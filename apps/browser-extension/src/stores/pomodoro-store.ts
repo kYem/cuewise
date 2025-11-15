@@ -1,8 +1,4 @@
-import {
-  type PomodoroSession,
-  generateId,
-  minutesToSeconds,
-} from '@cuewise/shared';
+import { generateId, minutesToSeconds, type PomodoroSession } from '@cuewise/shared';
 import { getPomodoroSessions, getSettings, setPomodoroSessions } from '@cuewise/storage';
 import { create } from 'zustand';
 
@@ -26,6 +22,7 @@ interface PomodoroStore {
 
   // Actions
   initialize: () => Promise<void>;
+  reloadSettings: () => Promise<void>;
   start: () => void;
   pause: () => void;
   resume: () => void;
@@ -55,10 +52,7 @@ export const usePomodoroStore = create<PomodoroStore>((set, get) => ({
       set({ isLoading: true, error: null });
 
       // Load settings and sessions
-      const [settings, sessions] = await Promise.all([
-        getSettings(),
-        getPomodoroSessions(),
-      ]);
+      const [settings, sessions] = await Promise.all([getSettings(), getPomodoroSessions()]);
 
       const workDuration = settings.pomodoroWorkDuration;
       const breakDuration = settings.pomodoroBreakDuration;
@@ -74,6 +68,33 @@ export const usePomodoroStore = create<PomodoroStore>((set, get) => ({
     } catch (error) {
       console.error('Error initializing pomodoro store:', error);
       set({ error: 'Failed to load pomodoro data', isLoading: false });
+    }
+  },
+
+  reloadSettings: async () => {
+    try {
+      const settings = await getSettings();
+      const { sessionType, status } = get();
+
+      const workDuration = settings.pomodoroWorkDuration;
+      const breakDuration = settings.pomodoroBreakDuration;
+
+      // Only update durations if timer is idle
+      if (status === 'idle') {
+        const duration = sessionType === 'work' ? workDuration : breakDuration;
+        set({
+          workDuration,
+          breakDuration,
+          timeRemaining: minutesToSeconds(duration),
+          totalTime: minutesToSeconds(duration),
+        });
+      } else {
+        // Timer is running/paused, just update the stored durations for next session
+        set({ workDuration, breakDuration });
+      }
+    } catch (error) {
+      console.error('Error reloading settings:', error);
+      set({ error: 'Failed to reload settings' });
     }
   },
 

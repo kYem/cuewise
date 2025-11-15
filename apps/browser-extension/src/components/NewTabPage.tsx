@@ -1,21 +1,26 @@
-import { Plus, Timer } from 'lucide-react';
+import { Plus, Settings, Timer } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useState } from 'react';
 import { useQuoteStore } from '../stores/quote-store';
+import { useSettingsStore } from '../stores/settings-store';
 import { AddQuoteForm } from './AddQuoteForm';
 import { Clock } from './Clock';
 import { GoalsSection } from './GoalsSection';
 import { Modal } from './Modal';
 import { QuoteDisplay } from './QuoteDisplay';
 import { RemindersSection } from './RemindersSection';
+import { SettingsModal } from './SettingsModal';
 
 export const NewTabPage: React.FC = () => {
-  const initialize = useQuoteStore((state) => state.initialize);
+  const initializeQuotes = useQuoteStore((state) => state.initialize);
+  const initializeSettings = useSettingsStore((state) => state.initialize);
   const [isAddQuoteModalOpen, setIsAddQuoteModalOpen] = useState(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
 
   useEffect(() => {
-    initialize();
-  }, [initialize]);
+    initializeQuotes();
+    initializeSettings();
+  }, [initializeQuotes, initializeSettings]);
 
   const handleQuoteAdded = () => {
     setIsAddQuoteModalOpen(false);
@@ -29,6 +34,19 @@ export const NewTabPage: React.FC = () => {
   return (
     <div className="min-h-screen w-full overflow-y-auto">
       <div className="w-full flex flex-col items-center px-4 sm:px-8 py-8 sm:py-12">
+        {/* Settings Button - Top Right */}
+        <button
+          type="button"
+          onClick={() => setIsSettingsModalOpen(true)}
+          className="fixed top-4 right-4 sm:top-8 sm:right-8 p-3 bg-white/80 backdrop-blur-sm text-gray-700 rounded-full shadow-lg hover:shadow-xl hover:scale-110 transition-all group z-50"
+          title="Settings"
+        >
+          <Settings className="w-5 h-5" />
+          <span className="absolute right-full mr-3 top-1/2 -translate-y-1/2 bg-gray-800 text-white text-sm px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+            Settings
+          </span>
+        </button>
+
         <div className="w-full max-w-7xl mx-auto space-y-8 sm:space-y-12">
           {/* Clock Section */}
           <Clock />
@@ -102,6 +120,9 @@ export const NewTabPage: React.FC = () => {
       >
         <AddQuoteForm onSuccess={handleQuoteAdded} />
       </Modal>
+
+      {/* Settings Modal */}
+      <SettingsModal isOpen={isSettingsModalOpen} onClose={() => setIsSettingsModalOpen(false)} />
     </div>
   );
 };

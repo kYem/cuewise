@@ -144,6 +144,3 @@ chrome.notifications.onButtonClicked.addListener(async (notificationId, buttonIn
     await chrome.notifications.clear(notificationId);
   }
 });
-
-// Export for TypeScript (no actual exports needed for service worker)
-export {};

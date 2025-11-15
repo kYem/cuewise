@@ -1,4 +1,4 @@
-import { type Reminder, generateId } from '@cuewise/shared';
+import { generateId, type Reminder } from '@cuewise/shared';
 import { getReminders, setReminders } from '@cuewise/storage';
 import { create } from 'zustand';
 
@@ -18,10 +18,7 @@ interface ReminderStore {
   ) => Promise<void>;
   toggleReminder: (reminderId: string) => Promise<void>;
   deleteReminder: (reminderId: string) => Promise<void>;
-  updateReminder: (
-    reminderId: string,
-    updates: Partial<Omit<Reminder, 'id'>>
-  ) => Promise<void>;
+  updateReminder: (reminderId: string, updates: Partial<Omit<Reminder, 'id'>>) => Promise<void>;
   markAsNotified: (reminderId: string) => Promise<void>;
   refreshLists: () => void;
 }

@@ -68,9 +68,7 @@ export const QuoteDisplay: React.FC = () => {
 
             {/* Source (for custom quotes) */}
             {currentQuote.source && (
-              <div className="text-sm text-gray-500 italic">
-                Source: {currentQuote.source}
-              </div>
+              <div className="text-sm text-gray-500 italic">Source: {currentQuote.source}</div>
             )}
 
             {/* Personal Notes (for custom quotes) */}
