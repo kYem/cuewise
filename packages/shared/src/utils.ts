@@ -1,3 +1,11 @@
+import {
+  format,
+  isToday as isTodayDateFns,
+  isSameDay,
+  parseISO,
+  startOfDay,
+  subDays,
+} from 'date-fns';
 import type { Quote } from './types';
 
 /**
@@ -11,38 +19,28 @@ export function generateId(): string {
  * Get today's date in YYYY-MM-DD format
  */
 export function getTodayDateString(): string {
-  const today = new Date();
-  return today.toISOString().split('T')[0];
+  return format(new Date(), 'yyyy-MM-dd');
 }
 
 /**
- * Format date to readable string
+ * Format date to readable string (e.g., "January 15, 2025")
  */
 export function formatDate(dateString: string): string {
-  const date = new Date(dateString);
-  return date.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
+  return format(parseISO(dateString), 'MMMM d, yyyy');
 }
 
 /**
- * Format time to readable string
+ * Format time to readable string (e.g., "2:30 PM")
  */
 export function formatTime(dateString: string): string {
-  const date = new Date(dateString);
-  return date.toLocaleTimeString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-  });
+  return format(parseISO(dateString), 'h:mm a');
 }
 
 /**
- * Check if a date is today
+ * Check if a date string (YYYY-MM-DD) is today
  */
 export function isToday(dateString: string): boolean {
-  return dateString === getTodayDateString();
+  return isTodayDateFns(parseISO(dateString));
 }
 
 /**
@@ -63,23 +61,25 @@ export function getRandomQuote(quotes: Quote[]): Quote | null {
 
 /**
  * Calculate streak from sessions/goals
+ * @param dates - Array of ISO date strings
+ * @returns Object with current and longest streak counts
  */
 export function calculateStreak(dates: string[]): { current: number; longest: number } {
   if (dates.length === 0) return { current: 0, longest: 0 };
 
-  const sortedDates = [...new Set(dates)].sort().reverse();
+  // Parse and normalize dates to start of day, remove duplicates
+  const uniqueDates = [...new Set(dates)]
+    .map((dateStr) => startOfDay(parseISO(dateStr)))
+    .sort((a, b) => b.getTime() - a.getTime()); // Sort descending (newest first)
+
   let current = 0;
   let longest = 0;
   let tempStreak = 0;
 
-  for (let i = 0; i < sortedDates.length; i++) {
-    const date = new Date(sortedDates[i]);
-    const expectedDate = new Date();
-    expectedDate.setDate(expectedDate.getDate() - i);
-    expectedDate.setHours(0, 0, 0, 0);
-    date.setHours(0, 0, 0, 0);
+  for (let i = 0; i < uniqueDates.length; i++) {
+    const expectedDate = startOfDay(subDays(new Date(), i));
 
-    if (date.getTime() === expectedDate.getTime()) {
+    if (isSameDay(uniqueDates[i], expectedDate)) {
       tempStreak++;
       if (i === 0 || current > 0) {
         current = tempStreak;
@@ -96,6 +96,52 @@ export function calculateStreak(dates: string[]): { current: number; longest: nu
     current,
     longest: Math.max(longest, tempStreak),
   };
+}
+
+/**
+ * Get current timestamp as ISO string
+ */
+export function getCurrentISOTimestamp(): string {
+  return new Date().toISOString();
+}
+
+/**
+ * Get ISO timestamp from a Date object
+ */
+export function getISOTimestamp(date: Date): string {
+  return date.toISOString();
+}
+
+/**
+ * Format a Date object for clock display (e.g., "02:30 PM")
+ */
+export function formatClockTime(date: Date): { time: string; period: string } {
+  const hours = date.getHours();
+  const minutes = date.getMinutes();
+  const period = hours >= 12 ? 'PM' : 'AM';
+  const displayHours = hours % 12 || 12;
+
+  return {
+    time: `${displayHours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`,
+    period,
+  };
+}
+
+/**
+ * Format a Date object to long date string (e.g., "Monday, January 15, 2025")
+ */
+export function formatLongDate(date: Date): string {
+  return format(date, 'EEEE, MMMM d, yyyy');
+}
+
+/**
+ * Get greeting based on time of day
+ */
+export function getGreeting(date: Date): string {
+  const hours = date.getHours();
+  if (hours < 12) return 'Good Morning';
+  if (hours < 18) return 'Good Afternoon';
+  return 'Good Evening';
 }
 
 /**
