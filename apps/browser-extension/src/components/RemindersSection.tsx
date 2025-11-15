@@ -3,6 +3,7 @@ import type React from 'react';
 import { useEffect, useState } from 'react';
 import { useReminderStore } from '../stores/reminder-store';
 import { AddReminderForm } from './AddReminderForm';
+import { EditReminderForm } from './EditReminderForm';
 import { ErrorFallback } from './ErrorFallback';
 import { Modal } from './Modal';
 import { ReminderItem } from './ReminderItem';
@@ -20,12 +21,30 @@ export const RemindersSection: React.FC = () => {
   } = useReminderStore();
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [editingReminderId, setEditingReminderId] = useState<string | null>(null);
 
   useEffect(() => {
     initialize();
   }, [initialize]);
 
   const totalReminders = upcomingReminders.length + overdueReminders.length;
+
+  // Find the reminder being edited
+  const editingReminder = editingReminderId
+    ? [...upcomingReminders, ...overdueReminders].find((r) => r.id === editingReminderId)
+    : null;
+
+  const handleEdit = (id: string) => {
+    setEditingReminderId(id);
+  };
+
+  const handleEditSuccess = () => {
+    setEditingReminderId(null);
+  };
+
+  const handleEditCancel = () => {
+    setEditingReminderId(null);
+  };
 
   return (
     <div className="w-full max-w-2xl mx-auto">
@@ -87,6 +106,7 @@ export const RemindersSection: React.FC = () => {
                         reminder={reminder}
                         onToggle={toggleReminder}
                         onDelete={deleteReminder}
+                        onEdit={handleEdit}
                         onSnooze={snoozeReminder}
                       />
                     ))}
@@ -107,6 +127,7 @@ export const RemindersSection: React.FC = () => {
                         reminder={reminder}
                         onToggle={toggleReminder}
                         onDelete={deleteReminder}
+                        onEdit={handleEdit}
                         onSnooze={snoozeReminder}
                       />
                     ))}
@@ -122,6 +143,17 @@ export const RemindersSection: React.FC = () => {
       <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="Add Reminder">
         <AddReminderForm onSuccess={() => setIsAddModalOpen(false)} />
       </Modal>
+
+      {/* Edit Reminder Modal */}
+      {editingReminder && (
+        <Modal isOpen={!!editingReminderId} onClose={handleEditCancel} title="Edit Reminder">
+          <EditReminderForm
+            reminder={editingReminder}
+            onSuccess={handleEditSuccess}
+            onCancel={handleEditCancel}
+          />
+        </Modal>
+      )}
     </div>
   );
 };
