@@ -19,6 +19,7 @@ export const NewTabPage: React.FC = () => {
   const [isAddQuoteModalOpen, setIsAddQuoteModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [lastManualRefresh, setLastManualRefresh] = useState(Date.now());
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -42,7 +43,7 @@ export const NewTabPage: React.FC = () => {
     return () => {
       clearInterval(intervalId);
     };
-  }, [quoteChangeInterval, refreshQuote]);
+  }, [quoteChangeInterval, refreshQuote, lastManualRefresh]);
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -145,7 +146,7 @@ export const NewTabPage: React.FC = () => {
 
           {/* Quote Display Section */}
           <div className="flex justify-center">
-            <QuoteDisplay />
+            <QuoteDisplay onManualRefresh={() => setLastManualRefresh(Date.now())} />
           </div>
 
           {/* Two Column Layout for Larger Screens */}

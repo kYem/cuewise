@@ -5,9 +5,18 @@ import type React from 'react';
 import { useQuoteStore } from '../stores/quote-store';
 import { ErrorFallback } from './ErrorFallback';
 
-export const QuoteDisplay: React.FC = () => {
+interface QuoteDisplayProps {
+  onManualRefresh?: () => void;
+}
+
+export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({ onManualRefresh }) => {
   const { currentQuote, refreshQuote, toggleFavorite, hideQuote, isLoading, error, initialize } =
     useQuoteStore();
+
+  const handleRefreshClick = async () => {
+    await refreshQuote();
+    onManualRefresh?.();
+  };
 
   if (isLoading) {
     return (
@@ -26,7 +35,7 @@ export const QuoteDisplay: React.FC = () => {
       <div className="flex flex-col items-center justify-center min-h-[400px] text-center">
         <p className="text-xl text-gray-500 mb-4">No quotes available</p>
         <button
-          onClick={refreshQuote}
+          onClick={handleRefreshClick}
           className="px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
         >
           Try Again
@@ -111,7 +120,7 @@ export const QuoteDisplay: React.FC = () => {
         </button>
 
         <button
-          onClick={refreshQuote}
+          onClick={handleRefreshClick}
           className="flex items-center gap-2 px-6 py-3 bg-white text-gray-700 rounded-full font-medium shadow-md hover:shadow-lg hover:scale-105 transition-all"
           title="New quote"
         >
