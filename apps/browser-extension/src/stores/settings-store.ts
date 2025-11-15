@@ -120,9 +120,11 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     }
   },
 
-  updateQuoteChangeInterval: async (interval: Settings['quoteChangeInterval']) => {
+  updateQuoteChangeInterval: async (interval: number) => {
     const { settings } = get();
-    const updatedSettings = { ...settings, quoteChangeInterval: interval };
+    // Validate interval: 0 for manual, or 1-3600 for auto-refresh
+    const validInterval = interval === 0 ? 0 : Math.max(1, Math.min(3600, interval));
+    const updatedSettings = { ...settings, quoteChangeInterval: validInterval };
 
     try {
       await setSettings(updatedSettings);

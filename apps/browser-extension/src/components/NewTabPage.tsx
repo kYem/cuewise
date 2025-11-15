@@ -13,7 +13,9 @@ import { SettingsModal } from './SettingsModal';
 
 export const NewTabPage: React.FC = () => {
   const initializeQuotes = useQuoteStore((state) => state.initialize);
+  const refreshQuote = useQuoteStore((state) => state.refreshQuote);
   const initializeSettings = useSettingsStore((state) => state.initialize);
+  const quoteChangeInterval = useSettingsStore((state) => state.settings.quoteChangeInterval);
   const [isAddQuoteModalOpen, setIsAddQuoteModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -23,6 +25,24 @@ export const NewTabPage: React.FC = () => {
     initializeQuotes();
     initializeSettings();
   }, [initializeQuotes, initializeSettings]);
+
+  // Auto-refresh quotes based on interval setting
+  useEffect(() => {
+    // If interval is 0 (manual), don't set up auto-refresh
+    if (quoteChangeInterval === 0) {
+      return;
+    }
+
+    // Set up interval timer (convert seconds to milliseconds)
+    const intervalId = setInterval(() => {
+      refreshQuote();
+    }, quoteChangeInterval * 1000);
+
+    // Cleanup on unmount or when interval changes
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [quoteChangeInterval, refreshQuote]);
 
   // Close menu when clicking outside
   useEffect(() => {
