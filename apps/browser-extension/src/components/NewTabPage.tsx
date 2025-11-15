@@ -28,8 +28,8 @@ export const NewTabPage: React.FC = () => {
 
   return (
     <div className="min-h-screen w-full overflow-y-auto">
-      <div className="w-full flex flex-col items-center p-8 py-12">
-        <div className="w-full max-w-6xl mx-auto space-y-12">
+      <div className="w-full flex flex-col items-center px-4 sm:px-8 py-8 sm:py-12">
+        <div className="w-full max-w-7xl mx-auto space-y-8 sm:space-y-12">
           {/* Clock Section */}
           <Clock />
 
@@ -38,27 +38,30 @@ export const NewTabPage: React.FC = () => {
             <QuoteDisplay />
           </div>
 
-          {/* Pomodoro Button */}
-          <div className="flex justify-center">
-            <button
-              type="button"
-              onClick={handleOpenPomodoro}
-              className="group relative flex items-center gap-3 px-8 py-4 bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-xl transition-all hover:scale-105 border border-gray-200/50"
-            >
-              <Timer className="w-6 h-6 text-primary-600" />
-              <span className="text-lg font-medium text-gray-800">Start Pomodoro Timer</span>
-              <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-primary-500/0 via-primary-500/5 to-primary-500/0 opacity-0 group-hover:opacity-100 transition-opacity" />
-            </button>
-          </div>
+          {/* Two Column Layout for Larger Screens */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
+            {/* Left Column */}
+            <div className="space-y-6">
+              {/* Pomodoro Button */}
+              <button
+                type="button"
+                onClick={handleOpenPomodoro}
+                className="w-full group relative flex items-center justify-center gap-3 px-8 py-6 bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-xl transition-all hover:scale-105 border border-gray-200/50"
+              >
+                <Timer className="w-6 h-6 text-primary-600" />
+                <span className="text-lg font-medium text-gray-800">Start Pomodoro Timer</span>
+                <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-primary-500/0 via-primary-500/5 to-primary-500/0 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </button>
 
-          {/* Goals Section */}
-          <div className="flex justify-center">
-            <GoalsSection />
-          </div>
+              {/* Goals Section */}
+              <GoalsSection />
+            </div>
 
-          {/* Reminders Section */}
-          <div className="flex justify-center">
-            <RemindersSection />
+            {/* Right Column */}
+            <div className="space-y-6">
+              {/* Reminders Section */}
+              <RemindersSection />
+            </div>
           </div>
 
           {/* Footer */}
@@ -82,7 +85,7 @@ export const NewTabPage: React.FC = () => {
       <button
         type="button"
         onClick={() => setIsAddQuoteModalOpen(true)}
-        className="fixed bottom-8 right-8 p-4 bg-primary-600 text-white rounded-full shadow-lg hover:shadow-xl hover:scale-110 transition-all group"
+        className="fixed bottom-8 right-8 p-4 bg-primary-600 text-white rounded-full shadow-lg hover:shadow-xl hover:scale-110 transition-all group z-50"
         title="Add custom quote"
       >
         <Plus className="w-6 h-6" />
