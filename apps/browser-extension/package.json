@@ -38,6 +38,7 @@
     "jsdom": "catalog:",
     "postcss": "catalog:",
     "tailwindcss": "catalog:",
+    "terser": "^5.44.1",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:"
