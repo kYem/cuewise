@@ -20,6 +20,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   const [theme, setTheme] = useState(settings.theme);
   const [notifications, setNotifications] = useState(settings.enableNotifications);
   const [quoteInterval, setQuoteInterval] = useState(settings.quoteChangeInterval);
+  const [timeFormat, setTimeFormat] = useState(settings.timeFormat);
 
   // Sync local state with store when settings change
   useEffect(() => {
@@ -28,6 +29,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     setTheme(settings.theme);
     setNotifications(settings.enableNotifications);
     setQuoteInterval(settings.quoteChangeInterval);
+    setTimeFormat(settings.timeFormat);
   }, [settings]);
 
   // Handle save
@@ -38,6 +40,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
       theme,
       enableNotifications: notifications,
       quoteChangeInterval: quoteInterval,
+      timeFormat,
     });
 
     // Reload Pomodoro settings if durations changed
@@ -212,6 +215,44 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                 </p>
               </div>
             </label>
+          </div>
+        </section>
+
+        {/* Time Format Settings */}
+        <section>
+          <div className="flex items-center gap-2 mb-4">
+            <Clock className="w-5 h-5 text-primary-600" />
+            <h3 className="text-lg font-semibold text-gray-800">Time Format</h3>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 pl-7">
+            <button
+              type="button"
+              onClick={() => setTimeFormat('12h')}
+              className={`p-4 rounded-lg border-2 transition-all ${
+                timeFormat === '12h'
+                  ? 'border-primary-600 bg-primary-50'
+                  : 'border-gray-200 hover:border-gray-300 bg-white'
+              }`}
+            >
+              <div className="text-2xl font-bold text-gray-800 mb-1">2:30</div>
+              <div className="text-xs text-primary-600 font-medium mb-2">PM</div>
+              <span className="block text-sm font-medium text-gray-700">12-hour</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setTimeFormat('24h')}
+              className={`p-4 rounded-lg border-2 transition-all ${
+                timeFormat === '24h'
+                  ? 'border-primary-600 bg-primary-50'
+                  : 'border-gray-200 hover:border-gray-300 bg-white'
+              }`}
+            >
+              <div className="text-2xl font-bold text-gray-800 mb-1">14:30</div>
+              <div className="text-xs text-transparent font-medium mb-2">.</div>
+              <span className="block text-sm font-medium text-gray-700">24-hour</span>
+            </button>
           </div>
         </section>
 

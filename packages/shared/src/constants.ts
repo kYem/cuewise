@@ -7,6 +7,7 @@ export const DEFAULT_SETTINGS: Settings = {
   enableNotifications: true,
   theme: 'light',
   quoteChangeInterval: 'manual',
+  timeFormat: '12h',
 };
 
 // Quote categories with display names

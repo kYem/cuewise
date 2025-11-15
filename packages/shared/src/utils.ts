@@ -116,11 +116,24 @@ export function getISOTimestamp(date: Date): string {
 }
 
 /**
- * Format a Date object for clock display (e.g., "02:30 PM")
+ * Format a Date object for clock display
+ * 12h format: "02:30 PM", 24h format: "14:30"
  */
-export function formatClockTime(date: Date): { time: string; period: string } {
+export function formatClockTime(
+  date: Date,
+  format: '12h' | '24h' = '12h'
+): { time: string; period: string } {
   const hours = date.getHours();
   const minutes = date.getMinutes();
+
+  if (format === '24h') {
+    return {
+      time: `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`,
+      period: '',
+    };
+  }
+
+  // 12-hour format
   const period = hours >= 12 ? 'PM' : 'AM';
   const displayHours = hours % 12 || 12;
 

@@ -65,6 +65,7 @@ export interface Settings {
   enableNotifications: boolean;
   theme: 'light' | 'dark' | 'auto';
   quoteChangeInterval: 'manual' | 'daily' | 'hourly';
+  timeFormat: '12h' | '24h'; // 12-hour (AM/PM) or 24-hour format
 }
 
 // Storage keys
