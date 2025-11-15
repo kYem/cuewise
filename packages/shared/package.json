@@ -1,5 +1,5 @@
 {
-  "name": "@productivity-extension/shared",
+  "name": "@cuewise/shared",
   "version": "1.0.0",
   "private": true,
   "main": "./src/index.ts",

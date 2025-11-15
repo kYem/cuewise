@@ -1,5 +1,5 @@
 {
-  "name": "@productivity-extension/storage",
+  "name": "@cuewise/storage",
   "version": "1.0.0",
   "private": true,
   "main": "./src/index.ts",
@@ -9,7 +9,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@productivity-extension/shared": "workspace:*"
+    "@cuewise/shared": "workspace:*"
   },
   "devDependencies": {
     "@types/chrome": "^0.0.254",

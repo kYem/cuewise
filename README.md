@@ -1,4 +1,4 @@
-# Productivity & Motivation Platform
+# Cuewise
 
 A cross-platform productivity suite with motivational quotes, goals, reminders, and productivity tracking. Built as a monorepo supporting browser extensions, web apps, and mobile apps.
 
@@ -85,7 +85,7 @@ A cross-platform productivity suite with motivational quotes, goals, reminders, 
 
 3. **Build the extension**
    ```bash
-   pnpm --filter @productivity-extension/browser-extension build
+   pnpm --filter @cuewise/browser-extension build
    ```
 
    Or use turbo to build all apps and packages:
@@ -115,7 +115,7 @@ A cross-platform productivity suite with motivational quotes, goals, reminders, 
 
 ### Start development server
 ```bash
-pnpm --filter @productivity-extension/browser-extension dev
+pnpm --filter @cuewise/browser-extension dev
 ```
 
 This starts Vite in development mode with hot module replacement (HMR). The extension will automatically rebuild when you make changes.
@@ -279,7 +279,7 @@ MIT License - see LICENSE file for details
 ### Extension not loading
 - Make sure you selected the `apps/browser-extension/dist` folder
 - Check that the build completed successfully
-- Try rebuilding: `pnpm --filter @productivity-extension/browser-extension build`
+- Try rebuilding: `pnpm --filter @cuewise/browser-extension build`
 
 ### Quotes not displaying
 - Open Chrome DevTools (F12) and check for errors

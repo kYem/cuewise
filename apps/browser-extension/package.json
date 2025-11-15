@@ -1,5 +1,5 @@
 {
-  "name": "@productivity-extension/browser-extension",
+  "name": "@cuewise/browser-extension",
   "version": "1.0.0",
   "private": true,
   "type": "module",
@@ -10,9 +10,9 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@productivity-extension/shared": "workspace:*",
-    "@productivity-extension/storage": "workspace:*",
-    "@productivity-extension/ui": "workspace:*",
+    "@cuewise/shared": "workspace:*",
+    "@cuewise/storage": "workspace:*",
+    "@cuewise/ui": "workspace:*",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "zustand": "^4.4.7",

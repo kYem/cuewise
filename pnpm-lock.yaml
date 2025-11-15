@@ -20,13 +20,13 @@ importers:
 
   apps/browser-extension:
     dependencies:
-      '@productivity-extension/shared':
+      '@cuewise/shared':
         specifier: workspace:*
         version: link:../../packages/shared
-      '@productivity-extension/storage':
+      '@cuewise/storage':
         specifier: workspace:*
         version: link:../../packages/storage
-      '@productivity-extension/ui':
+      '@cuewise/ui':
         specifier: workspace:*
         version: link:../../packages/ui
       lucide-react:
@@ -81,7 +81,7 @@ importers:
 
   packages/storage:
     dependencies:
-      '@productivity-extension/shared':
+      '@cuewise/shared':
         specifier: workspace:*
         version: link:../shared
     devDependencies:
@@ -94,7 +94,7 @@ importers:
 
   packages/ui:
     dependencies:
-      '@productivity-extension/shared':
+      '@cuewise/shared':
         specifier: workspace:*
         version: link:../shared
       clsx:

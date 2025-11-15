@@ -10,7 +10,7 @@ import {
   type Reminder,
   type Settings,
   STORAGE_KEYS,
-} from '@productivity-extension/shared';
+} from '@cuewise/shared';
 import { getFromStorage, setInStorage } from './chrome-storage';
 
 // Quotes

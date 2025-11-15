@@ -1,4 +1,4 @@
-import { cn } from '@productivity-extension/ui';
+import { cn } from '@cuewise/ui';
 import { CheckCircle2, Circle, Trash2 } from 'lucide-react';
 import type React from 'react';
 import { useGoalStore } from '../stores/goal-store';

@@ -41,7 +41,7 @@ quote-app/
 **Example:**
 ```typescript
 // Usable in extension, web, and mobile
-import { Quote, QuoteCategory, getRandomQuote } from '@productivity-extension/shared';
+import { Quote, QuoteCategory, getRandomQuote } from '@cuewise/shared';
 ```
 
 ### `packages/storage` - Multi-Platform Storage
@@ -56,15 +56,15 @@ import { Quote, QuoteCategory, getRandomQuote } from '@productivity-extension/sh
 **How it works:**
 ```typescript
 // Browser Extension
-import { ChromeStorageAdapter, StorageManager } from '@productivity-extension/storage';
+import { ChromeStorageAdapter, StorageManager } from '@cuewise/storage';
 const storage = new StorageManager(new ChromeStorageAdapter('local'));
 
 // Web App
-import { LocalStorageAdapter, StorageManager } from '@productivity-extension/storage';
+import { LocalStorageAdapter, StorageManager } from '@cuewise/storage';
 const storage = new StorageManager(new LocalStorageAdapter());
 
 // React Native App
-import { AsyncStorageAdapter, StorageManager } from '@productivity-extension/storage';
+import { AsyncStorageAdapter, StorageManager } from '@cuewise/storage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 const storage = new StorageManager(new AsyncStorageAdapter(AsyncStorage));
 
@@ -76,7 +76,7 @@ const quotes = await storage.get<Quote[]>('quotes');
 **Typed helpers:**
 ```typescript
 // Convenience wrappers that work with any adapter
-import { getQuotes, setQuotes, getGoals } from '@productivity-extension/storage';
+import { getQuotes, setQuotes, getGoals } from '@cuewise/storage';
 ```
 
 ### `packages/ui` - Shared UI Components
@@ -202,9 +202,9 @@ export const Button = () => { /* Native version */ };
    ```json
    {
      "dependencies": {
-       "@productivity-extension/shared": "workspace:*",
-       "@productivity-extension/storage": "workspace:*",
-       "@productivity-extension/ui": "workspace:*"
+       "@cuewise/shared": "workspace:*",
+       "@cuewise/storage": "workspace:*",
+       "@cuewise/ui": "workspace:*"
      }
    }
    ```
@@ -212,15 +212,15 @@ export const Button = () => { /* Native version */ };
 3. **Initialize storage with web adapter**
    ```typescript
    // apps/web/lib/storage.ts
-   import { LocalStorageAdapter, StorageManager } from '@productivity-extension/storage';
+   import { LocalStorageAdapter, StorageManager } from '@cuewise/storage';
 
    export const storage = new StorageManager(new LocalStorageAdapter());
    ```
 
 4. **Reuse business logic**
    ```typescript
-   import { Quote, getRandomQuote } from '@productivity-extension/shared';
-   import { getQuotes } from '@productivity-extension/storage';
+   import { Quote, getRandomQuote } from '@cuewise/shared';
+   import { getQuotes } from '@cuewise/storage';
 
    const quotes = await getQuotes();
    const randomQuote = getRandomQuote(quotes);
@@ -228,7 +228,7 @@ export const Button = () => { /* Native version */ };
 
 5. **Reuse UI components**
    ```typescript
-   import { Button, Card } from '@productivity-extension/ui';
+   import { Button, Card } from '@cuewise/ui';
    ```
 
 ## Best Practices

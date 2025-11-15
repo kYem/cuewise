@@ -1,4 +1,4 @@
-# @productivity-extension/storage
+# @cuewise/storage
 
 Platform-agnostic storage package with adapters for multiple platforms.
 
@@ -6,21 +6,21 @@ Platform-agnostic storage package with adapters for multiple platforms.
 
 ### Chrome Storage Adapter (Browser Extensions)
 ```typescript
-import { ChromeStorageAdapter, StorageManager } from '@productivity-extension/storage';
+import { ChromeStorageAdapter, StorageManager } from '@cuewise/storage';
 
 const storage = new StorageManager(new ChromeStorageAdapter('local'));
 ```
 
 ### Local Storage Adapter (Web Apps)
 ```typescript
-import { LocalStorageAdapter, StorageManager } from '@productivity-extension/storage';
+import { LocalStorageAdapter, StorageManager } from '@cuewise/storage';
 
 const storage = new StorageManager(new LocalStorageAdapter());
 ```
 
 ### AsyncStorage Adapter (React Native)
 ```typescript
-import { AsyncStorageAdapter, StorageManager } from '@productivity-extension/storage';
+import { AsyncStorageAdapter, StorageManager } from '@cuewise/storage';
 
 const storage = new StorageManager(new AsyncStorageAdapter());
 ```
@@ -53,7 +53,7 @@ storage.onChange((changes) => {
 For convenience, the package also exports typed helpers that work with any adapter:
 
 ```typescript
-import { getQuotes, setQuotes, getGoals, setGoals } from '@productivity-extension/storage';
+import { getQuotes, setQuotes, getGoals, setGoals } from '@cuewise/storage';
 
 // These still work for backward compatibility but use the Chrome adapter by default
 const quotes = await getQuotes();

@@ -1,5 +1,5 @@
-import { type Goal, generateId, getTodayDateString } from '@productivity-extension/shared';
-import { getGoals, setGoals } from '@productivity-extension/storage';
+import { type Goal, generateId, getTodayDateString } from '@cuewise/shared';
+import { getGoals, setGoals } from '@cuewise/storage';
 import { create } from 'zustand';
 
 interface GoalStore {

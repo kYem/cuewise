@@ -1,4 +1,4 @@
-import { QUOTE_CATEGORIES, type QuoteCategory } from '@productivity-extension/shared';
+import { QUOTE_CATEGORIES, type QuoteCategory } from '@cuewise/shared';
 import type React from 'react';
 import { useState } from 'react';
 import { useQuoteStore } from '../stores/quote-store';

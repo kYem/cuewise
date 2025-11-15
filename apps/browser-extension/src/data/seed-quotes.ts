@@ -1,4 +1,4 @@
-import type { Quote, QuoteCategory } from '@productivity-extension/shared';
+import type { Quote, QuoteCategory } from '@cuewise/shared';
 
 /**
  * Seed quotes organized by category

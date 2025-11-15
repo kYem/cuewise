@@ -1,5 +1,5 @@
 {
-  "name": "@productivity-extension/ui",
+  "name": "@cuewise/ui",
   "version": "1.0.0",
   "private": true,
   "main": "./src/index.ts",
@@ -9,7 +9,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@productivity-extension/shared": "workspace:*",
+    "@cuewise/shared": "workspace:*",
     "react": "^18.2.0",
     "lucide-react": "^0.294.0",
     "clsx": "^2.0.0",

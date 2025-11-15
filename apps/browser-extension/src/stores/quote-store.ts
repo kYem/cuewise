@@ -1,10 +1,10 @@
-import { getRandomQuote, type Quote, type QuoteCategory } from '@productivity-extension/shared';
+import { getRandomQuote, type Quote, type QuoteCategory } from '@cuewise/shared';
 import {
   getCurrentQuote,
   getQuotes,
   setCurrentQuote,
   setQuotes,
-} from '@productivity-extension/storage';
+} from '@cuewise/storage';
 import { create } from 'zustand';
 import { SEED_QUOTES } from '../data/seed-quotes';
 

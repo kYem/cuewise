@@ -1,4 +1,4 @@
-# @productivity-extension/ui
+# @cuewise/ui
 
 Shared UI components package.
 
@@ -48,7 +48,7 @@ Use a library like:
 ## Current Usage
 
 ```typescript
-import { Button, Card, Badge } from '@productivity-extension/ui';
+import { Button, Card, Badge } from '@cuewise/ui';
 
 <Button variant="primary" onClick={handleClick}>
   Click me

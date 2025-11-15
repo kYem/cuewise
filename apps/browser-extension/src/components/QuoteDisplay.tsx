@@ -1,5 +1,5 @@
-import { CATEGORY_COLORS } from '@productivity-extension/shared';
-import { cn } from '@productivity-extension/ui';
+import { CATEGORY_COLORS } from '@cuewise/shared';
+import { cn } from '@cuewise/ui';
 import { EyeOff, Heart, RefreshCw } from 'lucide-react';
 import type React from 'react';
 import { useQuoteStore } from '../stores/quote-store';
