@@ -9,5 +9,8 @@
   },
   "action": {
     "default_title": "Productivity & Motivation"
+  },
+  "background": {
+    "service_worker": "src/background.ts"
   }
 }
