@@ -81,8 +81,10 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
 
   refreshQuote: async () => {
     try {
-      const { quotes } = get();
-      const newQuote = getRandomQuote(quotes);
+      const { quotes, currentQuote } = get();
+
+      // Pass current quote ID to avoid getting the same quote twice in a row
+      const newQuote = getRandomQuote(quotes, currentQuote?.id);
 
       if (newQuote) {
         await setCurrentQuote(newQuote);

@@ -55,10 +55,23 @@ export function getRandomItem<T>(array: T[]): T {
 
 /**
  * Filter out hidden and get a random quote from a list
+ * Excludes the current quote if provided to prevent consecutive duplicates
  */
-export function getRandomQuote(quotes: Quote[]): Quote | null {
+export function getRandomQuote(quotes: Quote[], currentQuoteId?: string): Quote | null {
   const visibleQuotes = quotes.filter((q) => !q.isHidden);
   if (visibleQuotes.length === 0) return null;
+
+  // If only one visible quote, return it (no choice)
+  if (visibleQuotes.length === 1) return visibleQuotes[0];
+
+  // If current quote ID provided, exclude it from selection
+  if (currentQuoteId) {
+    const otherQuotes = visibleQuotes.filter((q) => q.id !== currentQuoteId);
+    if (otherQuotes.length > 0) {
+      return getRandomItem(otherQuotes);
+    }
+  }
+
   return getRandomItem(visibleQuotes);
 }
 

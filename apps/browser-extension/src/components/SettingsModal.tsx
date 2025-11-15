@@ -305,14 +305,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                 </button>
                 <button
                   type="button"
-                  onClick={() => setQuoteInterval(5)}
+                  onClick={() => setQuoteInterval(10)}
                   className={`px-3 py-2 text-xs font-medium rounded-md transition-all ${
-                    quoteInterval === 5
+                    quoteInterval === 10
                       ? 'bg-primary-600 text-white'
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
                 >
-                  5s
+                  10s
                 </button>
                 <button
                   type="button"
@@ -379,13 +379,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                   htmlFor="quote-interval"
                   className="block text-sm font-medium text-gray-700 mb-2"
                 >
-                  Custom interval (1s - 1h):
+                  Custom interval (10s - 1h):
                 </label>
                 <div className="flex items-center gap-4">
                   <input
                     id="quote-interval"
                     type="range"
-                    min="1"
+                    min="10"
                     max="3600"
                     step="1"
                     value={quoteInterval}
@@ -394,7 +394,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                   />
                   <input
                     type="number"
-                    min="1"
+                    min="10"
                     max="3600"
                     value={quoteInterval}
                     onChange={(e) => setQuoteInterval(Number(e.target.value))}

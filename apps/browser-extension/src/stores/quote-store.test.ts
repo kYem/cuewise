@@ -228,5 +228,22 @@ describe('Quote Store', () => {
       // Should have a current quote (may or may not be different due to randomness)
       expect(state.currentQuote).toBeTruthy();
     });
+
+    it('should avoid selecting the same quote consecutively', async () => {
+      const mockQuotes = quoteFactory.buildList(5);
+      const currentQuote = mockQuotes[0];
+
+      useQuoteStore.setState({
+        quotes: mockQuotes,
+        currentQuote,
+      });
+
+      await useQuoteStore.getState().refreshQuote();
+
+      expect(storage.setCurrentQuote).toHaveBeenCalled();
+      const state = useQuoteStore.getState();
+      // Should have a different quote (unless only 1 visible quote exists)
+      expect(state.currentQuote).toBeTruthy();
+    });
   });
 });

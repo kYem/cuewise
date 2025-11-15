@@ -6,7 +6,7 @@ export const DEFAULT_SETTINGS: Settings = {
   pomodoroBreakDuration: 5,
   enableNotifications: true,
   theme: 'light',
-  quoteChangeInterval: 0, // 0 = manual (no auto-refresh)
+  quoteChangeInterval: 10, // 0 = manual, 10+ = auto-refresh interval in seconds
   timeFormat: '12h',
 };
 
