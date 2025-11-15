@@ -46,7 +46,7 @@ A cross-platform productivity suite with motivational quotes, goals, reminders, 
 - **Language**: TypeScript throughout
 
 ### Applications (`apps/`)
-- `apps/extension` - Browser extension (Chrome/Edge, Manifest V3)
+- `apps/browser-extension` - Browser extension (Chrome/Edge, Manifest V3)
 - `apps/web` - Web application (Coming soon - Next.js)
 - `apps/mobile` - Mobile app (Coming soon - React Native)
 
@@ -85,7 +85,7 @@ A cross-platform productivity suite with motivational quotes, goals, reminders, 
 
 3. **Build the extension**
    ```bash
-   pnpm --filter @productivity-extension/extension build
+   pnpm --filter @productivity-extension/browser-extension build
    ```
 
    Or use turbo to build all apps and packages:
@@ -104,7 +104,7 @@ A cross-platform productivity suite with motivational quotes, goals, reminders, 
 
 3. **Load the extension**
    - Click "Load unpacked"
-   - Navigate to `apps/extension/dist`
+   - Navigate to `apps/browser-extension/dist`
    - Click "Select Folder"
 
 4. **Test it!**
@@ -115,7 +115,7 @@ A cross-platform productivity suite with motivational quotes, goals, reminders, 
 
 ### Start development server
 ```bash
-pnpm --filter @productivity-extension/extension dev
+pnpm --filter @productivity-extension/browser-extension dev
 ```
 
 This starts Vite in development mode with hot module replacement (HMR). The extension will automatically rebuild when you make changes.
@@ -154,7 +154,7 @@ pnpm clean
 ```
 quote-app/
 ├── apps/
-│   ├── extension/              # Browser extension (Chrome/Edge)
+│   ├── browser-extension/      # Browser extension (Chrome/Edge)
 │   │   ├── src/
 │   │   │   ├── components/     # React components
 │   │   │   ├── stores/         # Zustand stores
@@ -233,7 +233,7 @@ quote-app/
 
 ### Adding More Quotes
 
-Edit `apps/extension/src/data/seed-quotes.ts` to add new quotes:
+Edit `apps/browser-extension/src/data/seed-quotes.ts` to add new quotes:
 
 ```typescript
 const NEW_CATEGORY_QUOTES = [
@@ -244,7 +244,7 @@ const NEW_CATEGORY_QUOTES = [
 
 ### Changing Colors
 
-Edit the Tailwind config in `apps/extension/tailwind.config.js`:
+Edit the Tailwind config in `apps/browser-extension/tailwind.config.js`:
 
 ```javascript
 colors: {
@@ -277,9 +277,9 @@ MIT License - see LICENSE file for details
 ## Troubleshooting
 
 ### Extension not loading
-- Make sure you selected the `apps/extension/dist` folder
+- Make sure you selected the `apps/browser-extension/dist` folder
 - Check that the build completed successfully
-- Try rebuilding: `pnpm --filter @productivity-extension/extension build`
+- Try rebuilding: `pnpm --filter @productivity-extension/browser-extension build`
 
 ### Quotes not displaying
 - Open Chrome DevTools (F12) and check for errors

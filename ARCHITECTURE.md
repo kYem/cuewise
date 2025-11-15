@@ -4,7 +4,7 @@
 
 This project is structured to support **three platforms** from a single codebase:
 
-1. **Browser Extension** (Chrome/Edge) - `apps/extension`
+1. **Browser Extension** (Chrome/Edge) - `apps/browser-extension`
 2. **Web App** (Next.js/React) - `apps/web` (coming soon)
 3. **Mobile App** (React Native) - `apps/mobile` (coming soon)
 
@@ -13,7 +13,7 @@ This project is structured to support **three platforms** from a single codebase
 ```
 quote-app/
 ├── apps/                    # Deployable applications
-│   ├── extension/          # Browser extension (current)
+│   ├── browser-extension/  # Browser extension (current)
 │   ├── web/               # Web app (future)
 │   └── mobile/            # React Native app (future)
 │
