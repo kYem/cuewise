@@ -1,5 +1,5 @@
-import { Factory } from 'fishery';
 import type { Quote, QuoteCategory } from '@cuewise/shared';
+import { Factory } from 'fishery';
 
 const categories: QuoteCategory[] = [
   'inspiration',

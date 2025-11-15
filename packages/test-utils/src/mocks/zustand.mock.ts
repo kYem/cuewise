@@ -1,5 +1,5 @@
-import type { StateCreator } from 'zustand';
 import { act } from '@testing-library/react';
+import type { StateCreator } from 'zustand';
 
 // Store reset functions
 const storeResetFns = new Set<() => void>();
@@ -14,7 +14,7 @@ export const resetAllStores = () => {
 };
 
 // Create a store with reset capability
-export const createTestStore = <T,>(store: any, initialState: T) => {
+export const createTestStore = <T>(store: any, initialState: T) => {
   storeResetFns.add(() => {
     store.setState(initialState, true);
   });

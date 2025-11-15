@@ -1,6 +1,6 @@
-import { Factory } from 'fishery';
 import type { Goal } from '@cuewise/shared';
 import { getTodayDateString } from '@cuewise/shared';
+import { Factory } from 'fishery';
 
 export const goalFactory = Factory.define<Goal>(({ sequence }) => ({
   id: `goal-${sequence}`,

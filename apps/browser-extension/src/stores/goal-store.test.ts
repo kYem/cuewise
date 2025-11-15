@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { useGoalStore } from './goal-store';
-import { goalFactory, completedGoalFactory } from '@cuewise/test-utils/factories';
-import * as storage from '@cuewise/storage';
 import { getTodayDateString } from '@cuewise/shared';
+import * as storage from '@cuewise/storage';
+import { completedGoalFactory, goalFactory } from '@cuewise/test-utils/factories';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { useGoalStore } from './goal-store';
 
 // Mock storage functions
 vi.mock('@cuewise/storage', () => ({

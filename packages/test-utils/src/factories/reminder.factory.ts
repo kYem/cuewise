@@ -1,5 +1,5 @@
-import { Factory } from 'fishery';
 import type { Reminder } from '@cuewise/shared';
+import { Factory } from 'fishery';
 
 export const reminderFactory = Factory.define<Reminder>(({ sequence }) => ({
   id: `reminder-${sequence}`,
