@@ -12,6 +12,7 @@ interface GoalStore {
   // Actions
   initialize: () => Promise<void>;
   addGoal: (text: string) => Promise<void>;
+  updateGoal: (goalId: string, text: string) => Promise<void>;
   toggleGoal: (goalId: string) => Promise<void>;
   deleteGoal: (goalId: string) => Promise<void>;
   clearCompleted: () => Promise<void>;
@@ -65,6 +66,29 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
     } catch (error) {
       console.error('Error adding goal:', error);
       const errorMessage = 'Failed to add goal. Please try again.';
+      set({ error: errorMessage });
+      useToastStore.getState().error(errorMessage);
+    }
+  },
+
+  updateGoal: async (goalId: string, text: string) => {
+    if (!text.trim()) return;
+
+    try {
+      const { goals } = get();
+      const today = getTodayDateString();
+
+      const updatedGoals = goals.map((goal) =>
+        goal.id === goalId ? { ...goal, text: text.trim() } : goal
+      );
+
+      await setGoals(updatedGoals);
+
+      const todayGoals = updatedGoals.filter((goal) => goal.date === today);
+      set({ goals: updatedGoals, todayGoals });
+    } catch (error) {
+      console.error('Error updating goal:', error);
+      const errorMessage = 'Failed to update goal. Please try again.';
       set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
     }
