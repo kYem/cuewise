@@ -1,0 +1,26 @@
+# Build output
+dist/
+
+# Package files
+*.zip
+cuewise-extension-*.zip
+
+# Screenshots (source images)
+screenshots/
+
+# OS files
+.DS_Store
+*.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Environment
+.env
+.env.local
