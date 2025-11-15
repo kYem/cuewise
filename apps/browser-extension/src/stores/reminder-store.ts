@@ -1,6 +1,7 @@
 import { generateId, type Reminder } from '@cuewise/shared';
 import { getReminders, setReminders } from '@cuewise/storage';
 import { create } from 'zustand';
+import { useToastStore } from './toast-store';
 
 interface ReminderStore {
   reminders: Reminder[];
@@ -73,7 +74,9 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       });
     } catch (error) {
       console.error('Error initializing reminder store:', error);
-      set({ error: 'Failed to load reminders', isLoading: false });
+      const errorMessage = 'Failed to load reminders. Please refresh the page.';
+      set({ error: errorMessage, isLoading: false });
+      useToastStore.getState().error(errorMessage);
     }
   },
 
@@ -110,7 +113,9 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       }
     } catch (error) {
       console.error('Error adding reminder:', error);
-      set({ error: 'Failed to add reminder' });
+      const errorMessage = 'Failed to add reminder. Please try again.';
+      set({ error: errorMessage });
+      useToastStore.getState().error(errorMessage);
     }
   },
 
@@ -138,7 +143,9 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       }
     } catch (error) {
       console.error('Error toggling reminder:', error);
-      set({ error: 'Failed to update reminder' });
+      const errorMessage = 'Failed to update reminder. Please try again.';
+      set({ error: errorMessage });
+      useToastStore.getState().error(errorMessage);
     }
   },
 
@@ -163,7 +170,9 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       }
     } catch (error) {
       console.error('Error deleting reminder:', error);
-      set({ error: 'Failed to delete reminder' });
+      const errorMessage = 'Failed to delete reminder. Please try again.';
+      set({ error: errorMessage });
+      useToastStore.getState().error(errorMessage);
     }
   },
 
@@ -193,7 +202,9 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       }
     } catch (error) {
       console.error('Error updating reminder:', error);
-      set({ error: 'Failed to update reminder' });
+      const errorMessage = 'Failed to update reminder. Please try again.';
+      set({ error: errorMessage });
+      useToastStore.getState().error(errorMessage);
     }
   },
 

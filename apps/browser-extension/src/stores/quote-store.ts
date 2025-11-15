@@ -2,6 +2,7 @@ import { getRandomQuote, type Quote, type QuoteCategory } from '@cuewise/shared'
 import { getCurrentQuote, getQuotes, setCurrentQuote, setQuotes } from '@cuewise/storage';
 import { create } from 'zustand';
 import { SEED_QUOTES } from '../data/seed-quotes';
+import { useToastStore } from './toast-store';
 
 interface QuoteStore {
   quotes: Quote[];
@@ -60,7 +61,9 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       }
     } catch (error) {
       console.error('Error initializing quote store:', error);
-      set({ error: 'Failed to load quotes', isLoading: false });
+      const errorMessage = 'Failed to load quotes. Please refresh the page.';
+      set({ error: errorMessage, isLoading: false });
+      useToastStore.getState().error(errorMessage);
     }
   },
 
@@ -76,7 +79,9 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       }
     } catch (error) {
       console.error('Error refreshing quote:', error);
-      set({ error: 'Failed to refresh quote' });
+      const errorMessage = 'Failed to refresh quote. Please try again.';
+      set({ error: errorMessage });
+      useToastStore.getState().error(errorMessage);
     }
   },
 
@@ -99,7 +104,9 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       }
     } catch (error) {
       console.error('Error toggling favorite:', error);
-      set({ error: 'Failed to update favorite' });
+      const errorMessage = 'Failed to update favorite. Please try again.';
+      set({ error: errorMessage });
+      useToastStore.getState().error(errorMessage);
     }
   },
 
@@ -118,7 +125,9 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       }
     } catch (error) {
       console.error('Error hiding quote:', error);
-      set({ error: 'Failed to hide quote' });
+      const errorMessage = 'Failed to hide quote. Please try again.';
+      set({ error: errorMessage });
+      useToastStore.getState().error(errorMessage);
     }
   },
 
@@ -149,7 +158,9 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       set({ quotes: updatedQuotes });
     } catch (error) {
       console.error('Error adding custom quote:', error);
-      set({ error: 'Failed to add custom quote' });
+      const errorMessage = 'Failed to add custom quote. Please try again.';
+      set({ error: errorMessage });
+      useToastStore.getState().error(errorMessage);
     }
   },
 

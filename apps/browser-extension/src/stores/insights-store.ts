@@ -1,6 +1,7 @@
 import { calculateInsights, type InsightsData } from '@cuewise/shared';
 import { getGoals, getPomodoroSessions, getQuotes } from '@cuewise/storage';
 import { create } from 'zustand';
+import { useToastStore } from './toast-store';
 
 interface InsightsStore {
   insights: InsightsData | null;
@@ -34,7 +35,9 @@ export const useInsightsStore = create<InsightsStore>((set) => ({
       set({ insights, isLoading: false });
     } catch (error) {
       console.error('Error initializing insights store:', error);
-      set({ error: 'Failed to load insights', isLoading: false });
+      const errorMessage = 'Failed to load insights. Please refresh the page.';
+      set({ error: errorMessage, isLoading: false });
+      useToastStore.getState().error(errorMessage);
     }
   },
 
@@ -54,7 +57,9 @@ export const useInsightsStore = create<InsightsStore>((set) => ({
       set({ insights });
     } catch (error) {
       console.error('Error refreshing insights:', error);
-      set({ error: 'Failed to refresh insights' });
+      const errorMessage = 'Failed to refresh insights. Please try again.';
+      set({ error: errorMessage });
+      useToastStore.getState().error(errorMessage);
     }
   },
 }));

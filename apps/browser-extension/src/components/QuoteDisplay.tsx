@@ -3,9 +3,11 @@ import { cn } from '@cuewise/ui';
 import { EyeOff, Heart, RefreshCw } from 'lucide-react';
 import type React from 'react';
 import { useQuoteStore } from '../stores/quote-store';
+import { ErrorFallback } from './ErrorFallback';
 
 export const QuoteDisplay: React.FC = () => {
-  const { currentQuote, refreshQuote, toggleFavorite, hideQuote, isLoading } = useQuoteStore();
+  const { currentQuote, refreshQuote, toggleFavorite, hideQuote, isLoading, error, initialize } =
+    useQuoteStore();
 
   if (isLoading) {
     return (
@@ -13,6 +15,10 @@ export const QuoteDisplay: React.FC = () => {
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
       </div>
     );
+  }
+
+  if (error) {
+    return <ErrorFallback error={error} title="Failed to load quotes" onRetry={initialize} />;
   }
 
   if (!currentQuote) {
