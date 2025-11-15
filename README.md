@@ -5,8 +5,8 @@ A cross-platform productivity suite with motivational quotes, goals, reminders, 
 ## Features
 
 ### ✨ Currently Implemented (v1.0)
-- **Motivational Quotes**: 60+ curated quotes across 6 categories
-  - Inspiration, Learning, Productivity, Mindfulness, Success, Creativity
+- **Motivational Quotes**: 100+ curated quotes across 10 categories
+  - Inspiration, Learning, Productivity, Mindfulness, Success, Creativity, Resilience, Leadership, Health, Growth
   - Random quote display on each new tab
   - Favorite/hide quotes functionality
   - View count tracking
@@ -22,16 +22,23 @@ A cross-platform productivity suite with motivational quotes, goals, reminders, 
   - Progress bar showing completion status
   - Clear completed goals
   - Goals automatically organized by date
+- **Reminders**: Smart reminder system with notifications
+  - Create reminders with due dates
+  - Browser notifications when reminders are due
+  - Snooze functionality (5 min, 15 min, 1 hour, 1 day)
+  - Recurring reminders (daily, weekly, monthly)
+  - Mark reminders as completed
 - **Beautiful UI**: Clean, minimalist design with smooth animations
 - **Live Clock**: Real-time display with personalized greetings
 - **Category System**: Color-coded quote categories
+- **Error Handling**: Toast notifications and graceful error boundaries
 
 ### 🚀 Planned Features
 **Productivity Features:**
-- Reminders with browser notifications
 - Pomodoro timer (25/5 minute intervals)
 - Insights dashboard with statistics
 - Dark mode support
+- Quote search and filtering
 
 **Platform Expansion:**
 - 📱 **Mobile App** (React Native) - Take your productivity on the go
@@ -54,13 +61,16 @@ A cross-platform productivity suite with motivational quotes, goals, reminders, 
 - `packages/shared` - Shared business logic, types, utilities (platform-agnostic)
 - `packages/storage` - Multi-platform storage adapters (Chrome Storage, localStorage, AsyncStorage)
 - `packages/ui` - Shared UI components (currently web-focused, will support native)
+- `packages/test-utils` - Shared testing utilities, factories, and mocks
 
 ### Technologies
-- **Framework**: React 18+ with TypeScript
+- **Framework**: React 18+ with TypeScript (ES2022)
 - **Build**: Vite with @crxjs/vite-plugin
-- **UI**: Tailwind CSS + custom components
+- **UI**: Tailwind CSS 4 + custom components
 - **State Management**: Zustand
-- **Storage**: Chrome Storage API
+- **Storage**: Chrome Storage API with abstraction layer
+- **Testing**: Vitest + Testing Library + Fishery
+- **Linting**: Biome (50x faster than ESLint)
 - **Target**: Chrome/Edge (Manifest V3)
 
 ## Getting Started
@@ -144,6 +154,21 @@ See [LINTING.md](./LINTING.md) for full linting documentation (we use **Biome** 
 pnpm type-check
 ```
 
+### Testing
+```bash
+# Run all tests
+pnpm test
+
+# Run tests for specific package
+pnpm --filter @cuewise/browser-extension test
+
+# Watch mode
+pnpm --filter @cuewise/browser-extension test:watch
+
+# Coverage report
+pnpm --filter @cuewise/browser-extension test:coverage
+```
+
 ### Clean build artifacts
 ```bash
 pnpm clean
@@ -152,17 +177,18 @@ pnpm clean
 ## Project Structure
 
 ```
-quote-app/
+cuewise/
 ├── apps/
 │   ├── browser-extension/      # Browser extension (Chrome/Edge)
 │   │   ├── src/
 │   │   │   ├── components/     # React components
-│   │   │   ├── stores/         # Zustand stores
+│   │   │   ├── stores/         # Zustand stores (with tests)
 │   │   │   ├── data/           # Seed quotes data
 │   │   │   ├── manifest.json   # Extension manifest
 │   │   │   ├── App.tsx
 │   │   │   └── main.tsx
 │   │   ├── public/
+│   │   ├── vitest.config.ts   # Test configuration
 │   │   └── dist/              # Build output (load this in Chrome)
 │   │
 │   ├── web/                   # Web app (Coming soon)
@@ -185,13 +211,21 @@ quote-app/
 │   │       ├── chrome-storage.ts      # Legacy
 │   │       └── storage-helpers.ts     # Legacy
 │   │
-│   └── ui/                   # Shared UI components
+│   ├── ui/                   # Shared UI components
+│   │   └── src/
+│   │       ├── components/   # React components
+│   │       └── lib/          # UI utilities
+│   │
+│   └── test-utils/           # Shared testing utilities
 │       └── src/
-│           ├── components/   # React components
-│           └── lib/          # UI utilities
+│           ├── factories/    # Type-safe test data factories (Fishery)
+│           ├── mocks/        # Shared mocks (Chrome Storage, Zustand)
+│           └── fixtures/     # Static test data
 │
+├── vitest.shared.ts          # Shared Vitest configuration
 ├── pnpm-workspace.yaml
 ├── turbo.json
+├── biome.json
 └── package.json
 ```
 
@@ -229,6 +263,16 @@ quote-app/
 - **View**: Your custom quotes appear randomly alongside curated quotes
 - **Identify**: Custom quotes show source and notes when displayed
 
+### Managing Reminders
+- **Add a reminder**: Click the reminders icon in the top navigation
+- **Set details**:
+  - Reminder text (what to remember)
+  - Due date and time
+  - Optional: Enable recurring (daily, weekly, monthly)
+- **Receive notifications**: Browser notifications when reminders are due
+- **Snooze**: Postpone reminders for 5 min, 15 min, 1 hour, or 1 day
+- **Complete**: Mark reminders as done when finished
+
 ## Customization
 
 ### Adding More Quotes
@@ -257,18 +301,50 @@ colors: {
 }
 ```
 
+## Testing
+
+The project includes comprehensive testing infrastructure:
+
+### Test Coverage
+- ✅ **Quote Store**: 11 tests covering initialization, favorites, custom quotes, hiding, view tracking
+- ✅ **Goal Store**: 10 tests covering CRUD operations, completion tracking, date filtering
+- 🚧 **Component Tests**: Coming soon
+- 🚧 **Storage Adapters**: Coming soon
+
+### Writing Tests
+Use the shared test utilities for consistent, type-safe test data:
+
+```typescript
+import { quoteFactory, goalFactory } from '@cuewise/test-utils/factories';
+import { createChromeStorageMock, resetAllStores } from '@cuewise/test-utils/mocks';
+
+// Generate test data
+const quotes = quoteFactory.buildList(5);
+const customQuote = customQuoteFactory.build({ author: 'Test Author' });
+const goals = goalFactory.buildList(3, { date: '2025-01-15' });
+```
+
+See test files in `apps/browser-extension/src/stores/*.test.ts` for examples.
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
+### Development Guidelines
+- Write tests for new features using Vitest
+- Follow the existing code style (enforced by Biome)
+- Use TypeScript strictly (no `any` types)
+- Keep components small and focused
+- Use shared packages for cross-platform code
+
 ### Future Development Priorities
-1. Goals system with daily tracking
-2. Reminders with notifications
-3. Pomodoro timer integration
-4. Insights dashboard
-5. Custom quote creation UI
-6. Dark mode support
-7. Export/import settings
+1. Pomodoro timer integration
+2. Insights dashboard with statistics
+3. Dark mode support
+4. Quote search and filtering
+5. Component test coverage
+6. Export/import settings
+7. Web and mobile app implementations
 
 ## License
 
