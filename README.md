@@ -10,13 +10,18 @@ A cross-platform productivity suite with motivational quotes, goals, reminders, 
   - Random quote display on each new tab
   - Favorite/hide quotes functionality
   - View count tracking
+- **Daily Goals/Todos**: Simple, focused task management
+  - Add goals for today with one click
+  - Check off completed tasks
+  - Progress bar showing completion status
+  - Clear completed goals
+  - Goals automatically organized by date
 - **Beautiful UI**: Clean, minimalist design with smooth animations
 - **Live Clock**: Real-time display with personalized greetings
 - **Category System**: Color-coded quote categories
 
 ### 🚀 Planned Features
 **Productivity Features:**
-- Daily goals with checkbox tracking
 - Reminders with browser notifications
 - Pomodoro timer (25/5 minute intervals)
 - Insights dashboard with statistics
@@ -184,6 +189,14 @@ quote-app/
 ### Hiding Quotes
 - Click the eye-off icon to hide a quote you don't want to see
 - Hidden quotes won't appear in the random selection
+
+### Managing Daily Goals
+- **Add a goal**: Type in the input field and press Enter or click "Add"
+- **Complete a goal**: Click the circle icon next to the goal text
+- **Delete a goal**: Hover over a goal and click the trash icon
+- **Track progress**: View the progress bar showing completed vs. total goals
+- **Clear completed**: Remove all completed goals with one click
+- Goals are automatically organized by date and reset daily
 
 ## Customization
 
