@@ -6,13 +6,19 @@
   "types": "./src/index.ts",
   "scripts": {
     "type-check": "tsc --noEmit",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@cuewise/shared": "workspace:*"
   },
   "devDependencies": {
     "@types/chrome": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "@cuewise/test-utils": "workspace:*",
+    "jsdom": "catalog:",
+    "vitest": "catalog:"
   }
 }

@@ -1,4 +1,4 @@
-import { BarChart3, ChevronDown, Plus, Settings, Timer } from 'lucide-react';
+import { BarChart3, Plus, Settings, Timer } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useQuoteStore } from '../stores/quote-store';
