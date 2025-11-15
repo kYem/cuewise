@@ -1,0 +1,26 @@
+{
+  "name": "productivity-extension-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Productivity and motivation browser extension monorepo",
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "clean": "turbo run clean",
+    "type-check": "turbo run type-check"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.3.5",
+    "turbo": "^2.0.0",
+    "typescript": "^5.3.0"
+  },
+  "packageManager": "pnpm@8.15.0",
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  }
+}
