@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:store": "pnpm build && pnpm package",
+    "package": "cd dist && zip -r ../cuewise-extension-$npm_package_version.zip . -x '*.DS_Store' -x '.vite/*' && cd .. && echo 'Package created: cuewise-extension-'$npm_package_version'.zip'",
     "preview": "vite preview",
     "type-check": "tsc --noEmit",
     "test": "vitest run",
