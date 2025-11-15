@@ -14,70 +14,89 @@ const getAudioContext = (): AudioContext => {
 };
 
 /**
- * Play a "start" sound - a quick ascending tone
+ * Play a "start" sound - an uplifting ascending melody (~1.5s)
  * Indicates the beginning of a Pomodoro session
+ * Follows UX best practices: gentle fade-in to avoid startle response
  */
 export const playStartSound = (): void => {
   try {
     const ctx = getAudioContext();
     const now = ctx.currentTime;
 
-    // Create oscillator for tone
-    const oscillator = ctx.createOscillator();
-    const gainNode = ctx.createGain();
+    // Uplifting ascending melody: C5 -> E5 -> G5 (major triad)
+    const notes = [
+      { freq: 523.25, start: 0, duration: 0.4 }, // C5
+      { freq: 659.25, start: 0.35, duration: 0.4 }, // E5
+      { freq: 783.99, start: 0.7, duration: 0.7 }, // G5 (longer final note)
+    ];
 
-    oscillator.connect(gainNode);
-    gainNode.connect(ctx.destination);
-
-    // Quick ascending tone: 600Hz -> 800Hz
-    oscillator.frequency.setValueAtTime(600, now);
-    oscillator.frequency.linearRampToValueAtTime(800, now + 0.1);
-
-    // Envelope: quick fade in and out
-    gainNode.gain.setValueAtTime(0, now);
-    gainNode.gain.linearRampToValueAtTime(0.3, now + 0.05);
-    gainNode.gain.linearRampToValueAtTime(0, now + 0.15);
-
-    oscillator.type = 'sine';
-    oscillator.start(now);
-    oscillator.stop(now + 0.15);
-  } catch (error) {
-    console.error('Error playing start sound:', error);
-  }
-};
-
-/**
- * Play a "completion" sound - a pleasant chime
- * Indicates the end of a Pomodoro session (work or break)
- */
-export const playCompletionSound = (): void => {
-  try {
-    const ctx = getAudioContext();
-    const now = ctx.currentTime;
-
-    // Create three-note chime (like a bell)
-    const frequencies = [523.25, 659.25, 783.99]; // C5, E5, G5 (C major chord)
-    const delays = [0, 0.15, 0.3];
-
-    frequencies.forEach((freq, index) => {
+    notes.forEach((note) => {
       const oscillator = ctx.createOscillator();
       const gainNode = ctx.createGain();
 
       oscillator.connect(gainNode);
       gainNode.connect(ctx.destination);
 
-      const startTime = now + delays[index];
+      const startTime = now + note.start;
+      const endTime = startTime + note.duration;
 
-      oscillator.frequency.setValueAtTime(freq, startTime);
+      oscillator.frequency.setValueAtTime(note.freq, startTime);
       oscillator.type = 'sine';
 
-      // Bell-like envelope: quick attack, slow decay
+      // Gentle envelope: smooth fade-in (0.2s) and fade-out
       gainNode.gain.setValueAtTime(0, startTime);
-      gainNode.gain.linearRampToValueAtTime(0.3, startTime + 0.01);
-      gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + 0.8);
+      gainNode.gain.linearRampToValueAtTime(0.25, startTime + 0.2); // Gentle 0.2s fade-in
+      gainNode.gain.linearRampToValueAtTime(0.25, endTime - 0.15); // Hold
+      gainNode.gain.linearRampToValueAtTime(0, endTime); // Smooth fade-out
 
       oscillator.start(startTime);
-      oscillator.stop(startTime + 0.8);
+      oscillator.stop(endTime);
+    });
+  } catch (error) {
+    console.error('Error playing start sound:', error);
+  }
+};
+
+/**
+ * Play a "completion" sound - a celebratory chime melody (~2.5s)
+ * Indicates the end of a Pomodoro session (work or break)
+ * A pleasant 5-note ascending then resolving melody to mark achievement
+ */
+export const playCompletionSound = (): void => {
+  try {
+    const ctx = getAudioContext();
+    const now = ctx.currentTime;
+
+    // Celebratory 5-note melody: C5 -> E5 -> G5 -> C6 -> G5
+    // Ascending to celebrate, then resolving back down
+    const melody = [
+      { freq: 523.25, start: 0, duration: 0.5 }, // C5
+      { freq: 659.25, start: 0.4, duration: 0.5 }, // E5
+      { freq: 783.99, start: 0.8, duration: 0.5 }, // G5
+      { freq: 1046.5, start: 1.2, duration: 0.6 }, // C6 (octave up - climax)
+      { freq: 783.99, start: 1.7, duration: 1.2 }, // G5 (longer resolution)
+    ];
+
+    melody.forEach((note) => {
+      const oscillator = ctx.createOscillator();
+      const gainNode = ctx.createGain();
+
+      oscillator.connect(gainNode);
+      gainNode.connect(ctx.destination);
+
+      const startTime = now + note.start;
+      const endTime = startTime + note.duration;
+
+      oscillator.frequency.setValueAtTime(note.freq, startTime);
+      oscillator.type = 'sine';
+
+      // Bell-like envelope: gentle attack, natural decay
+      gainNode.gain.setValueAtTime(0, startTime);
+      gainNode.gain.linearRampToValueAtTime(0.28, startTime + 0.15); // Gentle 0.15s attack
+      gainNode.gain.exponentialRampToValueAtTime(0.01, endTime); // Natural exponential decay
+
+      oscillator.start(startTime);
+      oscillator.stop(endTime);
     });
   } catch (error) {
     console.error('Error playing completion sound:', error);
