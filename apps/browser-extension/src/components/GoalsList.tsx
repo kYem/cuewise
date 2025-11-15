@@ -1,10 +1,54 @@
 import { cn } from '@cuewise/ui';
 import { CheckCircle2, Circle, Trash2 } from 'lucide-react';
 import type React from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useGoalStore } from '../stores/goal-store';
 
 export const GoalsList: React.FC = () => {
-  const { todayGoals, toggleGoal, deleteGoal, isLoading } = useGoalStore();
+  const { todayGoals, toggleGoal, updateGoal, deleteGoal, isLoading } = useGoalStore();
+  const [editingGoalId, setEditingGoalId] = useState<string | null>(null);
+  const [editText, setEditText] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Focus input when editing starts
+  useEffect(() => {
+    if (editingGoalId && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [editingGoalId]);
+
+  const startEditing = (goalId: string, currentText: string) => {
+    setEditingGoalId(goalId);
+    setEditText(currentText);
+  };
+
+  const saveEdit = async () => {
+    if (
+      editingGoalId &&
+      editText.trim() &&
+      editText.trim() !== todayGoals.find((g) => g.id === editingGoalId)?.text
+    ) {
+      await updateGoal(editingGoalId, editText.trim());
+    }
+    setEditingGoalId(null);
+    setEditText('');
+  };
+
+  const cancelEdit = () => {
+    setEditingGoalId(null);
+    setEditText('');
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      saveEdit();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      cancelEdit();
+    }
+  };
 
   if (isLoading) {
     return <div className="text-center py-8 text-gray-500">Loading goals...</div>;
@@ -70,14 +114,29 @@ export const GoalsList: React.FC = () => {
             </button>
 
             {/* Goal Text */}
-            <span
-              className={cn(
-                'flex-1 text-base transition-all',
-                goal.completed ? 'text-gray-400 line-through' : 'text-gray-800'
-              )}
-            >
-              {goal.text}
-            </span>
+            {editingGoalId === goal.id ? (
+              <input
+                ref={inputRef}
+                type="text"
+                value={editText}
+                onChange={(e) => setEditText(e.target.value)}
+                onBlur={saveEdit}
+                onKeyDown={handleKeyDown}
+                maxLength={200}
+                className="flex-1 text-base px-2 py-1 border-2 border-primary-500 rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            ) : (
+              <button
+                type="button"
+                onClick={() => startEditing(goal.id, goal.text)}
+                className={cn(
+                  'flex-1 text-base text-left transition-all hover:bg-gray-50 px-2 py-1 rounded',
+                  goal.completed ? 'text-gray-400 line-through' : 'text-gray-800'
+                )}
+              >
+                {goal.text}
+              </button>
+            )}
 
             {/* Delete Button */}
             <button

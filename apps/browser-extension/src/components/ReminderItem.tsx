@@ -9,7 +9,7 @@ import {
   isTomorrow,
   parseISO,
 } from 'date-fns';
-import { Bell, CheckCircle2, Circle, Clock, Repeat, Trash2 } from 'lucide-react';
+import { Bell, CheckCircle2, Circle, Clock, Pencil, Repeat, Trash2 } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useState } from 'react';
 
@@ -17,6 +17,7 @@ interface ReminderItemProps {
   reminder: Reminder;
   onToggle: (id: string) => void;
   onDelete: (id: string) => void;
+  onEdit: (id: string) => void;
   onSnooze?: (id: string, minutes: number) => void;
 }
 
@@ -90,6 +91,7 @@ export const ReminderItem: React.FC<ReminderItemProps> = ({
   reminder,
   onToggle,
   onDelete,
+  onEdit,
   onSnooze,
 }) => {
   const [countdown, setCountdown] = useState('');
@@ -230,6 +232,16 @@ export const ReminderItem: React.FC<ReminderItemProps> = ({
           </div>
         )}
       </div>
+
+      {/* Edit Button */}
+      <button
+        type="button"
+        onClick={() => onEdit(reminder.id)}
+        className="flex-shrink-0 p-2 text-gray-400 hover:text-primary-500 opacity-0 group-hover:opacity-100 transition-all focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 rounded"
+        aria-label="Edit reminder"
+      >
+        <Pencil className="w-4 h-4" />
+      </button>
 
       {/* Delete Button */}
       <button
