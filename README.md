@@ -1,6 +1,6 @@
-# Productivity & Motivation Browser Extension
+# Productivity & Motivation Platform
 
-A beautiful browser extension that replaces your new tab page with motivational quotes, goals, reminders, and productivity tracking.
+A cross-platform productivity suite with motivational quotes, goals, reminders, and productivity tracking. Built as a monorepo supporting browser extensions, web apps, and mobile apps.
 
 ## Features
 
@@ -14,13 +14,19 @@ A beautiful browser extension that replaces your new tab page with motivational 
 - **Live Clock**: Real-time display with personalized greetings
 - **Category System**: Color-coded quote categories
 
-### 🚀 Planned Features (Future Updates)
+### 🚀 Planned Features
+**Productivity Features:**
 - Daily goals with checkbox tracking
 - Reminders with browser notifications
 - Pomodoro timer (25/5 minute intervals)
 - Insights dashboard with statistics
 - Custom quote creation
 - Dark mode support
+
+**Platform Expansion:**
+- 📱 **Mobile App** (React Native) - Take your productivity on the go
+- 🌐 **Web App** (Next.js) - Access from any browser without extension
+- 🔄 **Cloud Sync** - Sync data across all platforms
 
 ## Tech Stack
 
@@ -29,11 +35,15 @@ A beautiful browser extension that replaces your new tab page with motivational 
 - **Build Tool**: Turbo (turborepo) for efficient builds
 - **Language**: TypeScript throughout
 
-### Packages
-- `packages/extension` - Browser extension (React + Vite)
-- `packages/shared` - Shared types, utilities, constants
-- `packages/storage` - Chrome Storage API abstraction layer
-- `packages/ui` - Shared UI components (Tailwind CSS)
+### Applications (`apps/`)
+- `apps/extension` - Browser extension (Chrome/Edge, Manifest V3)
+- `apps/web` - Web application (Coming soon - Next.js)
+- `apps/mobile` - Mobile app (Coming soon - React Native)
+
+### Shared Packages (`packages/`)
+- `packages/shared` - Shared business logic, types, utilities (platform-agnostic)
+- `packages/storage` - Multi-platform storage adapters (Chrome Storage, localStorage, AsyncStorage)
+- `packages/ui` - Shared UI components (currently web-focused, will support native)
 
 ### Technologies
 - **Framework**: React 18+ with TypeScript
@@ -68,7 +78,7 @@ A beautiful browser extension that replaces your new tab page with motivational 
    pnpm --filter @productivity-extension/extension build
    ```
 
-   Or use turbo to build all packages:
+   Or use turbo to build all apps and packages:
    ```bash
    pnpm build
    ```
@@ -84,7 +94,7 @@ A beautiful browser extension that replaces your new tab page with motivational 
 
 3. **Load the extension**
    - Click "Load unpacked"
-   - Navigate to `packages/extension/dist`
+   - Navigate to `apps/extension/dist`
    - Click "Select Folder"
 
 4. **Test it!**
@@ -119,33 +129,42 @@ pnpm clean
 
 ```
 quote-app/
-├── packages/
-│   ├── extension/          # Main browser extension
+├── apps/
+│   ├── extension/              # Browser extension (Chrome/Edge)
 │   │   ├── src/
-│   │   │   ├── components/ # React components
-│   │   │   ├── stores/     # Zustand stores
-│   │   │   ├── data/       # Seed quotes data
-│   │   │   ├── manifest.json
+│   │   │   ├── components/     # React components
+│   │   │   ├── stores/         # Zustand stores
+│   │   │   ├── data/           # Seed quotes data
+│   │   │   ├── manifest.json   # Extension manifest
 │   │   │   ├── App.tsx
 │   │   │   └── main.tsx
 │   │   ├── public/
-│   │   └── dist/          # Build output (load this in Chrome)
+│   │   └── dist/              # Build output (load this in Chrome)
 │   │
-│   ├── shared/            # Shared TypeScript types & utilities
+│   ├── web/                   # Web app (Coming soon)
+│   └── mobile/                # React Native app (Coming soon)
+│
+├── packages/
+│   ├── shared/               # Platform-agnostic business logic
 │   │   └── src/
-│   │       ├── types.ts
-│   │       ├── constants.ts
-│   │       └── utils.ts
+│   │       ├── types.ts      # Shared TypeScript types
+│   │       ├── constants.ts  # Shared constants
+│   │       └── utils.ts      # Shared utilities
 │   │
-│   ├── storage/           # Chrome Storage API wrappers
+│   ├── storage/              # Multi-platform storage
 │   │   └── src/
-│   │       ├── chrome-storage.ts
-│   │       └── storage-helpers.ts
+│   │       ├── storage-interface.ts
+│   │       ├── adapters/
+│   │       │   ├── chrome-storage-adapter.ts  # For extension
+│   │       │   ├── local-storage-adapter.ts   # For web
+│   │       │   └── async-storage-adapter.ts   # For mobile
+│   │       ├── chrome-storage.ts      # Legacy
+│   │       └── storage-helpers.ts     # Legacy
 │   │
-│   └── ui/                # Shared UI components
+│   └── ui/                   # Shared UI components
 │       └── src/
-│           ├── components/
-│           └── lib/
+│           ├── components/   # React components
+│           └── lib/          # UI utilities
 │
 ├── pnpm-workspace.yaml
 ├── turbo.json
@@ -170,7 +189,7 @@ quote-app/
 
 ### Adding More Quotes
 
-Edit `packages/extension/src/data/seed-quotes.ts` to add new quotes:
+Edit `apps/extension/src/data/seed-quotes.ts` to add new quotes:
 
 ```typescript
 const NEW_CATEGORY_QUOTES = [
@@ -181,7 +200,7 @@ const NEW_CATEGORY_QUOTES = [
 
 ### Changing Colors
 
-Edit the Tailwind config in `packages/extension/tailwind.config.js`:
+Edit the Tailwind config in `apps/extension/tailwind.config.js`:
 
 ```javascript
 colors: {
@@ -214,7 +233,7 @@ MIT License - see LICENSE file for details
 ## Troubleshooting
 
 ### Extension not loading
-- Make sure you selected the `packages/extension/dist` folder
+- Make sure you selected the `apps/extension/dist` folder
 - Check that the build completed successfully
 - Try rebuilding: `pnpm --filter @productivity-extension/extension build`
 
