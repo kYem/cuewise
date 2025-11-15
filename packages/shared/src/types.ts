@@ -22,6 +22,8 @@ export interface Quote {
   isHidden: boolean;
   viewCount: number;
   lastViewed?: string; // ISO date string
+  source?: string; // Book, URL, or other reference
+  notes?: string; // Personal notes about the quote
 }
 
 // Goal interface

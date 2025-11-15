@@ -10,6 +10,12 @@ A cross-platform productivity suite with motivational quotes, goals, reminders, 
   - Random quote display on each new tab
   - Favorite/hide quotes functionality
   - View count tracking
+- **Custom Quote Creation**: Add your own inspiring quotes
+  - Include author, category, source/reference
+  - Add personal notes about why quotes are meaningful
+  - Source field for book titles, URLs, or references
+  - Custom quotes appear alongside curated ones
+  - Floating action button for quick access
 - **Daily Goals/Todos**: Simple, focused task management
   - Add goals for today with one click
   - Check off completed tasks
@@ -25,7 +31,6 @@ A cross-platform productivity suite with motivational quotes, goals, reminders, 
 - Reminders with browser notifications
 - Pomodoro timer (25/5 minute intervals)
 - Insights dashboard with statistics
-- Custom quote creation
 - Dark mode support
 
 **Platform Expansion:**
@@ -211,6 +216,18 @@ quote-app/
 - **Track progress**: View the progress bar showing completed vs. total goals
 - **Clear completed**: Remove all completed goals with one click
 - Goals are automatically organized by date and reset daily
+
+### Creating Custom Quotes
+- **Open the form**: Click the floating "+" button in the bottom-right corner
+- **Fill in details**:
+  - Quote text (required, up to 500 characters)
+  - Author (required)
+  - Category (select from 10 categories)
+  - Source (optional) - Book title, URL, or reference
+  - Personal notes (optional, up to 300 characters) - Why this quote matters to you
+- **Save**: Click "Add Quote" to save
+- **View**: Your custom quotes appear randomly alongside curated quotes
+- **Identify**: Custom quotes show source and notes when displayed
 
 ## Customization
 

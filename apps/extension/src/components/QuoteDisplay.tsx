@@ -58,13 +58,27 @@ export const QuoteDisplay: React.FC = () => {
           <p className="text-3xl md:text-4xl lg:text-5xl font-light text-gray-800 leading-relaxed text-center mb-8 text-balance">
             {currentQuote.text}
           </p>
-          <footer className="text-center">
+          <footer className="text-center space-y-3">
             <cite
               className="text-xl md:text-2xl font-medium not-italic"
               style={{ color: categoryColor }}
             >
               — {currentQuote.author}
             </cite>
+
+            {/* Source (for custom quotes) */}
+            {currentQuote.source && (
+              <div className="text-sm text-gray-500 italic">
+                Source: {currentQuote.source}
+              </div>
+            )}
+
+            {/* Personal Notes (for custom quotes) */}
+            {currentQuote.notes && (
+              <div className="text-sm text-gray-600 bg-yellow-50 border border-yellow-200 rounded-lg px-4 py-2 inline-block">
+                💭 {currentQuote.notes}
+              </div>
+            )}
           </footer>
         </blockquote>
 

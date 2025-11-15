@@ -19,7 +19,13 @@ interface QuoteStore {
   refreshQuote: () => Promise<void>;
   toggleFavorite: (quoteId: string) => Promise<void>;
   hideQuote: (quoteId: string) => Promise<void>;
-  addCustomQuote: (text: string, author: string, category: QuoteCategory) => Promise<void>;
+  addCustomQuote: (
+    text: string,
+    author: string,
+    category: QuoteCategory,
+    source?: string,
+    notes?: string
+  ) => Promise<void>;
   incrementViewCount: (quoteId: string) => Promise<void>;
 }
 
@@ -121,7 +127,13 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     }
   },
 
-  addCustomQuote: async (text: string, author: string, category: QuoteCategory) => {
+  addCustomQuote: async (
+    text: string,
+    author: string,
+    category: QuoteCategory,
+    source?: string,
+    notes?: string
+  ) => {
     try {
       const { quotes } = get();
       const newQuote: Quote = {
@@ -133,6 +145,8 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         isFavorite: false,
         isHidden: false,
         viewCount: 0,
+        source,
+        notes,
       };
 
       const updatedQuotes = [...quotes, newQuote];
