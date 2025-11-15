@@ -2,7 +2,7 @@
  * localStorage adapter for web applications
  */
 
-import { StorageAdapter } from '../storage-interface';
+import type { StorageAdapter } from '../storage-interface';
 
 export class LocalStorageAdapter implements StorageAdapter {
   async get<T>(key: string): Promise<T | null> {

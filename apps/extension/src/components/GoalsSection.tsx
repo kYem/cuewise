@@ -1,8 +1,9 @@
-import React, { useEffect } from 'react';
 import { Target } from 'lucide-react';
+import type React from 'react';
+import { useEffect } from 'react';
+import { useGoalStore } from '../stores/goal-store';
 import { GoalInput } from './GoalInput';
 import { GoalsList } from './GoalsList';
-import { useGoalStore } from '../stores/goal-store';
 
 export const GoalsSection: React.FC = () => {
   const initialize = useGoalStore((state) => state.initialize);

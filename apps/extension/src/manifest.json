@@ -3,11 +3,7 @@
   "name": "Productivity & Motivation",
   "version": "1.0.0",
   "description": "Stay focused and inspired with quotes, goals, reminders, and productivity tracking",
-  "permissions": [
-    "storage",
-    "notifications",
-    "alarms"
-  ],
+  "permissions": ["storage", "notifications", "alarms"],
   "chrome_url_overrides": {
     "newtab": "index.html"
   },

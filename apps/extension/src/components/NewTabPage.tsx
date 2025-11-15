@@ -1,8 +1,9 @@
-import React, { useEffect } from 'react';
-import { Clock } from './Clock';
-import { QuoteDisplay } from './QuoteDisplay';
-import { GoalsSection } from './GoalsSection';
+import type React from 'react';
+import { useEffect } from 'react';
 import { useQuoteStore } from '../stores/quote-store';
+import { Clock } from './Clock';
+import { GoalsSection } from './GoalsSection';
+import { QuoteDisplay } from './QuoteDisplay';
 
 export const NewTabPage: React.FC = () => {
   const initialize = useQuoteStore((state) => state.initialize);
@@ -37,8 +38,8 @@ export const NewTabPage: React.FC = () => {
             {' + '}
             <kbd className="px-2 py-1 bg-white rounded border border-gray-300 text-xs font-mono">
               T
-            </kbd>
-            {' '}to open a new tab
+            </kbd>{' '}
+            to open a new tab
           </p>
         </footer>
       </div>

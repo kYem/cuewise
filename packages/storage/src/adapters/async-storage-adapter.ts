@@ -6,7 +6,7 @@
  * 3. Pass it to this adapter or create a concrete implementation
  */
 
-import { StorageAdapter } from '../storage-interface';
+import type { StorageAdapter } from '../storage-interface';
 
 export class AsyncStorageAdapter implements StorageAdapter {
   private AsyncStorage: any = null;
@@ -16,7 +16,9 @@ export class AsyncStorageAdapter implements StorageAdapter {
     this.AsyncStorage = asyncStorageInstance;
 
     if (!this.AsyncStorage) {
-      console.warn('AsyncStorage not provided. This adapter will not work. Pass AsyncStorage instance to constructor.');
+      console.warn(
+        'AsyncStorage not provided. This adapter will not work. Pass AsyncStorage instance to constructor.'
+      );
     }
   }
 

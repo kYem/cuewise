@@ -1,6 +1,6 @@
-import { create } from 'zustand';
-import { Goal, getTodayDateString, generateId } from '@productivity-extension/shared';
+import { type Goal, generateId, getTodayDateString } from '@productivity-extension/shared';
 import { getGoals, setGoals } from '@productivity-extension/storage';
+import { create } from 'zustand';
 
 interface GoalStore {
   goals: Goal[];
@@ -107,9 +107,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       const today = getTodayDateString();
 
       // Remove completed goals from today only
-      const updatedGoals = goals.filter(
-        (goal) => !(goal.date === today && goal.completed)
-      );
+      const updatedGoals = goals.filter((goal) => !(goal.date === today && goal.completed));
 
       await setGoals(updatedGoals);
 

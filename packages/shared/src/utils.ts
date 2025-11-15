@@ -1,4 +1,4 @@
-import { Quote } from './types';
+import type { Quote } from './types';
 
 /**
  * Generate a unique ID
@@ -56,7 +56,7 @@ export function getRandomItem<T>(array: T[]): T {
  * Filter out hidden and get a random quote from a list
  */
 export function getRandomQuote(quotes: Quote[]): Quote | null {
-  const visibleQuotes = quotes.filter(q => !q.isHidden);
+  const visibleQuotes = quotes.filter((q) => !q.isHidden);
   if (visibleQuotes.length === 0) return null;
   return getRandomItem(visibleQuotes);
 }

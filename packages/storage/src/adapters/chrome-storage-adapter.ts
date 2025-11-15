@@ -2,7 +2,7 @@
  * Chrome Storage API adapter for browser extensions
  */
 
-import { StorageAdapter } from '../storage-interface';
+import type { StorageAdapter } from '../storage-interface';
 
 type StorageArea = 'local' | 'sync';
 

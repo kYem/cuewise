@@ -1,11 +1,11 @@
-import { create } from 'zustand';
-import { Quote, QuoteCategory, getRandomQuote } from '@productivity-extension/shared';
+import { getRandomQuote, type Quote, type QuoteCategory } from '@productivity-extension/shared';
 import {
-  getQuotes,
-  setQuotes,
   getCurrentQuote,
+  getQuotes,
   setCurrentQuote,
+  setQuotes,
 } from '@productivity-extension/storage';
+import { create } from 'zustand';
 import { SEED_QUOTES } from '../data/seed-quotes';
 
 interface QuoteStore {
@@ -105,9 +105,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
   hideQuote: async (quoteId: string) => {
     try {
       const { quotes } = get();
-      const updatedQuotes = quotes.map((q) =>
-        q.id === quoteId ? { ...q, isHidden: true } : q
-      );
+      const updatedQuotes = quotes.map((q) => (q.id === quoteId ? { ...q, isHidden: true } : q));
 
       await setQuotes(updatedQuotes);
       set({ quotes: updatedQuotes });

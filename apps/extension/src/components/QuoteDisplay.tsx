@@ -1,8 +1,8 @@
-import React from 'react';
-import { RefreshCw, Heart, EyeOff } from 'lucide-react';
-import { useQuoteStore } from '../stores/quote-store';
 import { CATEGORY_COLORS } from '@productivity-extension/shared';
 import { cn } from '@productivity-extension/ui';
+import { EyeOff, Heart, RefreshCw } from 'lucide-react';
+import type React from 'react';
+import { useQuoteStore } from '../stores/quote-store';
 
 export const QuoteDisplay: React.FC = () => {
   const { currentQuote, refreshQuote, toggleFavorite, hideQuote, isLoading } = useQuoteStore();
@@ -59,7 +59,10 @@ export const QuoteDisplay: React.FC = () => {
             {currentQuote.text}
           </p>
           <footer className="text-center">
-            <cite className="text-xl md:text-2xl font-medium not-italic" style={{ color: categoryColor }}>
+            <cite
+              className="text-xl md:text-2xl font-medium not-italic"
+              style={{ color: categoryColor }}
+            >
               — {currentQuote.author}
             </cite>
           </footer>
@@ -79,16 +82,14 @@ export const QuoteDisplay: React.FC = () => {
         <button
           onClick={() => toggleFavorite(currentQuote.id)}
           className={cn(
-            "p-3 rounded-full transition-all hover:scale-110 hover:shadow-lg",
+            'p-3 rounded-full transition-all hover:scale-110 hover:shadow-lg',
             currentQuote.isFavorite
-              ? "bg-red-500 text-white"
-              : "bg-white text-gray-600 hover:bg-gray-50"
+              ? 'bg-red-500 text-white'
+              : 'bg-white text-gray-600 hover:bg-gray-50'
           )}
-          title={currentQuote.isFavorite ? "Remove from favorites" : "Add to favorites"}
+          title={currentQuote.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
         >
-          <Heart
-            className={cn("w-5 h-5", currentQuote.isFavorite && "fill-current")}
-          />
+          <Heart className={cn('w-5 h-5', currentQuote.isFavorite && 'fill-current')} />
         </button>
 
         <button

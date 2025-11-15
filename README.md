@@ -120,6 +120,20 @@ This starts Vite in development mode with hot module replacement (HMR). The exte
 pnpm build
 ```
 
+### Linting and Formatting
+```bash
+# Check for linting and formatting issues
+pnpm lint
+
+# Auto-fix issues
+pnpm lint:fix
+
+# Format code
+pnpm format
+```
+
+See [LINTING.md](./LINTING.md) for full linting documentation (we use **Biome** - 50x faster than ESLint!).
+
 ### Type checking
 ```bash
 pnpm type-check

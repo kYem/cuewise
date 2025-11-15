@@ -1,17 +1,13 @@
-import React from 'react';
-import { CheckCircle2, Circle, Trash2 } from 'lucide-react';
-import { useGoalStore } from '../stores/goal-store';
 import { cn } from '@productivity-extension/ui';
+import { CheckCircle2, Circle, Trash2 } from 'lucide-react';
+import type React from 'react';
+import { useGoalStore } from '../stores/goal-store';
 
 export const GoalsList: React.FC = () => {
   const { todayGoals, toggleGoal, deleteGoal, isLoading } = useGoalStore();
 
   if (isLoading) {
-    return (
-      <div className="text-center py-8 text-gray-500">
-        Loading goals...
-      </div>
-    );
+    return <div className="text-center py-8 text-gray-500">Loading goals...</div>;
   }
 
   if (todayGoals.length === 0) {
@@ -77,9 +73,7 @@ export const GoalsList: React.FC = () => {
             <span
               className={cn(
                 'flex-1 text-base transition-all',
-                goal.completed
-                  ? 'text-gray-400 line-through'
-                  : 'text-gray-800'
+                goal.completed ? 'text-gray-400 line-through' : 'text-gray-800'
               )}
             >
               {goal.text}

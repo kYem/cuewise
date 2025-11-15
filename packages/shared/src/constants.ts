@@ -1,4 +1,4 @@
-import { QuoteCategory, Settings } from './types';
+import type { QuoteCategory, Settings } from './types';
 
 // Default settings
 export const DEFAULT_SETTINGS: Settings = {

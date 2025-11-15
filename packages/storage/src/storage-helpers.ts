@@ -3,13 +3,13 @@
  */
 
 import {
-  Quote,
-  Goal,
-  Reminder,
-  PomodoroSession,
-  Settings,
-  STORAGE_KEYS,
   DEFAULT_SETTINGS,
+  type Goal,
+  type PomodoroSession,
+  type Quote,
+  type Reminder,
+  type Settings,
+  STORAGE_KEYS,
 } from '@productivity-extension/shared';
 import { getFromStorage, setInStorage } from './chrome-storage';
 
