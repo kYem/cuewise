@@ -254,6 +254,7 @@ const QuoteCard: React.FC<QuoteCardProps> = ({
       <div className="flex items-center justify-between pt-4 border-t border-gray-100">
         <div className="flex items-center gap-2">
           <button
+            type="button"
             onClick={() => onToggleFavorite(quote.id)}
             className={cn(
               'p-2 rounded-full transition-all hover:scale-110',
@@ -267,6 +268,7 @@ const QuoteCard: React.FC<QuoteCardProps> = ({
           </button>
 
           <button
+            type="button"
             onClick={() => onToggleHidden(quote.id)}
             className={cn(
               'p-2 rounded-full transition-all hover:scale-110',
@@ -283,6 +285,7 @@ const QuoteCard: React.FC<QuoteCardProps> = ({
         {quote.isCustom && (
           <div className="flex items-center gap-2">
             <button
+              type="button"
               onClick={() => onEdit(quote)}
               className="p-2 rounded-full bg-blue-100 text-blue-600 hover:bg-blue-200 transition-all hover:scale-110"
               title="Edit quote"
@@ -293,6 +296,7 @@ const QuoteCard: React.FC<QuoteCardProps> = ({
             {showDeleteConfirm ? (
               <div className="flex items-center gap-1">
                 <button
+                  type="button"
                   onClick={() => {
                     onDelete(quote.id);
                     setShowDeleteConfirm(false);
@@ -302,6 +306,7 @@ const QuoteCard: React.FC<QuoteCardProps> = ({
                   Confirm
                 </button>
                 <button
+                  type="button"
                   onClick={() => setShowDeleteConfirm(false)}
                   className="px-2 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
                 >
@@ -310,6 +315,7 @@ const QuoteCard: React.FC<QuoteCardProps> = ({
               </div>
             ) : (
               <button
+                type="button"
                 onClick={() => setShowDeleteConfirm(true)}
                 className="p-2 rounded-full bg-red-100 text-red-600 hover:bg-red-200 transition-all hover:scale-110"
                 title="Delete quote"
@@ -459,13 +465,16 @@ export const QuoteManagementPage: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 py-6">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-4">
-              <a
-                href="#"
+              <button
+                type="button"
+                onClick={() => {
+                  window.location.hash = '';
+                }}
                 className="p-2 hover:bg-gray-100 rounded-full transition-colors"
                 title="Back to home"
               >
                 <ArrowLeft className="w-6 h-6" />
-              </a>
+              </button>
               <div>
                 <h1 className="text-3xl font-bold text-gray-900">Quote Management</h1>
                 <p className="text-gray-600 mt-1">Manage your collection of {stats.total} quotes</p>
@@ -473,6 +482,7 @@ export const QuoteManagementPage: React.FC = () => {
             </div>
 
             <button
+              type="button"
               onClick={() => setShowAddForm(!showAddForm)}
               className="flex items-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium shadow-sm hover:shadow-md"
             >
@@ -529,6 +539,7 @@ export const QuoteManagementPage: React.FC = () => {
                 {(['all', 'custom', 'default', 'favorites', 'hidden'] as const).map((type) => (
                   <button
                     key={type}
+                    type="button"
                     onClick={() => setFilterType(type)}
                     className={cn(
                       'px-4 py-2 rounded-lg font-medium transition-all',
