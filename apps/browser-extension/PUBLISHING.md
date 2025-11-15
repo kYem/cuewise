@@ -179,19 +179,99 @@ Turn your day into a meaningful journey. Install Cuewise today.
 - **Primary**: Productivity
 - **Tags**: goals, quotes, motivation, reminders, pomodoro, productivity
 
-### Permission Justifications
+---
 
-**Storage**
-- Store user's quotes, goals, reminders, and settings locally
-- No data leaves the device
+## 🔐 Privacy & Permissions (Required for Chrome Web Store)
 
-**Notifications**
-- Alert users when reminders are due
-- Notify when Pomodoro sessions complete
+### Single Purpose Description (Max 1,000 characters)
+```
+Cuewise is a productivity enhancement tool that replaces your browser's new tab page with an intentional workspace. It provides daily motivational quotes, goal tracking, smart reminders, and a Pomodoro focus timer to help users maintain mindful productivity throughout their day. All features work together to create a cohesive journey of intentional work and personal growth.
+```
 
-**Alarms**
-- Schedule recurring reminders
-- Manage Pomodoro timer intervals
+**Character count**: ~340/1,000
+
+### Permission Justifications (Max 1,000 characters each)
+
+#### Storage Permission
+```
+The storage permission is required to save user data locally on their device, including:
+
+• Custom and favorited quotes
+• Daily goals and task lists
+• Reminder schedules and settings
+• Pomodoro timer preferences (work/break durations)
+• User preferences (theme, quote auto-refresh interval)
+• Progress tracking data (streaks, completion stats)
+
+All data is stored exclusively in the user's local browser storage using Chrome's Storage API. No data is transmitted to external servers, shared with third parties, or stored in the cloud. Users maintain complete control and ownership of their data. The extension requires storage to provide its core functionality of persistent productivity tracking across browser sessions.
+```
+
+**Character count**: ~626/1,000
+
+#### Notifications Permission
+```
+The notifications permission is required to alert users at critical moments for productivity:
+
+• Reminder notifications when scheduled tasks or events are due
+• Pomodoro timer alerts when work sessions complete (25 minutes)
+• Pomodoro break notifications when break time ends (5 minutes)
+• Optional countdown notifications for approaching reminders (under 5 minutes)
+
+Notifications are only shown when the user has explicitly created a reminder or started a Pomodoro session. Users can disable notifications entirely in the extension settings. No notifications are used for marketing, promotions, or any purpose other than the user's scheduled productivity alerts. All notification scheduling happens locally using Chrome's Alarms API.
+```
+
+**Character count**: ~668/1,000
+
+#### Alarms Permission
+```
+The alarms permission is required to schedule time-based events for productivity features:
+
+• Recurring daily, weekly, or monthly reminders set by the user
+• Pomodoro timer intervals (25-minute work sessions, 5-minute breaks)
+• Auto-refresh quote intervals (user can set custom intervals from 10 seconds to 1 hour)
+• Upcoming reminder countdown triggers (alerts when reminder is less than 5 minutes away)
+
+The alarms API enables precise, battery-efficient scheduling of these events even when the extension is not actively running. All alarms are created based on explicit user actions (creating reminders, starting Pomodoro, configuring auto-refresh). No alarms are used for background data collection, analytics, or any tracking purposes.
+```
+
+**Character count**: ~670/1,000
+
+---
+
+### Data Usage & Privacy Policy
+
+#### What Data is Collected?
+**None.** Cuewise collects zero data. No analytics, no tracking, no telemetry.
+
+#### What Data is Stored?
+All user-created content is stored locally:
+- Quotes (custom, favorited, hidden status)
+- Daily goals and completion status
+- Reminders and their schedules
+- Pomodoro session history
+- User preferences and settings
+
+#### Where is Data Stored?
+Exclusively in Chrome's local storage on the user's device using `chrome.storage.local` API.
+
+#### Is Data Shared?
+No. Data never leaves the user's device.
+
+#### Can Users Delete Their Data?
+Yes. Users can:
+- Clear individual items (quotes, goals, reminders)
+- Reset all settings to defaults
+- Uninstall the extension (removes all data)
+
+#### Third-Party Services
+None. Cuewise does not connect to any external services, APIs, or servers.
+
+#### Future Privacy Commitment
+If cloud sync is added in future versions, it will be:
+- **Optional** (off by default)
+- **End-to-end encrypted**
+- **User-controlled** (can disable anytime)
+- **Transparent** (clearly documented)
 
 ### Screenshots Descriptions
 
