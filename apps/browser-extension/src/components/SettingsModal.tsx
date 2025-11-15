@@ -32,6 +32,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     setTimeFormat(settings.timeFormat);
   }, [settings]);
 
+  // Format interval for display
+  const formatInterval = (seconds: number): string => {
+    if (seconds === 0) return 'Manual';
+    if (seconds < 60) return `${seconds}s`;
+    if (seconds < 3600) {
+      const minutes = Math.floor(seconds / 60);
+      const remainingSeconds = seconds % 60;
+      return remainingSeconds > 0 ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`;
+    }
+    const hours = Math.floor(seconds / 3600);
+    const remainingMinutes = Math.floor((seconds % 3600) / 60);
+    return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+  };
+
   // Handle save
   const handleSave = async () => {
     await updateSettings({
@@ -263,53 +277,139 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
             <h3 className="text-lg font-semibold text-gray-800">Quote Change Interval</h3>
           </div>
 
-          <div className="space-y-2 pl-7">
-            <label className="flex items-center gap-3 cursor-pointer group">
-              <input
-                type="radio"
-                name="quote-interval"
-                value="manual"
-                checked={quoteInterval === 'manual'}
-                onChange={(e) => setQuoteInterval(e.target.value as typeof quoteInterval)}
-                className="w-4 h-4 text-primary-600 bg-gray-100 border-gray-300 focus:ring-primary-500"
-              />
-              <div>
-                <span className="text-sm font-medium text-gray-700">Manual</span>
-                <p className="text-xs text-gray-500">
-                  Change quote only when clicking the refresh button
-                </p>
+          <div className="space-y-4 pl-7">
+            {/* Current interval display */}
+            <div className="flex items-center justify-between">
+              <div className="block text-sm font-medium text-gray-700">
+                Current interval:{' '}
+                <span className="text-primary-600 font-semibold">
+                  {formatInterval(quoteInterval)}
+                </span>
               </div>
-            </label>
+            </div>
 
-            <label className="flex items-center gap-3 cursor-pointer group">
-              <input
-                type="radio"
-                name="quote-interval"
-                value="daily"
-                checked={quoteInterval === 'daily'}
-                onChange={(e) => setQuoteInterval(e.target.value as typeof quoteInterval)}
-                className="w-4 h-4 text-primary-600 bg-gray-100 border-gray-300 focus:ring-primary-500"
-              />
-              <div>
-                <span className="text-sm font-medium text-gray-700">Daily</span>
-                <p className="text-xs text-gray-500">Automatically change quote once per day</p>
+            {/* Quick preset buttons */}
+            <div>
+              <p className="text-xs text-gray-500 mb-2">Quick presets:</p>
+              <div className="grid grid-cols-4 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setQuoteInterval(0)}
+                  className={`px-3 py-2 text-xs font-medium rounded-md transition-all ${
+                    quoteInterval === 0
+                      ? 'bg-primary-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  Manual
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setQuoteInterval(5)}
+                  className={`px-3 py-2 text-xs font-medium rounded-md transition-all ${
+                    quoteInterval === 5
+                      ? 'bg-primary-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  5s
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setQuoteInterval(30)}
+                  className={`px-3 py-2 text-xs font-medium rounded-md transition-all ${
+                    quoteInterval === 30
+                      ? 'bg-primary-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  30s
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setQuoteInterval(60)}
+                  className={`px-3 py-2 text-xs font-medium rounded-md transition-all ${
+                    quoteInterval === 60
+                      ? 'bg-primary-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  1m
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setQuoteInterval(300)}
+                  className={`px-3 py-2 text-xs font-medium rounded-md transition-all ${
+                    quoteInterval === 300
+                      ? 'bg-primary-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  5m
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setQuoteInterval(1800)}
+                  className={`px-3 py-2 text-xs font-medium rounded-md transition-all ${
+                    quoteInterval === 1800
+                      ? 'bg-primary-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  30m
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setQuoteInterval(3600)}
+                  className={`px-3 py-2 text-xs font-medium rounded-md transition-all ${
+                    quoteInterval === 3600
+                      ? 'bg-primary-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  1h
+                </button>
               </div>
-            </label>
+            </div>
 
-            <label className="flex items-center gap-3 cursor-pointer group">
-              <input
-                type="radio"
-                name="quote-interval"
-                value="hourly"
-                checked={quoteInterval === 'hourly'}
-                onChange={(e) => setQuoteInterval(e.target.value as typeof quoteInterval)}
-                className="w-4 h-4 text-primary-600 bg-gray-100 border-gray-300 focus:ring-primary-500"
-              />
+            {/* Custom interval slider and input */}
+            {quoteInterval > 0 && (
               <div>
-                <span className="text-sm font-medium text-gray-700">Hourly</span>
-                <p className="text-xs text-gray-500">Automatically change quote every hour</p>
+                <label
+                  htmlFor="quote-interval"
+                  className="block text-sm font-medium text-gray-700 mb-2"
+                >
+                  Custom interval (1s - 1h):
+                </label>
+                <div className="flex items-center gap-4">
+                  <input
+                    id="quote-interval"
+                    type="range"
+                    min="1"
+                    max="3600"
+                    step="1"
+                    value={quoteInterval}
+                    onChange={(e) => setQuoteInterval(Number(e.target.value))}
+                    className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-primary-600"
+                  />
+                  <input
+                    type="number"
+                    min="1"
+                    max="3600"
+                    value={quoteInterval}
+                    onChange={(e) => setQuoteInterval(Number(e.target.value))}
+                    className="w-20 px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                  <span className="text-xs text-gray-500 w-8">sec</span>
+                </div>
               </div>
-            </label>
+            )}
+
+            <p className="text-xs text-gray-500">
+              {quoteInterval === 0
+                ? 'Quotes will only change when you click the refresh button'
+                : `Quotes will automatically change every ${formatInterval(quoteInterval).toLowerCase()}`}
+            </p>
           </div>
         </section>
 

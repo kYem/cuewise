@@ -64,7 +64,7 @@ export interface Settings {
   pomodoroBreakDuration: number; // minutes (default 5)
   enableNotifications: boolean;
   theme: 'light' | 'dark' | 'auto';
-  quoteChangeInterval: 'manual' | 'daily' | 'hourly';
+  quoteChangeInterval: number; // seconds (0 = manual, 1-3600 = auto-refresh every N seconds)
   timeFormat: '12h' | '24h'; // 12-hour (AM/PM) or 24-hour format
 }
 
