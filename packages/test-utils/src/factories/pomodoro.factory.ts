@@ -1,5 +1,5 @@
-import { Factory } from 'fishery';
 import type { PomodoroSession } from '@cuewise/shared';
+import { Factory } from 'fishery';
 
 export const pomodoroFactory = Factory.define<PomodoroSession>(({ sequence }) => ({
   id: `pomodoro-${sequence}`,

@@ -4,9 +4,10 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { InsightsPage } from './components/InsightsPage';
 import { NewTabPage } from './components/NewTabPage';
 import { PomodoroPage } from './components/PomodoroPage';
+import { QuoteManagementPage } from './components/QuoteManagementPage';
 import { useToastStore } from './stores/toast-store';
 
-type Page = 'home' | 'pomodoro' | 'insights';
+type Page = 'home' | 'pomodoro' | 'insights' | 'quotes';
 
 function App() {
   const [currentPage, setCurrentPage] = useState<Page>('home');
@@ -19,6 +20,8 @@ function App() {
         setCurrentPage('pomodoro');
       } else if (hash === 'insights') {
         setCurrentPage('insights');
+      } else if (hash === 'quotes') {
+        setCurrentPage('quotes');
       } else {
         setCurrentPage('home');
       }
@@ -39,6 +42,7 @@ function App() {
     <ErrorBoundary>
       {currentPage === 'pomodoro' && <PomodoroPage />}
       {currentPage === 'insights' && <InsightsPage />}
+      {currentPage === 'quotes' && <QuoteManagementPage />}
       {currentPage === 'home' && <NewTabPage />}
 
       {/* Toast notifications */}

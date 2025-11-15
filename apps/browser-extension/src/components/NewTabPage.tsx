@@ -1,4 +1,4 @@
-import { BarChart3, Plus, Settings, Timer } from 'lucide-react';
+import { BarChart3, BookMarked, Plus, Settings, Timer } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useQuoteStore } from '../stores/quote-store';
@@ -50,6 +50,11 @@ export const NewTabPage: React.FC = () => {
     window.location.hash = 'insights';
   };
 
+  const handleOpenQuoteManagement = () => {
+    setIsMenuOpen(false);
+    window.location.hash = 'quotes';
+  };
+
   const handleOpenSettings = () => {
     setIsMenuOpen(false);
     setIsSettingsModalOpen(true);
@@ -87,8 +92,16 @@ export const NewTabPage: React.FC = () => {
               <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden">
                 <button
                   type="button"
-                  onClick={handleOpenInsights}
+                  onClick={handleOpenQuoteManagement}
                   className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  <BookMarked className="w-5 h-5 text-blue-600" />
+                  <span className="text-sm font-medium">Manage Quotes</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleOpenInsights}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50 transition-colors border-t border-gray-100"
                 >
                   <BarChart3 className="w-5 h-5 text-purple-600" />
                   <span className="text-sm font-medium">View Insights</span>

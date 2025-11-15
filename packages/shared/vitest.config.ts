@@ -8,5 +8,5 @@ export default mergeConfig(
       environment: 'node', // Pure utility functions, no DOM
       include: ['src/**/*.test.ts'],
     },
-  }),
+  })
 );

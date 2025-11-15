@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { useQuoteStore } from './quote-store';
-import { quoteFactory } from '@cuewise/test-utils/factories';
 import * as storage from '@cuewise/storage';
+import { quoteFactory } from '@cuewise/test-utils/factories';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SEED_QUOTES } from '../data/seed-quotes';
+import { useQuoteStore } from './quote-store';
 
 // Mock storage functions
 vi.mock('@cuewise/storage', () => ({
@@ -137,13 +137,15 @@ describe('Quote Store', () => {
         notes: 'Test notes',
       };
 
-      await useQuoteStore.getState().addCustomQuote(
-        newQuoteData.text,
-        newQuoteData.author,
-        newQuoteData.category,
-        newQuoteData.source,
-        newQuoteData.notes
-      );
+      await useQuoteStore
+        .getState()
+        .addCustomQuote(
+          newQuoteData.text,
+          newQuoteData.author,
+          newQuoteData.category,
+          newQuoteData.source,
+          newQuoteData.notes
+        );
 
       expect(storage.setQuotes).toHaveBeenCalled();
       const updatedQuotes = vi.mocked(storage.setQuotes).mock.calls[0][0];

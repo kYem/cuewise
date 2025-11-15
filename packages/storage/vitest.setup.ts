@@ -1,5 +1,5 @@
-import { beforeEach } from 'vitest';
 import { createChromeStorageMock } from '@cuewise/test-utils/mocks';
+import { beforeEach } from 'vitest';
 
 // Mock Chrome storage API globally
 beforeEach(() => {

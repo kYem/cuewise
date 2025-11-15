@@ -15,6 +15,7 @@ interface QuoteStore {
   refreshQuote: () => Promise<void>;
   toggleFavorite: (quoteId: string) => Promise<void>;
   hideQuote: (quoteId: string) => Promise<void>;
+  unhideQuote: (quoteId: string) => Promise<void>;
   addCustomQuote: (
     text: string,
     author: string,
@@ -22,6 +23,17 @@ interface QuoteStore {
     source?: string,
     notes?: string
   ) => Promise<void>;
+  editQuote: (
+    quoteId: string,
+    updates: {
+      text?: string;
+      author?: string;
+      category?: QuoteCategory;
+      source?: string;
+      notes?: string;
+    }
+  ) => Promise<void>;
+  deleteQuote: (quoteId: string) => Promise<void>;
   incrementViewCount: (quoteId: string) => Promise<void>;
 }
 
@@ -177,6 +189,70 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       set({ quotes: updatedQuotes });
     } catch (error) {
       console.error('Error incrementing view count:', error);
+    }
+  },
+
+  unhideQuote: async (quoteId: string) => {
+    try {
+      const { quotes } = get();
+      const updatedQuotes = quotes.map((q) => (q.id === quoteId ? { ...q, isHidden: false } : q));
+
+      await setQuotes(updatedQuotes);
+      set({ quotes: updatedQuotes });
+      useToastStore.getState().success('Quote unhidden successfully');
+    } catch (error) {
+      console.error('Error unhiding quote:', error);
+      const errorMessage = 'Failed to unhide quote. Please try again.';
+      set({ error: errorMessage });
+      useToastStore.getState().error(errorMessage);
+    }
+  },
+
+  editQuote: async (quoteId: string, updates) => {
+    try {
+      const { quotes } = get();
+      const updatedQuotes = quotes.map((q) => (q.id === quoteId ? { ...q, ...updates } : q));
+
+      await setQuotes(updatedQuotes);
+      set({ quotes: updatedQuotes });
+
+      // Update current quote if it's the one being edited
+      const currentQuote = get().currentQuote;
+      if (currentQuote && currentQuote.id === quoteId) {
+        const updatedCurrentQuote = { ...currentQuote, ...updates };
+        await setCurrentQuote(updatedCurrentQuote);
+        set({ currentQuote: updatedCurrentQuote });
+      }
+
+      useToastStore.getState().success('Quote updated successfully');
+    } catch (error) {
+      console.error('Error editing quote:', error);
+      const errorMessage = 'Failed to update quote. Please try again.';
+      set({ error: errorMessage });
+      useToastStore.getState().error(errorMessage);
+    }
+  },
+
+  deleteQuote: async (quoteId: string) => {
+    try {
+      const { quotes } = get();
+      const updatedQuotes = quotes.filter((q) => q.id !== quoteId);
+
+      await setQuotes(updatedQuotes);
+      set({ quotes: updatedQuotes });
+
+      // If deleting current quote, get a new one
+      const currentQuote = get().currentQuote;
+      if (currentQuote && currentQuote.id === quoteId) {
+        await get().refreshQuote();
+      }
+
+      useToastStore.getState().success('Quote deleted successfully');
+    } catch (error) {
+      console.error('Error deleting quote:', error);
+      const errorMessage = 'Failed to delete quote. Please try again.';
+      set({ error: errorMessage });
+      useToastStore.getState().error(errorMessage);
     }
   },
 }));
