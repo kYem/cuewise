@@ -1,7 +1,7 @@
 import {
   format,
-  isToday as isTodayDateFns,
   isSameDay,
+  isToday as isTodayDateFns,
   parseISO,
   startOfDay,
   subDays,

@@ -10,6 +10,8 @@ export const PomodoroTimer: React.FC = () => {
     sessionType,
     timeRemaining,
     totalTime,
+    workDuration,
+    breakDuration,
     initialize,
     start,
     pause,
@@ -60,9 +62,7 @@ export const PomodoroTimer: React.FC = () => {
           </div>
           <div>
             <h2 className="text-2xl font-semibold text-gray-800">Pomodoro Timer</h2>
-            <p className="text-sm text-gray-500">
-              {isWork ? 'Focus Session' : 'Break Time'}
-            </p>
+            <p className="text-sm text-gray-500">{isWork ? 'Focus Session' : 'Break Time'}</p>
           </div>
         </div>
 
@@ -72,14 +72,7 @@ export const PomodoroTimer: React.FC = () => {
           <div className="relative w-64 h-64 mb-6">
             {/* Background circle */}
             <svg className="w-full h-full transform -rotate-90">
-              <circle
-                cx="128"
-                cy="128"
-                r="120"
-                stroke="#E5E7EB"
-                strokeWidth="8"
-                fill="none"
-              />
+              <circle cx="128" cy="128" r="120" stroke="#E5E7EB" strokeWidth="8" fill="none" />
               {/* Progress circle */}
               <circle
                 cx="128"
@@ -100,9 +93,7 @@ export const PomodoroTimer: React.FC = () => {
               <div className="text-6xl font-bold text-gray-800 font-mono">
                 {formatTimeRemaining(timeRemaining)}
               </div>
-              <div
-                className={`mt-2 text-sm font-medium uppercase tracking-wider ${sessionColor}`}
-              >
+              <div className={`mt-2 text-sm font-medium uppercase tracking-wider ${sessionColor}`}>
                 {isWork ? 'Work' : 'Break'}
               </div>
             </div>
@@ -179,7 +170,9 @@ export const PomodoroTimer: React.FC = () => {
 
         {/* Help Text */}
         <div className="mt-6 text-center text-xs text-gray-500">
-          <p>Focus for 25 minutes, then take a 5-minute break</p>
+          <p>
+            Focus for {workDuration} minutes, then take a {breakDuration}-minute break
+          </p>
         </div>
       </div>
     </div>

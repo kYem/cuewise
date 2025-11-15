@@ -1,7 +1,7 @@
-import { type Reminder } from '@cuewise/shared';
+import type { Reminder } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
+import { formatDistanceToNow, isPast, isToday, isTomorrow, parseISO } from 'date-fns';
 import { CheckCircle2, Circle, Clock, Repeat, Trash2 } from 'lucide-react';
-import { formatDistanceToNow, parseISO, isPast, isToday, isTomorrow } from 'date-fns';
 import type React from 'react';
 
 interface ReminderItemProps {
@@ -18,11 +18,17 @@ function formatDueDate(dueDate: string): { text: string; isOverdue: boolean } {
   const overdue = isPast(date) && !isToday(dueDate);
 
   if (isToday(dueDate)) {
-    return { text: `Today at ${date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`, isOverdue: false };
+    return {
+      text: `Today at ${date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`,
+      isOverdue: false,
+    };
   }
 
   if (isTomorrow(date)) {
-    return { text: `Tomorrow at ${date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`, isOverdue: false };
+    return {
+      text: `Tomorrow at ${date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`,
+      isOverdue: false,
+    };
   }
 
   if (overdue) {
@@ -89,11 +95,7 @@ export const ReminderItem: React.FC<ReminderItemProps> = ({ reminder, onToggle, 
           <Clock
             className={cn(
               'w-3.5 h-3.5',
-              reminder.completed
-                ? 'text-gray-400'
-                : isOverdue
-                  ? 'text-red-500'
-                  : 'text-gray-500'
+              reminder.completed ? 'text-gray-400' : isOverdue ? 'text-red-500' : 'text-gray-500'
             )}
           />
           <span
