@@ -1,14 +1,23 @@
 import { useEffect, useState } from 'react';
+import { InsightsPage } from './components/InsightsPage';
 import { NewTabPage } from './components/NewTabPage';
 import { PomodoroPage } from './components/PomodoroPage';
 
+type Page = 'home' | 'pomodoro' | 'insights';
+
 function App() {
-  const [currentPage, setCurrentPage] = useState<'home' | 'pomodoro'>('home');
+  const [currentPage, setCurrentPage] = useState<Page>('home');
 
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash.slice(1);
-      setCurrentPage(hash === 'pomodoro' ? 'pomodoro' : 'home');
+      if (hash === 'pomodoro') {
+        setCurrentPage('pomodoro');
+      } else if (hash === 'insights') {
+        setCurrentPage('insights');
+      } else {
+        setCurrentPage('home');
+      }
     };
 
     // Set initial page based on hash
@@ -24,6 +33,10 @@ function App() {
 
   if (currentPage === 'pomodoro') {
     return <PomodoroPage />;
+  }
+
+  if (currentPage === 'insights') {
+    return <InsightsPage />;
   }
 
   return <NewTabPage />;
