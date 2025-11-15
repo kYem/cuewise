@@ -1,4 +1,4 @@
-import { Plus, Settings, Timer } from 'lucide-react';
+import { BarChart3, Plus, Settings, Timer } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useState } from 'react';
 import { useQuoteStore } from '../stores/quote-store';
@@ -31,6 +31,10 @@ export const NewTabPage: React.FC = () => {
     window.location.hash = 'pomodoro';
   };
 
+  const handleOpenInsights = () => {
+    window.location.hash = 'insights';
+  };
+
   return (
     <div className="min-h-screen w-full overflow-y-auto">
       <div className="w-full flex flex-col items-center px-4 sm:px-8 py-8 sm:py-12">
@@ -56,21 +60,35 @@ export const NewTabPage: React.FC = () => {
             <QuoteDisplay />
           </div>
 
+          {/* Action Buttons */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Pomodoro Button */}
+            <button
+              type="button"
+              onClick={handleOpenPomodoro}
+              className="w-full group relative flex items-center justify-center gap-3 px-6 py-5 bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-xl transition-all hover:scale-105 border border-gray-200/50"
+            >
+              <Timer className="w-6 h-6 text-primary-600" />
+              <span className="text-lg font-medium text-gray-800">Pomodoro Timer</span>
+              <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-primary-500/0 via-primary-500/5 to-primary-500/0 opacity-0 group-hover:opacity-100 transition-opacity" />
+            </button>
+
+            {/* Insights Button */}
+            <button
+              type="button"
+              onClick={handleOpenInsights}
+              className="w-full group relative flex items-center justify-center gap-3 px-6 py-5 bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-xl transition-all hover:scale-105 border border-gray-200/50"
+            >
+              <BarChart3 className="w-6 h-6 text-purple-600" />
+              <span className="text-lg font-medium text-gray-800">View Insights</span>
+              <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-purple-500/0 via-purple-500/5 to-purple-500/0 opacity-0 group-hover:opacity-100 transition-opacity" />
+            </button>
+          </div>
+
           {/* Two Column Layout for Larger Screens */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
             {/* Left Column */}
             <div className="space-y-6">
-              {/* Pomodoro Button */}
-              <button
-                type="button"
-                onClick={handleOpenPomodoro}
-                className="w-full group relative flex items-center justify-center gap-3 px-8 py-6 bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-xl transition-all hover:scale-105 border border-gray-200/50"
-              >
-                <Timer className="w-6 h-6 text-primary-600" />
-                <span className="text-lg font-medium text-gray-800">Start Pomodoro Timer</span>
-                <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-primary-500/0 via-primary-500/5 to-primary-500/0 opacity-0 group-hover:opacity-100 transition-opacity" />
-              </button>
-
               {/* Goals Section */}
               <GoalsSection />
             </div>

@@ -1,12 +1,15 @@
 import {
   format,
+  isAfter,
   isSameDay,
   isToday as isTodayDateFns,
   parseISO,
   startOfDay,
+  startOfMonth,
+  startOfWeek,
   subDays,
 } from 'date-fns';
-import type { Quote } from './types';
+import type { Goal, InsightsData, PomodoroSession, Quote, QuoteCategory } from './types';
 
 /**
  * Generate a unique ID
@@ -158,4 +161,122 @@ export function formatTimeRemaining(seconds: number): string {
  */
 export function minutesToSeconds(minutes: number): number {
   return minutes * 60;
+}
+
+/**
+ * Calculate insights data from quotes, goals, and pomodoro sessions
+ */
+export function calculateInsights(
+  quotes: Quote[],
+  goals: Goal[],
+  pomodoroSessions: PomodoroSession[]
+): InsightsData {
+  const now = new Date();
+  const today = startOfDay(now);
+  const weekStart = startOfWeek(today, { weekStartsOn: 1 }); // Monday
+  const monthStart = startOfMonth(today);
+
+  // Total quotes viewed (sum of all view counts)
+  const totalQuotesViewed = quotes.reduce((sum, quote) => sum + quote.viewCount, 0);
+
+  // Quotes viewed this week
+  const quotesViewedThisWeek = quotes.reduce((sum, quote) => {
+    if (quote.lastViewed) {
+      const viewedDate = parseISO(quote.lastViewed);
+      if (isAfter(viewedDate, weekStart) || isSameDay(viewedDate, weekStart)) {
+        return sum + 1;
+      }
+    }
+    return sum;
+  }, 0);
+
+  // Goals completed today
+  const goalsCompletedToday = goals.filter((goal) => {
+    if (!goal.completed) return false;
+    const goalDate = parseISO(goal.date);
+    return isSameDay(goalDate, today);
+  }).length;
+
+  // Goals completed this week
+  const goalsCompletedThisWeek = goals.filter((goal) => {
+    if (!goal.completed) return false;
+    const goalDate = parseISO(goal.date);
+    return isAfter(goalDate, weekStart) || isSameDay(goalDate, weekStart);
+  }).length;
+
+  // Goals completed this month
+  const goalsCompletedThisMonth = goals.filter((goal) => {
+    if (!goal.completed) return false;
+    const goalDate = parseISO(goal.date);
+    return isAfter(goalDate, monthStart) || isSameDay(goalDate, monthStart);
+  }).length;
+
+  // Pomodoros completed today
+  const pomodorosCompletedToday = pomodoroSessions.filter((session) => {
+    if (session.interrupted || session.type !== 'work') return false;
+    const sessionDate = parseISO(session.completedAt || session.startedAt);
+    return isSameDay(sessionDate, today);
+  }).length;
+
+  // Category view counts
+  const categoryViewCounts: Record<QuoteCategory, number> = {
+    inspiration: 0,
+    learning: 0,
+    productivity: 0,
+    mindfulness: 0,
+    success: 0,
+    creativity: 0,
+    resilience: 0,
+    leadership: 0,
+    health: 0,
+    growth: 0,
+  };
+
+  quotes.forEach((quote) => {
+    if (quote.viewCount > 0) {
+      categoryViewCounts[quote.category] += quote.viewCount;
+    }
+  });
+
+  // Calculate streak based on goal completion dates
+  const completedGoalDates = goals.filter((goal) => goal.completed).map((goal) => goal.date); // YYYY-MM-DD format
+
+  const streakData = calculateStreak(completedGoalDates);
+
+  // Find the last active date
+  const lastActiveDate =
+    completedGoalDates.length > 0 ? completedGoalDates.sort().reverse()[0] : getTodayDateString();
+
+  return {
+    totalQuotesViewed,
+    quotesViewedThisWeek,
+    goalsCompletedToday,
+    goalsCompletedThisWeek,
+    goalsCompletedThisMonth,
+    pomodorosCompletedToday,
+    categoryViewCounts,
+    streak: {
+      current: streakData.current,
+      longest: streakData.longest,
+      lastActive: lastActiveDate,
+    },
+  };
+}
+
+/**
+ * Get category with most views
+ */
+export function getMostViewedCategory(
+  categoryViewCounts: Record<QuoteCategory, number>
+): { category: QuoteCategory; count: number } | null {
+  const entries = Object.entries(categoryViewCounts) as [QuoteCategory, number][];
+
+  if (entries.length === 0) return null;
+
+  const sorted = entries.sort((a, b) => b[1] - a[1]);
+  const [category, count] = sorted[0];
+
+  if (count === 0) return null;
+
+  return { category, count };
 }
