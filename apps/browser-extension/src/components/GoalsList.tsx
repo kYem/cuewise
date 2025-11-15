@@ -12,7 +12,7 @@ export const GoalsList: React.FC = () => {
 
   if (todayGoals.length === 0) {
     return (
-      <div className="text-center py-12">
+      <div className="text-center py-8">
         <Circle className="w-16 h-16 mx-auto mb-4 text-gray-300" />
         <p className="text-lg text-gray-500 mb-2">No goals for today</p>
         <p className="text-sm text-gray-400">Add your first goal to get started!</p>

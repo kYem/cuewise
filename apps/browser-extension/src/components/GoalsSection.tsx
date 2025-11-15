@@ -14,7 +14,7 @@ export const GoalsSection: React.FC = () => {
 
   return (
     <div className="w-full max-w-2xl mx-auto">
-      <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg p-6 border border-gray-200">
+      <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg p-6 border border-gray-200 min-h-[400px] flex flex-col">
         {/* Header */}
         <div className="flex items-center gap-3 mb-6">
           <div className="p-2 bg-primary-100 rounded-lg">
@@ -32,7 +32,9 @@ export const GoalsSection: React.FC = () => {
         </div>
 
         {/* Goals List */}
-        <GoalsList />
+        <div className="flex-1">
+          <GoalsList />
+        </div>
       </div>
     </div>
   );
