@@ -1,6 +1,36 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+@theme {
+  /* Custom primary colors */
+  --color-primary-50: #f5f3ff;
+  --color-primary-100: #ede9fe;
+  --color-primary-200: #ddd6fe;
+  --color-primary-300: #c4b5fd;
+  --color-primary-400: #a78bfa;
+  --color-primary-500: #8b5cf6;
+  --color-primary-600: #7c3aed;
+  --color-primary-700: #6d28d9;
+  --color-primary-800: #5b21b6;
+  --color-primary-900: #4c1d95;
+
+  /* Custom fonts */
+  --font-sans: Inter, system-ui, sans-serif;
+  --font-display: Poppins, system-ui, sans-serif;
+
+  /* Custom animations */
+  --animate-fade-in: fadeIn 0.5s ease-in-out;
+  --animate-slide-up: slideUp 0.4s ease-out;
+
+  @keyframes fadeIn {
+    0% { opacity: 0; }
+    100% { opacity: 1; }
+  }
+
+  @keyframes slideUp {
+    0% { transform: translateY(10px); opacity: 0; }
+    100% { transform: translateY(0); opacity: 1; }
+  }
+}
 
 @layer base {
   * {
@@ -17,8 +47,8 @@
   }
 
   body {
-    @apply bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-100;
-    @apply text-gray-900;
+    background: linear-gradient(to bottom right, #faf5ff, #eff6ff, #e0e7ff);
+    color: #111827;
     font-family: 'Inter', system-ui, sans-serif;
   }
 

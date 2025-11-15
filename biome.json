@@ -58,5 +58,11 @@
         "organizeImports": "on"
       }
     }
+  },
+  "css": {
+    "parser": {
+      "cssModules": false,
+      "tailwindDirectives": true
+    }
   }
 }

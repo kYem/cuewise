@@ -12,7 +12,7 @@
     "@cuewise/shared": "workspace:*"
   },
   "devDependencies": {
-    "@types/chrome": "^0.0.254",
-    "typescript": "^5.3.0"
+    "@types/chrome": "catalog:",
+    "typescript": "catalog:"
   }
 }

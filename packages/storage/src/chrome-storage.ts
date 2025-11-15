@@ -15,7 +15,7 @@ export async function getFromStorage<T>(
   try {
     const storage = area === 'local' ? chrome.storage.local : chrome.storage.sync;
     const result = await storage.get(key);
-    return result[key] ?? null;
+    return (result[key] as T) ?? null;
   } catch (error) {
     console.error(`Error getting ${key} from storage:`, error);
     return null;

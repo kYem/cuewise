@@ -14,9 +14,9 @@
     "type-check": "turbo run type-check"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.3.5",
-    "turbo": "^2.0.0",
-    "typescript": "^5.3.0"
+    "@biomejs/biome": "catalog:",
+    "turbo": "catalog:",
+    "typescript": "catalog:"
   },
   "packageManager": "pnpm@10.22.0",
   "engines": {

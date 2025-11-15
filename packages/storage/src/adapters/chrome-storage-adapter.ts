@@ -16,7 +16,7 @@ export class ChromeStorageAdapter implements StorageAdapter {
   async get<T>(key: string): Promise<T | null> {
     try {
       const result = await this.storage.get(key);
-      return result[key] ?? null;
+      return (result[key] as T) ?? null;
     } catch (error) {
       console.error(`Error getting ${key} from Chrome storage:`, error);
       return null;
