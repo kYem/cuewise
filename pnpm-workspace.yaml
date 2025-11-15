@@ -7,9 +7,9 @@ onlyBuiltDependencies:
 
 catalog:
   # Build tools
-  vite: ^7.2.2
+  vite: ^6.0.7
   '@vitejs/plugin-react': ^5.1.1
-  '@crxjs/vite-plugin': ^2.0.0-beta.21
+  '@crxjs/vite-plugin': ^2.2.1
 
   # Styling
   tailwindcss: ^4.1.17
