@@ -1,6 +1,7 @@
 import { generateId, minutesToSeconds, type PomodoroSession } from '@cuewise/shared';
 import { getPomodoroSessions, getSettings, setPomodoroSessions } from '@cuewise/storage';
 import { create } from 'zustand';
+import { playCompletionSound, playStartSound } from '../utils/sounds';
 import { useToastStore } from './toast-store';
 
 type TimerStatus = 'idle' | 'running' | 'paused';
@@ -108,6 +109,9 @@ export const usePomodoroStore = create<PomodoroStore>((set, get) => ({
     const duration = sessionType === 'work' ? workDuration : breakDuration;
     const currentSessionId = generateId();
 
+    // Play start sound
+    playStartSound();
+
     set({
       status: 'running',
       currentSessionId,
@@ -201,7 +205,10 @@ export const usePomodoroStore = create<PomodoroStore>((set, get) => ({
         });
       }
 
-      // Play notification sound or show notification
+      // Play completion sound
+      playCompletionSound();
+
+      // Show notification
       if ('Notification' in window && Notification.permission === 'granted') {
         const message =
           sessionType === 'work'
