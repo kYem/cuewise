@@ -1,6 +1,6 @@
-import { BarChart3, Plus, Settings, Timer } from 'lucide-react';
+import { BarChart3, ChevronDown, Plus, Settings, Timer } from 'lucide-react';
 import type React from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuoteStore } from '../stores/quote-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { AddQuoteForm } from './AddQuoteForm';
@@ -16,11 +16,25 @@ export const NewTabPage: React.FC = () => {
   const initializeSettings = useSettingsStore((state) => state.initialize);
   const [isAddQuoteModalOpen, setIsAddQuoteModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     initializeQuotes();
     initializeSettings();
   }, [initializeQuotes, initializeSettings]);
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setIsMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const handleQuoteAdded = () => {
     setIsAddQuoteModalOpen(false);
@@ -32,13 +46,19 @@ export const NewTabPage: React.FC = () => {
   };
 
   const handleOpenInsights = () => {
+    setIsMenuOpen(false);
     window.location.hash = 'insights';
+  };
+
+  const handleOpenSettings = () => {
+    setIsMenuOpen(false);
+    setIsSettingsModalOpen(true);
   };
 
   return (
     <div className="min-h-screen w-full overflow-y-auto">
       <div className="w-full flex flex-col items-center px-4 sm:px-8 py-8 sm:py-12">
-        {/* Top Right Buttons */}
+        {/* Top Right Navigation */}
         <div className="fixed top-4 right-4 sm:top-8 sm:right-8 flex items-center gap-2 z-50">
           {/* Pomodoro Button */}
           <button
@@ -49,23 +69,41 @@ export const NewTabPage: React.FC = () => {
           >
             <Timer className="w-5 h-5 text-primary-600" />
             <span className="hidden sm:inline text-sm font-medium text-gray-800">Pomodoro</span>
-            <span className="absolute right-full mr-3 top-1/2 -translate-y-1/2 bg-gray-800 text-white text-sm px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none sm:hidden">
-              Start Pomodoro
-            </span>
           </button>
 
-          {/* Settings Button */}
-          <button
-            type="button"
-            onClick={() => setIsSettingsModalOpen(true)}
-            className="p-3 bg-white/80 backdrop-blur-sm text-gray-700 rounded-full shadow-lg hover:shadow-xl hover:scale-110 transition-all group"
-            title="Settings"
-          >
-            <Settings className="w-5 h-5" />
-            <span className="absolute right-full mr-3 top-1/2 -translate-y-1/2 bg-gray-800 text-white text-sm px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
-              Settings
-            </span>
-          </button>
+          {/* Menu Dropdown */}
+          <div className="relative" ref={menuRef}>
+            <button
+              type="button"
+              onClick={() => setIsMenuOpen(!isMenuOpen)}
+              className="p-3 bg-white/80 backdrop-blur-sm text-gray-700 rounded-full shadow-lg hover:shadow-xl hover:scale-110 transition-all"
+              title="Menu"
+            >
+              <Settings className="w-5 h-5" />
+            </button>
+
+            {/* Dropdown Menu */}
+            {isMenuOpen && (
+              <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden">
+                <button
+                  type="button"
+                  onClick={handleOpenInsights}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  <BarChart3 className="w-5 h-5 text-purple-600" />
+                  <span className="text-sm font-medium">View Insights</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleOpenSettings}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50 transition-colors border-t border-gray-100"
+                >
+                  <Settings className="w-5 h-5 text-gray-600" />
+                  <span className="text-sm font-medium">Settings</span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="w-full max-w-7xl mx-auto space-y-8 sm:space-y-12">
@@ -75,31 +113,6 @@ export const NewTabPage: React.FC = () => {
           {/* Quote Display Section */}
           <div className="flex justify-center">
             <QuoteDisplay />
-          </div>
-
-          {/* Action Buttons */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* Pomodoro Button */}
-            <button
-              type="button"
-              onClick={handleOpenPomodoro}
-              className="w-full group relative flex items-center justify-center gap-3 px-6 py-5 bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-xl transition-all hover:scale-105 border border-gray-200/50"
-            >
-              <Timer className="w-6 h-6 text-primary-600" />
-              <span className="text-lg font-medium text-gray-800">Pomodoro Timer</span>
-              <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-primary-500/0 via-primary-500/5 to-primary-500/0 opacity-0 group-hover:opacity-100 transition-opacity" />
-            </button>
-
-            {/* Insights Button */}
-            <button
-              type="button"
-              onClick={handleOpenInsights}
-              className="w-full group relative flex items-center justify-center gap-3 px-6 py-5 bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-xl transition-all hover:scale-105 border border-gray-200/50"
-            >
-              <BarChart3 className="w-6 h-6 text-purple-600" />
-              <span className="text-lg font-medium text-gray-800">View Insights</span>
-              <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-purple-500/0 via-purple-500/5 to-purple-500/0 opacity-0 group-hover:opacity-100 transition-opacity" />
-            </button>
           </div>
 
           {/* Two Column Layout for Larger Screens */}

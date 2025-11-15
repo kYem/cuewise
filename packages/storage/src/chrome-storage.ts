@@ -7,15 +7,23 @@ type StorageArea = 'local' | 'sync';
 
 /**
  * Get data from Chrome storage
+ * Falls back to localStorage in development when chrome.storage is unavailable
  */
 export async function getFromStorage<T>(
   key: string,
   area: StorageArea = 'local'
 ): Promise<T | null> {
   try {
-    const storage = area === 'local' ? chrome.storage.local : chrome.storage.sync;
-    const result = await storage.get(key);
-    return (result[key] as T) ?? null;
+    // Check if chrome.storage is available
+    if (typeof chrome !== 'undefined' && chrome.storage) {
+      const storage = area === 'local' ? chrome.storage.local : chrome.storage.sync;
+      const result = await storage.get(key);
+      return (result[key] as T) ?? null;
+    }
+
+    // Fallback to localStorage for development
+    const item = localStorage.getItem(key);
+    return item ? JSON.parse(item) : null;
   } catch (error) {
     console.error(`Error getting ${key} from storage:`, error);
     return null;
@@ -24,6 +32,7 @@ export async function getFromStorage<T>(
 
 /**
  * Set data in Chrome storage
+ * Falls back to localStorage in development when chrome.storage is unavailable
  */
 export async function setInStorage<T>(
   key: string,
@@ -31,8 +40,15 @@ export async function setInStorage<T>(
   area: StorageArea = 'local'
 ): Promise<boolean> {
   try {
-    const storage = area === 'local' ? chrome.storage.local : chrome.storage.sync;
-    await storage.set({ [key]: value });
+    // Check if chrome.storage is available
+    if (typeof chrome !== 'undefined' && chrome.storage) {
+      const storage = area === 'local' ? chrome.storage.local : chrome.storage.sync;
+      await storage.set({ [key]: value });
+      return true;
+    }
+
+    // Fallback to localStorage for development
+    localStorage.setItem(key, JSON.stringify(value));
     return true;
   } catch (error) {
     console.error(`Error setting ${key} in storage:`, error);
