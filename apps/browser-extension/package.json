@@ -13,6 +13,7 @@
     "@cuewise/shared": "workspace:*",
     "@cuewise/storage": "workspace:*",
     "@cuewise/ui": "workspace:*",
+    "date-fns": "catalog:",
     "lucide-react": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",

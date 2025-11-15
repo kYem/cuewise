@@ -92,6 +92,9 @@ importers:
       '@cuewise/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      date-fns:
+        specifier: 'catalog:'
+        version: 4.1.0
       lucide-react:
         specifier: 'catalog:'
         version: 0.553.0(react@18.3.1)

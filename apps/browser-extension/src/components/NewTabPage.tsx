@@ -8,6 +8,7 @@ import { GoalsSection } from './GoalsSection';
 import { Modal } from './Modal';
 import { PomodoroTimer } from './PomodoroTimer';
 import { QuoteDisplay } from './QuoteDisplay';
+import { RemindersSection } from './RemindersSection';
 
 export const NewTabPage: React.FC = () => {
   const initialize = useQuoteStore((state) => state.initialize);
@@ -41,6 +42,11 @@ export const NewTabPage: React.FC = () => {
         {/* Goals Section */}
         <div className="flex justify-center">
           <GoalsSection />
+        </div>
+
+        {/* Reminders Section */}
+        <div className="flex justify-center">
+          <RemindersSection />
         </div>
 
         {/* Footer */}
