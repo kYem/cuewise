@@ -1,6 +1,7 @@
 import { generateId, minutesToSeconds, type PomodoroSession } from '@cuewise/shared';
 import { getPomodoroSessions, getSettings, setPomodoroSessions } from '@cuewise/storage';
 import { create } from 'zustand';
+import { useToastStore } from './toast-store';
 
 type TimerStatus = 'idle' | 'running' | 'paused';
 type SessionType = 'work' | 'break';
@@ -67,7 +68,9 @@ export const usePomodoroStore = create<PomodoroStore>((set, get) => ({
       });
     } catch (error) {
       console.error('Error initializing pomodoro store:', error);
-      set({ error: 'Failed to load pomodoro data', isLoading: false });
+      const errorMessage = 'Failed to load pomodoro data. Please refresh the page.';
+      set({ error: errorMessage, isLoading: false });
+      useToastStore.getState().error(errorMessage);
     }
   },
 
@@ -94,7 +97,9 @@ export const usePomodoroStore = create<PomodoroStore>((set, get) => ({
       }
     } catch (error) {
       console.error('Error reloading settings:', error);
-      set({ error: 'Failed to reload settings' });
+      const errorMessage = 'Failed to reload settings. Please try again.';
+      set({ error: errorMessage });
+      useToastStore.getState().error(errorMessage);
     }
   },
 
@@ -206,7 +211,9 @@ export const usePomodoroStore = create<PomodoroStore>((set, get) => ({
       }
     } catch (error) {
       console.error('Error completing pomodoro session:', error);
-      set({ error: 'Failed to save session' });
+      const errorMessage = 'Failed to save session. Please try again.';
+      set({ error: errorMessage });
+      useToastStore.getState().error(errorMessage);
     }
   },
 

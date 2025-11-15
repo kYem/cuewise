@@ -1,12 +1,16 @@
+import { ToastContainer } from '@cuewise/ui';
 import { useEffect, useState } from 'react';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { InsightsPage } from './components/InsightsPage';
 import { NewTabPage } from './components/NewTabPage';
 import { PomodoroPage } from './components/PomodoroPage';
+import { useToastStore } from './stores/toast-store';
 
 type Page = 'home' | 'pomodoro' | 'insights';
 
 function App() {
   const [currentPage, setCurrentPage] = useState<Page>('home');
+  const { toasts, removeToast } = useToastStore();
 
   useEffect(() => {
     const handleHashChange = () => {
@@ -31,15 +35,16 @@ function App() {
     };
   }, []);
 
-  if (currentPage === 'pomodoro') {
-    return <PomodoroPage />;
-  }
+  return (
+    <ErrorBoundary>
+      {currentPage === 'pomodoro' && <PomodoroPage />}
+      {currentPage === 'insights' && <InsightsPage />}
+      {currentPage === 'home' && <NewTabPage />}
 
-  if (currentPage === 'insights') {
-    return <InsightsPage />;
-  }
-
-  return <NewTabPage />;
+      {/* Toast notifications */}
+      <ToastContainer toasts={toasts} onClose={removeToast} position="top-right" />
+    </ErrorBoundary>
+  );
 }
 
 export default App;

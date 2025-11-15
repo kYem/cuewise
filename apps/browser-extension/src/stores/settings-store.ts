@@ -1,6 +1,7 @@
 import { DEFAULT_SETTINGS, type Settings } from '@cuewise/shared';
 import { getSettings, setSettings } from '@cuewise/storage';
 import { create } from 'zustand';
+import { useToastStore } from './toast-store';
 
 interface SettingsStore {
   // State
@@ -40,7 +41,9 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       applyTheme(settings.theme);
     } catch (error) {
       console.error('Error initializing settings store:', error);
-      set({ error: 'Failed to load settings', isLoading: false });
+      const errorMessage = 'Failed to load settings. Please refresh the page.';
+      set({ error: errorMessage, isLoading: false });
+      useToastStore.getState().error(errorMessage);
     }
   },
 
@@ -53,7 +56,9 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       set({ settings: updatedSettings });
     } catch (error) {
       console.error('Error updating work duration:', error);
-      set({ error: 'Failed to update work duration' });
+      const errorMessage = 'Failed to update work duration. Please try again.';
+      set({ error: errorMessage });
+      useToastStore.getState().error(errorMessage);
     }
   },
 
@@ -66,7 +71,9 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       set({ settings: updatedSettings });
     } catch (error) {
       console.error('Error updating break duration:', error);
-      set({ error: 'Failed to update break duration' });
+      const errorMessage = 'Failed to update break duration. Please try again.';
+      set({ error: errorMessage });
+      useToastStore.getState().error(errorMessage);
     }
   },
 
@@ -80,7 +87,9 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       applyTheme(theme);
     } catch (error) {
       console.error('Error updating theme:', error);
-      set({ error: 'Failed to update theme' });
+      const errorMessage = 'Failed to update theme. Please try again.';
+      set({ error: errorMessage });
+      useToastStore.getState().error(errorMessage);
     }
   },
 
@@ -93,7 +102,10 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       if (enabled && 'Notification' in window && Notification.permission === 'default') {
         const permission = await Notification.requestPermission();
         if (permission !== 'granted') {
-          set({ error: 'Notification permission denied' });
+          const errorMessage =
+            'Notification permission denied. Please enable notifications in your browser settings.';
+          set({ error: errorMessage });
+          useToastStore.getState().warning(errorMessage);
           return;
         }
       }
@@ -102,7 +114,9 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       set({ settings: updatedSettings });
     } catch (error) {
       console.error('Error updating notifications:', error);
-      set({ error: 'Failed to update notifications' });
+      const errorMessage = 'Failed to update notifications. Please try again.';
+      set({ error: errorMessage });
+      useToastStore.getState().error(errorMessage);
     }
   },
 
@@ -115,7 +129,9 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       set({ settings: updatedSettings });
     } catch (error) {
       console.error('Error updating quote interval:', error);
-      set({ error: 'Failed to update quote interval' });
+      const errorMessage = 'Failed to update quote interval. Please try again.';
+      set({ error: errorMessage });
+      useToastStore.getState().error(errorMessage);
     }
   },
 
@@ -133,7 +149,9 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       }
     } catch (error) {
       console.error('Error updating settings:', error);
-      set({ error: 'Failed to update settings' });
+      const errorMessage = 'Failed to update settings. Please try again.';
+      set({ error: errorMessage });
+      useToastStore.getState().error(errorMessage);
     }
   },
 
@@ -144,7 +162,9 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       applyTheme(DEFAULT_SETTINGS.theme);
     } catch (error) {
       console.error('Error resetting settings:', error);
-      set({ error: 'Failed to reset settings' });
+      const errorMessage = 'Failed to reset settings. Please try again.';
+      set({ error: errorMessage });
+      useToastStore.getState().error(errorMessage);
     }
   },
 }));

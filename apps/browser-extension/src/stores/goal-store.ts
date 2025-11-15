@@ -1,6 +1,7 @@
 import { type Goal, generateId, getTodayDateString } from '@cuewise/shared';
 import { getGoals, setGoals } from '@cuewise/storage';
 import { create } from 'zustand';
+import { useToastStore } from './toast-store';
 
 interface GoalStore {
   goals: Goal[];
@@ -35,7 +36,9 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       set({ goals: allGoals, todayGoals, isLoading: false });
     } catch (error) {
       console.error('Error initializing goal store:', error);
-      set({ error: 'Failed to load goals', isLoading: false });
+      const errorMessage = 'Failed to load goals. Please refresh the page.';
+      set({ error: errorMessage, isLoading: false });
+      useToastStore.getState().error(errorMessage);
     }
   },
 
@@ -61,7 +64,9 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       set({ goals: updatedGoals, todayGoals });
     } catch (error) {
       console.error('Error adding goal:', error);
-      set({ error: 'Failed to add goal' });
+      const errorMessage = 'Failed to add goal. Please try again.';
+      set({ error: errorMessage });
+      useToastStore.getState().error(errorMessage);
     }
   },
 
@@ -80,7 +85,9 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       set({ goals: updatedGoals, todayGoals });
     } catch (error) {
       console.error('Error toggling goal:', error);
-      set({ error: 'Failed to update goal' });
+      const errorMessage = 'Failed to update goal. Please try again.';
+      set({ error: errorMessage });
+      useToastStore.getState().error(errorMessage);
     }
   },
 
@@ -97,7 +104,9 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       set({ goals: updatedGoals, todayGoals });
     } catch (error) {
       console.error('Error deleting goal:', error);
-      set({ error: 'Failed to delete goal' });
+      const errorMessage = 'Failed to delete goal. Please try again.';
+      set({ error: errorMessage });
+      useToastStore.getState().error(errorMessage);
     }
   },
 
@@ -115,7 +124,9 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       set({ goals: updatedGoals, todayGoals });
     } catch (error) {
       console.error('Error clearing completed goals:', error);
-      set({ error: 'Failed to clear completed goals' });
+      const errorMessage = 'Failed to clear completed goals. Please try again.';
+      set({ error: errorMessage });
+      useToastStore.getState().error(errorMessage);
     }
   },
 }));
