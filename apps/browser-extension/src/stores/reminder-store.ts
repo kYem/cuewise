@@ -20,6 +20,7 @@ interface ReminderStore {
   toggleReminder: (reminderId: string) => Promise<void>;
   deleteReminder: (reminderId: string) => Promise<void>;
   updateReminder: (reminderId: string, updates: Partial<Omit<Reminder, 'id'>>) => Promise<void>;
+  snoozeReminder: (reminderId: string, minutes: number) => Promise<void>;
   markAsNotified: (reminderId: string) => Promise<void>;
   refreshLists: () => void;
 }
@@ -205,6 +206,44 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       const errorMessage = 'Failed to update reminder. Please try again.';
       set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
+    }
+  },
+
+  snoozeReminder: async (reminderId: string, minutes: number) => {
+    try {
+      const { reminders } = get();
+      const reminder = reminders.find((r) => r.id === reminderId);
+
+      if (!reminder) return;
+
+      // Calculate new due date
+      const currentDueDate = new Date(reminder.dueDate);
+      const newDueDate = new Date(currentDueDate.getTime() + minutes * 60 * 1000);
+
+      // Update reminder with new due date
+      const updatedReminders = reminders.map((r) =>
+        r.id === reminderId ? { ...r, dueDate: newDueDate.toISOString(), notified: false } : r
+      );
+
+      await setReminders(updatedReminders);
+
+      const { upcoming, overdue } = categorizeReminders(updatedReminders);
+      set({
+        reminders: updatedReminders,
+        upcomingReminders: upcoming,
+        overdueReminders: overdue,
+      });
+
+      // Update alarm
+      if (chrome?.alarms) {
+        await chrome.alarms.clear(`reminder-${reminderId}`);
+        await chrome.alarms.create(`reminder-${reminderId}`, {
+          when: newDueDate.getTime(),
+        });
+      }
+    } catch (error) {
+      console.error('Error snoozing reminder:', error);
+      set({ error: 'Failed to snooze reminder' });
     }
   },
 

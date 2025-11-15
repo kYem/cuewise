@@ -13,6 +13,7 @@ export const RemindersSection: React.FC = () => {
     overdueReminders,
     toggleReminder,
     deleteReminder,
+    snoozeReminder,
     initialize,
     isLoading,
     error,
@@ -86,6 +87,7 @@ export const RemindersSection: React.FC = () => {
                         reminder={reminder}
                         onToggle={toggleReminder}
                         onDelete={deleteReminder}
+                        onSnooze={snoozeReminder}
                       />
                     ))}
                   </div>
@@ -105,6 +107,7 @@ export const RemindersSection: React.FC = () => {
                         reminder={reminder}
                         onToggle={toggleReminder}
                         onDelete={deleteReminder}
+                        onSnooze={snoozeReminder}
                       />
                     ))}
                   </div>

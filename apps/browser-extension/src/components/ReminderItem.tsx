@@ -1,26 +1,46 @@
 import type { Reminder } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
-import { formatDistanceToNow, isPast, isToday, isTomorrow, parseISO } from 'date-fns';
-import { CheckCircle2, Circle, Clock, Repeat, Trash2 } from 'lucide-react';
+import {
+  differenceInMinutes,
+  differenceInSeconds,
+  formatDistanceToNow,
+  isPast,
+  isToday,
+  isTomorrow,
+  parseISO,
+} from 'date-fns';
+import { Bell, CheckCircle2, Circle, Clock, Repeat, Trash2 } from 'lucide-react';
 import type React from 'react';
+import { useEffect, useState } from 'react';
 
 interface ReminderItemProps {
   reminder: Reminder;
   onToggle: (id: string) => void;
   onDelete: (id: string) => void;
+  onSnooze?: (id: string, minutes: number) => void;
 }
 
 /**
  * Format the due date in a human-readable way
  */
-function formatDueDate(dueDate: string): { text: string; isOverdue: boolean } {
+function formatDueDate(dueDate: string): {
+  text: string;
+  isOverdue: boolean;
+  isSoon: boolean;
+  minutesUntil: number;
+} {
   const date = parseISO(dueDate);
+  const now = new Date();
+  const minutesUntil = differenceInMinutes(date, now);
   const overdue = isPast(date) && !isToday(dueDate);
+  const isSoon = minutesUntil >= 0 && minutesUntil <= 5;
 
   if (isToday(dueDate)) {
     return {
       text: `Today at ${date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`,
       isOverdue: false,
+      isSoon,
+      minutesUntil,
     };
   }
 
@@ -28,6 +48,8 @@ function formatDueDate(dueDate: string): { text: string; isOverdue: boolean } {
     return {
       text: `Tomorrow at ${date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`,
       isOverdue: false,
+      isSoon: false,
+      minutesUntil,
     };
   }
 
@@ -35,17 +57,60 @@ function formatDueDate(dueDate: string): { text: string; isOverdue: boolean } {
     return {
       text: `${formatDistanceToNow(date, { addSuffix: true })}`,
       isOverdue: true,
+      isSoon: false,
+      minutesUntil,
     };
   }
 
   return {
     text: `in ${formatDistanceToNow(date)}`,
     isOverdue: false,
+    isSoon: false,
+    minutesUntil,
   };
 }
 
-export const ReminderItem: React.FC<ReminderItemProps> = ({ reminder, onToggle, onDelete }) => {
-  const { text, isOverdue } = formatDueDate(reminder.dueDate);
+/**
+ * Format countdown for reminders that are very close (within 5 minutes)
+ */
+function formatCountdown(dueDate: string): string {
+  const date = parseISO(dueDate);
+  const now = new Date();
+  const seconds = differenceInSeconds(date, now);
+
+  if (seconds < 0) return 'Now!';
+  if (seconds < 60) return `${seconds}s`;
+
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  return `${minutes}m ${remainingSeconds}s`;
+}
+
+export const ReminderItem: React.FC<ReminderItemProps> = ({
+  reminder,
+  onToggle,
+  onDelete,
+  onSnooze,
+}) => {
+  const [countdown, setCountdown] = useState('');
+  const { text, isOverdue, isSoon } = formatDueDate(reminder.dueDate);
+
+  // Update countdown every second for reminders that are approaching
+  useEffect(() => {
+    if (!reminder.completed && isSoon) {
+      const timer = setInterval(() => {
+        setCountdown(formatCountdown(reminder.dueDate));
+      }, 1000);
+
+      return () => clearInterval(timer);
+    }
+  }, [reminder.dueDate, reminder.completed, isSoon]);
+
+  const handleSnooze = (minutes: number) => {
+    if (onSnooze) {
+      onSnooze(reminder.id, minutes);
+    }
+  };
 
   return (
     <div
@@ -55,7 +120,9 @@ export const ReminderItem: React.FC<ReminderItemProps> = ({ reminder, onToggle, 
           ? 'bg-gray-50 border-gray-200'
           : isOverdue
             ? 'bg-red-50 border-red-200 hover:border-red-300'
-            : 'bg-white border-gray-200 hover:border-primary-300'
+            : isSoon
+              ? 'bg-orange-50 border-orange-300 hover:border-orange-400'
+              : 'bg-white border-gray-200 hover:border-primary-300'
       )}
     >
       {/* Checkbox */}
@@ -95,7 +162,13 @@ export const ReminderItem: React.FC<ReminderItemProps> = ({ reminder, onToggle, 
           <Clock
             className={cn(
               'w-3.5 h-3.5',
-              reminder.completed ? 'text-gray-400' : isOverdue ? 'text-red-500' : 'text-gray-500'
+              reminder.completed
+                ? 'text-gray-400'
+                : isOverdue
+                  ? 'text-red-500'
+                  : isSoon
+                    ? 'text-orange-500'
+                    : 'text-gray-500'
             )}
           />
           <span
@@ -105,10 +178,12 @@ export const ReminderItem: React.FC<ReminderItemProps> = ({ reminder, onToggle, 
                 ? 'text-gray-400'
                 : isOverdue
                   ? 'text-red-600 font-medium'
-                  : 'text-gray-600'
+                  : isSoon
+                    ? 'text-orange-600 font-semibold'
+                    : 'text-gray-600'
             )}
           >
-            {text}
+            {isSoon && !reminder.completed ? countdown : text}
           </span>
 
           {/* Recurring Indicator */}
@@ -120,7 +195,40 @@ export const ReminderItem: React.FC<ReminderItemProps> = ({ reminder, onToggle, 
               </span>
             </div>
           )}
+
+          {/* Approaching Indicator */}
+          {isSoon && !reminder.completed && (
+            <Bell className="w-3.5 h-3.5 text-orange-500 animate-pulse" />
+          )}
         </div>
+
+        {/* Snooze Buttons (show when approaching) */}
+        {isSoon && !reminder.completed && onSnooze && (
+          <div className="flex items-center gap-1 mt-2">
+            <span className="text-xs text-gray-500 mr-1">Snooze:</span>
+            <button
+              type="button"
+              onClick={() => handleSnooze(5)}
+              className="px-2 py-1 text-xs font-medium text-orange-700 bg-orange-100 rounded hover:bg-orange-200 transition-colors"
+            >
+              5m
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSnooze(15)}
+              className="px-2 py-1 text-xs font-medium text-orange-700 bg-orange-100 rounded hover:bg-orange-200 transition-colors"
+            >
+              15m
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSnooze(30)}
+              className="px-2 py-1 text-xs font-medium text-orange-700 bg-orange-100 rounded hover:bg-orange-200 transition-colors"
+            >
+              30m
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Delete Button */}
