@@ -6,6 +6,7 @@ import { AddQuoteForm } from './AddQuoteForm';
 import { Clock } from './Clock';
 import { GoalsSection } from './GoalsSection';
 import { Modal } from './Modal';
+import { PomodoroTimer } from './PomodoroTimer';
 import { QuoteDisplay } from './QuoteDisplay';
 
 export const NewTabPage: React.FC = () => {
@@ -30,6 +31,11 @@ export const NewTabPage: React.FC = () => {
         {/* Quote Display Section */}
         <div className="flex justify-center">
           <QuoteDisplay />
+        </div>
+
+        {/* Pomodoro Timer Section */}
+        <div className="flex justify-center">
+          <PomodoroTimer />
         </div>
 
         {/* Goals Section */}

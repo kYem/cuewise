@@ -97,3 +97,19 @@ export function calculateStreak(dates: string[]): { current: number; longest: nu
     longest: Math.max(longest, tempStreak),
   };
 }
+
+/**
+ * Format seconds to mm:ss format
+ */
+export function formatTimeRemaining(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+}
+
+/**
+ * Convert minutes to seconds
+ */
+export function minutesToSeconds(minutes: number): number {
+  return minutes * 60;
+}
