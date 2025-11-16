@@ -214,7 +214,7 @@ export function expectHistoryStructure(
 /**
  * Validates that forward history was cleared
  */
-export function expectForwardHistoryCleared(state: any, fromIndex: number) {
+export function expectForwardHistoryCleared(state: any, _fromIndex: number) {
   // After clearing forward history from index, we should have:
   // - New quote at index 0
   // - Old history from fromIndex onwards

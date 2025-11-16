@@ -9,12 +9,10 @@ import {
   createDeletedQuoteScenario,
   createForwardHistoryClearScenario,
   createHiddenQuoteScenario,
-  createInMiddleState,
   createNavigationQuotes,
   expectHistoryStructure,
   expectNavigationToQuote,
   expectViewCountIncremented,
-  setupStorageMocks,
 } from './__fixtures__/quote-store.fixtures';
 import { useQuoteStore } from './quote-store';
 
