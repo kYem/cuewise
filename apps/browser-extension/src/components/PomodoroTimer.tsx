@@ -115,7 +115,9 @@ export const PomodoroTimer: React.FC = () => {
             <SessionIcon className={`w-6 h-6 ${color}`} />
           </div>
           <div className="flex-1">
-            <h2 className="text-2xl font-semibold text-gray-800 dark:text-gray-100">Pomodoro Timer</h2>
+            <h2 className="text-2xl font-semibold text-gray-800 dark:text-gray-100">
+              Pomodoro Timer
+            </h2>
             <p className="text-sm text-gray-500 dark:text-gray-400">{label}</p>
           </div>
         </div>
@@ -126,7 +128,9 @@ export const PomodoroTimer: React.FC = () => {
             {selectedGoal ? (
               <div className="flex items-center gap-2 p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-700">
                 <Target className="w-4 h-4 text-purple-600 dark:text-purple-400 flex-shrink-0" />
-                <span className="text-sm text-gray-700 dark:text-gray-200 flex-1">{selectedGoal.text}</span>
+                <span className="text-sm text-gray-700 dark:text-gray-200 flex-1">
+                  {selectedGoal.text}
+                </span>
                 <button
                   type="button"
                   onClick={() => setSelectedGoal(null)}

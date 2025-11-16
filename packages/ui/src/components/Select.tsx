@@ -156,9 +156,7 @@ export function Select<T extends string = string>({
         )}
       >
         <div className="flex items-center gap-2 flex-1 min-w-0">
-          {selectedOption?.icon && (
-            <div className="flex-shrink-0">{selectedOption.icon}</div>
-          )}
+          {selectedOption?.icon && <div className="flex-shrink-0">{selectedOption.icon}</div>}
           {selectedOption?.color && (
             <div
               className="w-3 h-3 rounded-full flex-shrink-0"
