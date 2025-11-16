@@ -435,7 +435,7 @@ export const QuoteManagementPage: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50">
+      <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
       </div>
     );
@@ -443,7 +443,7 @@ export const QuoteManagementPage: React.FC = () => {
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50 p-8">
+      <div className="min-h-screen flex items-center justify-center bg-background p-8">
         <ErrorFallback error={error} title="Failed to load quotes" onRetry={initialize} />
       </div>
     );
@@ -457,7 +457,7 @@ export const QuoteManagementPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50">
+    <div className="min-h-screen bg-background">
       {/* Header */}
       <div className="bg-surface shadow-sm border-b border-border">
         <div className="max-w-7xl mx-auto px-4 py-6">
@@ -493,21 +493,21 @@ export const QuoteManagementPage: React.FC = () => {
 
           {/* Stats */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            <div className="bg-purple-50 rounded-lg p-4">
-              <div className="text-2xl font-bold text-purple-700">{stats.total}</div>
-              <div className="text-sm text-purple-600">Total Quotes</div>
+            <div className="bg-primary-50 rounded-lg p-4">
+              <div className="text-2xl font-bold text-primary-700">{stats.total}</div>
+              <div className="text-sm text-primary-600">Total Quotes</div>
             </div>
-            <div className="bg-blue-50 rounded-lg p-4">
-              <div className="text-2xl font-bold text-blue-700">{stats.custom}</div>
-              <div className="text-sm text-blue-600">Custom Quotes</div>
+            <div className="bg-primary-100 rounded-lg p-4">
+              <div className="text-2xl font-bold text-primary-800">{stats.custom}</div>
+              <div className="text-sm text-primary-700">Custom Quotes</div>
             </div>
-            <div className="bg-red-50 rounded-lg p-4">
-              <div className="text-2xl font-bold text-red-700">{stats.favorites}</div>
-              <div className="text-sm text-red-600">Favorites</div>
+            <div className="bg-surface-variant rounded-lg p-4 border border-border">
+              <div className="text-2xl font-bold text-primary">{stats.favorites}</div>
+              <div className="text-sm text-secondary">Favorites</div>
             </div>
-            <div className="bg-gray-50 rounded-lg p-4">
-              <div className="text-2xl font-bold text-gray-700">{stats.hidden}</div>
-              <div className="text-sm text-gray-600">Hidden</div>
+            <div className="bg-surface rounded-lg p-4 border border-border">
+              <div className="text-2xl font-bold text-primary">{stats.hidden}</div>
+              <div className="text-sm text-secondary">Hidden</div>
             </div>
           </div>
 

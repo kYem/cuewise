@@ -37,7 +37,7 @@ export const InsightsPage: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen w-full p-8 bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-100 flex items-center justify-center">
+      <div className="min-h-screen w-full p-8 bg-background flex items-center justify-center">
         <div className="text-secondary">Loading insights...</div>
       </div>
     );
@@ -45,7 +45,7 @@ export const InsightsPage: React.FC = () => {
 
   if (!insights) {
     return (
-      <div className="min-h-screen w-full p-8 bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-100 flex items-center justify-center">
+      <div className="min-h-screen w-full p-8 bg-background flex items-center justify-center">
         <div className="text-secondary">No insights available</div>
       </div>
     );
@@ -57,7 +57,7 @@ export const InsightsPage: React.FC = () => {
   const maxCategoryCount = Math.max(...Object.values(insights.categoryViewCounts));
 
   return (
-    <div className="min-h-screen w-full p-8 bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-100">
+    <div className="min-h-screen w-full p-8 bg-background">
       {/* Back Button */}
       <button
         type="button"
@@ -72,7 +72,7 @@ export const InsightsPage: React.FC = () => {
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-4xl font-bold text-primary mb-2 flex items-center gap-3">
-            <BarChart3 className="w-10 h-10 text-purple-600" />
+            <BarChart3 className="w-10 h-10 text-primary-600" />
             Your Insights
           </h1>
           <p className="text-secondary">
@@ -87,7 +87,7 @@ export const InsightsPage: React.FC = () => {
             onClick={() => setActiveTab('overview')}
             className={`px-6 py-3 rounded-lg font-semibold transition-all ${
               activeTab === 'overview'
-                ? 'bg-surface text-purple-600 shadow-lg'
+                ? 'bg-surface text-primary-600 shadow-lg'
                 : 'bg-surface/50 text-secondary hover:bg-surface/80'
             }`}
           >
@@ -98,7 +98,7 @@ export const InsightsPage: React.FC = () => {
             onClick={() => setActiveTab('analytics')}
             className={`px-6 py-3 rounded-lg font-semibold transition-all ${
               activeTab === 'analytics'
-                ? 'bg-surface text-purple-600 shadow-lg'
+                ? 'bg-surface text-primary-600 shadow-lg'
                 : 'bg-surface/50 text-secondary hover:bg-surface/80'
             }`}
           >
@@ -109,7 +109,7 @@ export const InsightsPage: React.FC = () => {
             onClick={() => setActiveTab('exports')}
             className={`px-6 py-3 rounded-lg font-semibold transition-all ${
               activeTab === 'exports'
-                ? 'bg-surface text-purple-600 shadow-lg'
+                ? 'bg-surface text-primary-600 shadow-lg'
                 : 'bg-surface/50 text-secondary hover:bg-surface/80'
             }`}
           >
@@ -201,15 +201,15 @@ export const InsightsPage: React.FC = () => {
             {/* Category Heatmap */}
             <div className="bg-surface rounded-xl shadow-lg p-8 mb-8">
               <div className="flex items-center gap-3 mb-6">
-                <Award className="w-6 h-6 text-purple-600" />
+                <Award className="w-6 h-6 text-primary-600" />
                 <h2 className="text-2xl font-bold text-primary">Category Insights</h2>
               </div>
 
               {mostViewedCategory && (
-                <div className="mb-6 p-4 bg-purple-50 rounded-lg">
+                <div className="mb-6 p-4 bg-primary-50 rounded-lg">
                   <p className="text-sm text-secondary">
                     Your most viewed category is{' '}
-                    <span className="font-bold text-purple-700">
+                    <span className="font-bold text-primary-700">
                       {QUOTE_CATEGORIES[mostViewedCategory.category]}
                     </span>{' '}
                     with {mostViewedCategory.count} views
@@ -246,20 +246,20 @@ export const InsightsPage: React.FC = () => {
             </div>
 
             {/* Achievement Summary */}
-            <div className="bg-gradient-to-r from-purple-600 to-indigo-600 rounded-xl shadow-lg p-8 text-white">
+            <div className="bg-primary-600 rounded-xl shadow-lg p-8 text-white">
               <h2 className="text-2xl font-bold mb-4">Your Achievement Summary</h2>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div>
                   <div className="text-4xl font-bold mb-2">{insights.streak.longest}</div>
-                  <div className="text-purple-100">Longest Streak</div>
+                  <div className="text-white/80">Longest Streak</div>
                 </div>
                 <div>
                   <div className="text-4xl font-bold mb-2">{insights.goalsCompletedThisMonth}</div>
-                  <div className="text-purple-100">Goals This Month</div>
+                  <div className="text-white/80">Goals This Month</div>
                 </div>
                 <div>
                   <div className="text-4xl font-bold mb-2">{insights.totalQuotesViewed}</div>
-                  <div className="text-purple-100">Total Inspiration</div>
+                  <div className="text-white/80">Total Inspiration</div>
                 </div>
               </div>
             </div>
