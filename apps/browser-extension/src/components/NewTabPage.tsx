@@ -1,4 +1,4 @@
-import { BarChart3, BookMarked, Plus, Settings, Timer } from 'lucide-react';
+import { BarChart3, BookMarked, PanelRight, Plus, Settings, Timer } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useQuoteStore } from '../stores/quote-store';
@@ -16,6 +16,8 @@ export const NewTabPage: React.FC = () => {
   const refreshQuote = useQuoteStore((state) => state.refreshQuote);
   const initializeSettings = useSettingsStore((state) => state.initialize);
   const quoteChangeInterval = useSettingsStore((state) => state.settings.quoteChangeInterval);
+  const showThemeSwitcher = useSettingsStore((state) => state.settings.showThemeSwitcher);
+  const updateSettings = useSettingsStore((state) => state.updateSettings);
   const [isAddQuoteModalOpen, setIsAddQuoteModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -81,11 +83,15 @@ export const NewTabPage: React.FC = () => {
     setIsSettingsModalOpen(true);
   };
 
+  const handleToggleThemeSwitcher = () => {
+    updateSettings({ showThemeSwitcher: !showThemeSwitcher });
+  };
+
   return (
     <div className="min-h-screen w-full overflow-y-auto">
-      <div className="w-full flex flex-col items-center px-4 sm:px-8 py-8 sm:py-12">
+      <div className="w-full flex flex-col items-center px-density-md py-density-lg relative">
         {/* Top Right Navigation */}
-        <div className="fixed top-4 right-4 sm:top-8 sm:right-8 flex items-center gap-2 z-50">
+        <div className="absolute top-4 right-4 sm:top-8 sm:right-8 flex items-center gap-density-sm z-50">
           {/* Pomodoro Button */}
           <button
             type="button"
@@ -110,29 +116,37 @@ export const NewTabPage: React.FC = () => {
 
             {/* Dropdown Menu */}
             {isMenuOpen && (
-              <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden">
+              <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
                 <button
                   type="button"
                   onClick={handleOpenQuoteManagement}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50 transition-colors"
+                  className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                 >
-                  <BookMarked className="w-5 h-5 text-blue-600" />
+                  <BookMarked className="w-5 h-5 text-primary-600 dark:text-primary-400" />
                   <span className="text-sm font-medium">Manage Quotes</span>
                 </button>
                 <button
                   type="button"
                   onClick={handleOpenInsights}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50 transition-colors border-t border-gray-100"
+                  className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors border-t border-gray-100 dark:border-gray-700"
                 >
-                  <BarChart3 className="w-5 h-5 text-purple-600" />
+                  <BarChart3 className="w-5 h-5 text-primary-600 dark:text-primary-400" />
                   <span className="text-sm font-medium">View Insights</span>
                 </button>
                 <button
                   type="button"
-                  onClick={handleOpenSettings}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50 transition-colors border-t border-gray-100"
+                  onClick={handleToggleThemeSwitcher}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors border-t border-gray-100 dark:border-gray-700"
                 >
-                  <Settings className="w-5 h-5 text-gray-600" />
+                  <PanelRight className="w-5 h-5 text-primary-600 dark:text-primary-400" />
+                  <span className="text-sm font-medium">Theme Switcher</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleOpenSettings}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors border-t border-gray-100 dark:border-gray-700"
+                >
+                  <Settings className="w-5 h-5 text-primary-600 dark:text-primary-400" />
                   <span className="text-sm font-medium">Settings</span>
                 </button>
               </div>
@@ -140,7 +154,7 @@ export const NewTabPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="w-full max-w-7xl mx-auto space-y-8 sm:space-y-12">
+        <div className="w-full max-w-7xl mx-auto space-y-density-xl">
           {/* Clock Section */}
           <Clock />
 
@@ -150,22 +164,22 @@ export const NewTabPage: React.FC = () => {
           </div>
 
           {/* Two Column Layout for Larger Screens */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-density-lg">
             {/* Left Column */}
-            <div className="space-y-6">
+            <div className="space-y-density-md">
               {/* Goals Section */}
               <GoalsSection />
             </div>
 
             {/* Right Column */}
-            <div className="space-y-6">
+            <div className="space-y-density-md">
               {/* Reminders Section */}
               <RemindersSection />
             </div>
           </div>
 
           {/* Footer */}
-          <footer className="mt-8 text-center pb-8">
+          <footer className="mt-8 text-center py-density-lg">
             <p className="text-sm text-gray-400">
               Press{' '}
               <kbd className="px-2 py-1 bg-white rounded border border-gray-300 text-xs font-mono">
