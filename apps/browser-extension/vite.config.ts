@@ -5,6 +5,14 @@ import manifest from './manifest.config';
 
 export default defineConfig({
   plugins: [react(), crx({ manifest })],
+  server: {
+    port: 5173,
+    strictPort: true,
+    hmr: {
+      port: 5173,
+      clientPort: 5173,
+    },
+  },
   build: {
     rollupOptions: {
       input: {
