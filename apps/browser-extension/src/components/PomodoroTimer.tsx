@@ -322,8 +322,6 @@ export const PomodoroTimer: React.FC = () => {
               value={workDuration}
               unit="minutes"
               presets={[15, 20, 25, 30, 45, 60]}
-              min={1}
-              max={60}
               onChange={async (value) => {
                 await updateSettings({ ...settings, pomodoroWorkDuration: value });
                 await reloadSettings();
@@ -334,8 +332,6 @@ export const PomodoroTimer: React.FC = () => {
               value={breakDuration}
               unit="minute"
               presets={[3, 5, 10, 15]}
-              min={1}
-              max={30}
               onChange={async (value) => {
                 await updateSettings({ ...settings, pomodoroBreakDuration: value });
                 await reloadSettings();
@@ -346,8 +342,6 @@ export const PomodoroTimer: React.FC = () => {
               value={longBreakDuration}
               unit="minute"
               presets={[15, 20, 25, 30]}
-              min={10}
-              max={60}
               onChange={async (value) => {
                 await updateSettings({ ...settings, pomodoroLongBreakDuration: value });
                 await reloadSettings();
@@ -358,8 +352,6 @@ export const PomodoroTimer: React.FC = () => {
               value={longBreakInterval}
               unit={longBreakInterval === 1 ? 'session' : 'sessions'}
               presets={[2, 3, 4, 5, 6, 8]}
-              min={2}
-              max={10}
               onChange={async (value) => {
                 await updateSettings({ ...settings, pomodoroLongBreakInterval: value });
                 await reloadSettings();
