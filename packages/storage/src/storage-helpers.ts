@@ -6,6 +6,7 @@ import {
   DEFAULT_SETTINGS,
   type Goal,
   type PomodoroSession,
+  type PomodoroState,
   type Quote,
   type Reminder,
   type Settings,
@@ -165,6 +166,16 @@ export async function getPomodoroSessions(): Promise<PomodoroSession[]> {
 export async function setPomodoroSessions(sessions: PomodoroSession[]): Promise<boolean> {
   const area = await getStorageArea();
   return setInStorage(STORAGE_KEYS.POMODORO_SESSIONS, sessions, area);
+}
+
+// Pomodoro active state (persisted to local storage for faster access)
+export async function getPomodoroState(): Promise<PomodoroState | null> {
+  const state = await getFromStorage<PomodoroState>(STORAGE_KEYS.POMODORO_STATE, 'local');
+  return state;
+}
+
+export async function setPomodoroState(state: PomodoroState | null): Promise<boolean> {
+  return setInStorage(STORAGE_KEYS.POMODORO_STATE, state, 'local');
 }
 
 // Settings

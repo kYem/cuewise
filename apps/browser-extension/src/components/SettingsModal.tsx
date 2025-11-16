@@ -1,9 +1,10 @@
 import { AMBIENT_SOUNDS } from '@cuewise/shared';
-import { Bell, BellOff, Clock, Cloud, CloudOff, Music, RefreshCw, RotateCcw } from 'lucide-react';
+import { Bell, BellOff, Clock, Cloud, CloudOff, Music, Play, RefreshCw, RotateCcw, Square } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useState } from 'react';
 import { usePomodoroStore } from '../stores/pomodoro-store';
 import { useSettingsStore } from '../stores/settings-store';
+import { ambientSoundPlayer } from '../utils/ambient-sounds';
 import { Modal } from './Modal';
 import { StorageIndicator } from './StorageIndicator';
 
@@ -27,6 +28,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   const [quoteInterval, setQuoteInterval] = useState(settings.quoteChangeInterval);
   const [timeFormat, setTimeFormat] = useState(settings.timeFormat);
   const [syncEnabled, setSyncEnabled] = useState(settings.syncEnabled);
+  const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
 
   // Sync local state with store when settings change
   useEffect(() => {
@@ -56,8 +58,50 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
   };
 
+  // Toggle ambient sound preview
+  const togglePreview = () => {
+    if (isPreviewPlaying) {
+      ambientSoundPlayer.stop();
+      setIsPreviewPlaying(false);
+    } else {
+      if (ambientSound !== 'none') {
+        ambientSoundPlayer.play(ambientSound as any, ambientVolume);
+        setIsPreviewPlaying(true);
+      }
+    }
+  };
+
+  // Update preview volume when slider changes
+  useEffect(() => {
+    if (isPreviewPlaying) {
+      ambientSoundPlayer.setVolume(ambientVolume);
+    }
+  }, [ambientVolume, isPreviewPlaying]);
+
+  // Stop preview when modal closes or sound changes
+  useEffect(() => {
+    if (!isOpen && isPreviewPlaying) {
+      ambientSoundPlayer.stop();
+      setIsPreviewPlaying(false);
+    }
+  }, [isOpen, isPreviewPlaying]);
+
+  // Stop preview when ambient sound changes
+  useEffect(() => {
+    if (isPreviewPlaying) {
+      ambientSoundPlayer.stop();
+      setIsPreviewPlaying(false);
+    }
+  }, [ambientSound]);
+
   // Handle save
   const handleSave = async () => {
+    // Stop preview if playing
+    if (isPreviewPlaying) {
+      ambientSoundPlayer.stop();
+      setIsPreviewPlaying(false);
+    }
+
     // Check if sync setting changed
     const syncChanged = syncEnabled !== settings.syncEnabled;
 
@@ -258,18 +302,38 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
               >
                 Sound Type
               </label>
-              <select
-                id="ambient-sound"
-                value={ambientSound}
-                onChange={(e) => setAmbientSound(e.target.value)}
-                className="w-full px-3 py-2 text-sm text-primary border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-              >
-                {Object.entries(AMBIENT_SOUNDS).map(([key, label]) => (
-                  <option key={key} value={key}>
-                    {label}
-                  </option>
-                ))}
-              </select>
+              <div className="flex items-center gap-2">
+                <select
+                  id="ambient-sound"
+                  value={ambientSound}
+                  onChange={(e) => setAmbientSound(e.target.value)}
+                  className="flex-1 px-3 py-2 text-sm text-primary border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  {Object.entries(AMBIENT_SOUNDS).map(([key, label]) => (
+                    <option key={key} value={key}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+                {ambientSound !== 'none' && (
+                  <button
+                    type="button"
+                    onClick={togglePreview}
+                    className={`p-2 rounded-md transition-all ${
+                      isPreviewPlaying
+                        ? 'bg-primary-600 text-white hover:bg-primary-700'
+                        : 'bg-surface-variant text-primary hover:bg-border'
+                    }`}
+                    title={isPreviewPlaying ? 'Stop preview' : 'Test sound'}
+                  >
+                    {isPreviewPlaying ? (
+                      <Square className="w-5 h-5" />
+                    ) : (
+                      <Play className="w-5 h-5" />
+                    )}
+                  </button>
+                )}
+              </div>
               <p className="text-xs text-secondary mt-1">
                 Ambient sounds play during work sessions only
               </p>

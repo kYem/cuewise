@@ -1,8 +1,11 @@
 import { BarChart3, BookMarked, PanelRight, Plus, Settings, Timer } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
+import { formatClockTime, getGreeting, formatLongDate } from '@cuewise/shared';
 import { useQuoteStore } from '../stores/quote-store';
 import { useSettingsStore } from '../stores/settings-store';
+import { usePomodoroStore } from '../stores/pomodoro-store';
+import { ActivePomodoroWidget } from './ActivePomodoroWidget';
 import { AddQuoteForm } from './AddQuoteForm';
 import { Clock } from './Clock';
 import { GoalsSection } from './GoalsSection';
@@ -17,17 +20,58 @@ export const NewTabPage: React.FC = () => {
   const initializeSettings = useSettingsStore((state) => state.initialize);
   const quoteChangeInterval = useSettingsStore((state) => state.settings.quoteChangeInterval);
   const showThemeSwitcher = useSettingsStore((state) => state.settings.showThemeSwitcher);
+  const timeFormat = useSettingsStore((state) => state.settings.timeFormat);
   const updateSettings = useSettingsStore((state) => state.updateSettings);
+  const initializePomodoro = usePomodoroStore((state) => state.initialize);
+  const pomodoroStatus = usePomodoroStore((state) => state.status);
   const [isAddQuoteModalOpen, setIsAddQuoteModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [lastManualRefresh, setLastManualRefresh] = useState(Date.now());
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const [showStickyHeader, setShowStickyHeader] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const clockRef = useRef<HTMLDivElement>(null);
+
+  // Update time every second for sticky header
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Observe clock visibility to show/hide sticky header
+  useEffect(() => {
+    const currentClockRef = clockRef.current;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        // Show sticky header when clock is not visible
+        setShowStickyHeader(!entry.isIntersecting);
+      },
+      {
+        threshold: 0,
+        rootMargin: '-120px 0px 0px 0px', // Trigger earlier to prevent gap
+      }
+    );
+
+    if (currentClockRef) {
+      observer.observe(currentClockRef);
+    }
+
+    return () => {
+      if (currentClockRef) {
+        observer.unobserve(currentClockRef);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     initializeQuotes();
     initializeSettings();
-  }, [initializeQuotes, initializeSettings]);
+    initializePomodoro();
+  }, [initializeQuotes, initializeSettings, initializePomodoro]);
 
   // Auto-refresh quotes based on interval setting
   useEffect(() => {
@@ -87,28 +131,139 @@ export const NewTabPage: React.FC = () => {
     updateSettings({ showThemeSwitcher: !showThemeSwitcher });
   };
 
+  const { time, period } = formatClockTime(currentTime, timeFormat);
+  const greeting = getGreeting(currentTime);
+  const longDate = formatLongDate(currentTime);
+
   return (
     <div className="min-h-screen w-full overflow-y-auto">
+      {/* Sticky Header - Only visible when scrolled */}
+      <div
+        className={`fixed top-0 left-0 right-0 z-50 w-full bg-background/95 backdrop-blur-md border-b border-border/50 shadow-sm transition-all duration-300 ${
+          showStickyHeader ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0 pointer-events-none'
+        }`}
+      >
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            {/* Left: Time, Greeting & Date */}
+            <div className="flex items-center gap-4">
+              {/* Time */}
+              <div className="flex items-center gap-2">
+                <span className="text-2xl sm:text-3xl font-bold text-primary tabular-nums">
+                  {time}
+                </span>
+                {period && (
+                  <span className="text-sm font-medium text-secondary">{period}</span>
+                )}
+              </div>
+
+              {/* Greeting & Date - Hidden on small screens */}
+              <div className="hidden md:flex flex-col">
+                <span className="text-sm font-medium text-primary">{greeting}</span>
+                <span className="text-xs text-secondary">{longDate}</span>
+              </div>
+            </div>
+
+            {/* Right: Navigation */}
+            <div className="flex items-center gap-density-sm">
+              {/* Pomodoro Button or Active Session Widget */}
+              {pomodoroStatus !== 'idle' ? (
+                <ActivePomodoroWidget />
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleOpenPomodoro}
+                  className="group relative flex items-center gap-2 px-4 py-2.5 bg-surface/80 backdrop-blur-sm text-primary rounded-full shadow-md hover:shadow-lg hover:scale-105 transition-all"
+                  title="Start Pomodoro Timer"
+                >
+                  <Timer className="w-5 h-5 text-primary-600" />
+                  <span className="hidden sm:inline text-sm font-medium text-primary">Pomodoro</span>
+                </button>
+              )}
+
+              {/* Menu Dropdown */}
+              <div className="relative" ref={menuRef}>
+                <button
+                  type="button"
+                  onClick={() => setIsMenuOpen(!isMenuOpen)}
+                  className="p-2.5 bg-surface/80 backdrop-blur-sm text-primary rounded-full shadow-md hover:shadow-lg hover:scale-110 transition-all"
+                  title="Menu"
+                >
+                  <Settings className="w-5 h-5" />
+                </button>
+
+                {/* Dropdown Menu */}
+                {isMenuOpen && (
+                  <div className="absolute right-0 mt-2 w-48 bg-surface-elevated rounded-lg shadow-xl border border-border overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={handleOpenQuoteManagement}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-primary hover:bg-surface-variant transition-colors"
+                    >
+                      <BookMarked className="w-5 h-5 text-primary-600" />
+                      <span className="text-sm font-medium">Manage Quotes</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleOpenInsights}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-primary hover:bg-surface-variant transition-colors border-t border-divider"
+                    >
+                      <BarChart3 className="w-5 h-5 text-primary-600" />
+                      <span className="text-sm font-medium">View Insights</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleToggleThemeSwitcher}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-primary hover:bg-surface-variant transition-colors border-t border-divider"
+                    >
+                      <PanelRight className="w-5 h-5 text-primary-600" />
+                      <span className="text-sm font-medium">Theme Switcher</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleOpenSettings}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-primary hover:bg-surface-variant transition-colors border-t border-divider"
+                    >
+                      <Settings className="w-5 h-5 text-primary-600" />
+                      <span className="text-sm font-medium">Settings</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content */}
       <div className="w-full flex flex-col items-center px-density-md py-density-lg relative">
-        {/* Top Right Navigation */}
-        <div className="absolute top-4 right-4 sm:top-8 sm:right-8 flex items-center gap-density-sm z-50">
-          {/* Pomodoro Button */}
-          <button
-            type="button"
-            onClick={handleOpenPomodoro}
-            className="group relative flex items-center gap-2 px-4 py-3 bg-surface/80 backdrop-blur-sm text-primary rounded-full shadow-lg hover:shadow-xl hover:scale-105 transition-all"
-            title="Start Pomodoro Timer"
-          >
-            <Timer className="w-5 h-5 text-primary-600" />
-            <span className="hidden sm:inline text-sm font-medium text-primary">Pomodoro</span>
-          </button>
+        {/* Floating Top Right Navigation - Only visible when not scrolled */}
+        <div
+          className={`absolute top-4 right-4 sm:top-8 sm:right-8 flex items-center gap-density-sm z-40 transition-all duration-300 ${
+            showStickyHeader ? 'opacity-0 pointer-events-none' : 'opacity-100'
+          }`}
+        >
+          {/* Pomodoro Button or Active Session Widget */}
+          {pomodoroStatus !== 'idle' ? (
+            <ActivePomodoroWidget />
+          ) : (
+            <button
+              type="button"
+              onClick={handleOpenPomodoro}
+              className="group relative flex items-center gap-2 px-4 py-2.5 bg-surface/80 backdrop-blur-sm text-primary rounded-full shadow-md hover:shadow-lg hover:scale-105 transition-all"
+              title="Start Pomodoro Timer"
+            >
+              <Timer className="w-5 h-5 text-primary-600" />
+              <span className="hidden sm:inline text-sm font-medium text-primary">Pomodoro</span>
+            </button>
+          )}
 
           {/* Menu Dropdown */}
           <div className="relative" ref={menuRef}>
             <button
               type="button"
               onClick={() => setIsMenuOpen(!isMenuOpen)}
-              className="p-3 bg-surface/80 backdrop-blur-sm text-primary rounded-full shadow-lg hover:shadow-xl hover:scale-110 transition-all"
+              className="p-2.5 bg-surface/80 backdrop-blur-sm text-primary rounded-full shadow-md hover:shadow-lg hover:scale-110 transition-all"
               title="Menu"
             >
               <Settings className="w-5 h-5" />
@@ -155,8 +310,10 @@ export const NewTabPage: React.FC = () => {
         </div>
 
         <div className="w-full max-w-7xl mx-auto space-y-density-xl">
-          {/* Clock Section */}
-          <Clock />
+          {/* Clock Section - Observe this for sticky header */}
+          <div ref={clockRef}>
+            <Clock />
+          </div>
 
           {/* Quote Display Section */}
           <div className="flex justify-center">

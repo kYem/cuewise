@@ -136,10 +136,7 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({ onManualRefresh }) =
       {/* Quote Card */}
       <div className="relative">
         {/* Decorative Quote Marks */}
-        <div
-          className="absolute -top-6 -left-4 text-8xl font-serif opacity-10 dark:opacity-15"
-          style={{ color: categoryColor }}
-        >
+        <div className="absolute -top-6 -left-4 text-8xl font-serif text-primary-500 opacity-10 dark:opacity-20">
           "
         </div>
 
@@ -154,10 +151,7 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({ onManualRefresh }) =
             {currentQuote.text}
           </p>
           <footer className="text-center space-y-density-sm">
-            <cite
-              className="text-xl md:text-2xl font-medium not-italic"
-              style={{ color: categoryColor }}
-            >
+            <cite className="text-xl md:text-2xl font-semibold not-italic text-primary-600 dark:text-primary-500">
               — {currentQuote.author}
             </cite>
 
@@ -178,10 +172,7 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({ onManualRefresh }) =
         </blockquote>
 
         {/* Decorative Quote Marks */}
-        <div
-          className="absolute -bottom-6 -right-4 text-8xl font-serif opacity-10 dark:opacity-15"
-          style={{ color: categoryColor }}
-        >
+        <div className="absolute -bottom-6 -right-4 text-8xl font-serif text-primary-500 opacity-10 dark:opacity-20">
           "
         </div>
       </div>

@@ -1,5 +1,5 @@
 import { generateId, minutesToSeconds, type PomodoroSession } from '@cuewise/shared';
-import { getPomodoroSessions, getSettings, setPomodoroSessions } from '@cuewise/storage';
+import { getPomodoroSessions, getPomodoroState, getSettings, setPomodoroSessions, setPomodoroState } from '@cuewise/storage';
 import { create } from 'zustand';
 import { playCompletionSound, playStartSound } from '../utils/sounds';
 import { useToastStore } from './toast-store';
@@ -44,6 +44,37 @@ interface PomodoroStore {
   switchToWork: () => void;
 }
 
+// Helper to save current state to storage
+const saveCurrentState = async (state: Partial<PomodoroStore>) => {
+  const {
+    status,
+    sessionType,
+    timeRemaining,
+    totalTime,
+    currentSessionId,
+    consecutiveWorkSessions,
+    selectedGoalId,
+  } = state;
+
+  if (status === 'idle') {
+    // Clear saved state when idle
+    await setPomodoroState(null);
+  } else if (status === 'running' || status === 'paused') {
+    // Save active state
+    await setPomodoroState({
+      status,
+      sessionType: sessionType!,
+      timeRemaining: timeRemaining!,
+      totalTime: totalTime!,
+      currentSessionId: currentSessionId!,
+      startedAt: new Date().toISOString(), // Current time as reference
+      pausedAt: status === 'paused' ? new Date().toISOString() : null,
+      consecutiveWorkSessions: consecutiveWorkSessions!,
+      selectedGoalId: selectedGoalId ?? null,
+    });
+  }
+};
+
 export const usePomodoroStore = create<PomodoroStore>((set, get) => ({
   // Initial state
   status: 'idle',
@@ -67,8 +98,12 @@ export const usePomodoroStore = create<PomodoroStore>((set, get) => ({
     try {
       set({ isLoading: true, error: null });
 
-      // Load settings and sessions
-      const [settings, sessions] = await Promise.all([getSettings(), getPomodoroSessions()]);
+      // Load settings, sessions, and saved state
+      const [settings, sessions, savedState] = await Promise.all([
+        getSettings(),
+        getPomodoroSessions(),
+        getPomodoroState(),
+      ]);
 
       const workDuration = settings.pomodoroWorkDuration;
       const breakDuration = settings.pomodoroBreakDuration;
@@ -77,18 +112,72 @@ export const usePomodoroStore = create<PomodoroStore>((set, get) => ({
       const ambientSound = settings.pomodoroAmbientSound;
       const ambientVolume = settings.pomodoroAmbientVolume;
 
-      set({
-        workDuration,
-        breakDuration,
-        longBreakDuration,
-        longBreakInterval,
-        ambientSound,
-        ambientVolume,
-        timeRemaining: minutesToSeconds(workDuration),
-        totalTime: minutesToSeconds(workDuration),
-        sessions,
-        isLoading: false,
-      });
+      // Restore saved state if it exists and was running/paused
+      if (savedState && savedState.status !== 'idle' && savedState.startedAt) {
+        const now = Date.now();
+        const startedAt = new Date(savedState.startedAt).getTime();
+        const pausedAt = savedState.pausedAt ? new Date(savedState.pausedAt).getTime() : null;
+
+        let adjustedTimeRemaining = savedState.timeRemaining;
+
+        // If timer was running, calculate elapsed time
+        if (savedState.status === 'running') {
+          const elapsedSeconds = Math.floor((now - startedAt) / 1000);
+          adjustedTimeRemaining = Math.max(0, savedState.timeRemaining - elapsedSeconds);
+
+          // If timer expired while tab was closed, mark as completed
+          if (adjustedTimeRemaining === 0) {
+            // Will be handled by completeSession
+            set({
+              ...savedState,
+              timeRemaining: 0,
+              workDuration,
+              breakDuration,
+              longBreakDuration,
+              longBreakInterval,
+              ambientSound,
+              ambientVolume,
+              sessions,
+              isLoading: false,
+            });
+            get().completeSession();
+            return;
+          }
+        }
+
+        // Restore the saved state with adjusted time
+        set({
+          status: savedState.status,
+          sessionType: savedState.sessionType,
+          timeRemaining: adjustedTimeRemaining,
+          totalTime: savedState.totalTime,
+          currentSessionId: savedState.currentSessionId,
+          consecutiveWorkSessions: savedState.consecutiveWorkSessions,
+          selectedGoalId: savedState.selectedGoalId,
+          workDuration,
+          breakDuration,
+          longBreakDuration,
+          longBreakInterval,
+          ambientSound,
+          ambientVolume,
+          sessions,
+          isLoading: false,
+        });
+      } else {
+        // No saved state or it was idle, start fresh
+        set({
+          workDuration,
+          breakDuration,
+          longBreakDuration,
+          longBreakInterval,
+          ambientSound,
+          ambientVolume,
+          timeRemaining: minutesToSeconds(workDuration),
+          totalTime: minutesToSeconds(workDuration),
+          sessions,
+          isLoading: false,
+        });
+      }
     } catch (error) {
       console.error('Error initializing pomodoro store:', error);
       const errorMessage = 'Failed to load pomodoro data. Please refresh the page.';
@@ -165,14 +254,21 @@ export const usePomodoroStore = create<PomodoroStore>((set, get) => ({
       timeRemaining: minutesToSeconds(duration),
       totalTime: minutesToSeconds(duration),
     });
+
+    // Save state to storage
+    saveCurrentState(get());
   },
 
   pause: () => {
     set({ status: 'paused' });
+    // Save paused state
+    saveCurrentState(get());
   },
 
   resume: () => {
     set({ status: 'running' });
+    // Save resumed state
+    saveCurrentState(get());
   },
 
   reset: () => {
@@ -187,6 +283,9 @@ export const usePomodoroStore = create<PomodoroStore>((set, get) => ({
       timeRemaining: minutesToSeconds(duration),
       totalTime: minutesToSeconds(duration),
     });
+
+    // Clear saved state since we're idle
+    saveCurrentState(get());
   },
 
   skip: () => {
