@@ -35,6 +35,7 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({ onManualRefresh }) =
       <div className="flex flex-col items-center justify-center min-h-[400px] text-center">
         <p className="text-xl text-gray-500 mb-4">No quotes available</p>
         <button
+          type="button"
           onClick={handleRefreshClick}
           className="px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
         >
@@ -107,6 +108,7 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({ onManualRefresh }) =
       {/* Action Buttons */}
       <div className="flex items-center justify-center gap-4 mt-12">
         <button
+          type="button"
           onClick={() => toggleFavorite(currentQuote.id)}
           className={cn(
             'p-3 rounded-full transition-all hover:scale-110 hover:shadow-lg',
@@ -120,6 +122,7 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({ onManualRefresh }) =
         </button>
 
         <button
+          type="button"
           onClick={handleRefreshClick}
           className="flex items-center gap-2 px-6 py-3 bg-white text-gray-700 rounded-full font-medium shadow-md hover:shadow-lg hover:scale-105 transition-all"
           title="New quote"
@@ -129,6 +132,7 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({ onManualRefresh }) =
         </button>
 
         <button
+          type="button"
           onClick={() => hideQuote(currentQuote.id)}
           className="p-3 rounded-full bg-white text-gray-600 hover:bg-gray-50 hover:scale-110 transition-all hover:shadow-lg"
           title="Hide this quote"

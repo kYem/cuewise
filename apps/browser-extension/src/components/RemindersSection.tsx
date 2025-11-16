@@ -63,6 +63,7 @@ export const RemindersSection: React.FC = () => {
 
           {/* Add Reminder Button */}
           <button
+            type="button"
             onClick={() => setIsAddModalOpen(true)}
             className="p-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
             aria-label="Add reminder"

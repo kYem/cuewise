@@ -40,7 +40,9 @@ export function createChromeStorageMock(): MockChromeStorage {
       return Promise.resolve();
     }),
     clear: vi.fn(() => {
-      Object.keys(data).forEach((key) => delete data[key]);
+      for (const key of Object.keys(data)) {
+        delete data[key];
+      }
       return Promise.resolve();
     }),
   };

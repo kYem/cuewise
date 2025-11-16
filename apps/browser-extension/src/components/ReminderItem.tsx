@@ -129,6 +129,7 @@ export const ReminderItem: React.FC<ReminderItemProps> = ({
     >
       {/* Checkbox */}
       <button
+        type="button"
         onClick={() => onToggle(reminder.id)}
         className="flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 rounded-full"
         aria-label={reminder.completed ? 'Mark as incomplete' : 'Mark as complete'}
@@ -245,6 +246,7 @@ export const ReminderItem: React.FC<ReminderItemProps> = ({
 
       {/* Delete Button */}
       <button
+        type="button"
         onClick={() => onDelete(reminder.id)}
         className="flex-shrink-0 p-2 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 rounded"
         aria-label="Delete reminder"
