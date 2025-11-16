@@ -2,6 +2,20 @@ import * as storage from '@cuewise/storage';
 import { quoteFactory } from '@cuewise/test-utils/factories';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SEED_QUOTES } from '../data/seed-quotes';
+import {
+  EMPTY_STORE_STATE,
+  createAtBeginningState,
+  createAtEndState,
+  createDeletedQuoteScenario,
+  createForwardHistoryClearScenario,
+  createHiddenQuoteScenario,
+  createInMiddleState,
+  createNavigationQuotes,
+  expectHistoryStructure,
+  expectNavigationToQuote,
+  expectViewCountIncremented,
+  setupStorageMocks,
+} from './__fixtures__/quote-store.fixtures';
 import { useQuoteStore } from './quote-store';
 
 // Mock storage functions
@@ -23,15 +37,8 @@ vi.mock('./toast-store', () => ({
 
 describe('Quote Store', () => {
   beforeEach(() => {
-    // Reset store to initial state
-    useQuoteStore.setState({
-      quotes: [],
-      currentQuote: null,
-      isLoading: true,
-      error: null,
-      quoteHistory: [],
-      historyIndex: 0,
-    });
+    // Reset store to initial state using fixture
+    useQuoteStore.setState(EMPTY_STORE_STATE);
 
     // Clear all mocks
     vi.clearAllMocks();
@@ -268,60 +275,46 @@ describe('Quote Store', () => {
     });
 
     it('should clear forward history when refreshing from a back position', async () => {
-      const mockQuotes = quoteFactory.buildList(5);
-      const quote1 = mockQuotes[0];
-      const quote2 = mockQuotes[1];
-      const quote3 = mockQuotes[2];
+      const scenario = createForwardHistoryClearScenario();
 
       useQuoteStore.setState({
-        quotes: mockQuotes,
-        currentQuote: quote2,
-        quoteHistory: [quote1.id, quote2.id, quote3.id],
-        historyIndex: 1, // Currently at quote2, can go back to quote3 or forward to quote1
+        quotes: scenario.quotes,
+        currentQuote: scenario.currentQuote,
+        quoteHistory: scenario.initialHistory.map((q) => q.id),
+        historyIndex: scenario.historyIndex,
       });
 
       await useQuoteStore.getState().refreshQuote();
 
       const state = useQuoteStore.getState();
       // Should have cleared forward history (quote1) and added new quote
-      expect(state.quoteHistory.length).toBe(3);
-      expect(state.historyIndex).toBe(0);
-      expect(state.quoteHistory[1]).toBe(quote2.id);
+      expectHistoryStructure(state, 3, 0);
+      expect(state.quoteHistory[1]).toBe(scenario.currentQuote.id);
     });
   });
 
   describe('Quote Navigation', () => {
     describe('canGoBack', () => {
       it('should return true when there is history to go back to', () => {
-        const mockQuotes = quoteFactory.buildList(3);
+        const { quotes, quote1, quote2 } = createNavigationQuotes(2);
+        const state = createAtBeginningState(quotes, [quote1, quote2]);
 
-        useQuoteStore.setState({
-          quotes: mockQuotes,
-          quoteHistory: [mockQuotes[0].id, mockQuotes[1].id],
-          historyIndex: 0,
-        });
+        useQuoteStore.setState(state);
 
         expect(useQuoteStore.getState().canGoBack()).toBe(true);
       });
 
       it('should return false when at the end of history', () => {
-        const mockQuotes = quoteFactory.buildList(2);
+        const { quotes, quote1, quote2 } = createNavigationQuotes(2);
+        const state = createAtEndState(quotes, [quote1, quote2]);
 
-        useQuoteStore.setState({
-          quotes: mockQuotes,
-          quoteHistory: [mockQuotes[0].id, mockQuotes[1].id],
-          historyIndex: 1, // At the last item
-        });
+        useQuoteStore.setState(state);
 
         expect(useQuoteStore.getState().canGoBack()).toBe(false);
       });
 
       it('should return false when history is empty', () => {
-        useQuoteStore.setState({
-          quotes: [],
-          quoteHistory: [],
-          historyIndex: 0,
-        });
+        useQuoteStore.setState(EMPTY_STORE_STATE);
 
         expect(useQuoteStore.getState().canGoBack()).toBe(false);
       });
@@ -329,25 +322,19 @@ describe('Quote Store', () => {
 
     describe('canGoForward', () => {
       it('should return true when not at the most recent position', () => {
-        const mockQuotes = quoteFactory.buildList(3);
+        const { quotes, quote1, quote2 } = createNavigationQuotes(2);
+        const state = createAtEndState(quotes, [quote1, quote2]);
 
-        useQuoteStore.setState({
-          quotes: mockQuotes,
-          quoteHistory: [mockQuotes[0].id, mockQuotes[1].id],
-          historyIndex: 1,
-        });
+        useQuoteStore.setState(state);
 
         expect(useQuoteStore.getState().canGoForward()).toBe(true);
       });
 
       it('should return false when at the most recent position', () => {
-        const mockQuotes = quoteFactory.buildList(2);
+        const { quotes, quote1, quote2 } = createNavigationQuotes(2);
+        const state = createAtBeginningState(quotes, [quote1, quote2]);
 
-        useQuoteStore.setState({
-          quotes: mockQuotes,
-          quoteHistory: [mockQuotes[0].id, mockQuotes[1].id],
-          historyIndex: 0,
-        });
+        useQuoteStore.setState(state);
 
         expect(useQuoteStore.getState().canGoForward()).toBe(false);
       });
@@ -355,164 +342,113 @@ describe('Quote Store', () => {
 
     describe('goBack', () => {
       it('should navigate to previous quote in history', async () => {
-        const mockQuotes = quoteFactory.buildList(3);
-        const quote1 = mockQuotes[0];
-        const quote2 = mockQuotes[1];
+        const { quotes, quote1, quote2 } = createNavigationQuotes(2);
+        const state = createAtBeginningState(quotes, [quote1, quote2]);
 
-        useQuoteStore.setState({
-          quotes: mockQuotes,
-          currentQuote: quote1,
-          quoteHistory: [quote1.id, quote2.id],
-          historyIndex: 0,
-        });
+        useQuoteStore.setState(state);
 
         await useQuoteStore.getState().goBack();
 
-        const state = useQuoteStore.getState();
-        expect(state.currentQuote?.id).toBe(quote2.id);
-        expect(state.historyIndex).toBe(1);
+        const newState = useQuoteStore.getState();
+        expectNavigationToQuote(newState, quote2, 1);
         expect(storage.setCurrentQuote).toHaveBeenCalledWith(quote2);
       });
 
       it('should increment view count when going back', async () => {
-        const mockQuotes = quoteFactory.buildList(3);
-        const quote1 = mockQuotes[0];
-        const quote2 = mockQuotes[1];
+        const { quotes, quote1, quote2 } = createNavigationQuotes(2);
+        const state = createAtBeginningState(quotes, [quote1, quote2]);
 
-        useQuoteStore.setState({
-          quotes: mockQuotes,
-          currentQuote: quote1,
-          quoteHistory: [quote1.id, quote2.id],
-          historyIndex: 0,
-        });
+        useQuoteStore.setState(state);
 
         await useQuoteStore.getState().goBack();
 
-        expect(storage.setQuotes).toHaveBeenCalled();
-        const updatedQuotes = vi.mocked(storage.setQuotes).mock.calls[0][0];
-        const updatedQuote = updatedQuotes.find((q) => q.id === quote2.id);
-        expect(updatedQuote?.viewCount).toBe(quote2.viewCount + 1);
+        expectViewCountIncremented(vi.mocked(storage.setQuotes), quote2.id, quote2.viewCount);
       });
 
       it('should do nothing when at the end of history', async () => {
-        const mockQuotes = quoteFactory.buildList(2);
-        const quote1 = mockQuotes[0];
+        const { quotes, quote1 } = createNavigationQuotes(2);
+        const state = createAtBeginningState(quotes, [quote1]);
 
-        useQuoteStore.setState({
-          quotes: mockQuotes,
-          currentQuote: quote1,
-          quoteHistory: [quote1.id],
-          historyIndex: 0,
-        });
+        useQuoteStore.setState(state);
 
         await useQuoteStore.getState().goBack();
 
         expect(storage.setCurrentQuote).not.toHaveBeenCalled();
-        const state = useQuoteStore.getState();
-        expect(state.currentQuote?.id).toBe(quote1.id);
-        expect(state.historyIndex).toBe(0);
+        const newState = useQuoteStore.getState();
+        expectNavigationToQuote(newState, quote1, 0);
       });
 
       it('should skip hidden quotes when going back', async () => {
-        const mockQuotes = quoteFactory.buildList(4);
-        const quote1 = mockQuotes[0];
-        const quote2 = { ...mockQuotes[1], isHidden: true };
-        const quote3 = mockQuotes[2];
+        const scenario = createHiddenQuoteScenario();
 
         useQuoteStore.setState({
-          quotes: [quote1, quote2, quote3],
-          currentQuote: quote1,
-          quoteHistory: [quote1.id, quote2.id, quote3.id],
+          quotes: scenario.allQuotes,
+          currentQuote: scenario.visibleQuotes[0],
+          quoteHistory: scenario.history,
           historyIndex: 0,
         });
 
         await useQuoteStore.getState().goBack();
 
         const state = useQuoteStore.getState();
-        // Should skip quote2 (hidden) and go to quote3
-        expect(state.currentQuote?.id).toBe(quote3.id);
-        expect(state.historyIndex).toBe(2);
+        // Should skip hidden quote and go to the second visible quote
+        expectNavigationToQuote(state, scenario.visibleQuotes[1], 2);
       });
     });
 
     describe('goForward', () => {
       it('should navigate to next quote in history', async () => {
-        const mockQuotes = quoteFactory.buildList(3);
-        const quote1 = mockQuotes[0];
-        const quote2 = mockQuotes[1];
+        const { quotes, quote1, quote2 } = createNavigationQuotes(2);
+        const state = createAtEndState(quotes, [quote1, quote2]);
 
-        useQuoteStore.setState({
-          quotes: mockQuotes,
-          currentQuote: quote2,
-          quoteHistory: [quote1.id, quote2.id],
-          historyIndex: 1,
-        });
+        useQuoteStore.setState(state);
 
         await useQuoteStore.getState().goForward();
 
-        const state = useQuoteStore.getState();
-        expect(state.currentQuote?.id).toBe(quote1.id);
-        expect(state.historyIndex).toBe(0);
+        const newState = useQuoteStore.getState();
+        expectNavigationToQuote(newState, quote1, 0);
         expect(storage.setCurrentQuote).toHaveBeenCalledWith(quote1);
       });
 
       it('should increment view count when going forward', async () => {
-        const mockQuotes = quoteFactory.buildList(3);
-        const quote1 = mockQuotes[0];
-        const quote2 = mockQuotes[1];
+        const { quotes, quote1, quote2 } = createNavigationQuotes(2);
+        const state = createAtEndState(quotes, [quote1, quote2]);
 
-        useQuoteStore.setState({
-          quotes: mockQuotes,
-          currentQuote: quote2,
-          quoteHistory: [quote1.id, quote2.id],
-          historyIndex: 1,
-        });
+        useQuoteStore.setState(state);
 
         await useQuoteStore.getState().goForward();
 
-        expect(storage.setQuotes).toHaveBeenCalled();
-        const updatedQuotes = vi.mocked(storage.setQuotes).mock.calls[0][0];
-        const updatedQuote = updatedQuotes.find((q) => q.id === quote1.id);
-        expect(updatedQuote?.viewCount).toBe(quote1.viewCount + 1);
+        expectViewCountIncremented(vi.mocked(storage.setQuotes), quote1.id, quote1.viewCount);
       });
 
       it('should do nothing when already at most recent position', async () => {
-        const mockQuotes = quoteFactory.buildList(2);
-        const quote1 = mockQuotes[0];
+        const { quotes, quote1 } = createNavigationQuotes(2);
+        const state = createAtBeginningState(quotes, [quote1]);
 
-        useQuoteStore.setState({
-          quotes: mockQuotes,
-          currentQuote: quote1,
-          quoteHistory: [quote1.id],
-          historyIndex: 0,
-        });
+        useQuoteStore.setState(state);
 
         await useQuoteStore.getState().goForward();
 
         expect(storage.setCurrentQuote).not.toHaveBeenCalled();
-        const state = useQuoteStore.getState();
-        expect(state.currentQuote?.id).toBe(quote1.id);
-        expect(state.historyIndex).toBe(0);
+        const newState = useQuoteStore.getState();
+        expectNavigationToQuote(newState, quote1, 0);
       });
 
       it('should skip deleted quotes when going forward', async () => {
-        const mockQuotes = quoteFactory.buildList(3);
-        const quote1 = mockQuotes[0];
-        const quote3 = mockQuotes[2];
+        const scenario = createDeletedQuoteScenario();
 
         useQuoteStore.setState({
-          quotes: [quote1, quote3], // quote2 has been deleted
-          currentQuote: quote3,
-          quoteHistory: [quote1.id, 'deleted-quote-id', quote3.id],
+          quotes: scenario.existingQuotes,
+          currentQuote: scenario.existingQuotes[1],
+          quoteHistory: scenario.history,
           historyIndex: 2,
         });
 
         await useQuoteStore.getState().goForward();
 
         const state = useQuoteStore.getState();
-        // Should skip deleted quote and go to quote1
-        expect(state.currentQuote?.id).toBe(quote1.id);
-        expect(state.historyIndex).toBe(0);
+        // Should skip deleted quote and go to first quote
+        expectNavigationToQuote(state, scenario.existingQuotes[0], 0);
       });
     });
   });
