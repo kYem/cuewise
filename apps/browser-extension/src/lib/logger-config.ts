@@ -33,34 +33,3 @@ export function initializeLogger(): void {
     });
   }
 }
-
-/**
- * Future: Initialize Sentry integration
- *
- * To add Sentry:
- * 1. Install: pnpm add @sentry/browser @sentry/react
- * 2. Uncomment and configure below
- * 3. Implement SentryLogger in packages/shared/src/logger.ts
- */
-/*
-import * as Sentry from '@sentry/browser';
-import { setGlobalLogger, SentryLogger } from '@cuewise/shared';
-
-export function initializeSentry(): void {
-  if (import.meta.env.PROD) {
-    Sentry.init({
-      dsn: import.meta.env.VITE_SENTRY_DSN,
-      environment: import.meta.env.MODE,
-      release: import.meta.env.VITE_APP_VERSION,
-      tracesSampleRate: 0.1,
-      beforeSend(event) {
-        // Filter out sensitive data
-        return event;
-      },
-    });
-
-    // Use Sentry logger in production
-    setGlobalLogger(new SentryLogger());
-  }
-}
-*/

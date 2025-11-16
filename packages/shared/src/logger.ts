@@ -137,73 +137,6 @@ class ConsoleLogger implements Logger {
   }
 }
 
-/**
- * Sentry logger implementation (placeholder for future integration)
- *
- * To integrate Sentry:
- * 1. Install: pnpm add @sentry/browser (or @sentry/react-native)
- * 2. Initialize Sentry in your app entry point
- * 3. Uncomment and implement this class
- * 4. Use createLogger('sentry') or setGlobalLogger(new SentryLogger())
- */
-/*
-import * as Sentry from '@sentry/browser';
-
-class SentryLogger implements Logger {
-  private consoleLogger = new ConsoleLogger();
-
-  setConfig(config: Partial<LoggerConfig>): void {
-    this.consoleLogger.setConfig(config);
-  }
-
-  getConfig(): LoggerConfig {
-    return this.consoleLogger.getConfig();
-  }
-
-  debug(message: string, context?: LogContext): void {
-    this.consoleLogger.debug(message, context);
-    Sentry.addBreadcrumb({
-      level: 'debug',
-      message,
-      data: context,
-    });
-  }
-
-  info(message: string, context?: LogContext): void {
-    this.consoleLogger.info(message, context);
-    Sentry.addBreadcrumb({
-      level: 'info',
-      message,
-      data: context,
-    });
-  }
-
-  warn(message: string, context?: LogContext): void {
-    this.consoleLogger.warn(message, context);
-    Sentry.captureMessage(message, {
-      level: 'warning',
-      contexts: { custom: context },
-    });
-  }
-
-  error(message: string, error?: Error | unknown, context?: LogContext): void {
-    this.consoleLogger.error(message, error, context);
-
-    if (error instanceof Error) {
-      Sentry.captureException(error, {
-        contexts: { custom: context },
-        tags: { message },
-      });
-    } else {
-      Sentry.captureMessage(message, {
-        level: 'error',
-        contexts: { custom: { ...context, error } },
-      });
-    }
-  }
-}
-*/
-
 // Global logger instance
 let globalLogger: Logger = new ConsoleLogger();
 
@@ -218,9 +151,9 @@ export function getLogger(): Logger {
  * Set a custom logger implementation globally
  *
  * @example
- * // Use Sentry logger in production
+ * // Use a custom logger in production
  * if (import.meta.env.PROD) {
- *   setGlobalLogger(new SentryLogger());
+ *   setGlobalLogger(new CustomLogger());
  * }
  */
 export function setGlobalLogger(logger: Logger): void {
