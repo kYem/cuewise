@@ -106,6 +106,39 @@ export const PomodoroTimer: React.FC = () => {
   // Calculate sessions until long break
   const sessionsUntilLongBreak = longBreakInterval - consecutiveWorkSessions;
 
+  // Get density-aware sizing
+  const density = settings.layoutDensity;
+  const timerSizes = {
+    compact: {
+      container: 'w-48 h-48',
+      radius: 90,
+      center: 96,
+      strokeWidth: 6,
+      fontSize: 'text-4xl',
+      labelSize: 'text-xs',
+      viewBox: '0 0 192 192',
+    },
+    comfortable: {
+      container: 'w-64 h-64',
+      radius: 120,
+      center: 128,
+      strokeWidth: 8,
+      fontSize: 'text-6xl',
+      labelSize: 'text-sm',
+      viewBox: '0 0 256 256',
+    },
+    spacious: {
+      container: 'w-80 h-80',
+      radius: 150,
+      center: 160,
+      strokeWidth: 10,
+      fontSize: 'text-7xl',
+      labelSize: 'text-base',
+      viewBox: '0 0 320 320',
+    },
+  };
+  const timerSize = timerSizes[density];
+
   return (
     <div className="w-full max-w-md mx-auto">
       <div className="bg-surface/80 backdrop-blur-sm rounded-2xl shadow-lg p-density-lg border border-border">
@@ -210,24 +243,32 @@ export const PomodoroTimer: React.FC = () => {
         {/* Timer Display */}
         <div className="flex flex-col items-center mb-density-lg">
           {/* Circular Progress */}
-          <div className="relative w-64 h-64 mb-density-md">
+          <div className={`relative ${timerSize.container} mb-density-md`}>
             {/* Background circle */}
             <svg
               className="w-full h-full transform -rotate-90"
+              viewBox={timerSize.viewBox}
               role="img"
               aria-label={`Timer progress: ${progress.toFixed(0)}% complete`}
             >
-              <circle cx="128" cy="128" r="120" stroke="#E5E7EB" strokeWidth="8" fill="none" />
+              <circle
+                cx={timerSize.center}
+                cy={timerSize.center}
+                r={timerSize.radius}
+                stroke="#E5E7EB"
+                strokeWidth={timerSize.strokeWidth}
+                fill="none"
+              />
               {/* Progress circle */}
               <circle
-                cx="128"
-                cy="128"
-                r="120"
+                cx={timerSize.center}
+                cy={timerSize.center}
+                r={timerSize.radius}
                 stroke={progressColor}
-                strokeWidth="8"
+                strokeWidth={timerSize.strokeWidth}
                 fill="none"
-                strokeDasharray={`${2 * Math.PI * 120}`}
-                strokeDashoffset={`${2 * Math.PI * 120 * (1 - progress / 100)}`}
+                strokeDasharray={`${2 * Math.PI * timerSize.radius}`}
+                strokeDashoffset={`${2 * Math.PI * timerSize.radius * (1 - progress / 100)}`}
                 strokeLinecap="round"
                 className="transition-all duration-300 ease-linear"
               />
@@ -235,10 +276,10 @@ export const PomodoroTimer: React.FC = () => {
 
             {/* Time display in center */}
             <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <div className="text-6xl font-bold text-primary font-mono">
+              <div className={`${timerSize.fontSize} font-bold text-primary font-mono`}>
                 {formatTimeRemaining(timeRemaining)}
               </div>
-              <div className={`mt-2 text-sm font-medium uppercase tracking-wider ${color}`}>
+              <div className={`mt-2 ${timerSize.labelSize} font-medium uppercase tracking-wider ${color}`}>
                 {sessionType === 'work' && 'Work'}
                 {sessionType === 'break' && 'Break'}
                 {sessionType === 'longBreak' && 'Long Break'}
