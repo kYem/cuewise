@@ -1,6 +1,6 @@
 import {
-  DEFAULT_SETTINGS,
   type ColorTheme,
+  DEFAULT_SETTINGS,
   type LayoutDensity,
   type Settings,
 } from '@cuewise/shared';

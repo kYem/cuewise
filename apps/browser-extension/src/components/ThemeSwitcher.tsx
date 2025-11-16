@@ -8,7 +8,8 @@ interface ThemeSwitcherProps {
 }
 
 export const ThemeSwitcher: React.FC<ThemeSwitcherProps> = ({ isVisible }) => {
-  const { settings, updateColorTheme, updateTheme, updateLayoutDensity, updateSettings } = useSettingsStore();
+  const { settings, updateColorTheme, updateTheme, updateLayoutDensity, updateSettings } =
+    useSettingsStore();
 
   const colorThemes: { value: ColorTheme; label: string; gradient: string }[] = [
     {
@@ -112,7 +113,9 @@ export const ThemeSwitcher: React.FC<ThemeSwitcherProps> = ({ isVisible }) => {
 
         {/* Color Themes */}
         <section>
-          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Color Theme</h3>
+          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+            Color Theme
+          </h3>
           <div className="grid grid-cols-2 gap-3">
             {colorThemes.map((theme) => (
               <button
@@ -132,7 +135,9 @@ export const ThemeSwitcher: React.FC<ThemeSwitcherProps> = ({ isVisible }) => {
                   }}
                 />
                 <div className="absolute bottom-0 left-0 right-0 bg-black/50 backdrop-blur-sm py-1">
-                  <span className="text-xs font-medium text-white block text-center">{theme.label}</span>
+                  <span className="text-xs font-medium text-white block text-center">
+                    {theme.label}
+                  </span>
                 </div>
               </button>
             ))}
@@ -141,7 +146,9 @@ export const ThemeSwitcher: React.FC<ThemeSwitcherProps> = ({ isVisible }) => {
 
         {/* Layout Density */}
         <section>
-          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Layout Density</h3>
+          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+            Layout Density
+          </h3>
           <div className="flex gap-2">
             {densities.map((density) => {
               const Icon = density.icon;

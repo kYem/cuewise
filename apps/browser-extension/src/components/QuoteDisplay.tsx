@@ -71,9 +71,8 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({ onManualRefresh }) =
   };
 
   // Calculate progress percentage (100% = full time, 0% = no time left)
-  const progressPercentage = quoteChangeInterval > 0
-    ? (timeRemaining / quoteChangeInterval) * 100
-    : 0;
+  const progressPercentage =
+    quoteChangeInterval > 0 ? (timeRemaining / quoteChangeInterval) * 100 : 0;
 
   // Calculate dynamic font size based on quote length to prevent layout shifts
   const getQuoteFontSize = (text: string): string => {
@@ -164,7 +163,9 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({ onManualRefresh }) =
 
             {/* Source (for custom quotes) */}
             {currentQuote.source && (
-              <div className="text-sm text-gray-500 dark:text-gray-400 italic">Source: {currentQuote.source}</div>
+              <div className="text-sm text-gray-500 dark:text-gray-400 italic">
+                Source: {currentQuote.source}
+              </div>
             )}
 
             {/* Personal Notes (for custom quotes) */}

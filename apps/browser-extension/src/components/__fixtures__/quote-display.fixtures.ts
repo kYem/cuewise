@@ -1,6 +1,6 @@
 import type { Quote } from '@cuewise/shared';
 import { quoteFactory } from '@cuewise/test-utils/factories';
-import { vi, type Mock } from 'vitest';
+import { type Mock, vi } from 'vitest';
 
 /**
  * Common test fixtures for QuoteDisplay component tests
