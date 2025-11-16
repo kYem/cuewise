@@ -113,7 +113,7 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({ onManualRefresh }) =
           <p
             className={cn(
               getQuoteFontSize(currentQuote.text),
-              'font-light text-gray-800 dark:text-gray-100 leading-relaxed text-center mb-6 text-balance transition-all duration-300'
+              'font-normal text-gray-900 dark:text-gray-100 leading-relaxed text-center mb-6 text-balance transition-all duration-300'
             )}
           >
             {currentQuote.text}
