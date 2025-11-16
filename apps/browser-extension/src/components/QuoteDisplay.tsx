@@ -18,6 +18,24 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({ onManualRefresh }) =
     onManualRefresh?.();
   };
 
+  // Calculate dynamic font size based on quote length to prevent layout shifts
+  const getQuoteFontSize = (text: string): string => {
+    const length = text.length;
+    if (length < 50) {
+      return 'text-3xl md:text-4xl lg:text-5xl'; // Very short quotes - largest
+    }
+    if (length < 80) {
+      return 'text-2xl md:text-3xl lg:text-4xl'; // Short quotes - large
+    }
+    if (length < 120) {
+      return 'text-xl md:text-2xl lg:text-3xl'; // Medium quotes - medium
+    }
+    if (length < 180) {
+      return 'text-lg md:text-xl lg:text-2xl'; // Long quotes - smaller
+    }
+    return 'text-base md:text-lg lg:text-xl'; // Very long quotes - smallest
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -69,8 +87,13 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({ onManualRefresh }) =
         </div>
 
         {/* Quote Text */}
-        <blockquote className="relative z-10">
-          <p className="text-3xl md:text-4xl lg:text-5xl font-light text-gray-800 leading-relaxed text-center mb-8 text-balance">
+        <blockquote className="relative z-10 h-[240px] flex flex-col justify-center">
+          <p
+            className={cn(
+              getQuoteFontSize(currentQuote.text),
+              'font-light text-gray-800 leading-relaxed text-center mb-6 text-balance transition-all duration-300'
+            )}
+          >
             {currentQuote.text}
           </p>
           <footer className="text-center space-y-3">
