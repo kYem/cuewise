@@ -1,10 +1,11 @@
 import { formatTimeRemaining } from '@cuewise/shared';
-import { Coffee, Pause, Play, RotateCcw, SkipForward, Target, Timer } from 'lucide-react';
+import { Pause, Play, RotateCcw, SkipForward, Target } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useState } from 'react';
 import { useGoalStore } from '../stores/goal-store';
 import { usePomodoroStore } from '../stores/pomodoro-store';
 import { ambientSoundPlayer } from '../utils/ambient-sounds';
+import { getSessionStyles } from '../utils/pomodoro-styles';
 
 export const PomodoroTimer: React.FC = () => {
   const {
@@ -85,29 +86,9 @@ export const PomodoroTimer: React.FC = () => {
 
   const isWork = sessionType === 'work';
 
-  // Session colors
-  let sessionColor = 'text-primary-600';
-  let sessionBgColor = 'bg-primary-100';
-  let sessionBorderColor = 'border-primary-600';
-  let progressColor = '#8B5CF6';
-  let sessionLabel = 'Focus Session';
-  let sessionIcon = Timer;
-
-  if (sessionType === 'break') {
-    sessionColor = 'text-green-600';
-    sessionBgColor = 'bg-green-100';
-    sessionBorderColor = 'border-green-600';
-    progressColor = '#10B981';
-    sessionLabel = 'Short Break';
-    sessionIcon = Coffee;
-  } else if (sessionType === 'longBreak') {
-    sessionColor = 'text-blue-600';
-    sessionBgColor = 'bg-blue-100';
-    sessionBorderColor = 'border-blue-600';
-    progressColor = '#3B82F6';
-    sessionLabel = 'Long Break';
-    sessionIcon = Coffee;
-  }
+  // Get session-specific styles
+  const { color, bgColor, borderColor, progressColor, label, icon: SessionIcon } =
+    getSessionStyles(sessionType);
 
   // Find selected goal
   const selectedGoal = todayGoals.find((g) => g.id === selectedGoalId);
@@ -115,19 +96,17 @@ export const PomodoroTimer: React.FC = () => {
   // Calculate sessions until long break
   const sessionsUntilLongBreak = longBreakInterval - consecutiveWorkSessions;
 
-  const SessionIcon = sessionIcon;
-
   return (
     <div className="w-full max-w-md mx-auto">
       <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg p-8 border border-gray-200">
         {/* Header */}
         <div className="flex items-center gap-3 mb-6">
-          <div className={`p-2 ${sessionBgColor} rounded-lg`}>
-            <SessionIcon className={`w-6 h-6 ${sessionColor}`} />
+          <div className={`p-2 ${bgColor} rounded-lg`}>
+            <SessionIcon className={`w-6 h-6 ${color}`} />
           </div>
           <div className="flex-1">
             <h2 className="text-2xl font-semibold text-gray-800">Pomodoro Timer</h2>
-            <p className="text-sm text-gray-500">{sessionLabel}</p>
+            <p className="text-sm text-gray-500">{label}</p>
           </div>
         </div>
 
@@ -245,7 +224,7 @@ export const PomodoroTimer: React.FC = () => {
               <div className="text-6xl font-bold text-gray-800 font-mono">
                 {formatTimeRemaining(timeRemaining)}
               </div>
-              <div className={`mt-2 text-sm font-medium uppercase tracking-wider ${sessionColor}`}>
+              <div className={`mt-2 text-sm font-medium uppercase tracking-wider ${color}`}>
                 {sessionType === 'work' && 'Work'}
                 {sessionType === 'break' && 'Break'}
                 {sessionType === 'longBreak' && 'Long Break'}
@@ -254,10 +233,8 @@ export const PomodoroTimer: React.FC = () => {
           </div>
 
           {/* Session Type Badge */}
-          <div
-            className={`px-4 py-2 rounded-full border-2 ${sessionBorderColor} ${sessionBgColor}`}
-          >
-            <span className={`text-sm font-semibold ${sessionColor}`}>
+          <div className={`px-4 py-2 rounded-full border-2 ${borderColor} ${bgColor}`}>
+            <span className={`text-sm font-semibold ${color}`}>
               {status === 'idle' && 'Ready to start'}
               {status === 'running' && 'In progress'}
               {status === 'paused' && 'Paused'}
