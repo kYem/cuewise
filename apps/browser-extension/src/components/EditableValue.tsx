@@ -21,6 +21,7 @@ export const EditableValue: React.FC<EditableValueProps> = ({
   className = '',
 }) => {
   const [isEditing, setIsEditing] = useState(false);
+  const [useCustomInput, setUseCustomInput] = useState(false);
   const [inputValue, setInputValue] = useState(value.toString());
   const inputRef = useRef<HTMLInputElement>(null);
   const selectRef = useRef<HTMLSelectElement>(null);
@@ -33,17 +34,18 @@ export const EditableValue: React.FC<EditableValueProps> = ({
   // Focus input when editing starts
   useEffect(() => {
     if (isEditing) {
-      if (presets && selectRef.current) {
+      if (presets && !useCustomInput && selectRef.current) {
         selectRef.current.focus();
       } else if (inputRef.current) {
         inputRef.current.focus();
         inputRef.current.select();
       }
     }
-  }, [isEditing, presets]);
+  }, [isEditing, presets, useCustomInput]);
 
   const handleClick = () => {
     setIsEditing(true);
+    setUseCustomInput(false); // Reset to preset mode when starting
   };
 
   const handleBlur = () => {
@@ -56,6 +58,7 @@ export const EditableValue: React.FC<EditableValueProps> = ({
     } else if (e.key === 'Escape') {
       setInputValue(value.toString());
       setIsEditing(false);
+      setUseCustomInput(false);
     }
   };
 
@@ -71,22 +74,18 @@ export const EditableValue: React.FC<EditableValueProps> = ({
     }
 
     setIsEditing(false);
+    setUseCustomInput(false);
   };
 
   const handleSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const numValue = Number.parseInt(e.target.value, 10);
     if (e.target.value === 'custom') {
       // Switch to input mode
-      setIsEditing(true);
-      setTimeout(() => {
-        if (inputRef.current) {
-          inputRef.current.focus();
-          inputRef.current.select();
-        }
-      }, 0);
+      setUseCustomInput(true);
     } else {
+      const numValue = Number.parseInt(e.target.value, 10);
       onChange(numValue);
       setIsEditing(false);
+      setUseCustomInput(false);
     }
   };
 
@@ -103,8 +102,8 @@ export const EditableValue: React.FC<EditableValueProps> = ({
     );
   }
 
-  // Show select dropdown if presets are provided
-  if (presets) {
+  // Show select dropdown if presets are provided and not using custom input
+  if (presets && !useCustomInput) {
     const hasCurrentValue = presets.includes(value);
 
     return (
@@ -112,7 +111,12 @@ export const EditableValue: React.FC<EditableValueProps> = ({
         ref={selectRef}
         value={hasCurrentValue ? value : 'custom'}
         onChange={handleSelectChange}
-        onBlur={handleBlur}
+        onBlur={(e) => {
+          // Only blur if not switching to custom
+          if (e.target.value !== 'custom') {
+            handleBlur();
+          }
+        }}
         className="inline-block px-2 py-1 text-sm text-purple-600 font-semibold bg-white border-2 border-purple-400 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
       >
         {presets.map((preset) => (
