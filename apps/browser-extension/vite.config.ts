@@ -5,13 +5,10 @@ import manifest from './manifest.config';
 
 export default defineConfig({
   plugins: [react(), crx({ manifest })],
-  server: {
-    port: 5173,
-    strictPort: true,
-    hmr: {
-      port: 5173,
-      clientPort: 5173,
-    },
+  legacy: {
+    // Skip WebSocket token check for chrome extension dev mode
+    // Required for Vite 6.0.9+ CORS policy with @crxjs
+    skipWebSocketTokenCheck: true,
   },
   build: {
     rollupOptions: {
