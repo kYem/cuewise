@@ -757,6 +757,66 @@ pnpm type-check
 pnpm clean
 ```
 
+## Testing with Playwright (Browser Automation)
+
+For manual testing, visual verification, and browser automation, you can use Playwright to interact with the extension via the dev server:
+
+### Starting the Dev Server
+
+**Important**: Always check if the dev server is already running before starting it:
+
+```bash
+# Check if port 5173 is in use
+lsof -i :5173
+
+# If nothing is returned, start the dev server
+pnpm --filter @cuewise/browser-extension dev
+```
+
+The dev server will start on `http://localhost:5173/` with hot module replacement (HMR) enabled.
+
+### Testing with Playwright
+
+1. **Navigate to the extension**
+   ```javascript
+   await page.goto('http://localhost:5173/');
+   ```
+
+2. **Interact with features**
+   ```javascript
+   // Navigate to Pomodoro timer
+   await page.getByRole('button', { name: 'Pomodoro' }).click();
+
+   // Switch density modes
+   await page.getByRole('button', { name: 'Compact' }).click();
+   await page.getByRole('button', { name: 'Spacious' }).click();
+
+   // Take screenshots for verification
+   await page.screenshot({ path: 'screenshot.png' });
+   ```
+
+3. **Test responsive features**
+   - Click "Pomodoro" to access the Pomodoro timer
+   - Click "Menu" to access settings panel
+   - Test density modes (Compact/Comfortable/Spacious)
+   - Switch between light/dark modes
+   - Test all color themes
+   - Verify layouts and animations
+
+### Benefits of Dev Server Testing
+
+- ✅ **Instant Hot Reload**: Changes reflect immediately without rebuilding
+- ✅ **Better Debugging**: Source maps, console logs, detailed error messages
+- ✅ **Faster Iteration**: No need to reload extension in Chrome
+- ✅ **Browser Automation**: Compatible with Playwright, Puppeteer, Selenium
+- ✅ **Visual Testing**: Easy to capture screenshots and verify layouts
+
+### Important Notes
+
+- **Dev Server vs Production**: The dev server uses Vite's HMR. For production testing, load the built extension from `apps/browser-extension/dist` as an unpacked extension in Chrome.
+- **Port Conflicts**: If port 5173 is in use, Vite will automatically try another port. Check the terminal output for the actual port number.
+- **Stop Dev Server**: Use `Ctrl+C` in the terminal or kill the process when done.
+
 ## Package Naming Convention
 
 - **Apps**: `@cuewise/browser-extension`, `@cuewise/web`, `@cuewise/mobile`

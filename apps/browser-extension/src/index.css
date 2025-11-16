@@ -314,4 +314,20 @@
   .gap-density-sm { gap: var(--spacing-sm); }
   .gap-density-md { gap: var(--spacing-md); }
   .gap-density-lg { gap: var(--spacing-lg); }
+
+  /* Margin bottom */
+  .mb-density-xs { margin-bottom: var(--spacing-xs); }
+  .mb-density-sm { margin-bottom: var(--spacing-sm); }
+  .mb-density-md { margin-bottom: var(--spacing-md); }
+  .mb-density-lg { margin-bottom: var(--spacing-lg); }
+  .mb-density-xl { margin-bottom: var(--spacing-xl); }
+  .mb-density-2xl { margin-bottom: var(--spacing-2xl); }
+
+  /* Margin top */
+  .mt-density-xs { margin-top: var(--spacing-xs); }
+  .mt-density-sm { margin-top: var(--spacing-sm); }
+  .mt-density-md { margin-top: var(--spacing-md); }
+  .mt-density-lg { margin-top: var(--spacing-lg); }
+  .mt-density-xl { margin-top: var(--spacing-xl); }
+  .mt-density-2xl { margin-top: var(--spacing-2xl); }
 }
