@@ -14,15 +14,16 @@ export interface SessionStyles {
 
 /**
  * Get styling configuration for a Pomodoro session type
+ * Uses CSS variables for theme-aware colors
  */
 export function getSessionStyles(sessionType: SessionType): SessionStyles {
   switch (sessionType) {
     case 'break':
       return {
-        color: 'text-green-600',
+        color: 'text-success',
         bgColor: 'bg-green-100',
-        borderColor: 'border-green-600',
-        progressColor: '#10B981',
+        borderColor: 'border-success',
+        progressColor: 'var(--color-success)',
         label: 'Short Break',
         icon: Coffee,
       };
@@ -31,7 +32,7 @@ export function getSessionStyles(sessionType: SessionType): SessionStyles {
         color: 'text-blue-600',
         bgColor: 'bg-blue-100',
         borderColor: 'border-blue-600',
-        progressColor: '#3B82F6',
+        progressColor: 'oklch(0.62 0.22 230)', // Blue that works in light/dark
         label: 'Long Break',
         icon: Coffee,
       };
@@ -41,7 +42,7 @@ export function getSessionStyles(sessionType: SessionType): SessionStyles {
         color: 'text-primary-600',
         bgColor: 'bg-primary-100',
         borderColor: 'border-primary-600',
-        progressColor: '#8B5CF6',
+        progressColor: 'var(--color-primary-600)',
         label: 'Focus Session',
         icon: Timer,
       };

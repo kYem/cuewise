@@ -227,8 +227,9 @@ export const PomodoroTimer: React.FC = () => {
                 <div
                   key={i}
                   className={`h-1.5 w-8 rounded-full ${
-                    i < consecutiveWorkSessions ? 'bg-purple-500' : 'bg-divider'
+                    i < consecutiveWorkSessions ? '' : 'bg-divider'
                   }`}
+                  style={i < consecutiveWorkSessions ? { backgroundColor: progressColor } : undefined}
                 />
               ))}
             </div>
@@ -250,7 +251,7 @@ export const PomodoroTimer: React.FC = () => {
                 cx={timerSize.center}
                 cy={timerSize.center}
                 r={timerSize.radius}
-                stroke="#E5E7EB"
+                className="stroke-divider"
                 strokeWidth={timerSize.strokeWidth}
                 fill="none"
               />
@@ -399,7 +400,7 @@ export const PomodoroTimer: React.FC = () => {
             />
           </p>
           {ambientSound !== 'none' && isWork && (
-            <p className="mt-1 text-purple-600">🎵 Ambient sound: {ambientSound}</p>
+            <p className={`mt-1 ${color}`}>🎵 Ambient sound: {ambientSound}</p>
           )}
         </div>
       </div>
