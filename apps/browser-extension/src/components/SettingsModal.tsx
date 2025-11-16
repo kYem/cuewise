@@ -1,5 +1,5 @@
 import { AMBIENT_SOUNDS } from '@cuewise/shared';
-import { Bell, BellOff, Clock, Music, RefreshCw, RotateCcw } from 'lucide-react';
+import { Bell, BellOff, Clock, Cloud, CloudOff, Music, RefreshCw, RotateCcw } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useState } from 'react';
 import { usePomodoroStore } from '../stores/pomodoro-store';
@@ -26,6 +26,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   const [notifications, setNotifications] = useState(settings.enableNotifications);
   const [quoteInterval, setQuoteInterval] = useState(settings.quoteChangeInterval);
   const [timeFormat, setTimeFormat] = useState(settings.timeFormat);
+  const [syncEnabled, setSyncEnabled] = useState(settings.syncEnabled);
 
   // Sync local state with store when settings change
   useEffect(() => {
@@ -38,6 +39,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     setNotifications(settings.enableNotifications);
     setQuoteInterval(settings.quoteChangeInterval);
     setTimeFormat(settings.timeFormat);
+    setSyncEnabled(settings.syncEnabled);
   }, [settings]);
 
   // Format interval for display
@@ -56,6 +58,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
 
   // Handle save
   const handleSave = async () => {
+    // Check if sync setting changed
+    const syncChanged = syncEnabled !== settings.syncEnabled;
+
     await updateSettings({
       pomodoroWorkDuration: workDuration,
       pomodoroBreakDuration: breakDuration,
@@ -66,7 +71,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
       enableNotifications: notifications,
       quoteChangeInterval: quoteInterval,
       timeFormat,
+      syncEnabled,
     });
+
+    // If sync setting changed, reload the page to apply storage changes
+    if (syncChanged) {
+      window.location.reload();
+      return;
+    }
 
     // Reload Pomodoro settings if any pomodoro settings changed
     if (
@@ -324,6 +336,41 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                 <span className="text-sm font-medium text-primary">Enable notifications</span>
                 <p className="text-xs text-secondary">
                   Get notified when Pomodoro sessions complete and reminders are due
+                </p>
+              </div>
+            </label>
+          </div>
+        </section>
+
+        {/* Chrome Sync Settings */}
+        <section>
+          <div className="flex items-center gap-2 mb-4">
+            {syncEnabled ? (
+              <Cloud className="w-5 h-5 text-primary-600" />
+            ) : (
+              <CloudOff className="w-5 h-5 text-gray-400" />
+            )}
+            <h3 className="text-lg font-semibold text-gray-800">Chrome Sync</h3>
+          </div>
+
+          <div className="pl-7">
+            <label className="flex items-center gap-3 cursor-pointer group">
+              <div className="relative">
+                <input
+                  type="checkbox"
+                  checked={syncEnabled}
+                  onChange={(e) => setSyncEnabled(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
+              </div>
+              <div>
+                <span className="text-sm font-medium text-gray-700">Enable Chrome Sync</span>
+                <p className="text-xs text-gray-500">
+                  Sync your data across all Chrome browsers where you're signed in
+                </p>
+                <p className="text-xs text-orange-600 mt-1">
+                  Note: Sync storage is limited to 100KB. Disable sync if you have large amounts of data.
                 </p>
               </div>
             </label>
