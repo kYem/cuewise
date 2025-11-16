@@ -69,6 +69,7 @@ export interface Settings {
   pomodoroBreakDuration: number; // minutes (default 5)
   pomodoroLongBreakDuration: number; // minutes (default 15)
   pomodoroLongBreakInterval: number; // number of work sessions before long break (default 4)
+  pomodoroAutoStartBreaks: boolean; // auto-start breaks after work session (default true)
   pomodoroAmbientSound: string; // ambient sound type (default 'none')
   pomodoroAmbientVolume: number; // volume 0-100 (default 50)
   enableNotifications: boolean;

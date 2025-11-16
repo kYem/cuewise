@@ -6,6 +6,7 @@ export const DEFAULT_SETTINGS: Settings = {
   pomodoroBreakDuration: 5,
   pomodoroLongBreakDuration: 15,
   pomodoroLongBreakInterval: 4,
+  pomodoroAutoStartBreaks: true, // Auto-start breaks by default
   pomodoroAmbientSound: 'none',
   pomodoroAmbientVolume: 50,
   enableNotifications: true,
