@@ -84,7 +84,9 @@ export interface Settings {
 
 // Storage keys
 export const STORAGE_KEYS = {
-  QUOTES: 'quotes',
+  QUOTES: 'quotes', // Legacy key - kept for migration
+  SEED_QUOTES: 'seedQuotes', // Seed quotes (always in local storage)
+  CUSTOM_QUOTES: 'customQuotes', // Custom quotes (in sync storage when enabled)
   GOALS: 'goals',
   REMINDERS: 'reminders',
   POMODORO_SESSIONS: 'pomodoroSessions',
