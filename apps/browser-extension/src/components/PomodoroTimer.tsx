@@ -108,17 +108,17 @@ export const PomodoroTimer: React.FC = () => {
 
   return (
     <div className="w-full max-w-md mx-auto">
-      <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-2xl shadow-lg p-density-lg border border-gray-200 dark:border-gray-700">
+      <div className="bg-surface/80 backdrop-blur-sm rounded-2xl shadow-lg p-density-lg border border-border">
         {/* Header */}
         <div className="flex items-center gap-density-sm mb-density-md">
           <div className={`p-2 ${bgColor} rounded-lg`}>
             <SessionIcon className={`w-6 h-6 ${color}`} />
           </div>
           <div className="flex-1">
-            <h2 className="text-2xl font-semibold text-gray-800 dark:text-gray-100">
+            <h2 className="text-2xl font-semibold text-primary">
               Pomodoro Timer
             </h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400">{label}</p>
+            <p className="text-sm text-secondary">{label}</p>
           </div>
         </div>
 
@@ -128,7 +128,7 @@ export const PomodoroTimer: React.FC = () => {
             {selectedGoal ? (
               <div className="flex items-center gap-2 p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-700">
                 <Target className="w-4 h-4 text-purple-600 dark:text-purple-400 flex-shrink-0" />
-                <span className="text-sm text-gray-700 dark:text-gray-200 flex-1">
+                <span className="text-sm text-primary flex-1">
                   {selectedGoal.text}
                 </span>
                 <button
@@ -144,19 +144,19 @@ export const PomodoroTimer: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setShowGoalPicker(!showGoalPicker)}
-                className="w-full flex items-center gap-2 p-3 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors"
+                className="w-full flex items-center gap-2 p-3 bg-surface-variant rounded-lg border border-border hover:bg-border transition-colors"
                 title="Select a goal"
               >
-                <Target className="w-4 h-4 text-gray-600" />
-                <span className="text-sm text-gray-600">Work on a goal (optional)</span>
+                <Target className="w-4 h-4 text-secondary" />
+                <span className="text-sm text-secondary">Work on a goal (optional)</span>
               </button>
             )}
 
             {/* Goal Picker Dropdown */}
             {showGoalPicker && !selectedGoal && (
-              <div className="mt-2 p-2 bg-white rounded-lg border border-gray-200 shadow-lg max-h-48 overflow-y-auto">
+              <div className="mt-2 p-2 bg-surface-elevated rounded-lg border border-border shadow-lg max-h-48 overflow-y-auto">
                 {todayGoals.filter((g) => !g.completed).length === 0 ? (
-                  <p className="text-sm text-gray-500 p-2">No active goals for today</p>
+                  <p className="text-sm text-secondary p-2">No active goals for today</p>
                 ) : (
                   todayGoals
                     .filter((g) => !g.completed)
@@ -168,7 +168,7 @@ export const PomodoroTimer: React.FC = () => {
                           setSelectedGoal(goal.id);
                           setShowGoalPicker(false);
                         }}
-                        className="w-full text-left p-2 text-sm text-gray-700 hover:bg-purple-50 rounded transition-colors"
+                        className="w-full text-left p-2 text-sm text-primary hover:bg-surface-variant rounded transition-colors"
                       >
                         {goal.text}
                       </button>
@@ -183,14 +183,14 @@ export const PomodoroTimer: React.FC = () => {
         {isWork && status !== 'idle' && selectedGoal && (
           <div className="mb-density-md flex items-center gap-2 p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-700">
             <Target className="w-4 h-4 text-purple-600 dark:text-purple-400 flex-shrink-0" />
-            <span className="text-sm text-gray-700 dark:text-gray-200">{selectedGoal.text}</span>
+            <span className="text-sm text-primary">{selectedGoal.text}</span>
           </div>
         )}
 
         {/* Long Break Progress */}
         {isWork && sessionsUntilLongBreak > 0 && (
           <div className="mb-density-md text-center">
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-secondary">
               {sessionsUntilLongBreak} session{sessionsUntilLongBreak !== 1 ? 's' : ''} until long
               break
             </p>
@@ -199,7 +199,7 @@ export const PomodoroTimer: React.FC = () => {
                 <div
                   key={i}
                   className={`h-1.5 w-8 rounded-full ${
-                    i < consecutiveWorkSessions ? 'bg-purple-500' : 'bg-gray-200'
+                    i < consecutiveWorkSessions ? 'bg-purple-500' : 'bg-divider'
                   }`}
                 />
               ))}
@@ -235,7 +235,7 @@ export const PomodoroTimer: React.FC = () => {
 
             {/* Time display in center */}
             <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <div className="text-6xl font-bold text-gray-800 dark:text-gray-100 font-mono">
+              <div className="text-6xl font-bold text-primary font-mono">
                 {formatTimeRemaining(timeRemaining)}
               </div>
               <div className={`mt-2 text-sm font-medium uppercase tracking-wider ${color}`}>
@@ -300,7 +300,7 @@ export const PomodoroTimer: React.FC = () => {
             <button
               type="button"
               onClick={reset}
-              className="p-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors shadow-md hover:shadow-lg"
+              className="p-3 bg-surface-variant text-primary rounded-lg hover:bg-border transition-colors shadow-md hover:shadow-lg"
               title="Reset timer"
             >
               <RotateCcw className="w-5 h-5" />
@@ -311,7 +311,7 @@ export const PomodoroTimer: React.FC = () => {
           <button
             type="button"
             onClick={skip}
-            className="p-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors shadow-md hover:shadow-lg"
+            className="p-3 bg-surface-variant text-primary rounded-lg hover:bg-border transition-colors shadow-md hover:shadow-lg"
             title={`Skip to ${isWork ? 'break' : 'work'}`}
           >
             <SkipForward className="w-5 h-5" />
@@ -319,7 +319,7 @@ export const PomodoroTimer: React.FC = () => {
         </div>
 
         {/* Help Text - Interactive Settings */}
-        <div className="mt-density-md text-center text-xs text-gray-500 dark:text-gray-400">
+        <div className="mt-density-md text-center text-xs text-secondary">
           <p className="leading-relaxed">
             Focus for{' '}
             <EditableValue

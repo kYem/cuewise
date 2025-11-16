@@ -107,7 +107,7 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({ onManualRefresh }) =
   if (!currentQuote) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] text-center">
-        <p className="text-xl text-gray-500 mb-4">No quotes available</p>
+        <p className="text-xl text-secondary mb-4">No quotes available</p>
         <button
           type="button"
           onClick={handleRefreshClick}
@@ -148,7 +148,7 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({ onManualRefresh }) =
           <p
             className={cn(
               getQuoteFontSize(currentQuote.text),
-              'font-normal text-gray-900 dark:text-gray-100 leading-relaxed text-center mb-6 text-balance transition-all duration-300'
+              'font-normal text-primary leading-relaxed text-center mb-6 text-balance transition-all duration-300'
             )}
           >
             {currentQuote.text}
@@ -163,7 +163,7 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({ onManualRefresh }) =
 
             {/* Source (for custom quotes) */}
             {currentQuote.source && (
-              <div className="text-sm text-gray-500 dark:text-gray-400 italic">
+              <div className="text-sm text-secondary italic">
                 Source: {currentQuote.source}
               </div>
             )}
@@ -195,7 +195,7 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({ onManualRefresh }) =
             'p-density-sm rounded-full transition-all hover:scale-110 hover:shadow-lg',
             currentQuote.isFavorite
               ? 'bg-red-500 text-white'
-              : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600'
+              : 'bg-surface text-secondary hover:bg-surface-variant'
           )}
           title={currentQuote.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
         >
@@ -211,8 +211,8 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({ onManualRefresh }) =
             className={cn(
               'p-density-sm rounded-full transition-all',
               canGoBack()
-                ? 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 hover:scale-110 hover:shadow-lg'
-                : 'bg-gray-100 dark:bg-gray-800 text-gray-300 dark:text-gray-600 cursor-not-allowed'
+                ? 'bg-surface text-primary hover:bg-surface-variant hover:scale-110 hover:shadow-lg'
+                : 'bg-surface-variant text-tertiary cursor-not-allowed'
             )}
             title="Previous quote"
           >
@@ -222,7 +222,7 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({ onManualRefresh }) =
           <button
             type="button"
             onClick={handleRefreshClick}
-            className="relative flex items-center gap-density-xs px-density-lg py-density-sm bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg font-medium shadow-md hover:shadow-lg hover:scale-105 transition-all overflow-hidden"
+            className="relative flex items-center gap-density-xs px-density-lg py-density-sm bg-surface text-primary rounded-lg font-medium shadow-md hover:shadow-lg hover:scale-105 transition-all overflow-hidden"
             title="New quote"
           >
             <RefreshCw className="w-5 h-5" />
@@ -244,8 +244,8 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({ onManualRefresh }) =
             className={cn(
               'p-density-sm rounded-full transition-all',
               canGoForward()
-                ? 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 hover:scale-110 hover:shadow-lg'
-                : 'bg-gray-100 dark:bg-gray-800 text-gray-300 dark:text-gray-600 cursor-not-allowed'
+                ? 'bg-surface text-primary hover:bg-surface-variant hover:scale-110 hover:shadow-lg'
+                : 'bg-surface-variant text-tertiary cursor-not-allowed'
             )}
             title="Next quote"
           >
@@ -256,7 +256,7 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({ onManualRefresh }) =
         <button
           type="button"
           onClick={() => hideQuote(currentQuote.id)}
-          className="p-density-sm rounded-full bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 hover:scale-110 transition-all hover:shadow-lg"
+          className="p-density-sm rounded-full bg-surface text-secondary hover:bg-surface-variant hover:scale-110 transition-all hover:shadow-lg"
           title="Hide this quote"
         >
           <EyeOff className="w-5 h-5" />
@@ -265,7 +265,7 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({ onManualRefresh }) =
 
       {/* View Count (subtle) */}
       {currentQuote.viewCount > 0 && (
-        <div className="text-center mt-8 text-sm text-gray-400 dark:text-gray-500">
+        <div className="text-center mt-8 text-sm text-tertiary">
           Viewed {currentQuote.viewCount} {currentQuote.viewCount === 1 ? 'time' : 'times'}
         </div>
       )}
