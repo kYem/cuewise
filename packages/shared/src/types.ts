@@ -54,8 +54,9 @@ export interface PomodoroSession {
   startedAt: string; // ISO date string
   completedAt?: string; // ISO date string
   interrupted: boolean;
-  duration: number; // minutes (25 for work, 5 for break)
-  type: 'work' | 'break';
+  duration: number; // minutes (25 for work, 5 for break, 15 for long break)
+  type: 'work' | 'break' | 'longBreak';
+  goalId?: string; // Optional goal this session is associated with
 }
 
 // Customization types
@@ -72,6 +73,10 @@ export interface BackgroundStyle {
 export interface Settings {
   pomodoroWorkDuration: number; // minutes (default 25)
   pomodoroBreakDuration: number; // minutes (default 5)
+  pomodoroLongBreakDuration: number; // minutes (default 15)
+  pomodoroLongBreakInterval: number; // number of work sessions before long break (default 4)
+  pomodoroAmbientSound: string; // ambient sound type (default 'none')
+  pomodoroAmbientVolume: number; // volume 0-100 (default 50)
   enableNotifications: boolean;
   theme: 'light' | 'dark' | 'auto';
   quoteChangeInterval: number; // seconds (0 = manual, 1-3600 = auto-refresh every N seconds)
@@ -101,6 +106,8 @@ export interface InsightsData {
   goalsCompletedThisWeek: number;
   goalsCompletedThisMonth: number;
   pomodorosCompletedToday: number;
+  focusTimeToday: number; // minutes
+  focusTimeThisWeek: number; // minutes
   categoryViewCounts: Record<QuoteCategory, number>;
   streak: {
     current: number;

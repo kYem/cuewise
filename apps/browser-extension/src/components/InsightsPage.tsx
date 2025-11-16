@@ -1,5 +1,19 @@
-import { CATEGORY_COLORS, getMostViewedCategory, QUOTE_CATEGORIES } from '@cuewise/shared';
-import { ArrowLeft, Award, BarChart3, Calendar, Flame, Target, TrendingUp } from 'lucide-react';
+import {
+  CATEGORY_COLORS,
+  formatFocusTime,
+  getMostViewedCategory,
+  QUOTE_CATEGORIES,
+} from '@cuewise/shared';
+import {
+  ArrowLeft,
+  Award,
+  BarChart3,
+  Calendar,
+  Clock,
+  Flame,
+  Target,
+  TrendingUp,
+} from 'lucide-react';
 import type React from 'react';
 import { useEffect } from 'react';
 import { useInsightsStore } from '../stores/insights-store';
@@ -61,7 +75,7 @@ export const InsightsPage: React.FC = () => {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 mb-8">
           {/* Streak Card */}
           <div className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow">
             <div className="flex items-center justify-between mb-4">
@@ -117,6 +131,22 @@ export const InsightsPage: React.FC = () => {
             </div>
             <h3 className="text-gray-600 text-sm font-medium mb-1">Quotes Viewed</h3>
             <p className="text-xs text-gray-500">This week: {insights.quotesViewedThisWeek}</p>
+          </div>
+
+          {/* Focus Time */}
+          <div className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow">
+            <div className="flex items-center justify-between mb-4">
+              <div className="p-3 bg-blue-100 rounded-lg">
+                <Clock className="w-6 h-6 text-blue-600" />
+              </div>
+              <span className="text-3xl font-bold text-blue-600">
+                {formatFocusTime(insights.focusTimeToday)}
+              </span>
+            </div>
+            <h3 className="text-gray-600 text-sm font-medium mb-1">Focus Time Today</h3>
+            <p className="text-xs text-gray-500">
+              This week: {formatFocusTime(insights.focusTimeThisWeek)}
+            </p>
           </div>
         </div>
 

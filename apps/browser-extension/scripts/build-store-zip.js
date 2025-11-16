@@ -10,9 +10,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = join(__dirname, '..');
 
 async function getPackageVersion() {
-  const packageJson = JSON.parse(
-    await readFile(join(rootDir, 'package.json'), 'utf-8')
-  );
+  const packageJson = JSON.parse(await readFile(join(rootDir, 'package.json'), 'utf-8'));
   return packageJson.version;
 }
 

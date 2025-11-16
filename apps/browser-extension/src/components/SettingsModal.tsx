@@ -1,3 +1,4 @@
+import { AMBIENT_SOUNDS, COLOR_THEMES, type BackgroundStyle, type ColorTheme, type FontSize, type LayoutDensity } from '@cuewise/shared';
 import {
   Bell,
   BellOff,
@@ -6,6 +7,7 @@ import {
   Image,
   Minimize,
   Moon,
+  Music,
   Palette,
   RefreshCw,
   RotateCcw,
@@ -14,13 +16,6 @@ import {
 } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useState } from 'react';
-import {
-  COLOR_THEMES,
-  type BackgroundStyle,
-  type ColorTheme,
-  type FontSize,
-  type LayoutDensity,
-} from '@cuewise/shared';
 import { usePomodoroStore } from '../stores/pomodoro-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { Modal } from './Modal';
@@ -38,6 +33,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   // Local state for form controls
   const [workDuration, setWorkDuration] = useState(settings.pomodoroWorkDuration);
   const [breakDuration, setBreakDuration] = useState(settings.pomodoroBreakDuration);
+  const [longBreakDuration, setLongBreakDuration] = useState(settings.pomodoroLongBreakDuration);
+  const [longBreakInterval, setLongBreakInterval] = useState(settings.pomodoroLongBreakInterval);
+  const [ambientSound, setAmbientSound] = useState(settings.pomodoroAmbientSound);
+  const [ambientVolume, setAmbientVolume] = useState(settings.pomodoroAmbientVolume);
   const [theme, setTheme] = useState(settings.theme);
   const [notifications, setNotifications] = useState(settings.enableNotifications);
   const [quoteInterval, setQuoteInterval] = useState(settings.quoteChangeInterval);
@@ -51,6 +50,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   useEffect(() => {
     setWorkDuration(settings.pomodoroWorkDuration);
     setBreakDuration(settings.pomodoroBreakDuration);
+    setLongBreakDuration(settings.pomodoroLongBreakDuration);
+    setLongBreakInterval(settings.pomodoroLongBreakInterval);
+    setAmbientSound(settings.pomodoroAmbientSound);
+    setAmbientVolume(settings.pomodoroAmbientVolume);
     setTheme(settings.theme);
     setNotifications(settings.enableNotifications);
     setQuoteInterval(settings.quoteChangeInterval);
@@ -80,6 +83,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     await updateSettings({
       pomodoroWorkDuration: workDuration,
       pomodoroBreakDuration: breakDuration,
+      pomodoroLongBreakDuration: longBreakDuration,
+      pomodoroLongBreakInterval: longBreakInterval,
+      pomodoroAmbientSound: ambientSound,
+      pomodoroAmbientVolume: ambientVolume,
       theme,
       enableNotifications: notifications,
       quoteChangeInterval: quoteInterval,
@@ -90,10 +97,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
       backgroundStyle,
     });
 
-    // Reload Pomodoro settings if durations changed
+    // Reload Pomodoro settings if any pomodoro settings changed
     if (
       workDuration !== settings.pomodoroWorkDuration ||
-      breakDuration !== settings.pomodoroBreakDuration
+      breakDuration !== settings.pomodoroBreakDuration ||
+      longBreakDuration !== settings.pomodoroLongBreakDuration ||
+      longBreakInterval !== settings.pomodoroLongBreakInterval ||
+      ambientSound !== settings.pomodoroAmbientSound ||
+      ambientVolume !== settings.pomodoroAmbientVolume
     ) {
       await reloadPomodoroSettings();
     }
@@ -157,7 +168,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                 htmlFor="break-duration"
                 className="block text-sm font-medium text-gray-700 mb-2"
               >
-                Break Duration:{' '}
+                Short Break Duration:{' '}
                 <span className="text-primary-600 font-semibold">{breakDuration} minutes</span>
               </label>
               <div className="flex items-center gap-4">
@@ -181,6 +192,138 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                 />
               </div>
             </div>
+
+            {/* Long Break Duration */}
+            <div>
+              <label
+                htmlFor="long-break-duration"
+                className="block text-sm font-medium text-gray-700 mb-2"
+              >
+                Long Break Duration:{' '}
+                <span className="text-primary-600 font-semibold">{longBreakDuration} minutes</span>
+              </label>
+              <div className="flex items-center gap-4">
+                <input
+                  id="long-break-duration"
+                  type="range"
+                  min="10"
+                  max="60"
+                  step="1"
+                  value={longBreakDuration}
+                  onChange={(e) => setLongBreakDuration(Number(e.target.value))}
+                  className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-primary-600"
+                />
+                <input
+                  type="number"
+                  min="10"
+                  max="60"
+                  value={longBreakDuration}
+                  onChange={(e) => setLongBreakDuration(Number(e.target.value))}
+                  className="w-16 px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+              </div>
+            </div>
+
+            {/* Long Break Interval */}
+            <div>
+              <label
+                htmlFor="long-break-interval"
+                className="block text-sm font-medium text-gray-700 mb-2"
+              >
+                Long Break After:{' '}
+                <span className="text-primary-600 font-semibold">
+                  {longBreakInterval} session{longBreakInterval !== 1 ? 's' : ''}
+                </span>
+              </label>
+              <div className="flex items-center gap-4">
+                <input
+                  id="long-break-interval"
+                  type="range"
+                  min="2"
+                  max="10"
+                  step="1"
+                  value={longBreakInterval}
+                  onChange={(e) => setLongBreakInterval(Number(e.target.value))}
+                  className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-primary-600"
+                />
+                <input
+                  type="number"
+                  min="2"
+                  max="10"
+                  value={longBreakInterval}
+                  onChange={(e) => setLongBreakInterval(Number(e.target.value))}
+                  className="w-16 px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Ambient Sound Settings */}
+        <section>
+          <div className="flex items-center gap-2 mb-4">
+            <Music className="w-5 h-5 text-primary-600" />
+            <h3 className="text-lg font-semibold text-gray-800">Ambient Sounds</h3>
+          </div>
+
+          <div className="space-y-4 pl-7">
+            {/* Ambient Sound Selection */}
+            <div>
+              <label
+                htmlFor="ambient-sound"
+                className="block text-sm font-medium text-gray-700 mb-2"
+              >
+                Sound Type
+              </label>
+              <select
+                id="ambient-sound"
+                value={ambientSound}
+                onChange={(e) => setAmbientSound(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                {Object.entries(AMBIENT_SOUNDS).map(([key, label]) => (
+                  <option key={key} value={key}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Ambient sounds play during work sessions only
+              </p>
+            </div>
+
+            {/* Volume Control */}
+            {ambientSound !== 'none' && (
+              <div>
+                <label
+                  htmlFor="ambient-volume"
+                  className="block text-sm font-medium text-gray-700 mb-2"
+                >
+                  Volume: <span className="text-primary-600 font-semibold">{ambientVolume}%</span>
+                </label>
+                <div className="flex items-center gap-4">
+                  <input
+                    id="ambient-volume"
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="5"
+                    value={ambientVolume}
+                    onChange={(e) => setAmbientVolume(Number(e.target.value))}
+                    className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-primary-600"
+                  />
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="5"
+                    value={ambientVolume}
+                    onChange={(e) => setAmbientVolume(Number(e.target.value))}
+                    className="w-16 px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                </div>
+              </div>
+            )}
           </div>
         </section>
 
