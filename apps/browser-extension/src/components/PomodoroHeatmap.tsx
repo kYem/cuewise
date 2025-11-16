@@ -1,12 +1,22 @@
+import type { ChartConfig } from '@cuewise/ui';
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@cuewise/ui';
 import type { PomodoroHeatmapData } from '@cuewise/shared';
 import { Clock } from 'lucide-react';
 import type React from 'react';
+import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, XAxis, YAxis } from 'recharts';
 
 interface PomodoroHeatmapProps {
   data: PomodoroHeatmapData;
 }
 
 const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+const chartConfig: ChartConfig = {
+  count: {
+    label: 'Pomodoros',
+    color: '#8B5CF6',
+  },
+};
 
 export const PomodoroHeatmap: React.FC<PomodoroHeatmapProps> = ({ data }) => {
   // Find max values for scaling
@@ -15,12 +25,12 @@ export const PomodoroHeatmap: React.FC<PomodoroHeatmapProps> = ({ data }) => {
 
   // Get color intensity based on value
   const getColorIntensity = (value: number, max: number): string => {
-    if (value === 0) return 'bg-gray-100';
+    if (value === 0) return '#F3F4F6'; // gray-100
     const intensity = (value / max) * 100;
-    if (intensity < 25) return 'bg-purple-200';
-    if (intensity < 50) return 'bg-purple-400';
-    if (intensity < 75) return 'bg-purple-600';
-    return 'bg-purple-800';
+    if (intensity < 25) return '#DDD6FE'; // purple-200
+    if (intensity < 50) return '#C4B5FD'; // purple-300
+    if (intensity < 75) return '#A78BFA'; // purple-400
+    return '#8B5CF6'; // purple-600
   };
 
   // Format hour for display (12h format)
@@ -30,6 +40,20 @@ export const PomodoroHeatmap: React.FC<PomodoroHeatmapProps> = ({ data }) => {
     if (hour === 12) return '12pm';
     return `${hour - 12}pm`;
   };
+
+  // Prepare hourly data for chart
+  const hourlyData = Array.from({ length: 24 }, (_, hour) => ({
+    hour,
+    hourLabel: formatHour(hour),
+    count: data.hourlyDistribution[hour] || 0,
+    isProductive: data.productiveHours.includes(hour),
+  }));
+
+  // Prepare weekday data for chart
+  const weekdayData = Array.from({ length: 7 }, (_, day) => ({
+    day: WEEKDAY_LABELS[day],
+    count: data.weekdayDistribution[day] || 0,
+  }));
 
   return (
     <div className="bg-white rounded-xl shadow-lg p-8">
@@ -52,44 +76,54 @@ export const PomodoroHeatmap: React.FC<PomodoroHeatmapProps> = ({ data }) => {
         {/* Hourly Distribution */}
         <div>
           <h3 className="text-lg font-semibold text-gray-700 mb-4">By Hour of Day</h3>
-          <div className="grid grid-cols-6 gap-2">
-            {Array.from({ length: 24 }, (_, hour) => {
-              const count = data.hourlyDistribution[hour] || 0;
-              const color = getColorIntensity(count, maxHourly);
-              const isProductive = data.productiveHours.includes(hour);
-
-              return (
-                <div key={hour} className="group relative">
-                  <div
-                    className={`${color} rounded-md h-12 flex items-center justify-center text-xs font-medium transition-all hover:scale-110 cursor-pointer ${
-                      isProductive ? 'ring-2 ring-yellow-400' : ''
-                    }`}
-                    title={`${formatHour(hour)}: ${count} pomodoros`}
-                  >
-                    <span className="text-gray-700">{hour}</span>
-                  </div>
-                  {/* Tooltip */}
-                  <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
-                    <div className="bg-gray-900 text-white text-xs rounded-lg py-2 px-3 whitespace-nowrap shadow-lg">
-                      <div className="font-semibold">{formatHour(hour)}</div>
-                      <div className="text-gray-300">{count} pomodoros</div>
-                      {isProductive && (
-                        <div className="text-yellow-300 text-xs mt-1">Most productive!</div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <ChartContainer config={chartConfig} className="h-80 min-h-[20rem] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={hourlyData} margin={{ top: 20, right: 10, left: -10, bottom: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200" />
+                <XAxis
+                  dataKey="hour"
+                  tickFormatter={formatHour}
+                  className="text-xs"
+                  tick={{ fill: '#6B7280' }}
+                  interval={2}
+                />
+                <YAxis className="text-xs" tick={{ fill: '#6B7280' }} />
+                <ChartTooltip
+                  content={
+                    <ChartTooltipContent
+                      labelFormatter={(value) => formatHour(Number(value))}
+                      formatter={(value, _name, props) => {
+                        const isProductive = props.payload?.isProductive;
+                        return [
+                          `${value} pomodoros${isProductive ? ' ⭐' : ''}`,
+                          isProductive ? 'Peak productivity!' : 'Pomodoros',
+                        ];
+                      }}
+                    />
+                  }
+                />
+                <Bar dataKey="count" radius={[8, 8, 0, 0]}>
+                  {hourlyData.map((entry, index) => (
+                    <Cell
+                      key={`cell-${index}`}
+                      fill={getColorIntensity(entry.count, maxHourly)}
+                      stroke={entry.isProductive ? '#FBBF24' : 'none'}
+                      strokeWidth={entry.isProductive ? 2 : 0}
+                    />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </ChartContainer>
           <div className="mt-4 flex items-center justify-between text-xs text-gray-500">
             <span>Low activity</span>
-            <div className="flex gap-1">
+            <div className="flex gap-1 items-center">
               <div className="w-4 h-4 bg-gray-100 rounded" />
               <div className="w-4 h-4 bg-purple-200 rounded" />
+              <div className="w-4 h-4 bg-purple-300 rounded" />
               <div className="w-4 h-4 bg-purple-400 rounded" />
               <div className="w-4 h-4 bg-purple-600 rounded" />
-              <div className="w-4 h-4 bg-purple-800 rounded" />
+              <span className="ml-2">⭐ Peak hours</span>
             </div>
             <span>High activity</span>
           </div>
@@ -98,29 +132,27 @@ export const PomodoroHeatmap: React.FC<PomodoroHeatmapProps> = ({ data }) => {
         {/* Weekday Distribution */}
         <div>
           <h3 className="text-lg font-semibold text-gray-700 mb-4">By Day of Week</h3>
-          <div className="space-y-3">
-            {Array.from({ length: 7 }, (_, day) => {
-              const count = data.weekdayDistribution[day] || 0;
-              const widthPercent = maxWeekday > 0 ? (count / maxWeekday) * 100 : 0;
-
-              return (
-                <div key={day} className="flex items-center gap-3">
-                  <div className="w-12 text-sm font-medium text-gray-700">
-                    {WEEKDAY_LABELS[day]}
-                  </div>
-                  <div className="flex-1 h-10 bg-gray-100 rounded-lg overflow-hidden relative">
-                    <div
-                      className="h-full bg-gradient-to-r from-purple-600 to-purple-400 rounded-lg transition-all duration-500"
-                      style={{ width: `${widthPercent}%` }}
+          <ChartContainer config={chartConfig} className="h-80 min-h-[20rem] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={weekdayData} margin={{ top: 20, right: 10, left: -10, bottom: 20 }} layout="horizontal">
+                <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200" />
+                <XAxis type="number" className="text-xs" tick={{ fill: '#6B7280' }} />
+                <YAxis dataKey="day" type="category" className="text-xs" tick={{ fill: '#6B7280' }} width={50} />
+                <ChartTooltip
+                  content={
+                    <ChartTooltipContent
+                      formatter={(value) => [`${value} pomodoros`, 'Count']}
                     />
-                    <div className="absolute inset-0 flex items-center justify-end pr-3">
-                      <span className="text-sm font-semibold text-gray-700">{count}</span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                  }
+                />
+                <Bar dataKey="count" fill="#8B5CF6" radius={[0, 8, 8, 0]}>
+                  {weekdayData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={getColorIntensity(entry.count, maxWeekday)} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </ChartContainer>
         </div>
       </div>
 
