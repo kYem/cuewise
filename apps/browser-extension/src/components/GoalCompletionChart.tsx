@@ -60,7 +60,7 @@ export const GoalCompletionChart: React.FC<GoalCompletionChartProps> = ({ data }
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
         {/* Overall Completion */}
         <div className="flex flex-col items-center">
-          <ChartContainer config={chartConfig} className="h-48 w-48">
+          <ChartContainer config={chartConfig} className="h-48 min-h-[12rem] w-48">
             <ResponsiveContainer width="100%" height="100%">
               <RadialBarChart
                 data={overallData}
@@ -100,7 +100,7 @@ export const GoalCompletionChart: React.FC<GoalCompletionChartProps> = ({ data }
 
         {/* This Week */}
         <div className="flex flex-col items-center">
-          <ChartContainer config={chartConfig} className="h-48 w-48">
+          <ChartContainer config={chartConfig} className="h-48 min-h-[12rem] w-48">
             <ResponsiveContainer width="100%" height="100%">
               <RadialBarChart
                 data={weekData}
@@ -140,7 +140,7 @@ export const GoalCompletionChart: React.FC<GoalCompletionChartProps> = ({ data }
 
         {/* This Month */}
         <div className="flex flex-col items-center">
-          <ChartContainer config={chartConfig} className="h-48 w-48">
+          <ChartContainer config={chartConfig} className="h-48 min-h-[12rem] w-48">
             <ResponsiveContainer width="100%" height="100%">
               <RadialBarChart
                 data={monthData}

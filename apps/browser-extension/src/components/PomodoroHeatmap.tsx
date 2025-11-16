@@ -76,7 +76,7 @@ export const PomodoroHeatmap: React.FC<PomodoroHeatmapProps> = ({ data }) => {
         {/* Hourly Distribution */}
         <div>
           <h3 className="text-lg font-semibold text-gray-700 mb-4">By Hour of Day</h3>
-          <ChartContainer config={chartConfig} className="h-80 w-full">
+          <ChartContainer config={chartConfig} className="h-80 min-h-[20rem] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={hourlyData} margin={{ top: 20, right: 10, left: -10, bottom: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200" />
@@ -132,7 +132,7 @@ export const PomodoroHeatmap: React.FC<PomodoroHeatmapProps> = ({ data }) => {
         {/* Weekday Distribution */}
         <div>
           <h3 className="text-lg font-semibold text-gray-700 mb-4">By Day of Week</h3>
-          <ChartContainer config={chartConfig} className="h-80 w-full">
+          <ChartContainer config={chartConfig} className="h-80 min-h-[20rem] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={weekdayData} margin={{ top: 20, right: 10, left: -10, bottom: 20 }} layout="horizontal">
                 <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200" />

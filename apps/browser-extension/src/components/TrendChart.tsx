@@ -117,7 +117,7 @@ export const TrendChart: React.FC<TrendChartProps> = ({ title, data, metric }) =
         </div>
       </div>
 
-      <ChartContainer config={chartConfig} className="h-64 w-full">
+      <ChartContainer config={chartConfig} className="h-64 min-h-[16rem] w-full">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
             <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200" />
