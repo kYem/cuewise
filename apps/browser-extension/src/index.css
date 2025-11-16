@@ -69,39 +69,42 @@
 }
 
 @layer theme {
-  /* Dark mode base adjustments - invert lightness scale */
-  :is(.dark, .dark *) {
-    --color-primary-50: oklch(0.24 0.014 285);
-    --color-primary-100: oklch(0.28 0.03 285);
-    --color-primary-200: oklch(0.34 0.06 290);
-    --color-primary-300: oklch(0.42 0.12 295);
-    --color-primary-400: oklch(0.52 0.19 285);
-    --color-primary-500: oklch(0.68 0.24 285);
-    --color-primary-600: oklch(0.74 0.24 285);
-    --color-primary-700: oklch(0.80 0.22 285);
-    --color-primary-800: oklch(0.86 0.18 285);
-    --color-primary-900: oklch(0.92 0.14 285);
+  /* Dark mode base adjustments - Vibrant Violet Theme (Higher Contrast) */
+  .dark {
+    /* Vibrant violet primary scale - inspired by Tailwind/Shadcn */
+    --color-primary-50: oklch(0.26 0.08 285);
+    --color-primary-100: oklch(0.30 0.10 285);
+    --color-primary-200: oklch(0.36 0.14 285);
+    --color-primary-300: oklch(0.44 0.18 285);
+    --color-primary-400: oklch(0.54 0.22 285);
+    --color-primary-500: oklch(0.64 0.26 285);
+    --color-primary-600: oklch(0.70 0.27 285);
+    --color-primary-700: oklch(0.76 0.25 285);
+    --color-primary-800: oklch(0.84 0.21 285);
+    --color-primary-900: oklch(0.92 0.16 285);
 
-    /* Semantic colors - Dark mode */
-    --color-background: oklch(0.15 0.01 300);
-    --color-surface: oklch(0.18 0.01 300);
-    --color-surface-elevated: oklch(0.22 0.01 300);
-    --color-surface-variant: oklch(0.25 0.01 300);
+    /* Semantic colors - Higher contrast violet surfaces */
+    --color-background: oklch(0.21 0.12 285);
+    --color-surface: oklch(0.26 0.13 285);
+    --color-surface-elevated: oklch(0.31 0.14 285);
+    --color-surface-variant: oklch(0.36 0.15 285);
 
-    --color-text-primary: oklch(0.95 0.01 300);
-    --color-text-secondary: oklch(0.70 0.01 300);
-    --color-text-tertiary: oklch(0.55 0.01 300);
+    /* Text with better contrast and subtle violet tint */
+    --color-text-primary: oklch(0.98 0.03 285);
+    --color-text-secondary: oklch(0.72 0.08 285);
+    --color-text-tertiary: oklch(0.58 0.10 285);
 
-    --color-border: oklch(0.30 0.01 300);
-    --color-divider: oklch(0.25 0.01 300);
+    /* Borders with violet tint and better contrast */
+    --color-border: oklch(0.42 0.12 285);
+    --color-divider: oklch(0.32 0.10 285);
 
     /* Adjusted for dark mode */
     --color-success: oklch(0.70 0.18 145);
     --color-warning: oklch(0.80 0.16 85);
     --color-error: oklch(0.68 0.24 25);
 
-    /* Gradient backgrounds */
-    --gradient-background: linear-gradient(to bottom right, oklch(0.15 0.01 300), oklch(0.18 0.03 295), oklch(0.20 0.05 290));
+    /* Vibrant violet gradient backgrounds */
+    --gradient-background: linear-gradient(to bottom right, oklch(0.21 0.12 285), oklch(0.26 0.15 282), oklch(0.31 0.18 280));
   }
 
   /* Purple Theme - Light Mode (explicit for data-theme attribute) */
@@ -133,39 +136,42 @@
     --gradient-background: linear-gradient(to bottom right, oklch(0.99 0.01 300), oklch(0.96 0.03 295), oklch(0.93 0.05 290));
   }
 
-  /* Purple Theme - Dark Mode (explicit for data-theme attribute) */
-  :is(.dark, .dark *)[data-theme="purple"] {
-    --color-primary-50: oklch(0.24 0.014 285);
-    --color-primary-100: oklch(0.28 0.03 285);
-    --color-primary-200: oklch(0.34 0.06 290);
-    --color-primary-300: oklch(0.42 0.12 295);
-    --color-primary-400: oklch(0.52 0.19 285);
-    --color-primary-500: oklch(0.68 0.24 285);
-    --color-primary-600: oklch(0.74 0.24 285);
-    --color-primary-700: oklch(0.80 0.22 285);
-    --color-primary-800: oklch(0.86 0.18 285);
-    --color-primary-900: oklch(0.92 0.14 285);
+  /* Purple Theme - Dark Mode (explicit for data-theme attribute) - Vibrant Violet (Higher Contrast) */
+  .dark[data-theme="purple"] {
+    /* Vibrant violet primary scale - inspired by Tailwind/Shadcn */
+    --color-primary-50: oklch(0.26 0.08 285);
+    --color-primary-100: oklch(0.30 0.10 285);
+    --color-primary-200: oklch(0.36 0.14 285);
+    --color-primary-300: oklch(0.44 0.18 285);
+    --color-primary-400: oklch(0.54 0.22 285);
+    --color-primary-500: oklch(0.64 0.26 285);
+    --color-primary-600: oklch(0.70 0.27 285);
+    --color-primary-700: oklch(0.76 0.25 285);
+    --color-primary-800: oklch(0.84 0.21 285);
+    --color-primary-900: oklch(0.92 0.16 285);
 
-    /* Semantic colors - Dark mode */
-    --color-background: oklch(0.15 0.01 300);
-    --color-surface: oklch(0.18 0.01 300);
-    --color-surface-elevated: oklch(0.22 0.01 300);
-    --color-surface-variant: oklch(0.25 0.01 300);
+    /* Semantic colors - Higher contrast violet surfaces */
+    --color-background: oklch(0.21 0.12 285);
+    --color-surface: oklch(0.26 0.13 285);
+    --color-surface-elevated: oklch(0.31 0.14 285);
+    --color-surface-variant: oklch(0.36 0.15 285);
 
-    --color-text-primary: oklch(0.95 0.01 300);
-    --color-text-secondary: oklch(0.70 0.01 300);
-    --color-text-tertiary: oklch(0.55 0.01 300);
+    /* Text with better contrast and subtle violet tint */
+    --color-text-primary: oklch(0.98 0.03 285);
+    --color-text-secondary: oklch(0.72 0.08 285);
+    --color-text-tertiary: oklch(0.58 0.10 285);
 
-    --color-border: oklch(0.30 0.01 300);
-    --color-divider: oklch(0.25 0.01 300);
+    /* Borders with violet tint and better contrast */
+    --color-border: oklch(0.42 0.12 285);
+    --color-divider: oklch(0.32 0.10 285);
 
     /* Adjusted for dark mode */
     --color-success: oklch(0.70 0.18 145);
     --color-warning: oklch(0.80 0.16 85);
     --color-error: oklch(0.68 0.24 25);
 
-    /* Gradient backgrounds */
-    --gradient-background: linear-gradient(to bottom right, oklch(0.15 0.01 300), oklch(0.18 0.03 295), oklch(0.20 0.05 290));
+    /* Vibrant violet gradient backgrounds */
+    --gradient-background: linear-gradient(to bottom right, oklch(0.21 0.12 285), oklch(0.26 0.15 282), oklch(0.31 0.18 280));
   }
 
   /* Forest Green Theme - Light Mode */
@@ -198,7 +204,7 @@
   }
 
   /* Forest Green Theme - Dark Mode */
-  :is(.dark, .dark *)[data-theme="forest"] {
+  .dark[data-theme="forest"] {
     --color-primary-50: oklch(0.20 0.012 150);
     --color-primary-100: oklch(0.24 0.02 150);
     --color-primary-200: oklch(0.30 0.05 145);
@@ -210,20 +216,20 @@
     --color-primary-800: oklch(0.86 0.14 145);
     --color-primary-900: oklch(0.92 0.12 145);
 
-    /* Semantic colors - Dark mode */
-    --color-background: oklch(0.15 0.01 150);
-    --color-surface: oklch(0.18 0.01 150);
-    --color-surface-elevated: oklch(0.22 0.01 150);
-    --color-surface-variant: oklch(0.25 0.01 150);
+    /* Semantic colors - Dark mode - Forest (lighter & more saturated) */
+    --color-background: oklch(0.25 0.06 150);
+    --color-surface: oklch(0.28 0.06 150);
+    --color-surface-elevated: oklch(0.31 0.06 150);
+    --color-surface-variant: oklch(0.35 0.06 150);
 
-    --color-text-primary: oklch(0.95 0.01 150);
-    --color-text-secondary: oklch(0.70 0.01 150);
-    --color-text-tertiary: oklch(0.55 0.01 150);
+    --color-text-primary: oklch(0.95 0.03 150);
+    --color-text-secondary: oklch(0.70 0.03 150);
+    --color-text-tertiary: oklch(0.55 0.03 150);
 
-    --color-border: oklch(0.30 0.01 150);
-    --color-divider: oklch(0.25 0.01 150);
+    --color-border: oklch(0.38 0.03 150);
+    --color-divider: oklch(0.31 0.02 150);
 
-    --gradient-background: linear-gradient(to bottom right, oklch(0.15 0.01 150), oklch(0.18 0.03 148), oklch(0.20 0.05 146));
+    --gradient-background: linear-gradient(to bottom right, oklch(0.22 0.03 150), oklch(0.25 0.06 148), oklch(0.28 0.09 146));
   }
 
   /* Rose Pink Theme - Light Mode */
@@ -256,7 +262,7 @@
   }
 
   /* Rose Pink Theme - Dark Mode */
-  :is(.dark, .dark *)[data-theme="rose"] {
+  .dark[data-theme="rose"] {
     --color-primary-50: oklch(0.24 0.014 10);
     --color-primary-100: oklch(0.28 0.03 10);
     --color-primary-200: oklch(0.34 0.06 8);
@@ -268,20 +274,20 @@
     --color-primary-800: oklch(0.88 0.16 356);
     --color-primary-900: oklch(0.94 0.14 354);
 
-    /* Semantic colors - Dark mode */
-    --color-background: oklch(0.15 0.01 10);
-    --color-surface: oklch(0.18 0.01 10);
-    --color-surface-elevated: oklch(0.22 0.01 10);
-    --color-surface-variant: oklch(0.25 0.01 10);
+    /* Semantic colors - Dark mode - Rose (middle ground) */
+    --color-background: oklch(0.23 0.055 10);
+    --color-surface: oklch(0.26 0.055 10);
+    --color-surface-elevated: oklch(0.29 0.055 10);
+    --color-surface-variant: oklch(0.33 0.055 10);
 
-    --color-text-primary: oklch(0.95 0.01 10);
-    --color-text-secondary: oklch(0.70 0.01 10);
-    --color-text-tertiary: oklch(0.55 0.01 10);
+    --color-text-primary: oklch(0.95 0.03 10);
+    --color-text-secondary: oklch(0.70 0.03 10);
+    --color-text-tertiary: oklch(0.55 0.03 10);
 
-    --color-border: oklch(0.30 0.01 10);
-    --color-divider: oklch(0.25 0.01 10);
+    --color-border: oklch(0.36 0.03 10);
+    --color-divider: oklch(0.29 0.02 10);
 
-    --gradient-background: linear-gradient(to bottom right, oklch(0.15 0.01 10), oklch(0.18 0.03 8), oklch(0.20 0.05 6));
+    --gradient-background: linear-gradient(to bottom right, oklch(0.22 0.03 10), oklch(0.25 0.06 8), oklch(0.28 0.09 6));
   }
 
   /* Layout Density Scales - controls both spacing AND font size */
