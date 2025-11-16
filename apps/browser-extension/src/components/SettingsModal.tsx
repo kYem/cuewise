@@ -367,10 +367,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
               <div>
                 <span className="text-sm font-medium text-gray-700">Enable Chrome Sync</span>
                 <p className="text-xs text-gray-500">
-                  Sync your data across all Chrome browsers where you're signed in
+                  Sync your custom quotes, goals, and reminders across all Chrome browsers where you're signed in
                 </p>
                 <p className="text-xs text-orange-600 mt-1">
-                  Note: Sync storage is limited to 100KB. Disable sync if you have large amounts of data.
+                  Note: Built-in quotes stay in local storage. Only your custom data is synced (100KB limit).
                 </p>
               </div>
             </label>

@@ -51,7 +51,28 @@ export async function setInStorage<T>(
     localStorage.setItem(key, JSON.stringify(value));
     return true;
   } catch (error) {
-    console.error(`Error setting ${key} in storage:`, error);
+    // Provide more specific error messages for quota errors
+    const errorMessage = error instanceof Error ? error.message : String(error);
+
+    if (errorMessage.includes('quota') || errorMessage.includes('QUOTA_BYTES')) {
+      if (area === 'sync') {
+        console.error(
+          `Chrome sync storage quota exceeded for key "${key}". ` +
+            `Sync storage has a 100KB total limit and 8KB per-item limit. ` +
+            `Consider disabling sync or reducing data size.`,
+          error
+        );
+      } else {
+        console.error(
+          `Chrome local storage quota exceeded for key "${key}". ` +
+            `Local storage has a 10MB limit. Consider clearing old data.`,
+          error
+        );
+      }
+    } else {
+      console.error(`Error setting ${key} in ${area} storage:`, error);
+    }
+
     return false;
   }
 }

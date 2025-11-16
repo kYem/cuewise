@@ -11,7 +11,7 @@ import {
   type Settings,
   STORAGE_KEYS,
 } from '@cuewise/shared';
-import { getFromStorage, setInStorage } from './chrome-storage';
+import { getFromStorage, removeFromStorage, setInStorage } from './chrome-storage';
 
 /**
  * Get the storage area based on user settings
@@ -24,16 +24,101 @@ async function getStorageArea(): Promise<'local' | 'sync'> {
   return syncEnabled ? 'sync' : 'local';
 }
 
-// Quotes
+// Quotes - Hybrid Storage Strategy
+// Seed quotes: Always stored in local storage (same on all devices)
+// Custom quotes: Stored in sync/local based on user preference (user-created data)
+
+/**
+ * Check if a quote is a custom quote (user-created or modified seed quote)
+ */
+function isCustomQuote(quote: Quote): boolean {
+  // Custom quotes have isCustom flag OR have been favorited/hidden (modified state)
+  return quote.isCustom || quote.isFavorite || quote.isHidden;
+}
+
+/**
+ * Migrate legacy quotes storage to hybrid storage
+ * Called automatically when old 'quotes' key is detected
+ */
+async function migrateLegacyQuotes(): Promise<void> {
+  try {
+    // Check both storage areas for legacy quotes
+    const localQuotes = await getFromStorage<Quote[]>(STORAGE_KEYS.QUOTES, 'local');
+    const syncQuotes = await getFromStorage<Quote[]>(STORAGE_KEYS.QUOTES, 'sync');
+    const legacyQuotes = localQuotes || syncQuotes;
+
+    if (!legacyQuotes || legacyQuotes.length === 0) {
+      return; // No migration needed
+    }
+
+    console.log('Migrating legacy quotes to hybrid storage...');
+
+    // Split into seed and custom quotes
+    const seedQuotes = legacyQuotes.filter((q) => !isCustomQuote(q));
+    const customQuotes = legacyQuotes.filter((q) => isCustomQuote(q));
+
+    // Store seed quotes in local storage
+    if (seedQuotes.length > 0) {
+      await setInStorage(STORAGE_KEYS.SEED_QUOTES, seedQuotes, 'local');
+    }
+
+    // Store custom quotes in appropriate storage area
+    if (customQuotes.length > 0) {
+      const area = await getStorageArea();
+      await setInStorage(STORAGE_KEYS.CUSTOM_QUOTES, customQuotes, area);
+    }
+
+    // Clean up legacy storage from both areas
+    await removeFromStorage(STORAGE_KEYS.QUOTES, 'local');
+    await removeFromStorage(STORAGE_KEYS.QUOTES, 'sync');
+
+    console.log(`Migration complete: ${seedQuotes.length} seed quotes, ${customQuotes.length} custom quotes`);
+  } catch (error) {
+    console.error('Error migrating legacy quotes:', error);
+  }
+}
+
 export async function getQuotes(): Promise<Quote[]> {
-  const area = await getStorageArea();
-  const quotes = await getFromStorage<Quote[]>(STORAGE_KEYS.QUOTES, area);
-  return quotes ?? [];
+  try {
+    // Check if migration is needed
+    const legacyQuotes = await getFromStorage<Quote[]>(STORAGE_KEYS.QUOTES, 'local');
+    if (legacyQuotes && legacyQuotes.length > 0) {
+      await migrateLegacyQuotes();
+    }
+
+    // Load seed quotes from local storage (always)
+    const seedQuotes = (await getFromStorage<Quote[]>(STORAGE_KEYS.SEED_QUOTES, 'local')) ?? [];
+
+    // Load custom quotes from appropriate storage area
+    const area = await getStorageArea();
+    const customQuotes = (await getFromStorage<Quote[]>(STORAGE_KEYS.CUSTOM_QUOTES, area)) ?? [];
+
+    // Merge seed and custom quotes
+    return [...seedQuotes, ...customQuotes];
+  } catch (error) {
+    console.error('Error getting quotes:', error);
+    return [];
+  }
 }
 
 export async function setQuotes(quotes: Quote[]): Promise<boolean> {
-  const area = await getStorageArea();
-  return setInStorage(STORAGE_KEYS.QUOTES, quotes, area);
+  try {
+    // Split into seed and custom quotes
+    const seedQuotes = quotes.filter((q) => !isCustomQuote(q));
+    const customQuotes = quotes.filter((q) => isCustomQuote(q));
+
+    // Store seed quotes in local storage
+    const seedSuccess = await setInStorage(STORAGE_KEYS.SEED_QUOTES, seedQuotes, 'local');
+
+    // Store custom quotes in appropriate storage area
+    const area = await getStorageArea();
+    const customSuccess = await setInStorage(STORAGE_KEYS.CUSTOM_QUOTES, customQuotes, area);
+
+    return seedSuccess && customSuccess;
+  } catch (error) {
+    console.error('Error setting quotes:', error);
+    return false;
+  }
 }
 
 export async function getCurrentQuote(): Promise<Quote | null> {
@@ -187,18 +272,22 @@ export function formatBytes(bytes: number): string {
 /**
  * Migrate data between storage areas (local <-> sync)
  * Used when user toggles the syncEnabled setting
+ *
+ * Note: Seed quotes always stay in local storage.
+ * Only custom quotes and user data are migrated.
  */
 export async function migrateStorageData(fromArea: 'local' | 'sync', toArea: 'local' | 'sync'): Promise<boolean> {
   try {
-    // Get all data from source storage area
-    const quotes = await getFromStorage<Quote[]>(STORAGE_KEYS.QUOTES, fromArea) ?? [];
+    // Get user data from source storage area
+    const customQuotes = await getFromStorage<Quote[]>(STORAGE_KEYS.CUSTOM_QUOTES, fromArea) ?? [];
     const currentQuote = await getFromStorage<Quote>(STORAGE_KEYS.CURRENT_QUOTE, fromArea);
     const goals = await getFromStorage<Goal[]>(STORAGE_KEYS.GOALS, fromArea) ?? [];
     const reminders = await getFromStorage<Reminder[]>(STORAGE_KEYS.REMINDERS, fromArea) ?? [];
     const sessions = await getFromStorage<PomodoroSession[]>(STORAGE_KEYS.POMODORO_SESSIONS, fromArea) ?? [];
 
     // Copy data to destination storage area
-    await setInStorage(STORAGE_KEYS.QUOTES, quotes, toArea);
+    // Note: Seed quotes are not migrated (always in local storage)
+    await setInStorage(STORAGE_KEYS.CUSTOM_QUOTES, customQuotes, toArea);
     if (currentQuote) {
       await setInStorage(STORAGE_KEYS.CURRENT_QUOTE, currentQuote, toArea);
     }
@@ -207,6 +296,7 @@ export async function migrateStorageData(fromArea: 'local' | 'sync', toArea: 'lo
     await setInStorage(STORAGE_KEYS.POMODORO_SESSIONS, sessions, toArea);
 
     console.log(`Successfully migrated data from ${fromArea} to ${toArea}`);
+    console.log(`Migrated ${customQuotes.length} custom quotes (seed quotes remain in local storage)`);
     return true;
   } catch (error) {
     console.error(`Error migrating data from ${fromArea} to ${toArea}:`, error);
