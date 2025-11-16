@@ -108,3 +108,73 @@ export interface InsightsData {
     lastActive: string; // YYYY-MM-DD
   };
 }
+
+// Advanced analytics types
+
+// Daily data point for trend charts
+export interface DailyDataPoint {
+  date: string; // YYYY-MM-DD
+  goalsCompleted: number;
+  focusTime: number; // minutes
+  pomodorosCompleted: number;
+}
+
+// Weekly trend data
+export interface WeeklyTrend {
+  weekLabel: string; // e.g., "Jan 8-14"
+  goalsCompleted: number;
+  focusTime: number; // minutes
+  pomodorosCompleted: number;
+}
+
+// Monthly trend data
+export interface MonthlyTrend {
+  month: string; // e.g., "January 2025"
+  goalsCompleted: number;
+  focusTime: number; // minutes
+  pomodorosCompleted: number;
+}
+
+// Goal completion rate data
+export interface GoalCompletionRate {
+  totalGoals: number;
+  completedGoals: number;
+  completionRate: number; // 0-100 percentage
+  thisWeek: {
+    totalGoals: number;
+    completedGoals: number;
+    completionRate: number;
+  };
+  thisMonth: {
+    totalGoals: number;
+    completedGoals: number;
+    completionRate: number;
+  };
+}
+
+// Pomodoro heatmap data - hour of day (0-23) with count
+export interface PomodoroHeatmapData {
+  hourlyDistribution: Record<number, number>; // hour (0-23) -> count
+  dailyDistribution: Record<string, number>; // YYYY-MM-DD -> count
+  weekdayDistribution: Record<number, number>; // 0=Sunday, 6=Saturday -> count
+  productiveHours: number[]; // Top 3 most productive hours
+}
+
+// Complete analytics data
+export interface AdvancedAnalytics {
+  dailyTrends: DailyDataPoint[]; // Last 30 days
+  weeklyTrends: WeeklyTrend[]; // Last 12 weeks
+  monthlyTrends: MonthlyTrend[]; // Last 6 months
+  goalCompletionRate: GoalCompletionRate;
+  pomodoroHeatmap: PomodoroHeatmapData;
+}
+
+// Export data types
+export interface ExportData {
+  exportDate: string; // ISO timestamp
+  insights: InsightsData;
+  analytics: AdvancedAnalytics;
+  goals: Goal[];
+  pomodoroSessions: PomodoroSession[];
+  quotes: Quote[];
+}

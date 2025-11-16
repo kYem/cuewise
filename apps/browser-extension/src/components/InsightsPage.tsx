@@ -15,11 +15,17 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import type React from 'react';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useInsightsStore } from '../stores/insights-store';
+import { ExportControls } from './ExportControls';
+import { GoalCompletionChart } from './GoalCompletionChart';
+import { PomodoroHeatmap } from './PomodoroHeatmap';
+import { TrendChart } from './TrendChart';
 
 export const InsightsPage: React.FC = () => {
-  const { insights, isLoading, initialize } = useInsightsStore();
+  const { insights, analytics, isLoading, initialize, exportAsJSON, exportAsCSV, exportAllAsJSON } =
+    useInsightsStore();
+  const [activeTab, setActiveTab] = useState<'overview' | 'analytics'>('overview');
 
   useEffect(() => {
     initialize();
@@ -74,7 +80,36 @@ export const InsightsPage: React.FC = () => {
           </p>
         </div>
 
-        {/* Stats Grid */}
+        {/* Tab Navigation */}
+        <div className="flex gap-2 mb-8">
+          <button
+            type="button"
+            onClick={() => setActiveTab('overview')}
+            className={`px-6 py-3 rounded-lg font-semibold transition-all ${
+              activeTab === 'overview'
+                ? 'bg-white text-purple-600 shadow-lg'
+                : 'bg-white/50 text-gray-600 hover:bg-white/80'
+            }`}
+          >
+            Overview
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('analytics')}
+            className={`px-6 py-3 rounded-lg font-semibold transition-all ${
+              activeTab === 'analytics'
+                ? 'bg-white text-purple-600 shadow-lg'
+                : 'bg-white/50 text-gray-600 hover:bg-white/80'
+            }`}
+          >
+            Advanced Analytics
+          </button>
+        </div>
+
+        {/* Overview Tab */}
+        {activeTab === 'overview' && (
+          <>
+            {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 mb-8">
           {/* Streak Card */}
           <div className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow">
@@ -215,6 +250,68 @@ export const InsightsPage: React.FC = () => {
             </div>
           </div>
         </div>
+          </>
+        )}
+
+        {/* Analytics Tab */}
+        {activeTab === 'analytics' && analytics && (
+          <div className="space-y-8">
+            {/* Export Controls */}
+            <ExportControls
+              onExportJSON={exportAsJSON}
+              onExportCSV={exportAsCSV}
+              onExportAllJSON={exportAllAsJSON}
+            />
+
+            {/* Goal Completion Rate */}
+            <GoalCompletionChart data={analytics.goalCompletionRate} />
+
+            {/* Productivity Trends */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              {/* Daily Trends */}
+              <TrendChart
+                title="Daily Trends (Last 30 Days)"
+                data={analytics.dailyTrends.map((d) => ({
+                  label: new Date(d.date).toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                  }),
+                  goalsCompleted: d.goalsCompleted,
+                  focusTime: d.focusTime,
+                  pomodorosCompleted: d.pomodorosCompleted,
+                }))}
+                metric="goals"
+              />
+
+              {/* Weekly Trends */}
+              <TrendChart
+                title="Weekly Trends (Last 12 Weeks)"
+                data={analytics.weeklyTrends.map((w) => ({
+                  label: w.weekLabel,
+                  goalsCompleted: w.goalsCompleted,
+                  focusTime: w.focusTime,
+                  pomodorosCompleted: w.pomodorosCompleted,
+                }))}
+                metric="focus"
+              />
+            </div>
+
+            {/* Monthly Trends */}
+            <TrendChart
+              title="Monthly Trends (Last 6 Months)"
+              data={analytics.monthlyTrends.map((m) => ({
+                label: m.month,
+                goalsCompleted: m.goalsCompleted,
+                focusTime: m.focusTime,
+                pomodorosCompleted: m.pomodorosCompleted,
+              }))}
+              metric="pomodoros"
+            />
+
+            {/* Pomodoro Heatmap */}
+            <PomodoroHeatmap data={analytics.pomodoroHeatmap} />
+          </div>
+        )}
       </div>
     </div>
   );
