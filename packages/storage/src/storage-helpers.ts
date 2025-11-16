@@ -86,6 +86,30 @@ export interface StorageUsageInfo {
  */
 export async function getStorageUsage(): Promise<StorageUsageInfo> {
   try {
+    // Check if chrome.storage is available (extension context)
+    if (typeof chrome === 'undefined' || !chrome.storage) {
+      // Dev mode: estimate localStorage usage
+      let bytesInUse = 0;
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key) {
+          const value = localStorage.getItem(key);
+          bytesInUse += key.length + (value?.length || 0);
+        }
+      }
+      // localStorage quota is typically 5-10MB
+      const QUOTA_BYTES = 5242880; // 5MB in bytes
+      const percentageUsed = (bytesInUse / QUOTA_BYTES) * 100;
+
+      return {
+        bytesInUse,
+        quota: QUOTA_BYTES,
+        percentageUsed,
+        isWarning: percentageUsed > 75,
+        isCritical: percentageUsed > 90,
+      };
+    }
+
     // Chrome storage quota for local storage is 10MB
     const QUOTA_BYTES = 10485760; // 10MB in bytes
 
