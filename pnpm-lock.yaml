@@ -88,7 +88,7 @@ catalogs:
       specifier: ^3.2.0
       version: 3.2.4
     zustand:
-      specifier: ^5.0.8
+      specifier: 5.0.8
       version: 5.0.8
 
 importers:
@@ -211,6 +211,9 @@ importers:
       '@cuewise/shared':
         specifier: workspace:*
         version: link:../shared
+      zustand:
+        specifier: 'catalog:'
+        version: 5.0.8(@types/react@18.3.26)(react@18.3.1)(use-sync-external-store@1.6.0(react@18.3.1))
     devDependencies:
       '@cuewise/test-utils':
         specifier: workspace:*

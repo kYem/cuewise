@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { formatClockTime, getGreeting, formatLongDate } from '@cuewise/shared';
 import { useQuoteStore } from '../stores/quote-store';
 import { useSettingsStore } from '../stores/settings-store';
-import { usePomodoroStore } from '../stores/pomodoro-store';
+import { usePomodoroStore, usePomodoroStorageSync } from '../stores/pomodoro-store';
 import { ActivePomodoroWidget } from './ActivePomodoroWidget';
 import { AddQuoteForm } from './AddQuoteForm';
 import { Clock } from './Clock';
@@ -24,6 +24,10 @@ export const NewTabPage: React.FC = () => {
   const updateSettings = useSettingsStore((state) => state.updateSettings);
   const initializePomodoro = usePomodoroStore((state) => state.initialize);
   const pomodoroStatus = usePomodoroStore((state) => state.status);
+
+  // Enable cross-tab synchronization for Pomodoro timer
+  usePomodoroStorageSync();
+
   const [isAddQuoteModalOpen, setIsAddQuoteModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);

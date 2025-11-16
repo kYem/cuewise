@@ -59,19 +59,6 @@ export interface PomodoroSession {
   goalId?: string; // Optional goal this session is associated with
 }
 
-// Pomodoro active state (for persistence across tab reloads)
-export interface PomodoroState {
-  status: 'idle' | 'running' | 'paused';
-  sessionType: 'work' | 'break' | 'longBreak';
-  timeRemaining: number; // seconds
-  totalTime: number; // seconds
-  currentSessionId: string | null;
-  startedAt: string | null; // ISO date string when session started
-  pausedAt: string | null; // ISO date string when paused
-  consecutiveWorkSessions: number;
-  selectedGoalId: string | null;
-}
-
 // Customization types
 export type ColorTheme = 'purple' | 'forest' | 'rose';
 export type LayoutDensity = 'compact' | 'comfortable' | 'spacious';

@@ -3,11 +3,12 @@ import { Pause, Play, RotateCcw, SkipForward, Target } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useState } from 'react';
 import { useGoalStore } from '../stores/goal-store';
-import { usePomodoroStore } from '../stores/pomodoro-store';
+import { usePomodoroStore, usePomodoroStorageSync } from '../stores/pomodoro-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { ambientSoundPlayer } from '../utils/ambient-sounds';
 import { getSessionStyles } from '../utils/pomodoro-styles';
 import { EditableValue } from './EditableValue';
+import { usePomodoroLeader } from '../hooks/usePomodoroLeader';
 
 export const PomodoroTimer: React.FC = () => {
   const {
@@ -29,7 +30,6 @@ export const PomodoroTimer: React.FC = () => {
     resume,
     reset,
     skip,
-    tick,
     setSelectedGoal,
     reloadSettings,
   } = usePomodoroStore();
@@ -39,22 +39,17 @@ export const PomodoroTimer: React.FC = () => {
 
   const [showGoalPicker, setShowGoalPicker] = useState(false);
 
+  // Enable cross-tab synchronization
+  usePomodoroStorageSync();
+
+  // Timer leader election - only one tab/component runs the timer
+  usePomodoroLeader();
+
   // Initialize on mount
   useEffect(() => {
     initialize();
     initGoals();
   }, [initialize, initGoals]);
-
-  // Timer tick effect
-  useEffect(() => {
-    if (status !== 'running') return;
-
-    const interval = setInterval(() => {
-      tick();
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [status, tick]);
 
   // Ambient sound management
   useEffect(() => {

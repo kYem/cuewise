@@ -1,6 +1,8 @@
+import { useEffect } from 'react';
 import { generateId, minutesToSeconds, type PomodoroSession } from '@cuewise/shared';
-import { getPomodoroSessions, getPomodoroState, getSettings, setPomodoroSessions, setPomodoroState } from '@cuewise/storage';
+import { getPomodoroSessions, getSettings, setPomodoroSessions, chromeLocalStorage } from '@cuewise/storage';
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import { playCompletionSound, playStartSound } from '../utils/sounds';
 import { useToastStore } from './toast-store';
 
@@ -19,6 +21,7 @@ interface PomodoroStore {
   error: string | null;
   consecutiveWorkSessions: number; // track work sessions for long break
   selectedGoalId: string | null; // goal to work on during session
+  lastTickTime: number | null; // timestamp of last tick (for resuming after all tabs closed)
 
   // Settings
   workDuration: number; // in minutes
@@ -44,38 +47,9 @@ interface PomodoroStore {
   switchToWork: () => void;
 }
 
-// Helper to save current state to storage
-const saveCurrentState = async (state: Partial<PomodoroStore>) => {
-  const {
-    status,
-    sessionType,
-    timeRemaining,
-    totalTime,
-    currentSessionId,
-    consecutiveWorkSessions,
-    selectedGoalId,
-  } = state;
-
-  if (status === 'idle') {
-    // Clear saved state when idle
-    await setPomodoroState(null);
-  } else if (status === 'running' || status === 'paused') {
-    // Save active state
-    await setPomodoroState({
-      status,
-      sessionType: sessionType!,
-      timeRemaining: timeRemaining!,
-      totalTime: totalTime!,
-      currentSessionId: currentSessionId!,
-      startedAt: new Date().toISOString(), // Current time as reference
-      pausedAt: status === 'paused' ? new Date().toISOString() : null,
-      consecutiveWorkSessions: consecutiveWorkSessions!,
-      selectedGoalId: selectedGoalId ?? null,
-    });
-  }
-};
-
-export const usePomodoroStore = create<PomodoroStore>((set, get) => ({
+export const usePomodoroStore = create<PomodoroStore>()(
+  persist(
+    (set, get) => ({
   // Initial state
   status: 'idle',
   sessionType: 'work',
@@ -87,6 +61,7 @@ export const usePomodoroStore = create<PomodoroStore>((set, get) => ({
   error: null,
   consecutiveWorkSessions: 0,
   selectedGoalId: null,
+  lastTickTime: null,
   workDuration: 25,
   breakDuration: 5,
   longBreakDuration: 15,
@@ -98,11 +73,10 @@ export const usePomodoroStore = create<PomodoroStore>((set, get) => ({
     try {
       set({ isLoading: true, error: null });
 
-      // Load settings, sessions, and saved state
-      const [settings, sessions, savedState] = await Promise.all([
+      // Load settings and sessions (state is auto-hydrated by Zustand persist)
+      const [settings, sessions] = await Promise.all([
         getSettings(),
         getPomodoroSessions(),
-        getPomodoroState(),
       ]);
 
       const workDuration = settings.pomodoroWorkDuration;
@@ -112,59 +86,45 @@ export const usePomodoroStore = create<PomodoroStore>((set, get) => ({
       const ambientSound = settings.pomodoroAmbientSound;
       const ambientVolume = settings.pomodoroAmbientVolume;
 
-      // Restore saved state if it exists and was running/paused
-      if (savedState && savedState.status !== 'idle' && savedState.startedAt) {
+      // Check if timer was running when all tabs closed
+      const { status, timeRemaining, lastTickTime } = get();
+      if (status === 'running' && lastTickTime && timeRemaining > 0) {
         const now = Date.now();
-        const startedAt = new Date(savedState.startedAt).getTime();
-        const pausedAt = savedState.pausedAt ? new Date(savedState.pausedAt).getTime() : null;
+        const elapsedSeconds = Math.floor((now - lastTickTime) / 1000);
+        const adjustedTimeRemaining = Math.max(0, timeRemaining - elapsedSeconds);
 
-        let adjustedTimeRemaining = savedState.timeRemaining;
-
-        // If timer was running, calculate elapsed time
-        if (savedState.status === 'running') {
-          const elapsedSeconds = Math.floor((now - startedAt) / 1000);
-          adjustedTimeRemaining = Math.max(0, savedState.timeRemaining - elapsedSeconds);
-
-          // If timer expired while tab was closed, mark as completed
-          if (adjustedTimeRemaining === 0) {
-            // Will be handled by completeSession
-            set({
-              ...savedState,
-              timeRemaining: 0,
-              workDuration,
-              breakDuration,
-              longBreakDuration,
-              longBreakInterval,
-              ambientSound,
-              ambientVolume,
-              sessions,
-              isLoading: false,
-            });
-            get().completeSession();
-            return;
-          }
+        if (adjustedTimeRemaining === 0) {
+          // Timer expired while tabs were closed
+          set({
+            workDuration,
+            breakDuration,
+            longBreakDuration,
+            longBreakInterval,
+            ambientSound,
+            ambientVolume,
+            sessions,
+            isLoading: false,
+            timeRemaining: 0,
+          });
+          // Complete the session
+          get().completeSession();
+        } else {
+          // Timer still has time left - resume with adjusted time
+          set({
+            workDuration,
+            breakDuration,
+            longBreakDuration,
+            longBreakInterval,
+            ambientSound,
+            ambientVolume,
+            sessions,
+            isLoading: false,
+            timeRemaining: adjustedTimeRemaining,
+            lastTickTime: now, // Update to current time
+          });
         }
-
-        // Restore the saved state with adjusted time
-        set({
-          status: savedState.status,
-          sessionType: savedState.sessionType,
-          timeRemaining: adjustedTimeRemaining,
-          totalTime: savedState.totalTime,
-          currentSessionId: savedState.currentSessionId,
-          consecutiveWorkSessions: savedState.consecutiveWorkSessions,
-          selectedGoalId: savedState.selectedGoalId,
-          workDuration,
-          breakDuration,
-          longBreakDuration,
-          longBreakInterval,
-          ambientSound,
-          ambientVolume,
-          sessions,
-          isLoading: false,
-        });
       } else {
-        // No saved state or it was idle, start fresh
+        // No running timer or timer was paused
         set({
           workDuration,
           breakDuration,
@@ -172,8 +132,6 @@ export const usePomodoroStore = create<PomodoroStore>((set, get) => ({
           longBreakInterval,
           ambientSound,
           ambientVolume,
-          timeRemaining: minutesToSeconds(workDuration),
-          totalTime: minutesToSeconds(workDuration),
           sessions,
           isLoading: false,
         });
@@ -253,22 +211,19 @@ export const usePomodoroStore = create<PomodoroStore>((set, get) => ({
       currentSessionId,
       timeRemaining: minutesToSeconds(duration),
       totalTime: minutesToSeconds(duration),
+      lastTickTime: Date.now(),
     });
-
-    // Save state to storage
-    saveCurrentState(get());
   },
 
   pause: () => {
     set({ status: 'paused' });
-    // Save paused state
-    saveCurrentState(get());
   },
 
   resume: () => {
-    set({ status: 'running' });
-    // Save resumed state
-    saveCurrentState(get());
+    set({
+      status: 'running',
+      lastTickTime: Date.now(),
+    });
   },
 
   reset: () => {
@@ -282,10 +237,8 @@ export const usePomodoroStore = create<PomodoroStore>((set, get) => ({
       currentSessionId: null,
       timeRemaining: minutesToSeconds(duration),
       totalTime: minutesToSeconds(duration),
+      lastTickTime: null,
     });
-
-    // Clear saved state since we're idle
-    saveCurrentState(get());
   },
 
   skip: () => {
@@ -310,7 +263,10 @@ export const usePomodoroStore = create<PomodoroStore>((set, get) => ({
     if (status !== 'running') return;
 
     if (timeRemaining > 0) {
-      set({ timeRemaining: timeRemaining - 1 });
+      set({
+        timeRemaining: timeRemaining - 1,
+        lastTickTime: Date.now(), // Track last tick time for resume after tab close
+      });
     } else {
       // Timer completed
       get().completeSession();
@@ -450,4 +406,87 @@ export const usePomodoroStore = create<PomodoroStore>((set, get) => ({
       totalTime: minutesToSeconds(workDuration),
     });
   },
-}));
+    }),
+    {
+      name: 'pomodoroState', // Storage key
+      storage: createJSONStorage(() => chromeLocalStorage),
+      partialize: (state) => ({
+        // Only persist state data, not functions or loading/error states
+        status: state.status,
+        sessionType: state.sessionType,
+        timeRemaining: state.timeRemaining,
+        totalTime: state.totalTime,
+        currentSessionId: state.currentSessionId,
+        consecutiveWorkSessions: state.consecutiveWorkSessions,
+        selectedGoalId: state.selectedGoalId,
+        lastTickTime: state.lastTickTime, // For resuming after tabs close
+        sessions: state.sessions,
+        // Persist settings for timer configuration
+        workDuration: state.workDuration,
+        breakDuration: state.breakDuration,
+        longBreakDuration: state.longBreakDuration,
+        longBreakInterval: state.longBreakInterval,
+        ambientSound: state.ambientSound,
+        ambientVolume: state.ambientVolume,
+      }),
+      skipHydration: false, // Auto-hydrate on mount
+    }
+  )
+);
+
+/**
+ * React hook to sync Pomodoro state across tabs
+ * Listens to chrome.storage changes and rehydrates the store
+ *
+ * Usage: Call this hook in components that need cross-tab synchronization
+ * @example
+ * export const PomodoroTimer = () => {
+ *   usePomodoroStorageSync();
+ *   // ... rest of component
+ * }
+ */
+export function usePomodoroStorageSync() {
+  useEffect(() => {
+    const handleStorageChange = (
+      changes: { [key: string]: chrome.storage.StorageChange },
+      areaName: string
+    ) => {
+      // Only react to local storage changes
+      if (areaName !== 'local') return;
+
+      // Check if pomodoroState changed
+      const pomodoroStateChange = changes.pomodoroState;
+      if (!pomodoroStateChange) return;
+
+      // Trigger rehydration to sync with other tabs
+      // This will update the Zustand store with the latest storage value
+      usePomodoroStore.persist.rehydrate();
+
+      // Parse the new state to check for timer completion
+      try {
+        const newStateJson = pomodoroStateChange.newValue;
+        if (newStateJson && typeof newStateJson === 'string') {
+          const parsed = JSON.parse(newStateJson);
+          // Handle timer completion
+          if (parsed?.state?.timeRemaining === 0 && parsed?.state?.status === 'running') {
+            usePomodoroStore.getState().completeSession();
+          }
+        }
+      } catch (error) {
+        // Ignore parse errors
+      }
+    };
+
+    // Register listener
+    if (typeof chrome !== 'undefined' && chrome.storage) {
+      chrome.storage.onChanged.addListener(handleStorageChange);
+    }
+
+    // Cleanup on unmount
+    return () => {
+      if (typeof chrome !== 'undefined' && chrome.storage) {
+        chrome.storage.onChanged.removeListener(handleStorageChange);
+      }
+    };
+  }, []); // Empty deps - only set up once per component mount
+}

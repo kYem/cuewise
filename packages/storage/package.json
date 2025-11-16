@@ -12,13 +12,14 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@cuewise/shared": "workspace:*"
+    "@cuewise/shared": "workspace:*",
+    "zustand": "catalog:"
   },
   "devDependencies": {
-    "@types/chrome": "catalog:",
-    "typescript": "catalog:",
     "@cuewise/test-utils": "workspace:*",
+    "@types/chrome": "catalog:",
     "jsdom": "catalog:",
+    "typescript": "catalog:",
     "vitest": "catalog:"
   }
 }

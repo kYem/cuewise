@@ -1,23 +1,18 @@
 import { Pause, Play, Timer } from 'lucide-react';
 import type React from 'react';
-import { useEffect } from 'react';
-import { usePomodoroStore } from '../stores/pomodoro-store';
+import { usePomodoroStore, usePomodoroStorageSync } from '../stores/pomodoro-store';
 import { formatTimeRemaining } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
+import { usePomodoroLeader } from '../hooks/usePomodoroLeader';
 
 export const ActivePomodoroWidget: React.FC = () => {
-  const { status, sessionType, timeRemaining, pause, resume, tick } = usePomodoroStore();
+  const { status, sessionType, timeRemaining, pause, resume } = usePomodoroStore();
 
-  // Timer tick effect
-  useEffect(() => {
-    if (status !== 'running') return;
+  // Enable cross-tab synchronization
+  usePomodoroStorageSync();
 
-    const interval = setInterval(() => {
-      tick();
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [status, tick]);
+  // Timer leader election - only one tab/component runs the timer
+  usePomodoroLeader();
 
   // Only show when there's an active session
   if (status === 'idle') {
@@ -48,11 +43,10 @@ export const ActivePomodoroWidget: React.FC = () => {
       : 'text-blue-600';
 
   return (
-    <button
-      type="button"
+    <div
       onClick={handleNavigateToPomodoro}
       className={cn(
-        'group relative flex items-center gap-2 px-3 py-1.5 rounded-full shadow-md hover:shadow-lg transition-all',
+        'group relative flex items-center gap-2 px-3 py-1.5 rounded-full shadow-md hover:shadow-lg transition-all cursor-pointer',
         'bg-surface/80 backdrop-blur-sm border',
         sessionType === 'work' && 'border-primary-600',
         sessionType === 'break' && 'border-green-600',
@@ -88,6 +82,6 @@ export const ActivePomodoroWidget: React.FC = () => {
           <span className="relative inline-flex rounded-full h-2 w-2 bg-primary-600"></span>
         </span>
       )}
-    </button>
+    </div>
   );
 };
