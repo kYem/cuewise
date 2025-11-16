@@ -137,7 +137,7 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({ onManualRefresh }) =
       <div className="relative">
         {/* Decorative Quote Marks */}
         <div
-          className="absolute -top-6 -left-4 text-8xl font-serif opacity-20 dark:opacity-30"
+          className="absolute -top-6 -left-4 text-8xl font-serif opacity-10 dark:opacity-15"
           style={{ color: categoryColor }}
         >
           "
@@ -148,7 +148,7 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({ onManualRefresh }) =
           <p
             className={cn(
               getQuoteFontSize(currentQuote.text),
-              'font-normal text-primary leading-relaxed text-center mb-6 text-balance transition-all duration-300'
+              'font-semibold text-primary leading-relaxed text-center mb-6 text-balance transition-all duration-300 drop-shadow-sm'
             )}
           >
             {currentQuote.text}
@@ -179,7 +179,7 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({ onManualRefresh }) =
 
         {/* Decorative Quote Marks */}
         <div
-          className="absolute -bottom-6 -right-4 text-8xl font-serif opacity-20 dark:opacity-30"
+          className="absolute -bottom-6 -right-4 text-8xl font-serif opacity-10 dark:opacity-15"
           style={{ color: categoryColor }}
         >
           "
