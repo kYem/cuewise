@@ -25,16 +25,9 @@ export const GoalCompletionChart: React.FC<GoalCompletionChartProps> = ({ data }
         {/* Overall Completion */}
         <div className="flex flex-col items-center">
           <div className="relative w-48 h-48">
-            <svg className="transform -rotate-90 w-48 h-48">
+            <svg className="transform -rotate-90 w-48 h-48" aria-label="Overall completion rate">
               {/* Background circle */}
-              <circle
-                cx="96"
-                cy="96"
-                r={radius}
-                stroke="#E5E7EB"
-                strokeWidth="16"
-                fill="none"
-              />
+              <circle cx="96" cy="96" r={radius} stroke="#E5E7EB" strokeWidth="16" fill="none" />
               {/* Progress circle */}
               <circle
                 cx="96"
@@ -66,16 +59,9 @@ export const GoalCompletionChart: React.FC<GoalCompletionChartProps> = ({ data }
         {/* This Week */}
         <div className="flex flex-col items-center">
           <div className="relative w-48 h-48">
-            <svg className="transform -rotate-90 w-48 h-48">
+            <svg className="transform -rotate-90 w-48 h-48" aria-label="This week completion rate">
               {/* Background circle */}
-              <circle
-                cx="96"
-                cy="96"
-                r={radius}
-                stroke="#E5E7EB"
-                strokeWidth="16"
-                fill="none"
-              />
+              <circle cx="96" cy="96" r={radius} stroke="#E5E7EB" strokeWidth="16" fill="none" />
               {/* Progress circle */}
               <circle
                 cx="96"
@@ -107,16 +93,9 @@ export const GoalCompletionChart: React.FC<GoalCompletionChartProps> = ({ data }
         {/* This Month */}
         <div className="flex flex-col items-center">
           <div className="relative w-48 h-48">
-            <svg className="transform -rotate-90 w-48 h-48">
+            <svg className="transform -rotate-90 w-48 h-48" aria-label="This month completion rate">
               {/* Background circle */}
-              <circle
-                cx="96"
-                cy="96"
-                r={radius}
-                stroke="#E5E7EB"
-                strokeWidth="16"
-                fill="none"
-              />
+              <circle cx="96" cy="96" r={radius} stroke="#E5E7EB" strokeWidth="16" fill="none" />
               {/* Progress circle */}
               <circle
                 cx="96"

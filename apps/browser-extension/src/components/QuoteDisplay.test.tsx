@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { useQuoteStore } from '../stores/quote-store';
 import {
   createAtBeginningMockStore,
   createAtEndMockStore,
@@ -15,7 +16,6 @@ import {
   expectCallbackCalledAfterNavigation,
   expectNavigationMethodCalled,
 } from './__fixtures__/quote-display.fixtures';
-import { useQuoteStore } from '../stores/quote-store';
 import { QuoteDisplay } from './QuoteDisplay';
 
 // Mock the quote store

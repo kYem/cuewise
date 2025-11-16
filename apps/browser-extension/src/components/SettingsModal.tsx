@@ -1,12 +1,5 @@
 import { AMBIENT_SOUNDS } from '@cuewise/shared';
-import {
-  Bell,
-  BellOff,
-  Clock,
-  Music,
-  RefreshCw,
-  RotateCcw,
-} from 'lucide-react';
+import { Bell, BellOff, Clock, Music, RefreshCw, RotateCcw } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useState } from 'react';
 import { usePomodoroStore } from '../stores/pomodoro-store';

@@ -435,10 +435,7 @@ export function calculateWeeklyTrends(
   const startDate = startOfWeek(subWeeks(now, weeks - 1), { weekStartsOn: 1 }); // Monday
   const endDate = endOfWeek(now, { weekStartsOn: 1 });
 
-  const weekRanges = eachWeekOfInterval(
-    { start: startDate, end: endDate },
-    { weekStartsOn: 1 }
-  );
+  const weekRanges = eachWeekOfInterval({ start: startDate, end: endDate }, { weekStartsOn: 1 });
 
   return weekRanges.map((weekStart) => {
     const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 });
@@ -669,30 +666,36 @@ function convertToCSV(data: Array<Record<string, unknown>>, headers: string[]): 
  * Export daily trends to CSV
  */
 export function exportDailyTrendsCSV(trends: DailyDataPoint[]): string {
-  return convertToCSV(
-    trends as unknown as Array<Record<string, unknown>>,
-    ['date', 'goalsCompleted', 'focusTime', 'pomodorosCompleted']
-  );
+  return convertToCSV(trends as unknown as Array<Record<string, unknown>>, [
+    'date',
+    'goalsCompleted',
+    'focusTime',
+    'pomodorosCompleted',
+  ]);
 }
 
 /**
  * Export weekly trends to CSV
  */
 export function exportWeeklyTrendsCSV(trends: WeeklyTrend[]): string {
-  return convertToCSV(
-    trends as unknown as Array<Record<string, unknown>>,
-    ['weekLabel', 'goalsCompleted', 'focusTime', 'pomodorosCompleted']
-  );
+  return convertToCSV(trends as unknown as Array<Record<string, unknown>>, [
+    'weekLabel',
+    'goalsCompleted',
+    'focusTime',
+    'pomodorosCompleted',
+  ]);
 }
 
 /**
  * Export monthly trends to CSV
  */
 export function exportMonthlyTrendsCSV(trends: MonthlyTrend[]): string {
-  return convertToCSV(
-    trends as unknown as Array<Record<string, unknown>>,
-    ['month', 'goalsCompleted', 'focusTime', 'pomodorosCompleted']
-  );
+  return convertToCSV(trends as unknown as Array<Record<string, unknown>>, [
+    'month',
+    'goalsCompleted',
+    'focusTime',
+    'pomodorosCompleted',
+  ]);
 }
 
 /**

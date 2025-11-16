@@ -3,13 +3,13 @@ import { quoteFactory } from '@cuewise/test-utils/factories';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SEED_QUOTES } from '../data/seed-quotes';
 import {
-  EMPTY_STORE_STATE,
   createAtBeginningState,
   createAtEndState,
   createDeletedQuoteScenario,
   createForwardHistoryClearScenario,
   createHiddenQuoteScenario,
   createNavigationQuotes,
+  EMPTY_STORE_STATE,
   expectHistoryStructure,
   expectNavigationToQuote,
   expectViewCountIncremented,

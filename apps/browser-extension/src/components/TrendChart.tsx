@@ -37,6 +37,8 @@ export const TrendChart: React.FC<TrendChartProps> = ({ title, data, metric }) =
         return d.focusTime;
       case 'pomodoros':
         return d.pomodorosCompleted;
+      default:
+        return 0;
     }
   });
 
@@ -74,9 +76,7 @@ export const TrendChart: React.FC<TrendChartProps> = ({ title, data, metric }) =
           </div>
           <div className="text-center">
             <div className="text-gray-500">Trend</div>
-            <div
-              className={`font-bold ${trend >= 0 ? 'text-green-600' : 'text-red-600'}`}
-            >
+            <div className={`font-bold ${trend >= 0 ? 'text-green-600' : 'text-red-600'}`}>
               {trend >= 0 ? '+' : ''}
               {formatValue(trend)}
             </div>
@@ -105,9 +105,7 @@ export const TrendChart: React.FC<TrendChartProps> = ({ title, data, metric }) =
                       <div className="text-gray-300">Value: {formatValue(value)}</div>
                       {metric === 'goals' && (
                         <>
-                          <div className="text-gray-300">
-                            Pomodoros: {point.pomodorosCompleted}
-                          </div>
+                          <div className="text-gray-300">Pomodoros: {point.pomodorosCompleted}</div>
                           <div className="text-gray-300">
                             Focus: {formatFocusTime(point.focusTime)}
                           </div>
