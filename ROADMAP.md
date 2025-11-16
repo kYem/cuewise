@@ -1,7 +1,54 @@
 # Cuewise Development Roadmap
 
-**Last Updated**: 2025-01-15
-**Current Version**: v1.0 (Browser Extension MVP)
+**Last Updated**: 2025-01-16
+**Current Version**: v1.1 (Browser Extension with Dark Mode & Theme Customization)
+
+---
+
+## ✅ Recently Completed (v1.1)
+
+### Dark Mode & Theme Customization
+- [x] Full dark mode support with smooth transitions
+- [x] 6 beautiful color themes using OKLCH color space:
+  - Ocean Blue (default)
+  - Forest Green
+  - Sunset Orange
+  - Royal Purple
+  - Rose Pink
+  - Slate Gray
+- [x] Live theme preview sidebar with real-time visual feedback
+- [x] Theme settings persist across sessions
+- [x] All components fully themed (quotes, goals, pomodoro, insights)
+
+### UI/UX Enhancements
+- [x] Unified density customization (compact/comfortable/spacious)
+  - Affects all spacing, padding, and layout density
+  - Visual density preview in settings
+  - Smooth transitions when changing density
+- [x] Countdown progress bar on "New Quote" button
+  - Shows remaining time until next auto-refresh
+  - Smooth animation (100ms updates)
+  - Only appears when auto-refresh is enabled
+  - Resets on manual refresh and navigation
+- [x] Fixed 12-hour time format (removed leading zero: "5:20 PM" not "05:20 PM")
+
+### Technical Improvements
+- [x] Fixed Vite 6.0.9+ CORS policy for dev mode
+  - Added `skipWebSocketTokenCheck: true` in legacy config
+  - Resolved development server connection issues
+- [x] Migrated manifest to TypeScript configuration
+  - Type-safe manifest configuration
+  - Dynamic host_permissions based on environment
+  - Better maintainability
+- [x] Improved service worker reliability in development
+
+### Code Quality
+- [x] Consistent OKLCH color usage throughout theme system
+- [x] Improved TypeScript typing for theme configuration
+- [x] Better error handling in quote display
+- [x] Optimized re-renders with proper React hooks usage
+
+**Version Released**: January 16, 2025
 
 ---
 
