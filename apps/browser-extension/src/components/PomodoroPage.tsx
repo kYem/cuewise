@@ -46,7 +46,7 @@ export const PomodoroPage: React.FC = () => {
       <button
         type="button"
         onClick={handleBackToHome}
-        className="mb-8 flex items-center gap-density-xs text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
+        className="mb-8 flex items-center gap-density-xs text-secondary hover:text-primary transition-colors"
       >
         <ArrowLeft className="w-5 h-5" />
         <span>Back to Home</span>

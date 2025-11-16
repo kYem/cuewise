@@ -22,8 +22,8 @@ export const ErrorFallback: React.FC<ErrorFallbackProps> = ({
       <div className="rounded-full bg-red-100 p-3 mb-4">
         <AlertCircle className="h-8 w-8 text-red-600" />
       </div>
-      <h3 className="text-lg font-semibold text-gray-900 mb-2">{title}</h3>
-      <p className="text-sm text-gray-600 mb-4 max-w-md">{error || message}</p>
+      <h3 className="text-lg font-semibold text-primary mb-2">{title}</h3>
+      <p className="text-sm text-secondary mb-4 max-w-md">{error || message}</p>
       {showRetry && onRetry && (
         <Button onClick={onRetry} variant="primary" size="sm">
           <RefreshCw className="h-4 w-4 mr-2" />

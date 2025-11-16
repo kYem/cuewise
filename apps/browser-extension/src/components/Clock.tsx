@@ -21,14 +21,14 @@ export const Clock: React.FC = () => {
 
   return (
     <div className="text-center mb-12 animate-slide-up">
-      <div className="text-7xl md:text-8xl font-bold text-gray-800 mb-2 font-display tracking-tight">
+      <div className="text-7xl md:text-8xl font-bold text-primary mb-2 font-display tracking-tight">
         {formattedTime}
         {period && (
-          <span className="text-4xl md:text-5xl ml-2 text-gray-500 font-medium">{period}</span>
+          <span className="text-4xl md:text-5xl ml-2 text-secondary font-medium">{period}</span>
         )}
       </div>
-      <div className="text-xl md:text-2xl text-gray-600 mb-1">{greeting}</div>
-      <div className="text-base md:text-lg text-gray-500">{dateString}</div>
+      <div className="text-xl md:text-2xl text-secondary mb-1">{greeting}</div>
+      <div className="text-base md:text-lg text-secondary">{dateString}</div>
     </div>
   );
 };
