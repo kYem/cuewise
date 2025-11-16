@@ -6,7 +6,7 @@
  * - Production: Only warnings and errors, no timestamps
  */
 
-import { LogLevel, configureLogger } from '@cuewise/shared';
+import { configureLogger, LogLevel } from '@cuewise/shared';
 
 /**
  * Initialize logger configuration based on environment

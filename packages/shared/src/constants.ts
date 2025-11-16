@@ -4,6 +4,10 @@ import type { ColorTheme, FontSize, LayoutDensity, QuoteCategory, Settings } fro
 export const DEFAULT_SETTINGS: Settings = {
   pomodoroWorkDuration: 25,
   pomodoroBreakDuration: 5,
+  pomodoroLongBreakDuration: 15,
+  pomodoroLongBreakInterval: 4,
+  pomodoroAmbientSound: 'none',
+  pomodoroAmbientVolume: 50,
   enableNotifications: true,
   theme: 'light',
   quoteChangeInterval: 10, // 0 = manual, 10+ = auto-refresh interval in seconds
@@ -44,6 +48,19 @@ export const CATEGORY_COLORS: Record<QuoteCategory, string> = {
   health: '#14B8A6', // teal
   growth: '#84CC16', // lime
 };
+
+// Ambient sound options for Pomodoro
+export const AMBIENT_SOUNDS = {
+  none: 'None',
+  rain: 'Rain',
+  ocean: 'Ocean Waves',
+  forest: 'Forest',
+  cafe: 'Cafe Ambience',
+  whiteNoise: 'White Noise',
+  brownNoise: 'Brown Noise',
+} as const;
+
+export type AmbientSoundType = keyof typeof AMBIENT_SOUNDS;
 
 // Color theme definitions
 export const COLOR_THEMES: Record<

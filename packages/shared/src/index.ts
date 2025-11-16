@@ -2,10 +2,8 @@
 
 // Export constants
 export * from './constants';
-export * from './types';
-
-// Export utilities
-export * from './utils';
-
 // Export logger
 export * from './logger';
+export * from './types';
+// Export utilities
+export * from './utils';

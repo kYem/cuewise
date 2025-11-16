@@ -5,7 +5,7 @@ import { playCompletionSound, playStartSound } from '../utils/sounds';
 import { useToastStore } from './toast-store';
 
 type TimerStatus = 'idle' | 'running' | 'paused';
-type SessionType = 'work' | 'break';
+type SessionType = 'work' | 'break' | 'longBreak';
 
 interface PomodoroStore {
   // State
@@ -17,14 +17,21 @@ interface PomodoroStore {
   currentSessionId: string | null;
   isLoading: boolean;
   error: string | null;
+  consecutiveWorkSessions: number; // track work sessions for long break
+  selectedGoalId: string | null; // goal to work on during session
 
   // Settings
   workDuration: number; // in minutes
   breakDuration: number; // in minutes
+  longBreakDuration: number; // in minutes
+  longBreakInterval: number; // sessions before long break
+  ambientSound: string;
+  ambientVolume: number;
 
   // Actions
   initialize: () => Promise<void>;
   reloadSettings: () => Promise<void>;
+  setSelectedGoal: (goalId: string | null) => void;
   start: () => void;
   pause: () => void;
   resume: () => void;
@@ -33,6 +40,7 @@ interface PomodoroStore {
   tick: () => void;
   completeSession: () => Promise<void>;
   switchToBreak: () => void;
+  switchToLongBreak: () => void;
   switchToWork: () => void;
 }
 
@@ -46,8 +54,14 @@ export const usePomodoroStore = create<PomodoroStore>((set, get) => ({
   currentSessionId: null,
   isLoading: true,
   error: null,
+  consecutiveWorkSessions: 0,
+  selectedGoalId: null,
   workDuration: 25,
   breakDuration: 5,
+  longBreakDuration: 15,
+  longBreakInterval: 4,
+  ambientSound: 'none',
+  ambientVolume: 50,
 
   initialize: async () => {
     try {
@@ -58,10 +72,18 @@ export const usePomodoroStore = create<PomodoroStore>((set, get) => ({
 
       const workDuration = settings.pomodoroWorkDuration;
       const breakDuration = settings.pomodoroBreakDuration;
+      const longBreakDuration = settings.pomodoroLongBreakDuration;
+      const longBreakInterval = settings.pomodoroLongBreakInterval;
+      const ambientSound = settings.pomodoroAmbientSound;
+      const ambientVolume = settings.pomodoroAmbientVolume;
 
       set({
         workDuration,
         breakDuration,
+        longBreakDuration,
+        longBreakInterval,
+        ambientSound,
+        ambientVolume,
         timeRemaining: minutesToSeconds(workDuration),
         totalTime: minutesToSeconds(workDuration),
         sessions,
@@ -82,19 +104,37 @@ export const usePomodoroStore = create<PomodoroStore>((set, get) => ({
 
       const workDuration = settings.pomodoroWorkDuration;
       const breakDuration = settings.pomodoroBreakDuration;
+      const longBreakDuration = settings.pomodoroLongBreakDuration;
+      const longBreakInterval = settings.pomodoroLongBreakInterval;
+      const ambientSound = settings.pomodoroAmbientSound;
+      const ambientVolume = settings.pomodoroAmbientVolume;
 
       // Only update durations if timer is idle
       if (status === 'idle') {
-        const duration = sessionType === 'work' ? workDuration : breakDuration;
+        let duration = workDuration;
+        if (sessionType === 'break') duration = breakDuration;
+        if (sessionType === 'longBreak') duration = longBreakDuration;
+
         set({
           workDuration,
           breakDuration,
+          longBreakDuration,
+          longBreakInterval,
+          ambientSound,
+          ambientVolume,
           timeRemaining: minutesToSeconds(duration),
           totalTime: minutesToSeconds(duration),
         });
       } else {
-        // Timer is running/paused, just update the stored durations for next session
-        set({ workDuration, breakDuration });
+        // Timer is running/paused, just update the stored settings for next session
+        set({
+          workDuration,
+          breakDuration,
+          longBreakDuration,
+          longBreakInterval,
+          ambientSound,
+          ambientVolume,
+        });
       }
     } catch (error) {
       console.error('Error reloading settings:', error);
@@ -104,9 +144,16 @@ export const usePomodoroStore = create<PomodoroStore>((set, get) => ({
     }
   },
 
+  setSelectedGoal: (goalId: string | null) => {
+    set({ selectedGoalId: goalId });
+  },
+
   start: () => {
-    const { sessionType, workDuration, breakDuration } = get();
-    const duration = sessionType === 'work' ? workDuration : breakDuration;
+    const { sessionType, workDuration, breakDuration, longBreakDuration } = get();
+    let duration = workDuration;
+    if (sessionType === 'break') duration = breakDuration;
+    if (sessionType === 'longBreak') duration = longBreakDuration;
+
     const currentSessionId = generateId();
 
     // Play start sound
@@ -129,8 +176,10 @@ export const usePomodoroStore = create<PomodoroStore>((set, get) => ({
   },
 
   reset: () => {
-    const { sessionType, workDuration, breakDuration } = get();
-    const duration = sessionType === 'work' ? workDuration : breakDuration;
+    const { sessionType, workDuration, breakDuration, longBreakDuration } = get();
+    let duration = workDuration;
+    if (sessionType === 'break') duration = breakDuration;
+    if (sessionType === 'longBreak') duration = longBreakDuration;
 
     set({
       status: 'idle',
@@ -141,11 +190,17 @@ export const usePomodoroStore = create<PomodoroStore>((set, get) => ({
   },
 
   skip: () => {
-    const { sessionType } = get();
+    const { sessionType, consecutiveWorkSessions, longBreakInterval } = get();
 
     if (sessionType === 'work') {
-      get().switchToBreak();
+      // Check if we should switch to long break
+      if (consecutiveWorkSessions + 1 >= longBreakInterval) {
+        get().switchToLongBreak();
+      } else {
+        get().switchToBreak();
+      }
     } else {
+      // From any break back to work
       get().switchToWork();
     }
   },
@@ -164,8 +219,18 @@ export const usePomodoroStore = create<PomodoroStore>((set, get) => ({
   },
 
   completeSession: async () => {
-    const { currentSessionId, sessionType, totalTime, sessions, workDuration, breakDuration } =
-      get();
+    const {
+      currentSessionId,
+      sessionType,
+      totalTime,
+      sessions,
+      workDuration,
+      breakDuration,
+      longBreakDuration,
+      consecutiveWorkSessions,
+      longBreakInterval,
+      selectedGoalId,
+    } = get();
 
     if (!currentSessionId) return;
 
@@ -178,6 +243,7 @@ export const usePomodoroStore = create<PomodoroStore>((set, get) => ({
         interrupted: false,
         duration: totalTime / 60, // convert back to minutes
         type: sessionType,
+        ...(selectedGoalId && sessionType === 'work' ? { goalId: selectedGoalId } : {}),
       };
 
       // Save session
@@ -186,22 +252,43 @@ export const usePomodoroStore = create<PomodoroStore>((set, get) => ({
 
       set({ sessions: updatedSessions });
 
-      // Auto-switch to break after work or vice versa
+      // Auto-switch logic
       if (sessionType === 'work') {
-        set({
-          sessionType: 'break',
-          status: 'idle',
-          currentSessionId: null,
-          timeRemaining: minutesToSeconds(breakDuration),
-          totalTime: minutesToSeconds(breakDuration),
-        });
+        // Increment consecutive work sessions
+        const newConsecutiveCount = consecutiveWorkSessions + 1;
+
+        // Check if it's time for long break
+        if (newConsecutiveCount >= longBreakInterval) {
+          set({
+            sessionType: 'longBreak',
+            status: 'idle',
+            currentSessionId: null,
+            timeRemaining: minutesToSeconds(longBreakDuration),
+            totalTime: minutesToSeconds(longBreakDuration),
+            consecutiveWorkSessions: newConsecutiveCount,
+            selectedGoalId: null, // Clear selected goal
+          });
+        } else {
+          set({
+            sessionType: 'break',
+            status: 'idle',
+            currentSessionId: null,
+            timeRemaining: minutesToSeconds(breakDuration),
+            totalTime: minutesToSeconds(breakDuration),
+            consecutiveWorkSessions: newConsecutiveCount,
+            selectedGoalId: null, // Clear selected goal
+          });
+        }
       } else {
+        // Break or long break completed - switch to work
+        const resetConsecutive = sessionType === 'longBreak' ? 0 : consecutiveWorkSessions;
         set({
           sessionType: 'work',
           status: 'idle',
           currentSessionId: null,
           timeRemaining: minutesToSeconds(workDuration),
           totalTime: minutesToSeconds(workDuration),
+          consecutiveWorkSessions: resetConsecutive,
         });
       }
 
@@ -210,10 +297,18 @@ export const usePomodoroStore = create<PomodoroStore>((set, get) => ({
 
       // Show notification
       if ('Notification' in window && Notification.permission === 'granted') {
-        const message =
-          sessionType === 'work'
-            ? 'Work session complete! Time for a break.'
-            : 'Break complete! Ready to focus?';
+        let message = 'Session complete!';
+        if (sessionType === 'work') {
+          const newCount = consecutiveWorkSessions + 1;
+          message =
+            newCount >= longBreakInterval
+              ? 'Work session complete! Time for a long break.'
+              : 'Work session complete! Time for a break.';
+        } else if (sessionType === 'longBreak') {
+          message = 'Long break complete! Ready to focus?';
+        } else {
+          message = 'Break complete! Ready to focus?';
+        }
         new Notification('Pomodoro Timer', { body: message });
       }
     } catch (error) {
@@ -232,6 +327,17 @@ export const usePomodoroStore = create<PomodoroStore>((set, get) => ({
       currentSessionId: null,
       timeRemaining: minutesToSeconds(breakDuration),
       totalTime: minutesToSeconds(breakDuration),
+    });
+  },
+
+  switchToLongBreak: () => {
+    const { longBreakDuration } = get();
+    set({
+      sessionType: 'longBreak',
+      status: 'idle',
+      currentSessionId: null,
+      timeRemaining: minutesToSeconds(longBreakDuration),
+      totalTime: minutesToSeconds(longBreakDuration),
     });
   },
 

@@ -1,8 +1,10 @@
 import { formatTimeRemaining } from '@cuewise/shared';
-import { Pause, Play, RotateCcw, SkipForward, Timer } from 'lucide-react';
+import { Coffee, Pause, Play, RotateCcw, SkipForward, Target, Timer } from 'lucide-react';
 import type React from 'react';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { useGoalStore } from '../stores/goal-store';
 import { usePomodoroStore } from '../stores/pomodoro-store';
+import { ambientSoundPlayer } from '../utils/ambient-sounds';
 
 export const PomodoroTimer: React.FC = () => {
   const {
@@ -12,6 +14,12 @@ export const PomodoroTimer: React.FC = () => {
     totalTime,
     workDuration,
     breakDuration,
+    longBreakDuration,
+    consecutiveWorkSessions,
+    longBreakInterval,
+    selectedGoalId,
+    ambientSound,
+    ambientVolume,
     initialize,
     start,
     pause,
@@ -19,12 +27,18 @@ export const PomodoroTimer: React.FC = () => {
     reset,
     skip,
     tick,
+    setSelectedGoal,
   } = usePomodoroStore();
+
+  const { todayGoals, initialize: initGoals } = useGoalStore();
+
+  const [showGoalPicker, setShowGoalPicker] = useState(false);
 
   // Initialize on mount
   useEffect(() => {
     initialize();
-  }, [initialize]);
+    initGoals();
+  }, [initialize, initGoals]);
 
   // Timer tick effect
   useEffect(() => {
@@ -37,6 +51,29 @@ export const PomodoroTimer: React.FC = () => {
     return () => clearInterval(interval);
   }, [status, tick]);
 
+  // Ambient sound management
+  useEffect(() => {
+    if (status === 'running' && sessionType === 'work' && ambientSound !== 'none') {
+      // Start ambient sound during work sessions
+      ambientSoundPlayer.play(
+        ambientSound as 'rain' | 'ocean' | 'forest' | 'cafe' | 'whiteNoise' | 'brownNoise',
+        ambientVolume
+      );
+    } else {
+      // Stop ambient sound when not in work session or when paused
+      if (ambientSoundPlayer.getIsPlaying()) {
+        ambientSoundPlayer.stop();
+      }
+    }
+
+    // Cleanup on unmount
+    return () => {
+      if (ambientSoundPlayer.getIsPlaying()) {
+        ambientSoundPlayer.stop();
+      }
+    };
+  }, [status, sessionType, ambientSound, ambientVolume]);
+
   // Request notification permission on mount
   useEffect(() => {
     if ('Notification' in window && Notification.permission === 'default') {
@@ -47,24 +84,135 @@ export const PomodoroTimer: React.FC = () => {
   const progress = totalTime > 0 ? ((totalTime - timeRemaining) / totalTime) * 100 : 0;
 
   const isWork = sessionType === 'work';
-  const sessionColor = isWork ? 'text-primary-600' : 'text-green-600';
-  const sessionBgColor = isWork ? 'bg-primary-100' : 'bg-green-100';
-  const sessionBorderColor = isWork ? 'border-primary-600' : 'border-green-600';
-  const progressColor = isWork ? '#8B5CF6' : '#10B981';
+
+  // Session colors
+  let sessionColor = 'text-primary-600';
+  let sessionBgColor = 'bg-primary-100';
+  let sessionBorderColor = 'border-primary-600';
+  let progressColor = '#8B5CF6';
+  let sessionLabel = 'Focus Session';
+  let sessionIcon = Timer;
+
+  if (sessionType === 'break') {
+    sessionColor = 'text-green-600';
+    sessionBgColor = 'bg-green-100';
+    sessionBorderColor = 'border-green-600';
+    progressColor = '#10B981';
+    sessionLabel = 'Short Break';
+    sessionIcon = Coffee;
+  } else if (sessionType === 'longBreak') {
+    sessionColor = 'text-blue-600';
+    sessionBgColor = 'bg-blue-100';
+    sessionBorderColor = 'border-blue-600';
+    progressColor = '#3B82F6';
+    sessionLabel = 'Long Break';
+    sessionIcon = Coffee;
+  }
+
+  // Find selected goal
+  const selectedGoal = todayGoals.find((g) => g.id === selectedGoalId);
+
+  // Calculate sessions until long break
+  const sessionsUntilLongBreak = longBreakInterval - consecutiveWorkSessions;
+
+  const SessionIcon = sessionIcon;
 
   return (
     <div className="w-full max-w-md mx-auto">
       <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg p-8 border border-gray-200">
         {/* Header */}
-        <div className="flex items-center gap-3 mb-8">
+        <div className="flex items-center gap-3 mb-6">
           <div className={`p-2 ${sessionBgColor} rounded-lg`}>
-            <Timer className={`w-6 h-6 ${sessionColor}`} />
+            <SessionIcon className={`w-6 h-6 ${sessionColor}`} />
           </div>
-          <div>
+          <div className="flex-1">
             <h2 className="text-2xl font-semibold text-gray-800">Pomodoro Timer</h2>
-            <p className="text-sm text-gray-500">{isWork ? 'Focus Session' : 'Break Time'}</p>
+            <p className="text-sm text-gray-500">{sessionLabel}</p>
           </div>
         </div>
+
+        {/* Goal Selection (only show for work sessions when idle) */}
+        {isWork && status === 'idle' && (
+          <div className="mb-6">
+            {selectedGoal ? (
+              <div className="flex items-center gap-2 p-3 bg-purple-50 rounded-lg border border-purple-200">
+                <Target className="w-4 h-4 text-purple-600 flex-shrink-0" />
+                <span className="text-sm text-gray-700 flex-1">{selectedGoal.text}</span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedGoal(null)}
+                  className="text-xs text-purple-600 hover:text-purple-700"
+                  title="Clear goal"
+                >
+                  Clear
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowGoalPicker(!showGoalPicker)}
+                className="w-full flex items-center gap-2 p-3 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors"
+                title="Select a goal"
+              >
+                <Target className="w-4 h-4 text-gray-600" />
+                <span className="text-sm text-gray-600">Work on a goal (optional)</span>
+              </button>
+            )}
+
+            {/* Goal Picker Dropdown */}
+            {showGoalPicker && !selectedGoal && (
+              <div className="mt-2 p-2 bg-white rounded-lg border border-gray-200 shadow-lg max-h-48 overflow-y-auto">
+                {todayGoals.filter((g) => !g.completed).length === 0 ? (
+                  <p className="text-sm text-gray-500 p-2">No active goals for today</p>
+                ) : (
+                  todayGoals
+                    .filter((g) => !g.completed)
+                    .map((goal) => (
+                      <button
+                        key={goal.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedGoal(goal.id);
+                          setShowGoalPicker(false);
+                        }}
+                        className="w-full text-left p-2 text-sm text-gray-700 hover:bg-purple-50 rounded transition-colors"
+                      >
+                        {goal.text}
+                      </button>
+                    ))
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Active Goal Display (during session) */}
+        {isWork && status !== 'idle' && selectedGoal && (
+          <div className="mb-6 flex items-center gap-2 p-3 bg-purple-50 rounded-lg border border-purple-200">
+            <Target className="w-4 h-4 text-purple-600 flex-shrink-0" />
+            <span className="text-sm text-gray-700">{selectedGoal.text}</span>
+          </div>
+        )}
+
+        {/* Long Break Progress */}
+        {isWork && sessionsUntilLongBreak > 0 && (
+          <div className="mb-6 text-center">
+            <p className="text-xs text-gray-500">
+              {sessionsUntilLongBreak} session{sessionsUntilLongBreak !== 1 ? 's' : ''} until long
+              break
+            </p>
+            <div className="mt-2 flex gap-1 justify-center">
+              {Array.from({ length: longBreakInterval }).map((_, i) => (
+                <div
+                  key={i}
+                  className={`h-1.5 w-8 rounded-full ${
+                    i < consecutiveWorkSessions ? 'bg-purple-500' : 'bg-gray-200'
+                  }`}
+                />
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Timer Display */}
         <div className="flex flex-col items-center mb-8">
@@ -98,7 +246,9 @@ export const PomodoroTimer: React.FC = () => {
                 {formatTimeRemaining(timeRemaining)}
               </div>
               <div className={`mt-2 text-sm font-medium uppercase tracking-wider ${sessionColor}`}>
-                {isWork ? 'Work' : 'Break'}
+                {sessionType === 'work' && 'Work'}
+                {sessionType === 'break' && 'Break'}
+                {sessionType === 'longBreak' && 'Long Break'}
               </div>
             </div>
           </div>
@@ -180,8 +330,12 @@ export const PomodoroTimer: React.FC = () => {
         {/* Help Text */}
         <div className="mt-6 text-center text-xs text-gray-500">
           <p>
-            Focus for {workDuration} minutes, then take a {breakDuration}-minute break
+            Focus for {workDuration} minutes • {breakDuration}-minute breaks • {longBreakDuration}
+            -minute long break every {longBreakInterval} sessions
           </p>
+          {ambientSound !== 'none' && isWork && (
+            <p className="mt-1 text-purple-600">🎵 Ambient sound: {ambientSound}</p>
+          )}
         </div>
       </div>
     </div>

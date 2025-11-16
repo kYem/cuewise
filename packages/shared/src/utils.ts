@@ -273,6 +273,10 @@ export function calculateInsights(
   const lastActiveDate =
     completedGoalDates.length > 0 ? completedGoalDates.sort().reverse()[0] : getTodayDateString();
 
+  // Calculate focus time stats
+  const focusTimeToday = calculateFocusTimeToday(pomodoroSessions);
+  const focusTimeThisWeek = calculateFocusTimeThisWeek(pomodoroSessions);
+
   return {
     totalQuotesViewed,
     quotesViewedThisWeek,
@@ -280,6 +284,8 @@ export function calculateInsights(
     goalsCompletedThisWeek,
     goalsCompletedThisMonth,
     pomodorosCompletedToday,
+    focusTimeToday,
+    focusTimeThisWeek,
     categoryViewCounts,
     streak: {
       current: streakData.current,
@@ -305,4 +311,53 @@ export function getMostViewedCategory(
   if (count === 0) return null;
 
   return { category, count };
+}
+
+/**
+ * Calculate total focus time in minutes for completed work sessions
+ */
+export function calculateFocusTime(
+  sessions: PomodoroSession[],
+  filterFn?: (session: PomodoroSession) => boolean
+): number {
+  return sessions
+    .filter((session) => {
+      if (session.interrupted || session.type !== 'work') return false;
+      return filterFn ? filterFn(session) : true;
+    })
+    .reduce((total, session) => total + session.duration, 0);
+}
+
+/**
+ * Calculate focus time for today (in minutes)
+ */
+export function calculateFocusTimeToday(sessions: PomodoroSession[]): number {
+  const today = startOfDay(new Date());
+  return calculateFocusTime(sessions, (session) => {
+    const sessionDate = parseISO(session.completedAt || session.startedAt);
+    return isSameDay(sessionDate, today);
+  });
+}
+
+/**
+ * Calculate focus time for this week (in minutes)
+ */
+export function calculateFocusTimeThisWeek(sessions: PomodoroSession[]): number {
+  const weekStart = startOfWeek(startOfDay(new Date()), { weekStartsOn: 1 }); // Monday
+  return calculateFocusTime(sessions, (session) => {
+    const sessionDate = parseISO(session.completedAt || session.startedAt);
+    return isAfter(sessionDate, weekStart) || isSameDay(sessionDate, weekStart);
+  });
+}
+
+/**
+ * Format focus time in minutes to hours and minutes
+ */
+export function formatFocusTime(minutes: number): string {
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+
+  if (hours === 0) return `${mins}m`;
+  if (mins === 0) return `${hours}h`;
+  return `${hours}h ${mins}m`;
 }
