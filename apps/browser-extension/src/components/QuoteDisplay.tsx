@@ -1,6 +1,6 @@
 import { CATEGORY_COLORS } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
-import { EyeOff, Heart, RefreshCw } from 'lucide-react';
+import { ChevronLeft, ChevronRight, EyeOff, Heart, RefreshCw } from 'lucide-react';
 import type React from 'react';
 import { useQuoteStore } from '../stores/quote-store';
 import { ErrorFallback } from './ErrorFallback';
@@ -10,11 +10,32 @@ interface QuoteDisplayProps {
 }
 
 export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({ onManualRefresh }) => {
-  const { currentQuote, refreshQuote, toggleFavorite, hideQuote, isLoading, error, initialize } =
-    useQuoteStore();
+  const {
+    currentQuote,
+    refreshQuote,
+    goBack,
+    goForward,
+    canGoBack,
+    canGoForward,
+    toggleFavorite,
+    hideQuote,
+    isLoading,
+    error,
+    initialize,
+  } = useQuoteStore();
 
   const handleRefreshClick = async () => {
     await refreshQuote();
+    onManualRefresh?.();
+  };
+
+  const handleGoBack = async () => {
+    await goBack();
+    onManualRefresh?.();
+  };
+
+  const handleGoForward = async () => {
+    await goForward();
     onManualRefresh?.();
   };
 
@@ -144,15 +165,48 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({ onManualRefresh }) =
           <Heart className={cn('w-5 h-5', currentQuote.isFavorite && 'fill-current')} />
         </button>
 
-        <button
-          type="button"
-          onClick={handleRefreshClick}
-          className="flex items-center gap-2 px-6 py-3 bg-white text-gray-700 rounded-full font-medium shadow-md hover:shadow-lg hover:scale-105 transition-all"
-          title="New quote"
-        >
-          <RefreshCw className="w-5 h-5" />
-          <span>New Quote</span>
-        </button>
+        {/* Navigation Buttons */}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleGoBack}
+            disabled={!canGoBack()}
+            className={cn(
+              'p-3 rounded-full transition-all',
+              canGoBack()
+                ? 'bg-white text-gray-700 hover:bg-gray-50 hover:scale-110 hover:shadow-lg'
+                : 'bg-gray-100 text-gray-300 cursor-not-allowed'
+            )}
+            title="Previous quote"
+          >
+            <ChevronLeft className="w-5 h-5" />
+          </button>
+
+          <button
+            type="button"
+            onClick={handleRefreshClick}
+            className="flex items-center gap-2 px-6 py-3 bg-white text-gray-700 rounded-full font-medium shadow-md hover:shadow-lg hover:scale-105 transition-all"
+            title="New quote"
+          >
+            <RefreshCw className="w-5 h-5" />
+            <span>New Quote</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleGoForward}
+            disabled={!canGoForward()}
+            className={cn(
+              'p-3 rounded-full transition-all',
+              canGoForward()
+                ? 'bg-white text-gray-700 hover:bg-gray-50 hover:scale-110 hover:shadow-lg'
+                : 'bg-gray-100 text-gray-300 cursor-not-allowed'
+            )}
+            title="Next quote"
+          >
+            <ChevronRight className="w-5 h-5" />
+          </button>
+        </div>
 
         <button
           type="button"

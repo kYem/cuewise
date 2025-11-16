@@ -486,13 +486,166 @@ import { CATEGORY_COLORS } from '@cuewise/shared';
 const color = CATEGORY_COLORS[quote.category]; // "#8B5CF6"
 ```
 
-## Testing Strategy (Future)
+## Testing Strategy
 
-When adding tests:
+### Testing Tools
+- **Test Runner**: Vitest (fast, Vite-native)
+- **Component Testing**: React Testing Library
+- **Mocking**: Vitest built-in mocks
+- **Factories**: `@cuewise/test-utils/factories` for test data
+
+### Test Organization
 - **`packages/shared`**: Unit tests (pure functions, platform-agnostic)
 - **Storage adapters**: Integration tests per platform
 - **Components**: Component tests with React Testing Library
-- **Stores**: State management tests
+- **Stores**: State management tests with Zustand
+
+### Test Fixtures Pattern
+
+**Use fixtures to eliminate duplication and improve maintainability.** Store reusable test data, mock builders, and assertion helpers in `__fixtures__` directories alongside test files.
+
+**Example Structure**:
+```
+src/
+  stores/
+    __fixtures__/
+      quote-store.fixtures.ts    # Reusable test helpers for store tests
+    quote-store.ts
+    quote-store.test.ts
+  components/
+    __fixtures__/
+      quote-display.fixtures.ts  # Reusable mocks for component tests
+    QuoteDisplay.tsx
+    QuoteDisplay.test.tsx
+```
+
+**Fixture Categories**:
+
+1. **Test Data Builders** - Create consistent test data
+```typescript
+// quote-store.fixtures.ts
+export function createNavigationQuotes(count = 3) {
+  const quotes = quoteFactory.buildList(count);
+  return {
+    quotes,
+    quote1: quotes[0],
+    quote2: quotes[1],
+    quote3: quotes[2],
+  };
+}
+```
+
+2. **State Presets** - Pre-configured states for common scenarios
+```typescript
+export const EMPTY_STORE_STATE = {
+  quotes: [],
+  currentQuote: null,
+  isLoading: true,
+  error: null,
+  quoteHistory: [],
+  historyIndex: 0,
+};
+
+export function createAtBeginningState(quotes: Quote[], history: Quote[]) {
+  return {
+    quotes,
+    currentQuote: history[0],
+    quoteHistory: history.map(q => q.id),
+    historyIndex: 0,  // At most recent
+    isLoading: false,
+    error: null,
+  };
+}
+```
+
+3. **Mock Builders** - Create mocks with sensible defaults
+```typescript
+// quote-display.fixtures.ts
+export function createLoadedMockStore(quote?: Quote) {
+  const currentQuote = quote || quoteFactory.build();
+  return {
+    currentQuote,
+    quotes: [currentQuote],
+    isLoading: false,
+    error: null,
+    goBack: vi.fn(),
+    goForward: vi.fn(),
+    canGoBack: vi.fn(() => false),
+    canGoForward: vi.fn(() => false),
+    // ... other methods
+  };
+}
+```
+
+4. **Assertion Helpers** - Reusable test assertions
+```typescript
+export function expectNavigationToQuote(
+  state: any,
+  expectedQuote: Quote,
+  expectedIndex: number
+) {
+  expect(state.currentQuote?.id).toBe(expectedQuote.id);
+  expect(state.historyIndex).toBe(expectedIndex);
+}
+```
+
+5. **Test Scenarios** - Complex test setups
+```typescript
+export function createHiddenQuoteScenario() {
+  const visibleQuotes = quoteFactory.buildList(2);
+  const hiddenQuote = quoteFactory.build({ isHidden: true });
+
+  return {
+    allQuotes: [visibleQuotes[0], hiddenQuote, visibleQuotes[1]],
+    visibleQuotes,
+    hiddenQuote,
+    history: [visibleQuotes[0].id, hiddenQuote.id, visibleQuotes[1].id],
+  };
+}
+```
+
+**Usage in Tests**:
+```typescript
+import { createNavigationQuotes, expectNavigationToQuote } from './__fixtures__/quote-store.fixtures';
+
+it('should navigate to previous quote', async () => {
+  const { quotes, quote1, quote2 } = createNavigationQuotes(2);
+  const state = createAtBeginningState(quotes, [quote1, quote2]);
+
+  useQuoteStore.setState(state);
+  await useQuoteStore.getState().goBack();
+
+  const newState = useQuoteStore.getState();
+  expectNavigationToQuote(newState, quote2, 1);
+});
+```
+
+### Testing Best Practices
+
+**DO:**
+- ✅ Use semantic fixture names that describe the scenario
+- ✅ Create assertion helpers for complex validations
+- ✅ Build test scenarios for edge cases (hidden quotes, deleted items)
+- ✅ Keep tests focused on one behavior per test
+- ✅ Use factories from `@cuewise/test-utils` for base data
+
+**DON'T:**
+- ❌ Repeat mock setup code across multiple tests
+- ❌ Create inline test data when fixtures would be clearer
+- ❌ Write assertion logic multiple times
+- ❌ Mix multiple concerns in a single test
+
+**Running Tests**:
+```bash
+# Run all tests
+pnpm --filter @cuewise/browser-extension test
+
+# Watch mode
+pnpm --filter @cuewise/browser-extension test:watch
+
+# With coverage
+pnpm --filter @cuewise/browser-extension test:coverage
+```
 
 ## Common Gotchas
 
@@ -631,6 +784,6 @@ pnpm clean
 
 ---
 
-**Last Updated**: 2025-01-16
+**Last Updated**: 2025-11-16
 
 This guide should give you (Claude) a solid understanding of the codebase structure, patterns, and conventions. When in doubt, refer to existing code in similar contexts.
