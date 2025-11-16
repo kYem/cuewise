@@ -48,7 +48,7 @@ export const RemindersSection: React.FC = () => {
 
   return (
     <div className="w-full max-w-2xl mx-auto">
-      <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg p-6 border border-gray-200 min-h-[400px] flex flex-col">
+      <div className="bg-surface/80 backdrop-blur-sm rounded-2xl shadow-lg p-6 border border-border min-h-[400px] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
@@ -56,8 +56,8 @@ export const RemindersSection: React.FC = () => {
               <Bell className="w-6 h-6 text-primary-600" />
             </div>
             <div>
-              <h2 className="text-2xl font-semibold text-gray-800">Reminders</h2>
-              <p className="text-sm text-gray-500">Stay on top of what matters</p>
+              <h2 className="text-2xl font-semibold text-primary">Reminders</h2>
+              <p className="text-sm text-secondary">Stay on top of what matters</p>
             </div>
           </div>
 
@@ -75,7 +75,7 @@ export const RemindersSection: React.FC = () => {
         {/* Content Area */}
         <div className="flex-1 flex flex-col">
           {/* Loading State */}
-          {isLoading && <div className="text-center py-8 text-gray-500">Loading reminders...</div>}
+          {isLoading && <div className="text-center py-8 text-secondary">Loading reminders...</div>}
 
           {/* Error State */}
           {!isLoading && error && (
@@ -85,9 +85,9 @@ export const RemindersSection: React.FC = () => {
           {/* Empty State */}
           {!isLoading && !error && totalReminders === 0 && (
             <div className="text-center py-8">
-              <Bell className="w-16 h-16 mx-auto mb-4 text-gray-300" />
-              <p className="text-lg text-gray-500 mb-2">No reminders yet</p>
-              <p className="text-sm text-gray-400">Add a reminder to get notified on time</p>
+              <Bell className="w-16 h-16 mx-auto mb-4 text-tertiary" />
+              <p className="text-lg text-secondary mb-2">No reminders yet</p>
+              <p className="text-sm text-tertiary">Add a reminder to get notified on time</p>
             </div>
           )}
 
@@ -118,7 +118,7 @@ export const RemindersSection: React.FC = () => {
               {/* Upcoming Reminders */}
               {upcomingReminders.length > 0 && (
                 <div className="space-y-3">
-                  <h3 className="text-sm font-semibold text-gray-600 uppercase tracking-wide">
+                  <h3 className="text-sm font-semibold text-secondary uppercase tracking-wide">
                     Upcoming ({upcomingReminders.length})
                   </h3>
                   <div className="space-y-2">

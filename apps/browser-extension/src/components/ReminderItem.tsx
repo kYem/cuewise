@@ -119,12 +119,12 @@ export const ReminderItem: React.FC<ReminderItemProps> = ({
       className={cn(
         'group flex items-center gap-3 p-3 rounded-lg border-2 transition-all',
         reminder.completed
-          ? 'bg-gray-50 border-gray-200'
+          ? 'bg-surface-variant border-border'
           : isOverdue
             ? 'bg-red-50 border-red-200 hover:border-red-300'
             : isSoon
               ? 'bg-orange-50 border-orange-300 hover:border-orange-400'
-              : 'bg-white border-gray-200 hover:border-primary-300'
+              : 'bg-surface border-border hover:border-primary-300'
       )}
     >
       {/* Checkbox */}
@@ -142,7 +142,7 @@ export const ReminderItem: React.FC<ReminderItemProps> = ({
               'w-6 h-6 transition-colors',
               isOverdue
                 ? 'text-red-400 group-hover:text-red-500'
-                : 'text-gray-400 group-hover:text-primary-500'
+                : 'text-tertiary group-hover:text-primary-500'
             )}
           />
         )}
@@ -154,7 +154,7 @@ export const ReminderItem: React.FC<ReminderItemProps> = ({
         <span
           className={cn(
             'block text-base transition-all',
-            reminder.completed ? 'text-gray-400 line-through' : 'text-gray-800'
+            reminder.completed ? 'text-tertiary line-through' : 'text-primary'
           )}
         >
           {reminder.text}
@@ -166,24 +166,24 @@ export const ReminderItem: React.FC<ReminderItemProps> = ({
             className={cn(
               'w-3.5 h-3.5',
               reminder.completed
-                ? 'text-gray-400'
+                ? 'text-tertiary'
                 : isOverdue
                   ? 'text-red-500'
                   : isSoon
                     ? 'text-orange-500'
-                    : 'text-gray-500'
+                    : 'text-secondary'
             )}
           />
           <span
             className={cn(
               'text-sm',
               reminder.completed
-                ? 'text-gray-400'
+                ? 'text-tertiary'
                 : isOverdue
                   ? 'text-red-600 font-medium'
                   : isSoon
                     ? 'text-orange-600 font-semibold'
-                    : 'text-gray-600'
+                    : 'text-secondary'
             )}
           >
             {isSoon && !reminder.completed ? countdown : text}
@@ -208,7 +208,7 @@ export const ReminderItem: React.FC<ReminderItemProps> = ({
         {/* Snooze Buttons (show when approaching) */}
         {isSoon && !reminder.completed && onSnooze && (
           <div className="flex items-center gap-1 mt-2">
-            <span className="text-xs text-gray-500 mr-1">Snooze:</span>
+            <span className="text-xs text-secondary mr-1">Snooze:</span>
             <button
               type="button"
               onClick={() => handleSnooze(5)}
@@ -238,7 +238,7 @@ export const ReminderItem: React.FC<ReminderItemProps> = ({
       <button
         type="button"
         onClick={() => onEdit(reminder.id)}
-        className="flex-shrink-0 p-2 text-gray-400 hover:text-primary-500 opacity-0 group-hover:opacity-100 transition-all focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 rounded"
+        className="flex-shrink-0 p-2 text-secondary hover:text-primary-500 opacity-0 group-hover:opacity-100 transition-all focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 rounded"
         aria-label="Edit reminder"
       >
         <Pencil className="w-4 h-4" />
@@ -248,7 +248,7 @@ export const ReminderItem: React.FC<ReminderItemProps> = ({
       <button
         type="button"
         onClick={() => onDelete(reminder.id)}
-        className="flex-shrink-0 p-2 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 rounded"
+        className="flex-shrink-0 p-2 text-secondary hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 rounded"
         aria-label="Delete reminder"
       >
         <Trash2 className="w-4 h-4" />

@@ -81,7 +81,7 @@ export const AddReminderForm: React.FC<AddReminderFormProps> = ({ onSuccess }) =
     <form onSubmit={handleSubmit} className="space-y-6">
       {/* Reminder Text */}
       <div>
-        <label htmlFor="reminder-text" className="block text-sm font-medium text-gray-700 mb-2">
+        <label htmlFor="reminder-text" className="block text-sm font-medium text-primary mb-2">
           Reminder <span className="text-red-500">*</span>
         </label>
         <textarea
@@ -92,16 +92,16 @@ export const AddReminderForm: React.FC<AddReminderFormProps> = ({ onSuccess }) =
           required
           rows={3}
           maxLength={200}
-          className="w-full px-4 py-3 rounded-lg border-2 border-gray-200 focus:border-primary-500 focus:outline-none transition-colors resize-none"
+          className="w-full px-4 py-3 rounded-lg border-2 border-border focus:border-primary-500 focus:outline-none transition-colors resize-none text-primary placeholder:text-secondary"
         />
-        <p className="mt-1 text-xs text-gray-500">{text.length}/200 characters</p>
+        <p className="mt-1 text-xs text-secondary">{text.length}/200 characters</p>
       </div>
 
       {/* Date and Time */}
       <div className="grid grid-cols-2 gap-4">
         {/* Date */}
         <div>
-          <label htmlFor="reminder-date" className="block text-sm font-medium text-gray-700 mb-2">
+          <label htmlFor="reminder-date" className="block text-sm font-medium text-primary mb-2">
             Date <span className="text-red-500">*</span>
           </label>
           <input
@@ -112,13 +112,13 @@ export const AddReminderForm: React.FC<AddReminderFormProps> = ({ onSuccess }) =
             onFocus={initializeDefaultDateTime}
             required
             min={new Date().toISOString().split('T')[0]}
-            className="w-full px-4 py-3 rounded-lg border-2 border-gray-200 focus:border-primary-500 focus:outline-none transition-colors"
+            className="w-full px-4 py-3 rounded-lg border-2 border-border focus:border-primary-500 focus:outline-none transition-colors text-primary"
           />
         </div>
 
         {/* Time */}
         <div>
-          <label htmlFor="reminder-time" className="block text-sm font-medium text-gray-700 mb-2">
+          <label htmlFor="reminder-time" className="block text-sm font-medium text-primary mb-2">
             Time <span className="text-red-500">*</span>
           </label>
           <input
@@ -128,7 +128,7 @@ export const AddReminderForm: React.FC<AddReminderFormProps> = ({ onSuccess }) =
             onChange={(e) => setTime(e.target.value)}
             onFocus={initializeDefaultDateTime}
             required
-            className="w-full px-4 py-3 rounded-lg border-2 border-gray-200 focus:border-primary-500 focus:outline-none transition-colors"
+            className="w-full px-4 py-3 rounded-lg border-2 border-border focus:border-primary-500 focus:outline-none transition-colors text-primary"
           />
         </div>
       </div>
@@ -141,9 +141,9 @@ export const AddReminderForm: React.FC<AddReminderFormProps> = ({ onSuccess }) =
             type="checkbox"
             checked={isRecurring}
             onChange={(e) => setIsRecurring(e.target.checked)}
-            className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+            className="w-4 h-4 text-primary-600 border-border rounded focus:ring-primary-500"
           />
-          <label htmlFor="reminder-recurring" className="ml-2 text-sm font-medium text-gray-700">
+          <label htmlFor="reminder-recurring" className="ml-2 text-sm font-medium text-primary">
             Repeat this reminder
           </label>
         </div>
@@ -153,7 +153,7 @@ export const AddReminderForm: React.FC<AddReminderFormProps> = ({ onSuccess }) =
           <div className="ml-6">
             <label
               htmlFor="reminder-frequency"
-              className="block text-sm font-medium text-gray-700 mb-2"
+              className="block text-sm font-medium text-primary mb-2"
             >
               Frequency
             </label>
@@ -163,7 +163,7 @@ export const AddReminderForm: React.FC<AddReminderFormProps> = ({ onSuccess }) =
               onChange={(e) =>
                 setRecurringFrequency(e.target.value as 'daily' | 'weekly' | 'monthly')
               }
-              className="w-full px-4 py-3 rounded-lg border-2 border-gray-200 focus:border-primary-500 focus:outline-none transition-colors"
+              className="w-full px-4 py-3 rounded-lg border-2 border-border focus:border-primary-500 focus:outline-none transition-colors text-primary"
             >
               <option value="daily">Daily</option>
               <option value="weekly">Weekly</option>
