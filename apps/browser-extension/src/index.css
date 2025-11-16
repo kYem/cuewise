@@ -104,6 +104,70 @@
     --gradient-background: linear-gradient(to bottom right, oklch(0.15 0.01 300), oklch(0.18 0.03 295), oklch(0.20 0.05 290));
   }
 
+  /* Purple Theme - Light Mode (explicit for data-theme attribute) */
+  [data-theme="purple"] {
+    --color-primary-50: oklch(0.98 0.01 300);
+    --color-primary-100: oklch(0.96 0.03 300);
+    --color-primary-200: oklch(0.92 0.06 295);
+    --color-primary-300: oklch(0.84 0.12 290);
+    --color-primary-400: oklch(0.72 0.19 285);
+    --color-primary-500: oklch(0.62 0.24 285);
+    --color-primary-600: oklch(0.54 0.24 285);
+    --color-primary-700: oklch(0.48 0.22 285);
+    --color-primary-800: oklch(0.40 0.18 285);
+    --color-primary-900: oklch(0.34 0.14 285);
+
+    /* Semantic colors */
+    --color-background: white;
+    --color-surface: oklch(0.99 0.005 300);
+    --color-surface-elevated: white;
+    --color-surface-variant: oklch(0.97 0.01 300);
+
+    --color-text-primary: oklch(0.20 0.01 300);
+    --color-text-secondary: oklch(0.45 0.01 300);
+    --color-text-tertiary: oklch(0.60 0.01 300);
+
+    --color-border: oklch(0.90 0.005 300);
+    --color-divider: oklch(0.95 0.005 300);
+
+    --gradient-background: linear-gradient(to bottom right, oklch(0.99 0.01 300), oklch(0.96 0.03 295), oklch(0.93 0.05 290));
+  }
+
+  /* Purple Theme - Dark Mode (explicit for data-theme attribute) */
+  :is(.dark, .dark *)[data-theme="purple"] {
+    --color-primary-50: oklch(0.24 0.014 285);
+    --color-primary-100: oklch(0.28 0.03 285);
+    --color-primary-200: oklch(0.34 0.06 290);
+    --color-primary-300: oklch(0.42 0.12 295);
+    --color-primary-400: oklch(0.52 0.19 285);
+    --color-primary-500: oklch(0.68 0.24 285);
+    --color-primary-600: oklch(0.74 0.24 285);
+    --color-primary-700: oklch(0.80 0.22 285);
+    --color-primary-800: oklch(0.86 0.18 285);
+    --color-primary-900: oklch(0.92 0.14 285);
+
+    /* Semantic colors - Dark mode */
+    --color-background: oklch(0.15 0.01 300);
+    --color-surface: oklch(0.18 0.01 300);
+    --color-surface-elevated: oklch(0.22 0.01 300);
+    --color-surface-variant: oklch(0.25 0.01 300);
+
+    --color-text-primary: oklch(0.95 0.01 300);
+    --color-text-secondary: oklch(0.70 0.01 300);
+    --color-text-tertiary: oklch(0.55 0.01 300);
+
+    --color-border: oklch(0.30 0.01 300);
+    --color-divider: oklch(0.25 0.01 300);
+
+    /* Adjusted for dark mode */
+    --color-success: oklch(0.70 0.18 145);
+    --color-warning: oklch(0.80 0.16 85);
+    --color-error: oklch(0.68 0.24 25);
+
+    /* Gradient backgrounds */
+    --gradient-background: linear-gradient(to bottom right, oklch(0.15 0.01 300), oklch(0.18 0.03 295), oklch(0.20 0.05 290));
+  }
+
   /* Forest Green Theme - Light Mode */
   [data-theme="forest"] {
     --color-primary-50: oklch(0.98 0.01 150);

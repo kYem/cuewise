@@ -159,15 +159,15 @@ export const PomodoroTimer: React.FC = () => {
         {isWork && status === 'idle' && (
           <div className="mb-density-md">
             {selectedGoal ? (
-              <div className="flex items-center gap-2 p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-700">
-                <Target className="w-4 h-4 text-purple-600 dark:text-purple-400 flex-shrink-0" />
+              <div className="flex items-center gap-2 p-3 bg-primary-50 rounded-lg border border-primary-200">
+                <Target className="w-4 h-4 text-primary-600 flex-shrink-0" />
                 <span className="text-sm text-primary flex-1">
                   {selectedGoal.text}
                 </span>
                 <button
                   type="button"
                   onClick={() => setSelectedGoal(null)}
-                  className="text-xs text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300"
+                  className="text-xs text-primary-600 hover:text-primary-700"
                   title="Clear goal"
                 >
                   Clear
@@ -214,8 +214,8 @@ export const PomodoroTimer: React.FC = () => {
 
         {/* Active Goal Display (during session) */}
         {isWork && status !== 'idle' && selectedGoal && (
-          <div className="mb-density-md flex items-center gap-2 p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-700">
-            <Target className="w-4 h-4 text-purple-600 dark:text-purple-400 flex-shrink-0" />
+          <div className="mb-density-md flex items-center gap-2 p-3 bg-primary-50 rounded-lg border border-primary-200">
+            <Target className="w-4 h-4 text-primary-600 flex-shrink-0" />
             <span className="text-sm text-primary">{selectedGoal.text}</span>
           </div>
         )}
