@@ -70,3 +70,63 @@ export async function getSettings(): Promise<Settings> {
 export async function setSettings(settings: Settings): Promise<boolean> {
   return setInStorage(STORAGE_KEYS.SETTINGS, settings);
 }
+
+// Storage usage tracking
+export interface StorageUsageInfo {
+  bytesInUse: number;
+  quota: number;
+  percentageUsed: number;
+  isWarning: boolean; // > 75%
+  isCritical: boolean; // > 90%
+}
+
+/**
+ * Get storage usage information for Chrome local storage
+ * Chrome.storage.local quota is 10MB (10485760 bytes)
+ */
+export async function getStorageUsage(): Promise<StorageUsageInfo> {
+  try {
+    // Chrome storage quota for local storage is 10MB
+    const QUOTA_BYTES = 10485760; // 10MB in bytes
+
+    // Get bytes in use from Chrome storage
+    const bytesInUse = await new Promise<number>((resolve) => {
+      chrome.storage.local.getBytesInUse(null, (bytes) => {
+        resolve(bytes);
+      });
+    });
+
+    const percentageUsed = (bytesInUse / QUOTA_BYTES) * 100;
+
+    return {
+      bytesInUse,
+      quota: QUOTA_BYTES,
+      percentageUsed,
+      isWarning: percentageUsed > 75,
+      isCritical: percentageUsed > 90,
+    };
+  } catch (error) {
+    console.error('Error getting storage usage:', error);
+    // Return safe defaults on error
+    return {
+      bytesInUse: 0,
+      quota: 10485760,
+      percentageUsed: 0,
+      isWarning: false,
+      isCritical: false,
+    };
+  }
+}
+
+/**
+ * Format bytes to human-readable string
+ */
+export function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 Bytes';
+
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+
+  return `${Number.parseFloat((bytes / k ** i).toFixed(2))} ${sizes[i]}`;
+}

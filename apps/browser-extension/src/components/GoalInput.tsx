@@ -18,7 +18,10 @@ export const GoalInput: React.FC = () => {
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      handleSubmit(e as any);
+      if (text.trim()) {
+        addGoal(text);
+        setText('');
+      }
     }
   };
 

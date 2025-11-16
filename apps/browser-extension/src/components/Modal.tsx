@@ -35,10 +35,12 @@ export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in">
       {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+      <button
+        type="button"
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm cursor-default"
         onClick={onClose}
         aria-label="Close modal"
+        tabIndex={-1}
       />
 
       {/* Modal Content */}
@@ -47,6 +49,7 @@ export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <h2 className="text-2xl font-semibold text-gray-800">{title}</h2>
           <button
+            type="button"
             onClick={onClose}
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
             aria-label="Close"

@@ -1,17 +1,26 @@
+import { getStorageUsage, type StorageUsageInfo } from '@cuewise/storage';
 import { Target } from 'lucide-react';
 import type React from 'react';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useGoalStore } from '../stores/goal-store';
 import { ErrorFallback } from './ErrorFallback';
 import { GoalInput } from './GoalInput';
 import { GoalsList } from './GoalsList';
+import { StorageIndicator } from './StorageIndicator';
 
 export const GoalsSection: React.FC = () => {
   const { initialize, isLoading, error } = useGoalStore();
+  const [storageUsage, setStorageUsage] = useState<StorageUsageInfo | null>(null);
 
   useEffect(() => {
     initialize();
+    loadStorageInfo();
   }, [initialize]);
+
+  const loadStorageInfo = async () => {
+    const usage = await getStorageUsage();
+    setStorageUsage(usage);
+  };
 
   if (isLoading) {
     return (
@@ -53,6 +62,13 @@ export const GoalsSection: React.FC = () => {
         <div className="mb-6">
           <GoalInput />
         </div>
+
+        {/* Storage Warning - only show if warning or critical */}
+        {storageUsage && (storageUsage.isWarning || storageUsage.isCritical) && (
+          <div className="mb-4">
+            <StorageIndicator mode="compact" />
+          </div>
+        )}
 
         {/* Goals List */}
         <div className="flex-1">

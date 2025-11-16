@@ -71,7 +71,11 @@ export const PomodoroTimer: React.FC = () => {
           {/* Circular Progress */}
           <div className="relative w-64 h-64 mb-6">
             {/* Background circle */}
-            <svg className="w-full h-full transform -rotate-90">
+            <svg
+              className="w-full h-full transform -rotate-90"
+              role="img"
+              aria-label={`Timer progress: ${progress.toFixed(0)}% complete`}
+            >
               <circle cx="128" cy="128" r="120" stroke="#E5E7EB" strokeWidth="8" fill="none" />
               {/* Progress circle */}
               <circle
@@ -116,6 +120,7 @@ export const PomodoroTimer: React.FC = () => {
           {/* Start/Pause/Resume Button */}
           {status === 'idle' && (
             <button
+              type="button"
               onClick={start}
               className="flex items-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors shadow-md hover:shadow-lg"
               title="Start timer"
@@ -127,6 +132,7 @@ export const PomodoroTimer: React.FC = () => {
 
           {status === 'running' && (
             <button
+              type="button"
               onClick={pause}
               className="flex items-center gap-2 px-6 py-3 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors shadow-md hover:shadow-lg"
               title="Pause timer"
@@ -138,6 +144,7 @@ export const PomodoroTimer: React.FC = () => {
 
           {status === 'paused' && (
             <button
+              type="button"
               onClick={resume}
               className="flex items-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors shadow-md hover:shadow-lg"
               title="Resume timer"
@@ -150,6 +157,7 @@ export const PomodoroTimer: React.FC = () => {
           {/* Reset Button */}
           {status !== 'idle' && (
             <button
+              type="button"
               onClick={reset}
               className="p-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors shadow-md hover:shadow-lg"
               title="Reset timer"
@@ -160,6 +168,7 @@ export const PomodoroTimer: React.FC = () => {
 
           {/* Skip Button */}
           <button
+            type="button"
             onClick={skip}
             className="p-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors shadow-md hover:shadow-lg"
             title={`Skip to ${isWork ? 'break' : 'work'}`}

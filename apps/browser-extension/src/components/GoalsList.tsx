@@ -102,6 +102,7 @@ export const GoalsList: React.FC = () => {
           >
             {/* Checkbox */}
             <button
+              type="button"
               onClick={() => toggleGoal(goal.id)}
               className="flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 rounded-full"
               aria-label={goal.completed ? 'Mark as incomplete' : 'Mark as complete'}
@@ -140,6 +141,7 @@ export const GoalsList: React.FC = () => {
 
             {/* Delete Button */}
             <button
+              type="button"
               onClick={() => deleteGoal(goal.id)}
               className="flex-shrink-0 p-2 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 rounded"
               aria-label="Delete goal"
@@ -153,6 +155,7 @@ export const GoalsList: React.FC = () => {
       {/* Clear Completed Button */}
       {completedCount > 0 && (
         <button
+          type="button"
           onClick={() => useGoalStore.getState().clearCompleted()}
           className="w-full py-2 text-sm text-gray-500 hover:text-gray-700 transition-colors"
         >

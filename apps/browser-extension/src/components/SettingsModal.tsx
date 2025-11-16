@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { usePomodoroStore } from '../stores/pomodoro-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { Modal } from './Modal';
+import { StorageIndicator } from './StorageIndicator';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -412,6 +413,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
             </p>
           </div>
         </section>
+
+        {/* Storage Usage */}
+        <StorageIndicator mode="full" />
 
         {/* Action Buttons */}
         <div className="flex items-center justify-between pt-4 border-t border-gray-200">
