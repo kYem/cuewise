@@ -1,10 +1,11 @@
 import { useEffect } from 'react';
 import { generateId, minutesToSeconds, type PomodoroSession } from '@cuewise/shared';
-import { getPomodoroSessions, getSettings, setPomodoroSessions, chromeLocalStorage } from '@cuewise/storage';
+import { getPomodoroSessions, getSettings, setPomodoroSessions } from '@cuewise/storage';
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { playCompletionSound, playStartSound } from '../utils/sounds';
 import { useToastStore } from './toast-store';
+import { chromeLocalStorage } from '../adapters/zustand-chrome-adapter';
 
 type TimerStatus = 'idle' | 'running' | 'paused';
 type SessionType = 'work' | 'break' | 'longBreak';
