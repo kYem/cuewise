@@ -102,7 +102,7 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({ onManualRefresh }) =
       <div className="relative">
         {/* Decorative Quote Marks */}
         <div
-          className="absolute -top-6 -left-4 text-8xl font-serif opacity-10"
+          className="absolute -top-6 -left-4 text-8xl font-serif opacity-20 dark:opacity-30"
           style={{ color: categoryColor }}
         >
           "
@@ -142,7 +142,7 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({ onManualRefresh }) =
 
         {/* Decorative Quote Marks */}
         <div
-          className="absolute -bottom-6 -right-4 text-8xl font-serif opacity-10"
+          className="absolute -bottom-6 -right-4 text-8xl font-serif opacity-20 dark:opacity-30"
           style={{ color: categoryColor }}
         >
           "
