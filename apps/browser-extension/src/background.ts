@@ -34,10 +34,10 @@ async function handleReminderAlarm(reminderId: string) {
       return;
     }
 
-    // Show notification (iconUrl will use Chrome's default icon if not found)
+    // Show notification with custom icon
     await chrome.notifications.create(`reminder-${reminderId}`, {
       type: 'basic',
-      iconUrl: chrome.runtime.getURL('icon-128.png'),
+      iconUrl: chrome.runtime.getURL('icons/icon-128.png'),
       title: '🔔 Reminder',
       message: reminder.text,
       priority: 2,
