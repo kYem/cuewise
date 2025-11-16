@@ -58,6 +58,16 @@ export interface PomodoroSession {
   type: 'work' | 'break';
 }
 
+// Customization types
+export type ColorTheme = 'default' | 'ocean' | 'forest' | 'sunset' | 'lavender' | 'rose';
+export type FontSize = 'xs' | 'sm' | 'base' | 'lg' | 'xl';
+export type LayoutDensity = 'compact' | 'comfortable' | 'spacious';
+
+export interface BackgroundStyle {
+  type: 'solid' | 'gradient' | 'image';
+  value: string; // Color hex, gradient CSS, or image URL
+}
+
 // Settings interface
 export interface Settings {
   pomodoroWorkDuration: number; // minutes (default 25)
@@ -66,6 +76,11 @@ export interface Settings {
   theme: 'light' | 'dark' | 'auto';
   quoteChangeInterval: number; // seconds (0 = manual, 1-3600 = auto-refresh every N seconds)
   timeFormat: '12h' | '24h'; // 12-hour (AM/PM) or 24-hour format
+  // Customization
+  colorTheme: ColorTheme;
+  fontSize: FontSize;
+  layoutDensity: LayoutDensity;
+  backgroundStyle: BackgroundStyle;
 }
 
 // Storage keys

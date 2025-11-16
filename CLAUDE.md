@@ -230,6 +230,72 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
 - Uses storage helpers from `@cuewise/storage`
 - Uses business logic from `@cuewise/shared`
 
+## Error Handling & Logging Pattern
+
+### Unified Error Handling with Toast Store
+
+**Problem**: Avoid repetitive error handling patterns where we call both logger and toast separately:
+
+```typescript
+// AVOID THIS PATTERN:
+const errorMessage = 'Failed to load quotes';
+console.error(errorMessage, error);
+useToastStore.getState().error(errorMessage);
+```
+
+**Solution**: The `toast-store` automatically logs all messages to the console, providing a unified approach for error handling, warnings, and success messages.
+
+**Location**: `apps/browser-extension/src/stores/toast-store.ts`
+
+### Toast Store Pattern
+
+```typescript
+import { useToastStore } from '../stores/toast-store';
+
+// In Zustand store actions
+try {
+  await setSettings(updatedSettings);
+  set({ settings: updatedSettings });
+} catch (error) {
+  console.error('Error updating settings:', error);
+  const errorMessage = 'Failed to update settings. Please try again.';
+  set({ error: errorMessage });
+  useToastStore.getState().error(errorMessage);
+}
+```
+
+**Key Features**:
+- **Automatic logging**: Toast store logs all messages to console automatically
+- **Type-safe**: Uses TypeScript for error typing
+- **Consistent UX**: User sees toast notification, developer sees console logs
+- **Three severity levels**: `error`, `warning`, `success`
+
+### Best Practices
+
+1. **Always log the underlying error object** first with `console.error()` for debugging
+2. **Create user-friendly error messages** for the toast notification
+3. **Use toast store for user-facing feedback**:
+   ```typescript
+   useToastStore.getState().error('User-friendly message');
+   useToastStore.getState().warning('Warning message');
+   useToastStore.getState().success('Success message');
+   ```
+
+4. **Pattern for store error handling**:
+   ```typescript
+   try {
+     // operation
+     await someAsyncOperation();
+   } catch (error) {
+     console.error('Error context for debugging:', error);
+     const errorMessage = 'User-friendly error message';
+     set({ error: errorMessage }); // Update store error state
+     useToastStore.getState().error(errorMessage); // Show user notification
+   }
+   ```
+
+5. **Don't duplicate logging**: Since toast store logs automatically, avoid calling both `console.log` and toast for the same message
+
 ## Component Patterns
 
 ### Imports Organization
@@ -565,6 +631,6 @@ pnpm clean
 
 ---
 
-**Last Updated**: 2025-01-15
+**Last Updated**: 2025-01-16
 
 This guide should give you (Claude) a solid understanding of the codebase structure, patterns, and conventions. When in doubt, refer to existing code in similar contexts.

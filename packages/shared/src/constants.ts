@@ -1,4 +1,4 @@
-import type { QuoteCategory, Settings } from './types';
+import type { ColorTheme, FontSize, LayoutDensity, QuoteCategory, Settings } from './types';
 
 // Default settings
 export const DEFAULT_SETTINGS: Settings = {
@@ -8,6 +8,13 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: 'light',
   quoteChangeInterval: 10, // 0 = manual, 10+ = auto-refresh interval in seconds
   timeFormat: '12h',
+  colorTheme: 'default',
+  fontSize: 'base',
+  layoutDensity: 'comfortable',
+  backgroundStyle: {
+    type: 'gradient',
+    value: 'linear-gradient(to bottom right, #faf5ff, #eff6ff, #e0e7ff)',
+  },
 };
 
 // Quote categories with display names
@@ -36,4 +43,63 @@ export const CATEGORY_COLORS: Record<QuoteCategory, string> = {
   leadership: '#6366F1', // indigo
   health: '#14B8A6', // teal
   growth: '#84CC16', // lime
+};
+
+// Color theme definitions
+export const COLOR_THEMES: Record<
+  ColorTheme,
+  { name: string; primary: string; background: string; accent: string }
+> = {
+  default: {
+    name: 'Default Purple',
+    primary: '#8B5CF6',
+    background: 'linear-gradient(to bottom right, #faf5ff, #eff6ff, #e0e7ff)',
+    accent: '#7c3aed',
+  },
+  ocean: {
+    name: 'Ocean Blue',
+    primary: '#0ea5e9',
+    background: 'linear-gradient(to bottom right, #f0f9ff, #e0f2fe, #bae6fd)',
+    accent: '#0284c7',
+  },
+  forest: {
+    name: 'Forest Green',
+    primary: '#10b981',
+    background: 'linear-gradient(to bottom right, #f0fdf4, #dcfce7, #bbf7d0)',
+    accent: '#059669',
+  },
+  sunset: {
+    name: 'Sunset Orange',
+    primary: '#f97316',
+    background: 'linear-gradient(to bottom right, #fff7ed, #ffedd5, #fed7aa)',
+    accent: '#ea580c',
+  },
+  lavender: {
+    name: 'Soft Lavender',
+    primary: '#a78bfa',
+    background: 'linear-gradient(to bottom right, #faf5ff, #f3e8ff, #e9d5ff)',
+    accent: '#8b5cf6',
+  },
+  rose: {
+    name: 'Rose Pink',
+    primary: '#f43f5e',
+    background: 'linear-gradient(to bottom right, #fff1f2, #ffe4e6, #fecdd3)',
+    accent: '#e11d48',
+  },
+};
+
+// Font size scales (multiplier for base font size)
+export const FONT_SIZE_SCALES: Record<FontSize, number> = {
+  xs: 0.875,
+  sm: 0.9375,
+  base: 1,
+  lg: 1.0625,
+  xl: 1.125,
+};
+
+// Layout density spacing multipliers
+export const LAYOUT_DENSITY_SPACING: Record<LayoutDensity, number> = {
+  compact: 0.75,
+  comfortable: 1,
+  spacious: 1.25,
 };
