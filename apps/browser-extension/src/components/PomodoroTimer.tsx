@@ -4,8 +4,10 @@ import type React from 'react';
 import { useEffect, useState } from 'react';
 import { useGoalStore } from '../stores/goal-store';
 import { usePomodoroStore } from '../stores/pomodoro-store';
+import { useSettingsStore } from '../stores/settings-store';
 import { ambientSoundPlayer } from '../utils/ambient-sounds';
 import { getSessionStyles } from '../utils/pomodoro-styles';
+import { EditableValue } from './EditableValue';
 
 export const PomodoroTimer: React.FC = () => {
   const {
@@ -29,9 +31,11 @@ export const PomodoroTimer: React.FC = () => {
     skip,
     tick,
     setSelectedGoal,
+    reloadSettings,
   } = usePomodoroStore();
 
   const { todayGoals, initialize: initGoals } = useGoalStore();
+  const { updateSettings, settings } = useSettingsStore();
 
   const [showGoalPicker, setShowGoalPicker] = useState(false);
 
@@ -87,8 +91,14 @@ export const PomodoroTimer: React.FC = () => {
   const isWork = sessionType === 'work';
 
   // Get session-specific styles
-  const { color, bgColor, borderColor, progressColor, label, icon: SessionIcon } =
-    getSessionStyles(sessionType);
+  const {
+    color,
+    bgColor,
+    borderColor,
+    progressColor,
+    label,
+    icon: SessionIcon,
+  } = getSessionStyles(sessionType);
 
   // Find selected goal
   const selectedGoal = todayGoals.find((g) => g.id === selectedGoalId);
@@ -304,11 +314,57 @@ export const PomodoroTimer: React.FC = () => {
           </button>
         </div>
 
-        {/* Help Text */}
+        {/* Help Text - Interactive Settings */}
         <div className="mt-6 text-center text-xs text-gray-500">
-          <p>
-            Focus for {workDuration} minutes • {breakDuration}-minute breaks • {longBreakDuration}
-            -minute long break every {longBreakInterval} sessions
+          <p className="leading-relaxed">
+            Focus for{' '}
+            <EditableValue
+              value={workDuration}
+              unit="minutes"
+              presets={[15, 20, 25, 30, 45, 60]}
+              min={1}
+              max={60}
+              onChange={async (value) => {
+                await updateSettings({ ...settings, pomodoroWorkDuration: value });
+                await reloadSettings();
+              }}
+            />{' '}
+            •{' '}
+            <EditableValue
+              value={breakDuration}
+              unit="minute"
+              presets={[3, 5, 10, 15]}
+              min={1}
+              max={30}
+              onChange={async (value) => {
+                await updateSettings({ ...settings, pomodoroBreakDuration: value });
+                await reloadSettings();
+              }}
+            />{' '}
+            breaks •{' '}
+            <EditableValue
+              value={longBreakDuration}
+              unit="minute"
+              presets={[15, 20, 25, 30]}
+              min={10}
+              max={60}
+              onChange={async (value) => {
+                await updateSettings({ ...settings, pomodoroLongBreakDuration: value });
+                await reloadSettings();
+              }}
+            />{' '}
+            long break every{' '}
+            <EditableValue
+              value={longBreakInterval}
+              unit={longBreakInterval === 1 ? 'session' : 'sessions'}
+              presets={[2, 3, 4, 5, 6, 8]}
+              min={2}
+              max={10}
+              onChange={async (value) => {
+                await updateSettings({ ...settings, pomodoroLongBreakInterval: value });
+                await reloadSettings();
+              }}
+            />
           </p>
           {ambientSound !== 'none' && isWork && (
             <p className="mt-1 text-purple-600">🎵 Ambient sound: {ambientSound}</p>

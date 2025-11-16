@@ -1,4 +1,11 @@
-import { AMBIENT_SOUNDS, COLOR_THEMES, type BackgroundStyle, type ColorTheme, type FontSize, type LayoutDensity } from '@cuewise/shared';
+import {
+  AMBIENT_SOUNDS,
+  type BackgroundStyle,
+  COLOR_THEMES,
+  type ColorTheme,
+  type FontSize,
+  type LayoutDensity,
+} from '@cuewise/shared';
 import {
   Bell,
   BellOff,
@@ -772,7 +779,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
 
             {/* Background value input */}
             <div>
-              <label htmlFor="background-value" className="block text-sm font-medium text-gray-700 mb-2">
+              <label
+                htmlFor="background-value"
+                className="block text-sm font-medium text-gray-700 mb-2"
+              >
                 {backgroundStyle.type === 'solid' && 'Color (hex):'}
                 {backgroundStyle.type === 'gradient' && 'Gradient (CSS):'}
                 {backgroundStyle.type === 'image' && 'Image URL:'}
