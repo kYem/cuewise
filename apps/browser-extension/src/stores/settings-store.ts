@@ -4,7 +4,7 @@ import {
   type LayoutDensity,
   type Settings,
 } from '@cuewise/shared';
-import { getSettings, setSettings } from '@cuewise/storage';
+import { getSettings, migrateStorageData, setSettings } from '@cuewise/storage';
 import { create } from 'zustand';
 import { useToastStore } from './toast-store';
 
@@ -185,6 +185,25 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     const updatedSettings = { ...settings, ...partialSettings };
 
     try {
+      // Check if syncEnabled changed
+      const syncChanged = partialSettings.syncEnabled !== undefined && partialSettings.syncEnabled !== settings.syncEnabled;
+
+      // If sync setting changed, migrate data before saving settings
+      if (syncChanged) {
+        const fromArea = settings.syncEnabled ? 'sync' : 'local';
+        const toArea = partialSettings.syncEnabled ? 'sync' : 'local';
+
+        useToastStore.getState().success(`Migrating data to ${toArea} storage...`);
+        const migrated = await migrateStorageData(fromArea, toArea);
+
+        if (!migrated) {
+          const errorMessage = 'Failed to migrate data. Please try again.';
+          set({ error: errorMessage });
+          useToastStore.getState().error(errorMessage);
+          return;
+        }
+      }
+
       await setSettings(updatedSettings);
       set({ settings: updatedSettings });
 

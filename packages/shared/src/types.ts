@@ -75,6 +75,7 @@ export interface Settings {
   theme: 'light' | 'dark' | 'auto';
   quoteChangeInterval: number; // seconds (0 = manual, 1-3600 = auto-refresh every N seconds)
   timeFormat: '12h' | '24h'; // 12-hour (AM/PM) or 24-hour format
+  syncEnabled: boolean; // Enable Chrome sync for cross-device synchronization (default false)
   // Customization
   colorTheme: ColorTheme;
   layoutDensity: LayoutDensity;
