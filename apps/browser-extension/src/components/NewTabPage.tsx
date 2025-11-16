@@ -34,7 +34,8 @@ export const NewTabPage: React.FC = () => {
   const [lastManualRefresh, setLastManualRefresh] = useState(Date.now());
   const [currentTime, setCurrentTime] = useState(new Date());
   const [showStickyHeader, setShowStickyHeader] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
+  const stickyMenuRef = useRef<HTMLDivElement>(null);
+  const floatingMenuRef = useRef<HTMLDivElement>(null);
   const clockRef = useRef<HTMLDivElement>(null);
 
   // Update time every second for sticky header
@@ -98,7 +99,10 @@ export const NewTabPage: React.FC = () => {
   // Close menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+      const clickedInStickyMenu = stickyMenuRef.current?.contains(event.target as Node);
+      const clickedInFloatingMenu = floatingMenuRef.current?.contains(event.target as Node);
+
+      if (!clickedInStickyMenu && !clickedInFloatingMenu) {
         setIsMenuOpen(false);
       }
     };
@@ -186,7 +190,7 @@ export const NewTabPage: React.FC = () => {
               )}
 
               {/* Menu Dropdown */}
-              <div className="relative" ref={menuRef}>
+              <div className="relative" ref={stickyMenuRef}>
                 <button
                   type="button"
                   onClick={() => setIsMenuOpen(!isMenuOpen)}
@@ -263,7 +267,7 @@ export const NewTabPage: React.FC = () => {
           )}
 
           {/* Menu Dropdown */}
-          <div className="relative" ref={menuRef}>
+          <div className="relative" ref={floatingMenuRef}>
             <button
               type="button"
               onClick={() => setIsMenuOpen(!isMenuOpen)}

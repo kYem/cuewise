@@ -1,11 +1,17 @@
 import { useEffect } from 'react';
-import { generateId, minutesToSeconds, type PomodoroSession } from '@cuewise/shared';
+import { generateId, minutesToSeconds, type PomodoroSession, createLogger, LogLevel } from '@cuewise/shared';
 import { getPomodoroSessions, getSettings, setPomodoroSessions } from '@cuewise/storage';
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { playCompletionSound, playStartSound } from '../utils/sounds';
 import { useToastStore } from './toast-store';
 import { chromeLocalStorage } from '../adapters/zustand-chrome-adapter';
+
+const logger = createLogger({
+  prefix: '[PomodoroStore]',
+  minLevel: import.meta.env.DEV ? LogLevel.DEBUG : LogLevel.WARN,
+  includeTimestamp: false,
+});
 
 type TimerStatus = 'idle' | 'running' | 'paused';
 type SessionType = 'work' | 'break' | 'longBreak';
@@ -89,12 +95,16 @@ export const usePomodoroStore = create<PomodoroStore>()(
 
       // Check if timer was running when all tabs closed
       const { status, timeRemaining, lastTickTime } = get();
+      logger.debug('Initialize', { status, timeRemaining, lastTickTime });
+
       if (status === 'running' && lastTickTime && timeRemaining > 0) {
         const now = Date.now();
         const elapsedSeconds = Math.floor((now - lastTickTime) / 1000);
         const adjustedTimeRemaining = Math.max(0, timeRemaining - elapsedSeconds);
+        logger.debug('Timer was running', { elapsed: elapsedSeconds, adjusted: adjustedTimeRemaining });
 
         if (adjustedTimeRemaining === 0) {
+          logger.debug('Timer expired, completing session');
           // Timer expired while tabs were closed
           set({
             workDuration,
@@ -110,6 +120,7 @@ export const usePomodoroStore = create<PomodoroStore>()(
           // Complete the session
           get().completeSession();
         } else {
+          logger.debug('Timer still active, resuming with adjusted time');
           // Timer still has time left - resume with adjusted time
           set({
             workDuration,
@@ -125,6 +136,7 @@ export const usePomodoroStore = create<PomodoroStore>()(
           });
         }
       } else {
+        logger.debug('No active timer to resume');
         // No running timer or timer was paused
         set({
           workDuration,
@@ -138,7 +150,7 @@ export const usePomodoroStore = create<PomodoroStore>()(
         });
       }
     } catch (error) {
-      console.error('Error initializing pomodoro store:', error);
+      logger.error('Error initializing pomodoro store', error);
       const errorMessage = 'Failed to load pomodoro data. Please refresh the page.';
       set({ error: errorMessage, isLoading: false });
       useToastStore.getState().error(errorMessage);
@@ -185,7 +197,7 @@ export const usePomodoroStore = create<PomodoroStore>()(
         });
       }
     } catch (error) {
-      console.error('Error reloading settings:', error);
+      logger.error('Error reloading settings', error);
       const errorMessage = 'Failed to reload settings. Please try again.';
       set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
@@ -368,7 +380,7 @@ export const usePomodoroStore = create<PomodoroStore>()(
         new Notification('Pomodoro Timer', { body: message });
       }
     } catch (error) {
-      console.error('Error completing pomodoro session:', error);
+      logger.error('Error completing pomodoro session', error);
       const errorMessage = 'Failed to save session. Please try again.';
       set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
