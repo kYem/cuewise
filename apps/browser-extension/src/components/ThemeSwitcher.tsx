@@ -13,29 +13,14 @@ export const ThemeSwitcher: React.FC<ThemeSwitcherProps> = ({ isVisible }) => {
 
   const colorThemes: { value: ColorTheme; label: string; gradient: string }[] = [
     {
-      value: 'default',
+      value: 'purple',
       label: 'Purple',
       gradient: 'linear-gradient(to bottom right, #faf5ff, #eff6ff, #e0e7ff)',
-    },
-    {
-      value: 'ocean',
-      label: 'Ocean',
-      gradient: 'linear-gradient(to bottom right, #f0f9ff, #e0f2fe, #bae6fd)',
     },
     {
       value: 'forest',
       label: 'Forest',
       gradient: 'linear-gradient(to bottom right, #f0fdf4, #dcfce7, #bbf7d0)',
-    },
-    {
-      value: 'sunset',
-      label: 'Sunset',
-      gradient: 'linear-gradient(to bottom right, #fff7ed, #ffedd5, #fed7aa)',
-    },
-    {
-      value: 'lavender',
-      label: 'Lavender',
-      gradient: 'linear-gradient(to bottom right, #faf5ff, #f3e8ff, #e9d5ff)',
     },
     {
       value: 'rose',

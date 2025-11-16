@@ -44,17 +44,17 @@ export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }
       />
 
       {/* Modal Content */}
-      <div className="relative bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden animate-slide-up">
+      <div className="relative bg-surface-elevated rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden animate-slide-up">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
-          <h2 className="text-2xl font-semibold text-gray-800">{title}</h2>
+        <div className="flex items-center justify-between p-6 border-b border-border">
+          <h2 className="text-2xl font-semibold text-primary">{title}</h2>
           <button
             type="button"
             onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            className="p-2 hover:bg-surface-variant rounded-lg transition-colors"
             aria-label="Close"
           >
-            <X className="w-5 h-5 text-gray-500" />
+            <X className="w-5 h-5 text-secondary" />
           </button>
         </div>
 

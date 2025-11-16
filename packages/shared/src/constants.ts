@@ -12,7 +12,7 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: 'light',
   quoteChangeInterval: 10, // 0 = manual, 10+ = auto-refresh interval in seconds
   timeFormat: '12h',
-  colorTheme: 'default',
+  colorTheme: 'purple',
   layoutDensity: 'comfortable',
   showThemeSwitcher: false,
 };
@@ -63,35 +63,17 @@ export const COLOR_THEMES: Record<
   ColorTheme,
   { name: string; primary: string; background: string; accent: string }
 > = {
-  default: {
-    name: 'Default Purple',
+  purple: {
+    name: 'Purple',
     primary: '#8B5CF6',
     background: 'linear-gradient(to bottom right, #faf5ff, #eff6ff, #e0e7ff)',
     accent: '#7c3aed',
-  },
-  ocean: {
-    name: 'Ocean Blue',
-    primary: '#0ea5e9',
-    background: 'linear-gradient(to bottom right, #f0f9ff, #e0f2fe, #bae6fd)',
-    accent: '#0284c7',
   },
   forest: {
     name: 'Forest Green',
     primary: '#10b981',
     background: 'linear-gradient(to bottom right, #f0fdf4, #dcfce7, #bbf7d0)',
     accent: '#059669',
-  },
-  sunset: {
-    name: 'Sunset Orange',
-    primary: '#f97316',
-    background: 'linear-gradient(to bottom right, #fff7ed, #ffedd5, #fed7aa)',
-    accent: '#ea580c',
-  },
-  lavender: {
-    name: 'Soft Lavender',
-    primary: '#a78bfa',
-    background: 'linear-gradient(to bottom right, #faf5ff, #f3e8ff, #e9d5ff)',
-    accent: '#8b5cf6',
   },
   rose: {
     name: 'Rose Pink',

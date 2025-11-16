@@ -60,7 +60,7 @@ export interface PomodoroSession {
 }
 
 // Customization types
-export type ColorTheme = 'default' | 'ocean' | 'forest' | 'sunset' | 'lavender' | 'rose';
+export type ColorTheme = 'purple' | 'forest' | 'rose';
 export type LayoutDensity = 'compact' | 'comfortable' | 'spacious';
 
 // Settings interface

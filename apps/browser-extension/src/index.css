@@ -15,6 +15,27 @@
   --color-primary-800: oklch(0.40 0.18 285);
   --color-primary-900: oklch(0.34 0.14 285);
 
+  /* Semantic colors - Light mode defaults */
+  --color-background: white;
+  --color-surface: oklch(0.99 0.005 300);
+  --color-surface-elevated: white;
+  --color-surface-variant: oklch(0.97 0.01 300);
+
+  --color-text-primary: oklch(0.20 0.01 300);
+  --color-text-secondary: oklch(0.45 0.01 300);
+  --color-text-tertiary: oklch(0.60 0.01 300);
+
+  --color-border: oklch(0.90 0.005 300);
+  --color-divider: oklch(0.95 0.005 300);
+
+  /* Theme-independent functional colors */
+  --color-success: oklch(0.65 0.18 145);
+  --color-warning: oklch(0.75 0.16 85);
+  --color-error: oklch(0.62 0.24 25);
+
+  /* Gradient backgrounds */
+  --gradient-background: linear-gradient(to bottom right, oklch(0.99 0.01 300), oklch(0.96 0.03 295), oklch(0.93 0.05 290));
+
   /* Custom fonts */
   --font-sans: Inter, system-ui, sans-serif;
   --font-display: Poppins, system-ui, sans-serif;
@@ -60,34 +81,27 @@
     --color-primary-700: oklch(0.80 0.22 285);
     --color-primary-800: oklch(0.86 0.18 285);
     --color-primary-900: oklch(0.92 0.14 285);
-  }
 
-  /* Ocean Blue Theme - Light Mode */
-  [data-theme="ocean"] {
-    --color-primary-50: oklch(0.98 0.01 230);
-    --color-primary-100: oklch(0.96 0.02 230);
-    --color-primary-200: oklch(0.92 0.05 225);
-    --color-primary-300: oklch(0.84 0.10 220);
-    --color-primary-400: oklch(0.72 0.15 215);
-    --color-primary-500: oklch(0.62 0.18 212);
-    --color-primary-600: oklch(0.54 0.18 210);
-    --color-primary-700: oklch(0.46 0.16 208);
-    --color-primary-800: oklch(0.38 0.12 205);
-    --color-primary-900: oklch(0.30 0.10 202);
-  }
+    /* Semantic colors - Dark mode */
+    --color-background: oklch(0.15 0.01 300);
+    --color-surface: oklch(0.18 0.01 300);
+    --color-surface-elevated: oklch(0.22 0.01 300);
+    --color-surface-variant: oklch(0.25 0.01 300);
 
-  /* Ocean Blue Theme - Dark Mode */
-  :is(.dark, .dark *)[data-theme="ocean"] {
-    --color-primary-50: oklch(0.22 0.01 230);
-    --color-primary-100: oklch(0.26 0.02 230);
-    --color-primary-200: oklch(0.32 0.05 225);
-    --color-primary-300: oklch(0.40 0.10 220);
-    --color-primary-400: oklch(0.50 0.15 215);
-    --color-primary-500: oklch(0.68 0.18 212);
-    --color-primary-600: oklch(0.74 0.18 210);
-    --color-primary-700: oklch(0.80 0.16 208);
-    --color-primary-800: oklch(0.86 0.12 205);
-    --color-primary-900: oklch(0.92 0.10 202);
+    --color-text-primary: oklch(0.95 0.01 300);
+    --color-text-secondary: oklch(0.70 0.01 300);
+    --color-text-tertiary: oklch(0.55 0.01 300);
+
+    --color-border: oklch(0.30 0.01 300);
+    --color-divider: oklch(0.25 0.01 300);
+
+    /* Adjusted for dark mode */
+    --color-success: oklch(0.70 0.18 145);
+    --color-warning: oklch(0.80 0.16 85);
+    --color-error: oklch(0.68 0.24 25);
+
+    /* Gradient backgrounds */
+    --gradient-background: linear-gradient(to bottom right, oklch(0.15 0.01 300), oklch(0.18 0.03 295), oklch(0.20 0.05 290));
   }
 
   /* Forest Green Theme - Light Mode */
@@ -102,6 +116,21 @@
     --color-primary-700: oklch(0.44 0.18 145);
     --color-primary-800: oklch(0.36 0.14 145);
     --color-primary-900: oklch(0.28 0.12 145);
+
+    /* Semantic colors */
+    --color-background: white;
+    --color-surface: oklch(0.99 0.005 150);
+    --color-surface-elevated: white;
+    --color-surface-variant: oklch(0.97 0.01 150);
+
+    --color-text-primary: oklch(0.20 0.01 150);
+    --color-text-secondary: oklch(0.45 0.01 150);
+    --color-text-tertiary: oklch(0.60 0.01 150);
+
+    --color-border: oklch(0.90 0.005 150);
+    --color-divider: oklch(0.95 0.005 150);
+
+    --gradient-background: linear-gradient(to bottom right, oklch(0.99 0.01 150), oklch(0.96 0.03 148), oklch(0.93 0.05 146));
   }
 
   /* Forest Green Theme - Dark Mode */
@@ -116,62 +145,21 @@
     --color-primary-700: oklch(0.80 0.18 145);
     --color-primary-800: oklch(0.86 0.14 145);
     --color-primary-900: oklch(0.92 0.12 145);
-  }
 
-  /* Sunset Orange Theme - Light Mode */
-  [data-theme="sunset"] {
-    --color-primary-50: oklch(0.98 0.01 50);
-    --color-primary-100: oklch(0.96 0.03 45);
-    --color-primary-200: oklch(0.90 0.08 40);
-    --color-primary-300: oklch(0.82 0.14 35);
-    --color-primary-400: oklch(0.72 0.18 30);
-    --color-primary-500: oklch(0.64 0.20 28);
-    --color-primary-600: oklch(0.56 0.20 26);
-    --color-primary-700: oklch(0.48 0.18 24);
-    --color-primary-800: oklch(0.40 0.14 22);
-    --color-primary-900: oklch(0.32 0.12 20);
-  }
+    /* Semantic colors - Dark mode */
+    --color-background: oklch(0.15 0.01 150);
+    --color-surface: oklch(0.18 0.01 150);
+    --color-surface-elevated: oklch(0.22 0.01 150);
+    --color-surface-variant: oklch(0.25 0.01 150);
 
-  /* Sunset Orange Theme - Dark Mode */
-  :is(.dark, .dark *)[data-theme="sunset"] {
-    --color-primary-50: oklch(0.24 0.012 50);
-    --color-primary-100: oklch(0.28 0.03 45);
-    --color-primary-200: oklch(0.34 0.08 40);
-    --color-primary-300: oklch(0.42 0.14 35);
-    --color-primary-400: oklch(0.52 0.18 30);
-    --color-primary-500: oklch(0.70 0.20 28);
-    --color-primary-600: oklch(0.76 0.20 26);
-    --color-primary-700: oklch(0.82 0.18 24);
-    --color-primary-800: oklch(0.88 0.14 22);
-    --color-primary-900: oklch(0.94 0.12 20);
-  }
+    --color-text-primary: oklch(0.95 0.01 150);
+    --color-text-secondary: oklch(0.70 0.01 150);
+    --color-text-tertiary: oklch(0.55 0.01 150);
 
-  /* Soft Lavender Theme - Light Mode */
-  [data-theme="lavender"] {
-    --color-primary-50: oklch(0.98 0.01 310);
-    --color-primary-100: oklch(0.96 0.02 310);
-    --color-primary-200: oklch(0.92 0.05 305);
-    --color-primary-300: oklch(0.84 0.10 300);
-    --color-primary-400: oklch(0.74 0.16 295);
-    --color-primary-500: oklch(0.66 0.20 293);
-    --color-primary-600: oklch(0.58 0.22 291);
-    --color-primary-700: oklch(0.50 0.20 289);
-    --color-primary-800: oklch(0.42 0.16 287);
-    --color-primary-900: oklch(0.34 0.14 285);
-  }
+    --color-border: oklch(0.30 0.01 150);
+    --color-divider: oklch(0.25 0.01 150);
 
-  /* Soft Lavender Theme - Dark Mode */
-  :is(.dark, .dark *)[data-theme="lavender"] {
-    --color-primary-50: oklch(0.22 0.014 310);
-    --color-primary-100: oklch(0.26 0.02 310);
-    --color-primary-200: oklch(0.32 0.05 305);
-    --color-primary-300: oklch(0.40 0.10 300);
-    --color-primary-400: oklch(0.50 0.16 295);
-    --color-primary-500: oklch(0.72 0.20 293);
-    --color-primary-600: oklch(0.78 0.22 291);
-    --color-primary-700: oklch(0.84 0.20 289);
-    --color-primary-800: oklch(0.90 0.16 287);
-    --color-primary-900: oklch(0.94 0.14 285);
+    --gradient-background: linear-gradient(to bottom right, oklch(0.15 0.01 150), oklch(0.18 0.03 148), oklch(0.20 0.05 146));
   }
 
   /* Rose Pink Theme - Light Mode */
@@ -186,6 +174,21 @@
     --color-primary-700: oklch(0.44 0.20 358);
     --color-primary-800: oklch(0.36 0.16 356);
     --color-primary-900: oklch(0.28 0.14 354);
+
+    /* Semantic colors */
+    --color-background: white;
+    --color-surface: oklch(0.99 0.005 10);
+    --color-surface-elevated: white;
+    --color-surface-variant: oklch(0.97 0.01 10);
+
+    --color-text-primary: oklch(0.20 0.01 10);
+    --color-text-secondary: oklch(0.45 0.01 10);
+    --color-text-tertiary: oklch(0.60 0.01 10);
+
+    --color-border: oklch(0.90 0.005 10);
+    --color-divider: oklch(0.95 0.005 10);
+
+    --gradient-background: linear-gradient(to bottom right, oklch(0.99 0.01 10), oklch(0.96 0.03 8), oklch(0.93 0.05 6));
   }
 
   /* Rose Pink Theme - Dark Mode */
@@ -200,6 +203,21 @@
     --color-primary-700: oklch(0.82 0.20 358);
     --color-primary-800: oklch(0.88 0.16 356);
     --color-primary-900: oklch(0.94 0.14 354);
+
+    /* Semantic colors - Dark mode */
+    --color-background: oklch(0.15 0.01 10);
+    --color-surface: oklch(0.18 0.01 10);
+    --color-surface-elevated: oklch(0.22 0.01 10);
+    --color-surface-variant: oklch(0.25 0.01 10);
+
+    --color-text-primary: oklch(0.95 0.01 10);
+    --color-text-secondary: oklch(0.70 0.01 10);
+    --color-text-tertiary: oklch(0.55 0.01 10);
+
+    --color-border: oklch(0.30 0.01 10);
+    --color-divider: oklch(0.25 0.01 10);
+
+    --gradient-background: linear-gradient(to bottom right, oklch(0.15 0.01 10), oklch(0.18 0.03 8), oklch(0.20 0.05 6));
   }
 
   /* Layout Density Scales - controls both spacing AND font size */
@@ -251,20 +269,14 @@
     font-size: calc(16px * var(--font-scale));
   }
 
-  /* Light mode backgrounds and text */
+  /* Theme-aware backgrounds and text */
   body {
     width: 100%;
     height: 100%;
-    background: linear-gradient(to bottom right, #faf5ff, #eff6ff, #e0e7ff);
-    color: #111827;
+    background: var(--gradient-background);
+    color: var(--color-text-primary);
     font-family: "Inter", system-ui, sans-serif;
     transition: background-color 0.3s ease, color 0.3s ease;
-  }
-
-  /* Dark mode backgrounds and text */
-  .dark body {
-    background: linear-gradient(to bottom right, #0f172a, #1e1b4b, #1e293b);
-    color: #f1f5f9;
   }
 
   #root {
@@ -285,6 +297,27 @@
   .text-balance {
     text-wrap: balance;
   }
+
+  /* Semantic color utilities */
+  .bg-background { background-color: var(--color-background); }
+  .bg-surface { background-color: var(--color-surface); }
+  .bg-surface-elevated { background-color: var(--color-surface-elevated); }
+  .bg-surface-variant { background-color: var(--color-surface-variant); }
+
+  .text-primary { color: var(--color-text-primary); }
+  .text-secondary { color: var(--color-text-secondary); }
+  .text-tertiary { color: var(--color-text-tertiary); }
+
+  .border-border { border-color: var(--color-border); }
+  .border-divider { border-color: var(--color-divider); }
+
+  .bg-success { background-color: var(--color-success); }
+  .bg-warning { background-color: var(--color-warning); }
+  .bg-error { background-color: var(--color-error); }
+
+  .text-success { color: var(--color-success); }
+  .text-warning { color: var(--color-warning); }
+  .text-error { color: var(--color-error); }
 
   /* Density-responsive spacing utilities */
   /* Padding */
