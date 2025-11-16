@@ -5,6 +5,8 @@ import { InsightsPage } from './components/InsightsPage';
 import { NewTabPage } from './components/NewTabPage';
 import { PomodoroPage } from './components/PomodoroPage';
 import { QuoteManagementPage } from './components/QuoteManagementPage';
+import { ThemeSwitcher } from './components/ThemeSwitcher';
+import { useSettingsStore } from './stores/settings-store';
 import { useToastStore } from './stores/toast-store';
 
 type Page = 'home' | 'pomodoro' | 'insights' | 'quotes';
@@ -12,6 +14,7 @@ type Page = 'home' | 'pomodoro' | 'insights' | 'quotes';
 function App() {
   const [currentPage, setCurrentPage] = useState<Page>('home');
   const { toasts, removeToast } = useToastStore();
+  const { settings } = useSettingsStore();
 
   useEffect(() => {
     const handleHashChange = () => {
@@ -40,10 +43,18 @@ function App() {
 
   return (
     <ErrorBoundary>
-      {currentPage === 'pomodoro' && <PomodoroPage />}
-      {currentPage === 'insights' && <InsightsPage />}
-      {currentPage === 'quotes' && <QuoteManagementPage />}
-      {currentPage === 'home' && <NewTabPage />}
+      <div className="flex h-full w-full">
+        {/* Main content area */}
+        <div className="flex-1 overflow-auto">
+          {currentPage === 'pomodoro' && <PomodoroPage />}
+          {currentPage === 'insights' && <InsightsPage />}
+          {currentPage === 'quotes' && <QuoteManagementPage />}
+          {currentPage === 'home' && <NewTabPage />}
+        </div>
+
+        {/* Live Theme Switcher (pushes content to the left when visible) */}
+        <ThemeSwitcher isVisible={settings.showThemeSwitcher} />
+      </div>
 
       {/* Toast notifications */}
       <ToastContainer toasts={toasts} onClose={removeToast} position="top-right" />

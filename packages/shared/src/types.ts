@@ -61,13 +61,7 @@ export interface PomodoroSession {
 
 // Customization types
 export type ColorTheme = 'default' | 'ocean' | 'forest' | 'sunset' | 'lavender' | 'rose';
-export type FontSize = 'xs' | 'sm' | 'base' | 'lg' | 'xl';
 export type LayoutDensity = 'compact' | 'comfortable' | 'spacious';
-
-export interface BackgroundStyle {
-  type: 'solid' | 'gradient' | 'image';
-  value: string; // Color hex, gradient CSS, or image URL
-}
 
 // Settings interface
 export interface Settings {
@@ -83,9 +77,8 @@ export interface Settings {
   timeFormat: '12h' | '24h'; // 12-hour (AM/PM) or 24-hour format
   // Customization
   colorTheme: ColorTheme;
-  fontSize: FontSize;
   layoutDensity: LayoutDensity;
-  backgroundStyle: BackgroundStyle;
+  showThemeSwitcher: boolean; // Show live theme switcher sidebar
 }
 
 // Storage keys

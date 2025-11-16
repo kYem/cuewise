@@ -1,11 +1,6 @@
-import type { BackgroundStyle } from '@cuewise/shared';
 import {
-  COLOR_THEMES,
-  type ColorTheme,
   DEFAULT_SETTINGS,
-  FONT_SIZE_SCALES,
-  type FontSize,
-  LAYOUT_DENSITY_SPACING,
+  type ColorTheme,
   type LayoutDensity,
   type Settings,
 } from '@cuewise/shared';
@@ -27,9 +22,7 @@ interface SettingsStore {
   updateNotifications: (enabled: boolean) => Promise<void>;
   updateQuoteChangeInterval: (interval: Settings['quoteChangeInterval']) => Promise<void>;
   updateColorTheme: (colorTheme: ColorTheme) => Promise<void>;
-  updateFontSize: (fontSize: FontSize) => Promise<void>;
   updateLayoutDensity: (density: LayoutDensity) => Promise<void>;
-  updateBackgroundStyle: (style: BackgroundStyle) => Promise<void>;
   updateSettings: (settings: Partial<Settings>) => Promise<void>;
   resetToDefaults: () => Promise<void>;
 }
@@ -56,9 +49,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       // Apply all customization on initialization
       applyTheme(settings.theme);
       applyColorTheme(settings.colorTheme);
-      applyFontSize(settings.fontSize);
       applyLayoutDensity(settings.layoutDensity);
-      applyBackgroundStyle(settings.backgroundStyle);
     } catch (error) {
       console.error('Error initializing settings store:', error);
       const errorMessage = 'Failed to load settings. Please refresh the page.';
@@ -173,22 +164,6 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     }
   },
 
-  updateFontSize: async (fontSize: FontSize) => {
-    const { settings } = get();
-    const updatedSettings = { ...settings, fontSize };
-
-    try {
-      await setSettings(updatedSettings);
-      set({ settings: updatedSettings });
-      applyFontSize(fontSize);
-    } catch (error) {
-      console.error('Error updating font size:', error);
-      const errorMessage = 'Failed to update font size. Please try again.';
-      set({ error: errorMessage });
-      useToastStore.getState().error(errorMessage);
-    }
-  },
-
   updateLayoutDensity: async (density: LayoutDensity) => {
     const { settings } = get();
     const updatedSettings = { ...settings, layoutDensity: density };
@@ -200,22 +175,6 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     } catch (error) {
       console.error('Error updating layout density:', error);
       const errorMessage = 'Failed to update layout density. Please try again.';
-      set({ error: errorMessage });
-      useToastStore.getState().error(errorMessage);
-    }
-  },
-
-  updateBackgroundStyle: async (style: BackgroundStyle) => {
-    const { settings } = get();
-    const updatedSettings = { ...settings, backgroundStyle: style };
-
-    try {
-      await setSettings(updatedSettings);
-      set({ settings: updatedSettings });
-      applyBackgroundStyle(style);
-    } catch (error) {
-      console.error('Error updating background style:', error);
-      const errorMessage = 'Failed to update background. Please try again.';
       set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
     }
@@ -236,14 +195,8 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       if (partialSettings.colorTheme) {
         applyColorTheme(partialSettings.colorTheme);
       }
-      if (partialSettings.fontSize) {
-        applyFontSize(partialSettings.fontSize);
-      }
       if (partialSettings.layoutDensity) {
         applyLayoutDensity(partialSettings.layoutDensity);
-      }
-      if (partialSettings.backgroundStyle) {
-        applyBackgroundStyle(partialSettings.backgroundStyle);
       }
     } catch (error) {
       console.error('Error updating settings:', error);
@@ -259,9 +212,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       set({ settings: DEFAULT_SETTINGS });
       applyTheme(DEFAULT_SETTINGS.theme);
       applyColorTheme(DEFAULT_SETTINGS.colorTheme);
-      applyFontSize(DEFAULT_SETTINGS.fontSize);
       applyLayoutDensity(DEFAULT_SETTINGS.layoutDensity);
-      applyBackgroundStyle(DEFAULT_SETTINGS.backgroundStyle);
     } catch (error) {
       console.error('Error resetting settings:', error);
       const errorMessage = 'Failed to reset settings. Please try again.';
@@ -294,58 +245,16 @@ function applyTheme(theme: Settings['theme']) {
 
 /**
  * Apply color theme to the document
+ * Using Tailwind v4's @layer theme approach - just set data attribute, CSS handles the rest
  */
 function applyColorTheme(colorTheme: ColorTheme) {
-  const theme = COLOR_THEMES[colorTheme];
-  const root = document.documentElement;
-
-  // Set CSS custom properties for the color theme
-  root.style.setProperty('--theme-primary', theme.primary);
-  root.style.setProperty('--theme-accent', theme.accent);
-
-  // Store the theme name as a data attribute for potential CSS selectors
-  root.setAttribute('data-color-theme', colorTheme);
-}
-
-/**
- * Apply font size to the document
- */
-function applyFontSize(fontSize: FontSize) {
-  const scale = FONT_SIZE_SCALES[fontSize];
-  const root = document.documentElement;
-
-  // Apply font size scale as a CSS custom property
-  root.style.setProperty('--font-size-scale', scale.toString());
-
-  // Store the size name as a data attribute
-  root.setAttribute('data-font-size', fontSize);
+  document.documentElement.setAttribute('data-theme', colorTheme);
 }
 
 /**
  * Apply layout density to the document
+ * Using Tailwind v4's @layer theme approach - just set data attribute, CSS handles the rest
  */
 function applyLayoutDensity(density: LayoutDensity) {
-  const spacing = LAYOUT_DENSITY_SPACING[density];
-  const root = document.documentElement;
-
-  // Apply spacing scale as a CSS custom property
-  root.style.setProperty('--layout-spacing-scale', spacing.toString());
-
-  // Store the density name as a data attribute
-  root.setAttribute('data-layout-density', density);
-}
-
-/**
- * Apply background style to the document
- */
-function applyBackgroundStyle(style: BackgroundStyle) {
-  const body = document.body;
-
-  if (style.type === 'solid') {
-    body.style.background = style.value;
-  } else if (style.type === 'gradient') {
-    body.style.background = style.value;
-  } else if (style.type === 'image') {
-    body.style.background = `url('${style.value}') center/cover no-repeat fixed`;
-  }
+  document.documentElement.setAttribute('data-density', density);
 }

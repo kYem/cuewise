@@ -1,4 +1,4 @@
-import type { ColorTheme, FontSize, LayoutDensity, QuoteCategory, Settings } from './types';
+import type { ColorTheme, LayoutDensity, QuoteCategory, Settings } from './types';
 
 // Default settings
 export const DEFAULT_SETTINGS: Settings = {
@@ -13,12 +13,8 @@ export const DEFAULT_SETTINGS: Settings = {
   quoteChangeInterval: 10, // 0 = manual, 10+ = auto-refresh interval in seconds
   timeFormat: '12h',
   colorTheme: 'default',
-  fontSize: 'base',
   layoutDensity: 'comfortable',
-  backgroundStyle: {
-    type: 'gradient',
-    value: 'linear-gradient(to bottom right, #faf5ff, #eff6ff, #e0e7ff)',
-  },
+  showThemeSwitcher: false,
 };
 
 // Quote categories with display names
@@ -103,15 +99,6 @@ export const COLOR_THEMES: Record<
     background: 'linear-gradient(to bottom right, #fff1f2, #ffe4e6, #fecdd3)',
     accent: '#e11d48',
   },
-};
-
-// Font size scales (multiplier for base font size)
-export const FONT_SIZE_SCALES: Record<FontSize, number> = {
-  xs: 0.875,
-  sm: 0.9375,
-  base: 1,
-  lg: 1.0625,
-  xl: 1.125,
 };
 
 // Layout density spacing multipliers
