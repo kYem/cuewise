@@ -81,8 +81,9 @@ export interface StorageUsageInfo {
 }
 
 /**
- * Get storage usage information for Chrome local storage
- * Chrome.storage.local quota is 10MB (10485760 bytes)
+ * Get storage usage information for Chrome sync storage
+ * Chrome.storage.sync quota is 100KB (102400 bytes)
+ * Note: Individual items are limited to 8KB, max 512 items
  */
 export async function getStorageUsage(): Promise<StorageUsageInfo> {
   try {
@@ -110,12 +111,12 @@ export async function getStorageUsage(): Promise<StorageUsageInfo> {
       };
     }
 
-    // Chrome storage quota for local storage is 10MB
-    const QUOTA_BYTES = 10485760; // 10MB in bytes
+    // Chrome storage quota for sync storage is 100KB
+    const QUOTA_BYTES = 102400; // 100KB in bytes
 
     // Get bytes in use from Chrome storage
     const bytesInUse = await new Promise<number>((resolve) => {
-      chrome.storage.local.getBytesInUse(null, (bytes) => {
+      chrome.storage.sync.getBytesInUse(null, (bytes) => {
         resolve(bytes);
       });
     });
@@ -134,7 +135,7 @@ export async function getStorageUsage(): Promise<StorageUsageInfo> {
     // Return safe defaults on error
     return {
       bytesInUse: 0,
-      quota: 10485760,
+      quota: 102400,
       percentageUsed: 0,
       isWarning: false,
       isCritical: false,

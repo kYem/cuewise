@@ -11,7 +11,7 @@ type StorageArea = 'local' | 'sync';
  */
 export async function getFromStorage<T>(
   key: string,
-  area: StorageArea = 'local'
+  area: StorageArea = 'sync'
 ): Promise<T | null> {
   try {
     // Check if chrome.storage is available
@@ -37,7 +37,7 @@ export async function getFromStorage<T>(
 export async function setInStorage<T>(
   key: string,
   value: T,
-  area: StorageArea = 'local'
+  area: StorageArea = 'sync'
 ): Promise<boolean> {
   try {
     // Check if chrome.storage is available
@@ -61,7 +61,7 @@ export async function setInStorage<T>(
  */
 export async function removeFromStorage(
   key: string,
-  area: StorageArea = 'local'
+  area: StorageArea = 'sync'
 ): Promise<boolean> {
   try {
     const storage = area === 'local' ? chrome.storage.local : chrome.storage.sync;
@@ -76,7 +76,7 @@ export async function removeFromStorage(
 /**
  * Clear all data from Chrome storage
  */
-export async function clearStorage(area: StorageArea = 'local'): Promise<boolean> {
+export async function clearStorage(area: StorageArea = 'sync'): Promise<boolean> {
   try {
     const storage = area === 'local' ? chrome.storage.local : chrome.storage.sync;
     await storage.clear();
