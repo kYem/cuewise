@@ -85,7 +85,9 @@ const EditQuoteModal: React.FC<EditQuoteModalProps> = ({ quote, onClose, onSave 
               maxLength={500}
               className="w-full px-4 py-3 rounded-lg border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-primary-500 dark:focus:border-primary-400 focus:outline-none transition-colors resize-none"
             />
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{text.length}/500 characters</p>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {text.length}/500 characters
+            </p>
           </div>
 
           {/* Author */}
@@ -164,7 +166,9 @@ const EditQuoteModal: React.FC<EditQuoteModalProps> = ({ quote, onClose, onSave 
               maxLength={300}
               className="w-full px-4 py-3 rounded-lg border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-primary-500 dark:focus:border-primary-400 focus:outline-none transition-colors resize-none"
             />
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{notes.length}/300 characters</p>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {notes.length}/300 characters
+            </p>
           </div>
 
           {/* Actions */}

@@ -25,7 +25,7 @@ import { TrendChart } from './TrendChart';
 export const InsightsPage: React.FC = () => {
   const { insights, analytics, isLoading, initialize, exportAsJSON, exportAsCSV, exportAllAsJSON } =
     useInsightsStore();
-  const [activeTab, setActiveTab] = useState<'overview' | 'analytics'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'analytics' | 'exports'>('overview');
 
   useEffect(() => {
     initialize();
@@ -103,6 +103,17 @@ export const InsightsPage: React.FC = () => {
             }`}
           >
             Advanced Analytics
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('exports')}
+            className={`px-6 py-3 rounded-lg font-semibold transition-all ${
+              activeTab === 'exports'
+                ? 'bg-white text-purple-600 shadow-lg'
+                : 'bg-white/50 text-gray-600 hover:bg-white/80'
+            }`}
+          >
+            Exports
           </button>
         </div>
 
@@ -258,13 +269,6 @@ export const InsightsPage: React.FC = () => {
         {/* Analytics Tab */}
         {activeTab === 'analytics' && analytics && (
           <div className="space-y-8">
-            {/* Export Controls */}
-            <ExportControls
-              onExportJSON={exportAsJSON}
-              onExportCSV={exportAsCSV}
-              onExportAllJSON={exportAllAsJSON}
-            />
-
             {/* Goal Completion Rate */}
             <GoalCompletionChart data={analytics.goalCompletionRate} />
 
@@ -312,6 +316,17 @@ export const InsightsPage: React.FC = () => {
 
             {/* Pomodoro Heatmap */}
             <PomodoroHeatmap data={analytics.pomodoroHeatmap} />
+          </div>
+        )}
+
+        {/* Exports Tab */}
+        {activeTab === 'exports' && (
+          <div className="space-y-8">
+            <ExportControls
+              onExportJSON={exportAsJSON}
+              onExportCSV={exportAsCSV}
+              onExportAllJSON={exportAllAsJSON}
+            />
           </div>
         )}
       </div>

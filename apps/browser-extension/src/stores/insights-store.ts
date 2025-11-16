@@ -185,13 +185,16 @@ export const useInsightsStore = create<InsightsStore>((set, get) => ({
         return;
       }
 
+      // Filter to only include custom quotes (exclude default/curated quotes)
+      const customQuotes = quotes.filter((quote) => quote.isCustom);
+
       const exportData: ExportData = {
         exportDate: new Date().toISOString(),
         insights,
         analytics,
         goals,
         pomodoroSessions,
-        quotes,
+        quotes: customQuotes,
       };
 
       const json = JSON.stringify(exportData, null, 2);
