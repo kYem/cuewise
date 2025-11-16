@@ -2,7 +2,9 @@ import { CATEGORY_COLORS } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
 import { ChevronLeft, ChevronRight, EyeOff, Heart, RefreshCw } from 'lucide-react';
 import type React from 'react';
+import { useEffect, useState } from 'react';
 import { useQuoteStore } from '../stores/quote-store';
+import { useSettingsStore } from '../stores/settings-store';
 import { ErrorFallback } from './ErrorFallback';
 
 interface QuoteDisplayProps {
@@ -10,6 +12,8 @@ interface QuoteDisplayProps {
 }
 
 export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({ onManualRefresh }) => {
+  const quoteChangeInterval = useSettingsStore((state) => state.settings.quoteChangeInterval);
+  const [timeRemaining, setTimeRemaining] = useState(quoteChangeInterval);
   const {
     currentQuote,
     refreshQuote,
@@ -24,20 +28,52 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({ onManualRefresh }) =
     initialize,
   } = useQuoteStore();
 
+  // Countdown timer for auto-refresh
+  useEffect(() => {
+    // Reset countdown when interval changes or when quote changes
+    setTimeRemaining(quoteChangeInterval);
+  }, [quoteChangeInterval, currentQuote?.id]);
+
+  // Update countdown every 100ms for smooth animation
+  useEffect(() => {
+    if (quoteChangeInterval === 0 || !currentQuote) {
+      return; // No countdown if manual mode or no quote
+    }
+
+    const interval = setInterval(() => {
+      setTimeRemaining((prev) => {
+        if (prev <= 0.1) {
+          return quoteChangeInterval; // Reset when countdown finishes
+        }
+        return prev - 0.1; // Decrease by 100ms
+      });
+    }, 100);
+
+    return () => clearInterval(interval);
+  }, [quoteChangeInterval, currentQuote]);
+
   const handleRefreshClick = async () => {
     await refreshQuote();
+    setTimeRemaining(quoteChangeInterval); // Reset countdown on manual refresh
     onManualRefresh?.();
   };
 
   const handleGoBack = async () => {
     await goBack();
+    setTimeRemaining(quoteChangeInterval); // Reset countdown on navigation
     onManualRefresh?.();
   };
 
   const handleGoForward = async () => {
     await goForward();
+    setTimeRemaining(quoteChangeInterval); // Reset countdown on navigation
     onManualRefresh?.();
   };
+
+  // Calculate progress percentage (100% = full time, 0% = no time left)
+  const progressPercentage = quoteChangeInterval > 0
+    ? (timeRemaining / quoteChangeInterval) * 100
+    : 0;
 
   // Calculate dynamic font size based on quote length to prevent layout shifts
   const getQuoteFontSize = (text: string): string => {
@@ -185,11 +221,19 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({ onManualRefresh }) =
           <button
             type="button"
             onClick={handleRefreshClick}
-            className="flex items-center gap-density-xs px-density-lg py-density-sm bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-full font-medium shadow-md hover:shadow-lg hover:scale-105 transition-all"
+            className="relative flex items-center gap-density-xs px-density-lg py-density-sm bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg font-medium shadow-md hover:shadow-lg hover:scale-105 transition-all overflow-hidden"
             title="New quote"
           >
             <RefreshCw className="w-5 h-5" />
             <span>New Quote</span>
+
+            {/* Countdown Progress Bar - only show when auto-refresh is enabled */}
+            {quoteChangeInterval > 0 && (
+              <div
+                className="absolute bottom-0 left-0 h-0.5 bg-primary-500 dark:bg-primary-400 transition-all duration-100 ease-linear"
+                style={{ width: `${progressPercentage}%` }}
+              />
+            )}
           </button>
 
           <button
