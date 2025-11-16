@@ -54,7 +54,7 @@ export const AddQuoteForm: React.FC<AddQuoteFormProps> = ({ onSuccess }) => {
     <form onSubmit={handleSubmit} className="space-y-6">
       {/* Quote Text */}
       <div>
-        <label htmlFor="quote-text" className="block text-sm font-medium text-gray-700 mb-2">
+        <label htmlFor="quote-text" className="block text-sm font-medium text-primary mb-2">
           Quote Text <span className="text-red-500">*</span>
         </label>
         <textarea
@@ -65,14 +65,14 @@ export const AddQuoteForm: React.FC<AddQuoteFormProps> = ({ onSuccess }) => {
           required
           rows={4}
           maxLength={500}
-          className="w-full px-4 py-3 rounded-lg border-2 border-gray-200 focus:border-primary-500 focus:outline-none transition-colors resize-none"
+          className="w-full px-4 py-3 rounded-lg border-2 border-border text-primary placeholder:text-secondary focus:border-primary-500 focus:outline-none transition-colors resize-none"
         />
-        <p className="mt-1 text-xs text-gray-500">{text.length}/500 characters</p>
+        <p className="mt-1 text-xs text-secondary">{text.length}/500 characters</p>
       </div>
 
       {/* Author */}
       <div>
-        <label htmlFor="quote-author" className="block text-sm font-medium text-gray-700 mb-2">
+        <label htmlFor="quote-author" className="block text-sm font-medium text-primary mb-2">
           Author <span className="text-red-500">*</span>
         </label>
         <input
@@ -83,20 +83,20 @@ export const AddQuoteForm: React.FC<AddQuoteFormProps> = ({ onSuccess }) => {
           placeholder="Who said this?"
           required
           maxLength={100}
-          className="w-full px-4 py-3 rounded-lg border-2 border-gray-200 focus:border-primary-500 focus:outline-none transition-colors"
+          className="w-full px-4 py-3 rounded-lg border-2 border-border text-primary placeholder:text-secondary focus:border-primary-500 focus:outline-none transition-colors"
         />
       </div>
 
       {/* Category */}
       <div>
-        <label htmlFor="quote-category" className="block text-sm font-medium text-gray-700 mb-2">
+        <label htmlFor="quote-category" className="block text-sm font-medium text-primary mb-2">
           Category <span className="text-red-500">*</span>
         </label>
         <select
           id="quote-category"
           value={category}
           onChange={(e) => setCategory(e.target.value as QuoteCategory)}
-          className="w-full px-4 py-3 rounded-lg border-2 border-gray-200 focus:border-primary-500 focus:outline-none transition-colors"
+          className="w-full px-4 py-3 rounded-lg border-2 border-border text-primary focus:border-primary-500 focus:outline-none transition-colors"
         >
           {Object.entries(QUOTE_CATEGORIES).map(([key, label]) => (
             <option key={key} value={key}>
@@ -108,7 +108,7 @@ export const AddQuoteForm: React.FC<AddQuoteFormProps> = ({ onSuccess }) => {
 
       {/* Source (Optional) */}
       <div>
-        <label htmlFor="quote-source" className="block text-sm font-medium text-gray-700 mb-2">
+        <label htmlFor="quote-source" className="block text-sm font-medium text-primary mb-2">
           Source (Optional)
         </label>
         <input
@@ -118,16 +118,16 @@ export const AddQuoteForm: React.FC<AddQuoteFormProps> = ({ onSuccess }) => {
           onChange={(e) => setSource(e.target.value)}
           placeholder="Book, URL, or reference (e.g., 'The Art of War')"
           maxLength={200}
-          className="w-full px-4 py-3 rounded-lg border-2 border-gray-200 focus:border-primary-500 focus:outline-none transition-colors"
+          className="w-full px-4 py-3 rounded-lg border-2 border-border text-primary placeholder:text-secondary focus:border-primary-500 focus:outline-none transition-colors"
         />
-        <p className="mt-1 text-xs text-gray-500">
+        <p className="mt-1 text-xs text-secondary">
           Where did you find this quote? (book title, website, etc.)
         </p>
       </div>
 
       {/* Notes (Optional) */}
       <div>
-        <label htmlFor="quote-notes" className="block text-sm font-medium text-gray-700 mb-2">
+        <label htmlFor="quote-notes" className="block text-sm font-medium text-primary mb-2">
           Personal Notes (Optional)
         </label>
         <textarea
@@ -137,9 +137,9 @@ export const AddQuoteForm: React.FC<AddQuoteFormProps> = ({ onSuccess }) => {
           placeholder="Why is this quote meaningful to you?"
           rows={3}
           maxLength={300}
-          className="w-full px-4 py-3 rounded-lg border-2 border-gray-200 focus:border-primary-500 focus:outline-none transition-colors resize-none"
+          className="w-full px-4 py-3 rounded-lg border-2 border-border text-primary placeholder:text-secondary focus:border-primary-500 focus:outline-none transition-colors resize-none"
         />
-        <p className="mt-1 text-xs text-gray-500">{notes.length}/300 characters</p>
+        <p className="mt-1 text-xs text-secondary">{notes.length}/300 characters</p>
       </div>
 
       {/* Submit Button */}

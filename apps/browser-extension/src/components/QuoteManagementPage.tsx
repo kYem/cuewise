@@ -53,13 +53,13 @@ const EditQuoteModal: React.FC<EditQuoteModalProps> = ({ quote, onClose, onSave 
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 dark:bg-black/70 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex items-center justify-between">
-          <h2 className="text-2xl font-semibold text-gray-800 dark:text-gray-100">Edit Quote</h2>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-surface-elevated rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="sticky top-0 bg-surface-elevated border-b border-divider px-6 py-4 flex items-center justify-between">
+          <h2 className="text-2xl font-semibold text-primary">Edit Quote</h2>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors text-gray-600 dark:text-gray-300"
+            className="p-2 hover:bg-surface-variant rounded-full transition-colors text-secondary"
             type="button"
           >
             <X className="w-5 h-5" />
@@ -71,7 +71,7 @@ const EditQuoteModal: React.FC<EditQuoteModalProps> = ({ quote, onClose, onSave 
           <div>
             <label
               htmlFor="edit-quote-text"
-              className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+              className="block text-sm font-medium text-primary mb-2"
             >
               Quote Text <span className="text-red-500">*</span>
             </label>
@@ -83,9 +83,9 @@ const EditQuoteModal: React.FC<EditQuoteModalProps> = ({ quote, onClose, onSave 
               required
               rows={4}
               maxLength={500}
-              className="w-full px-4 py-3 rounded-lg border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-primary-500 dark:focus:border-primary-400 focus:outline-none transition-colors resize-none"
+              className="w-full px-4 py-3 rounded-lg border-2 border-border bg-surface text-primary placeholder:text-secondary focus:border-primary-500 focus:outline-none transition-colors resize-none"
             />
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p className="mt-1 text-xs text-secondary">
               {text.length}/500 characters
             </p>
           </div>
@@ -94,7 +94,7 @@ const EditQuoteModal: React.FC<EditQuoteModalProps> = ({ quote, onClose, onSave 
           <div>
             <label
               htmlFor="edit-quote-author"
-              className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+              className="block text-sm font-medium text-primary mb-2"
             >
               Author <span className="text-red-500">*</span>
             </label>
@@ -106,7 +106,7 @@ const EditQuoteModal: React.FC<EditQuoteModalProps> = ({ quote, onClose, onSave 
               placeholder="Who said this?"
               required
               maxLength={100}
-              className="w-full px-4 py-3 rounded-lg border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-primary-500 dark:focus:border-primary-400 focus:outline-none transition-colors"
+              className="w-full px-4 py-3 rounded-lg border-2 border-border bg-surface text-primary placeholder:text-secondary focus:border-primary-500 focus:outline-none transition-colors"
             />
           </div>
 
@@ -114,7 +114,7 @@ const EditQuoteModal: React.FC<EditQuoteModalProps> = ({ quote, onClose, onSave 
           <div>
             <label
               htmlFor="edit-quote-category"
-              className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+              className="block text-sm font-medium text-primary mb-2"
             >
               Category <span className="text-red-500">*</span>
             </label>
@@ -134,7 +134,7 @@ const EditQuoteModal: React.FC<EditQuoteModalProps> = ({ quote, onClose, onSave 
           <div>
             <label
               htmlFor="edit-quote-source"
-              className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+              className="block text-sm font-medium text-primary mb-2"
             >
               Source (Optional)
             </label>
@@ -145,7 +145,7 @@ const EditQuoteModal: React.FC<EditQuoteModalProps> = ({ quote, onClose, onSave 
               onChange={(e) => setSource(e.target.value)}
               placeholder="Book, URL, or reference"
               maxLength={200}
-              className="w-full px-4 py-3 rounded-lg border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-primary-500 dark:focus:border-primary-400 focus:outline-none transition-colors"
+              className="w-full px-4 py-3 rounded-lg border-2 border-border bg-surface text-primary placeholder:text-secondary focus:border-primary-500 focus:outline-none transition-colors"
             />
           </div>
 
@@ -153,7 +153,7 @@ const EditQuoteModal: React.FC<EditQuoteModalProps> = ({ quote, onClose, onSave 
           <div>
             <label
               htmlFor="edit-quote-notes"
-              className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+              className="block text-sm font-medium text-primary mb-2"
             >
               Personal Notes (Optional)
             </label>
@@ -164,26 +164,26 @@ const EditQuoteModal: React.FC<EditQuoteModalProps> = ({ quote, onClose, onSave 
               placeholder="Why is this quote meaningful to you?"
               rows={3}
               maxLength={300}
-              className="w-full px-4 py-3 rounded-lg border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-primary-500 dark:focus:border-primary-400 focus:outline-none transition-colors resize-none"
+              className="w-full px-4 py-3 rounded-lg border-2 border-border bg-surface text-primary placeholder:text-secondary focus:border-primary-500 focus:outline-none transition-colors resize-none"
             />
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p className="mt-1 text-xs text-secondary">
               {notes.length}/300 characters
             </p>
           </div>
 
           {/* Actions */}
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="flex justify-end gap-3 pt-4 border-t border-divider">
             <button
               type="button"
               onClick={onClose}
-              className="px-6 py-3 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors font-medium"
+              className="px-6 py-3 bg-surface-variant text-primary rounded-lg hover:bg-border transition-colors font-medium"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={!text.trim() || !author.trim() || isSubmitting}
-              className="px-6 py-3 bg-primary-600 dark:bg-primary-500 text-white rounded-lg hover:bg-primary-700 dark:hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium shadow-sm hover:shadow-md"
+              className="px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium shadow-sm hover:shadow-md"
             >
               {isSubmitting ? 'Saving...' : 'Save Changes'}
             </button>
@@ -215,7 +215,7 @@ const QuoteCard: React.FC<QuoteCardProps> = ({
   return (
     <div
       className={cn(
-        'bg-white rounded-xl shadow-md hover:shadow-lg transition-all p-6 border-2 border-transparent hover:border-gray-200 relative',
+        'bg-surface rounded-xl shadow-md hover:shadow-lg transition-all p-6 border-2 border-transparent hover:border-border relative',
         quote.isHidden && 'opacity-60'
       )}
     >
@@ -238,22 +238,22 @@ const QuoteCard: React.FC<QuoteCardProps> = ({
 
       {/* Quote Text */}
       <blockquote className="mb-4">
-        <p className="text-lg font-light text-gray-800 leading-relaxed line-clamp-4">
+        <p className="text-lg font-light text-primary leading-relaxed line-clamp-4">
           "{quote.text}"
         </p>
         <footer className="mt-2">
-          <cite className="text-sm font-medium text-gray-600 not-italic">— {quote.author}</cite>
+          <cite className="text-sm font-medium text-secondary not-italic">— {quote.author}</cite>
         </footer>
       </blockquote>
 
       {/* Stats */}
-      <div className="flex items-center gap-3 text-xs text-gray-500 mb-4">
+      <div className="flex items-center gap-3 text-xs text-secondary mb-4">
         <span>Views: {quote.viewCount}</span>
         {quote.lastViewed && <span>Last: {new Date(quote.lastViewed).toLocaleDateString()}</span>}
       </div>
 
       {/* Actions */}
-      <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+      <div className="flex items-center justify-between pt-4 border-t border-divider">
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -262,7 +262,7 @@ const QuoteCard: React.FC<QuoteCardProps> = ({
               'p-2 rounded-full transition-all hover:scale-110',
               quote.isFavorite
                 ? 'bg-red-100 text-red-600 hover:bg-red-200'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                : 'bg-surface-variant text-secondary hover:bg-border'
             )}
             title={quote.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
           >
@@ -276,7 +276,7 @@ const QuoteCard: React.FC<QuoteCardProps> = ({
               'p-2 rounded-full transition-all hover:scale-110',
               quote.isHidden
                 ? 'bg-green-100 text-green-600 hover:bg-green-200'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                : 'bg-surface-variant text-secondary hover:bg-border'
             )}
             title={quote.isHidden ? 'Unhide quote' : 'Hide quote'}
           >
@@ -310,7 +310,7 @@ const QuoteCard: React.FC<QuoteCardProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowDeleteConfirm(false)}
-                  className="px-2 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+                  className="px-2 py-1 text-xs bg-surface-variant text-primary rounded hover:bg-border"
                 >
                   Cancel
                 </button>
@@ -463,7 +463,7 @@ export const QuoteManagementPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50">
       {/* Header */}
-      <div className="bg-white shadow-sm border-b border-gray-200">
+      <div className="bg-surface shadow-sm border-b border-border">
         <div className="max-w-7xl mx-auto px-4 py-6">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-4">
@@ -472,14 +472,14 @@ export const QuoteManagementPage: React.FC = () => {
                 onClick={() => {
                   window.location.hash = '';
                 }}
-                className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                className="p-2 hover:bg-surface-variant rounded-full transition-colors text-primary"
                 title="Back to home"
               >
                 <ArrowLeft className="w-6 h-6" />
               </button>
               <div>
-                <h1 className="text-3xl font-bold text-gray-900">Quote Management</h1>
-                <p className="text-gray-600 mt-1">Manage your collection of {stats.total} quotes</p>
+                <h1 className="text-3xl font-bold text-primary">Quote Management</h1>
+                <p className="text-secondary mt-1">Manage your collection of {stats.total} quotes</p>
               </div>
             </div>
 
@@ -515,7 +515,7 @@ export const QuoteManagementPage: React.FC = () => {
 
           {/* Add Quote Form */}
           {showAddForm && (
-            <div className="bg-gray-50 rounded-xl p-6 mb-6 border-2 border-gray-200">
+            <div className="bg-surface-variant rounded-xl p-6 mb-6 border-2 border-border">
               <AddQuoteForm onSuccess={() => setShowAddForm(false)} />
             </div>
           )}
@@ -524,13 +524,13 @@ export const QuoteManagementPage: React.FC = () => {
           <div className="space-y-4">
             {/* Search Bar */}
             <div className="relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-tertiary" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search quotes by text, author, source, or notes..."
-                className="w-full pl-12 pr-4 py-3 rounded-lg border-2 border-gray-200 focus:border-primary-500 focus:outline-none transition-colors"
+                className="w-full pl-12 pr-4 py-3 rounded-lg border-2 border-border text-primary placeholder:text-secondary focus:border-primary-500 focus:outline-none transition-colors"
               />
             </div>
 
@@ -547,7 +547,7 @@ export const QuoteManagementPage: React.FC = () => {
                       'px-4 py-2 rounded-lg font-medium transition-all',
                       filterType === type
                         ? 'bg-primary-600 text-white shadow-md'
-                        : 'bg-white text-gray-700 hover:bg-gray-100'
+                        : 'bg-surface text-primary hover:bg-surface-variant'
                     )}
                   >
                     {type.charAt(0).toUpperCase() + type.slice(1)}
@@ -572,7 +572,7 @@ export const QuoteManagementPage: React.FC = () => {
             </div>
 
             {/* Results count */}
-            <div className="text-sm text-gray-600">
+            <div className="text-sm text-secondary">
               Showing {filteredQuotes.length} {filteredQuotes.length === 1 ? 'quote' : 'quotes'}
             </div>
           </div>
@@ -583,8 +583,8 @@ export const QuoteManagementPage: React.FC = () => {
       <div className="max-w-7xl mx-auto px-4 py-8">
         {filteredQuotes.length === 0 ? (
           <div className="text-center py-16">
-            <p className="text-xl text-gray-500 mb-4">No quotes found</p>
-            <p className="text-gray-400">Try adjusting your filters or search query</p>
+            <p className="text-xl text-secondary mb-4">No quotes found</p>
+            <p className="text-tertiary">Try adjusting your filters or search query</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

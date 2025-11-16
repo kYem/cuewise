@@ -98,7 +98,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
         <section>
           <div className="flex items-center gap-2 mb-4">
             <Clock className="w-5 h-5 text-primary-600" />
-            <h3 className="text-lg font-semibold text-gray-800">Pomodoro Timer</h3>
+            <h3 className="text-lg font-semibold text-primary">Pomodoro Timer</h3>
           </div>
 
           <div className="space-y-4 pl-7">
@@ -106,7 +106,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
             <div>
               <label
                 htmlFor="work-duration"
-                className="block text-sm font-medium text-gray-700 mb-2"
+                className="block text-sm font-medium text-primary mb-2"
               >
                 Work Duration:{' '}
                 <span className="text-primary-600 font-semibold">{workDuration} minutes</span>
@@ -120,7 +120,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                   step="1"
                   value={workDuration}
                   onChange={(e) => setWorkDuration(Number(e.target.value))}
-                  className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-primary-600"
+                  className="flex-1 h-2 bg-divider rounded-lg appearance-none cursor-pointer accent-primary-600"
                 />
                 <input
                   type="number"
@@ -128,7 +128,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                   max="60"
                   value={workDuration}
                   onChange={(e) => setWorkDuration(Number(e.target.value))}
-                  className="w-16 px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-16 px-2 py-1 text-sm text-primary border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
               </div>
             </div>
@@ -137,7 +137,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
             <div>
               <label
                 htmlFor="break-duration"
-                className="block text-sm font-medium text-gray-700 mb-2"
+                className="block text-sm font-medium text-primary mb-2"
               >
                 Short Break Duration:{' '}
                 <span className="text-primary-600 font-semibold">{breakDuration} minutes</span>
@@ -151,7 +151,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                   step="1"
                   value={breakDuration}
                   onChange={(e) => setBreakDuration(Number(e.target.value))}
-                  className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-primary-600"
+                  className="flex-1 h-2 bg-divider rounded-lg appearance-none cursor-pointer accent-primary-600"
                 />
                 <input
                   type="number"
@@ -159,7 +159,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                   max="30"
                   value={breakDuration}
                   onChange={(e) => setBreakDuration(Number(e.target.value))}
-                  className="w-16 px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-16 px-2 py-1 text-sm text-primary border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
               </div>
             </div>
@@ -168,7 +168,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
             <div>
               <label
                 htmlFor="long-break-duration"
-                className="block text-sm font-medium text-gray-700 mb-2"
+                className="block text-sm font-medium text-primary mb-2"
               >
                 Long Break Duration:{' '}
                 <span className="text-primary-600 font-semibold">{longBreakDuration} minutes</span>
@@ -182,7 +182,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                   step="1"
                   value={longBreakDuration}
                   onChange={(e) => setLongBreakDuration(Number(e.target.value))}
-                  className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-primary-600"
+                  className="flex-1 h-2 bg-divider rounded-lg appearance-none cursor-pointer accent-primary-600"
                 />
                 <input
                   type="number"
@@ -190,7 +190,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                   max="60"
                   value={longBreakDuration}
                   onChange={(e) => setLongBreakDuration(Number(e.target.value))}
-                  className="w-16 px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-16 px-2 py-1 text-sm text-primary border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
               </div>
             </div>
@@ -199,7 +199,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
             <div>
               <label
                 htmlFor="long-break-interval"
-                className="block text-sm font-medium text-gray-700 mb-2"
+                className="block text-sm font-medium text-primary mb-2"
               >
                 Long Break After:{' '}
                 <span className="text-primary-600 font-semibold">
@@ -215,7 +215,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                   step="1"
                   value={longBreakInterval}
                   onChange={(e) => setLongBreakInterval(Number(e.target.value))}
-                  className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-primary-600"
+                  className="flex-1 h-2 bg-divider rounded-lg appearance-none cursor-pointer accent-primary-600"
                 />
                 <input
                   type="number"
@@ -223,7 +223,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                   max="10"
                   value={longBreakInterval}
                   onChange={(e) => setLongBreakInterval(Number(e.target.value))}
-                  className="w-16 px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-16 px-2 py-1 text-sm text-primary border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
               </div>
             </div>
@@ -234,7 +234,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
         <section>
           <div className="flex items-center gap-2 mb-4">
             <Music className="w-5 h-5 text-primary-600" />
-            <h3 className="text-lg font-semibold text-gray-800">Ambient Sounds</h3>
+            <h3 className="text-lg font-semibold text-primary">Ambient Sounds</h3>
           </div>
 
           <div className="space-y-4 pl-7">
@@ -242,7 +242,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
             <div>
               <label
                 htmlFor="ambient-sound"
-                className="block text-sm font-medium text-gray-700 mb-2"
+                className="block text-sm font-medium text-primary mb-2"
               >
                 Sound Type
               </label>
@@ -250,7 +250,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                 id="ambient-sound"
                 value={ambientSound}
                 onChange={(e) => setAmbientSound(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className="w-full px-3 py-2 text-sm text-primary border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
               >
                 {Object.entries(AMBIENT_SOUNDS).map(([key, label]) => (
                   <option key={key} value={key}>
@@ -258,7 +258,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                   </option>
                 ))}
               </select>
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="text-xs text-secondary mt-1">
                 Ambient sounds play during work sessions only
               </p>
             </div>
@@ -268,7 +268,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
               <div>
                 <label
                   htmlFor="ambient-volume"
-                  className="block text-sm font-medium text-gray-700 mb-2"
+                  className="block text-sm font-medium text-primary mb-2"
                 >
                   Volume: <span className="text-primary-600 font-semibold">{ambientVolume}%</span>
                 </label>
@@ -281,7 +281,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                     step="5"
                     value={ambientVolume}
                     onChange={(e) => setAmbientVolume(Number(e.target.value))}
-                    className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-primary-600"
+                    className="flex-1 h-2 bg-divider rounded-lg appearance-none cursor-pointer accent-primary-600"
                   />
                   <input
                     type="number"
@@ -290,7 +290,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                     step="5"
                     value={ambientVolume}
                     onChange={(e) => setAmbientVolume(Number(e.target.value))}
-                    className="w-16 px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    className="w-16 px-2 py-1 text-sm text-primary border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                   />
                 </div>
               </div>
@@ -304,9 +304,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
             {notifications ? (
               <Bell className="w-5 h-5 text-primary-600" />
             ) : (
-              <BellOff className="w-5 h-5 text-gray-400" />
+              <BellOff className="w-5 h-5 text-tertiary" />
             )}
-            <h3 className="text-lg font-semibold text-gray-800">Notifications</h3>
+            <h3 className="text-lg font-semibold text-primary">Notifications</h3>
           </div>
 
           <div className="pl-7">
@@ -318,11 +318,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                   onChange={(e) => setNotifications(e.target.checked)}
                   className="sr-only peer"
                 />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
+                <div className="w-11 h-6 bg-divider peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-surface after:border-border after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
               </div>
               <div>
-                <span className="text-sm font-medium text-gray-700">Enable notifications</span>
-                <p className="text-xs text-gray-500">
+                <span className="text-sm font-medium text-primary">Enable notifications</span>
+                <p className="text-xs text-secondary">
                   Get notified when Pomodoro sessions complete and reminders are due
                 </p>
               </div>
@@ -334,7 +334,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
         <section>
           <div className="flex items-center gap-2 mb-4">
             <Clock className="w-5 h-5 text-primary-600" />
-            <h3 className="text-lg font-semibold text-gray-800">Time Format</h3>
+            <h3 className="text-lg font-semibold text-primary">Time Format</h3>
           </div>
 
           <div className="grid grid-cols-2 gap-3 pl-7">
@@ -344,12 +344,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
               className={`p-4 rounded-lg border-2 transition-all ${
                 timeFormat === '12h'
                   ? 'border-primary-600 bg-primary-50'
-                  : 'border-gray-200 hover:border-gray-300 bg-white'
+                  : 'border-border hover:border-primary-300 bg-surface'
               }`}
             >
-              <div className="text-2xl font-bold text-gray-800 mb-1">2:30</div>
+              <div className="text-2xl font-bold text-primary mb-1">2:30</div>
               <div className="text-xs text-primary-600 font-medium mb-2">PM</div>
-              <span className="block text-sm font-medium text-gray-700">12-hour</span>
+              <span className="block text-sm font-medium text-primary">12-hour</span>
             </button>
 
             <button
@@ -358,12 +358,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
               className={`p-4 rounded-lg border-2 transition-all ${
                 timeFormat === '24h'
                   ? 'border-primary-600 bg-primary-50'
-                  : 'border-gray-200 hover:border-gray-300 bg-white'
+                  : 'border-border hover:border-primary-300 bg-surface'
               }`}
             >
-              <div className="text-2xl font-bold text-gray-800 mb-1">14:30</div>
+              <div className="text-2xl font-bold text-primary mb-1">14:30</div>
               <div className="text-xs text-transparent font-medium mb-2">.</div>
-              <span className="block text-sm font-medium text-gray-700">24-hour</span>
+              <span className="block text-sm font-medium text-primary">24-hour</span>
             </button>
           </div>
         </section>
@@ -372,13 +372,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
         <section>
           <div className="flex items-center gap-2 mb-4">
             <RefreshCw className="w-5 h-5 text-primary-600" />
-            <h3 className="text-lg font-semibold text-gray-800">Quote Change Interval</h3>
+            <h3 className="text-lg font-semibold text-primary">Quote Change Interval</h3>
           </div>
 
           <div className="space-y-4 pl-7">
             {/* Current interval display */}
             <div className="flex items-center justify-between">
-              <div className="block text-sm font-medium text-gray-700">
+              <div className="block text-sm font-medium text-primary">
                 Current interval:{' '}
                 <span className="text-primary-600 font-semibold">
                   {formatInterval(quoteInterval)}
@@ -388,7 +388,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
 
             {/* Quick preset buttons */}
             <div>
-              <p className="text-xs text-gray-500 mb-2">Quick presets:</p>
+              <p className="text-xs text-secondary mb-2">Quick presets:</p>
               <div className="grid grid-cols-4 gap-2">
                 <button
                   type="button"
@@ -396,7 +396,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                   className={`px-3 py-2 text-xs font-medium rounded-md transition-all ${
                     quoteInterval === 0
                       ? 'bg-primary-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      : 'bg-surface-variant text-primary hover:bg-border'
                   }`}
                 >
                   Manual
@@ -407,7 +407,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                   className={`px-3 py-2 text-xs font-medium rounded-md transition-all ${
                     quoteInterval === 10
                       ? 'bg-primary-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      : 'bg-surface-variant text-primary hover:bg-border'
                   }`}
                 >
                   10s
@@ -418,7 +418,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                   className={`px-3 py-2 text-xs font-medium rounded-md transition-all ${
                     quoteInterval === 30
                       ? 'bg-primary-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      : 'bg-surface-variant text-primary hover:bg-border'
                   }`}
                 >
                   30s
@@ -429,7 +429,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                   className={`px-3 py-2 text-xs font-medium rounded-md transition-all ${
                     quoteInterval === 60
                       ? 'bg-primary-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      : 'bg-surface-variant text-primary hover:bg-border'
                   }`}
                 >
                   1m
@@ -440,7 +440,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                   className={`px-3 py-2 text-xs font-medium rounded-md transition-all ${
                     quoteInterval === 300
                       ? 'bg-primary-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      : 'bg-surface-variant text-primary hover:bg-border'
                   }`}
                 >
                   5m
@@ -451,7 +451,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                   className={`px-3 py-2 text-xs font-medium rounded-md transition-all ${
                     quoteInterval === 1800
                       ? 'bg-primary-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      : 'bg-surface-variant text-primary hover:bg-border'
                   }`}
                 >
                   30m
@@ -462,7 +462,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                   className={`px-3 py-2 text-xs font-medium rounded-md transition-all ${
                     quoteInterval === 3600
                       ? 'bg-primary-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      : 'bg-surface-variant text-primary hover:bg-border'
                   }`}
                 >
                   1h
@@ -475,7 +475,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
               <div>
                 <label
                   htmlFor="quote-interval"
-                  className="block text-sm font-medium text-gray-700 mb-2"
+                  className="block text-sm font-medium text-primary mb-2"
                 >
                   Custom interval (10s - 1h):
                 </label>
@@ -488,7 +488,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                     step="1"
                     value={quoteInterval}
                     onChange={(e) => setQuoteInterval(Number(e.target.value))}
-                    className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-primary-600"
+                    className="flex-1 h-2 bg-divider rounded-lg appearance-none cursor-pointer accent-primary-600"
                   />
                   <input
                     type="number"
@@ -496,14 +496,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                     max="3600"
                     value={quoteInterval}
                     onChange={(e) => setQuoteInterval(Number(e.target.value))}
-                    className="w-20 px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    className="w-20 px-2 py-1 text-sm text-primary border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                   />
-                  <span className="text-xs text-gray-500 w-8">sec</span>
+                  <span className="text-xs text-secondary w-8">sec</span>
                 </div>
               </div>
             )}
 
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-secondary">
               {quoteInterval === 0
                 ? 'Quotes will only change when you click the refresh button'
                 : `Quotes will automatically change every ${formatInterval(quoteInterval).toLowerCase()}`}
@@ -515,11 +515,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
         <StorageIndicator mode="full" />
 
         {/* Action Buttons */}
-        <div className="flex items-center justify-between pt-4 border-t border-gray-200">
+        <div className="flex items-center justify-between pt-4 border-t border-border">
           <button
             type="button"
             onClick={handleReset}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary bg-surface border border-border rounded-lg hover:bg-surface-variant transition-colors"
           >
             <RotateCcw className="w-4 h-4" />
             Reset to Defaults
@@ -529,7 +529,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              className="px-4 py-2 text-sm font-medium text-primary bg-surface border border-border rounded-lg hover:bg-surface-variant transition-colors"
             >
               Cancel
             </button>
