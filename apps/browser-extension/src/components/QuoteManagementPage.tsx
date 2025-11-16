@@ -1,5 +1,5 @@
 import { CATEGORY_COLORS, QUOTE_CATEGORIES, type Quote, type QuoteCategory } from '@cuewise/shared';
-import { cn } from '@cuewise/ui';
+import { cn, Select } from '@cuewise/ui';
 import { ArrowLeft, Edit2, Eye, EyeOff, Heart, Plus, Search, Trash2, X } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
@@ -53,13 +53,13 @@ const EditQuoteModal: React.FC<EditQuoteModalProps> = ({ quote, onClose, onSave 
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-          <h2 className="text-2xl font-semibold text-gray-800">Edit Quote</h2>
+    <div className="fixed inset-0 bg-black/50 dark:bg-black/70 flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex items-center justify-between">
+          <h2 className="text-2xl font-semibold text-gray-800 dark:text-gray-100">Edit Quote</h2>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors text-gray-600 dark:text-gray-300"
             type="button"
           >
             <X className="w-5 h-5" />
@@ -71,7 +71,7 @@ const EditQuoteModal: React.FC<EditQuoteModalProps> = ({ quote, onClose, onSave 
           <div>
             <label
               htmlFor="edit-quote-text"
-              className="block text-sm font-medium text-gray-700 mb-2"
+              className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
             >
               Quote Text <span className="text-red-500">*</span>
             </label>
@@ -83,16 +83,16 @@ const EditQuoteModal: React.FC<EditQuoteModalProps> = ({ quote, onClose, onSave 
               required
               rows={4}
               maxLength={500}
-              className="w-full px-4 py-3 rounded-lg border-2 border-gray-200 focus:border-primary-500 focus:outline-none transition-colors resize-none"
+              className="w-full px-4 py-3 rounded-lg border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-primary-500 dark:focus:border-primary-400 focus:outline-none transition-colors resize-none"
             />
-            <p className="mt-1 text-xs text-gray-500">{text.length}/500 characters</p>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{text.length}/500 characters</p>
           </div>
 
           {/* Author */}
           <div>
             <label
               htmlFor="edit-quote-author"
-              className="block text-sm font-medium text-gray-700 mb-2"
+              className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
             >
               Author <span className="text-red-500">*</span>
             </label>
@@ -104,7 +104,7 @@ const EditQuoteModal: React.FC<EditQuoteModalProps> = ({ quote, onClose, onSave 
               placeholder="Who said this?"
               required
               maxLength={100}
-              className="w-full px-4 py-3 rounded-lg border-2 border-gray-200 focus:border-primary-500 focus:outline-none transition-colors"
+              className="w-full px-4 py-3 rounded-lg border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-primary-500 dark:focus:border-primary-400 focus:outline-none transition-colors"
             />
           </div>
 
@@ -112,29 +112,27 @@ const EditQuoteModal: React.FC<EditQuoteModalProps> = ({ quote, onClose, onSave 
           <div>
             <label
               htmlFor="edit-quote-category"
-              className="block text-sm font-medium text-gray-700 mb-2"
+              className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
             >
               Category <span className="text-red-500">*</span>
             </label>
-            <select
-              id="edit-quote-category"
+            <Select
               value={category}
-              onChange={(e) => setCategory(e.target.value as QuoteCategory)}
-              className="w-full px-4 py-3 rounded-lg border-2 border-gray-200 focus:border-primary-500 focus:outline-none transition-colors"
-            >
-              {Object.entries(QUOTE_CATEGORIES).map(([key, label]) => (
-                <option key={key} value={key}>
-                  {label}
-                </option>
-              ))}
-            </select>
+              onChange={(value) => setCategory(value as QuoteCategory)}
+              options={Object.entries(QUOTE_CATEGORIES).map(([key, label]) => ({
+                value: key,
+                label: label,
+                color: CATEGORY_COLORS[key as QuoteCategory],
+              }))}
+              aria-label="Quote category"
+            />
           </div>
 
           {/* Source */}
           <div>
             <label
               htmlFor="edit-quote-source"
-              className="block text-sm font-medium text-gray-700 mb-2"
+              className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
             >
               Source (Optional)
             </label>
@@ -145,7 +143,7 @@ const EditQuoteModal: React.FC<EditQuoteModalProps> = ({ quote, onClose, onSave 
               onChange={(e) => setSource(e.target.value)}
               placeholder="Book, URL, or reference"
               maxLength={200}
-              className="w-full px-4 py-3 rounded-lg border-2 border-gray-200 focus:border-primary-500 focus:outline-none transition-colors"
+              className="w-full px-4 py-3 rounded-lg border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-primary-500 dark:focus:border-primary-400 focus:outline-none transition-colors"
             />
           </div>
 
@@ -153,7 +151,7 @@ const EditQuoteModal: React.FC<EditQuoteModalProps> = ({ quote, onClose, onSave 
           <div>
             <label
               htmlFor="edit-quote-notes"
-              className="block text-sm font-medium text-gray-700 mb-2"
+              className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
             >
               Personal Notes (Optional)
             </label>
@@ -164,24 +162,24 @@ const EditQuoteModal: React.FC<EditQuoteModalProps> = ({ quote, onClose, onSave 
               placeholder="Why is this quote meaningful to you?"
               rows={3}
               maxLength={300}
-              className="w-full px-4 py-3 rounded-lg border-2 border-gray-200 focus:border-primary-500 focus:outline-none transition-colors resize-none"
+              className="w-full px-4 py-3 rounded-lg border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-primary-500 dark:focus:border-primary-400 focus:outline-none transition-colors resize-none"
             />
-            <p className="mt-1 text-xs text-gray-500">{notes.length}/300 characters</p>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{notes.length}/300 characters</p>
           </div>
 
           {/* Actions */}
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
             <button
               type="button"
               onClick={onClose}
-              className="px-6 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium"
+              className="px-6 py-3 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors font-medium"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={!text.trim() || !author.trim() || isSubmitting}
-              className="px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium shadow-sm hover:shadow-md"
+              className="px-6 py-3 bg-primary-600 dark:bg-primary-500 text-white rounded-lg hover:bg-primary-700 dark:hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium shadow-sm hover:shadow-md"
             >
               {isSubmitting ? 'Saving...' : 'Save Changes'}
             </button>
@@ -554,18 +552,19 @@ export const QuoteManagementPage: React.FC = () => {
               </div>
 
               {/* Category Filter */}
-              <select
+              <Select
                 value={selectedCategory}
-                onChange={(e) => setSelectedCategory(e.target.value as QuoteCategory | 'all')}
-                className="px-4 py-2 rounded-lg border-2 border-gray-200 bg-white focus:border-primary-500 focus:outline-none transition-colors"
-              >
-                <option value="all">All Categories</option>
-                {Object.entries(QUOTE_CATEGORIES).map(([key, label]) => (
-                  <option key={key} value={key}>
-                    {label}
-                  </option>
-                ))}
-              </select>
+                onChange={(value) => setSelectedCategory(value as QuoteCategory | 'all')}
+                options={[
+                  { value: 'all', label: 'All Categories' },
+                  ...Object.entries(QUOTE_CATEGORIES).map(([key, label]) => ({
+                    value: key,
+                    label: label,
+                    color: CATEGORY_COLORS[key as QuoteCategory],
+                  })),
+                ]}
+                aria-label="Filter by category"
+              />
             </div>
 
             {/* Results count */}

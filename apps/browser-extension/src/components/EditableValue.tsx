@@ -1,5 +1,6 @@
+import { Select } from '@cuewise/ui';
 import type React from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 
 interface EditableValueProps {
   value: number;
@@ -17,27 +18,9 @@ export const EditableValue: React.FC<EditableValueProps> = ({
   className = '',
 }) => {
   const [isEditing, setIsEditing] = useState(false);
-  const selectRef = useRef<HTMLSelectElement>(null);
-
-  // Focus select when editing starts
-  useEffect(() => {
-    if (isEditing && selectRef.current) {
-      selectRef.current.focus();
-    }
-  }, [isEditing]);
 
   const handleClick = () => {
     setIsEditing(true);
-  };
-
-  const handleSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const numValue = Number.parseInt(e.target.value, 10);
-    onChange(numValue);
-    setIsEditing(false);
-  };
-
-  const handleBlur = () => {
-    setIsEditing(false);
   };
 
   if (!isEditing) {
@@ -56,19 +39,20 @@ export const EditableValue: React.FC<EditableValueProps> = ({
   // Show select dropdown with presets only
   if (presets) {
     return (
-      <select
-        ref={selectRef}
-        value={value}
-        onChange={handleSelectChange}
-        onBlur={handleBlur}
-        className="inline-block px-2 py-1 text-sm text-purple-600 font-semibold bg-white border-2 border-purple-400 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-      >
-        {presets.map((preset) => (
-          <option key={preset} value={preset}>
-            {preset} {unit}
-          </option>
-        ))}
-      </select>
+      <span className="inline-block min-w-[120px] align-middle">
+        <Select
+          value={value.toString()}
+          onChange={(val) => {
+            onChange(Number.parseInt(val, 10));
+            setIsEditing(false);
+          }}
+          options={presets.map((preset) => ({
+            value: preset.toString(),
+            label: `${preset} ${unit}`,
+          }))}
+          className="text-xs [&>button]:py-1 [&>button]:px-2 [&>button]:min-h-0 [&>button]:h-auto"
+        />
+      </span>
     );
   }
 

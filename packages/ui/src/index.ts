@@ -3,6 +3,7 @@
 export * from './components/Badge';
 export * from './components/Button';
 export * from './components/Card';
+export * from './components/Select';
 export * from './components/Toast';
 
 // Export utilities
