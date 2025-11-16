@@ -1,17 +1,17 @@
+import type { BackgroundStyle } from '@cuewise/shared';
 import {
   COLOR_THEMES,
+  type ColorTheme,
   DEFAULT_SETTINGS,
   FONT_SIZE_SCALES,
-  LAYOUT_DENSITY_SPACING,
-  type ColorTheme,
   type FontSize,
+  LAYOUT_DENSITY_SPACING,
   type LayoutDensity,
   type Settings,
 } from '@cuewise/shared';
 import { getSettings, setSettings } from '@cuewise/storage';
 import { create } from 'zustand';
 import { useToastStore } from './toast-store';
-import type { BackgroundStyle } from '@cuewise/shared';
 
 interface SettingsStore {
   // State
