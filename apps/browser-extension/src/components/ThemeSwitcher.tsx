@@ -11,21 +11,30 @@ export const ThemeSwitcher: React.FC<ThemeSwitcherProps> = ({ isVisible }) => {
   const { settings, updateColorTheme, updateTheme, updateLayoutDensity, updateSettings } =
     useSettingsStore();
 
+  // Theme-aware gradients that match actual theme colors
+  const isDark = settings.theme === 'dark' || (settings.theme === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+
   const colorThemes: { value: ColorTheme; label: string; gradient: string }[] = [
     {
       value: 'purple',
       label: 'Purple',
-      gradient: 'linear-gradient(to bottom right, #faf5ff, #eff6ff, #e0e7ff)',
+      gradient: isDark
+        ? 'linear-gradient(to bottom right, oklch(0.21 0.12 285), oklch(0.26 0.13 285), oklch(0.31 0.14 285))'
+        : 'linear-gradient(to bottom right, #faf5ff, #eff6ff, #e0e7ff)',
     },
     {
       value: 'forest',
       label: 'Forest',
-      gradient: 'linear-gradient(to bottom right, #f0fdf4, #dcfce7, #bbf7d0)',
+      gradient: isDark
+        ? 'linear-gradient(to bottom right, oklch(0.25 0.06 150), oklch(0.28 0.06 150), oklch(0.31 0.06 150))'
+        : 'linear-gradient(to bottom right, #f0fdf4, #dcfce7, #bbf7d0)',
     },
     {
       value: 'rose',
       label: 'Rose',
-      gradient: 'linear-gradient(to bottom right, #fff1f2, #ffe4e6, #fecdd3)',
+      gradient: isDark
+        ? 'linear-gradient(to bottom right, oklch(0.23 0.055 10), oklch(0.26 0.055 10), oklch(0.29 0.055 10))'
+        : 'linear-gradient(to bottom right, #fff1f2, #ffe4e6, #fecdd3)',
     },
   ];
 
