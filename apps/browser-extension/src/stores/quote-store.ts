@@ -9,10 +9,16 @@ interface QuoteStore {
   currentQuote: Quote | null;
   isLoading: boolean;
   error: string | null;
+  quoteHistory: string[]; // Array of quote IDs in viewing order
+  historyIndex: number; // Current position in history (0 = most recent)
 
   // Actions
   initialize: () => Promise<void>;
   refreshQuote: () => Promise<void>;
+  goBack: () => Promise<void>;
+  goForward: () => Promise<void>;
+  canGoBack: () => boolean;
+  canGoForward: () => boolean;
   toggleFavorite: (quoteId: string) => Promise<void>;
   hideQuote: (quoteId: string) => Promise<void>;
   unhideQuote: (quoteId: string) => Promise<void>;
@@ -42,6 +48,8 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
   currentQuote: null,
   isLoading: true,
   error: null,
+  quoteHistory: [],
+  historyIndex: 0,
 
   initialize: async () => {
     try {
@@ -65,7 +73,10 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         }
       }
 
-      set({ quotes, currentQuote, isLoading: false });
+      // Initialize history with current quote
+      const quoteHistory = currentQuote ? [currentQuote.id] : [];
+
+      set({ quotes, currentQuote, quoteHistory, historyIndex: 0, isLoading: false });
 
       // Increment view count for current quote
       if (currentQuote) {
@@ -81,14 +92,25 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
 
   refreshQuote: async () => {
     try {
-      const { quotes, currentQuote } = get();
+      const { quotes, currentQuote, quoteHistory, historyIndex } = get();
 
       // Pass current quote ID to avoid getting the same quote twice in a row
       const newQuote = getRandomQuote(quotes, currentQuote?.id);
 
       if (newQuote) {
         await setCurrentQuote(newQuote);
-        set({ currentQuote: newQuote });
+
+        // Add to history - if we're not at the most recent position,
+        // clear forward history (like browser navigation)
+        let updatedHistory = [...quoteHistory];
+        if (historyIndex > 0) {
+          // Remove forward history
+          updatedHistory = updatedHistory.slice(historyIndex);
+        }
+        // Add new quote to the beginning
+        updatedHistory.unshift(newQuote.id);
+
+        set({ currentQuote: newQuote, quoteHistory: updatedHistory, historyIndex: 0 });
         await get().incrementViewCount(newQuote.id);
       }
     } catch (error) {
@@ -97,6 +119,76 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
     }
+  },
+
+  goBack: async () => {
+    try {
+      const { quotes, quoteHistory, historyIndex } = get();
+
+      // Check if we can go back
+      if (historyIndex >= quoteHistory.length - 1) {
+        return;
+      }
+
+      const newIndex = historyIndex + 1;
+      const quoteId = quoteHistory[newIndex];
+      const quote = quotes.find((q) => q.id === quoteId);
+
+      if (quote && !quote.isHidden) {
+        await setCurrentQuote(quote);
+        set({ currentQuote: quote, historyIndex: newIndex });
+        await get().incrementViewCount(quote.id);
+      } else {
+        // Quote was deleted or hidden, skip it
+        set({ historyIndex: newIndex });
+        await get().goBack();
+      }
+    } catch (error) {
+      logger.error('Error going back in history', error);
+      const errorMessage = 'Failed to navigate back. Please try again.';
+      set({ error: errorMessage });
+      useToastStore.getState().error(errorMessage);
+    }
+  },
+
+  goForward: async () => {
+    try {
+      const { quotes, quoteHistory, historyIndex } = get();
+
+      // Check if we can go forward
+      if (historyIndex <= 0) {
+        return;
+      }
+
+      const newIndex = historyIndex - 1;
+      const quoteId = quoteHistory[newIndex];
+      const quote = quotes.find((q) => q.id === quoteId);
+
+      if (quote && !quote.isHidden) {
+        await setCurrentQuote(quote);
+        set({ currentQuote: quote, historyIndex: newIndex });
+        await get().incrementViewCount(quote.id);
+      } else {
+        // Quote was deleted or hidden, skip it
+        set({ historyIndex: newIndex });
+        await get().goForward();
+      }
+    } catch (error) {
+      logger.error('Error going forward in history', error);
+      const errorMessage = 'Failed to navigate forward. Please try again.';
+      set({ error: errorMessage });
+      useToastStore.getState().error(errorMessage);
+    }
+  },
+
+  canGoBack: () => {
+    const { quoteHistory, historyIndex } = get();
+    return historyIndex < quoteHistory.length - 1;
+  },
+
+  canGoForward: () => {
+    const { historyIndex } = get();
+    return historyIndex > 0;
   },
 
   toggleFavorite: async (quoteId: string) => {
