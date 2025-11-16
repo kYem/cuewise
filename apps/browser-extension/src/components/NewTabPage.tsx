@@ -96,11 +96,11 @@ export const NewTabPage: React.FC = () => {
           <button
             type="button"
             onClick={handleOpenPomodoro}
-            className="group relative flex items-center gap-2 px-4 py-3 bg-white/80 backdrop-blur-sm text-gray-700 rounded-full shadow-lg hover:shadow-xl hover:scale-105 transition-all"
+            className="group relative flex items-center gap-2 px-4 py-3 bg-surface/80 backdrop-blur-sm text-primary rounded-full shadow-lg hover:shadow-xl hover:scale-105 transition-all"
             title="Start Pomodoro Timer"
           >
             <Timer className="w-5 h-5 text-primary-600" />
-            <span className="hidden sm:inline text-sm font-medium text-gray-800">Pomodoro</span>
+            <span className="hidden sm:inline text-sm font-medium text-primary">Pomodoro</span>
           </button>
 
           {/* Menu Dropdown */}
@@ -108,7 +108,7 @@ export const NewTabPage: React.FC = () => {
             <button
               type="button"
               onClick={() => setIsMenuOpen(!isMenuOpen)}
-              className="p-3 bg-white/80 backdrop-blur-sm text-gray-700 rounded-full shadow-lg hover:shadow-xl hover:scale-110 transition-all"
+              className="p-3 bg-surface/80 backdrop-blur-sm text-primary rounded-full shadow-lg hover:shadow-xl hover:scale-110 transition-all"
               title="Menu"
             >
               <Settings className="w-5 h-5" />
@@ -116,37 +116,37 @@ export const NewTabPage: React.FC = () => {
 
             {/* Dropdown Menu */}
             {isMenuOpen && (
-              <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+              <div className="absolute right-0 mt-2 w-48 bg-surface-elevated rounded-lg shadow-xl border border-border overflow-hidden">
                 <button
                   type="button"
                   onClick={handleOpenQuoteManagement}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                  className="w-full flex items-center gap-3 px-4 py-3 text-primary hover:bg-surface-variant transition-colors"
                 >
-                  <BookMarked className="w-5 h-5 text-primary-600 dark:text-primary-400" />
+                  <BookMarked className="w-5 h-5 text-primary-600" />
                   <span className="text-sm font-medium">Manage Quotes</span>
                 </button>
                 <button
                   type="button"
                   onClick={handleOpenInsights}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors border-t border-gray-100 dark:border-gray-700"
+                  className="w-full flex items-center gap-3 px-4 py-3 text-primary hover:bg-surface-variant transition-colors border-t border-divider"
                 >
-                  <BarChart3 className="w-5 h-5 text-primary-600 dark:text-primary-400" />
+                  <BarChart3 className="w-5 h-5 text-primary-600" />
                   <span className="text-sm font-medium">View Insights</span>
                 </button>
                 <button
                   type="button"
                   onClick={handleToggleThemeSwitcher}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors border-t border-gray-100 dark:border-gray-700"
+                  className="w-full flex items-center gap-3 px-4 py-3 text-primary hover:bg-surface-variant transition-colors border-t border-divider"
                 >
-                  <PanelRight className="w-5 h-5 text-primary-600 dark:text-primary-400" />
+                  <PanelRight className="w-5 h-5 text-primary-600" />
                   <span className="text-sm font-medium">Theme Switcher</span>
                 </button>
                 <button
                   type="button"
                   onClick={handleOpenSettings}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors border-t border-gray-100 dark:border-gray-700"
+                  className="w-full flex items-center gap-3 px-4 py-3 text-primary hover:bg-surface-variant transition-colors border-t border-divider"
                 >
-                  <Settings className="w-5 h-5 text-primary-600 dark:text-primary-400" />
+                  <Settings className="w-5 h-5 text-primary-600" />
                   <span className="text-sm font-medium">Settings</span>
                 </button>
               </div>
@@ -180,13 +180,13 @@ export const NewTabPage: React.FC = () => {
 
           {/* Footer */}
           <footer className="mt-8 text-center py-density-lg">
-            <p className="text-sm text-gray-400">
+            <p className="text-sm text-tertiary">
               Press{' '}
-              <kbd className="px-2 py-1 bg-white rounded border border-gray-300 text-xs font-mono">
+              <kbd className="px-2 py-1 bg-surface rounded border border-border text-xs font-mono">
                 Ctrl
               </kbd>
               {' + '}
-              <kbd className="px-2 py-1 bg-white rounded border border-gray-300 text-xs font-mono">
+              <kbd className="px-2 py-1 bg-surface rounded border border-border text-xs font-mono">
                 T
               </kbd>{' '}
               to open a new tab
