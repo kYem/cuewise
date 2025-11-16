@@ -1,0 +1,25 @@
+import { defineManifest } from '@crxjs/vite-plugin';
+import pkg from './package.json';
+
+export default defineManifest({
+  manifest_version: 3,
+  name: 'Cuewise',
+  version: pkg.version,
+  description:
+    'Turn your day into a meaningful journey. Daily wisdom, mindful goals, and progress tracking.',
+  icons: {
+    16: 'icons/icon-16.png',
+    48: 'icons/icon-48.png',
+    128: 'icons/icon-128.png',
+  },
+  permissions: ['storage', 'notifications', 'alarms'],
+  chrome_url_overrides: {
+    newtab: 'index.html',
+  },
+  action: {
+    default_title: 'Cuewise',
+  },
+  background: {
+    service_worker: 'src/background.ts',
+  },
+});
