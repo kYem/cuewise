@@ -72,7 +72,9 @@ async function migrateLegacyQuotes(): Promise<void> {
     await removeFromStorage(STORAGE_KEYS.QUOTES, 'local');
     await removeFromStorage(STORAGE_KEYS.QUOTES, 'sync');
 
-    console.log(`Migration complete: ${seedQuotes.length} seed quotes, ${customQuotes.length} custom quotes`);
+    console.log(
+      `Migration complete: ${seedQuotes.length} seed quotes, ${customQuotes.length} custom quotes`
+    );
   } catch (error) {
     console.error('Error migrating legacy quotes:', error);
   }
@@ -276,14 +278,19 @@ export function formatBytes(bytes: number): string {
  * Note: Seed quotes always stay in local storage.
  * Only custom quotes and user data are migrated.
  */
-export async function migrateStorageData(fromArea: 'local' | 'sync', toArea: 'local' | 'sync'): Promise<boolean> {
+export async function migrateStorageData(
+  fromArea: 'local' | 'sync',
+  toArea: 'local' | 'sync'
+): Promise<boolean> {
   try {
     // Get user data from source storage area
-    const customQuotes = await getFromStorage<Quote[]>(STORAGE_KEYS.CUSTOM_QUOTES, fromArea) ?? [];
+    const customQuotes =
+      (await getFromStorage<Quote[]>(STORAGE_KEYS.CUSTOM_QUOTES, fromArea)) ?? [];
     const currentQuote = await getFromStorage<Quote>(STORAGE_KEYS.CURRENT_QUOTE, fromArea);
-    const goals = await getFromStorage<Goal[]>(STORAGE_KEYS.GOALS, fromArea) ?? [];
-    const reminders = await getFromStorage<Reminder[]>(STORAGE_KEYS.REMINDERS, fromArea) ?? [];
-    const sessions = await getFromStorage<PomodoroSession[]>(STORAGE_KEYS.POMODORO_SESSIONS, fromArea) ?? [];
+    const goals = (await getFromStorage<Goal[]>(STORAGE_KEYS.GOALS, fromArea)) ?? [];
+    const reminders = (await getFromStorage<Reminder[]>(STORAGE_KEYS.REMINDERS, fromArea)) ?? [];
+    const sessions =
+      (await getFromStorage<PomodoroSession[]>(STORAGE_KEYS.POMODORO_SESSIONS, fromArea)) ?? [];
 
     // Copy data to destination storage area
     // Note: Seed quotes are not migrated (always in local storage)
@@ -296,7 +303,9 @@ export async function migrateStorageData(fromArea: 'local' | 'sync', toArea: 'lo
     await setInStorage(STORAGE_KEYS.POMODORO_SESSIONS, sessions, toArea);
 
     console.log(`Successfully migrated data from ${fromArea} to ${toArea}`);
-    console.log(`Migrated ${customQuotes.length} custom quotes (seed quotes remain in local storage)`);
+    console.log(
+      `Migrated ${customQuotes.length} custom quotes (seed quotes remain in local storage)`
+    );
     return true;
   } catch (error) {
     console.error(`Error migrating data from ${fromArea} to ${toArea}:`, error);

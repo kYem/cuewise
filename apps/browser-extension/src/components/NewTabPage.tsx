@@ -1,10 +1,10 @@
+import { formatClockTime, formatLongDate, getGreeting } from '@cuewise/shared';
 import { BarChart3, BookMarked, PanelRight, Plus, Settings, Timer } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
-import { formatClockTime, getGreeting, formatLongDate } from '@cuewise/shared';
+import { usePomodoroStorageSync, usePomodoroStore } from '../stores/pomodoro-store';
 import { useQuoteStore } from '../stores/quote-store';
 import { useSettingsStore } from '../stores/settings-store';
-import { usePomodoroStore, usePomodoroStorageSync } from '../stores/pomodoro-store';
 import { ActivePomodoroWidget } from './ActivePomodoroWidget';
 import { AddQuoteForm } from './AddQuoteForm';
 import { Clock } from './Clock';
@@ -148,7 +148,9 @@ export const NewTabPage: React.FC = () => {
       {/* Sticky Header - Only visible when scrolled */}
       <div
         className={`fixed top-0 left-0 right-0 z-50 w-full bg-background/95 backdrop-blur-md border-b border-border/50 shadow-sm transition-all duration-300 ${
-          showStickyHeader ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0 pointer-events-none'
+          showStickyHeader
+            ? 'translate-y-0 opacity-100'
+            : '-translate-y-full opacity-0 pointer-events-none'
         }`}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -160,9 +162,7 @@ export const NewTabPage: React.FC = () => {
                 <span className="text-2xl sm:text-3xl font-bold text-primary tabular-nums">
                   {time}
                 </span>
-                {period && (
-                  <span className="text-sm font-medium text-secondary">{period}</span>
-                )}
+                {period && <span className="text-sm font-medium text-secondary">{period}</span>}
               </div>
 
               {/* Greeting & Date - Hidden on small screens */}
@@ -185,7 +185,9 @@ export const NewTabPage: React.FC = () => {
                   title="Start Pomodoro Timer"
                 >
                   <Timer className="w-5 h-5 text-primary-600" />
-                  <span className="hidden sm:inline text-sm font-medium text-primary">Pomodoro</span>
+                  <span className="hidden sm:inline text-sm font-medium text-primary">
+                    Pomodoro
+                  </span>
                 </button>
               )}
 

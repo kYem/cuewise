@@ -2,13 +2,13 @@ import { formatTimeRemaining } from '@cuewise/shared';
 import { Pause, Play, RotateCcw, SkipForward, Target } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useState } from 'react';
+import { usePomodoroLeader } from '../hooks/usePomodoroLeader';
 import { useGoalStore } from '../stores/goal-store';
-import { usePomodoroStore, usePomodoroStorageSync } from '../stores/pomodoro-store';
+import { usePomodoroStorageSync, usePomodoroStore } from '../stores/pomodoro-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { ambientSoundPlayer } from '../utils/ambient-sounds';
 import { getSessionStyles } from '../utils/pomodoro-styles';
 import { EditableValue } from './EditableValue';
-import { usePomodoroLeader } from '../hooks/usePomodoroLeader';
 
 export const PomodoroTimer: React.FC = () => {
   const {
@@ -143,9 +143,7 @@ export const PomodoroTimer: React.FC = () => {
             <SessionIcon className={`w-6 h-6 ${color}`} />
           </div>
           <div className="flex-1">
-            <h2 className="text-2xl font-semibold text-primary">
-              Pomodoro Timer
-            </h2>
+            <h2 className="text-2xl font-semibold text-primary">Pomodoro Timer</h2>
             <p className="text-sm text-secondary">{label}</p>
           </div>
         </div>
@@ -156,9 +154,7 @@ export const PomodoroTimer: React.FC = () => {
             {selectedGoal ? (
               <div className="flex items-center gap-2 p-3 bg-primary-50 rounded-lg border border-primary-200">
                 <Target className="w-4 h-4 text-primary-600 flex-shrink-0" />
-                <span className="text-sm text-primary flex-1">
-                  {selectedGoal.text}
-                </span>
+                <span className="text-sm text-primary flex-1">{selectedGoal.text}</span>
                 <button
                   type="button"
                   onClick={() => setSelectedGoal(null)}
@@ -229,7 +225,9 @@ export const PomodoroTimer: React.FC = () => {
                   className={`h-1.5 w-8 rounded-full ${
                     i < consecutiveWorkSessions ? '' : 'bg-divider'
                   }`}
-                  style={i < consecutiveWorkSessions ? { backgroundColor: progressColor } : undefined}
+                  style={
+                    i < consecutiveWorkSessions ? { backgroundColor: progressColor } : undefined
+                  }
                 />
               ))}
             </div>
@@ -275,7 +273,9 @@ export const PomodoroTimer: React.FC = () => {
               <div className={`${timerSize.fontSize} font-bold text-primary font-mono`}>
                 {formatTimeRemaining(timeRemaining)}
               </div>
-              <div className={`mt-2 ${timerSize.labelSize} font-medium uppercase tracking-wider ${color}`}>
+              <div
+                className={`mt-2 ${timerSize.labelSize} font-medium uppercase tracking-wider ${color}`}
+              >
                 {sessionType === 'work' && 'Work'}
                 {sessionType === 'break' && 'Break'}
                 {sessionType === 'longBreak' && 'Long Break'}

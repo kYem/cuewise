@@ -1,9 +1,9 @@
-import { Pause, Play, Timer } from 'lucide-react';
-import type React from 'react';
-import { usePomodoroStore, usePomodoroStorageSync } from '../stores/pomodoro-store';
 import { formatTimeRemaining } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
+import { Pause, Play, Timer } from 'lucide-react';
+import type React from 'react';
 import { usePomodoroLeader } from '../hooks/usePomodoroLeader';
+import { usePomodoroStorageSync, usePomodoroStore } from '../stores/pomodoro-store';
 
 export const ActivePomodoroWidget: React.FC = () => {
   const { status, sessionType, timeRemaining, pause, resume } = usePomodoroStore();
@@ -39,8 +39,8 @@ export const ActivePomodoroWidget: React.FC = () => {
     sessionType === 'work'
       ? 'text-primary-600'
       : sessionType === 'break'
-      ? 'text-green-600'
-      : 'text-blue-600';
+        ? 'text-green-600'
+        : 'text-blue-600';
 
   return (
     <div
@@ -58,7 +58,9 @@ export const ActivePomodoroWidget: React.FC = () => {
       <Timer className={cn('w-4 h-4', sessionColor)} />
 
       {/* Time Display */}
-      <span className="text-base font-bold text-primary tabular-nums">{formatTimeRemaining(timeRemaining)}</span>
+      <span className="text-base font-bold text-primary tabular-nums">
+        {formatTimeRemaining(timeRemaining)}
+      </span>
 
       {/* Pause/Resume Button */}
       <button

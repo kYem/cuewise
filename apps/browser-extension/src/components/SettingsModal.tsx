@@ -1,5 +1,16 @@
 import { AMBIENT_SOUNDS } from '@cuewise/shared';
-import { Bell, BellOff, Clock, Cloud, CloudOff, Music, Play, RefreshCw, RotateCcw, Square } from 'lucide-react';
+import {
+  Bell,
+  BellOff,
+  Clock,
+  Cloud,
+  CloudOff,
+  Music,
+  Play,
+  RefreshCw,
+  RotateCcw,
+  Square,
+} from 'lucide-react';
 import type React from 'react';
 import { useEffect, useState } from 'react';
 import { usePomodoroStore } from '../stores/pomodoro-store';
@@ -431,10 +442,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
               <div>
                 <span className="text-sm font-medium text-gray-700">Enable Chrome Sync</span>
                 <p className="text-xs text-gray-500">
-                  Sync your custom quotes, goals, and reminders across all Chrome browsers where you're signed in
+                  Sync your custom quotes, goals, and reminders across all Chrome browsers where
+                  you're signed in
                 </p>
                 <p className="text-xs text-orange-600 mt-1">
-                  Note: Built-in quotes stay in local storage. Only your custom data is synced (100KB limit).
+                  Note: Built-in quotes stay in local storage. Only your custom data is synced
+                  (100KB limit).
                 </p>
               </div>
             </label>

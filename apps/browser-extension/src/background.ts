@@ -144,4 +144,3 @@ chrome.notifications.onButtonClicked.addListener(async (notificationId, buttonIn
     await chrome.notifications.clear(notificationId);
   }
 });
-

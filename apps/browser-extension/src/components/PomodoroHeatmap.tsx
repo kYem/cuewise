@@ -1,6 +1,6 @@
+import type { PomodoroHeatmapData } from '@cuewise/shared';
 import type { ChartConfig } from '@cuewise/ui';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@cuewise/ui';
-import type { PomodoroHeatmapData } from '@cuewise/shared';
 import { Clock } from 'lucide-react';
 import type React from 'react';
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, XAxis, YAxis } from 'recharts';
@@ -134,15 +134,23 @@ export const PomodoroHeatmap: React.FC<PomodoroHeatmapProps> = ({ data }) => {
           <h3 className="text-lg font-semibold text-primary mb-4">By Day of Week</h3>
           <ChartContainer config={chartConfig} className="h-80 min-h-[20rem] w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={weekdayData} margin={{ top: 20, right: 10, left: -10, bottom: 20 }} layout="horizontal">
+              <BarChart
+                data={weekdayData}
+                margin={{ top: 20, right: 10, left: -10, bottom: 20 }}
+                layout="horizontal"
+              >
                 <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200" />
                 <XAxis type="number" className="text-xs" tick={{ fill: '#6B7280' }} />
-                <YAxis dataKey="day" type="category" className="text-xs" tick={{ fill: '#6B7280' }} width={50} />
+                <YAxis
+                  dataKey="day"
+                  type="category"
+                  className="text-xs"
+                  tick={{ fill: '#6B7280' }}
+                  width={50}
+                />
                 <ChartTooltip
                   content={
-                    <ChartTooltipContent
-                      formatter={(value) => [`${value} pomodoros`, 'Count']}
-                    />
+                    <ChartTooltipContent formatter={(value) => [`${value} pomodoros`, 'Count']} />
                   }
                 />
                 <Bar dataKey="count" fill="#8B5CF6" radius={[0, 8, 8, 0]}>

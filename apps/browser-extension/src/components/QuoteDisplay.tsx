@@ -157,9 +157,7 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({ onManualRefresh }) =
 
             {/* Source (for custom quotes) */}
             {currentQuote.source && (
-              <div className="text-sm text-secondary italic">
-                Source: {currentQuote.source}
-              </div>
+              <div className="text-sm text-secondary italic">Source: {currentQuote.source}</div>
             )}
 
             {/* Personal Notes (for custom quotes) */}

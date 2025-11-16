@@ -1,6 +1,6 @@
+import type { GoalCompletionRate } from '@cuewise/shared';
 import type { ChartConfig } from '@cuewise/ui';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@cuewise/ui';
-import type { GoalCompletionRate } from '@cuewise/shared';
 import { Target } from 'lucide-react';
 import type React from 'react';
 import { PolarAngleAxis, RadialBar, RadialBarChart, ResponsiveContainer } from 'recharts';
@@ -88,9 +88,7 @@ export const GoalCompletionChart: React.FC<GoalCompletionChartProps> = ({ data }
             </ResponsiveContainer>
           </ChartContainer>
           <div className="mt-4 text-center">
-            <div className="text-4xl font-bold text-primary">
-              {data.completionRate.toFixed(0)}%
-            </div>
+            <div className="text-4xl font-bold text-primary">{data.completionRate.toFixed(0)}%</div>
             <div className="text-sm text-secondary mt-1">Overall</div>
             <div className="text-sm text-secondary mt-2">
               {data.completedGoals} of {data.totalGoals} goals

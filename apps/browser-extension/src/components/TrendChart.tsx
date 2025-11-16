@@ -1,6 +1,6 @@
+import { formatFocusTime } from '@cuewise/shared';
 import type { ChartConfig } from '@cuewise/ui';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@cuewise/ui';
-import { formatFocusTime } from '@cuewise/shared';
 import { TrendingUp } from 'lucide-react';
 import type React from 'react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis } from 'recharts';
@@ -80,7 +80,8 @@ export const TrendChart: React.FC<TrendChartProps> = ({ title, data, metric }) =
   };
 
   // Get the data key based on metric
-  const dataKey = metric === 'goals' ? 'goalsCompleted' : metric === 'focus' ? 'focusTime' : 'pomodorosCompleted';
+  const dataKey =
+    metric === 'goals' ? 'goalsCompleted' : metric === 'focus' ? 'focusTime' : 'pomodorosCompleted';
 
   // Get the chart config for this metric
   const chartConfig = chartConfigs[metric];

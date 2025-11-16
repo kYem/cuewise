@@ -186,7 +186,9 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
 
     try {
       // Check if syncEnabled changed
-      const syncChanged = partialSettings.syncEnabled !== undefined && partialSettings.syncEnabled !== settings.syncEnabled;
+      const syncChanged =
+        partialSettings.syncEnabled !== undefined &&
+        partialSettings.syncEnabled !== settings.syncEnabled;
 
       // If sync setting changed, migrate data before saving settings
       if (syncChanged) {

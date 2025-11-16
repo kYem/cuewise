@@ -12,7 +12,9 @@ export const ThemeSwitcher: React.FC<ThemeSwitcherProps> = ({ isVisible }) => {
     useSettingsStore();
 
   // Theme-aware gradients that match actual theme colors
-  const isDark = settings.theme === 'dark' || (settings.theme === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  const isDark =
+    settings.theme === 'dark' ||
+    (settings.theme === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
 
   const colorThemes: { value: ColorTheme; label: string; gradient: string }[] = [
     {
@@ -107,9 +109,7 @@ export const ThemeSwitcher: React.FC<ThemeSwitcherProps> = ({ isVisible }) => {
 
         {/* Color Themes */}
         <section>
-          <h3 className="text-sm font-semibold text-primary mb-3">
-            Color Theme
-          </h3>
+          <h3 className="text-sm font-semibold text-primary mb-3">Color Theme</h3>
           <div className="grid grid-cols-3 gap-2">
             {colorThemes.map((theme) => (
               <button
@@ -140,9 +140,7 @@ export const ThemeSwitcher: React.FC<ThemeSwitcherProps> = ({ isVisible }) => {
 
         {/* Density */}
         <section>
-          <h3 className="text-sm font-semibold text-primary mb-3">
-            Density
-          </h3>
+          <h3 className="text-sm font-semibold text-primary mb-3">Density</h3>
           <div className="grid grid-cols-3 gap-2">
             {densities.map((density) => {
               const Icon = density.icon;

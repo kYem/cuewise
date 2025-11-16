@@ -85,9 +85,7 @@ const EditQuoteModal: React.FC<EditQuoteModalProps> = ({ quote, onClose, onSave 
               maxLength={500}
               className="w-full px-4 py-3 rounded-lg border-2 border-border bg-surface text-primary placeholder:text-secondary focus:border-primary-500 focus:outline-none transition-colors resize-none"
             />
-            <p className="mt-1 text-xs text-secondary">
-              {text.length}/500 characters
-            </p>
+            <p className="mt-1 text-xs text-secondary">{text.length}/500 characters</p>
           </div>
 
           {/* Author */}
@@ -166,9 +164,7 @@ const EditQuoteModal: React.FC<EditQuoteModalProps> = ({ quote, onClose, onSave 
               maxLength={300}
               className="w-full px-4 py-3 rounded-lg border-2 border-border bg-surface text-primary placeholder:text-secondary focus:border-primary-500 focus:outline-none transition-colors resize-none"
             />
-            <p className="mt-1 text-xs text-secondary">
-              {notes.length}/300 characters
-            </p>
+            <p className="mt-1 text-xs text-secondary">{notes.length}/300 characters</p>
           </div>
 
           {/* Actions */}
@@ -479,7 +475,9 @@ export const QuoteManagementPage: React.FC = () => {
               </button>
               <div>
                 <h1 className="text-3xl font-bold text-primary">Quote Management</h1>
-                <p className="text-secondary mt-1">Manage your collection of {stats.total} quotes</p>
+                <p className="text-secondary mt-1">
+                  Manage your collection of {stats.total} quotes
+                </p>
               </div>
             </div>
 

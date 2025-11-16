@@ -43,8 +43,8 @@ const ChartContainer = React.forwardRef<HTMLDivElement, ChartContainerProps>(
         <div
           ref={ref}
           className={cn(
-            'flex aspect-video justify-center text-xs [&_.recharts-cartesian-axis-tick_text]:fill-gray-500 [&_.recharts-cartesian-grid_line[stroke=\'#ccc\']]:stroke-gray-200 [&_.recharts-curve.recharts-tooltip-cursor]:stroke-gray-200 [&_.recharts-polar-grid_[stroke=\'#ccc\']]:stroke-gray-200 [&_.recharts-radial-bar-background-sector]:fill-gray-100 [&_.recharts-rectangle.recharts-tooltip-cursor]:fill-gray-100 [&_.recharts-reference-line_[stroke=\'#ccc\']]:stroke-gray-200 [&_.recharts-sector[stroke=\'#fff\']]:stroke-white [&_.recharts-sector]:outline-hidden [&_.recharts-surface]:outline-hidden',
-            className,
+            "flex aspect-video justify-center text-xs [&_.recharts-cartesian-axis-tick_text]:fill-gray-500 [&_.recharts-cartesian-grid_line[stroke='#ccc']]:stroke-gray-200 [&_.recharts-curve.recharts-tooltip-cursor]:stroke-gray-200 [&_.recharts-polar-grid_[stroke='#ccc']]:stroke-gray-200 [&_.recharts-radial-bar-background-sector]:fill-gray-100 [&_.recharts-rectangle.recharts-tooltip-cursor]:fill-gray-100 [&_.recharts-reference-line_[stroke='#ccc']]:stroke-gray-200 [&_.recharts-sector[stroke='#fff']]:stroke-white [&_.recharts-sector]:outline-hidden [&_.recharts-surface]:outline-hidden",
+            className
           )}
           {...props}
         >
@@ -52,7 +52,7 @@ const ChartContainer = React.forwardRef<HTMLDivElement, ChartContainerProps>(
         </div>
       </ChartContext.Provider>
     );
-  },
+  }
 );
 ChartContainer.displayName = 'ChartContainer';
 
@@ -61,7 +61,10 @@ const ChartTooltip = RechartsPrimitive.Tooltip;
 
 // Chart Tooltip Content
 interface ChartTooltipContentProps
-  extends Omit<React.ComponentPropsWithoutRef<typeof RechartsPrimitive.Tooltip>, 'content' | 'wrapperStyle' | 'contentStyle' | 'itemStyle' | 'labelStyle'>,
+  extends Omit<
+      React.ComponentPropsWithoutRef<typeof RechartsPrimitive.Tooltip>,
+      'content' | 'wrapperStyle' | 'contentStyle' | 'itemStyle' | 'labelStyle'
+    >,
     Omit<React.ComponentPropsWithoutRef<'div'>, 'content'> {
   hideLabel?: boolean;
   hideIndicator?: boolean;
@@ -87,7 +90,7 @@ const ChartTooltipContent = React.forwardRef<HTMLDivElement, ChartTooltipContent
       nameKey,
       labelKey,
     },
-    ref,
+    ref
   ) => {
     const { config } = useChart();
 
@@ -106,9 +109,7 @@ const ChartTooltipContent = React.forwardRef<HTMLDivElement, ChartTooltipContent
 
       if (labelFormatter) {
         return (
-          <div className={cn('font-medium', labelClassName)}>
-            {labelFormatter(value, payload)}
-          </div>
+          <div className={cn('font-medium', labelClassName)}>{labelFormatter(value, payload)}</div>
         );
       }
 
@@ -128,7 +129,7 @@ const ChartTooltipContent = React.forwardRef<HTMLDivElement, ChartTooltipContent
         ref={ref}
         className={cn(
           'grid min-w-[8rem] items-start gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs shadow-xl',
-          className,
+          className
         )}
       >
         {!hideLabel ? tooltipLabel : null}
@@ -143,7 +144,7 @@ const ChartTooltipContent = React.forwardRef<HTMLDivElement, ChartTooltipContent
                 key={`${item.dataKey}-${index}`}
                 className={cn(
                   'flex w-full items-center justify-between gap-2',
-                  indicator === 'dot' && 'items-center',
+                  indicator === 'dot' && 'items-center'
                 )}
               >
                 <div className="flex items-center gap-1.5">
@@ -153,7 +154,7 @@ const ChartTooltipContent = React.forwardRef<HTMLDivElement, ChartTooltipContent
                         'shrink-0 rounded-[2px]',
                         indicator === 'dot' && 'h-2.5 w-2.5',
                         indicator === 'line' && 'h-px w-4',
-                        indicator === 'dashed' && 'h-px w-4 border-t-2 border-dashed',
+                        indicator === 'dashed' && 'h-px w-4 border-t-2 border-dashed'
                       )}
                       style={{
                         backgroundColor: indicator === 'dot' ? indicatorColor : undefined,
@@ -162,12 +163,12 @@ const ChartTooltipContent = React.forwardRef<HTMLDivElement, ChartTooltipContent
                       }}
                     />
                   )}
-                  <span className="text-gray-500">
-                    {itemConfig?.label || item.name}
-                  </span>
+                  <span className="text-gray-500">{itemConfig?.label || item.name}</span>
                 </div>
                 <span className="font-mono font-medium tabular-nums text-gray-900">
-                  {formatter ? formatter(item.value, item.name, item, index, item.payload) : item.value}
+                  {formatter
+                    ? formatter(item.value, item.name, item, index, item.payload)
+                    : item.value}
                 </span>
               </div>
             );
@@ -175,7 +176,7 @@ const ChartTooltipContent = React.forwardRef<HTMLDivElement, ChartTooltipContent
         </div>
       </div>
     );
-  },
+  }
 );
 ChartTooltipContent.displayName = 'ChartTooltipContent';
 
@@ -204,7 +205,7 @@ const ChartLegendContent = React.forwardRef<HTMLDivElement, ChartLegendContentPr
         className={cn(
           'flex items-center justify-center gap-4',
           verticalAlign === 'top' ? 'pb-3' : 'pt-3',
-          className,
+          className
         )}
       >
         {payload.map((item: any) => {
@@ -212,7 +213,10 @@ const ChartLegendContent = React.forwardRef<HTMLDivElement, ChartLegendContentPr
           const itemConfig = config[key];
 
           return (
-            <div key={item.value} className="flex items-center gap-1.5 [&>svg]:h-3 [&>svg]:w-3 [&>svg]:text-gray-500">
+            <div
+              key={item.value}
+              className="flex items-center gap-1.5 [&>svg]:h-3 [&>svg]:w-3 [&>svg]:text-gray-500"
+            >
               {itemConfig?.icon && !hideIcon ? (
                 <itemConfig.icon />
               ) : (
@@ -231,7 +235,7 @@ const ChartLegendContent = React.forwardRef<HTMLDivElement, ChartLegendContentPr
         })}
       </div>
     );
-  },
+  }
 );
 ChartLegendContent.displayName = 'ChartLegendContent';
 

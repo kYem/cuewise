@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react';
 import { createLogger, LogLevel } from '@cuewise/shared';
+import { useEffect, useRef } from 'react';
 import { usePomodoroStore } from '../stores/pomodoro-store';
 
 const logger = createLogger({
@@ -70,7 +70,10 @@ export function usePomodoroLeader() {
             const checkInterval = setInterval(() => {
               const currentStatus = usePomodoroStore.getState().status;
               if (!isRunningRef.current || currentStatus !== 'running') {
-                logger.debug('Releasing lock', { running: isRunningRef.current, status: currentStatus });
+                logger.debug('Releasing lock', {
+                  running: isRunningRef.current,
+                  status: currentStatus,
+                });
                 clearInterval(checkInterval);
                 resolve();
               }
@@ -113,4 +116,3 @@ export function usePomodoroLeader() {
     };
   }, [status, tick]);
 }
-
