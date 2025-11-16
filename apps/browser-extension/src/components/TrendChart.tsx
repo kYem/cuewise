@@ -1,6 +1,9 @@
+import type { ChartConfig } from '@cuewise/ui';
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@cuewise/ui';
 import { formatFocusTime } from '@cuewise/shared';
 import { TrendingUp } from 'lucide-react';
 import type React from 'react';
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis } from 'recharts';
 
 interface DataPoint {
   label: string;
@@ -14,6 +17,27 @@ interface TrendChartProps {
   data: DataPoint[];
   metric: 'goals' | 'focus' | 'pomodoros';
 }
+
+const chartConfigs: Record<string, ChartConfig> = {
+  goals: {
+    goalsCompleted: {
+      label: 'Goals Completed',
+      color: '#8B5CF6',
+    },
+  },
+  focus: {
+    focusTime: {
+      label: 'Focus Time',
+      color: '#3B82F6',
+    },
+  },
+  pomodoros: {
+    pomodorosCompleted: {
+      label: 'Pomodoros',
+      color: '#EF4444',
+    },
+  },
+};
 
 export const TrendChart: React.FC<TrendChartProps> = ({ title, data, metric }) => {
   if (!data || data.length === 0) {
@@ -42,9 +66,6 @@ export const TrendChart: React.FC<TrendChartProps> = ({ title, data, metric }) =
     }
   });
 
-  const maxValue = Math.max(...values, 1);
-  const minValue = Math.min(...values);
-
   // Calculate statistics
   const total = values.reduce((sum, v) => sum + v, 0);
   const average = total / values.length;
@@ -56,6 +77,18 @@ export const TrendChart: React.FC<TrendChartProps> = ({ title, data, metric }) =
       return formatFocusTime(value);
     }
     return value.toString();
+  };
+
+  // Get the data key based on metric
+  const dataKey = metric === 'goals' ? 'goalsCompleted' : metric === 'focus' ? 'focusTime' : 'pomodorosCompleted';
+
+  // Get the chart config for this metric
+  const chartConfig = chartConfigs[metric];
+
+  // Custom tooltip formatter
+  const tooltipFormatter = (value: string | number | (string | number)[]) => {
+    const numValue = typeof value === 'number' ? value : Number(value);
+    return formatValue(numValue);
   };
 
   return (
@@ -84,53 +117,33 @@ export const TrendChart: React.FC<TrendChartProps> = ({ title, data, metric }) =
         </div>
       </div>
 
-      {/* Simple line chart */}
-      <div className="relative h-64 flex items-end gap-1 border-b border-l border-gray-200 pb-1 pl-1">
-        {data.map((point, index) => {
-          const value = values[index];
-          const heightPercent = maxValue > 0 ? (value / maxValue) * 100 : 0;
-
-          return (
-            <div key={index} className="flex-1 flex flex-col items-center group relative">
-              {/* Bar */}
-              <div className="w-full flex items-end justify-center">
-                <div
-                  className="w-full bg-gradient-to-t from-purple-600 to-purple-400 rounded-t-md transition-all hover:opacity-80 relative"
-                  style={{ height: `${heightPercent}%` }}
-                >
-                  {/* Tooltip */}
-                  <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
-                    <div className="bg-gray-900 text-white text-xs rounded-lg py-2 px-3 whitespace-nowrap shadow-lg">
-                      <div className="font-semibold">{point.label}</div>
-                      <div className="text-gray-300">Value: {formatValue(value)}</div>
-                      {metric === 'goals' && (
-                        <>
-                          <div className="text-gray-300">Pomodoros: {point.pomodorosCompleted}</div>
-                          <div className="text-gray-300">
-                            Focus: {formatFocusTime(point.focusTime)}
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Label */}
-              <div className="text-xs text-gray-600 mt-2 transform -rotate-45 origin-top-left whitespace-nowrap">
-                {point.label}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Y-axis labels */}
-      <div className="absolute left-0 top-16 bottom-12 flex flex-col justify-between text-xs text-gray-500 pr-2">
-        <div>{formatValue(maxValue)}</div>
-        <div>{formatValue(Math.round(maxValue / 2))}</div>
-        <div>{formatValue(minValue)}</div>
-      </div>
+      <ChartContainer config={chartConfig} className="h-64 w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
+            <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200" />
+            <XAxis
+              dataKey="label"
+              angle={-45}
+              textAnchor="end"
+              height={100}
+              className="text-xs"
+              tick={{ fill: '#6B7280' }}
+            />
+            <YAxis
+              className="text-xs"
+              tick={{ fill: '#6B7280' }}
+              tickFormatter={(value) => (metric === 'focus' ? `${Math.round(value / 60)}m` : value)}
+            />
+            <ChartTooltip content={<ChartTooltipContent formatter={tooltipFormatter} />} />
+            <Bar
+              dataKey={dataKey}
+              fill={chartConfig[dataKey].color}
+              radius={[8, 8, 0, 0]}
+              className="transition-all hover:opacity-80"
+            />
+          </BarChart>
+        </ResponsiveContainer>
+      </ChartContainer>
     </div>
   );
 };

@@ -1,18 +1,54 @@
+import type { ChartConfig } from '@cuewise/ui';
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@cuewise/ui';
 import type { GoalCompletionRate } from '@cuewise/shared';
 import { Target } from 'lucide-react';
 import type React from 'react';
+import { PolarAngleAxis, RadialBar, RadialBarChart, ResponsiveContainer } from 'recharts';
 
 interface GoalCompletionChartProps {
   data: GoalCompletionRate;
 }
 
+const chartConfig: ChartConfig = {
+  overall: {
+    label: 'Overall',
+    color: '#10B981',
+  },
+  thisWeek: {
+    label: 'This Week',
+    color: '#3B82F6',
+  },
+  thisMonth: {
+    label: 'This Month',
+    color: '#8B5CF6',
+  },
+};
+
 export const GoalCompletionChart: React.FC<GoalCompletionChartProps> = ({ data }) => {
-  // Calculate circle positions for donut chart
-  const radius = 80;
-  const circumference = 2 * Math.PI * radius;
-  const completionOffset = circumference - (data.completionRate / 100) * circumference;
-  const weekOffset = circumference - (data.thisWeek.completionRate / 100) * circumference;
-  const monthOffset = circumference - (data.thisMonth.completionRate / 100) * circumference;
+  // Prepare data for radial charts
+  const overallData = [
+    {
+      name: 'Overall',
+      value: data.completionRate,
+      fill: chartConfig.overall.color,
+    },
+  ];
+
+  const weekData = [
+    {
+      name: 'This Week',
+      value: data.thisWeek.completionRate,
+      fill: chartConfig.thisWeek.color,
+    },
+  ];
+
+  const monthData = [
+    {
+      name: 'This Month',
+      value: data.thisMonth.completionRate,
+      fill: chartConfig.thisMonth.color,
+    },
+  ];
 
   return (
     <div className="bg-white rounded-xl shadow-lg p-8">
@@ -24,33 +60,39 @@ export const GoalCompletionChart: React.FC<GoalCompletionChartProps> = ({ data }
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
         {/* Overall Completion */}
         <div className="flex flex-col items-center">
-          <div className="relative w-48 h-48">
-            <svg className="transform -rotate-90 w-48 h-48" aria-label="Overall completion rate">
-              {/* Background circle */}
-              <circle cx="96" cy="96" r={radius} stroke="#E5E7EB" strokeWidth="16" fill="none" />
-              {/* Progress circle */}
-              <circle
-                cx="96"
-                cy="96"
-                r={radius}
-                stroke="#10B981"
-                strokeWidth="16"
-                fill="none"
-                strokeDasharray={circumference}
-                strokeDashoffset={completionOffset}
-                strokeLinecap="round"
-                className="transition-all duration-1000"
-              />
-            </svg>
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <div className="text-4xl font-bold text-gray-800">
-                {data.completionRate.toFixed(0)}%
-              </div>
-              <div className="text-sm text-gray-500">Overall</div>
-            </div>
-          </div>
+          <ChartContainer config={chartConfig} className="h-48 w-48">
+            <ResponsiveContainer width="100%" height="100%">
+              <RadialBarChart
+                data={overallData}
+                startAngle={90}
+                endAngle={-270}
+                innerRadius="70%"
+                outerRadius="100%"
+              >
+                <PolarAngleAxis type="number" domain={[0, 100]} angleAxisId={0} tick={false} />
+                <RadialBar
+                  background={{ fill: '#E5E7EB' }}
+                  dataKey="value"
+                  cornerRadius={10}
+                  fill={chartConfig.overall.color}
+                />
+                <ChartTooltip
+                  content={
+                    <ChartTooltipContent
+                      formatter={(value) => `${Number(value).toFixed(0)}%`}
+                      hideLabel
+                    />
+                  }
+                />
+              </RadialBarChart>
+            </ResponsiveContainer>
+          </ChartContainer>
           <div className="mt-4 text-center">
-            <div className="text-sm text-gray-600">
+            <div className="text-4xl font-bold text-gray-800">
+              {data.completionRate.toFixed(0)}%
+            </div>
+            <div className="text-sm text-gray-500 mt-1">Overall</div>
+            <div className="text-sm text-gray-600 mt-2">
               {data.completedGoals} of {data.totalGoals} goals
             </div>
           </div>
@@ -58,33 +100,39 @@ export const GoalCompletionChart: React.FC<GoalCompletionChartProps> = ({ data }
 
         {/* This Week */}
         <div className="flex flex-col items-center">
-          <div className="relative w-48 h-48">
-            <svg className="transform -rotate-90 w-48 h-48" aria-label="This week completion rate">
-              {/* Background circle */}
-              <circle cx="96" cy="96" r={radius} stroke="#E5E7EB" strokeWidth="16" fill="none" />
-              {/* Progress circle */}
-              <circle
-                cx="96"
-                cy="96"
-                r={radius}
-                stroke="#3B82F6"
-                strokeWidth="16"
-                fill="none"
-                strokeDasharray={circumference}
-                strokeDashoffset={weekOffset}
-                strokeLinecap="round"
-                className="transition-all duration-1000"
-              />
-            </svg>
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <div className="text-4xl font-bold text-gray-800">
-                {data.thisWeek.completionRate.toFixed(0)}%
-              </div>
-              <div className="text-sm text-gray-500">This Week</div>
-            </div>
-          </div>
+          <ChartContainer config={chartConfig} className="h-48 w-48">
+            <ResponsiveContainer width="100%" height="100%">
+              <RadialBarChart
+                data={weekData}
+                startAngle={90}
+                endAngle={-270}
+                innerRadius="70%"
+                outerRadius="100%"
+              >
+                <PolarAngleAxis type="number" domain={[0, 100]} angleAxisId={0} tick={false} />
+                <RadialBar
+                  background={{ fill: '#E5E7EB' }}
+                  dataKey="value"
+                  cornerRadius={10}
+                  fill={chartConfig.thisWeek.color}
+                />
+                <ChartTooltip
+                  content={
+                    <ChartTooltipContent
+                      formatter={(value) => `${Number(value).toFixed(0)}%`}
+                      hideLabel
+                    />
+                  }
+                />
+              </RadialBarChart>
+            </ResponsiveContainer>
+          </ChartContainer>
           <div className="mt-4 text-center">
-            <div className="text-sm text-gray-600">
+            <div className="text-4xl font-bold text-gray-800">
+              {data.thisWeek.completionRate.toFixed(0)}%
+            </div>
+            <div className="text-sm text-gray-500 mt-1">This Week</div>
+            <div className="text-sm text-gray-600 mt-2">
               {data.thisWeek.completedGoals} of {data.thisWeek.totalGoals} goals
             </div>
           </div>
@@ -92,33 +140,39 @@ export const GoalCompletionChart: React.FC<GoalCompletionChartProps> = ({ data }
 
         {/* This Month */}
         <div className="flex flex-col items-center">
-          <div className="relative w-48 h-48">
-            <svg className="transform -rotate-90 w-48 h-48" aria-label="This month completion rate">
-              {/* Background circle */}
-              <circle cx="96" cy="96" r={radius} stroke="#E5E7EB" strokeWidth="16" fill="none" />
-              {/* Progress circle */}
-              <circle
-                cx="96"
-                cy="96"
-                r={radius}
-                stroke="#8B5CF6"
-                strokeWidth="16"
-                fill="none"
-                strokeDasharray={circumference}
-                strokeDashoffset={monthOffset}
-                strokeLinecap="round"
-                className="transition-all duration-1000"
-              />
-            </svg>
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <div className="text-4xl font-bold text-gray-800">
-                {data.thisMonth.completionRate.toFixed(0)}%
-              </div>
-              <div className="text-sm text-gray-500">This Month</div>
-            </div>
-          </div>
+          <ChartContainer config={chartConfig} className="h-48 w-48">
+            <ResponsiveContainer width="100%" height="100%">
+              <RadialBarChart
+                data={monthData}
+                startAngle={90}
+                endAngle={-270}
+                innerRadius="70%"
+                outerRadius="100%"
+              >
+                <PolarAngleAxis type="number" domain={[0, 100]} angleAxisId={0} tick={false} />
+                <RadialBar
+                  background={{ fill: '#E5E7EB' }}
+                  dataKey="value"
+                  cornerRadius={10}
+                  fill={chartConfig.thisMonth.color}
+                />
+                <ChartTooltip
+                  content={
+                    <ChartTooltipContent
+                      formatter={(value) => `${Number(value).toFixed(0)}%`}
+                      hideLabel
+                    />
+                  }
+                />
+              </RadialBarChart>
+            </ResponsiveContainer>
+          </ChartContainer>
           <div className="mt-4 text-center">
-            <div className="text-sm text-gray-600">
+            <div className="text-4xl font-bold text-gray-800">
+              {data.thisMonth.completionRate.toFixed(0)}%
+            </div>
+            <div className="text-sm text-gray-500 mt-1">This Month</div>
+            <div className="text-sm text-gray-600 mt-2">
               {data.thisMonth.completedGoals} of {data.thisMonth.totalGoals} goals
             </div>
           </div>

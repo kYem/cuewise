@@ -22,6 +22,7 @@
     "lucide-react": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
+    "recharts": "catalog:",
     "zustand": "catalog:"
   },
   "devDependencies": {
