@@ -101,7 +101,7 @@ export const ThemeSwitcher: React.FC<ThemeSwitcherProps> = ({ isVisible }) => {
           <h3 className="text-sm font-semibold text-primary mb-3">
             Color Theme
           </h3>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-2">
             {colorThemes.map((theme) => (
               <button
                 key={theme.value}
@@ -114,7 +114,7 @@ export const ThemeSwitcher: React.FC<ThemeSwitcherProps> = ({ isVisible }) => {
                 }`}
               >
                 <div
-                  className="h-20 w-full"
+                  className="h-12 w-full"
                   style={{
                     background: theme.gradient,
                   }}
@@ -129,12 +129,12 @@ export const ThemeSwitcher: React.FC<ThemeSwitcherProps> = ({ isVisible }) => {
           </div>
         </section>
 
-        {/* Layout Density */}
+        {/* Density */}
         <section>
           <h3 className="text-sm font-semibold text-primary mb-3">
-            Layout Density
+            Density
           </h3>
-          <div className="flex gap-2">
+          <div className="grid grid-cols-3 gap-2">
             {densities.map((density) => {
               const Icon = density.icon;
               return (
@@ -142,7 +142,7 @@ export const ThemeSwitcher: React.FC<ThemeSwitcherProps> = ({ isVisible }) => {
                   key={density.value}
                   type="button"
                   onClick={() => updateLayoutDensity(density.value)}
-                  className={`flex-1 py-3 rounded-lg transition-all flex flex-col items-center gap-1 ${
+                  className={`p-3 rounded-lg transition-all flex flex-col items-center gap-2 ${
                     settings.layoutDensity === density.value
                       ? 'bg-primary-600 text-white shadow-md'
                       : 'bg-surface-variant text-primary hover:bg-border'
