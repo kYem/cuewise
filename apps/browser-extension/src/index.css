@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@variant dark (.dark *);
+
 @theme {
   /* Default purple theme - using OKLCH for better color consistency */
   --color-primary-50: oklch(0.98 0.01 300);
