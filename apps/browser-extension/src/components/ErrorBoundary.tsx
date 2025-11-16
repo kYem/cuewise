@@ -1,3 +1,4 @@
+import { logger } from '@cuewise/shared';
 import { Button } from '@cuewise/ui';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 import { Component, type ErrorInfo, type ReactNode } from 'react';
@@ -24,7 +25,9 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('ErrorBoundary caught an error:', error, errorInfo);
+    logger.error('ErrorBoundary caught an error', error, {
+      componentStack: errorInfo.componentStack,
+    });
     this.props.onError?.(error, errorInfo);
   }
 

@@ -11,5 +11,8 @@ export default defineConfig({
         newtab: 'index.html',
       },
     },
+    // Use esbuild for fast minification (default, ~100x faster than terser)
+    // Our logger abstraction handles console filtering via configuration
+    minify: 'esbuild',
   },
 });
