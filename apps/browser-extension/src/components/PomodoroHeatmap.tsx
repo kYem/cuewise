@@ -56,8 +56,8 @@ export const PomodoroHeatmap: React.FC<PomodoroHeatmapProps> = ({ data }) => {
   }));
 
   return (
-    <div className="bg-white rounded-xl shadow-lg p-8">
-      <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-3">
+    <div className="bg-surface rounded-xl shadow-lg p-8">
+      <h2 className="text-2xl font-bold text-primary mb-6 flex items-center gap-3">
         <Clock className="w-6 h-6 text-purple-600" />
         Pomodoro Heatmap
       </h2>
@@ -65,7 +65,7 @@ export const PomodoroHeatmap: React.FC<PomodoroHeatmapProps> = ({ data }) => {
       {/* Productive Hours Summary */}
       {data.productiveHours.length > 0 && (
         <div className="mb-6 p-4 bg-purple-50 rounded-lg">
-          <p className="text-sm text-gray-700">
+          <p className="text-sm text-primary">
             <span className="font-bold">Most productive hours:</span>{' '}
             {data.productiveHours.map((hour) => formatHour(hour)).join(', ')}
           </p>
@@ -75,7 +75,7 @@ export const PomodoroHeatmap: React.FC<PomodoroHeatmapProps> = ({ data }) => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Hourly Distribution */}
         <div>
-          <h3 className="text-lg font-semibold text-gray-700 mb-4">By Hour of Day</h3>
+          <h3 className="text-lg font-semibold text-primary mb-4">By Hour of Day</h3>
           <ChartContainer config={chartConfig} className="h-80 min-h-[20rem] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={hourlyData} margin={{ top: 20, right: 10, left: -10, bottom: 20 }}>
@@ -131,7 +131,7 @@ export const PomodoroHeatmap: React.FC<PomodoroHeatmapProps> = ({ data }) => {
 
         {/* Weekday Distribution */}
         <div>
-          <h3 className="text-lg font-semibold text-gray-700 mb-4">By Day of Week</h3>
+          <h3 className="text-lg font-semibold text-primary mb-4">By Day of Week</h3>
           <ChartContainer config={chartConfig} className="h-80 min-h-[20rem] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={weekdayData} margin={{ top: 20, right: 10, left: -10, bottom: 20 }} layout="horizontal">
@@ -157,19 +157,19 @@ export const PomodoroHeatmap: React.FC<PomodoroHeatmapProps> = ({ data }) => {
       </div>
 
       {/* Total Sessions Summary */}
-      <div className="mt-8 pt-6 border-t border-gray-200">
+      <div className="mt-8 pt-6 border-t border-border">
         <div className="flex items-center justify-center gap-8">
           <div className="text-center">
             <div className="text-3xl font-bold text-purple-600">
               {Object.values(data.hourlyDistribution).reduce((sum, count) => sum + count, 0)}
             </div>
-            <div className="text-sm text-gray-600">Total Pomodoros</div>
+            <div className="text-sm text-secondary">Total Pomodoros</div>
           </div>
           <div className="text-center">
             <div className="text-3xl font-bold text-blue-600">
               {Object.keys(data.dailyDistribution).length}
             </div>
-            <div className="text-sm text-gray-600">Active Days</div>
+            <div className="text-sm text-secondary">Active Days</div>
           </div>
         </div>
       </div>

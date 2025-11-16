@@ -51,8 +51,8 @@ export const GoalCompletionChart: React.FC<GoalCompletionChartProps> = ({ data }
   ];
 
   return (
-    <div className="bg-white rounded-xl shadow-lg p-8">
-      <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-3">
+    <div className="bg-surface rounded-xl shadow-lg p-8">
+      <h2 className="text-2xl font-bold text-primary mb-6 flex items-center gap-3">
         <Target className="w-6 h-6 text-green-600" />
         Goal Completion Rate
       </h2>
@@ -88,11 +88,11 @@ export const GoalCompletionChart: React.FC<GoalCompletionChartProps> = ({ data }
             </ResponsiveContainer>
           </ChartContainer>
           <div className="mt-4 text-center">
-            <div className="text-4xl font-bold text-gray-800">
+            <div className="text-4xl font-bold text-primary">
               {data.completionRate.toFixed(0)}%
             </div>
-            <div className="text-sm text-gray-500 mt-1">Overall</div>
-            <div className="text-sm text-gray-600 mt-2">
+            <div className="text-sm text-secondary mt-1">Overall</div>
+            <div className="text-sm text-secondary mt-2">
               {data.completedGoals} of {data.totalGoals} goals
             </div>
           </div>
@@ -128,11 +128,11 @@ export const GoalCompletionChart: React.FC<GoalCompletionChartProps> = ({ data }
             </ResponsiveContainer>
           </ChartContainer>
           <div className="mt-4 text-center">
-            <div className="text-4xl font-bold text-gray-800">
+            <div className="text-4xl font-bold text-primary">
               {data.thisWeek.completionRate.toFixed(0)}%
             </div>
-            <div className="text-sm text-gray-500 mt-1">This Week</div>
-            <div className="text-sm text-gray-600 mt-2">
+            <div className="text-sm text-secondary mt-1">This Week</div>
+            <div className="text-sm text-secondary mt-2">
               {data.thisWeek.completedGoals} of {data.thisWeek.totalGoals} goals
             </div>
           </div>
@@ -168,11 +168,11 @@ export const GoalCompletionChart: React.FC<GoalCompletionChartProps> = ({ data }
             </ResponsiveContainer>
           </ChartContainer>
           <div className="mt-4 text-center">
-            <div className="text-4xl font-bold text-gray-800">
+            <div className="text-4xl font-bold text-primary">
               {data.thisMonth.completionRate.toFixed(0)}%
             </div>
-            <div className="text-sm text-gray-500 mt-1">This Month</div>
-            <div className="text-sm text-gray-600 mt-2">
+            <div className="text-sm text-secondary mt-1">This Month</div>
+            <div className="text-sm text-secondary mt-2">
               {data.thisMonth.completedGoals} of {data.thisMonth.totalGoals} goals
             </div>
           </div>
@@ -180,20 +180,20 @@ export const GoalCompletionChart: React.FC<GoalCompletionChartProps> = ({ data }
       </div>
 
       {/* Summary Stats */}
-      <div className="mt-8 grid grid-cols-3 gap-4 pt-6 border-t border-gray-200">
+      <div className="mt-8 grid grid-cols-3 gap-4 pt-6 border-t border-border">
         <div className="text-center">
           <div className="text-2xl font-bold text-green-600">{data.totalGoals}</div>
-          <div className="text-sm text-gray-600">Total Goals</div>
+          <div className="text-sm text-secondary">Total Goals</div>
         </div>
         <div className="text-center">
           <div className="text-2xl font-bold text-blue-600">{data.completedGoals}</div>
-          <div className="text-sm text-gray-600">Completed</div>
+          <div className="text-sm text-secondary">Completed</div>
         </div>
         <div className="text-center">
-          <div className="text-2xl font-bold text-gray-600">
+          <div className="text-2xl font-bold text-secondary">
             {data.totalGoals - data.completedGoals}
           </div>
-          <div className="text-sm text-gray-600">Remaining</div>
+          <div className="text-sm text-secondary">Remaining</div>
         </div>
       </div>
     </div>

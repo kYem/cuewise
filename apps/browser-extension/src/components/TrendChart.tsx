@@ -42,12 +42,12 @@ const chartConfigs: Record<string, ChartConfig> = {
 export const TrendChart: React.FC<TrendChartProps> = ({ title, data, metric }) => {
   if (!data || data.length === 0) {
     return (
-      <div className="bg-white rounded-xl shadow-lg p-8">
-        <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-3">
+      <div className="bg-surface rounded-xl shadow-lg p-8">
+        <h2 className="text-2xl font-bold text-primary mb-6 flex items-center gap-3">
           <TrendingUp className="w-6 h-6 text-purple-600" />
           {title}
         </h2>
-        <p className="text-gray-500 text-center py-8">No data available</p>
+        <p className="text-secondary text-center py-8">No data available</p>
       </div>
     );
   }
@@ -92,23 +92,23 @@ export const TrendChart: React.FC<TrendChartProps> = ({ title, data, metric }) =
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-lg p-8">
+    <div className="bg-surface rounded-xl shadow-lg p-8">
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-3">
+        <h2 className="text-2xl font-bold text-primary flex items-center gap-3">
           <TrendingUp className="w-6 h-6 text-purple-600" />
           {title}
         </h2>
         <div className="flex gap-4 text-sm">
           <div className="text-center">
-            <div className="text-gray-500">Average</div>
-            <div className="font-bold text-gray-800">{formatValue(Math.round(average))}</div>
+            <div className="text-secondary">Average</div>
+            <div className="font-bold text-primary">{formatValue(Math.round(average))}</div>
           </div>
           <div className="text-center">
-            <div className="text-gray-500">Total</div>
-            <div className="font-bold text-gray-800">{formatValue(total)}</div>
+            <div className="text-secondary">Total</div>
+            <div className="font-bold text-primary">{formatValue(total)}</div>
           </div>
           <div className="text-center">
-            <div className="text-gray-500">Trend</div>
+            <div className="text-secondary">Trend</div>
             <div className={`font-bold ${trend >= 0 ? 'text-green-600' : 'text-red-600'}`}>
               {trend >= 0 ? '+' : ''}
               {formatValue(trend)}

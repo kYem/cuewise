@@ -16,8 +16,8 @@ export const ExportControls: React.FC<ExportControlsProps> = ({
   const [showDropdown, setShowDropdown] = useState(false);
 
   return (
-    <div className="bg-white rounded-xl shadow-lg p-6">
-      <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+    <div className="bg-surface rounded-xl shadow-lg p-6">
+      <h2 className="text-xl font-bold text-primary mb-4 flex items-center gap-2">
         <Download className="w-5 h-5 text-purple-600" />
         Export Reports
       </h2>
@@ -31,8 +31,8 @@ export const ExportControls: React.FC<ExportControlsProps> = ({
         >
           <FileJson className="w-6 h-6 text-purple-600" />
           <div className="text-left">
-            <div className="font-semibold text-gray-800">Analytics JSON</div>
-            <div className="text-xs text-gray-600">Export insights & analytics</div>
+            <div className="font-semibold text-primary">Analytics JSON</div>
+            <div className="text-xs text-secondary">Export insights & analytics</div>
           </div>
         </button>
 
@@ -44,8 +44,8 @@ export const ExportControls: React.FC<ExportControlsProps> = ({
         >
           <FileJson className="w-6 h-6 text-blue-600" />
           <div className="text-left">
-            <div className="font-semibold text-gray-800">Complete Export</div>
-            <div className="text-xs text-gray-600">All data including quotes</div>
+            <div className="font-semibold text-primary">Complete Export</div>
+            <div className="text-xs text-secondary">All data including quotes</div>
           </div>
         </button>
 
@@ -58,11 +58,11 @@ export const ExportControls: React.FC<ExportControlsProps> = ({
           >
             <FileDown className="w-6 h-6 text-green-600" />
             <div className="flex-1 text-left">
-              <div className="font-semibold text-gray-800">Export as CSV</div>
-              <div className="text-xs text-gray-600">Select data type to export</div>
+              <div className="font-semibold text-primary">Export as CSV</div>
+              <div className="text-xs text-secondary">Select data type to export</div>
             </div>
             <svg
-              className={`w-5 h-5 text-gray-600 transition-transform ${showDropdown ? 'rotate-180' : ''}`}
+              className={`w-5 h-5 text-secondary transition-transform ${showDropdown ? 'rotate-180' : ''}`}
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -79,17 +79,17 @@ export const ExportControls: React.FC<ExportControlsProps> = ({
 
           {/* Dropdown Menu */}
           {showDropdown && (
-            <div className="absolute top-full left-0 right-0 mt-2 bg-white border-2 border-gray-200 rounded-lg shadow-xl z-10">
+            <div className="absolute top-full left-0 right-0 mt-2 bg-surface-elevated border-2 border-border rounded-lg shadow-xl z-10">
               <button
                 type="button"
                 onClick={() => {
                   onExportCSV('daily');
                   setShowDropdown(false);
                 }}
-                className="w-full px-4 py-3 text-left hover:bg-gray-50 transition-colors border-b border-gray-100"
+                className="w-full px-4 py-3 text-left hover:bg-surface-variant transition-colors border-b border-divider"
               >
-                <div className="font-medium text-gray-800">Daily Trends</div>
-                <div className="text-xs text-gray-600">Last 30 days of data</div>
+                <div className="font-medium text-primary">Daily Trends</div>
+                <div className="text-xs text-secondary">Last 30 days of data</div>
               </button>
               <button
                 type="button"
@@ -97,10 +97,10 @@ export const ExportControls: React.FC<ExportControlsProps> = ({
                   onExportCSV('weekly');
                   setShowDropdown(false);
                 }}
-                className="w-full px-4 py-3 text-left hover:bg-gray-50 transition-colors border-b border-gray-100"
+                className="w-full px-4 py-3 text-left hover:bg-surface-variant transition-colors border-b border-divider"
               >
-                <div className="font-medium text-gray-800">Weekly Trends</div>
-                <div className="text-xs text-gray-600">Last 12 weeks of data</div>
+                <div className="font-medium text-primary">Weekly Trends</div>
+                <div className="text-xs text-secondary">Last 12 weeks of data</div>
               </button>
               <button
                 type="button"
@@ -108,10 +108,10 @@ export const ExportControls: React.FC<ExportControlsProps> = ({
                   onExportCSV('monthly');
                   setShowDropdown(false);
                 }}
-                className="w-full px-4 py-3 text-left hover:bg-gray-50 transition-colors border-b border-gray-100"
+                className="w-full px-4 py-3 text-left hover:bg-surface-variant transition-colors border-b border-divider"
               >
-                <div className="font-medium text-gray-800">Monthly Trends</div>
-                <div className="text-xs text-gray-600">Last 6 months of data</div>
+                <div className="font-medium text-primary">Monthly Trends</div>
+                <div className="text-xs text-secondary">Last 6 months of data</div>
               </button>
               <button
                 type="button"
@@ -119,10 +119,10 @@ export const ExportControls: React.FC<ExportControlsProps> = ({
                   onExportCSV('goals');
                   setShowDropdown(false);
                 }}
-                className="w-full px-4 py-3 text-left hover:bg-gray-50 transition-colors border-b border-gray-100"
+                className="w-full px-4 py-3 text-left hover:bg-surface-variant transition-colors border-b border-divider"
               >
-                <div className="font-medium text-gray-800">Goals</div>
-                <div className="text-xs text-gray-600">All goals data</div>
+                <div className="font-medium text-primary">Goals</div>
+                <div className="text-xs text-secondary">All goals data</div>
               </button>
               <button
                 type="button"
@@ -130,10 +130,10 @@ export const ExportControls: React.FC<ExportControlsProps> = ({
                   onExportCSV('pomodoros');
                   setShowDropdown(false);
                 }}
-                className="w-full px-4 py-3 text-left hover:bg-gray-50 transition-colors"
+                className="w-full px-4 py-3 text-left hover:bg-surface-variant transition-colors"
               >
-                <div className="font-medium text-gray-800">Pomodoro Sessions</div>
-                <div className="text-xs text-gray-600">All session data</div>
+                <div className="font-medium text-primary">Pomodoro Sessions</div>
+                <div className="text-xs text-secondary">All session data</div>
               </button>
             </div>
           )}
@@ -141,7 +141,7 @@ export const ExportControls: React.FC<ExportControlsProps> = ({
       </div>
 
       <div className="mt-4 p-3 bg-blue-50 rounded-lg">
-        <p className="text-xs text-gray-700">
+        <p className="text-xs text-primary">
           <span className="font-semibold">Tip:</span> Export your data regularly to track your
           long-term progress and maintain backups.
         </p>
