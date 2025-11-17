@@ -163,21 +163,62 @@ describe('Pomodoro Store - Auto-Start Breaks', () => {
     });
   });
 
-  describe('completeSession - break to work transitions', () => {
-    it('should never auto-start work session after break completes', async () => {
+  describe('completeSession - break to work transitions with auto-start enabled', () => {
+    it('should auto-start work session after break completes', async () => {
+      setupBreakSession('break', { consecutiveWorkSessions: 1 });
+      await usePomodoroStore.getState().completeSession();
+
+      const state = usePomodoroStore.getState();
+      expect(state.status).toBe('running');
+      expect(state.sessionType).toBe('work');
+      expect(state.currentSessionId).toBeTruthy();
+      expect(state.timeRemaining).toBe(25 * 60);
+      expect(state.lastTickTime).toBeTruthy();
+      expect(state.consecutiveWorkSessions).toBe(1);
+      expect(sounds.playStartSound).toHaveBeenCalled();
+      expect(sounds.playCompletionSound).toHaveBeenCalledOnce();
+    });
+
+    it('should auto-start work session after long break completes and reset count', async () => {
+      setupBreakSession('longBreak', { consecutiveWorkSessions: 4 });
+      await usePomodoroStore.getState().completeSession();
+
+      const state = usePomodoroStore.getState();
+      expect(state.status).toBe('running');
+      expect(state.sessionType).toBe('work');
+      expect(state.currentSessionId).toBeTruthy();
+      expect(state.timeRemaining).toBe(25 * 60);
+      expect(state.lastTickTime).toBeTruthy();
+      expect(state.consecutiveWorkSessions).toBe(0);
+      expect(sounds.playStartSound).toHaveBeenCalled();
+      expect(sounds.playCompletionSound).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe('completeSession - break to work transitions with auto-start disabled', () => {
+    beforeEach(() => {
+      vi.mocked(storage.getSettings).mockResolvedValue({
+        ...defaultSettings,
+        pomodoroAutoStartBreaks: false,
+      });
+    });
+
+    it('should not auto-start work session after break completes', async () => {
       setupBreakSession('break', { consecutiveWorkSessions: 1 });
       await usePomodoroStore.getState().completeSession();
 
       expectIdleTransition('work');
+      expect(usePomodoroStore.getState().consecutiveWorkSessions).toBe(1);
       expect(sounds.playCompletionSound).toHaveBeenCalledOnce();
     });
 
-    it('should never auto-start work session after long break completes', async () => {
+    it('should not auto-start work session after long break completes', async () => {
       setupBreakSession('longBreak', { consecutiveWorkSessions: 4 });
       await usePomodoroStore.getState().completeSession();
 
       expectIdleTransition('work');
       expect(usePomodoroStore.getState().consecutiveWorkSessions).toBe(0);
+      expect(sounds.playCompletionSound).toHaveBeenCalledOnce();
     });
   });
 

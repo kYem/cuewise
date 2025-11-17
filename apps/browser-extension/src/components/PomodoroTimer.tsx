@@ -282,15 +282,6 @@ export const PomodoroTimer: React.FC = () => {
               </div>
             </div>
           </div>
-
-          {/* Session Type Badge */}
-          <div className={`px-4 py-2 rounded-full border-2 ${borderColor} ${bgColor}`}>
-            <span className={`text-sm font-semibold ${color}`}>
-              {status === 'idle' && 'Ready to start'}
-              {status === 'running' && 'In progress'}
-              {status === 'paused' && 'Paused'}
-            </span>
-          </div>
         </div>
 
         {/* Controls */}

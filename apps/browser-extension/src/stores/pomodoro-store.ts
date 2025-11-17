@@ -370,16 +370,26 @@ export const usePomodoroStore = create<PomodoroStore>()(
               }
             }
           } else {
-            // Break or long break completed - switch to work (never auto-start work)
+            // Break or long break completed - auto-start work if setting enabled
             const resetConsecutive = sessionType === 'longBreak' ? 0 : consecutiveWorkSessions;
+
+            // Determine next status based on auto-start setting
+            const nextStatus = autoStartBreaks ? 'running' : 'idle';
+            const nextSessionId = autoStartBreaks ? generateId() : null;
+
             set({
               sessionType: 'work',
-              status: 'idle',
-              currentSessionId: null,
+              status: nextStatus,
+              currentSessionId: nextSessionId,
               timeRemaining: minutesToSeconds(workDuration),
               totalTime: minutesToSeconds(workDuration),
               consecutiveWorkSessions: resetConsecutive,
+              lastTickTime: autoStartBreaks ? Date.now() : null,
             });
+
+            if (autoStartBreaks) {
+              playStartSound();
+            }
           }
 
           // Play completion sound
