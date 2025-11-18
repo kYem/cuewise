@@ -505,21 +505,11 @@ export function usePomodoroStorageSync() {
 
       // Trigger rehydration to sync with other tabs
       // This will update the Zustand store with the latest storage value
+      // NOTE: Removed automatic completeSession() call here as it causes
+      // double completion (once from tick(), once from storage sync),
+      // which makes the timer skip breaks by completing them immediately.
+      // The rehydrate() call is sufficient to keep tabs in sync.
       usePomodoroStore.persist.rehydrate();
-
-      // Parse the new state to check for timer completion
-      try {
-        const newStateJson = pomodoroStateChange.newValue;
-        if (newStateJson && typeof newStateJson === 'string') {
-          const parsed = JSON.parse(newStateJson);
-          // Handle timer completion
-          if (parsed?.state?.timeRemaining === 0 && parsed?.state?.status === 'running') {
-            usePomodoroStore.getState().completeSession();
-          }
-        }
-      } catch (_error) {
-        // Ignore parse errors
-      }
     };
 
     // Register listener
