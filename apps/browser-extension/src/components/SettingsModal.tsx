@@ -1,8 +1,9 @@
-import { AMBIENT_SOUNDS, type AmbientSoundType } from '@cuewise/shared';
+import { AMBIENT_SOUNDS, type AmbientSoundType, type SettingsLogLevel } from '@cuewise/shared';
 import {
   ArrowRight,
   Bell,
   BellOff,
+  Bug,
   Clock,
   Cloud,
   CloudOff,
@@ -41,6 +42,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   const [syncEnabled, setSyncEnabled] = useState(settings.syncEnabled);
   const [enableGoalTransfer, setEnableGoalTransfer] = useState(settings.enableGoalTransfer);
   const [goalTransferTime, setGoalTransferTime] = useState(settings.goalTransferTime);
+  const [logLevel, setLogLevel] = useState(settings.logLevel);
   const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
 
   // Sync local state with store when settings change
@@ -57,6 +59,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     setSyncEnabled(settings.syncEnabled);
     setEnableGoalTransfer(settings.enableGoalTransfer);
     setGoalTransferTime(settings.goalTransferTime);
+    setLogLevel(settings.logLevel);
   }, [settings]);
 
   // Format interval for display
@@ -133,6 +136,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
       syncEnabled,
       enableGoalTransfer,
       goalTransferTime,
+      logLevel,
     });
 
     // If sync setting changed, reload the page to apply storage changes
@@ -569,6 +573,38 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                 </p>
               </div>
             )}
+          </div>
+        </section>
+
+        {/* Debug Settings */}
+        <section>
+          <div className="flex items-center gap-2 mb-4">
+            <Bug className="w-5 h-5 text-primary-600" />
+            <h3 className="text-lg font-semibold text-primary">Debug</h3>
+          </div>
+
+          <div className="pl-7">
+            <div>
+              <label htmlFor="log-level" className="block text-sm font-medium text-primary mb-2">
+                Console Log Level
+              </label>
+              <select
+                id="log-level"
+                value={logLevel}
+                onChange={(e) => setLogLevel(e.target.value as SettingsLogLevel)}
+                className="w-full px-3 py-2 text-sm text-primary border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="none">None - No console logs</option>
+                <option value="error">Error - Only errors</option>
+                <option value="warn">Warning - Errors and warnings</option>
+                <option value="info">Info - Errors, warnings, and info</option>
+                <option value="debug">Debug - All logs (verbose)</option>
+              </select>
+              <p className="text-xs text-secondary mt-2">
+                Control what messages appear in the browser console. Higher levels include all lower
+                levels.
+              </p>
+            </div>
           </div>
         </section>
 

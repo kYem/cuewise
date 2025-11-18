@@ -2,7 +2,9 @@ import {
   type ColorTheme,
   DEFAULT_SETTINGS,
   type LayoutDensity,
+  LogLevel as LoggerLevel,
   type Settings,
+  configureLogger,
 } from '@cuewise/shared';
 import { getSettings, migrateStorageData, setSettings } from '@cuewise/storage';
 import { create } from 'zustand';
@@ -50,6 +52,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       applyTheme(settings.theme);
       applyColorTheme(settings.colorTheme);
       applyLayoutDensity(settings.layoutDensity);
+      applyLogLevel(settings.logLevel);
     } catch (error) {
       console.error('Error initializing settings store:', error);
       const errorMessage = 'Failed to load settings. Please refresh the page.';
@@ -219,6 +222,9 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       if (partialSettings.layoutDensity) {
         applyLayoutDensity(partialSettings.layoutDensity);
       }
+      if (partialSettings.logLevel !== undefined) {
+        applyLogLevel(partialSettings.logLevel);
+      }
     } catch (error) {
       console.error('Error updating settings:', error);
       const errorMessage = 'Failed to update settings. Please try again.';
@@ -234,6 +240,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       applyTheme(DEFAULT_SETTINGS.theme);
       applyColorTheme(DEFAULT_SETTINGS.colorTheme);
       applyLayoutDensity(DEFAULT_SETTINGS.layoutDensity);
+      applyLogLevel(DEFAULT_SETTINGS.logLevel);
     } catch (error) {
       console.error('Error resetting settings:', error);
       const errorMessage = 'Failed to reset settings. Please try again.';
@@ -278,4 +285,26 @@ function applyColorTheme(colorTheme: ColorTheme) {
  */
 function applyLayoutDensity(density: LayoutDensity) {
   document.documentElement.setAttribute('data-density', density);
+}
+
+/**
+ * Configure global logger based on settings
+ */
+function applyLogLevel(logLevel: Settings['logLevel']) {
+  if (logLevel === 'none') {
+    configureLogger({ enabled: false });
+  } else {
+    // Map our LogLevel type to the logger's LogLevel enum
+    const levelMap: Record<Exclude<Settings['logLevel'], 'none'>, LoggerLevel> = {
+      debug: LoggerLevel.DEBUG,
+      info: LoggerLevel.INFO,
+      warn: LoggerLevel.WARN,
+      error: LoggerLevel.ERROR,
+    };
+
+    configureLogger({
+      enabled: true,
+      minLevel: levelMap[logLevel],
+    });
+  }
 }

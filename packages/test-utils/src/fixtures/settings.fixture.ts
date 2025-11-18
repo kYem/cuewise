@@ -18,4 +18,5 @@ export const defaultSettings: Settings = {
   showThemeSwitcher: false,
   enableGoalTransfer: true,
   goalTransferTime: 20,
+  logLevel: 'error',
 };

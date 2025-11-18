@@ -19,6 +19,7 @@ export const DEFAULT_SETTINGS: Settings = {
   showThemeSwitcher: false,
   enableGoalTransfer: true,
   goalTransferTime: 20, // 8 PM (20:00)
+  logLevel: 'error', // Only show errors by default
 };
 
 // Quote categories with display names

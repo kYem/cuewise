@@ -63,6 +63,7 @@ export interface PomodoroSession {
 // Customization types
 export type ColorTheme = 'purple' | 'forest' | 'rose';
 export type LayoutDensity = 'compact' | 'comfortable' | 'spacious';
+export type SettingsLogLevel = 'none' | 'error' | 'warn' | 'info' | 'debug';
 
 // Settings interface
 export interface Settings {
@@ -85,6 +86,8 @@ export interface Settings {
   // Goal Transfer
   enableGoalTransfer: boolean; // Enable goal transfer feature (default true)
   goalTransferTime: number; // Hour (0-23) when transfer button appears (default 20 for 8 PM)
+  // Debug
+  logLevel: SettingsLogLevel; // Console log level (default 'error')
 }
 
 // Storage keys
