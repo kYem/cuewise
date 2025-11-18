@@ -1,4 +1,4 @@
-import { AMBIENT_SOUNDS } from '@cuewise/shared';
+import { AMBIENT_SOUNDS, type AmbientSoundType } from '@cuewise/shared';
 import {
   ArrowRight,
   Bell,
@@ -81,7 +81,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
       setIsPreviewPlaying(false);
     } else {
       if (ambientSound !== 'none') {
-        ambientSoundPlayer.play(ambientSound as any, ambientVolume);
+        ambientSoundPlayer.play(ambientSound as AmbientSoundType, ambientVolume);
         setIsPreviewPlaying(true);
       }
     }

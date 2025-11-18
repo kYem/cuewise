@@ -7,6 +7,15 @@ import type { Mock } from 'vitest';
  * This file provides reusable test data and setup functions
  */
 
+/**
+ * Minimal QuoteStore state interface for test assertions
+ */
+interface QuoteStoreState {
+  currentQuote?: Quote | null;
+  historyIndex?: number;
+  quoteHistory?: string[];
+}
+
 // ============================================================================
 // Mock Functions
 // ============================================================================
@@ -175,7 +184,11 @@ export function createInMiddleState(quotes: Quote[], history: Quote[], index: nu
 /**
  * Validates that navigation moved to the expected quote
  */
-export function expectNavigationToQuote(state: any, expectedQuote: Quote, expectedIndex: number) {
+export function expectNavigationToQuote(
+  state: QuoteStoreState,
+  expectedQuote: Quote,
+  expectedIndex: number
+) {
   expect(state.currentQuote?.id).toBe(expectedQuote.id);
   expect(state.historyIndex).toBe(expectedIndex);
 }
@@ -198,15 +211,15 @@ export function expectViewCountIncremented(
  * Validates that history has the expected structure
  */
 export function expectHistoryStructure(
-  state: any,
+  state: QuoteStoreState,
   expectedLength: number,
   expectedIndex: number,
   expectedCurrentId?: string
 ) {
-  expect(state.quoteHistory.length).toBe(expectedLength);
+  expect(state.quoteHistory?.length).toBe(expectedLength);
   expect(state.historyIndex).toBe(expectedIndex);
 
-  if (expectedCurrentId) {
+  if (expectedCurrentId && state.quoteHistory) {
     expect(state.quoteHistory[expectedIndex]).toBe(expectedCurrentId);
   }
 }
@@ -214,7 +227,7 @@ export function expectHistoryStructure(
 /**
  * Validates that forward history was cleared
  */
-export function expectForwardHistoryCleared(state: any, _fromIndex: number) {
+export function expectForwardHistoryCleared(state: QuoteStoreState, _fromIndex: number) {
   // After clearing forward history from index, we should have:
   // - New quote at index 0
   // - Old history from fromIndex onwards

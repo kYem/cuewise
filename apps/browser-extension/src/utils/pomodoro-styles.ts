@@ -36,7 +36,6 @@ export function getSessionStyles(sessionType: SessionType): SessionStyles {
         label: 'Long Break',
         icon: Coffee,
       };
-    case 'work':
     default:
       return {
         color: 'text-primary-600',

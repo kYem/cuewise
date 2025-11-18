@@ -32,6 +32,13 @@ export const ActivePomodoroWidget: React.FC = () => {
     window.location.hash = 'pomodoro';
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      handleNavigateToPomodoro();
+    }
+  };
+
   const sessionLabel =
     sessionType === 'work' ? 'Work' : sessionType === 'break' ? 'Break' : 'Long Break';
 
@@ -44,7 +51,10 @@ export const ActivePomodoroWidget: React.FC = () => {
 
   return (
     <div
+      role="button"
+      tabIndex={0}
       onClick={handleNavigateToPomodoro}
+      onKeyDown={handleKeyDown}
       className={cn(
         'group relative flex items-center gap-2 px-3 py-1.5 rounded-full shadow-md hover:shadow-lg transition-all cursor-pointer',
         'bg-surface/80 backdrop-blur-sm border',

@@ -68,6 +68,7 @@ export const ExportControls: React.FC<ExportControlsProps> = ({
               viewBox="0 0 24 24"
               aria-label="Toggle dropdown"
             >
+              <title>Toggle dropdown</title>
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"

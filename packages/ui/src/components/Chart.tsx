@@ -15,6 +15,15 @@ export type ChartConfig = {
   };
 };
 
+// Tooltip payload item interface
+interface TooltipPayloadItem {
+  name?: string;
+  dataKey?: string;
+  value?: number;
+  color?: string;
+  payload?: Record<string, unknown> & { fill?: string };
+}
+
 // Context for sharing config across chart components
 const ChartContext = React.createContext<{
   config: ChartConfig;
@@ -134,10 +143,10 @@ const ChartTooltipContent = React.forwardRef<HTMLDivElement, ChartTooltipContent
       >
         {!hideLabel ? tooltipLabel : null}
         <div className="grid gap-1.5">
-          {payload.map((item: any, index: number) => {
+          {payload.map((item: TooltipPayloadItem, index: number) => {
             const key = `${nameKey || item.name || item.dataKey || 'value'}`;
             const itemConfig = config[key];
-            const indicatorColor = color || item.payload.fill || item.color;
+            const indicatorColor = color || item.payload?.fill || item.color;
 
             return (
               <div
@@ -208,7 +217,7 @@ const ChartLegendContent = React.forwardRef<HTMLDivElement, ChartLegendContentPr
           className
         )}
       >
-        {payload.map((item: any) => {
+        {payload.map((item: TooltipPayloadItem) => {
           const key = `${nameKey || item.dataKey || 'value'}`;
           const itemConfig = config[key];
 
