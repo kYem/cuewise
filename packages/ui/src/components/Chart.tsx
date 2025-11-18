@@ -43,7 +43,7 @@ const ChartContainer = React.forwardRef<HTMLDivElement, ChartContainerProps>(
         <div
           ref={ref}
           className={cn(
-            "flex aspect-video justify-center text-xs [&_.recharts-cartesian-axis-tick_text]:fill-gray-500 [&_.recharts-cartesian-grid_line[stroke='#ccc']]:stroke-gray-200 [&_.recharts-curve.recharts-tooltip-cursor]:stroke-gray-200 [&_.recharts-polar-grid_[stroke='#ccc']]:stroke-gray-200 [&_.recharts-radial-bar-background-sector]:fill-gray-100 [&_.recharts-rectangle.recharts-tooltip-cursor]:fill-gray-100 [&_.recharts-reference-line_[stroke='#ccc']]:stroke-gray-200 [&_.recharts-sector[stroke='#fff']]:stroke-white [&_.recharts-sector]:outline-hidden [&_.recharts-surface]:outline-hidden",
+            "flex aspect-video justify-center text-xs bg-surface-elevated rounded-lg border border-border shadow-sm",
             className
           )}
           {...props}
