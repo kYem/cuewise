@@ -86,14 +86,7 @@ export const PomodoroTimer: React.FC = () => {
   const isWork = sessionType === 'work';
 
   // Get session-specific styles
-  const {
-    color,
-    bgColor,
-    borderColor,
-    progressColor,
-    label,
-    icon: SessionIcon,
-  } = getSessionStyles(sessionType);
+  const { color, bgColor, progressColor, label, icon: SessionIcon } = getSessionStyles(sessionType);
 
   // Find selected goal
   const selectedGoal = todayGoals.find((g) => g.id === selectedGoalId);

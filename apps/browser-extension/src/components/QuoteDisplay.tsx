@@ -136,9 +136,7 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({ onManualRefresh }) =
       {/* Quote Card */}
       <div className="relative">
         {/* Decorative Quote Marks */}
-        <div className="absolute -top-6 -left-4 text-8xl font-serif text-primary-400">
-          "
-        </div>
+        <div className="absolute -top-6 -left-4 text-8xl font-serif text-primary-400">"</div>
 
         {/* Quote Text */}
         <blockquote className="relative z-10 h-[240px] flex flex-col justify-center">
@@ -170,9 +168,7 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({ onManualRefresh }) =
         </blockquote>
 
         {/* Decorative Quote Marks */}
-        <div className="absolute -bottom-6 -right-4 text-8xl font-serif text-primary-400">
-          "
-        </div>
+        <div className="absolute -bottom-6 -right-4 text-8xl font-serif text-primary-400">"</div>
       </div>
 
       {/* Action Buttons */}

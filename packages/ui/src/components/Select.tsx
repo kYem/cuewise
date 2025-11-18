@@ -207,11 +207,8 @@ export function Select<T extends string = string>({
                 'w-full flex items-center gap-2 px-4 py-2.5 text-left transition-colors',
                 'text-primary',
                 'focus:outline-none',
-                option.value === value &&
-                  'bg-primary-50 text-primary-700 font-medium',
-                highlightedIndex === index &&
-                  option.value !== value &&
-                  'bg-surface-variant',
+                option.value === value && 'bg-primary-50 text-primary-700 font-medium',
+                highlightedIndex === index && option.value !== value && 'bg-surface-variant',
                 option.disabled
                   ? 'opacity-50 cursor-not-allowed'
                   : 'cursor-pointer hover:bg-surface-variant'
