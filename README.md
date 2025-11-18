@@ -1,89 +1,63 @@
 # Cuewise
 
-A cross-platform productivity suite with motivational quotes, goals, reminders, and productivity tracking. Built as a monorepo supporting browser extensions, web apps, and mobile apps.
+**Your personal productivity companion.** A beautiful browser extension that combines motivational quotes, goal tracking, Pomodoro timer, and productivity insights in your new tab.
 
-## Features
+**Current Version:** 1.1.0 | **Status:** Feature-complete for Chrome/Edge
 
-### ✨ Currently Implemented (v1.1)
-- **Motivational Quotes**: 100+ curated quotes across 10 categories
-  - Inspiration, Learning, Productivity, Mindfulness, Success, Creativity, Resilience, Leadership, Health, Growth
-  - Random quote display on each new tab
-  - Favorite/hide quotes functionality
-  - View count tracking
-  - Countdown progress bar showing time until next quote
-- **Custom Quote Creation**: Add your own inspiring quotes
-  - Include author, category, source/reference
-  - Add personal notes about why quotes are meaningful
-  - Source field for book titles, URLs, or references
-  - Custom quotes appear alongside curated ones
-  - Floating action button for quick access
-- **Daily Goals/Todos**: Simple, focused task management
-  - Add goals for today with one click
-  - Check off completed tasks
-  - Progress bar showing completion status
-  - Clear completed goals
-  - Goals automatically organized by date
-- **Reminders**: Smart reminder system with notifications
-  - Create reminders with due dates
-  - Browser notifications when reminders are due
-  - Snooze functionality (5 min, 15 min, 1 hour, 1 day)
-  - Recurring reminders (daily, weekly, monthly)
-  - Mark reminders as completed
-- **Dark Mode & Themes**: Beautiful theming system
-  - Full dark mode support with smooth transitions
-  - 6 color themes using OKLCH color space (Ocean Blue, Forest Green, Sunset Orange, Royal Purple, Rose Pink, Slate Gray)
-  - Live theme preview sidebar with real-time feedback
-  - Theme settings persist across sessions
-- **Customization**: Personalize your experience
-  - Unified density settings (compact/comfortable/spacious)
-  - Visual density preview in settings
-  - All spacing and layout adapts to your preference
-- **Beautiful UI**: Clean, minimalist design with smooth animations
-- **Live Clock**: Real-time display with personalized greetings (proper 12-hour format)
-- **Category System**: Color-coded quote categories
-- **Error Handling**: Toast notifications and graceful error boundaries
+---
 
-### 🚀 Planned Features
-**Productivity Features:**
-- Pomodoro timer (25/5 minute intervals)
-- Insights dashboard with statistics
-- Quote search and filtering
-- Quote management page (browse, filter, bulk operations)
+## ✨ Features
 
-**Platform Expansion:**
-- 📱 **Mobile App** (React Native) - Take your productivity on the go
-- 🌐 **Web App** (Next.js) - Access from any browser without extension
-- 🔄 **Cloud Sync** - Sync data across all platforms
+### 📝 Smart Goal Management
+- **Daily Focus**: Add and track today's goals with visual progress
+- **Goal History**: View all past, present, and future goals organized by date
+- **Flexible Actions**: Edit, complete, delete, or move goals between days
+- **Filter by Status**: View all, completed, or incomplete goals
+- **Auto-Transfer**: Move incomplete goals to tomorrow with one click
 
-## Tech Stack
+### 💭 Motivational Quotes
+- **100+ Curated Quotes**: Across 10 categories (Inspiration, Learning, Productivity, and more)
+- **Custom Quotes**: Add your own with author, category, source, and personal notes
+- **Smart Features**: Favorite, hide, view count tracking, and quote history navigation
+- **Category Colors**: Beautiful OKLCH-based color coding for each category
 
-### Monorepo Architecture
-- **Package Manager**: pnpm with workspaces
-- **Build Tool**: Turbo (turborepo) for efficient builds
-- **Language**: TypeScript throughout
+### ⏱️ Pomodoro Timer
+- **Classic Technique**: 25-minute work sessions, 5-minute breaks, 15-minute long breaks
+- **Customizable**: Adjust all durations and intervals to your preference
+- **Ambient Sounds**: Focus with optional background audio
+- **Session Tracking**: Complete history of all Pomodoro sessions
+- **Widget Access**: Quick timer control from any page
 
-### Applications (`apps/`)
-- `apps/browser-extension` - Browser extension (Chrome/Edge, Manifest V3)
-- `apps/web` - Web application (Coming soon - Next.js)
-- `apps/mobile` - Mobile app (Coming soon - React Native)
+### 📊 Insights & Analytics
+- **Productivity Stats**: Goals completed, focus time, Pomodoro sessions
+- **Streak Tracking**: Current and longest goal completion streaks
+- **Advanced Analytics**: Daily, weekly, and monthly trends
+- **Visual Charts**: Goal completion rates and Pomodoro heatmaps
+- **Data Export**: Download your data as JSON or CSV
 
-### Shared Packages (`packages/`)
-- `packages/shared` - Shared business logic, types, utilities (platform-agnostic)
-- `packages/storage` - Multi-platform storage adapters (Chrome Storage, localStorage, AsyncStorage)
-- `packages/ui` - Shared UI components (currently web-focused, will support native)
-- `packages/test-utils` - Shared testing utilities, factories, and mocks
+### 🎨 Beautiful Customization
+- **Dark Mode**: Seamless light/dark/auto theme switching
+- **3 Color Themes**: Purple, Forest Green, and Rose Pink
+- **3 Density Modes**: Compact, Comfortable, and Spacious layouts
+- **Live Preview**: See theme changes in real-time before applying
+- **Persistent Settings**: All preferences saved locally
 
-### Technologies
-- **Framework**: React 18+ with TypeScript (ES2022)
-- **Build**: Vite with @crxjs/vite-plugin
-- **UI**: Tailwind CSS 4 + custom components
-- **State Management**: Zustand
-- **Storage**: Chrome Storage API with abstraction layer
-- **Testing**: Vitest + Testing Library + Fishery
-- **Linting**: Biome (50x faster than ESLint)
-- **Target**: Chrome/Edge (Manifest V3)
+### 🔔 Smart Reminders
+- **Flexible Scheduling**: Set reminders with specific dates and times
+- **Browser Notifications**: Never miss what matters
+- **Snooze Options**: 5 min, 15 min, 1 hour, or 1 day
+- **Recurring Support**: Daily, weekly, or monthly reminders
+- **Quick Management**: Mark complete or delete with one click
 
-## Getting Started
+### 💾 Storage Management
+- **Usage Tracking**: Monitor Chrome storage usage with visual indicators
+- **Warning System**: Alerts when approaching storage limits
+- **Hybrid Strategy**: Seed quotes in local storage, custom data in sync storage
+- **Cross-Device Sync**: Enable Chrome Sync to share data across devices
+
+---
+
+## 🚀 Quick Start
 
 ### Prerequisites
 - Node.js >= 18.0.0
@@ -92,310 +66,196 @@ A cross-platform productivity suite with motivational quotes, goals, reminders, 
 
 ### Installation
 
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd quote-app
-   ```
-
-2. **Install dependencies**
-   ```bash
-   pnpm install
-   ```
-
-3. **Build the extension**
-   ```bash
-   pnpm --filter @cuewise/browser-extension build
-   ```
-
-   Or use turbo to build all apps and packages:
-   ```bash
-   pnpm build
-   ```
-
-### Loading the Extension in Chrome
-
-1. **Open Chrome Extensions page**
-   - Navigate to `chrome://extensions/`
-   - Or: Menu → More Tools → Extensions
-
-2. **Enable Developer Mode**
-   - Toggle the "Developer mode" switch in the top right
-
-3. **Load the extension**
-   - Click "Load unpacked"
-   - Navigate to `apps/browser-extension/dist`
-   - Click "Select Folder"
-
-4. **Test it!**
-   - Open a new tab (Ctrl+T / Cmd+T)
-   - You should see the motivational dashboard with a quote!
-
-## Development
-
-### Start development server
 ```bash
-pnpm --filter @cuewise/browser-extension dev
+# Clone and install
+git clone <repository-url>
+cd cuewise
+pnpm install
+
+# Build the extension
+pnpm --filter @cuewise/browser-extension build
 ```
 
-This starts Vite in development mode with hot module replacement (HMR). The extension will automatically rebuild when you make changes.
+### Load in Chrome
 
-### Build for production
-```bash
-pnpm build
-```
-
-### Linting and Formatting
-```bash
-# Check for linting and formatting issues
-pnpm lint
-
-# Auto-fix issues
-pnpm lint:fix
-
-# Format code
-pnpm format
-```
-
-See [LINTING.md](./LINTING.md) for full linting documentation (we use **Biome** - 50x faster than ESLint!).
-
-### Type checking
-```bash
-pnpm type-check
-```
-
-### Testing
-```bash
-# Run all tests
-pnpm test
-
-# Run tests for specific package
-pnpm --filter @cuewise/browser-extension test
-
-# Watch mode
-pnpm --filter @cuewise/browser-extension test:watch
-
-# Coverage report
-pnpm --filter @cuewise/browser-extension test:coverage
-```
-
-### Clean build artifacts
-```bash
-pnpm clean
-```
-
-## Project Structure
-
-```
-cuewise/
-├── apps/
-│   ├── browser-extension/      # Browser extension (Chrome/Edge)
-│   │   ├── src/
-│   │   │   ├── components/     # React components
-│   │   │   ├── stores/         # Zustand stores (with tests)
-│   │   │   ├── data/           # Seed quotes data
-│   │   │   ├── manifest.json   # Extension manifest
-│   │   │   ├── App.tsx
-│   │   │   └── main.tsx
-│   │   ├── public/
-│   │   ├── vitest.config.ts   # Test configuration
-│   │   └── dist/              # Build output (load this in Chrome)
-│   │
-│   ├── web/                   # Web app (Coming soon)
-│   └── mobile/                # React Native app (Coming soon)
-│
-├── packages/
-│   ├── shared/               # Platform-agnostic business logic
-│   │   └── src/
-│   │       ├── types.ts      # Shared TypeScript types
-│   │       ├── constants.ts  # Shared constants
-│   │       └── utils.ts      # Shared utilities
-│   │
-│   ├── storage/              # Multi-platform storage
-│   │   └── src/
-│   │       ├── storage-interface.ts
-│   │       ├── adapters/
-│   │       │   ├── chrome-storage-adapter.ts  # For extension
-│   │       │   ├── local-storage-adapter.ts   # For web
-│   │       │   └── async-storage-adapter.ts   # For mobile
-│   │       ├── chrome-storage.ts      # Legacy
-│   │       └── storage-helpers.ts     # Legacy
-│   │
-│   ├── ui/                   # Shared UI components
-│   │   └── src/
-│   │       ├── components/   # React components
-│   │       └── lib/          # UI utilities
-│   │
-│   └── test-utils/           # Shared testing utilities
-│       └── src/
-│           ├── factories/    # Type-safe test data factories (Fishery)
-│           ├── mocks/        # Shared mocks (Chrome Storage, Zustand)
-│           └── fixtures/     # Static test data
-│
-├── vitest.shared.ts          # Shared Vitest configuration
-├── pnpm-workspace.yaml
-├── turbo.json
-├── biome.json
-└── package.json
-```
-
-## Usage
-
-### Refreshing Quotes
-- Click the "New Quote" button to get a random quote
-- The quote automatically updates on each new tab
-
-### Favoriting Quotes
-- Click the heart icon to add a quote to favorites
-- Click again to remove from favorites
-
-### Hiding Quotes
-- Click the eye-off icon to hide a quote you don't want to see
-- Hidden quotes won't appear in the random selection
-
-### Managing Daily Goals
-- **Add a goal**: Type in the input field and press Enter or click "Add"
-- **Complete a goal**: Click the circle icon next to the goal text
-- **Delete a goal**: Hover over a goal and click the trash icon
-- **Track progress**: View the progress bar showing completed vs. total goals
-- **Clear completed**: Remove all completed goals with one click
-- Goals are automatically organized by date and reset daily
-
-### Creating Custom Quotes
-- **Open the form**: Click the floating "+" button in the bottom-right corner
-- **Fill in details**:
-  - Quote text (required, up to 500 characters)
-  - Author (required)
-  - Category (select from 10 categories)
-  - Source (optional) - Book title, URL, or reference
-  - Personal notes (optional, up to 300 characters) - Why this quote matters to you
-- **Save**: Click "Add Quote" to save
-- **View**: Your custom quotes appear randomly alongside curated quotes
-- **Identify**: Custom quotes show source and notes when displayed
-
-### Managing Reminders
-- **Add a reminder**: Click the reminders icon in the top navigation
-- **Set details**:
-  - Reminder text (what to remember)
-  - Due date and time
-  - Optional: Enable recurring (daily, weekly, monthly)
-- **Receive notifications**: Browser notifications when reminders are due
-- **Snooze**: Postpone reminders for 5 min, 15 min, 1 hour, or 1 day
-- **Complete**: Mark reminders as done when finished
-
-## Customization
-
-### Adding More Quotes
-
-Edit `apps/browser-extension/src/data/seed-quotes.ts` to add new quotes:
-
-```typescript
-const NEW_CATEGORY_QUOTES = [
-  { text: "Your quote here", author: "Author Name" },
-  // Add more quotes...
-];
-```
-
-### Changing Colors
-
-Edit the Tailwind config in `apps/browser-extension/tailwind.config.js`:
-
-```javascript
-colors: {
-  primary: {
-    // Change these values
-    500: '#8b5cf6',
-    600: '#7c3aed',
-    // ...
-  }
-}
-```
-
-## Testing
-
-The project includes comprehensive testing infrastructure:
-
-### Test Coverage
-- ✅ **Quote Store**: 11 tests covering initialization, favorites, custom quotes, hiding, view tracking
-- ✅ **Goal Store**: 10 tests covering CRUD operations, completion tracking, date filtering
-- 🚧 **Component Tests**: Coming soon
-- 🚧 **Storage Adapters**: Coming soon
-
-### Writing Tests
-Use the shared test utilities for consistent, type-safe test data:
-
-```typescript
-import { quoteFactory, goalFactory } from '@cuewise/test-utils/factories';
-import { createChromeStorageMock, resetAllStores } from '@cuewise/test-utils/mocks';
-
-// Generate test data
-const quotes = quoteFactory.buildList(5);
-const customQuote = customQuoteFactory.build({ author: 'Test Author' });
-const goals = goalFactory.buildList(3, { date: '2025-01-15' });
-```
-
-See test files in `apps/browser-extension/src/stores/*.test.ts` for examples.
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-### Development Guidelines
-- Write tests for new features using Vitest
-- Follow the existing code style (enforced by Biome)
-- Use TypeScript strictly (no `any` types)
-- Keep components small and focused
-- Use shared packages for cross-platform code
-
-### Future Development Priorities
-1. **Production Polish** (Chrome Web Store preparation)
-   - Remove console.logs from production build
-   - Bundle size optimization and performance audit
-   - Store listing assets and promotional materials
-2. **Quote Management Page**
-   - Browse all quotes with grid/list view
-   - Filter by category, favorite status, custom vs curated
-   - Search functionality and bulk operations
-3. **Pomodoro Timer Integration**
-   - 25/5 minute work/break intervals
-   - Session tracking and statistics
-4. **Insights Dashboard**
-   - Visual charts and graphs
-   - Productivity trends and goal completion rates
-   - Advanced analytics
-5. **Enhanced Features**
-   - Export/import data functionality
-   - Onboarding tutorials for new users
-   - Accessibility improvements
-6. **Platform Expansion**
-   - Web app (Next.js) implementation
-   - Cloud sync backend
-   - Mobile app (React Native)
-
-## License
-
-MIT License - see LICENSE file for details
-
-## Troubleshooting
-
-### Extension not loading
-- Make sure you selected the `apps/browser-extension/dist` folder
-- Check that the build completed successfully
-- Try rebuilding: `pnpm --filter @cuewise/browser-extension build`
-
-### Quotes not displaying
-- Open Chrome DevTools (F12) and check for errors
-- Check Chrome Storage: DevTools → Application → Storage → Local Storage
-
-### Build errors
-- Clear node_modules: `rm -rf node_modules packages/*/node_modules`
-- Reinstall: `pnpm install`
-- Rebuild: `pnpm build`
-
-## Support
-
-If you encounter any issues or have suggestions, please open an issue on GitHub.
+1. Open `chrome://extensions/`
+2. Enable "Developer mode" (top-right toggle)
+3. Click "Load unpacked"
+4. Select `apps/browser-extension/dist` folder
+5. Open a new tab to see your productivity dashboard! 🎉
 
 ---
 
-**Enjoy staying motivated and productive!** 🚀
+## 🛠️ Development
+
+```bash
+# Start dev server with HMR
+pnpm --filter @cuewise/browser-extension dev
+
+# Run linting and type check
+pnpm lint
+pnpm type-check
+
+# Run tests
+pnpm --filter @cuewise/browser-extension test
+pnpm --filter @cuewise/browser-extension test:watch
+
+# Build for production
+pnpm build
+
+# Clean build artifacts
+pnpm clean
+```
+
+### Development URLs
+- **Extension**: Load `dist/` folder in Chrome
+- **Dev Server**: `http://localhost:5173/` (for rapid testing without extension reload)
+
+---
+
+## 📦 Tech Stack
+
+### Monorepo Architecture
+- **Package Manager**: pnpm with workspaces
+- **Build Tool**: Turbo for efficient caching
+- **Linting**: Biome (50x faster than ESLint)
+
+### Frontend
+- **Framework**: React 18 + TypeScript (ES2022)
+- **Build**: Vite with @crxjs/vite-plugin for HMR
+- **Styling**: Tailwind CSS 4 with OKLCH colors
+- **State**: Zustand stores with persistence
+- **Icons**: Lucide React
+- **Testing**: Vitest + Testing Library + Fishery factories
+
+### Structure
+```
+cuewise/
+├── apps/
+│   └── browser-extension/    # Chrome/Edge extension (30 components, 11 stores)
+├── packages/
+│   ├── shared/               # Platform-agnostic types, utils, constants
+│   ├── storage/              # Multi-platform storage adapters
+│   ├── ui/                   # Shared UI components (Toast, Modal, etc.)
+│   └── test-utils/           # Testing factories and mocks
+```
+
+---
+
+## 📚 Key Features Explained
+
+### Goal History View
+Access past and future goals even when today's list is empty:
+- **Always Accessible**: "View All Goals" button never disappears
+- **Date Grouping**: Goals organized with relative dates (Today, Yesterday, Tomorrow)
+- **Smart Filtering**: Toggle between All, Completed, or Incomplete
+- **Move to Today**: One-click to bring back past goals
+- **Transfer Forward**: Move incomplete goals to tomorrow
+
+### Pomodoro Integration
+Full-featured timer with ambient sounds and tracking:
+- **Flexible Settings**: Customize work/break durations
+- **Auto-Start**: Optional auto-transition between intervals
+- **Sound Options**: Multiple ambient soundscapes
+- **Sticky Widget**: Access timer from any page
+- **Complete Analytics**: Heatmaps show your most productive hours
+
+### Storage Strategy
+Smart hybrid approach for performance and sync:
+- **Local Storage**: 99 seed quotes (fast, no sync needed)
+- **Sync Storage**: Custom quotes and user data (syncs across devices)
+- **Visual Indicators**: Real-time storage usage with color-coded warnings
+- **Efficient**: Optimized to stay well under Chrome's limits
+
+---
+
+## 🎯 Usage Tips
+
+### Goals
+- **Add**: Type and press Enter
+- **Complete**: Click the circle checkbox
+- **Edit**: Click the goal text
+- **Move to Today**: Expand history, click move button on past goals
+- **Transfer**: Hover and click arrow to move to tomorrow (after 8 PM)
+- **Clear**: Bulk remove completed goals with one click
+
+### Quotes
+- **New Quote**: Click refresh button or open a new tab
+- **Navigate**: Use arrow buttons to browse quote history
+- **Favorite**: Click heart icon (favorites never appear as random)
+- **Hide**: Click eye icon (hidden quotes never appear)
+- **Custom Quote**: Click floating "+" button to add your own
+
+### Pomodoro
+- **Quick Start**: Click "Pomodoro" in top-right corner
+- **Customize**: Open settings (⚙️) → Pomodoro section
+- **Ambient Sound**: Select from multiple options and adjust volume
+- **Track Progress**: View session history and analytics in Insights
+
+### Theme Customization
+- **Live Preview**: Enable theme switcher sidebar to test instantly
+- **Density**: Choose Compact (minimal), Comfortable (balanced), or Spacious (relaxed)
+- **Dark Mode**: Auto-syncs with system preferences or set manually
+- **Persistence**: All settings saved automatically
+
+---
+
+## 🔮 Planned Enhancements
+
+### Near-Term (v1.2)
+- Chrome Web Store publication
+- Export/import data backup
+- Onboarding tutorial for new users
+- Accessibility improvements (ARIA labels, keyboard navigation)
+
+### Future Platforms
+- 🌐 **Web App** (Next.js) - Use without browser extension
+- 📱 **Mobile App** (React Native) - iOS and Android support
+- ☁️ **Cloud Sync** - Backend service for cross-platform data sync
+
+---
+
+## 🤝 Contributing
+
+Contributions welcome! Please:
+- Write tests for new features
+- Follow TypeScript strict mode (no `any` types)
+- Use Biome for linting (auto-fix with `pnpm lint:fix`)
+- Keep components focused and under 300 lines
+- Add JSDoc comments for public APIs
+
+See [CLAUDE.md](./CLAUDE.md) for architecture details and [LINTING.md](./LINTING.md) for code style.
+
+---
+
+## 🐛 Troubleshooting
+
+**Extension not loading**
+- Verify you selected the `dist/` folder
+- Rebuild: `pnpm --filter @cuewise/browser-extension build`
+- Check Chrome DevTools console for errors
+
+**Data not syncing**
+- Enable Chrome Sync in settings
+- Check storage usage in Insights page
+- Ensure you're signed into Chrome on all devices
+
+**Build errors**
+```bash
+# Clear everything and reinstall
+rm -rf node_modules packages/*/node_modules apps/*/node_modules
+pnpm install
+pnpm build
+```
+
+---
+
+## 📄 License
+
+MIT License - See LICENSE file for details
+
+---
+
+**Stay motivated. Stay productive. Stay focused.** ✨
+
+Made with ❤️ using React, TypeScript, and Tailwind CSS
