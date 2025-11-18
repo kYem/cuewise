@@ -36,7 +36,7 @@ describe('Analytics Utilities', () => {
 
     it('should count completed goals correctly per day', () => {
       const goals = createTrendTestGoals(5);
-      const sessions: typeof createTestPomodoroSessions = [];
+      const sessions: ReturnType<typeof createTestPomodoroSessions> = [];
 
       const trends = calculateDailyTrends(goals, sessions, 5);
 
@@ -47,7 +47,7 @@ describe('Analytics Utilities', () => {
     });
 
     it('should calculate focus time from completed work sessions', () => {
-      const goals: typeof createTestGoals = [];
+      const goals: ReturnType<typeof createTestGoals> = [];
       const sessions = createTestPomodoroSessions();
 
       const trends = calculateDailyTrends(goals, sessions, 5);
@@ -59,7 +59,7 @@ describe('Analytics Utilities', () => {
     });
 
     it('should exclude interrupted and break sessions', () => {
-      const goals: typeof createTestGoals = [];
+      const goals: ReturnType<typeof createTestGoals> = [];
       const sessions = createTestPomodoroSessions();
 
       const trends = calculateDailyTrends(goals, sessions, 5);
@@ -85,7 +85,7 @@ describe('Analytics Utilities', () => {
 
     it('should format week labels correctly', () => {
       const goals = createTrendTestGoals(14);
-      const sessions: typeof createTestPomodoroSessions = [];
+      const sessions: ReturnType<typeof createTestPomodoroSessions> = [];
 
       const trends = calculateWeeklyTrends(goals, sessions, 2);
 
@@ -110,7 +110,7 @@ describe('Analytics Utilities', () => {
 
     it('should format month labels correctly', () => {
       const goals = createTrendTestGoals(30);
-      const sessions: typeof createTestPomodoroSessions = [];
+      const sessions: ReturnType<typeof createTestPomodoroSessions> = [];
 
       const trends = calculateMonthlyTrends(goals, sessions, 3);
 

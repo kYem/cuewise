@@ -232,7 +232,7 @@ export function expectForwardHistoryCleared(state: QuoteStoreState, _fromIndex: 
   // - New quote at index 0
   // - Old history from fromIndex onwards
   expect(state.historyIndex).toBe(0);
-  expect(state.quoteHistory[0]).toBe(state.currentQuote?.id);
+  expect(state.quoteHistory?.[0]).toBe(state.currentQuote?.id);
 }
 
 // ============================================================================

@@ -15,15 +15,6 @@ export type ChartConfig = {
   };
 };
 
-// Tooltip payload item interface
-interface TooltipPayloadItem {
-  name?: string;
-  dataKey?: string;
-  value?: number;
-  color?: string;
-  payload?: Record<string, unknown> & { fill?: string };
-}
-
 // Context for sharing config across chart components
 const ChartContext = React.createContext<{
   config: ChartConfig;
@@ -143,7 +134,7 @@ const ChartTooltipContent = React.forwardRef<HTMLDivElement, ChartTooltipContent
       >
         {!hideLabel ? tooltipLabel : null}
         <div className="grid gap-1.5">
-          {payload.map((item: TooltipPayloadItem, index: number) => {
+          {payload.map((item, index) => {
             const key = `${nameKey || item.name || item.dataKey || 'value'}`;
             const itemConfig = config[key];
             const indicatorColor = color || item.payload?.fill || item.color;
@@ -175,8 +166,14 @@ const ChartTooltipContent = React.forwardRef<HTMLDivElement, ChartTooltipContent
                   <span className="text-gray-500">{itemConfig?.label || item.name}</span>
                 </div>
                 <span className="font-mono font-medium tabular-nums text-gray-900">
-                  {formatter
-                    ? formatter(item.value, item.name, item, index, item.payload)
+                  {formatter && item.value !== undefined
+                    ? formatter(
+                        item.value,
+                        item.name as Parameters<typeof formatter>[1],
+                        item,
+                        index,
+                        item.payload
+                      )
                     : item.value}
                 </span>
               </div>
@@ -217,7 +214,7 @@ const ChartLegendContent = React.forwardRef<HTMLDivElement, ChartLegendContentPr
           className
         )}
       >
-        {payload.map((item: TooltipPayloadItem) => {
+        {payload.map((item) => {
           const key = `${nameKey || item.dataKey || 'value'}`;
           const itemConfig = config[key];
 

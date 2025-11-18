@@ -1,7 +1,7 @@
 import { vi } from 'vitest';
 
 export interface MockChromeStorage {
-  data: Record<string, any>;
+  data: Record<string, unknown>;
   get: ReturnType<typeof vi.fn>;
   set: ReturnType<typeof vi.fn>;
   remove: ReturnType<typeof vi.fn>;
@@ -9,7 +9,7 @@ export interface MockChromeStorage {
 }
 
 export function createChromeStorageMock(): MockChromeStorage {
-  const data: Record<string, any> = {};
+  const data: Record<string, unknown> = {};
 
   return {
     data,
@@ -20,7 +20,7 @@ export function createChromeStorageMock(): MockChromeStorage {
       if (typeof keys === 'string') {
         return Promise.resolve({ [keys]: data[keys] });
       }
-      const result: Record<string, any> = {};
+      const result: Record<string, unknown> = {};
       for (const key of keys) {
         if (key in data) {
           result[key] = data[key];
@@ -28,7 +28,7 @@ export function createChromeStorageMock(): MockChromeStorage {
       }
       return Promise.resolve(result);
     }),
-    set: vi.fn((items: Record<string, any>) => {
+    set: vi.fn((items: Record<string, unknown>) => {
       Object.assign(data, items);
       return Promise.resolve();
     }),

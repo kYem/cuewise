@@ -2,11 +2,16 @@
  * Chrome Storage API adapter for browser extensions
  */
 
-import type { StorageAdapter } from '../storage-interface';
+import type { StorageAdapter, StorageChanges } from '../storage-interface';
 
 type StorageArea = 'local' | 'sync';
 
 export class ChromeStorageAdapter implements StorageAdapter {
+  private listenerMap = new WeakMap<
+    (changes: StorageChanges) => void,
+    (changes: chrome.storage.StorageChange, areaName: string) => void
+  >();
+
   constructor(private area: StorageArea = 'local') {}
 
   private get storage() {
@@ -53,15 +58,23 @@ export class ChromeStorageAdapter implements StorageAdapter {
     }
   }
 
-  onChange(callback: (changes: Record<string, any>) => void): void {
-    chrome.storage.onChanged.addListener((changes, areaName) => {
+  onChange(callback: (changes: StorageChanges) => void): void {
+    // Create and store the event listener so we can remove it later
+    const eventListener = (changes: chrome.storage.StorageChange, areaName: string) => {
       if (areaName === this.area) {
-        callback(changes);
+        callback(changes as StorageChanges);
       }
-    });
+    };
+
+    this.listenerMap.set(callback, eventListener);
+    chrome.storage.onChanged.addListener(eventListener);
   }
 
-  removeChangeListener(callback: (changes: Record<string, any>) => void): void {
-    chrome.storage.onChanged.removeListener(callback as any);
+  removeChangeListener(callback: (changes: StorageChanges) => void): void {
+    const eventListener = this.listenerMap.get(callback);
+    if (eventListener) {
+      chrome.storage.onChanged.removeListener(eventListener);
+      this.listenerMap.delete(callback);
+    }
   }
 }

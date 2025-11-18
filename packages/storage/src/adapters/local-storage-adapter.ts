@@ -2,9 +2,14 @@
  * localStorage adapter for web applications
  */
 
-import type { StorageAdapter } from '../storage-interface';
+import type { StorageAdapter, StorageChanges } from '../storage-interface';
 
 export class LocalStorageAdapter implements StorageAdapter {
+  private listenerMap = new WeakMap<
+    (changes: StorageChanges) => void,
+    (event: StorageEvent) => void
+  >();
+
   async get<T>(key: string): Promise<T | null> {
     try {
       const item = localStorage.getItem(key);
@@ -45,9 +50,9 @@ export class LocalStorageAdapter implements StorageAdapter {
     }
   }
 
-  onChange(callback: (changes: Record<string, any>) => void): void {
-    // Listen to storage events from other tabs
-    window.addEventListener('storage', (event) => {
+  onChange(callback: (changes: StorageChanges) => void): void {
+    // Create and store the event listener so we can remove it later
+    const eventListener = (event: StorageEvent) => {
       if (event.key) {
         callback({
           [event.key]: {
@@ -56,10 +61,17 @@ export class LocalStorageAdapter implements StorageAdapter {
           },
         });
       }
-    });
+    };
+
+    this.listenerMap.set(callback, eventListener);
+    window.addEventListener('storage', eventListener);
   }
 
-  removeChangeListener(callback: (changes: Record<string, any>) => void): void {
-    window.removeEventListener('storage', callback as any);
+  removeChangeListener(callback: (changes: StorageChanges) => void): void {
+    const eventListener = this.listenerMap.get(callback);
+    if (eventListener) {
+      window.removeEventListener('storage', eventListener);
+      this.listenerMap.delete(callback);
+    }
   }
 }

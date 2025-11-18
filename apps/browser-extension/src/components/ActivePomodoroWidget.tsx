@@ -50,6 +50,7 @@ export const ActivePomodoroWidget: React.FC = () => {
         : 'text-blue-600';
 
   return (
+    // biome-ignore lint/a11y/useSemanticElements: Container has nested button, cannot use button element
     <div
       role="button"
       tabIndex={0}

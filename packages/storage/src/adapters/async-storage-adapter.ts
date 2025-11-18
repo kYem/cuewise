@@ -8,12 +8,22 @@
 
 import type { StorageAdapter } from '../storage-interface';
 
-export class AsyncStorageAdapter implements StorageAdapter {
-  private AsyncStorage: any = null;
+/**
+ * Minimal interface for AsyncStorage from @react-native-async-storage/async-storage
+ */
+interface AsyncStorageInterface {
+  getItem: (key: string) => Promise<string | null>;
+  setItem: (key: string, value: string) => Promise<void>;
+  removeItem: (key: string) => Promise<void>;
+  clear: () => Promise<void>;
+}
 
-  constructor(asyncStorageInstance?: any) {
+export class AsyncStorageAdapter implements StorageAdapter {
+  private AsyncStorage: AsyncStorageInterface | null = null;
+
+  constructor(asyncStorageInstance?: AsyncStorageInterface) {
     // Accept AsyncStorage instance from React Native app
-    this.AsyncStorage = asyncStorageInstance;
+    this.AsyncStorage = asyncStorageInstance ?? null;
 
     if (!this.AsyncStorage) {
       console.warn(

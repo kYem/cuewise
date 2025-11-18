@@ -3,13 +3,26 @@
  * Implementations: Chrome Storage API, localStorage, AsyncStorage (React Native)
  */
 
+/**
+ * Represents a change to a storage value
+ */
+export interface StorageChange<T = unknown> {
+  oldValue?: T;
+  newValue?: T;
+}
+
+/**
+ * Map of storage keys to their changes
+ */
+export type StorageChanges = Record<string, StorageChange>;
+
 export interface StorageAdapter {
   get<T>(key: string): Promise<T | null>;
   set<T>(key: string, value: T): Promise<boolean>;
   remove(key: string): Promise<boolean>;
   clear(): Promise<boolean>;
-  onChange?(callback: (changes: Record<string, any>) => void): void;
-  removeChangeListener?(callback: (changes: Record<string, any>) => void): void;
+  onChange?(callback: (changes: StorageChanges) => void): void;
+  removeChangeListener?(callback: (changes: StorageChanges) => void): void;
 }
 
 /**
@@ -34,13 +47,13 @@ export class StorageManager {
     return this.adapter.clear();
   }
 
-  onChange(callback: (changes: Record<string, any>) => void): void {
+  onChange(callback: (changes: StorageChanges) => void): void {
     if (this.adapter.onChange) {
       this.adapter.onChange(callback);
     }
   }
 
-  removeChangeListener(callback: (changes: Record<string, any>) => void): void {
+  removeChangeListener(callback: (changes: StorageChanges) => void): void {
     if (this.adapter.removeChangeListener) {
       this.adapter.removeChangeListener(callback);
     }
