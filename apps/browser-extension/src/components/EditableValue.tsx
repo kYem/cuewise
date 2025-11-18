@@ -28,7 +28,7 @@ export const EditableValue: React.FC<EditableValueProps> = ({
       <button
         type="button"
         onClick={handleClick}
-        className={`text-purple-600 hover:text-purple-700 font-semibold underline decoration-dotted underline-offset-2 cursor-pointer transition-colors ${className}`}
+        className={`text-primary-600 hover:text-primary-700 font-semibold underline decoration-dotted underline-offset-2 cursor-pointer transition-colors ${className}`}
         title="Click to edit"
       >
         {value} {unit}
@@ -58,7 +58,7 @@ export const EditableValue: React.FC<EditableValueProps> = ({
 
   // Fallback (should not happen if presets are always provided)
   return (
-    <span className={`text-purple-600 font-semibold ${className}`}>
+    <span className={`text-primary-600 font-semibold ${className}`}>
       {value} {unit}
     </span>
   );

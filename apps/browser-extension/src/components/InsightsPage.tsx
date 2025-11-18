@@ -20,6 +20,7 @@ import { useInsightsStore } from '../stores/insights-store';
 import { ExportControls } from './ExportControls';
 import { GoalCompletionChart } from './GoalCompletionChart';
 import { PomodoroHeatmap } from './PomodoroHeatmap';
+import { StorageIndicator } from './StorageIndicator';
 import { TrendChart } from './TrendChart';
 
 export const InsightsPage: React.FC = () => {
@@ -243,6 +244,11 @@ export const InsightsPage: React.FC = () => {
                   );
                 })}
               </div>
+            </div>
+
+            {/* Storage Usage */}
+            <div className="bg-surface rounded-xl shadow-lg p-8 mb-8">
+              <StorageIndicator mode="full" />
             </div>
 
             {/* Achievement Summary */}
