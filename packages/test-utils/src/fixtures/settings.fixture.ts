@@ -16,4 +16,6 @@ export const defaultSettings: Settings = {
   colorTheme: 'purple',
   layoutDensity: 'comfortable',
   showThemeSwitcher: false,
+  enableGoalTransfer: true,
+  goalTransferTime: 20,
 };

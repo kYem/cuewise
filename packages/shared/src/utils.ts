@@ -45,6 +45,26 @@ export function getTodayDateString(): string {
 }
 
 /**
+ * Get tomorrow's date in YYYY-MM-DD format
+ */
+export function getNextDayDateString(): string {
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  return format(tomorrow, 'yyyy-MM-dd');
+}
+
+/**
+ * Check if current time is past the specified goal transfer hour
+ * @param transferHour - Hour in 24-hour format (0-23)
+ * @returns true if current time is past the transfer hour
+ */
+export function isPastGoalTransferTime(transferHour: number): boolean {
+  const now = new Date();
+  const currentHour = now.getHours();
+  return currentHour >= transferHour;
+}
+
+/**
  * Format date to readable string (e.g., "January 15, 2025")
  */
 export function formatDate(dateString: string): string {

@@ -33,6 +33,7 @@ export interface Goal {
   completed: boolean;
   createdAt: string; // ISO date string
   date: string; // YYYY-MM-DD
+  transferCount?: number; // Number of times goal was transferred to next day
 }
 
 // Reminder interface
@@ -81,6 +82,9 @@ export interface Settings {
   colorTheme: ColorTheme;
   layoutDensity: LayoutDensity;
   showThemeSwitcher: boolean; // Show live theme switcher sidebar
+  // Goal Transfer
+  enableGoalTransfer: boolean; // Enable goal transfer feature (default true)
+  goalTransferTime: number; // Hour (0-23) when transfer button appears (default 20 for 8 PM)
 }
 
 // Storage keys

@@ -1,4 +1,4 @@
-import { type Goal, generateId, getTodayDateString } from '@cuewise/shared';
+import { type Goal, generateId, getNextDayDateString, getTodayDateString } from '@cuewise/shared';
 import { getGoals, setGoals } from '@cuewise/storage';
 import { create } from 'zustand';
 import { useToastStore } from './toast-store';
@@ -16,6 +16,7 @@ interface GoalStore {
   toggleGoal: (goalId: string) => Promise<void>;
   deleteGoal: (goalId: string) => Promise<void>;
   clearCompleted: () => Promise<void>;
+  transferGoalToNextDay: (goalId: string) => Promise<void>;
 }
 
 export const useGoalStore = create<GoalStore>((set, get) => ({
@@ -149,6 +150,37 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
     } catch (error) {
       console.error('Error clearing completed goals:', error);
       const errorMessage = 'Failed to clear completed goals. Please try again.';
+      set({ error: errorMessage });
+      useToastStore.getState().error(errorMessage);
+    }
+  },
+
+  transferGoalToNextDay: async (goalId: string) => {
+    try {
+      const { goals } = get();
+      const today = getTodayDateString();
+      const tomorrow = getNextDayDateString();
+
+      const updatedGoals = goals.map((goal) => {
+        if (goal.id === goalId) {
+          return {
+            ...goal,
+            date: tomorrow,
+            transferCount: (goal.transferCount || 0) + 1,
+          };
+        }
+        return goal;
+      });
+
+      await setGoals(updatedGoals);
+
+      const todayGoals = updatedGoals.filter((goal) => goal.date === today);
+      set({ goals: updatedGoals, todayGoals });
+
+      useToastStore.getState().success('Goal transferred to tomorrow');
+    } catch (error) {
+      console.error('Error transferring goal:', error);
+      const errorMessage = 'Failed to transfer goal. Please try again.';
       set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
     }

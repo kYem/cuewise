@@ -17,6 +17,8 @@ export const DEFAULT_SETTINGS: Settings = {
   colorTheme: 'purple',
   layoutDensity: 'comfortable',
   showThemeSwitcher: false,
+  enableGoalTransfer: true,
+  goalTransferTime: 20, // 8 PM (20:00)
 };
 
 // Quote categories with display names

@@ -1,14 +1,22 @@
+import { isPastGoalTransferTime } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
-import { CheckCircle2, Circle, Trash2 } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Circle, Trash2 } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useGoalStore } from '../stores/goal-store';
+import { useSettingsStore } from '../stores/settings-store';
 
 export const GoalsList: React.FC = () => {
-  const { todayGoals, toggleGoal, updateGoal, deleteGoal, isLoading } = useGoalStore();
+  const { todayGoals, toggleGoal, updateGoal, deleteGoal, transferGoalToNextDay, isLoading } =
+    useGoalStore();
+  const { settings } = useSettingsStore();
   const [editingGoalId, setEditingGoalId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Check if transfer button should be shown
+  const showTransferButton =
+    settings.enableGoalTransfer && isPastGoalTransferTime(settings.goalTransferTime);
 
   // Focus input when editing starts
   useEffect(() => {
@@ -127,15 +135,39 @@ export const GoalsList: React.FC = () => {
                 className="flex-1 text-base px-2 py-1 border-2 border-primary-500 rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
             ) : (
+              <div className="flex-1 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => startEditing(goal.id, goal.text)}
+                  className={cn(
+                    'flex-1 text-base text-left transition-all hover:bg-surface-variant px-2 py-1 rounded',
+                    goal.completed ? 'text-tertiary line-through' : 'text-primary'
+                  )}
+                >
+                  {goal.text}
+                </button>
+                {/* Transfer count badge */}
+                {goal.transferCount && goal.transferCount > 0 && (
+                  <span
+                    className="flex-shrink-0 text-xs text-tertiary"
+                    title={`Transferred ${goal.transferCount} time${goal.transferCount > 1 ? 's' : ''}`}
+                  >
+                    ↻{goal.transferCount}
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Transfer Button - only show for incomplete goals after transfer time */}
+            {showTransferButton && !goal.completed && (
               <button
                 type="button"
-                onClick={() => startEditing(goal.id, goal.text)}
-                className={cn(
-                  'flex-1 text-base text-left transition-all hover:bg-surface-variant px-2 py-1 rounded',
-                  goal.completed ? 'text-tertiary line-through' : 'text-primary'
-                )}
+                onClick={() => transferGoalToNextDay(goal.id)}
+                className="flex-shrink-0 p-2 text-secondary hover:text-primary-600 opacity-0 group-hover:opacity-100 transition-all focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 rounded"
+                aria-label="Transfer to tomorrow"
+                title="Transfer to tomorrow"
               >
-                {goal.text}
+                <ArrowRight className="w-4 h-4" />
               </button>
             )}
 

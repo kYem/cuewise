@@ -1,5 +1,6 @@
 import { AMBIENT_SOUNDS } from '@cuewise/shared';
 import {
+  ArrowRight,
   Bell,
   BellOff,
   Clock,
@@ -39,6 +40,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   const [quoteInterval, setQuoteInterval] = useState(settings.quoteChangeInterval);
   const [timeFormat, setTimeFormat] = useState(settings.timeFormat);
   const [syncEnabled, setSyncEnabled] = useState(settings.syncEnabled);
+  const [enableGoalTransfer, setEnableGoalTransfer] = useState(settings.enableGoalTransfer);
+  const [goalTransferTime, setGoalTransferTime] = useState(settings.goalTransferTime);
   const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
 
   // Sync local state with store when settings change
@@ -53,6 +56,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     setQuoteInterval(settings.quoteChangeInterval);
     setTimeFormat(settings.timeFormat);
     setSyncEnabled(settings.syncEnabled);
+    setEnableGoalTransfer(settings.enableGoalTransfer);
+    setGoalTransferTime(settings.goalTransferTime);
   }, [settings]);
 
   // Format interval for display
@@ -127,6 +132,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
       quoteChangeInterval: quoteInterval,
       timeFormat,
       syncEnabled,
+      enableGoalTransfer,
+      goalTransferTime,
     });
 
     // If sync setting changed, reload the page to apply storage changes
@@ -489,6 +496,80 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
               <div className="text-xs text-transparent font-medium mb-2">.</div>
               <span className="block text-sm font-medium text-primary">24-hour</span>
             </button>
+          </div>
+        </section>
+
+        {/* Goal Transfer Settings */}
+        <section>
+          <div className="flex items-center gap-2 mb-4">
+            <ArrowRight className="w-5 h-5 text-primary-600" />
+            <h3 className="text-lg font-semibold text-primary">Goal Transfer</h3>
+          </div>
+
+          <div className="space-y-4 pl-7">
+            {/* Enable Goal Transfer Toggle */}
+            <label className="flex items-center gap-3 cursor-pointer group">
+              <div className="relative">
+                <input
+                  type="checkbox"
+                  checked={enableGoalTransfer}
+                  onChange={(e) => setEnableGoalTransfer(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-divider peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-surface after:border-border after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
+              </div>
+              <div>
+                <span className="text-sm font-medium text-primary">Enable goal transfers</span>
+                <p className="text-xs text-secondary">
+                  Show option to transfer incomplete goals to tomorrow after end-of-day time
+                </p>
+              </div>
+            </label>
+
+            {/* Transfer Time Setting */}
+            {enableGoalTransfer && (
+              <div>
+                <label
+                  htmlFor="goal-transfer-time"
+                  className="block text-sm font-medium text-primary mb-2"
+                >
+                  End-of-day time:{' '}
+                  <span className="text-primary-600 font-semibold">
+                    {timeFormat === '12h'
+                      ? `${goalTransferTime % 12 || 12}:00 ${goalTransferTime >= 12 ? 'PM' : 'AM'}`
+                      : `${goalTransferTime.toString().padStart(2, '0')}:00`}
+                  </span>
+                </label>
+                <div className="flex items-center gap-4">
+                  <input
+                    id="goal-transfer-time"
+                    type="range"
+                    min="0"
+                    max="23"
+                    step="1"
+                    value={goalTransferTime}
+                    onChange={(e) => setGoalTransferTime(Number(e.target.value))}
+                    className="flex-1 h-2 bg-divider rounded-lg appearance-none cursor-pointer accent-primary-600"
+                  />
+                  <select
+                    value={goalTransferTime}
+                    onChange={(e) => setGoalTransferTime(Number(e.target.value))}
+                    className="w-24 px-2 py-1 text-sm text-primary border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    {Array.from({ length: 24 }, (_, i) => (
+                      <option key={i} value={i}>
+                        {timeFormat === '12h'
+                          ? `${i % 12 || 12}:00 ${i >= 12 ? 'PM' : 'AM'}`
+                          : `${i.toString().padStart(2, '0')}:00`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <p className="text-xs text-secondary mt-2">
+                  Transfer button will appear on incomplete goals after this time
+                </p>
+              </div>
+            )}
           </div>
         </section>
 
