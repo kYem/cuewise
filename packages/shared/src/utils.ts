@@ -54,6 +54,15 @@ export function getNextDayDateString(): string {
 }
 
 /**
+ * Get yesterday's date in YYYY-MM-DD format
+ */
+export function getYesterdayDateString(): string {
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  return format(yesterday, 'yyyy-MM-dd');
+}
+
+/**
  * Check if current time is past the specified goal transfer hour
  * @param transferHour - Hour in 24-hour format (0-23)
  * @returns true if current time is past the transfer hour
@@ -83,6 +92,61 @@ export function formatTime(dateString: string): string {
  */
 export function isToday(dateString: string): boolean {
   return isTodayDateFns(parseISO(dateString));
+}
+
+/**
+ * Get relative date label for display (e.g., "Today", "Yesterday", "Tomorrow")
+ * Returns formatted date string for dates beyond tomorrow
+ */
+export function getRelativeDateLabel(dateString: string): string {
+  const today = getTodayDateString();
+  const yesterday = getYesterdayDateString();
+  const tomorrow = getNextDayDateString();
+
+  if (dateString === today) return 'Today';
+  if (dateString === yesterday) return 'Yesterday';
+  if (dateString === tomorrow) return 'Tomorrow';
+
+  return formatDate(dateString);
+}
+
+/**
+ * Group goals by date and optionally sort
+ * @param goals - Array of goals to group
+ * @param sortOrder - 'desc' for newest first (default), 'asc' for oldest first
+ * @returns Array of { date, goals[] } objects
+ */
+export function groupGoalsByDate(
+  goals: Goal[],
+  sortOrder: 'asc' | 'desc' = 'desc'
+): Array<{ date: string; goals: Goal[] }> {
+  // Group goals by date
+  const groupedMap = goals.reduce(
+    (acc, goal) => {
+      if (!acc[goal.date]) {
+        acc[goal.date] = [];
+      }
+      acc[goal.date].push(goal);
+      return acc;
+    },
+    {} as Record<string, Goal[]>
+  );
+
+  // Convert to array and sort by date
+  const groupedArray = Object.entries(groupedMap).map(([date, goals]) => ({
+    date,
+    goals,
+  }));
+
+  groupedArray.sort((a, b) => {
+    const dateA = parseISO(a.date);
+    const dateB = parseISO(b.date);
+    return sortOrder === 'desc'
+      ? dateB.getTime() - dateA.getTime() // Newest first
+      : dateA.getTime() - dateB.getTime(); // Oldest first
+  });
+
+  return groupedArray;
 }
 
 /**

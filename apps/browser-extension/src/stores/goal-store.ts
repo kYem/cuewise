@@ -1,13 +1,23 @@
-import { type Goal, generateId, getNextDayDateString, getTodayDateString } from '@cuewise/shared';
+import {
+  type Goal,
+  generateId,
+  getNextDayDateString,
+  getTodayDateString,
+  groupGoalsByDate,
+} from '@cuewise/shared';
 import { getGoals, setGoals } from '@cuewise/storage';
 import { create } from 'zustand';
 import { useToastStore } from './toast-store';
+
+export type CompletionFilter = 'all' | 'completed' | 'incomplete';
 
 interface GoalStore {
   goals: Goal[];
   todayGoals: Goal[];
   isLoading: boolean;
   error: string | null;
+  showAllGoals: boolean;
+  completionFilter: CompletionFilter;
 
   // Actions
   initialize: () => Promise<void>;
@@ -17,6 +27,10 @@ interface GoalStore {
   deleteGoal: (goalId: string) => Promise<void>;
   clearCompleted: () => Promise<void>;
   transferGoalToNextDay: (goalId: string) => Promise<void>;
+  moveGoalToToday: (goalId: string) => Promise<void>;
+  toggleShowAllGoals: () => void;
+  setCompletionFilter: (filter: CompletionFilter) => void;
+  getFilteredGoalsByDate: () => Array<{ date: string; goals: Goal[] }>;
 }
 
 export const useGoalStore = create<GoalStore>((set, get) => ({
@@ -24,6 +38,8 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
   todayGoals: [],
   isLoading: true,
   error: null,
+  showAllGoals: false,
+  completionFilter: 'all',
 
   initialize: async () => {
     try {
@@ -184,5 +200,58 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
     }
+  },
+
+  moveGoalToToday: async (goalId: string) => {
+    try {
+      const { goals } = get();
+      const today = getTodayDateString();
+
+      const updatedGoals = goals.map((goal) => {
+        if (goal.id === goalId) {
+          return {
+            ...goal,
+            date: today,
+            completed: false, // Reset completion status when moving to today
+          };
+        }
+        return goal;
+      });
+
+      await setGoals(updatedGoals);
+
+      const todayGoals = updatedGoals.filter((goal) => goal.date === today);
+      set({ goals: updatedGoals, todayGoals });
+
+      useToastStore.getState().success('Goal moved to today');
+    } catch (error) {
+      console.error('Error moving goal to today:', error);
+      const errorMessage = 'Failed to move goal. Please try again.';
+      set({ error: errorMessage });
+      useToastStore.getState().error(errorMessage);
+    }
+  },
+
+  toggleShowAllGoals: () => {
+    set((state) => ({ showAllGoals: !state.showAllGoals }));
+  },
+
+  setCompletionFilter: (filter: CompletionFilter) => {
+    set({ completionFilter: filter });
+  },
+
+  getFilteredGoalsByDate: () => {
+    const { goals, completionFilter } = get();
+
+    // Apply completion filter
+    const filteredGoals =
+      completionFilter === 'all'
+        ? goals
+        : goals.filter((goal) =>
+            completionFilter === 'completed' ? goal.completed : !goal.completed
+          );
+
+    // Group by date (newest first)
+    return groupGoalsByDate(filteredGoals, 'desc');
   },
 }));

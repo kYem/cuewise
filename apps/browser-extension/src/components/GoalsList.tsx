@@ -1,14 +1,34 @@
 import { isPastGoalTransferTime } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
-import { ArrowRight, CheckCircle2, Circle, Trash2 } from 'lucide-react';
+import {
+  ArrowRight,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Circle,
+  History,
+  Trash2,
+} from 'lucide-react';
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
-import { useGoalStore } from '../stores/goal-store';
+import { type CompletionFilter, useGoalStore } from '../stores/goal-store';
 import { useSettingsStore } from '../stores/settings-store';
+import { AllGoalsList } from './AllGoalsList';
 
 export const GoalsList: React.FC = () => {
-  const { todayGoals, toggleGoal, updateGoal, deleteGoal, transferGoalToNextDay, isLoading } =
-    useGoalStore();
+  const {
+    todayGoals,
+    goals,
+    showAllGoals,
+    completionFilter,
+    toggleGoal,
+    updateGoal,
+    deleteGoal,
+    transferGoalToNextDay,
+    toggleShowAllGoals,
+    setCompletionFilter,
+    isLoading,
+  } = useGoalStore();
   const { settings } = useSettingsStore();
   const [editingGoalId, setEditingGoalId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
@@ -194,6 +214,54 @@ export const GoalsList: React.FC = () => {
           Clear {completedCount} completed {completedCount === 1 ? 'goal' : 'goals'}
         </button>
       )}
+
+      {/* View All Goals Button */}
+      <div className="pt-4 border-t border-border">
+        <button
+          type="button"
+          onClick={toggleShowAllGoals}
+          className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-lg bg-surface-variant hover:bg-primary-100 text-secondary hover:text-primary-600 transition-all font-medium"
+        >
+          <History className="w-4 h-4" />
+          <span>{showAllGoals ? 'Hide History' : 'View All Goals'}</span>
+          {showAllGoals ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          {!showAllGoals && goals.length > todayGoals.length && (
+            <span className="ml-1 text-xs bg-primary-600 text-white px-2 py-0.5 rounded-full">
+              {goals.length - todayGoals.length}
+            </span>
+          )}
+        </button>
+
+        {/* Expanded Section: Filters + All Goals */}
+        {showAllGoals && (
+          <div className="mt-6 space-y-4">
+            {/* Completion Filter */}
+            <div className="flex items-center justify-center gap-2">
+              <span className="text-sm text-secondary font-medium">Show:</span>
+              <div className="flex gap-1 bg-surface-variant rounded-lg p-1">
+                {(['all', 'incomplete', 'completed'] as CompletionFilter[]).map((filter) => (
+                  <button
+                    key={filter}
+                    type="button"
+                    onClick={() => setCompletionFilter(filter)}
+                    className={cn(
+                      'px-4 py-1.5 rounded-md text-sm font-medium transition-all capitalize',
+                      completionFilter === filter
+                        ? 'bg-primary-600 text-white shadow-md'
+                        : 'text-secondary hover:text-primary hover:bg-surface'
+                    )}
+                  >
+                    {filter}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* All Goals List */}
+            <AllGoalsList />
+          </div>
+        )}
+      </div>
     </div>
   );
 };
