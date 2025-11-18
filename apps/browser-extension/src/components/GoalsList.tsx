@@ -82,22 +82,26 @@ export const GoalsList: React.FC = () => {
     return <div className="text-center py-8 text-secondary">Loading goals...</div>;
   }
 
-  if (todayGoals.length === 0) {
-    return (
-      <div className="text-center py-8">
-        <Circle className="w-16 h-16 mx-auto mb-4 text-tertiary" />
-        <p className="text-lg text-secondary mb-2">No goals for today</p>
-        <p className="text-sm text-tertiary">Add your first goal to get started!</p>
-      </div>
-    );
-  }
-
   const completedCount = todayGoals.filter((g) => g.completed).length;
   const totalCount = todayGoals.length;
   const progressPercentage = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
+  const hasOtherGoals = goals.length > todayGoals.length;
 
   return (
     <div className="space-y-4">
+      {/* Empty State - Only show when no today's goals */}
+      {todayGoals.length === 0 && (
+        <div className="text-center py-8">
+          <Circle className="w-16 h-16 mx-auto mb-4 text-tertiary" />
+          <p className="text-lg text-secondary mb-2">No goals for today</p>
+          <p className="text-sm text-tertiary">
+            {hasOtherGoals
+              ? 'Add a new goal or view all goals below'
+              : 'Add your first goal to get started!'}
+          </p>
+        </div>
+      )}
+
       {/* Progress Bar */}
       {totalCount > 0 && (
         <div className="space-y-2">
@@ -117,92 +121,94 @@ export const GoalsList: React.FC = () => {
       )}
 
       {/* Goals List */}
-      <div className="space-y-2">
-        {todayGoals.map((goal) => (
-          <div
-            key={goal.id}
-            className={cn(
-              'group flex items-center gap-3 p-3 rounded-lg border-2 transition-all',
-              goal.completed
-                ? 'bg-surface-variant border-border'
-                : 'bg-surface border-border hover:border-primary-300'
-            )}
-          >
-            {/* Checkbox */}
-            <button
-              type="button"
-              onClick={() => toggleGoal(goal.id)}
-              className="flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 rounded-full"
-              aria-label={goal.completed ? 'Mark as incomplete' : 'Mark as complete'}
-            >
-              {goal.completed ? (
-                <CheckCircle2 className="w-6 h-6 text-primary-600" />
-              ) : (
-                <Circle className="w-6 h-6 text-tertiary group-hover:text-primary-500 transition-colors" />
+      {totalCount > 0 && (
+        <div className="space-y-2">
+          {todayGoals.map((goal) => (
+            <div
+              key={goal.id}
+              className={cn(
+                'group flex items-center gap-3 p-3 rounded-lg border-2 transition-all',
+                goal.completed
+                  ? 'bg-surface-variant border-border'
+                  : 'bg-surface border-border hover:border-primary-300'
               )}
-            </button>
-
-            {/* Goal Text */}
-            {editingGoalId === goal.id ? (
-              <input
-                ref={inputRef}
-                type="text"
-                value={editText}
-                onChange={(e) => setEditText(e.target.value)}
-                onBlur={saveEdit}
-                onKeyDown={handleKeyDown}
-                maxLength={200}
-                className="flex-1 text-base px-2 py-1 border-2 border-primary-500 rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
-              />
-            ) : (
-              <div className="flex-1 flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => startEditing(goal.id, goal.text)}
-                  className={cn(
-                    'flex-1 text-base text-left transition-all hover:bg-surface-variant px-2 py-1 rounded',
-                    goal.completed ? 'text-tertiary line-through' : 'text-primary'
-                  )}
-                >
-                  {goal.text}
-                </button>
-                {/* Transfer count badge */}
-                {goal.transferCount && goal.transferCount > 0 && (
-                  <span
-                    className="flex-shrink-0 text-xs text-tertiary"
-                    title={`Transferred ${goal.transferCount} time${goal.transferCount > 1 ? 's' : ''}`}
-                  >
-                    ↻{goal.transferCount}
-                  </span>
-                )}
-              </div>
-            )}
-
-            {/* Transfer Button - only show for incomplete goals after transfer time */}
-            {showTransferButton && !goal.completed && (
+            >
+              {/* Checkbox */}
               <button
                 type="button"
-                onClick={() => transferGoalToNextDay(goal.id)}
-                className="flex-shrink-0 p-2 text-secondary hover:text-primary-600 opacity-0 group-hover:opacity-100 transition-all focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 rounded"
-                aria-label="Transfer to tomorrow"
-                title="Transfer to tomorrow"
+                onClick={() => toggleGoal(goal.id)}
+                className="flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 rounded-full"
+                aria-label={goal.completed ? 'Mark as incomplete' : 'Mark as complete'}
               >
-                <ArrowRight className="w-4 h-4" />
+                {goal.completed ? (
+                  <CheckCircle2 className="w-6 h-6 text-primary-600" />
+                ) : (
+                  <Circle className="w-6 h-6 text-tertiary group-hover:text-primary-500 transition-colors" />
+                )}
               </button>
-            )}
 
-            {/* Delete Button */}
-            <button
-              type="button"
-              onClick={() => deleteGoal(goal.id)}
-              className="flex-shrink-0 p-2 text-secondary hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 rounded"
-              aria-label="Delete goal"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
-          </div>
-        ))}
-      </div>
+              {/* Goal Text */}
+              {editingGoalId === goal.id ? (
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={editText}
+                  onChange={(e) => setEditText(e.target.value)}
+                  onBlur={saveEdit}
+                  onKeyDown={handleKeyDown}
+                  maxLength={200}
+                  className="flex-1 text-base px-2 py-1 border-2 border-primary-500 rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+              ) : (
+                <div className="flex-1 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => startEditing(goal.id, goal.text)}
+                    className={cn(
+                      'flex-1 text-base text-left transition-all hover:bg-surface-variant px-2 py-1 rounded',
+                      goal.completed ? 'text-tertiary line-through' : 'text-primary'
+                    )}
+                  >
+                    {goal.text}
+                  </button>
+                  {/* Transfer count badge */}
+                  {goal.transferCount && goal.transferCount > 0 && (
+                    <span
+                      className="flex-shrink-0 text-xs text-tertiary"
+                      title={`Transferred ${goal.transferCount} time${goal.transferCount > 1 ? 's' : ''}`}
+                    >
+                      ↻{goal.transferCount}
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* Transfer Button - only show for incomplete goals after transfer time */}
+              {showTransferButton && !goal.completed && (
+                <button
+                  type="button"
+                  onClick={() => transferGoalToNextDay(goal.id)}
+                  className="flex-shrink-0 p-2 text-secondary hover:text-primary-600 opacity-0 group-hover:opacity-100 transition-all focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 rounded"
+                  aria-label="Transfer to tomorrow"
+                  title="Transfer to tomorrow"
+                >
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              )}
+
+              {/* Delete Button */}
+              <button
+                type="button"
+                onClick={() => deleteGoal(goal.id)}
+                className="flex-shrink-0 p-2 text-secondary hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 rounded"
+                aria-label="Delete goal"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Clear Completed Button */}
       {completedCount > 0 && (
@@ -215,8 +221,8 @@ export const GoalsList: React.FC = () => {
         </button>
       )}
 
-      {/* View All Goals Button */}
-      <div className="pt-4 border-t border-border">
+      {/* View All Goals Button - Always visible */}
+      <div className={cn('pt-4', totalCount > 0 && 'border-t border-border')}>
         <button
           type="button"
           onClick={toggleShowAllGoals}
@@ -225,7 +231,7 @@ export const GoalsList: React.FC = () => {
           <History className="w-4 h-4" />
           <span>{showAllGoals ? 'Hide History' : 'View All Goals'}</span>
           {showAllGoals ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-          {!showAllGoals && goals.length > todayGoals.length && (
+          {!showAllGoals && hasOtherGoals && (
             <span className="ml-1 text-xs bg-primary-600 text-white px-2 py-0.5 rounded-full">
               {goals.length - todayGoals.length}
             </span>
