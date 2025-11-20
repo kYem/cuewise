@@ -14,7 +14,7 @@ export const DEFAULT_SETTINGS: Settings = {
   quoteChangeInterval: 10, // 0 = manual, 10+ = auto-refresh interval in seconds
   timeFormat: '12h',
   syncEnabled: false, // Disabled by default for privacy
-  colorTheme: 'purple',
+  colorTheme: 'forest',
   layoutDensity: 'comfortable',
   showThemeSwitcher: false,
   enableGoalTransfer: true,
