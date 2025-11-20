@@ -140,10 +140,10 @@ export const InsightsPage: React.FC = () => {
               {/* Goals Today */}
               <div className="bg-surface rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow">
                 <div className="flex items-center justify-between mb-4">
-                  <div className="p-3 bg-green-100 rounded-lg">
-                    <Target className="w-6 h-6 text-green-600" />
+                  <div className="p-3 bg-primary-600/10 rounded-lg">
+                    <Target className="w-6 h-6 text-primary-600" />
                   </div>
-                  <span className="text-3xl font-bold text-green-600">
+                  <span className="text-3xl font-bold text-primary-600">
                     {insights.goalsCompletedToday}
                   </span>
                 </div>
@@ -157,10 +157,10 @@ export const InsightsPage: React.FC = () => {
               {/* Pomodoros Today */}
               <div className="bg-surface rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow">
                 <div className="flex items-center justify-between mb-4">
-                  <div className="p-3 bg-red-100 rounded-lg">
-                    <Calendar className="w-6 h-6 text-red-600" />
+                  <div className="p-3 bg-primary-600/10 rounded-lg">
+                    <Calendar className="w-6 h-6 text-primary-600" />
                   </div>
-                  <span className="text-3xl font-bold text-red-600">
+                  <span className="text-3xl font-bold text-primary-600">
                     {insights.pomodorosCompletedToday}
                   </span>
                 </div>
@@ -171,10 +171,10 @@ export const InsightsPage: React.FC = () => {
               {/* Total Quotes Viewed */}
               <div className="bg-surface rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow">
                 <div className="flex items-center justify-between mb-4">
-                  <div className="p-3 bg-purple-100 rounded-lg">
-                    <TrendingUp className="w-6 h-6 text-purple-600" />
+                  <div className="p-3 bg-primary-600/10 rounded-lg">
+                    <TrendingUp className="w-6 h-6 text-primary-600" />
                   </div>
-                  <span className="text-3xl font-bold text-purple-600">
+                  <span className="text-3xl font-bold text-primary-600">
                     {insights.totalQuotesViewed}
                   </span>
                 </div>
@@ -185,10 +185,10 @@ export const InsightsPage: React.FC = () => {
               {/* Focus Time */}
               <div className="bg-surface rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow">
                 <div className="flex items-center justify-between mb-4">
-                  <div className="p-3 bg-blue-100 rounded-lg">
-                    <Clock className="w-6 h-6 text-blue-600" />
+                  <div className="p-3 bg-primary-600/10 rounded-lg">
+                    <Clock className="w-6 h-6 text-primary-600" />
                   </div>
-                  <span className="text-3xl font-bold text-blue-600">
+                  <span className="text-3xl font-bold text-primary-600">
                     {formatFocusTime(insights.focusTimeToday)}
                   </span>
                 </div>

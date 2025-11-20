@@ -226,7 +226,7 @@ const QuoteCard: React.FC<QuoteCardProps> = ({
 
         {/* Custom Badge */}
         {quote.isCustom && (
-          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-primary-600/20 text-primary-600">
             Custom
           </span>
         )}
@@ -257,7 +257,7 @@ const QuoteCard: React.FC<QuoteCardProps> = ({
             className={cn(
               'p-2 rounded-full transition-all hover:scale-110',
               quote.isFavorite
-                ? 'bg-red-100 text-red-600 hover:bg-red-200'
+                ? 'bg-red-500/20 text-red-600 hover:bg-red-500/30'
                 : 'bg-surface-variant text-secondary hover:bg-border'
             )}
             title={quote.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
@@ -271,7 +271,7 @@ const QuoteCard: React.FC<QuoteCardProps> = ({
             className={cn(
               'p-2 rounded-full transition-all hover:scale-110',
               quote.isHidden
-                ? 'bg-green-100 text-green-600 hover:bg-green-200'
+                ? 'bg-primary-600/20 text-primary-600 hover:bg-primary-600/30'
                 : 'bg-surface-variant text-secondary hover:bg-border'
             )}
             title={quote.isHidden ? 'Unhide quote' : 'Hide quote'}
@@ -285,7 +285,7 @@ const QuoteCard: React.FC<QuoteCardProps> = ({
             <button
               type="button"
               onClick={() => onEdit(quote)}
-              className="p-2 rounded-full bg-blue-100 text-blue-600 hover:bg-blue-200 transition-all hover:scale-110"
+              className="p-2 rounded-full bg-primary-600/20 text-primary-600 hover:bg-primary-600/30 transition-all hover:scale-110"
               title="Edit quote"
             >
               <Edit2 className="w-4 h-4" />

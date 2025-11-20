@@ -18,7 +18,7 @@ export const ExportControls: React.FC<ExportControlsProps> = ({
   return (
     <div className="bg-surface rounded-xl shadow-lg p-6">
       <h2 className="text-xl font-bold text-primary mb-4 flex items-center gap-2">
-        <Download className="w-5 h-5 text-purple-600" />
+        <Download className="w-5 h-5 text-primary-600" />
         Export Reports
       </h2>
 
@@ -27,9 +27,9 @@ export const ExportControls: React.FC<ExportControlsProps> = ({
         <button
           type="button"
           onClick={onExportJSON}
-          className="flex items-center gap-3 p-4 border-2 border-purple-200 rounded-lg hover:border-purple-400 hover:bg-purple-50 transition-all"
+          className="flex items-center gap-3 p-4 border-2 border-border rounded-lg hover:border-primary-400 hover:bg-primary-600/10 transition-all"
         >
-          <FileJson className="w-6 h-6 text-purple-600" />
+          <FileJson className="w-6 h-6 text-primary-600" />
           <div className="text-left">
             <div className="font-semibold text-primary">Analytics JSON</div>
             <div className="text-xs text-secondary">Export insights & analytics</div>
@@ -40,9 +40,9 @@ export const ExportControls: React.FC<ExportControlsProps> = ({
         <button
           type="button"
           onClick={onExportAllJSON}
-          className="flex items-center gap-3 p-4 border-2 border-blue-200 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition-all"
+          className="flex items-center gap-3 p-4 border-2 border-border rounded-lg hover:border-primary-400 hover:bg-primary-600/10 transition-all"
         >
-          <FileJson className="w-6 h-6 text-blue-600" />
+          <FileJson className="w-6 h-6 text-primary-600" />
           <div className="text-left">
             <div className="font-semibold text-primary">Complete Export</div>
             <div className="text-xs text-secondary">All data including quotes</div>
@@ -54,9 +54,9 @@ export const ExportControls: React.FC<ExportControlsProps> = ({
           <button
             type="button"
             onClick={() => setShowDropdown(!showDropdown)}
-            className="w-full flex items-center gap-3 p-4 border-2 border-green-200 rounded-lg hover:border-green-400 hover:bg-green-50 transition-all"
+            className="w-full flex items-center gap-3 p-4 border-2 border-border rounded-lg hover:border-primary-400 hover:bg-primary-600/10 transition-all"
           >
-            <FileDown className="w-6 h-6 text-green-600" />
+            <FileDown className="w-6 h-6 text-primary-600" />
             <div className="flex-1 text-left">
               <div className="font-semibold text-primary">Export as CSV</div>
               <div className="text-xs text-secondary">Select data type to export</div>
@@ -141,7 +141,7 @@ export const ExportControls: React.FC<ExportControlsProps> = ({
         </div>
       </div>
 
-      <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+      <div className="mt-4 p-3 bg-primary-600/10 border border-border rounded-lg">
         <p className="text-xs text-primary">
           <span className="font-semibold">Tip:</span> Export your data regularly to track your
           long-term progress and maintain backups.

@@ -58,13 +58,13 @@ export const PomodoroHeatmap: React.FC<PomodoroHeatmapProps> = ({ data }) => {
   return (
     <div className="bg-surface rounded-xl shadow-lg p-8">
       <h2 className="text-2xl font-bold text-primary mb-6 flex items-center gap-3">
-        <Clock className="w-6 h-6 text-purple-600" />
+        <Clock className="w-6 h-6 text-primary-600" />
         Pomodoro Heatmap
       </h2>
 
       {/* Productive Hours Summary */}
       {data.productiveHours.length > 0 && (
-        <div className="mb-6 p-4 bg-purple-50 rounded-lg">
+        <div className="mb-6 p-4 bg-primary-600/10 border border-border rounded-lg">
           <p className="text-sm text-primary">
             <span className="font-bold">Most productive hours:</span>{' '}
             {data.productiveHours.map((hour) => formatHour(hour)).join(', ')}
@@ -115,14 +115,14 @@ export const PomodoroHeatmap: React.FC<PomodoroHeatmapProps> = ({ data }) => {
               </BarChart>
             </ResponsiveContainer>
           </ChartContainer>
-          <div className="mt-4 flex items-center justify-between text-xs text-gray-500">
+          <div className="mt-4 flex items-center justify-between text-xs text-secondary">
             <span>Low activity</span>
             <div className="flex gap-1 items-center">
-              <div className="w-4 h-4 bg-gray-100 rounded" />
-              <div className="w-4 h-4 bg-purple-200 rounded" />
-              <div className="w-4 h-4 bg-purple-300 rounded" />
-              <div className="w-4 h-4 bg-purple-400 rounded" />
-              <div className="w-4 h-4 bg-purple-600 rounded" />
+              <div className="w-4 h-4 bg-surface-variant border border-border rounded" />
+              <div className="w-4 h-4 bg-primary-600/20 rounded" />
+              <div className="w-4 h-4 bg-primary-600/40 rounded" />
+              <div className="w-4 h-4 bg-primary-600/60 rounded" />
+              <div className="w-4 h-4 bg-primary-600 rounded" />
               <span className="ml-2">⭐ Peak hours</span>
             </div>
             <span>High activity</span>
@@ -168,13 +168,13 @@ export const PomodoroHeatmap: React.FC<PomodoroHeatmapProps> = ({ data }) => {
       <div className="mt-8 pt-6 border-t border-border">
         <div className="flex items-center justify-center gap-8">
           <div className="text-center">
-            <div className="text-3xl font-bold text-purple-600">
+            <div className="text-3xl font-bold text-primary-600">
               {Object.values(data.hourlyDistribution).reduce((sum, count) => sum + count, 0)}
             </div>
             <div className="text-sm text-secondary">Total Pomodoros</div>
           </div>
           <div className="text-center">
-            <div className="text-3xl font-bold text-blue-600">
+            <div className="text-3xl font-bold text-primary-600">
               {Object.keys(data.dailyDistribution).length}
             </div>
             <div className="text-sm text-secondary">Active Days</div>

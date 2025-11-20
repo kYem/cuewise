@@ -197,7 +197,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                   step="1"
                   value={workDuration}
                   onChange={(e) => setWorkDuration(Number(e.target.value))}
-                  className="flex-1 h-2 bg-divider rounded-lg appearance-none cursor-pointer accent-primary-600"
+                  className="flex-1"
                 />
                 <input
                   type="number"
@@ -228,7 +228,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                   step="1"
                   value={breakDuration}
                   onChange={(e) => setBreakDuration(Number(e.target.value))}
-                  className="flex-1 h-2 bg-divider rounded-lg appearance-none cursor-pointer accent-primary-600"
+                  className="flex-1"
                 />
                 <input
                   type="number"
@@ -259,7 +259,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                   step="1"
                   value={longBreakDuration}
                   onChange={(e) => setLongBreakDuration(Number(e.target.value))}
-                  className="flex-1 h-2 bg-divider rounded-lg appearance-none cursor-pointer accent-primary-600"
+                  className="flex-1"
                 />
                 <input
                   type="number"
@@ -292,7 +292,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                   step="1"
                   value={longBreakInterval}
                   onChange={(e) => setLongBreakInterval(Number(e.target.value))}
-                  className="flex-1 h-2 bg-divider rounded-lg appearance-none cursor-pointer accent-primary-600"
+                  className="flex-1"
                 />
                 <input
                   type="number"
@@ -378,7 +378,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                     step="5"
                     value={ambientVolume}
                     onChange={(e) => setAmbientVolume(Number(e.target.value))}
-                    className="flex-1 h-2 bg-divider rounded-lg appearance-none cursor-pointer accent-primary-600"
+                    className="flex-1"
                   />
                   <input
                     type="number"
@@ -552,7 +552,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                     step="1"
                     value={goalTransferTime}
                     onChange={(e) => setGoalTransferTime(Number(e.target.value))}
-                    className="flex-1 h-2 bg-divider rounded-lg appearance-none cursor-pointer accent-primary-600"
+                    className="flex-1"
                   />
                   <select
                     value={goalTransferTime}
@@ -728,7 +728,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                     step="1"
                     value={quoteInterval}
                     onChange={(e) => setQuoteInterval(Number(e.target.value))}
-                    className="flex-1 h-2 bg-divider rounded-lg appearance-none cursor-pointer accent-primary-600"
+                    className="flex-1"
                   />
                   <input
                     type="number"
