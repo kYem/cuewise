@@ -53,7 +53,7 @@ export const GoalCompletionChart: React.FC<GoalCompletionChartProps> = ({ data }
   return (
     <div className="bg-surface rounded-xl shadow-lg p-8">
       <h2 className="text-2xl font-bold text-primary mb-6 flex items-center gap-3">
-        <Target className="w-6 h-6 text-green-600" />
+        <Target className="w-6 h-6 text-primary-600" />
         Goal Completion Rate
       </h2>
 
@@ -180,11 +180,11 @@ export const GoalCompletionChart: React.FC<GoalCompletionChartProps> = ({ data }
       {/* Summary Stats */}
       <div className="mt-8 grid grid-cols-3 gap-4 pt-6 border-t border-border">
         <div className="text-center">
-          <div className="text-2xl font-bold text-green-600">{data.totalGoals}</div>
+          <div className="text-2xl font-bold text-primary-600">{data.totalGoals}</div>
           <div className="text-sm text-secondary">Total Goals</div>
         </div>
         <div className="text-center">
-          <div className="text-2xl font-bold text-blue-600">{data.completedGoals}</div>
+          <div className="text-2xl font-bold text-primary-600">{data.completedGoals}</div>
           <div className="text-sm text-secondary">Completed</div>
         </div>
         <div className="text-center">

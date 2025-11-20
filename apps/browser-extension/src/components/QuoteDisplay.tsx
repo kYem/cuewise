@@ -160,7 +160,7 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({ onManualRefresh }) =
 
             {/* Personal Notes (for custom quotes) */}
             {currentQuote.notes && (
-              <div className="text-sm text-gray-600 dark:text-gray-300 bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-700 rounded-lg px-density-md py-density-sm inline-block">
+              <div className="text-sm text-primary bg-orange-500/10 border border-orange-500/30 rounded-lg px-density-md py-density-sm inline-block">
                 💭 {currentQuote.notes}
               </div>
             )}

@@ -44,7 +44,7 @@ export const TrendChart: React.FC<TrendChartProps> = ({ title, data, metric }) =
     return (
       <div className="bg-surface rounded-xl shadow-lg p-8">
         <h2 className="text-2xl font-bold text-primary mb-6 flex items-center gap-3">
-          <TrendingUp className="w-6 h-6 text-purple-600" />
+          <TrendingUp className="w-6 h-6 text-primary-600" />
           {title}
         </h2>
         <p className="text-secondary text-center py-8">No data available</p>
@@ -96,7 +96,7 @@ export const TrendChart: React.FC<TrendChartProps> = ({ title, data, metric }) =
     <div className="bg-surface rounded-xl shadow-lg p-8">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold text-primary flex items-center gap-3">
-          <TrendingUp className="w-6 h-6 text-purple-600" />
+          <TrendingUp className="w-6 h-6 text-primary-600" />
           {title}
         </h2>
         <div className="flex gap-4 text-sm">

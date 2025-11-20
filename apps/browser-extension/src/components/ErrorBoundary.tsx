@@ -43,20 +43,20 @@ export class ErrorBoundary extends Component<Props, State> {
 
       return (
         <div className="flex flex-col items-center justify-center min-h-[400px] p-8 text-center">
-          <div className="rounded-full bg-red-100 p-4 mb-4">
+          <div className="rounded-full bg-red-500/10 p-4 mb-4">
             <AlertCircle className="h-12 w-12 text-red-600" />
           </div>
-          <h2 className="text-2xl font-semibold text-gray-900 mb-2">Something went wrong</h2>
-          <p className="text-gray-600 mb-6 max-w-md">
+          <h2 className="text-2xl font-semibold text-primary mb-2">Something went wrong</h2>
+          <p className="text-secondary mb-6 max-w-md">
             We encountered an unexpected error. Please try refreshing the page or contact support if
             the problem persists.
           </p>
           {this.state.error && (
             <details className="mb-6 text-left max-w-md w-full">
-              <summary className="cursor-pointer text-sm text-gray-500 hover:text-gray-700 mb-2">
+              <summary className="cursor-pointer text-sm text-secondary hover:text-primary mb-2">
                 Error details
               </summary>
-              <pre className="text-xs bg-gray-50 p-4 rounded-lg overflow-auto max-h-40 border border-gray-200">
+              <pre className="text-xs bg-surface-variant p-4 rounded-lg overflow-auto max-h-40 border border-border">
                 {this.state.error.toString()}
                 {this.state.error.stack && `\n\n${this.state.error.stack}`}
               </pre>

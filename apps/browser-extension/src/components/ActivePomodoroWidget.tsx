@@ -46,8 +46,8 @@ export const ActivePomodoroWidget: React.FC = () => {
     sessionType === 'work'
       ? 'text-primary-600'
       : sessionType === 'break'
-        ? 'text-green-600'
-        : 'text-blue-600';
+        ? 'text-primary-600'
+        : 'text-primary-600';
 
   return (
     // biome-ignore lint/a11y/useSemanticElements: Container has nested button, cannot use button element
@@ -58,10 +58,7 @@ export const ActivePomodoroWidget: React.FC = () => {
       onKeyDown={handleKeyDown}
       className={cn(
         'group relative flex items-center gap-2 px-3 py-1.5 rounded-full shadow-md hover:shadow-lg transition-all cursor-pointer',
-        'bg-surface/80 backdrop-blur-sm border',
-        sessionType === 'work' && 'border-primary-600',
-        sessionType === 'break' && 'border-green-600',
-        sessionType === 'longBreak' && 'border-blue-600'
+        'bg-surface/80 backdrop-blur-sm border border-primary-600'
       )}
       title={`${sessionLabel} session in progress - Click to view`}
     >
@@ -80,8 +77,8 @@ export const ActivePomodoroWidget: React.FC = () => {
         className={cn(
           'p-1 rounded-full transition-all hover:scale-110',
           status === 'running'
-            ? 'bg-yellow-500 text-white hover:bg-yellow-600'
-            : 'bg-green-500 text-white hover:bg-green-600'
+            ? 'bg-orange-500 text-white hover:bg-orange-600'
+            : 'bg-primary-600 text-white hover:bg-primary-700'
         )}
         title={status === 'running' ? 'Pause timer' : 'Resume timer'}
       >

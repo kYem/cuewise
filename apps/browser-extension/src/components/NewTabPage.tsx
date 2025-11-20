@@ -373,7 +373,7 @@ export const NewTabPage: React.FC = () => {
         title="Add custom quote"
       >
         <Plus className="w-6 h-6" />
-        <span className="absolute right-full mr-3 top-1/2 -translate-y-1/2 bg-gray-800 text-white text-sm px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+        <span className="absolute right-full mr-3 top-1/2 -translate-y-1/2 bg-surface-elevated border border-border text-primary text-sm px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none shadow-lg">
           Add Custom Quote
         </span>
       </button>
