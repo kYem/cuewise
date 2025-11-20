@@ -433,9 +433,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
             {syncEnabled ? (
               <Cloud className="w-5 h-5 text-primary-600" />
             ) : (
-              <CloudOff className="w-5 h-5 text-gray-400" />
+              <CloudOff className="w-5 h-5 text-tertiary" />
             )}
-            <h3 className="text-lg font-semibold text-gray-800">Chrome Sync</h3>
+            <h3 className="text-lg font-semibold text-primary">Chrome Sync</h3>
           </div>
 
           <div className="pl-7">
@@ -447,11 +447,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                   onChange={(e) => setSyncEnabled(e.target.checked)}
                   className="sr-only peer"
                 />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
+                <div className="w-11 h-6 bg-divider peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-surface after:border-border after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
               </div>
               <div>
-                <span className="text-sm font-medium text-gray-700">Enable Chrome Sync</span>
-                <p className="text-xs text-gray-500">
+                <span className="text-sm font-medium text-primary">Enable Chrome Sync</span>
+                <p className="text-xs text-secondary">
                   Sync your custom quotes, goals, and reminders across all Chrome browsers where
                   you're signed in
                 </p>

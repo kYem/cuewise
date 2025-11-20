@@ -418,6 +418,43 @@
   button:disabled {
     cursor: not-allowed;
   }
+
+  /* Custom scrollbar styles - theme-aware */
+  * {
+    /* Firefox scrollbar styling */
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border) var(--color-surface-variant);
+  }
+
+  /* Webkit browsers (Chrome, Safari, Edge) scrollbar styling */
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: var(--color-surface-variant);
+    border-radius: 4px;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: 4px;
+    transition: background-color 0.2s ease;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background: var(--color-primary-600);
+  }
+
+  *::-webkit-scrollbar-thumb:active {
+    background: var(--color-primary-700);
+  }
+
+  /* Scrollbar corner (when both scrollbars are present) */
+  *::-webkit-scrollbar-corner {
+    background: var(--color-surface-variant);
+  }
 }
 
 @layer utilities {

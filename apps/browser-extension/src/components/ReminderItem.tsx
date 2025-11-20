@@ -121,9 +121,9 @@ export const ReminderItem: React.FC<ReminderItemProps> = ({
         reminder.completed
           ? 'bg-surface-variant border-border'
           : isOverdue
-            ? 'bg-red-50 border-red-200 hover:border-red-300'
+            ? 'bg-red-500/10 border-red-500/30 hover:border-red-500/50'
             : isSoon
-              ? 'bg-orange-50 border-orange-300 hover:border-orange-400'
+              ? 'bg-orange-500/10 border-orange-500/30 hover:border-orange-500/50'
               : 'bg-surface border-border hover:border-primary-300'
       )}
     >
@@ -212,21 +212,21 @@ export const ReminderItem: React.FC<ReminderItemProps> = ({
             <button
               type="button"
               onClick={() => handleSnooze(5)}
-              className="px-2 py-1 text-xs font-medium text-orange-700 bg-orange-100 rounded hover:bg-orange-200 transition-colors"
+              className="px-2 py-1 text-xs font-medium text-orange-600 bg-orange-500/20 rounded hover:bg-orange-500/30 transition-colors"
             >
               5m
             </button>
             <button
               type="button"
               onClick={() => handleSnooze(15)}
-              className="px-2 py-1 text-xs font-medium text-orange-700 bg-orange-100 rounded hover:bg-orange-200 transition-colors"
+              className="px-2 py-1 text-xs font-medium text-orange-600 bg-orange-500/20 rounded hover:bg-orange-500/30 transition-colors"
             >
               15m
             </button>
             <button
               type="button"
               onClick={() => handleSnooze(30)}
-              className="px-2 py-1 text-xs font-medium text-orange-700 bg-orange-100 rounded hover:bg-orange-200 transition-colors"
+              className="px-2 py-1 text-xs font-medium text-orange-600 bg-orange-500/20 rounded hover:bg-orange-500/30 transition-colors"
             >
               30m
             </button>

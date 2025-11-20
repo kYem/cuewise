@@ -52,7 +52,7 @@ export const RemindersSection: React.FC = () => {
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-primary-100 rounded-lg">
+            <div className="p-2 bg-primary-600/10 rounded-lg">
               <Bell className="w-6 h-6 text-primary-600" />
             </div>
             <div>
