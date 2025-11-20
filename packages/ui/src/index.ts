@@ -4,7 +4,10 @@ export * from './components/Badge';
 export * from './components/Button';
 export * from './components/Card';
 export * from './components/Chart';
+export * from './components/Input';
+export * from './components/Label';
 export * from './components/Select';
+export * from './components/Textarea';
 export * from './components/Toast';
 
 // Export utilities

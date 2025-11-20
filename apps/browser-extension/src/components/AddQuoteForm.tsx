@@ -1,4 +1,5 @@
 import { QUOTE_CATEGORIES, type QuoteCategory } from '@cuewise/shared';
+import { Input, Label, Textarea } from '@cuewise/ui';
 import type React from 'react';
 import { useState } from 'react';
 import { useQuoteStore } from '../stores/quote-store';
@@ -54,10 +55,10 @@ export const AddQuoteForm: React.FC<AddQuoteFormProps> = ({ onSuccess }) => {
     <form onSubmit={handleSubmit} className="space-y-6">
       {/* Quote Text */}
       <div>
-        <label htmlFor="quote-text" className="block text-sm font-medium text-primary mb-2">
-          Quote Text <span className="text-red-500">*</span>
-        </label>
-        <textarea
+        <Label htmlFor="quote-text" required>
+          Quote Text
+        </Label>
+        <Textarea
           id="quote-text"
           value={text}
           onChange={(e) => setText(e.target.value)}
@@ -65,17 +66,16 @@ export const AddQuoteForm: React.FC<AddQuoteFormProps> = ({ onSuccess }) => {
           required
           rows={4}
           maxLength={500}
-          className="w-full px-4 py-3 rounded-lg border-2 border-border text-primary placeholder:text-secondary focus:border-primary-500 focus:outline-none transition-colors resize-none"
+          showCount
         />
-        <p className="mt-1 text-xs text-secondary">{text.length}/500 characters</p>
       </div>
 
       {/* Author */}
       <div>
-        <label htmlFor="quote-author" className="block text-sm font-medium text-primary mb-2">
-          Author <span className="text-red-500">*</span>
-        </label>
-        <input
+        <Label htmlFor="quote-author" required>
+          Author
+        </Label>
+        <Input
           id="quote-author"
           type="text"
           value={author}
@@ -83,15 +83,14 @@ export const AddQuoteForm: React.FC<AddQuoteFormProps> = ({ onSuccess }) => {
           placeholder="Who said this?"
           required
           maxLength={100}
-          className="w-full px-4 py-3 rounded-lg border-2 border-border text-primary placeholder:text-secondary focus:border-primary-500 focus:outline-none transition-colors"
         />
       </div>
 
       {/* Category */}
       <div>
-        <label htmlFor="quote-category" className="block text-sm font-medium text-primary mb-2">
-          Category <span className="text-red-500">*</span>
-        </label>
+        <Label htmlFor="quote-category" required>
+          Category
+        </Label>
         <select
           id="quote-category"
           value={category}
@@ -108,17 +107,14 @@ export const AddQuoteForm: React.FC<AddQuoteFormProps> = ({ onSuccess }) => {
 
       {/* Source (Optional) */}
       <div>
-        <label htmlFor="quote-source" className="block text-sm font-medium text-primary mb-2">
-          Source (Optional)
-        </label>
-        <input
+        <Label htmlFor="quote-source">Source (Optional)</Label>
+        <Input
           id="quote-source"
           type="text"
           value={source}
           onChange={(e) => setSource(e.target.value)}
           placeholder="Book, URL, or reference (e.g., 'The Art of War')"
           maxLength={200}
-          className="w-full px-4 py-3 rounded-lg border-2 border-border text-primary placeholder:text-secondary focus:border-primary-500 focus:outline-none transition-colors"
         />
         <p className="mt-1 text-xs text-secondary">
           Where did you find this quote? (book title, website, etc.)
@@ -127,19 +123,16 @@ export const AddQuoteForm: React.FC<AddQuoteFormProps> = ({ onSuccess }) => {
 
       {/* Notes (Optional) */}
       <div>
-        <label htmlFor="quote-notes" className="block text-sm font-medium text-primary mb-2">
-          Personal Notes (Optional)
-        </label>
-        <textarea
+        <Label htmlFor="quote-notes">Personal Notes (Optional)</Label>
+        <Textarea
           id="quote-notes"
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           placeholder="Why is this quote meaningful to you?"
           rows={3}
           maxLength={300}
-          className="w-full px-4 py-3 rounded-lg border-2 border-border text-primary placeholder:text-secondary focus:border-primary-500 focus:outline-none transition-colors resize-none"
+          showCount
         />
-        <p className="mt-1 text-xs text-secondary">{notes.length}/300 characters</p>
       </div>
 
       {/* Submit Button */}
