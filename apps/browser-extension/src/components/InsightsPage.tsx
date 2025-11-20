@@ -6,7 +6,6 @@ import {
 } from '@cuewise/shared';
 import {
   Award,
-  BarChart3,
   Calendar,
   Clock,
   Flame,

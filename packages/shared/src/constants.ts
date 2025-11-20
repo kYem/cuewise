@@ -10,7 +10,7 @@ export const DEFAULT_SETTINGS: Settings = {
   pomodoroAmbientSound: 'none',
   pomodoroAmbientVolume: 50,
   enableNotifications: true,
-  theme: 'light',
+  theme: 'auto',
   quoteChangeInterval: 10, // 0 = manual, 10+ = auto-refresh interval in seconds
   timeFormat: '12h',
   syncEnabled: false, // Disabled by default for privacy
