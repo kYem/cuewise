@@ -5,7 +5,6 @@ import {
   QUOTE_CATEGORIES,
 } from '@cuewise/shared';
 import {
-  ArrowLeft,
   Award,
   BarChart3,
   Calendar,
@@ -19,6 +18,7 @@ import { useEffect, useState } from 'react';
 import { useInsightsStore } from '../stores/insights-store';
 import { ExportControls } from './ExportControls';
 import { GoalCompletionChart } from './GoalCompletionChart';
+import { PageHeader } from './PageHeader';
 import { PomodoroHeatmap } from './PomodoroHeatmap';
 import { StorageIndicator } from './StorageIndicator';
 import { TrendChart } from './TrendChart';
@@ -31,10 +31,6 @@ export const InsightsPage: React.FC = () => {
   useEffect(() => {
     initialize();
   }, [initialize]);
-
-  const handleBackToHome = () => {
-    window.location.hash = '';
-  };
 
   if (isLoading) {
     return (
@@ -58,28 +54,14 @@ export const InsightsPage: React.FC = () => {
   const maxCategoryCount = Math.max(...Object.values(insights.categoryViewCounts));
 
   return (
-    <div className="min-h-screen w-full p-8 bg-background">
-      {/* Back Button */}
-      <button
-        type="button"
-        onClick={handleBackToHome}
-        className="mb-8 flex items-center gap-2 text-secondary hover:text-primary transition-colors"
-      >
-        <ArrowLeft className="w-5 h-5" />
-        <span>Back to Home</span>
-      </button>
+    <div className="min-h-screen w-full bg-background">
+      <PageHeader
+        currentPage="insights"
+        title="Your Insights"
+        subtitle="Track your productivity journey and celebrate your progress"
+      />
 
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-primary mb-2 flex items-center gap-3">
-            <BarChart3 className="w-10 h-10 text-primary-600" />
-            Your Insights
-          </h1>
-          <p className="text-secondary">
-            Track your productivity journey and celebrate your progress
-          </p>
-        </div>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
         {/* Tab Navigation */}
         <div className="flex gap-2 mb-8">

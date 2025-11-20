@@ -1,8 +1,8 @@
-import { ArrowLeft } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useState } from 'react';
 import { useQuoteStore } from '../stores/quote-store';
 import { useSettingsStore } from '../stores/settings-store';
+import { PageHeader } from './PageHeader';
 import { PomodoroTimer } from './PomodoroTimer';
 import { QuoteDisplay } from './QuoteDisplay';
 
@@ -36,24 +36,16 @@ export const PomodoroPage: React.FC = () => {
     };
   }, [quoteChangeInterval, refreshQuote, lastManualRefresh]);
 
-  const handleBackToHome = () => {
-    window.location.hash = '';
-  };
-
   return (
-    <div className="min-h-screen w-full p-density-lg">
-      {/* Back Button */}
-      <button
-        type="button"
-        onClick={handleBackToHome}
-        className="mb-8 flex items-center gap-density-xs text-secondary hover:text-primary transition-colors"
-      >
-        <ArrowLeft className="w-5 h-5" />
-        <span>Back to Home</span>
-      </button>
+    <div className="min-h-screen w-full bg-background">
+      <PageHeader
+        currentPage="pomodoro"
+        title="Pomodoro Timer"
+        subtitle="Stay focused and productive with timed work sessions"
+      />
 
       {/* Split Layout for Large Screens */}
-      <div className="flex flex-col lg:flex-row gap-density-lg items-center justify-center min-h-[calc(100vh-8rem)]">
+      <div className="flex flex-col lg:flex-row gap-density-lg items-center justify-center min-h-[calc(100vh-12rem)] px-4 sm:px-6 lg:px-8 py-8">
         {/* Pomodoro Timer */}
         <div className="flex-shrink-0">
           <PomodoroTimer />

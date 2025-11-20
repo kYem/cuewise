@@ -1,11 +1,12 @@
 import { CATEGORY_COLORS, QUOTE_CATEGORIES, type Quote, type QuoteCategory } from '@cuewise/shared';
 import { cn, Select } from '@cuewise/ui';
-import { ArrowLeft, Edit2, Eye, EyeOff, Heart, Plus, Search, Trash2, X } from 'lucide-react';
+import { Edit2, Eye, EyeOff, Heart, Plus, Search, Trash2, X } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { useQuoteStore } from '../stores/quote-store';
 import { AddQuoteForm } from './AddQuoteForm';
 import { ErrorFallback } from './ErrorFallback';
+import { PageHeader } from './PageHeader';
 
 type FilterType = 'all' | 'custom' | 'default' | 'favorites' | 'hidden';
 
@@ -458,41 +459,29 @@ export const QuoteManagementPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="bg-surface shadow-sm border-b border-border">
-        <div className="max-w-7xl mx-auto px-4 py-6">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-4">
-              <button
-                type="button"
-                onClick={() => {
-                  window.location.hash = '';
-                }}
-                className="p-2 hover:bg-surface-variant rounded-full transition-colors text-primary"
-                title="Back to home"
-              >
-                <ArrowLeft className="w-6 h-6" />
-              </button>
-              <div>
-                <h1 className="text-3xl font-bold text-primary">Quote Management</h1>
-                <p className="text-secondary mt-1">
-                  Manage your collection of {stats.total} quotes
-                </p>
-              </div>
-            </div>
+      {/* Page Header with Navigation */}
+      <PageHeader
+        currentPage="quotes"
+        title="Quote Management"
+        subtitle={`Manage your collection of ${stats.total} quotes`}
+      />
 
-            <button
-              type="button"
-              onClick={() => setShowAddForm(!showAddForm)}
-              className="flex items-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium shadow-sm hover:shadow-md"
-            >
-              <Plus className="w-5 h-5" />
-              Add Quote
-            </button>
-          </div>
+      {/* Main Content */}
+      <div className="max-w-7xl mx-auto px-4 py-6">
+        {/* Add Quote Button */}
+        <div className="flex justify-end mb-6">
+          <button
+            type="button"
+            onClick={() => setShowAddForm(!showAddForm)}
+            className="flex items-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium shadow-sm hover:shadow-md"
+          >
+            <Plus className="w-5 h-5" />
+            Add Quote
+          </button>
+        </div>
 
-          {/* Stats */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        {/* Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             <div className="bg-primary-50 rounded-lg p-4">
               <div className="text-2xl font-bold text-primary-700">{stats.total}</div>
               <div className="text-sm text-primary-600">Total Quotes</div>
@@ -511,68 +500,67 @@ export const QuoteManagementPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Add Quote Form */}
-          {showAddForm && (
-            <div className="bg-surface-variant rounded-xl p-6 mb-6 border-2 border-border">
-              <AddQuoteForm onSuccess={() => setShowAddForm(false)} />
-            </div>
-          )}
+        {/* Add Quote Form */}
+        {showAddForm && (
+          <div className="bg-surface-variant rounded-xl p-6 mb-6 border-2 border-border">
+            <AddQuoteForm onSuccess={() => setShowAddForm(false)} />
+          </div>
+        )}
 
-          {/* Search and Filters */}
-          <div className="space-y-4">
-            {/* Search Bar */}
-            <div className="relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-tertiary" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search quotes by text, author, source, or notes..."
-                className="w-full pl-12 pr-4 py-3 rounded-lg border-2 border-border text-primary placeholder:text-secondary focus:border-primary-500 focus:outline-none transition-colors"
-              />
-            </div>
+        {/* Search and Filters */}
+        <div className="space-y-4">
+          {/* Search Bar */}
+          <div className="relative">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-tertiary" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search quotes by text, author, source, or notes..."
+              className="w-full pl-12 pr-4 py-3 rounded-lg border-2 border-border text-primary placeholder:text-secondary focus:border-primary-500 focus:outline-none transition-colors"
+            />
+          </div>
 
-            {/* Filters */}
-            <div className="flex flex-wrap gap-3">
-              {/* Filter Type */}
-              <div className="flex gap-2">
-                {(['all', 'custom', 'default', 'favorites', 'hidden'] as const).map((type) => (
-                  <button
-                    key={type}
-                    type="button"
-                    onClick={() => setFilterType(type)}
-                    className={cn(
-                      'px-4 py-2 rounded-lg font-medium transition-all',
-                      filterType === type
-                        ? 'bg-primary-600 text-white shadow-md'
-                        : 'bg-surface text-primary hover:bg-surface-variant'
-                    )}
-                  >
-                    {type.charAt(0).toUpperCase() + type.slice(1)}
-                  </button>
-                ))}
-              </div>
-
-              {/* Category Filter */}
-              <Select
-                value={selectedCategory}
-                onChange={(value) => setSelectedCategory(value as QuoteCategory | 'all')}
-                options={[
-                  { value: 'all', label: 'All Categories' },
-                  ...Object.entries(QUOTE_CATEGORIES).map(([key, label]) => ({
-                    value: key,
-                    label: label,
-                    color: CATEGORY_COLORS[key as QuoteCategory],
-                  })),
-                ]}
-                aria-label="Filter by category"
-              />
+          {/* Filters */}
+          <div className="flex flex-wrap gap-3">
+            {/* Filter Type */}
+            <div className="flex gap-2">
+              {(['all', 'custom', 'default', 'favorites', 'hidden'] as const).map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => setFilterType(type)}
+                  className={cn(
+                    'px-4 py-2 rounded-lg font-medium transition-all',
+                    filterType === type
+                      ? 'bg-primary-600 text-white shadow-md'
+                      : 'bg-surface text-primary hover:bg-surface-variant'
+                  )}
+                >
+                  {type.charAt(0).toUpperCase() + type.slice(1)}
+                </button>
+              ))}
             </div>
 
-            {/* Results count */}
-            <div className="text-sm text-secondary">
-              Showing {filteredQuotes.length} {filteredQuotes.length === 1 ? 'quote' : 'quotes'}
-            </div>
+            {/* Category Filter */}
+            <Select
+              value={selectedCategory}
+              onChange={(value) => setSelectedCategory(value as QuoteCategory | 'all')}
+              options={[
+                { value: 'all', label: 'All Categories' },
+                ...Object.entries(QUOTE_CATEGORIES).map(([key, label]) => ({
+                  value: key,
+                  label: label,
+                  color: CATEGORY_COLORS[key as QuoteCategory],
+                })),
+              ]}
+              aria-label="Filter by category"
+            />
+          </div>
+
+          {/* Results count */}
+          <div className="text-sm text-secondary">
+            Showing {filteredQuotes.length} {filteredQuotes.length === 1 ? 'quote' : 'quotes'}
           </div>
         </div>
       </div>
