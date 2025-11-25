@@ -4,6 +4,9 @@ import { cleanup } from '@testing-library/react';
 import { afterEach, beforeEach } from 'vitest';
 import '@testing-library/jest-dom';
 
+// Mock scrollIntoView which is not implemented in JSDOM
+Element.prototype.scrollIntoView = () => {};
+
 // Minimal Chrome API interface for tests
 interface ChromeMock {
   storage: {
