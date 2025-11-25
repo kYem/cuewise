@@ -16,7 +16,8 @@
     "changeset": "changeset",
     "version": "changeset version",
     "release:prepare": "pnpm version && pnpm build",
-    "release:extension": "pnpm --filter @cuewise/browser-extension build:store"
+    "release:extension": "pnpm --filter @cuewise/browser-extension build:store",
+    "publish:chrome": "tsx scripts/publish-chrome.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.3.6",
@@ -25,6 +26,7 @@
     "@commitlint/cli": "^20.1.0",
     "@commitlint/config-conventional": "^20.0.0",
     "husky": "^9.1.7",
+    "tsx": "^4.20.6",
     "turbo": "catalog:",
     "typescript": "catalog:"
   },

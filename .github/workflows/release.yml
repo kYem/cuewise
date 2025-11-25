@@ -8,6 +8,11 @@ on:
         required: false
         default: false
         type: boolean
+      publish_chrome:
+        description: 'Publish to Chrome Web Store'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -88,6 +93,15 @@ jobs:
           name: cuewise-extension-${{ steps.version.outputs.version }}
           path: apps/browser-extension/build/cuewise-extension-${{ steps.version.outputs.version }}.zip
 
+      - name: Publish to Chrome Web Store
+        if: ${{ inputs.publish_chrome && !inputs.dry_run }}
+        env:
+          CHROME_EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+          CHROME_CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
+          CHROME_CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
+          CHROME_REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
+        run: pnpm publish:chrome "apps/browser-extension/build/cuewise-extension-${{ steps.version.outputs.version }}.zip"
+
       - name: Summary
         run: |
           echo "## Release Summary" >> $GITHUB_STEP_SUMMARY
@@ -95,6 +109,7 @@ jobs:
           echo "**Version:** v${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "**Dry Run:** ${{ inputs.dry_run }}" >> $GITHUB_STEP_SUMMARY
           echo "**Release Exists:** ${{ steps.check_release.outputs.exists }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Chrome Publish:** ${{ inputs.publish_chrome }}" >> $GITHUB_STEP_SUMMARY
           if [[ "${{ inputs.dry_run }}" == "true" ]]; then
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "This was a dry run. No release was created." >> $GITHUB_STEP_SUMMARY
