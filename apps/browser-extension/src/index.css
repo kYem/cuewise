@@ -629,7 +629,7 @@
   }
 
   /* Custom range input (slider) styling - 2025 best practices */
-  input[type='range'] {
+  input[type="range"] {
     -webkit-appearance: none;
     appearance: none;
     background: transparent;
@@ -638,13 +638,13 @@
   }
 
   /* Remove default focus */
-  input[type='range']:focus {
+  input[type="range"]:focus {
     outline: none;
   }
 
   /***** Chrome, Safari, Opera, Edge Chromium *****/
   /* Slider track - note: use runnable-track not slider-track */
-  input[type='range']::-webkit-slider-runnable-track {
+  input[type="range"]::-webkit-slider-runnable-track {
     background-color: var(--color-divider);
     border-radius: 0.5rem;
     height: 0.5rem;
@@ -652,7 +652,7 @@
   }
 
   /* Slider thumb */
-  input[type='range']::-webkit-slider-thumb {
+  input[type="range"]::-webkit-slider-thumb {
     -webkit-appearance: none;
     appearance: none;
     margin-top: -0.375rem; /* (thumb height - track height) / 2 = (1.25rem - 0.5rem) / 2 */
@@ -665,25 +665,25 @@
     transition: all 0.2s ease;
   }
 
-  input[type='range']::-webkit-slider-thumb:hover {
+  input[type="range"]::-webkit-slider-thumb:hover {
     background-color: var(--color-primary-700);
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
     transform: scale(1.1);
   }
 
-  input[type='range']::-webkit-slider-thumb:active {
+  input[type="range"]::-webkit-slider-thumb:active {
     background-color: var(--color-primary-800);
     transform: scale(1.05);
   }
 
-  input[type='range']:focus::-webkit-slider-thumb {
+  input[type="range"]:focus::-webkit-slider-thumb {
     outline: 2px solid var(--color-primary-600);
     outline-offset: 0.125rem;
   }
 
   /***** Firefox *****/
   /* Slider track */
-  input[type='range']::-moz-range-track {
+  input[type="range"]::-moz-range-track {
     background-color: var(--color-divider);
     border-radius: 0.5rem;
     height: 0.5rem;
@@ -691,7 +691,7 @@
   }
 
   /* Slider thumb */
-  input[type='range']::-moz-range-thumb {
+  input[type="range"]::-moz-range-thumb {
     border: none; /* Override Firefox defaults */
     border-radius: 50%; /* Firefox needs this explicitly */
     background-color: var(--color-primary-600);
@@ -701,18 +701,18 @@
     transition: all 0.2s ease;
   }
 
-  input[type='range']::-moz-range-thumb:hover {
+  input[type="range"]::-moz-range-thumb:hover {
     background-color: var(--color-primary-700);
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
     transform: scale(1.1);
   }
 
-  input[type='range']::-moz-range-thumb:active {
+  input[type="range"]::-moz-range-thumb:active {
     background-color: var(--color-primary-800);
     transform: scale(1.05);
   }
 
-  input[type='range']:focus::-moz-range-thumb {
+  input[type="range"]:focus::-moz-range-thumb {
     outline: 2px solid var(--color-primary-600);
     outline-offset: 0.125rem;
   }
@@ -726,7 +726,7 @@
     background-color: var(--color-surface);
     background-image: none;
     cursor: pointer;
-    padding-right: 2.5rem !important; /* Extra space for custom arrow */
+    padding-right: 2.5rem; /* Extra space for custom arrow */
   }
 
   /* Remove IE10+ arrow */
@@ -737,10 +737,15 @@
   /* Container for select with custom arrow */
   select {
     position: relative;
-    background-image: linear-gradient(45deg, transparent 50%, var(--color-primary-600) 50%),
+    background-image:
+      linear-gradient(45deg, transparent 50%, var(--color-primary-600) 50%),
       linear-gradient(135deg, var(--color-primary-600) 50%, transparent 50%);
-    background-position: calc(100% - 20px) calc(1em + 2px), calc(100% - 15px) calc(1em + 2px);
-    background-size: 5px 5px, 5px 5px;
+    background-position:
+      calc(100% - 20px) calc(1em + 2px),
+      calc(100% - 15px) calc(1em + 2px);
+    background-size:
+      5px 5px,
+      5px 5px;
     background-repeat: no-repeat;
   }
 
@@ -748,13 +753,15 @@
   select:disabled {
     cursor: not-allowed;
     opacity: 0.6;
-    background-image: linear-gradient(45deg, transparent 50%, var(--color-border) 50%),
+    background-image:
+      linear-gradient(45deg, transparent 50%, var(--color-border) 50%),
       linear-gradient(135deg, var(--color-border) 50%, transparent 50%);
   }
 
   /* Focus state - enhance the arrow color */
   select:focus {
-    background-image: linear-gradient(45deg, transparent 50%, var(--color-primary-700) 50%),
+    background-image:
+      linear-gradient(45deg, transparent 50%, var(--color-primary-700) 50%),
       linear-gradient(135deg, var(--color-primary-700) 50%, transparent 50%);
   }
 }

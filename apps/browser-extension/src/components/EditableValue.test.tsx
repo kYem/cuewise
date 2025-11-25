@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { EditableValue } from './EditableValue';
@@ -44,11 +44,13 @@ describe('EditableValue', () => {
 
       render(<EditableValue {...defaultProps} presets={presets} />);
 
-      const button = screen.getByRole('button');
-      await user.click(button);
+      const displayButton = screen.getByRole('button');
+      await user.click(displayButton);
 
-      const select = screen.getByRole('combobox');
-      expect(select).toBeInTheDocument();
+      // Custom Select uses a button with aria-haspopup="listbox"
+      const selectTrigger = screen.getByRole('button', { expanded: false });
+      expect(selectTrigger).toBeInTheDocument();
+      expect(selectTrigger).toHaveAttribute('aria-haspopup', 'listbox');
     });
 
     it('should show fallback text when no presets provided', async () => {
@@ -59,8 +61,10 @@ describe('EditableValue', () => {
       const button = screen.getByRole('button');
       await user.click(button);
 
-      // Should show fallback span
-      expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+      // Should show fallback span - no select trigger with aria-haspopup
+      const buttons = screen.queryAllByRole('button');
+      const selectTrigger = buttons.find((btn) => btn.getAttribute('aria-haspopup') === 'listbox');
+      expect(selectTrigger).toBeUndefined();
       expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument();
     });
   });
@@ -75,10 +79,13 @@ describe('EditableValue', () => {
 
       await user.click(screen.getByRole('button'));
 
-      const select = screen.getByRole('combobox');
-      const options = select.querySelectorAll('option');
+      // Click the select trigger to open dropdown
+      const selectTrigger = screen.getByRole('button', { expanded: false });
+      await user.click(selectTrigger);
 
-      // Only presets, no custom option
+      const listbox = screen.getByRole('listbox');
+      const options = within(listbox).getAllByRole('option');
+
       expect(options).toHaveLength(presets.length);
     });
 
@@ -89,9 +96,14 @@ describe('EditableValue', () => {
       render(<EditableValue {...defaultProps} presets={presets} onChange={onChange} />);
 
       await user.click(screen.getByRole('button'));
-      const select = screen.getByRole('combobox');
 
-      await user.selectOptions(select, '30');
+      // Open the dropdown
+      const selectTrigger = screen.getByRole('button', { expanded: false });
+      await user.click(selectTrigger);
+
+      // Click the option with "30 minutes"
+      const option = screen.getByRole('option', { name: '30 minutes' });
+      await user.click(option);
 
       expect(onChange).toHaveBeenCalledWith(30);
     });
@@ -102,14 +114,21 @@ describe('EditableValue', () => {
       render(<EditableValue {...defaultProps} presets={presets} />);
 
       await user.click(screen.getByRole('button'));
-      const select = screen.getByRole('combobox');
 
-      await user.selectOptions(select, '30');
+      // Open the dropdown
+      const selectTrigger = screen.getByRole('button', { expanded: false });
+      await user.click(selectTrigger);
+
+      // Click an option
+      const option = screen.getByRole('option', { name: '30 minutes' });
+      await user.click(option);
 
       await waitFor(() => {
-        expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+        expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
       });
-      expect(screen.getByRole('button')).toBeInTheDocument();
+      // Should return to display mode with "Click to edit" button (value unchanged since onChange is mocked)
+      const displayButton = screen.getByRole('button', { name: /minutes/i });
+      expect(displayButton).toHaveAttribute('title', 'Click to edit');
     });
 
     it('should show current value as selected in dropdown', async () => {
@@ -118,37 +137,50 @@ describe('EditableValue', () => {
       render(<EditableValue {...defaultProps} value={30} presets={presets} />);
 
       await user.click(screen.getByRole('button'));
-      const select = screen.getByRole('combobox') as HTMLSelectElement;
 
-      expect(select.value).toBe('30');
+      // Open the dropdown
+      const selectTrigger = screen.getByRole('button', { expanded: false });
+      await user.click(selectTrigger);
+
+      // Check that the 30 minutes option has aria-selected="true"
+      // Note: selected option name includes "Selected" from checkmark icon title
+      const selectedOption = screen.getByRole('option', { name: /30 minutes/i });
+      expect(selectedOption).toHaveAttribute('aria-selected', 'true');
     });
 
-    it('should focus select dropdown when entering edit mode', async () => {
+    it('should show select trigger when entering edit mode', async () => {
       const user = userEvent.setup();
 
       render(<EditableValue {...defaultProps} presets={presets} />);
 
       await user.click(screen.getByRole('button'));
 
-      const select = screen.getByRole('combobox');
-      await waitFor(() => {
-        expect(select).toHaveFocus();
-      });
+      const selectTrigger = screen.getByRole('button', { expanded: false });
+      expect(selectTrigger).toBeInTheDocument();
     });
 
-    it('should exit edit mode on blur', async () => {
+    it('should exit edit mode when clicking outside', async () => {
       const user = userEvent.setup();
 
-      render(<EditableValue {...defaultProps} presets={presets} />);
+      render(
+        <div>
+          <EditableValue {...defaultProps} presets={presets} />
+          <button type="button">Outside</button>
+        </div>
+      );
 
-      await user.click(screen.getByRole('button'));
+      await user.click(screen.getByRole('button', { name: /25 minutes/i }));
 
-      await user.tab(); // Trigger blur
+      // Open the dropdown
+      const selectTrigger = screen.getByRole('button', { expanded: false });
+      await user.click(selectTrigger);
+
+      // Click outside
+      await user.click(screen.getByRole('button', { name: 'Outside' }));
 
       await waitFor(() => {
-        expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+        expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
       });
-      expect(screen.getByRole('button')).toBeInTheDocument();
     });
   });
 

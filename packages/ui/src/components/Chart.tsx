@@ -43,7 +43,7 @@ const ChartContainer = React.forwardRef<HTMLDivElement, ChartContainerProps>(
         <div
           ref={ref}
           className={cn(
-            "flex aspect-video justify-center text-xs bg-surface-elevated rounded-lg border border-border shadow-sm",
+            'flex aspect-video justify-center text-xs bg-surface-elevated rounded-lg border border-border shadow-sm',
             className
           )}
           {...props}

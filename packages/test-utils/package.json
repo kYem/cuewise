@@ -16,12 +16,12 @@
   "dependencies": {
     "@cuewise/shared": "workspace:*",
     "@testing-library/react": "catalog:",
-    "fishery": "catalog:",
-    "vitest": "catalog:"
+    "fishery": "catalog:"
   },
   "devDependencies": {
     "@types/chrome": "catalog:",
     "@types/react": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }
