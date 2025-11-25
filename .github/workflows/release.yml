@@ -1,0 +1,109 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (skip actual release creation)'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run type check
+        run: pnpm type-check
+
+      - name: Run lint
+        run: pnpm lint
+
+      - name: Run tests
+        run: pnpm --filter @cuewise/browser-extension test
+
+      - name: Build all packages
+        run: pnpm build
+
+      - name: Build extension zip
+        run: pnpm release:extension
+
+      - name: Get version from package.json
+        id: version
+        run: |
+          VERSION=$(node -p "require('./apps/browser-extension/package.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+      - name: Check if release exists
+        id: check_release
+        run: |
+          if gh release view "v${{ steps.version.outputs.version }}" &>/dev/null; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create GitHub Release
+        if: ${{ !inputs.dry_run && steps.check_release.outputs.exists == 'false' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: Cuewise v${{ steps.version.outputs.version }}
+          body_path: CHANGELOG.md
+          files: |
+            apps/browser-extension/build/cuewise-extension-${{ steps.version.outputs.version }}.zip
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload artifact (for dry run or existing release)
+        if: ${{ inputs.dry_run || steps.check_release.outputs.exists == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: cuewise-extension-${{ steps.version.outputs.version }}
+          path: apps/browser-extension/build/cuewise-extension-${{ steps.version.outputs.version }}.zip
+
+      - name: Summary
+        run: |
+          echo "## Release Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** v${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Dry Run:** ${{ inputs.dry_run }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Release Exists:** ${{ steps.check_release.outputs.exists }}" >> $GITHUB_STEP_SUMMARY
+          if [[ "${{ inputs.dry_run }}" == "true" ]]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "This was a dry run. No release was created." >> $GITHUB_STEP_SUMMARY
+            echo "The extension zip has been uploaded as an artifact." >> $GITHUB_STEP_SUMMARY
+          elif [[ "${{ steps.check_release.outputs.exists }}" == "true" ]]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Release v${{ steps.version.outputs.version }} already exists." >> $GITHUB_STEP_SUMMARY
+            echo "The extension zip has been uploaded as an artifact." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Release created successfully!" >> $GITHUB_STEP_SUMMARY
+          fi

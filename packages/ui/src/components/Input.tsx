@@ -16,9 +16,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
           'transition-colors duration-200',
           'focus:outline-none focus:ring-0',
           'disabled:cursor-not-allowed disabled:opacity-50',
-          error
-            ? 'border-red-500 focus:border-red-600'
-            : 'border-border focus:border-primary-500',
+          error ? 'border-red-500 focus:border-red-600' : 'border-border focus:border-primary-500',
           className
         )}
         ref={ref}

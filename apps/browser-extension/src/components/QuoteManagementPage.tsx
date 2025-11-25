@@ -482,23 +482,23 @@ export const QuoteManagementPage: React.FC = () => {
 
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            <div className="bg-primary-50 rounded-lg p-4">
-              <div className="text-2xl font-bold text-primary-700">{stats.total}</div>
-              <div className="text-sm text-primary-600">Total Quotes</div>
-            </div>
-            <div className="bg-primary-100 rounded-lg p-4">
-              <div className="text-2xl font-bold text-primary-800">{stats.custom}</div>
-              <div className="text-sm text-primary-700">Custom Quotes</div>
-            </div>
-            <div className="bg-surface-variant rounded-lg p-4 border border-border">
-              <div className="text-2xl font-bold text-primary">{stats.favorites}</div>
-              <div className="text-sm text-secondary">Favorites</div>
-            </div>
-            <div className="bg-surface rounded-lg p-4 border border-border">
-              <div className="text-2xl font-bold text-primary">{stats.hidden}</div>
-              <div className="text-sm text-secondary">Hidden</div>
-            </div>
+          <div className="bg-primary-50 rounded-lg p-4">
+            <div className="text-2xl font-bold text-primary-700">{stats.total}</div>
+            <div className="text-sm text-primary-600">Total Quotes</div>
           </div>
+          <div className="bg-primary-100 rounded-lg p-4">
+            <div className="text-2xl font-bold text-primary-800">{stats.custom}</div>
+            <div className="text-sm text-primary-700">Custom Quotes</div>
+          </div>
+          <div className="bg-surface-variant rounded-lg p-4 border border-border">
+            <div className="text-2xl font-bold text-primary">{stats.favorites}</div>
+            <div className="text-sm text-secondary">Favorites</div>
+          </div>
+          <div className="bg-surface rounded-lg p-4 border border-border">
+            <div className="text-2xl font-bold text-primary">{stats.hidden}</div>
+            <div className="text-sm text-secondary">Hidden</div>
+          </div>
+        </div>
 
         {/* Add Quote Form */}
         {showAddForm && (

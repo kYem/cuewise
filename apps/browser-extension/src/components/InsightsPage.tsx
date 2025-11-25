@@ -4,14 +4,7 @@ import {
   getMostViewedCategory,
   QUOTE_CATEGORIES,
 } from '@cuewise/shared';
-import {
-  Award,
-  Calendar,
-  Clock,
-  Flame,
-  Target,
-  TrendingUp,
-} from 'lucide-react';
+import { Award, Calendar, Clock, Flame, Target, TrendingUp } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useState } from 'react';
 import { useInsightsStore } from '../stores/insights-store';
@@ -61,7 +54,6 @@ export const InsightsPage: React.FC = () => {
       />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-
         {/* Tab Navigation */}
         <div className="flex gap-2 mb-8">
           <button

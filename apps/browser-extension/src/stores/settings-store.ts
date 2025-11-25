@@ -1,10 +1,10 @@
 import {
   type ColorTheme,
+  configureLogger,
   DEFAULT_SETTINGS,
   type LayoutDensity,
   LogLevel as LoggerLevel,
   type Settings,
-  configureLogger,
 } from '@cuewise/shared';
 import { getSettings, migrateStorageData, setSettings } from '@cuewise/storage';
 import { create } from 'zustand';

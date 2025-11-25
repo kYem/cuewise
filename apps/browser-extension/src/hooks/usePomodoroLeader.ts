@@ -58,7 +58,7 @@ export function usePomodoroLeader() {
 
           logger.debug('Lock acquired! Starting timer interval');
           // This tab is the leader - run the timer
-          intervalId = setInterval(() => {
+          intervalId = window.setInterval(() => {
             const currentStatus = usePomodoroStore.getState().status;
             if (currentStatus === 'running') {
               tick();
@@ -92,7 +92,7 @@ export function usePomodoroLeader() {
         // Fallback: run timer anyway if Web Locks not supported
         if (isRunningRef.current) {
           logger.warn('Using fallback interval (no Web Locks)');
-          intervalId = setInterval(() => {
+          intervalId = window.setInterval(() => {
             if (usePomodoroStore.getState().status === 'running') {
               tick();
             }
