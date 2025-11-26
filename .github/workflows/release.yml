@@ -78,7 +78,7 @@ jobs:
         with:
           tag_name: v${{ steps.version.outputs.version }}
           name: Cuewise v${{ steps.version.outputs.version }}
-          body_path: CHANGELOG.md
+          body_path: apps/browser-extension/CHANGELOG.md
           files: |
             apps/browser-extension/build/cuewise-extension-${{ steps.version.outputs.version }}.zip
           draft: false
