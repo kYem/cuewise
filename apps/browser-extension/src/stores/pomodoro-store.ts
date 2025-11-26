@@ -103,15 +103,15 @@ export const usePomodoroStore = create<PomodoroStore>()(
           if (status === 'running' && lastTickTime && timeRemaining > 0) {
             const now = Date.now();
             const elapsedSeconds = Math.floor((now - lastTickTime) / 1000);
-            const adjustedTimeRemaining = Math.max(0, timeRemaining - elapsedSeconds);
-            logger.debug('Timer was running', {
-              elapsed: elapsedSeconds,
-              adjusted: adjustedTimeRemaining,
-            });
 
-            if (adjustedTimeRemaining === 0) {
-              logger.debug('Timer expired, completing session');
-              // Timer expired while tabs were closed
+            // Check if timer is ACTIVELY being ticked by another component/tab
+            // If lastTickTime is within 2 seconds, another component has the Web Lock
+            // and is managing the timer - don't interfere with its state
+            const isActivelyTicking = now - lastTickTime < 2000;
+
+            if (isActivelyTicking) {
+              logger.debug('Timer actively ticking, skipping recovery adjustment');
+              // Timer is already being managed - just load settings, don't modify timer state
               set({
                 workDuration,
                 breakDuration,
@@ -121,25 +121,47 @@ export const usePomodoroStore = create<PomodoroStore>()(
                 ambientVolume,
                 sessions,
                 isLoading: false,
-                timeRemaining: 0,
               });
-              // Complete the session
-              get().completeSession();
             } else {
-              logger.debug('Timer still active, resuming with adjusted time');
-              // Timer still has time left - resume with adjusted time
-              set({
-                workDuration,
-                breakDuration,
-                longBreakDuration,
-                longBreakInterval,
-                ambientSound,
-                ambientVolume,
-                sessions,
-                isLoading: false,
-                timeRemaining: adjustedTimeRemaining,
-                lastTickTime: now, // Update to current time
+              // Timer was running but tabs were closed - apply recovery logic
+              const adjustedTimeRemaining = Math.max(0, timeRemaining - elapsedSeconds);
+              logger.debug('Timer was running, applying recovery', {
+                elapsed: elapsedSeconds,
+                adjusted: adjustedTimeRemaining,
               });
+
+              if (adjustedTimeRemaining === 0) {
+                logger.debug('Timer expired, completing session');
+                // Timer expired while tabs were closed
+                set({
+                  workDuration,
+                  breakDuration,
+                  longBreakDuration,
+                  longBreakInterval,
+                  ambientSound,
+                  ambientVolume,
+                  sessions,
+                  isLoading: false,
+                  timeRemaining: 0,
+                });
+                // Complete the session
+                get().completeSession();
+              } else {
+                logger.debug('Timer still has time, resuming with adjusted time');
+                // Timer still has time left - resume with adjusted time
+                set({
+                  workDuration,
+                  breakDuration,
+                  longBreakDuration,
+                  longBreakInterval,
+                  ambientSound,
+                  ambientVolume,
+                  sessions,
+                  isLoading: false,
+                  timeRemaining: adjustedTimeRemaining,
+                  lastTickTime: now, // Update to current time
+                });
+              }
             }
           } else {
             logger.debug('No active timer to resume');

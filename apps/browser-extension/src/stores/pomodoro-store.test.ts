@@ -267,4 +267,55 @@ describe('Pomodoro Store - Auto-Start Breaks', () => {
       expect(savedSessions[0]).not.toHaveProperty('goalId');
     });
   });
+
+  describe('initialize - active timer handling', () => {
+    it('should NOT modify lastTickTime when timer is actively ticking', async () => {
+      // Simulate: timer is running and was just ticked (lastTickTime is recent)
+      const now = Date.now();
+      const originalLastTickTime = now - 500; // Ticked 500ms ago
+      const currentTimeRemaining = 280; // 4:40 remaining
+
+      usePomodoroStore.setState({
+        status: 'running',
+        sessionType: 'break',
+        currentSessionId: 'break-123',
+        timeRemaining: currentTimeRemaining,
+        totalTime: 5 * 60,
+        lastTickTime: originalLastTickTime,
+        consecutiveWorkSessions: 1,
+      });
+
+      // Call initialize (simulates navigating to Pomodoro page)
+      await usePomodoroStore.getState().initialize();
+
+      // lastTickTime should NOT be updated - let the active ticker manage it
+      const state = usePomodoroStore.getState();
+      expect(state.timeRemaining).toBe(currentTimeRemaining);
+      expect(state.lastTickTime).toBe(originalLastTickTime); // Should NOT change
+      expect(state.status).toBe('running');
+      expect(state.sessionType).toBe('break');
+    });
+
+    it('should STILL apply recovery when timer was running but tabs were closed', async () => {
+      // Simulate: timer was running but all tabs closed 10 seconds ago
+      const now = Date.now();
+      const originalTimeRemaining = 280; // 4:40 remaining
+
+      usePomodoroStore.setState({
+        status: 'running',
+        sessionType: 'break',
+        currentSessionId: 'break-123',
+        timeRemaining: originalTimeRemaining,
+        totalTime: 5 * 60,
+        lastTickTime: now - 10000, // Ticked 10 seconds ago (tabs were closed)
+        consecutiveWorkSessions: 1,
+      });
+
+      await usePomodoroStore.getState().initialize();
+
+      // timeRemaining SHOULD be adjusted (recovery logic)
+      const state = usePomodoroStore.getState();
+      expect(state.timeRemaining).toBe(originalTimeRemaining - 10); // Adjusted by ~10 seconds
+    });
+  });
 });
