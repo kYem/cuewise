@@ -1,6 +1,6 @@
 {
   "$schema": "https://unpkg.com/@changesets/config@3.1.1/schema.json",
-  "changelog": ["@changesets/changelog-github", { "repo": "kYem/cuewise" }],
+  "changelog": "@changesets/cli/changelog",
   "commit": false,
   "fixed": [],
   "linked": [["@cuewise/browser-extension", "@cuewise/shared", "@cuewise/storage", "@cuewise/ui"]],
