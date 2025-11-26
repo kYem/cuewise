@@ -83,10 +83,22 @@ async function uploadExtension(zipPath: string, accessToken: string): Promise<vo
     body: zipBuffer,
   });
 
-  const data = (await response.json()) as UploadResponse;
+  const responseText = await response.text();
+  let data: UploadResponse | undefined;
+
+  try {
+    data = JSON.parse(responseText) as UploadResponse;
+  } catch {
+    // Response is not JSON
+  }
 
   if (!response.ok) {
+    console.error('Upload response:', responseText);
     throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
+  }
+
+  if (!data) {
+    throw new Error(`Upload failed: Invalid response - ${responseText}`);
   }
 
   if (data.uploadState !== 'SUCCESS') {
@@ -111,10 +123,22 @@ async function publishExtension(accessToken: string): Promise<void> {
     },
   });
 
-  const data = (await response.json()) as PublishResponse;
+  const responseText = await response.text();
+  let data: PublishResponse | undefined;
+
+  try {
+    data = JSON.parse(responseText) as PublishResponse;
+  } catch {
+    // Response is not JSON
+  }
 
   if (!response.ok) {
+    console.error('Publish response:', responseText);
     throw new Error(`Publish failed: ${response.status} ${response.statusText}`);
+  }
+
+  if (!data) {
+    throw new Error(`Publish failed: Invalid response - ${responseText}`);
   }
 
   const status = data.status[0];
