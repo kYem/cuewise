@@ -1,5 +1,11 @@
 # @cuewise/browser-extension
 
+## 1.2.0
+
+### Minor Changes
+
+- 8ef3a22: Add version display to settings modal with link to changelog
+
 ## 1.1.1
 
 ### Patch Changes
