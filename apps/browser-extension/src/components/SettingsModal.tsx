@@ -779,6 +779,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
             </button>
           </div>
         </div>
+
+        {/* Version Info */}
+        <div className="text-center text-xs text-tertiary pt-4">
+          {__APP_NAME__}{' '}
+          <a
+            href="https://github.com/kYem/cuewise/blob/main/apps/browser-extension/CHANGELOG.md"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary-600 hover:underline"
+          >
+            v{__APP_VERSION__}
+          </a>
+        </div>
       </div>
     </Modal>
   );
