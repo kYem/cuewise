@@ -1,11 +1,62 @@
 # Cuewise Development Roadmap
 
-**Last Updated**: 2025-01-16
-**Current Version**: v1.1 (Browser Extension with Dark Mode & Theme Customization)
+**Last Updated**: 2025-11-29
+**Current Version**: v1.2.0 (Published on Chrome Web Store)
 
 ---
 
-## ✅ Recently Completed (v1.1)
+## ✅ Recently Completed (v1.2.0)
+
+### Chrome Web Store Publication
+- [x] 3 versions published and live on Chrome Web Store
+- [x] Release process with changesets and CI/CD
+- [x] Automated Chrome Web Store publishing script
+- [x] Store listing with screenshots and description
+
+### Quote Management Page
+- [x] Full-text search across text, author, source, and notes
+- [x] 5 filter types (all, custom, default, favorites, hidden)
+- [x] Full inline editing with modal and validation
+- [x] Statistics display (total, custom, favorites, hidden counts)
+- [x] Single quote delete with confirmation
+
+### Export Functionality
+- [x] Complete data export to JSON (all quotes, goals, reminders, settings)
+- [x] Analytics JSON export (insights + analytics)
+- [x] CSV exports:
+  - Daily trends (last 30 days)
+  - Weekly trends (last 12 weeks)
+  - Monthly trends (last 6 months)
+  - Goals data
+  - Pomodoro sessions
+
+### Advanced Analytics (Recharts)
+- [x] TrendChart - Bar charts for daily/weekly/monthly trends
+- [x] GoalCompletionChart - Radial gauges for completion rates
+- [x] PomodoroHeatmap - Hourly and weekday distribution
+- [x] Productive hours detection
+- [x] Multi-tab analytics dashboard (Overview, Advanced, Exports)
+
+### Pomodoro Enhancements
+- [x] Long break system (configurable interval and duration)
+- [x] 6 ambient sounds via Web Audio API (rain, ocean, forest, cafe, white noise, brown noise)
+- [x] Sound notifications (start and completion melodies)
+- [x] Goal integration (link sessions to goals)
+- [x] Cross-tab synchronization via Web Locks API
+- [x] Timer recovery after browser restart
+- [x] Volume controls
+
+### Code Quality
+- [x] Logger abstraction with environment-aware log levels
+- [x] Test infrastructure with Vitest and Testing Library
+- [x] Test fixtures pattern for reusable test data
+- [x] Version display in settings modal
+
+**Version Released**: November 2025
+
+---
+
+## ✅ Previously Completed (v1.1)
 
 ### Dark Mode & Theme Customization
 - [x] Full dark mode support with smooth transitions
@@ -54,237 +105,125 @@
 
 ## 🎯 Next Steps & Priorities
 
-### Phase 1: Production Polish (1-2 weeks) 🚀
+### ✅ Phase 1: Production Polish - COMPLETED 🚀
 
-**Priority: HIGH - Get to market**
+**Status: DONE - Published on Chrome Web Store**
 
 #### 1.1 Production Optimizations
-- [ ] Remove console.logs from production build
-  - Add Vite plugin to strip console statements
-  - Keep error logging only
-- [ ] Bundle size optimization
+- [x] Console.log management via logger abstraction
+  - Environment-aware log levels (DEBUG in dev, WARN+ in prod)
+  - No build plugin needed - runtime configuration
+- [ ] Bundle size optimization (optional)
   - Add bundle analyzer (`rollup-plugin-visualizer`)
   - Lazy load Insights page components
-  - Tree-shake unused code
-  - Add compression (gzip)
-- [ ] Performance audit
-  - Lighthouse audit
-  - Optimize re-renders
-  - Check memory leaks
+- [x] Performance - acceptable for extension size
 
-**Estimated effort**: 2-3 days
-
-#### 1.2 Chrome Web Store Preparation
-- [ ] Create store listing assets
-  - Screenshots (1280x800, 640x400)
-  - Promotional images
-  - App icon in multiple sizes
-  - Feature graphic
-- [ ] Write store description
-  - Feature list
-  - Benefits
-  - Usage instructions
-- [ ] Add privacy policy
-- [ ] Create promotional website/landing page
-- [ ] Submit for review
+#### 1.2 Chrome Web Store - PUBLISHED
+- [x] Store listing assets (screenshots, icons)
+- [x] Store description and feature list
+- [x] Privacy policy
+- [x] 3 versions published and live
+- [x] Automated publishing via CI/CD
 
 ---
 
-### Phase 2: Feature Enhancement (1-2 months) ✨
+### Phase 2: Feature Enhancement ✨
 
-**Priority: MEDIUM - Improve user experience**
+**Priority: HIGH - Current focus**
 
-#### 2.1 Quote Management Page
-- [ ] Browse all quotes interface
-  - Grid/list view toggle
-  - Pagination or infinite scroll
-- [ ] Filter quotes
-  - By category
-  - By favorite status
-  - Custom vs curated
-  - Hidden quotes view
-- [ ] Search functionality
-  - Search by text/author
-  - Debounced input
-  - Highlight matches
-- [ ] Bulk operations
-  - Unhide multiple quotes
-  - Delete custom quotes
-  - Export selected quotes
-- [ ] Edit custom quotes
-  - Edit form modal
-  - Update quote details
-  - Validation
+#### 2.1 Quote Management Page - ✅ MOSTLY COMPLETE
+- [x] Browse all quotes interface with list view
+- [x] Filter quotes (5 types: all, custom, default, favorites, hidden)
+- [x] Search functionality (full-text, debounced)
+- [x] Edit custom quotes (modal with validation)
+- [ ] **Bulk operations** - NOT IMPLEMENTED
+  - Multi-select checkboxes
+  - Select all functionality
+  - Bulk delete/favorite/hide
 
-**Estimated effort**: 5-7 days
-**User value**: HIGH - Power users will love this
-
-#### 2.2 Export/Import Data
-- [ ] Export all data to JSON
-  - Download as file
-  - Include all quotes, goals, reminders, settings
-  - Timestamped filename
-- [ ] Import from backup
-  - File upload
-  - Validation
+#### 2.2 Export/Import Data - ⚠️ PARTIAL
+- [x] Export all data to JSON
+- [x] Export CSV (multiple types)
+- [ ] **Import from backup** - NOT IMPLEMENTED
+  - File upload UI
+  - JSON validation
   - Merge or replace options
   - Preview before import
-- [ ] Export specific data types
-  - Export only custom quotes
-  - Export goals history
-  - Export insights data
 
-**Estimated effort**: 2-3 days
-**User value**: MEDIUM - Important for migrations and backups
-
-#### 2.3 Onboarding & Tutorials
+#### 2.3 Onboarding & Tutorials - ❌ NOT STARTED
 - [ ] First-time user experience
   - Welcome modal
-  - Sample data option
-  - Quick tour
-- [ ] Interactive tutorials
-  - Tooltip walkthrough
   - Feature highlights
-  - Keyboard shortcuts guide
-- [ ] Help documentation
-  - In-app help section
-  - FAQ
-  - Video tutorials
+  - Skip/don't show again
+- [ ] Interactive tutorials (optional)
+- [ ] Help documentation (optional)
 
-**Estimated effort**: 3-4 days
 **User value**: HIGH - Reduces friction for new users
 
-#### 2.4 Accessibility Improvements
-- [ ] Keyboard navigation
-  - Tab order optimization
-  - Keyboard shortcuts
-  - Focus indicators
-- [ ] Screen reader support
-  - ARIA labels
-  - Semantic HTML
-  - Alt text for icons
-- [ ] Accessibility audit
-  - axe DevTools
-  - WAVE evaluation
-  - Fix contrast issues
+#### 2.4 Accessibility - ⚠️ PARTIAL
+**Implemented:**
+- [x] 40+ ARIA labels on interactive elements
+- [x] Keyboard navigation (Escape, Enter, Tab)
+- [x] Focus indicators
+- [x] Screen reader-friendly form labels
 
-**Estimated effort**: 3-4 days
+**Still Needed:**
+- [ ] Semantic HTML landmarks (`<main>`, `<nav>`)
+- [ ] `aria-live` regions for dynamic content
+- [ ] `prefers-reduced-motion` support
+- [ ] Skip navigation links
+
 **User value**: HIGH - Inclusivity matters
-
-**Total Phase 2**: 4-6 weeks
 
 ---
 
-### Phase 3: Advanced Features (2-3 months) 📊
+### Phase 3: Advanced Features 📊
 
 **Priority: MEDIUM - Differentiation**
 
-#### 3.1 Advanced Analytics
-- [ ] Visual charts and graphs
-  - Install recharts or chart.js
-  - Productivity trend lines
-  - Goal completion rate chart
-  - Pomodoro heatmap (productive hours)
-  - Weekly/monthly comparisons
-- [ ] Export reports
-  - PDF export
-  - CSV export
-  - Email report (future)
-- [ ] Custom date ranges
-  - Filter insights by date
-  - Compare time periods
-- [ ] Goal categories
-  - Tag goals by type
-  - Category-based insights
+#### 3.1 Advanced Analytics - ✅ COMPLETE
+- [x] Visual charts with Recharts
+  - TrendChart (bar charts for daily/weekly/monthly)
+  - GoalCompletionChart (radial gauges)
+  - PomodoroHeatmap (hourly + weekday distribution)
+- [x] Export reports (JSON + CSV)
+- [x] Productive hours detection
+- [ ] Custom date ranges (optional enhancement)
+- [ ] Goal categories/tagging (optional)
 
-**Estimated effort**: 7-10 days
-**User value**: MEDIUM - Power users and productivity enthusiasts
-
-#### 3.2 Quote Collections
+#### 3.2 Quote Collections - ❌ NOT STARTED
 - [ ] Create custom collections
-  - Collection name and description
-  - Add quotes to collections
-  - Multiple collections per quote
 - [ ] Collection management
-  - Browse collections
-  - Edit/delete collections
-  - Reorder quotes
 - [ ] Collection rotation
-  - Show quotes from specific collection
-  - Cycle through collection
-- [ ] Share collections
-  - Export collection as JSON
-  - Import shared collections
-  - Community collections marketplace
+- [ ] Share/import collections
 
-**Estimated effort**: 5-7 days
 **User value**: MEDIUM - Great for themed quotes
 
-#### 3.3 Smart Reminders
-- [ ] Natural language input
-  - "remind me tomorrow at 3pm"
-  - "every Monday at 9am"
-  - Parse with library (chrono-node)
+#### 3.3 Smart Reminders - ❌ NOT STARTED
+- [ ] Natural language input (chrono-node)
 - [ ] Reminder templates
-  - Common reminder presets
-  - Quick add buttons
 - [ ] Task dependencies
-  - Reminder after goal completion
-  - Chained reminders
-- [ ] Reminder statistics
-  - Completion rate
-  - Most common reminder times
 
-**Estimated effort**: 4-5 days
 **User value**: MEDIUM - Convenience feature
 
-#### 3.4 Pomodoro Enhancements
-- [ ] Long break system
-  - Long break after N sessions
-  - Configurable long break duration
-- [ ] Task integration
-  - Link Pomodoro to specific goal
-  - Track time per goal
-  - Goal-based insights
-- [ ] Focus mode
+#### 3.4 Pomodoro Enhancements - ✅ MOSTLY COMPLETE
+- [x] Long break system (configurable interval + duration)
+- [x] Task/goal integration (link Pomodoro to goals)
+- [x] Sounds & Music (6 ambient sounds via Web Audio API)
+- [x] Volume controls
+- [x] Completion sounds
+- [x] Advanced stats (heatmaps, productive hours)
+- [ ] **Focus mode** - NOT IMPLEMENTED
   - Block distracting websites
   - Full-screen timer
-  - Minimize distractions
-- [ ] Sounds & Music
-  - Tick-tock sound option
-  - Completion sound
-  - Ambient background music
-  - Volume controls
-- [ ] Advanced stats
-  - Focus time per day/week/month
-  - Most productive hours
-  - Interruption tracking
 
-**Estimated effort**: 7-10 days
-**User value**: HIGH - Core productivity feature
-
-#### 3.5 Customization Options
-- [ ] Custom color themes
-  - Theme builder
-  - Save custom themes
-  - Share themes
+#### 3.5 Customization Options - ⚠️ PARTIAL
+- [x] 6 color themes (OKLCH-based)
+- [x] 3 density modes (compact/comfortable/spacious)
+- [x] Dark/light mode with auto option
+- [ ] Custom color theme builder
 - [ ] Font options
-  - Font size slider
-  - Font family selection
-  - Accessibility fonts
-- [ ] Layout preferences
-  - Compact/spacious modes
-  - Reorder sections
-  - Hide/show sections
 - [ ] Background customization
-  - Upload custom image
-  - Gradient backgrounds
-  - Unsplash integration
-
-**Estimated effort**: 5-7 days
-**User value**: MEDIUM - Personalization
-
-**Total Phase 3**: 8-12 weeks
 
 ---
 
@@ -393,47 +332,39 @@
 
 ## 🐛 Technical Debt & Maintenance
 
-### Current Issues
+### Current Status
 
-#### Code Quality
-- [ ] Remove console.logs from production
-  - Currently in 10+ files
-  - Add Vite plugin to strip in build
-- [ ] Reduce `any` types
-  - Audit TypeScript for loose typing
-  - Enable stricter TypeScript flags
-- [ ] Add JSDoc comments
-  - Document complex functions
-  - Add examples for utilities
+#### Code Quality - ✅ GOOD
+- [x] Console.log management via logger abstraction
+  - Environment-aware log levels
+  - No build plugin needed
+- [x] TypeScript strict mode throughout
+- [ ] JSDoc comments (optional - code is readable)
 
-#### Performance
-- [ ] Bundle size audit
-  - Currently no analysis
-  - Add rollup-plugin-visualizer
-- [ ] Lazy load heavy components
-  - Insights page charts
-  - Settings modal
-  - Quote management (future)
-- [ ] Optimize re-renders
-  - Check unnecessary re-renders
-  - Use React.memo where needed
-  - Optimize Zustand selectors
+#### Performance - ⚠️ ACCEPTABLE
+- [ ] Bundle size audit (optional)
+  - Add rollup-plugin-visualizer for visibility
+- [ ] Lazy load heavy components (optional)
+  - InsightsPage with charts
+  - Could reduce initial load
+- [x] Re-render optimization with proper hooks
 
-#### Testing
-- [ ] Zero test coverage currently
-- [ ] Add unit tests (target: 70%+ coverage)
-- [ ] Add component tests (critical paths)
-- [ ] Add E2E tests (Playwright)
-- [ ] Set up CI/CD
+#### Testing - ✅ SOLID FOUNDATION
+- [x] Test infrastructure (Vitest + Testing Library)
+- [x] Store tests (quote-store, goal-store, pomodoro-store)
+- [x] Component tests (QuoteDisplay, EditableValue)
+- [x] Test fixtures pattern for reusable data
+- [x] CI/CD with GitHub Actions
+- [ ] Increase coverage to 70%+ (ongoing)
+- [ ] E2E tests with Playwright (optional)
 
-#### Documentation
-- [x] CLAUDE.md - Complete ✅
-- [x] ARCHITECTURE.md - Complete ✅
-- [x] README.md - Complete ✅
-- [x] LINTING.md - Complete ✅
-- [x] ROADMAP.md - This file ✅
-- [ ] API documentation (JSDoc → TypeDoc)
-- [ ] Component storybook (optional)
+#### Documentation - ✅ COMPLETE
+- [x] CLAUDE.md - AI development guide
+- [x] ARCHITECTURE.md - System design
+- [x] README.md - User documentation
+- [x] LINTING.md - Code style guide
+- [x] ROADMAP.md - This file
+- [ ] API documentation (optional - TypeDoc)
 
 ---
 
@@ -461,26 +392,36 @@
 
 ---
 
-## 🎯 Recommended Priorities (My Opinion)
+## 🎯 Recommended Next Priorities
 
-### If Priority is **Getting to Market** 🚀
-1. **Week 1-2**: Production polish + Chrome Web Store prep
-2. **Week 3**: Submit to Chrome Web Store
-3. **Week 4**: Gather user feedback, fix critical bugs
-4. **Month 2**: Implement top user requests
+### Current Focus: Complete Phase 2
 
-### If Priority is **Best User Experience** ✨
-1. **Week 1-2**: Quote Management Page
-2. **Week 3**: Export/Import + Onboarding
-3. **Week 4-5**: Accessibility improvements
-4. **Week 6+**: Advanced analytics
+**Remaining high-value items:**
 
-### If Priority is **Platform Growth** 🌍
-1. **Month 1**: Production polish + Chrome Web Store
-2. **Month 2**: Web App (Next.js)
-3. **Month 3**: Cloud Sync Backend
-4. **Month 4-5**: Mobile App
-5. **Month 6**: Cross-platform launch
+1. **Import functionality** (Priority: HIGH)
+   - Complete the backup/restore cycle
+   - Users can export but not restore
+   - File upload + validation + merge/replace
+
+2. **Onboarding** (Priority: HIGH)
+   - Welcome modal for first-time users
+   - Feature highlights
+   - Reduces user friction
+
+3. **Accessibility improvements** (Priority: HIGH)
+   - Semantic HTML landmarks
+   - aria-live regions
+   - prefers-reduced-motion
+
+4. **Bulk quote operations** (Priority: MEDIUM)
+   - Multi-select for power users
+
+### Future: Platform Expansion
+
+When ready for growth:
+1. **Web App** (Next.js) - ~90% code reuse
+2. **Cloud Sync Backend** - Cross-device sync
+3. **Mobile App** (React Native) - ~70-80% code reuse
 
 ---
 
@@ -522,13 +463,14 @@
 - ✅ Shared business logic is platform-agnostic
 - ✅ TypeScript throughout ensures type safety
 - ✅ Modern tech stack (React 18, Vite, Zustand)
+- ✅ Test infrastructure with fixtures pattern
+- ✅ CI/CD with automated releases
 
 ### Current Limitations
 - Single-platform (browser extension only)
-- No cloud sync (local storage only)
+- No cloud sync (local storage + Chrome Sync only)
 - No user accounts
-- No cross-device synchronization
-- Limited analytics (client-side only)
+- No import functionality (export only)
 
 ### Future Opportunities
 - Premium features (cloud sync, advanced analytics)
@@ -540,4 +482,6 @@
 ---
 
 **Version History**
+- v1.2.0 (2025-11-29) - Chrome Web Store published, Quote Management, Analytics, Pomodoro enhancements
+- v1.1.0 (2025-01-16) - Dark mode, themes, density modes
 - v1.0.0 (2025-01-15) - Initial roadmap after MVP completion
