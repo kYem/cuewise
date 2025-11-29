@@ -20,6 +20,7 @@ export const DEFAULT_SETTINGS: Settings = {
   enableGoalTransfer: true,
   goalTransferTime: 20, // 8 PM (20:00)
   logLevel: 'error', // Only show errors by default
+  hasSeenOnboarding: false, // Show welcome modal on first visit
 };
 
 // Quote categories with display names

@@ -19,4 +19,5 @@ export const defaultSettings: Settings = {
   enableGoalTransfer: true,
   goalTransferTime: 20,
   logLevel: 'error',
+  hasSeenOnboarding: false,
 };

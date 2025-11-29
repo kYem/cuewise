@@ -88,6 +88,8 @@ export interface Settings {
   goalTransferTime: number; // Hour (0-23) when transfer button appears (default 20 for 8 PM)
   // Debug
   logLevel: SettingsLogLevel; // Console log level (default 'error')
+  // Onboarding
+  hasSeenOnboarding: boolean; // Has user seen the welcome modal (default false)
 }
 
 // Storage keys

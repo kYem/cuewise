@@ -13,14 +13,17 @@ import { Modal } from './Modal';
 import { QuoteDisplay } from './QuoteDisplay';
 import { RemindersSection } from './RemindersSection';
 import { SettingsModal } from './SettingsModal';
+import { WelcomeModal } from './WelcomeModal';
 
 export const NewTabPage: React.FC = () => {
   const initializeQuotes = useQuoteStore((state) => state.initialize);
   const refreshQuote = useQuoteStore((state) => state.refreshQuote);
   const initializeSettings = useSettingsStore((state) => state.initialize);
+  const settingsLoading = useSettingsStore((state) => state.isLoading);
   const quoteChangeInterval = useSettingsStore((state) => state.settings.quoteChangeInterval);
   const showThemeSwitcher = useSettingsStore((state) => state.settings.showThemeSwitcher);
   const timeFormat = useSettingsStore((state) => state.settings.timeFormat);
+  const hasSeenOnboarding = useSettingsStore((state) => state.settings.hasSeenOnboarding);
   const updateSettings = useSettingsStore((state) => state.updateSettings);
   const initializePomodoro = usePomodoroStore((state) => state.initialize);
   const pomodoroStatus = usePomodoroStore((state) => state.status);
@@ -30,6 +33,7 @@ export const NewTabPage: React.FC = () => {
 
   const [isAddQuoteModalOpen, setIsAddQuoteModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isWelcomeOpen, setIsWelcomeOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [lastManualRefresh, setLastManualRefresh] = useState(Date.now());
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -78,6 +82,13 @@ export const NewTabPage: React.FC = () => {
     initializePomodoro();
   }, [initializeQuotes, initializeSettings, initializePomodoro]);
 
+  // Show welcome modal on first visit
+  useEffect(() => {
+    if (!settingsLoading && !hasSeenOnboarding) {
+      setIsWelcomeOpen(true);
+    }
+  }, [settingsLoading, hasSeenOnboarding]);
+
   // Auto-refresh quotes based on interval setting
   useEffect(() => {
     // If interval is 0 (manual), don't set up auto-refresh
@@ -114,6 +125,11 @@ export const NewTabPage: React.FC = () => {
   const handleQuoteAdded = () => {
     setIsAddQuoteModalOpen(false);
     // Optionally show success message
+  };
+
+  const handleCloseWelcome = async () => {
+    setIsWelcomeOpen(false);
+    await updateSettings({ hasSeenOnboarding: true });
   };
 
   const handleOpenPomodoro = () => {
@@ -389,6 +405,9 @@ export const NewTabPage: React.FC = () => {
 
       {/* Settings Modal */}
       <SettingsModal isOpen={isSettingsModalOpen} onClose={() => setIsSettingsModalOpen(false)} />
+
+      {/* Welcome Modal - First-time users */}
+      <WelcomeModal isOpen={isWelcomeOpen} onClose={handleCloseWelcome} />
     </div>
   );
 };
