@@ -622,18 +622,27 @@ it('should navigate to previous quote', async () => {
 
 ### Testing Best Practices
 
+**Key Principles:**
+1. **Keep tests simple and small** - Each test should verify one specific behavior
+2. **Always abstract to fixtures** - Extract test data, mocks, and setup into fixture files
+3. **Use descriptive names** - Test names should read like documentation
+
 **DO:**
 - ✅ Use semantic fixture names that describe the scenario
 - ✅ Create assertion helpers for complex validations
 - ✅ Build test scenarios for edge cases (hidden quotes, deleted items)
 - ✅ Keep tests focused on one behavior per test
 - ✅ Use factories from `@cuewise/test-utils` for base data
+- ✅ Extract default props and common mocks into fixture files
+- ✅ Use `expect(...).toBeRejectedWith()` instead of try/catch in tests
+- ✅ Use explicit `if` blocks instead of shorthand conditions
 
 **DON'T:**
 - ❌ Repeat mock setup code across multiple tests
 - ❌ Create inline test data when fixtures would be clearer
 - ❌ Write assertion logic multiple times
 - ❌ Mix multiple concerns in a single test
+- ❌ Use try/catch blocks in tests - use expect assertions for errors
 
 **Running Tests**:
 ```bash

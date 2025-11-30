@@ -183,12 +183,50 @@ export interface AdvancedAnalytics {
   pomodoroHeatmap: PomodoroHeatmapData;
 }
 
-// Export data types
-export interface ExportData {
+// Export/Import metadata
+export interface ExportMetadata {
+  version: string; // App version that created the export (e.g., "1.2.0")
+  formatVersion: number; // Data format version for compatibility (starts at 1)
   exportDate: string; // ISO timestamp
-  insights: InsightsData;
-  analytics: AdvancedAnalytics;
+}
+
+// Current export format version - increment when making breaking changes to ExportData
+export const EXPORT_FORMAT_VERSION = 1;
+
+// Export data types
+export interface ExportData extends ExportMetadata {
+  insights: InsightsData | null;
+  analytics: AdvancedAnalytics | null;
   goals: Goal[];
   pomodoroSessions: PomodoroSession[];
   quotes: Quote[];
+}
+
+// Import result types
+export interface ImportValidationError {
+  field: string;
+  message: string;
+}
+
+export interface ImportResult {
+  success: boolean;
+  imported: {
+    goals: number;
+    quotes: number;
+    pomodoroSessions: number;
+  };
+  skipped: {
+    goals: number;
+    quotes: number;
+    pomodoroSessions: number;
+  };
+  errors: ImportValidationError[];
+}
+
+// Import options
+export interface ImportOptions {
+  importGoals: boolean;
+  importQuotes: boolean;
+  importPomodoroSessions: boolean;
+  skipDuplicates: boolean; // Skip items with matching IDs
 }
