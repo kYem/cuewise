@@ -10,14 +10,27 @@ import { useEffect, useState } from 'react';
 import { useInsightsStore } from '../stores/insights-store';
 import { ExportControls } from './ExportControls';
 import { GoalCompletionChart } from './GoalCompletionChart';
+import { ImportControls } from './ImportControls';
 import { PageHeader } from './PageHeader';
 import { PomodoroHeatmap } from './PomodoroHeatmap';
 import { StorageIndicator } from './StorageIndicator';
 import { TrendChart } from './TrendChart';
 
 export const InsightsPage: React.FC = () => {
-  const { insights, analytics, isLoading, initialize, exportAsJSON, exportAsCSV, exportAllAsJSON } =
-    useInsightsStore();
+  const {
+    insights,
+    analytics,
+    isLoading,
+    initialize,
+    exportAsJSON,
+    exportAsCSV,
+    exportAllAsJSON,
+    importValidation,
+    isImporting,
+    validateImportFile,
+    executeImport,
+    clearImportValidation,
+  } = useInsightsStore();
   const [activeTab, setActiveTab] = useState<'overview' | 'analytics' | 'exports'>('overview');
 
   useEffect(() => {
@@ -305,6 +318,13 @@ export const InsightsPage: React.FC = () => {
               onExportJSON={exportAsJSON}
               onExportCSV={exportAsCSV}
               onExportAllJSON={exportAllAsJSON}
+            />
+            <ImportControls
+              importValidation={importValidation}
+              isImporting={isImporting}
+              onValidateFile={validateImportFile}
+              onExecuteImport={executeImport}
+              onClearValidation={clearImportValidation}
             />
           </div>
         )}
