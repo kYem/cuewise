@@ -18,6 +18,7 @@ import {
   exportMonthlyTrendsCSV,
   exportPomodoroSessionsCSV,
   exportWeeklyTrendsCSV,
+  getRandomQuote,
   parseImportData,
 } from './utils';
 
@@ -558,6 +559,138 @@ describe('Import Utilities', () => {
       expect(compareVersions('1.0', '1.0.0')).toBe(0);
       expect(compareVersions('1.0.0', '1.0')).toBe(0);
       expect(compareVersions('1.0', '1.0.1')).toBe(-1);
+    });
+  });
+
+  describe('getRandomQuote with category filtering', () => {
+    it('should filter quotes by enabled categories', () => {
+      const quotes = [
+        {
+          id: '1',
+          text: 'Quote 1',
+          author: 'Author 1',
+          category: 'inspiration' as const,
+          isCustom: false,
+          isFavorite: false,
+          isHidden: false,
+          viewCount: 0,
+        },
+        {
+          id: '2',
+          text: 'Quote 2',
+          author: 'Author 2',
+          category: 'productivity' as const,
+          isCustom: false,
+          isFavorite: false,
+          isHidden: false,
+          viewCount: 0,
+        },
+        {
+          id: '3',
+          text: 'Quote 3',
+          author: 'Author 3',
+          category: 'learning' as const,
+          isCustom: false,
+          isFavorite: false,
+          isHidden: false,
+          viewCount: 0,
+        },
+      ];
+
+      // Only enable 'productivity' category
+      const result = getRandomQuote(quotes, undefined, ['productivity']);
+
+      expect(result).not.toBeNull();
+      expect(result?.category).toBe('productivity');
+    });
+
+    it('should return null when no quotes match enabled categories', () => {
+      const quotes = [
+        {
+          id: '1',
+          text: 'Quote 1',
+          author: 'Author 1',
+          category: 'inspiration' as const,
+          isCustom: false,
+          isFavorite: false,
+          isHidden: false,
+          viewCount: 0,
+        },
+      ];
+
+      // Enable a category that has no quotes
+      const result = getRandomQuote(quotes, undefined, ['productivity']);
+
+      expect(result).toBeNull();
+    });
+
+    it('should return null when enabled categories array is empty', () => {
+      const quotes = [
+        {
+          id: '1',
+          text: 'Quote 1',
+          author: 'Author 1',
+          category: 'inspiration' as const,
+          isCustom: false,
+          isFavorite: false,
+          isHidden: false,
+          viewCount: 0,
+        },
+      ];
+
+      // Empty categories array should return null
+      const result = getRandomQuote(quotes, undefined, []);
+
+      expect(result).toBeNull();
+    });
+
+    it('should respect both hidden filter and category filter', () => {
+      const quotes = [
+        {
+          id: '1',
+          text: 'Quote 1',
+          author: 'Author 1',
+          category: 'inspiration' as const,
+          isCustom: false,
+          isFavorite: false,
+          isHidden: true, // Hidden
+          viewCount: 0,
+        },
+        {
+          id: '2',
+          text: 'Quote 2',
+          author: 'Author 2',
+          category: 'inspiration' as const,
+          isCustom: false,
+          isFavorite: false,
+          isHidden: false, // Visible
+          viewCount: 0,
+        },
+      ];
+
+      const result = getRandomQuote(quotes, undefined, ['inspiration']);
+
+      expect(result).not.toBeNull();
+      expect(result?.id).toBe('2'); // Should get the non-hidden one
+    });
+
+    it('should include all quotes when enabledCategories is undefined', () => {
+      const quotes = [
+        {
+          id: '1',
+          text: 'Quote 1',
+          author: 'Author 1',
+          category: 'inspiration' as const,
+          isCustom: false,
+          isFavorite: false,
+          isHidden: false,
+          viewCount: 0,
+        },
+      ];
+
+      const result = getRandomQuote(quotes, undefined, undefined);
+
+      expect(result).not.toBeNull();
     });
   });
 });

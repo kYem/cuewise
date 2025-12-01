@@ -1,10 +1,11 @@
-import { CATEGORY_COLORS } from '@cuewise/shared';
+import { ALL_QUOTE_CATEGORIES, CATEGORY_COLORS } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
-import { ChevronLeft, ChevronRight, EyeOff, Heart, RefreshCw } from 'lucide-react';
+import { ChevronLeft, ChevronRight, EyeOff, Filter, Heart, RefreshCw } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useState } from 'react';
 import { useQuoteStore } from '../stores/quote-store';
 import { useSettingsStore } from '../stores/settings-store';
+import { CategoryFilter } from './CategoryFilter';
 import { ErrorFallback } from './ErrorFallback';
 
 interface QuoteDisplayProps {
@@ -26,7 +27,13 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({ onManualRefresh }) =
     isLoading,
     error,
     initialize,
+    enabledCategories,
+    setEnabledCategories,
+    showCustomQuotes,
+    toggleCustomQuotes,
   } = useQuoteStore();
+
+  const isFiltered = enabledCategories.length < ALL_QUOTE_CATEGORIES.length || !showCustomQuotes;
 
   // Countdown timer for auto-refresh
   useEffect(() => {
@@ -105,16 +112,47 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({ onManualRefresh }) =
   }
 
   if (!currentQuote) {
+    // Check if it's due to category filtering (any filter applied)
+    const noMatchingQuotes = (enabledCategories.length === 0 && !showCustomQuotes) || isFiltered;
+
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] text-center">
-        <p className="text-xl text-secondary mb-4">No quotes available</p>
-        <button
-          type="button"
-          onClick={handleRefreshClick}
-          className="px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-        >
-          Try Again
-        </button>
+        {noMatchingQuotes ? (
+          <>
+            <Filter className="w-12 h-12 text-secondary mb-4" />
+            <p className="text-xl text-secondary mb-2">No quotes match your selected categories</p>
+            <p className="text-sm text-tertiary mb-6">
+              {enabledCategories.length === 0 && !showCustomQuotes
+                ? 'Select at least one category to see quotes.'
+                : 'Try selecting more categories to see more quotes.'}
+            </p>
+            <button
+              type="button"
+              onClick={async () => {
+                setEnabledCategories([...ALL_QUOTE_CATEGORIES]);
+                if (!showCustomQuotes) {
+                  toggleCustomQuotes();
+                }
+                // Refresh to get a new quote with the restored filters
+                await refreshQuote();
+              }}
+              className="px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+            >
+              Show All Categories
+            </button>
+          </>
+        ) : (
+          <>
+            <p className="text-xl text-secondary mb-4">No quotes available</p>
+            <button
+              type="button"
+              onClick={handleRefreshClick}
+              className="px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+            >
+              Try Again
+            </button>
+          </>
+        )}
       </div>
     );
   }
@@ -173,6 +211,9 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({ onManualRefresh }) =
 
       {/* Action Buttons */}
       <div className="flex items-center justify-center gap-density-md mt-12">
+        {/* Category Filter */}
+        <CategoryFilter />
+
         <button
           type="button"
           onClick={() => toggleFavorite(currentQuote.id)}

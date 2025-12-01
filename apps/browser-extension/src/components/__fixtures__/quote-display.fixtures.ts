@@ -1,4 +1,4 @@
-import type { Quote } from '@cuewise/shared';
+import { ALL_QUOTE_CATEGORIES, type Quote, type QuoteCategory } from '@cuewise/shared';
 import { quoteFactory } from '@cuewise/test-utils/factories';
 import { type Mock, vi } from 'vitest';
 
@@ -18,6 +18,8 @@ export interface MockQuoteStore {
   error: string | null;
   quoteHistory: string[];
   historyIndex: number;
+  enabledCategories: QuoteCategory[];
+  showCustomQuotes: boolean;
   initialize: Mock;
   refreshQuote: Mock;
   goBack: Mock;
@@ -31,6 +33,9 @@ export interface MockQuoteStore {
   editQuote: Mock;
   deleteQuote: Mock;
   incrementViewCount: Mock;
+  setEnabledCategories: Mock;
+  toggleCategory: Mock;
+  toggleCustomQuotes: Mock;
 }
 
 // ============================================================================
@@ -48,6 +53,8 @@ export function createMockStore(overrides: Partial<MockQuoteStore> = {}): MockQu
     error: null,
     quoteHistory: [],
     historyIndex: 0,
+    enabledCategories: [...ALL_QUOTE_CATEGORIES],
+    showCustomQuotes: true,
     initialize: overrides.initialize || (vi.fn() as Mock),
     refreshQuote: overrides.refreshQuote || (vi.fn() as Mock),
     goBack: overrides.goBack || (vi.fn() as Mock),
@@ -61,6 +68,9 @@ export function createMockStore(overrides: Partial<MockQuoteStore> = {}): MockQu
     editQuote: overrides.editQuote || (vi.fn() as Mock),
     deleteQuote: overrides.deleteQuote || (vi.fn() as Mock),
     incrementViewCount: overrides.incrementViewCount || (vi.fn() as Mock),
+    setEnabledCategories: overrides.setEnabledCategories || (vi.fn() as Mock),
+    toggleCategory: overrides.toggleCategory || (vi.fn() as Mock),
+    toggleCustomQuotes: overrides.toggleCustomQuotes || (vi.fn() as Mock),
     ...overrides,
   };
 }
