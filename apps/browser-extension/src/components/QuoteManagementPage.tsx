@@ -1,4 +1,10 @@
-import { CATEGORY_COLORS, QUOTE_CATEGORIES, type Quote, type QuoteCategory } from '@cuewise/shared';
+import {
+  CATEGORY_COLORS,
+  logger,
+  QUOTE_CATEGORIES,
+  type Quote,
+  type QuoteCategory,
+} from '@cuewise/shared';
 import { cn, Select } from '@cuewise/ui';
 import { Edit2, Eye, EyeOff, Heart, Plus, Search, Trash2, X } from 'lucide-react';
 import type React from 'react';
@@ -47,7 +53,7 @@ const EditQuoteModal: React.FC<EditQuoteModalProps> = ({ quote, onClose, onSave 
       });
       onClose();
     } catch (error) {
-      console.error('Failed to save quote:', error);
+      logger.error('Failed to save quote', error);
     } finally {
       setIsSubmitting(false);
     }

@@ -4,6 +4,7 @@ import {
   DEFAULT_SETTINGS,
   type LayoutDensity,
   LogLevel as LoggerLevel,
+  logger,
   type Settings,
 } from '@cuewise/shared';
 import { getSettings, migrateStorageData, setSettings } from '@cuewise/storage';
@@ -54,7 +55,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       applyLayoutDensity(settings.layoutDensity);
       applyLogLevel(settings.logLevel);
     } catch (error) {
-      console.error('Error initializing settings store:', error);
+      logger.error('Error initializing settings store', error);
       const errorMessage = 'Failed to load settings. Please refresh the page.';
       set({ error: errorMessage, isLoading: false });
       useToastStore.getState().error(errorMessage);
@@ -69,7 +70,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       await setSettings(updatedSettings);
       set({ settings: updatedSettings });
     } catch (error) {
-      console.error('Error updating work duration:', error);
+      logger.error('Error updating work duration', error);
       const errorMessage = 'Failed to update work duration. Please try again.';
       set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
@@ -84,7 +85,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       await setSettings(updatedSettings);
       set({ settings: updatedSettings });
     } catch (error) {
-      console.error('Error updating break duration:', error);
+      logger.error('Error updating break duration', error);
       const errorMessage = 'Failed to update break duration. Please try again.';
       set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
@@ -100,7 +101,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       set({ settings: updatedSettings });
       applyTheme(theme);
     } catch (error) {
-      console.error('Error updating theme:', error);
+      logger.error('Error updating theme', error);
       const errorMessage = 'Failed to update theme. Please try again.';
       set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
@@ -127,7 +128,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       await setSettings(updatedSettings);
       set({ settings: updatedSettings });
     } catch (error) {
-      console.error('Error updating notifications:', error);
+      logger.error('Error updating notifications', error);
       const errorMessage = 'Failed to update notifications. Please try again.';
       set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
@@ -144,7 +145,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       await setSettings(updatedSettings);
       set({ settings: updatedSettings });
     } catch (error) {
-      console.error('Error updating quote interval:', error);
+      logger.error('Error updating quote interval', error);
       const errorMessage = 'Failed to update quote interval. Please try again.';
       set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
@@ -160,7 +161,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       set({ settings: updatedSettings });
       applyColorTheme(colorTheme);
     } catch (error) {
-      console.error('Error updating color theme:', error);
+      logger.error('Error updating color theme', error);
       const errorMessage = 'Failed to update color theme. Please try again.';
       set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
@@ -176,7 +177,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       set({ settings: updatedSettings });
       applyLayoutDensity(density);
     } catch (error) {
-      console.error('Error updating layout density:', error);
+      logger.error('Error updating layout density', error);
       const errorMessage = 'Failed to update layout density. Please try again.';
       set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
@@ -226,7 +227,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
         applyLogLevel(partialSettings.logLevel);
       }
     } catch (error) {
-      console.error('Error updating settings:', error);
+      logger.error('Error updating settings', error);
       const errorMessage = 'Failed to update settings. Please try again.';
       set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
@@ -242,7 +243,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       applyLayoutDensity(DEFAULT_SETTINGS.layoutDensity);
       applyLogLevel(DEFAULT_SETTINGS.logLevel);
     } catch (error) {
-      console.error('Error resetting settings:', error);
+      logger.error('Error resetting settings', error);
       const errorMessage = 'Failed to reset settings. Please try again.';
       set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);

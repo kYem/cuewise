@@ -6,6 +6,7 @@
  * 3. Pass it to this adapter or create a concrete implementation
  */
 
+import { logger } from '@cuewise/shared';
 import type { StorageAdapter } from '../storage-interface';
 
 /**
@@ -26,7 +27,7 @@ export class AsyncStorageAdapter implements StorageAdapter {
     this.AsyncStorage = asyncStorageInstance ?? null;
 
     if (!this.AsyncStorage) {
-      console.warn(
+      logger.warn(
         'AsyncStorage not provided. This adapter will not work. Pass AsyncStorage instance to constructor.'
       );
     }
@@ -39,7 +40,7 @@ export class AsyncStorageAdapter implements StorageAdapter {
       const item = await this.AsyncStorage.getItem(key);
       return item ? JSON.parse(item) : null;
     } catch (error) {
-      console.error(`Error getting ${key} from AsyncStorage:`, error);
+      logger.error(`Error getting ${key} from AsyncStorage`, error);
       return null;
     }
   }
@@ -51,7 +52,7 @@ export class AsyncStorageAdapter implements StorageAdapter {
       await this.AsyncStorage.setItem(key, JSON.stringify(value));
       return true;
     } catch (error) {
-      console.error(`Error setting ${key} in AsyncStorage:`, error);
+      logger.error(`Error setting ${key} in AsyncStorage`, error);
       return false;
     }
   }
@@ -63,7 +64,7 @@ export class AsyncStorageAdapter implements StorageAdapter {
       await this.AsyncStorage.removeItem(key);
       return true;
     } catch (error) {
-      console.error(`Error removing ${key} from AsyncStorage:`, error);
+      logger.error(`Error removing ${key} from AsyncStorage`, error);
       return false;
     }
   }
@@ -75,7 +76,7 @@ export class AsyncStorageAdapter implements StorageAdapter {
       await this.AsyncStorage.clear();
       return true;
     } catch (error) {
-      console.error('Error clearing AsyncStorage:', error);
+      logger.error('Error clearing AsyncStorage', error);
       return false;
     }
   }

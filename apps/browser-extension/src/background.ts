@@ -2,12 +2,12 @@
  * Background Service Worker for handling alarms and notifications
  */
 
-import type { Reminder } from '@cuewise/shared';
+import { logger, type Reminder } from '@cuewise/shared';
 import { getReminders, setReminders } from '@cuewise/storage';
 
 // Listen for alarm triggers
 chrome.alarms.onAlarm.addListener(async (alarm) => {
-  console.log('Alarm triggered:', alarm.name);
+  logger.info('Alarm triggered', { alarmName: alarm.name });
 
   // Check if this is a reminder alarm
   if (alarm.name.startsWith('reminder-')) {
@@ -25,7 +25,7 @@ async function handleReminderAlarm(reminderId: string) {
     const reminder = reminders.find((r) => r.id === reminderId);
 
     if (!reminder) {
-      console.warn(`Reminder ${reminderId} not found`);
+      logger.warn(`Reminder ${reminderId} not found`);
       return;
     }
 
@@ -55,7 +55,7 @@ async function handleReminderAlarm(reminderId: string) {
       await scheduleRecurringReminder(reminder);
     }
   } catch (error) {
-    console.error('Error handling reminder alarm:', error);
+    logger.error('Error handling reminder alarm', error);
   }
 }
 

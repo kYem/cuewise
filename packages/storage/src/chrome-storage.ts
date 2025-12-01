@@ -2,6 +2,8 @@
  * Chrome Storage API abstraction layer with TypeScript type safety
  */
 
+import { logger } from '@cuewise/shared';
+
 // Storage area type
 type StorageArea = 'local' | 'sync';
 
@@ -25,7 +27,7 @@ export async function getFromStorage<T>(
     const item = localStorage.getItem(key);
     return item ? JSON.parse(item) : null;
   } catch (error) {
-    console.error(`Error getting ${key} from storage:`, error);
+    logger.error(`Error getting ${key} from storage`, error);
     return null;
   }
 }
@@ -56,21 +58,21 @@ export async function setInStorage<T>(
 
     if (errorMessage.includes('quota') || errorMessage.includes('QUOTA_BYTES')) {
       if (area === 'sync') {
-        console.error(
+        logger.error(
           `Chrome sync storage quota exceeded for key "${key}". ` +
             `Sync storage has a 100KB total limit and 8KB per-item limit. ` +
             `Consider disabling sync or reducing data size.`,
           error
         );
       } else {
-        console.error(
+        logger.error(
           `Chrome local storage quota exceeded for key "${key}". ` +
             `Local storage has a 10MB limit. Consider clearing old data.`,
           error
         );
       }
     } else {
-      console.error(`Error setting ${key} in ${area} storage:`, error);
+      logger.error(`Error setting ${key} in ${area} storage`, error);
     }
 
     return false;
@@ -89,7 +91,7 @@ export async function removeFromStorage(
     await storage.remove(key);
     return true;
   } catch (error) {
-    console.error(`Error removing ${key} from storage:`, error);
+    logger.error(`Error removing ${key} from storage`, error);
     return false;
   }
 }
@@ -103,7 +105,7 @@ export async function clearStorage(area: StorageArea = 'local'): Promise<boolean
     await storage.clear();
     return true;
   } catch (error) {
-    console.error('Error clearing storage:', error);
+    logger.error('Error clearing storage', error);
     return false;
   }
 }

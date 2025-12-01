@@ -1,4 +1,4 @@
-import { generateId, type Reminder } from '@cuewise/shared';
+import { generateId, logger, type Reminder } from '@cuewise/shared';
 import { getReminders, setReminders } from '@cuewise/storage';
 import { create } from 'zustand';
 import { useToastStore } from './toast-store';
@@ -74,7 +74,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
         isLoading: false,
       });
     } catch (error) {
-      console.error('Error initializing reminder store:', error);
+      logger.error('Error initializing reminder store', error);
       const errorMessage = 'Failed to load reminders. Please refresh the page.';
       set({ error: errorMessage, isLoading: false });
       useToastStore.getState().error(errorMessage);
@@ -113,7 +113,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
         });
       }
     } catch (error) {
-      console.error('Error adding reminder:', error);
+      logger.error('Error adding reminder', error);
       const errorMessage = 'Failed to add reminder. Please try again.';
       set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
@@ -143,7 +143,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
         await chrome.alarms.clear(`reminder-${reminderId}`);
       }
     } catch (error) {
-      console.error('Error toggling reminder:', error);
+      logger.error('Error toggling reminder', error);
       const errorMessage = 'Failed to update reminder. Please try again.';
       set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
@@ -170,7 +170,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
         await chrome.alarms.clear(`reminder-${reminderId}`);
       }
     } catch (error) {
-      console.error('Error deleting reminder:', error);
+      logger.error('Error deleting reminder', error);
       const errorMessage = 'Failed to delete reminder. Please try again.';
       set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
@@ -202,7 +202,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
         });
       }
     } catch (error) {
-      console.error('Error updating reminder:', error);
+      logger.error('Error updating reminder', error);
       const errorMessage = 'Failed to update reminder. Please try again.';
       set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
@@ -242,7 +242,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
         });
       }
     } catch (error) {
-      console.error('Error snoozing reminder:', error);
+      logger.error('Error snoozing reminder', error);
       set({ error: 'Failed to snooze reminder' });
     }
   },
@@ -259,7 +259,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
 
       set({ reminders: updatedReminders });
     } catch (error) {
-      console.error('Error marking reminder as notified:', error);
+      logger.error('Error marking reminder as notified', error);
     }
   },
 

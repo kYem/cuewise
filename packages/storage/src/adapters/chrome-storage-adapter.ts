@@ -2,6 +2,7 @@
  * Chrome Storage API adapter for browser extensions
  */
 
+import { logger } from '@cuewise/shared';
 import type { StorageAdapter, StorageChanges } from '../storage-interface';
 
 type StorageArea = 'local' | 'sync';
@@ -23,7 +24,7 @@ export class ChromeStorageAdapter implements StorageAdapter {
       const result = await this.storage.get(key);
       return (result[key] as T) ?? null;
     } catch (error) {
-      console.error(`Error getting ${key} from Chrome storage:`, error);
+      logger.error(`Error getting ${key} from Chrome storage`, error);
       return null;
     }
   }
@@ -33,7 +34,7 @@ export class ChromeStorageAdapter implements StorageAdapter {
       await this.storage.set({ [key]: value });
       return true;
     } catch (error) {
-      console.error(`Error setting ${key} in Chrome storage:`, error);
+      logger.error(`Error setting ${key} in Chrome storage`, error);
       return false;
     }
   }
@@ -43,7 +44,7 @@ export class ChromeStorageAdapter implements StorageAdapter {
       await this.storage.remove(key);
       return true;
     } catch (error) {
-      console.error(`Error removing ${key} from Chrome storage:`, error);
+      logger.error(`Error removing ${key} from Chrome storage`, error);
       return false;
     }
   }
@@ -53,7 +54,7 @@ export class ChromeStorageAdapter implements StorageAdapter {
       await this.storage.clear();
       return true;
     } catch (error) {
-      console.error('Error clearing Chrome storage:', error);
+      logger.error('Error clearing Chrome storage', error);
       return false;
     }
   }
