@@ -1,4 +1,4 @@
-import type { Reminder } from '@cuewise/shared';
+import { logger, type Reminder } from '@cuewise/shared';
 import type React from 'react';
 import { useState } from 'react';
 import { useReminderStore } from '../stores/reminder-store';
@@ -56,7 +56,7 @@ export const EditReminderForm: React.FC<EditReminderFormProps> = ({
 
       onSuccess();
     } catch (error) {
-      console.error('Failed to update reminder:', error);
+      logger.error('Failed to update reminder', error);
       alert('Failed to update reminder. Please try again.');
     } finally {
       setIsSubmitting(false);

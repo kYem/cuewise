@@ -3,6 +3,8 @@
  * Uses Web Audio API to generate notification sounds without external audio files
  */
 
+import { logger } from '@cuewise/shared';
+
 // Create audio context (reused across all sounds)
 let audioContext: AudioContext | null = null;
 
@@ -53,7 +55,7 @@ export const playStartSound = (): void => {
       oscillator.stop(endTime);
     });
   } catch (error) {
-    console.error('Error playing start sound:', error);
+    logger.error('Error playing start sound', error);
   }
 };
 
@@ -99,6 +101,6 @@ export const playCompletionSound = (): void => {
       oscillator.stop(endTime);
     });
   } catch (error) {
-    console.error('Error playing completion sound:', error);
+    logger.error('Error playing completion sound', error);
   }
 };

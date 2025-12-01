@@ -232,6 +232,32 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
 
 ## Error Handling & Logging Pattern
 
+### Use the Logger, Not console.error
+
+**IMPORTANT**: Never use `console.error`, `console.log`, `console.warn`, or `console.debug` directly. Always use the project's logger from `@cuewise/shared`:
+
+```typescript
+import { logger } from '@cuewise/shared';
+
+// CORRECT
+logger.error('Error updating settings', error);
+logger.warn('Deprecated API usage');
+logger.info('User logged in');
+logger.debug('Debug info', { userId: 123 });
+
+// WRONG - Never use console directly
+console.error('Error:', error);
+console.log('Debug:', data);
+```
+
+The logger:
+- Can be controlled via settings (log level: none, error, warn, info, debug)
+- Provides consistent formatting with timestamps and prefixes
+- Can be extended to integrate with services like Sentry or LogRocket
+- Respects user preferences for logging verbosity
+
+**Location**: `packages/shared/src/logger.ts`
+
 ### Unified Error Handling with Toast Store
 
 **Problem**: Avoid repetitive error handling patterns where we call both logger and toast separately:
@@ -239,7 +265,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
 ```typescript
 // AVOID THIS PATTERN:
 const errorMessage = 'Failed to load quotes';
-console.error(errorMessage, error);
+logger.error(errorMessage, error);
 useToastStore.getState().error(errorMessage);
 ```
 
@@ -250,6 +276,7 @@ useToastStore.getState().error(errorMessage);
 ### Toast Store Pattern
 
 ```typescript
+import { logger } from '@cuewise/shared';
 import { useToastStore } from '../stores/toast-store';
 
 // In Zustand store actions
@@ -257,7 +284,7 @@ try {
   await setSettings(updatedSettings);
   set({ settings: updatedSettings });
 } catch (error) {
-  console.error('Error updating settings:', error);
+  logger.error('Error updating settings', error);
   const errorMessage = 'Failed to update settings. Please try again.';
   set({ error: errorMessage });
   useToastStore.getState().error(errorMessage);
@@ -265,14 +292,14 @@ try {
 ```
 
 **Key Features**:
-- **Automatic logging**: Toast store logs all messages to console automatically
+- **Controllable logging**: Logger respects user's log level settings
 - **Type-safe**: Uses TypeScript for error typing
-- **Consistent UX**: User sees toast notification, developer sees console logs
+- **Consistent UX**: User sees toast notification, developer sees formatted logs
 - **Three severity levels**: `error`, `warning`, `success`
 
 ### Best Practices
 
-1. **Always log the underlying error object** first with `console.error()` for debugging
+1. **Always log the underlying error object** first with `logger.error()` for debugging
 2. **Create user-friendly error messages** for the toast notification
 3. **Use toast store for user-facing feedback**:
    ```typescript
@@ -287,14 +314,14 @@ try {
      // operation
      await someAsyncOperation();
    } catch (error) {
-     console.error('Error context for debugging:', error);
+     logger.error('Error context for debugging', error);
      const errorMessage = 'User-friendly error message';
      set({ error: errorMessage }); // Update store error state
      useToastStore.getState().error(errorMessage); // Show user notification
    }
    ```
 
-5. **Don't duplicate logging**: Since toast store logs automatically, avoid calling both `console.log` and toast for the same message
+5. **Don't duplicate logging**: Since toast store logs automatically, avoid calling both `logger` and toast for the same message
 
 ## Component Patterns
 
@@ -622,18 +649,27 @@ it('should navigate to previous quote', async () => {
 
 ### Testing Best Practices
 
+**Key Principles:**
+1. **Keep tests simple and small** - Each test should verify one specific behavior
+2. **Always abstract to fixtures** - Extract test data, mocks, and setup into fixture files
+3. **Use descriptive names** - Test names should read like documentation
+
 **DO:**
 - ✅ Use semantic fixture names that describe the scenario
 - ✅ Create assertion helpers for complex validations
 - ✅ Build test scenarios for edge cases (hidden quotes, deleted items)
 - ✅ Keep tests focused on one behavior per test
 - ✅ Use factories from `@cuewise/test-utils` for base data
+- ✅ Extract default props and common mocks into fixture files
+- ✅ Use `expect(...).toBeRejectedWith()` instead of try/catch in tests
+- ✅ Use explicit `if` blocks instead of shorthand conditions
 
 **DON'T:**
 - ❌ Repeat mock setup code across multiple tests
 - ❌ Create inline test data when fixtures would be clearer
 - ❌ Write assertion logic multiple times
 - ❌ Mix multiple concerns in a single test
+- ❌ Use try/catch blocks in tests - use expect assertions for errors
 
 **Running Tests**:
 ```bash

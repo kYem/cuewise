@@ -2,6 +2,7 @@
  * localStorage adapter for web applications
  */
 
+import { logger } from '@cuewise/shared';
 import type { StorageAdapter, StorageChanges } from '../storage-interface';
 
 export class LocalStorageAdapter implements StorageAdapter {
@@ -15,7 +16,7 @@ export class LocalStorageAdapter implements StorageAdapter {
       const item = localStorage.getItem(key);
       return item ? JSON.parse(item) : null;
     } catch (error) {
-      console.error(`Error getting ${key} from localStorage:`, error);
+      logger.error(`Error getting ${key} from localStorage`, error);
       return null;
     }
   }
@@ -25,7 +26,7 @@ export class LocalStorageAdapter implements StorageAdapter {
       localStorage.setItem(key, JSON.stringify(value));
       return true;
     } catch (error) {
-      console.error(`Error setting ${key} in localStorage:`, error);
+      logger.error(`Error setting ${key} in localStorage`, error);
       return false;
     }
   }
@@ -35,7 +36,7 @@ export class LocalStorageAdapter implements StorageAdapter {
       localStorage.removeItem(key);
       return true;
     } catch (error) {
-      console.error(`Error removing ${key} from localStorage:`, error);
+      logger.error(`Error removing ${key} from localStorage`, error);
       return false;
     }
   }
@@ -45,7 +46,7 @@ export class LocalStorageAdapter implements StorageAdapter {
       localStorage.clear();
       return true;
     } catch (error) {
-      console.error('Error clearing localStorage:', error);
+      logger.error('Error clearing localStorage', error);
       return false;
     }
   }

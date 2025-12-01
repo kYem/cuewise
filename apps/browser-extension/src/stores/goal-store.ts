@@ -4,6 +4,7 @@ import {
   getNextDayDateString,
   getTodayDateString,
   groupGoalsByDate,
+  logger,
 } from '@cuewise/shared';
 import { getGoals, setGoals } from '@cuewise/storage';
 import { create } from 'zustand';
@@ -53,7 +54,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
 
       set({ goals: allGoals, todayGoals, isLoading: false });
     } catch (error) {
-      console.error('Error initializing goal store:', error);
+      logger.error('Error initializing goal store', error);
       const errorMessage = 'Failed to load goals. Please refresh the page.';
       set({ error: errorMessage, isLoading: false });
       useToastStore.getState().error(errorMessage);
@@ -81,7 +82,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       const todayGoals = updatedGoals.filter((goal) => goal.date === today);
       set({ goals: updatedGoals, todayGoals });
     } catch (error) {
-      console.error('Error adding goal:', error);
+      logger.error('Error adding goal', error);
       const errorMessage = 'Failed to add goal. Please try again.';
       set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
@@ -104,7 +105,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       const todayGoals = updatedGoals.filter((goal) => goal.date === today);
       set({ goals: updatedGoals, todayGoals });
     } catch (error) {
-      console.error('Error updating goal:', error);
+      logger.error('Error updating goal', error);
       const errorMessage = 'Failed to update goal. Please try again.';
       set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
@@ -125,7 +126,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       const todayGoals = updatedGoals.filter((goal) => goal.date === today);
       set({ goals: updatedGoals, todayGoals });
     } catch (error) {
-      console.error('Error toggling goal:', error);
+      logger.error('Error toggling goal', error);
       const errorMessage = 'Failed to update goal. Please try again.';
       set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
@@ -144,7 +145,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       const todayGoals = updatedGoals.filter((goal) => goal.date === today);
       set({ goals: updatedGoals, todayGoals });
     } catch (error) {
-      console.error('Error deleting goal:', error);
+      logger.error('Error deleting goal', error);
       const errorMessage = 'Failed to delete goal. Please try again.';
       set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
@@ -164,7 +165,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       const todayGoals = updatedGoals.filter((goal) => goal.date === today);
       set({ goals: updatedGoals, todayGoals });
     } catch (error) {
-      console.error('Error clearing completed goals:', error);
+      logger.error('Error clearing completed goals', error);
       const errorMessage = 'Failed to clear completed goals. Please try again.';
       set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
@@ -195,7 +196,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
 
       useToastStore.getState().success('Goal transferred to tomorrow');
     } catch (error) {
-      console.error('Error transferring goal:', error);
+      logger.error('Error transferring goal', error);
       const errorMessage = 'Failed to transfer goal. Please try again.';
       set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
@@ -225,7 +226,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
 
       useToastStore.getState().success('Goal moved to today');
     } catch (error) {
-      console.error('Error moving goal to today:', error);
+      logger.error('Error moving goal to today', error);
       const errorMessage = 'Failed to move goal. Please try again.';
       set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);

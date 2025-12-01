@@ -1,3 +1,4 @@
+import { logger } from '@cuewise/shared';
 import type React from 'react';
 import { useState } from 'react';
 import { useReminderStore } from '../stores/reminder-store';
@@ -70,7 +71,7 @@ export const AddReminderForm: React.FC<AddReminderFormProps> = ({ onSuccess }) =
 
       onSuccess();
     } catch (error) {
-      console.error('Failed to add reminder:', error);
+      logger.error('Failed to add reminder', error);
       alert('Failed to add reminder. Please try again.');
     } finally {
       setIsSubmitting(false);

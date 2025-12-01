@@ -3,6 +3,7 @@
  * Provides async storage interface compatible with Zustand's persist middleware
  */
 
+import { logger } from '@cuewise/shared';
 import type { StateStorage } from 'zustand/middleware';
 
 /**
@@ -21,7 +22,7 @@ export const chromeLocalStorage: StateStorage = {
       const value = result[name];
       return typeof value === 'string' ? value : null;
     } catch (error) {
-      console.error('Error reading from chrome.storage.local:', error);
+      logger.error('Error reading from chrome.storage.local', error);
       return null;
     }
   },
@@ -36,7 +37,7 @@ export const chromeLocalStorage: StateStorage = {
 
       await chrome.storage.local.set({ [name]: value });
     } catch (error) {
-      console.error('Error writing to chrome.storage.local:', error);
+      logger.error('Error writing to chrome.storage.local', error);
     }
   },
 
@@ -50,7 +51,7 @@ export const chromeLocalStorage: StateStorage = {
 
       await chrome.storage.local.remove(name);
     } catch (error) {
-      console.error('Error removing from chrome.storage.local:', error);
+      logger.error('Error removing from chrome.storage.local', error);
     }
   },
 };

@@ -5,6 +5,7 @@
 import {
   DEFAULT_SETTINGS,
   type Goal,
+  logger,
   type PomodoroSession,
   type Quote,
   type Reminder,
@@ -51,7 +52,7 @@ async function migrateLegacyQuotes(): Promise<void> {
       return; // No migration needed
     }
 
-    console.log('Migrating legacy quotes to hybrid storage...');
+    logger.info('Migrating legacy quotes to hybrid storage...');
 
     // Split into seed and custom quotes
     const seedQuotes = legacyQuotes.filter((q) => !isCustomQuote(q));
@@ -72,11 +73,11 @@ async function migrateLegacyQuotes(): Promise<void> {
     await removeFromStorage(STORAGE_KEYS.QUOTES, 'local');
     await removeFromStorage(STORAGE_KEYS.QUOTES, 'sync');
 
-    console.log(
+    logger.info(
       `Migration complete: ${seedQuotes.length} seed quotes, ${customQuotes.length} custom quotes`
     );
   } catch (error) {
-    console.error('Error migrating legacy quotes:', error);
+    logger.error('Error migrating legacy quotes', error);
   }
 }
 
@@ -98,7 +99,7 @@ export async function getQuotes(): Promise<Quote[]> {
     // Merge seed and custom quotes
     return [...seedQuotes, ...customQuotes];
   } catch (error) {
-    console.error('Error getting quotes:', error);
+    logger.error('Error getting quotes', error);
     return [];
   }
 }
@@ -118,7 +119,7 @@ export async function setQuotes(quotes: Quote[]): Promise<boolean> {
 
     return seedSuccess && customSuccess;
   } catch (error) {
-    console.error('Error setting quotes:', error);
+    logger.error('Error setting quotes', error);
     return false;
   }
 }
@@ -246,7 +247,7 @@ export async function getStorageUsage(): Promise<StorageUsageInfo> {
       isCritical: percentageUsed > 90,
     };
   } catch (error) {
-    console.error('Error getting storage usage:', error);
+    logger.error('Error getting storage usage', error);
     // Return safe defaults on error (assume local storage)
     return {
       bytesInUse: 0,
@@ -302,13 +303,13 @@ export async function migrateStorageData(
     await setInStorage(STORAGE_KEYS.REMINDERS, reminders, toArea);
     await setInStorage(STORAGE_KEYS.POMODORO_SESSIONS, sessions, toArea);
 
-    console.log(`Successfully migrated data from ${fromArea} to ${toArea}`);
-    console.log(
+    logger.info(`Successfully migrated data from ${fromArea} to ${toArea}`);
+    logger.info(
       `Migrated ${customQuotes.length} custom quotes (seed quotes remain in local storage)`
     );
     return true;
   } catch (error) {
-    console.error(`Error migrating data from ${fromArea} to ${toArea}:`, error);
+    logger.error(`Error migrating data from ${fromArea} to ${toArea}`, error);
     return false;
   }
 }

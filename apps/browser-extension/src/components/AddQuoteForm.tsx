@@ -1,4 +1,4 @@
-import { QUOTE_CATEGORIES, type QuoteCategory } from '@cuewise/shared';
+import { logger, QUOTE_CATEGORIES, type QuoteCategory } from '@cuewise/shared';
 import { Input, Label, Textarea } from '@cuewise/ui';
 import type React from 'react';
 import { useState } from 'react';
@@ -45,7 +45,7 @@ export const AddQuoteForm: React.FC<AddQuoteFormProps> = ({ onSuccess }) => {
 
       onSuccess();
     } catch (error) {
-      console.error('Failed to add quote:', error);
+      logger.error('Failed to add quote', error);
     } finally {
       setIsSubmitting(false);
     }
