@@ -19,8 +19,10 @@ import {
 import type {
   AdvancedAnalytics,
   DailyDataPoint,
+  ExportData,
   Goal,
   GoalCompletionRate,
+  ImportValidationError,
   InsightsData,
   MonthlyTrend,
   PomodoroHeatmapData,
@@ -29,6 +31,7 @@ import type {
   QuoteCategory,
   WeeklyTrend,
 } from './types';
+import { EXPORT_FORMAT_VERSION } from './types';
 
 /**
  * Generate a unique ID
@@ -833,4 +836,260 @@ export function downloadFile(content: string, filename: string, mimeType: string
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
+}
+
+// ============================================================================
+// Import utilities
+// ============================================================================
+
+/**
+ * Validation result for import data
+ */
+export interface ImportValidation {
+  isValid: boolean;
+  errors: ImportValidationError[];
+  warnings: string[];
+  data: ExportData | null;
+}
+
+/**
+ * Parse and validate import data from JSON string.
+ * Performs JSON parsing, schema validation, and format version compatibility checks.
+ *
+ * @param jsonString - Raw JSON string from imported file
+ * @returns ImportValidation containing validation status, errors, warnings, and parsed data
+ *
+ * @remarks
+ * - Legacy exports without formatVersion are allowed with a warning
+ * - Missing arrays (goals, quotes, pomodoroSessions) are initialized to empty with warnings
+ * - Individual items in arrays are validated and invalid items are reported as errors
+ * - Validation fails if formatVersion exceeds EXPORT_FORMAT_VERSION (forward compatibility)
+ */
+export function parseImportData(jsonString: string): ImportValidation {
+  const errors: ImportValidationError[] = [];
+  const warnings: string[] = [];
+
+  // Try to parse JSON
+  let data: unknown;
+  try {
+    data = JSON.parse(jsonString);
+  } catch {
+    return {
+      isValid: false,
+      errors: [{ field: 'json', message: 'Invalid JSON format' }],
+      warnings: [],
+      data: null,
+    };
+  }
+
+  // Check if it's an object
+  if (typeof data !== 'object' || data === null || Array.isArray(data)) {
+    return {
+      isValid: false,
+      errors: [{ field: 'root', message: 'Export data must be an object' }],
+      warnings: [],
+      data: null,
+    };
+  }
+
+  const exportData = data as Record<string, unknown>;
+
+  // Check format version for compatibility
+  if (exportData.formatVersion !== undefined) {
+    const formatVersion = exportData.formatVersion as number;
+    if (formatVersion > EXPORT_FORMAT_VERSION) {
+      errors.push({
+        field: 'formatVersion',
+        message: `Export format version ${formatVersion} is newer than supported version ${EXPORT_FORMAT_VERSION}. Please update Cuewise to import this file.`,
+      });
+    }
+  } else {
+    // Legacy export without format version - add warning but allow import
+    warnings.push(
+      'This export file does not have a format version. It may be from an older version of Cuewise.'
+    );
+  }
+
+  // Check for required arrays (can be empty but must exist)
+  if (!Array.isArray(exportData.goals)) {
+    exportData.goals = [];
+    warnings.push('No goals found in export file');
+  }
+
+  if (!Array.isArray(exportData.quotes)) {
+    exportData.quotes = [];
+    warnings.push('No quotes found in export file');
+  }
+
+  if (!Array.isArray(exportData.pomodoroSessions)) {
+    exportData.pomodoroSessions = [];
+    warnings.push('No pomodoro sessions found in export file');
+  }
+
+  // Validate individual items
+  const validatedData: ExportData = {
+    version: (exportData.version as string) || 'unknown',
+    formatVersion: (exportData.formatVersion as number) || 0,
+    exportDate: (exportData.exportDate as string) || new Date().toISOString(),
+    insights: (exportData.insights as ExportData['insights']) || null,
+    analytics: (exportData.analytics as ExportData['analytics']) || null,
+    goals: validateGoals(exportData.goals as unknown[], errors),
+    quotes: validateQuotes(exportData.quotes as unknown[], errors),
+    pomodoroSessions: validatePomodoroSessions(exportData.pomodoroSessions as unknown[], errors),
+  };
+
+  return {
+    isValid: errors.length === 0,
+    errors,
+    warnings,
+    data: validatedData,
+  };
+}
+
+/**
+ * Validate goals array
+ */
+function validateGoals(goals: unknown[], errors: ImportValidationError[]): Goal[] {
+  const validGoals: Goal[] = [];
+
+  for (let i = 0; i < goals.length; i++) {
+    const goal = goals[i] as Record<string, unknown>;
+
+    if (typeof goal !== 'object' || goal === null) {
+      errors.push({ field: `goals[${i}]`, message: 'Invalid goal format' });
+      continue;
+    }
+
+    // Check required fields
+    if (typeof goal.id !== 'string' || !goal.id) {
+      errors.push({ field: `goals[${i}].id`, message: 'Goal must have a valid id' });
+      continue;
+    }
+
+    if (typeof goal.text !== 'string') {
+      errors.push({ field: `goals[${i}].text`, message: 'Goal must have text' });
+      continue;
+    }
+
+    validGoals.push({
+      id: goal.id,
+      text: goal.text,
+      completed: Boolean(goal.completed),
+      createdAt: (goal.createdAt as string) || new Date().toISOString(),
+      date: (goal.date as string) || getTodayDateString(),
+    });
+  }
+
+  return validGoals;
+}
+
+/**
+ * Validate quotes array
+ */
+function validateQuotes(quotes: unknown[], errors: ImportValidationError[]): Quote[] {
+  const validQuotes: Quote[] = [];
+
+  for (let i = 0; i < quotes.length; i++) {
+    const quote = quotes[i] as Record<string, unknown>;
+
+    if (typeof quote !== 'object' || quote === null) {
+      errors.push({ field: `quotes[${i}]`, message: 'Invalid quote format' });
+      continue;
+    }
+
+    // Check required fields
+    if (typeof quote.id !== 'string' || !quote.id) {
+      errors.push({ field: `quotes[${i}].id`, message: 'Quote must have a valid id' });
+      continue;
+    }
+
+    if (typeof quote.text !== 'string' || !quote.text) {
+      errors.push({ field: `quotes[${i}].text`, message: 'Quote must have text' });
+      continue;
+    }
+
+    validQuotes.push({
+      id: quote.id,
+      text: quote.text,
+      author: (quote.author as string) || 'Unknown',
+      category: (quote.category as Quote['category']) || 'inspiration',
+      isCustom: true, // All imported quotes are marked as custom
+      isFavorite: Boolean(quote.isFavorite),
+      isHidden: Boolean(quote.isHidden),
+      viewCount: (quote.viewCount as number) || 0,
+      lastViewed: quote.lastViewed as string | undefined,
+      source: quote.source as string | undefined,
+      notes: quote.notes as string | undefined,
+    });
+  }
+
+  return validQuotes;
+}
+
+/**
+ * Validate pomodoro sessions array
+ */
+function validatePomodoroSessions(
+  sessions: unknown[],
+  errors: ImportValidationError[]
+): PomodoroSession[] {
+  const validSessions: PomodoroSession[] = [];
+
+  for (let i = 0; i < sessions.length; i++) {
+    const session = sessions[i] as Record<string, unknown>;
+
+    if (typeof session !== 'object' || session === null) {
+      errors.push({ field: `pomodoroSessions[${i}]`, message: 'Invalid session format' });
+      continue;
+    }
+
+    // Check required fields
+    if (typeof session.id !== 'string' || !session.id) {
+      errors.push({ field: `pomodoroSessions[${i}].id`, message: 'Session must have a valid id' });
+      continue;
+    }
+
+    if (typeof session.startedAt !== 'string') {
+      errors.push({
+        field: `pomodoroSessions[${i}].startedAt`,
+        message: 'Session must have startedAt',
+      });
+      continue;
+    }
+
+    validSessions.push({
+      id: session.id,
+      startedAt: session.startedAt,
+      completedAt: (session.completedAt as string) || undefined,
+      interrupted: Boolean(session.interrupted),
+      duration: (session.duration as number) || 25,
+      type: (session.type as PomodoroSession['type']) || 'work',
+      goalId: (session.goalId as string) || undefined,
+    });
+  }
+
+  return validSessions;
+}
+
+/**
+ * Compare semantic versions (e.g., "1.2.0" vs "1.3.0")
+ * Returns: -1 if v1 < v2, 0 if equal, 1 if v1 > v2
+ */
+export function compareVersions(v1: string, v2: string): number {
+  const parts1 = v1.split('.').map(Number);
+  const parts2 = v2.split('.').map(Number);
+
+  for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
+    const p1 = parts1[i] || 0;
+    const p2 = parts2[i] || 0;
+
+    if (p1 < p2) {
+      return -1;
+    }
+    if (p1 > p2) {
+      return 1;
+    }
+  }
+
+  return 0;
 }
