@@ -365,7 +365,19 @@ export const NewTabPage: React.FC = () => {
           </div>
 
           {/* Footer */}
-          <footer className="mt-8 text-center py-density-lg">
+          <footer className="mt-8 py-density-lg flex items-center justify-center gap-4">
+            <span className="text-sm text-tertiary">
+              {__APP_NAME__}{' '}
+              <a
+                href="https://github.com/kYem/cuewise/blob/main/apps/browser-extension/CHANGELOG.md"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary-600 hover:underline"
+              >
+                v{__APP_VERSION__}
+              </a>
+            </span>
+            <span className="text-tertiary">·</span>
             <p className="text-sm text-tertiary">
               Press{' '}
               <kbd className="px-2 py-1 bg-surface rounded border border-border text-xs font-mono">
