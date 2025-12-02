@@ -1,5 +1,20 @@
 # @cuewise/browser-extension
 
+## 1.3.0
+
+### Minor Changes
+
+- ### Features
+
+  - Add category filter for quotes with custom quote toggle
+  - Add data import functionality with version compatibility checking
+  - Add welcome modal for first-time users
+  - Add version info to main page footer with changelog link
+
+  ### Improvements
+
+  - Replace console.error/warn/log with centralized logger
+
 ## 1.2.0
 
 ### Minor Changes
