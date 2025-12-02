@@ -37,6 +37,11 @@ export const QUOTE_CATEGORIES: Record<QuoteCategory, string> = {
   growth: 'Growth',
 };
 
+// All quote categories as an array (for filters)
+export const ALL_QUOTE_CATEGORIES: QuoteCategory[] = Object.keys(
+  QUOTE_CATEGORIES
+) as QuoteCategory[];
+
 // Category colors (for UI)
 export const CATEGORY_COLORS: Record<QuoteCategory, string> = {
   inspiration: '#8B5CF6', // purple

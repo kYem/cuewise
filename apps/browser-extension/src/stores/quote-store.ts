@@ -1,4 +1,10 @@
-import { getRandomQuote, logger, type Quote, type QuoteCategory } from '@cuewise/shared';
+import {
+  ALL_QUOTE_CATEGORIES,
+  getRandomQuote,
+  logger,
+  type Quote,
+  type QuoteCategory,
+} from '@cuewise/shared';
 import { getCurrentQuote, getQuotes, setCurrentQuote, setQuotes } from '@cuewise/storage';
 import { create } from 'zustand';
 import { SEED_QUOTES } from '../data/seed-quotes';
@@ -11,6 +17,8 @@ interface QuoteStore {
   error: string | null;
   quoteHistory: string[]; // Array of quote IDs in viewing order
   historyIndex: number; // Current position in history (0 = most recent)
+  enabledCategories: QuoteCategory[]; // Categories to show (session-only, not persisted)
+  showCustomQuotes: boolean; // Show custom quotes in filter (session-only)
 
   // Actions
   initialize: () => Promise<void>;
@@ -41,6 +49,9 @@ interface QuoteStore {
   ) => Promise<void>;
   deleteQuote: (quoteId: string) => Promise<void>;
   incrementViewCount: (quoteId: string) => Promise<void>;
+  setEnabledCategories: (categories: QuoteCategory[]) => void;
+  toggleCategory: (category: QuoteCategory) => void;
+  toggleCustomQuotes: () => void;
 }
 
 export const useQuoteStore = create<QuoteStore>((set, get) => ({
@@ -50,6 +61,8 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
   error: null,
   quoteHistory: [],
   historyIndex: 0,
+  enabledCategories: [...ALL_QUOTE_CATEGORIES],
+  showCustomQuotes: true,
 
   initialize: async () => {
     try {
@@ -92,10 +105,22 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
 
   refreshQuote: async () => {
     try {
-      const { quotes, currentQuote, quoteHistory, historyIndex } = get();
+      const {
+        quotes,
+        currentQuote,
+        quoteHistory,
+        historyIndex,
+        enabledCategories,
+        showCustomQuotes,
+      } = get();
 
-      // Pass current quote ID to avoid getting the same quote twice in a row
-      const newQuote = getRandomQuote(quotes, currentQuote?.id);
+      // Pass current quote ID, enabled categories, and custom filter
+      const newQuote = getRandomQuote(
+        quotes,
+        currentQuote?.id,
+        enabledCategories,
+        showCustomQuotes
+      );
 
       if (newQuote) {
         await setCurrentQuote(newQuote);
@@ -112,6 +137,9 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
 
         set({ currentQuote: newQuote, quoteHistory: updatedHistory, historyIndex: 0 });
         await get().incrementViewCount(newQuote.id);
+      } else {
+        // No matching quotes found (all filtered out)
+        set({ currentQuote: null });
       }
     } catch (error) {
       logger.error('Error refreshing quote', error);
@@ -348,5 +376,25 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
     }
+  },
+
+  setEnabledCategories: (categories: QuoteCategory[]) => {
+    set({ enabledCategories: categories });
+  },
+
+  toggleCategory: (category: QuoteCategory) => {
+    const { enabledCategories } = get();
+    const isEnabled = enabledCategories.includes(category);
+
+    if (isEnabled) {
+      set({ enabledCategories: enabledCategories.filter((c) => c !== category) });
+    } else {
+      set({ enabledCategories: [...enabledCategories, category] });
+    }
+  },
+
+  toggleCustomQuotes: () => {
+    const { showCustomQuotes } = get();
+    set({ showCustomQuotes: !showCustomQuotes });
   },
 }));

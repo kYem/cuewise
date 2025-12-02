@@ -1,0 +1,211 @@
+import { ALL_QUOTE_CATEGORIES, CATEGORY_COLORS, QUOTE_CATEGORIES } from '@cuewise/shared';
+import { cn } from '@cuewise/ui';
+import { Check, Filter, Sparkles, X } from 'lucide-react';
+import type React from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useQuoteStore } from '../stores/quote-store';
+
+export const CategoryFilter: React.FC = () => {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const {
+    enabledCategories,
+    setEnabledCategories,
+    toggleCategory,
+    showCustomQuotes,
+    toggleCustomQuotes,
+  } = useQuoteStore();
+
+  // Count includes categories + custom (if enabled)
+  const enabledCount = enabledCategories.length + (showCustomQuotes ? 1 : 0);
+  const totalCount = ALL_QUOTE_CATEGORIES.length + 1; // +1 for Custom
+  const allEnabled = enabledCategories.length === ALL_QUOTE_CATEGORIES.length && showCustomQuotes;
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen]);
+
+  const handleSelectAll = () => {
+    setEnabledCategories([...ALL_QUOTE_CATEGORIES]);
+    if (!showCustomQuotes) {
+      toggleCustomQuotes();
+    }
+  };
+
+  const handleClearAll = () => {
+    setEnabledCategories([]);
+    if (showCustomQuotes) {
+      toggleCustomQuotes();
+    }
+  };
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      {/* Filter Button */}
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className={cn(
+          'p-density-sm rounded-full transition-all hover:scale-110 hover:shadow-lg',
+          isOpen || !allEnabled
+            ? 'bg-primary-600 text-white'
+            : 'bg-surface text-secondary hover:bg-surface-variant'
+        )}
+        title={`Filter categories (${enabledCount}/${totalCount})`}
+      >
+        <Filter className="w-5 h-5" />
+      </button>
+
+      {/* Badge showing filtered count */}
+      {!allEnabled && (
+        <span className="absolute -top-1 -right-1 w-4 h-4 bg-primary-500 text-white text-xs rounded-full flex items-center justify-center font-medium">
+          {enabledCount}
+        </span>
+      )}
+
+      {/* Dropdown */}
+      {isOpen && (
+        <div className="absolute bottom-full mb-2 right-0 w-64 bg-surface rounded-lg shadow-xl border border-border z-50 animate-fade-in">
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+            <span className="font-semibold text-primary">Filter Categories</span>
+            <button
+              type="button"
+              onClick={() => setIsOpen(false)}
+              className="p-1 rounded hover:bg-surface-variant transition-colors"
+            >
+              <X className="w-4 h-4 text-secondary" />
+            </button>
+          </div>
+
+          {/* Quick Actions */}
+          <div className="flex gap-2 px-4 py-2 border-b border-border">
+            <button
+              type="button"
+              onClick={handleSelectAll}
+              disabled={allEnabled}
+              className={cn(
+                'flex-1 px-3 py-1.5 text-xs font-medium rounded transition-colors',
+                allEnabled
+                  ? 'bg-surface-variant text-tertiary cursor-not-allowed'
+                  : 'bg-primary-100 text-primary-700 hover:bg-primary-200 dark:bg-primary-900 dark:text-primary-300 dark:hover:bg-primary-800'
+              )}
+            >
+              Select All
+            </button>
+            <button
+              type="button"
+              onClick={handleClearAll}
+              disabled={enabledCategories.length === 0 && !showCustomQuotes}
+              className={cn(
+                'flex-1 px-3 py-1.5 text-xs font-medium rounded transition-colors',
+                enabledCategories.length === 0 && !showCustomQuotes
+                  ? 'bg-surface-variant text-tertiary cursor-not-allowed'
+                  : 'bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900 dark:text-red-300 dark:hover:bg-red-800'
+              )}
+            >
+              Clear All
+            </button>
+          </div>
+
+          {/* Category List */}
+          <div className="max-h-64 overflow-y-auto py-2">
+            {/* Custom Quotes Option */}
+            <button
+              type="button"
+              onClick={toggleCustomQuotes}
+              className="w-full flex items-center gap-3 px-4 py-2 hover:bg-surface-variant transition-colors"
+            >
+              {/* Checkbox */}
+              <div
+                className={cn(
+                  'w-5 h-5 rounded border-2 flex items-center justify-center transition-all',
+                  showCustomQuotes
+                    ? 'border-primary-600 bg-primary-600'
+                    : 'border-border bg-surface'
+                )}
+              >
+                {showCustomQuotes && <Check className="w-3 h-3 text-white" />}
+              </div>
+
+              {/* Icon */}
+              <Sparkles
+                className={cn(
+                  'w-3 h-3 flex-shrink-0',
+                  showCustomQuotes ? 'text-amber-500' : 'text-secondary'
+                )}
+              />
+
+              {/* Label */}
+              <span className={cn('text-sm', showCustomQuotes ? 'text-primary' : 'text-secondary')}>
+                Custom
+              </span>
+            </button>
+
+            {/* Divider */}
+            <div className="border-t border-border my-2" />
+
+            {/* Category Options */}
+            {ALL_QUOTE_CATEGORIES.map((category) => {
+              const isEnabled = enabledCategories.includes(category);
+              const color = CATEGORY_COLORS[category];
+              const displayName = QUOTE_CATEGORIES[category];
+
+              return (
+                <button
+                  key={category}
+                  type="button"
+                  onClick={() => toggleCategory(category)}
+                  className="w-full flex items-center gap-3 px-4 py-2 hover:bg-surface-variant transition-colors"
+                >
+                  {/* Checkbox */}
+                  <div
+                    className={cn(
+                      'w-5 h-5 rounded border-2 flex items-center justify-center transition-all',
+                      isEnabled ? 'border-primary-600 bg-primary-600' : 'border-border bg-surface'
+                    )}
+                  >
+                    {isEnabled && <Check className="w-3 h-3 text-white" />}
+                  </div>
+
+                  {/* Color Dot */}
+                  <span
+                    className="w-3 h-3 rounded-full flex-shrink-0"
+                    style={{ backgroundColor: color }}
+                  />
+
+                  {/* Category Name */}
+                  <span className={cn('text-sm', isEnabled ? 'text-primary' : 'text-secondary')}>
+                    {displayName}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Footer */}
+          {enabledCount === 0 && (
+            <div className="px-4 py-3 border-t border-border bg-orange-50 dark:bg-orange-900/20">
+              <p className="text-xs text-orange-600 dark:text-orange-400 text-center">
+                No categories selected. Select at least one to see quotes.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};

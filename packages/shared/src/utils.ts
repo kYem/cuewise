@@ -162,9 +162,38 @@ export function getRandomItem<T>(array: T[]): T {
 /**
  * Filter out hidden and get a random quote from a list
  * Excludes the current quote if provided to prevent consecutive duplicates
+ * Optionally filters by enabled categories and custom quotes
  */
-export function getRandomQuote(quotes: Quote[], currentQuoteId?: string): Quote | null {
-  const visibleQuotes = quotes.filter((q) => !q.isHidden);
+export function getRandomQuote(
+  quotes: Quote[],
+  currentQuoteId?: string,
+  enabledCategories?: QuoteCategory[],
+  showCustom = true
+): Quote | null {
+  let visibleQuotes = quotes.filter((q) => !q.isHidden);
+
+  // Filter by enabled categories if provided
+  // An empty array means no categories are enabled, so return null
+  if (enabledCategories !== undefined) {
+    if (enabledCategories.length === 0 && !showCustom) {
+      return null;
+    }
+    visibleQuotes = visibleQuotes.filter((q) => {
+      // Custom quotes pass if showCustom is enabled
+      if (q.isCustom && showCustom) {
+        return true;
+      }
+      // Non-custom quotes pass if their category is enabled
+      if (!q.isCustom && enabledCategories.includes(q.category)) {
+        return true;
+      }
+      return false;
+    });
+  } else if (!showCustom) {
+    // If no category filter but showCustom is false, exclude custom quotes
+    visibleQuotes = visibleQuotes.filter((q) => !q.isCustom);
+  }
+
   if (visibleQuotes.length === 0) return null;
 
   // If only one visible quote, return it (no choice)
