@@ -1,9 +1,10 @@
 import { formatFocusTime } from '@cuewise/shared';
 import type { ChartConfig } from '@cuewise/ui';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@cuewise/ui';
+import { format, parseISO } from 'date-fns';
 import { TrendingUp } from 'lucide-react';
 import type React from 'react';
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis } from 'recharts';
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from 'recharts';
 
 interface DataPoint {
   label: string;
@@ -22,21 +23,30 @@ const chartConfigs: Record<string, ChartConfig> = {
   goals: {
     goalsCompleted: {
       label: 'Goals Completed',
-      color: '#8B5CF6',
+      color: 'var(--chart-1)',
     },
   },
   focus: {
     focusTime: {
       label: 'Focus Time',
-      color: '#3B82F6',
+      color: 'var(--chart-2)',
     },
   },
   pomodoros: {
     pomodorosCompleted: {
       label: 'Pomodoros',
-      color: '#EF4444',
+      color: 'var(--chart-3)',
     },
   },
+};
+
+// Format date to abbreviated form for chart labels (e.g., "Nov 9")
+const formatChartDate = (dateStr: string): string => {
+  try {
+    return format(parseISO(dateStr), 'MMM d');
+  } catch {
+    return dateStr;
+  }
 };
 
 export const TrendChart: React.FC<TrendChartProps> = ({ title, data, metric }) => {
@@ -119,31 +129,32 @@ export const TrendChart: React.FC<TrendChartProps> = ({ title, data, metric }) =
       </div>
 
       <ChartContainer config={chartConfig} className="h-64 min-h-[16rem] w-full">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
-            <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200" />
-            <XAxis
-              dataKey="label"
-              angle={-45}
-              textAnchor="end"
-              height={100}
-              className="text-xs"
-              tick={{ fill: '#6B7280' }}
-            />
-            <YAxis
-              className="text-xs"
-              tick={{ fill: '#6B7280' }}
-              tickFormatter={(value) => (metric === 'focus' ? `${Math.round(value / 60)}m` : value)}
-            />
-            <ChartTooltip content={<ChartTooltipContent formatter={tooltipFormatter} />} />
-            <Bar
-              dataKey={dataKey}
-              fill={chartConfig[dataKey].color}
-              radius={[8, 8, 0, 0]}
-              className="transition-all hover:opacity-80"
-            />
-          </BarChart>
-        </ResponsiveContainer>
+        <BarChart
+          data={data}
+          margin={{ top: 20, right: 20, left: 10, bottom: 20 }}
+          accessibilityLayer
+        >
+          <CartesianGrid vertical={false} className="stroke-border" />
+          <XAxis
+            dataKey="label"
+            tickLine={false}
+            axisLine={false}
+            tickMargin={8}
+            tickFormatter={formatChartDate}
+            className="text-xs fill-secondary"
+          />
+          <YAxis
+            tickLine={false}
+            axisLine={false}
+            tickMargin={8}
+            tickFormatter={(value) =>
+              metric === 'focus' ? `${Math.round(value / 60)}m` : String(value)
+            }
+            className="text-xs fill-secondary"
+          />
+          <ChartTooltip content={<ChartTooltipContent formatter={tooltipFormatter} />} />
+          <Bar dataKey={dataKey} fill={`var(--color-${dataKey})`} radius={[4, 4, 0, 0]} />
+        </BarChart>
       </ChartContainer>
     </div>
   );

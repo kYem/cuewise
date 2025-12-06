@@ -387,6 +387,40 @@
     --chart-5: oklch(0.645 0.246 16.439);
   }
 
+  /* Forest theme chart colors */
+  [data-theme="forest"] {
+    --chart-1: oklch(0.62 0.2 145);
+    --chart-2: oklch(0.55 0.15 165);
+    --chart-3: oklch(0.48 0.12 180);
+    --chart-4: oklch(0.7 0.18 130);
+    --chart-5: oklch(0.58 0.14 150);
+  }
+
+  .dark[data-theme="forest"] {
+    --chart-1: oklch(0.7 0.2 145);
+    --chart-2: oklch(0.65 0.15 165);
+    --chart-3: oklch(0.6 0.12 180);
+    --chart-4: oklch(0.75 0.18 130);
+    --chart-5: oklch(0.68 0.14 150);
+  }
+
+  /* Rose theme chart colors */
+  [data-theme="rose"] {
+    --chart-1: oklch(0.62 0.22 2);
+    --chart-2: oklch(0.55 0.18 350);
+    --chart-3: oklch(0.48 0.15 340);
+    --chart-4: oklch(0.7 0.2 15);
+    --chart-5: oklch(0.58 0.17 5);
+  }
+
+  .dark[data-theme="rose"] {
+    --chart-1: oklch(0.7 0.22 2);
+    --chart-2: oklch(0.65 0.18 350);
+    --chart-3: oklch(0.6 0.15 340);
+    --chart-4: oklch(0.75 0.2 15);
+    --chart-5: oklch(0.68 0.17 5);
+  }
+
   html {
     width: 100%;
     height: 100%;

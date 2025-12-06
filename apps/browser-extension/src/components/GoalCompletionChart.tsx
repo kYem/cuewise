@@ -3,7 +3,7 @@ import type { ChartConfig } from '@cuewise/ui';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@cuewise/ui';
 import { Target } from 'lucide-react';
 import type React from 'react';
-import { PolarAngleAxis, RadialBar, RadialBarChart, ResponsiveContainer } from 'recharts';
+import { PolarAngleAxis, RadialBar, RadialBarChart } from 'recharts';
 
 interface GoalCompletionChartProps {
   data: GoalCompletionRate;
@@ -12,15 +12,15 @@ interface GoalCompletionChartProps {
 const chartConfig: ChartConfig = {
   overall: {
     label: 'Overall',
-    color: '#10B981',
+    color: 'var(--chart-1)',
   },
   thisWeek: {
     label: 'This Week',
-    color: '#3B82F6',
+    color: 'var(--chart-2)',
   },
   thisMonth: {
     label: 'This Month',
-    color: '#8B5CF6',
+    color: 'var(--chart-3)',
   },
 };
 
@@ -28,25 +28,25 @@ export const GoalCompletionChart: React.FC<GoalCompletionChartProps> = ({ data }
   // Prepare data for radial charts
   const overallData = [
     {
-      name: 'Overall',
+      name: 'overall',
       value: data.completionRate,
-      fill: chartConfig.overall.color,
+      fill: 'var(--color-overall)',
     },
   ];
 
   const weekData = [
     {
-      name: 'This Week',
+      name: 'thisWeek',
       value: data.thisWeek.completionRate,
-      fill: chartConfig.thisWeek.color,
+      fill: 'var(--color-thisWeek)',
     },
   ];
 
   const monthData = [
     {
-      name: 'This Month',
+      name: 'thisMonth',
       value: data.thisMonth.completionRate,
-      fill: chartConfig.thisMonth.color,
+      fill: 'var(--color-thisMonth)',
     },
   ];
 
@@ -60,32 +60,29 @@ export const GoalCompletionChart: React.FC<GoalCompletionChartProps> = ({ data }
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
         {/* Overall Completion */}
         <div className="flex flex-col items-center">
-          <ChartContainer config={chartConfig} className="h-48 min-h-[12rem] w-48">
-            <ResponsiveContainer width="100%" height="100%">
-              <RadialBarChart
-                data={overallData}
-                startAngle={90}
-                endAngle={-270}
-                innerRadius="70%"
-                outerRadius="100%"
-              >
-                <PolarAngleAxis type="number" domain={[0, 100]} angleAxisId={0} tick={false} />
-                <RadialBar
-                  background={{ fill: '#E5E7EB' }}
-                  dataKey="value"
-                  cornerRadius={10}
-                  fill={chartConfig.overall.color}
-                />
-                <ChartTooltip
-                  content={
-                    <ChartTooltipContent
-                      formatter={(value) => `${Number(value).toFixed(0)}%`}
-                      hideLabel
-                    />
-                  }
-                />
-              </RadialBarChart>
-            </ResponsiveContainer>
+          <ChartContainer config={chartConfig} className="h-48 min-h-[12rem] w-48 aspect-square">
+            <RadialBarChart
+              data={overallData}
+              startAngle={90}
+              endAngle={-270}
+              innerRadius="70%"
+              outerRadius="100%"
+            >
+              <PolarAngleAxis type="number" domain={[0, 100]} angleAxisId={0} tick={false} />
+              <RadialBar
+                background={{ fill: 'var(--color-surface-variant)' }}
+                dataKey="value"
+                cornerRadius={10}
+              />
+              <ChartTooltip
+                content={
+                  <ChartTooltipContent
+                    formatter={(value) => `${Number(value).toFixed(0)}%`}
+                    hideLabel
+                  />
+                }
+              />
+            </RadialBarChart>
           </ChartContainer>
           <div className="mt-4 text-center">
             <div className="text-4xl font-bold text-primary">{data.completionRate.toFixed(0)}%</div>
@@ -98,32 +95,29 @@ export const GoalCompletionChart: React.FC<GoalCompletionChartProps> = ({ data }
 
         {/* This Week */}
         <div className="flex flex-col items-center">
-          <ChartContainer config={chartConfig} className="h-48 min-h-[12rem] w-48">
-            <ResponsiveContainer width="100%" height="100%">
-              <RadialBarChart
-                data={weekData}
-                startAngle={90}
-                endAngle={-270}
-                innerRadius="70%"
-                outerRadius="100%"
-              >
-                <PolarAngleAxis type="number" domain={[0, 100]} angleAxisId={0} tick={false} />
-                <RadialBar
-                  background={{ fill: '#E5E7EB' }}
-                  dataKey="value"
-                  cornerRadius={10}
-                  fill={chartConfig.thisWeek.color}
-                />
-                <ChartTooltip
-                  content={
-                    <ChartTooltipContent
-                      formatter={(value) => `${Number(value).toFixed(0)}%`}
-                      hideLabel
-                    />
-                  }
-                />
-              </RadialBarChart>
-            </ResponsiveContainer>
+          <ChartContainer config={chartConfig} className="h-48 min-h-[12rem] w-48 aspect-square">
+            <RadialBarChart
+              data={weekData}
+              startAngle={90}
+              endAngle={-270}
+              innerRadius="70%"
+              outerRadius="100%"
+            >
+              <PolarAngleAxis type="number" domain={[0, 100]} angleAxisId={0} tick={false} />
+              <RadialBar
+                background={{ fill: 'var(--color-surface-variant)' }}
+                dataKey="value"
+                cornerRadius={10}
+              />
+              <ChartTooltip
+                content={
+                  <ChartTooltipContent
+                    formatter={(value) => `${Number(value).toFixed(0)}%`}
+                    hideLabel
+                  />
+                }
+              />
+            </RadialBarChart>
           </ChartContainer>
           <div className="mt-4 text-center">
             <div className="text-4xl font-bold text-primary">
@@ -138,32 +132,29 @@ export const GoalCompletionChart: React.FC<GoalCompletionChartProps> = ({ data }
 
         {/* This Month */}
         <div className="flex flex-col items-center">
-          <ChartContainer config={chartConfig} className="h-48 min-h-[12rem] w-48">
-            <ResponsiveContainer width="100%" height="100%">
-              <RadialBarChart
-                data={monthData}
-                startAngle={90}
-                endAngle={-270}
-                innerRadius="70%"
-                outerRadius="100%"
-              >
-                <PolarAngleAxis type="number" domain={[0, 100]} angleAxisId={0} tick={false} />
-                <RadialBar
-                  background={{ fill: '#E5E7EB' }}
-                  dataKey="value"
-                  cornerRadius={10}
-                  fill={chartConfig.thisMonth.color}
-                />
-                <ChartTooltip
-                  content={
-                    <ChartTooltipContent
-                      formatter={(value) => `${Number(value).toFixed(0)}%`}
-                      hideLabel
-                    />
-                  }
-                />
-              </RadialBarChart>
-            </ResponsiveContainer>
+          <ChartContainer config={chartConfig} className="h-48 min-h-[12rem] w-48 aspect-square">
+            <RadialBarChart
+              data={monthData}
+              startAngle={90}
+              endAngle={-270}
+              innerRadius="70%"
+              outerRadius="100%"
+            >
+              <PolarAngleAxis type="number" domain={[0, 100]} angleAxisId={0} tick={false} />
+              <RadialBar
+                background={{ fill: 'var(--color-surface-variant)' }}
+                dataKey="value"
+                cornerRadius={10}
+              />
+              <ChartTooltip
+                content={
+                  <ChartTooltipContent
+                    formatter={(value) => `${Number(value).toFixed(0)}%`}
+                    hideLabel
+                  />
+                }
+              />
+            </RadialBarChart>
           </ChartContainer>
           <div className="mt-4 text-center">
             <div className="text-4xl font-bold text-primary">

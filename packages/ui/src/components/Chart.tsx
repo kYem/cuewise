@@ -15,6 +15,9 @@ export type ChartConfig = {
   };
 };
 
+// Theme modes for CSS variable generation
+const THEMES = { light: '', dark: '.dark' } as const;
+
 // Context for sharing config across chart components
 const ChartContext = React.createContext<{
   config: ChartConfig;
@@ -30,25 +33,61 @@ function useChart() {
   return context;
 }
 
+// Component to inject CSS variables from chart config
+function ChartStyle({ id, config }: { id: string; config: ChartConfig }) {
+  const colorConfig = Object.entries(config).filter(([_, cfg]) => cfg.theme || cfg.color);
+
+  if (!colorConfig.length) {
+    return null;
+  }
+
+  return (
+    <style
+      dangerouslySetInnerHTML={{
+        __html: Object.entries(THEMES)
+          .map(
+            ([theme, prefix]) =>
+              `${prefix} [data-chart=${id}] {
+${colorConfig
+  .map(([key, itemConfig]) => {
+    const color = itemConfig.theme?.[theme as keyof typeof itemConfig.theme] || itemConfig.color;
+    return color ? `  --color-${key}: ${color};` : null;
+  })
+  .filter(Boolean)
+  .join('\n')}
+}`
+          )
+          .join('\n'),
+      }}
+    />
+  );
+}
+
 // Chart Container
 interface ChartContainerProps extends React.ComponentPropsWithoutRef<'div'> {
   config: ChartConfig;
-  children: React.ReactElement<typeof RechartsPrimitive.ResponsiveContainer>;
+  children: React.ReactElement;
+  id?: string;
 }
 
 const ChartContainer = React.forwardRef<HTMLDivElement, ChartContainerProps>(
-  ({ config, children, className, ...props }, ref) => {
+  ({ id, config, children, className, ...props }, ref) => {
+    const uniqueId = React.useId();
+    const chartId = `chart-${id || uniqueId.replace(/:/g, '')}`;
+
     return (
       <ChartContext.Provider value={{ config }}>
         <div
+          data-chart={chartId}
           ref={ref}
           className={cn(
-            'flex aspect-video justify-center text-xs bg-surface-elevated rounded-lg border border-border shadow-sm',
+            'flex justify-center text-xs [&_.recharts-cartesian-grid_line[stroke="#ccc"]]:stroke-border/50 [&_.recharts-curve.recharts-tooltip-cursor]:stroke-border [&_.recharts-polar-grid_[stroke="#ccc"]]:stroke-border [&_.recharts-radial-bar-background-sector]:fill-surface-variant [&_.recharts-rectangle.recharts-tooltip-cursor]:fill-surface-variant [&_.recharts-reference-line_[stroke="#ccc"]]:stroke-border',
             className
           )}
           {...props}
         >
-          {children}
+          <ChartStyle id={chartId} config={config} />
+          <RechartsPrimitive.ResponsiveContainer>{children}</RechartsPrimitive.ResponsiveContainer>
         </div>
       </ChartContext.Provider>
     );
@@ -68,6 +107,7 @@ interface ChartTooltipContentProps
     Omit<React.ComponentPropsWithoutRef<'div'>, 'content'> {
   hideLabel?: boolean;
   hideIndicator?: boolean;
+  hideName?: boolean;
   indicator?: 'line' | 'dot' | 'dashed';
   nameKey?: string;
   labelKey?: string;
@@ -82,6 +122,7 @@ const ChartTooltipContent = React.forwardRef<HTMLDivElement, ChartTooltipContent
       indicator = 'dot',
       hideLabel = false,
       hideIndicator = false,
+      hideName = false,
       label,
       labelFormatter,
       labelClassName,
@@ -100,12 +141,18 @@ const ChartTooltipContent = React.forwardRef<HTMLDivElement, ChartTooltipContent
       }
 
       const [item] = payload;
-      const key = `${labelKey || item.dataKey || item.name || 'value'}`;
-      const itemConfig = config[key];
-      const value =
-        !labelKey && typeof label === 'string'
-          ? config[label as string]?.label || label
-          : itemConfig?.label;
+
+      // If labelKey is provided, get the value directly from the payload data
+      let value: React.ReactNode;
+      if (labelKey && item.payload) {
+        value = item.payload[labelKey];
+      } else if (typeof label === 'string') {
+        value = config[label]?.label || label;
+      } else {
+        const key = `${item.dataKey || item.name || 'value'}`;
+        const itemConfig = config[key];
+        value = itemConfig?.label;
+      }
 
       if (labelFormatter) {
         return (
@@ -128,7 +175,7 @@ const ChartTooltipContent = React.forwardRef<HTMLDivElement, ChartTooltipContent
       <div
         ref={ref}
         className={cn(
-          'grid min-w-[8rem] items-start gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs shadow-xl',
+          'grid min-w-[8rem] items-start gap-2 rounded-lg border border-border bg-surface-elevated px-3 py-2.5 text-xs shadow-xl',
           className
         )}
       >
@@ -147,25 +194,29 @@ const ChartTooltipContent = React.forwardRef<HTMLDivElement, ChartTooltipContent
                   indicator === 'dot' && 'items-center'
                 )}
               >
-                <div className="flex items-center gap-1.5">
-                  {!hideIndicator && (
-                    <div
-                      className={cn(
-                        'shrink-0 rounded-[2px]',
-                        indicator === 'dot' && 'h-2.5 w-2.5',
-                        indicator === 'line' && 'h-px w-4',
-                        indicator === 'dashed' && 'h-px w-4 border-t-2 border-dashed'
-                      )}
-                      style={{
-                        backgroundColor: indicator === 'dot' ? indicatorColor : undefined,
-                        borderColor: indicator === 'dashed' ? indicatorColor : undefined,
-                        background: indicator === 'line' ? indicatorColor : undefined,
-                      }}
-                    />
-                  )}
-                  <span className="text-gray-500">{itemConfig?.label || item.name}</span>
-                </div>
-                <span className="font-mono font-medium tabular-nums text-gray-900">
+                {(!hideIndicator || !hideName) && (
+                  <div className="flex items-center gap-1.5">
+                    {!hideIndicator && (
+                      <div
+                        className={cn(
+                          'shrink-0 rounded-[2px]',
+                          indicator === 'dot' && 'h-2.5 w-2.5',
+                          indicator === 'line' && 'h-px w-4',
+                          indicator === 'dashed' && 'h-px w-4 border-t-2 border-dashed'
+                        )}
+                        style={{
+                          backgroundColor: indicator === 'dot' ? indicatorColor : undefined,
+                          borderColor: indicator === 'dashed' ? indicatorColor : undefined,
+                          background: indicator === 'line' ? indicatorColor : undefined,
+                        }}
+                      />
+                    )}
+                    {!hideName && (
+                      <span className="text-secondary">{itemConfig?.label || item.name}</span>
+                    )}
+                  </div>
+                )}
+                <span className="font-mono font-medium tabular-nums text-primary">
                   {formatter && item.value !== undefined
                     ? formatter(
                         item.value,
@@ -221,7 +272,7 @@ const ChartLegendContent = React.forwardRef<HTMLDivElement, ChartLegendContentPr
           return (
             <div
               key={item.value}
-              className="flex items-center gap-1.5 [&>svg]:h-3 [&>svg]:w-3 [&>svg]:text-gray-500"
+              className="flex items-center gap-1.5 [&>svg]:h-3 [&>svg]:w-3 [&>svg]:text-secondary"
             >
               {itemConfig?.icon && !hideIcon ? (
                 <itemConfig.icon />
@@ -235,7 +286,7 @@ const ChartLegendContent = React.forwardRef<HTMLDivElement, ChartLegendContentPr
                   />
                 )
               )}
-              <span className="text-gray-500">{itemConfig?.label || item.value}</span>
+              <span className="text-secondary">{itemConfig?.label || item.value}</span>
             </div>
           );
         })}
