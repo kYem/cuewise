@@ -416,7 +416,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       const updatedQuotes = quotes.filter((q) => !quoteIdSet.has(q.id));
 
       await setQuotes(updatedQuotes);
-      set({ quotes: updatedQuotes });
+      set({ quotes: updatedQuotes, error: null });
 
       // If current quote was deleted, refresh to a new one
       if (currentQuote && quoteIdSet.has(currentQuote.id)) {
@@ -425,8 +425,10 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
 
       useToastStore.getState().success(`Deleted ${quoteIds.length} quotes`);
     } catch (error) {
-      logger.error('Error bulk deleting quotes', error);
-      useToastStore.getState().error('Failed to delete quotes. Please try again.');
+      logger.error('Error bulk deleting quotes', error, { quoteIds, count: quoteIds.length });
+      const errorMessage = 'Failed to delete quotes. Please try again.';
+      set({ error: errorMessage });
+      useToastStore.getState().error(errorMessage);
     }
   },
 
@@ -439,7 +441,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       );
 
       await setQuotes(updatedQuotes);
-      set({ quotes: updatedQuotes });
+      set({ quotes: updatedQuotes, error: null });
 
       // Update current quote if it was in the selection
       if (currentQuote && quoteIdSet.has(currentQuote.id)) {
@@ -451,8 +453,14 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       const action = setFavorite ? 'added to favorites' : 'removed from favorites';
       useToastStore.getState().success(`${quoteIds.length} quotes ${action}`);
     } catch (error) {
-      logger.error('Error bulk toggling favorites', error);
-      useToastStore.getState().error('Failed to update favorites. Please try again.');
+      logger.error('Error bulk toggling favorites', error, {
+        quoteIds,
+        setFavorite,
+        count: quoteIds.length,
+      });
+      const errorMessage = 'Failed to update favorites. Please try again.';
+      set({ error: errorMessage });
+      useToastStore.getState().error(errorMessage);
     }
   },
 
@@ -465,7 +473,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       );
 
       await setQuotes(updatedQuotes);
-      set({ quotes: updatedQuotes });
+      set({ quotes: updatedQuotes, error: null });
 
       // If hiding current quote, refresh to a new one
       if (setHidden && currentQuote && quoteIdSet.has(currentQuote.id)) {
@@ -475,8 +483,14 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       const action = setHidden ? 'hidden' : 'unhidden';
       useToastStore.getState().success(`${quoteIds.length} quotes ${action}`);
     } catch (error) {
-      logger.error('Error bulk toggling hidden', error);
-      useToastStore.getState().error('Failed to update quotes. Please try again.');
+      logger.error('Error bulk toggling hidden', error, {
+        quoteIds,
+        setHidden,
+        count: quoteIds.length,
+      });
+      const errorMessage = 'Failed to update quotes. Please try again.';
+      set({ error: errorMessage });
+      useToastStore.getState().error(errorMessage);
     }
   },
 
@@ -498,14 +512,16 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       const updatedQuotes = [...quotes, ...missingQuotes];
 
       await setQuotes(updatedQuotes);
-      set({ quotes: updatedQuotes });
+      set({ quotes: updatedQuotes, error: null });
 
       useToastStore.getState().success(`Restored ${missingQuotes.length} missing quotes`);
       return { restored: missingQuotes.length };
     } catch (error) {
       logger.error('Error restoring missing quotes', error);
-      useToastStore.getState().error('Failed to restore quotes. Please try again.');
-      return { restored: 0 };
+      const errorMessage = 'Failed to restore quotes. Please try again.';
+      set({ error: errorMessage });
+      useToastStore.getState().error(errorMessage);
+      throw error;
     }
   },
 
@@ -521,7 +537,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       }));
 
       await setQuotes(freshQuotes);
-      set({ quotes: freshQuotes });
+      set({ quotes: freshQuotes, error: null });
 
       // Reset current quote to a random one
       const newCurrent = getRandomQuote(freshQuotes);
@@ -537,7 +553,10 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       useToastStore.getState().success('All quotes reset to defaults');
     } catch (error) {
       logger.error('Error resetting quotes', error);
-      useToastStore.getState().error('Failed to reset quotes. Please try again.');
+      const errorMessage = 'Failed to reset quotes. Please try again.';
+      set({ error: errorMessage });
+      useToastStore.getState().error(errorMessage);
+      throw error;
     }
   },
 

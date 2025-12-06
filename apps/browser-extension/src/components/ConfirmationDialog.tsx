@@ -43,28 +43,33 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
   variant = 'danger',
   isLoading = false,
 }) => {
-  const confirmButtonRef = useRef<HTMLButtonElement>(null);
+  const cancelButtonRef = useRef<HTMLButtonElement>(null);
 
   // Handle keyboard events and focus management
   useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    const originalOverflow = document.body.style.overflow;
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && !isLoading) {
         onClose();
       }
     };
 
-    if (isOpen) {
-      document.addEventListener('keydown', handleKeyDown);
-      document.body.style.overflow = 'hidden';
-      // Focus the cancel button for safety (not the confirm button)
-      setTimeout(() => {
-        confirmButtonRef.current?.focus();
-      }, 0);
-    }
+    document.addEventListener('keydown', handleKeyDown);
+    document.body.style.overflow = 'hidden';
+
+    // Focus the cancel button for safety on destructive dialogs
+    setTimeout(() => {
+      cancelButtonRef.current?.focus();
+    }, 0);
 
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
-      document.body.style.overflow = 'unset';
+      document.body.style.overflow = originalOverflow;
     };
   }, [isOpen, onClose, isLoading]);
 
@@ -113,6 +118,7 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
           {/* Actions */}
           <div className="flex justify-end gap-3 mt-6">
             <button
+              ref={cancelButtonRef}
               type="button"
               onClick={onClose}
               disabled={isLoading}
@@ -121,7 +127,6 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
               {cancelText}
             </button>
             <button
-              ref={confirmButtonRef}
               type="button"
               onClick={onConfirm}
               disabled={isLoading}

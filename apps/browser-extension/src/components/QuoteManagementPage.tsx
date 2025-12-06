@@ -10,6 +10,7 @@ import { Check, Edit2, Eye, EyeOff, Heart, Plus, Search, Trash2, X } from 'lucid
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuoteStore } from '../stores/quote-store';
+import { useToastStore } from '../stores/toast-store';
 import { AddQuoteForm } from './AddQuoteForm';
 import { BulkActionsToolbar } from './BulkActionsToolbar';
 import { ConfirmationDialog } from './ConfirmationDialog';
@@ -57,6 +58,7 @@ const EditQuoteModal: React.FC<EditQuoteModalProps> = ({ quote, onClose, onSave 
       onClose();
     } catch (error) {
       logger.error('Failed to save quote', error);
+      useToastStore.getState().error('Failed to save changes. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -440,11 +442,14 @@ export const QuoteManagementPage: React.FC = () => {
   }, []);
 
   const handleToggleSelectionMode = useCallback(() => {
-    setIsSelectionMode((prev) => !prev);
-    if (isSelectionMode) {
-      setSelectedQuoteIds(new Set());
-    }
-  }, [isSelectionMode]);
+    setIsSelectionMode((prev) => {
+      // Clear selection when exiting selection mode
+      if (prev) {
+        setSelectedQuoteIds(new Set());
+      }
+      return !prev;
+    });
+  }, []);
 
   // Bulk action handlers
   const handleBulkDelete = async () => {
@@ -452,6 +457,9 @@ export const QuoteManagementPage: React.FC = () => {
     try {
       await bulkDelete(Array.from(selectedQuoteIds));
       setSelectedQuoteIds(new Set());
+      setShowBulkDeleteConfirm(false);
+    } catch (error) {
+      logger.error('Bulk delete operation failed', error);
       setShowBulkDeleteConfirm(false);
     } finally {
       setIsBulkLoading(false);
@@ -462,6 +470,8 @@ export const QuoteManagementPage: React.FC = () => {
     setIsBulkLoading(true);
     try {
       await bulkToggleFavorite(Array.from(selectedQuoteIds), true);
+    } catch (error) {
+      logger.error('Bulk favorite operation failed', error);
     } finally {
       setIsBulkLoading(false);
     }
@@ -471,6 +481,8 @@ export const QuoteManagementPage: React.FC = () => {
     setIsBulkLoading(true);
     try {
       await bulkToggleFavorite(Array.from(selectedQuoteIds), false);
+    } catch (error) {
+      logger.error('Bulk unfavorite operation failed', error);
     } finally {
       setIsBulkLoading(false);
     }
@@ -481,6 +493,8 @@ export const QuoteManagementPage: React.FC = () => {
     try {
       await bulkToggleHidden(Array.from(selectedQuoteIds), true);
       setSelectedQuoteIds(new Set());
+    } catch (error) {
+      logger.error('Bulk hide operation failed', error);
     } finally {
       setIsBulkLoading(false);
     }
@@ -490,6 +504,8 @@ export const QuoteManagementPage: React.FC = () => {
     setIsBulkLoading(true);
     try {
       await bulkToggleHidden(Array.from(selectedQuoteIds), false);
+    } catch (error) {
+      logger.error('Bulk unhide operation failed', error);
     } finally {
       setIsBulkLoading(false);
     }
@@ -500,6 +516,8 @@ export const QuoteManagementPage: React.FC = () => {
     setIsBulkLoading(true);
     try {
       await restoreMissingQuotes();
+    } catch (error) {
+      logger.error('Restore missing quotes operation failed', error);
     } finally {
       setIsBulkLoading(false);
     }
@@ -510,6 +528,9 @@ export const QuoteManagementPage: React.FC = () => {
     try {
       await resetAllQuotes();
       setSelectedQuoteIds(new Set());
+      setShowResetAllConfirm(false);
+    } catch (error) {
+      logger.error('Reset all quotes operation failed', error);
       setShowResetAllConfirm(false);
     } finally {
       setIsBulkLoading(false);

@@ -19,36 +19,29 @@ export const QuoteRestorationMenu: React.FC<QuoteRestorationMenuProps> = ({
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // Close menu on outside click
+  // Handle outside click and escape key
   useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
     const handleClickOutside = (event: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setIsOpen(false);
       }
     };
 
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [isOpen]);
-
-  // Close on escape
-  useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setIsOpen(false);
       }
     };
 
-    if (isOpen) {
-      document.addEventListener('keydown', handleEscape);
-    }
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
 
     return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('keydown', handleEscape);
     };
   }, [isOpen]);
@@ -90,6 +83,11 @@ export const QuoteRestorationMenu: React.FC<QuoteRestorationMenuProps> = ({
           <button
             type="button"
             role="menuitem"
+            aria-label={
+              missingSeedQuoteCount > 0
+                ? `Restore ${missingSeedQuoteCount} missing default quotes`
+                : 'All default quotes are already present'
+            }
             onClick={handleRestoreMissing}
             disabled={missingSeedQuoteCount === 0 || isLoading}
             className={cn(
@@ -116,6 +114,7 @@ export const QuoteRestorationMenu: React.FC<QuoteRestorationMenuProps> = ({
           <button
             type="button"
             role="menuitem"
+            aria-label="Reset all quotes to factory defaults"
             onClick={handleResetAll}
             disabled={isLoading}
             className="w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-red-50 text-red-600 transition-colors"
