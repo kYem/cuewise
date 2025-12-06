@@ -243,9 +243,8 @@
 - [x] 6 color themes (OKLCH-based)
 - [x] 3 density modes (compact/comfortable/spacious)
 - [x] Dark/light mode with auto option
-- [ ] Custom color theme builder
-- [ ] Font options
-- [ ] Background customization
+- [ ] Background customization (gradients, patterns, images)
+- [ ] Font options (optional)
 
 ---
 

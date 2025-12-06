@@ -457,7 +457,7 @@
   * {
     /* Firefox scrollbar styling */
     scrollbar-width: thin;
-    scrollbar-color: var(--color-border) var(--color-surface-variant);
+    scrollbar-color: var(--color-text-tertiary) var(--color-surface-variant);
   }
 
   /* Webkit browsers (Chrome, Safari, Edge) scrollbar styling */
@@ -472,7 +472,7 @@
   }
 
   *::-webkit-scrollbar-thumb {
-    background: var(--color-border);
+    background: var(--color-text-tertiary);
     border-radius: 4px;
     transition: background-color 0.2s ease;
   }
