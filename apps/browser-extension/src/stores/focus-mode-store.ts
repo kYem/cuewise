@@ -1,6 +1,6 @@
 import { logger } from '@cuewise/shared';
 import { create } from 'zustand';
-import { getUnsplashUrl, loadImageWithFallback } from '../utils/unsplash';
+import { loadImageWithFallback } from '../utils/unsplash';
 import { useSettingsStore } from './settings-store';
 
 interface FocusModeStore {
@@ -51,9 +51,8 @@ export const useFocusModeStore = create<FocusModeStore>((set, get) => ({
         return;
       }
 
-      // Otherwise load a new image
-      const url = getUnsplashUrl(category);
-      const loadedUrl = await loadImageWithFallback(category, url);
+      // Load a new image from our curated collection
+      const loadedUrl = await loadImageWithFallback(category);
 
       set({
         currentImageUrl: loadedUrl,
@@ -103,9 +102,8 @@ export const useFocusModeStore = create<FocusModeStore>((set, get) => ({
         return;
       }
 
-      // Otherwise load a new image
-      const url = getUnsplashUrl(category);
-      const loadedUrl = await loadImageWithFallback(category, url);
+      // Load a new image from our curated collection
+      const loadedUrl = await loadImageWithFallback(category);
 
       set({
         currentImageUrl: loadedUrl,
@@ -128,9 +126,7 @@ export const useFocusModeStore = create<FocusModeStore>((set, get) => ({
     const category = settings.focusModeImageCategory;
 
     try {
-      const url = getUnsplashUrl(category);
-      // Use loadImageWithFallback so preloads also use rotating fallbacks on 503/rate limit
-      const loadedUrl = await loadImageWithFallback(category, url);
+      const loadedUrl = await loadImageWithFallback(category);
       set({ nextImageUrl: loadedUrl });
     } catch (error) {
       // Preload failure is not critical, log and continue
