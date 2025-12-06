@@ -6,13 +6,16 @@ import {
   type QuoteCategory,
 } from '@cuewise/shared';
 import { cn, Select } from '@cuewise/ui';
-import { Edit2, Eye, EyeOff, Heart, Plus, Search, Trash2, X } from 'lucide-react';
+import { Check, Edit2, Eye, EyeOff, Heart, Plus, Search, Trash2, X } from 'lucide-react';
 import type React from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuoteStore } from '../stores/quote-store';
 import { AddQuoteForm } from './AddQuoteForm';
+import { BulkActionsToolbar } from './BulkActionsToolbar';
+import { ConfirmationDialog } from './ConfirmationDialog';
 import { ErrorFallback } from './ErrorFallback';
 import { PageHeader } from './PageHeader';
+import { QuoteRestorationMenu } from './QuoteRestorationMenu';
 
 type FilterType = 'all' | 'custom' | 'default' | 'favorites' | 'hidden';
 
@@ -203,6 +206,9 @@ interface QuoteCardProps {
   onDelete: (quoteId: string) => void;
   onToggleFavorite: (quoteId: string) => void;
   onToggleHidden: (quoteId: string) => void;
+  isSelected?: boolean;
+  onSelectChange?: (quoteId: string, selected: boolean) => void;
+  showCheckbox?: boolean;
 }
 
 const QuoteCard: React.FC<QuoteCardProps> = ({
@@ -211,19 +217,52 @@ const QuoteCard: React.FC<QuoteCardProps> = ({
   onDelete,
   onToggleFavorite,
   onToggleHidden,
+  isSelected = false,
+  onSelectChange,
+  showCheckbox = false,
 }) => {
   const categoryColor = CATEGORY_COLORS[quote.category];
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
+  const handleCheckboxChange = () => {
+    onSelectChange?.(quote.id, !isSelected);
+  };
+
   return (
     <div
       className={cn(
-        'bg-surface rounded-xl shadow-md hover:shadow-lg transition-all p-6 border-2 border-transparent hover:border-border relative',
-        quote.isHidden && 'opacity-60'
+        'bg-surface rounded-xl shadow-md hover:shadow-lg transition-all p-6 border-2 relative',
+        quote.isHidden && 'opacity-60',
+        isSelected
+          ? 'border-primary-500 ring-2 ring-primary-500/20'
+          : 'border-transparent hover:border-border'
       )}
     >
+      {/* Selection Checkbox */}
+      {showCheckbox && (
+        <label className="absolute top-3 left-3 z-10 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={isSelected}
+            onChange={handleCheckboxChange}
+            className="sr-only"
+            aria-label={`Select quote by ${quote.author}`}
+          />
+          <div
+            className={cn(
+              'w-6 h-6 rounded border-2 flex items-center justify-center transition-all',
+              isSelected
+                ? 'border-primary-600 bg-primary-600'
+                : 'border-border bg-surface hover:border-primary-400'
+            )}
+          >
+            {isSelected && <Check className="w-4 h-4 text-white" />}
+          </div>
+        </label>
+      )}
+
       {/* Category Badge */}
-      <div className="flex items-center justify-between mb-4">
+      <div className={cn('flex items-center justify-between mb-4', showCheckbox && 'ml-8')}>
         <span
           className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium text-white"
           style={{ backgroundColor: categoryColor }}
@@ -346,6 +385,12 @@ export const QuoteManagementPage: React.FC = () => {
     unhideQuote,
     editQuote,
     deleteQuote,
+    bulkDelete,
+    bulkToggleFavorite,
+    bulkToggleHidden,
+    restoreMissingQuotes,
+    resetAllQuotes,
+    getMissingSeedQuoteCount,
   } = useQuoteStore();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -354,11 +399,122 @@ export const QuoteManagementPage: React.FC = () => {
   const [editingQuote, setEditingQuote] = useState<Quote | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
 
+  // Selection state
+  const [selectedQuoteIds, setSelectedQuoteIds] = useState<Set<string>>(new Set());
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+
+  // Confirmation dialogs
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+  const [showResetAllConfirm, setShowResetAllConfirm] = useState(false);
+  const [isBulkLoading, setIsBulkLoading] = useState(false);
+
   useEffect(() => {
     if (quotes.length === 0 && !isLoading) {
       initialize();
     }
   }, [quotes.length, isLoading, initialize]);
+
+  // Clear selection when filters change
+  useEffect(() => {
+    setSelectedQuoteIds(new Set());
+  }, [filterType, selectedCategory, searchQuery]);
+
+  // Get missing seed quote count
+  const missingSeedQuoteCount = getMissingSeedQuoteCount();
+
+  // Selection handlers
+  const handleSelectQuote = useCallback((quoteId: string, selected: boolean) => {
+    setSelectedQuoteIds((prev) => {
+      const next = new Set(prev);
+      if (selected) {
+        next.add(quoteId);
+      } else {
+        next.delete(quoteId);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleDeselectAll = useCallback(() => {
+    setSelectedQuoteIds(new Set());
+  }, []);
+
+  const handleToggleSelectionMode = useCallback(() => {
+    setIsSelectionMode((prev) => !prev);
+    if (isSelectionMode) {
+      setSelectedQuoteIds(new Set());
+    }
+  }, [isSelectionMode]);
+
+  // Bulk action handlers
+  const handleBulkDelete = async () => {
+    setIsBulkLoading(true);
+    try {
+      await bulkDelete(Array.from(selectedQuoteIds));
+      setSelectedQuoteIds(new Set());
+      setShowBulkDeleteConfirm(false);
+    } finally {
+      setIsBulkLoading(false);
+    }
+  };
+
+  const handleBulkFavorite = async () => {
+    setIsBulkLoading(true);
+    try {
+      await bulkToggleFavorite(Array.from(selectedQuoteIds), true);
+    } finally {
+      setIsBulkLoading(false);
+    }
+  };
+
+  const handleBulkUnfavorite = async () => {
+    setIsBulkLoading(true);
+    try {
+      await bulkToggleFavorite(Array.from(selectedQuoteIds), false);
+    } finally {
+      setIsBulkLoading(false);
+    }
+  };
+
+  const handleBulkHide = async () => {
+    setIsBulkLoading(true);
+    try {
+      await bulkToggleHidden(Array.from(selectedQuoteIds), true);
+      setSelectedQuoteIds(new Set());
+    } finally {
+      setIsBulkLoading(false);
+    }
+  };
+
+  const handleBulkUnhide = async () => {
+    setIsBulkLoading(true);
+    try {
+      await bulkToggleHidden(Array.from(selectedQuoteIds), false);
+    } finally {
+      setIsBulkLoading(false);
+    }
+  };
+
+  // Restoration handlers
+  const handleRestoreMissing = async () => {
+    setIsBulkLoading(true);
+    try {
+      await restoreMissingQuotes();
+    } finally {
+      setIsBulkLoading(false);
+    }
+  };
+
+  const handleResetAll = async () => {
+    setIsBulkLoading(true);
+    try {
+      await resetAllQuotes();
+      setSelectedQuoteIds(new Set());
+      setShowResetAllConfirm(false);
+    } finally {
+      setIsBulkLoading(false);
+    }
+  };
 
   // Filter and search quotes
   const filteredQuotes = useMemo(() => {
@@ -405,6 +561,22 @@ export const QuoteManagementPage: React.FC = () => {
 
     return result;
   }, [quotes, searchQuery, filterType, selectedCategory]);
+
+  // handleSelectAll needs filteredQuotes, so define it after the useMemo
+  const handleSelectAll = useCallback(() => {
+    const allIds = new Set(filteredQuotes.map((q) => q.id));
+    setSelectedQuoteIds(allIds);
+  }, [filteredQuotes]);
+
+  // Get selected quotes for toolbar state
+  const selectedQuotes = useMemo(() => {
+    return quotes.filter((q) => selectedQuoteIds.has(q.id));
+  }, [quotes, selectedQuoteIds]);
+
+  const hasSelectedFavorites = selectedQuotes.some((q) => q.isFavorite);
+  const hasSelectedUnfavorited = selectedQuotes.some((q) => !q.isFavorite);
+  const hasSelectedHidden = selectedQuotes.some((q) => q.isHidden);
+  const hasSelectedVisible = selectedQuotes.some((q) => !q.isHidden);
 
   const handleToggleFavorite = async (quoteId: string) => {
     await toggleFavorite(quoteId);
@@ -474,8 +646,14 @@ export const QuoteManagementPage: React.FC = () => {
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 py-6">
-        {/* Add Quote Button */}
-        <div className="flex justify-end mb-6">
+        {/* Add Quote Button and Restoration Menu */}
+        <div className="flex justify-end gap-3 mb-6">
+          <QuoteRestorationMenu
+            missingSeedQuoteCount={missingSeedQuoteCount}
+            onRestoreMissing={handleRestoreMissing}
+            onResetAll={() => setShowResetAllConfirm(true)}
+            isLoading={isBulkLoading}
+          />
           <button
             type="button"
             onClick={() => setShowAddForm(!showAddForm)}
@@ -573,6 +751,26 @@ export const QuoteManagementPage: React.FC = () => {
 
       {/* Quote Grid */}
       <div className="max-w-7xl mx-auto px-4 py-8">
+        {/* Bulk Actions Toolbar */}
+        <BulkActionsToolbar
+          selectedCount={selectedQuoteIds.size}
+          totalCount={filteredQuotes.length}
+          isSelectionMode={isSelectionMode}
+          onToggleSelectionMode={handleToggleSelectionMode}
+          onSelectAll={handleSelectAll}
+          onDeselectAll={handleDeselectAll}
+          onBulkFavorite={handleBulkFavorite}
+          onBulkUnfavorite={handleBulkUnfavorite}
+          onBulkHide={handleBulkHide}
+          onBulkUnhide={handleBulkUnhide}
+          onBulkDelete={() => setShowBulkDeleteConfirm(true)}
+          hasSelectedFavorites={hasSelectedFavorites}
+          hasSelectedUnfavorited={hasSelectedUnfavorited}
+          hasSelectedHidden={hasSelectedHidden}
+          hasSelectedVisible={hasSelectedVisible}
+          isLoading={isBulkLoading}
+        />
+
         {filteredQuotes.length === 0 ? (
           <div className="text-center py-16">
             <p className="text-xl text-secondary mb-4">No quotes found</p>
@@ -588,6 +786,9 @@ export const QuoteManagementPage: React.FC = () => {
                 onDelete={handleDelete}
                 onToggleFavorite={handleToggleFavorite}
                 onToggleHidden={handleToggleHidden}
+                isSelected={selectedQuoteIds.has(quote.id)}
+                onSelectChange={handleSelectQuote}
+                showCheckbox={isSelectionMode}
               />
             ))}
           </div>
@@ -602,6 +803,30 @@ export const QuoteManagementPage: React.FC = () => {
           onSave={handleSaveEdit}
         />
       )}
+
+      {/* Bulk Delete Confirmation Dialog */}
+      <ConfirmationDialog
+        isOpen={showBulkDeleteConfirm}
+        onClose={() => setShowBulkDeleteConfirm(false)}
+        onConfirm={handleBulkDelete}
+        title="Delete Quotes"
+        message={`Are you sure you want to delete ${selectedQuoteIds.size} ${selectedQuoteIds.size === 1 ? 'quote' : 'quotes'}? This action cannot be undone.`}
+        confirmText="Delete"
+        variant="danger"
+        isLoading={isBulkLoading}
+      />
+
+      {/* Reset All Confirmation Dialog */}
+      <ConfirmationDialog
+        isOpen={showResetAllConfirm}
+        onClose={() => setShowResetAllConfirm(false)}
+        onConfirm={handleResetAll}
+        title="Reset All Quotes"
+        message="This will delete ALL quotes (including custom ones) and restore the default quotes. Are you sure?"
+        confirmText="Reset All"
+        variant="danger"
+        isLoading={isBulkLoading}
+      />
     </div>
   );
 };
