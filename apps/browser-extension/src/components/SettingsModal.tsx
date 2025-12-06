@@ -1,4 +1,10 @@
-import { AMBIENT_SOUNDS, type AmbientSoundType, type SettingsLogLevel } from '@cuewise/shared';
+import {
+  AMBIENT_SOUNDS,
+  type AmbientSoundType,
+  FOCUS_IMAGE_CATEGORIES,
+  type FocusImageCategory,
+  type SettingsLogLevel,
+} from '@cuewise/shared';
 import {
   ArrowRight,
   Bell,
@@ -7,6 +13,7 @@ import {
   Clock,
   Cloud,
   CloudOff,
+  Maximize2,
   Music,
   Play,
   RefreshCw,
@@ -43,6 +50,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   const [enableGoalTransfer, setEnableGoalTransfer] = useState(settings.enableGoalTransfer);
   const [goalTransferTime, setGoalTransferTime] = useState(settings.goalTransferTime);
   const [logLevel, setLogLevel] = useState(settings.logLevel);
+  const [focusModeEnabled, setFocusModeEnabled] = useState(settings.focusModeEnabled);
+  const [focusModeImageCategory, setFocusModeImageCategory] = useState(
+    settings.focusModeImageCategory
+  );
+  const [focusModeShowQuote, setFocusModeShowQuote] = useState(settings.focusModeShowQuote);
+  const [focusModeAutoEnter, setFocusModeAutoEnter] = useState(settings.focusModeAutoEnter);
   const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
 
   // Sync local state with store when settings change
@@ -60,6 +73,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     setEnableGoalTransfer(settings.enableGoalTransfer);
     setGoalTransferTime(settings.goalTransferTime);
     setLogLevel(settings.logLevel);
+    setFocusModeEnabled(settings.focusModeEnabled);
+    setFocusModeImageCategory(settings.focusModeImageCategory);
+    setFocusModeShowQuote(settings.focusModeShowQuote);
+    setFocusModeAutoEnter(settings.focusModeAutoEnter);
   }, [settings]);
 
   // Format interval for display
@@ -137,6 +154,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
       enableGoalTransfer,
       goalTransferTime,
       logLevel,
+      focusModeEnabled,
+      focusModeImageCategory,
+      focusModeShowQuote,
+      focusModeAutoEnter,
     });
 
     // If sync setting changed, reload the page to apply storage changes
@@ -572,6 +593,100 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                   Transfer button will appear on incomplete goals after this time
                 </p>
               </div>
+            )}
+          </div>
+        </section>
+
+        {/* Focus Mode Settings */}
+        <section>
+          <div className="flex items-center gap-2 mb-4">
+            <Maximize2 className="w-5 h-5 text-primary-600" />
+            <h3 className="text-lg font-semibold text-primary">Focus Mode</h3>
+          </div>
+
+          <div className="space-y-4 pl-7">
+            {/* Enable Focus Mode Toggle */}
+            <label className="flex items-center gap-3 cursor-pointer group">
+              <div className="relative">
+                <input
+                  type="checkbox"
+                  checked={focusModeEnabled}
+                  onChange={(e) => setFocusModeEnabled(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-divider peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-surface after:border-border after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
+              </div>
+              <div>
+                <span className="text-sm font-medium text-primary">Enable focus mode</span>
+                <p className="text-xs text-secondary">
+                  Show fullscreen button on Pomodoro timer with scenic backgrounds
+                </p>
+              </div>
+            </label>
+
+            {focusModeEnabled && (
+              <>
+                {/* Image Category Selection */}
+                <div>
+                  <label
+                    htmlFor="focus-image-category"
+                    className="block text-sm font-medium text-primary mb-2"
+                  >
+                    Background Category
+                  </label>
+                  <select
+                    id="focus-image-category"
+                    value={focusModeImageCategory}
+                    onChange={(e) =>
+                      setFocusModeImageCategory(e.target.value as FocusImageCategory)
+                    }
+                    className="w-full px-3 py-2 text-sm text-primary border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    {Object.entries(FOCUS_IMAGE_CATEGORIES).map(([key, label]) => (
+                      <option key={key} value={key}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-secondary mt-1">High-quality photos from Unsplash</p>
+                </div>
+
+                {/* Show Quote Toggle */}
+                <label className="flex items-center gap-3 cursor-pointer group">
+                  <div className="relative">
+                    <input
+                      type="checkbox"
+                      checked={focusModeShowQuote}
+                      onChange={(e) => setFocusModeShowQuote(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-divider peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-surface after:border-border after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
+                  </div>
+                  <div>
+                    <span className="text-sm font-medium text-primary">Show quote</span>
+                    <p className="text-xs text-secondary">Display current quote in focus mode</p>
+                  </div>
+                </label>
+
+                {/* Auto-Enter Toggle */}
+                <label className="flex items-center gap-3 cursor-pointer group">
+                  <div className="relative">
+                    <input
+                      type="checkbox"
+                      checked={focusModeAutoEnter}
+                      onChange={(e) => setFocusModeAutoEnter(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-divider peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-surface after:border-border after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
+                  </div>
+                  <div>
+                    <span className="text-sm font-medium text-primary">Auto-enter on start</span>
+                    <p className="text-xs text-secondary">
+                      Automatically enter focus mode when starting a work session
+                    </p>
+                  </div>
+                </label>
+              </>
             )}
           </div>
         </section>
