@@ -1,11 +1,32 @@
 # Cuewise Development Roadmap
 
-**Last Updated**: 2025-11-29
-**Current Version**: v1.2.0 (Published on Chrome Web Store)
+**Last Updated**: 2025-12-06
+**Current Version**: v1.3.0 (Published on Chrome Web Store)
 
 ---
 
-## ✅ Recently Completed (v1.2.0)
+## ✅ Recently Completed (v1.3.0)
+
+### Import & Onboarding
+- [x] Data import functionality with version compatibility checking
+- [x] File upload with JSON validation
+- [x] Merge or replace options for imported data
+- [x] Welcome modal for first-time users
+- [x] Feature highlights in onboarding
+
+### Quote Management Enhancements
+- [x] Category filter for quotes with custom quote toggle
+- [x] Version info displayed in main page footer
+
+### Code Quality
+- [x] Logger consistency (all console.* calls replaced with logger)
+- [x] Additional component tests (CategoryFilter)
+
+**Version Released**: December 2025
+
+---
+
+## ✅ Previously Completed (v1.2.0)
 
 ### Chrome Web Store Publication
 - [x] 3 versions published and live on Chrome Web Store
@@ -141,37 +162,34 @@
   - Select all functionality
   - Bulk delete/favorite/hide
 
-#### 2.2 Export/Import Data - ⚠️ PARTIAL
+#### 2.2 Export/Import Data - ✅ COMPLETE
 - [x] Export all data to JSON
 - [x] Export CSV (multiple types)
-- [ ] **Import from backup** - NOT IMPLEMENTED
+- [x] Import from backup
   - File upload UI
-  - JSON validation
+  - JSON validation with version compatibility
   - Merge or replace options
-  - Preview before import
 
-#### 2.3 Onboarding & Tutorials - ❌ NOT STARTED
-- [ ] First-time user experience
-  - Welcome modal
-  - Feature highlights
-  - Skip/don't show again
+#### 2.3 Onboarding & Tutorials - ✅ MOSTLY COMPLETE
+- [x] First-time user experience
+  - Welcome modal with feature highlights
+  - Skip/don't show again option
 - [ ] Interactive tutorials (optional)
 - [ ] Help documentation (optional)
 
 **User value**: HIGH - Reduces friction for new users
 
-#### 2.4 Accessibility - ⚠️ PARTIAL
-**Implemented:**
+#### 2.4 Accessibility - ✅ COMPLETE
 - [x] 40+ ARIA labels on interactive elements
 - [x] Keyboard navigation (Escape, Enter, Tab)
 - [x] Focus indicators
 - [x] Screen reader-friendly form labels
-
-**Still Needed:**
-- [ ] Semantic HTML landmarks (`<main>`, `<nav>`)
-- [ ] `aria-live` regions for dynamic content
-- [ ] `prefers-reduced-motion` support
-- [ ] Skip navigation links
+- [x] Semantic HTML landmarks (`<main>`, `<nav>`, `<header>`)
+- [x] Skip navigation links
+- [x] `aria-live` regions for dynamic content (toasts, quote changes)
+- [x] `prefers-reduced-motion` support
+- [x] ARIA attributes for dropdown menus (`aria-expanded`, `aria-haspopup`, `role="menu"`)
+- [x] `aria-current="page"` for active navigation
 
 **User value**: HIGH - Inclusivity matters
 
@@ -394,27 +412,26 @@
 
 ## 🎯 Recommended Next Priorities
 
-### Current Focus: Complete Phase 2
+### Current Focus: Bulk Quote Operations (Phase 2.1)
 
-**Remaining high-value items:**
+**Next tasks:**
 
-1. **Import functionality** (Priority: HIGH)
-   - Complete the backup/restore cycle
-   - Users can export but not restore
-   - File upload + validation + merge/replace
+1. **Bulk quote operations** (Priority: MEDIUM)
+   - Multi-select checkboxes in Quote Management page
+   - Select all / deselect all functionality
+   - Bulk delete, favorite, hide actions
+   - Confirmation dialog for destructive actions
 
-2. **Onboarding** (Priority: HIGH)
-   - Welcome modal for first-time users
-   - Feature highlights
-   - Reduces user friction
+### Phase 3 Features
 
-3. **Accessibility improvements** (Priority: HIGH)
-   - Semantic HTML landmarks
-   - aria-live regions
-   - prefers-reduced-motion
+1. **Quote Collections** (Priority: MEDIUM)
+   - Create custom themed collections
+   - Add/remove quotes from collections
+   - Collection rotation for display
 
-4. **Bulk quote operations** (Priority: MEDIUM)
-   - Multi-select for power users
+2. **Focus Mode** (Priority: MEDIUM)
+   - Full-screen Pomodoro timer
+   - Optional website blocking
 
 ### Future: Platform Expansion
 
@@ -470,7 +487,6 @@ When ready for growth:
 - Single-platform (browser extension only)
 - No cloud sync (local storage + Chrome Sync only)
 - No user accounts
-- No import functionality (export only)
 
 ### Future Opportunities
 - Premium features (cloud sync, advanced analytics)
@@ -482,6 +498,7 @@ When ready for growth:
 ---
 
 **Version History**
+- v1.3.0 (2025-12-06) - Data import, onboarding welcome modal, category filter
 - v1.2.0 (2025-11-29) - Chrome Web Store published, Quote Management, Analytics, Pomodoro enhancements
 - v1.1.0 (2025-01-16) - Dark mode, themes, density modes
 - v1.0.0 (2025-01-15) - Initial roadmap after MVP completion

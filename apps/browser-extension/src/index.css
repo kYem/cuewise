@@ -765,3 +765,36 @@
       linear-gradient(135deg, var(--color-primary-700) 50%, transparent 50%);
   }
 }
+
+/* Accessibility: Reduce motion for users who prefer it
+   !important is required here to override all animation/transition styles
+   regardless of specificity - this is a standard a11y pattern */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    /* biome-ignore lint/complexity/noImportantStyles: required for reduced-motion a11y */
+    animation-duration: 0.01ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: required for reduced-motion a11y */
+    animation-iteration-count: 1 !important;
+    /* biome-ignore lint/complexity/noImportantStyles: required for reduced-motion a11y */
+    transition-duration: 0.01ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: required for reduced-motion a11y */
+    scroll-behavior: auto !important;
+  }
+
+  .animate-fade-in,
+  .animate-slide-up {
+    /* biome-ignore lint/complexity/noImportantStyles: required for reduced-motion a11y */
+    animation: none !important;
+    /* biome-ignore lint/complexity/noImportantStyles: required for reduced-motion a11y */
+    opacity: 1 !important;
+    /* biome-ignore lint/complexity/noImportantStyles: required for reduced-motion a11y */
+    transform: none !important;
+  }
+
+  body {
+    /* biome-ignore lint/complexity/noImportantStyles: required for reduced-motion a11y */
+    transition: none !important;
+  }
+}

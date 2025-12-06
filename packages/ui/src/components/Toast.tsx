@@ -83,15 +83,23 @@ const ToastItem: React.FC<ToastItemProps> = ({ toast, onClose }) => {
     }
   };
 
+  // Use role="alert" for errors (assertive), role="status" for others (polite)
+  const role = toast.type === 'error' ? 'alert' : 'status';
+
   return (
     <div
+      role={role}
+      aria-live={toast.type === 'error' ? 'assertive' : 'polite'}
+      aria-atomic="true"
       className={cn(
         'flex items-start gap-3 p-4 rounded-lg border shadow-lg transition-all duration-300 min-w-[300px] max-w-[500px]',
         getStyles(),
         isVisible ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0 pointer-events-none'
       )}
     >
-      <div className={cn('flex-shrink-0', getIconColor())}>{getIcon()}</div>
+      <div className={cn('flex-shrink-0', getIconColor())} aria-hidden="true">
+        {getIcon()}
+      </div>
       <p className="flex-1 text-sm font-medium">{toast.message}</p>
       <button
         type="button"

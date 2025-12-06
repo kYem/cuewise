@@ -26,7 +26,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ currentPage, title, subt
   ];
 
   return (
-    <div className="bg-surface/95 backdrop-blur-sm border-b border-border sticky top-0 z-40 shadow-sm">
+    <header className="bg-surface/95 backdrop-blur-sm border-b border-border sticky top-0 z-40 shadow-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between py-4">
           {/* Left: Back Button + Title */}
@@ -43,7 +43,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ currentPage, title, subt
               <span className="hidden sm:inline text-sm font-medium">Back to Home</span>
             </button>
 
-            <div className="h-6 w-px bg-divider hidden sm:block" />
+            <div className="h-6 w-px bg-divider hidden sm:block" aria-hidden="true" />
 
             <div>
               <h1 className="text-xl sm:text-2xl font-bold text-primary">{title}</h1>
@@ -52,12 +52,16 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ currentPage, title, subt
           </div>
 
           {/* Right: Quick Navigation Tabs */}
-          <nav className="flex items-center gap-1 bg-surface-variant rounded-lg p-1">
+          <nav
+            aria-label="Page navigation"
+            className="flex items-center gap-1 bg-surface-variant rounded-lg p-1"
+          >
             {navItems.map((item) => (
               <button
                 key={item.page}
                 type="button"
                 onClick={() => handleNavigateTo(item.page)}
+                aria-current={currentPage === item.page ? 'page' : undefined}
                 className={cn(
                   'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all',
                   currentPage === item.page
@@ -73,6 +77,6 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ currentPage, title, subt
           </nav>
         </div>
       </div>
-    </div>
+    </header>
   );
 };

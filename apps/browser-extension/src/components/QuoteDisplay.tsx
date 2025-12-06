@@ -171,10 +171,15 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({ onManualRefresh }) =
         </span>
       </div>
 
-      {/* Quote Card */}
-      <div className="relative">
+      {/* Quote Card - aria-live announces quote changes to screen readers */}
+      <div className="relative" aria-live="polite" aria-atomic="true">
         {/* Decorative Quote Marks */}
-        <div className="absolute -top-6 -left-4 text-8xl font-serif text-primary-400">"</div>
+        <div
+          className="absolute -top-6 -left-4 text-8xl font-serif text-primary-400"
+          aria-hidden="true"
+        >
+          "
+        </div>
 
         {/* Quote Text */}
         <blockquote className="relative z-10 h-[240px] flex flex-col justify-center">
@@ -206,7 +211,12 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({ onManualRefresh }) =
         </blockquote>
 
         {/* Decorative Quote Marks */}
-        <div className="absolute -bottom-6 -right-4 text-8xl font-serif text-primary-400">"</div>
+        <div
+          className="absolute -bottom-6 -right-4 text-8xl font-serif text-primary-400"
+          aria-hidden="true"
+        >
+          "
+        </div>
       </div>
 
       {/* Action Buttons */}
