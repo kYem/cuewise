@@ -179,20 +179,17 @@
 
 **User value**: HIGH - Reduces friction for new users
 
-#### 2.4 Accessibility - 🎯 CURRENT FOCUS
-**Priority: HIGH - Next Development Focus**
-
-**Implemented:**
+#### 2.4 Accessibility - ✅ COMPLETE
 - [x] 40+ ARIA labels on interactive elements
 - [x] Keyboard navigation (Escape, Enter, Tab)
 - [x] Focus indicators
 - [x] Screen reader-friendly form labels
-
-**Next Tasks (in order):**
-1. [ ] Semantic HTML landmarks (`<main>`, `<nav>`, `<section>`)
-2. [ ] Skip navigation links
-3. [ ] `aria-live` regions for dynamic content (toasts, quote changes)
-4. [ ] `prefers-reduced-motion` support
+- [x] Semantic HTML landmarks (`<main>`, `<nav>`, `<header>`)
+- [x] Skip navigation links
+- [x] `aria-live` regions for dynamic content (toasts, quote changes)
+- [x] `prefers-reduced-motion` support
+- [x] ARIA attributes for dropdown menus (`aria-expanded`, `aria-haspopup`, `role="menu"`)
+- [x] `aria-current="page"` for active navigation
 
 **User value**: HIGH - Inclusivity matters
 
@@ -415,31 +412,26 @@
 
 ## 🎯 Recommended Next Priorities
 
-### Current Focus: Accessibility (Phase 2.4)
+### Current Focus: Bulk Quote Operations (Phase 2.1)
 
-**Next tasks (in order):**
-
-1. **Semantic HTML landmarks** (Priority: HIGH)
-   - Add `<main>`, `<nav>`, `<section>` elements
-   - Improve screen reader navigation
-
-2. **Skip navigation links** (Priority: HIGH)
-   - Allow keyboard users to skip to main content
-   - Standard accessibility pattern
-
-3. **aria-live regions** (Priority: HIGH)
-   - Announce toast notifications
-   - Announce quote changes dynamically
-
-4. **prefers-reduced-motion** (Priority: MEDIUM)
-   - Respect user motion preferences
-   - Disable animations for users who prefer reduced motion
-
-### After Accessibility
+**Next tasks:**
 
 1. **Bulk quote operations** (Priority: MEDIUM)
-   - Multi-select checkboxes
-   - Bulk delete/favorite/hide
+   - Multi-select checkboxes in Quote Management page
+   - Select all / deselect all functionality
+   - Bulk delete, favorite, hide actions
+   - Confirmation dialog for destructive actions
+
+### Phase 3 Features
+
+1. **Quote Collections** (Priority: MEDIUM)
+   - Create custom themed collections
+   - Add/remove quotes from collections
+   - Collection rotation for display
+
+2. **Focus Mode** (Priority: MEDIUM)
+   - Full-screen Pomodoro timer
+   - Optional website blocking
 
 ### Future: Platform Expansion
 
