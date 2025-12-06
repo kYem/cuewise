@@ -50,7 +50,7 @@ const FALLBACK_IMAGE_IDS: Record<FocusImageCategory, string[]> = {
   ],
 };
 
-// Track last used fallback index per category for rotation
+// Track last used fallback index per category to avoid immediate repeats
 const lastFallbackIndex: Record<FocusImageCategory, number> = {
   nature: -1,
   forest: -1,
@@ -75,11 +75,11 @@ export function getUnsplashUrl(category: FocusImageCategory, width = 1920, heigh
 }
 
 /**
- * Get a fallback image URL from our known-good list.
- * Rotates through fallbacks to provide variety when called multiple times.
+ * Get a random fallback image URL from our known-good list.
+ * Uses random selection but avoids immediate repeats.
  * @param category - The image category
- * @param index - Optional index for specific fallback (default: next in rotation)
- * @returns Direct Unsplash image URL
+ * @param index - Optional index for specific fallback (default: random)
+ * @returns Direct Unsplash image URL with cache-busting
  */
 export function getFallbackImageUrl(category: FocusImageCategory, index?: number): string {
   const fallbacks = FALLBACK_IMAGE_IDS[category];
@@ -88,14 +88,19 @@ export function getFallbackImageUrl(category: FocusImageCategory, index?: number
   if (index !== undefined) {
     selectedIndex = index % fallbacks.length;
   } else {
-    // Rotate to next fallback
-    lastFallbackIndex[category] = (lastFallbackIndex[category] + 1) % fallbacks.length;
-    selectedIndex = lastFallbackIndex[category];
+    // Random selection that avoids immediate repeats
+    const lastIndex = lastFallbackIndex[category];
+    const availableIndices = fallbacks
+      .map((_, i) => i)
+      .filter((i) => i !== lastIndex || fallbacks.length === 1);
+    selectedIndex = availableIndices[Math.floor(Math.random() * availableIndices.length)];
+    lastFallbackIndex[category] = selectedIndex;
   }
 
   const imageId = fallbacks[selectedIndex];
-  // Use direct Unsplash image URL format
-  return `https://images.unsplash.com/${imageId}?w=1920&h=1080&fit=crop&auto=format`;
+  // Add timestamp for cache-busting to ensure fresh requests
+  const timestamp = Date.now();
+  return `https://images.unsplash.com/${imageId}?w=1920&h=1080&fit=crop&auto=format&t=${timestamp}`;
 }
 
 /**
