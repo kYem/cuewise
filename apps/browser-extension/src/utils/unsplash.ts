@@ -16,7 +16,7 @@ const CATEGORY_QUERIES: Record<FocusImageCategory, string> = {
 };
 
 // Known-good fallback image IDs from Unsplash (static, high-quality images)
-// These are used when the random source fails
+// These are used when source.unsplash.com fails (503, rate limit, etc.)
 const FALLBACK_IMAGE_IDS: Record<FocusImageCategory, string[]> = {
   nature: [
     'photo-1469474968028-56623f02e42e', // Mountain lake
@@ -50,6 +50,16 @@ const FALLBACK_IMAGE_IDS: Record<FocusImageCategory, string[]> = {
   ],
 };
 
+// Track last used fallback index per category for rotation
+const lastFallbackIndex: Record<FocusImageCategory, number> = {
+  nature: -1,
+  forest: -1,
+  ocean: -1,
+  mountains: -1,
+  minimal: -1,
+  dark: -1,
+};
+
 /**
  * Generate an Unsplash Source URL for a random image in the given category.
  * @param category - The image category
@@ -66,14 +76,23 @@ export function getUnsplashUrl(category: FocusImageCategory, width = 1920, heigh
 
 /**
  * Get a fallback image URL from our known-good list.
+ * Rotates through fallbacks to provide variety when called multiple times.
  * @param category - The image category
- * @param index - Optional index for specific fallback (default: random)
+ * @param index - Optional index for specific fallback (default: next in rotation)
  * @returns Direct Unsplash image URL
  */
 export function getFallbackImageUrl(category: FocusImageCategory, index?: number): string {
   const fallbacks = FALLBACK_IMAGE_IDS[category];
-  const selectedIndex =
-    index !== undefined ? index % fallbacks.length : Math.floor(Math.random() * fallbacks.length);
+  let selectedIndex: number;
+
+  if (index !== undefined) {
+    selectedIndex = index % fallbacks.length;
+  } else {
+    // Rotate to next fallback
+    lastFallbackIndex[category] = (lastFallbackIndex[category] + 1) % fallbacks.length;
+    selectedIndex = lastFallbackIndex[category];
+  }
+
   const imageId = fallbacks[selectedIndex];
   // Use direct Unsplash image URL format
   return `https://images.unsplash.com/${imageId}?w=1920&h=1080&fit=crop&auto=format`;
@@ -110,6 +129,7 @@ export function preloadImage(url: string, timeout = 10000): Promise<string> {
 /**
  * Try to load an image with fallback support.
  * First tries the primary URL, then falls back to known-good images.
+ * Fallbacks rotate to provide variety across multiple calls.
  * @param category - The image category for fallbacks
  * @param primaryUrl - The primary URL to try first
  * @returns Promise that resolves with a working image URL
@@ -122,17 +142,20 @@ export async function loadImageWithFallback(
   try {
     return await preloadImage(primaryUrl);
   } catch {
-    // Primary failed, try fallbacks
+    // Primary failed (503, rate limit, etc.), use rotating fallback
     const fallbacks = FALLBACK_IMAGE_IDS[category];
-    for (let i = 0; i < fallbacks.length; i++) {
+
+    // Try each fallback starting from the next in rotation
+    for (let attempt = 0; attempt < fallbacks.length; attempt++) {
       try {
-        const fallbackUrl = getFallbackImageUrl(category, i);
+        // getFallbackImageUrl without index will rotate automatically
+        const fallbackUrl = getFallbackImageUrl(category);
         return await preloadImage(fallbackUrl, 5000); // Shorter timeout for fallbacks
       } catch {
         // Continue to next fallback
       }
     }
-    // All fallbacks failed - return empty string (component should show solid color)
+    // All fallbacks failed - component should show solid color
     throw new Error('All image sources failed');
   }
 }
