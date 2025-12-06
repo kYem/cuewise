@@ -192,7 +192,7 @@ export const NewTabPage: React.FC = () => {
             </div>
 
             {/* Right: Navigation */}
-            <div className="flex items-center gap-density-sm">
+            <nav aria-label="Main navigation" className="flex items-center gap-density-sm">
               {/* Pomodoro Button or Active Session Widget */}
               {pomodoroStatus !== 'idle' ? (
                 <ActivePomodoroWidget />
@@ -215,6 +215,8 @@ export const NewTabPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setIsMenuOpen(!isMenuOpen)}
+                  aria-expanded={isMenuOpen}
+                  aria-haspopup="menu"
                   className="p-2.5 bg-surface/80 backdrop-blur-sm text-primary rounded-full shadow-md hover:shadow-lg hover:scale-110 transition-all"
                   title="Menu"
                 >
@@ -223,9 +225,13 @@ export const NewTabPage: React.FC = () => {
 
                 {/* Dropdown Menu */}
                 {isMenuOpen && (
-                  <div className="absolute right-0 mt-2 w-48 bg-surface-elevated rounded-lg shadow-xl border border-border overflow-hidden">
+                  <div
+                    role="menu"
+                    className="absolute right-0 mt-2 w-48 bg-surface-elevated rounded-lg shadow-xl border border-border overflow-hidden"
+                  >
                     <button
                       type="button"
+                      role="menuitem"
                       onClick={handleOpenQuoteManagement}
                       className="w-full flex items-center gap-3 px-4 py-3 text-primary hover:bg-surface-variant transition-colors"
                     >
@@ -234,6 +240,7 @@ export const NewTabPage: React.FC = () => {
                     </button>
                     <button
                       type="button"
+                      role="menuitem"
                       onClick={handleOpenInsights}
                       className="w-full flex items-center gap-3 px-4 py-3 text-primary hover:bg-surface-variant transition-colors border-t border-divider"
                     >
@@ -242,6 +249,7 @@ export const NewTabPage: React.FC = () => {
                     </button>
                     <button
                       type="button"
+                      role="menuitem"
                       onClick={handleToggleThemeSwitcher}
                       className="w-full flex items-center gap-3 px-4 py-3 text-primary hover:bg-surface-variant transition-colors border-t border-divider"
                     >
@@ -250,6 +258,7 @@ export const NewTabPage: React.FC = () => {
                     </button>
                     <button
                       type="button"
+                      role="menuitem"
                       onClick={handleOpenSettings}
                       className="w-full flex items-center gap-3 px-4 py-3 text-primary hover:bg-surface-variant transition-colors border-t border-divider"
                     >
@@ -259,7 +268,7 @@ export const NewTabPage: React.FC = () => {
                   </div>
                 )}
               </div>
-            </div>
+            </nav>
           </div>
         </div>
       </div>
@@ -267,7 +276,8 @@ export const NewTabPage: React.FC = () => {
       {/* Main Content */}
       <div className="w-full flex flex-col items-center px-density-md py-density-lg relative">
         {/* Floating Top Right Navigation - Only visible when not scrolled */}
-        <div
+        <nav
+          aria-label="Main navigation"
           className={`absolute top-4 right-4 sm:top-8 sm:right-8 flex items-center gap-density-sm z-40 transition-all duration-300 ${
             showStickyHeader ? 'opacity-0 pointer-events-none' : 'opacity-100'
           }`}
@@ -292,6 +302,8 @@ export const NewTabPage: React.FC = () => {
             <button
               type="button"
               onClick={() => setIsMenuOpen(!isMenuOpen)}
+              aria-expanded={isMenuOpen}
+              aria-haspopup="menu"
               className="p-2.5 bg-surface/80 backdrop-blur-sm text-primary rounded-full shadow-md hover:shadow-lg hover:scale-110 transition-all"
               title="Menu"
             >
@@ -300,9 +312,13 @@ export const NewTabPage: React.FC = () => {
 
             {/* Dropdown Menu */}
             {isMenuOpen && (
-              <div className="absolute right-0 mt-2 w-48 bg-surface-elevated rounded-lg shadow-xl border border-border overflow-hidden">
+              <div
+                role="menu"
+                className="absolute right-0 mt-2 w-48 bg-surface-elevated rounded-lg shadow-xl border border-border overflow-hidden"
+              >
                 <button
                   type="button"
+                  role="menuitem"
                   onClick={handleOpenQuoteManagement}
                   className="w-full flex items-center gap-3 px-4 py-3 text-primary hover:bg-surface-variant transition-colors"
                 >
@@ -311,6 +327,7 @@ export const NewTabPage: React.FC = () => {
                 </button>
                 <button
                   type="button"
+                  role="menuitem"
                   onClick={handleOpenInsights}
                   className="w-full flex items-center gap-3 px-4 py-3 text-primary hover:bg-surface-variant transition-colors border-t border-divider"
                 >
@@ -319,6 +336,7 @@ export const NewTabPage: React.FC = () => {
                 </button>
                 <button
                   type="button"
+                  role="menuitem"
                   onClick={handleToggleThemeSwitcher}
                   className="w-full flex items-center gap-3 px-4 py-3 text-primary hover:bg-surface-variant transition-colors border-t border-divider"
                 >
@@ -327,6 +345,7 @@ export const NewTabPage: React.FC = () => {
                 </button>
                 <button
                   type="button"
+                  role="menuitem"
                   onClick={handleOpenSettings}
                   className="w-full flex items-center gap-3 px-4 py-3 text-primary hover:bg-surface-variant transition-colors border-t border-divider"
                 >
@@ -336,7 +355,7 @@ export const NewTabPage: React.FC = () => {
               </div>
             )}
           </div>
-        </div>
+        </nav>
 
         <div className="w-full max-w-7xl mx-auto space-y-density-xl">
           {/* Clock Section - Observe this for sticky header */}
