@@ -20,4 +20,8 @@ export const defaultSettings: Settings = {
   goalTransferTime: 20,
   logLevel: 'error',
   hasSeenOnboarding: false,
+  focusModeEnabled: true,
+  focusModeImageCategory: 'nature',
+  focusModeShowQuote: true,
+  focusModeAutoEnter: false,
 };

@@ -2,7 +2,11 @@ import { defineManifest } from '@crxjs/vite-plugin';
 import pkg from './package.json';
 
 export default defineManifest(async (env) => {
-  const hostPermissions: string[] = [];
+  // Unsplash permissions for focus mode background images
+  const hostPermissions: string[] = [
+    'https://source.unsplash.com/*',
+    'https://images.unsplash.com/*',
+  ];
 
   // Add host_permissions for dev server in development mode only
   if (env.mode !== 'production') {

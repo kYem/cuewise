@@ -1,8 +1,9 @@
 import { formatTimeRemaining } from '@cuewise/shared';
-import { Pause, Play, RotateCcw, SkipForward, Target } from 'lucide-react';
+import { Maximize2, Pause, Play, RotateCcw, SkipForward, Target } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useState } from 'react';
 import { usePomodoroLeader } from '../hooks/usePomodoroLeader';
+import { useFocusModeStore } from '../stores/focus-mode-store';
 import { useGoalStore } from '../stores/goal-store';
 import { usePomodoroStorageSync, usePomodoroStore } from '../stores/pomodoro-store';
 import { useSettingsStore } from '../stores/settings-store';
@@ -337,6 +338,18 @@ export const PomodoroTimer: React.FC = () => {
           >
             <SkipForward className="w-5 h-5" />
           </button>
+
+          {/* Focus Mode Button */}
+          {settings.focusModeEnabled && (
+            <button
+              type="button"
+              onClick={() => useFocusModeStore.getState().enterFocusMode()}
+              className="p-3 bg-surface-variant text-primary rounded-lg hover:bg-border transition-colors shadow-md hover:shadow-lg"
+              title="Enter focus mode"
+            >
+              <Maximize2 className="w-5 h-5" />
+            </button>
+          )}
         </div>
 
         {/* Help Text - Interactive Settings */}

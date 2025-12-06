@@ -2,6 +2,7 @@ import type React from 'react';
 import { useEffect, useState } from 'react';
 import { useQuoteStore } from '../stores/quote-store';
 import { useSettingsStore } from '../stores/settings-store';
+import { FocusMode } from './FocusMode';
 import { PageHeader } from './PageHeader';
 import { PomodoroTimer } from './PomodoroTimer';
 import { QuoteDisplay } from './QuoteDisplay';
@@ -56,6 +57,9 @@ export const PomodoroPage: React.FC = () => {
           <QuoteDisplay onManualRefresh={() => setLastManualRefresh(Date.now())} />
         </div>
       </div>
+
+      {/* Focus Mode Overlay (renders as portal) */}
+      <FocusMode />
     </div>
   );
 };

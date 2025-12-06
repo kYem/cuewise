@@ -11,6 +11,8 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { chromeLocalStorage } from '../adapters/zustand-chrome-adapter';
 import { playCompletionSound, playStartSound } from '../utils/sounds';
+import { useFocusModeStore } from './focus-mode-store';
+import { useSettingsStore } from './settings-store';
 import { useToastStore } from './toast-store';
 
 const logger = createLogger({
@@ -254,6 +256,12 @@ export const usePomodoroStore = create<PomodoroStore>()(
           totalTime: minutesToSeconds(duration),
           lastTickTime: Date.now(),
         });
+
+        // Auto-enter focus mode if enabled and starting a work session
+        const { settings } = useSettingsStore.getState();
+        if (sessionType === 'work' && settings.focusModeAutoEnter && settings.focusModeEnabled) {
+          useFocusModeStore.getState().enterFocusMode();
+        }
       },
 
       pause: () => {
