@@ -152,15 +152,19 @@
 
 **Priority: HIGH - Current focus**
 
-#### 2.1 Quote Management Page - ✅ MOSTLY COMPLETE
+#### 2.1 Quote Management Page - ✅ COMPLETE
 - [x] Browse all quotes interface with list view
 - [x] Filter quotes (5 types: all, custom, default, favorites, hidden)
 - [x] Search functionality (full-text, debounced)
 - [x] Edit custom quotes (modal with validation)
-- [ ] **Bulk operations** - NOT IMPLEMENTED
+- [x] **Bulk operations**
   - Multi-select checkboxes
-  - Select all functionality
+  - Select all / deselect all functionality
   - Bulk delete/favorite/hide
+  - Confirmation dialogs for destructive actions
+- [x] **Quote restoration**
+  - Restore missing default quotes
+  - Reset all quotes to defaults
 
 #### 2.2 Export/Import Data - ✅ COMPLETE
 - [x] Export all data to JSON
@@ -412,17 +416,14 @@
 
 ## 🎯 Recommended Next Priorities
 
-### Current Focus: Bulk Quote Operations (Phase 2.1)
+### ✅ Recently Completed: Bulk Quote Operations (Phase 2.1)
+- Multi-select checkboxes in Quote Management page
+- Select all / deselect all functionality
+- Bulk delete, favorite, hide actions
+- Confirmation dialogs for destructive actions
+- Quote restoration (restore missing, reset all)
 
-**Next tasks:**
-
-1. **Bulk quote operations** (Priority: MEDIUM)
-   - Multi-select checkboxes in Quote Management page
-   - Select all / deselect all functionality
-   - Bulk delete, favorite, hide actions
-   - Confirmation dialog for destructive actions
-
-### Phase 3 Features
+### Phase 3 Features (Next Focus)
 
 1. **Quote Collections** (Priority: MEDIUM)
    - Create custom themed collections

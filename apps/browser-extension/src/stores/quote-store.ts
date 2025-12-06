@@ -52,6 +52,16 @@ interface QuoteStore {
   setEnabledCategories: (categories: QuoteCategory[]) => void;
   toggleCategory: (category: QuoteCategory) => void;
   toggleCustomQuotes: () => void;
+
+  // Bulk operations
+  bulkDelete: (quoteIds: string[]) => Promise<void>;
+  bulkToggleFavorite: (quoteIds: string[], setFavorite: boolean) => Promise<void>;
+  bulkToggleHidden: (quoteIds: string[], setHidden: boolean) => Promise<void>;
+
+  // Restoration operations
+  restoreMissingQuotes: () => Promise<{ restored: number }>;
+  resetAllQuotes: () => Promise<void>;
+  getMissingSeedQuoteCount: () => number;
 }
 
 export const useQuoteStore = create<QuoteStore>((set, get) => ({
@@ -396,5 +406,163 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
   toggleCustomQuotes: () => {
     const { showCustomQuotes } = get();
     set({ showCustomQuotes: !showCustomQuotes });
+  },
+
+  // Bulk operations
+  bulkDelete: async (quoteIds: string[]) => {
+    try {
+      const { quotes, currentQuote } = get();
+      const quoteIdSet = new Set(quoteIds);
+      const updatedQuotes = quotes.filter((q) => !quoteIdSet.has(q.id));
+
+      await setQuotes(updatedQuotes);
+      set({ quotes: updatedQuotes, error: null });
+
+      // If current quote was deleted, refresh to a new one
+      if (currentQuote && quoteIdSet.has(currentQuote.id)) {
+        await get().refreshQuote();
+      }
+
+      useToastStore.getState().success(`Deleted ${quoteIds.length} quotes`);
+    } catch (error) {
+      logger.error('Error bulk deleting quotes', error, { quoteIds, count: quoteIds.length });
+      const errorMessage = 'Failed to delete quotes. Please try again.';
+      set({ error: errorMessage });
+      useToastStore.getState().error(errorMessage);
+    }
+  },
+
+  bulkToggleFavorite: async (quoteIds: string[], setFavorite: boolean) => {
+    try {
+      const { quotes, currentQuote } = get();
+      const quoteIdSet = new Set(quoteIds);
+      const updatedQuotes = quotes.map((q) =>
+        quoteIdSet.has(q.id) ? { ...q, isFavorite: setFavorite } : q
+      );
+
+      await setQuotes(updatedQuotes);
+      set({ quotes: updatedQuotes, error: null });
+
+      // Update current quote if it was in the selection
+      if (currentQuote && quoteIdSet.has(currentQuote.id)) {
+        const updatedCurrentQuote = { ...currentQuote, isFavorite: setFavorite };
+        await setCurrentQuote(updatedCurrentQuote);
+        set({ currentQuote: updatedCurrentQuote });
+      }
+
+      const action = setFavorite ? 'added to favorites' : 'removed from favorites';
+      useToastStore.getState().success(`${quoteIds.length} quotes ${action}`);
+    } catch (error) {
+      logger.error('Error bulk toggling favorites', error, {
+        quoteIds,
+        setFavorite,
+        count: quoteIds.length,
+      });
+      const errorMessage = 'Failed to update favorites. Please try again.';
+      set({ error: errorMessage });
+      useToastStore.getState().error(errorMessage);
+    }
+  },
+
+  bulkToggleHidden: async (quoteIds: string[], setHidden: boolean) => {
+    try {
+      const { quotes, currentQuote } = get();
+      const quoteIdSet = new Set(quoteIds);
+      const updatedQuotes = quotes.map((q) =>
+        quoteIdSet.has(q.id) ? { ...q, isHidden: setHidden } : q
+      );
+
+      await setQuotes(updatedQuotes);
+      set({ quotes: updatedQuotes, error: null });
+
+      // If hiding current quote, refresh to a new one
+      if (setHidden && currentQuote && quoteIdSet.has(currentQuote.id)) {
+        await get().refreshQuote();
+      }
+
+      const action = setHidden ? 'hidden' : 'unhidden';
+      useToastStore.getState().success(`${quoteIds.length} quotes ${action}`);
+    } catch (error) {
+      logger.error('Error bulk toggling hidden', error, {
+        quoteIds,
+        setHidden,
+        count: quoteIds.length,
+      });
+      const errorMessage = 'Failed to update quotes. Please try again.';
+      set({ error: errorMessage });
+      useToastStore.getState().error(errorMessage);
+    }
+  },
+
+  // Restoration operations
+  restoreMissingQuotes: async () => {
+    try {
+      const { quotes } = get();
+      const existingIds = new Set(quotes.map((q) => q.id));
+
+      // Find seed quotes that are missing from current quotes
+      const missingQuotes = SEED_QUOTES.filter((sq) => !existingIds.has(sq.id));
+
+      if (missingQuotes.length === 0) {
+        useToastStore.getState().info('All default quotes are already present');
+        return { restored: 0 };
+      }
+
+      // Add missing quotes back
+      const updatedQuotes = [...quotes, ...missingQuotes];
+
+      await setQuotes(updatedQuotes);
+      set({ quotes: updatedQuotes, error: null });
+
+      useToastStore.getState().success(`Restored ${missingQuotes.length} missing quotes`);
+      return { restored: missingQuotes.length };
+    } catch (error) {
+      logger.error('Error restoring missing quotes', error);
+      const errorMessage = 'Failed to restore quotes. Please try again.';
+      set({ error: errorMessage });
+      useToastStore.getState().error(errorMessage);
+      throw error;
+    }
+  },
+
+  resetAllQuotes: async () => {
+    try {
+      // Create fresh copy of seed quotes with default properties
+      const freshQuotes = SEED_QUOTES.map((q) => ({
+        ...q,
+        isFavorite: false,
+        isHidden: false,
+        viewCount: 0,
+        lastViewed: undefined,
+      }));
+
+      await setQuotes(freshQuotes);
+      set({ quotes: freshQuotes, error: null });
+
+      // Reset current quote to a random one
+      const newCurrent = getRandomQuote(freshQuotes);
+      if (newCurrent) {
+        await setCurrentQuote(newCurrent);
+        set({
+          currentQuote: newCurrent,
+          quoteHistory: [newCurrent.id],
+          historyIndex: 0,
+        });
+      }
+
+      useToastStore.getState().success('All quotes reset to defaults');
+    } catch (error) {
+      logger.error('Error resetting quotes', error);
+      const errorMessage = 'Failed to reset quotes. Please try again.';
+      set({ error: errorMessage });
+      useToastStore.getState().error(errorMessage);
+      throw error;
+    }
+  },
+
+  getMissingSeedQuoteCount: () => {
+    const { quotes } = get();
+    const existingIds = new Set(quotes.map((q) => q.id));
+    return SEED_QUOTES.filter((sq) => !existingIds.has(sq.id)).length;
   },
 }));
