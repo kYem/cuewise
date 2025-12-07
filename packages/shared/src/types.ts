@@ -65,6 +65,9 @@ export type ColorTheme = 'purple' | 'forest' | 'rose';
 export type LayoutDensity = 'compact' | 'comfortable' | 'spacious';
 export type SettingsLogLevel = 'none' | 'error' | 'warn' | 'info' | 'debug';
 
+// Focus mode image categories for Unsplash backgrounds
+export type FocusImageCategory = 'nature' | 'forest' | 'ocean' | 'mountains' | 'minimal' | 'dark';
+
 // Settings interface
 export interface Settings {
   pomodoroWorkDuration: number; // minutes (default 25)
@@ -90,6 +93,11 @@ export interface Settings {
   logLevel: SettingsLogLevel; // Console log level (default 'error')
   // Onboarding
   hasSeenOnboarding: boolean; // Has user seen the welcome modal (default false)
+  // Focus Mode
+  focusModeEnabled: boolean; // Enable focus mode feature (default true)
+  focusModeImageCategory: FocusImageCategory; // Background image category (default 'nature')
+  focusModeShowQuote: boolean; // Show motivational quote overlay (default true)
+  focusModeAutoEnter: boolean; // Auto-enter focus mode when timer starts (default false)
 }
 
 // Storage keys

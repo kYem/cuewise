@@ -1,4 +1,10 @@
-import type { ColorTheme, LayoutDensity, QuoteCategory, Settings } from './types';
+import type {
+  ColorTheme,
+  FocusImageCategory,
+  LayoutDensity,
+  QuoteCategory,
+  Settings,
+} from './types';
 
 // Default settings
 export const DEFAULT_SETTINGS: Settings = {
@@ -21,6 +27,11 @@ export const DEFAULT_SETTINGS: Settings = {
   goalTransferTime: 20, // 8 PM (20:00)
   logLevel: 'error', // Only show errors by default
   hasSeenOnboarding: false, // Show welcome modal on first visit
+  // Focus Mode defaults
+  focusModeEnabled: true, // Enable by default
+  focusModeImageCategory: 'nature', // Nature photos by default
+  focusModeShowQuote: true, // Show quote overlay
+  focusModeAutoEnter: false, // Don't auto-enter (user choice)
 };
 
 // Quote categories with display names
@@ -100,3 +111,18 @@ export const LAYOUT_DENSITY_SPACING: Record<LayoutDensity, number> = {
   comfortable: 1,
   spacious: 1.25,
 };
+
+// Focus mode image categories with display names
+export const FOCUS_IMAGE_CATEGORIES: Record<FocusImageCategory, string> = {
+  nature: 'Nature',
+  forest: 'Forest',
+  ocean: 'Ocean',
+  mountains: 'Mountains',
+  minimal: 'Minimal',
+  dark: 'Dark',
+};
+
+// All focus image categories as an array (for UI)
+export const ALL_FOCUS_IMAGE_CATEGORIES: FocusImageCategory[] = Object.keys(
+  FOCUS_IMAGE_CATEGORIES
+) as FocusImageCategory[];
