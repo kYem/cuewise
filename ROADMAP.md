@@ -1,6 +1,6 @@
 # Cuewise Development Roadmap
 
-**Last Updated**: 2025-12-06
+**Last Updated**: 2025-12-07
 **Current Version**: v1.3.0 (Published on Chrome Web Store)
 
 ---
@@ -21,6 +21,15 @@
 ### Code Quality
 - [x] Logger consistency (all console.* calls replaced with logger)
 - [x] Additional component tests (CategoryFilter)
+
+### Focus Mode (Full-Screen Pomodoro)
+- [x] Full-screen focus mode overlay with scenic backgrounds
+- [x] Unsplash integration with 10 fallback images per category
+- [x] Large timer display with controls
+- [x] Optional quote display during focus sessions
+- [x] Auto-enter focus mode when timer starts (configurable)
+- [x] Escape key to exit focus mode
+- [ ] Website blocking (optional future enhancement)
 
 **Version Released**: December 2025
 
@@ -228,22 +237,25 @@
 
 **User value**: MEDIUM - Convenience feature
 
-#### 3.4 Pomodoro Enhancements - ✅ MOSTLY COMPLETE
+#### 3.4 Pomodoro Enhancements - ✅ COMPLETE
 - [x] Long break system (configurable interval + duration)
 - [x] Task/goal integration (link Pomodoro to goals)
 - [x] Sounds & Music (6 ambient sounds via Web Audio API)
 - [x] Volume controls
 - [x] Completion sounds
 - [x] Advanced stats (heatmaps, productive hours)
-- [ ] **Focus mode** - NOT IMPLEMENTED
-  - Block distracting websites
-  - Full-screen timer
+- [x] **Focus mode** - IMPLEMENTED
+  - Full-screen timer with Unsplash backgrounds
+  - Auto-enter when timer starts (configurable)
+  - Optional quote display
+- [ ] Website blocking (optional enhancement)
 
 #### 3.5 Customization Options - ⚠️ PARTIAL
 - [x] 6 color themes (OKLCH-based)
 - [x] 3 density modes (compact/comfortable/spacious)
 - [x] Dark/light mode with auto option
-- [ ] Background customization (gradients, patterns, images)
+- [x] Background customization in Focus Mode (Unsplash images)
+- [ ] Background customization for main view (gradients, patterns)
 - [ ] Font options (optional)
 
 ---
@@ -415,12 +427,11 @@
 
 ## 🎯 Recommended Next Priorities
 
-### ✅ Recently Completed: Bulk Quote Operations (Phase 2.1)
-- Multi-select checkboxes in Quote Management page
-- Select all / deselect all functionality
-- Bulk delete, favorite, hide actions
-- Confirmation dialogs for destructive actions
-- Quote restoration (restore missing, reset all)
+### ✅ Recently Completed: Focus Mode (Phase 3.4)
+- Full-screen focus mode with Unsplash backgrounds
+- Auto-enter when Pomodoro timer starts
+- Optional quote display during focus sessions
+- Escape key to exit focus mode
 
 ### Phase 3 Features (Next Focus)
 
@@ -429,9 +440,9 @@
    - Add/remove quotes from collections
    - Collection rotation for display
 
-2. **Focus Mode** (Priority: MEDIUM)
-   - Full-screen Pomodoro timer
-   - Optional website blocking
+2. **Smart Reminders** (Priority: MEDIUM)
+   - Natural language input
+   - Reminder templates
 
 ### Future: Platform Expansion
 
@@ -498,7 +509,7 @@ When ready for growth:
 ---
 
 **Version History**
-- v1.3.0 (2025-12-06) - Data import, onboarding welcome modal, category filter
+- v1.3.0 (2025-12-07) - Data import, onboarding welcome modal, category filter, Focus Mode with Unsplash backgrounds
 - v1.2.0 (2025-11-29) - Chrome Web Store published, Quote Management, Analytics, Pomodoro enhancements
 - v1.1.0 (2025-01-16) - Dark mode, themes, density modes
 - v1.0.0 (2025-01-15) - Initial roadmap after MVP completion

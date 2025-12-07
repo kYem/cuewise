@@ -1,5 +1,88 @@
 # @cuewise/browser-extension
 
+## 1.4.0
+
+### Minor Changes
+
+- b02da15: Add accessibility improvements
+
+  - Semantic HTML landmarks (`<main>`, `<nav>`, `<header>`) for screen reader navigation
+  - Skip-to-main-content link for keyboard users
+  - `aria-live` regions for toast notifications and quote changes
+  - `prefers-reduced-motion` support to disable animations
+  - ARIA attributes for dropdown menus (`aria-expanded`, `aria-haspopup`, `role="menu"`)
+  - `aria-current="page"` for active navigation tabs
+
+- 3e219ae: Add bulk quote operations and quote restoration functionality
+
+  ## Bulk Operations
+
+  - Multi-select checkboxes on quote cards in Quote Management page
+  - Select all / deselect all for current filtered view
+  - Bulk delete, favorite/unfavorite, hide/unhide actions
+  - Confirmation dialog for destructive actions
+
+  ## Quote Restoration
+
+  - "Restore Missing Quotes" - adds back deleted default quotes without affecting custom quotes
+  - "Reset All Quotes" - completely resets to factory defaults (with confirmation)
+  - Accessible via "More Options" dropdown in Quote Management page
+
+  ## New Components
+
+  - ConfirmationDialog - reusable modal for destructive action confirmations
+  - BulkActionsToolbar - selection mode toggle and action buttons
+  - QuoteRestorationMenu - restore/reset dropdown menu
+
+- Add full-screen Focus Mode with Unsplash background images
+
+  ## Focus Mode Features
+
+  - Full-screen overlay with scenic Unsplash background images
+  - Large timer display with play/pause controls
+  - Optional motivational quote display during focus sessions
+  - Auto-enter focus mode when Pomodoro timer starts (configurable in settings)
+  - Escape key to quickly exit focus mode
+
+  ## Background Image System
+
+  - Integration with Unsplash API for high-quality scenic images
+  - 10 fallback images per category (nature, water, forest, mountains, sky)
+  - Smart image preloading and caching for smooth transitions
+  - Random selection with cache-busting to ensure variety
+
+  ## New Components
+
+  - FocusMode - main full-screen overlay component
+  - FocusModeTimer - large timer display
+  - FocusModeControls - play/pause and exit controls
+  - FocusModeQuote - optional quote display
+  - BackgroundImage - handles image loading with fallbacks
+
+  ## New Store
+
+  - focus-mode-store - manages focus mode state, image loading, and preloading
+
+### Patch Changes
+
+- 9ac8b71: Improve charts with shadcn/Recharts best practices
+
+  - Add CSS variable injection for theme-aware chart colors
+  - Fix tooltip styling for dark mode compatibility
+  - Add `hideName` prop to ChartTooltipContent for cleaner tooltips
+  - Remove dashed grid lines, use clean horizontal lines
+  - Make X-axis labels horizontal and abbreviated
+  - Convert weekday chart to vertical bar layout for consistency
+  - Add forest and rose theme chart color variants
+
+- c56e23a: Add unique quotes for resilience, leadership, health, and growth categories
+
+  Previously these 4 categories reused quotes from other categories (inspiration, success, mindfulness, learning), resulting in only 60 unique quotes despite generating 100 quote objects. Now all 10 categories have 10 unique quotes each for a total of 100 truly unique quotes.
+
+- Updated dependencies [b02da15]
+- Updated dependencies [9ac8b71]
+  - @cuewise/ui@1.4.0
+
 ## 1.3.0
 
 ### Minor Changes
