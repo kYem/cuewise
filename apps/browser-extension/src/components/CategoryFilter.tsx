@@ -1,6 +1,6 @@
 import { ALL_QUOTE_CATEGORIES, CATEGORY_COLORS, QUOTE_CATEGORIES } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
-import { Check, Filter, Sparkles, X } from 'lucide-react';
+import { Check, Filter, Heart, Sparkles, X } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useQuoteStore } from '../stores/quote-store';
@@ -14,12 +14,17 @@ export const CategoryFilter: React.FC = () => {
     toggleCategory,
     showCustomQuotes,
     toggleCustomQuotes,
+    showFavoritesOnly,
+    toggleFavoritesOnly,
   } = useQuoteStore();
 
   // Count includes categories + custom (if enabled)
   const enabledCount = enabledCategories.length + (showCustomQuotes ? 1 : 0);
   const totalCount = ALL_QUOTE_CATEGORIES.length + 1; // +1 for Custom
-  const allEnabled = enabledCategories.length === ALL_QUOTE_CATEGORIES.length && showCustomQuotes;
+  const allEnabled =
+    enabledCategories.length === ALL_QUOTE_CATEGORIES.length &&
+    showCustomQuotes &&
+    !showFavoritesOnly;
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -43,12 +48,18 @@ export const CategoryFilter: React.FC = () => {
     if (!showCustomQuotes) {
       toggleCustomQuotes();
     }
+    if (showFavoritesOnly) {
+      toggleFavoritesOnly();
+    }
   };
 
   const handleClearAll = () => {
     setEnabledCategories([]);
     if (showCustomQuotes) {
       toggleCustomQuotes();
+    }
+    if (showFavoritesOnly) {
+      toggleFavoritesOnly();
     }
   };
 
@@ -152,6 +163,40 @@ export const CategoryFilter: React.FC = () => {
               {/* Label */}
               <span className={cn('text-sm', showCustomQuotes ? 'text-primary' : 'text-secondary')}>
                 Custom
+              </span>
+            </button>
+
+            {/* Favorites Only Option */}
+            <button
+              type="button"
+              onClick={toggleFavoritesOnly}
+              className="w-full flex items-center gap-3 px-4 py-2 hover:bg-surface-variant transition-colors"
+            >
+              {/* Checkbox */}
+              <div
+                className={cn(
+                  'w-5 h-5 rounded border-2 flex items-center justify-center transition-all',
+                  showFavoritesOnly
+                    ? 'border-primary-600 bg-primary-600'
+                    : 'border-border bg-surface'
+                )}
+              >
+                {showFavoritesOnly && <Check className="w-3 h-3 text-white" />}
+              </div>
+
+              {/* Icon */}
+              <Heart
+                className={cn(
+                  'w-3 h-3 flex-shrink-0',
+                  showFavoritesOnly ? 'text-red-500 fill-current' : 'text-secondary'
+                )}
+              />
+
+              {/* Label */}
+              <span
+                className={cn('text-sm', showFavoritesOnly ? 'text-primary' : 'text-secondary')}
+              >
+                Favorites Only
               </span>
             </button>
 

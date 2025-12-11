@@ -12,9 +12,11 @@ vi.mock('../stores/quote-store', () => ({
 interface MockCategoryFilterStore {
   enabledCategories: string[];
   showCustomQuotes: boolean;
+  showFavoritesOnly: boolean;
   setEnabledCategories: Mock;
   toggleCategory: Mock;
   toggleCustomQuotes: Mock;
+  toggleFavoritesOnly: Mock;
 }
 
 function createMockStore(
@@ -23,9 +25,11 @@ function createMockStore(
   return {
     enabledCategories: [...ALL_QUOTE_CATEGORIES],
     showCustomQuotes: true,
+    showFavoritesOnly: false,
     setEnabledCategories: vi.fn(),
     toggleCategory: vi.fn(),
     toggleCustomQuotes: vi.fn(),
+    toggleFavoritesOnly: vi.fn(),
     ...overrides,
   };
 }
@@ -411,6 +415,151 @@ describe('CategoryFilter', () => {
       const customButton = screen.getByText('Custom').closest('button');
       const checkboxDiv = customButton?.querySelector('div');
       expect(checkboxDiv?.className).toContain('bg-primary-600');
+    });
+  });
+
+  describe('favorites filter', () => {
+    it('should show Favorites Only option in dropdown', async () => {
+      const user = userEvent.setup();
+      vi.mocked(useQuoteStore).mockReturnValue(createMockStore());
+
+      render(<CategoryFilter />);
+
+      await user.click(screen.getByTitle('Filter categories (11/11)'));
+
+      expect(screen.getByText('Favorites Only')).toBeInTheDocument();
+    });
+
+    it('should call toggleFavoritesOnly when Favorites Only clicked', async () => {
+      const user = userEvent.setup();
+      const toggleFavoritesOnly = vi.fn();
+      vi.mocked(useQuoteStore).mockReturnValue(createMockStore({ toggleFavoritesOnly }));
+
+      render(<CategoryFilter />);
+
+      await user.click(screen.getByTitle('Filter categories (11/11)'));
+      await user.click(screen.getByText('Favorites Only'));
+
+      expect(toggleFavoritesOnly).toHaveBeenCalledTimes(1);
+    });
+
+    it('should show badge when showFavoritesOnly is true', () => {
+      vi.mocked(useQuoteStore).mockReturnValue(
+        createMockStore({
+          showFavoritesOnly: true,
+        })
+      );
+
+      render(<CategoryFilter />);
+
+      // When favorites is enabled, allEnabled is false so badge should show
+      expect(screen.getByText('11')).toBeInTheDocument();
+    });
+
+    it('should show favorites checkbox as checked when showFavoritesOnly is true', async () => {
+      const user = userEvent.setup();
+      vi.mocked(useQuoteStore).mockReturnValue(
+        createMockStore({
+          showFavoritesOnly: true,
+        })
+      );
+
+      render(<CategoryFilter />);
+
+      await user.click(screen.getByTitle('Filter categories (11/11)'));
+
+      const favoritesButton = screen.getByText('Favorites Only').closest('button');
+      const checkboxDiv = favoritesButton?.querySelector('div');
+      expect(checkboxDiv?.className).toContain('bg-primary-600');
+    });
+
+    it('should call toggleFavoritesOnly on Select All when favorites is enabled', async () => {
+      const user = userEvent.setup();
+      const toggleFavoritesOnly = vi.fn();
+      const setEnabledCategories = vi.fn();
+      vi.mocked(useQuoteStore).mockReturnValue(
+        createMockStore({
+          enabledCategories: ['inspiration'],
+          showFavoritesOnly: true,
+          toggleFavoritesOnly,
+          setEnabledCategories,
+        })
+      );
+
+      render(<CategoryFilter />);
+
+      await user.click(screen.getByTitle('Filter categories (2/11)'));
+      await user.click(screen.getByText('Select All'));
+
+      expect(toggleFavoritesOnly).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not call toggleFavoritesOnly on Select All when favorites is disabled', async () => {
+      const user = userEvent.setup();
+      const toggleFavoritesOnly = vi.fn();
+      const setEnabledCategories = vi.fn();
+      const toggleCustomQuotes = vi.fn();
+      vi.mocked(useQuoteStore).mockReturnValue(
+        createMockStore({
+          enabledCategories: ['inspiration'],
+          showCustomQuotes: false,
+          showFavoritesOnly: false,
+          toggleFavoritesOnly,
+          setEnabledCategories,
+          toggleCustomQuotes,
+        })
+      );
+
+      render(<CategoryFilter />);
+
+      await user.click(screen.getByTitle('Filter categories (1/11)'));
+      await user.click(screen.getByText('Select All'));
+
+      expect(toggleFavoritesOnly).not.toHaveBeenCalled();
+    });
+
+    it('should call toggleFavoritesOnly on Clear All when favorites is enabled', async () => {
+      const user = userEvent.setup();
+      const toggleFavoritesOnly = vi.fn();
+      const setEnabledCategories = vi.fn();
+      const toggleCustomQuotes = vi.fn();
+      vi.mocked(useQuoteStore).mockReturnValue(
+        createMockStore({
+          showFavoritesOnly: true,
+          toggleFavoritesOnly,
+          setEnabledCategories,
+          toggleCustomQuotes,
+        })
+      );
+
+      render(<CategoryFilter />);
+
+      await user.click(screen.getByTitle('Filter categories (11/11)'));
+      await user.click(screen.getByText('Clear All'));
+
+      expect(toggleFavoritesOnly).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not call toggleFavoritesOnly on Clear All when favorites is disabled', async () => {
+      const user = userEvent.setup();
+      const toggleFavoritesOnly = vi.fn();
+      const setEnabledCategories = vi.fn();
+      const toggleCustomQuotes = vi.fn();
+      vi.mocked(useQuoteStore).mockReturnValue(
+        createMockStore({
+          showFavoritesOnly: false,
+          toggleFavoritesOnly,
+          setEnabledCategories,
+          toggleCustomQuotes,
+        })
+      );
+
+      render(<CategoryFilter />);
+
+      await user.click(screen.getByTitle('Filter categories (11/11)'));
+      await user.click(screen.getByText('Clear All'));
+
+      expect(toggleFavoritesOnly).not.toHaveBeenCalled();
     });
   });
 });

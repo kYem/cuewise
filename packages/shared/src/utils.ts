@@ -162,15 +162,21 @@ export function getRandomItem<T>(array: T[]): T {
 /**
  * Filter out hidden and get a random quote from a list
  * Excludes the current quote if provided to prevent consecutive duplicates
- * Optionally filters by enabled categories and custom quotes
+ * Optionally filters by enabled categories, custom quotes, and favorites
  */
 export function getRandomQuote(
   quotes: Quote[],
   currentQuoteId?: string,
   enabledCategories?: QuoteCategory[],
-  showCustom = true
+  showCustom = true,
+  showFavoritesOnly = false
 ): Quote | null {
   let visibleQuotes = quotes.filter((q) => !q.isHidden);
+
+  // Filter by favorites if enabled
+  if (showFavoritesOnly) {
+    visibleQuotes = visibleQuotes.filter((q) => q.isFavorite);
+  }
 
   // Filter by enabled categories if provided
   // An empty array means no categories are enabled, so return null
