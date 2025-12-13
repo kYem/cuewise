@@ -126,3 +126,10 @@ export const FOCUS_IMAGE_CATEGORIES: Record<FocusImageCategory, string> = {
 export const ALL_FOCUS_IMAGE_CATEGORIES: FocusImageCategory[] = Object.keys(
   FOCUS_IMAGE_CATEGORIES
 ) as FocusImageCategory[];
+
+// App configuration links
+export const APP_LINKS = {
+  website: 'https://cuewise.app/',
+  changelog: 'https://github.com/kYem/cuewise/blob/main/apps/browser-extension/CHANGELOG.md',
+  github: 'https://github.com/kYem/cuewise',
+} as const;

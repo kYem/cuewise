@@ -1,4 +1,4 @@
-import { formatClockTime, formatLongDate, getGreeting } from '@cuewise/shared';
+import { APP_LINKS, formatClockTime, formatLongDate, getGreeting } from '@cuewise/shared';
 import { BarChart3, BookMarked, PanelRight, Plus, Settings, Timer } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
@@ -386,9 +386,16 @@ export const NewTabPage: React.FC = () => {
           {/* Footer */}
           <footer className="mt-8 py-density-lg flex items-center justify-center gap-4">
             <span className="text-sm text-tertiary">
-              {__APP_NAME__}{' '}
               <a
-                href="https://github.com/kYem/cuewise/blob/main/apps/browser-extension/CHANGELOG.md"
+                href={APP_LINKS.website}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-primary-600 hover:underline transition-colors"
+              >
+                {__APP_NAME__}
+              </a>{' '}
+              <a
+                href={APP_LINKS.changelog}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-primary-600 hover:underline"
