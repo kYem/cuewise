@@ -233,27 +233,8 @@ export const InsightsPage: React.FC = () => {
             </div>
 
             {/* Storage Usage */}
-            <div className="bg-surface rounded-xl shadow-lg p-8 mb-8">
+            <div className="bg-surface rounded-xl shadow-lg p-8">
               <StorageIndicator mode="full" />
-            </div>
-
-            {/* Achievement Summary */}
-            <div className="bg-primary-600 rounded-xl shadow-lg p-8 text-white">
-              <h2 className="text-2xl font-bold mb-4">Your Achievement Summary</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div>
-                  <div className="text-4xl font-bold mb-2">{insights.streak.longest}</div>
-                  <div className="text-white/80">Longest Streak</div>
-                </div>
-                <div>
-                  <div className="text-4xl font-bold mb-2">{insights.goalsCompletedThisMonth}</div>
-                  <div className="text-white/80">Goals This Month</div>
-                </div>
-                <div>
-                  <div className="text-4xl font-bold mb-2">{insights.totalQuotesViewed}</div>
-                  <div className="text-white/80">Total Inspiration</div>
-                </div>
-              </div>
             </div>
           </>
         )}

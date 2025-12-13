@@ -21,10 +21,10 @@ export function FocusModeTimer() {
 
   return (
     <div className="text-center text-white select-none">
-      {/* Large timer display */}
+      {/* Timer display */}
       <div
         className={cn(
-          'text-8xl md:text-9xl font-bold font-mono tracking-tight drop-shadow-2xl',
+          'text-6xl md:text-7xl font-bold font-mono tracking-tight drop-shadow-2xl',
           'transition-opacity duration-300',
           isPaused && 'animate-pulse'
         )}
@@ -38,7 +38,7 @@ export function FocusModeTimer() {
       {/* Session type indicator */}
       <div
         className={cn(
-          'text-2xl md:text-3xl mt-4 uppercase tracking-widest font-medium drop-shadow-lg',
+          'text-xl md:text-2xl mt-3 uppercase tracking-widest font-medium drop-shadow-lg',
           sessionColor
         )}
       >
@@ -47,7 +47,7 @@ export function FocusModeTimer() {
 
       {/* Status indicator */}
       {!isRunning && status !== 'idle' && (
-        <div className="mt-4 text-white/60 text-lg">{isPaused ? 'Paused' : 'Ready'}</div>
+        <div className="mt-3 text-white/60 text-base">{isPaused ? 'Paused' : 'Ready'}</div>
       )}
     </div>
   );
