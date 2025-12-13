@@ -19,6 +19,7 @@ interface QuoteStore {
   historyIndex: number; // Current position in history (0 = most recent)
   enabledCategories: QuoteCategory[]; // Categories to show (session-only, not persisted)
   showCustomQuotes: boolean; // Show custom quotes in filter (session-only)
+  showFavoritesOnly: boolean; // Show only favorite quotes (session-only)
 
   // Actions
   initialize: () => Promise<void>;
@@ -52,6 +53,7 @@ interface QuoteStore {
   setEnabledCategories: (categories: QuoteCategory[]) => void;
   toggleCategory: (category: QuoteCategory) => void;
   toggleCustomQuotes: () => void;
+  toggleFavoritesOnly: () => void;
 
   // Bulk operations
   bulkDelete: (quoteIds: string[]) => Promise<void>;
@@ -73,6 +75,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
   historyIndex: 0,
   enabledCategories: [...ALL_QUOTE_CATEGORIES],
   showCustomQuotes: true,
+  showFavoritesOnly: false,
 
   initialize: async () => {
     try {
@@ -122,14 +125,16 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         historyIndex,
         enabledCategories,
         showCustomQuotes,
+        showFavoritesOnly,
       } = get();
 
-      // Pass current quote ID, enabled categories, and custom filter
+      // Pass current quote ID, enabled categories, custom filter, and favorites filter
       const newQuote = getRandomQuote(
         quotes,
         currentQuote?.id,
         enabledCategories,
-        showCustomQuotes
+        showCustomQuotes,
+        showFavoritesOnly
       );
 
       if (newQuote) {
@@ -406,6 +411,11 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
   toggleCustomQuotes: () => {
     const { showCustomQuotes } = get();
     set({ showCustomQuotes: !showCustomQuotes });
+  },
+
+  toggleFavoritesOnly: () => {
+    const { showFavoritesOnly } = get();
+    set({ showFavoritesOnly: !showFavoritesOnly });
   },
 
   // Bulk operations

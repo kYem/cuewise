@@ -1,4 +1,4 @@
-import type { Quote } from '@cuewise/shared';
+import { ALL_QUOTE_CATEGORIES, type Quote, type QuoteCategory } from '@cuewise/shared';
 import { quoteFactory } from '@cuewise/test-utils/factories';
 import type { Mock } from 'vitest';
 
@@ -312,5 +312,51 @@ export function createForwardHistoryClearScenario() {
     // - quote1 (forward history) should be removed
     // - New quote added at index 0
     // - quote2 should remain in history
+  };
+}
+
+/**
+ * Creates a test scenario for favorites filter with store state ready to use
+ */
+export function createFavoritesScenario(options: {
+  showFavoritesOnly: boolean;
+  hasFavorites?: boolean;
+}) {
+  const { showFavoritesOnly, hasFavorites = true } = options;
+
+  const favoriteQuotes = hasFavorites ? quoteFactory.buildList(2, { isFavorite: true }) : [];
+  const nonFavoriteQuotes = quoteFactory.buildList(2, { isFavorite: false });
+  const allQuotes = [...favoriteQuotes, ...nonFavoriteQuotes];
+  const currentQuote = nonFavoriteQuotes[0];
+
+  return {
+    state: {
+      quotes: allQuotes,
+      currentQuote,
+      quoteHistory: [currentQuote.id],
+      historyIndex: 0,
+      isLoading: false,
+      error: null,
+      showFavoritesOnly,
+      enabledCategories: [...ALL_QUOTE_CATEGORIES] as QuoteCategory[],
+      showCustomQuotes: true,
+    },
+    favoriteQuotes,
+    nonFavoriteQuotes,
+  };
+}
+
+/**
+ * Creates quotes for testing category + favorites combination
+ */
+export function createCategoryFavoritesScenario() {
+  const favoriteInspiration = quoteFactory.build({ isFavorite: true, category: 'inspiration' });
+  const favoriteProductivity = quoteFactory.build({ isFavorite: true, category: 'productivity' });
+  const nonFavoriteInspiration = quoteFactory.build({ isFavorite: false, category: 'inspiration' });
+
+  return {
+    quotes: [favoriteInspiration, favoriteProductivity, nonFavoriteInspiration],
+    favoriteInspiration,
+    currentQuote: nonFavoriteInspiration,
   };
 }

@@ -5,7 +5,9 @@ import { SEED_QUOTES } from '../data/seed-quotes';
 import {
   createAtBeginningState,
   createAtEndState,
+  createCategoryFavoritesScenario,
   createDeletedQuoteScenario,
+  createFavoritesScenario,
   createForwardHistoryClearScenario,
   createHiddenQuoteScenario,
   createNavigationQuotes,
@@ -448,6 +450,55 @@ describe('Quote Store', () => {
         // Should skip deleted quote and go to first quote
         expectNavigationToQuote(state, scenario.existingQuotes[0], 0);
       });
+    });
+  });
+
+  describe('Favorites Filter', () => {
+    it('should toggle showFavoritesOnly state', () => {
+      useQuoteStore.setState({ showFavoritesOnly: false });
+      useQuoteStore.getState().toggleFavoritesOnly();
+      expect(useQuoteStore.getState().showFavoritesOnly).toBe(true);
+
+      useQuoteStore.getState().toggleFavoritesOnly();
+      expect(useQuoteStore.getState().showFavoritesOnly).toBe(false);
+    });
+
+    it('should only return favorites when filter enabled', async () => {
+      const { state } = createFavoritesScenario({ showFavoritesOnly: true });
+      useQuoteStore.setState(state);
+
+      await useQuoteStore.getState().refreshQuote();
+
+      expect(useQuoteStore.getState().currentQuote?.isFavorite).toBe(true);
+    });
+
+    it('should return null when no favorites exist', async () => {
+      const { state } = createFavoritesScenario({ showFavoritesOnly: true, hasFavorites: false });
+      useQuoteStore.setState(state);
+
+      await useQuoteStore.getState().refreshQuote();
+
+      expect(useQuoteStore.getState().currentQuote).toBeNull();
+    });
+
+    it('should combine with category filter', async () => {
+      const { quotes, favoriteInspiration, currentQuote } = createCategoryFavoritesScenario();
+      useQuoteStore.setState({
+        quotes,
+        currentQuote,
+        quoteHistory: [currentQuote.id],
+        historyIndex: 0,
+        isLoading: false,
+        error: null,
+        showFavoritesOnly: true,
+        enabledCategories: ['inspiration'],
+        showCustomQuotes: true,
+      });
+
+      await useQuoteStore.getState().refreshQuote();
+
+      const result = useQuoteStore.getState().currentQuote;
+      expect(result?.id).toBe(favoriteInspiration.id);
     });
   });
 });
