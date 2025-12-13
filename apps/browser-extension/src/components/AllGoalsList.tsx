@@ -178,8 +178,8 @@ export const AllGoalsList: React.FC = () => {
                     </div>
                   )}
 
-                  {/* Move to Today Button - only show for non-today goals */}
-                  {!isToday && (
+                  {/* Move to Today Button - only show for incomplete non-today goals */}
+                  {!isToday && !goal.completed && (
                     <button
                       type="button"
                       onClick={() => moveGoalToToday(goal.id)}
@@ -198,7 +198,7 @@ export const AllGoalsList: React.FC = () => {
                       onClick={() => transferGoalToNextDay(goal.id)}
                       className="flex-shrink-0 p-2 text-secondary hover:text-primary-600 opacity-0 group-hover:opacity-100 transition-all focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 rounded"
                       aria-label="Transfer to tomorrow"
-                      title="Transfer to tomorrow"
+                      title="Move to tomorrow"
                     >
                       <ArrowRight className="w-4 h-4" />
                     </button>
@@ -210,6 +210,7 @@ export const AllGoalsList: React.FC = () => {
                     onClick={() => deleteGoal(goal.id)}
                     className="flex-shrink-0 p-2 text-secondary hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 rounded"
                     aria-label="Delete goal"
+                    title="Delete goal"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>

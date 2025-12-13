@@ -1,6 +1,7 @@
 import { ToastContainer } from '@cuewise/ui';
 import { useEffect, useState } from 'react';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { GoalsPage } from './components/GoalsPage';
 import { InsightsPage } from './components/InsightsPage';
 import { NewTabPage } from './components/NewTabPage';
 import { PomodoroPage } from './components/PomodoroPage';
@@ -9,7 +10,7 @@ import { ThemeSwitcher } from './components/ThemeSwitcher';
 import { useSettingsStore } from './stores/settings-store';
 import { useToastStore } from './stores/toast-store';
 
-type Page = 'home' | 'pomodoro' | 'insights' | 'quotes';
+type Page = 'home' | 'pomodoro' | 'insights' | 'quotes' | 'goals';
 
 function App() {
   const [currentPage, setCurrentPage] = useState<Page>('home');
@@ -25,6 +26,8 @@ function App() {
         setCurrentPage('insights');
       } else if (hash === 'quotes') {
         setCurrentPage('quotes');
+      } else if (hash === 'goals') {
+        setCurrentPage('goals');
       } else {
         setCurrentPage('home');
       }
@@ -56,6 +59,7 @@ function App() {
           {currentPage === 'pomodoro' && <PomodoroPage />}
           {currentPage === 'insights' && <InsightsPage />}
           {currentPage === 'quotes' && <QuoteManagementPage />}
+          {currentPage === 'goals' && <GoalsPage />}
           {currentPage === 'home' && <NewTabPage />}
         </main>
 

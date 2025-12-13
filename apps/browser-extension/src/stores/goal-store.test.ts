@@ -15,6 +15,7 @@ vi.mock('./toast-store', () => ({
   useToastStore: {
     getState: () => ({
       error: vi.fn(),
+      success: vi.fn(),
     }),
   },
 }));
@@ -186,6 +187,95 @@ describe('Goal Store', () => {
       const state = useGoalStore.getState();
       expect(state.todayGoals).toHaveLength(1);
       expect(state.todayGoals[0]).toMatchObject(incompleteTodayGoals[0]);
+    });
+  });
+
+  describe('moveGoalToToday', () => {
+    it('should move a past goal to today', async () => {
+      const today = getTodayDateString();
+      const pastGoal = goalFactory.build({ date: '2025-01-01', completed: false });
+      const todayGoal = goalFactory.build({ date: today });
+
+      useGoalStore.setState({ goals: [pastGoal, todayGoal], todayGoals: [todayGoal] });
+
+      await useGoalStore.getState().moveGoalToToday(pastGoal.id);
+
+      expect(storage.setGoals).toHaveBeenCalled();
+      const updatedGoals = vi.mocked(storage.setGoals).mock.calls[0][0];
+      const movedGoal = updatedGoals.find((g) => g.id === pastGoal.id);
+
+      expect(movedGoal?.date).toBe(today);
+    });
+
+    it('should reset completion status when moving to today', async () => {
+      const today = getTodayDateString();
+      const pastCompletedGoal = completedGoalFactory.build({ date: '2025-01-01' });
+
+      useGoalStore.setState({ goals: [pastCompletedGoal], todayGoals: [] });
+
+      await useGoalStore.getState().moveGoalToToday(pastCompletedGoal.id);
+
+      const updatedGoals = vi.mocked(storage.setGoals).mock.calls[0][0];
+      const movedGoal = updatedGoals.find((g) => g.id === pastCompletedGoal.id);
+
+      expect(movedGoal?.date).toBe(today);
+      expect(movedGoal?.completed).toBe(false);
+    });
+
+    it('should update todayGoals after moving', async () => {
+      const pastGoal = goalFactory.build({ date: '2025-01-01', completed: false });
+
+      useGoalStore.setState({ goals: [pastGoal], todayGoals: [] });
+
+      await useGoalStore.getState().moveGoalToToday(pastGoal.id);
+
+      const state = useGoalStore.getState();
+      expect(state.todayGoals).toHaveLength(1);
+      expect(state.todayGoals[0].id).toBe(pastGoal.id);
+    });
+  });
+
+  describe('transferGoalToNextDay', () => {
+    it('should transfer goal to tomorrow', async () => {
+      const today = getTodayDateString();
+      const todayGoal = goalFactory.build({ date: today, completed: false });
+
+      useGoalStore.setState({ goals: [todayGoal], todayGoals: [todayGoal] });
+
+      await useGoalStore.getState().transferGoalToNextDay(todayGoal.id);
+
+      expect(storage.setGoals).toHaveBeenCalled();
+      const updatedGoals = vi.mocked(storage.setGoals).mock.calls[0][0];
+      const transferredGoal = updatedGoals.find((g) => g.id === todayGoal.id);
+
+      // Should be tomorrow, not today
+      expect(transferredGoal?.date).not.toBe(today);
+    });
+
+    it('should increment transfer count', async () => {
+      const today = getTodayDateString();
+      const todayGoal = goalFactory.build({ date: today, transferCount: 2 });
+
+      useGoalStore.setState({ goals: [todayGoal], todayGoals: [todayGoal] });
+
+      await useGoalStore.getState().transferGoalToNextDay(todayGoal.id);
+
+      const updatedGoals = vi.mocked(storage.setGoals).mock.calls[0][0];
+      const transferredGoal = updatedGoals.find((g) => g.id === todayGoal.id);
+
+      expect(transferredGoal?.transferCount).toBe(3);
+    });
+
+    it('should remove goal from todayGoals after transfer', async () => {
+      const today = getTodayDateString();
+      const todayGoal = goalFactory.build({ date: today });
+
+      useGoalStore.setState({ goals: [todayGoal], todayGoals: [todayGoal] });
+
+      await useGoalStore.getState().transferGoalToNextDay(todayGoal.id);
+
+      const state = useGoalStore.getState();
+      expect(state.todayGoals).toHaveLength(0);
     });
   });
 });

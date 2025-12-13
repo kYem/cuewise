@@ -1,4 +1,4 @@
-import { isPastGoalTransferTime } from '@cuewise/shared';
+import { getTodayDateString, isPastGoalTransferTime } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
 import {
   ArrowRight,
@@ -6,27 +6,26 @@ import {
   ChevronDown,
   ChevronUp,
   Circle,
+  ExternalLink,
   History,
   Trash2,
 } from 'lucide-react';
 import type React from 'react';
-import { useEffect, useRef, useState } from 'react';
-import { type CompletionFilter, useGoalStore } from '../stores/goal-store';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useGoalStore } from '../stores/goal-store';
 import { useSettingsStore } from '../stores/settings-store';
-import { AllGoalsList } from './AllGoalsList';
 
 export const GoalsList: React.FC = () => {
   const {
     todayGoals,
     goals,
     showAllGoals,
-    completionFilter,
     toggleGoal,
     updateGoal,
     deleteGoal,
     transferGoalToNextDay,
+    moveGoalToToday,
     toggleShowAllGoals,
-    setCompletionFilter,
     isLoading,
   } = useGoalStore();
   const { settings } = useSettingsStore();
@@ -85,6 +84,33 @@ export const GoalsList: React.FC = () => {
   const completedCount = todayGoals.filter((g) => g.completed).length;
   const totalCount = todayGoals.length;
   const progressPercentage = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
+
+  // Get incomplete goals from the last 2 weeks (excluding today)
+  const recentIncompleteGoals = useMemo(() => {
+    const today = getTodayDateString();
+    const twoWeeksAgo = new Date();
+    twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+    const twoWeeksAgoStr = twoWeeksAgo.toISOString().split('T')[0];
+
+    return goals.filter((goal) => {
+      // Exclude today's goals (already shown above)
+      if (goal.date === today) {
+        return false;
+      }
+      // Only incomplete goals
+      if (goal.completed) {
+        return false;
+      }
+      // Only goals from the last 2 weeks
+      if (goal.date < twoWeeksAgoStr) {
+        return false;
+      }
+      return true;
+    });
+  }, [goals]);
+
+  const recentIncompleteCount = recentIncompleteGoals.length;
+
   const hasOtherGoals = goals.length > todayGoals.length;
 
   return (
@@ -221,7 +247,7 @@ export const GoalsList: React.FC = () => {
         </button>
       )}
 
-      {/* View All Goals Button - Always visible */}
+      {/* Incomplete Goals Dropdown */}
       <div className={cn('pt-4', totalCount > 0 && 'border-t border-border')}>
         <button
           type="button"
@@ -229,42 +255,84 @@ export const GoalsList: React.FC = () => {
           className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-lg bg-surface-variant hover:bg-primary-100 text-secondary hover:text-primary-600 transition-all font-medium"
         >
           <History className="w-4 h-4" />
-          <span>{showAllGoals ? 'Hide History' : 'View All Goals'}</span>
+          <span>{showAllGoals ? 'Hide Incomplete' : 'Show Incomplete'}</span>
           {showAllGoals ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-          {!showAllGoals && hasOtherGoals && (
+          {!showAllGoals && recentIncompleteCount > 0 && (
             <span className="ml-1 text-xs bg-primary-600 text-white px-2 py-0.5 rounded-full">
-              {goals.length - todayGoals.length}
+              {recentIncompleteCount}
             </span>
           )}
         </button>
 
-        {/* Expanded Section: Filters + All Goals */}
+        {/* Expanded Section: Incomplete Goals from Last 2 Weeks */}
         {showAllGoals && (
-          <div className="mt-6 space-y-4">
-            {/* Completion Filter */}
-            <div className="flex items-center justify-center gap-2">
-              <span className="text-sm text-secondary font-medium">Show:</span>
-              <div className="flex gap-1 bg-surface-variant rounded-lg p-1">
-                {(['all', 'incomplete', 'completed'] as CompletionFilter[]).map((filter) => (
-                  <button
-                    key={filter}
-                    type="button"
-                    onClick={() => setCompletionFilter(filter)}
-                    className={cn(
-                      'px-4 py-1.5 rounded-md text-sm font-medium transition-all capitalize',
-                      completionFilter === filter
-                        ? 'bg-primary-600 text-white shadow-md'
-                        : 'text-secondary hover:text-primary hover:bg-surface'
-                    )}
+          <div className="mt-4 space-y-4">
+            {recentIncompleteGoals.length === 0 ? (
+              <p className="text-center text-sm text-tertiary py-4">
+                No incomplete goals from the last 2 weeks
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {recentIncompleteGoals.map((goal) => (
+                  <div
+                    key={goal.id}
+                    className="group flex items-start gap-3 p-3 rounded-lg border-2 border-border bg-surface hover:border-primary-300 transition-all"
                   >
-                    {filter}
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => toggleGoal(goal.id)}
+                      className="flex-shrink-0 mt-0.5 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 rounded-full"
+                      aria-label="Mark as complete"
+                    >
+                      <Circle className="w-5 h-5 text-tertiary group-hover:text-primary-500 transition-colors" />
+                    </button>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm text-primary block">{goal.text}</span>
+                      <span className="text-xs text-tertiary">
+                        {goal.date}
+                        {goal.transferCount && goal.transferCount > 0 && (
+                          <span
+                            className="ml-2"
+                            title={`Transferred ${goal.transferCount} time${goal.transferCount > 1 ? 's' : ''}`}
+                          >
+                            · ↻{goal.transferCount}
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => moveGoalToToday(goal.id)}
+                        className="p-1.5 text-secondary hover:text-primary-600 opacity-0 group-hover:opacity-100 transition-all focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 rounded"
+                        aria-label="Move to today"
+                        title="Move to today"
+                      >
+                        <ArrowRight className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => deleteGoal(goal.id)}
+                        className="p-1.5 text-secondary hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 rounded"
+                        aria-label="Delete goal"
+                        title="Delete goal"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
                 ))}
               </div>
-            </div>
+            )}
 
-            {/* All Goals List */}
-            <AllGoalsList />
+            {/* Link to full Goals page */}
+            <a
+              href="#goals"
+              className="flex items-center justify-center gap-2 py-2 text-sm text-secondary hover:text-primary-600 transition-colors"
+            >
+              <span>View all goals</span>
+              <ExternalLink className="w-3 h-3" />
+            </a>
           </div>
         )}
       </div>
