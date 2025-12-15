@@ -2,6 +2,7 @@ import {
   createScheduledDate,
   logger,
   type ReminderCategory,
+  type ReminderFrequency,
   type ReminderTemplate,
   suggestOptimalTime,
 } from '@cuewise/shared';
@@ -24,9 +25,7 @@ export const AddReminderForm: React.FC<AddReminderFormProps> = ({ onSuccess }) =
   const [text, setText] = useState('');
   const [dueDate, setDueDate] = useState<Date | null>(null);
   const [isRecurring, setIsRecurring] = useState(false);
-  const [recurringFrequency, setRecurringFrequency] = useState<'daily' | 'weekly' | 'monthly'>(
-    'daily'
-  );
+  const [recurringFrequency, setRecurringFrequency] = useState<ReminderFrequency>('daily');
   const [category, setCategory] = useState<ReminderCategory | undefined>(undefined);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -39,17 +38,59 @@ export const AddReminderForm: React.FC<AddReminderFormProps> = ({ onSuccess }) =
     return suggestOptimalTime(reminders, category);
   }, [reminders, category]);
 
-  // Handle template selection - pre-fill form and switch to custom mode
-  const handleSelectTemplate = (template: ReminderTemplate) => {
-    setText(template.text);
-    setIsRecurring(true);
-    setRecurringFrequency(template.frequency);
-    setCategory(template.category);
+  // Handle template selection - create reminder directly
+  const handleSelectTemplate = async (template: ReminderTemplate) => {
+    // Validate time format
+    const timeParts = template.defaultTime?.split(':');
+    if (!timeParts || timeParts.length !== 2) {
+      logger.error('Invalid template time format', {
+        templateId: template.id,
+        defaultTime: template.defaultTime,
+      });
+      useToastStore.getState().warning('Template has invalid time format');
+      return;
+    }
 
-    // Calculate the due date based on template's default time
-    const [hours, minutes] = template.defaultTime.split(':').map(Number);
-    setDueDate(createScheduledDate(hours, minutes));
-    setMode('custom'); // Switch to custom mode to allow editing
+    const hours = Number(timeParts[0]);
+    const minutes = Number(timeParts[1]);
+
+    if (
+      Number.isNaN(hours) ||
+      Number.isNaN(minutes) ||
+      hours < 0 ||
+      hours > 23 ||
+      minutes < 0 ||
+      minutes > 59
+    ) {
+      logger.error('Invalid template time values', {
+        templateId: template.id,
+        hours,
+        minutes,
+      });
+      useToastStore.getState().warning('Template has invalid time values');
+      return;
+    }
+
+    // Create reminder directly from template
+    try {
+      const dueDate = createScheduledDate(hours, minutes);
+
+      await addReminder(
+        template.text,
+        dueDate,
+        {
+          frequency: template.frequency,
+          enabled: true,
+        },
+        template.category
+      );
+
+      useToastStore.getState().success(`Created "${template.name}" reminder`);
+      onSuccess();
+    } catch (error) {
+      logger.error('Failed to create reminder from template', error);
+      useToastStore.getState().error('Failed to create reminder. Please try again.');
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -188,9 +229,7 @@ export const AddReminderForm: React.FC<AddReminderFormProps> = ({ onSuccess }) =
                 <select
                   id="reminder-frequency"
                   value={recurringFrequency}
-                  onChange={(e) =>
-                    setRecurringFrequency(e.target.value as 'daily' | 'weekly' | 'monthly')
-                  }
+                  onChange={(e) => setRecurringFrequency(e.target.value as ReminderFrequency)}
                   className="w-full px-4 py-3 rounded-lg border-2 border-border focus:border-primary-500 focus:outline-none transition-colors text-primary"
                 >
                   <option value="daily">Daily</option>

@@ -39,6 +39,9 @@ export interface Goal {
 // Reminder category for templates and context-aware suggestions
 export type ReminderCategory = 'health' | 'productivity' | 'personal';
 
+// Reminder frequency for recurring reminders and templates
+export type ReminderFrequency = 'daily' | 'weekly' | 'monthly';
+
 // Reminder interface
 export interface Reminder {
   id: string;
@@ -47,7 +50,7 @@ export interface Reminder {
   completed: boolean;
   notified: boolean;
   recurring?: {
-    frequency: 'daily' | 'weekly' | 'monthly';
+    frequency: ReminderFrequency;
     enabled: boolean;
   };
   // Context-aware suggestions
@@ -61,7 +64,7 @@ export interface ReminderTemplate {
   name: string;
   text: string;
   defaultTime: string; // HH:MM format (e.g., "09:00")
-  frequency: 'daily' | 'weekly' | 'monthly';
+  frequency: ReminderFrequency;
   category: ReminderCategory;
 }
 

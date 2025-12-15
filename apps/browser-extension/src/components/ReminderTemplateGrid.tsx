@@ -3,6 +3,7 @@ import {
   REMINDER_CATEGORIES,
   REMINDER_TEMPLATES,
   type ReminderCategory,
+  type ReminderFrequency,
   type ReminderTemplate,
 } from '@cuewise/shared';
 import {
@@ -42,7 +43,7 @@ const CATEGORY_COLORS: Record<ReminderCategory, string> = {
 };
 
 // Frequency display labels
-const FREQUENCY_LABELS: Record<'daily' | 'weekly' | 'monthly', string> = {
+const FREQUENCY_LABELS: Record<ReminderFrequency, string> = {
   daily: 'Daily',
   weekly: 'Weekly',
   monthly: 'Monthly',
@@ -114,7 +115,7 @@ export const ReminderTemplateGrid: React.FC<ReminderTemplateGridProps> = ({ onSe
       </div>
 
       <p className="text-xs text-secondary text-center">
-        Click a template to pre-fill the form. You can adjust the time before saving.
+        Click a template to create a reminder instantly. Edit it later if needed.
       </p>
     </div>
   );
@@ -122,6 +123,16 @@ export const ReminderTemplateGrid: React.FC<ReminderTemplateGridProps> = ({ onSe
 
 // Helper to format time from HH:MM string to readable format
 function formatTemplateTime(time: string): string {
-  const [hours, minutes] = time.split(':').map(Number);
+  if (!time || !time.includes(':')) {
+    return 'Invalid time';
+  }
+  const [hoursStr, minutesStr] = time.split(':');
+  const hours = Number(hoursStr);
+  const minutes = Number(minutesStr);
+
+  if (Number.isNaN(hours) || Number.isNaN(minutes)) {
+    return 'Invalid time';
+  }
+
   return formatHourMinute(hours, minutes);
 }

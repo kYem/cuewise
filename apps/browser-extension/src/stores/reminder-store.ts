@@ -1,4 +1,10 @@
-import { generateId, logger, type Reminder, type ReminderCategory } from '@cuewise/shared';
+import {
+  generateId,
+  logger,
+  type Reminder,
+  type ReminderCategory,
+  type ReminderFrequency,
+} from '@cuewise/shared';
 import { getReminders, setReminders } from '@cuewise/storage';
 import { create } from 'zustand';
 import { useToastStore } from './toast-store';
@@ -15,7 +21,7 @@ interface ReminderStore {
   addReminder: (
     text: string,
     dueDate: Date,
-    recurring?: { frequency: 'daily' | 'weekly' | 'monthly'; enabled: boolean },
+    recurring?: { frequency: ReminderFrequency; enabled: boolean },
     category?: ReminderCategory
   ) => Promise<void>;
   toggleReminder: (reminderId: string) => Promise<void>;
@@ -131,6 +137,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       const reminder = reminders.find((r) => r.id === reminderId);
       if (!reminder) {
         logger.warn(`toggleReminder: Reminder with id ${reminderId} not found`);
+        useToastStore.getState().warning('This reminder no longer exists');
         return;
       }
 
@@ -172,6 +179,12 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
     try {
       const { reminders } = get();
 
+      const reminderExists = reminders.some((r) => r.id === reminderId);
+      if (!reminderExists) {
+        logger.warn(`deleteReminder: Reminder with id ${reminderId} not found`);
+        return;
+      }
+
       const updatedReminders = reminders.filter((reminder) => reminder.id !== reminderId);
 
       await setReminders(updatedReminders);
@@ -198,6 +211,13 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
   updateReminder: async (reminderId: string, updates: Partial<Omit<Reminder, 'id'>>) => {
     try {
       const { reminders } = get();
+
+      const reminderExists = reminders.some((r) => r.id === reminderId);
+      if (!reminderExists) {
+        logger.warn(`updateReminder: Reminder with id ${reminderId} not found`);
+        useToastStore.getState().warning('This reminder no longer exists');
+        return;
+      }
 
       const updatedReminders = reminders.map((reminder) =>
         reminder.id === reminderId ? { ...reminder, ...updates } : reminder
@@ -234,6 +254,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
 
       if (!reminder) {
         logger.warn(`snoozeReminder: Reminder with id ${reminderId} not found`);
+        useToastStore.getState().warning('This reminder no longer exists');
         return;
       }
 
