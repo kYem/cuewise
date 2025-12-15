@@ -513,6 +513,22 @@ import { CATEGORY_COLORS } from '@cuewise/shared';
 const color = CATEGORY_COLORS[quote.category]; // "#8B5CF6"
 ```
 
+### 6. Code Style
+
+**Always use explicit if blocks** - never use shorthand conditionals:
+```typescript
+// CORRECT: Full if block
+if (condition) {
+  doSomething();
+}
+
+// WRONG: Shorthand
+condition && doSomething();
+
+// WRONG: Single-line without braces
+if (condition) doSomething();
+```
+
 ## Testing Strategy
 
 ### Testing Tools
@@ -670,6 +686,7 @@ it('should navigate to previous quote', async () => {
 - ❌ Write assertion logic multiple times
 - ❌ Mix multiple concerns in a single test
 - ❌ Use try/catch blocks in tests - use expect assertions for errors
+- ❌ Use shorthand if statements - always use full `if () {}` blocks
 
 **Running Tests**:
 ```bash

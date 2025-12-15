@@ -36,6 +36,9 @@ export interface Goal {
   transferCount?: number; // Number of times goal was transferred to next day
 }
 
+// Reminder category for templates and context-aware suggestions
+export type ReminderCategory = 'health' | 'productivity' | 'personal';
+
 // Reminder interface
 export interface Reminder {
   id: string;
@@ -47,6 +50,19 @@ export interface Reminder {
     frequency: 'daily' | 'weekly' | 'monthly';
     enabled: boolean;
   };
+  // Context-aware suggestions
+  category?: ReminderCategory; // Optional category for suggestions
+  completedAt?: string; // ISO timestamp when marked complete (for suggestions)
+}
+
+// Reminder template for quick creation
+export interface ReminderTemplate {
+  id: string;
+  name: string;
+  text: string;
+  defaultTime: string; // HH:MM format (e.g., "09:00")
+  frequency: 'daily' | 'weekly' | 'monthly';
+  category: ReminderCategory;
 }
 
 // Pomodoro session interface

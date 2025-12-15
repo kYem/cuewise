@@ -1,6 +1,7 @@
+import { createScheduledDate, type SuggestedTime } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
 import * as chrono from 'chrono-node';
-import { Calendar, ChevronDown, ChevronUp, Clock } from 'lucide-react';
+import { Calendar, ChevronDown, ChevronUp, Clock, Sparkles } from 'lucide-react';
 import type React from 'react';
 import { useMemo, useRef, useState } from 'react';
 
@@ -10,6 +11,8 @@ interface DateTimePresetPickerProps {
   minDate?: Date;
   label?: string;
   required?: boolean;
+  /** Optional suggested time based on user's completion patterns */
+  suggestion?: SuggestedTime | null;
 }
 
 interface Preset {
@@ -121,6 +124,7 @@ export const DateTimePresetPicker: React.FC<DateTimePresetPickerProps> = ({
   minDate,
   label = 'When',
   required = false,
+  suggestion,
 }) => {
   const [naturalInput, setNaturalInput] = useState('');
   const [showCustom, setShowCustom] = useState(false);
@@ -132,6 +136,15 @@ export const DateTimePresetPicker: React.FC<DateTimePresetPickerProps> = ({
   const effectiveMinDate = minDate ?? minDateRef.current;
 
   const presets = generatePresets();
+
+  const handleSuggestionClick = () => {
+    if (suggestion) {
+      const date = createScheduledDate(suggestion.hour, suggestion.minute);
+      onChange(date);
+      setNaturalInput('');
+      setShowCustom(false);
+    }
+  };
 
   // Parse natural language input - memoized to avoid re-renders
   const parsedPreview = useMemo(() => {
@@ -214,6 +227,33 @@ export const DateTimePresetPicker: React.FC<DateTimePresetPickerProps> = ({
         <div className="flex items-center gap-2 px-4 py-3 bg-primary-50 dark:bg-primary-900/20 rounded-lg border-2 border-primary-200 dark:border-primary-800">
           <Clock className="w-5 h-5 text-primary-600" />
           <span className="font-medium text-primary">{formatDateTime(value)}</span>
+        </div>
+      )}
+
+      {/* Suggested Time (Context-Aware) */}
+      {suggestion && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-1.5 text-xs text-secondary">
+            <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+            <span>
+              Suggested based on your completion patterns
+              {suggestion.confidence === 'high' && ' (strong pattern)'}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={handleSuggestionClick}
+            className={cn(
+              'w-full px-4 py-3 text-sm font-medium rounded-lg transition-all',
+              'bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/30',
+              'text-amber-800 dark:text-amber-300',
+              'border-2 border-amber-200 dark:border-amber-800 hover:border-amber-300 dark:hover:border-amber-700',
+              'flex items-center justify-center gap-2'
+            )}
+          >
+            <Clock className="w-4 h-4" />
+            <span>Use suggested time: {suggestion.formatted}</span>
+          </button>
         </div>
       )}
 

@@ -29,6 +29,8 @@ import type {
   PomodoroSession,
   Quote,
   QuoteCategory,
+  Reminder,
+  ReminderCategory,
   WeeklyTrend,
 } from './types';
 import { EXPORT_FORMAT_VERSION } from './types';
@@ -81,6 +83,32 @@ export function isPastGoalTransferTime(transferHour: number): boolean {
  */
 export function formatDate(dateString: string): string {
   return format(parseISO(dateString), 'MMMM d, yyyy');
+}
+
+/**
+ * Create a Date object for a specific time today, or tomorrow if that time has already passed.
+ * Useful for scheduling reminders at a specific time.
+ *
+ * @param hour - Hour in 24-hour format (0-23)
+ * @param minute - Minute (0-59), defaults to 0
+ * @returns Date object set to the specified time today or tomorrow
+ *
+ * @example
+ * // If it's currently 3:00 PM
+ * createScheduledDate(10, 0);  // Returns tomorrow at 10:00 AM
+ * createScheduledDate(17, 30); // Returns today at 5:30 PM
+ */
+export function createScheduledDate(hour: number, minute = 0): Date {
+  const now = new Date();
+  const scheduledDate = new Date();
+  scheduledDate.setHours(hour, minute, 0, 0);
+
+  // If the time has already passed today, schedule for tomorrow
+  if (scheduledDate <= now) {
+    scheduledDate.setDate(scheduledDate.getDate() + 1);
+  }
+
+  return scheduledDate;
 }
 
 /**
@@ -289,7 +317,10 @@ export function formatClockTime(
 
   // 12-hour format
   const period = hours >= 12 ? 'PM' : 'AM';
-  const displayHours = hours % 12 || 12;
+  let displayHours = hours % 12;
+  if (displayHours === 0) {
+    displayHours = 12;
+  }
 
   return {
     time: `${displayHours}:${minutes.toString().padStart(2, '0')}`,
@@ -302,6 +333,28 @@ export function formatClockTime(
  */
 export function formatLongDate(date: Date): string {
   return format(date, 'EEEE, MMMM d, yyyy');
+}
+
+/**
+ * Format hour and minute as a 12-hour time string (e.g., "10 AM", "2:30 PM")
+ * Omits minutes if they are zero.
+ *
+ * @param hour - Hour in 24-hour format (0-23)
+ * @param minute - Minute (0-59), defaults to 0
+ * @returns Formatted time string like "10 AM" or "2:30 PM"
+ */
+export function formatHourMinute(hour: number, minute = 0): string {
+  const period = hour >= 12 ? 'PM' : 'AM';
+  let displayHour = hour % 12;
+  if (displayHour === 0) {
+    displayHour = 12;
+  }
+
+  if (minute === 0) {
+    return `${displayHour}:00 ${period}`;
+  }
+
+  return `${displayHour}:${minute.toString().padStart(2, '0')} ${period}`;
 }
 
 /**
@@ -1127,4 +1180,146 @@ export function compareVersions(v1: string, v2: string): number {
   }
 
   return 0;
+}
+
+// ============================================================================
+// Context-aware reminder suggestions
+// ============================================================================
+
+/**
+ * Suggested time result with metadata
+ */
+export interface SuggestedTime {
+  hour: number;
+  minute: number;
+  formatted: string; // "10:00 AM"
+  confidence: 'high' | 'medium' | 'low';
+  basedOn: number; // Number of completions used to determine suggestion
+}
+
+/**
+ * Analyze reminder completion patterns and suggest optimal time for a new reminder.
+ *
+ * @param reminders - Array of all reminders (will filter to completed ones with completedAt)
+ * @param category - Optional category to filter by for more relevant suggestions
+ * @param minCompletions - Minimum completions needed for a suggestion (default: 3)
+ * @returns SuggestedTime or null if not enough data
+ *
+ * @example
+ * const suggestion = suggestOptimalTime(reminders, 'health');
+ * // Returns: { hour: 10, minute: 0, formatted: "10:00 AM", confidence: "high", basedOn: 15 }
+ */
+export function suggestOptimalTime(
+  reminders: Reminder[],
+  category?: ReminderCategory,
+  minCompletions = 3
+): SuggestedTime | null {
+  // Filter to completed reminders with completion timestamps
+  let relevantReminders = reminders.filter((r) => r.completed && r.completedAt);
+
+  // Filter by category if specified
+  if (category) {
+    relevantReminders = relevantReminders.filter((r) => r.category === category);
+  }
+
+  // Not enough data
+  if (relevantReminders.length < minCompletions) {
+    return null;
+  }
+
+  // Count completions by hour
+  const hourCounts: Record<number, number> = {};
+
+  for (const reminder of relevantReminders) {
+    if (reminder.completedAt) {
+      const completedDate = parseISO(reminder.completedAt);
+      const hour = getHours(completedDate);
+      if (!hourCounts[hour]) {
+        hourCounts[hour] = 0;
+      }
+      hourCounts[hour] = hourCounts[hour] + 1;
+    }
+  }
+
+  // Find the most common hour
+  const sortedHours = Object.entries(hourCounts)
+    .map(([hour, count]) => ({ hour: Number(hour), count }))
+    .sort((a, b) => b.count - a.count);
+
+  if (sortedHours.length === 0) {
+    return null;
+  }
+
+  const topHour = sortedHours[0];
+  const totalCompletions = relevantReminders.length;
+
+  // Determine confidence based on how concentrated completions are
+  const topHourPercentage = topHour.count / totalCompletions;
+  let confidence: 'high' | 'medium' | 'low';
+
+  if (topHourPercentage >= 0.4 && totalCompletions >= 10) {
+    confidence = 'high';
+  } else if (topHourPercentage >= 0.25 || totalCompletions >= 5) {
+    confidence = 'medium';
+  } else {
+    confidence = 'low';
+  }
+
+  return {
+    hour: topHour.hour,
+    minute: 0, // Round to the hour for simplicity
+    formatted: formatHourMinute(topHour.hour, 0),
+    confidence,
+    basedOn: totalCompletions,
+  };
+}
+
+/**
+ * Get multiple time suggestions across different parts of the day.
+ * Useful for showing "Morning: 9 AM, Afternoon: 2 PM, Evening: 7 PM" options.
+ *
+ * @param reminders - Array of all reminders
+ * @param category - Optional category to filter by
+ * @returns Object with morning, afternoon, evening suggestions (or null if no data)
+ */
+export function suggestTimesByDayPart(
+  reminders: Reminder[],
+  category?: ReminderCategory
+): {
+  morning: SuggestedTime | null;
+  afternoon: SuggestedTime | null;
+  evening: SuggestedTime | null;
+} {
+  // Filter to completed reminders with timestamps
+  let relevantReminders = reminders.filter((r) => r.completed && r.completedAt);
+
+  if (category) {
+    relevantReminders = relevantReminders.filter((r) => r.category === category);
+  }
+
+  // Group by day part
+  const morningReminders = relevantReminders.filter((r) => {
+    if (!r.completedAt) return false;
+    const hour = getHours(parseISO(r.completedAt));
+    return hour >= 5 && hour < 12; // 5 AM - 11:59 AM
+  });
+
+  const afternoonReminders = relevantReminders.filter((r) => {
+    if (!r.completedAt) return false;
+    const hour = getHours(parseISO(r.completedAt));
+    return hour >= 12 && hour < 17; // 12 PM - 4:59 PM
+  });
+
+  const eveningReminders = relevantReminders.filter((r) => {
+    if (!r.completedAt) return false;
+    const hour = getHours(parseISO(r.completedAt));
+    return hour >= 17 || hour < 5; // 5 PM - 4:59 AM
+  });
+
+  // Create temporary arrays with category preserved for the suggestion function
+  const morning = suggestOptimalTime(morningReminders, undefined, 2);
+  const afternoon = suggestOptimalTime(afternoonReminders, undefined, 2);
+  const evening = suggestOptimalTime(eveningReminders, undefined, 2);
+
+  return { morning, afternoon, evening };
 }

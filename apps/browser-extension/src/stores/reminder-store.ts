@@ -1,4 +1,4 @@
-import { generateId, logger, type Reminder } from '@cuewise/shared';
+import { generateId, logger, type Reminder, type ReminderCategory } from '@cuewise/shared';
 import { getReminders, setReminders } from '@cuewise/storage';
 import { create } from 'zustand';
 import { useToastStore } from './toast-store';
@@ -15,7 +15,8 @@ interface ReminderStore {
   addReminder: (
     text: string,
     dueDate: Date,
-    recurring?: { frequency: 'daily' | 'weekly' | 'monthly'; enabled: boolean }
+    recurring?: { frequency: 'daily' | 'weekly' | 'monthly'; enabled: boolean },
+    category?: ReminderCategory
   ) => Promise<void>;
   toggleReminder: (reminderId: string) => Promise<void>;
   deleteReminder: (reminderId: string) => Promise<void>;
@@ -81,8 +82,11 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
     }
   },
 
-  addReminder: async (text: string, dueDate: Date, recurring?) => {
-    if (!text.trim()) return;
+  addReminder: async (text: string, dueDate: Date, recurring?, category?) => {
+    if (!text.trim()) {
+      logger.warn('addReminder called with empty text - ignoring request');
+      return;
+    }
 
     try {
       const newReminder: Reminder = {
@@ -92,6 +96,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
         completed: false,
         notified: false,
         ...(recurring && { recurring }),
+        ...(category && { category }),
       };
 
       const { reminders } = get();
@@ -123,9 +128,23 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
   toggleReminder: async (reminderId: string) => {
     try {
       const { reminders } = get();
+      const reminder = reminders.find((r) => r.id === reminderId);
+      if (!reminder) {
+        logger.warn(`toggleReminder: Reminder with id ${reminderId} not found`);
+        return;
+      }
 
-      const updatedReminders = reminders.map((reminder) =>
-        reminder.id === reminderId ? { ...reminder, completed: !reminder.completed } : reminder
+      const isCompleting = !reminder.completed;
+
+      const updatedReminders = reminders.map((r) =>
+        r.id === reminderId
+          ? {
+              ...r,
+              completed: isCompleting,
+              // Track when the reminder was completed for context-aware suggestions
+              completedAt: isCompleting ? new Date().toISOString() : undefined,
+            }
+          : r
       );
 
       await setReminders(updatedReminders);
@@ -138,8 +157,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       });
 
       // Cancel alarm if completed
-      const reminder = reminders.find((r) => r.id === reminderId);
-      if (reminder && !reminder.completed && chrome?.alarms) {
+      if (isCompleting && chrome?.alarms) {
         await chrome.alarms.clear(`reminder-${reminderId}`);
       }
     } catch (error) {
@@ -214,7 +232,10 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       const { reminders } = get();
       const reminder = reminders.find((r) => r.id === reminderId);
 
-      if (!reminder) return;
+      if (!reminder) {
+        logger.warn(`snoozeReminder: Reminder with id ${reminderId} not found`);
+        return;
+      }
 
       // Calculate new due date
       const currentDueDate = new Date(reminder.dueDate);
@@ -243,7 +264,9 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       }
     } catch (error) {
       logger.error('Error snoozing reminder', error);
-      set({ error: 'Failed to snooze reminder' });
+      const errorMessage = 'Failed to snooze reminder. Please try again.';
+      set({ error: errorMessage });
+      useToastStore.getState().error(errorMessage);
     }
   },
 
@@ -260,6 +283,8 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       set({ reminders: updatedReminders });
     } catch (error) {
       logger.error('Error marking reminder as notified', error);
+      // Track error in state for debugging, but don't show toast since this is a background operation
+      set({ error: 'Failed to update notification status' });
     }
   },
 
