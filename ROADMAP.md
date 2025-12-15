@@ -1,6 +1,6 @@
 # Cuewise Development Roadmap
 
-**Last Updated**: 2025-12-07
+**Last Updated**: 2025-12-15
 **Current Version**: v1.3.0 (Published on Chrome Web Store)
 
 ---
@@ -21,6 +21,12 @@
 ### Code Quality
 - [x] Logger consistency (all console.* calls replaced with logger)
 - [x] Additional component tests (CategoryFilter)
+
+### Goals Page
+- [x] Dedicated goals page with filtering (All/Incomplete/Completed)
+- [x] Stats dashboard (today/week/month/all-time completion rates)
+- [x] Goal history view with date grouping
+- [x] Goal transfer to next day functionality
 
 ### Focus Mode (Full-Screen Pomodoro)
 - [x] Full-screen focus mode overlay with scenic backgrounds
@@ -230,8 +236,13 @@
 
 **User value**: MEDIUM - Great for themed quotes
 
-#### 3.3 Smart Reminders - ❌ NOT STARTED
-- [ ] Natural language input (chrono-node)
+#### 3.3 Smart Reminders - ⚠️ PARTIAL
+- [x] Natural language input (chrono-node)
+- [x] Quick presets (1hr, 3hr, tomorrow 9am, next Monday, etc.)
+- [x] Basic recurring (daily/weekly/monthly)
+- [x] Snooze functionality
+- [ ] Context-aware suggestions
+- [ ] Habit-based automatic reminders
 - [ ] Reminder templates
 - [ ] Task dependencies
 
@@ -254,8 +265,9 @@
 - [x] 6 color themes (OKLCH-based)
 - [x] 3 density modes (compact/comfortable/spacious)
 - [x] Dark/light mode with auto option
-- [x] Background customization in Focus Mode (Unsplash images)
-- [ ] Background customization for main view (gradients, patterns)
+- [x] Focus Mode backgrounds (6 Unsplash categories: nature, forest, ocean, mountains, minimal, dark)
+- [x] Image preloading for smooth transitions
+- [ ] Main view backgrounds (gradients, patterns)
 - [ ] Font options (optional)
 
 ---
@@ -435,14 +447,20 @@
 
 ### Phase 3 Features (Next Focus)
 
-1. **Quote Collections** (Priority: MEDIUM)
+1. **Quote Collections** (Priority: MEDIUM) - Not Started
    - Create custom themed collections
    - Add/remove quotes from collections
    - Collection rotation for display
 
-2. **Smart Reminders** (Priority: MEDIUM)
-   - Natural language input
+2. **Smart Reminders Enhancement** (Priority: MEDIUM) - Partial
+   - ✅ Natural language input already implemented
+   - Context-aware suggestions
+   - Habit-based automatic reminders
    - Reminder templates
+
+3. **Main View Backgrounds** (Priority: LOW) - Not Started
+   - Gradients and patterns for main extension view
+   - (Focus Mode backgrounds already complete)
 
 ### Future: Platform Expansion
 
