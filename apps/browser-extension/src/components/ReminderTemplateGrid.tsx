@@ -35,11 +35,18 @@ const TEMPLATE_ICONS: Record<string, React.FC<{ className?: string }>> = {
   gratitude: Heart,
 };
 
-// Category colors for visual grouping
-const CATEGORY_COLORS: Record<ReminderCategory, string> = {
-  health: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
-  productivity: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-  personal: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
+// Category background colors for icon container
+const CATEGORY_BG_COLORS: Record<ReminderCategory, string> = {
+  health: 'bg-emerald-100 dark:bg-emerald-900/30',
+  productivity: 'bg-blue-100 dark:bg-blue-900/30',
+  personal: 'bg-purple-100 dark:bg-purple-900/30',
+};
+
+// Category icon colors - applied directly to icon for reliable color inheritance
+const CATEGORY_ICON_COLORS: Record<ReminderCategory, string> = {
+  health: 'text-emerald-600 dark:text-emerald-400',
+  productivity: 'text-blue-600 dark:text-blue-400',
+  personal: 'text-purple-600 dark:text-purple-400',
 };
 
 // Frequency display labels
@@ -98,9 +105,9 @@ export const ReminderTemplateGrid: React.FC<ReminderTemplateGridProps> = ({ onSe
               className="flex items-start gap-3 p-3 rounded-lg border-2 border-border hover:border-primary-500 hover:bg-surface-secondary transition-all text-left group"
             >
               <div
-                className={`p-2 rounded-lg ${CATEGORY_COLORS[template.category]} group-hover:scale-110 transition-transform`}
+                className={`p-2 rounded-lg ${CATEGORY_BG_COLORS[template.category]} group-hover:scale-110 transition-transform`}
               >
-                <Icon className="w-4 h-4" />
+                <Icon className={`w-4 h-4 ${CATEGORY_ICON_COLORS[template.category]}`} />
               </div>
               <div className="flex-1 min-w-0">
                 <div className="font-medium text-primary text-sm truncate">{template.name}</div>
