@@ -1,5 +1,44 @@
 # @cuewise/browser-extension
 
+## 1.5.0
+
+### Minor Changes
+
+- ## Smart Reminder Templates
+
+  Add pre-built reminder templates for common tasks with context-aware time suggestions:
+
+  - **Health & Wellness**: Drink Water, Stretch Break, Eye Rest, Medication, Exercise
+  - **Productivity**: Daily Standup, End of Day Review, Weekly Review
+  - **Personal**: Daily Journal, Gratitude
+
+  Templates create reminders instantly with one click, using smart default times based on the reminder type.
+
+  ## Dedicated Goals Page
+
+  New full-page goals view with:
+
+  - Goals history and statistics
+  - Filter by date range
+  - Visual progress tracking
+
+  ## Quick Reminder Presets
+
+  - Natural language date picker ("tomorrow", "next week")
+  - Quick time presets for common scheduling patterns
+
+  ## Favorites Filter
+
+  - Filter quotes by favorites in the category filter dropdown
+  - Quick access to your favorite quotes
+
+  ## Fixes
+
+  - Fix template icon visibility in light mode
+  - Fix dark mode variant behavior for explicit light mode selection (Tailwind v4 class-based dark mode)
+  - Improved error handling with user feedback for reminder operations
+  - Template time parsing validation
+
 ## 1.4.0
 
 ### Minor Changes
