@@ -1,4 +1,4 @@
-import { logger, type Reminder } from '@cuewise/shared';
+import { logger, type Reminder, type ReminderFrequency } from '@cuewise/shared';
 import type React from 'react';
 import { useState } from 'react';
 import { useReminderStore } from '../stores/reminder-store';
@@ -23,7 +23,7 @@ export const EditReminderForm: React.FC<EditReminderFormProps> = ({
   const [date, setDate] = useState(existingDateString);
   const [time, setTime] = useState(existingTimeString);
   const [isRecurring, setIsRecurring] = useState(reminder.recurring?.enabled ?? false);
-  const [recurringFrequency, setRecurringFrequency] = useState<'daily' | 'weekly' | 'monthly'>(
+  const [recurringFrequency, setRecurringFrequency] = useState<ReminderFrequency>(
     reminder.recurring?.frequency ?? 'daily'
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -143,9 +143,7 @@ export const EditReminderForm: React.FC<EditReminderFormProps> = ({
             <select
               id="reminder-frequency"
               value={recurringFrequency}
-              onChange={(e) =>
-                setRecurringFrequency(e.target.value as 'daily' | 'weekly' | 'monthly')
-              }
+              onChange={(e) => setRecurringFrequency(e.target.value as ReminderFrequency)}
               className="w-full px-4 py-3 rounded-lg border-2 border-border focus:border-primary-500 focus:outline-none transition-colors text-primary"
             >
               <option value="daily">Daily</option>

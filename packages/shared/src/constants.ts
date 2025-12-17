@@ -3,6 +3,8 @@ import type {
   FocusImageCategory,
   LayoutDensity,
   QuoteCategory,
+  ReminderCategory,
+  ReminderTemplate,
   Settings,
 } from './types';
 
@@ -133,3 +135,97 @@ export const APP_LINKS = {
   changelog: 'https://github.com/kYem/cuewise/blob/main/apps/browser-extension/CHANGELOG.md',
   github: 'https://github.com/kYem/cuewise',
 } as const;
+
+// Reminder category display names
+export const REMINDER_CATEGORIES: Record<ReminderCategory, string> = {
+  health: 'Health & Wellness',
+  productivity: 'Productivity',
+  personal: 'Personal',
+};
+
+// Built-in reminder templates for quick creation
+export const REMINDER_TEMPLATES: ReminderTemplate[] = [
+  // Health & Wellness
+  {
+    id: 'water',
+    name: 'Drink Water',
+    text: 'Time to drink water',
+    defaultTime: '10:00',
+    frequency: 'daily',
+    category: 'health',
+  },
+  {
+    id: 'stretch',
+    name: 'Stretch Break',
+    text: 'Take a stretch break',
+    defaultTime: '14:00',
+    frequency: 'daily',
+    category: 'health',
+  },
+  {
+    id: 'eyes',
+    name: 'Eye Rest',
+    text: 'Look away from screen (20-20-20 rule)',
+    defaultTime: '11:00',
+    frequency: 'daily',
+    category: 'health',
+  },
+  {
+    id: 'medication',
+    name: 'Medication',
+    text: 'Take your medication',
+    defaultTime: '08:00',
+    frequency: 'daily',
+    category: 'health',
+  },
+  {
+    id: 'exercise',
+    name: 'Exercise',
+    text: 'Time for your workout',
+    defaultTime: '07:00',
+    frequency: 'daily',
+    category: 'health',
+  },
+  // Productivity
+  {
+    id: 'standup',
+    name: 'Daily Standup',
+    text: 'Time for standup meeting',
+    defaultTime: '09:00',
+    frequency: 'daily',
+    category: 'productivity',
+  },
+  {
+    id: 'review',
+    name: 'End of Day Review',
+    text: "Review today's accomplishments",
+    defaultTime: '17:00',
+    frequency: 'daily',
+    category: 'productivity',
+  },
+  {
+    id: 'weekly-review',
+    name: 'Weekly Review',
+    text: 'Weekly planning and review session',
+    defaultTime: '09:00',
+    frequency: 'weekly',
+    category: 'productivity',
+  },
+  // Personal
+  {
+    id: 'journal',
+    name: 'Daily Journal',
+    text: 'Write in your journal',
+    defaultTime: '21:00',
+    frequency: 'daily',
+    category: 'personal',
+  },
+  {
+    id: 'gratitude',
+    name: 'Gratitude',
+    text: "Write 3 things you're grateful for",
+    defaultTime: '08:00',
+    frequency: 'daily',
+    category: 'personal',
+  },
+];
