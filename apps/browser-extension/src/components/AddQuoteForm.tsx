@@ -1,14 +1,15 @@
 import { logger, QUOTE_CATEGORIES, type QuoteCategory } from '@cuewise/shared';
-import { Input, Label, Textarea } from '@cuewise/ui';
+import { Autocomplete, Input, Label, Textarea } from '@cuewise/ui';
 import type React from 'react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuoteStore } from '../stores/quote-store';
 
 interface AddQuoteFormProps {
   onSuccess: () => void;
+  onCancel: () => void;
 }
 
-export const AddQuoteForm: React.FC<AddQuoteFormProps> = ({ onSuccess }) => {
+export const AddQuoteForm: React.FC<AddQuoteFormProps> = ({ onSuccess, onCancel }) => {
   const [text, setText] = useState('');
   const [author, setAuthor] = useState('');
   const [category, setCategory] = useState<QuoteCategory>('inspiration');
@@ -16,7 +17,14 @@ export const AddQuoteForm: React.FC<AddQuoteFormProps> = ({ onSuccess }) => {
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const quotes = useQuoteStore((state) => state.quotes);
   const addCustomQuote = useQuoteStore((state) => state.addCustomQuote);
+
+  // Get unique authors sorted alphabetically
+  const existingAuthors = useMemo(() => {
+    const authors = new Set(quotes.map((q) => q.author));
+    return Array.from(authors).sort((a, b) => a.localeCompare(b));
+  }, [quotes]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -75,11 +83,11 @@ export const AddQuoteForm: React.FC<AddQuoteFormProps> = ({ onSuccess }) => {
         <Label htmlFor="quote-author" required>
           Author
         </Label>
-        <Input
+        <Autocomplete
           id="quote-author"
-          type="text"
           value={author}
-          onChange={(e) => setAuthor(e.target.value)}
+          onChange={setAuthor}
+          suggestions={existingAuthors}
           placeholder="Who said this?"
           required
           maxLength={100}
@@ -135,8 +143,16 @@ export const AddQuoteForm: React.FC<AddQuoteFormProps> = ({ onSuccess }) => {
         />
       </div>
 
-      {/* Submit Button */}
+      {/* Action Buttons */}
       <div className="flex justify-end gap-3 pt-4">
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={isSubmitting}
+          className="px-6 py-3 bg-surface text-primary border-2 border-border rounded-lg hover:bg-surface-variant disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium"
+        >
+          Cancel
+        </button>
         <button
           type="submit"
           disabled={!text.trim() || !author.trim() || isSubmitting}
