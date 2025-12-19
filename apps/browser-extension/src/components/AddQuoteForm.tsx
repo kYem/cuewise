@@ -1,7 +1,7 @@
 import { logger, QUOTE_CATEGORIES, type QuoteCategory } from '@cuewise/shared';
-import { Input, Label, Textarea } from '@cuewise/ui';
+import { Autocomplete, Input, Label, Textarea } from '@cuewise/ui';
 import type React from 'react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuoteStore } from '../stores/quote-store';
 
 interface AddQuoteFormProps {
@@ -16,7 +16,14 @@ export const AddQuoteForm: React.FC<AddQuoteFormProps> = ({ onSuccess }) => {
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const quotes = useQuoteStore((state) => state.quotes);
   const addCustomQuote = useQuoteStore((state) => state.addCustomQuote);
+
+  // Get unique authors sorted alphabetically
+  const existingAuthors = useMemo(() => {
+    const authors = new Set(quotes.map((q) => q.author));
+    return Array.from(authors).sort((a, b) => a.localeCompare(b));
+  }, [quotes]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -75,11 +82,11 @@ export const AddQuoteForm: React.FC<AddQuoteFormProps> = ({ onSuccess }) => {
         <Label htmlFor="quote-author" required>
           Author
         </Label>
-        <Input
+        <Autocomplete
           id="quote-author"
-          type="text"
           value={author}
-          onChange={(e) => setAuthor(e.target.value)}
+          onChange={setAuthor}
+          suggestions={existingAuthors}
           placeholder="Who said this?"
           required
           maxLength={100}

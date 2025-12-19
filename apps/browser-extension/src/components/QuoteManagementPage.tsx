@@ -5,7 +5,7 @@ import {
   type Quote,
   type QuoteCategory,
 } from '@cuewise/shared';
-import { cn, Select } from '@cuewise/ui';
+import { Autocomplete, cn, Select } from '@cuewise/ui';
 import { Check, Edit2, Eye, EyeOff, Heart, Plus, Search, Trash2, X } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -42,6 +42,14 @@ const EditQuoteModal: React.FC<EditQuoteModalProps> = ({ quote, onClose, onSave 
   const [source, setSource] = useState(quote.source || '');
   const [notes, setNotes] = useState(quote.notes || '');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const quotes = useQuoteStore((state) => state.quotes);
+
+  // Get unique authors sorted alphabetically
+  const existingAuthors = useMemo(() => {
+    const authors = new Set(quotes.map((q) => q.author));
+    return Array.from(authors).sort((a, b) => a.localeCompare(b));
+  }, [quotes]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -108,15 +116,14 @@ const EditQuoteModal: React.FC<EditQuoteModalProps> = ({ quote, onClose, onSave 
             >
               Author <span className="text-red-500">*</span>
             </label>
-            <input
+            <Autocomplete
               id="edit-quote-author"
-              type="text"
               value={author}
-              onChange={(e) => setAuthor(e.target.value)}
+              onChange={setAuthor}
+              suggestions={existingAuthors}
               placeholder="Who said this?"
               required
               maxLength={100}
-              className="w-full px-4 py-3 rounded-lg border-2 border-border bg-surface text-primary placeholder:text-secondary focus:border-primary-500 focus:outline-none transition-colors"
             />
           </div>
 

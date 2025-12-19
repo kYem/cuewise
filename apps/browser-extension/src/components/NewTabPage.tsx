@@ -1,15 +1,13 @@
 import { APP_LINKS, formatClockTime, formatLongDate, getGreeting } from '@cuewise/shared';
-import { BarChart3, BookMarked, PanelRight, Plus, Settings, Timer } from 'lucide-react';
+import { BarChart3, BookMarked, PanelRight, Settings, Timer } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { usePomodoroStorageSync, usePomodoroStore } from '../stores/pomodoro-store';
 import { useQuoteStore } from '../stores/quote-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { ActivePomodoroWidget } from './ActivePomodoroWidget';
-import { AddQuoteForm } from './AddQuoteForm';
 import { Clock } from './Clock';
 import { GoalsSection } from './GoalsSection';
-import { Modal } from './Modal';
 import { QuoteDisplay } from './QuoteDisplay';
 import { RemindersSection } from './RemindersSection';
 import { SettingsModal } from './SettingsModal';
@@ -31,7 +29,6 @@ export const NewTabPage: React.FC = () => {
   // Enable cross-tab synchronization for Pomodoro timer
   usePomodoroStorageSync();
 
-  const [isAddQuoteModalOpen, setIsAddQuoteModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isWelcomeOpen, setIsWelcomeOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -121,11 +118,6 @@ export const NewTabPage: React.FC = () => {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-
-  const handleQuoteAdded = () => {
-    setIsAddQuoteModalOpen(false);
-    // Optionally show success message
-  };
 
   const handleCloseWelcome = async () => {
     setIsWelcomeOpen(false);
@@ -418,28 +410,6 @@ export const NewTabPage: React.FC = () => {
           </footer>
         </div>
       </div>
-
-      {/* Floating Action Button - Add Custom Quote */}
-      <button
-        type="button"
-        onClick={() => setIsAddQuoteModalOpen(true)}
-        className="fixed bottom-8 right-8 p-4 bg-primary-600 text-white rounded-full shadow-lg hover:shadow-xl hover:scale-110 transition-all group z-50"
-        title="Add custom quote"
-      >
-        <Plus className="w-6 h-6" />
-        <span className="absolute right-full mr-3 top-1/2 -translate-y-1/2 bg-surface-elevated border border-border text-primary text-sm px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none shadow-lg">
-          Add Custom Quote
-        </span>
-      </button>
-
-      {/* Add Quote Modal */}
-      <Modal
-        isOpen={isAddQuoteModalOpen}
-        onClose={() => setIsAddQuoteModalOpen(false)}
-        title="Add Custom Quote"
-      >
-        <AddQuoteForm onSuccess={handleQuoteAdded} />
-      </Modal>
 
       {/* Settings Modal */}
       <SettingsModal isOpen={isSettingsModalOpen} onClose={() => setIsSettingsModalOpen(false)} />
