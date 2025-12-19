@@ -715,7 +715,10 @@ export const QuoteManagementPage: React.FC = () => {
         {/* Add Quote Form */}
         {showAddForm && (
           <div className="bg-surface-variant rounded-xl p-6 mb-6 border-2 border-border">
-            <AddQuoteForm onSuccess={() => setShowAddForm(false)} />
+            <AddQuoteForm
+              onSuccess={() => setShowAddForm(false)}
+              onCancel={() => setShowAddForm(false)}
+            />
           </div>
         )}
 

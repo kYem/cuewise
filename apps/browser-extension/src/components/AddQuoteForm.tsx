@@ -6,9 +6,10 @@ import { useQuoteStore } from '../stores/quote-store';
 
 interface AddQuoteFormProps {
   onSuccess: () => void;
+  onCancel: () => void;
 }
 
-export const AddQuoteForm: React.FC<AddQuoteFormProps> = ({ onSuccess }) => {
+export const AddQuoteForm: React.FC<AddQuoteFormProps> = ({ onSuccess, onCancel }) => {
   const [text, setText] = useState('');
   const [author, setAuthor] = useState('');
   const [category, setCategory] = useState<QuoteCategory>('inspiration');
@@ -142,8 +143,16 @@ export const AddQuoteForm: React.FC<AddQuoteFormProps> = ({ onSuccess }) => {
         />
       </div>
 
-      {/* Submit Button */}
+      {/* Action Buttons */}
       <div className="flex justify-end gap-3 pt-4">
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={isSubmitting}
+          className="px-6 py-3 bg-surface text-primary border-2 border-border rounded-lg hover:bg-surface-variant disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium"
+        >
+          Cancel
+        </button>
         <button
           type="submit"
           disabled={!text.trim() || !author.trim() || isSubmitting}
