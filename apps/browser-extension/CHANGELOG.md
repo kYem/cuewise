@@ -1,5 +1,20 @@
 # @cuewise/browser-extension
 
+## 1.6.0
+
+### Minor Changes
+
+- d5ebdd6: Add author autocomplete and streamline quote management
+
+  - Add reusable Autocomplete component to @cuewise/ui with keyboard navigation and accessibility support
+  - Add author autocomplete to Add Quote and Edit Quote forms, suggesting existing authors
+  - Remove floating "Add Custom Quote" button from home page - quotes can now be added via the dedicated Quote Management page
+
+### Patch Changes
+
+- Updated dependencies [d5ebdd6]
+  - @cuewise/ui@1.6.0
+
 ## 1.5.0
 
 ### Minor Changes
