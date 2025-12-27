@@ -1,7 +1,7 @@
 import {
   type Goal,
   generateId,
-  getActiveObjectives,
+  getActiveGoals,
   getLinkedTasks,
   getNextDayDateString,
   getObjectiveProgress,
@@ -47,11 +47,11 @@ interface GoalStore {
     updates: { text?: string; description?: string; date?: string; completed?: boolean }
   ) => Promise<void>;
   deleteObjective: (objectiveId: string) => Promise<void>;
-  linkTaskToObjective: (taskId: string, objectiveId: string | null) => Promise<void>;
+  linkTaskToGoal: (taskId: string, objectiveId: string | null) => Promise<void>;
 
   // Objective Selectors
   getObjectives: () => Goal[];
-  getActiveObjectives: () => Goal[];
+  getActiveGoals: () => Goal[];
   getObjectiveProgress: (objectiveId: string) => ObjectiveProgress | null;
   getLinkedTasks: (objectiveId: string) => Goal[];
 }
@@ -392,7 +392,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
     }
   },
 
-  linkTaskToObjective: async (taskId: string, objectiveId: string | null) => {
+  linkTaskToGoal: async (taskId: string, objectiveId: string | null) => {
     try {
       const { goals } = get();
       const today = getTodayDateString();
@@ -430,9 +430,9 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
     return getObjectives(goals);
   },
 
-  getActiveObjectives: () => {
+  getActiveGoals: () => {
     const { goals } = get();
-    return getActiveObjectives(goals);
+    return getActiveGoals(goals);
   },
 
   getObjectiveProgress: (objectiveId: string) => {

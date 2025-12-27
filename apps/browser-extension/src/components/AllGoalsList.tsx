@@ -24,8 +24,8 @@ export const AllGoalsList: React.FC = () => {
     transferGoalToNextDay,
     moveGoalToToday,
     completionFilter,
-    getActiveObjectives,
-    linkTaskToObjective,
+    getActiveGoals,
+    linkTaskToGoal,
   } = useGoalStore();
   const [editingGoalId, setEditingGoalId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
@@ -35,7 +35,7 @@ export const AllGoalsList: React.FC = () => {
 
   const groupedGoals = getFilteredGoalsByDate();
   const today = getTodayDateString();
-  const activeObjectives = getActiveObjectives();
+  const activeGoals = getActiveGoals();
 
   // Focus input when editing starts
   useEffect(() => {
@@ -60,12 +60,12 @@ export const AllGoalsList: React.FC = () => {
   }, [linkingGoalId]);
 
   const handleLinkToGoal = async (taskId: string, goalId: string | null) => {
-    await linkTaskToObjective(taskId, goalId);
+    await linkTaskToGoal(taskId, goalId);
     setLinkingGoalId(null);
     setEditingGoalId(null);
   };
 
-  const getLinkedObjective = (parentId: string | undefined) => {
+  const getLinkedGoal = (parentId: string | undefined) => {
     if (!parentId) {
       return null;
     }
@@ -214,7 +214,7 @@ export const AllGoalsList: React.FC = () => {
                     {/* Objective link badge - hide in edit mode */}
                     {editingGoalId !== goal.id &&
                       (() => {
-                        const objective = getLinkedObjective(goal.parentId);
+                        const objective = getLinkedGoal(goal.parentId);
                         if (!objective) {
                           return null;
                         }
@@ -274,7 +274,7 @@ export const AllGoalsList: React.FC = () => {
                     )}
 
                     {/* Link to Goal Button - only show in edit mode */}
-                    {editingGoalId === goal.id && activeObjectives.length > 0 && (
+                    {editingGoalId === goal.id && activeGoals.length > 0 && (
                       <div className="relative">
                         <button
                           type="button"
@@ -311,7 +311,7 @@ export const AllGoalsList: React.FC = () => {
                                   <span>Remove link</span>
                                 </button>
                               )}
-                              {activeObjectives.map((obj) => (
+                              {activeGoals.map((obj) => (
                                 <button
                                   key={obj.id}
                                   type="button"

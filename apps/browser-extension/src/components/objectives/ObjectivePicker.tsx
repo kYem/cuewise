@@ -19,10 +19,10 @@ export const ObjectivePicker: React.FC<ObjectivePickerProps> = ({
   disabled = false,
   autoOpen = false,
 }) => {
-  const getActiveObjectives = useGoalStore((state) => state.getActiveObjectives);
+  const getActiveGoals = useGoalStore((state) => state.getActiveGoals);
   const getObjectiveProgress = useGoalStore((state) => state.getObjectiveProgress);
 
-  const objectives = getActiveObjectives();
+  const objectives = getActiveGoals();
 
   const options = useMemo<SelectOption<string>[]>(() => {
     const baseOptions: SelectOption<string>[] = [

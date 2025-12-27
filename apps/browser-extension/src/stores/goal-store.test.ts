@@ -412,13 +412,13 @@ describe('Goal Store', () => {
       });
     });
 
-    describe('linkTaskToObjective', () => {
+    describe('linkTaskToGoal', () => {
       it('should link task to objective', async () => {
         const objective = createObjective({ id: 'obj-1' });
         const task = goalFactory.build({ id: 'task-1' });
         useGoalStore.setState({ goals: [objective, task] });
 
-        await useGoalStore.getState().linkTaskToObjective('task-1', 'obj-1');
+        await useGoalStore.getState().linkTaskToGoal('task-1', 'obj-1');
 
         const updatedGoals = vi.mocked(storage.setGoals).mock.calls[0][0];
         const linkedTask = updatedGoals.find((g) => g.id === 'task-1');
@@ -430,7 +430,7 @@ describe('Goal Store', () => {
         const linkedTask = createLinkedTask('obj-1', { id: 'task-1' });
         useGoalStore.setState({ goals: [objective, linkedTask] });
 
-        await useGoalStore.getState().linkTaskToObjective('task-1', null);
+        await useGoalStore.getState().linkTaskToGoal('task-1', null);
 
         const updatedGoals = vi.mocked(storage.setGoals).mock.calls[0][0];
         const unlinkedTask = updatedGoals.find((g) => g.id === 'task-1');
@@ -443,7 +443,7 @@ describe('Goal Store', () => {
         const linkedTask = createLinkedTask('obj-1', { id: 'task-1' });
         useGoalStore.setState({ goals: [objective1, objective2, linkedTask] });
 
-        await useGoalStore.getState().linkTaskToObjective('task-1', 'obj-2');
+        await useGoalStore.getState().linkTaskToGoal('task-1', 'obj-2');
 
         const updatedGoals = vi.mocked(storage.setGoals).mock.calls[0][0];
         const relinkedTask = updatedGoals.find((g) => g.id === 'task-1');
@@ -464,16 +464,16 @@ describe('Goal Store', () => {
       });
     });
 
-    describe('getActiveObjectives', () => {
+    describe('getActiveGoals', () => {
       it('should return only incomplete objectives', () => {
-        const activeObjective = createObjective({ id: 'obj-1', completed: false });
+        const activeGoal = createObjective({ id: 'obj-1', completed: false });
         const completedObjective = createObjective({ id: 'obj-2', completed: true });
-        useGoalStore.setState({ goals: [activeObjective, completedObjective] });
+        useGoalStore.setState({ goals: [activeGoal, completedObjective] });
 
-        const activeObjectives = useGoalStore.getState().getActiveObjectives();
+        const activeGoals = useGoalStore.getState().getActiveGoals();
 
-        expect(activeObjectives).toHaveLength(1);
-        expect(activeObjectives[0].id).toBe('obj-1');
+        expect(activeGoals).toHaveLength(1);
+        expect(activeGoals[0].id).toBe('obj-1');
       });
     });
 

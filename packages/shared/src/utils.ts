@@ -225,7 +225,7 @@ export function getObjectives(goals: Goal[]): Goal[] {
 /**
  * Get active (not completed) objectives
  */
-export function getActiveObjectives(goals: Goal[]): Goal[] {
+export function getActiveGoals(goals: Goal[]): Goal[] {
   return goals.filter((g) => isObjective(g) && !g.completed);
 }
 
@@ -273,18 +273,18 @@ export function getObjectiveProgress(objective: Goal, allGoals: Goal[]): Objecti
  * Calculate average progress across all active objectives
  */
 export function calculateAvgObjectiveProgress(goals: Goal[]): number {
-  const activeObjectives = getActiveObjectives(goals);
+  const activeGoals = getActiveGoals(goals);
 
-  if (activeObjectives.length === 0) {
+  if (activeGoals.length === 0) {
     return 0;
   }
 
-  const totalProgress = activeObjectives.reduce((sum, objective) => {
+  const totalProgress = activeGoals.reduce((sum, objective) => {
     const progress = getObjectiveProgress(objective, goals);
     return sum + progress.percent;
   }, 0);
 
-  return Math.round(totalProgress / activeObjectives.length);
+  return Math.round(totalProgress / activeGoals.length);
 }
 
 /**
@@ -579,7 +579,7 @@ export function calculateInsights(
   const focusTimeThisWeek = calculateFocusTimeThisWeek(pomodoroSessions);
 
   // Calculate objective analytics
-  const activeObjectives = getActiveObjectives(goals).length;
+  const activeGoals = getActiveGoals(goals).length;
   const objectivesCompletedThisMonth = goals.filter((goal) => {
     if (!isObjective(goal) || !goal.completed) {
       return false;
@@ -604,7 +604,7 @@ export function calculateInsights(
       longest: streakData.longest,
       lastActive: lastActiveDate,
     },
-    activeObjectives,
+    activeGoals,
     objectivesCompletedThisMonth,
     avgObjectiveProgress,
   };

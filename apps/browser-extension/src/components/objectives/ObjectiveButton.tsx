@@ -12,17 +12,17 @@ interface ObjectiveButtonProps {
 }
 
 export const ObjectiveButton: React.FC<ObjectiveButtonProps> = ({ className = '' }) => {
-  const getActiveObjectives = useGoalStore((state) => state.getActiveObjectives);
+  const getActiveGoals = useGoalStore((state) => state.getActiveGoals);
   const getObjectiveProgress = useGoalStore((state) => state.getObjectiveProgress);
 
   const [isOpen, setIsOpen] = useState(false);
-  const [selectedObjectiveId, setSelectedObjectiveId] = useState<string | null>(null);
+  const [selectedGoalId, setSelectedObjectiveId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const triggerRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const activeObjectives = getActiveObjectives();
-  const objectiveCount = activeObjectives.length;
+  const activeGoals = getActiveGoals();
+  const goalCount = activeGoals.length;
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -68,16 +68,12 @@ export const ObjectiveButton: React.FC<ObjectiveButtonProps> = ({ className = ''
           type="button"
           onClick={() => setIsOpen(!isOpen)}
           className={`group flex items-center gap-2 px-4 py-2.5 bg-surface/80 backdrop-blur-sm text-primary rounded-full shadow-md hover:shadow-lg hover:scale-105 transition-all ${className}`}
-          title={
-            objectiveCount > 0
-              ? `${objectiveCount} active goal${objectiveCount > 1 ? 's' : ''}`
-              : 'Goals'
-          }
+          title={goalCount > 0 ? `${goalCount} active goal${goalCount > 1 ? 's' : ''}` : 'Goals'}
         >
           <Flag className="w-5 h-5 text-primary-600" />
-          {objectiveCount > 0 ? (
+          {goalCount > 0 ? (
             <span className="hidden sm:inline text-sm font-medium text-primary">
-              {objectiveCount} Goal{objectiveCount > 1 ? 's' : ''}
+              {goalCount} Goal{goalCount > 1 ? 's' : ''}
             </span>
           ) : (
             <span className="hidden sm:inline text-sm font-medium text-primary">Goals</span>
@@ -113,7 +109,7 @@ export const ObjectiveButton: React.FC<ObjectiveButtonProps> = ({ className = ''
 
               {/* List */}
               <div className="py-1 max-h-[280px] overflow-y-auto">
-                {activeObjectives.length === 0 ? (
+                {activeGoals.length === 0 ? (
                   <div className="px-3 py-4 text-center">
                     <p className="text-sm text-secondary">No goals yet</p>
                     <button
@@ -125,7 +121,7 @@ export const ObjectiveButton: React.FC<ObjectiveButtonProps> = ({ className = ''
                     </button>
                   </div>
                 ) : (
-                  activeObjectives.map((obj) => {
+                  activeGoals.map((obj) => {
                     const progress = getObjectiveProgress(obj.id);
                     const percent = progress?.percent ?? 0;
 
@@ -150,9 +146,9 @@ export const ObjectiveButton: React.FC<ObjectiveButtonProps> = ({ className = ''
       </div>
 
       {/* Detail View Modal */}
-      {selectedObjectiveId && (
+      {selectedGoalId && (
         <Modal isOpen={true} onClose={handleCloseDetail}>
-          <ObjectiveDetailView objectiveId={selectedObjectiveId} onClose={handleCloseDetail} />
+          <ObjectiveDetailView objectiveId={selectedGoalId} onClose={handleCloseDetail} />
         </Modal>
       )}
 

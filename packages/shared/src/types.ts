@@ -171,7 +171,7 @@ export interface InsightsData {
     lastActive: string; // YYYY-MM-DD
   };
   // Objective analytics
-  activeObjectives: number;
+  activeGoals: number;
   objectivesCompletedThisMonth: number;
   avgObjectiveProgress: number; // 0-100 percentage
 }

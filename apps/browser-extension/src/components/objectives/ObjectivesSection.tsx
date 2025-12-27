@@ -23,7 +23,7 @@ export const ObjectivesSection: React.FC<ObjectivesSectionProps> = ({
   const getObjectives = useGoalStore((state) => state.getObjectives);
   const getObjectiveProgress = useGoalStore((state) => state.getObjectiveProgress);
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [selectedObjectiveId, setSelectedObjectiveId] = useState<string | null>(null);
+  const [selectedGoalId, setSelectedObjectiveId] = useState<string | null>(null);
 
   const objectives = getObjectives();
 
@@ -58,9 +58,7 @@ export const ObjectivesSection: React.FC<ObjectivesSectionProps> = ({
     setIsFormOpen(false);
   };
 
-  const selectedObjective = selectedObjectiveId
-    ? objectives.find((o) => o.id === selectedObjectiveId)
-    : null;
+  const selectedGoal = selectedGoalId ? objectives.find((o) => o.id === selectedGoalId) : null;
 
   if (sortedObjectives.length === 0) {
     return (
@@ -134,9 +132,9 @@ export const ObjectivesSection: React.FC<ObjectivesSectionProps> = ({
       </Modal>
 
       {/* Objective Detail Modal */}
-      {selectedObjective && (
-        <Modal isOpen={!!selectedObjective} onClose={handleCloseDetail}>
-          <ObjectiveDetailView objectiveId={selectedObjective.id} onClose={handleCloseDetail} />
+      {selectedGoal && (
+        <Modal isOpen={!!selectedGoal} onClose={handleCloseDetail}>
+          <ObjectiveDetailView objectiveId={selectedGoal.id} onClose={handleCloseDetail} />
         </Modal>
       )}
     </div>

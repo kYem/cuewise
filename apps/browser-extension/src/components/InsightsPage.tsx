@@ -141,14 +141,14 @@ export const InsightsPage: React.FC = () => {
               </div>
 
               {/* Goals */}
-              {insights.activeObjectives !== undefined && (
+              {insights.activeGoals !== undefined && (
                 <div className="bg-surface rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow">
                   <div className="flex items-center justify-between mb-4">
                     <div className="p-3 bg-purple-100 rounded-lg">
                       <Flag className="w-6 h-6 text-purple-600" />
                     </div>
                     <span className="text-3xl font-bold text-purple-600">
-                      {insights.activeObjectives}
+                      {insights.activeGoals}
                     </span>
                   </div>
                   <h3 className="text-secondary text-sm font-medium mb-1">Active Goals</h3>

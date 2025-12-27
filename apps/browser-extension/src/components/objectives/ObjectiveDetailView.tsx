@@ -33,7 +33,7 @@ export const ObjectiveDetailView: React.FC<ObjectiveDetailViewProps> = ({
   const getObjectiveProgress = useGoalStore((state) => state.getObjectiveProgress);
   const toggleGoal = useGoalStore((state) => state.toggleGoal);
   const deleteObjective = useGoalStore((state) => state.deleteObjective);
-  const linkTaskToObjective = useGoalStore((state) => state.linkTaskToObjective);
+  const linkTaskToGoal = useGoalStore((state) => state.linkTaskToGoal);
   const updateObjective = useGoalStore((state) => state.updateObjective);
 
   const [isEditing, setIsEditing] = useState(false);
@@ -66,7 +66,7 @@ export const ObjectiveDetailView: React.FC<ObjectiveDetailViewProps> = ({
   };
 
   const handleUnlinkTask = async (taskId: string) => {
-    await linkTaskToObjective(taskId, null);
+    await linkTaskToGoal(taskId, null);
   };
 
   const handleDeleteObjective = async () => {
