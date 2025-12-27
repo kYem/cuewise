@@ -3,13 +3,13 @@ import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useGoalStore } from '../../stores/goal-store';
 
-interface ObjectiveFormProps {
+interface GoalFormProps {
   objective?: Goal; // If provided, edit mode
   onCancel: () => void;
   onSuccess: () => void;
 }
 
-export const ObjectiveForm: React.FC<ObjectiveFormProps> = ({ objective, onCancel, onSuccess }) => {
+export const GoalForm: React.FC<GoalFormProps> = ({ objective, onCancel, onSuccess }) => {
   const addObjective = useGoalStore((state) => state.addObjective);
   const updateObjective = useGoalStore((state) => state.updateObjective);
 

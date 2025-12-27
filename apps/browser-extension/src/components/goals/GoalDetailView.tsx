@@ -18,17 +18,14 @@ import { useGoalStore } from '../../stores/goal-store';
 import { ConfirmationDialog } from '../ConfirmationDialog';
 import { GoalInput } from '../GoalInput';
 import { Modal } from '../Modal';
-import { ObjectiveForm } from './ObjectiveForm';
+import { GoalForm } from './GoalForm';
 
-interface ObjectiveDetailViewProps {
+interface GoalDetailViewProps {
   objectiveId: string;
   onClose: () => void;
 }
 
-export const ObjectiveDetailView: React.FC<ObjectiveDetailViewProps> = ({
-  objectiveId,
-  onClose,
-}) => {
+export const GoalDetailView: React.FC<GoalDetailViewProps> = ({ objectiveId, onClose }) => {
   const goals = useGoalStore((state) => state.goals);
   const getObjectiveProgress = useGoalStore((state) => state.getObjectiveProgress);
   const toggleGoal = useGoalStore((state) => state.toggleGoal);
@@ -104,8 +101,8 @@ export const ObjectiveDetailView: React.FC<ObjectiveDetailViewProps> = ({
 
   if (isEditing) {
     return (
-      <Modal isOpen={true} onClose={() => setIsEditing(false)} title="Edit Objective">
-        <ObjectiveForm
+      <Modal isOpen={true} onClose={() => setIsEditing(false)} title="Edit Goal">
+        <GoalForm
           objective={objective}
           onCancel={() => setIsEditing(false)}
           onSuccess={() => setIsEditing(false)}

@@ -4,14 +4,14 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useGoalStore } from '../../stores/goal-store';
 import { Modal } from '../Modal';
-import { ObjectiveDetailView } from './ObjectiveDetailView';
-import { ObjectiveForm } from './ObjectiveForm';
+import { GoalDetailView } from './GoalDetailView';
+import { GoalForm } from './GoalForm';
 
-interface ObjectiveButtonProps {
+interface GoalButtonProps {
   className?: string;
 }
 
-export const ObjectiveButton: React.FC<ObjectiveButtonProps> = ({ className = '' }) => {
+export const GoalButton: React.FC<GoalButtonProps> = ({ className = '' }) => {
   const getActiveGoals = useGoalStore((state) => state.getActiveGoals);
   const getObjectiveProgress = useGoalStore((state) => state.getObjectiveProgress);
 
@@ -148,14 +148,14 @@ export const ObjectiveButton: React.FC<ObjectiveButtonProps> = ({ className = ''
       {/* Detail View Modal */}
       {selectedGoalId && (
         <Modal isOpen={true} onClose={handleCloseDetail}>
-          <ObjectiveDetailView objectiveId={selectedGoalId} onClose={handleCloseDetail} />
+          <GoalDetailView objectiveId={selectedGoalId} onClose={handleCloseDetail} />
         </Modal>
       )}
 
       {/* Form Modal */}
       {showForm && (
         <Modal isOpen={true} onClose={() => setShowForm(false)} title="New Goal">
-          <ObjectiveForm onCancel={() => setShowForm(false)} onSuccess={handleFormSuccess} />
+          <GoalForm onCancel={() => setShowForm(false)} onSuccess={handleFormSuccess} />
         </Modal>
       )}
     </>

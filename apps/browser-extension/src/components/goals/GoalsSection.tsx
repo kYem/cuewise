@@ -3,18 +3,18 @@ import type React from 'react';
 import { useState } from 'react';
 import { useGoalStore } from '../../stores/goal-store';
 import { Modal } from '../Modal';
-import { ObjectiveCard } from './ObjectiveCard';
-import { ObjectiveDetailView } from './ObjectiveDetailView';
-import { ObjectiveForm } from './ObjectiveForm';
+import { GoalCard } from './GoalCard';
+import { GoalDetailView } from './GoalDetailView';
+import { GoalForm } from './GoalForm';
 
-interface ObjectivesSectionProps {
+interface GoalsSectionProps {
   onObjectiveClick?: (objectiveId: string) => void;
   showCompleted?: boolean;
   compact?: boolean;
   showCreateButton?: boolean;
 }
 
-export const ObjectivesSection: React.FC<ObjectivesSectionProps> = ({
+export const GoalsSection: React.FC<GoalsSectionProps> = ({
   onObjectiveClick,
   showCompleted = false,
   compact = false,
@@ -85,8 +85,8 @@ export const ObjectivesSection: React.FC<ObjectivesSectionProps> = ({
         </div>
 
         {/* Create Objective Modal */}
-        <Modal isOpen={isFormOpen} onClose={() => setIsFormOpen(false)} title="Create Objective">
-          <ObjectiveForm onCancel={() => setIsFormOpen(false)} onSuccess={handleFormSuccess} />
+        <Modal isOpen={isFormOpen} onClose={() => setIsFormOpen(false)} title="New Goal">
+          <GoalForm onCancel={() => setIsFormOpen(false)} onSuccess={handleFormSuccess} />
         </Modal>
       </div>
     );
@@ -115,7 +115,7 @@ export const ObjectivesSection: React.FC<ObjectivesSectionProps> = ({
           }
 
           return (
-            <ObjectiveCard
+            <GoalCard
               key={objective.id}
               objective={objective}
               progress={progress}
@@ -126,15 +126,15 @@ export const ObjectivesSection: React.FC<ObjectivesSectionProps> = ({
         })}
       </div>
 
-      {/* Create Objective Modal */}
-      <Modal isOpen={isFormOpen} onClose={() => setIsFormOpen(false)} title="Create Objective">
-        <ObjectiveForm onCancel={() => setIsFormOpen(false)} onSuccess={handleFormSuccess} />
+      {/* Create Goal Modal */}
+      <Modal isOpen={isFormOpen} onClose={() => setIsFormOpen(false)} title="New Goal">
+        <GoalForm onCancel={() => setIsFormOpen(false)} onSuccess={handleFormSuccess} />
       </Modal>
 
-      {/* Objective Detail Modal */}
+      {/* Goal Detail Modal */}
       {selectedGoal && (
         <Modal isOpen={!!selectedGoal} onClose={handleCloseDetail}>
-          <ObjectiveDetailView objectiveId={selectedGoal.id} onClose={handleCloseDetail} />
+          <GoalDetailView objectiveId={selectedGoal.id} onClose={handleCloseDetail} />
         </Modal>
       )}
     </div>

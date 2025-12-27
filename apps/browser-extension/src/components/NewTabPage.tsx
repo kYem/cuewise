@@ -8,7 +8,7 @@ import { useSettingsStore } from '../stores/settings-store';
 import { ActivePomodoroWidget } from './ActivePomodoroWidget';
 import { Clock } from './Clock';
 import { GoalsSection } from './GoalsSection';
-import { ObjectiveButton } from './objectives';
+import { GoalButton } from './goals';
 import { QuoteDisplay } from './QuoteDisplay';
 import { RemindersSection } from './RemindersSection';
 import { SettingsModal } from './SettingsModal';
@@ -189,7 +189,7 @@ export const NewTabPage: React.FC = () => {
               </div>
 
               {/* Objectives Button - in sticky header */}
-              <ObjectiveButton />
+              <GoalButton />
             </div>
 
             {/* Right: Navigation */}
@@ -291,7 +291,7 @@ export const NewTabPage: React.FC = () => {
             showStickyHeader ? 'opacity-0 pointer-events-none' : 'opacity-100'
           }`}
         >
-          <ObjectiveButton />
+          <GoalButton />
         </div>
 
         {/* Floating Top Right Navigation - Only visible when not scrolled */}

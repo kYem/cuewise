@@ -4,7 +4,7 @@ import type React from 'react';
 import { useMemo } from 'react';
 import { useGoalStore } from '../../stores/goal-store';
 
-interface ObjectivePickerProps {
+interface GoalPickerProps {
   value: string | null;
   onChange: (objectiveId: string | null) => void;
   placeholder?: string;
@@ -12,10 +12,10 @@ interface ObjectivePickerProps {
   autoOpen?: boolean;
 }
 
-export const ObjectivePicker: React.FC<ObjectivePickerProps> = ({
+export const GoalPicker: React.FC<GoalPickerProps> = ({
   value,
   onChange,
-  placeholder = 'Link to objective...',
+  placeholder = 'Link to goal...',
   disabled = false,
   autoOpen = false,
 }) => {
@@ -28,7 +28,7 @@ export const ObjectivePicker: React.FC<ObjectivePickerProps> = ({
     const baseOptions: SelectOption<string>[] = [
       {
         value: '',
-        label: 'No objective',
+        label: 'No goal',
       },
     ];
 

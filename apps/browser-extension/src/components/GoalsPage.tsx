@@ -5,7 +5,7 @@ import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { type CompletionFilter, useGoalStore } from '../stores/goal-store';
 import { AllGoalsList } from './AllGoalsList';
-import { ObjectivesSection } from './objectives';
+import { GoalsSection } from './goals';
 import { PageHeader } from './PageHeader';
 
 type ViewTab = 'tasks' | 'goals';
@@ -237,7 +237,7 @@ export const GoalsPage: React.FC = () => {
         {/* Goals View */}
         {activeTab === 'goals' && (
           <div className="bg-surface rounded-xl border-2 border-border p-6">
-            <ObjectivesSection showCreateButton />
+            <GoalsSection showCreateButton />
           </div>
         )}
       </div>

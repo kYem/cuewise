@@ -2,14 +2,14 @@ import { formatDate, type Goal, type ObjectiveProgress } from '@cuewise/shared';
 import { Calendar, CheckCircle2, ChevronRight, Flag } from 'lucide-react';
 import type React from 'react';
 
-interface ObjectiveCardProps {
+interface GoalCardProps {
   objective: Goal;
   progress: ObjectiveProgress;
   onClick?: () => void;
   compact?: boolean;
 }
 
-export const ObjectiveCard: React.FC<ObjectiveCardProps> = ({
+export const GoalCard: React.FC<GoalCardProps> = ({
   objective,
   progress,
   onClick,
