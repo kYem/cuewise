@@ -1,5 +1,5 @@
 import { cn } from '@cuewise/ui';
-import { ArrowLeft, BarChart3, BookText, Clock, Target } from 'lucide-react';
+import { ArrowLeft, BarChart3, BookText, Clock, Flag } from 'lucide-react';
 import type React from 'react';
 
 type Page = 'quotes' | 'insights' | 'pomodoro' | 'goals';
@@ -20,8 +20,8 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ currentPage, title, subt
   };
 
   const navItems: Array<{ page: Page; label: string; icon: React.ReactNode }> = [
+    { page: 'goals', label: 'Goals', icon: <Flag className="w-4 h-4" /> },
     { page: 'quotes', label: 'Quotes', icon: <BookText className="w-4 h-4" /> },
-    { page: 'goals', label: 'Goals', icon: <Target className="w-4 h-4" /> },
     { page: 'insights', label: 'Insights', icon: <BarChart3 className="w-4 h-4" /> },
     { page: 'pomodoro', label: 'Pomodoro', icon: <Clock className="w-4 h-4" /> },
   ];

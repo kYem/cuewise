@@ -19,6 +19,7 @@ export interface SelectProps<T = string> {
   placeholder?: string;
   className?: string;
   disabled?: boolean;
+  autoOpen?: boolean;
   'aria-label'?: string;
 }
 
@@ -29,9 +30,10 @@ export function Select<T extends string = string>({
   placeholder = 'Select an option',
   className,
   disabled = false,
+  autoOpen = false,
   'aria-label': ariaLabel,
 }: SelectProps<T>) {
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(autoOpen);
   const [highlightedIndex, setHighlightedIndex] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
