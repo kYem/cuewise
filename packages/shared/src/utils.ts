@@ -22,9 +22,11 @@ import type {
   ExportData,
   Goal,
   GoalCompletionRate,
+  GoalType,
   ImportValidationError,
   InsightsData,
   MonthlyTrend,
+  ObjectiveProgress,
   PomodoroHeatmapData,
   PomodoroSession,
   Quote,
@@ -178,6 +180,111 @@ export function groupGoalsByDate(
   });
 
   return groupedArray;
+}
+
+// ============================================================================
+// Objective utilities
+// ============================================================================
+
+/**
+ * Get the type of a goal, defaulting to 'task' for backward compatibility.
+ * Existing goals without a type field are treated as tasks.
+ */
+export function getGoalType(goal: Goal): GoalType {
+  return goal.type ?? 'task';
+}
+
+/**
+ * Check if a goal is a task (including goals without explicit type)
+ */
+export function isTask(goal: Goal): boolean {
+  return getGoalType(goal) === 'task';
+}
+
+/**
+ * Check if a goal is an objective
+ */
+export function isObjective(goal: Goal): boolean {
+  return getGoalType(goal) === 'objective';
+}
+
+/**
+ * Get all tasks from a list of goals
+ */
+export function getTasks(goals: Goal[]): Goal[] {
+  return goals.filter(isTask);
+}
+
+/**
+ * Get all objectives from a list of goals
+ */
+export function getObjectives(goals: Goal[]): Goal[] {
+  return goals.filter(isObjective);
+}
+
+/**
+ * Get active (not completed) objectives
+ */
+export function getActiveObjectives(goals: Goal[]): Goal[] {
+  return goals.filter((g) => isObjective(g) && !g.completed);
+}
+
+/**
+ * Get tasks linked to a specific objective
+ */
+export function getLinkedTasks(goals: Goal[], objectiveId: string): Goal[] {
+  return goals.filter((g) => isTask(g) && g.parentId === objectiveId);
+}
+
+/**
+ * Calculate the number of days between two dates
+ * @param fromDate - Start date in YYYY-MM-DD format
+ * @param toDate - End date in YYYY-MM-DD format
+ * @returns Number of days (positive if toDate is after fromDate)
+ */
+export function daysBetween(fromDate: string, toDate: string): number {
+  const from = parseISO(fromDate);
+  const to = parseISO(toDate);
+  const diffTime = to.getTime() - from.getTime();
+  return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+}
+
+/**
+ * Calculate progress for an objective based on its linked tasks
+ */
+export function getObjectiveProgress(objective: Goal, allGoals: Goal[]): ObjectiveProgress {
+  const tasks = getLinkedTasks(allGoals, objective.id);
+  const completed = tasks.filter((t) => t.completed).length;
+
+  const today = getTodayDateString();
+  const daysRemaining = objective.date ? daysBetween(today, objective.date) : null;
+
+  return {
+    total: tasks.length,
+    completed,
+    percent: tasks.length > 0 ? Math.round((completed / tasks.length) * 100) : 0,
+    tasks,
+    daysRemaining,
+    isOverdue: daysRemaining !== null && daysRemaining < 0,
+  };
+}
+
+/**
+ * Calculate average progress across all active objectives
+ */
+export function calculateAvgObjectiveProgress(goals: Goal[]): number {
+  const activeObjectives = getActiveObjectives(goals);
+
+  if (activeObjectives.length === 0) {
+    return 0;
+  }
+
+  const totalProgress = activeObjectives.reduce((sum, objective) => {
+    const progress = getObjectiveProgress(objective, goals);
+    return sum + progress.percent;
+  }, 0);
+
+  return Math.round(totalProgress / activeObjectives.length);
 }
 
 /**
@@ -471,6 +578,17 @@ export function calculateInsights(
   const focusTimeToday = calculateFocusTimeToday(pomodoroSessions);
   const focusTimeThisWeek = calculateFocusTimeThisWeek(pomodoroSessions);
 
+  // Calculate objective analytics
+  const activeObjectives = getActiveObjectives(goals).length;
+  const objectivesCompletedThisMonth = goals.filter((goal) => {
+    if (!isObjective(goal) || !goal.completed) {
+      return false;
+    }
+    const goalDate = parseISO(goal.date);
+    return isAfter(goalDate, monthStart) || isSameDay(goalDate, monthStart);
+  }).length;
+  const avgObjectiveProgress = calculateAvgObjectiveProgress(goals);
+
   return {
     totalQuotesViewed,
     quotesViewedThisWeek,
@@ -486,6 +604,9 @@ export function calculateInsights(
       longest: streakData.longest,
       lastActive: lastActiveDate,
     },
+    activeObjectives,
+    objectivesCompletedThisMonth,
+    avgObjectiveProgress,
   };
 }
 

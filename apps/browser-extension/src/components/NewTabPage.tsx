@@ -1,5 +1,5 @@
 import { APP_LINKS, formatClockTime, formatLongDate, getGreeting } from '@cuewise/shared';
-import { BarChart3, BookMarked, PanelRight, Settings, Timer } from 'lucide-react';
+import { BarChart3, BookMarked, Flag, PanelRight, Settings, Timer } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { usePomodoroStorageSync, usePomodoroStore } from '../stores/pomodoro-store';
@@ -8,6 +8,7 @@ import { useSettingsStore } from '../stores/settings-store';
 import { ActivePomodoroWidget } from './ActivePomodoroWidget';
 import { Clock } from './Clock';
 import { GoalsSection } from './GoalsSection';
+import { ObjectiveButton } from './objectives';
 import { QuoteDisplay } from './QuoteDisplay';
 import { RemindersSection } from './RemindersSection';
 import { SettingsModal } from './SettingsModal';
@@ -133,6 +134,11 @@ export const NewTabPage: React.FC = () => {
     window.location.hash = 'insights';
   };
 
+  const handleOpenGoals = () => {
+    setIsMenuOpen(false);
+    window.location.hash = 'goals';
+  };
+
   const handleOpenQuoteManagement = () => {
     setIsMenuOpen(false);
     window.location.hash = 'quotes';
@@ -166,7 +172,7 @@ export const NewTabPage: React.FC = () => {
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            {/* Left: Time, Greeting & Date */}
+            {/* Left: Time, Greeting & Date + Objectives */}
             <div className="flex items-center gap-4">
               {/* Time */}
               <div className="flex items-center gap-2">
@@ -181,6 +187,9 @@ export const NewTabPage: React.FC = () => {
                 <span className="text-sm font-medium text-primary">{greeting}</span>
                 <span className="text-xs text-secondary">{longDate}</span>
               </div>
+
+              {/* Objectives Button - in sticky header */}
+              <ObjectiveButton />
             </div>
 
             {/* Right: Navigation */}
@@ -224,8 +233,17 @@ export const NewTabPage: React.FC = () => {
                     <button
                       type="button"
                       role="menuitem"
-                      onClick={handleOpenQuoteManagement}
+                      onClick={handleOpenGoals}
                       className="w-full flex items-center gap-3 px-4 py-3 text-primary hover:bg-surface-variant transition-colors"
+                    >
+                      <Flag className="w-5 h-5 text-primary-600" />
+                      <span className="text-sm font-medium">Goals</span>
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={handleOpenQuoteManagement}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-primary hover:bg-surface-variant transition-colors border-t border-divider"
                     >
                       <BookMarked className="w-5 h-5 text-primary-600" />
                       <span className="text-sm font-medium">Manage Quotes</span>
@@ -267,6 +285,15 @@ export const NewTabPage: React.FC = () => {
 
       {/* Main Content */}
       <div className="w-full flex flex-col items-center px-density-md py-density-lg relative">
+        {/* Floating Top Left - Objectives Button */}
+        <div
+          className={`absolute top-4 left-4 sm:top-8 sm:left-8 z-40 transition-all duration-300 ${
+            showStickyHeader ? 'opacity-0 pointer-events-none' : 'opacity-100'
+          }`}
+        >
+          <ObjectiveButton />
+        </div>
+
         {/* Floating Top Right Navigation - Only visible when not scrolled */}
         <nav
           aria-label="Main navigation"
@@ -311,8 +338,17 @@ export const NewTabPage: React.FC = () => {
                 <button
                   type="button"
                   role="menuitem"
-                  onClick={handleOpenQuoteManagement}
+                  onClick={handleOpenGoals}
                   className="w-full flex items-center gap-3 px-4 py-3 text-primary hover:bg-surface-variant transition-colors"
+                >
+                  <Flag className="w-5 h-5 text-primary-600" />
+                  <span className="text-sm font-medium">Goals</span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={handleOpenQuoteManagement}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-primary hover:bg-surface-variant transition-colors border-t border-divider"
                 >
                   <BookMarked className="w-5 h-5 text-primary-600" />
                   <span className="text-sm font-medium">Manage Quotes</span>

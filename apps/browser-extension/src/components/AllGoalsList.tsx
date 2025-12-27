@@ -1,12 +1,22 @@
-import { getRelativeDateLabel, getTodayDateString } from '@cuewise/shared';
+import { getRelativeDateLabel, getTodayDateString, isObjective } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
-import { ArrowRight, Calendar, CheckCircle2, Circle, MoveRight, Trash2 } from 'lucide-react';
+import {
+  ArrowRight,
+  Calendar,
+  CheckCircle2,
+  Circle,
+  Flag,
+  Link2,
+  MoveRight,
+  Trash2,
+} from 'lucide-react';
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useGoalStore } from '../stores/goal-store';
 
 export const AllGoalsList: React.FC = () => {
   const {
+    goals,
     getFilteredGoalsByDate,
     toggleGoal,
     updateGoal,
@@ -14,13 +24,18 @@ export const AllGoalsList: React.FC = () => {
     transferGoalToNextDay,
     moveGoalToToday,
     completionFilter,
+    getActiveObjectives,
+    linkTaskToObjective,
   } = useGoalStore();
   const [editingGoalId, setEditingGoalId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
+  const [linkingGoalId, setLinkingGoalId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const linkPickerRef = useRef<HTMLDivElement>(null);
 
   const groupedGoals = getFilteredGoalsByDate();
   const today = getTodayDateString();
+  const activeObjectives = getActiveObjectives();
 
   // Focus input when editing starts
   useEffect(() => {
@@ -29,6 +44,33 @@ export const AllGoalsList: React.FC = () => {
       inputRef.current.select();
     }
   }, [editingGoalId]);
+
+  // Close link picker when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (linkPickerRef.current && !linkPickerRef.current.contains(event.target as Node)) {
+        setLinkingGoalId(null);
+      }
+    };
+
+    if (linkingGoalId) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [linkingGoalId]);
+
+  const handleLinkToGoal = async (taskId: string, goalId: string | null) => {
+    await linkTaskToObjective(taskId, goalId);
+    setLinkingGoalId(null);
+    setEditingGoalId(null);
+  };
+
+  const getLinkedObjective = (parentId: string | undefined) => {
+    if (!parentId) {
+      return null;
+    }
+    return goals.find((g) => g.id === parentId && isObjective(g));
+  };
 
   const startEditing = (goalId: string, currentText: string) => {
     setEditingGoalId(goalId);
@@ -155,65 +197,162 @@ export const AllGoalsList: React.FC = () => {
                       className="flex-1 text-base px-2 py-1 border-2 border-primary-500 rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
                     />
                   ) : (
-                    <div className="flex-1 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => startEditing(goal.id, goal.text)}
+                      className={cn(
+                        'flex-1 text-base text-left transition-all hover:bg-surface-variant px-2 py-1 rounded',
+                        goal.completed ? 'text-tertiary line-through' : 'text-primary'
+                      )}
+                    >
+                      {goal.text}
+                    </button>
+                  )}
+
+                  {/* Right side: badges and actions */}
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    {/* Objective link badge - hide in edit mode */}
+                    {editingGoalId !== goal.id &&
+                      (() => {
+                        const objective = getLinkedObjective(goal.parentId);
+                        if (!objective) {
+                          return null;
+                        }
+                        return (
+                          <span
+                            className="flex items-center gap-1 text-xs text-primary-600 bg-primary-50 px-1.5 py-0.5 rounded-full"
+                            title={`Linked to: ${objective.text}`}
+                          >
+                            <Flag className="w-3 h-3" />
+                            <span className="max-w-[80px] truncate">{objective.text}</span>
+                          </span>
+                        );
+                      })()}
+
+                    {/* Transfer count badge - hide in edit mode */}
+                    {editingGoalId !== goal.id && goal.transferCount && goal.transferCount > 0 && (
+                      <span
+                        className="text-xs text-tertiary px-1"
+                        title={`Transferred ${goal.transferCount} time${goal.transferCount > 1 ? 's' : ''}`}
+                      >
+                        ↻{goal.transferCount}
+                      </span>
+                    )}
+
+                    {/* Move to Today Button - only show in edit mode */}
+                    {editingGoalId === goal.id && !isToday && !goal.completed && (
                       <button
                         type="button"
-                        onClick={() => startEditing(goal.id, goal.text)}
-                        className={cn(
-                          'flex-1 text-base text-left transition-all hover:bg-surface-variant px-2 py-1 rounded',
-                          goal.completed ? 'text-tertiary line-through' : 'text-primary'
-                        )}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          moveGoalToToday(goal.id);
+                          setEditingGoalId(null);
+                        }}
+                        className="p-1 text-secondary hover:text-primary-600 transition-colors focus:outline-none rounded"
+                        aria-label="Move to today"
+                        title="Move to today"
                       >
-                        {goal.text}
+                        <MoveRight className="w-4 h-4" />
                       </button>
-                      {/* Transfer count badge */}
-                      {goal.transferCount && goal.transferCount > 0 && (
-                        <span
-                          className="flex-shrink-0 text-xs text-tertiary"
-                          title={`Transferred ${goal.transferCount} time${goal.transferCount > 1 ? 's' : ''}`}
+                    )}
+
+                    {/* Transfer to Tomorrow Button - only show in edit mode */}
+                    {editingGoalId === goal.id && isToday && !goal.completed && (
+                      <button
+                        type="button"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          transferGoalToNextDay(goal.id);
+                          setEditingGoalId(null);
+                        }}
+                        className="p-1 text-secondary hover:text-primary-600 transition-colors focus:outline-none rounded"
+                        aria-label="Transfer to tomorrow"
+                        title="Move to tomorrow"
+                      >
+                        <ArrowRight className="w-4 h-4" />
+                      </button>
+                    )}
+
+                    {/* Link to Goal Button - only show in edit mode */}
+                    {editingGoalId === goal.id && activeObjectives.length > 0 && (
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() =>
+                            setLinkingGoalId(linkingGoalId === goal.id ? null : goal.id)
+                          }
+                          className={cn(
+                            'p-1 transition-colors focus:outline-none rounded',
+                            goal.parentId
+                              ? 'text-primary-600 hover:text-primary-700'
+                              : 'text-secondary hover:text-primary-600'
+                          )}
+                          aria-label={goal.parentId ? 'Change linked goal' : 'Link to goal'}
+                          title={goal.parentId ? 'Change linked goal' : 'Link to goal'}
                         >
-                          ↻{goal.transferCount}
-                        </span>
-                      )}
-                    </div>
-                  )}
+                          <Link2 className="w-4 h-4" />
+                        </button>
 
-                  {/* Move to Today Button - only show for incomplete non-today goals */}
-                  {!isToday && !goal.completed && (
-                    <button
-                      type="button"
-                      onClick={() => moveGoalToToday(goal.id)}
-                      className="flex-shrink-0 p-2 text-secondary hover:text-primary-600 opacity-0 group-hover:opacity-100 transition-all focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 rounded"
-                      aria-label="Move to today"
-                      title="Move to today"
-                    >
-                      <MoveRight className="w-4 h-4" />
-                    </button>
-                  )}
+                        {/* Link Picker Dropdown */}
+                        {linkingGoalId === goal.id && (
+                          <div
+                            ref={linkPickerRef}
+                            className="absolute right-0 top-full mt-1 z-50 min-w-[180px] bg-surface rounded-lg shadow-lg border border-border overflow-hidden"
+                          >
+                            <div className="py-1">
+                              {goal.parentId && (
+                                <button
+                                  type="button"
+                                  onMouseDown={(e) => e.preventDefault()}
+                                  onClick={() => handleLinkToGoal(goal.id, null)}
+                                  className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 transition-colors"
+                                >
+                                  <span>Remove link</span>
+                                </button>
+                              )}
+                              {activeObjectives.map((obj) => (
+                                <button
+                                  key={obj.id}
+                                  type="button"
+                                  onMouseDown={(e) => e.preventDefault()}
+                                  onClick={() => handleLinkToGoal(goal.id, obj.id)}
+                                  className={cn(
+                                    'w-full flex items-center gap-2 px-3 py-2 text-left text-sm transition-colors',
+                                    goal.parentId === obj.id
+                                      ? 'bg-primary-50 text-primary-600'
+                                      : 'text-primary hover:bg-surface-variant'
+                                  )}
+                                >
+                                  <Flag className="w-3 h-3 flex-shrink-0" />
+                                  <span className="truncate">{obj.text}</span>
+                                  {goal.parentId === obj.id && (
+                                    <span className="ml-auto text-xs text-primary-500">✓</span>
+                                  )}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
 
-                  {/* Transfer to Tomorrow Button - only show for today's incomplete goals */}
-                  {isToday && !goal.completed && (
-                    <button
-                      type="button"
-                      onClick={() => transferGoalToNextDay(goal.id)}
-                      className="flex-shrink-0 p-2 text-secondary hover:text-primary-600 opacity-0 group-hover:opacity-100 transition-all focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 rounded"
-                      aria-label="Transfer to tomorrow"
-                      title="Move to tomorrow"
-                    >
-                      <ArrowRight className="w-4 h-4" />
-                    </button>
-                  )}
-
-                  {/* Delete Button */}
-                  <button
-                    type="button"
-                    onClick={() => deleteGoal(goal.id)}
-                    className="flex-shrink-0 p-2 text-secondary hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 rounded"
-                    aria-label="Delete goal"
-                    title="Delete goal"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                    {/* Delete Button - only show in edit mode */}
+                    {editingGoalId === goal.id && (
+                      <button
+                        type="button"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          deleteGoal(goal.id);
+                        }}
+                        className="p-1 text-secondary hover:text-red-500 transition-colors focus:outline-none rounded"
+                        aria-label="Delete goal"
+                        title="Delete goal"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
