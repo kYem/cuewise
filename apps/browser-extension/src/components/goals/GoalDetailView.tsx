@@ -21,30 +21,30 @@ import { Modal } from '../Modal';
 import { GoalForm } from './GoalForm';
 
 interface GoalDetailViewProps {
-  objectiveId: string;
+  goalId: string;
   onClose: () => void;
 }
 
-export const GoalDetailView: React.FC<GoalDetailViewProps> = ({ objectiveId, onClose }) => {
+export const GoalDetailView: React.FC<GoalDetailViewProps> = ({ goalId, onClose }) => {
   const goals = useGoalStore((state) => state.goals);
-  const getObjectiveProgress = useGoalStore((state) => state.getObjectiveProgress);
-  const toggleGoal = useGoalStore((state) => state.toggleGoal);
-  const deleteObjective = useGoalStore((state) => state.deleteObjective);
+  const getGoalProgress = useGoalStore((state) => state.getGoalProgress);
+  const toggleTask = useGoalStore((state) => state.toggleTask);
+  const deleteGoal = useGoalStore((state) => state.deleteGoal);
   const linkTaskToGoal = useGoalStore((state) => state.linkTaskToGoal);
-  const updateObjective = useGoalStore((state) => state.updateObjective);
+  const updateGoal = useGoalStore((state) => state.updateGoal);
 
   const [isEditing, setIsEditing] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
   const [showTaskInput, setShowTaskInput] = useState(false);
 
-  const objective = goals.find((g) => g.id === objectiveId);
-  const progress = getObjectiveProgress(objectiveId);
+  const goalItem = goals.find((g) => g.id === goalId);
+  const progress = getGoalProgress(goalId);
 
-  if (!objective || !progress) {
+  if (!goalItem || !progress) {
     return (
       <div className="p-6 text-center">
-        <p className="text-secondary">Objective not found</p>
+        <p className="text-secondary">Goal not found</p>
         <button
           type="button"
           onClick={onClose}
@@ -59,29 +59,29 @@ export const GoalDetailView: React.FC<GoalDetailViewProps> = ({ objectiveId, onC
   const { total, completed, percent, tasks, daysRemaining, isOverdue } = progress;
 
   const handleToggleTask = async (taskId: string) => {
-    await toggleGoal(taskId);
+    await toggleTask(taskId);
   };
 
   const handleUnlinkTask = async (taskId: string) => {
     await linkTaskToGoal(taskId, null);
   };
 
-  const handleDeleteObjective = async () => {
-    await deleteObjective(objectiveId);
+  const handleDeleteGoal = async () => {
+    await deleteGoal(goalId);
     onClose();
   };
 
-  const handleCompleteObjective = async () => {
-    await updateObjective(objectiveId, { completed: true });
+  const handleCompleteGoal = async () => {
+    await updateGoal(goalId, { completed: true });
     setShowCompleteConfirm(false);
   };
 
-  const handleReopenObjective = async () => {
-    await updateObjective(objectiveId, { completed: false });
+  const handleReopenGoal = async () => {
+    await updateGoal(goalId, { completed: false });
   };
 
   // Determine if we should show the completion prompt
-  const allTasksComplete = total > 0 && completed === total && !objective.completed;
+  const allTasksComplete = total > 0 && completed === total && !goalItem.completed;
 
   const getDaysLabel = () => {
     if (daysRemaining === null) {
@@ -103,7 +103,7 @@ export const GoalDetailView: React.FC<GoalDetailViewProps> = ({ objectiveId, onC
     return (
       <Modal isOpen={true} onClose={() => setIsEditing(false)} title="Edit Goal">
         <GoalForm
-          objective={objective}
+          goal={goalItem}
           onCancel={() => setIsEditing(false)}
           onSuccess={() => setIsEditing(false)}
         />
@@ -146,18 +146,18 @@ export const GoalDetailView: React.FC<GoalDetailViewProps> = ({ objectiveId, onC
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-4 space-y-6">
-        {/* Objective Info */}
+        {/* Goal Info */}
         <div className="flex items-start gap-4">
           <div
             className={`w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 ${
-              objective.completed
+              goalItem.completed
                 ? 'bg-green-100 text-green-600'
                 : isOverdue
                   ? 'bg-red-100 text-red-600'
                   : 'bg-primary-100 text-primary-600'
             }`}
           >
-            {objective.completed ? (
+            {goalItem.completed ? (
               <CheckCircle2 className="w-6 h-6" />
             ) : (
               <Flag className="w-6 h-6" />
@@ -166,14 +166,12 @@ export const GoalDetailView: React.FC<GoalDetailViewProps> = ({ objectiveId, onC
 
           <div className="flex-1 min-w-0">
             <h3
-              className={`text-xl font-semibold ${objective.completed ? 'text-secondary line-through' : 'text-primary'}`}
+              className={`text-xl font-semibold ${goalItem.completed ? 'text-secondary line-through' : 'text-primary'}`}
             >
-              {objective.text}
+              {goalItem.text}
             </h3>
 
-            {objective.description && (
-              <p className="text-secondary mt-2">{objective.description}</p>
-            )}
+            {goalItem.description && <p className="text-secondary mt-2">{goalItem.description}</p>}
 
             {/* Due date */}
             <div className="flex items-center gap-2 mt-3">
@@ -181,7 +179,7 @@ export const GoalDetailView: React.FC<GoalDetailViewProps> = ({ objectiveId, onC
               <span
                 className={`text-sm ${isOverdue ? 'text-red-600 font-medium' : 'text-secondary'}`}
               >
-                {formatDate(objective.date)}
+                {formatDate(goalItem.date)}
                 {getDaysLabel() && ` (${getDaysLabel()})`}
               </span>
             </div>
@@ -211,8 +209,8 @@ export const GoalDetailView: React.FC<GoalDetailViewProps> = ({ objectiveId, onC
           </div>
         )}
 
-        {/* Completed Objective Banner */}
-        {objective.completed && (
+        {/* Completed Goal Banner */}
+        {goalItem.completed && (
           <div className="bg-surface-variant border border-border rounded-xl p-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -224,7 +222,7 @@ export const GoalDetailView: React.FC<GoalDetailViewProps> = ({ objectiveId, onC
               </div>
               <button
                 type="button"
-                onClick={handleReopenObjective}
+                onClick={handleReopenGoal}
                 className="text-sm text-primary-600 hover:text-primary-700 font-medium"
               >
                 Reopen
@@ -246,7 +244,7 @@ export const GoalDetailView: React.FC<GoalDetailViewProps> = ({ objectiveId, onC
           <div className="h-3 bg-muted rounded-full overflow-hidden">
             <div
               className={`h-full transition-all ${
-                objective.completed ? 'bg-green-500' : isOverdue ? 'bg-red-500' : 'bg-primary-500'
+                goalItem.completed ? 'bg-green-500' : isOverdue ? 'bg-red-500' : 'bg-primary-500'
               }`}
               style={{ width: `${percent}%` }}
             />
@@ -276,7 +274,7 @@ export const GoalDetailView: React.FC<GoalDetailViewProps> = ({ objectiveId, onC
           {showTaskInput && (
             <div className="mb-4">
               <GoalInput
-                defaultObjectiveId={objectiveId}
+                defaultGoalId={goalId}
                 onTaskAdded={() => setShowTaskInput(false)}
                 autoFocus
               />
@@ -348,9 +346,9 @@ export const GoalDetailView: React.FC<GoalDetailViewProps> = ({ objectiveId, onC
       <ConfirmationDialog
         isOpen={showDeleteConfirm}
         onClose={() => setShowDeleteConfirm(false)}
-        onConfirm={handleDeleteObjective}
+        onConfirm={handleDeleteGoal}
         title="Delete Goal"
-        message={`Are you sure you want to delete "${objective.text}"? Linked tasks will become standalone tasks.`}
+        message={`Are you sure you want to delete "${goalItem.text}"? Linked tasks will become standalone tasks.`}
         confirmText="Delete"
         variant="danger"
       />
@@ -359,9 +357,9 @@ export const GoalDetailView: React.FC<GoalDetailViewProps> = ({ objectiveId, onC
       <ConfirmationDialog
         isOpen={showCompleteConfirm}
         onClose={() => setShowCompleteConfirm(false)}
-        onConfirm={handleCompleteObjective}
+        onConfirm={handleCompleteGoal}
         title="Complete Goal"
-        message={`Mark "${objective.text}" as complete? Completed goals are archived and hidden from the active view.`}
+        message={`Mark "${goalItem.text}" as complete? Completed goals are archived and hidden from the active view.`}
         confirmText="Complete"
         variant="primary"
       />

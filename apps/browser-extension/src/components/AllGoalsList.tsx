@@ -17,12 +17,12 @@ import { useGoalStore } from '../stores/goal-store';
 export const AllGoalsList: React.FC = () => {
   const {
     goals,
-    getFilteredGoalsByDate,
-    toggleGoal,
-    updateGoal,
-    deleteGoal,
-    transferGoalToNextDay,
-    moveGoalToToday,
+    getFilteredTasksByDate,
+    toggleTask,
+    updateTask,
+    deleteTask,
+    transferTaskToNextDay,
+    moveTaskToToday,
     completionFilter,
     getActiveGoals,
     linkTaskToGoal,
@@ -33,7 +33,7 @@ export const AllGoalsList: React.FC = () => {
   const inputRef = useRef<HTMLInputElement>(null);
   const linkPickerRef = useRef<HTMLDivElement>(null);
 
-  const groupedGoals = getFilteredGoalsByDate();
+  const groupedGoals = getFilteredTasksByDate();
   const today = getTodayDateString();
   const activeGoals = getActiveGoals();
 
@@ -84,7 +84,7 @@ export const AllGoalsList: React.FC = () => {
         .find((goal) => goal.id === editingGoalId);
 
       if (currentGoal && editText.trim() !== currentGoal.text) {
-        await updateGoal(editingGoalId, editText.trim());
+        await updateTask(editingGoalId, editText.trim());
       }
     }
     setEditingGoalId(null);
@@ -173,7 +173,7 @@ export const AllGoalsList: React.FC = () => {
                   {/* Checkbox */}
                   <button
                     type="button"
-                    onClick={() => toggleGoal(goal.id)}
+                    onClick={() => toggleTask(goal.id)}
                     className="flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 rounded-full"
                     aria-label={goal.completed ? 'Mark as incomplete' : 'Mark as complete'}
                   >
@@ -245,7 +245,7 @@ export const AllGoalsList: React.FC = () => {
                         type="button"
                         onMouseDown={(e) => {
                           e.preventDefault();
-                          moveGoalToToday(goal.id);
+                          moveTaskToToday(goal.id);
                           setEditingGoalId(null);
                         }}
                         className="p-1 text-secondary hover:text-primary-600 transition-colors focus:outline-none rounded"
@@ -262,7 +262,7 @@ export const AllGoalsList: React.FC = () => {
                         type="button"
                         onMouseDown={(e) => {
                           e.preventDefault();
-                          transferGoalToNextDay(goal.id);
+                          transferTaskToNextDay(goal.id);
                           setEditingGoalId(null);
                         }}
                         className="p-1 text-secondary hover:text-primary-600 transition-colors focus:outline-none rounded"
@@ -343,7 +343,7 @@ export const AllGoalsList: React.FC = () => {
                         type="button"
                         onMouseDown={(e) => {
                           e.preventDefault();
-                          deleteGoal(goal.id);
+                          deleteTask(goal.id);
                         }}
                         className="p-1 text-secondary hover:text-red-500 transition-colors focus:outline-none rounded"
                         aria-label="Delete goal"

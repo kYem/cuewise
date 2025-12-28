@@ -6,7 +6,7 @@ import { useGoalStore } from '../../stores/goal-store';
 
 interface GoalPickerProps {
   value: string | null;
-  onChange: (objectiveId: string | null) => void;
+  onChange: (goalId: string | null) => void;
   placeholder?: string;
   disabled?: boolean;
   autoOpen?: boolean;
@@ -20,9 +20,9 @@ export const GoalPicker: React.FC<GoalPickerProps> = ({
   autoOpen = false,
 }) => {
   const getActiveGoals = useGoalStore((state) => state.getActiveGoals);
-  const getObjectiveProgress = useGoalStore((state) => state.getObjectiveProgress);
+  const getGoalProgress = useGoalStore((state) => state.getGoalProgress);
 
-  const objectives = getActiveGoals();
+  const goals = getActiveGoals();
 
   const options = useMemo<SelectOption<string>[]>(() => {
     const baseOptions: SelectOption<string>[] = [
@@ -32,8 +32,8 @@ export const GoalPicker: React.FC<GoalPickerProps> = ({
       },
     ];
 
-    const objectiveOptions: SelectOption<string>[] = objectives.map((obj) => {
-      const progress = getObjectiveProgress(obj.id);
+    const goalOptions: SelectOption<string>[] = goals.map((obj) => {
+      const progress = getGoalProgress(obj.id);
       const percent = progress?.percent ?? 0;
 
       return {
@@ -44,14 +44,14 @@ export const GoalPicker: React.FC<GoalPickerProps> = ({
       };
     });
 
-    return [...baseOptions, ...objectiveOptions];
-  }, [objectives, getObjectiveProgress]);
+    return [...baseOptions, ...goalOptions];
+  }, [goals, getGoalProgress]);
 
   const handleChange = (selectedValue: string) => {
     onChange(selectedValue === '' ? null : selectedValue);
   };
 
-  if (objectives.length === 0) {
+  if (goals.length === 0) {
     return null;
   }
 

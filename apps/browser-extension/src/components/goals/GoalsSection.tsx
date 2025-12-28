@@ -8,32 +8,30 @@ import { GoalDetailView } from './GoalDetailView';
 import { GoalForm } from './GoalForm';
 
 interface GoalsSectionProps {
-  onObjectiveClick?: (objectiveId: string) => void;
+  onGoalClick?: (goalId: string) => void;
   showCompleted?: boolean;
   compact?: boolean;
   showCreateButton?: boolean;
 }
 
 export const GoalsSection: React.FC<GoalsSectionProps> = ({
-  onObjectiveClick,
+  onGoalClick,
   showCompleted = false,
   compact = false,
   showCreateButton = false,
 }) => {
-  const getObjectives = useGoalStore((state) => state.getObjectives);
-  const getObjectiveProgress = useGoalStore((state) => state.getObjectiveProgress);
+  const getGoals = useGoalStore((state) => state.getGoals);
+  const getGoalProgress = useGoalStore((state) => state.getGoalProgress);
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [selectedGoalId, setSelectedObjectiveId] = useState<string | null>(null);
+  const [selectedGoalId, setSelectedGoalId] = useState<string | null>(null);
 
-  const objectives = getObjectives();
+  const goalItems = getGoals();
 
   // Filter based on showCompleted preference
-  const filteredObjectives = showCompleted
-    ? objectives
-    : objectives.filter((obj) => !obj.completed);
+  const filteredGoals = showCompleted ? goalItems : goalItems.filter((obj) => !obj.completed);
 
   // Sort by due date (soonest first)
-  const sortedObjectives = [...filteredObjectives].sort((a, b) => {
+  const sortedGoals = [...filteredGoals].sort((a, b) => {
     // Completed goals go to the end
     if (a.completed !== b.completed) {
       return a.completed ? 1 : -1;
@@ -42,25 +40,25 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({
     return a.date.localeCompare(b.date);
   });
 
-  const handleObjectiveClick = (objectiveId: string) => {
-    if (onObjectiveClick) {
-      onObjectiveClick(objectiveId);
+  const handleGoalClick = (goalId: string) => {
+    if (onGoalClick) {
+      onGoalClick(goalId);
     } else {
-      setSelectedObjectiveId(objectiveId);
+      setSelectedGoalId(goalId);
     }
   };
 
   const handleCloseDetail = () => {
-    setSelectedObjectiveId(null);
+    setSelectedGoalId(null);
   };
 
   const handleFormSuccess = () => {
     setIsFormOpen(false);
   };
 
-  const selectedGoal = selectedGoalId ? objectives.find((o) => o.id === selectedGoalId) : null;
+  const selectedGoal = selectedGoalId ? goalItems.find((o) => o.id === selectedGoalId) : null;
 
-  if (sortedObjectives.length === 0) {
+  if (sortedGoals.length === 0) {
     return (
       <div className="space-y-4">
         {showCreateButton && (
@@ -108,18 +106,18 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({
       )}
 
       <div className="space-y-3">
-        {sortedObjectives.map((objective) => {
-          const progress = getObjectiveProgress(objective.id);
+        {sortedGoals.map((goalItem) => {
+          const progress = getGoalProgress(goalItem.id);
           if (!progress) {
             return null;
           }
 
           return (
             <GoalCard
-              key={objective.id}
-              objective={objective}
+              key={goalItem.id}
+              goal={goalItem}
               progress={progress}
-              onClick={() => handleObjectiveClick(objective.id)}
+              onClick={() => handleGoalClick(goalItem.id)}
               compact={compact}
             />
           );
@@ -134,7 +132,7 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({
       {/* Goal Detail Modal */}
       {selectedGoal && (
         <Modal isOpen={!!selectedGoal} onClose={handleCloseDetail}>
-          <GoalDetailView objectiveId={selectedGoal.id} onClose={handleCloseDetail} />
+          <GoalDetailView goalId={selectedGoal.id} onClose={handleCloseDetail} />
         </Modal>
       )}
     </div>

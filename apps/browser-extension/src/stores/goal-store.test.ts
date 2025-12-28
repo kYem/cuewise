@@ -43,7 +43,7 @@ describe('Goal Store', () => {
     // Reset store to initial state
     useGoalStore.setState({
       goals: [],
-      todayGoals: [],
+      todayTasks: [],
       isLoading: true,
       error: null,
     });
@@ -55,9 +55,9 @@ describe('Goal Store', () => {
   describe('initialize', () => {
     it('should load goals and filter today goals', async () => {
       const today = getTodayDateString();
-      const todayGoals = goalFactory.buildList(3, { date: today });
+      const todayTasks = goalFactory.buildList(3, { date: today });
       const yesterdayGoals = goalFactory.buildList(2, { date: '2025-01-01' });
-      const allGoals = [...todayGoals, ...yesterdayGoals];
+      const allGoals = [...todayTasks, ...yesterdayGoals];
 
       vi.mocked(storage.getGoals).mockResolvedValue(allGoals);
 
@@ -65,7 +65,7 @@ describe('Goal Store', () => {
 
       const state = useGoalStore.getState();
       expect(state.goals).toEqual(allGoals);
-      expect(state.todayGoals).toEqual(todayGoals);
+      expect(state.todayTasks).toEqual(todayTasks);
       expect(state.isLoading).toBe(false);
       expect(state.error).toBe(null);
     });
@@ -87,7 +87,7 @@ describe('Goal Store', () => {
       useGoalStore.setState({ goals: existingGoals });
 
       const goalText = 'New goal text';
-      await useGoalStore.getState().addGoal(goalText);
+      await useGoalStore.getState().addTask(goalText);
 
       expect(storage.setGoals).toHaveBeenCalled();
       const updatedGoals = vi.mocked(storage.setGoals).mock.calls[0][0];
@@ -103,7 +103,7 @@ describe('Goal Store', () => {
       const existingGoals = goalFactory.buildList(2);
       useGoalStore.setState({ goals: existingGoals });
 
-      await useGoalStore.getState().addGoal('   ');
+      await useGoalStore.getState().addTask('   ');
 
       expect(storage.setGoals).not.toHaveBeenCalled();
     });
@@ -111,7 +111,7 @@ describe('Goal Store', () => {
     it('should trim goal text', async () => {
       useGoalStore.setState({ goals: [] });
 
-      await useGoalStore.getState().addGoal('  Goal with spaces  ');
+      await useGoalStore.getState().addTask('  Goal with spaces  ');
 
       const updatedGoals = vi.mocked(storage.setGoals).mock.calls[0][0];
       expect(updatedGoals[0].text).toBe('Goal with spaces');
@@ -126,7 +126,7 @@ describe('Goal Store', () => {
 
       useGoalStore.setState({ goals: mockGoals });
 
-      await useGoalStore.getState().toggleGoal(targetGoal.id);
+      await useGoalStore.getState().toggleTask(targetGoal.id);
 
       expect(storage.setGoals).toHaveBeenCalled();
       const updatedGoals = vi.mocked(storage.setGoals).mock.calls[0][0];
@@ -141,7 +141,7 @@ describe('Goal Store', () => {
 
       useGoalStore.setState({ goals: mockGoals });
 
-      await useGoalStore.getState().toggleGoal(completedGoal.id);
+      await useGoalStore.getState().toggleTask(completedGoal.id);
 
       const updatedGoals = vi.mocked(storage.setGoals).mock.calls[0][0];
       const toggledGoal = updatedGoals.find((g) => g.id === completedGoal.id);
@@ -155,9 +155,9 @@ describe('Goal Store', () => {
       const mockGoals = goalFactory.buildList(3, { date: today });
       const targetGoal = mockGoals[1];
 
-      useGoalStore.setState({ goals: mockGoals, todayGoals: mockGoals });
+      useGoalStore.setState({ goals: mockGoals, todayTasks: mockGoals });
 
-      await useGoalStore.getState().deleteGoal(targetGoal.id);
+      await useGoalStore.getState().deleteTask(targetGoal.id);
 
       expect(storage.setGoals).toHaveBeenCalled();
       const updatedGoals = vi.mocked(storage.setGoals).mock.calls[0][0];
@@ -193,7 +193,7 @@ describe('Goal Store', () => {
       );
     });
 
-    it('should update todayGoals correctly after clearing', async () => {
+    it('should update todayTasks correctly after clearing', async () => {
       const today = getTodayDateString();
       const completedTodayGoals = completedGoalFactory.buildList(2, { date: today });
       const incompleteTodayGoals = goalFactory.buildList(1, { date: today, completed: false });
@@ -203,8 +203,8 @@ describe('Goal Store', () => {
       await useGoalStore.getState().clearCompleted();
 
       const state = useGoalStore.getState();
-      expect(state.todayGoals).toHaveLength(1);
-      expect(state.todayGoals[0]).toMatchObject(incompleteTodayGoals[0]);
+      expect(state.todayTasks).toHaveLength(1);
+      expect(state.todayTasks[0]).toMatchObject(incompleteTodayGoals[0]);
     });
   });
 
@@ -214,9 +214,9 @@ describe('Goal Store', () => {
       const pastGoal = goalFactory.build({ date: '2025-01-01', completed: false });
       const todayGoal = goalFactory.build({ date: today });
 
-      useGoalStore.setState({ goals: [pastGoal, todayGoal], todayGoals: [todayGoal] });
+      useGoalStore.setState({ goals: [pastGoal, todayGoal], todayTasks: [todayGoal] });
 
-      await useGoalStore.getState().moveGoalToToday(pastGoal.id);
+      await useGoalStore.getState().moveTaskToToday(pastGoal.id);
 
       expect(storage.setGoals).toHaveBeenCalled();
       const updatedGoals = vi.mocked(storage.setGoals).mock.calls[0][0];
@@ -229,9 +229,9 @@ describe('Goal Store', () => {
       const today = getTodayDateString();
       const pastCompletedGoal = completedGoalFactory.build({ date: '2025-01-01' });
 
-      useGoalStore.setState({ goals: [pastCompletedGoal], todayGoals: [] });
+      useGoalStore.setState({ goals: [pastCompletedGoal], todayTasks: [] });
 
-      await useGoalStore.getState().moveGoalToToday(pastCompletedGoal.id);
+      await useGoalStore.getState().moveTaskToToday(pastCompletedGoal.id);
 
       const updatedGoals = vi.mocked(storage.setGoals).mock.calls[0][0];
       const movedGoal = updatedGoals.find((g) => g.id === pastCompletedGoal.id);
@@ -240,16 +240,16 @@ describe('Goal Store', () => {
       expect(movedGoal?.completed).toBe(false);
     });
 
-    it('should update todayGoals after moving', async () => {
+    it('should update todayTasks after moving', async () => {
       const pastGoal = goalFactory.build({ date: '2025-01-01', completed: false });
 
-      useGoalStore.setState({ goals: [pastGoal], todayGoals: [] });
+      useGoalStore.setState({ goals: [pastGoal], todayTasks: [] });
 
-      await useGoalStore.getState().moveGoalToToday(pastGoal.id);
+      await useGoalStore.getState().moveTaskToToday(pastGoal.id);
 
       const state = useGoalStore.getState();
-      expect(state.todayGoals).toHaveLength(1);
-      expect(state.todayGoals[0].id).toBe(pastGoal.id);
+      expect(state.todayTasks).toHaveLength(1);
+      expect(state.todayTasks[0].id).toBe(pastGoal.id);
     });
   });
 
@@ -258,9 +258,9 @@ describe('Goal Store', () => {
       const today = getTodayDateString();
       const todayGoal = goalFactory.build({ date: today, completed: false });
 
-      useGoalStore.setState({ goals: [todayGoal], todayGoals: [todayGoal] });
+      useGoalStore.setState({ goals: [todayGoal], todayTasks: [todayGoal] });
 
-      await useGoalStore.getState().transferGoalToNextDay(todayGoal.id);
+      await useGoalStore.getState().transferTaskToNextDay(todayGoal.id);
 
       expect(storage.setGoals).toHaveBeenCalled();
       const updatedGoals = vi.mocked(storage.setGoals).mock.calls[0][0];
@@ -274,9 +274,9 @@ describe('Goal Store', () => {
       const today = getTodayDateString();
       const todayGoal = goalFactory.build({ date: today, transferCount: 2 });
 
-      useGoalStore.setState({ goals: [todayGoal], todayGoals: [todayGoal] });
+      useGoalStore.setState({ goals: [todayGoal], todayTasks: [todayGoal] });
 
-      await useGoalStore.getState().transferGoalToNextDay(todayGoal.id);
+      await useGoalStore.getState().transferTaskToNextDay(todayGoal.id);
 
       const updatedGoals = vi.mocked(storage.setGoals).mock.calls[0][0];
       const transferredGoal = updatedGoals.find((g) => g.id === todayGoal.id);
@@ -284,16 +284,16 @@ describe('Goal Store', () => {
       expect(transferredGoal?.transferCount).toBe(3);
     });
 
-    it('should remove goal from todayGoals after transfer', async () => {
+    it('should remove goal from todayTasks after transfer', async () => {
       const today = getTodayDateString();
       const todayGoal = goalFactory.build({ date: today });
 
-      useGoalStore.setState({ goals: [todayGoal], todayGoals: [todayGoal] });
+      useGoalStore.setState({ goals: [todayGoal], todayTasks: [todayGoal] });
 
-      await useGoalStore.getState().transferGoalToNextDay(todayGoal.id);
+      await useGoalStore.getState().transferTaskToNextDay(todayGoal.id);
 
       const state = useGoalStore.getState();
-      expect(state.todayGoals).toHaveLength(0);
+      expect(state.todayTasks).toHaveLength(0);
     });
   });
 
@@ -302,7 +302,7 @@ describe('Goal Store', () => {
       it('should add a new objective', async () => {
         useGoalStore.setState({ goals: [] });
 
-        await useGoalStore.getState().addObjective('Learn TypeScript', '2025-02-15', 'Master TS');
+        await useGoalStore.getState().addGoal('Learn TypeScript', '2025-02-15', 'Master TS');
 
         expect(storage.setGoals).toHaveBeenCalled();
         const updatedGoals = vi.mocked(storage.setGoals).mock.calls[0][0];
@@ -319,7 +319,7 @@ describe('Goal Store', () => {
       it('should not add objective with empty title', async () => {
         useGoalStore.setState({ goals: [] });
 
-        await useGoalStore.getState().addObjective('  ', '2025-02-15');
+        await useGoalStore.getState().addGoal('  ', '2025-02-15');
 
         expect(storage.setGoals).not.toHaveBeenCalled();
       });
@@ -327,7 +327,7 @@ describe('Goal Store', () => {
       it('should trim objective title and description', async () => {
         useGoalStore.setState({ goals: [] });
 
-        await useGoalStore.getState().addObjective('  Title  ', '2025-02-15', '  Description  ');
+        await useGoalStore.getState().addGoal('  Title  ', '2025-02-15', '  Description  ');
 
         const updatedGoals = vi.mocked(storage.setGoals).mock.calls[0][0];
         expect(updatedGoals[0].text).toBe('Title');
@@ -340,7 +340,7 @@ describe('Goal Store', () => {
         const objective = createObjective({ id: 'obj-1' });
         useGoalStore.setState({ goals: [objective] });
 
-        await useGoalStore.getState().updateObjective('obj-1', { text: 'Updated Title' });
+        await useGoalStore.getState().updateGoal('obj-1', { text: 'Updated Title' });
 
         const updatedGoals = vi.mocked(storage.setGoals).mock.calls[0][0];
         expect(updatedGoals[0].text).toBe('Updated Title');
@@ -350,7 +350,7 @@ describe('Goal Store', () => {
         const objective = createObjective({ id: 'obj-1' });
         useGoalStore.setState({ goals: [objective] });
 
-        await useGoalStore.getState().updateObjective('obj-1', { description: 'New description' });
+        await useGoalStore.getState().updateGoal('obj-1', { description: 'New description' });
 
         const updatedGoals = vi.mocked(storage.setGoals).mock.calls[0][0];
         expect(updatedGoals[0].description).toBe('New description');
@@ -360,7 +360,7 @@ describe('Goal Store', () => {
         const objective = createObjective({ id: 'obj-1' });
         useGoalStore.setState({ goals: [objective] });
 
-        await useGoalStore.getState().updateObjective('obj-1', { date: '2025-03-01' });
+        await useGoalStore.getState().updateGoal('obj-1', { date: '2025-03-01' });
 
         const updatedGoals = vi.mocked(storage.setGoals).mock.calls[0][0];
         expect(updatedGoals[0].date).toBe('2025-03-01');
@@ -370,7 +370,7 @@ describe('Goal Store', () => {
         const objective = createObjective({ id: 'obj-1' });
         useGoalStore.setState({ goals: [objective] });
 
-        await useGoalStore.getState().updateObjective('obj-1', { completed: true });
+        await useGoalStore.getState().updateGoal('obj-1', { completed: true });
 
         const updatedGoals = vi.mocked(storage.setGoals).mock.calls[0][0];
         expect(updatedGoals[0].completed).toBe(true);
@@ -380,7 +380,7 @@ describe('Goal Store', () => {
         const objective = createObjective({ id: 'obj-1', completed: true });
         useGoalStore.setState({ goals: [objective] });
 
-        await useGoalStore.getState().updateObjective('obj-1', { completed: false });
+        await useGoalStore.getState().updateGoal('obj-1', { completed: false });
 
         const updatedGoals = vi.mocked(storage.setGoals).mock.calls[0][0];
         expect(updatedGoals[0].completed).toBe(false);
@@ -392,7 +392,7 @@ describe('Goal Store', () => {
         const objective = createObjective({ id: 'obj-1' });
         useGoalStore.setState({ goals: [objective] });
 
-        await useGoalStore.getState().deleteObjective('obj-1');
+        await useGoalStore.getState().deleteGoal('obj-1');
 
         const updatedGoals = vi.mocked(storage.setGoals).mock.calls[0][0];
         expect(updatedGoals).toHaveLength(0);
@@ -403,7 +403,7 @@ describe('Goal Store', () => {
         const linkedTask = createLinkedTask('obj-1', { id: 'task-1' });
         useGoalStore.setState({ goals: [objective, linkedTask] });
 
-        await useGoalStore.getState().deleteObjective('obj-1');
+        await useGoalStore.getState().deleteGoal('obj-1');
 
         const updatedGoals = vi.mocked(storage.setGoals).mock.calls[0][0];
         expect(updatedGoals).toHaveLength(1);
@@ -457,7 +457,7 @@ describe('Goal Store', () => {
         const task = goalFactory.build({ id: 'task-1' });
         useGoalStore.setState({ goals: [objective, task] });
 
-        const objectives = useGoalStore.getState().getObjectives();
+        const objectives = useGoalStore.getState().getGoals();
 
         expect(objectives).toHaveLength(1);
         expect(objectives[0].id).toBe('obj-1');
@@ -477,12 +477,12 @@ describe('Goal Store', () => {
       });
     });
 
-    describe('getObjectiveProgress', () => {
+    describe('getGoalProgress', () => {
       it('should return progress for objective with no tasks', () => {
         const objective = createObjective({ id: 'obj-1' });
         useGoalStore.setState({ goals: [objective] });
 
-        const progress = useGoalStore.getState().getObjectiveProgress('obj-1');
+        const progress = useGoalStore.getState().getGoalProgress('obj-1');
 
         expect(progress).not.toBeNull();
         expect(progress?.total).toBe(0);
@@ -496,7 +496,7 @@ describe('Goal Store', () => {
         const task2 = createLinkedTask('obj-1', { id: 'task-2', completed: false });
         useGoalStore.setState({ goals: [objective, task1, task2] });
 
-        const progress = useGoalStore.getState().getObjectiveProgress('obj-1');
+        const progress = useGoalStore.getState().getGoalProgress('obj-1');
 
         expect(progress?.total).toBe(2);
         expect(progress?.completed).toBe(1);
@@ -506,7 +506,7 @@ describe('Goal Store', () => {
       it('should return null for non-existent objective', () => {
         useGoalStore.setState({ goals: [] });
 
-        const progress = useGoalStore.getState().getObjectiveProgress('non-existent');
+        const progress = useGoalStore.getState().getGoalProgress('non-existent');
 
         expect(progress).toBeNull();
       });
@@ -531,7 +531,7 @@ describe('Goal Store', () => {
         const objective = createObjective({ id: 'obj-1' });
         useGoalStore.setState({ goals: [objective] });
 
-        await useGoalStore.getState().addGoal('New linked task', 'obj-1');
+        await useGoalStore.getState().addTask('New linked task', 'obj-1');
 
         const updatedGoals = vi.mocked(storage.setGoals).mock.calls[0][0];
         const addedTask = updatedGoals.find((g) => g.text === 'New linked task');
@@ -539,8 +539,8 @@ describe('Goal Store', () => {
       });
     });
 
-    describe('initialize excludes objectives from todayGoals', () => {
-      it('should not include objectives in todayGoals', async () => {
+    describe('initialize excludes objectives from todayTasks', () => {
+      it('should not include objectives in todayTasks', async () => {
         const today = getTodayDateString();
         const todayTask = goalFactory.build({ date: today });
         const todayObjective = createObjective({ date: today });
@@ -550,8 +550,8 @@ describe('Goal Store', () => {
         await useGoalStore.getState().initialize();
 
         const state = useGoalStore.getState();
-        expect(state.todayGoals).toHaveLength(1);
-        expect(state.todayGoals[0].id).toBe(todayTask.id);
+        expect(state.todayTasks).toHaveLength(1);
+        expect(state.todayTasks[0].id).toBe(todayTask.id);
       });
     });
   });

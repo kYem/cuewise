@@ -48,8 +48,8 @@ export interface Goal {
   description?: string; // Longer description for objectives
 }
 
-// Objective progress information
-export interface ObjectiveProgress {
+// Goal progress information
+export interface GoalProgress {
   total: number;
   completed: number;
   percent: number;
@@ -173,7 +173,7 @@ export interface InsightsData {
   // Objective analytics
   activeGoals: number;
   objectivesCompletedThisMonth: number;
-  avgObjectiveProgress: number; // 0-100 percentage
+  avgGoalProgress: number; // 0-100 percentage
 }
 
 // Advanced analytics types

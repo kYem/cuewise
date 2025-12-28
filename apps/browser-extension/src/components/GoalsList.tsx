@@ -19,14 +19,14 @@ import { useSettingsStore } from '../stores/settings-store';
 
 export const GoalsList: React.FC = () => {
   const {
-    todayGoals,
+    todayTasks,
     goals,
-    showAllGoals,
-    toggleGoal,
-    updateGoal,
-    deleteGoal,
-    transferGoalToNextDay,
-    toggleShowAllGoals,
+    showAllTasks,
+    toggleTask,
+    updateTask,
+    deleteTask,
+    transferTaskToNextDay,
+    toggleShowAllTasks,
     isLoading,
     getActiveGoals,
     linkTaskToGoal,
@@ -81,9 +81,9 @@ export const GoalsList: React.FC = () => {
     if (
       editingGoalId &&
       editText.trim() &&
-      editText.trim() !== todayGoals.find((g) => g.id === editingGoalId)?.text
+      editText.trim() !== todayTasks.find((g) => g.id === editingGoalId)?.text
     ) {
-      await updateGoal(editingGoalId, editText.trim());
+      await updateTask(editingGoalId, editText.trim());
     }
     setEditingGoalId(null);
     setEditText('');
@@ -108,8 +108,8 @@ export const GoalsList: React.FC = () => {
     return <div className="text-center py-8 text-secondary">Loading goals...</div>;
   }
 
-  const completedCount = todayGoals.filter((g) => g.completed).length;
-  const totalCount = todayGoals.length;
+  const completedCount = todayTasks.filter((g) => g.completed).length;
+  const totalCount = todayTasks.length;
   const progressPercentage = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
 
   // Get incomplete goals from the last 2 weeks (excluding today)
@@ -138,12 +138,12 @@ export const GoalsList: React.FC = () => {
 
   const recentIncompleteCount = recentIncompleteGoals.length;
 
-  const hasOtherGoals = goals.length > todayGoals.length;
+  const hasOtherGoals = goals.length > todayTasks.length;
 
   return (
     <div className="space-y-4">
       {/* Empty State - Only show when no today's goals */}
-      {todayGoals.length === 0 && (
+      {todayTasks.length === 0 && (
         <div className="text-center py-8">
           <Circle className="w-16 h-16 mx-auto mb-4 text-tertiary" />
           <p className="text-lg text-secondary mb-2">No goals for today</p>
@@ -176,7 +176,7 @@ export const GoalsList: React.FC = () => {
       {/* Goals List */}
       {totalCount > 0 && (
         <div className="space-y-2">
-          {todayGoals.map((goal) => (
+          {todayTasks.map((goal) => (
             <div
               key={goal.id}
               className={cn(
@@ -189,7 +189,7 @@ export const GoalsList: React.FC = () => {
               {/* Checkbox */}
               <button
                 type="button"
-                onClick={() => toggleGoal(goal.id)}
+                onClick={() => toggleTask(goal.id)}
                 className="flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 rounded-full"
                 aria-label={goal.completed ? 'Mark as incomplete' : 'Mark as complete'}
               >
@@ -262,7 +262,7 @@ export const GoalsList: React.FC = () => {
                     type="button"
                     onMouseDown={(e) => {
                       e.preventDefault();
-                      transferGoalToNextDay(goal.id);
+                      transferTaskToNextDay(goal.id);
                       setEditingGoalId(null);
                     }}
                     className="p-1 text-secondary hover:text-primary-600 transition-colors focus:outline-none rounded"
@@ -341,7 +341,7 @@ export const GoalsList: React.FC = () => {
                     type="button"
                     onMouseDown={(e) => {
                       e.preventDefault();
-                      deleteGoal(goal.id);
+                      deleteTask(goal.id);
                     }}
                     className="p-1 text-secondary hover:text-red-500 transition-colors focus:outline-none rounded"
                     aria-label="Delete goal"
@@ -370,13 +370,13 @@ export const GoalsList: React.FC = () => {
       <div className={cn('pt-4', totalCount > 0 && 'border-t border-border')}>
         <button
           type="button"
-          onClick={toggleShowAllGoals}
+          onClick={toggleShowAllTasks}
           className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-lg bg-surface-variant hover:bg-primary-100 text-secondary hover:text-primary-600 transition-all font-medium"
         >
           <History className="w-4 h-4" />
-          <span>{showAllGoals ? 'Hide Incomplete' : 'Show Incomplete'}</span>
-          {showAllGoals ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-          {!showAllGoals && recentIncompleteCount > 0 && (
+          <span>{showAllTasks ? 'Hide Incomplete' : 'Show Incomplete'}</span>
+          {showAllTasks ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          {!showAllTasks && recentIncompleteCount > 0 && (
             <span className="ml-1 text-xs bg-primary-600 text-white px-2 py-0.5 rounded-full">
               {recentIncompleteCount}
             </span>
@@ -384,7 +384,7 @@ export const GoalsList: React.FC = () => {
         </button>
 
         {/* Expanded Section: Incomplete Goals from Last 2 Weeks */}
-        {showAllGoals && (
+        {showAllTasks && (
           <div className="mt-4 space-y-4">
             {recentIncompleteGoals.length === 0 ? (
               <p className="text-center text-sm text-tertiary py-4">
@@ -399,7 +399,7 @@ export const GoalsList: React.FC = () => {
                   >
                     <button
                       type="button"
-                      onClick={() => toggleGoal(goal.id)}
+                      onClick={() => toggleTask(goal.id)}
                       className="flex-shrink-0 mt-0.5 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 rounded-full"
                       aria-label="Mark as complete"
                     >

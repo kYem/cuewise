@@ -14,17 +14,17 @@ export const GoalsPage: React.FC = () => {
   const { goals, isLoading, initialize, completionFilter, setCompletionFilter } = useGoalStore();
   const [newGoalText, setNewGoalText] = useState('');
   const [activeTab, setActiveTab] = useState<ViewTab>('tasks');
-  const addGoal = useGoalStore((state) => state.addGoal);
+  const addTask = useGoalStore((state) => state.addTask);
 
-  // Get tasks and objectives counts
+  // Get tasks and goals counts
   const tasks = useMemo(() => goals.filter(isTask), [goals]);
-  const objectives = useMemo(() => getObjectives(goals), [goals]);
+  const goalItems = useMemo(() => getObjectives(goals), [goals]);
 
   useEffect(() => {
     initialize();
   }, [initialize]);
 
-  // Calculate stats (only for tasks, not objectives)
+  // Calculate stats (only for tasks, not goals)
   const stats = useMemo(() => {
     const today = getTodayDateString();
     const totalGoals = tasks.length;
@@ -67,7 +67,7 @@ export const GoalsPage: React.FC = () => {
   const handleAddGoal = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newGoalText.trim()) {
-      await addGoal(newGoalText.trim());
+      await addTask(newGoalText.trim());
       setNewGoalText('');
     }
   };
@@ -168,7 +168,7 @@ export const GoalsPage: React.FC = () => {
           >
             <Flag className="w-4 h-4" />
             <span>Goals</span>
-            <span className="text-xs opacity-75">({objectives.length})</span>
+            <span className="text-xs opacity-75">({goalItems.length})</span>
           </button>
         </div>
 

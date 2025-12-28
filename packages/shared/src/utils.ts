@@ -22,11 +22,11 @@ import type {
   ExportData,
   Goal,
   GoalCompletionRate,
+  GoalProgress,
   GoalType,
   ImportValidationError,
   InsightsData,
   MonthlyTrend,
-  ObjectiveProgress,
   PomodoroHeatmapData,
   PomodoroSession,
   Quote,
@@ -252,7 +252,7 @@ export function daysBetween(fromDate: string, toDate: string): number {
 /**
  * Calculate progress for an objective based on its linked tasks
  */
-export function getObjectiveProgress(objective: Goal, allGoals: Goal[]): ObjectiveProgress {
+export function getGoalProgress(objective: Goal, allGoals: Goal[]): GoalProgress {
   const tasks = getLinkedTasks(allGoals, objective.id);
   const completed = tasks.filter((t) => t.completed).length;
 
@@ -272,7 +272,7 @@ export function getObjectiveProgress(objective: Goal, allGoals: Goal[]): Objecti
 /**
  * Calculate average progress across all active objectives
  */
-export function calculateAvgObjectiveProgress(goals: Goal[]): number {
+export function calculateAvgGoalProgress(goals: Goal[]): number {
   const activeGoals = getActiveGoals(goals);
 
   if (activeGoals.length === 0) {
@@ -280,7 +280,7 @@ export function calculateAvgObjectiveProgress(goals: Goal[]): number {
   }
 
   const totalProgress = activeGoals.reduce((sum, objective) => {
-    const progress = getObjectiveProgress(objective, goals);
+    const progress = getGoalProgress(objective, goals);
     return sum + progress.percent;
   }, 0);
 
@@ -587,7 +587,7 @@ export function calculateInsights(
     const goalDate = parseISO(goal.date);
     return isAfter(goalDate, monthStart) || isSameDay(goalDate, monthStart);
   }).length;
-  const avgObjectiveProgress = calculateAvgObjectiveProgress(goals);
+  const avgGoalProgress = calculateAvgGoalProgress(goals);
 
   return {
     totalQuotesViewed,
@@ -606,7 +606,7 @@ export function calculateInsights(
     },
     activeGoals,
     objectivesCompletedThisMonth,
-    avgObjectiveProgress,
+    avgGoalProgress,
   };
 }
 

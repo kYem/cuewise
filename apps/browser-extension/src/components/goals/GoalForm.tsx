@@ -4,14 +4,14 @@ import { useEffect, useRef, useState } from 'react';
 import { useGoalStore } from '../../stores/goal-store';
 
 interface GoalFormProps {
-  objective?: Goal; // If provided, edit mode
+  goal?: Goal; // If provided, edit mode
   onCancel: () => void;
   onSuccess: () => void;
 }
 
-export const GoalForm: React.FC<GoalFormProps> = ({ objective, onCancel, onSuccess }) => {
-  const addObjective = useGoalStore((state) => state.addObjective);
-  const updateObjective = useGoalStore((state) => state.updateObjective);
+export const GoalForm: React.FC<GoalFormProps> = ({ goal, onCancel, onSuccess }) => {
+  const addGoal = useGoalStore((state) => state.addGoal);
+  const updateGoal = useGoalStore((state) => state.updateGoal);
 
   // Default to 2 weeks from now for new goals
   const defaultDate = () => {
@@ -20,13 +20,13 @@ export const GoalForm: React.FC<GoalFormProps> = ({ objective, onCancel, onSucce
     return date.toISOString().split('T')[0];
   };
 
-  const [title, setTitle] = useState(objective?.text ?? '');
-  const [description, setDescription] = useState(objective?.description ?? '');
-  const [dueDate, setDueDate] = useState(objective?.date ?? defaultDate());
+  const [title, setTitle] = useState(goal?.text ?? '');
+  const [description, setDescription] = useState(goal?.description ?? '');
+  const [dueDate, setDueDate] = useState(goal?.date ?? defaultDate());
   const [isSubmitting, setIsSubmitting] = useState(false);
   const titleInputRef = useRef<HTMLInputElement>(null);
 
-  const isEditMode = !!objective;
+  const isEditMode = !!goal;
 
   // Focus the title input when the form mounts
   useEffect(() => {
@@ -46,14 +46,14 @@ export const GoalForm: React.FC<GoalFormProps> = ({ objective, onCancel, onSucce
     setIsSubmitting(true);
 
     try {
-      if (isEditMode && objective) {
-        await updateObjective(objective.id, {
+      if (isEditMode && goal) {
+        await updateGoal(goal.id, {
           text: title.trim(),
           description: description.trim() || undefined,
           date: dueDate,
         });
       } else {
-        await addObjective(title.trim(), dueDate, description.trim() || undefined);
+        await addGoal(title.trim(), dueDate, description.trim() || undefined);
       }
       onSuccess();
     } finally {

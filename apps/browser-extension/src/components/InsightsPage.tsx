@@ -153,8 +153,8 @@ export const InsightsPage: React.FC = () => {
                   </div>
                   <h3 className="text-secondary text-sm font-medium mb-1">Active Goals</h3>
                   <p className="text-xs text-tertiary">
-                    {insights.avgObjectiveProgress ?? 0}% avg progress |{' '}
-                    {insights.objectivesCompletedThisMonth ?? 0} completed this month
+                    {insights.avgGoalProgress ?? 0}% avg progress |{' '}
+                    {insights.goalsCompletedThisMonth ?? 0} completed this month
                   </p>
                 </div>
               )}

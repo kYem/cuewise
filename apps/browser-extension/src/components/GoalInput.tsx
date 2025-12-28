@@ -4,26 +4,24 @@ import { useEffect, useRef, useState } from 'react';
 import { useGoalStore } from '../stores/goal-store';
 
 interface GoalInputProps {
-  defaultObjectiveId?: string;
+  defaultGoalId?: string;
   onTaskAdded?: () => void;
   autoFocus?: boolean;
 }
 
 export const GoalInput: React.FC<GoalInputProps> = ({
-  defaultObjectiveId,
+  defaultGoalId,
   onTaskAdded,
   autoFocus = false,
 }) => {
   const [text, setText] = useState('');
-  const [selectedGoalId, setSelectedObjectiveId] = useState<string | null>(
-    defaultObjectiveId ?? null
-  );
+  const [selectedGoalId, setSelectedObjectiveId] = useState<string | null>(defaultGoalId ?? null);
   const [showObjectivePicker, setShowObjectivePicker] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
-  const addGoal = useGoalStore((state) => state.addGoal);
+  const addTask = useGoalStore((state) => state.addTask);
   const getActiveGoals = useGoalStore((state) => state.getActiveGoals);
-  const getObjectiveProgress = useGoalStore((state) => state.getObjectiveProgress);
+  const getGoalProgress = useGoalStore((state) => state.getGoalProgress);
 
   const activeGoals = getActiveGoals();
   const hasGoals = activeGoals.length > 0;
@@ -52,9 +50,9 @@ export const GoalInput: React.FC<GoalInputProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (text.trim()) {
-      await addGoal(text, selectedGoalId ?? undefined);
+      await addTask(text, selectedGoalId ?? undefined);
       setText('');
-      if (!defaultObjectiveId) {
+      if (!defaultGoalId) {
         setSelectedObjectiveId(null);
       }
       if (onTaskAdded) {
@@ -67,9 +65,9 @@ export const GoalInput: React.FC<GoalInputProps> = ({
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       if (text.trim()) {
-        await addGoal(text, selectedGoalId ?? undefined);
+        await addTask(text, selectedGoalId ?? undefined);
         setText('');
-        if (!defaultObjectiveId) {
+        if (!defaultGoalId) {
           setSelectedObjectiveId(null);
         }
         if (onTaskAdded) {
@@ -79,7 +77,7 @@ export const GoalInput: React.FC<GoalInputProps> = ({
     }
   };
 
-  const handleObjectiveSelect = (objectiveId: string | null) => {
+  const handleGoalSelect = (objectiveId: string | null) => {
     setSelectedObjectiveId(objectiveId);
     setShowObjectivePicker(false);
   };
@@ -120,7 +118,7 @@ export const GoalInput: React.FC<GoalInputProps> = ({
                 {/* No goal option */}
                 <button
                   type="button"
-                  onClick={() => handleObjectiveSelect(null)}
+                  onClick={() => handleGoalSelect(null)}
                   className={`w-full flex items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-surface-variant ${
                     !selectedGoalId ? 'bg-primary-50 text-primary-700 font-medium' : 'text-primary'
                   }`}
@@ -134,7 +132,7 @@ export const GoalInput: React.FC<GoalInputProps> = ({
 
                 {/* Objective options */}
                 {activeGoals.map((obj) => {
-                  const progress = getObjectiveProgress(obj.id);
+                  const progress = getGoalProgress(obj.id);
                   const percent = progress?.percent ?? 0;
                   const isSelected = selectedGoalId === obj.id;
 
@@ -142,7 +140,7 @@ export const GoalInput: React.FC<GoalInputProps> = ({
                     <button
                       key={obj.id}
                       type="button"
-                      onClick={() => handleObjectiveSelect(obj.id)}
+                      onClick={() => handleGoalSelect(obj.id)}
                       className={`w-full flex items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-surface-variant ${
                         isSelected ? 'bg-primary-50 text-primary-700 font-medium' : 'text-primary'
                       }`}

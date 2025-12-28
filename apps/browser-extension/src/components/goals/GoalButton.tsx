@@ -13,10 +13,10 @@ interface GoalButtonProps {
 
 export const GoalButton: React.FC<GoalButtonProps> = ({ className = '' }) => {
   const getActiveGoals = useGoalStore((state) => state.getActiveGoals);
-  const getObjectiveProgress = useGoalStore((state) => state.getObjectiveProgress);
+  const getGoalProgress = useGoalStore((state) => state.getGoalProgress);
 
   const [isOpen, setIsOpen] = useState(false);
-  const [selectedGoalId, setSelectedObjectiveId] = useState<string | null>(null);
+  const [selectedGoalId, setSelectedGoalId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const triggerRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -42,8 +42,8 @@ export const GoalButton: React.FC<GoalButtonProps> = ({ className = '' }) => {
     }
   }, [isOpen]);
 
-  const handleObjectiveClick = (objectiveId: string) => {
-    setSelectedObjectiveId(objectiveId);
+  const handleGoalClick = (objectiveId: string) => {
+    setSelectedGoalId(objectiveId);
     setIsOpen(false);
   };
 
@@ -54,7 +54,7 @@ export const GoalButton: React.FC<GoalButtonProps> = ({ className = '' }) => {
   };
 
   const handleCloseDetail = () => {
-    setSelectedObjectiveId(null);
+    setSelectedGoalId(null);
   };
 
   const handleFormSuccess = () => {
@@ -122,14 +122,14 @@ export const GoalButton: React.FC<GoalButtonProps> = ({ className = '' }) => {
                   </div>
                 ) : (
                   activeGoals.map((obj) => {
-                    const progress = getObjectiveProgress(obj.id);
+                    const progress = getGoalProgress(obj.id);
                     const percent = progress?.percent ?? 0;
 
                     return (
                       <button
                         key={obj.id}
                         type="button"
-                        onClick={() => handleObjectiveClick(obj.id)}
+                        onClick={() => handleGoalClick(obj.id)}
                         className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-surface-variant transition-colors"
                       >
                         <Flag className="w-4 h-4 text-primary-600 flex-shrink-0" />
@@ -148,7 +148,7 @@ export const GoalButton: React.FC<GoalButtonProps> = ({ className = '' }) => {
       {/* Detail View Modal */}
       {selectedGoalId && (
         <Modal isOpen={true} onClose={handleCloseDetail}>
-          <GoalDetailView objectiveId={selectedGoalId} onClose={handleCloseDetail} />
+          <GoalDetailView goalId={selectedGoalId} onClose={handleCloseDetail} />
         </Modal>
       )}
 

@@ -1,19 +1,19 @@
 import {
   type Goal,
+  type GoalProgress,
   generateId,
   getActiveGoals,
+  getGoalProgress,
   getLinkedTasks,
   getNextDayDateString,
-  getObjectiveProgress,
   getObjectives,
   getTodayDateString,
   groupGoalsByDate,
   isObjective,
   isTask,
   logger,
-  type ObjectiveProgress,
 } from '@cuewise/shared';
-import { getGoals, setGoals } from '@cuewise/storage';
+import { getGoals as loadAllGoals, setGoals as saveAllGoals } from '@cuewise/storage';
 import { create } from 'zustand';
 import { useToastStore } from './toast-store';
 
@@ -21,60 +21,60 @@ export type CompletionFilter = 'all' | 'completed' | 'incomplete';
 
 interface GoalStore {
   goals: Goal[];
-  todayGoals: Goal[];
+  todayTasks: Goal[];
   isLoading: boolean;
   error: string | null;
-  showAllGoals: boolean;
+  showAllTasks: boolean;
   completionFilter: CompletionFilter;
 
-  // Task Actions
+  // Task Actions (daily tasks)
   initialize: () => Promise<void>;
-  addGoal: (text: string, parentId?: string) => Promise<void>;
-  updateGoal: (goalId: string, text: string) => Promise<void>;
-  toggleGoal: (goalId: string) => Promise<void>;
-  deleteGoal: (goalId: string) => Promise<void>;
+  addTask: (text: string, parentId?: string) => Promise<void>;
+  updateTask: (goalId: string, text: string) => Promise<void>;
+  toggleTask: (goalId: string) => Promise<void>;
+  deleteTask: (goalId: string) => Promise<void>;
   clearCompleted: () => Promise<void>;
-  transferGoalToNextDay: (goalId: string) => Promise<void>;
-  moveGoalToToday: (goalId: string) => Promise<void>;
-  toggleShowAllGoals: () => void;
+  transferTaskToNextDay: (goalId: string) => Promise<void>;
+  moveTaskToToday: (goalId: string) => Promise<void>;
+  toggleShowAllTasks: () => void;
   setCompletionFilter: (filter: CompletionFilter) => void;
-  getFilteredGoalsByDate: () => Array<{ date: string; goals: Goal[] }>;
+  getFilteredTasksByDate: () => Array<{ date: string; goals: Goal[] }>;
 
-  // Objective Actions
-  addObjective: (title: string, dueDate: string, description?: string) => Promise<void>;
-  updateObjective: (
-    objectiveId: string,
+  // Goal Actions (long-term goals)
+  addGoal: (title: string, dueDate: string, description?: string) => Promise<void>;
+  updateGoal: (
+    goalId: string,
     updates: { text?: string; description?: string; date?: string; completed?: boolean }
   ) => Promise<void>;
-  deleteObjective: (objectiveId: string) => Promise<void>;
-  linkTaskToGoal: (taskId: string, objectiveId: string | null) => Promise<void>;
+  deleteGoal: (goalId: string) => Promise<void>;
+  linkTaskToGoal: (taskId: string, goalId: string | null) => Promise<void>;
 
-  // Objective Selectors
-  getObjectives: () => Goal[];
+  // Goal Selectors
+  getGoals: () => Goal[];
   getActiveGoals: () => Goal[];
-  getObjectiveProgress: (objectiveId: string) => ObjectiveProgress | null;
-  getLinkedTasks: (objectiveId: string) => Goal[];
+  getGoalProgress: (goalId: string) => GoalProgress | null;
+  getLinkedTasks: (goalId: string) => Goal[];
 }
 
 export const useGoalStore = create<GoalStore>((set, get) => ({
   goals: [],
-  todayGoals: [],
+  todayTasks: [],
   isLoading: true,
   error: null,
-  showAllGoals: false,
+  showAllTasks: false,
   completionFilter: 'all',
 
   initialize: async () => {
     try {
       set({ isLoading: true, error: null });
 
-      const allGoals = await getGoals();
+      const allGoals = await loadAllGoals();
       const today = getTodayDateString();
 
       // Filter tasks for today (exclude objectives)
-      const todayGoals = allGoals.filter((goal) => goal.date === today && isTask(goal));
+      const todayTasks = allGoals.filter((goal) => goal.date === today && isTask(goal));
 
-      set({ goals: allGoals, todayGoals, isLoading: false });
+      set({ goals: allGoals, todayTasks, isLoading: false });
     } catch (error) {
       logger.error('Error initializing goal store', error);
       const errorMessage = 'Failed to load goals. Please refresh the page.';
@@ -83,7 +83,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
     }
   },
 
-  addGoal: async (text: string, parentId?: string) => {
+  addTask: async (text: string, parentId?: string) => {
     if (!text.trim()) {
       return;
     }
@@ -102,10 +102,10 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       const { goals } = get();
       const updatedGoals = [...goals, newGoal];
 
-      await setGoals(updatedGoals);
+      await saveAllGoals(updatedGoals);
 
-      const todayGoals = updatedGoals.filter((goal) => goal.date === today && isTask(goal));
-      set({ goals: updatedGoals, todayGoals });
+      const todayTasks = updatedGoals.filter((goal) => goal.date === today && isTask(goal));
+      set({ goals: updatedGoals, todayTasks });
     } catch (error) {
       logger.error('Error adding goal', error);
       const errorMessage = 'Failed to add goal. Please try again.';
@@ -114,7 +114,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
     }
   },
 
-  updateGoal: async (goalId: string, text: string) => {
+  updateTask: async (goalId: string, text: string) => {
     if (!text.trim()) {
       return;
     }
@@ -127,10 +127,10 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
         goal.id === goalId ? { ...goal, text: text.trim() } : goal
       );
 
-      await setGoals(updatedGoals);
+      await saveAllGoals(updatedGoals);
 
-      const todayGoals = updatedGoals.filter((goal) => goal.date === today && isTask(goal));
-      set({ goals: updatedGoals, todayGoals });
+      const todayTasks = updatedGoals.filter((goal) => goal.date === today && isTask(goal));
+      set({ goals: updatedGoals, todayTasks });
     } catch (error) {
       logger.error('Error updating goal', error);
       const errorMessage = 'Failed to update goal. Please try again.';
@@ -139,7 +139,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
     }
   },
 
-  toggleGoal: async (goalId: string) => {
+  toggleTask: async (goalId: string) => {
     try {
       const { goals } = get();
       const today = getTodayDateString();
@@ -148,10 +148,10 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
         goal.id === goalId ? { ...goal, completed: !goal.completed } : goal
       );
 
-      await setGoals(updatedGoals);
+      await saveAllGoals(updatedGoals);
 
-      const todayGoals = updatedGoals.filter((goal) => goal.date === today && isTask(goal));
-      set({ goals: updatedGoals, todayGoals });
+      const todayTasks = updatedGoals.filter((goal) => goal.date === today && isTask(goal));
+      set({ goals: updatedGoals, todayTasks });
     } catch (error) {
       logger.error('Error toggling goal', error);
       const errorMessage = 'Failed to update goal. Please try again.';
@@ -160,17 +160,17 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
     }
   },
 
-  deleteGoal: async (goalId: string) => {
+  deleteTask: async (goalId: string) => {
     try {
       const { goals } = get();
       const today = getTodayDateString();
 
       const updatedGoals = goals.filter((goal) => goal.id !== goalId);
 
-      await setGoals(updatedGoals);
+      await saveAllGoals(updatedGoals);
 
-      const todayGoals = updatedGoals.filter((goal) => goal.date === today && isTask(goal));
-      set({ goals: updatedGoals, todayGoals });
+      const todayTasks = updatedGoals.filter((goal) => goal.date === today && isTask(goal));
+      set({ goals: updatedGoals, todayTasks });
     } catch (error) {
       logger.error('Error deleting goal', error);
       const errorMessage = 'Failed to delete goal. Please try again.';
@@ -189,10 +189,10 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
         (goal) => !(goal.date === today && goal.completed && isTask(goal))
       );
 
-      await setGoals(updatedGoals);
+      await saveAllGoals(updatedGoals);
 
-      const todayGoals = updatedGoals.filter((goal) => goal.date === today && isTask(goal));
-      set({ goals: updatedGoals, todayGoals });
+      const todayTasks = updatedGoals.filter((goal) => goal.date === today && isTask(goal));
+      set({ goals: updatedGoals, todayTasks });
     } catch (error) {
       logger.error('Error clearing completed goals', error);
       const errorMessage = 'Failed to clear completed goals. Please try again.';
@@ -201,7 +201,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
     }
   },
 
-  transferGoalToNextDay: async (goalId: string) => {
+  transferTaskToNextDay: async (goalId: string) => {
     try {
       const { goals } = get();
       const today = getTodayDateString();
@@ -218,10 +218,10 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
         return goal;
       });
 
-      await setGoals(updatedGoals);
+      await saveAllGoals(updatedGoals);
 
-      const todayGoals = updatedGoals.filter((goal) => goal.date === today && isTask(goal));
-      set({ goals: updatedGoals, todayGoals });
+      const todayTasks = updatedGoals.filter((goal) => goal.date === today && isTask(goal));
+      set({ goals: updatedGoals, todayTasks });
 
       useToastStore.getState().success('Goal transferred to tomorrow');
     } catch (error) {
@@ -232,7 +232,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
     }
   },
 
-  moveGoalToToday: async (goalId: string) => {
+  moveTaskToToday: async (goalId: string) => {
     try {
       const { goals } = get();
       const today = getTodayDateString();
@@ -248,10 +248,10 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
         return goal;
       });
 
-      await setGoals(updatedGoals);
+      await saveAllGoals(updatedGoals);
 
-      const todayGoals = updatedGoals.filter((goal) => goal.date === today && isTask(goal));
-      set({ goals: updatedGoals, todayGoals });
+      const todayTasks = updatedGoals.filter((goal) => goal.date === today && isTask(goal));
+      set({ goals: updatedGoals, todayTasks });
 
       useToastStore.getState().success('Goal moved to today');
     } catch (error) {
@@ -262,15 +262,15 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
     }
   },
 
-  toggleShowAllGoals: () => {
-    set((state) => ({ showAllGoals: !state.showAllGoals }));
+  toggleShowAllTasks: () => {
+    set((state) => ({ showAllTasks: !state.showAllTasks }));
   },
 
   setCompletionFilter: (filter: CompletionFilter) => {
     set({ completionFilter: filter });
   },
 
-  getFilteredGoalsByDate: () => {
+  getFilteredTasksByDate: () => {
     const { goals, completionFilter } = get();
 
     // Filter to tasks only (exclude objectives from the date-grouped view)
@@ -289,10 +289,10 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
   },
 
   // ============================================================================
-  // Objective Actions
+  // Goal Actions (long-term goals)
   // ============================================================================
 
-  addObjective: async (title: string, dueDate: string, description?: string) => {
+  addGoal: async (title: string, dueDate: string, description?: string) => {
     if (!title.trim()) {
       return;
     }
@@ -311,7 +311,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       const { goals } = get();
       const updatedGoals = [...goals, newObjective];
 
-      await setGoals(updatedGoals);
+      await saveAllGoals(updatedGoals);
       set({ goals: updatedGoals });
 
       useToastStore.getState().success('Goal created');
@@ -323,15 +323,15 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
     }
   },
 
-  updateObjective: async (
-    objectiveId: string,
+  updateGoal: async (
+    goalId: string,
     updates: { text?: string; description?: string; date?: string; completed?: boolean }
   ) => {
     try {
       const { goals } = get();
 
       const updatedGoals = goals.map((goal) => {
-        if (goal.id === objectiveId && isObjective(goal)) {
+        if (goal.id === goalId && isObjective(goal)) {
           return {
             ...goal,
             ...(updates.text !== undefined && { text: updates.text.trim() }),
@@ -343,7 +343,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
         return goal;
       });
 
-      await setGoals(updatedGoals);
+      await saveAllGoals(updatedGoals);
       set({ goals: updatedGoals });
 
       if (updates.completed === true) {
@@ -361,16 +361,16 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
     }
   },
 
-  deleteObjective: async (objectiveId: string) => {
+  deleteGoal: async (goalId: string) => {
     try {
       const { goals } = get();
       const today = getTodayDateString();
 
       // Remove the goal and unlink any tasks that were linked to it
       const updatedGoals = goals
-        .filter((goal) => goal.id !== objectiveId)
+        .filter((goal) => goal.id !== goalId)
         .map((goal) => {
-          if (goal.parentId === objectiveId) {
+          if (goal.parentId === goalId) {
             // Orphan the task - remove the parentId link
             const { parentId, ...rest } = goal;
             return rest;
@@ -378,10 +378,10 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
           return goal;
         });
 
-      await setGoals(updatedGoals);
+      await saveAllGoals(updatedGoals);
 
-      const todayGoals = updatedGoals.filter((goal) => goal.date === today && isTask(goal));
-      set({ goals: updatedGoals, todayGoals });
+      const todayTasks = updatedGoals.filter((goal) => goal.date === today && isTask(goal));
+      set({ goals: updatedGoals, todayTasks });
 
       useToastStore.getState().success('Goal deleted');
     } catch (error) {
@@ -392,27 +392,27 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
     }
   },
 
-  linkTaskToGoal: async (taskId: string, objectiveId: string | null) => {
+  linkTaskToGoal: async (taskId: string, goalId: string | null) => {
     try {
       const { goals } = get();
       const today = getTodayDateString();
 
       const updatedGoals = goals.map((goal) => {
         if (goal.id === taskId && isTask(goal)) {
-          if (objectiveId === null) {
+          if (goalId === null) {
             // Unlink the task - remove parentId
             const { parentId, ...rest } = goal;
             return rest;
           }
-          return { ...goal, parentId: objectiveId };
+          return { ...goal, parentId: goalId };
         }
         return goal;
       });
 
-      await setGoals(updatedGoals);
+      await saveAllGoals(updatedGoals);
 
-      const todayGoals = updatedGoals.filter((goal) => goal.date === today && isTask(goal));
-      set({ goals: updatedGoals, todayGoals });
+      const todayTasks = updatedGoals.filter((goal) => goal.date === today && isTask(goal));
+      set({ goals: updatedGoals, todayTasks });
     } catch (error) {
       logger.error('Error linking task to objective', error);
       const errorMessage = 'Failed to link task. Please try again.';
@@ -422,10 +422,10 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
   },
 
   // ============================================================================
-  // Objective Selectors
+  // Goal Selectors
   // ============================================================================
 
-  getObjectives: () => {
+  getGoals: () => {
     const { goals } = get();
     return getObjectives(goals);
   },
@@ -435,19 +435,19 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
     return getActiveGoals(goals);
   },
 
-  getObjectiveProgress: (objectiveId: string) => {
+  getGoalProgress: (goalId: string) => {
     const { goals } = get();
-    const objective = goals.find((g) => g.id === objectiveId && isObjective(g));
+    const objective = goals.find((g) => g.id === goalId && isObjective(g));
 
     if (!objective) {
       return null;
     }
 
-    return getObjectiveProgress(objective, goals);
+    return getGoalProgress(objective, goals);
   },
 
-  getLinkedTasks: (objectiveId: string) => {
+  getLinkedTasks: (goalId: string) => {
     const { goals } = get();
-    return getLinkedTasks(goals, objectiveId);
+    return getLinkedTasks(goals, goalId);
   },
 }));
