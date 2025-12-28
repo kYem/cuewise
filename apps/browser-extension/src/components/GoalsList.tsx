@@ -10,6 +10,7 @@ import {
   Flag,
   History,
   Link2,
+  MoveRight,
   Trash2,
 } from 'lucide-react';
 import type React from 'react';
@@ -26,6 +27,7 @@ export const GoalsList: React.FC = () => {
     updateTask,
     deleteTask,
     transferTaskToNextDay,
+    moveTaskToToday,
     toggleShowAllTasks,
     isLoading,
     getActiveGoals,
@@ -419,6 +421,15 @@ export const GoalsList: React.FC = () => {
                         )}
                       </span>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => moveTaskToToday(goal.id)}
+                      className="flex-shrink-0 p-1.5 text-secondary hover:text-primary-600 hover:bg-primary-50 rounded transition-colors opacity-0 group-hover:opacity-100"
+                      aria-label="Move to today"
+                      title="Move to today"
+                    >
+                      <MoveRight className="w-4 h-4" />
+                    </button>
                   </div>
                 ))}
               </div>
