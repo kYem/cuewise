@@ -47,13 +47,9 @@ export const AllGoalsList: React.FC = () => {
   }, [editingGoalId]);
 
   const handleLinkToGoal = async (taskId: string, goalId: string | null) => {
-    try {
-      await linkTaskToGoal(taskId, goalId);
-      setLinkPickerOpenFor(null);
-      setEditingGoalId(null);
-    } catch {
-      // Store handles error logging and toast notification
-    }
+    await linkTaskToGoal(taskId, goalId);
+    setLinkPickerOpenFor(null);
+    setEditingGoalId(null);
   };
 
   const getLinkedGoal = (parentId: string | undefined) => {
@@ -75,10 +71,8 @@ export const AllGoalsList: React.FC = () => {
         .find((goal) => goal.id === editingGoalId);
 
       if (currentGoal && editText.trim() !== currentGoal.text) {
-        try {
-          await updateTask(editingGoalId, editText.trim());
-        } catch {
-          // Store handles error logging and toast notification
+        const success = await updateTask(editingGoalId, editText.trim());
+        if (!success) {
           // Keep edit mode open so user can retry
           return;
         }
@@ -243,11 +237,9 @@ export const AllGoalsList: React.FC = () => {
                         type="button"
                         onMouseDown={async (e) => {
                           e.preventDefault();
-                          try {
-                            await moveTaskToToday(goal.id);
+                          const success = await moveTaskToToday(goal.id);
+                          if (success) {
                             setEditingGoalId(null);
-                          } catch {
-                            // Store handles error logging and toast notification
                           }
                         }}
                         className="p-1 text-secondary hover:text-primary-600 transition-colors focus:outline-none rounded"
@@ -264,11 +256,9 @@ export const AllGoalsList: React.FC = () => {
                         type="button"
                         onMouseDown={async (e) => {
                           e.preventDefault();
-                          try {
-                            await transferTaskToNextDay(goal.id);
+                          const success = await transferTaskToNextDay(goal.id);
+                          if (success) {
                             setEditingGoalId(null);
-                          } catch {
-                            // Store handles error logging and toast notification
                           }
                         }}
                         className="p-1 text-secondary hover:text-primary-600 transition-colors focus:outline-none rounded"

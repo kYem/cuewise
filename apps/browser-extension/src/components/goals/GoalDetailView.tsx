@@ -67,23 +67,19 @@ export const GoalDetailView: React.FC<GoalDetailViewProps> = ({ goalId, onClose 
   };
 
   const handleDeleteGoal = async () => {
-    try {
-      await deleteGoal(goalId);
+    const success = await deleteGoal(goalId);
+    if (success) {
       onClose();
-    } catch {
-      // Store handles error logging and toast notification
-      // Keep modal open so user can retry
     }
+    // On failure, keep modal open so user can retry
   };
 
   const handleCompleteGoal = async () => {
-    try {
-      await updateGoal(goalId, { completed: true });
+    const success = await updateGoal(goalId, { completed: true });
+    if (success) {
       setShowCompleteConfirm(false);
-    } catch {
-      // Store handles error logging and toast notification
-      // Keep confirmation dialog open so user can retry
     }
+    // On failure, keep confirmation dialog open so user can retry
   };
 
   const handleReopenGoal = () => {

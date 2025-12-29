@@ -56,13 +56,9 @@ export const GoalsList: React.FC = () => {
   }, [editingGoalId]);
 
   const handleLinkToGoal = async (taskId: string, goalId: string | null) => {
-    try {
-      await linkTaskToGoal(taskId, goalId);
-      setLinkPickerOpenFor(null);
-      setEditingGoalId(null);
-    } catch {
-      // Store handles error logging and toast notification
-    }
+    await linkTaskToGoal(taskId, goalId);
+    setLinkPickerOpenFor(null);
+    setEditingGoalId(null);
   };
 
   const startEditing = (goalId: string, currentText: string) => {
@@ -76,10 +72,8 @@ export const GoalsList: React.FC = () => {
       editText.trim() &&
       editText.trim() !== todayTasks.find((g) => g.id === editingGoalId)?.text
     ) {
-      try {
-        await updateTask(editingGoalId, editText.trim());
-      } catch {
-        // Store handles error logging and toast notification
+      const success = await updateTask(editingGoalId, editText.trim());
+      if (!success) {
         // Keep edit mode open so user can retry
         return;
       }
@@ -262,11 +256,9 @@ export const GoalsList: React.FC = () => {
                     type="button"
                     onMouseDown={async (e) => {
                       e.preventDefault();
-                      try {
-                        await transferTaskToNextDay(goal.id);
+                      const success = await transferTaskToNextDay(goal.id);
+                      if (success) {
                         setEditingGoalId(null);
-                      } catch {
-                        // Store handles error logging and toast notification
                       }
                     }}
                     className="p-1 text-secondary hover:text-primary-600 transition-colors focus:outline-none rounded"
