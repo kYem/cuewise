@@ -1,6 +1,7 @@
 import { cn } from '@cuewise/ui';
 import { ArrowLeft, BarChart3, BookText, Clock, Flag } from 'lucide-react';
 import type React from 'react';
+import { useSettingsStore } from '../stores/settings-store';
 
 type Page = 'quotes' | 'insights' | 'pomodoro' | 'goals';
 
@@ -15,8 +16,12 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   currentPage,
   title,
   subtitle,
-  transparent = false,
+  transparent: transparentProp,
 }) => {
+  const colorTheme = useSettingsStore((state) => state.settings.colorTheme);
+
+  // Auto-detect transparent mode: use prop if provided, otherwise detect glass theme
+  const transparent = transparentProp ?? colorTheme === 'glass';
   const handleBackToHome = () => {
     window.location.hash = '';
   };
@@ -109,7 +114,9 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
                 className={cn(
                   'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all',
                   currentPage === item.page
-                    ? 'bg-primary-600 text-white shadow-sm'
+                    ? transparent
+                      ? 'bg-white/25 text-white shadow-sm'
+                      : 'bg-primary-600 text-white shadow-sm'
                     : transparent
                       ? 'text-white/80 hover:text-white hover:bg-white/20'
                       : 'text-secondary hover:text-primary hover:bg-surface'
