@@ -183,13 +183,7 @@ export const AllGoalsList: React.FC = () => {
                   {/* Checkbox */}
                   <button
                     type="button"
-                    onClick={async () => {
-                      try {
-                        await toggleTask(goal.id);
-                      } catch {
-                        // Store handles error logging and toast notification
-                      }
-                    }}
+                    onClick={() => toggleTask(goal.id)}
                     className="flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 rounded-full"
                     aria-label={goal.completed ? 'Mark as incomplete' : 'Mark as complete'}
                   >
@@ -365,13 +359,9 @@ export const AllGoalsList: React.FC = () => {
                     {editingGoalId === goal.id && (
                       <button
                         type="button"
-                        onMouseDown={async (e) => {
+                        onMouseDown={(e) => {
                           e.preventDefault();
-                          try {
-                            await deleteTask(goal.id);
-                          } catch {
-                            // Store handles error logging and toast notification
-                          }
+                          deleteTask(goal.id);
                         }}
                         className="p-1 text-secondary hover:text-red-500 transition-colors focus:outline-none rounded"
                         aria-label="Delete goal"

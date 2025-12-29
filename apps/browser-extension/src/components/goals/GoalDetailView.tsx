@@ -58,20 +58,12 @@ export const GoalDetailView: React.FC<GoalDetailViewProps> = ({ goalId, onClose 
 
   const { total, completed, percent, tasks, daysRemaining, isOverdue } = progress;
 
-  const handleToggleTask = async (taskId: string) => {
-    try {
-      await toggleTask(taskId);
-    } catch {
-      // Store handles error logging and toast notification
-    }
+  const handleToggleTask = (taskId: string) => {
+    toggleTask(taskId);
   };
 
-  const handleUnlinkTask = async (taskId: string) => {
-    try {
-      await linkTaskToGoal(taskId, null);
-    } catch {
-      // Store handles error logging and toast notification
-    }
+  const handleUnlinkTask = (taskId: string) => {
+    linkTaskToGoal(taskId, null);
   };
 
   const handleDeleteGoal = async () => {
@@ -94,12 +86,8 @@ export const GoalDetailView: React.FC<GoalDetailViewProps> = ({ goalId, onClose 
     }
   };
 
-  const handleReopenGoal = async () => {
-    try {
-      await updateGoal(goalId, { completed: false });
-    } catch {
-      // Store handles error logging and toast notification
-    }
+  const handleReopenGoal = () => {
+    updateGoal(goalId, { completed: false });
   };
 
   // Determine if we should show the completion prompt

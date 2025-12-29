@@ -111,6 +111,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       const errorMessage = 'Failed to add goal. Please try again.';
       set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
+      throw error;
     }
   },
 
@@ -136,6 +137,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       const errorMessage = 'Failed to update goal. Please try again.';
       set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
+      throw error;
     }
   },
 
@@ -157,6 +159,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       const errorMessage = 'Failed to update goal. Please try again.';
       set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
+      throw error;
     }
   },
 
@@ -176,6 +179,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       const errorMessage = 'Failed to delete goal. Please try again.';
       set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
+      throw error;
     }
   },
 
@@ -198,6 +202,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       const errorMessage = 'Failed to clear completed goals. Please try again.';
       set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
+      throw error;
     }
   },
 
@@ -229,6 +234,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       const errorMessage = 'Failed to transfer goal. Please try again.';
       set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
+      throw error;
     }
   },
 
@@ -259,6 +265,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       const errorMessage = 'Failed to move goal. Please try again.';
       set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
+      throw error;
     }
   },
 
@@ -320,6 +327,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       const errorMessage = 'Failed to create goal. Please try again.';
       set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
+      throw error;
     }
   },
 
@@ -358,6 +366,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       const errorMessage = 'Failed to update goal. Please try again.';
       set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
+      throw error;
     }
   },
 
@@ -389,6 +398,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       const errorMessage = 'Failed to delete goal. Please try again.';
       set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
+      throw error;
     }
   },
 
@@ -418,6 +428,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       const errorMessage = 'Failed to link task. Please try again.';
       set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
+      throw error;
     }
   },
 

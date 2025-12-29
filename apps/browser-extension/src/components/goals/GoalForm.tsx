@@ -13,16 +13,17 @@ export const GoalForm: React.FC<GoalFormProps> = ({ goal, onCancel, onSuccess })
   const addGoal = useGoalStore((state) => state.addGoal);
   const updateGoal = useGoalStore((state) => state.updateGoal);
 
+  const [title, setTitle] = useState(goal?.text ?? '');
+  const [description, setDescription] = useState(goal?.description ?? '');
   // Default to 2 weeks from now for new goals
-  const defaultDate = () => {
+  const [dueDate, setDueDate] = useState(() => {
+    if (goal?.date) {
+      return goal.date;
+    }
     const date = new Date();
     date.setDate(date.getDate() + 14);
     return date.toISOString().split('T')[0];
-  };
-
-  const [title, setTitle] = useState(goal?.text ?? '');
-  const [description, setDescription] = useState(goal?.description ?? '');
-  const [dueDate, setDueDate] = useState(goal?.date ?? defaultDate());
+  });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const titleInputRef = useRef<HTMLInputElement>(null);
 
