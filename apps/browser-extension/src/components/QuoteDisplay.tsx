@@ -173,14 +173,6 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({ onManualRefresh }) =
 
       {/* Quote Card - aria-live announces quote changes to screen readers */}
       <div className="relative" aria-live="polite" aria-atomic="true">
-        {/* Decorative Quote Marks */}
-        <div
-          className="absolute -top-6 -left-4 text-8xl font-serif text-primary-400"
-          aria-hidden="true"
-        >
-          "
-        </div>
-
         {/* Quote Text */}
         <blockquote className="relative z-10 h-[240px] flex flex-col justify-center">
           <p
@@ -209,14 +201,6 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({ onManualRefresh }) =
             )}
           </footer>
         </blockquote>
-
-        {/* Decorative Quote Marks */}
-        <div
-          className="absolute -bottom-6 -right-4 text-8xl font-serif text-primary-400"
-          aria-hidden="true"
-        >
-          "
-        </div>
       </div>
 
       {/* Action Buttons */}
@@ -298,13 +282,6 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({ onManualRefresh }) =
           <EyeOff className="w-5 h-5" />
         </button>
       </div>
-
-      {/* View Count (subtle) */}
-      {currentQuote.viewCount > 0 && (
-        <div className="text-center mt-8 text-sm text-tertiary">
-          Viewed {currentQuote.viewCount} {currentQuote.viewCount === 1 ? 'time' : 'times'}
-        </div>
-      )}
     </div>
   );
 };

@@ -1,10 +1,11 @@
 import { APP_LINKS, formatClockTime, formatLongDate, getGreeting } from '@cuewise/shared';
 import { BarChart3, BookMarked, Flag, PanelRight, Settings, Timer } from 'lucide-react';
 import type React from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePomodoroStorageSync, usePomodoroStore } from '../stores/pomodoro-store';
 import { useQuoteStore } from '../stores/quote-store';
 import { useSettingsStore } from '../stores/settings-store';
+import { preloadImages } from '../utils/image-preload-cache';
 import { ActivePomodoroWidget } from './ActivePomodoroWidget';
 import { Clock } from './Clock';
 import { GoalsSection } from './GoalsSection';
@@ -21,7 +22,9 @@ export const NewTabPage: React.FC = () => {
   const settingsLoading = useSettingsStore((state) => state.isLoading);
   const quoteChangeInterval = useSettingsStore((state) => state.settings.quoteChangeInterval);
   const showThemeSwitcher = useSettingsStore((state) => state.settings.showThemeSwitcher);
+  const showClock = useSettingsStore((state) => state.settings.showClock);
   const timeFormat = useSettingsStore((state) => state.settings.timeFormat);
+  const focusModeImageCategory = useSettingsStore((state) => state.settings.focusModeImageCategory);
   const hasSeenOnboarding = useSettingsStore((state) => state.settings.hasSeenOnboarding);
   const updateSettings = useSettingsStore((state) => state.updateSettings);
   const initializePomodoro = usePomodoroStore((state) => state.initialize);
@@ -38,7 +41,8 @@ export const NewTabPage: React.FC = () => {
   const [showStickyHeader, setShowStickyHeader] = useState(false);
   const stickyMenuRef = useRef<HTMLDivElement>(null);
   const floatingMenuRef = useRef<HTMLDivElement>(null);
-  const clockRef = useRef<HTMLDivElement>(null);
+  const headerSentinelRef = useRef<HTMLDivElement>(null);
+  const pomodoroImagePreloaded = useRef(false);
 
   // Update time every second for sticky header
   useEffect(() => {
@@ -48,28 +52,28 @@ export const NewTabPage: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Observe clock visibility to show/hide sticky header
+  // Observe sentinel element visibility to show/hide sticky header
   useEffect(() => {
-    const currentClockRef = clockRef.current;
+    const sentinelRef = headerSentinelRef.current;
 
     const observer = new IntersectionObserver(
       ([entry]) => {
-        // Show sticky header when clock is not visible
+        // Show sticky header when sentinel is not visible (scrolled past)
         setShowStickyHeader(!entry.isIntersecting);
       },
       {
         threshold: 0,
-        rootMargin: '-120px 0px 0px 0px', // Trigger earlier to prevent gap
+        rootMargin: '0px 0px 0px 0px',
       }
     );
 
-    if (currentClockRef) {
-      observer.observe(currentClockRef);
+    if (sentinelRef) {
+      observer.observe(sentinelRef);
     }
 
     return () => {
-      if (currentClockRef) {
-        observer.unobserve(currentClockRef);
+      if (sentinelRef) {
+        observer.unobserve(sentinelRef);
       }
     };
   }, []);
@@ -129,6 +133,15 @@ export const NewTabPage: React.FC = () => {
     window.location.hash = 'pomodoro';
   };
 
+  // Preload Pomodoro background images on hover (current + next)
+  const preloadPomodoroImage = useCallback(() => {
+    if (pomodoroImagePreloaded.current) {
+      return;
+    }
+    pomodoroImagePreloaded.current = true;
+    preloadImages(focusModeImageCategory);
+  }, [focusModeImageCategory]);
+
   const handleOpenInsights = () => {
     setIsMenuOpen(false);
     window.location.hash = 'insights';
@@ -158,10 +171,10 @@ export const NewTabPage: React.FC = () => {
   const longDate = formatLongDate(currentTime);
 
   return (
-    <div className="min-h-screen w-full overflow-y-auto">
+    <div className="min-h-screen w-full overflow-y-auto relative">
       {/* Sticky Header - Only visible when scrolled */}
       <div
-        className={`fixed top-0 left-0 z-50 bg-background/95 backdrop-blur-md border-b border-border/50 shadow-sm transition-all duration-300 ${
+        className={`fixed top-0 left-0 z-50 bg-background/50 backdrop-blur-md border-b border-border/20 shadow-sm transition-all duration-300 ${
           showStickyHeader
             ? 'translate-y-0 opacity-100'
             : '-translate-y-full opacity-0 pointer-events-none'
@@ -201,6 +214,7 @@ export const NewTabPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleOpenPomodoro}
+                  onMouseEnter={preloadPomodoroImage}
                   className="group relative flex items-center gap-2 px-4 py-2.5 bg-surface/80 backdrop-blur-sm text-primary rounded-full shadow-md hover:shadow-lg hover:scale-105 transition-all"
                   title="Start Pomodoro Timer"
                 >
@@ -308,6 +322,7 @@ export const NewTabPage: React.FC = () => {
             <button
               type="button"
               onClick={handleOpenPomodoro}
+              onMouseEnter={preloadPomodoroImage}
               className="group relative flex items-center gap-2 px-4 py-2.5 bg-surface/80 backdrop-blur-sm text-primary rounded-full shadow-md hover:shadow-lg hover:scale-105 transition-all"
               title="Start Pomodoro Timer"
             >
@@ -386,10 +401,11 @@ export const NewTabPage: React.FC = () => {
         </nav>
 
         <div className="w-full max-w-7xl mx-auto space-y-density-xl">
-          {/* Clock Section - Observe this for sticky header */}
-          <div ref={clockRef}>
-            <Clock />
-          </div>
+          {/* Sentinel element for sticky header detection */}
+          <div ref={headerSentinelRef} className="h-1" aria-hidden="true" />
+
+          {/* Clock Section (optional) */}
+          {showClock && <Clock />}
 
           {/* Quote Display Section */}
           <div className="flex justify-center">

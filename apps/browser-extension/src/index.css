@@ -331,6 +331,47 @@
     );
   }
 
+  /* Glass Theme - Optimized for image backgrounds */
+  /* Uses transparent/frosted glass surfaces with white text */
+  /* Works on any background image, both light and dark */
+  [data-theme="glass"],
+  .dark[data-theme="glass"] {
+    /* Neutral white/gray primary scale - works on any image */
+    --color-primary-50: rgba(255, 255, 255, 0.05);
+    --color-primary-100: rgba(255, 255, 255, 0.1);
+    --color-primary-200: rgba(255, 255, 255, 0.15);
+    --color-primary-300: rgba(255, 255, 255, 0.25);
+    --color-primary-400: rgba(255, 255, 255, 0.4);
+    --color-primary-500: rgba(255, 255, 255, 0.6);
+    --color-primary-600: rgba(255, 255, 255, 0.8);
+    --color-primary-700: rgba(255, 255, 255, 0.9);
+    --color-primary-800: rgba(255, 255, 255, 0.95);
+    --color-primary-900: rgba(255, 255, 255, 1);
+
+    /* Transparent/glass surfaces */
+    --color-background: transparent;
+    --color-surface: rgba(0, 0, 0, 0.25);
+    --color-surface-elevated: rgba(0, 0, 0, 0.35);
+    --color-surface-variant: rgba(255, 255, 255, 0.1);
+
+    /* White text for readability on any image */
+    --color-text-primary: rgba(255, 255, 255, 1);
+    --color-text-secondary: rgba(255, 255, 255, 0.75);
+    --color-text-tertiary: rgba(255, 255, 255, 0.5);
+
+    /* Subtle white borders */
+    --color-border: rgba(255, 255, 255, 0.2);
+    --color-divider: rgba(255, 255, 255, 0.1);
+
+    /* Functional colors - slightly brighter for visibility */
+    --color-success: oklch(0.75 0.2 145);
+    --color-warning: oklch(0.85 0.18 85);
+    --color-error: oklch(0.7 0.26 25);
+
+    /* No gradient - transparent for image backgrounds */
+    --gradient-background: transparent;
+  }
+
   /* Layout Density Scales - controls both spacing AND font size */
   [data-density="compact"] {
     --font-scale: 0.875; /* 14px base */
@@ -422,6 +463,16 @@
     --chart-3: oklch(0.6 0.15 340);
     --chart-4: oklch(0.75 0.2 15);
     --chart-5: oklch(0.68 0.17 5);
+  }
+
+  /* Glass theme chart colors - neutral whites and grays */
+  [data-theme="glass"],
+  .dark[data-theme="glass"] {
+    --chart-1: rgba(255, 255, 255, 0.9);
+    --chart-2: rgba(255, 255, 255, 0.7);
+    --chart-3: rgba(255, 255, 255, 0.5);
+    --chart-4: rgba(255, 255, 255, 0.8);
+    --chart-5: rgba(255, 255, 255, 0.6);
   }
 
   html {

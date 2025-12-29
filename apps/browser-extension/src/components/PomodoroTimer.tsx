@@ -130,15 +130,15 @@ export const PomodoroTimer: React.FC = () => {
 
   return (
     <div className="w-full max-w-md mx-auto">
-      <div className="bg-surface/80 backdrop-blur-sm rounded-2xl shadow-lg p-density-lg border border-border">
+      <div className="bg-black/25 backdrop-blur-md rounded-2xl shadow-lg p-density-lg border border-white/10">
         {/* Header */}
         <div className="flex items-center gap-density-sm mb-density-md">
           <div className={`p-2 ${bgColor} rounded-lg`}>
             <SessionIcon className={`w-6 h-6 ${color}`} />
           </div>
           <div className="flex-1">
-            <h2 className="text-2xl font-semibold text-primary">Pomodoro Timer</h2>
-            <p className="text-sm text-secondary">{label}</p>
+            <h2 className="text-2xl font-semibold text-white">Pomodoro Timer</h2>
+            <p className="text-sm text-white/70">{label}</p>
           </div>
         </div>
 
@@ -146,13 +146,13 @@ export const PomodoroTimer: React.FC = () => {
         {isWork && status === 'idle' && (
           <div className="mb-density-md">
             {selectedGoal ? (
-              <div className="flex items-center gap-2 p-3 bg-primary-50 rounded-lg border border-primary-200">
-                <Target className="w-4 h-4 text-primary-600 flex-shrink-0" />
-                <span className="text-sm text-primary flex-1">{selectedGoal.text}</span>
+              <div className="flex items-center gap-2 p-3 bg-white/10 rounded-lg border border-white/20">
+                <Target className="w-4 h-4 text-primary-400 flex-shrink-0" />
+                <span className="text-sm text-white flex-1">{selectedGoal.text}</span>
                 <button
                   type="button"
                   onClick={() => setSelectedGoal(null)}
-                  className="text-xs text-primary-600 hover:text-primary-700"
+                  className="text-xs text-white/70 hover:text-white"
                   title="Clear goal"
                 >
                   Clear
@@ -162,19 +162,19 @@ export const PomodoroTimer: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setShowGoalPicker(!showGoalPicker)}
-                className="w-full flex items-center gap-2 p-3 bg-surface-variant rounded-lg border border-border hover:bg-border transition-colors"
+                className="w-full flex items-center gap-2 p-3 bg-white/10 rounded-lg border border-white/20 hover:bg-white/20 transition-colors"
                 title="Select a goal"
               >
-                <Target className="w-4 h-4 text-secondary" />
-                <span className="text-sm text-secondary">Work on a goal (optional)</span>
+                <Target className="w-4 h-4 text-white/70" />
+                <span className="text-sm text-white/70">Work on a goal (optional)</span>
               </button>
             )}
 
             {/* Goal Picker Dropdown */}
             {showGoalPicker && !selectedGoal && (
-              <div className="mt-2 p-2 bg-surface-elevated rounded-lg border border-border shadow-lg max-h-48 overflow-y-auto">
+              <div className="mt-2 p-2 bg-black/50 backdrop-blur-md rounded-lg border border-white/20 shadow-lg max-h-48 overflow-y-auto">
                 {todayTasks.filter((g) => !g.completed).length === 0 ? (
-                  <p className="text-sm text-secondary p-2">No active goals for today</p>
+                  <p className="text-sm text-white/70 p-2">No active goals for today</p>
                 ) : (
                   todayTasks
                     .filter((g) => !g.completed)
@@ -186,7 +186,7 @@ export const PomodoroTimer: React.FC = () => {
                           setSelectedGoal(goal.id);
                           setShowGoalPicker(false);
                         }}
-                        className="w-full text-left p-2 text-sm text-primary hover:bg-surface-variant rounded transition-colors"
+                        className="w-full text-left p-2 text-sm text-white hover:bg-white/20 rounded transition-colors"
                       >
                         {goal.text}
                       </button>
@@ -199,16 +199,16 @@ export const PomodoroTimer: React.FC = () => {
 
         {/* Active Goal Display (during session) */}
         {isWork && status !== 'idle' && selectedGoal && (
-          <div className="mb-density-md flex items-center gap-2 p-3 bg-primary-50 rounded-lg border border-primary-200">
-            <Target className="w-4 h-4 text-primary-600 flex-shrink-0" />
-            <span className="text-sm text-primary">{selectedGoal.text}</span>
+          <div className="mb-density-md flex items-center gap-2 p-3 bg-white/10 rounded-lg border border-white/20">
+            <Target className="w-4 h-4 text-primary-400 flex-shrink-0" />
+            <span className="text-sm text-white">{selectedGoal.text}</span>
           </div>
         )}
 
         {/* Long Break Progress */}
         {isWork && sessionsUntilLongBreak > 0 && (
           <div className="mb-density-md text-center">
-            <p className="text-xs text-secondary">
+            <p className="text-xs text-white/70">
               {sessionsUntilLongBreak} session{sessionsUntilLongBreak !== 1 ? 's' : ''} until long
               break
             </p>
@@ -217,7 +217,7 @@ export const PomodoroTimer: React.FC = () => {
                 <div
                   key={i}
                   className={`h-1.5 w-8 rounded-full ${
-                    i < consecutiveWorkSessions ? '' : 'bg-divider'
+                    i < consecutiveWorkSessions ? '' : 'bg-white/20'
                   }`}
                   style={
                     i < consecutiveWorkSessions ? { backgroundColor: progressColor } : undefined
@@ -243,7 +243,7 @@ export const PomodoroTimer: React.FC = () => {
                 cx={timerSize.center}
                 cy={timerSize.center}
                 r={timerSize.radius}
-                className="stroke-divider"
+                className="stroke-white/20"
                 strokeWidth={timerSize.strokeWidth}
                 fill="none"
               />
@@ -264,7 +264,7 @@ export const PomodoroTimer: React.FC = () => {
 
             {/* Time display in center */}
             <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <div className={`${timerSize.fontSize} font-bold text-primary font-mono`}>
+              <div className={`${timerSize.fontSize} font-bold text-white font-mono`}>
                 {formatTimeRemaining(timeRemaining)}
               </div>
               <div
@@ -322,7 +322,7 @@ export const PomodoroTimer: React.FC = () => {
             <button
               type="button"
               onClick={reset}
-              className="p-3 bg-surface-variant text-primary rounded-lg hover:bg-border transition-colors shadow-md hover:shadow-lg"
+              className="p-3 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-colors shadow-md hover:shadow-lg"
               title="Reset timer"
             >
               <RotateCcw className="w-5 h-5" />
@@ -333,7 +333,7 @@ export const PomodoroTimer: React.FC = () => {
           <button
             type="button"
             onClick={skip}
-            className="p-3 bg-surface-variant text-primary rounded-lg hover:bg-border transition-colors shadow-md hover:shadow-lg"
+            className="p-3 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-colors shadow-md hover:shadow-lg"
             title={`Skip to ${isWork ? 'break' : 'work'}`}
           >
             <SkipForward className="w-5 h-5" />
@@ -344,7 +344,7 @@ export const PomodoroTimer: React.FC = () => {
             <button
               type="button"
               onClick={() => useFocusModeStore.getState().enterFocusMode()}
-              className="p-3 bg-surface-variant text-primary rounded-lg hover:bg-border transition-colors shadow-md hover:shadow-lg"
+              className="p-3 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-colors shadow-md hover:shadow-lg"
               title="Enter focus mode"
             >
               <Maximize2 className="w-5 h-5" />
@@ -353,7 +353,7 @@ export const PomodoroTimer: React.FC = () => {
         </div>
 
         {/* Help Text - Interactive Settings */}
-        <div className="mt-density-md text-center text-xs text-secondary">
+        <div className="mt-density-md text-center text-xs text-white/70">
           <p className="leading-relaxed">
             Focus for{' '}
             <EditableValue

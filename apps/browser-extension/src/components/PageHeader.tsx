@@ -8,9 +8,15 @@ interface PageHeaderProps {
   currentPage: Page;
   title: string;
   subtitle?: string;
+  transparent?: boolean;
 }
 
-export const PageHeader: React.FC<PageHeaderProps> = ({ currentPage, title, subtitle }) => {
+export const PageHeader: React.FC<PageHeaderProps> = ({
+  currentPage,
+  title,
+  subtitle,
+  transparent = false,
+}) => {
   const handleBackToHome = () => {
     window.location.hash = '';
   };
@@ -27,7 +33,14 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ currentPage, title, subt
   ];
 
   return (
-    <header className="bg-surface/95 backdrop-blur-sm border-b border-border sticky top-0 z-40 shadow-sm">
+    <header
+      className={cn(
+        'sticky top-0 z-40 transition-colors',
+        transparent
+          ? 'bg-transparent'
+          : 'bg-surface/95 backdrop-blur-sm border-b border-border shadow-sm'
+      )}
+    >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between py-4">
           {/* Left: Back Button + Title */}
@@ -35,27 +48,57 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ currentPage, title, subt
             <button
               type="button"
               onClick={handleBackToHome}
-              className="flex items-center gap-2 text-secondary hover:text-primary transition-colors group"
+              className={cn(
+                'flex items-center gap-2 transition-colors group',
+                transparent ? 'text-white/80 hover:text-white' : 'text-secondary hover:text-primary'
+              )}
               title="Back to home"
             >
-              <div className="p-2 hover:bg-surface-variant rounded-full transition-colors">
+              <div
+                className={cn(
+                  'p-2 rounded-full transition-colors',
+                  transparent ? 'hover:bg-white/20' : 'hover:bg-surface-variant'
+                )}
+              >
                 <ArrowLeft className="w-5 h-5" />
               </div>
               <span className="hidden sm:inline text-sm font-medium">Back to Home</span>
             </button>
 
-            <div className="h-6 w-px bg-divider hidden sm:block" aria-hidden="true" />
+            <div
+              className={cn('h-6 w-px hidden sm:block', transparent ? 'bg-white/30' : 'bg-divider')}
+              aria-hidden="true"
+            />
 
             <div>
-              <h1 className="text-xl sm:text-2xl font-bold text-primary">{title}</h1>
-              {subtitle && <p className="text-xs sm:text-sm text-secondary">{subtitle}</p>}
+              <h1
+                className={cn(
+                  'text-xl sm:text-2xl font-bold',
+                  transparent ? 'text-white' : 'text-primary'
+                )}
+              >
+                {title}
+              </h1>
+              {subtitle && (
+                <p
+                  className={cn(
+                    'text-xs sm:text-sm',
+                    transparent ? 'text-white/70' : 'text-secondary'
+                  )}
+                >
+                  {subtitle}
+                </p>
+              )}
             </div>
           </div>
 
           {/* Right: Quick Navigation Tabs */}
           <nav
             aria-label="Page navigation"
-            className="flex items-center gap-1 bg-surface-variant rounded-lg p-1"
+            className={cn(
+              'flex items-center gap-1 rounded-lg p-1',
+              transparent ? 'bg-white/10 backdrop-blur-sm' : 'bg-surface-variant'
+            )}
           >
             {navItems.map((item) => (
               <button
@@ -67,7 +110,9 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ currentPage, title, subt
                   'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all',
                   currentPage === item.page
                     ? 'bg-primary-600 text-white shadow-sm'
-                    : 'text-secondary hover:text-primary hover:bg-surface'
+                    : transparent
+                      ? 'text-white/80 hover:text-white hover:bg-white/20'
+                      : 'text-secondary hover:text-primary hover:bg-surface'
                 )}
                 title={`Go to ${item.label}`}
               >

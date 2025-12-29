@@ -9,6 +9,8 @@ import { QuoteManagementPage } from './components/QuoteManagementPage';
 import { ThemeSwitcher } from './components/ThemeSwitcher';
 import { useSettingsStore } from './stores/settings-store';
 import { useToastStore } from './stores/toast-store';
+import { getPreloadedCurrentUrl, preloadImages } from './utils/image-preload-cache';
+import { loadImageWithFallback } from './utils/unsplash';
 
 type Page = 'home' | 'pomodoro' | 'insights' | 'quotes' | 'goals';
 
@@ -16,6 +18,11 @@ function App() {
   const [currentPage, setCurrentPage] = useState<Page>('home');
   const { toasts, removeToast } = useToastStore();
   const { settings } = useSettingsStore();
+  const [backgroundImage, setBackgroundImage] = useState<string | null>(null);
+  const [imageLoaded, setImageLoaded] = useState(false);
+
+  // Show background image only when glass theme is selected
+  const showBackgroundImage = settings.colorTheme === 'glass';
 
   useEffect(() => {
     const handleHashChange = () => {
@@ -44,6 +51,50 @@ function App() {
     };
   }, []);
 
+  // Load background image when glass theme is selected
+  useEffect(() => {
+    if (!showBackgroundImage) {
+      setBackgroundImage(null);
+      setImageLoaded(false);
+      return;
+    }
+
+    // Preload images (current + next) when glass theme is active
+    preloadImages(settings.focusModeImageCategory);
+
+    let cancelled = false;
+
+    const loadBackground = async () => {
+      // Check if we have a preloaded image from the cache
+      const preloadedUrl = getPreloadedCurrentUrl(settings.focusModeImageCategory);
+      if (preloadedUrl) {
+        setBackgroundImage(preloadedUrl);
+        setImageLoaded(true);
+        return;
+      }
+
+      // Fall back to loading a new image
+      try {
+        const imageUrl = await loadImageWithFallback(settings.focusModeImageCategory);
+        if (!cancelled) {
+          setBackgroundImage(imageUrl);
+          setImageLoaded(true);
+        }
+      } catch {
+        // Failed to load image
+        if (!cancelled) {
+          setImageLoaded(true);
+        }
+      }
+    };
+
+    loadBackground();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [showBackgroundImage, settings.focusModeImageCategory]);
+
   return (
     <ErrorBoundary>
       {/* Skip to main content link - visible on focus for keyboard users */}
@@ -53,7 +104,20 @@ function App() {
       >
         Skip to main content
       </a>
-      <div className="flex h-full w-full">
+
+      {/* Global Background Image - shown with glass theme on all pages */}
+      {showBackgroundImage && (
+        <div
+          className={`fixed inset-0 bg-cover bg-center bg-no-repeat transition-opacity duration-1000 ${
+            imageLoaded && backgroundImage ? 'opacity-100' : 'opacity-0'
+          }`}
+          style={{
+            backgroundImage: backgroundImage ? `url(${backgroundImage})` : undefined,
+          }}
+        />
+      )}
+
+      <div className="flex h-full w-full relative">
         {/* Main content area */}
         <main id="main-content" className="flex-1 overflow-auto" tabIndex={-1}>
           {currentPage === 'pomodoro' && <PomodoroPage />}
