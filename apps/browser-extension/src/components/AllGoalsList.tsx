@@ -60,9 +60,13 @@ export const AllGoalsList: React.FC = () => {
   }, [linkingGoalId]);
 
   const handleLinkToGoal = async (taskId: string, goalId: string | null) => {
-    await linkTaskToGoal(taskId, goalId);
-    setLinkingGoalId(null);
-    setEditingGoalId(null);
+    try {
+      await linkTaskToGoal(taskId, goalId);
+      setLinkingGoalId(null);
+      setEditingGoalId(null);
+    } catch {
+      // Store handles error logging and toast notification
+    }
   };
 
   const getLinkedGoal = (parentId: string | undefined) => {
@@ -84,7 +88,13 @@ export const AllGoalsList: React.FC = () => {
         .find((goal) => goal.id === editingGoalId);
 
       if (currentGoal && editText.trim() !== currentGoal.text) {
-        await updateTask(editingGoalId, editText.trim());
+        try {
+          await updateTask(editingGoalId, editText.trim());
+        } catch {
+          // Store handles error logging and toast notification
+          // Keep edit mode open so user can retry
+          return;
+        }
       }
     }
     setEditingGoalId(null);
@@ -173,7 +183,13 @@ export const AllGoalsList: React.FC = () => {
                   {/* Checkbox */}
                   <button
                     type="button"
-                    onClick={() => toggleTask(goal.id)}
+                    onClick={async () => {
+                      try {
+                        await toggleTask(goal.id);
+                      } catch {
+                        // Store handles error logging and toast notification
+                      }
+                    }}
                     className="flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 rounded-full"
                     aria-label={goal.completed ? 'Mark as incomplete' : 'Mark as complete'}
                   >
@@ -243,10 +259,14 @@ export const AllGoalsList: React.FC = () => {
                     {editingGoalId === goal.id && !isToday && !goal.completed && (
                       <button
                         type="button"
-                        onMouseDown={(e) => {
+                        onMouseDown={async (e) => {
                           e.preventDefault();
-                          moveTaskToToday(goal.id);
-                          setEditingGoalId(null);
+                          try {
+                            await moveTaskToToday(goal.id);
+                            setEditingGoalId(null);
+                          } catch {
+                            // Store handles error logging and toast notification
+                          }
                         }}
                         className="p-1 text-secondary hover:text-primary-600 transition-colors focus:outline-none rounded"
                         aria-label="Move to today"
@@ -260,10 +280,14 @@ export const AllGoalsList: React.FC = () => {
                     {editingGoalId === goal.id && isToday && !goal.completed && (
                       <button
                         type="button"
-                        onMouseDown={(e) => {
+                        onMouseDown={async (e) => {
                           e.preventDefault();
-                          transferTaskToNextDay(goal.id);
-                          setEditingGoalId(null);
+                          try {
+                            await transferTaskToNextDay(goal.id);
+                            setEditingGoalId(null);
+                          } catch {
+                            // Store handles error logging and toast notification
+                          }
                         }}
                         className="p-1 text-secondary hover:text-primary-600 transition-colors focus:outline-none rounded"
                         aria-label="Transfer to tomorrow"
@@ -341,9 +365,13 @@ export const AllGoalsList: React.FC = () => {
                     {editingGoalId === goal.id && (
                       <button
                         type="button"
-                        onMouseDown={(e) => {
+                        onMouseDown={async (e) => {
                           e.preventDefault();
-                          deleteTask(goal.id);
+                          try {
+                            await deleteTask(goal.id);
+                          } catch {
+                            // Store handles error logging and toast notification
+                          }
                         }}
                         className="p-1 text-secondary hover:text-red-500 transition-colors focus:outline-none rounded"
                         aria-label="Delete goal"

@@ -50,13 +50,18 @@ export const GoalInput: React.FC<GoalInputProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (text.trim()) {
-      await addTask(text, selectedGoalId ?? undefined);
-      setText('');
-      if (!defaultGoalId) {
-        setSelectedObjectiveId(null);
-      }
-      if (onTaskAdded) {
-        onTaskAdded();
+      try {
+        await addTask(text, selectedGoalId ?? undefined);
+        setText('');
+        if (!defaultGoalId) {
+          setSelectedObjectiveId(null);
+        }
+        if (onTaskAdded) {
+          onTaskAdded();
+        }
+      } catch {
+        // Store handles error logging and toast notification
+        // Keep text in input so user can retry
       }
     }
   };
@@ -65,13 +70,18 @@ export const GoalInput: React.FC<GoalInputProps> = ({
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       if (text.trim()) {
-        await addTask(text, selectedGoalId ?? undefined);
-        setText('');
-        if (!defaultGoalId) {
-          setSelectedObjectiveId(null);
-        }
-        if (onTaskAdded) {
-          onTaskAdded();
+        try {
+          await addTask(text, selectedGoalId ?? undefined);
+          setText('');
+          if (!defaultGoalId) {
+            setSelectedObjectiveId(null);
+          }
+          if (onTaskAdded) {
+            onTaskAdded();
+          }
+        } catch {
+          // Store handles error logging and toast notification
+          // Keep text in input so user can retry
         }
       }
     }

@@ -69,9 +69,13 @@ export const GoalsList: React.FC = () => {
   }, [linkingGoalId]);
 
   const handleLinkToGoal = async (taskId: string, goalId: string | null) => {
-    await linkTaskToGoal(taskId, goalId);
-    setLinkingGoalId(null);
-    setEditingGoalId(null);
+    try {
+      await linkTaskToGoal(taskId, goalId);
+      setLinkingGoalId(null);
+      setEditingGoalId(null);
+    } catch {
+      // Store handles error logging and toast notification
+    }
   };
 
   const startEditing = (goalId: string, currentText: string) => {
@@ -85,7 +89,13 @@ export const GoalsList: React.FC = () => {
       editText.trim() &&
       editText.trim() !== todayTasks.find((g) => g.id === editingGoalId)?.text
     ) {
-      await updateTask(editingGoalId, editText.trim());
+      try {
+        await updateTask(editingGoalId, editText.trim());
+      } catch {
+        // Store handles error logging and toast notification
+        // Keep edit mode open so user can retry
+        return;
+      }
     }
     setEditingGoalId(null);
     setEditText('');
@@ -191,7 +201,13 @@ export const GoalsList: React.FC = () => {
               {/* Checkbox */}
               <button
                 type="button"
-                onClick={() => toggleTask(goal.id)}
+                onClick={async () => {
+                  try {
+                    await toggleTask(goal.id);
+                  } catch {
+                    // Store handles error logging and toast notification
+                  }
+                }}
                 className="flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 rounded-full"
                 aria-label={goal.completed ? 'Mark as incomplete' : 'Mark as complete'}
               >
@@ -262,10 +278,14 @@ export const GoalsList: React.FC = () => {
                 {editingGoalId === goal.id && showTransferButton && !goal.completed && (
                   <button
                     type="button"
-                    onMouseDown={(e) => {
+                    onMouseDown={async (e) => {
                       e.preventDefault();
-                      transferTaskToNextDay(goal.id);
-                      setEditingGoalId(null);
+                      try {
+                        await transferTaskToNextDay(goal.id);
+                        setEditingGoalId(null);
+                      } catch {
+                        // Store handles error logging and toast notification
+                      }
                     }}
                     className="p-1 text-secondary hover:text-primary-600 transition-colors focus:outline-none rounded"
                     aria-label="Transfer to tomorrow"
@@ -341,9 +361,13 @@ export const GoalsList: React.FC = () => {
                 {editingGoalId === goal.id && (
                   <button
                     type="button"
-                    onMouseDown={(e) => {
+                    onMouseDown={async (e) => {
                       e.preventDefault();
-                      deleteTask(goal.id);
+                      try {
+                        await deleteTask(goal.id);
+                      } catch {
+                        // Store handles error logging and toast notification
+                      }
                     }}
                     className="p-1 text-secondary hover:text-red-500 transition-colors focus:outline-none rounded"
                     aria-label="Delete goal"
@@ -361,7 +385,13 @@ export const GoalsList: React.FC = () => {
       {completedCount > 0 && (
         <button
           type="button"
-          onClick={() => useGoalStore.getState().clearCompleted()}
+          onClick={async () => {
+            try {
+              await useGoalStore.getState().clearCompleted();
+            } catch {
+              // Store handles error logging and toast notification
+            }
+          }}
           className="w-full py-2 text-sm text-secondary hover:text-primary transition-colors"
         >
           Clear {completedCount} completed {completedCount === 1 ? 'goal' : 'goals'}
@@ -401,7 +431,13 @@ export const GoalsList: React.FC = () => {
                   >
                     <button
                       type="button"
-                      onClick={() => toggleTask(goal.id)}
+                      onClick={async () => {
+                        try {
+                          await toggleTask(goal.id);
+                        } catch {
+                          // Store handles error logging and toast notification
+                        }
+                      }}
                       className="flex-shrink-0 mt-0.5 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 rounded-full"
                       aria-label="Mark as complete"
                     >
@@ -423,7 +459,13 @@ export const GoalsList: React.FC = () => {
                     </div>
                     <button
                       type="button"
-                      onClick={() => moveTaskToToday(goal.id)}
+                      onClick={async () => {
+                        try {
+                          await moveTaskToToday(goal.id);
+                        } catch {
+                          // Store handles error logging and toast notification
+                        }
+                      }}
                       className="flex-shrink-0 p-1.5 text-secondary hover:text-primary-600 hover:bg-primary-50 rounded transition-colors opacity-0 group-hover:opacity-100"
                       aria-label="Move to today"
                       title="Move to today"
