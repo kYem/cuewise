@@ -330,9 +330,9 @@ export const AllGoalsList: React.FC = () => {
                     {editingGoalId === goal.id && (
                       <button
                         type="button"
-                        onMouseDown={(e) => {
+                        onMouseDown={async (e) => {
                           e.preventDefault();
-                          deleteTask(goal.id);
+                          await deleteTask(goal.id);
                         }}
                         className="p-1 text-secondary hover:text-red-500 transition-colors focus:outline-none rounded"
                         aria-label="Delete goal"

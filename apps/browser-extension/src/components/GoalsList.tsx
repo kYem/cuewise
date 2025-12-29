@@ -330,9 +330,9 @@ export const GoalsList: React.FC = () => {
                 {editingGoalId === goal.id && (
                   <button
                     type="button"
-                    onMouseDown={(e) => {
+                    onMouseDown={async (e) => {
                       e.preventDefault();
-                      deleteTask(goal.id);
+                      await deleteTask(goal.id);
                     }}
                     className="p-1 text-secondary hover:text-red-500 transition-colors focus:outline-none rounded"
                     aria-label="Delete goal"
@@ -390,7 +390,9 @@ export const GoalsList: React.FC = () => {
                   >
                     <button
                       type="button"
-                      onClick={() => toggleTask(goal.id)}
+                      onClick={async () => {
+                        await toggleTask(goal.id);
+                      }}
                       className="flex-shrink-0 mt-0.5 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 rounded-full"
                       aria-label="Mark as complete"
                     >
@@ -402,7 +404,9 @@ export const GoalsList: React.FC = () => {
                     </div>
                     <button
                       type="button"
-                      onClick={() => moveTaskToToday(goal.id)}
+                      onClick={async () => {
+                        await moveTaskToToday(goal.id);
+                      }}
                       className="flex-shrink-0 p-1.5 text-secondary hover:text-primary-600 hover:bg-primary-50 rounded transition-colors opacity-0 group-hover:opacity-100"
                       aria-label="Move to today"
                       title="Move to today"

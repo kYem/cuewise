@@ -58,12 +58,12 @@ export const GoalDetailView: React.FC<GoalDetailViewProps> = ({ goalId, onClose 
 
   const { total, completed, percent, tasks, daysRemaining, isOverdue } = progress;
 
-  const handleToggleTask = (taskId: string) => {
-    toggleTask(taskId);
+  const handleToggleTask = async (taskId: string) => {
+    await toggleTask(taskId);
   };
 
-  const handleUnlinkTask = (taskId: string) => {
-    linkTaskToGoal(taskId, null);
+  const handleUnlinkTask = async (taskId: string) => {
+    await linkTaskToGoal(taskId, null);
   };
 
   const handleDeleteGoal = async () => {
@@ -82,8 +82,8 @@ export const GoalDetailView: React.FC<GoalDetailViewProps> = ({ goalId, onClose 
     // On failure, keep confirmation dialog open so user can retry
   };
 
-  const handleReopenGoal = () => {
-    updateGoal(goalId, { completed: false });
+  const handleReopenGoal = async () => {
+    await updateGoal(goalId, { completed: false });
   };
 
   // Determine if we should show the completion prompt
