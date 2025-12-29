@@ -59,25 +59,47 @@ export const GoalDetailView: React.FC<GoalDetailViewProps> = ({ goalId, onClose 
   const { total, completed, percent, tasks, daysRemaining, isOverdue } = progress;
 
   const handleToggleTask = async (taskId: string) => {
-    await toggleTask(taskId);
+    try {
+      await toggleTask(taskId);
+    } catch {
+      // Store handles error logging and toast notification
+    }
   };
 
   const handleUnlinkTask = async (taskId: string) => {
-    await linkTaskToGoal(taskId, null);
+    try {
+      await linkTaskToGoal(taskId, null);
+    } catch {
+      // Store handles error logging and toast notification
+    }
   };
 
   const handleDeleteGoal = async () => {
-    await deleteGoal(goalId);
-    onClose();
+    try {
+      await deleteGoal(goalId);
+      onClose();
+    } catch {
+      // Store handles error logging and toast notification
+      // Keep modal open so user can retry
+    }
   };
 
   const handleCompleteGoal = async () => {
-    await updateGoal(goalId, { completed: true });
-    setShowCompleteConfirm(false);
+    try {
+      await updateGoal(goalId, { completed: true });
+      setShowCompleteConfirm(false);
+    } catch {
+      // Store handles error logging and toast notification
+      // Keep confirmation dialog open so user can retry
+    }
   };
 
   const handleReopenGoal = async () => {
-    await updateGoal(goalId, { completed: false });
+    try {
+      await updateGoal(goalId, { completed: false });
+    } catch {
+      // Store handles error logging and toast notification
+    }
   };
 
   // Determine if we should show the completion prompt

@@ -56,6 +56,9 @@ export const GoalForm: React.FC<GoalFormProps> = ({ goal, onCancel, onSuccess })
         await addGoal(title.trim(), dueDate, description.trim() || undefined);
       }
       onSuccess();
+    } catch {
+      // Store handles error logging and toast notification
+      // Keep form open so user can retry
     } finally {
       setIsSubmitting(false);
     }
