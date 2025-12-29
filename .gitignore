@@ -147,3 +147,6 @@ build/
 
 # Playwright MCP screenshots and artifacts
 .playwright-mcp/
+
+# Local docs/research (not tracked)
+docs/

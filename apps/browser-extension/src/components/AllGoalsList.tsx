@@ -1,26 +1,42 @@
-import { getRelativeDateLabel, getTodayDateString } from '@cuewise/shared';
-import { cn } from '@cuewise/ui';
-import { ArrowRight, Calendar, CheckCircle2, Circle, MoveRight, Trash2 } from 'lucide-react';
+import { getRelativeDateLabel, getTodayDateString, isObjective } from '@cuewise/shared';
+import { cn, Popover, PopoverContent, PopoverTrigger } from '@cuewise/ui';
+import {
+  ArrowRight,
+  Calendar,
+  Check,
+  CheckCircle2,
+  Circle,
+  Flag,
+  Link2,
+  MoveRight,
+  Trash2,
+} from 'lucide-react';
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useGoalStore } from '../stores/goal-store';
 
 export const AllGoalsList: React.FC = () => {
   const {
-    getFilteredGoalsByDate,
-    toggleGoal,
-    updateGoal,
-    deleteGoal,
-    transferGoalToNextDay,
-    moveGoalToToday,
+    goals,
+    getFilteredTasksByDate,
+    toggleTask,
+    updateTask,
+    deleteTask,
+    transferTaskToNextDay,
+    moveTaskToToday,
     completionFilter,
+    getActiveGoals,
+    linkTaskToGoal,
   } = useGoalStore();
   const [editingGoalId, setEditingGoalId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
+  const [linkPickerOpenFor, setLinkPickerOpenFor] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const actionsRef = useRef<HTMLDivElement>(null);
 
-  const groupedGoals = getFilteredGoalsByDate();
+  const groupedGoals = getFilteredTasksByDate();
   const today = getTodayDateString();
+  const activeGoals = getActiveGoals();
 
   // Focus input when editing starts
   useEffect(() => {
@@ -29,6 +45,19 @@ export const AllGoalsList: React.FC = () => {
       inputRef.current.select();
     }
   }, [editingGoalId]);
+
+  const handleLinkToGoal = async (taskId: string, goalId: string | null) => {
+    await linkTaskToGoal(taskId, goalId);
+    setLinkPickerOpenFor(null);
+    setEditingGoalId(null);
+  };
+
+  const getLinkedGoal = (parentId: string | undefined) => {
+    if (!parentId) {
+      return null;
+    }
+    return goals.find((g) => g.id === parentId && isObjective(g));
+  };
 
   const startEditing = (goalId: string, currentText: string) => {
     setEditingGoalId(goalId);
@@ -42,7 +71,11 @@ export const AllGoalsList: React.FC = () => {
         .find((goal) => goal.id === editingGoalId);
 
       if (currentGoal && editText.trim() !== currentGoal.text) {
-        await updateGoal(editingGoalId, editText.trim());
+        const success = await updateTask(editingGoalId, editText.trim());
+        if (!success) {
+          // Keep edit mode open so user can retry
+          return;
+        }
       }
     }
     setEditingGoalId(null);
@@ -52,6 +85,14 @@ export const AllGoalsList: React.FC = () => {
   const cancelEdit = () => {
     setEditingGoalId(null);
     setEditText('');
+  };
+
+  const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    // Don't save if clicking on an action button (move, transfer, link, delete)
+    if (actionsRef.current?.contains(e.relatedTarget as Node)) {
+      return;
+    }
+    saveEdit();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -131,7 +172,7 @@ export const AllGoalsList: React.FC = () => {
                   {/* Checkbox */}
                   <button
                     type="button"
-                    onClick={() => toggleGoal(goal.id)}
+                    onClick={() => toggleTask(goal.id)}
                     className="flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 rounded-full"
                     aria-label={goal.completed ? 'Mark as incomplete' : 'Mark as complete'}
                   >
@@ -149,71 +190,158 @@ export const AllGoalsList: React.FC = () => {
                       type="text"
                       value={editText}
                       onChange={(e) => setEditText(e.target.value)}
-                      onBlur={saveEdit}
+                      onBlur={handleBlur}
                       onKeyDown={handleKeyDown}
                       maxLength={200}
                       className="flex-1 text-base px-2 py-1 border-2 border-primary-500 rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
                     />
                   ) : (
-                    <div className="flex-1 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => startEditing(goal.id, goal.text)}
+                      className={cn(
+                        'flex-1 text-base text-left transition-all hover:bg-surface-variant px-2 py-1 rounded',
+                        goal.completed ? 'text-tertiary line-through' : 'text-primary'
+                      )}
+                    >
+                      {goal.text}
+                    </button>
+                  )}
+
+                  {/* Right side: badges and actions */}
+                  <div
+                    ref={editingGoalId === goal.id ? actionsRef : undefined}
+                    className="flex items-center gap-1 flex-shrink-0"
+                  >
+                    {/* Goal link badge - hide in edit mode */}
+                    {editingGoalId !== goal.id &&
+                      (() => {
+                        const linkedGoal = getLinkedGoal(goal.parentId);
+                        if (!linkedGoal) {
+                          return null;
+                        }
+                        return (
+                          <span
+                            className="flex items-center gap-1 text-xs text-primary-600 bg-primary-50 px-1.5 py-0.5 rounded-full"
+                            title={`Linked to: ${linkedGoal.text}`}
+                          >
+                            <Flag className="w-3 h-3" />
+                            <span className="max-w-[80px] truncate">{linkedGoal.text}</span>
+                          </span>
+                        );
+                      })()}
+
+                    {/* Move to Today Button - only show in edit mode */}
+                    {editingGoalId === goal.id && !isToday && !goal.completed && (
                       <button
                         type="button"
-                        onClick={() => startEditing(goal.id, goal.text)}
-                        className={cn(
-                          'flex-1 text-base text-left transition-all hover:bg-surface-variant px-2 py-1 rounded',
-                          goal.completed ? 'text-tertiary line-through' : 'text-primary'
-                        )}
+                        onMouseDown={async (e) => {
+                          e.preventDefault();
+                          const success = await moveTaskToToday(goal.id);
+                          if (success) {
+                            setEditingGoalId(null);
+                          }
+                        }}
+                        className="p-1 text-secondary hover:text-primary-600 transition-colors focus:outline-none rounded"
+                        aria-label="Move to today"
+                        title="Move to today"
                       >
-                        {goal.text}
+                        <MoveRight className="w-4 h-4" />
                       </button>
-                      {/* Transfer count badge */}
-                      {goal.transferCount && goal.transferCount > 0 && (
-                        <span
-                          className="flex-shrink-0 text-xs text-tertiary"
-                          title={`Transferred ${goal.transferCount} time${goal.transferCount > 1 ? 's' : ''}`}
-                        >
-                          ↻{goal.transferCount}
-                        </span>
-                      )}
-                    </div>
-                  )}
+                    )}
 
-                  {/* Move to Today Button - only show for incomplete non-today goals */}
-                  {!isToday && !goal.completed && (
-                    <button
-                      type="button"
-                      onClick={() => moveGoalToToday(goal.id)}
-                      className="flex-shrink-0 p-2 text-secondary hover:text-primary-600 opacity-0 group-hover:opacity-100 transition-all focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 rounded"
-                      aria-label="Move to today"
-                      title="Move to today"
-                    >
-                      <MoveRight className="w-4 h-4" />
-                    </button>
-                  )}
+                    {/* Transfer to Tomorrow Button - only show in edit mode */}
+                    {editingGoalId === goal.id && isToday && !goal.completed && (
+                      <button
+                        type="button"
+                        onMouseDown={async (e) => {
+                          e.preventDefault();
+                          const success = await transferTaskToNextDay(goal.id);
+                          if (success) {
+                            setEditingGoalId(null);
+                          }
+                        }}
+                        className="p-1 text-secondary hover:text-primary-600 transition-colors focus:outline-none rounded"
+                        aria-label="Transfer to tomorrow"
+                        title="Move to tomorrow"
+                      >
+                        <ArrowRight className="w-4 h-4" />
+                      </button>
+                    )}
 
-                  {/* Transfer to Tomorrow Button - only show for today's incomplete goals */}
-                  {isToday && !goal.completed && (
-                    <button
-                      type="button"
-                      onClick={() => transferGoalToNextDay(goal.id)}
-                      className="flex-shrink-0 p-2 text-secondary hover:text-primary-600 opacity-0 group-hover:opacity-100 transition-all focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 rounded"
-                      aria-label="Transfer to tomorrow"
-                      title="Move to tomorrow"
-                    >
-                      <ArrowRight className="w-4 h-4" />
-                    </button>
-                  )}
+                    {/* Link to Goal Button - only show in edit mode */}
+                    {editingGoalId === goal.id && activeGoals.length > 0 && (
+                      <Popover
+                        open={linkPickerOpenFor === goal.id}
+                        onOpenChange={(open) => setLinkPickerOpenFor(open ? goal.id : null)}
+                      >
+                        <PopoverTrigger asChild>
+                          <button
+                            type="button"
+                            className={cn(
+                              'p-1 transition-colors focus:outline-none rounded',
+                              goal.parentId
+                                ? 'text-primary-600 hover:text-primary-700'
+                                : 'text-secondary hover:text-primary-600'
+                            )}
+                            aria-label={goal.parentId ? 'Change linked goal' : 'Link to goal'}
+                            title={goal.parentId ? 'Change linked goal' : 'Link to goal'}
+                          >
+                            <Link2 className="w-4 h-4" />
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent className="min-w-[180px] py-1">
+                          {goal.parentId && (
+                            <button
+                              type="button"
+                              onClick={() => handleLinkToGoal(goal.id, null)}
+                              className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 transition-colors"
+                            >
+                              <span>Remove link</span>
+                            </button>
+                          )}
+                          {activeGoals.map((obj) => {
+                            const isLinked = goal.parentId === obj.id;
+                            return (
+                              <button
+                                key={obj.id}
+                                type="button"
+                                onClick={() => handleLinkToGoal(goal.id, obj.id)}
+                                className={cn(
+                                  'w-full flex items-center gap-2 px-3 py-2 text-left text-sm transition-colors',
+                                  isLinked
+                                    ? 'bg-primary-50 text-primary-600'
+                                    : 'text-primary hover:bg-surface-variant'
+                                )}
+                              >
+                                <Flag className="w-3 h-3 flex-shrink-0" />
+                                <span className="flex-1 truncate">{obj.text}</span>
+                                {isLinked && (
+                                  <Check className="w-4 h-4 text-primary-600 flex-shrink-0" />
+                                )}
+                              </button>
+                            );
+                          })}
+                        </PopoverContent>
+                      </Popover>
+                    )}
 
-                  {/* Delete Button */}
-                  <button
-                    type="button"
-                    onClick={() => deleteGoal(goal.id)}
-                    className="flex-shrink-0 p-2 text-secondary hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 rounded"
-                    aria-label="Delete goal"
-                    title="Delete goal"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                    {/* Delete Button - only show in edit mode */}
+                    {editingGoalId === goal.id && (
+                      <button
+                        type="button"
+                        onMouseDown={async (e) => {
+                          e.preventDefault();
+                          await deleteTask(goal.id);
+                        }}
+                        className="p-1 text-secondary hover:text-red-500 transition-colors focus:outline-none rounded"
+                        aria-label="Delete goal"
+                        title="Delete goal"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>

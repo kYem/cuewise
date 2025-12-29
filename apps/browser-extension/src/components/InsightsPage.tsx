@@ -4,7 +4,7 @@ import {
   getMostViewedCategory,
   QUOTE_CATEGORIES,
 } from '@cuewise/shared';
-import { Award, Calendar, Clock, Flame, Target, TrendingUp } from 'lucide-react';
+import { Award, Calendar, Clock, Flag, Flame, Target, TrendingUp } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useState } from 'react';
 import { useInsightsStore } from '../stores/insights-store';
@@ -139,6 +139,25 @@ export const InsightsPage: React.FC = () => {
                   {insights.goalsCompletedThisMonth}
                 </p>
               </div>
+
+              {/* Goals */}
+              {insights.activeGoals !== undefined && (
+                <div className="bg-surface rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="p-3 bg-purple-100 rounded-lg">
+                      <Flag className="w-6 h-6 text-purple-600" />
+                    </div>
+                    <span className="text-3xl font-bold text-purple-600">
+                      {insights.activeGoals}
+                    </span>
+                  </div>
+                  <h3 className="text-secondary text-sm font-medium mb-1">Active Goals</h3>
+                  <p className="text-xs text-tertiary">
+                    {insights.avgGoalProgress ?? 0}% avg progress |{' '}
+                    {insights.goalsCompletedThisMonth ?? 0} completed this month
+                  </p>
+                </div>
+              )}
 
               {/* Pomodoros Today */}
               <div className="bg-surface rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow">

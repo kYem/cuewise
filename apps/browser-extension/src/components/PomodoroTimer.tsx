@@ -35,7 +35,7 @@ export const PomodoroTimer: React.FC = () => {
     reloadSettings,
   } = usePomodoroStore();
 
-  const { todayGoals, initialize: initGoals } = useGoalStore();
+  const { todayTasks, initialize: initGoals } = useGoalStore();
   const { updateSettings, settings } = useSettingsStore();
 
   const [showGoalPicker, setShowGoalPicker] = useState(false);
@@ -90,7 +90,7 @@ export const PomodoroTimer: React.FC = () => {
   const { color, bgColor, progressColor, label, icon: SessionIcon } = getSessionStyles(sessionType);
 
   // Find selected goal
-  const selectedGoal = todayGoals.find((g) => g.id === selectedGoalId);
+  const selectedGoal = todayTasks.find((g) => g.id === selectedGoalId);
 
   // Calculate sessions until long break
   const sessionsUntilLongBreak = longBreakInterval - consecutiveWorkSessions;
@@ -173,10 +173,10 @@ export const PomodoroTimer: React.FC = () => {
             {/* Goal Picker Dropdown */}
             {showGoalPicker && !selectedGoal && (
               <div className="mt-2 p-2 bg-surface-elevated rounded-lg border border-border shadow-lg max-h-48 overflow-y-auto">
-                {todayGoals.filter((g) => !g.completed).length === 0 ? (
+                {todayTasks.filter((g) => !g.completed).length === 0 ? (
                   <p className="text-sm text-secondary p-2">No active goals for today</p>
                 ) : (
-                  todayGoals
+                  todayTasks
                     .filter((g) => !g.completed)
                     .map((goal) => (
                       <button

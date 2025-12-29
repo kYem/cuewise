@@ -6,6 +6,7 @@ export * from './components/Card';
 export * from './components/Chart';
 export * from './components/Input';
 export * from './components/Label';
+export * from './components/Popover';
 export * from './components/Select';
 export * from './components/Textarea';
 export * from './components/Toast';

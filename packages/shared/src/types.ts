@@ -26,14 +26,36 @@ export interface Quote {
   notes?: string; // Personal notes about the quote
 }
 
-// Goal interface
+// Goal type - 'task' (default) or 'objective' for longer-term goals
+export type GoalType = 'task' | 'objective';
+
+// Goal interface - supports both daily tasks and objectives
 export interface Goal {
   id: string;
   text: string;
   completed: boolean;
   createdAt: string; // ISO date string
-  date: string; // YYYY-MM-DD
+  date: string; // YYYY-MM-DD (due date for both tasks and objectives)
+
+  // Optional type - defaults to 'task' if not set (backward compatible)
+  type?: GoalType;
+
+  // Task-specific (optional)
+  parentId?: string; // Links task to parent objective
   transferCount?: number; // Number of times goal was transferred to next day
+
+  // Objective-specific (optional)
+  description?: string; // Longer description for objectives
+}
+
+// Goal progress information
+export interface GoalProgress {
+  total: number;
+  completed: number;
+  percent: number;
+  tasks: Goal[];
+  daysRemaining: number | null;
+  isOverdue: boolean;
 }
 
 // Reminder category for templates and context-aware suggestions
@@ -148,6 +170,10 @@ export interface InsightsData {
     longest: number;
     lastActive: string; // YYYY-MM-DD
   };
+  // Objective analytics
+  activeGoals: number;
+  objectivesCompletedThisMonth: number;
+  avgGoalProgress: number; // 0-100 percentage
 }
 
 // Advanced analytics types
