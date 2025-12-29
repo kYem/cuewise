@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@cuewise/shared": "workspace:*",
+    "@radix-ui/react-popover": "^1.1.15",
     "clsx": "catalog:",
     "lucide-react": "catalog:",
     "react": "catalog:",

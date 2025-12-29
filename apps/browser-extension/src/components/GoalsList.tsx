@@ -1,7 +1,8 @@
 import { getTodayDateString, isObjective, isPastGoalTransferTime } from '@cuewise/shared';
-import { cn } from '@cuewise/ui';
+import { cn, Popover, PopoverContent, PopoverTrigger } from '@cuewise/ui';
 import {
   ArrowRight,
+  Check,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
@@ -36,9 +37,9 @@ export const GoalsList: React.FC = () => {
   const { settings } = useSettingsStore();
   const [editingGoalId, setEditingGoalId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
-  const [linkingGoalId, setLinkingGoalId] = useState<string | null>(null);
+  const [linkPickerOpenFor, setLinkPickerOpenFor] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const linkPickerRef = useRef<HTMLDivElement>(null);
+  const actionsRef = useRef<HTMLDivElement>(null);
 
   const activeGoals = getActiveGoals();
 
@@ -54,24 +55,10 @@ export const GoalsList: React.FC = () => {
     }
   }, [editingGoalId]);
 
-  // Close link picker when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (linkPickerRef.current && !linkPickerRef.current.contains(event.target as Node)) {
-        setLinkingGoalId(null);
-      }
-    };
-
-    if (linkingGoalId) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [linkingGoalId]);
-
   const handleLinkToGoal = async (taskId: string, goalId: string | null) => {
     try {
       await linkTaskToGoal(taskId, goalId);
-      setLinkingGoalId(null);
+      setLinkPickerOpenFor(null);
       setEditingGoalId(null);
     } catch {
       // Store handles error logging and toast notification
@@ -104,6 +91,14 @@ export const GoalsList: React.FC = () => {
   const cancelEdit = () => {
     setEditingGoalId(null);
     setEditText('');
+  };
+
+  const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    // Don't save if clicking on an action button (transfer, link, delete)
+    if (actionsRef.current?.contains(e.relatedTarget as Node)) {
+      return;
+    }
+    saveEdit();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -219,7 +214,7 @@ export const GoalsList: React.FC = () => {
                   type="text"
                   value={editText}
                   onChange={(e) => setEditText(e.target.value)}
-                  onBlur={saveEdit}
+                  onBlur={handleBlur}
                   onKeyDown={handleKeyDown}
                   maxLength={200}
                   className="flex-1 text-base px-2 py-1 border-2 border-primary-500 rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
@@ -238,35 +233,28 @@ export const GoalsList: React.FC = () => {
               )}
 
               {/* Right side: badges and actions */}
-              <div className="flex items-center gap-1 flex-shrink-0">
-                {/* Objective link badge - hide in edit mode */}
+              <div
+                ref={editingGoalId === goal.id ? actionsRef : undefined}
+                className="flex items-center gap-1 flex-shrink-0"
+              >
+                {/* Goal link badge - hide in edit mode */}
                 {editingGoalId !== goal.id &&
                   goal.parentId &&
                   (() => {
-                    const objective = goals.find((g) => g.id === goal.parentId && isObjective(g));
-                    if (objective) {
+                    const linkedGoal = goals.find((g) => g.id === goal.parentId && isObjective(g));
+                    if (linkedGoal) {
                       return (
                         <span
                           className="flex items-center gap-1 text-xs text-primary-600 bg-primary-50 px-1.5 py-0.5 rounded-full"
-                          title={`Linked to: ${objective.text}`}
+                          title={`Linked to: ${linkedGoal.text}`}
                         >
                           <Flag className="w-3 h-3" />
-                          <span className="max-w-[80px] truncate">{objective.text}</span>
+                          <span className="max-w-[80px] truncate">{linkedGoal.text}</span>
                         </span>
                       );
                     }
                     return null;
                   })()}
-
-                {/* Transfer count badge - hide in edit mode */}
-                {editingGoalId !== goal.id && goal.transferCount && goal.transferCount > 0 && (
-                  <span
-                    className="text-xs text-tertiary px-1"
-                    title={`Transferred ${goal.transferCount} time${goal.transferCount > 1 ? 's' : ''}`}
-                  >
-                    ↻{goal.transferCount}
-                  </span>
-                )}
 
                 {/* Transfer Button - only show in edit mode */}
                 {editingGoalId === goal.id && showTransferButton && !goal.completed && (
@@ -291,64 +279,59 @@ export const GoalsList: React.FC = () => {
 
                 {/* Link to Goal Button - only show in edit mode */}
                 {editingGoalId === goal.id && activeGoals.length > 0 && (
-                  <div className="relative">
-                    <button
-                      type="button"
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => setLinkingGoalId(linkingGoalId === goal.id ? null : goal.id)}
-                      className={cn(
-                        'p-1 transition-colors focus:outline-none rounded',
-                        goal.parentId
-                          ? 'text-primary-600 hover:text-primary-700'
-                          : 'text-secondary hover:text-primary-600'
-                      )}
-                      aria-label={goal.parentId ? 'Change linked goal' : 'Link to goal'}
-                      title={goal.parentId ? 'Change linked goal' : 'Link to goal'}
-                    >
-                      <Link2 className="w-4 h-4" />
-                    </button>
-
-                    {/* Link Picker Dropdown */}
-                    {linkingGoalId === goal.id && (
-                      <div
-                        ref={linkPickerRef}
-                        className="absolute right-0 top-full mt-1 z-50 min-w-[180px] bg-surface rounded-lg shadow-lg border border-border overflow-hidden"
+                  <Popover
+                    open={linkPickerOpenFor === goal.id}
+                    onOpenChange={(open) => setLinkPickerOpenFor(open ? goal.id : null)}
+                  >
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        className={cn(
+                          'p-1 transition-colors focus:outline-none rounded',
+                          goal.parentId
+                            ? 'text-primary-600 hover:text-primary-700'
+                            : 'text-secondary hover:text-primary-600'
+                        )}
+                        aria-label={goal.parentId ? 'Change linked goal' : 'Link to goal'}
+                        title={goal.parentId ? 'Change linked goal' : 'Link to goal'}
                       >
-                        <div className="py-1">
-                          {goal.parentId && (
-                            <button
-                              type="button"
-                              onMouseDown={(e) => e.preventDefault()}
-                              onClick={() => handleLinkToGoal(goal.id, null)}
-                              className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 transition-colors"
-                            >
-                              <span>Remove link</span>
-                            </button>
-                          )}
-                          {activeGoals.map((obj) => (
-                            <button
-                              key={obj.id}
-                              type="button"
-                              onMouseDown={(e) => e.preventDefault()}
-                              onClick={() => handleLinkToGoal(goal.id, obj.id)}
-                              className={cn(
-                                'w-full flex items-center gap-2 px-3 py-2 text-left text-sm transition-colors',
-                                goal.parentId === obj.id
-                                  ? 'bg-primary-50 text-primary-600'
-                                  : 'text-primary hover:bg-surface-variant'
-                              )}
-                            >
-                              <Flag className="w-3 h-3 flex-shrink-0" />
-                              <span className="truncate">{obj.text}</span>
-                              {goal.parentId === obj.id && (
-                                <span className="ml-auto text-xs text-primary-500">✓</span>
-                              )}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                        <Link2 className="w-4 h-4" />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="min-w-[180px] py-1">
+                      {goal.parentId && (
+                        <button
+                          type="button"
+                          onClick={() => handleLinkToGoal(goal.id, null)}
+                          className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 transition-colors"
+                        >
+                          <span>Remove link</span>
+                        </button>
+                      )}
+                      {activeGoals.map((obj) => {
+                        const isLinked = goal.parentId === obj.id;
+                        return (
+                          <button
+                            key={obj.id}
+                            type="button"
+                            onClick={() => handleLinkToGoal(goal.id, obj.id)}
+                            className={cn(
+                              'w-full flex items-center gap-2 px-3 py-2 text-left text-sm transition-colors',
+                              isLinked
+                                ? 'bg-primary-50 text-primary-600'
+                                : 'text-primary hover:bg-surface-variant'
+                            )}
+                          >
+                            <Flag className="w-3 h-3 flex-shrink-0" />
+                            <span className="flex-1 truncate">{obj.text}</span>
+                            {isLinked && (
+                              <Check className="w-4 h-4 text-primary-600 flex-shrink-0" />
+                            )}
+                          </button>
+                        );
+                      })}
+                    </PopoverContent>
+                  </Popover>
                 )}
 
                 {/* Delete Button - only show in edit mode */}
@@ -423,17 +406,7 @@ export const GoalsList: React.FC = () => {
                     </button>
                     <div className="flex-1 min-w-0">
                       <span className="text-sm text-primary block">{goal.text}</span>
-                      <span className="text-xs text-tertiary">
-                        {goal.date}
-                        {goal.transferCount && goal.transferCount > 0 && (
-                          <span
-                            className="ml-2"
-                            title={`Transferred ${goal.transferCount} time${goal.transferCount > 1 ? 's' : ''}`}
-                          >
-                            · ↻{goal.transferCount}
-                          </span>
-                        )}
-                      </span>
+                      <span className="text-xs text-tertiary">{goal.date}</span>
                     </div>
                     <button
                       type="button"

@@ -305,7 +305,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
     }
 
     try {
-      const newObjective: Goal = {
+      const newGoal: Goal = {
         id: generateId(),
         text: title.trim(),
         type: 'objective',
@@ -316,7 +316,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       };
 
       const { goals } = get();
-      const updatedGoals = [...goals, newObjective];
+      const updatedGoals = [...goals, newGoal];
 
       await saveAllGoals(updatedGoals);
       set({ goals: updatedGoals });
@@ -448,13 +448,13 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
 
   getGoalProgress: (goalId: string) => {
     const { goals } = get();
-    const objective = goals.find((g) => g.id === goalId && isObjective(g));
+    const goal = goals.find((g) => g.id === goalId && isObjective(g));
 
-    if (!objective) {
+    if (!goal) {
       return null;
     }
 
-    return getGoalProgress(objective, goals);
+    return getGoalProgress(goal, goals);
   },
 
   getLinkedTasks: (goalId: string) => {

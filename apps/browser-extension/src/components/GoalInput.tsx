@@ -1,3 +1,4 @@
+import { Popover, PopoverContent, PopoverTrigger } from '@cuewise/ui';
 import { Check, Flag, Link2, Plus } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
@@ -15,10 +16,9 @@ export const GoalInput: React.FC<GoalInputProps> = ({
   autoFocus = false,
 }) => {
   const [text, setText] = useState('');
-  const [selectedGoalId, setSelectedObjectiveId] = useState<string | null>(defaultGoalId ?? null);
-  const [showObjectivePicker, setShowObjectivePicker] = useState(false);
+  const [selectedGoalId, setSelectedGoalId] = useState<string | null>(defaultGoalId ?? null);
+  const [isPickerOpen, setIsPickerOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const pickerRef = useRef<HTMLDivElement>(null);
   const addTask = useGoalStore((state) => state.addTask);
   const getActiveGoals = useGoalStore((state) => state.getActiveGoals);
   const getGoalProgress = useGoalStore((state) => state.getGoalProgress);
@@ -33,20 +33,6 @@ export const GoalInput: React.FC<GoalInputProps> = ({
     }
   }, [autoFocus]);
 
-  // Close picker when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (pickerRef.current && !pickerRef.current.contains(event.target as Node)) {
-        setShowObjectivePicker(false);
-      }
-    };
-
-    if (showObjectivePicker) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [showObjectivePicker]);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (text.trim()) {
@@ -54,7 +40,7 @@ export const GoalInput: React.FC<GoalInputProps> = ({
         await addTask(text, selectedGoalId ?? undefined);
         setText('');
         if (!defaultGoalId) {
-          setSelectedObjectiveId(null);
+          setSelectedGoalId(null);
         }
         if (onTaskAdded) {
           onTaskAdded();
@@ -74,7 +60,7 @@ export const GoalInput: React.FC<GoalInputProps> = ({
           await addTask(text, selectedGoalId ?? undefined);
           setText('');
           if (!defaultGoalId) {
-            setSelectedObjectiveId(null);
+            setSelectedGoalId(null);
           }
           if (onTaskAdded) {
             onTaskAdded();
@@ -87,9 +73,9 @@ export const GoalInput: React.FC<GoalInputProps> = ({
     }
   };
 
-  const handleGoalSelect = (objectiveId: string | null) => {
-    setSelectedObjectiveId(objectiveId);
-    setShowObjectivePicker(false);
+  const handleGoalSelect = (goalId: string | null) => {
+    setSelectedGoalId(goalId);
+    setIsPickerOpen(false);
   };
 
   return (
@@ -106,65 +92,64 @@ export const GoalInput: React.FC<GoalInputProps> = ({
           maxLength={200}
         />
 
-        {/* Link to Objective button - only show if there are objectives */}
+        {/* Link to Goal button */}
         {hasGoals && (
-          <div className="relative" ref={pickerRef}>
-            <button
-              type="button"
-              onClick={() => setShowObjectivePicker(!showObjectivePicker)}
-              className={`p-3 rounded-lg border-2 transition-all ${
-                selectedGoalId
-                  ? 'bg-primary-50 border-primary-500 text-primary-600'
-                  : 'border-border text-secondary hover:border-primary-300 hover:text-primary-500'
-              }`}
-              title={selectedGoalId ? `Linked to: ${selectedGoal?.text ?? 'Goal'}` : 'Link to goal'}
-            >
-              <Link2 className="w-5 h-5" />
-            </button>
+          <Popover open={isPickerOpen} onOpenChange={setIsPickerOpen}>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className={`p-3 rounded-lg border-2 transition-all ${
+                  selectedGoalId
+                    ? 'bg-primary-50 border-primary-500 text-primary-600'
+                    : 'border-border text-secondary hover:border-primary-300 hover:text-primary-500'
+                }`}
+                title={
+                  selectedGoalId ? `Linked to: ${selectedGoal?.text ?? 'Goal'}` : 'Link to goal'
+                }
+              >
+                <Link2 className="w-5 h-5" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="min-w-[220px] py-1">
+              {/* No goal option */}
+              <button
+                type="button"
+                onClick={() => handleGoalSelect(null)}
+                className={`w-full flex items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-surface-variant ${
+                  !selectedGoalId ? 'bg-primary-50 text-primary-700 font-medium' : 'text-primary'
+                }`}
+              >
+                <span className="flex-1">No goal</span>
+                {!selectedGoalId && <Check className="w-4 h-4 text-primary-600" />}
+              </button>
 
-            {/* Dropdown menu */}
-            {showObjectivePicker && (
-              <div className="absolute right-0 top-full mt-1 z-50 min-w-[220px] py-1 bg-surface border-2 border-border rounded-lg shadow-xl">
-                {/* No goal option */}
-                <button
-                  type="button"
-                  onClick={() => handleGoalSelect(null)}
-                  className={`w-full flex items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-surface-variant ${
-                    !selectedGoalId ? 'bg-primary-50 text-primary-700 font-medium' : 'text-primary'
-                  }`}
-                >
-                  <span className="flex-1">No goal</span>
-                  {!selectedGoalId && <Check className="w-4 h-4 text-primary-600" />}
-                </button>
+              {/* Divider */}
+              <div className="border-t border-border my-1" />
 
-                {/* Divider */}
-                <div className="border-t border-border my-1" />
+              {/* Goal options */}
+              {activeGoals.map((goal) => {
+                const progress = getGoalProgress(goal.id);
+                const percent = progress?.percent ?? 0;
+                const isSelected = selectedGoalId === goal.id;
 
-                {/* Objective options */}
-                {activeGoals.map((obj) => {
-                  const progress = getGoalProgress(obj.id);
-                  const percent = progress?.percent ?? 0;
-                  const isSelected = selectedGoalId === obj.id;
-
-                  return (
-                    <button
-                      key={obj.id}
-                      type="button"
-                      onClick={() => handleGoalSelect(obj.id)}
-                      className={`w-full flex items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-surface-variant ${
-                        isSelected ? 'bg-primary-50 text-primary-700 font-medium' : 'text-primary'
-                      }`}
-                    >
-                      <Flag className="w-4 h-4 text-primary-600 flex-shrink-0" />
-                      <span className="flex-1 truncate">{obj.text}</span>
-                      <span className="text-xs text-secondary flex-shrink-0">{percent}%</span>
-                      {isSelected && <Check className="w-4 h-4 text-primary-600 flex-shrink-0" />}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+                return (
+                  <button
+                    key={goal.id}
+                    type="button"
+                    onClick={() => handleGoalSelect(goal.id)}
+                    className={`w-full flex items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-surface-variant ${
+                      isSelected ? 'bg-primary-50 text-primary-700 font-medium' : 'text-primary'
+                    }`}
+                  >
+                    <Flag className="w-4 h-4 text-primary-600 flex-shrink-0" />
+                    <span className="flex-1 truncate">{goal.text}</span>
+                    <span className="text-xs text-secondary flex-shrink-0">{percent}%</span>
+                    {isSelected && <Check className="w-4 h-4 text-primary-600 flex-shrink-0" />}
+                  </button>
+                );
+              })}
+            </PopoverContent>
+          </Popover>
         )}
 
         <button
@@ -184,7 +169,7 @@ export const GoalInput: React.FC<GoalInputProps> = ({
           <span>Will link to: {selectedGoal.text}</span>
           <button
             type="button"
-            onClick={() => setSelectedObjectiveId(null)}
+            onClick={() => setSelectedGoalId(null)}
             className="ml-1 text-secondary hover:text-primary underline"
           >
             Remove
