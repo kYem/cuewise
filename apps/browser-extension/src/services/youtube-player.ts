@@ -158,20 +158,14 @@ class YouTubePlayerService {
       this.iframe.remove();
     }
 
-    // Build the embed URL using YouTube's recommended format:
-    // https://www.youtube.com/embed/VIDEO_ID?list=PLAYLIST_ID
-    // Note: autoplay=0 because autoplay is blocked in extension context
-    // User needs to click play button in the Now Playing panel
+    // Use proxy page to avoid Chrome extension referrer header issues (Error 153)
+    // The proxy page embeds YouTube with proper referrer headers
     const params = new URLSearchParams({
+      vid: firstVideoId,
       list: playlistId,
-      autoplay: '0', // Autoplay blocked in extension iframes
-      controls: '1',
-      rel: '0',
-      enablejsapi: '1', // Enable JavaScript API for postMessage communication
     });
 
-    // Use regular youtube.com - nocookie domain has stricter policies in extensions
-    const embedUrl = `https://www.youtube.com/embed/${firstVideoId}?${params.toString()}`;
+    const embedUrl = `https://cuewise.app/player?${params.toString()}`;
 
     // Create iframe
     this.iframe = document.createElement('iframe');
