@@ -159,10 +159,13 @@ export const useMusicStore = create<MusicStore>((set, get) => ({
       return;
     }
 
-    // Load playlist if not already loaded
+    // Load playlist if not already loaded, then play
     const currentPlaylistId = youtubePlayer.getCurrentPlaylistId();
     if (currentPlaylistId !== playlist.playlistId) {
-      youtubePlayer.loadPlaylist(playlist.playlistId, playlist.firstVideoId, true);
+      // Load new playlist and play when ready
+      youtubePlayer.loadPlaylist(playlist.playlistId, playlist.firstVideoId, () => {
+        youtubePlayer.play();
+      });
     } else {
       youtubePlayer.play();
     }
@@ -208,7 +211,9 @@ export const useMusicStore = create<MusicStore>((set, get) => ({
 
     // If currently playing, load and play the new playlist
     if (isPlaying && playlist.firstVideoId) {
-      youtubePlayer.loadPlaylist(playlist.playlistId, playlist.firstVideoId, true);
+      youtubePlayer.loadPlaylist(playlist.playlistId, playlist.firstVideoId, () => {
+        youtubePlayer.play();
+      });
     }
 
     logger.debug('Playlist selected', { playlistId, name: playlist.name });

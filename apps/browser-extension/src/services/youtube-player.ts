@@ -146,12 +146,12 @@ class YouTubePlayerService {
   }
 
   /**
-   * Load and play a YouTube playlist
+   * Load a YouTube playlist (does not auto-play, use play() to start)
    * @param playlistId - YouTube playlist ID
    * @param firstVideoId - First video ID in the playlist (required for proper embedding)
-   * @param autoplay - Whether to autoplay the video (default: false, explicitly play with play())
+   * @param onReady - Optional callback when playlist is loaded and ready
    */
-  loadPlaylist(playlistId: string, firstVideoId: string, autoplay = false): void {
+  loadPlaylist(playlistId: string, firstVideoId: string, onReady?: () => void): void {
     if (!this.container) {
       this.initialize();
     }
@@ -163,10 +163,11 @@ class YouTubePlayerService {
 
     // Use proxy page to avoid Chrome extension referrer header issues (Error 153)
     // The proxy page embeds YouTube with proper referrer headers
+    // Always load with autoplay=0, control playback via play()/pause() methods
     const params = new URLSearchParams({
       vid: firstVideoId,
       list: playlistId,
-      autoplay: autoplay ? '1' : '0',
+      autoplay: '0',
     });
 
     const embedUrl = `https://cuewise.app/player?${params.toString()}`;
@@ -190,6 +191,10 @@ class YouTubePlayerService {
       // Apply saved volume after load
       setTimeout(() => {
         this.setVolume(this.state.volume);
+        // Call onReady callback after volume is set
+        if (onReady) {
+          onReady();
+        }
       }, 1000);
 
       logger.info('YouTube iframe loaded successfully', { playlistId });
