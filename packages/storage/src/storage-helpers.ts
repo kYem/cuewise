@@ -12,7 +12,12 @@ import {
   type Settings,
   STORAGE_KEYS,
 } from '@cuewise/shared';
-import { getFromStorage, removeFromStorage, setInStorage } from './chrome-storage';
+import {
+  getFromStorage,
+  removeFromStorage,
+  type StorageResult,
+  setInStorage,
+} from './chrome-storage';
 
 /**
  * Get the storage area based on user settings
@@ -104,23 +109,26 @@ export async function getQuotes(): Promise<Quote[]> {
   }
 }
 
-export async function setQuotes(quotes: Quote[]): Promise<boolean> {
+export async function setQuotes(quotes: Quote[]): Promise<StorageResult> {
   try {
     // Split into seed and custom quotes
     const seedQuotes = quotes.filter((q) => !isCustomQuote(q));
     const customQuotes = quotes.filter((q) => isCustomQuote(q));
 
     // Store seed quotes in local storage
-    const seedSuccess = await setInStorage(STORAGE_KEYS.SEED_QUOTES, seedQuotes, 'local');
+    const seedResult = await setInStorage(STORAGE_KEYS.SEED_QUOTES, seedQuotes, 'local');
+    if (!seedResult.success) {
+      return seedResult;
+    }
 
     // Store custom quotes in appropriate storage area
     const area = await getStorageArea();
-    const customSuccess = await setInStorage(STORAGE_KEYS.CUSTOM_QUOTES, customQuotes, area);
+    const customResult = await setInStorage(STORAGE_KEYS.CUSTOM_QUOTES, customQuotes, area);
 
-    return seedSuccess && customSuccess;
+    return customResult;
   } catch (error) {
     logger.error('Error setting quotes', error);
-    return false;
+    return { success: false };
   }
 }
 
@@ -129,7 +137,7 @@ export async function getCurrentQuote(): Promise<Quote | null> {
   return getFromStorage<Quote>(STORAGE_KEYS.CURRENT_QUOTE, area);
 }
 
-export async function setCurrentQuote(quote: Quote): Promise<boolean> {
+export async function setCurrentQuote(quote: Quote): Promise<StorageResult> {
   const area = await getStorageArea();
   return setInStorage(STORAGE_KEYS.CURRENT_QUOTE, quote, area);
 }
@@ -141,7 +149,7 @@ export async function getGoals(): Promise<Goal[]> {
   return goals ?? [];
 }
 
-export async function setGoals(goals: Goal[]): Promise<boolean> {
+export async function setGoals(goals: Goal[]): Promise<StorageResult> {
   const area = await getStorageArea();
   return setInStorage(STORAGE_KEYS.GOALS, goals, area);
 }
@@ -153,7 +161,7 @@ export async function getReminders(): Promise<Reminder[]> {
   return reminders ?? [];
 }
 
-export async function setReminders(reminders: Reminder[]): Promise<boolean> {
+export async function setReminders(reminders: Reminder[]): Promise<StorageResult> {
   const area = await getStorageArea();
   return setInStorage(STORAGE_KEYS.REMINDERS, reminders, area);
 }
@@ -165,7 +173,7 @@ export async function getPomodoroSessions(): Promise<PomodoroSession[]> {
   return sessions ?? [];
 }
 
-export async function setPomodoroSessions(sessions: PomodoroSession[]): Promise<boolean> {
+export async function setPomodoroSessions(sessions: PomodoroSession[]): Promise<StorageResult> {
   const area = await getStorageArea();
   return setInStorage(STORAGE_KEYS.POMODORO_SESSIONS, sessions, area);
 }
@@ -177,7 +185,7 @@ export async function getSettings(): Promise<Settings> {
   return settings ?? DEFAULT_SETTINGS;
 }
 
-export async function setSettings(settings: Settings): Promise<boolean> {
+export async function setSettings(settings: Settings): Promise<StorageResult> {
   return setInStorage(STORAGE_KEYS.SETTINGS, settings, 'local');
 }
 
@@ -282,7 +290,7 @@ export function formatBytes(bytes: number): string {
 export async function migrateStorageData(
   fromArea: 'local' | 'sync',
   toArea: 'local' | 'sync'
-): Promise<boolean> {
+): Promise<StorageResult> {
   try {
     // Get user data from source storage area
     const customQuotes =
@@ -295,21 +303,29 @@ export async function migrateStorageData(
 
     // Copy data to destination storage area
     // Note: Seed quotes are not migrated (always in local storage)
-    await setInStorage(STORAGE_KEYS.CUSTOM_QUOTES, customQuotes, toArea);
+    const results: StorageResult[] = [];
+
+    results.push(await setInStorage(STORAGE_KEYS.CUSTOM_QUOTES, customQuotes, toArea));
     if (currentQuote) {
-      await setInStorage(STORAGE_KEYS.CURRENT_QUOTE, currentQuote, toArea);
+      results.push(await setInStorage(STORAGE_KEYS.CURRENT_QUOTE, currentQuote, toArea));
     }
-    await setInStorage(STORAGE_KEYS.GOALS, goals, toArea);
-    await setInStorage(STORAGE_KEYS.REMINDERS, reminders, toArea);
-    await setInStorage(STORAGE_KEYS.POMODORO_SESSIONS, sessions, toArea);
+    results.push(await setInStorage(STORAGE_KEYS.GOALS, goals, toArea));
+    results.push(await setInStorage(STORAGE_KEYS.REMINDERS, reminders, toArea));
+    results.push(await setInStorage(STORAGE_KEYS.POMODORO_SESSIONS, sessions, toArea));
+
+    // Check if any operation failed
+    const failedResult = results.find((r) => !r.success);
+    if (failedResult) {
+      return failedResult;
+    }
 
     logger.info(`Successfully migrated data from ${fromArea} to ${toArea}`);
     logger.info(
       `Migrated ${customQuotes.length} custom quotes (seed quotes remain in local storage)`
     );
-    return true;
+    return { success: true };
   } catch (error) {
     logger.error(`Error migrating data from ${fromArea} to ${toArea}`, error);
-    return false;
+    return { success: false };
   }
 }

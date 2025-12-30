@@ -214,7 +214,7 @@ describe('Insights Store - Import Methods', () => {
 
     it('should report partial progress when failure occurs mid-import', async () => {
       vi.mocked(storage.getGoals).mockResolvedValue([]);
-      vi.mocked(storage.setGoals).mockResolvedValue(true);
+      vi.mocked(storage.setGoals).mockResolvedValue({ success: true });
       mockStorageError('quotes', new Error('Quotes storage error'));
 
       useInsightsStore.setState({

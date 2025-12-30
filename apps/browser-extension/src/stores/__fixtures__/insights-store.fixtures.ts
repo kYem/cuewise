@@ -66,11 +66,11 @@ export function mockStorageWithData(
   } = {}
 ) {
   vi.mocked(storage.getGoals).mockResolvedValue(options.goals ?? []);
-  vi.mocked(storage.setGoals).mockResolvedValue(true);
+  vi.mocked(storage.setGoals).mockResolvedValue({ success: true });
   vi.mocked(storage.getQuotes).mockResolvedValue(options.quotes ?? []);
-  vi.mocked(storage.setQuotes).mockResolvedValue(true);
+  vi.mocked(storage.setQuotes).mockResolvedValue({ success: true });
   vi.mocked(storage.getPomodoroSessions).mockResolvedValue(options.sessions ?? []);
-  vi.mocked(storage.setPomodoroSessions).mockResolvedValue(true);
+  vi.mocked(storage.setPomodoroSessions).mockResolvedValue({ success: true });
 }
 
 export function mockStorageError(operation: 'goals' | 'quotes' | 'sessions', error: Error) {

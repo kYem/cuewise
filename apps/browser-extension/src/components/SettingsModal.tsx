@@ -480,8 +480,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                   you're signed in
                 </p>
                 <p className="text-xs text-orange-600 mt-1">
-                  Note: Built-in quotes stay in local storage. Only your custom data is synced
-                  (100KB limit).
+                  Note: Built-in quotes stay in local storage. Sync has a 100KB total limit and 8KB
+                  per-item limit. Pomodoro sessions may exceed limits over time.
                 </p>
               </div>
             </label>

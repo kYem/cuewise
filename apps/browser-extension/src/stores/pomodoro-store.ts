@@ -356,7 +356,24 @@ export const usePomodoroStore = create<PomodoroStore>()(
 
           // Save session
           const updatedSessions = [...sessions, completedSession];
-          await setPomodoroSessions(updatedSessions);
+          const saveResult = await setPomodoroSessions(updatedSessions);
+
+          // Show toast if storage failed (quota exceeded, etc.)
+          if (!saveResult.success && saveResult.error) {
+            if (
+              saveResult.error.type === 'per_item_quota_exceeded' ||
+              saveResult.error.type === 'quota_exceeded'
+            ) {
+              useToastStore
+                .getState()
+                .warning(
+                  'Session completed but could not save to sync storage. ' +
+                    'Consider disabling Chrome Sync in settings or clearing old sessions.'
+                );
+            } else {
+              useToastStore.getState().error('Failed to save session. Please try again.');
+            }
+          }
 
           set({ sessions: updatedSessions });
 

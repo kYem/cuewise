@@ -200,10 +200,21 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
         const toArea = partialSettings.syncEnabled ? 'sync' : 'local';
 
         useToastStore.getState().success(`Migrating data to ${toArea} storage...`);
-        const migrated = await migrateStorageData(fromArea, toArea);
+        const migrateResult = await migrateStorageData(fromArea, toArea);
 
-        if (!migrated) {
-          const errorMessage = 'Failed to migrate data. Please try again.';
+        if (!migrateResult.success) {
+          let errorMessage = 'Failed to migrate data. Please try again.';
+
+          // Provide specific error message for quota errors
+          if (migrateResult.error) {
+            if (migrateResult.error.type === 'per_item_quota_exceeded') {
+              errorMessage = `Cannot enable sync: "${migrateResult.error.key}" exceeds the 8KB per-item limit. Try clearing old data first.`;
+            } else if (migrateResult.error.type === 'quota_exceeded') {
+              errorMessage =
+                'Cannot enable sync: Your data exceeds the 100KB sync storage limit. Try clearing old data first.';
+            }
+          }
+
           set({ error: errorMessage });
           useToastStore.getState().error(errorMessage);
           return;

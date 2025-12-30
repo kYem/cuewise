@@ -8,6 +8,26 @@ import { logger } from '@cuewise/shared';
 type StorageArea = 'local' | 'sync';
 
 /**
+ * Storage operation result with detailed error information
+ */
+export interface StorageResult {
+  success: boolean;
+  error?: StorageError;
+}
+
+/**
+ * Storage error types for more specific error handling
+ */
+export type StorageErrorType = 'quota_exceeded' | 'per_item_quota_exceeded' | 'unknown';
+
+export interface StorageError {
+  type: StorageErrorType;
+  message: string;
+  key: string;
+  area: StorageArea;
+}
+
+/**
  * Get data from Chrome storage
  * Falls back to localStorage in development when chrome.storage is unavailable
  */
@@ -35,47 +55,56 @@ export async function getFromStorage<T>(
 /**
  * Set data in Chrome storage
  * Falls back to localStorage in development when chrome.storage is unavailable
+ *
+ * @returns StorageResult with success status and detailed error information
  */
 export async function setInStorage<T>(
   key: string,
   value: T,
   area: StorageArea = 'local'
-): Promise<boolean> {
+): Promise<StorageResult> {
   try {
     // Check if chrome.storage is available
     if (typeof chrome !== 'undefined' && chrome.storage) {
       const storage = area === 'local' ? chrome.storage.local : chrome.storage.sync;
       await storage.set({ [key]: value });
-      return true;
+      return { success: true };
     }
 
     // Fallback to localStorage for development
     localStorage.setItem(key, JSON.stringify(value));
-    return true;
+    return { success: true };
   } catch (error) {
     // Provide more specific error messages for quota errors
     const errorMessage = error instanceof Error ? error.message : String(error);
+    const isQuotaError = errorMessage.includes('quota') || errorMessage.includes('QUOTA_BYTES');
+    const isPerItemQuota = errorMessage.includes('kQuotaBytesPerItem');
 
-    if (errorMessage.includes('quota') || errorMessage.includes('QUOTA_BYTES')) {
+    let storageError: StorageError;
+
+    if (isQuotaError) {
       if (area === 'sync') {
-        logger.error(
-          `Chrome sync storage quota exceeded for key "${key}". ` +
-            `Sync storage has a 100KB total limit and 8KB per-item limit. ` +
-            `Consider disabling sync or reducing data size.`,
-          error
-        );
+        const errorType: StorageErrorType = isPerItemQuota
+          ? 'per_item_quota_exceeded'
+          : 'quota_exceeded';
+        const message = isPerItemQuota
+          ? `Data for "${key}" exceeds the 8KB per-item limit for Chrome sync storage. Consider disabling sync or clearing old data.`
+          : `Chrome sync storage quota exceeded (100KB total limit). Consider disabling sync or clearing old data.`;
+
+        logger.error(message, error);
+        storageError = { type: errorType, message, key, area };
       } else {
-        logger.error(
-          `Chrome local storage quota exceeded for key "${key}". ` +
-            `Local storage has a 10MB limit. Consider clearing old data.`,
-          error
-        );
+        const message = `Chrome local storage quota exceeded for key "${key}" (10MB limit). Consider clearing old data.`;
+        logger.error(message, error);
+        storageError = { type: 'quota_exceeded', message, key, area };
       }
     } else {
-      logger.error(`Error setting ${key} in ${area} storage`, error);
+      const message = `Error saving ${key} to storage`;
+      logger.error(message, error);
+      storageError = { type: 'unknown', message, key, area };
     }
 
-    return false;
+    return { success: false, error: storageError };
   }
 }
 

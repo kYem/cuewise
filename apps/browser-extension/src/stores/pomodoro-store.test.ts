@@ -108,7 +108,7 @@ describe('Pomodoro Store - Auto-Start Breaks', () => {
 
     // Default mock implementations
     vi.mocked(storage.getPomodoroSessions).mockResolvedValue([]);
-    vi.mocked(storage.setPomodoroSessions).mockResolvedValue(true);
+    vi.mocked(storage.setPomodoroSessions).mockResolvedValue({ success: true });
     vi.mocked(storage.getSettings).mockResolvedValue(defaultSettings);
   });
 
