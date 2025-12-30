@@ -383,6 +383,24 @@
     background-color: rgba(0, 0, 0, 0.45) !important;
   }
 
+  /* Glass theme - make colored backgrounds semi-transparent */
+  [data-theme="glass"] .bg-primary-100,
+  .dark[data-theme="glass"] .bg-primary-100,
+  [data-theme="glass"] .bg-green-100,
+  .dark[data-theme="glass"] .bg-green-100,
+  [data-theme="glass"] .bg-blue-100,
+  .dark[data-theme="glass"] .bg-blue-100 {
+    background-color: rgba(255, 255, 255, 0.15) !important;
+  }
+
+  /* Glass theme - icon colors to white */
+  [data-theme="glass"] .text-primary-600,
+  .dark[data-theme="glass"] .text-primary-600,
+  [data-theme="glass"] .text-blue-600,
+  .dark[data-theme="glass"] .text-blue-600 {
+    color: rgba(255, 255, 255, 0.9) !important;
+  }
+
   /* Layout Density Scales - controls both spacing AND font size */
   [data-density="compact"] {
     --font-scale: 0.875; /* 14px base */
