@@ -107,14 +107,20 @@ function App() {
 
       {/* Global Background Image - shown with glass theme on all pages */}
       {showBackgroundImage && (
-        <div
-          className={`fixed inset-0 bg-cover bg-center bg-no-repeat transition-opacity duration-1000 ${
-            imageLoaded && backgroundImage ? 'opacity-100' : 'opacity-0'
-          }`}
-          style={{
-            backgroundImage: backgroundImage ? `url(${backgroundImage})` : undefined,
-          }}
-        />
+        <>
+          <div
+            className={`fixed inset-0 bg-cover bg-center bg-no-repeat transition-opacity duration-1000 ${
+              imageLoaded && backgroundImage ? 'opacity-100' : 'opacity-0'
+            }`}
+            style={{
+              backgroundImage: backgroundImage ? `url(${backgroundImage})` : undefined,
+            }}
+          />
+          {/* Dark overlay for better readability on content-heavy pages (not home/pomodoro) */}
+          {(currentPage === 'goals' || currentPage === 'quotes' || currentPage === 'insights') && (
+            <div className="fixed inset-0 bg-black/25" />
+          )}
+        </>
       )}
 
       <div className="flex h-full w-full relative">

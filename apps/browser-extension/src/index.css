@@ -372,6 +372,17 @@
     --gradient-background: transparent;
   }
 
+  /* Glass theme button overrides - dark background for primary buttons */
+  [data-theme="glass"] .bg-primary-600,
+  .dark[data-theme="glass"] .bg-primary-600 {
+    background-color: rgba(0, 0, 0, 0.35) !important;
+  }
+
+  [data-theme="glass"] .bg-primary-600:hover,
+  .dark[data-theme="glass"] .bg-primary-600:hover {
+    background-color: rgba(0, 0, 0, 0.45) !important;
+  }
+
   /* Layout Density Scales - controls both spacing AND font size */
   [data-density="compact"] {
     --font-scale: 0.875; /* 14px base */
