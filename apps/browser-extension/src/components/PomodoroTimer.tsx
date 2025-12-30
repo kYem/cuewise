@@ -43,6 +43,7 @@ export const PomodoroTimer: React.FC = () => {
     pause: pauseMusic,
     stop: stopMusic,
     initialize: initMusic,
+    isLoading: isMusicLoading,
   } = useMusicStore();
 
   const [showGoalPicker, setShowGoalPicker] = useState(false);
@@ -93,11 +94,16 @@ export const PomodoroTimer: React.FC = () => {
       return;
     }
 
+    // Wait for music store to be initialized before auto-starting
+    if (isMusicLoading) {
+      return;
+    }
+
     // Determine if we should play music based on session type
     const shouldPlayForSession = sessionType === 'work' || pomodoroMusicPlayDuringBreaks;
 
     if (status === 'running' && shouldPlayForSession) {
-      // Play music when timer is running
+      // Play music when timer is running (including on page load with running timer)
       playMusic();
     } else if (status === 'paused') {
       // Pause music when timer is paused
@@ -117,6 +123,7 @@ export const PomodoroTimer: React.FC = () => {
     settings.pomodoroMusicEnabled,
     settings.pomodoroMusicAutoStart,
     settings.pomodoroMusicPlayDuringBreaks,
+    isMusicLoading,
     playMusic,
     pauseMusic,
     stopMusic,

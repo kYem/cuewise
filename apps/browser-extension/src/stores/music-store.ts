@@ -129,15 +129,20 @@ export const useMusicStore = create<MusicStore>((set, get) => ({
   },
 
   play: () => {
-    const { selectedPlaylistId, playlists } = get();
+    let { selectedPlaylistId } = get();
+    const { playlists } = get();
 
+    // If no playlist selected, select the first one
     if (!selectedPlaylistId) {
-      // If no playlist selected, select the first one and load it
       const firstPlaylist = playlists[0];
       if (firstPlaylist) {
-        get().selectPlaylist(firstPlaylist.id);
+        set({ selectedPlaylistId: firstPlaylist.id });
+        selectedPlaylistId = firstPlaylist.id;
+        logger.debug('Auto-selected first playlist for playback', { playlistId: firstPlaylist.id });
+      } else {
+        logger.warn('No playlists available to play');
+        return;
       }
-      return;
     }
 
     // Find the playlist
