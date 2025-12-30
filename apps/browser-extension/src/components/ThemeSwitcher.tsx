@@ -38,6 +38,13 @@ export const ThemeSwitcher: React.FC<ThemeSwitcherProps> = ({ isVisible }) => {
         ? 'linear-gradient(to bottom right, oklch(0.23 0.055 10), oklch(0.26 0.055 10), oklch(0.29 0.055 10))'
         : 'linear-gradient(to bottom right, #fff1f2, #ffe4e6, #fecdd3)',
     },
+    {
+      value: 'glass',
+      label: 'Glass',
+      // Semi-transparent gradient to represent glass/image background theme
+      gradient:
+        'linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.3) 50%, rgba(255,255,255,0.1) 100%), linear-gradient(to bottom right, #374151, #1f2937, #111827)',
+    },
   ];
 
   const densities: { value: LayoutDensity; label: string; icon: typeof Minimize }[] = [

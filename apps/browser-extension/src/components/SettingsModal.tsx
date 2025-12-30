@@ -56,6 +56,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   );
   const [focusModeShowQuote, setFocusModeShowQuote] = useState(settings.focusModeShowQuote);
   const [focusModeAutoEnter, setFocusModeAutoEnter] = useState(settings.focusModeAutoEnter);
+  const [showClock, setShowClock] = useState(settings.showClock);
   const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
 
   // Sync local state with store when settings change
@@ -77,6 +78,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     setFocusModeImageCategory(settings.focusModeImageCategory);
     setFocusModeShowQuote(settings.focusModeShowQuote);
     setFocusModeAutoEnter(settings.focusModeAutoEnter);
+    setShowClock(settings.showClock);
   }, [settings]);
 
   // Format interval for display
@@ -158,6 +160,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
       focusModeImageCategory,
       focusModeShowQuote,
       focusModeAutoEnter,
+      showClock,
     });
 
     // If sync setting changed, reload the page to apply storage changes
@@ -485,41 +488,65 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
           </div>
         </section>
 
-        {/* Time Format Settings */}
+        {/* Clock & Time Settings */}
         <section>
           <div className="flex items-center gap-2 mb-4">
             <Clock className="w-5 h-5 text-primary-600" />
-            <h3 className="text-lg font-semibold text-primary">Time Format</h3>
+            <h3 className="text-lg font-semibold text-primary">Clock & Time</h3>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 pl-7">
-            <button
-              type="button"
-              onClick={() => setTimeFormat('12h')}
-              className={`p-4 rounded-lg border-2 transition-all ${
-                timeFormat === '12h'
-                  ? 'border-primary-600 bg-primary-50'
-                  : 'border-border hover:border-primary-300 bg-surface'
-              }`}
-            >
-              <div className="text-2xl font-bold text-primary mb-1">2:30</div>
-              <div className="text-xs text-primary-600 font-medium mb-2">PM</div>
-              <span className="block text-sm font-medium text-primary">12-hour</span>
-            </button>
+          <div className="space-y-4 pl-7">
+            {/* Show Clock Toggle */}
+            <label className="flex items-center gap-3 cursor-pointer group">
+              <div className="relative">
+                <input
+                  type="checkbox"
+                  checked={showClock}
+                  onChange={(e) => setShowClock(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-divider peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-surface after:border-border after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
+              </div>
+              <div>
+                <span className="text-sm font-medium text-primary">Show clock on home page</span>
+                <p className="text-xs text-secondary">
+                  Display time, date, and greeting on the main page
+                </p>
+              </div>
+            </label>
 
-            <button
-              type="button"
-              onClick={() => setTimeFormat('24h')}
-              className={`p-4 rounded-lg border-2 transition-all ${
-                timeFormat === '24h'
-                  ? 'border-primary-600 bg-primary-50'
-                  : 'border-border hover:border-primary-300 bg-surface'
-              }`}
-            >
-              <div className="text-2xl font-bold text-primary mb-1">14:30</div>
-              <div className="text-xs text-transparent font-medium mb-2">.</div>
-              <span className="block text-sm font-medium text-primary">24-hour</span>
-            </button>
+            {/* Time Format - only show when clock is enabled */}
+            {showClock && (
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setTimeFormat('12h')}
+                  className={`p-4 rounded-lg border-2 transition-all ${
+                    timeFormat === '12h'
+                      ? 'border-primary-600 bg-primary-50'
+                      : 'border-border hover:border-primary-300 bg-surface'
+                  }`}
+                >
+                  <div className="text-2xl font-bold text-primary mb-1">2:30</div>
+                  <div className="text-xs text-primary-600 font-medium mb-2">PM</div>
+                  <span className="block text-sm font-medium text-primary">12-hour</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setTimeFormat('24h')}
+                  className={`p-4 rounded-lg border-2 transition-all ${
+                    timeFormat === '24h'
+                      ? 'border-primary-600 bg-primary-50'
+                      : 'border-border hover:border-primary-300 bg-surface'
+                  }`}
+                >
+                  <div className="text-2xl font-bold text-primary mb-1">14:30</div>
+                  <div className="text-xs text-transparent font-medium mb-2">.</div>
+                  <span className="block text-sm font-medium text-primary">24-hour</span>
+                </button>
+              </div>
+            )}
           </div>
         </section>
 

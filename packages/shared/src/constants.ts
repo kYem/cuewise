@@ -25,6 +25,7 @@ export const DEFAULT_SETTINGS: Settings = {
   colorTheme: 'forest',
   layoutDensity: 'comfortable',
   showThemeSwitcher: false,
+  showClock: false, // Clock hidden by default for simpler UI
   enableGoalTransfer: true,
   goalTransferTime: 20, // 8 PM (20:00)
   logLevel: 'error', // Only show errors by default
@@ -104,6 +105,12 @@ export const COLOR_THEMES: Record<
     primary: '#f43f5e',
     background: 'linear-gradient(to bottom right, #fff1f2, #ffe4e6, #fecdd3)',
     accent: '#e11d48',
+  },
+  glass: {
+    name: 'Glass',
+    primary: 'rgba(255, 255, 255, 0.8)',
+    background: 'transparent',
+    accent: 'rgba(255, 255, 255, 0.9)',
   },
 };
 

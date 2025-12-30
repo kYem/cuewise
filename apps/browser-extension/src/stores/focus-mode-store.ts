@@ -1,5 +1,6 @@
 import { logger } from '@cuewise/shared';
 import { create } from 'zustand';
+import { getPreloadedCurrentUrl } from '../utils/image-preload-cache';
 import { loadImageWithFallback } from '../utils/unsplash';
 import { useSettingsStore } from './settings-store';
 
@@ -39,7 +40,20 @@ export const useFocusModeStore = create<FocusModeStore>((set, get) => ({
     const category = settings.focusModeImageCategory;
 
     try {
-      // If we have a preloaded image, use it
+      // First, check if we have a preloaded image from the shared cache
+      // (same image shown on Pomodoro page background)
+      const cachedUrl = getPreloadedCurrentUrl(category);
+      if (cachedUrl) {
+        set({
+          currentImageUrl: cachedUrl,
+          isImageLoading: false,
+        });
+        // Start preloading the next one
+        get().preloadNextImage();
+        return;
+      }
+
+      // If we have a preloaded image in this store, use it
       if (nextImageUrl) {
         set({
           currentImageUrl: nextImageUrl,

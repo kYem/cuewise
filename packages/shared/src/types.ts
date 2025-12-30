@@ -102,7 +102,7 @@ export interface PomodoroSession {
 }
 
 // Customization types
-export type ColorTheme = 'purple' | 'forest' | 'rose';
+export type ColorTheme = 'purple' | 'forest' | 'rose' | 'glass';
 export type LayoutDensity = 'compact' | 'comfortable' | 'spacious';
 export type SettingsLogLevel = 'none' | 'error' | 'warn' | 'info' | 'debug';
 
@@ -127,6 +127,7 @@ export interface Settings {
   colorTheme: ColorTheme;
   layoutDensity: LayoutDensity;
   showThemeSwitcher: boolean; // Show live theme switcher sidebar
+  showClock: boolean; // Show clock and date on home page (default false)
   // Goal Transfer
   enableGoalTransfer: boolean; // Enable goal transfer feature (default true)
   goalTransferTime: number; // Hour (0-23) when transfer button appears (default 20 for 8 PM)
