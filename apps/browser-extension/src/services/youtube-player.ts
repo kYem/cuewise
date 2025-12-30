@@ -122,16 +122,19 @@ class YouTubePlayerService {
     }
 
     // Create container for the iframe - hidden by default, shown in Now Playing view
+    // IMPORTANT: Must be positioned in viewport for YouTube to allow autoplay
+    // YouTube checks Intersection Observer and blocks autoplay if video is not "in view"
     this.container = document.createElement('div');
     this.container.id = 'youtube-player-container';
     this.container.style.cssText = `
       position: fixed;
-      bottom: -9999px;
-      left: -9999px;
+      bottom: 0;
+      left: 0;
       width: 1px;
       height: 1px;
-      overflow: hidden;
+      opacity: 0.01;
       pointer-events: none;
+      z-index: -1;
     `;
     document.body.appendChild(this.container);
 
@@ -146,9 +149,9 @@ class YouTubePlayerService {
    * Load and play a YouTube playlist
    * @param playlistId - YouTube playlist ID
    * @param firstVideoId - First video ID in the playlist (required for proper embedding)
-   * @param autoplay - Whether to autoplay the video
+   * @param autoplay - Whether to autoplay the video (default: false, explicitly play with play())
    */
-  loadPlaylist(playlistId: string, firstVideoId: string, _autoplay = true): void {
+  loadPlaylist(playlistId: string, firstVideoId: string, autoplay = false): void {
     if (!this.container) {
       this.initialize();
     }
@@ -163,6 +166,7 @@ class YouTubePlayerService {
     const params = new URLSearchParams({
       vid: firstVideoId,
       list: playlistId,
+      autoplay: autoplay ? '1' : '0',
     });
 
     const embedUrl = `https://cuewise.app/player?${params.toString()}`;
