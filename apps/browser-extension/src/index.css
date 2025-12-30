@@ -3,6 +3,19 @@
 /* Override dark mode to use .dark class selector instead of prefers-color-scheme media query */
 @variant dark (&:where(.dark, .dark *));
 
+/* Override dark initial background from index.html for non-glass themes */
+/* Only apply when a specific theme is set (not before React initializes) */
+html[data-theme="purple"],
+html[data-theme="forest"],
+html[data-theme="rose"] {
+  background: white;
+}
+html.dark[data-theme="purple"],
+html.dark[data-theme="forest"],
+html.dark[data-theme="rose"] {
+  background: oklch(0.21 0.12 285);
+}
+
 @theme {
   /* Default purple theme - using OKLCH for better color consistency */
   --color-primary-50: oklch(0.98 0.01 300);
@@ -72,6 +85,47 @@
       opacity: 1;
     }
   }
+
+  /* Glass theme loading animations */
+  --animate-float: float 2s ease-in-out infinite;
+  --animate-bounce-dots: bounceDots 1.4s ease-in-out infinite;
+
+  @keyframes float {
+    0%, 100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-10px);
+    }
+  }
+
+  @keyframes bounceDots {
+    0%, 80%, 100% {
+      opacity: 0.3;
+      transform: translateY(0);
+    }
+    40% {
+      opacity: 1;
+      transform: translateY(-4px);
+    }
+  }
+}
+
+/* Loading animation utility classes */
+.animate-float {
+  animation: float 2s ease-in-out infinite;
+}
+
+.animate-bounce-dots {
+  animation: bounceDots 1.4s ease-in-out infinite;
+}
+
+.animation-delay-200 {
+  animation-delay: 0.2s;
+}
+
+.animation-delay-400 {
+  animation-delay: 0.4s;
 }
 
 @layer theme {
@@ -370,6 +424,12 @@
 
     /* No gradient - transparent for image backgrounds */
     --gradient-background: transparent;
+  }
+
+  /* Glass theme - dark body background as fallback */
+  html[data-theme="glass"],
+  html.dark[data-theme="glass"] {
+    background: #0f172a;
   }
 
   /* Glass theme button overrides - dark background for primary buttons */

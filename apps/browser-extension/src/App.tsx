@@ -1,4 +1,5 @@
 import { ToastContainer } from '@cuewise/ui';
+import { Coffee } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { GoalsPage } from './components/GoalsPage';
@@ -23,6 +24,10 @@ function App() {
 
   // Show background image only when glass theme is selected
   const showBackgroundImage = settings.colorTheme === 'glass';
+
+  // Only hide content while glass theme background loads (not during settings load)
+  // This allows the default theme to show while waiting for the background image
+  const hideContent = showBackgroundImage && !imageLoaded;
 
   useEffect(() => {
     const handleHashChange = () => {
@@ -65,27 +70,45 @@ function App() {
     let cancelled = false;
 
     const loadBackground = async () => {
+      // Get the image URL (either preloaded or fetch new one)
+      let imageUrl: string | null = null;
+
       // Check if we have a preloaded image from the cache
       const preloadedUrl = getPreloadedCurrentUrl(settings.focusModeImageCategory);
       if (preloadedUrl) {
-        setBackgroundImage(preloadedUrl);
-        setImageLoaded(true);
+        imageUrl = preloadedUrl;
+      } else {
+        // Fall back to fetching a new image URL
+        try {
+          imageUrl = await loadImageWithFallback(settings.focusModeImageCategory);
+        } catch {
+          // Failed to get image URL, show content without background
+          if (!cancelled) {
+            setImageLoaded(true);
+          }
+          return;
+        }
+      }
+
+      if (cancelled || !imageUrl) {
         return;
       }
 
-      // Fall back to loading a new image
-      try {
-        const imageUrl = await loadImageWithFallback(settings.focusModeImageCategory);
+      // Wait for the actual image to load in the browser
+      const img = new Image();
+      img.onload = () => {
         if (!cancelled) {
           setBackgroundImage(imageUrl);
           setImageLoaded(true);
         }
-      } catch {
-        // Failed to load image
+      };
+      img.onerror = () => {
+        // Image failed to load, still show content
         if (!cancelled) {
           setImageLoaded(true);
         }
-      }
+      };
+      img.src = imageUrl;
     };
 
     loadBackground();
@@ -105,9 +128,13 @@ function App() {
         Skip to main content
       </a>
 
-      {/* Global Background Image - shown with glass theme on all pages */}
+      {/* Glass theme background layers */}
       {showBackgroundImage && (
         <>
+          {/* Fallback dark gradient - always visible as base layer */}
+          <div className="fixed inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900" />
+
+          {/* Background image - fades in when loaded */}
           <div
             className={`fixed inset-0 bg-cover bg-center bg-no-repeat transition-opacity duration-1000 ${
               imageLoaded && backgroundImage ? 'opacity-100' : 'opacity-0'
@@ -116,14 +143,37 @@ function App() {
               backgroundImage: backgroundImage ? `url(${backgroundImage})` : undefined,
             }}
           />
+
           {/* Dark overlay for better readability on content-heavy pages (not home/pomodoro) */}
           {(currentPage === 'goals' || currentPage === 'quotes' || currentPage === 'insights') && (
             <div className="fixed inset-0 bg-black/25" />
           )}
+
+          {/* Loading indicator - shown while image loads */}
+          {!imageLoaded && (
+            <div className="fixed inset-0 z-40 flex items-center justify-center pointer-events-none">
+              <div className="flex flex-col items-center gap-4">
+                <div className="p-5 rounded-2xl bg-white/10 backdrop-blur-md shadow-2xl animate-float">
+                  <Coffee className="w-14 h-14 text-white/90" />
+                </div>
+                <div className="flex items-center gap-1 text-white/70 text-sm font-medium">
+                  <span>Brewing your view</span>
+                  <span className="animate-bounce-dots">.</span>
+                  <span className="animate-bounce-dots animation-delay-200">.</span>
+                  <span className="animate-bounce-dots animation-delay-400">.</span>
+                </div>
+              </div>
+            </div>
+          )}
         </>
       )}
 
-      <div className="flex h-full w-full relative">
+      {/* Hide content while settings load or glass theme background loads */}
+      <div
+        className={`flex h-full w-full relative transition-opacity duration-500 ${
+          hideContent ? 'opacity-0' : 'opacity-100'
+        }`}
+      >
         {/* Main content area */}
         <main id="main-content" className="flex-1 overflow-auto" tabIndex={-1}>
           {currentPage === 'pomodoro' && <PomodoroPage />}
