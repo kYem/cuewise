@@ -1,4 +1,4 @@
-import { APP_LINKS, formatClockTime, formatLongDate, getGreeting } from '@cuewise/shared';
+import { formatClockTime, formatLongDate, getGreeting } from '@cuewise/shared';
 import { BarChart3, BookMarked, Flag, PanelRight, Settings, Timer } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -426,40 +426,6 @@ export const NewTabPage: React.FC = () => {
               <RemindersSection />
             </div>
           </div>
-
-          {/* Footer */}
-          <footer className="mt-8 py-density-lg flex items-center justify-center gap-4">
-            <span className="text-sm text-tertiary">
-              <a
-                href={APP_LINKS.website}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hover:text-primary-600 hover:underline transition-colors"
-              >
-                {__APP_NAME__}
-              </a>{' '}
-              <a
-                href={APP_LINKS.changelog}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary-600 hover:underline"
-              >
-                v{__APP_VERSION__}
-              </a>
-            </span>
-            <span className="text-tertiary">·</span>
-            <p className="text-sm text-tertiary">
-              Press{' '}
-              <kbd className="px-2 py-1 bg-surface rounded border border-border text-xs font-mono">
-                Ctrl
-              </kbd>
-              {' + '}
-              <kbd className="px-2 py-1 bg-surface rounded border border-border text-xs font-mono">
-                T
-              </kbd>{' '}
-              to open a new tab
-            </p>
-          </footer>
         </div>
       </div>
 
