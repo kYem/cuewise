@@ -3,6 +3,7 @@ import {
   generateId,
   LogLevel,
   minutesToSeconds,
+  type NotificationSoundType,
   type PomodoroSession,
 } from '@cuewise/shared';
 import { getPomodoroSessions, getSettings, setPomodoroSessions } from '@cuewise/storage';
@@ -45,6 +46,8 @@ interface PomodoroStore {
   longBreakInterval: number; // sessions before long break
   ambientSound: string;
   ambientVolume: number;
+  startSound: string;
+  completionSound: string;
 
   // Actions
   initialize: () => Promise<void>;
@@ -83,6 +86,8 @@ export const usePomodoroStore = create<PomodoroStore>()(
       longBreakInterval: 4,
       ambientSound: 'none',
       ambientVolume: 50,
+      startSound: 'gentle',
+      completionSound: 'gentle',
 
       initialize: async () => {
         try {
@@ -97,6 +102,8 @@ export const usePomodoroStore = create<PomodoroStore>()(
           const longBreakInterval = settings.pomodoroLongBreakInterval;
           const ambientSound = settings.pomodoroAmbientSound;
           const ambientVolume = settings.pomodoroAmbientVolume;
+          const startSound = settings.pomodoroStartSound;
+          const completionSound = settings.pomodoroCompletionSound;
 
           // Check if timer was running when all tabs closed
           const { status, timeRemaining, lastTickTime } = get();
@@ -121,6 +128,8 @@ export const usePomodoroStore = create<PomodoroStore>()(
                 longBreakInterval,
                 ambientSound,
                 ambientVolume,
+                startSound,
+                completionSound,
                 sessions,
                 isLoading: false,
               });
@@ -142,6 +151,8 @@ export const usePomodoroStore = create<PomodoroStore>()(
                   longBreakInterval,
                   ambientSound,
                   ambientVolume,
+                  startSound,
+                  completionSound,
                   sessions,
                   isLoading: false,
                   timeRemaining: 0,
@@ -158,6 +169,8 @@ export const usePomodoroStore = create<PomodoroStore>()(
                   longBreakInterval,
                   ambientSound,
                   ambientVolume,
+                  startSound,
+                  completionSound,
                   sessions,
                   isLoading: false,
                   timeRemaining: adjustedTimeRemaining,
@@ -175,6 +188,8 @@ export const usePomodoroStore = create<PomodoroStore>()(
               longBreakInterval,
               ambientSound,
               ambientVolume,
+              startSound,
+              completionSound,
               sessions,
               isLoading: false,
             });
@@ -198,12 +213,18 @@ export const usePomodoroStore = create<PomodoroStore>()(
           const longBreakInterval = settings.pomodoroLongBreakInterval;
           const ambientSound = settings.pomodoroAmbientSound;
           const ambientVolume = settings.pomodoroAmbientVolume;
+          const startSound = settings.pomodoroStartSound;
+          const completionSound = settings.pomodoroCompletionSound;
 
           // Only update durations if timer is idle
           if (status === 'idle') {
             let duration = workDuration;
-            if (sessionType === 'break') duration = breakDuration;
-            if (sessionType === 'longBreak') duration = longBreakDuration;
+            if (sessionType === 'break') {
+              duration = breakDuration;
+            }
+            if (sessionType === 'longBreak') {
+              duration = longBreakDuration;
+            }
 
             set({
               workDuration,
@@ -212,6 +233,8 @@ export const usePomodoroStore = create<PomodoroStore>()(
               longBreakInterval,
               ambientSound,
               ambientVolume,
+              startSound,
+              completionSound,
               timeRemaining: minutesToSeconds(duration),
               totalTime: minutesToSeconds(duration),
             });
@@ -224,6 +247,8 @@ export const usePomodoroStore = create<PomodoroStore>()(
               longBreakInterval,
               ambientSound,
               ambientVolume,
+              startSound,
+              completionSound,
             });
           }
         } catch (error) {
@@ -239,15 +264,19 @@ export const usePomodoroStore = create<PomodoroStore>()(
       },
 
       start: () => {
-        const { sessionType, workDuration, breakDuration, longBreakDuration } = get();
+        const { sessionType, workDuration, breakDuration, longBreakDuration, startSound } = get();
         let duration = workDuration;
-        if (sessionType === 'break') duration = breakDuration;
-        if (sessionType === 'longBreak') duration = longBreakDuration;
+        if (sessionType === 'break') {
+          duration = breakDuration;
+        }
+        if (sessionType === 'longBreak') {
+          duration = longBreakDuration;
+        }
 
         const currentSessionId = generateId();
 
         // Play start sound
-        playStartSound();
+        playStartSound(startSound as NotificationSoundType);
 
         set({
           status: 'running',
@@ -334,6 +363,8 @@ export const usePomodoroStore = create<PomodoroStore>()(
           consecutiveWorkSessions,
           longBreakInterval,
           selectedGoalId,
+          startSound,
+          completionSound,
         } = get();
 
         if (!currentSessionId) return;
@@ -399,7 +430,7 @@ export const usePomodoroStore = create<PomodoroStore>()(
                 lastTickTime: autoStartBreaks ? Date.now() : null,
               });
               if (autoStartBreaks) {
-                playStartSound();
+                playStartSound(startSound as NotificationSoundType);
               }
             } else {
               set({
@@ -413,7 +444,7 @@ export const usePomodoroStore = create<PomodoroStore>()(
                 lastTickTime: autoStartBreaks ? Date.now() : null,
               });
               if (autoStartBreaks) {
-                playStartSound();
+                playStartSound(startSound as NotificationSoundType);
               }
             }
           } else {
@@ -435,12 +466,12 @@ export const usePomodoroStore = create<PomodoroStore>()(
             });
 
             if (autoStartBreaks) {
-              playStartSound();
+              playStartSound(startSound as NotificationSoundType);
             }
           }
 
           // Play completion sound
-          playCompletionSound();
+          playCompletionSound(completionSound as NotificationSoundType);
 
           // Show notification
           if ('Notification' in window && Notification.permission === 'granted') {

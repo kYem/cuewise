@@ -8,6 +8,8 @@ export const defaultSettings: Settings = {
   pomodoroAutoStartBreaks: true,
   pomodoroAmbientSound: 'none',
   pomodoroAmbientVolume: 50,
+  pomodoroStartSound: 'gentle',
+  pomodoroCompletionSound: 'gentle',
   enableNotifications: true,
   theme: 'light',
   quoteChangeInterval: 10,

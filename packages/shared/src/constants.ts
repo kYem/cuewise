@@ -17,6 +17,8 @@ export const DEFAULT_SETTINGS: Settings = {
   pomodoroAutoStartBreaks: true, // Auto-cycle continuously by default
   pomodoroAmbientSound: 'none',
   pomodoroAmbientVolume: 50,
+  pomodoroStartSound: 'gentle',
+  pomodoroCompletionSound: 'gentle',
   enableNotifications: true,
   theme: 'auto',
   quoteChangeInterval: 10, // 0 = manual, 10+ = auto-refresh interval in seconds
@@ -82,6 +84,17 @@ export const AMBIENT_SOUNDS = {
 } as const;
 
 export type AmbientSoundType = keyof typeof AMBIENT_SOUNDS;
+
+// Notification sound options for Pomodoro start/completion
+export const NOTIFICATION_SOUNDS = {
+  none: 'None',
+  chime: 'Chime',
+  bell: 'Bell',
+  digital: 'Digital',
+  gentle: 'Gentle',
+} as const;
+
+export type NotificationSoundType = keyof typeof NOTIFICATION_SOUNDS;
 
 // Color theme definitions
 export const COLOR_THEMES: Record<

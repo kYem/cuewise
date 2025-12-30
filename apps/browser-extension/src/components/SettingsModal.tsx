@@ -3,6 +3,8 @@ import {
   type AmbientSoundType,
   FOCUS_IMAGE_CATEGORIES,
   type FocusImageCategory,
+  NOTIFICATION_SOUNDS,
+  type NotificationSoundType,
   type SettingsLogLevel,
 } from '@cuewise/shared';
 import {
@@ -25,6 +27,7 @@ import { useEffect, useState } from 'react';
 import { usePomodoroStore } from '../stores/pomodoro-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { ambientSoundPlayer } from '../utils/ambient-sounds';
+import { previewSound } from '../utils/sounds';
 import { Modal } from './Modal';
 
 interface SettingsModalProps {
@@ -43,6 +46,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   const [longBreakInterval, setLongBreakInterval] = useState(settings.pomodoroLongBreakInterval);
   const [ambientSound, setAmbientSound] = useState(settings.pomodoroAmbientSound);
   const [ambientVolume, setAmbientVolume] = useState(settings.pomodoroAmbientVolume);
+  const [startSound, setStartSound] = useState(settings.pomodoroStartSound);
+  const [completionSound, setCompletionSound] = useState(settings.pomodoroCompletionSound);
   const [notifications, setNotifications] = useState(settings.enableNotifications);
   const [quoteInterval, setQuoteInterval] = useState(settings.quoteChangeInterval);
   const [timeFormat, setTimeFormat] = useState(settings.timeFormat);
@@ -67,6 +72,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     setLongBreakInterval(settings.pomodoroLongBreakInterval);
     setAmbientSound(settings.pomodoroAmbientSound);
     setAmbientVolume(settings.pomodoroAmbientVolume);
+    setStartSound(settings.pomodoroStartSound);
+    setCompletionSound(settings.pomodoroCompletionSound);
     setNotifications(settings.enableNotifications);
     setQuoteInterval(settings.quoteChangeInterval);
     setTimeFormat(settings.timeFormat);
@@ -149,6 +156,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
       pomodoroLongBreakInterval: longBreakInterval,
       pomodoroAmbientSound: ambientSound,
       pomodoroAmbientVolume: ambientVolume,
+      pomodoroStartSound: startSound,
+      pomodoroCompletionSound: completionSound,
       enableNotifications: notifications,
       quoteChangeInterval: quoteInterval,
       timeFormat,
@@ -176,7 +185,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
       longBreakDuration !== settings.pomodoroLongBreakDuration ||
       longBreakInterval !== settings.pomodoroLongBreakInterval ||
       ambientSound !== settings.pomodoroAmbientSound ||
-      ambientVolume !== settings.pomodoroAmbientVolume
+      ambientVolume !== settings.pomodoroAmbientVolume ||
+      startSound !== settings.pomodoroStartSound ||
+      completionSound !== settings.pomodoroCompletionSound
     ) {
       await reloadPomodoroSettings();
     }
@@ -416,6 +427,87 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                 </div>
               </div>
             )}
+          </div>
+        </section>
+
+        {/* Notification Sounds Settings */}
+        <section>
+          <div className="flex items-center gap-2 mb-4">
+            <Bell className="w-5 h-5 text-primary-600" />
+            <h3 className="text-lg font-semibold text-primary">Notification Sounds</h3>
+          </div>
+
+          <div className="space-y-4 pl-7">
+            {/* Start Sound Selection */}
+            <div>
+              <label htmlFor="start-sound" className="block text-sm font-medium text-primary mb-2">
+                Start Sound
+              </label>
+              <div className="flex items-center gap-2">
+                <select
+                  id="start-sound"
+                  value={startSound}
+                  onChange={(e) => setStartSound(e.target.value)}
+                  className="flex-1 px-3 py-2 text-sm text-primary border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  {Object.entries(NOTIFICATION_SOUNDS).map(([key, label]) => (
+                    <option key={key} value={key}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+                {startSound !== 'none' && (
+                  <button
+                    type="button"
+                    onClick={() => previewSound(startSound as NotificationSoundType, 'start')}
+                    className="p-2 rounded-md bg-surface-variant text-primary hover:bg-border transition-all"
+                    title="Test sound"
+                  >
+                    <Play className="w-5 h-5" />
+                  </button>
+                )}
+              </div>
+              <p className="text-xs text-secondary mt-1">Played when a Pomodoro session starts</p>
+            </div>
+
+            {/* Completion Sound Selection */}
+            <div>
+              <label
+                htmlFor="completion-sound"
+                className="block text-sm font-medium text-primary mb-2"
+              >
+                Completion Sound
+              </label>
+              <div className="flex items-center gap-2">
+                <select
+                  id="completion-sound"
+                  value={completionSound}
+                  onChange={(e) => setCompletionSound(e.target.value)}
+                  className="flex-1 px-3 py-2 text-sm text-primary border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  {Object.entries(NOTIFICATION_SOUNDS).map(([key, label]) => (
+                    <option key={key} value={key}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+                {completionSound !== 'none' && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      previewSound(completionSound as NotificationSoundType, 'completion')
+                    }
+                    className="p-2 rounded-md bg-surface-variant text-primary hover:bg-border transition-all"
+                    title="Test sound"
+                  >
+                    <Play className="w-5 h-5" />
+                  </button>
+                )}
+              </div>
+              <p className="text-xs text-secondary mt-1">
+                Played when a session completes (work or break)
+              </p>
+            </div>
           </div>
         </section>
 

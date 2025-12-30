@@ -118,6 +118,8 @@ export interface Settings {
   pomodoroAutoStartBreaks: boolean; // auto-cycle between work and breaks continuously (default true)
   pomodoroAmbientSound: string; // ambient sound type (default 'none')
   pomodoroAmbientVolume: number; // volume 0-100 (default 50)
+  pomodoroStartSound: string; // notification sound for session start (default 'chime')
+  pomodoroCompletionSound: string; // notification sound for session completion (default 'chime')
   enableNotifications: boolean;
   theme: 'light' | 'dark' | 'auto';
   quoteChangeInterval: number; // seconds (0 = manual, 1-3600 = auto-refresh every N seconds)
