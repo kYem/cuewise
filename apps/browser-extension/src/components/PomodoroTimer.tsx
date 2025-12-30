@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { usePomodoroLeader } from '../hooks/usePomodoroLeader';
 import { useFocusModeStore } from '../stores/focus-mode-store';
 import { useGoalStore } from '../stores/goal-store';
+import { useMusicStore } from '../stores/music-store';
 import { usePomodoroStorageSync, usePomodoroStore } from '../stores/pomodoro-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { ambientSoundPlayer } from '../utils/ambient-sounds';
@@ -37,6 +38,12 @@ export const PomodoroTimer: React.FC = () => {
 
   const { todayTasks, initialize: initGoals } = useGoalStore();
   const { updateSettings, settings } = useSettingsStore();
+  const {
+    play: playMusic,
+    pause: pauseMusic,
+    stop: stopMusic,
+    initialize: initMusic,
+  } = useMusicStore();
 
   const [showGoalPicker, setShowGoalPicker] = useState(false);
 
@@ -50,7 +57,8 @@ export const PomodoroTimer: React.FC = () => {
   useEffect(() => {
     initialize();
     initGoals();
-  }, [initialize, initGoals]);
+    initMusic();
+  }, [initialize, initGoals, initMusic]);
 
   // Ambient sound management
   useEffect(() => {
@@ -74,6 +82,45 @@ export const PomodoroTimer: React.FC = () => {
       }
     };
   }, [status, sessionType, ambientSound, ambientVolume]);
+
+  // YouTube music management (synced with Pomodoro)
+  useEffect(() => {
+    const { pomodoroMusicEnabled, pomodoroMusicAutoStart, pomodoroMusicPlayDuringBreaks } =
+      settings;
+
+    // Skip if music feature is disabled or auto-start is off
+    if (!pomodoroMusicEnabled || !pomodoroMusicAutoStart) {
+      return;
+    }
+
+    // Determine if we should play music based on session type
+    const shouldPlayForSession = sessionType === 'work' || pomodoroMusicPlayDuringBreaks;
+
+    if (status === 'running' && shouldPlayForSession) {
+      // Play music when timer is running
+      playMusic();
+    } else if (status === 'paused') {
+      // Pause music when timer is paused
+      pauseMusic();
+    } else if (status === 'idle') {
+      // Stop music when timer is idle
+      stopMusic();
+    }
+
+    // Cleanup on unmount
+    return () => {
+      stopMusic();
+    };
+  }, [
+    status,
+    sessionType,
+    settings.pomodoroMusicEnabled,
+    settings.pomodoroMusicAutoStart,
+    settings.pomodoroMusicPlayDuringBreaks,
+    playMusic,
+    pauseMusic,
+    stopMusic,
+  ]);
 
   // Request notification permission on mount
   useEffect(() => {

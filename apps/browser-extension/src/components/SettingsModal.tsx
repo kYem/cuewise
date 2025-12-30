@@ -15,6 +15,7 @@ import {
   Clock,
   Cloud,
   CloudOff,
+  Headphones,
   Maximize2,
   Music,
   Play,
@@ -63,6 +64,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   const [focusModeAutoEnter, setFocusModeAutoEnter] = useState(settings.focusModeAutoEnter);
   const [showClock, setShowClock] = useState(settings.showClock);
   const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
+  const [pomodoroMusicEnabled, setPomodoroMusicEnabled] = useState(settings.pomodoroMusicEnabled);
+  const [pomodoroMusicVolume, setPomodoroMusicVolume] = useState(settings.pomodoroMusicVolume);
+  const [pomodoroMusicAutoStart, setPomodoroMusicAutoStart] = useState(
+    settings.pomodoroMusicAutoStart
+  );
+  const [pomodoroMusicPlayDuringBreaks, setPomodoroMusicPlayDuringBreaks] = useState(
+    settings.pomodoroMusicPlayDuringBreaks
+  );
 
   // Sync local state with store when settings change
   useEffect(() => {
@@ -86,6 +95,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     setFocusModeShowQuote(settings.focusModeShowQuote);
     setFocusModeAutoEnter(settings.focusModeAutoEnter);
     setShowClock(settings.showClock);
+    setPomodoroMusicEnabled(settings.pomodoroMusicEnabled);
+    setPomodoroMusicVolume(settings.pomodoroMusicVolume);
+    setPomodoroMusicAutoStart(settings.pomodoroMusicAutoStart);
+    setPomodoroMusicPlayDuringBreaks(settings.pomodoroMusicPlayDuringBreaks);
   }, [settings]);
 
   // Format interval for display
@@ -170,6 +183,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
       focusModeShowQuote,
       focusModeAutoEnter,
       showClock,
+      pomodoroMusicEnabled,
+      pomodoroMusicVolume,
+      pomodoroMusicAutoStart,
+      pomodoroMusicPlayDuringBreaks,
     });
 
     // If sync setting changed, reload the page to apply storage changes
@@ -508,6 +525,113 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                 Played when a session completes (work or break)
               </p>
             </div>
+          </div>
+        </section>
+
+        {/* Focus Music Settings */}
+        <section>
+          <div className="flex items-center gap-2 mb-4">
+            <Headphones className="w-5 h-5 text-primary-600" />
+            <h3 className="text-lg font-semibold text-primary">Focus Music</h3>
+          </div>
+
+          <div className="space-y-4 pl-7">
+            {/* Enable Focus Music Toggle */}
+            <label className="flex items-center gap-3 cursor-pointer group">
+              <div className="relative">
+                <input
+                  type="checkbox"
+                  checked={pomodoroMusicEnabled}
+                  onChange={(e) => setPomodoroMusicEnabled(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-divider peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-surface after:border-border after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
+              </div>
+              <div>
+                <span className="text-sm font-medium text-primary">Enable focus music</span>
+                <p className="text-xs text-secondary">
+                  Play YouTube music playlists during Pomodoro sessions
+                </p>
+              </div>
+            </label>
+
+            {pomodoroMusicEnabled && (
+              <>
+                {/* Auto-Start Toggle */}
+                <label className="flex items-center gap-3 cursor-pointer group">
+                  <div className="relative">
+                    <input
+                      type="checkbox"
+                      checked={pomodoroMusicAutoStart}
+                      onChange={(e) => setPomodoroMusicAutoStart(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-divider peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-surface after:border-border after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
+                  </div>
+                  <div>
+                    <span className="text-sm font-medium text-primary">Auto-start with timer</span>
+                    <p className="text-xs text-secondary">
+                      Automatically play music when you start a Pomodoro session
+                    </p>
+                  </div>
+                </label>
+
+                {/* Play During Breaks Toggle */}
+                <label className="flex items-center gap-3 cursor-pointer group">
+                  <div className="relative">
+                    <input
+                      type="checkbox"
+                      checked={pomodoroMusicPlayDuringBreaks}
+                      onChange={(e) => setPomodoroMusicPlayDuringBreaks(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-divider peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-surface after:border-border after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
+                  </div>
+                  <div>
+                    <span className="text-sm font-medium text-primary">Play during breaks</span>
+                    <p className="text-xs text-secondary">
+                      Continue playing music during break sessions
+                    </p>
+                  </div>
+                </label>
+
+                {/* Volume Control */}
+                <div>
+                  <label
+                    htmlFor="music-volume"
+                    className="block text-sm font-medium text-primary mb-2"
+                  >
+                    Volume:{' '}
+                    <span className="text-primary-600 font-semibold">{pomodoroMusicVolume}%</span>
+                  </label>
+                  <div className="flex items-center gap-4">
+                    <input
+                      id="music-volume"
+                      type="range"
+                      min="0"
+                      max="100"
+                      step="5"
+                      value={pomodoroMusicVolume}
+                      onChange={(e) => setPomodoroMusicVolume(Number(e.target.value))}
+                      className="flex-1"
+                    />
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="5"
+                      value={pomodoroMusicVolume}
+                      onChange={(e) => setPomodoroMusicVolume(Number(e.target.value))}
+                      className="w-16 px-2 py-1 text-sm text-primary border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    />
+                  </div>
+                </div>
+
+                <p className="text-xs text-secondary">
+                  Browse and select playlists from the mini player on the Pomodoro page
+                </p>
+              </>
+            )}
           </div>
         </section>
 

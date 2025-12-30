@@ -5,6 +5,40 @@
 import { logger, type Reminder } from '@cuewise/shared';
 import { getReminders, setReminders } from '@cuewise/storage';
 
+/**
+ * Set up declarativeNetRequest rules for YouTube iframe embedding
+ * Chrome extensions don't send Referer headers with iframes, causing YouTube Error 153
+ * This workaround sets the Referer header using declarativeNetRequest
+ * See: https://groups.google.com/a/chromium.org/g/chromium-extensions/c/OUJad0q-d_g
+ */
+chrome.runtime.onInstalled.addListener(() => {
+  const YOUTUBE_REFERER_RULE: chrome.declarativeNetRequest.Rule = {
+    id: 1,
+    condition: {
+      initiatorDomains: [chrome.runtime.id],
+      requestDomains: ['www.youtube.com', 'www.youtube-nocookie.com'],
+      resourceTypes: [chrome.declarativeNetRequest.ResourceType.SUB_FRAME],
+    },
+    action: {
+      type: chrome.declarativeNetRequest.RuleActionType.MODIFY_HEADERS,
+      requestHeaders: [
+        {
+          header: 'Referer',
+          value: `https://${chrome.runtime.id}.chromiumapp.org/`,
+          operation: chrome.declarativeNetRequest.HeaderOperation.SET,
+        },
+      ],
+    },
+  };
+
+  chrome.declarativeNetRequest.updateDynamicRules({
+    removeRuleIds: [YOUTUBE_REFERER_RULE.id],
+    addRules: [YOUTUBE_REFERER_RULE],
+  });
+
+  logger.info('YouTube Referer header rule installed');
+});
+
 // Listen for alarm triggers
 chrome.alarms.onAlarm.addListener(async (alarm) => {
   logger.info('Alarm triggered', { alarmName: alarm.name });

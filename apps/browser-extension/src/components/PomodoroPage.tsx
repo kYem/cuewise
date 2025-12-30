@@ -5,6 +5,7 @@ import { useSettingsStore } from '../stores/settings-store';
 import { getPreloadedCurrentUrl } from '../utils/image-preload-cache';
 import { loadImageWithFallback } from '../utils/unsplash';
 import { FocusMode } from './FocusMode';
+import { MusicMiniPlayer } from './MusicMiniPlayer';
 import { PageHeader } from './PageHeader';
 import { PomodoroTimer } from './PomodoroTimer';
 import { QuoteDisplay } from './QuoteDisplay';
@@ -15,6 +16,7 @@ export const PomodoroPage: React.FC = () => {
   const initializeSettings = useSettingsStore((state) => state.initialize);
   const quoteChangeInterval = useSettingsStore((state) => state.settings.quoteChangeInterval);
   const focusModeImageCategory = useSettingsStore((state) => state.settings.focusModeImageCategory);
+  const pomodoroMusicEnabled = useSettingsStore((state) => state.settings.pomodoroMusicEnabled);
   const [lastManualRefresh, setLastManualRefresh] = useState(Date.now());
   const [backgroundImage, setBackgroundImage] = useState<string | null>(null);
   const [imageLoaded, setImageLoaded] = useState(false);
@@ -91,12 +93,14 @@ export const PomodoroPage: React.FC = () => {
 
       {/* Content */}
       <div className="relative z-10">
-        <PageHeader
-          currentPage="pomodoro"
-          title="Pomodoro Timer"
-          subtitle="Stay focused and productive with timed work sessions"
-          transparent
-        />
+        <PageHeader currentPage="pomodoro" transparent />
+
+        {/* Music Mini Player - Fixed position below header */}
+        {pomodoroMusicEnabled && (
+          <div className="fixed top-16 left-4 z-50">
+            <MusicMiniPlayer />
+          </div>
+        )}
 
         {/* Split Layout for Large Screens */}
         <div className="flex flex-col lg:flex-row gap-density-lg items-center justify-center min-h-[calc(100vh-12rem)] px-4 sm:px-6 lg:px-8 py-8">

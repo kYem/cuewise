@@ -11,6 +11,7 @@ import {
   type Reminder,
   type Settings,
   STORAGE_KEYS,
+  type YoutubePlaylist,
 } from '@cuewise/shared';
 import {
   getFromStorage,
@@ -176,6 +177,20 @@ export async function getPomodoroSessions(): Promise<PomodoroSession[]> {
 export async function setPomodoroSessions(sessions: PomodoroSession[]): Promise<StorageResult> {
   const area = await getStorageArea();
   return setInStorage(STORAGE_KEYS.POMODORO_SESSIONS, sessions, area);
+}
+
+// Custom YouTube Playlists (for Pomodoro music)
+// Note: Custom playlists are stored in local storage (not synced)
+export async function getCustomYoutubePlaylists(): Promise<YoutubePlaylist[]> {
+  const playlists = await getFromStorage<YoutubePlaylist[]>(
+    STORAGE_KEYS.CUSTOM_YOUTUBE_PLAYLISTS,
+    'local'
+  );
+  return playlists ?? [];
+}
+
+export async function setCustomYoutubePlaylists(playlists: YoutubePlaylist[]): Promise<boolean> {
+  return setInStorage(STORAGE_KEYS.CUSTOM_YOUTUBE_PLAYLISTS, playlists, 'local');
 }
 
 // Settings

@@ -6,6 +6,7 @@ import type {
   ReminderCategory,
   ReminderTemplate,
   Settings,
+  YoutubePlaylist,
 } from './types';
 
 // Default settings
@@ -19,6 +20,12 @@ export const DEFAULT_SETTINGS: Settings = {
   pomodoroAmbientVolume: 50,
   pomodoroStartSound: 'gentle',
   pomodoroCompletionSound: 'gentle',
+  // Pomodoro Music (YouTube integration)
+  pomodoroMusicEnabled: true,
+  pomodoroMusicVolume: 50,
+  pomodoroMusicAutoStart: false,
+  pomodoroMusicPlaylistId: '',
+  pomodoroMusicPlayDuringBreaks: false,
   enableNotifications: true,
   theme: 'auto',
   quoteChangeInterval: 10, // 0 = manual, 10+ = auto-refresh interval in seconds
@@ -95,6 +102,59 @@ export const NOTIFICATION_SOUNDS = {
 } as const;
 
 export type NotificationSoundType = keyof typeof NOTIFICATION_SOUNDS;
+
+// Default YouTube playlists for Pomodoro music (curated focus music)
+// Each playlist includes a firstVideoId for proper embed support
+export const DEFAULT_YOUTUBE_PLAYLISTS: YoutubePlaylist[] = [
+  {
+    id: 'lofi-hip-hop',
+    name: 'Lofi Hip Hop',
+    playlistId: 'PLOzDu-MXXLliO9fBNZOQTBDddoA3FzZUo',
+    thumbnailUrl: 'https://i.ytimg.com/vi/jfKfPfyJRdk/hqdefault.jpg',
+    firstVideoId: 'jfKfPfyJRdk',
+    isCustom: false,
+  },
+  {
+    id: 'synthwave',
+    name: 'Synthwave',
+    playlistId: 'PLvLlb2QOBKR2Jh_uQC8bPWNjWk_YYa3y',
+    thumbnailUrl: 'https://i.ytimg.com/vi/4xDzrJKXOOY/hqdefault.jpg',
+    firstVideoId: '4xDzrJKXOOY',
+    isCustom: false,
+  },
+  {
+    id: 'chill-beats',
+    name: 'Chill Beats',
+    playlistId: 'PLofht4PTcKYnaH8w5olJCI-wUVxuoMHqM',
+    thumbnailUrl: 'https://i.ytimg.com/vi/lTRiuFIWV54/hqdefault.jpg',
+    firstVideoId: 'lTRiuFIWV54',
+    isCustom: false,
+  },
+  {
+    id: 'jazz',
+    name: 'Jazz for Work',
+    playlistId: 'PLgzTt0k8mXzEpH7-dOCHqRZOsakqXmzmG',
+    thumbnailUrl: 'https://i.ytimg.com/vi/fEvM-OUbaKs/hqdefault.jpg',
+    firstVideoId: 'fEvM-OUbaKs',
+    isCustom: false,
+  },
+  {
+    id: 'deep-focus',
+    name: 'Deep Focus',
+    playlistId: 'PLWoofaG1KBZsnGBJRkY4UBpPsE94z2Qk9',
+    thumbnailUrl: 'https://i.ytimg.com/vi/DWcJFNfaw9c/hqdefault.jpg',
+    firstVideoId: 'DWcJFNfaw9c',
+    isCustom: false,
+  },
+  {
+    id: 'nature-sounds',
+    name: 'Nature Sounds',
+    playlistId: 'PLQ_PIlf6OzqJzXo8KTHCvTAQXXXyvlz2w',
+    thumbnailUrl: 'https://i.ytimg.com/vi/eKFTSSKCzWA/hqdefault.jpg',
+    firstVideoId: 'eKFTSSKCzWA',
+    isCustom: false,
+  },
+];
 
 // Color theme definitions
 export const COLOR_THEMES: Record<
