@@ -1,5 +1,6 @@
 import { createLogger, LogLevel } from '@cuewise/shared';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
+import { useMusicStore } from '../stores/music-store';
 
 const logger = createLogger({
   prefix: '[MusicLeader]',
@@ -12,10 +13,11 @@ const logger = createLogger({
  * Only one tab across the browser will play music
  * Uses Web Locks API for automatic leader election
  *
- * @returns isLeader - true if this tab should play music
+ * Sets isLeader in the music store, which controls whether
+ * this tab actually plays audio or just shows the UI state.
  */
-export function useMusicLeader(): boolean {
-  const [isLeader, setIsLeader] = useState(false);
+export function useMusicLeader(): void {
+  const setIsLeader = useMusicStore((state) => state.setIsLeader);
   const lockHeldRef = useRef(false);
 
   useEffect(() => {
@@ -64,8 +66,7 @@ export function useMusicLeader(): boolean {
     return () => {
       logger.debug('Music leader hook cleanup');
       aborted = true;
+      setIsLeader(false);
     };
-  }, []);
-
-  return isLeader;
+  }, [setIsLeader]);
 }

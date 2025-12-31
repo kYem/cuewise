@@ -6,7 +6,7 @@ import { useMusicLeader } from '../hooks/useMusicLeader';
 import { usePomodoroLeader } from '../hooks/usePomodoroLeader';
 import { useFocusModeStore } from '../stores/focus-mode-store';
 import { useGoalStore } from '../stores/goal-store';
-import { useMusicStore } from '../stores/music-store';
+import { useMusicStorageSync, useMusicStore } from '../stores/music-store';
 import { usePomodoroStorageSync, usePomodoroStore } from '../stores/pomodoro-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { ambientSoundPlayer } from '../utils/ambient-sounds';
@@ -56,7 +56,11 @@ export const PomodoroTimer: React.FC = () => {
   usePomodoroLeader();
 
   // Music leader election - only one tab plays music
-  const isMusicLeader = useMusicLeader();
+  // Sets isLeader in the music store
+  useMusicLeader();
+
+  // Sync music state across tabs
+  useMusicStorageSync();
 
   // Initialize on mount
   useEffect(() => {
@@ -89,7 +93,7 @@ export const PomodoroTimer: React.FC = () => {
   }, [status, sessionType, ambientSound, ambientVolume]);
 
   // YouTube music management (synced with Pomodoro)
-  // Only the music leader tab controls playback
+  // State is synced across tabs, but only leader tab plays audio
   useEffect(() => {
     const { pomodoroMusicEnabled, pomodoroMusicAutoStart, pomodoroMusicPlayDuringBreaks } =
       settings;
@@ -104,16 +108,12 @@ export const PomodoroTimer: React.FC = () => {
       return;
     }
 
-    // Only the music leader tab should control playback
-    if (!isMusicLeader) {
-      return;
-    }
-
     // Determine if we should play music based on session type
     const shouldPlayForSession = sessionType === 'work' || pomodoroMusicPlayDuringBreaks;
 
     if (status === 'running' && shouldPlayForSession) {
       // Play music when timer is running (including on page load with running timer)
+      // Note: store handles leader check internally - only leader plays audio
       playMusic();
     } else if (status === 'paused') {
       // Pause music when timer is paused
@@ -134,7 +134,6 @@ export const PomodoroTimer: React.FC = () => {
     settings.pomodoroMusicAutoStart,
     settings.pomodoroMusicPlayDuringBreaks,
     isMusicLoading,
-    isMusicLeader,
     playMusic,
     pauseMusic,
     stopMusic,
