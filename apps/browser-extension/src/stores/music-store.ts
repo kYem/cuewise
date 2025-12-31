@@ -438,8 +438,11 @@ export const useMusicStore = create<MusicStore>()(
 /**
  * React hook to sync Music state across tabs
  * Listens to chrome.storage changes and rehydrates the store
+ * Leader tab also syncs YouTube player with state changes from other tabs
  */
 export function useMusicStorageSync() {
+  const isLeader = useMusicStore((state) => state.isLeader);
+
   useEffect(() => {
     const handleStorageChange = (
       changes: { [key: string]: chrome.storage.StorageChange },
@@ -458,6 +461,14 @@ export function useMusicStorageSync() {
 
       // Trigger rehydration to sync with other tabs
       useMusicStore.persist.rehydrate();
+
+      // If we're the leader, sync the YouTube player with state changes from other tabs
+      if (isLeader) {
+        // Small delay to ensure rehydration completes
+        setTimeout(() => {
+          syncLeaderPlayback();
+        }, 50);
+      }
     };
 
     // Register listener
@@ -471,5 +482,39 @@ export function useMusicStorageSync() {
         chrome.storage.onChanged.removeListener(handleStorageChange);
       }
     };
-  }, []);
+  }, [isLeader]);
+}
+
+/**
+ * Sync the leader's YouTube player with the current store state
+ * Called when leader receives state changes from other tabs
+ */
+function syncLeaderPlayback() {
+  const { isPlaying, isPaused, selectedPlaylistId, playlists, volume } = useMusicStore.getState();
+
+  logger.debug('Leader syncing playback state', { isPlaying, isPaused, selectedPlaylistId });
+
+  if (isPlaying) {
+    const playlist = playlists.find((p) => p.id === selectedPlaylistId);
+    if (playlist?.firstVideoId) {
+      const currentPlaylistId = youtubePlayer.getCurrentPlaylistId();
+      if (currentPlaylistId !== playlist.playlistId) {
+        // Different playlist - load and play
+        youtubePlayer.loadPlaylist(playlist.playlistId, playlist.firstVideoId, () => {
+          youtubePlayer.play();
+          youtubePlayer.setVolume(volume);
+        });
+      } else if (!youtubePlayer.isPlaying()) {
+        // Same playlist but not playing - just play
+        youtubePlayer.play();
+      }
+    }
+  } else if (isPaused) {
+    if (youtubePlayer.isPlaying()) {
+      youtubePlayer.pause();
+    }
+  } else {
+    // Stopped (idle)
+    youtubePlayer.stop();
+  }
 }
