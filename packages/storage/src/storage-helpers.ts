@@ -189,7 +189,9 @@ export async function getCustomYoutubePlaylists(): Promise<YoutubePlaylist[]> {
   return playlists ?? [];
 }
 
-export async function setCustomYoutubePlaylists(playlists: YoutubePlaylist[]): Promise<boolean> {
+export async function setCustomYoutubePlaylists(
+  playlists: YoutubePlaylist[]
+): Promise<StorageResult> {
   return setInStorage(STORAGE_KEYS.CUSTOM_YOUTUBE_PLAYLISTS, playlists, 'local');
 }
 
