@@ -5,10 +5,10 @@ import { useSettingsStore } from '../stores/settings-store';
 import { getPreloadedCurrentUrl } from '../utils/image-preload-cache';
 import { loadImageWithFallback } from '../utils/unsplash';
 import { FocusMode } from './FocusMode';
-import { MusicMiniPlayer } from './MusicMiniPlayer';
 import { PageHeader } from './PageHeader';
 import { PomodoroTimer } from './PomodoroTimer';
 import { QuoteDisplay } from './QuoteDisplay';
+import { SoundsMiniPlayer } from './sounds';
 
 export const PomodoroPage: React.FC = () => {
   const initialize = useQuoteStore((state) => state.initialize);
@@ -98,7 +98,7 @@ export const PomodoroPage: React.FC = () => {
         {/* Music Mini Player - Fixed position below header */}
         {pomodoroMusicEnabled && (
           <div className="fixed top-16 left-4 z-50">
-            <MusicMiniPlayer />
+            <SoundsMiniPlayer />
           </div>
         )}
 

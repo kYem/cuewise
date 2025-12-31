@@ -119,6 +119,30 @@ export interface YoutubePlaylist {
   isCustom: boolean; // User-added vs pre-built curated playlist
 }
 
+// YouTube video progress for timestamp memory
+export interface VideoProgress {
+  videoId: string; // YouTube video ID
+  timestamp: number; // Playback position in seconds
+  updatedAt: string; // ISO timestamp of last update
+}
+
+// YouTube playlist progress (tracks current video and timestamps)
+export interface PlaylistProgress {
+  playlistId: string; // YouTube playlist ID
+  currentVideoId?: string; // Currently playing video ID
+  videoProgress: VideoProgress[]; // Timestamps for videos in this playlist
+}
+
+// Sound source type (mutually exclusive - only one can play at a time)
+export type SoundSource = 'none' | 'ambient' | 'youtube';
+
+// Soundscape tile configuration for the sounds panel
+export interface SoundscapeTile {
+  id: string; // Matches AmbientSoundType (e.g., 'rain', 'ocean')
+  name: string; // Display name
+  icon: string; // Lucide icon name
+}
+
 // Settings interface
 export interface Settings {
   pomodoroWorkDuration: number; // minutes (default 25)
@@ -172,6 +196,7 @@ export const STORAGE_KEYS = {
   SETTINGS: 'settings',
   CURRENT_QUOTE: 'currentQuote',
   CUSTOM_YOUTUBE_PLAYLISTS: 'customYoutubePlaylists', // User-added YouTube playlists
+  YOUTUBE_PROGRESS: 'youtubeProgress', // YouTube playback progress (timestamps per video)
 } as const;
 
 // Insights data

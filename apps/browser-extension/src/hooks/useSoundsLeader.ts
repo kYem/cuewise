@@ -1,39 +1,39 @@
 import { createLogger, LogLevel } from '@cuewise/shared';
 import { useEffect, useRef } from 'react';
-import { useMusicStore } from '../stores/music-store';
+import { useSoundsStore } from '../stores/sounds-store';
 
 const logger = createLogger({
-  prefix: '[MusicLeader]',
+  prefix: '[SoundsLeader]',
   minLevel: import.meta.env.DEV ? LogLevel.DEBUG : LogLevel.WARN,
   includeTimestamp: false,
 });
 
 /**
- * Hook to handle music playback leader election
- * Only one tab across the browser will play music
+ * Hook to handle sounds playback leader election
+ * Only one tab across the browser will play sounds (YouTube)
  * Uses Web Locks API for automatic leader election
  *
- * Sets isLeader in the music store, which controls whether
+ * Sets isLeader in the sounds store, which controls whether
  * this tab actually plays audio or just shows the UI state.
  */
-export function useMusicLeader(): void {
-  const setIsLeader = useMusicStore((state) => state.setIsLeader);
+export function useSoundsLeader(): void {
+  const setIsLeader = useSoundsStore((state) => state.setIsLeader);
   const lockHeldRef = useRef(false);
 
   useEffect(() => {
     let aborted = false;
 
     const requestLeadership = async () => {
-      logger.debug('Requesting music leadership lock...');
+      logger.debug('Requesting sounds leadership lock...');
 
       try {
-        await navigator.locks.request('cuewise-music-leader', async (lock) => {
+        await navigator.locks.request('cuewise-sounds-leader', async (lock) => {
           if (!lock || aborted) {
             logger.debug('Lock not acquired or aborted');
             return;
           }
 
-          logger.debug('Music lock acquired! This tab is the music leader');
+          logger.debug('Sounds lock acquired! This tab is the sounds leader');
           lockHeldRef.current = true;
           setIsLeader(true);
 
@@ -41,7 +41,7 @@ export function useMusicLeader(): void {
           await new Promise<void>((resolve) => {
             const checkInterval = setInterval(() => {
               if (aborted) {
-                logger.debug('Releasing music lock (component unmounted)');
+                logger.debug('Releasing sounds lock (component unmounted)');
                 clearInterval(checkInterval);
                 resolve();
               }
@@ -52,7 +52,7 @@ export function useMusicLeader(): void {
           setIsLeader(false);
         });
       } catch (error) {
-        logger.error('Error requesting music leadership', error);
+        logger.error('Error requesting sounds leadership', error);
         // Fallback: assume leader if Web Locks not supported
         if (!aborted) {
           logger.warn('Using fallback (no Web Locks) - assuming leader');
@@ -64,7 +64,7 @@ export function useMusicLeader(): void {
     requestLeadership();
 
     return () => {
-      logger.debug('Music leader hook cleanup');
+      logger.debug('Sounds leader hook cleanup');
       aborted = true;
       setIsLeader(false);
     };

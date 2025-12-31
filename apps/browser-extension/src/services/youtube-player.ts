@@ -96,6 +96,8 @@ interface PlayerState {
   isPaused: boolean;
   isReady: boolean;
   currentPlaylistId: string | null;
+  currentVideoId: string | null;
+  currentTime: number; // Current playback position in seconds
   volume: number;
 }
 
@@ -107,10 +109,14 @@ class YouTubePlayerService {
     isPaused: false,
     isReady: false,
     currentPlaylistId: null,
+    currentVideoId: null,
+    currentTime: 0,
     volume: 50,
   };
   private messageHandler: ((event: MessageEvent) => void) | null = null;
   private onStateChangeCallbacks: Array<(state: PlayerState) => void> = [];
+  private timeTrackingInterval: ReturnType<typeof setInterval> | null = null;
+  private onTimeUpdateCallbacks: Array<(videoId: string, time: number) => void> = [];
 
   /**
    * Initialize the YouTube player by creating a hidden iframe
@@ -150,8 +156,14 @@ class YouTubePlayerService {
    * @param playlistId - YouTube playlist ID
    * @param firstVideoId - First video ID in the playlist (required for proper embedding)
    * @param onReady - Optional callback when playlist is loaded and ready
+   * @param startAt - Optional start time in seconds (for resuming from saved position)
    */
-  loadPlaylist(playlistId: string, firstVideoId: string, onReady?: () => void): void {
+  loadPlaylist(
+    playlistId: string,
+    firstVideoId: string,
+    onReady?: () => void,
+    startAt?: number
+  ): void {
     if (!this.container) {
       this.initialize();
     }
@@ -161,14 +173,22 @@ class YouTubePlayerService {
       this.iframe.remove();
     }
 
+    // Stop any existing time tracking
+    this.stopTimeTracking();
+
     // Use proxy page to avoid Chrome extension referrer header issues (Error 153)
     // The proxy page embeds YouTube with proper referrer headers
     // Always load with autoplay=0, control playback via play()/pause() methods
     const params = new URLSearchParams({
-      vid: firstVideoId,
+      v: firstVideoId,
       list: playlistId,
       autoplay: '0',
     });
+
+    // Add start time if specified (for resuming playback)
+    if (startAt && startAt > 0) {
+      params.set('start', Math.floor(startAt).toString());
+    }
 
     const embedUrl = `https://cuewise.app/player?${params.toString()}`;
 
@@ -187,6 +207,8 @@ class YouTubePlayerService {
     this.iframe.onload = () => {
       this.state.isReady = true;
       this.state.currentPlaylistId = playlistId;
+      this.state.currentVideoId = firstVideoId;
+      this.state.currentTime = startAt || 0;
 
       // Apply saved volume after load
       setTimeout(() => {
@@ -197,7 +219,7 @@ class YouTubePlayerService {
         }
       }, 1000);
 
-      logger.info('YouTube iframe loaded successfully', { playlistId });
+      logger.info('YouTube iframe loaded successfully', { playlistId, firstVideoId, startAt });
       this.notifyStateChange();
     };
 
@@ -233,8 +255,8 @@ class YouTubePlayerService {
    * Handle messages from the YouTube iframe
    */
   private handleMessage(event: MessageEvent): void {
-    // Only process messages from YouTube
-    if (!event.origin.includes('youtube')) {
+    // Process messages from YouTube or our proxy page
+    if (!event.origin.includes('youtube') && !event.origin.includes('cuewise.app')) {
       return;
     }
 
@@ -248,9 +270,41 @@ class YouTubePlayerService {
         logger.info('YouTube player ready event received');
       } else if (data.event === 'onError') {
         logger.error('YouTube player error', { errorCode: data.info });
+      } else if (data.info?.currentTime !== undefined) {
+        // Handle getCurrentTime response
+        this.handleTimeUpdate(data.info.currentTime);
+      } else if (data.info?.videoData?.video_id) {
+        // Handle video change (when playlist advances to next video)
+        this.handleVideoChange(data.info.videoData.video_id);
       }
     } catch {
       // Not a JSON message, ignore
+    }
+  }
+
+  /**
+   * Handle current time update from iframe
+   */
+  private handleTimeUpdate(currentTime: number): void {
+    this.state.currentTime = currentTime;
+
+    // Notify time update callbacks
+    if (this.state.currentVideoId) {
+      for (const callback of this.onTimeUpdateCallbacks) {
+        callback(this.state.currentVideoId, currentTime);
+      }
+    }
+  }
+
+  /**
+   * Handle video change (when playlist advances)
+   */
+  private handleVideoChange(videoId: string): void {
+    if (this.state.currentVideoId !== videoId) {
+      logger.debug('Video changed', { from: this.state.currentVideoId, to: videoId });
+      this.state.currentVideoId = videoId;
+      this.state.currentTime = 0;
+      this.notifyStateChange();
     }
   }
 
@@ -291,6 +345,7 @@ class YouTubePlayerService {
     this.sendCommand('playVideo');
     this.state.isPlaying = true;
     this.state.isPaused = false;
+    this.startTimeTracking();
     this.notifyStateChange();
     logger.debug('YouTube player: play');
   }
@@ -303,9 +358,13 @@ class YouTubePlayerService {
       return;
     }
 
+    // Request current time before pausing (to save the timestamp)
+    this.requestCurrentTime();
+
     this.sendCommand('pauseVideo');
     this.state.isPlaying = false;
     this.state.isPaused = true;
+    this.stopTimeTracking();
     this.notifyStateChange();
     logger.debug('YouTube player: pause');
   }
@@ -318,9 +377,13 @@ class YouTubePlayerService {
       return;
     }
 
+    // Request current time before stopping (to save the timestamp)
+    this.requestCurrentTime();
+
     this.sendCommand('stopVideo');
     this.state.isPlaying = false;
     this.state.isPaused = false;
+    this.stopTimeTracking();
     this.notifyStateChange();
     logger.debug('YouTube player: stop');
   }
@@ -345,6 +408,89 @@ class YouTubePlayerService {
    */
   getVolume(): number {
     return this.state.volume;
+  }
+
+  /**
+   * Seek to a specific time in the video
+   * @param seconds - Position in seconds to seek to
+   * @param allowSeekAhead - If true, allows seeking to unbuffered parts (default: true)
+   */
+  seekTo(seconds: number, allowSeekAhead = true): void {
+    if (!this.state.isReady) {
+      logger.warn('YouTube player not ready for seek');
+      return;
+    }
+
+    this.sendCommand('seekTo', [seconds, allowSeekAhead]);
+    this.state.currentTime = seconds;
+    logger.debug('YouTube player: seekTo', { seconds });
+  }
+
+  /**
+   * Request current playback time from the player
+   * The response will be handled by handleTimeUpdate via postMessage
+   */
+  requestCurrentTime(): void {
+    if (!this.state.isReady) {
+      return;
+    }
+
+    this.sendCommand('getCurrentTime');
+  }
+
+  /**
+   * Get the last known current time (may not be up-to-date)
+   * Call requestCurrentTime() first if you need the latest value
+   */
+  getCurrentTime(): number {
+    return this.state.currentTime;
+  }
+
+  /**
+   * Get current video ID
+   */
+  getCurrentVideoId(): string | null {
+    return this.state.currentVideoId;
+  }
+
+  /**
+   * Start periodic time tracking (saves timestamp every 10 seconds)
+   */
+  startTimeTracking(): void {
+    if (this.timeTrackingInterval) {
+      return; // Already tracking
+    }
+
+    this.timeTrackingInterval = setInterval(() => {
+      if (this.state.isPlaying) {
+        this.requestCurrentTime();
+      }
+    }, 10000); // Every 10 seconds
+
+    logger.debug('YouTube player: started time tracking');
+  }
+
+  /**
+   * Stop periodic time tracking
+   */
+  stopTimeTracking(): void {
+    if (this.timeTrackingInterval) {
+      clearInterval(this.timeTrackingInterval);
+      this.timeTrackingInterval = null;
+      logger.debug('YouTube player: stopped time tracking');
+    }
+  }
+
+  /**
+   * Subscribe to time updates (called when getCurrentTime response is received)
+   * @param callback - Called with (videoId, currentTime) when time is updated
+   * @returns Unsubscribe function
+   */
+  onTimeUpdate(callback: (videoId: string, time: number) => void): () => void {
+    this.onTimeUpdateCallbacks.push(callback);
+    return () => {
+      this.onTimeUpdateCallbacks = this.onTimeUpdateCallbacks.filter((cb) => cb !== callback);
+    };
   }
 
   /**
@@ -436,6 +582,9 @@ class YouTubePlayerService {
    * Clean up the player
    */
   destroy(): void {
+    // Stop time tracking
+    this.stopTimeTracking();
+
     if (this.messageHandler) {
       window.removeEventListener('message', this.messageHandler);
       this.messageHandler = null;
@@ -456,10 +605,13 @@ class YouTubePlayerService {
       isPaused: false,
       isReady: false,
       currentPlaylistId: null,
+      currentVideoId: null,
+      currentTime: 0,
       volume: 50,
     };
 
     this.onStateChangeCallbacks = [];
+    this.onTimeUpdateCallbacks = [];
     logger.debug('YouTube player destroyed');
   }
 }

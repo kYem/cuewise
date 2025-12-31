@@ -6,6 +6,7 @@ import type {
   ReminderCategory,
   ReminderTemplate,
   Settings,
+  SoundscapeTile,
   YoutubePlaylist,
 } from './types';
 
@@ -91,6 +92,16 @@ export const AMBIENT_SOUNDS = {
 } as const;
 
 export type AmbientSoundType = keyof typeof AMBIENT_SOUNDS;
+
+// Soundscape tiles for the sounds panel (visual icon grid)
+export const SOUNDSCAPE_TILES: SoundscapeTile[] = [
+  { id: 'rain', name: 'Rain', icon: 'CloudRain' },
+  { id: 'ocean', name: 'Ocean', icon: 'Waves' },
+  { id: 'forest', name: 'Forest', icon: 'TreePine' },
+  { id: 'cafe', name: 'Cafe', icon: 'Coffee' },
+  { id: 'whiteNoise', name: 'White Noise', icon: 'Radio' },
+  { id: 'brownNoise', name: 'Brown Noise', icon: 'Wind' },
+];
 
 // Notification sound options for Pomodoro start/completion
 export const NOTIFICATION_SOUNDS = {

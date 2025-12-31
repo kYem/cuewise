@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useFocusModeStore } from '../../stores/focus-mode-store';
 import { useSettingsStore } from '../../stores/settings-store';
-import { MusicMiniPlayer } from '../MusicMiniPlayer';
+import { SoundsMiniPlayer } from '../sounds';
 import { BackgroundImage } from './BackgroundImage';
 import { FocusModeControls } from './FocusModeControls';
 import { FocusModeQuote } from './FocusModeQuote';
@@ -68,7 +68,7 @@ export function FocusMode() {
       {/* Music Mini Player - Floating in top-left */}
       {settings.pomodoroMusicEnabled && (
         <div className="absolute top-4 left-4 z-20">
-          <MusicMiniPlayer />
+          <SoundsMiniPlayer />
         </div>
       )}
     </div>
