@@ -18,8 +18,8 @@ import {
   type YoutubePlaylist,
 } from '@cuewise/shared';
 import {
+  getCurrentVideoForPlaylist,
   getCustomYoutubePlaylists,
-  getVideoTimestamp,
   setCustomYoutubePlaylists,
   updateVideoProgress,
 } from '@cuewise/storage';
@@ -48,6 +48,7 @@ interface SoundsStore {
   selectedPlaylistId: string;
   youtubeVolume: number;
   isYoutubeReady: boolean;
+  isYoutubeLoading: boolean; // True while loading a new playlist
 
   // Playback state
   isPlaying: boolean;
@@ -132,6 +133,7 @@ export const useSoundsStore = create<SoundsStore>()(
       selectedPlaylistId: '',
       youtubeVolume: 50,
       isYoutubeReady: false,
+      isYoutubeLoading: false,
       isPlaying: false,
       isPaused: false,
       isLeader: false,
@@ -203,16 +205,23 @@ export const useSoundsStore = create<SoundsStore>()(
           const { activeSource, isPlaying, selectedPlaylistId, playlists, youtubeVolume } = get();
           if (activeSource === 'youtube' && isPlaying && selectedPlaylistId) {
             const playlist = playlists.find((p) => p.id === selectedPlaylistId);
-            const firstVideoId = playlist?.firstVideoId;
-            if (playlist && firstVideoId) {
-              // Get saved timestamp for resume
-              getVideoTimestamp(playlist.playlistId, firstVideoId).then((startAt) => {
+            if (playlist?.firstVideoId) {
+              set({ isYoutubeLoading: true });
+              // Get last played video and timestamp (or fall back to first video)
+              getCurrentVideoForPlaylist(playlist.playlistId).then((resumeInfo) => {
+                const videoId = resumeInfo?.videoId || playlist.firstVideoId;
+                const startAt = resumeInfo?.timestamp || 0;
+                if (!videoId) {
+                  set({ isYoutubeLoading: false });
+                  return;
+                }
                 youtubePlayer.loadPlaylist(
                   playlist.playlistId,
-                  firstVideoId,
+                  videoId,
                   () => {
                     youtubePlayer.play();
                     youtubePlayer.setVolume(youtubeVolume);
+                    set({ isYoutubeLoading: false });
                   },
                   startAt
                 );
@@ -303,36 +312,57 @@ export const useSoundsStore = create<SoundsStore>()(
           return;
         }
 
-        set({
-          activeSource: 'youtube',
-          selectedPlaylistId: targetPlaylistId,
-          isPlaying: true,
-          isPaused: false,
-          activeTab: 'nowPlaying', // Switch to Now Playing tab
-        });
-
         if (isLeader) {
-          // Get saved timestamp for resume
-          const startAt = await getVideoTimestamp(playlist.playlistId, playlist.firstVideoId);
+          // Get last played video and timestamp (or fall back to first video)
+          const resumeInfo = await getCurrentVideoForPlaylist(playlist.playlistId);
+          const videoId = resumeInfo?.videoId || playlist.firstVideoId;
+          const startAt = resumeInfo?.timestamp || 0;
 
           const currentPlaylistId = youtubePlayer.getCurrentPlaylistId();
           if (currentPlaylistId !== playlist.playlistId) {
+            // Set loading state before loading new playlist
+            set({
+              activeSource: 'youtube',
+              selectedPlaylistId: targetPlaylistId,
+              isPlaying: true,
+              isPaused: false,
+              isYoutubeLoading: true,
+              activeTab: 'nowPlaying',
+            });
+
             youtubePlayer.loadPlaylist(
               playlist.playlistId,
-              playlist.firstVideoId,
+              videoId,
               () => {
                 youtubePlayer.play();
                 youtubePlayer.setVolume(youtubeVolume);
+                set({ isYoutubeLoading: false });
               },
               startAt
             );
           } else {
             // Same playlist, just seek and play
+            set({
+              activeSource: 'youtube',
+              selectedPlaylistId: targetPlaylistId,
+              isPlaying: true,
+              isPaused: false,
+              activeTab: 'nowPlaying',
+            });
             if (startAt > 0) {
               youtubePlayer.seekTo(startAt);
             }
             youtubePlayer.play();
           }
+        } else {
+          // Not leader, just update state
+          set({
+            activeSource: 'youtube',
+            selectedPlaylistId: targetPlaylistId,
+            isPlaying: true,
+            isPaused: false,
+            activeTab: 'nowPlaying',
+          });
         }
       },
 
@@ -431,13 +461,20 @@ export const useSoundsStore = create<SoundsStore>()(
 
         // If currently playing YouTube, load the new playlist
         if (isPlaying && activeSource === 'youtube' && playlist.firstVideoId && isLeader) {
-          const startAt = await getVideoTimestamp(playlist.playlistId, playlist.firstVideoId);
+          // Set loading state
+          set({ isYoutubeLoading: true });
+
+          // Get last played video and timestamp (or fall back to first video)
+          const resumeInfo = await getCurrentVideoForPlaylist(playlist.playlistId);
+          const videoId = resumeInfo?.videoId || playlist.firstVideoId;
+          const startAt = resumeInfo?.timestamp || 0;
           youtubePlayer.loadPlaylist(
             playlist.playlistId,
-            playlist.firstVideoId,
+            videoId,
             () => {
               youtubePlayer.play();
               youtubePlayer.setVolume(youtubeVolume);
+              set({ isYoutubeLoading: false });
             },
             startAt
           );
@@ -645,13 +682,18 @@ async function syncLeaderPlayback() {
       if (playlist?.firstVideoId) {
         const currentPlaylistId = youtubePlayer.getCurrentPlaylistId();
         if (currentPlaylistId !== playlist.playlistId) {
-          const startAt = await getVideoTimestamp(playlist.playlistId, playlist.firstVideoId);
+          useSoundsStore.setState({ isYoutubeLoading: true });
+          // Get last played video and timestamp (or fall back to first video)
+          const resumeInfo = await getCurrentVideoForPlaylist(playlist.playlistId);
+          const videoId = resumeInfo?.videoId || playlist.firstVideoId;
+          const startAt = resumeInfo?.timestamp || 0;
           youtubePlayer.loadPlaylist(
             playlist.playlistId,
-            playlist.firstVideoId,
+            videoId,
             () => {
               youtubePlayer.play();
               youtubePlayer.setVolume(youtubeVolume);
+              useSoundsStore.setState({ isYoutubeLoading: false });
             },
             startAt
           );

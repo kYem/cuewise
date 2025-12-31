@@ -440,14 +440,34 @@ export async function getVideoTimestamp(playlistId: string, videoId: string): Pr
   }
 }
 
+export interface PlaylistResumeInfo {
+  videoId: string;
+  timestamp: number;
+}
+
 /**
- * Get the current video ID for a playlist (last played video)
+ * Get the current video ID and timestamp for a playlist (last played video)
+ * Returns both the videoId and timestamp to avoid multiple storage lookups
  */
-export async function getCurrentVideoForPlaylist(playlistId: string): Promise<string | null> {
+export async function getCurrentVideoForPlaylist(
+  playlistId: string
+): Promise<PlaylistResumeInfo | null> {
   try {
     const allProgress = await getYoutubeProgress();
     const playlistProgress = allProgress.find((p) => p.playlistId === playlistId);
-    return playlistProgress?.currentVideoId ?? null;
+
+    if (!playlistProgress?.currentVideoId) {
+      return null;
+    }
+
+    const videoProgress = playlistProgress.videoProgress.find(
+      (v) => v.videoId === playlistProgress.currentVideoId
+    );
+
+    return {
+      videoId: playlistProgress.currentVideoId,
+      timestamp: videoProgress?.timestamp ?? 0,
+    };
   } catch (error) {
     logger.error('Error getting current video for playlist', error);
     return null;

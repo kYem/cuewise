@@ -117,6 +117,7 @@ class YouTubePlayerService {
   private onStateChangeCallbacks: Array<(state: PlayerState) => void> = [];
   private timeTrackingInterval: ReturnType<typeof setInterval> | null = null;
   private onTimeUpdateCallbacks: Array<(videoId: string, time: number) => void> = [];
+  private lastTimeUpdateNotification = 0; // Timestamp of last callback notification
 
   /**
    * Initialize the YouTube player by creating a hidden iframe
@@ -183,6 +184,10 @@ class YouTubePlayerService {
       v: firstVideoId,
       list: playlistId,
       autoplay: '0',
+      controls: '0', // Hide player controls (we control via postMessage)
+      rel: '0', // Don't show related videos at end
+      iv_load_policy: '3', // Hide video annotations
+      disablekb: '1', // Disable keyboard controls (we handle via our UI)
     });
 
     // Add start time if specified (for resuming playback)
@@ -209,6 +214,12 @@ class YouTubePlayerService {
       this.state.currentPlaylistId = playlistId;
       this.state.currentVideoId = firstVideoId;
       this.state.currentTime = startAt || 0;
+
+      // Subscribe to YouTube events by sending "listening" message
+      // This enables infoDelivery messages with currentTime, duration, etc.
+      setTimeout(() => {
+        this.sendListening();
+      }, 500);
 
       // Apply saved volume after load
       setTimeout(() => {
@@ -252,6 +263,22 @@ class YouTubePlayerService {
   }
 
   /**
+   * Subscribe to YouTube events by sending "listening" message
+   * This enables infoDelivery messages with currentTime, duration, videoData, etc.
+   */
+  private sendListening(): void {
+    if (!this.iframe?.contentWindow) {
+      return;
+    }
+
+    // Send listening message to subscribe to YouTube events
+    // YouTube will respond with infoDelivery messages containing currentTime, videoData, etc.
+    const message = JSON.stringify({ event: 'listening' });
+    this.iframe.contentWindow.postMessage(message, '*');
+    logger.debug('YouTube: subscribed to events');
+  }
+
+  /**
    * Handle messages from the YouTube iframe
    */
   private handleMessage(event: MessageEvent): void {
@@ -262,7 +289,6 @@ class YouTubePlayerService {
 
     try {
       const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
-      logger.debug('YouTube received message', { event: data.event, info: data.info });
 
       if (data.event === 'onStateChange') {
         this.handleStateChange(data.info);
@@ -270,8 +296,17 @@ class YouTubePlayerService {
         logger.info('YouTube player ready event received');
       } else if (data.event === 'onError') {
         logger.error('YouTube player error', { errorCode: data.info });
+      } else if (data.event === 'infoDelivery') {
+        // Handle periodic infoDelivery messages from YouTube
+        // These contain currentTime, duration, videoData, etc.
+        if (data.info?.currentTime !== undefined) {
+          this.handleTimeUpdate(data.info.currentTime);
+        }
+        if (data.info?.videoData?.video_id) {
+          this.handleVideoChange(data.info.videoData.video_id);
+        }
       } else if (data.info?.currentTime !== undefined) {
-        // Handle getCurrentTime response
+        // Handle getCurrentTime response (fallback)
         this.handleTimeUpdate(data.info.currentTime);
       } else if (data.info?.videoData?.video_id) {
         // Handle video change (when playlist advances to next video)
@@ -284,15 +319,34 @@ class YouTubePlayerService {
 
   /**
    * Handle current time update from iframe
+   * Throttles callback notifications to every 10 seconds to avoid excessive storage writes
+   * @param force - If true, bypasses throttling (used for pause/stop to save immediately)
    */
-  private handleTimeUpdate(currentTime: number): void {
+  private handleTimeUpdate(currentTime: number, force = false): void {
     this.state.currentTime = currentTime;
 
-    // Notify time update callbacks
-    if (this.state.currentVideoId) {
-      for (const callback of this.onTimeUpdateCallbacks) {
-        callback(this.state.currentVideoId, currentTime);
+    // Throttle callback notifications to every 10 seconds (unless forced)
+    const now = Date.now();
+    const TIME_UPDATE_THROTTLE_MS = 10000; // 10 seconds
+
+    if (force || now - this.lastTimeUpdateNotification >= TIME_UPDATE_THROTTLE_MS) {
+      this.lastTimeUpdateNotification = now;
+
+      // Notify time update callbacks
+      if (this.state.currentVideoId) {
+        for (const callback of this.onTimeUpdateCallbacks) {
+          callback(this.state.currentVideoId, currentTime);
+        }
       }
+    }
+  }
+
+  /**
+   * Force notify callbacks with current time (used for pause/stop)
+   */
+  private forceTimeUpdate(): void {
+    if (this.state.currentVideoId && this.state.currentTime > 0) {
+      this.handleTimeUpdate(this.state.currentTime, true);
     }
   }
 
@@ -358,8 +412,8 @@ class YouTubePlayerService {
       return;
     }
 
-    // Request current time before pausing (to save the timestamp)
-    this.requestCurrentTime();
+    // Save the current timestamp immediately before pausing
+    this.forceTimeUpdate();
 
     this.sendCommand('pauseVideo');
     this.state.isPlaying = false;
@@ -377,8 +431,8 @@ class YouTubePlayerService {
       return;
     }
 
-    // Request current time before stopping (to save the timestamp)
-    this.requestCurrentTime();
+    // Save the current timestamp immediately before stopping
+    this.forceTimeUpdate();
 
     this.sendCommand('stopVideo');
     this.state.isPlaying = false;
