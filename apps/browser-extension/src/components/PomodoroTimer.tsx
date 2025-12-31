@@ -2,6 +2,7 @@ import { formatTimeRemaining } from '@cuewise/shared';
 import { Maximize2, Pause, Play, RotateCcw, SkipForward, Target } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useState } from 'react';
+import { useMusicLeader } from '../hooks/useMusicLeader';
 import { usePomodoroLeader } from '../hooks/usePomodoroLeader';
 import { useFocusModeStore } from '../stores/focus-mode-store';
 import { useGoalStore } from '../stores/goal-store';
@@ -54,6 +55,9 @@ export const PomodoroTimer: React.FC = () => {
   // Timer leader election - only one tab/component runs the timer
   usePomodoroLeader();
 
+  // Music leader election - only one tab plays music
+  const isMusicLeader = useMusicLeader();
+
   // Initialize on mount
   useEffect(() => {
     initialize();
@@ -85,6 +89,7 @@ export const PomodoroTimer: React.FC = () => {
   }, [status, sessionType, ambientSound, ambientVolume]);
 
   // YouTube music management (synced with Pomodoro)
+  // Only the music leader tab controls playback
   useEffect(() => {
     const { pomodoroMusicEnabled, pomodoroMusicAutoStart, pomodoroMusicPlayDuringBreaks } =
       settings;
@@ -96,6 +101,11 @@ export const PomodoroTimer: React.FC = () => {
 
     // Wait for music store to be initialized before auto-starting
     if (isMusicLoading) {
+      return;
+    }
+
+    // Only the music leader tab should control playback
+    if (!isMusicLeader) {
       return;
     }
 
@@ -124,6 +134,7 @@ export const PomodoroTimer: React.FC = () => {
     settings.pomodoroMusicAutoStart,
     settings.pomodoroMusicPlayDuringBreaks,
     isMusicLoading,
+    isMusicLeader,
     playMusic,
     pauseMusic,
     stopMusic,
