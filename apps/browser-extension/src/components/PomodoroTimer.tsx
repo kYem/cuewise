@@ -3,11 +3,12 @@ import { Maximize2, Pause, Play, RotateCcw, SkipForward, Target } from 'lucide-r
 import type React from 'react';
 import { useEffect, useState } from 'react';
 import { usePomodoroLeader } from '../hooks/usePomodoroLeader';
+import { useSoundsLeader } from '../hooks/useSoundsLeader';
 import { useFocusModeStore } from '../stores/focus-mode-store';
 import { useGoalStore } from '../stores/goal-store';
 import { usePomodoroStorageSync, usePomodoroStore } from '../stores/pomodoro-store';
 import { useSettingsStore } from '../stores/settings-store';
-import { ambientSoundPlayer } from '../utils/ambient-sounds';
+import { useSoundsStore } from '../stores/sounds-store';
 import { getSessionStyles } from '../utils/pomodoro-styles';
 import { EditableValue } from './EditableValue';
 
@@ -23,8 +24,6 @@ export const PomodoroTimer: React.FC = () => {
     consecutiveWorkSessions,
     longBreakInterval,
     selectedGoalId,
-    ambientSound,
-    ambientVolume,
     initialize,
     start,
     pause,
@@ -38,6 +37,17 @@ export const PomodoroTimer: React.FC = () => {
   const { todayTasks, initialize: initGoals } = useGoalStore();
   const { updateSettings, settings } = useSettingsStore();
 
+  // Unified sounds store for ambient and YouTube
+  const {
+    activeSource,
+    isPlaying: isSoundsPlaying,
+    pause: pauseSounds,
+    resume: resumeSounds,
+    stop: stopSounds,
+    initialize: initSounds,
+    getActiveSourceName,
+  } = useSoundsStore();
+
   const [showGoalPicker, setShowGoalPicker] = useState(false);
 
   // Enable cross-tab synchronization
@@ -46,34 +56,61 @@ export const PomodoroTimer: React.FC = () => {
   // Timer leader election - only one tab/component runs the timer
   usePomodoroLeader();
 
+  // Sounds leader election - only one tab plays YouTube audio
+  useSoundsLeader();
+
   // Initialize on mount
   useEffect(() => {
     initialize();
     initGoals();
-  }, [initialize, initGoals]);
+    initSounds();
+  }, [initialize, initGoals, initSounds]);
 
-  // Ambient sound management
+  // Unified sound management (ambient + YouTube via sounds-store)
+  // The sounds-store handles leader election and cross-tab sync internally
   useEffect(() => {
-    if (status === 'running' && sessionType === 'work' && ambientSound !== 'none') {
-      // Start ambient sound during work sessions
-      ambientSoundPlayer.play(
-        ambientSound as 'rain' | 'ocean' | 'forest' | 'cafe' | 'whiteNoise' | 'brownNoise',
-        ambientVolume
-      );
-    } else {
-      // Stop ambient sound when not in work session or when paused
-      if (ambientSoundPlayer.getIsPlaying()) {
-        ambientSoundPlayer.stop();
-      }
+    const { pomodoroMusicEnabled, pomodoroMusicAutoStart, pomodoroMusicPlayDuringBreaks } =
+      settings;
+
+    // Skip if sounds feature is disabled or auto-start is off
+    if (!pomodoroMusicEnabled || !pomodoroMusicAutoStart) {
+      return;
+    }
+
+    // Skip if no sound source is selected
+    if (activeSource === 'none') {
+      return;
+    }
+
+    // Determine if we should play sounds based on session type
+    const shouldPlayForSession = sessionType === 'work' || pomodoroMusicPlayDuringBreaks;
+
+    if (status === 'running' && shouldPlayForSession) {
+      // Resume sounds when timer is running
+      resumeSounds();
+    } else if (status === 'paused') {
+      // Pause sounds when timer is paused
+      pauseSounds();
+    } else if (status === 'idle') {
+      // Stop sounds when timer is idle
+      stopSounds();
     }
 
     // Cleanup on unmount
     return () => {
-      if (ambientSoundPlayer.getIsPlaying()) {
-        ambientSoundPlayer.stop();
-      }
+      stopSounds();
     };
-  }, [status, sessionType, ambientSound, ambientVolume]);
+  }, [
+    status,
+    sessionType,
+    activeSource,
+    settings.pomodoroMusicEnabled,
+    settings.pomodoroMusicAutoStart,
+    settings.pomodoroMusicPlayDuringBreaks,
+    resumeSounds,
+    pauseSounds,
+    stopSounds,
+  ]);
 
   // Request notification permission on mount
   useEffect(() => {
@@ -396,8 +433,8 @@ export const PomodoroTimer: React.FC = () => {
               }}
             />
           </p>
-          {ambientSound !== 'none' && isWork && (
-            <p className={`mt-1 ${color}`}>🎵 Ambient sound: {ambientSound}</p>
+          {activeSource !== 'none' && isSoundsPlaying && isWork && (
+            <p className={`mt-1 ${color}`}>🎵 {getActiveSourceName()}</p>
           )}
         </div>
       </div>

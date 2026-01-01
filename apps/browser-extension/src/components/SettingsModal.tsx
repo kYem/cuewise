@@ -1,6 +1,4 @@
 import {
-  AMBIENT_SOUNDS,
-  type AmbientSoundType,
   FOCUS_IMAGE_CATEGORIES,
   type FocusImageCategory,
   NOTIFICATION_SOUNDS,
@@ -15,18 +13,18 @@ import {
   Clock,
   Cloud,
   CloudOff,
+  Headphones,
   Maximize2,
-  Music,
   Play,
   RefreshCw,
   RotateCcw,
-  Square,
+  Settings2,
 } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useState } from 'react';
 import { usePomodoroStore } from '../stores/pomodoro-store';
 import { useSettingsStore } from '../stores/settings-store';
-import { ambientSoundPlayer } from '../utils/ambient-sounds';
+import { useSoundsStore } from '../stores/sounds-store';
 import { previewSound } from '../utils/sounds';
 import { Modal } from './Modal';
 
@@ -39,13 +37,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   const { settings, updateSettings, resetToDefaults } = useSettingsStore();
   const reloadPomodoroSettings = usePomodoroStore((state) => state.reloadSettings);
 
+  // Sounds store for opening the sounds panel
+  const openSoundsPanel = useSoundsStore((state) => state.openPanel);
+
   // Local state for form controls
   const [workDuration, setWorkDuration] = useState(settings.pomodoroWorkDuration);
   const [breakDuration, setBreakDuration] = useState(settings.pomodoroBreakDuration);
   const [longBreakDuration, setLongBreakDuration] = useState(settings.pomodoroLongBreakDuration);
   const [longBreakInterval, setLongBreakInterval] = useState(settings.pomodoroLongBreakInterval);
-  const [ambientSound, setAmbientSound] = useState(settings.pomodoroAmbientSound);
-  const [ambientVolume, setAmbientVolume] = useState(settings.pomodoroAmbientVolume);
   const [startSound, setStartSound] = useState(settings.pomodoroStartSound);
   const [completionSound, setCompletionSound] = useState(settings.pomodoroCompletionSound);
   const [notifications, setNotifications] = useState(settings.enableNotifications);
@@ -62,7 +61,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   const [focusModeShowQuote, setFocusModeShowQuote] = useState(settings.focusModeShowQuote);
   const [focusModeAutoEnter, setFocusModeAutoEnter] = useState(settings.focusModeAutoEnter);
   const [showClock, setShowClock] = useState(settings.showClock);
-  const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
+  const [pomodoroMusicEnabled, setPomodoroMusicEnabled] = useState(settings.pomodoroMusicEnabled);
+  const [pomodoroMusicAutoStart, setPomodoroMusicAutoStart] = useState(
+    settings.pomodoroMusicAutoStart
+  );
+  const [pomodoroMusicPlayDuringBreaks, setPomodoroMusicPlayDuringBreaks] = useState(
+    settings.pomodoroMusicPlayDuringBreaks
+  );
 
   // Sync local state with store when settings change
   useEffect(() => {
@@ -70,8 +75,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     setBreakDuration(settings.pomodoroBreakDuration);
     setLongBreakDuration(settings.pomodoroLongBreakDuration);
     setLongBreakInterval(settings.pomodoroLongBreakInterval);
-    setAmbientSound(settings.pomodoroAmbientSound);
-    setAmbientVolume(settings.pomodoroAmbientVolume);
     setStartSound(settings.pomodoroStartSound);
     setCompletionSound(settings.pomodoroCompletionSound);
     setNotifications(settings.enableNotifications);
@@ -86,6 +89,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     setFocusModeShowQuote(settings.focusModeShowQuote);
     setFocusModeAutoEnter(settings.focusModeAutoEnter);
     setShowClock(settings.showClock);
+    setPomodoroMusicEnabled(settings.pomodoroMusicEnabled);
+    setPomodoroMusicAutoStart(settings.pomodoroMusicAutoStart);
+    setPomodoroMusicPlayDuringBreaks(settings.pomodoroMusicPlayDuringBreaks);
   }, [settings]);
 
   // Format interval for display
@@ -102,50 +108,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
   };
 
-  // Toggle ambient sound preview
-  const togglePreview = () => {
-    if (isPreviewPlaying) {
-      ambientSoundPlayer.stop();
-      setIsPreviewPlaying(false);
-    } else {
-      if (ambientSound !== 'none') {
-        ambientSoundPlayer.play(ambientSound as AmbientSoundType, ambientVolume);
-        setIsPreviewPlaying(true);
-      }
-    }
-  };
-
-  // Update preview volume when slider changes
-  useEffect(() => {
-    if (isPreviewPlaying) {
-      ambientSoundPlayer.setVolume(ambientVolume);
-    }
-  }, [ambientVolume, isPreviewPlaying]);
-
-  // Stop preview when modal closes or sound changes
-  useEffect(() => {
-    if (!isOpen && isPreviewPlaying) {
-      ambientSoundPlayer.stop();
-      setIsPreviewPlaying(false);
-    }
-  }, [isOpen, isPreviewPlaying]);
-
-  // Stop preview when ambient sound changes
-  useEffect(() => {
-    if (isPreviewPlaying) {
-      ambientSoundPlayer.stop();
-      setIsPreviewPlaying(false);
-    }
-  }, [ambientSound]);
-
   // Handle save
   const handleSave = async () => {
-    // Stop preview if playing
-    if (isPreviewPlaying) {
-      ambientSoundPlayer.stop();
-      setIsPreviewPlaying(false);
-    }
-
     // Check if sync setting changed
     const syncChanged = syncEnabled !== settings.syncEnabled;
 
@@ -154,8 +118,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
       pomodoroBreakDuration: breakDuration,
       pomodoroLongBreakDuration: longBreakDuration,
       pomodoroLongBreakInterval: longBreakInterval,
-      pomodoroAmbientSound: ambientSound,
-      pomodoroAmbientVolume: ambientVolume,
       pomodoroStartSound: startSound,
       pomodoroCompletionSound: completionSound,
       enableNotifications: notifications,
@@ -170,6 +132,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
       focusModeShowQuote,
       focusModeAutoEnter,
       showClock,
+      pomodoroMusicEnabled,
+      pomodoroMusicAutoStart,
+      pomodoroMusicPlayDuringBreaks,
     });
 
     // If sync setting changed, reload the page to apply storage changes
@@ -184,8 +149,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
       breakDuration !== settings.pomodoroBreakDuration ||
       longBreakDuration !== settings.pomodoroLongBreakDuration ||
       longBreakInterval !== settings.pomodoroLongBreakInterval ||
-      ambientSound !== settings.pomodoroAmbientSound ||
-      ambientVolume !== settings.pomodoroAmbientVolume ||
       startSound !== settings.pomodoroStartSound ||
       completionSound !== settings.pomodoroCompletionSound
     ) {
@@ -342,94 +305,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
           </div>
         </section>
 
-        {/* Ambient Sound Settings */}
-        <section>
-          <div className="flex items-center gap-2 mb-4">
-            <Music className="w-5 h-5 text-primary-600" />
-            <h3 className="text-lg font-semibold text-primary">Ambient Sounds</h3>
-          </div>
-
-          <div className="space-y-4 pl-7">
-            {/* Ambient Sound Selection */}
-            <div>
-              <label
-                htmlFor="ambient-sound"
-                className="block text-sm font-medium text-primary mb-2"
-              >
-                Sound Type
-              </label>
-              <div className="flex items-center gap-2">
-                <select
-                  id="ambient-sound"
-                  value={ambientSound}
-                  onChange={(e) => setAmbientSound(e.target.value)}
-                  className="flex-1 px-3 py-2 text-sm text-primary border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                >
-                  {Object.entries(AMBIENT_SOUNDS).map(([key, label]) => (
-                    <option key={key} value={key}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-                {ambientSound !== 'none' && (
-                  <button
-                    type="button"
-                    onClick={togglePreview}
-                    className={`p-2 rounded-md transition-all ${
-                      isPreviewPlaying
-                        ? 'bg-primary-600 text-white hover:bg-primary-700'
-                        : 'bg-surface-variant text-primary hover:bg-border'
-                    }`}
-                    title={isPreviewPlaying ? 'Stop preview' : 'Test sound'}
-                  >
-                    {isPreviewPlaying ? (
-                      <Square className="w-5 h-5" />
-                    ) : (
-                      <Play className="w-5 h-5" />
-                    )}
-                  </button>
-                )}
-              </div>
-              <p className="text-xs text-secondary mt-1">
-                Ambient sounds play during work sessions only
-              </p>
-            </div>
-
-            {/* Volume Control */}
-            {ambientSound !== 'none' && (
-              <div>
-                <label
-                  htmlFor="ambient-volume"
-                  className="block text-sm font-medium text-primary mb-2"
-                >
-                  Volume: <span className="text-primary-600 font-semibold">{ambientVolume}%</span>
-                </label>
-                <div className="flex items-center gap-4">
-                  <input
-                    id="ambient-volume"
-                    type="range"
-                    min="0"
-                    max="100"
-                    step="5"
-                    value={ambientVolume}
-                    onChange={(e) => setAmbientVolume(Number(e.target.value))}
-                    className="flex-1"
-                  />
-                  <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="5"
-                    value={ambientVolume}
-                    onChange={(e) => setAmbientVolume(Number(e.target.value))}
-                    className="w-16 px-2 py-1 text-sm text-primary border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-        </section>
-
         {/* Notification Sounds Settings */}
         <section>
           <div className="flex items-center gap-2 mb-4">
@@ -508,6 +383,94 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                 Played when a session completes (work or break)
               </p>
             </div>
+          </div>
+        </section>
+
+        {/* Focus Music Settings */}
+        <section>
+          <div className="flex items-center gap-2 mb-4">
+            <Headphones className="w-5 h-5 text-primary-600" />
+            <h3 className="text-lg font-semibold text-primary">Focus Music</h3>
+          </div>
+
+          <div className="space-y-4 pl-7">
+            {/* Enable Focus Music Toggle */}
+            <label className="flex items-center gap-3 cursor-pointer group">
+              <div className="relative">
+                <input
+                  type="checkbox"
+                  checked={pomodoroMusicEnabled}
+                  onChange={(e) => setPomodoroMusicEnabled(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-divider peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-surface after:border-border after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
+              </div>
+              <div>
+                <span className="text-sm font-medium text-primary">Enable focus music</span>
+                <p className="text-xs text-secondary">
+                  Play YouTube music playlists during Pomodoro sessions
+                </p>
+              </div>
+            </label>
+
+            {pomodoroMusicEnabled && (
+              <>
+                {/* Auto-Start Toggle */}
+                <label className="flex items-center gap-3 cursor-pointer group">
+                  <div className="relative">
+                    <input
+                      type="checkbox"
+                      checked={pomodoroMusicAutoStart}
+                      onChange={(e) => setPomodoroMusicAutoStart(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-divider peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-surface after:border-border after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
+                  </div>
+                  <div>
+                    <span className="text-sm font-medium text-primary">Auto-start with timer</span>
+                    <p className="text-xs text-secondary">
+                      Automatically play music when you start a Pomodoro session
+                    </p>
+                  </div>
+                </label>
+
+                {/* Play During Breaks Toggle */}
+                <label className="flex items-center gap-3 cursor-pointer group">
+                  <div className="relative">
+                    <input
+                      type="checkbox"
+                      checked={pomodoroMusicPlayDuringBreaks}
+                      onChange={(e) => setPomodoroMusicPlayDuringBreaks(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-divider peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-surface after:border-border after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
+                  </div>
+                  <div>
+                    <span className="text-sm font-medium text-primary">Play during breaks</span>
+                    <p className="text-xs text-secondary">
+                      Continue playing music during break sessions
+                    </p>
+                  </div>
+                </label>
+
+                {/* Configure Sounds Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    openSoundsPanel();
+                    onClose();
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary bg-surface border border-border rounded-lg hover:bg-surface-variant transition-colors"
+                >
+                  <Settings2 className="w-4 h-4" />
+                  Configure Sounds & Playlists
+                </button>
+
+                <p className="text-xs text-secondary">
+                  Choose ambient sounds or YouTube playlists from the sounds panel
+                </p>
+              </>
+            )}
           </div>
         </section>
 

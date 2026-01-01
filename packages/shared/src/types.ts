@@ -109,6 +109,40 @@ export type SettingsLogLevel = 'none' | 'error' | 'warn' | 'info' | 'debug';
 // Focus mode image categories for Unsplash backgrounds
 export type FocusImageCategory = 'nature' | 'forest' | 'ocean' | 'mountains' | 'minimal' | 'dark';
 
+// YouTube playlist for Pomodoro music
+export interface YoutubePlaylist {
+  id: string; // Unique ID (generated for custom, fixed for curated)
+  name: string; // Display name
+  playlistId: string; // YouTube playlist ID (e.g., "PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf")
+  thumbnailUrl?: string; // Optional thumbnail URL
+  firstVideoId?: string; // First video ID for embedding (YouTube requires video ID + list for embeds)
+  isCustom: boolean; // User-added vs pre-built curated playlist
+}
+
+// YouTube video progress for timestamp memory
+export interface VideoProgress {
+  videoId: string; // YouTube video ID
+  timestamp: number; // Playback position in seconds
+  updatedAt: string; // ISO timestamp of last update
+}
+
+// YouTube playlist progress (tracks current video and timestamps)
+export interface PlaylistProgress {
+  playlistId: string; // YouTube playlist ID
+  currentVideoId?: string; // Currently playing video ID
+  videoProgress: VideoProgress[]; // Timestamps for videos in this playlist
+}
+
+// Sound source type (mutually exclusive - only one can play at a time)
+export type SoundSource = 'none' | 'ambient' | 'youtube';
+
+// Soundscape tile configuration for the sounds panel
+export interface SoundscapeTile {
+  id: string; // Matches AmbientSoundType (e.g., 'rain', 'ocean')
+  name: string; // Display name
+  icon: string; // Lucide icon name
+}
+
 // Settings interface
 export interface Settings {
   pomodoroWorkDuration: number; // minutes (default 25)
@@ -120,6 +154,12 @@ export interface Settings {
   pomodoroAmbientVolume: number; // volume 0-100 (default 50)
   pomodoroStartSound: string; // notification sound for session start (default 'chime')
   pomodoroCompletionSound: string; // notification sound for session completion (default 'chime')
+  // Pomodoro Music (YouTube integration)
+  pomodoroMusicEnabled: boolean; // Enable YouTube music integration (default false)
+  pomodoroMusicVolume: number; // volume 0-100 (default 50)
+  pomodoroMusicAutoStart: boolean; // Auto-play music when timer starts (default true)
+  pomodoroMusicPlaylistId: string; // Selected playlist ID (default '')
+  pomodoroMusicPlayDuringBreaks: boolean; // Continue music during breaks (default false)
   enableNotifications: boolean;
   theme: 'light' | 'dark' | 'auto';
   quoteChangeInterval: number; // seconds (0 = manual, 1-3600 = auto-refresh every N seconds)
@@ -155,6 +195,8 @@ export const STORAGE_KEYS = {
   POMODORO_STATE: 'pomodoroState',
   SETTINGS: 'settings',
   CURRENT_QUOTE: 'currentQuote',
+  CUSTOM_YOUTUBE_PLAYLISTS: 'customYoutubePlaylists', // User-added YouTube playlists
+  YOUTUBE_PROGRESS: 'youtubeProgress', // YouTube playback progress (timestamps per video)
 } as const;
 
 // Insights data

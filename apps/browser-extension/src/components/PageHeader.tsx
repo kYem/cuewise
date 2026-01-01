@@ -7,7 +7,7 @@ type Page = 'quotes' | 'insights' | 'pomodoro' | 'goals';
 
 interface PageHeaderProps {
   currentPage: Page;
-  title: string;
+  title?: string;
   subtitle?: string;
   transparent?: boolean;
 }
@@ -70,31 +70,38 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
               <span className="hidden sm:inline text-sm font-medium">Back to Home</span>
             </button>
 
-            <div
-              className={cn('h-6 w-px hidden sm:block', transparent ? 'bg-white/30' : 'bg-divider')}
-              aria-hidden="true"
-            />
-
-            <div>
-              <h1
-                className={cn(
-                  'text-xl sm:text-2xl font-bold',
-                  transparent ? 'text-white' : 'text-primary'
-                )}
-              >
-                {title}
-              </h1>
-              {subtitle && (
-                <p
+            {title && (
+              <>
+                <div
                   className={cn(
-                    'text-xs sm:text-sm',
-                    transparent ? 'text-white/70' : 'text-secondary'
+                    'h-6 w-px hidden sm:block',
+                    transparent ? 'bg-white/30' : 'bg-divider'
                   )}
-                >
-                  {subtitle}
-                </p>
-              )}
-            </div>
+                  aria-hidden="true"
+                />
+
+                <div>
+                  <h1
+                    className={cn(
+                      'text-xl sm:text-2xl font-bold',
+                      transparent ? 'text-white' : 'text-primary'
+                    )}
+                  >
+                    {title}
+                  </h1>
+                  {subtitle && (
+                    <p
+                      className={cn(
+                        'text-xs sm:text-sm',
+                        transparent ? 'text-white/70' : 'text-secondary'
+                      )}
+                    >
+                      {subtitle}
+                    </p>
+                  )}
+                </div>
+              </>
+            )}
           </div>
 
           {/* Right: Quick Navigation Tabs */}

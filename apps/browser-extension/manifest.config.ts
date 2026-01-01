@@ -3,7 +3,7 @@ import pkg from './package.json';
 
 export default defineManifest(async (env) => {
   // Unsplash CDN for focus mode background images
-  // Cuewise API for dynamic content loading
+  // Cuewise API for dynamic content loading and YouTube proxy page
   const hostPermissions: string[] = ['https://images.unsplash.com/*', 'https://*.cuewise.app/*'];
 
   // Add host_permissions for dev server in development mode only
@@ -33,6 +33,11 @@ export default defineManifest(async (env) => {
     background: {
       service_worker: 'src/background.ts',
       type: 'module',
+    },
+    // Content Security Policy for proxy page iframe and Google Fonts
+    content_security_policy: {
+      extension_pages:
+        "frame-src 'self' https://cuewise.app; default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src *; img-src * data: blob:;",
     },
   };
 });

@@ -6,6 +6,8 @@ import type {
   ReminderCategory,
   ReminderTemplate,
   Settings,
+  SoundscapeTile,
+  YoutubePlaylist,
 } from './types';
 
 // Default settings
@@ -19,6 +21,12 @@ export const DEFAULT_SETTINGS: Settings = {
   pomodoroAmbientVolume: 50,
   pomodoroStartSound: 'gentle',
   pomodoroCompletionSound: 'gentle',
+  // Pomodoro Music (YouTube integration)
+  pomodoroMusicEnabled: true,
+  pomodoroMusicVolume: 50,
+  pomodoroMusicAutoStart: false,
+  pomodoroMusicPlaylistId: '',
+  pomodoroMusicPlayDuringBreaks: false,
   enableNotifications: true,
   theme: 'auto',
   quoteChangeInterval: 10, // 0 = manual, 10+ = auto-refresh interval in seconds
@@ -85,6 +93,16 @@ export const AMBIENT_SOUNDS = {
 
 export type AmbientSoundType = keyof typeof AMBIENT_SOUNDS;
 
+// Soundscape tiles for the sounds panel (visual icon grid)
+export const SOUNDSCAPE_TILES: SoundscapeTile[] = [
+  { id: 'rain', name: 'Rain', icon: 'CloudRain' },
+  { id: 'ocean', name: 'Ocean', icon: 'Waves' },
+  { id: 'forest', name: 'Forest', icon: 'TreePine' },
+  { id: 'cafe', name: 'Cafe', icon: 'Coffee' },
+  { id: 'whiteNoise', name: 'White Noise', icon: 'Radio' },
+  { id: 'brownNoise', name: 'Brown Noise', icon: 'Wind' },
+];
+
 // Notification sound options for Pomodoro start/completion
 export const NOTIFICATION_SOUNDS = {
   none: 'None',
@@ -95,6 +113,59 @@ export const NOTIFICATION_SOUNDS = {
 } as const;
 
 export type NotificationSoundType = keyof typeof NOTIFICATION_SOUNDS;
+
+// Default YouTube playlists for Pomodoro music (curated focus music)
+// Each playlist includes a firstVideoId for proper embed support
+export const DEFAULT_YOUTUBE_PLAYLISTS: YoutubePlaylist[] = [
+  {
+    id: 'lofi-hip-hop',
+    name: 'Lofi Hip Hop',
+    playlistId: 'PLOzDu-MXXLliO9fBNZOQTBDddoA3FzZUo',
+    thumbnailUrl: 'https://i.ytimg.com/vi/jfKfPfyJRdk/hqdefault.jpg',
+    firstVideoId: 'jfKfPfyJRdk',
+    isCustom: false,
+  },
+  {
+    id: 'synthwave',
+    name: 'Synthwave',
+    playlistId: 'PLvLlb2QOBKR2Jh_uQC8bPWNjWk_YYa3y',
+    thumbnailUrl: 'https://i.ytimg.com/vi/k3WkJq478To/hqdefault.jpg',
+    firstVideoId: 'k3WkJq478To',
+    isCustom: false,
+  },
+  {
+    id: 'chill-beats',
+    name: 'Chill Beats',
+    playlistId: 'PLXIclLvfETS3AgCnZg4N6QqHu_T27XKIq',
+    thumbnailUrl: 'https://i.ytimg.com/vi/A7uNvvAKsYU/hqdefault.jpg',
+    firstVideoId: 'A7uNvvAKsYU',
+    isCustom: false,
+  },
+  {
+    id: 'jazz',
+    name: 'Jazz for Work',
+    playlistId: 'PLgzTt0k8mXzEpH7-dOCHqRZOsakqXmzmG',
+    thumbnailUrl: 'https://i.ytimg.com/vi/fEvM-OUbaKs/hqdefault.jpg',
+    firstVideoId: 'fEvM-OUbaKs',
+    isCustom: false,
+  },
+  {
+    id: 'deep-focus',
+    name: 'Deep Focus',
+    playlistId: 'PLNIOIzEHtNJbXCOTAlbxazG1MwruX0Rg5',
+    thumbnailUrl: 'https://i.ytimg.com/vi/1x_x3hC1e04/hqdefault.jpg',
+    firstVideoId: '1x_x3hC1e04',
+    isCustom: false,
+  },
+  {
+    id: 'nature-sounds',
+    name: 'Nature Sounds',
+    playlistId: 'PLMA7kfAr6g5Hvae_IJi74x57ONAx9Wvet',
+    thumbnailUrl: 'https://i.ytimg.com/vi/BnyLOcChdzk/hqdefault.jpg',
+    firstVideoId: 'BnyLOcChdzk',
+    isCustom: false,
+  },
+];
 
 // Color theme definitions
 export const COLOR_THEMES: Record<
