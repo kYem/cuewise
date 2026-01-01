@@ -11,7 +11,7 @@ import { Clock } from './Clock';
 import { GoalsSection } from './GoalsSection';
 import { GoalButton } from './goals';
 import { QuoteDisplay } from './QuoteDisplay';
-import { RemindersSection } from './RemindersSection';
+import { ReminderWidget } from './ReminderWidget';
 import { SettingsModal } from './SettingsModal';
 import { WelcomeModal } from './WelcomeModal';
 
@@ -412,22 +412,15 @@ export const NewTabPage: React.FC = () => {
             <QuoteDisplay onManualRefresh={() => setLastManualRefresh(Date.now())} />
           </div>
 
-          {/* Two Column Layout for Larger Screens */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-density-lg">
-            {/* Left Column */}
-            <div className="space-y-density-md">
-              {/* Goals Section */}
-              <GoalsSection />
-            </div>
-
-            {/* Right Column */}
-            <div className="space-y-density-md">
-              {/* Reminders Section */}
-              <RemindersSection />
-            </div>
+          {/* Goals Section - Centered */}
+          <div className="max-w-2xl mx-auto">
+            <GoalsSection />
           </div>
         </div>
       </div>
+
+      {/* Floating Reminder Widget */}
+      <ReminderWidget />
 
       {/* Settings Modal */}
       <SettingsModal isOpen={isSettingsModalOpen} onClose={() => setIsSettingsModalOpen(false)} />
