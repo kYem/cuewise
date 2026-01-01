@@ -1,5 +1,57 @@
 # @cuewise/browser-extension
 
+## 1.7.0
+
+### Minor Changes
+
+- ## New Features
+
+  ### Glass Theme with Dynamic Backgrounds
+
+  - Add new glass theme with frosted glass effect and dynamic Unsplash background images
+  - Improve glass theme loading with animated shimmer indicator
+
+  ### YouTube Music Player for Pomodoro
+
+  - Add embedded YouTube music player for focus sessions
+  - Play ambient music, lo-fi beats, or custom playlists during Pomodoro sessions
+
+  ### Customizable Notification Sounds
+
+  - Add customizable notification sounds for Pomodoro timer events
+  - Choose from multiple sound options for work/break transitions
+
+  ### Compact Floating Reminder Widget
+
+  - Replace side-by-side reminders panel with compact floating widget in bottom-right corner
+  - Show up to 3 priority reminders (overdue first, then upcoming)
+  - Add "View all" modal for full reminder list
+  - Display live countdown for reminders within 5 minutes of due time
+  - Add snooze buttons for approaching reminders
+
+  ### Goals with Link-to-Task Feature
+
+  - Add goals feature with ability to link tasks to goals
+  - Rename objectives terminology to goals throughout the app
+
+  ### Storage Quota Error Handling
+
+  - Surface Chrome storage quota errors in frontend with user-friendly messages
+
+  ## Improvements
+
+  - Replace manual click-outside detection with Radix popover component
+  - Simplify error handling by re-throwing from stores
+  - Add error handling to async event handlers to prevent silent failures
+  - Restore move-to-today button for incomplete tasks
+  - Center Goals section as full-width after layout change
+
+  ## Fixes
+
+  - Remove footer from new tab page
+  - Fix missing await in async event handlers
+  - Add error handling to goal form async operations
+
 ## 1.6.0
 
 ### Minor Changes
