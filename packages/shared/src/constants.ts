@@ -136,9 +136,9 @@ export const DEFAULT_YOUTUBE_PLAYLISTS: YoutubePlaylist[] = [
   {
     id: 'chill-beats',
     name: 'Chill Beats',
-    playlistId: 'PLofht4PTcKYnaH8w5olJCI-wUVxuoMHqM',
-    thumbnailUrl: 'https://i.ytimg.com/vi/lTRiuFIWV54/hqdefault.jpg',
-    firstVideoId: 'lTRiuFIWV54',
+    playlistId: 'PLXIclLvfETS3AgCnZg4N6QqHu_T27XKIq',
+    thumbnailUrl: 'https://i.ytimg.com/vi/A7uNvvAKsYU/hqdefault.jpg',
+    firstVideoId: 'A7uNvvAKsYU',
     isCustom: false,
   },
   {
@@ -152,17 +152,17 @@ export const DEFAULT_YOUTUBE_PLAYLISTS: YoutubePlaylist[] = [
   {
     id: 'deep-focus',
     name: 'Deep Focus',
-    playlistId: 'PLWoofaG1KBZsnGBJRkY4UBpPsE94z2Qk9',
-    thumbnailUrl: 'https://i.ytimg.com/vi/DWcJFNfaw9c/hqdefault.jpg',
-    firstVideoId: 'DWcJFNfaw9c',
+    playlistId: 'PLNIOIzEHtNJbXCOTAlbxazG1MwruX0Rg5',
+    thumbnailUrl: 'https://i.ytimg.com/vi/1x_x3hC1e04/hqdefault.jpg',
+    firstVideoId: '1x_x3hC1e04',
     isCustom: false,
   },
   {
     id: 'nature-sounds',
     name: 'Nature Sounds',
-    playlistId: 'PLQ_PIlf6OzqJzXo8KTHCvTAQXXXyvlz2w',
-    thumbnailUrl: 'https://i.ytimg.com/vi/eKFTSSKCzWA/hqdefault.jpg',
-    firstVideoId: 'eKFTSSKCzWA',
+    playlistId: 'PLMA7kfAr6g5Hvae_IJi74x57ONAx9Wvet',
+    thumbnailUrl: 'https://i.ytimg.com/vi/BnyLOcChdzk/hqdefault.jpg',
+    firstVideoId: 'BnyLOcChdzk',
     isCustom: false,
   },
 ];
