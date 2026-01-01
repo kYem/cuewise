@@ -1,11 +1,12 @@
 import { cn } from '@cuewise/ui';
-import { Bell, ChevronDown, ExternalLink, Plus } from 'lucide-react';
+import { AlertCircle, Bell, ChevronDown, ExternalLink, Plus } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useReminderStore } from '../stores/reminder-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { AddReminderForm } from './AddReminderForm';
 import { EditReminderForm } from './EditReminderForm';
+import { ErrorFallback } from './ErrorFallback';
 import { Modal } from './Modal';
 import { ReminderItem } from './ReminderItem';
 import { ReminderWidgetItem } from './ReminderWidgetItem';
@@ -24,6 +25,7 @@ export const ReminderWidget: React.FC = () => {
     snoozeReminder,
     initialize,
     isLoading,
+    error,
   } = useReminderStore();
 
   const showThemeSwitcher = useSettingsStore((state) => state.settings.showThemeSwitcher);
@@ -104,14 +106,29 @@ export const ReminderWidget: React.FC = () => {
             className={cn(
               'relative p-3 rounded-full shadow-lg hover:shadow-xl hover:scale-105 transition-all',
               'bg-surface/90 backdrop-blur-sm border',
-              hasOverdue ? 'border-red-500/50' : 'border-border'
+              error ? 'border-orange-500/50' : hasOverdue ? 'border-red-500/50' : 'border-border'
             )}
-            aria-label={`${totalCount} reminders. Click to expand.`}
+            aria-label={
+              error
+                ? 'Error loading reminders. Click to see details.'
+                : `${totalCount} reminders. Click to expand.`
+            }
           >
-            <Bell className={cn('w-6 h-6', hasOverdue ? 'text-red-500' : 'text-primary-600')} />
+            {error ? (
+              <AlertCircle className="w-6 h-6 text-orange-500" />
+            ) : (
+              <Bell className={cn('w-6 h-6', hasOverdue ? 'text-red-500' : 'text-primary-600')} />
+            )}
 
-            {/* Badge */}
-            {totalCount > 0 && (
+            {/* Error Badge */}
+            {error && (
+              <span className="absolute -top-1 -right-1 min-w-[20px] h-5 flex items-center justify-center text-xs font-bold rounded-full bg-orange-500 text-white">
+                !
+              </span>
+            )}
+
+            {/* Count Badge */}
+            {!error && totalCount > 0 && (
               <span
                 className={cn(
                   'absolute -top-1 -right-1 min-w-[20px] h-5 flex items-center justify-center',
@@ -131,9 +148,17 @@ export const ReminderWidget: React.FC = () => {
             {/* Header */}
             <div className="flex items-center justify-between p-3 border-b border-border">
               <div className="flex items-center gap-2">
-                <Bell className={cn('w-5 h-5', hasOverdue ? 'text-red-500' : 'text-primary-600')} />
+                {error ? (
+                  <AlertCircle className="w-5 h-5 text-orange-500" />
+                ) : (
+                  <Bell
+                    className={cn('w-5 h-5', hasOverdue ? 'text-red-500' : 'text-primary-600')}
+                  />
+                )}
                 <span className="font-semibold text-primary">Reminders</span>
-                {totalCount > 0 && <span className="text-sm text-secondary">({totalCount})</span>}
+                {!error && totalCount > 0 && (
+                  <span className="text-sm text-secondary">({totalCount})</span>
+                )}
               </div>
               <div className="flex items-center gap-1">
                 {/* View All Icon Link - show when more than 3 reminders */}
@@ -162,8 +187,15 @@ export const ReminderWidget: React.FC = () => {
 
             {/* Content */}
             <div className="p-3">
-              {/* Priority Reminders (up to 3) */}
-              {priorityReminders.length > 0 ? (
+              {/* Error State */}
+              {error ? (
+                <ErrorFallback
+                  error={error}
+                  title="Failed to load reminders"
+                  onRetry={initialize}
+                />
+              ) : priorityReminders.length > 0 ? (
+                /* Priority Reminders (up to 3) */
                 <div className="space-y-2">
                   {priorityReminders.map((reminder) => (
                     <ReminderWidgetItem
