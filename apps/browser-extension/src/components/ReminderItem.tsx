@@ -1,17 +1,9 @@
 import type { Reminder } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
-import {
-  differenceInMinutes,
-  differenceInSeconds,
-  formatDistanceToNow,
-  isPast,
-  isToday,
-  isTomorrow,
-  parseISO,
-} from 'date-fns';
 import { Bell, CheckCircle2, Circle, Clock, Pencil, Repeat, Trash2 } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useState } from 'react';
+import { formatCountdown, formatDueDate } from '../utils/reminder-date-utils';
 
 interface ReminderItemProps {
   reminder: Reminder;
@@ -22,69 +14,19 @@ interface ReminderItemProps {
 }
 
 /**
- * Format the due date in a human-readable way
+ * Get container styling classes based on reminder state
  */
-function formatDueDate(dueDate: string): {
-  text: string;
-  isOverdue: boolean;
-  isSoon: boolean;
-  minutesUntil: number;
-} {
-  const date = parseISO(dueDate);
-  const now = new Date();
-  const minutesUntil = differenceInMinutes(date, now);
-  const overdue = isPast(date) && !isToday(dueDate);
-  const isSoon = minutesUntil >= 0 && minutesUntil <= 5;
-
-  if (isToday(dueDate)) {
-    return {
-      text: `Today at ${date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`,
-      isOverdue: false,
-      isSoon,
-      minutesUntil,
-    };
+function getContainerClasses(completed: boolean, isOverdue: boolean, isSoon: boolean): string {
+  if (completed) {
+    return 'bg-surface-variant border-border';
   }
-
-  if (isTomorrow(date)) {
-    return {
-      text: `Tomorrow at ${date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`,
-      isOverdue: false,
-      isSoon: false,
-      minutesUntil,
-    };
+  if (isOverdue) {
+    return 'bg-red-500/10 border-red-500/30 hover:border-red-500/50';
   }
-
-  if (overdue) {
-    return {
-      text: `${formatDistanceToNow(date, { addSuffix: true })}`,
-      isOverdue: true,
-      isSoon: false,
-      minutesUntil,
-    };
+  if (isSoon) {
+    return 'bg-orange-500/10 border-orange-500/30 hover:border-orange-500/50';
   }
-
-  return {
-    text: `in ${formatDistanceToNow(date)}`,
-    isOverdue: false,
-    isSoon: false,
-    minutesUntil,
-  };
-}
-
-/**
- * Format countdown for reminders that are very close (within 5 minutes)
- */
-function formatCountdown(dueDate: string): string {
-  const date = parseISO(dueDate);
-  const now = new Date();
-  const seconds = differenceInSeconds(date, now);
-
-  if (seconds < 0) return 'Now!';
-  if (seconds < 60) return `${seconds}s`;
-
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = seconds % 60;
-  return `${minutes}m ${remainingSeconds}s`;
+  return 'bg-surface border-border hover:border-primary-300';
 }
 
 export const ReminderItem: React.FC<ReminderItemProps> = ({
@@ -100,6 +42,9 @@ export const ReminderItem: React.FC<ReminderItemProps> = ({
   // Update countdown every second for reminders that are approaching
   useEffect(() => {
     if (!reminder.completed && isSoon) {
+      // Set initial countdown value immediately
+      setCountdown(formatCountdown(reminder.dueDate));
+
       const timer = setInterval(() => {
         setCountdown(formatCountdown(reminder.dueDate));
       }, 1000);
@@ -118,13 +63,7 @@ export const ReminderItem: React.FC<ReminderItemProps> = ({
     <div
       className={cn(
         'group flex items-center gap-3 p-3 rounded-lg border-2 transition-all',
-        reminder.completed
-          ? 'bg-surface-variant border-border'
-          : isOverdue
-            ? 'bg-red-500/10 border-red-500/30 hover:border-red-500/50'
-            : isSoon
-              ? 'bg-orange-500/10 border-orange-500/30 hover:border-orange-500/50'
-              : 'bg-surface border-border hover:border-primary-300'
+        getContainerClasses(reminder.completed, isOverdue, isSoon)
       )}
     >
       {/* Checkbox */}
