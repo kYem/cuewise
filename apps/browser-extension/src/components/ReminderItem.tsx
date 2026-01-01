@@ -13,6 +13,22 @@ interface ReminderItemProps {
   onSnooze?: (id: string, minutes: number) => void;
 }
 
+/**
+ * Get container styling classes based on reminder state
+ */
+function getContainerClasses(completed: boolean, isOverdue: boolean, isSoon: boolean): string {
+  if (completed) {
+    return 'bg-surface-variant border-border';
+  }
+  if (isOverdue) {
+    return 'bg-red-500/10 border-red-500/30 hover:border-red-500/50';
+  }
+  if (isSoon) {
+    return 'bg-orange-500/10 border-orange-500/30 hover:border-orange-500/50';
+  }
+  return 'bg-surface border-border hover:border-primary-300';
+}
+
 export const ReminderItem: React.FC<ReminderItemProps> = ({
   reminder,
   onToggle,
@@ -26,6 +42,9 @@ export const ReminderItem: React.FC<ReminderItemProps> = ({
   // Update countdown every second for reminders that are approaching
   useEffect(() => {
     if (!reminder.completed && isSoon) {
+      // Set initial countdown value immediately
+      setCountdown(formatCountdown(reminder.dueDate));
+
       const timer = setInterval(() => {
         setCountdown(formatCountdown(reminder.dueDate));
       }, 1000);
@@ -44,13 +63,7 @@ export const ReminderItem: React.FC<ReminderItemProps> = ({
     <div
       className={cn(
         'group flex items-center gap-3 p-3 rounded-lg border-2 transition-all',
-        reminder.completed
-          ? 'bg-surface-variant border-border'
-          : isOverdue
-            ? 'bg-red-500/10 border-red-500/30 hover:border-red-500/50'
-            : isSoon
-              ? 'bg-orange-500/10 border-orange-500/30 hover:border-orange-500/50'
-              : 'bg-surface border-border hover:border-primary-300'
+        getContainerClasses(reminder.completed, isOverdue, isSoon)
       )}
     >
       {/* Checkbox */}

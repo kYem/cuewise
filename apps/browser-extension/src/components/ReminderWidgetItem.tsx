@@ -14,6 +14,22 @@ interface ReminderWidgetItemProps {
 }
 
 /**
+ * Get container styling classes based on reminder state
+ */
+function getContainerClasses(completed: boolean, isOverdue: boolean, isSoon: boolean): string {
+  if (completed) {
+    return 'bg-surface-variant border-border';
+  }
+  if (isOverdue) {
+    return 'bg-red-500/10 border-red-500/30';
+  }
+  if (isSoon) {
+    return 'bg-orange-500/10 border-orange-500/30';
+  }
+  return 'bg-surface border-border';
+}
+
+/**
  * Compact reminder item for the floating widget
  */
 export const ReminderWidgetItem: React.FC<ReminderWidgetItemProps> = ({
@@ -29,6 +45,9 @@ export const ReminderWidgetItem: React.FC<ReminderWidgetItemProps> = ({
   // Update countdown every second for reminders that are approaching
   useEffect(() => {
     if (!reminder.completed && isSoon) {
+      // Set initial countdown value immediately
+      setCountdown(formatCountdown(reminder.dueDate));
+
       const timer = setInterval(() => {
         setCountdown(formatCountdown(reminder.dueDate));
       }, 1000);
@@ -47,13 +66,7 @@ export const ReminderWidgetItem: React.FC<ReminderWidgetItemProps> = ({
     <div
       className={cn(
         'rounded-lg border-2 p-3 transition-all',
-        reminder.completed
-          ? 'bg-surface-variant border-border'
-          : isOverdue
-            ? 'bg-red-500/10 border-red-500/30'
-            : isSoon
-              ? 'bg-orange-500/10 border-orange-500/30'
-              : 'bg-surface border-border'
+        getContainerClasses(reminder.completed, isOverdue, isSoon)
       )}
     >
       <div className="flex items-start gap-2">

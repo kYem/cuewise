@@ -84,13 +84,19 @@ export const ReminderWidget: React.FC = () => {
     setEditingReminderId(null);
   }, []);
 
-  // Don't render while loading
-  if (isLoading) {
-    return null;
-  }
-
   // Calculate right position based on theme switcher visibility
   const rightPosition = showThemeSwitcher ? 'right-[340px]' : 'right-4';
+
+  // Show loading skeleton while initializing
+  if (isLoading) {
+    return (
+      <div className={cn('fixed bottom-4 z-40', rightPosition)}>
+        <div className="p-3 rounded-full shadow-lg bg-surface/90 backdrop-blur-sm border border-border animate-pulse">
+          <Bell className="w-6 h-6 text-tertiary" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
