@@ -129,8 +129,8 @@ export const DEFAULT_YOUTUBE_PLAYLISTS: YoutubePlaylist[] = [
     id: 'synthwave',
     name: 'Synthwave',
     playlistId: 'PLvLlb2QOBKR2Jh_uQC8bPWNjWk_YYa3y',
-    thumbnailUrl: 'https://i.ytimg.com/vi/4xDzrJKXOOY/hqdefault.jpg',
-    firstVideoId: '4xDzrJKXOOY',
+    thumbnailUrl: 'https://i.ytimg.com/vi/k3WkJq478To/hqdefault.jpg',
+    firstVideoId: 'k3WkJq478To',
     isCustom: false,
   },
   {

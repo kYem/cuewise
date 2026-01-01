@@ -120,7 +120,7 @@ export const SoundsMiniPlayer: React.FC = () => {
       {/* Main Controls Row */}
       <div className="flex items-center gap-2">
         {/* Thumbnail/Icon - Click to open popover */}
-        <Popover open={isPanelOpen} onOpenChange={handleOpenChange}>
+        <Popover open={isPanelOpen} onOpenChange={handleOpenChange} modal>
           <PopoverTrigger asChild>
             <button
               type="button"
