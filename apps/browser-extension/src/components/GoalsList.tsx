@@ -20,7 +20,8 @@ import {
   Trash2,
 } from 'lucide-react';
 import type React from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo } from 'react';
+import { useGoalEditing } from '../hooks/useGoalEditing';
 import { useGoalStore } from '../stores/goal-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { GoalInput } from './GoalInput';
@@ -45,75 +46,33 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
     linkTaskToGoal,
   } = useGoalStore();
   const { settings } = useSettingsStore();
-  const [editingGoalId, setEditingGoalId] = useState<string | null>(null);
-  const [editText, setEditText] = useState('');
-  const [linkPickerOpenFor, setLinkPickerOpenFor] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const actionsRef = useRef<HTMLDivElement>(null);
 
   const activeGoals = getActiveGoals();
+
+  // Use shared editing hook
+  const {
+    editText,
+    inputRef,
+    actionsRef,
+    startEditing,
+    handleBlur,
+    handleKeyDown,
+    setEditText,
+    handleLinkToGoal,
+    isEditing,
+    isLinkPickerOpen,
+    openLinkPicker,
+    closeLinkPicker,
+    clearEditing,
+  } = useGoalEditing({
+    findGoalById: (id) => todayTasks.find((g) => g.id === id),
+    updateTask,
+    linkTaskToGoal,
+  });
 
   // Check if transfer button should be shown
   const showTransferButton =
     settings.enableGoalTransfer && isPastGoalTransferTime(settings.goalTransferTime);
-
-  // Focus input when editing starts
-  useEffect(() => {
-    if (editingGoalId && inputRef.current) {
-      inputRef.current.focus();
-      inputRef.current.select();
-    }
-  }, [editingGoalId]);
-
-  const handleLinkToGoal = async (taskId: string, goalId: string | null) => {
-    await linkTaskToGoal(taskId, goalId);
-    setLinkPickerOpenFor(null);
-    setEditingGoalId(null);
-  };
-
-  const startEditing = (goalId: string, currentText: string) => {
-    setEditingGoalId(goalId);
-    setEditText(currentText);
-  };
-
-  const saveEdit = async () => {
-    if (
-      editingGoalId &&
-      editText.trim() &&
-      editText.trim() !== todayTasks.find((g) => g.id === editingGoalId)?.text
-    ) {
-      const success = await updateTask(editingGoalId, editText.trim());
-      if (!success) {
-        // Keep edit mode open so user can retry
-        return;
-      }
-    }
-    setEditingGoalId(null);
-    setEditText('');
-  };
-
-  const cancelEdit = () => {
-    setEditingGoalId(null);
-    setEditText('');
-  };
-
-  const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
-    // Don't save if clicking on an action button (transfer, link, delete)
-    if (actionsRef.current?.contains(e.relatedTarget as Node)) {
-      return;
-    }
-    saveEdit();
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      saveEdit();
-    } else if (e.key === 'Escape') {
-      e.preventDefault();
-      cancelEdit();
-    }
-  };
 
   if (isLoading) {
     return <div className="text-center py-8 text-secondary">Loading goals...</div>;
@@ -218,7 +177,7 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
               </button>
 
               {/* Goal Text */}
-              {editingGoalId === goal.id ? (
+              {isEditing(goal.id) ? (
                 <input
                   ref={inputRef}
                   type="text"
@@ -244,11 +203,11 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
 
               {/* Right side: badges and actions */}
               <div
-                ref={editingGoalId === goal.id ? actionsRef : undefined}
+                ref={isEditing(goal.id) ? actionsRef : undefined}
                 className="flex items-center gap-1 flex-shrink-0"
               >
                 {/* Goal link badge - hide in edit mode */}
-                {editingGoalId !== goal.id &&
+                {!isEditing(goal.id) &&
                   goal.parentId &&
                   (() => {
                     const linkedGoal = goals.find((g) => g.id === goal.parentId && isObjective(g));
@@ -267,14 +226,14 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
                   })()}
 
                 {/* Transfer Button - only show in edit mode */}
-                {editingGoalId === goal.id && showTransferButton && !goal.completed && (
+                {isEditing(goal.id) && showTransferButton && !goal.completed && (
                   <button
                     type="button"
                     onMouseDown={async (e) => {
                       e.preventDefault();
                       const success = await transferTaskToNextDay(goal.id);
                       if (success) {
-                        setEditingGoalId(null);
+                        clearEditing();
                       }
                     }}
                     className="p-1 text-secondary hover:text-primary-600 transition-colors focus:outline-none rounded"
@@ -286,10 +245,10 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
                 )}
 
                 {/* Link to Goal Button - only show in edit mode */}
-                {editingGoalId === goal.id && activeGoals.length > 0 && (
+                {isEditing(goal.id) && activeGoals.length > 0 && (
                   <Popover
-                    open={linkPickerOpenFor === goal.id}
-                    onOpenChange={(open) => setLinkPickerOpenFor(open ? goal.id : null)}
+                    open={isLinkPickerOpen(goal.id)}
+                    onOpenChange={(open) => (open ? openLinkPicker(goal.id) : closeLinkPicker())}
                   >
                     <PopoverTrigger asChild>
                       <button
@@ -343,7 +302,7 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
                 )}
 
                 {/* Delete Button - only show in edit mode */}
-                {editingGoalId === goal.id && (
+                {isEditing(goal.id) && (
                   <button
                     type="button"
                     onMouseDown={async (e) => {
