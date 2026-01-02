@@ -4,6 +4,7 @@ import { cn, Popover, PopoverContent, PopoverTrigger } from '@cuewise/ui';
 import { AlignJustify, Check, CheckCircle2, Circle, List, Settings2, Target } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useState } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { useGoalStore } from '../stores/goal-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { ErrorFallback } from './ErrorFallback';
@@ -13,8 +14,19 @@ import { GoalsList } from './GoalsList';
 import { StorageIndicator } from './StorageIndicator';
 
 export const GoalsSection: React.FC = () => {
-  const { initialize, isLoading, error, todayTasks } = useGoalStore();
-  const { settings, updateSettings } = useSettingsStore();
+  // State values - use useShallow to prevent re-renders when unrelated state changes
+  const { isLoading, error, todayTasks } = useGoalStore(
+    useShallow((state) => ({
+      isLoading: state.isLoading,
+      error: state.error,
+      todayTasks: state.todayTasks,
+    }))
+  );
+  const initialize = useGoalStore((state) => state.initialize);
+
+  // Settings - use useShallow for multiple values, individual selector for action
+  const settings = useSettingsStore(useShallow((state) => state.settings));
+  const updateSettings = useSettingsStore((state) => state.updateSettings);
   const [storageUsage, setStorageUsage] = useState<StorageUsageInfo | null>(null);
   const [showAddInput, setShowAddInput] = useState(false);
 

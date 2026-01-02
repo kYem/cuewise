@@ -3,6 +3,7 @@ import { cn } from '@cuewise/ui';
 import { ChevronLeft, ChevronRight, EyeOff, Filter, Heart, RefreshCw } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useState } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { useQuoteStore } from '../stores/quote-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { CategoryFilter } from './CategoryFilter';
@@ -15,23 +16,29 @@ interface QuoteDisplayProps {
 export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({ onManualRefresh }) => {
   const quoteChangeInterval = useSettingsStore((state) => state.settings.quoteChangeInterval);
   const [timeRemaining, setTimeRemaining] = useState(quoteChangeInterval);
-  const {
-    currentQuote,
-    refreshQuote,
-    goBack,
-    goForward,
-    canGoBack,
-    canGoForward,
-    toggleFavorite,
-    hideQuote,
-    isLoading,
-    error,
-    initialize,
-    enabledCategories,
-    setEnabledCategories,
-    showCustomQuotes,
-    toggleCustomQuotes,
-  } = useQuoteStore();
+
+  // State values - use useShallow to prevent re-renders when unrelated state changes
+  const { currentQuote, isLoading, error, enabledCategories, showCustomQuotes } = useQuoteStore(
+    useShallow((state) => ({
+      currentQuote: state.currentQuote,
+      isLoading: state.isLoading,
+      error: state.error,
+      enabledCategories: state.enabledCategories,
+      showCustomQuotes: state.showCustomQuotes,
+    }))
+  );
+
+  // Actions - stable references that don't cause re-renders
+  const refreshQuote = useQuoteStore((state) => state.refreshQuote);
+  const goBack = useQuoteStore((state) => state.goBack);
+  const goForward = useQuoteStore((state) => state.goForward);
+  const canGoBack = useQuoteStore((state) => state.canGoBack);
+  const canGoForward = useQuoteStore((state) => state.canGoForward);
+  const toggleFavorite = useQuoteStore((state) => state.toggleFavorite);
+  const hideQuote = useQuoteStore((state) => state.hideQuote);
+  const initialize = useQuoteStore((state) => state.initialize);
+  const setEnabledCategories = useQuoteStore((state) => state.setEnabledCategories);
+  const toggleCustomQuotes = useQuoteStore((state) => state.toggleCustomQuotes);
 
   const isFiltered = enabledCategories.length < ALL_QUOTE_CATEGORIES.length || !showCustomQuotes;
 

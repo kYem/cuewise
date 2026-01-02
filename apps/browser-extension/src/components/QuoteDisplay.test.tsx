@@ -15,6 +15,7 @@ import {
   expectButtonState,
   expectCallbackCalledAfterNavigation,
   expectNavigationMethodCalled,
+  type MockQuoteStore,
 } from './__fixtures__/quote-display.fixtures';
 import { QuoteDisplay } from './QuoteDisplay';
 
@@ -23,18 +24,29 @@ vi.mock('../stores/quote-store', () => ({
   useQuoteStore: vi.fn(),
 }));
 
+// Helper to create a mock implementation that handles selector functions
+function createSelectorMock(store: MockQuoteStore) {
+  // biome-ignore lint/suspicious/noExplicitAny: Mock needs flexible typing to handle selector functions
+  return (selector?: (state: any) => unknown) => {
+    if (selector) {
+      return selector(store);
+    }
+    return store;
+  };
+}
+
 describe('QuoteDisplay - Navigation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    // Default mock implementation using fixture
-    vi.mocked(useQuoteStore).mockReturnValue(createMockStore());
+    // Default mock implementation using fixture with selector support
+    vi.mocked(useQuoteStore).mockImplementation(createSelectorMock(createMockStore()));
   });
 
   describe('Navigation buttons', () => {
     it('should render back, forward, and new quote buttons', () => {
       const mockStore = createNavigableMockStore();
-      vi.mocked(useQuoteStore).mockReturnValue(mockStore);
+      vi.mocked(useQuoteStore).mockImplementation(createSelectorMock(mockStore));
 
       render(<QuoteDisplay />);
 
@@ -46,7 +58,7 @@ describe('QuoteDisplay - Navigation', () => {
     it('should call goBack when back button is clicked', async () => {
       const user = userEvent.setup();
       const mockStore = createAtBeginningMockStore();
-      vi.mocked(useQuoteStore).mockReturnValue(mockStore);
+      vi.mocked(useQuoteStore).mockImplementation(createSelectorMock(mockStore));
 
       render(<QuoteDisplay />);
 
@@ -59,7 +71,7 @@ describe('QuoteDisplay - Navigation', () => {
     it('should call goForward when forward button is clicked', async () => {
       const user = userEvent.setup();
       const mockStore = createAtEndMockStore();
-      vi.mocked(useQuoteStore).mockReturnValue(mockStore);
+      vi.mocked(useQuoteStore).mockImplementation(createSelectorMock(mockStore));
 
       render(<QuoteDisplay />);
 
@@ -72,7 +84,7 @@ describe('QuoteDisplay - Navigation', () => {
     it('should call refreshQuote when new quote button is clicked', async () => {
       const user = userEvent.setup();
       const mockStore = createLoadedMockStore();
-      vi.mocked(useQuoteStore).mockReturnValue(mockStore);
+      vi.mocked(useQuoteStore).mockImplementation(createSelectorMock(mockStore));
 
       render(<QuoteDisplay />);
 
@@ -87,7 +99,7 @@ describe('QuoteDisplay - Navigation', () => {
     it('should disable back button when canGoBack returns false', () => {
       const mockStore = createAtBeginningMockStore();
       mockStore.canGoBack = vi.fn(() => false);
-      vi.mocked(useQuoteStore).mockReturnValue(mockStore);
+      vi.mocked(useQuoteStore).mockImplementation(createSelectorMock(mockStore));
 
       render(<QuoteDisplay />);
 
@@ -98,7 +110,7 @@ describe('QuoteDisplay - Navigation', () => {
     it('should disable forward button when canGoForward returns false', () => {
       const mockStore = createAtEndMockStore();
       mockStore.canGoForward = vi.fn(() => false);
-      vi.mocked(useQuoteStore).mockReturnValue(mockStore);
+      vi.mocked(useQuoteStore).mockImplementation(createSelectorMock(mockStore));
 
       render(<QuoteDisplay />);
 
@@ -108,7 +120,7 @@ describe('QuoteDisplay - Navigation', () => {
 
     it('should enable back button when canGoBack returns true', () => {
       const mockStore = createAtBeginningMockStore();
-      vi.mocked(useQuoteStore).mockReturnValue(mockStore);
+      vi.mocked(useQuoteStore).mockImplementation(createSelectorMock(mockStore));
 
       render(<QuoteDisplay />);
 
@@ -118,7 +130,7 @@ describe('QuoteDisplay - Navigation', () => {
 
     it('should enable forward button when canGoForward returns true', () => {
       const mockStore = createAtEndMockStore();
-      vi.mocked(useQuoteStore).mockReturnValue(mockStore);
+      vi.mocked(useQuoteStore).mockImplementation(createSelectorMock(mockStore));
 
       render(<QuoteDisplay />);
 
@@ -128,7 +140,7 @@ describe('QuoteDisplay - Navigation', () => {
 
     it('should disable both navigation buttons when at the only quote in history', () => {
       const mockStore = createNoNavigationMockStore();
-      vi.mocked(useQuoteStore).mockReturnValue(mockStore);
+      vi.mocked(useQuoteStore).mockImplementation(createSelectorMock(mockStore));
 
       render(<QuoteDisplay />);
 
@@ -145,7 +157,7 @@ describe('QuoteDisplay - Navigation', () => {
       const user = userEvent.setup();
       const onManualRefresh = vi.fn();
       const mockStore = createAtBeginningMockStore();
-      vi.mocked(useQuoteStore).mockReturnValue(mockStore);
+      vi.mocked(useQuoteStore).mockImplementation(createSelectorMock(mockStore));
 
       render(<QuoteDisplay onManualRefresh={onManualRefresh} />);
 
@@ -159,7 +171,7 @@ describe('QuoteDisplay - Navigation', () => {
       const user = userEvent.setup();
       const onManualRefresh = vi.fn();
       const mockStore = createAtEndMockStore();
-      vi.mocked(useQuoteStore).mockReturnValue(mockStore);
+      vi.mocked(useQuoteStore).mockImplementation(createSelectorMock(mockStore));
 
       render(<QuoteDisplay onManualRefresh={onManualRefresh} />);
 
@@ -173,7 +185,7 @@ describe('QuoteDisplay - Navigation', () => {
       const user = userEvent.setup();
       const onManualRefresh = vi.fn();
       const mockStore = createLoadedMockStore();
-      vi.mocked(useQuoteStore).mockReturnValue(mockStore);
+      vi.mocked(useQuoteStore).mockImplementation(createSelectorMock(mockStore));
 
       render(<QuoteDisplay onManualRefresh={onManualRefresh} />);
 
@@ -187,7 +199,7 @@ describe('QuoteDisplay - Navigation', () => {
   describe('Loading and error states', () => {
     it('should show loading spinner when isLoading is true', () => {
       const mockStore = createLoadingMockStore();
-      vi.mocked(useQuoteStore).mockReturnValue(mockStore);
+      vi.mocked(useQuoteStore).mockImplementation(createSelectorMock(mockStore));
 
       const { container } = render(<QuoteDisplay />);
 
@@ -198,7 +210,7 @@ describe('QuoteDisplay - Navigation', () => {
 
     it('should show error fallback when error exists', () => {
       const mockStore = createErrorMockStore('Failed to load quotes');
-      vi.mocked(useQuoteStore).mockReturnValue(mockStore);
+      vi.mocked(useQuoteStore).mockImplementation(createSelectorMock(mockStore));
 
       render(<QuoteDisplay />);
 
@@ -208,7 +220,7 @@ describe('QuoteDisplay - Navigation', () => {
 
     it('should not render navigation buttons when no current quote', () => {
       const mockStore = createEmptyMockStore();
-      vi.mocked(useQuoteStore).mockReturnValue(mockStore);
+      vi.mocked(useQuoteStore).mockImplementation(createSelectorMock(mockStore));
 
       render(<QuoteDisplay />);
 
