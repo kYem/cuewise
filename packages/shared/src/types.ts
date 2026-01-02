@@ -106,6 +106,7 @@ export type ColorTheme = 'purple' | 'forest' | 'rose' | 'glass';
 export type LayoutDensity = 'compact' | 'comfortable' | 'spacious';
 export type SettingsLogLevel = 'none' | 'error' | 'warn' | 'info' | 'debug';
 export type GoalViewMode = 'full' | 'compact' | 'focus';
+export type TimeFormat = '12h' | '24h';
 
 // Focus mode image categories for Unsplash backgrounds
 export type FocusImageCategory = 'nature' | 'forest' | 'ocean' | 'mountains' | 'minimal' | 'dark';
@@ -164,7 +165,7 @@ export interface Settings {
   enableNotifications: boolean;
   theme: 'light' | 'dark' | 'auto';
   quoteChangeInterval: number; // seconds (0 = manual, 1-3600 = auto-refresh every N seconds)
-  timeFormat: '12h' | '24h'; // 12-hour (AM/PM) or 24-hour format
+  timeFormat: TimeFormat; // 12-hour (AM/PM) or 24-hour format
   syncEnabled: boolean; // Enable Chrome sync for cross-device synchronization (default false)
   // Customization
   colorTheme: ColorTheme;
