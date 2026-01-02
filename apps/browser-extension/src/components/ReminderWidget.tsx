@@ -104,53 +104,51 @@ export const ReminderWidget: React.FC = () => {
         ref={widgetRef}
         className={cn('fixed bottom-4 z-40 transition-all duration-200', rightPosition)}
       >
-        {/* Collapsed State */}
-        {!isExpanded && (
-          <button
-            type="button"
-            onClick={() => setIsExpanded(true)}
-            className={cn(
-              'relative p-3 rounded-full shadow-lg hover:shadow-xl hover:scale-105 transition-all',
-              'bg-surface/90 backdrop-blur-sm border',
-              error ? 'border-orange-500/50' : hasOverdue ? 'border-red-500/50' : 'border-border'
-            )}
-            aria-label={
-              error
-                ? 'Error loading reminders. Click to see details.'
-                : `${totalCount} reminders. Click to expand.`
-            }
-          >
-            {error ? (
-              <AlertCircle className="w-6 h-6 text-orange-500" />
-            ) : (
-              <Bell className={cn('w-6 h-6', hasOverdue ? 'text-red-500' : 'text-primary-600')} />
-            )}
+        {/* Always visible button */}
+        <button
+          type="button"
+          onClick={() => setIsExpanded(!isExpanded)}
+          className={cn(
+            'relative p-3 rounded-full shadow-lg hover:shadow-xl hover:scale-105 transition-all',
+            'bg-surface/90 backdrop-blur-sm border',
+            error ? 'border-orange-500/50' : hasOverdue ? 'border-red-500/50' : 'border-border'
+          )}
+          aria-label={
+            error
+              ? 'Error loading reminders. Click to see details.'
+              : `${totalCount} reminders. Click to ${isExpanded ? 'collapse' : 'expand'}.`
+          }
+        >
+          {error ? (
+            <AlertCircle className="w-6 h-6 text-orange-500" />
+          ) : (
+            <Bell className={cn('w-6 h-6', hasOverdue ? 'text-red-500' : 'text-primary-600')} />
+          )}
 
-            {/* Error Badge */}
-            {error && (
-              <span className="absolute -top-1 -right-1 min-w-[20px] h-5 flex items-center justify-center text-xs font-bold rounded-full bg-orange-500 text-white">
-                !
-              </span>
-            )}
+          {/* Error Badge */}
+          {error && (
+            <span className="absolute -top-1 -right-1 min-w-[20px] h-5 flex items-center justify-center text-xs font-bold rounded-full bg-orange-500 text-white">
+              !
+            </span>
+          )}
 
-            {/* Count Badge */}
-            {!error && totalCount > 0 && (
-              <span
-                className={cn(
-                  'absolute -top-1 -right-1 min-w-[20px] h-5 flex items-center justify-center',
-                  'text-xs font-bold rounded-full',
-                  hasOverdue ? 'bg-red-500 text-white' : 'bg-primary-600 text-white'
-                )}
-              >
-                {totalCount > 9 ? '9+' : totalCount}
-              </span>
-            )}
-          </button>
-        )}
+          {/* Count Badge */}
+          {!error && totalCount > 0 && (
+            <span
+              className={cn(
+                'absolute -top-1 -right-1 min-w-[20px] h-5 flex items-center justify-center',
+                'text-xs font-bold rounded-full',
+                hasOverdue ? 'bg-red-500 text-white' : 'bg-primary-600 text-white'
+              )}
+            >
+              {totalCount > 9 ? '9+' : totalCount}
+            </span>
+          )}
+        </button>
 
-        {/* Expanded State */}
+        {/* Expanded Panel - positioned above the button */}
         {isExpanded && (
-          <div className="w-80 bg-surface/95 backdrop-blur-md rounded-2xl shadow-2xl border border-border overflow-hidden animate-in slide-in-from-bottom-2 fade-in duration-200">
+          <div className="absolute bottom-full right-0 mb-2 w-80 bg-surface/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-border overflow-hidden animate-in slide-in-from-bottom-2 fade-in duration-200">
             {/* Header */}
             <div className="flex items-center justify-between p-3 border-b border-border">
               <div className="flex items-center gap-2">

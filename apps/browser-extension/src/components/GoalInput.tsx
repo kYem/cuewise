@@ -106,7 +106,7 @@ export const GoalInput: React.FC<GoalInputProps> = ({
                 <Link2 className="w-5 h-5" />
               </button>
             </PopoverTrigger>
-            <PopoverContent className="min-w-[220px] py-1">
+            <PopoverContent className="min-w-[220px] py-1 bg-surface/95 backdrop-blur-xl">
               {/* No goal option */}
               <button
                 type="button"

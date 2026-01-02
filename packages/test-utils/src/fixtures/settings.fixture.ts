@@ -32,4 +32,6 @@ export const defaultSettings: Settings = {
   focusModeImageCategory: 'nature',
   focusModeShowQuote: true,
   focusModeAutoEnter: false,
+  goalViewMode: 'full',
+  focusedGoalId: null,
 };

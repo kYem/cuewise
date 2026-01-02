@@ -45,6 +45,9 @@ export const DEFAULT_SETTINGS: Settings = {
   focusModeImageCategory: 'nature', // Nature photos by default
   focusModeShowQuote: true, // Show quote overlay
   focusModeAutoEnter: false, // Don't auto-enter (user choice)
+  // Goal View Mode
+  goalViewMode: 'full', // Full view by default
+  focusedGoalId: null, // No focused goal by default
 };
 
 // Quote categories with display names
