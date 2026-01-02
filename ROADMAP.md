@@ -1,11 +1,125 @@
 # Cuewise Development Roadmap
 
-**Last Updated**: 2025-12-15
-**Current Version**: v1.3.0 (Published on Chrome Web Store)
+**Last Updated**: 2026-01-02
+**Current Version**: v1.7.0 (Published on Chrome Web Store)
 
 ---
 
-## ✅ Recently Completed (v1.3.0)
+## 🚧 In Progress (v1.8.0)
+
+### Goals Section View Modes
+- [x] Three view modes for Today's Focus: Full, Compact, and Focus
+- [x] Full mode: Complete view with input, progress bar, task list, and incomplete section
+- [x] Compact mode: Minimal task list with edit controls only
+- [x] Focus mode: Single task display without container wrapper (glass-theme friendly)
+- [x] Settings popover in Focus mode for switching modes and selecting focused goal
+- [x] View mode persists across sessions via Chrome storage
+
+### UI Improvements
+- [x] Compact quote controls with circular progress ring for countdown
+- [x] Improved popover/dropdown visibility with frosted glass background (95% opacity + blur)
+- [x] Fixed reminders panel to open above button without overlapping
+
+**Status**: Merged to main, pending release
+
+---
+
+## ✅ Recently Completed (v1.7.0)
+
+### Glass Theme with Dynamic Backgrounds
+- [x] New glass theme with frosted glass effect and dynamic Unsplash background images
+- [x] Improved glass theme loading with animated shimmer indicator
+
+### YouTube Music Player for Pomodoro
+- [x] Embedded YouTube music player for focus sessions
+- [x] Play ambient music, lo-fi beats, or custom playlists during Pomodoro sessions
+
+### Customizable Notification Sounds
+- [x] Customizable notification sounds for Pomodoro timer events
+- [x] Multiple sound options for work/break transitions
+
+### Compact Floating Reminder Widget
+- [x] Compact floating widget in bottom-right corner (replaces side panel)
+- [x] Show up to 3 priority reminders (overdue first, then upcoming)
+- [x] "View all" modal for full reminder list
+- [x] Live countdown for reminders within 5 minutes of due time
+- [x] Snooze buttons for approaching reminders
+
+### Goals with Link-to-Task Feature
+- [x] Add goals feature with ability to link tasks to goals
+- [x] Rename objectives terminology to goals throughout the app
+
+### Storage Quota Error Handling
+- [x] Surface Chrome storage quota errors in frontend with user-friendly messages
+
+**Version Released**: December 2025
+
+---
+
+## ✅ Previously Completed (v1.6.0)
+
+### Author Autocomplete
+- [x] Reusable Autocomplete component with keyboard navigation and accessibility
+- [x] Author autocomplete in Add Quote and Edit Quote forms
+- [x] Streamlined quote management (removed floating "Add Custom Quote" button)
+
+**Version Released**: December 2025
+
+---
+
+## ✅ Previously Completed (v1.5.0)
+
+### Smart Reminder Templates
+- [x] Pre-built reminder templates for common tasks
+- [x] Health & Wellness: Drink Water, Stretch Break, Eye Rest, Medication, Exercise
+- [x] Productivity: Daily Standup, End of Day Review, Weekly Review
+- [x] Personal: Daily Journal, Gratitude
+
+### Dedicated Goals Page
+- [x] Full-page goals view with history and statistics
+- [x] Filter by date range
+- [x] Visual progress tracking
+
+### Quick Reminder Presets
+- [x] Natural language date picker ("tomorrow", "next week")
+- [x] Quick time presets for common scheduling patterns
+
+### Favorites Filter
+- [x] Filter quotes by favorites in the category filter dropdown
+
+**Version Released**: November 2025
+
+---
+
+## ✅ Previously Completed (v1.4.0)
+
+### Accessibility Improvements
+- [x] Semantic HTML landmarks (`<main>`, `<nav>`, `<header>`)
+- [x] Skip-to-main-content link for keyboard users
+- [x] `aria-live` regions for toast notifications and quote changes
+- [x] `prefers-reduced-motion` support
+- [x] ARIA attributes for dropdown menus
+
+### Bulk Quote Operations
+- [x] Multi-select checkboxes on quote cards
+- [x] Select all / deselect all for filtered view
+- [x] Bulk delete, favorite/unfavorite, hide/unhide actions
+
+### Quote Restoration
+- [x] "Restore Missing Quotes" - adds back deleted default quotes
+- [x] "Reset All Quotes" - completely resets to factory defaults
+
+### Full-Screen Focus Mode
+- [x] Full-screen overlay with Unsplash background images
+- [x] Large timer display with play/pause controls
+- [x] Optional motivational quote display
+- [x] Auto-enter focus mode when Pomodoro starts (configurable)
+
+**Version Released**: November 2025
+
+---
+
+## ✅ Previously Completed (v1.3.0)
 
 ### Import & Onboarding
 - [x] Data import functionality with version compatibility checking
@@ -527,7 +641,12 @@ When ready for growth:
 ---
 
 **Version History**
-- v1.3.0 (2025-12-07) - Data import, onboarding welcome modal, category filter, Focus Mode with Unsplash backgrounds
-- v1.2.0 (2025-11-29) - Chrome Web Store published, Quote Management, Analytics, Pomodoro enhancements
-- v1.1.0 (2025-01-16) - Dark mode, themes, density modes
-- v1.0.0 (2025-01-15) - Initial roadmap after MVP completion
+- v1.8.0 (pending) - Goals view modes (Full/Compact/Focus), compact quote controls, UI improvements
+- v1.7.0 (2025-12) - Glass theme, YouTube music player, notification sounds, floating reminder widget
+- v1.6.0 (2025-12) - Author autocomplete, streamlined quote management
+- v1.5.0 (2025-11) - Smart reminder templates, dedicated goals page, favorites filter
+- v1.4.0 (2025-11) - Accessibility improvements, bulk quote operations, full-screen focus mode
+- v1.3.0 (2025-12) - Data import, onboarding welcome modal, category filter
+- v1.2.0 (2025-11) - Chrome Web Store published, Quote Management, Analytics, Pomodoro enhancements
+- v1.1.0 (2025-01) - Dark mode, themes, density modes
+- v1.0.0 (2025-01) - Initial release
