@@ -203,83 +203,109 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({ onManualRefresh }) =
         </blockquote>
       </div>
 
-      {/* Action Buttons */}
-      <div className="flex items-center justify-center gap-density-md mt-12">
-        {/* Category Filter */}
-        <CategoryFilter />
+      {/* Action Buttons - Compact row */}
+      <div className="flex items-center justify-center gap-2 mt-4">
+        {/* Navigation: Back */}
+        <button
+          type="button"
+          onClick={handleGoBack}
+          disabled={!canGoBack()}
+          className={cn(
+            'p-2 rounded-full transition-all',
+            canGoBack()
+              ? 'bg-surface/60 text-primary hover:bg-surface hover:scale-105'
+              : 'bg-surface/30 text-tertiary cursor-not-allowed'
+          )}
+          title="Previous quote"
+        >
+          <ChevronLeft className="w-4 h-4" />
+        </button>
 
+        {/* New Quote (center, slightly larger) */}
+        <button
+          type="button"
+          onClick={handleRefreshClick}
+          className="relative p-2.5 bg-surface/60 text-primary rounded-full hover:bg-surface hover:scale-105 transition-all overflow-hidden"
+          title="New quote"
+        >
+          <RefreshCw className="w-5 h-5" />
+          {/* Countdown Progress Ring */}
+          {quoteChangeInterval > 0 && (
+            <svg
+              className="absolute inset-0 w-full h-full -rotate-90"
+              viewBox="0 0 36 36"
+              role="img"
+              aria-label="Quote refresh countdown"
+            >
+              <circle
+                className="text-primary-500/30"
+                strokeWidth="2"
+                stroke="currentColor"
+                fill="transparent"
+                r="16"
+                cx="18"
+                cy="18"
+              />
+              <circle
+                className="text-primary-500"
+                strokeWidth="2"
+                strokeDasharray={`${progressPercentage} 100`}
+                strokeLinecap="round"
+                stroke="currentColor"
+                fill="transparent"
+                r="16"
+                cx="18"
+                cy="18"
+              />
+            </svg>
+          )}
+        </button>
+
+        {/* Navigation: Forward */}
+        <button
+          type="button"
+          onClick={handleGoForward}
+          disabled={!canGoForward()}
+          className={cn(
+            'p-2 rounded-full transition-all',
+            canGoForward()
+              ? 'bg-surface/60 text-primary hover:bg-surface hover:scale-105'
+              : 'bg-surface/30 text-tertiary cursor-not-allowed'
+          )}
+          title="Next quote"
+        >
+          <ChevronRight className="w-4 h-4" />
+        </button>
+
+        {/* Separator */}
+        <div className="w-px h-4 bg-border/50 mx-1" />
+
+        {/* Favorite */}
         <button
           type="button"
           onClick={() => toggleFavorite(currentQuote.id)}
           className={cn(
-            'p-density-sm rounded-full transition-all hover:scale-110 hover:shadow-lg',
+            'p-2 rounded-full transition-all hover:scale-105',
             currentQuote.isFavorite
               ? 'bg-red-500 text-white'
-              : 'bg-surface text-secondary hover:bg-surface-variant'
+              : 'bg-surface/60 text-secondary hover:bg-surface'
           )}
           title={currentQuote.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
         >
-          <Heart className={cn('w-5 h-5', currentQuote.isFavorite && 'fill-current')} />
+          <Heart className={cn('w-4 h-4', currentQuote.isFavorite && 'fill-current')} />
         </button>
 
-        {/* Navigation Buttons */}
-        <div className="flex items-center gap-density-xs">
-          <button
-            type="button"
-            onClick={handleGoBack}
-            disabled={!canGoBack()}
-            className={cn(
-              'p-density-sm rounded-full transition-all',
-              canGoBack()
-                ? 'bg-surface text-primary hover:bg-surface-variant hover:scale-110 hover:shadow-lg'
-                : 'bg-surface-variant text-tertiary cursor-not-allowed'
-            )}
-            title="Previous quote"
-          >
-            <ChevronLeft className="w-5 h-5" />
-          </button>
+        {/* Category Filter */}
+        <CategoryFilter compact />
 
-          <button
-            type="button"
-            onClick={handleRefreshClick}
-            className="relative flex items-center gap-density-xs px-density-lg py-density-sm bg-surface text-primary rounded-lg font-medium shadow-md hover:shadow-lg hover:scale-105 transition-all overflow-hidden"
-            title="New quote"
-          >
-            <RefreshCw className="w-5 h-5" />
-            <span>New Quote</span>
-
-            {/* Countdown Progress Bar - only show when auto-refresh is enabled */}
-            {quoteChangeInterval > 0 && (
-              <div
-                className="absolute bottom-0 left-0 h-0.5 bg-primary-500 dark:bg-primary-400 transition-all duration-100 ease-linear"
-                style={{ width: `${progressPercentage}%` }}
-              />
-            )}
-          </button>
-
-          <button
-            type="button"
-            onClick={handleGoForward}
-            disabled={!canGoForward()}
-            className={cn(
-              'p-density-sm rounded-full transition-all',
-              canGoForward()
-                ? 'bg-surface text-primary hover:bg-surface-variant hover:scale-110 hover:shadow-lg'
-                : 'bg-surface-variant text-tertiary cursor-not-allowed'
-            )}
-            title="Next quote"
-          >
-            <ChevronRight className="w-5 h-5" />
-          </button>
-        </div>
-
+        {/* Hide */}
         <button
           type="button"
           onClick={() => hideQuote(currentQuote.id)}
-          className="p-density-sm rounded-full bg-surface text-secondary hover:bg-surface-variant hover:scale-110 transition-all hover:shadow-lg"
+          className="p-2 rounded-full bg-surface/60 text-secondary hover:bg-surface hover:scale-105 transition-all"
           title="Hide this quote"
         >
-          <EyeOff className="w-5 h-5" />
+          <EyeOff className="w-4 h-4" />
         </button>
       </div>
     </div>

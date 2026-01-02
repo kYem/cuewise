@@ -5,7 +5,11 @@ import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useQuoteStore } from '../stores/quote-store';
 
-export const CategoryFilter: React.FC = () => {
+interface CategoryFilterProps {
+  compact?: boolean;
+}
+
+export const CategoryFilter: React.FC<CategoryFilterProps> = ({ compact = false }) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const {
@@ -70,14 +74,17 @@ export const CategoryFilter: React.FC = () => {
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
-          'p-density-sm rounded-full transition-all hover:scale-110 hover:shadow-lg',
+          'rounded-full transition-all',
+          compact ? 'p-2 hover:scale-105' : 'p-density-sm hover:scale-110 hover:shadow-lg',
           isOpen || !allEnabled
             ? 'bg-primary-600 text-white'
-            : 'bg-surface text-secondary hover:bg-surface-variant'
+            : compact
+              ? 'bg-surface/60 text-secondary hover:bg-surface'
+              : 'bg-surface text-secondary hover:bg-surface-variant'
         )}
         title={`Filter categories (${enabledCount}/${totalCount})`}
       >
-        <Filter className="w-5 h-5" />
+        <Filter className={compact ? 'w-4 h-4' : 'w-5 h-5'} />
       </button>
 
       {/* Badge showing filtered count */}
@@ -89,7 +96,7 @@ export const CategoryFilter: React.FC = () => {
 
       {/* Dropdown */}
       {isOpen && (
-        <div className="absolute bottom-full mb-2 right-0 w-64 bg-surface rounded-lg shadow-xl border border-border z-50 animate-fade-in">
+        <div className="absolute bottom-full mb-2 right-0 w-64 bg-surface/95 backdrop-blur-xl rounded-lg shadow-xl border border-border z-50 animate-fade-in">
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-border">
             <span className="font-semibold text-primary">Filter Categories</span>

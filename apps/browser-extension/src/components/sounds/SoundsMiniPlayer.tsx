@@ -134,7 +134,11 @@ export const SoundsMiniPlayer: React.FC = () => {
               {getThumbnail()}
             </button>
           </PopoverTrigger>
-          <PopoverContent align="start" sideOffset={8} className="p-0">
+          <PopoverContent
+            align="start"
+            sideOffset={8}
+            className="p-0 bg-surface/95 backdrop-blur-xl"
+          >
             <SoundsPanel />
           </PopoverContent>
         </Popover>

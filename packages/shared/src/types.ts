@@ -105,6 +105,7 @@ export interface PomodoroSession {
 export type ColorTheme = 'purple' | 'forest' | 'rose' | 'glass';
 export type LayoutDensity = 'compact' | 'comfortable' | 'spacious';
 export type SettingsLogLevel = 'none' | 'error' | 'warn' | 'info' | 'debug';
+export type GoalViewMode = 'full' | 'compact' | 'focus';
 
 // Focus mode image categories for Unsplash backgrounds
 export type FocusImageCategory = 'nature' | 'forest' | 'ocean' | 'mountains' | 'minimal' | 'dark';
@@ -182,6 +183,9 @@ export interface Settings {
   focusModeImageCategory: FocusImageCategory; // Background image category (default 'nature')
   focusModeShowQuote: boolean; // Show motivational quote overlay (default true)
   focusModeAutoEnter: boolean; // Auto-enter focus mode when timer starts (default false)
+  // Goal View Mode
+  goalViewMode: GoalViewMode; // View mode for Today's Focus section (default 'full')
+  focusedGoalId: string | null; // Selected goal ID for focus mode (default null)
 }
 
 // Storage keys

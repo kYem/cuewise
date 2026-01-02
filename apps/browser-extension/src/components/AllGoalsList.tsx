@@ -290,7 +290,7 @@ export const AllGoalsList: React.FC = () => {
                             <Link2 className="w-4 h-4" />
                           </button>
                         </PopoverTrigger>
-                        <PopoverContent className="min-w-[180px] py-1">
+                        <PopoverContent className="min-w-[180px] py-1 bg-surface/95 backdrop-blur-xl">
                           {goal.parentId && (
                             <button
                               type="button"
