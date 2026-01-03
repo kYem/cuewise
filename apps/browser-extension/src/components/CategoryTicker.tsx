@@ -22,14 +22,13 @@ export const CategoryTicker: React.FC<CategoryTickerProps> = ({ category, classN
   const displayCategory = category.charAt(0).toUpperCase() + category.slice(1);
 
   return (
-    <span className={className}>
-      <Ticker
-        value={displayCategory}
-        duration={600}
-        easing="easeInOut"
-        charWidth={0.6}
-        characterLists={CATEGORY_CHARACTER_LISTS}
-      />
-    </span>
+    <Ticker
+      className={className}
+      value={displayCategory}
+      duration={600}
+      easing="easeInOut"
+      charWidth={0.6}
+      characterLists={CATEGORY_CHARACTER_LISTS}
+    />
   );
 };
