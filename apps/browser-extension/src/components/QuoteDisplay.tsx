@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useQuoteStore } from '../stores/quote-store';
 import { useSettingsStore } from '../stores/settings-store';
+import { AuthorTicker } from './AuthorTicker';
 import { CategoryFilter } from './CategoryFilter';
 import { ErrorFallback } from './ErrorFallback';
 
@@ -192,7 +193,7 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({ onManualRefresh }) =
           </p>
           <footer className="text-center space-y-density-sm">
             <cite className="text-xl md:text-2xl font-semibold not-italic text-primary-600 dark:text-primary-500">
-              — {currentQuote.author}
+              <AuthorTicker author={currentQuote.author} />
             </cite>
 
             {/* Source (for custom quotes) */}
