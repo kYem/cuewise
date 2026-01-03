@@ -47,7 +47,7 @@ export const GoalFocusView: React.FC<GoalFocusViewProps> = ({ showAddInput, onCl
   if (todayTasks.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-8">
-        <div className="w-full max-w-md">
+        <div className="w-full max-w-xl">
           <GoalInput />
         </div>
       </div>
@@ -58,9 +58,11 @@ export const GoalFocusView: React.FC<GoalFocusViewProps> = ({ showAddInput, onCl
   if (incompleteGoals.length === 0 && !focusedGoal) {
     return (
       <div className="flex flex-col items-center justify-center py-8">
-        <CheckCircle2 className="w-12 h-12 mb-3 text-primary-600" />
-        <p className="text-lg text-primary font-medium">All done!</p>
-        <p className="text-sm text-secondary/80">
+        <CheckCircle2 className="w-12 h-12 mb-3 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]" />
+        <p className="text-lg text-white font-medium drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]">
+          All done!
+        </p>
+        <p className="text-sm text-white/80 drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]">
           Completed {todayTasks.length} task{todayTasks.length !== 1 ? 's' : ''} today
         </p>
       </div>
@@ -78,8 +80,8 @@ export const GoalFocusView: React.FC<GoalFocusViewProps> = ({ showAddInput, onCl
             'group flex items-center gap-4 px-6 py-4 rounded-xl transition-all',
             'focus:outline-none focus:ring-2 focus:ring-primary-500/50',
             displayGoal.completed
-              ? 'bg-primary-500/20 backdrop-blur-sm'
-              : 'bg-white/10 backdrop-blur-sm hover:bg-white/20 border border-white/10'
+              ? 'bg-primary-500/25 backdrop-blur-md'
+              : 'bg-black/20 backdrop-blur-md hover:bg-black/30 border border-white/25 shadow-lg shadow-black/10'
           )}
         >
           {/* Checkbox */}
@@ -87,15 +89,15 @@ export const GoalFocusView: React.FC<GoalFocusViewProps> = ({ showAddInput, onCl
             {displayGoal.completed ? (
               <CheckCircle2 className="w-8 h-8 text-primary-600" />
             ) : (
-              <Circle className="w-8 h-8 text-secondary/60 group-hover:text-primary-500 transition-colors" />
+              <Circle className="w-8 h-8 text-white/80 group-hover:text-primary-500 transition-colors" />
             )}
           </div>
 
           {/* Goal Text */}
           <span
             className={cn(
-              'text-xl text-left transition-all',
-              displayGoal.completed ? 'text-primary-600 line-through' : 'text-primary'
+              'text-xl text-left transition-all font-medium drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]',
+              displayGoal.completed ? 'text-primary-600 line-through opacity-80' : 'text-white'
             )}
           >
             {displayGoal.text}
@@ -105,7 +107,7 @@ export const GoalFocusView: React.FC<GoalFocusViewProps> = ({ showAddInput, onCl
 
       {/* Add Goal Input (when shown) */}
       {showAddInput && (
-        <div className="w-full max-w-md mt-6">
+        <div className="w-full max-w-xl mt-6">
           <GoalInput onTaskAdded={onCloseAddInput} />
         </div>
       )}
