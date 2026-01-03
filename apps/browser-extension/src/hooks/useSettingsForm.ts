@@ -45,8 +45,9 @@ export interface SettingsFormState {
   focusModeShowQuote: boolean;
   focusModeAutoEnter: boolean;
 
-  // Quote interval
+  // Quote settings
   quoteChangeInterval: number;
+  enableQuoteAnimation: boolean;
 
   // Debug
   logLevel: SettingsLogLevel;
@@ -77,6 +78,7 @@ function settingsToFormState(settings: Settings): SettingsFormState {
     focusModeShowQuote: settings.focusModeShowQuote,
     focusModeAutoEnter: settings.focusModeAutoEnter,
     quoteChangeInterval: settings.quoteChangeInterval,
+    enableQuoteAnimation: settings.enableQuoteAnimation,
     logLevel: settings.logLevel,
   };
 }
@@ -176,6 +178,7 @@ export function useSettingsForm({
       focusModeShowQuote: form.focusModeShowQuote,
       focusModeAutoEnter: form.focusModeAutoEnter,
       quoteChangeInterval: form.quoteChangeInterval,
+      enableQuoteAnimation: form.enableQuoteAnimation,
       logLevel: form.logLevel,
     });
 

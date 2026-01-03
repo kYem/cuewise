@@ -84,7 +84,7 @@ export const GoalInput: React.FC<GoalInputProps> = ({
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="What do you want to focus on today?"
-          className="flex-1 px-4 py-3 rounded-lg border-2 border-border focus:border-primary-500 focus:outline-none transition-colors text-primary placeholder:text-secondary"
+          className="flex-1 min-w-[280px] px-4 py-3 rounded-lg border-2 border-border focus:border-primary-500 focus:outline-none transition-colors text-primary placeholder:text-secondary"
           maxLength={200}
         />
 

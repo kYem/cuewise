@@ -48,6 +48,8 @@ export const DEFAULT_SETTINGS: Settings = {
   // Goal View Mode
   goalViewMode: 'full', // Full view by default
   focusedGoalId: null, // No focused goal by default
+  // Quote Animation
+  enableQuoteAnimation: false, // Disabled by default (can be CPU-intensive)
 };
 
 // Quote categories with display names

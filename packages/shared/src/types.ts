@@ -187,6 +187,8 @@ export interface Settings {
   // Goal View Mode
   goalViewMode: GoalViewMode; // View mode for Today's Focus section (default 'full')
   focusedGoalId: string | null; // Selected goal ID for focus mode (default null)
+  // Quote Animation
+  enableQuoteAnimation: boolean; // Enable smart-ticker animation for quotes (default false)
 }
 
 // Storage keys
