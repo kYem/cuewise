@@ -34,6 +34,17 @@ function createMockStore(
   };
 }
 
+// Helper to create a mock implementation that handles selector functions
+function createSelectorMock(store: MockCategoryFilterStore) {
+  // biome-ignore lint/suspicious/noExplicitAny: Mock needs flexible typing to handle selector functions
+  return (selector?: (state: any) => unknown) => {
+    if (selector) {
+      return selector(store);
+    }
+    return store;
+  };
+}
+
 describe('CategoryFilter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -41,7 +52,7 @@ describe('CategoryFilter', () => {
 
   describe('rendering', () => {
     it('should render filter button with correct title when all enabled', () => {
-      vi.mocked(useQuoteStore).mockReturnValue(createMockStore());
+      vi.mocked(useQuoteStore).mockImplementation(createSelectorMock(createMockStore()));
 
       render(<CategoryFilter />);
 
@@ -49,11 +60,13 @@ describe('CategoryFilter', () => {
     });
 
     it('should render filter button with correct count when some disabled', () => {
-      vi.mocked(useQuoteStore).mockReturnValue(
-        createMockStore({
-          enabledCategories: ['inspiration', 'productivity'],
-          showCustomQuotes: true,
-        })
+      vi.mocked(useQuoteStore).mockImplementation(
+        createSelectorMock(
+          createMockStore({
+            enabledCategories: ['inspiration', 'productivity'],
+            showCustomQuotes: true,
+          })
+        )
       );
 
       render(<CategoryFilter />);
@@ -62,7 +75,7 @@ describe('CategoryFilter', () => {
     });
 
     it('should not show badge when all categories enabled', () => {
-      vi.mocked(useQuoteStore).mockReturnValue(createMockStore());
+      vi.mocked(useQuoteStore).mockImplementation(createSelectorMock(createMockStore()));
 
       render(<CategoryFilter />);
 
@@ -75,11 +88,13 @@ describe('CategoryFilter', () => {
     });
 
     it('should show badge with count when some categories disabled', () => {
-      vi.mocked(useQuoteStore).mockReturnValue(
-        createMockStore({
-          enabledCategories: ['inspiration', 'productivity'],
-          showCustomQuotes: false,
-        })
+      vi.mocked(useQuoteStore).mockImplementation(
+        createSelectorMock(
+          createMockStore({
+            enabledCategories: ['inspiration', 'productivity'],
+            showCustomQuotes: false,
+          })
+        )
       );
 
       render(<CategoryFilter />);
@@ -88,7 +103,7 @@ describe('CategoryFilter', () => {
     });
 
     it('should not show dropdown initially', () => {
-      vi.mocked(useQuoteStore).mockReturnValue(createMockStore());
+      vi.mocked(useQuoteStore).mockImplementation(createSelectorMock(createMockStore()));
 
       render(<CategoryFilter />);
 
@@ -99,7 +114,7 @@ describe('CategoryFilter', () => {
   describe('dropdown behavior', () => {
     it('should open dropdown when filter button clicked', async () => {
       const user = userEvent.setup();
-      vi.mocked(useQuoteStore).mockReturnValue(createMockStore());
+      vi.mocked(useQuoteStore).mockImplementation(createSelectorMock(createMockStore()));
 
       render(<CategoryFilter />);
 
@@ -110,7 +125,7 @@ describe('CategoryFilter', () => {
 
     it('should close dropdown when close button clicked', async () => {
       const user = userEvent.setup();
-      vi.mocked(useQuoteStore).mockReturnValue(createMockStore());
+      vi.mocked(useQuoteStore).mockImplementation(createSelectorMock(createMockStore()));
 
       render(<CategoryFilter />);
 
@@ -126,7 +141,7 @@ describe('CategoryFilter', () => {
 
     it('should toggle dropdown when filter button clicked twice', async () => {
       const user = userEvent.setup();
-      vi.mocked(useQuoteStore).mockReturnValue(createMockStore());
+      vi.mocked(useQuoteStore).mockImplementation(createSelectorMock(createMockStore()));
 
       render(<CategoryFilter />);
 
@@ -141,7 +156,7 @@ describe('CategoryFilter', () => {
 
     it('should show all category options in dropdown', async () => {
       const user = userEvent.setup();
-      vi.mocked(useQuoteStore).mockReturnValue(createMockStore());
+      vi.mocked(useQuoteStore).mockImplementation(createSelectorMock(createMockStore()));
 
       render(<CategoryFilter />);
 
@@ -162,7 +177,9 @@ describe('CategoryFilter', () => {
     it('should call toggleCategory when category clicked', async () => {
       const user = userEvent.setup();
       const toggleCategory = vi.fn();
-      vi.mocked(useQuoteStore).mockReturnValue(createMockStore({ toggleCategory }));
+      vi.mocked(useQuoteStore).mockImplementation(
+        createSelectorMock(createMockStore({ toggleCategory }))
+      );
 
       render(<CategoryFilter />);
 
@@ -175,7 +192,9 @@ describe('CategoryFilter', () => {
     it('should call toggleCustomQuotes when custom option clicked', async () => {
       const user = userEvent.setup();
       const toggleCustomQuotes = vi.fn();
-      vi.mocked(useQuoteStore).mockReturnValue(createMockStore({ toggleCustomQuotes }));
+      vi.mocked(useQuoteStore).mockImplementation(
+        createSelectorMock(createMockStore({ toggleCustomQuotes }))
+      );
 
       render(<CategoryFilter />);
 
@@ -188,7 +207,9 @@ describe('CategoryFilter', () => {
     it('should call toggleCategory for each category', async () => {
       const user = userEvent.setup();
       const toggleCategory = vi.fn();
-      vi.mocked(useQuoteStore).mockReturnValue(createMockStore({ toggleCategory }));
+      vi.mocked(useQuoteStore).mockImplementation(
+        createSelectorMock(createMockStore({ toggleCategory }))
+      );
 
       render(<CategoryFilter />);
 
@@ -213,13 +234,15 @@ describe('CategoryFilter', () => {
       const user = userEvent.setup();
       const setEnabledCategories = vi.fn();
       const toggleCustomQuotes = vi.fn();
-      vi.mocked(useQuoteStore).mockReturnValue(
-        createMockStore({
-          enabledCategories: ['inspiration'],
-          showCustomQuotes: false,
-          setEnabledCategories,
-          toggleCustomQuotes,
-        })
+      vi.mocked(useQuoteStore).mockImplementation(
+        createSelectorMock(
+          createMockStore({
+            enabledCategories: ['inspiration'],
+            showCustomQuotes: false,
+            setEnabledCategories,
+            toggleCustomQuotes,
+          })
+        )
       );
 
       render(<CategoryFilter />);
@@ -235,13 +258,15 @@ describe('CategoryFilter', () => {
       const user = userEvent.setup();
       const setEnabledCategories = vi.fn();
       const toggleCustomQuotes = vi.fn();
-      vi.mocked(useQuoteStore).mockReturnValue(
-        createMockStore({
-          enabledCategories: ['inspiration'],
-          showCustomQuotes: true,
-          setEnabledCategories,
-          toggleCustomQuotes,
-        })
+      vi.mocked(useQuoteStore).mockImplementation(
+        createSelectorMock(
+          createMockStore({
+            enabledCategories: ['inspiration'],
+            showCustomQuotes: true,
+            setEnabledCategories,
+            toggleCustomQuotes,
+          })
+        )
       );
 
       render(<CategoryFilter />);
@@ -255,7 +280,7 @@ describe('CategoryFilter', () => {
 
     it('should disable Select All button when all categories enabled', async () => {
       const user = userEvent.setup();
-      vi.mocked(useQuoteStore).mockReturnValue(createMockStore());
+      vi.mocked(useQuoteStore).mockImplementation(createSelectorMock(createMockStore()));
 
       render(<CategoryFilter />);
 
@@ -269,11 +294,13 @@ describe('CategoryFilter', () => {
       const user = userEvent.setup();
       const setEnabledCategories = vi.fn();
       const toggleCustomQuotes = vi.fn();
-      vi.mocked(useQuoteStore).mockReturnValue(
-        createMockStore({
-          setEnabledCategories,
-          toggleCustomQuotes,
-        })
+      vi.mocked(useQuoteStore).mockImplementation(
+        createSelectorMock(
+          createMockStore({
+            setEnabledCategories,
+            toggleCustomQuotes,
+          })
+        )
       );
 
       render(<CategoryFilter />);
@@ -289,12 +316,14 @@ describe('CategoryFilter', () => {
       const user = userEvent.setup();
       const setEnabledCategories = vi.fn();
       const toggleCustomQuotes = vi.fn();
-      vi.mocked(useQuoteStore).mockReturnValue(
-        createMockStore({
-          showCustomQuotes: false,
-          setEnabledCategories,
-          toggleCustomQuotes,
-        })
+      vi.mocked(useQuoteStore).mockImplementation(
+        createSelectorMock(
+          createMockStore({
+            showCustomQuotes: false,
+            setEnabledCategories,
+            toggleCustomQuotes,
+          })
+        )
       );
 
       render(<CategoryFilter />);
@@ -308,11 +337,13 @@ describe('CategoryFilter', () => {
 
     it('should disable Clear All button when no categories enabled', async () => {
       const user = userEvent.setup();
-      vi.mocked(useQuoteStore).mockReturnValue(
-        createMockStore({
-          enabledCategories: [],
-          showCustomQuotes: false,
-        })
+      vi.mocked(useQuoteStore).mockImplementation(
+        createSelectorMock(
+          createMockStore({
+            enabledCategories: [],
+            showCustomQuotes: false,
+          })
+        )
       );
 
       render(<CategoryFilter />);
@@ -327,11 +358,13 @@ describe('CategoryFilter', () => {
   describe('warning state', () => {
     it('should show warning when no categories selected', async () => {
       const user = userEvent.setup();
-      vi.mocked(useQuoteStore).mockReturnValue(
-        createMockStore({
-          enabledCategories: [],
-          showCustomQuotes: false,
-        })
+      vi.mocked(useQuoteStore).mockImplementation(
+        createSelectorMock(
+          createMockStore({
+            enabledCategories: [],
+            showCustomQuotes: false,
+          })
+        )
       );
 
       render(<CategoryFilter />);
@@ -344,11 +377,13 @@ describe('CategoryFilter', () => {
 
     it('should not show warning when at least one category is enabled', async () => {
       const user = userEvent.setup();
-      vi.mocked(useQuoteStore).mockReturnValue(
-        createMockStore({
-          enabledCategories: ['inspiration'],
-          showCustomQuotes: false,
-        })
+      vi.mocked(useQuoteStore).mockImplementation(
+        createSelectorMock(
+          createMockStore({
+            enabledCategories: ['inspiration'],
+            showCustomQuotes: false,
+          })
+        )
       );
 
       render(<CategoryFilter />);
@@ -360,11 +395,13 @@ describe('CategoryFilter', () => {
 
     it('should not show warning when only custom quotes enabled', async () => {
       const user = userEvent.setup();
-      vi.mocked(useQuoteStore).mockReturnValue(
-        createMockStore({
-          enabledCategories: [],
-          showCustomQuotes: true,
-        })
+      vi.mocked(useQuoteStore).mockImplementation(
+        createSelectorMock(
+          createMockStore({
+            enabledCategories: [],
+            showCustomQuotes: true,
+          })
+        )
       );
 
       render(<CategoryFilter />);
@@ -378,11 +415,13 @@ describe('CategoryFilter', () => {
   describe('checkbox visual state', () => {
     it('should show checkbox as checked for enabled categories', async () => {
       const user = userEvent.setup();
-      vi.mocked(useQuoteStore).mockReturnValue(
-        createMockStore({
-          enabledCategories: ['inspiration'],
-          showCustomQuotes: false,
-        })
+      vi.mocked(useQuoteStore).mockImplementation(
+        createSelectorMock(
+          createMockStore({
+            enabledCategories: ['inspiration'],
+            showCustomQuotes: false,
+          })
+        )
       );
 
       render(<CategoryFilter />);
@@ -401,11 +440,13 @@ describe('CategoryFilter', () => {
 
     it('should show custom checkbox as checked when showCustomQuotes is true', async () => {
       const user = userEvent.setup();
-      vi.mocked(useQuoteStore).mockReturnValue(
-        createMockStore({
-          enabledCategories: [],
-          showCustomQuotes: true,
-        })
+      vi.mocked(useQuoteStore).mockImplementation(
+        createSelectorMock(
+          createMockStore({
+            enabledCategories: [],
+            showCustomQuotes: true,
+          })
+        )
       );
 
       render(<CategoryFilter />);
@@ -421,7 +462,7 @@ describe('CategoryFilter', () => {
   describe('favorites filter', () => {
     it('should show Favorites Only option in dropdown', async () => {
       const user = userEvent.setup();
-      vi.mocked(useQuoteStore).mockReturnValue(createMockStore());
+      vi.mocked(useQuoteStore).mockImplementation(createSelectorMock(createMockStore()));
 
       render(<CategoryFilter />);
 
@@ -433,7 +474,9 @@ describe('CategoryFilter', () => {
     it('should call toggleFavoritesOnly when Favorites Only clicked', async () => {
       const user = userEvent.setup();
       const toggleFavoritesOnly = vi.fn();
-      vi.mocked(useQuoteStore).mockReturnValue(createMockStore({ toggleFavoritesOnly }));
+      vi.mocked(useQuoteStore).mockImplementation(
+        createSelectorMock(createMockStore({ toggleFavoritesOnly }))
+      );
 
       render(<CategoryFilter />);
 
@@ -444,10 +487,12 @@ describe('CategoryFilter', () => {
     });
 
     it('should show badge when showFavoritesOnly is true', () => {
-      vi.mocked(useQuoteStore).mockReturnValue(
-        createMockStore({
-          showFavoritesOnly: true,
-        })
+      vi.mocked(useQuoteStore).mockImplementation(
+        createSelectorMock(
+          createMockStore({
+            showFavoritesOnly: true,
+          })
+        )
       );
 
       render(<CategoryFilter />);
@@ -458,10 +503,12 @@ describe('CategoryFilter', () => {
 
     it('should show favorites checkbox as checked when showFavoritesOnly is true', async () => {
       const user = userEvent.setup();
-      vi.mocked(useQuoteStore).mockReturnValue(
-        createMockStore({
-          showFavoritesOnly: true,
-        })
+      vi.mocked(useQuoteStore).mockImplementation(
+        createSelectorMock(
+          createMockStore({
+            showFavoritesOnly: true,
+          })
+        )
       );
 
       render(<CategoryFilter />);
@@ -477,13 +524,15 @@ describe('CategoryFilter', () => {
       const user = userEvent.setup();
       const toggleFavoritesOnly = vi.fn();
       const setEnabledCategories = vi.fn();
-      vi.mocked(useQuoteStore).mockReturnValue(
-        createMockStore({
-          enabledCategories: ['inspiration'],
-          showFavoritesOnly: true,
-          toggleFavoritesOnly,
-          setEnabledCategories,
-        })
+      vi.mocked(useQuoteStore).mockImplementation(
+        createSelectorMock(
+          createMockStore({
+            enabledCategories: ['inspiration'],
+            showFavoritesOnly: true,
+            toggleFavoritesOnly,
+            setEnabledCategories,
+          })
+        )
       );
 
       render(<CategoryFilter />);
@@ -499,15 +548,17 @@ describe('CategoryFilter', () => {
       const toggleFavoritesOnly = vi.fn();
       const setEnabledCategories = vi.fn();
       const toggleCustomQuotes = vi.fn();
-      vi.mocked(useQuoteStore).mockReturnValue(
-        createMockStore({
-          enabledCategories: ['inspiration'],
-          showCustomQuotes: false,
-          showFavoritesOnly: false,
-          toggleFavoritesOnly,
-          setEnabledCategories,
-          toggleCustomQuotes,
-        })
+      vi.mocked(useQuoteStore).mockImplementation(
+        createSelectorMock(
+          createMockStore({
+            enabledCategories: ['inspiration'],
+            showCustomQuotes: false,
+            showFavoritesOnly: false,
+            toggleFavoritesOnly,
+            setEnabledCategories,
+            toggleCustomQuotes,
+          })
+        )
       );
 
       render(<CategoryFilter />);
@@ -523,13 +574,15 @@ describe('CategoryFilter', () => {
       const toggleFavoritesOnly = vi.fn();
       const setEnabledCategories = vi.fn();
       const toggleCustomQuotes = vi.fn();
-      vi.mocked(useQuoteStore).mockReturnValue(
-        createMockStore({
-          showFavoritesOnly: true,
-          toggleFavoritesOnly,
-          setEnabledCategories,
-          toggleCustomQuotes,
-        })
+      vi.mocked(useQuoteStore).mockImplementation(
+        createSelectorMock(
+          createMockStore({
+            showFavoritesOnly: true,
+            toggleFavoritesOnly,
+            setEnabledCategories,
+            toggleCustomQuotes,
+          })
+        )
       );
 
       render(<CategoryFilter />);
@@ -545,13 +598,15 @@ describe('CategoryFilter', () => {
       const toggleFavoritesOnly = vi.fn();
       const setEnabledCategories = vi.fn();
       const toggleCustomQuotes = vi.fn();
-      vi.mocked(useQuoteStore).mockReturnValue(
-        createMockStore({
-          showFavoritesOnly: false,
-          toggleFavoritesOnly,
-          setEnabledCategories,
-          toggleCustomQuotes,
-        })
+      vi.mocked(useQuoteStore).mockImplementation(
+        createSelectorMock(
+          createMockStore({
+            showFavoritesOnly: false,
+            toggleFavoritesOnly,
+            setEnabledCategories,
+            toggleCustomQuotes,
+          })
+        )
       );
 
       render(<CategoryFilter />);
