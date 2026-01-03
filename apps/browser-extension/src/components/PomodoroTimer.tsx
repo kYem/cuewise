@@ -2,6 +2,7 @@ import { formatTimeRemaining } from '@cuewise/shared';
 import { Maximize2, Pause, Play, RotateCcw, SkipForward, Target } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useState } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { usePomodoroLeader } from '../hooks/usePomodoroLeader';
 import { useSoundsLeader } from '../hooks/useSoundsLeader';
 import { useFocusModeStore } from '../stores/focus-mode-store';
@@ -13,6 +14,7 @@ import { getSessionStyles } from '../utils/pomodoro-styles';
 import { EditableValue } from './EditableValue';
 
 export const PomodoroTimer: React.FC = () => {
+  // Pomodoro state - use useShallow to prevent re-renders when unrelated state changes
   const {
     status,
     sessionType,
@@ -24,29 +26,53 @@ export const PomodoroTimer: React.FC = () => {
     consecutiveWorkSessions,
     longBreakInterval,
     selectedGoalId,
-    initialize,
-    start,
-    pause,
-    resume,
-    reset,
-    skip,
-    setSelectedGoal,
-    reloadSettings,
-  } = usePomodoroStore();
+  } = usePomodoroStore(
+    useShallow((state) => ({
+      status: state.status,
+      sessionType: state.sessionType,
+      timeRemaining: state.timeRemaining,
+      totalTime: state.totalTime,
+      workDuration: state.workDuration,
+      breakDuration: state.breakDuration,
+      longBreakDuration: state.longBreakDuration,
+      consecutiveWorkSessions: state.consecutiveWorkSessions,
+      longBreakInterval: state.longBreakInterval,
+      selectedGoalId: state.selectedGoalId,
+    }))
+  );
 
-  const { todayTasks, initialize: initGoals } = useGoalStore();
-  const { updateSettings, settings } = useSettingsStore();
+  // Pomodoro actions - stable references
+  const initialize = usePomodoroStore((state) => state.initialize);
+  const start = usePomodoroStore((state) => state.start);
+  const pause = usePomodoroStore((state) => state.pause);
+  const resume = usePomodoroStore((state) => state.resume);
+  const reset = usePomodoroStore((state) => state.reset);
+  const skip = usePomodoroStore((state) => state.skip);
+  const setSelectedGoal = usePomodoroStore((state) => state.setSelectedGoal);
+  const reloadSettings = usePomodoroStore((state) => state.reloadSettings);
 
-  // Unified sounds store for ambient and YouTube
-  const {
-    activeSource,
-    isPlaying: isSoundsPlaying,
-    pause: pauseSounds,
-    resume: resumeSounds,
-    stop: stopSounds,
-    initialize: initSounds,
-    getActiveSourceName,
-  } = useSoundsStore();
+  // Goal state and actions
+  const todayTasks = useGoalStore((state) => state.todayTasks);
+  const initGoals = useGoalStore((state) => state.initialize);
+
+  // Settings state and actions
+  const settings = useSettingsStore(useShallow((state) => state.settings));
+  const updateSettings = useSettingsStore((state) => state.updateSettings);
+
+  // Sounds state - use useShallow for multiple values
+  const { activeSource, isPlaying: isSoundsPlaying } = useSoundsStore(
+    useShallow((state) => ({
+      activeSource: state.activeSource,
+      isPlaying: state.isPlaying,
+    }))
+  );
+
+  // Sounds actions - stable references
+  const pauseSounds = useSoundsStore((state) => state.pause);
+  const resumeSounds = useSoundsStore((state) => state.resume);
+  const stopSounds = useSoundsStore((state) => state.stop);
+  const initSounds = useSoundsStore((state) => state.initialize);
+  const getActiveSourceName = useSoundsStore((state) => state.getActiveSourceName);
 
   const [showGoalPicker, setShowGoalPicker] = useState(false);
 
