@@ -2,6 +2,7 @@ import { RefreshCw } from 'lucide-react';
 import type React from 'react';
 import type { SettingsFormState } from '../../hooks/useSettingsForm';
 import { SettingsSection } from './SettingsSection';
+import { SettingsToggle } from './SettingsToggle';
 
 interface QuoteIntervalSettingsProps {
   form: SettingsFormState;
@@ -111,6 +112,17 @@ export const QuoteIntervalSettings: React.FC<QuoteIntervalSettingsProps> = ({ fo
           ? 'Quotes will only change when you click the refresh button'
           : `Quotes will automatically change every ${formatInterval(interval).toLowerCase()}`}
       </p>
+
+      {/* Animation toggle */}
+      <div className="pt-4 border-t border-border">
+        <SettingsToggle
+          id="quote-animation"
+          label="Animate quote transitions"
+          description="Slot-machine style animation when quotes change"
+          checked={form.enableQuoteAnimation}
+          onChange={(checked) => setField('enableQuoteAnimation', checked)}
+        />
+      </div>
     </SettingsSection>
   );
 };

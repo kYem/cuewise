@@ -8,6 +8,7 @@ import { useQuoteStore } from '../stores/quote-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { AuthorTicker } from './AuthorTicker';
 import { CategoryFilter } from './CategoryFilter';
+import { CategoryTicker } from './CategoryTicker';
 import { ErrorFallback } from './ErrorFallback';
 
 interface QuoteDisplayProps {
@@ -15,7 +16,12 @@ interface QuoteDisplayProps {
 }
 
 export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({ onManualRefresh }) => {
-  const quoteChangeInterval = useSettingsStore((state) => state.settings.quoteChangeInterval);
+  const { quoteChangeInterval, enableQuoteAnimation } = useSettingsStore(
+    useShallow((state) => ({
+      quoteChangeInterval: state.settings.quoteChangeInterval,
+      enableQuoteAnimation: state.settings.enableQuoteAnimation,
+    }))
+  );
   const [timeRemaining, setTimeRemaining] = useState(quoteChangeInterval);
 
   // State values - use useShallow to prevent re-renders when unrelated state changes
@@ -175,7 +181,11 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({ onManualRefresh }) =
           className="inline-flex items-center px-density-md py-density-xs rounded-full text-sm font-medium text-white shadow-sm"
           style={{ backgroundColor: categoryColor }}
         >
-          {currentQuote.category.charAt(0).toUpperCase() + currentQuote.category.slice(1)}
+          {enableQuoteAnimation ? (
+            <CategoryTicker category={currentQuote.category} />
+          ) : (
+            currentQuote.category.charAt(0).toUpperCase() + currentQuote.category.slice(1)
+          )}
         </span>
       </div>
 
@@ -193,7 +203,11 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({ onManualRefresh }) =
           </p>
           <footer className="text-center space-y-density-sm">
             <cite className="text-xl md:text-2xl font-semibold not-italic text-primary-600 dark:text-primary-500">
-              <AuthorTicker author={currentQuote.author} />
+              {enableQuoteAnimation ? (
+                <AuthorTicker author={currentQuote.author} />
+              ) : (
+                `— ${currentQuote.author}`
+              )}
             </cite>
 
             {/* Source (for custom quotes) */}
