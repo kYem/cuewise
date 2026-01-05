@@ -33,6 +33,52 @@ interface ReminderStore {
 }
 
 /**
+ * Calculate the next occurrence for a recurring reminder
+ */
+function calculateNextOccurrence(currentDueDate: Date, frequency: ReminderFrequency): Date {
+  const nextDueDate = new Date(currentDueDate);
+
+  switch (frequency) {
+    case 'daily':
+      nextDueDate.setDate(nextDueDate.getDate() + 1);
+      break;
+    case 'weekly':
+      nextDueDate.setDate(nextDueDate.getDate() + 7);
+      break;
+    case 'monthly':
+      nextDueDate.setMonth(nextDueDate.getMonth() + 1);
+      break;
+  }
+
+  return nextDueDate;
+}
+
+/**
+ * Advance a recurring reminder to the next future occurrence
+ * If the reminder is overdue, keep advancing until it's in the future
+ */
+function advanceToNextFutureOccurrence(reminder: Reminder): Reminder {
+  if (!reminder.recurring?.enabled) {
+    return reminder;
+  }
+
+  const now = new Date();
+  let nextDueDate = new Date(reminder.dueDate);
+
+  // Keep advancing until the due date is in the future
+  while (nextDueDate <= now) {
+    nextDueDate = calculateNextOccurrence(nextDueDate, reminder.recurring.frequency);
+  }
+
+  return {
+    ...reminder,
+    dueDate: nextDueDate.toISOString(),
+    completed: false,
+    notified: false,
+  };
+}
+
+/**
  * Filter reminders into upcoming and overdue categories
  */
 function categorizeReminders(reminders: Reminder[]) {
@@ -71,7 +117,44 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
     try {
       set({ isLoading: true, error: null });
 
-      const reminders = await getReminders();
+      let reminders = await getReminders();
+
+      // Auto-advance overdue recurring reminders to their next future occurrence
+      const now = new Date();
+      let hasAdvanced = false;
+      const advancedReminders = reminders.map((reminder) => {
+        // Only advance recurring reminders that are overdue
+        if (
+          reminder.recurring?.enabled &&
+          !reminder.completed &&
+          new Date(reminder.dueDate) < now
+        ) {
+          hasAdvanced = true;
+          const advanced = advanceToNextFutureOccurrence(reminder);
+          logger.info(`Auto-advanced recurring reminder "${reminder.text}" to ${advanced.dueDate}`);
+          return advanced;
+        }
+        return reminder;
+      });
+
+      // Save if any reminders were advanced
+      if (hasAdvanced) {
+        await setReminders(advancedReminders);
+        reminders = advancedReminders;
+
+        // Reschedule alarms for advanced reminders
+        if (chrome?.alarms) {
+          for (const reminder of reminders) {
+            if (reminder.recurring?.enabled) {
+              await chrome.alarms.clear(`reminder-${reminder.id}`);
+              await chrome.alarms.create(`reminder-${reminder.id}`, {
+                when: new Date(reminder.dueDate).getTime(),
+              });
+            }
+          }
+        }
+      }
+
       const { upcoming, overdue } = categorizeReminders(reminders);
 
       set({
@@ -143,6 +226,43 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
 
       const isCompleting = !reminder.completed;
 
+      // For recurring reminders, advance to next occurrence instead of marking complete
+      if (isCompleting && reminder.recurring?.enabled) {
+        // Always calculate the next occurrence from current due date
+        const currentDueDate = new Date(reminder.dueDate);
+        const nextDueDate = calculateNextOccurrence(currentDueDate, reminder.recurring.frequency);
+
+        const advancedReminder: Reminder = {
+          ...reminder,
+          dueDate: nextDueDate.toISOString(),
+          completed: false,
+          notified: false,
+        };
+
+        const updatedReminders = reminders.map((r) => (r.id === reminderId ? advancedReminder : r));
+
+        await setReminders(updatedReminders);
+
+        const { upcoming, overdue } = categorizeReminders(updatedReminders);
+        set({
+          reminders: updatedReminders,
+          upcomingReminders: upcoming,
+          overdueReminders: overdue,
+        });
+
+        // Reschedule alarm for next occurrence
+        if (chrome?.alarms) {
+          await chrome.alarms.clear(`reminder-${reminderId}`);
+          await chrome.alarms.create(`reminder-${reminderId}`, {
+            when: new Date(advancedReminder.dueDate).getTime(),
+          });
+        }
+
+        useToastStore.getState().success('Recurring reminder advanced to next occurrence');
+        return;
+      }
+
+      // For non-recurring reminders, toggle completed status
       const updatedReminders = reminders.map((r) =>
         r.id === reminderId
           ? {

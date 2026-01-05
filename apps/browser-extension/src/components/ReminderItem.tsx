@@ -71,7 +71,18 @@ export const ReminderItem: React.FC<ReminderItemProps> = ({
         type="button"
         onClick={() => onToggle(reminder.id)}
         className="flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 rounded-full"
-        aria-label={reminder.completed ? 'Mark as incomplete' : 'Mark as complete'}
+        aria-label={
+          reminder.completed
+            ? 'Mark as incomplete'
+            : reminder.recurring?.enabled
+              ? 'Mark done and advance to next occurrence'
+              : 'Mark as complete'
+        }
+        title={
+          reminder.recurring?.enabled && !reminder.completed
+            ? 'Mark done and advance to next occurrence'
+            : undefined
+        }
       >
         {reminder.completed ? (
           <CheckCircle2 className="w-6 h-6 text-primary-600" />
