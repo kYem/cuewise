@@ -1,6 +1,6 @@
 # Cuewise Development Roadmap
 
-**Last Updated**: 2026-01-02
+**Last Updated**: 2026-01-03
 **Current Version**: v1.7.0 (Published on Chrome Web Store)
 
 ---
@@ -19,6 +19,13 @@
 - [x] Compact quote controls with circular progress ring for countdown
 - [x] Improved popover/dropdown visibility with frosted glass background (95% opacity + blur)
 - [x] Fixed reminders panel to open above button without overlapping
+
+### Smart Ticker Animation
+- [x] Slot-machine style animation for author name and category badge using `@tombcato/smart-ticker`
+- [x] `AuthorTicker` component with character-level scrolling transitions
+- [x] `CategoryTicker` component for animated category badge
+- [x] Settings toggle: "Animate quote transitions" (disabled by default)
+- [x] Animation uses Levenshtein diff algorithm for smooth character transitions
 
 **Status**: Merged to main, pending release
 
@@ -641,7 +648,7 @@ When ready for growth:
 ---
 
 **Version History**
-- v1.8.0 (pending) - Goals view modes (Full/Compact/Focus), compact quote controls, UI improvements
+- v1.8.0 (pending) - Goals view modes (Full/Compact/Focus), compact quote controls, smart ticker animation, UI improvements
 - v1.7.0 (2025-12) - Glass theme, YouTube music player, notification sounds, floating reminder widget
 - v1.6.0 (2025-12) - Author autocomplete, streamlined quote management
 - v1.5.0 (2025-11) - Smart reminder templates, dedicated goals page, favorites filter
