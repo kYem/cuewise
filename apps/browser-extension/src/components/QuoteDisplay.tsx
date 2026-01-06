@@ -13,9 +13,13 @@ import { ErrorFallback } from './ErrorFallback';
 
 interface QuoteDisplayProps {
   onManualRefresh?: () => void;
+  variant?: 'normal' | 'compact';
 }
 
-export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({ onManualRefresh }) => {
+export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
+  onManualRefresh,
+  variant = 'normal',
+}) => {
   const { quoteChangeInterval, enableQuoteAnimation } = useSettingsStore(
     useShallow((state) => ({
       quoteChangeInterval: state.settings.quoteChangeInterval,
@@ -98,6 +102,25 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({ onManualRefresh }) =
   // Calculate dynamic font size based on quote length to prevent layout shifts
   const getQuoteFontSize = (text: string): string => {
     const length = text.length;
+
+    // Compact variant: ~50% smaller fonts
+    if (variant === 'compact') {
+      if (length < 50) {
+        return 'text-lg md:text-xl lg:text-2xl';
+      }
+      if (length < 80) {
+        return 'text-base md:text-lg lg:text-xl';
+      }
+      if (length < 120) {
+        return 'text-sm md:text-base lg:text-lg';
+      }
+      if (length < 180) {
+        return 'text-sm md:text-sm lg:text-base';
+      }
+      return 'text-xs md:text-sm lg:text-sm';
+    }
+
+    // Normal variant
     if (length < 50) {
       return 'text-3xl md:text-4xl lg:text-5xl'; // Very short quotes - largest
     }

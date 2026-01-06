@@ -25,6 +25,7 @@ export const NewTabPage: React.FC = () => {
   const showClock = useSettingsStore((state) => state.settings.showClock);
   const timeFormat = useSettingsStore((state) => state.settings.timeFormat);
   const focusModeImageCategory = useSettingsStore((state) => state.settings.focusModeImageCategory);
+  const quoteDisplayMode = useSettingsStore((state) => state.settings.quoteDisplayMode);
   const hasSeenOnboarding = useSettingsStore((state) => state.settings.hasSeenOnboarding);
   const updateSettings = useSettingsStore((state) => state.updateSettings);
   const initializePomodoro = usePomodoroStore((state) => state.initialize);
@@ -407,17 +408,34 @@ export const NewTabPage: React.FC = () => {
           {/* Clock Section (optional) */}
           {showClock && <Clock />}
 
-          {/* Quote Display Section */}
-          <div className="flex justify-center">
-            <QuoteDisplay onManualRefresh={() => setLastManualRefresh(Date.now())} />
-          </div>
+          {/* Quote Display Section - Top position (normal or compact) */}
+          {quoteDisplayMode !== 'hidden' && quoteDisplayMode !== 'bottom' && (
+            <div className="flex justify-center">
+              <QuoteDisplay
+                onManualRefresh={() => setLastManualRefresh(Date.now())}
+                variant={quoteDisplayMode === 'compact' ? 'compact' : 'normal'}
+              />
+            </div>
+          )}
 
           {/* Goals Section - Centered */}
-          <div className="max-w-2xl mx-auto">
+          <div className={`max-w-2xl mx-auto ${quoteDisplayMode === 'bottom' ? 'pb-48' : ''}`}>
             <GoalsSection />
           </div>
         </div>
       </div>
+
+      {/* Quote Display Section - Fixed at bottom of viewport */}
+      {quoteDisplayMode === 'bottom' && (
+        <div className="fixed bottom-0 left-0 right-0 z-30 bg-gradient-to-t from-black/40 to-transparent pb-4 pt-8">
+          <div className="flex justify-center">
+            <QuoteDisplay
+              onManualRefresh={() => setLastManualRefresh(Date.now())}
+              variant="compact"
+            />
+          </div>
+        </div>
+      )}
 
       {/* Floating Reminder Widget */}
       <ReminderWidget />
