@@ -14,11 +14,13 @@ import { ErrorFallback } from './ErrorFallback';
 interface QuoteDisplayProps {
   onManualRefresh?: () => void;
   variant?: 'normal' | 'compact';
+  position?: 'top' | 'bottom';
 }
 
 export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
   onManualRefresh,
   variant = 'normal',
+  position = 'top',
 }) => {
   const { quoteChangeInterval, enableQuoteAnimation } = useSettingsStore(
     useShallow((state) => ({
@@ -196,50 +198,87 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
 
   const categoryColor = CATEGORY_COLORS[currentQuote.category];
 
+  const isBottom = position === 'bottom';
+
   return (
     <div className="w-full max-w-4xl mx-auto animate-fade-in">
-      {/* Category Badge */}
-      <div className="flex justify-center mb-6">
-        <span
-          className="inline-flex items-center px-density-md py-density-xs rounded-full text-sm font-medium text-white shadow-sm"
-          style={{ backgroundColor: categoryColor }}
-        >
-          {enableQuoteAnimation ? (
-            <CategoryTicker category={currentQuote.category} />
-          ) : (
-            currentQuote.category.charAt(0).toUpperCase() + currentQuote.category.slice(1)
-          )}
-        </span>
-      </div>
+      {/* Category Badge - Only show at top position */}
+      {!isBottom && (
+        <div className="flex justify-center mb-6">
+          <span
+            className="inline-flex items-center px-density-md py-density-xs rounded-full text-sm font-medium text-white shadow-sm"
+            style={{ backgroundColor: categoryColor }}
+          >
+            {enableQuoteAnimation ? (
+              <CategoryTicker category={currentQuote.category} />
+            ) : (
+              currentQuote.category.charAt(0).toUpperCase() + currentQuote.category.slice(1)
+            )}
+          </span>
+        </div>
+      )}
 
       {/* Quote Card - aria-live announces quote changes to screen readers */}
       <div className="relative" aria-live="polite" aria-atomic="true">
         {/* Quote Text */}
-        <blockquote className="relative z-10 h-[240px] flex flex-col justify-center">
+        <blockquote
+          className={cn(
+            'relative z-10 flex flex-col justify-center',
+            isBottom ? 'min-h-0' : 'h-[240px]'
+          )}
+        >
           <p
             className={cn(
               getQuoteFontSize(currentQuote.text),
-              'font-semibold text-primary leading-relaxed text-center mb-6 text-balance transition-all duration-300 drop-shadow-sm'
+              'font-semibold text-primary leading-relaxed text-center text-balance transition-all duration-300 drop-shadow-sm',
+              isBottom ? 'mb-2' : 'mb-6'
             )}
           >
             {currentQuote.text}
           </p>
-          <footer className="text-center space-y-density-sm">
-            <cite className="text-xl md:text-2xl font-semibold not-italic text-primary-600 dark:text-primary-500">
-              {enableQuoteAnimation ? (
-                <AuthorTicker author={currentQuote.author} />
-              ) : (
-                `— ${currentQuote.author}`
+          <footer className={cn('text-center', isBottom ? 'space-y-1' : 'space-y-density-sm')}>
+            {/* Author with inline category for bottom position */}
+            <div
+              className={cn(
+                'flex items-center justify-center gap-2',
+                isBottom ? 'flex-wrap' : 'flex-col'
               )}
-            </cite>
+            >
+              <cite
+                className={cn(
+                  'font-semibold not-italic text-primary-600 dark:text-primary-500',
+                  isBottom ? 'text-base md:text-lg' : 'text-xl md:text-2xl'
+                )}
+              >
+                {enableQuoteAnimation ? (
+                  <AuthorTicker author={currentQuote.author} />
+                ) : (
+                  `— ${currentQuote.author}`
+                )}
+              </cite>
 
-            {/* Source (for custom quotes) */}
-            {currentQuote.source && (
+              {/* Inline category badge for bottom position */}
+              {isBottom && (
+                <span
+                  className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium text-white"
+                  style={{ backgroundColor: categoryColor }}
+                >
+                  {enableQuoteAnimation ? (
+                    <CategoryTicker category={currentQuote.category} />
+                  ) : (
+                    currentQuote.category.charAt(0).toUpperCase() + currentQuote.category.slice(1)
+                  )}
+                </span>
+              )}
+            </div>
+
+            {/* Source (for custom quotes) - hide in bottom mode */}
+            {!isBottom && currentQuote.source && (
               <div className="text-sm text-secondary italic">Source: {currentQuote.source}</div>
             )}
 
-            {/* Personal Notes (for custom quotes) */}
-            {currentQuote.notes && (
+            {/* Personal Notes (for custom quotes) - hide in bottom mode */}
+            {!isBottom && currentQuote.notes && (
               <div className="text-sm text-primary bg-orange-500/10 border border-orange-500/30 rounded-lg px-density-md py-density-sm inline-block">
                 💭 {currentQuote.notes}
               </div>
@@ -249,7 +288,7 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
       </div>
 
       {/* Action Buttons - Compact row */}
-      <div className="flex items-center justify-center gap-2 mt-4">
+      <div className={cn('flex items-center justify-center gap-2', isBottom ? 'mt-2' : 'mt-4')}>
         {/* Navigation: Back */}
         <button
           type="button"

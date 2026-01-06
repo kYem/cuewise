@@ -1,4 +1,5 @@
 import { formatClockTime, formatLongDate, getGreeting } from '@cuewise/shared';
+import { cn } from '@cuewise/ui';
 import { BarChart3, BookMarked, Flag, PanelRight, Settings, Timer } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -26,6 +27,7 @@ export const NewTabPage: React.FC = () => {
   const timeFormat = useSettingsStore((state) => state.settings.timeFormat);
   const focusModeImageCategory = useSettingsStore((state) => state.settings.focusModeImageCategory);
   const quoteDisplayMode = useSettingsStore((state) => state.settings.quoteDisplayMode);
+  const focusPosition = useSettingsStore((state) => state.settings.focusPosition);
   const hasSeenOnboarding = useSettingsStore((state) => state.settings.hasSeenOnboarding);
   const updateSettings = useSettingsStore((state) => state.updateSettings);
   const initializePomodoro = usePomodoroStore((state) => state.initialize);
@@ -299,7 +301,12 @@ export const NewTabPage: React.FC = () => {
       </div>
 
       {/* Main Content */}
-      <div className="w-full flex flex-col items-center px-density-md py-density-lg relative">
+      <div
+        className={cn(
+          'w-full flex flex-col items-center px-density-md py-density-lg relative',
+          (quoteDisplayMode === 'hidden' || quoteDisplayMode === 'bottom') && 'min-h-screen'
+        )}
+      >
         {/* Floating Top Left - Objectives Button */}
         <div
           className={`absolute top-4 left-4 sm:top-8 sm:left-8 z-40 transition-all duration-300 ${
@@ -401,10 +408,15 @@ export const NewTabPage: React.FC = () => {
           </div>
         </nav>
 
-        <div className="w-full max-w-7xl mx-auto space-y-density-xl">
-          {/* Sentinel element for sticky header detection */}
-          <div ref={headerSentinelRef} className="h-1" aria-hidden="true" />
+        {/* Sentinel element for sticky header detection */}
+        <div ref={headerSentinelRef} className="h-1 flex-shrink-0" aria-hidden="true" />
 
+        {/* Spacer for top positioning - pushes content down */}
+        {(quoteDisplayMode === 'bottom' || quoteDisplayMode === 'hidden') &&
+          focusPosition !== 'top' && <div className="flex-1" />}
+
+        {/* Content wrapper */}
+        <div className="w-full max-w-7xl mx-auto space-y-density-xl flex-shrink-0">
           {/* Clock Section (optional) */}
           {showClock && <Clock />}
 
@@ -419,23 +431,28 @@ export const NewTabPage: React.FC = () => {
           )}
 
           {/* Goals Section - Centered */}
-          <div className={`max-w-2xl mx-auto ${quoteDisplayMode === 'bottom' ? 'pb-48' : ''}`}>
+          <div className="max-w-2xl mx-auto">
             <GoalsSection />
           </div>
         </div>
-      </div>
 
-      {/* Quote Display Section - Fixed at bottom of viewport */}
-      {quoteDisplayMode === 'bottom' && (
-        <div className="fixed bottom-0 left-0 right-0 z-30 bg-gradient-to-t from-black/40 to-transparent pb-4 pt-8">
-          <div className="flex justify-center">
-            <QuoteDisplay
-              onManualRefresh={() => setLastManualRefresh(Date.now())}
-              variant="compact"
-            />
+        {/* Spacer for center/top positioning - pushes quote to bottom */}
+        {(quoteDisplayMode === 'bottom' || quoteDisplayMode === 'hidden') &&
+          focusPosition !== 'bottom' && <div className="flex-1" />}
+
+        {/* Quote Display Section - Bottom position */}
+        {quoteDisplayMode === 'bottom' && (
+          <div className="pt-8 pb-4 w-full flex-shrink-0">
+            <div className="flex justify-center">
+              <QuoteDisplay
+                onManualRefresh={() => setLastManualRefresh(Date.now())}
+                variant="compact"
+                position="bottom"
+              />
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Floating Reminder Widget */}
       <ReminderWidget />

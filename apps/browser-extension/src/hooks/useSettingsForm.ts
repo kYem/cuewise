@@ -1,5 +1,6 @@
 import type {
   FocusImageCategory,
+  FocusPosition,
   NotificationSoundType,
   QuoteDisplayMode,
   Settings,
@@ -51,6 +52,9 @@ export interface SettingsFormState {
   quoteChangeInterval: number;
   enableQuoteAnimation: boolean;
 
+  // Focus position
+  focusPosition: FocusPosition;
+
   // Debug
   logLevel: SettingsLogLevel;
 }
@@ -82,6 +86,7 @@ function settingsToFormState(settings: Settings): SettingsFormState {
     quoteDisplayMode: settings.quoteDisplayMode,
     quoteChangeInterval: settings.quoteChangeInterval,
     enableQuoteAnimation: settings.enableQuoteAnimation,
+    focusPosition: settings.focusPosition,
     logLevel: settings.logLevel,
   };
 }
@@ -183,6 +188,7 @@ export function useSettingsForm({
       quoteDisplayMode: form.quoteDisplayMode,
       quoteChangeInterval: form.quoteChangeInterval,
       enableQuoteAnimation: form.enableQuoteAnimation,
+      focusPosition: form.focusPosition,
       logLevel: form.logLevel,
     });
 

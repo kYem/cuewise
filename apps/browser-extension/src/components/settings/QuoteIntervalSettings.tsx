@@ -1,4 +1,4 @@
-import type { QuoteDisplayMode } from '@cuewise/shared';
+import type { FocusPosition, QuoteDisplayMode } from '@cuewise/shared';
 import { RefreshCw } from 'lucide-react';
 import type React from 'react';
 import type { SettingsFormState } from '../../hooks/useSettingsForm';
@@ -11,6 +11,12 @@ const QUOTE_DISPLAY_OPTIONS: Record<QuoteDisplayMode, string> = {
   compact: 'Compact (top)',
   bottom: 'Fixed at bottom',
   hidden: 'Hidden',
+};
+
+const FOCUS_POSITION_OPTIONS: Record<FocusPosition, string> = {
+  top: 'Top',
+  center: 'Center',
+  bottom: 'Bottom',
 };
 
 interface QuoteIntervalSettingsProps {
@@ -68,6 +74,18 @@ export const QuoteIntervalSettings: React.FC<QuoteIntervalSettingsProps> = ({ fo
         onChange={(value) => setField('quoteDisplayMode', value as QuoteDisplayMode)}
         description="Control how quotes are displayed on the home page"
       />
+
+      {/* Focus position - only show when quote is bottom or hidden */}
+      {(form.quoteDisplayMode === 'bottom' || form.quoteDisplayMode === 'hidden') && (
+        <SettingsSelect
+          id="focus-position"
+          label="Focus Position"
+          value={form.focusPosition}
+          options={FOCUS_POSITION_OPTIONS}
+          onChange={(value) => setField('focusPosition', value as FocusPosition)}
+          description="Vertical position of the focus/goals section"
+        />
+      )}
 
       {/* Only show interval settings when quotes are visible */}
       {!isHidden && (
