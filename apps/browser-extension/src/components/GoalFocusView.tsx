@@ -1,6 +1,7 @@
 import { cn } from '@cuewise/ui';
-import { CheckCircle2, Circle } from 'lucide-react';
+import { CheckCircle2, Circle, Plus } from 'lucide-react';
 import type React from 'react';
+import { useState } from 'react';
 import { useGoalStore } from '../stores/goal-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { GoalInput } from './GoalInput';
@@ -17,6 +18,7 @@ interface GoalFocusViewProps {
 export const GoalFocusView: React.FC<GoalFocusViewProps> = ({ showAddInput, onCloseAddInput }) => {
   const { todayTasks, toggleTask, goals } = useGoalStore();
   const { settings, updateSettings } = useSettingsStore();
+  const [showAddInDone, setShowAddInDone] = useState(false);
 
   const focusedGoalId = settings.focusedGoalId;
 
@@ -70,6 +72,27 @@ export const GoalFocusView: React.FC<GoalFocusViewProps> = ({ showAddInput, onCl
         <p className="text-sm text-white/80 drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]">
           Completed {todayTasks.length} task{todayTasks.length !== 1 ? 's' : ''} today
         </p>
+
+        {/* Add another task */}
+        {showAddInDone ? (
+          <div className="w-full max-w-xl mt-6">
+            <GoalInput autoFocus onTaskAdded={() => setShowAddInDone(false)} />
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setShowAddInDone(true)}
+            className={cn(
+              'mt-6 flex items-center gap-2 px-4 py-2 rounded-full',
+              'bg-white/20 backdrop-blur-sm text-white',
+              'hover:bg-white/30 transition-all',
+              'drop-shadow-[0_1px_2px_rgba(0,0,0,0.3)]'
+            )}
+          >
+            <Plus className="w-4 h-4" />
+            <span className="text-sm font-medium">Add another</span>
+          </button>
+        )}
       </div>
     );
   }
