@@ -204,7 +204,15 @@ export const STORAGE_KEYS = {
   CURRENT_QUOTE: 'currentQuote',
   CUSTOM_YOUTUBE_PLAYLISTS: 'customYoutubePlaylists', // User-added YouTube playlists
   YOUTUBE_PROGRESS: 'youtubeProgress', // YouTube playback progress (timestamps per video)
+  DAILY_BACKGROUND: 'dailyBackground', // Daily background image (changes once per day)
 } as const;
+
+// Daily background image data (persisted to change only once per day)
+export interface DailyBackground {
+  url: string;
+  category: FocusImageCategory;
+  date: string; // YYYY-MM-DD format
+}
 
 // Insights data
 export interface InsightsData {

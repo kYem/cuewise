@@ -64,12 +64,17 @@ function App() {
       return;
     }
 
-    // Preload images (current + next) when glass theme is active
-    preloadImages(settings.focusModeImageCategory);
-
     let cancelled = false;
 
     const loadBackground = async () => {
+      // Preload images first (loads from storage or gets new image)
+      // This persists the daily background so it only changes once per day
+      await preloadImages(settings.focusModeImageCategory);
+
+      if (cancelled) {
+        return;
+      }
+
       // Get the image URL (either preloaded or fetch new one)
       let imageUrl: string | null = null;
 

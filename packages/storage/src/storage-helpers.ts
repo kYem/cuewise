@@ -3,7 +3,9 @@
  */
 
 import {
+  type DailyBackground,
   DEFAULT_SETTINGS,
+  type FocusImageCategory,
   type Goal,
   logger,
   type PlaylistProgress,
@@ -471,5 +473,68 @@ export async function getCurrentVideoForPlaylist(
   } catch (error) {
     logger.error('Error getting current video for playlist', error);
     return null;
+  }
+}
+
+// Daily Background (persisted to change only once per day)
+// Note: Daily background is stored in local storage only (not synced)
+
+/**
+ * Get today's date in YYYY-MM-DD format
+ */
+function getTodayDateString(): string {
+  const today = new Date();
+  return today.toISOString().split('T')[0];
+}
+
+/**
+ * Get the daily background image data
+ * Returns null if no background is stored or if the stored background is from a different day
+ */
+export async function getDailyBackground(
+  category: FocusImageCategory
+): Promise<DailyBackground | null> {
+  try {
+    const background = await getFromStorage<DailyBackground>(
+      STORAGE_KEYS.DAILY_BACKGROUND,
+      'local'
+    );
+
+    if (!background) {
+      return null;
+    }
+
+    // Check if the background is from today and matches the category
+    const today = getTodayDateString();
+    if (background.date === today && background.category === category) {
+      return background;
+    }
+
+    // Background is stale (different day or category)
+    return null;
+  } catch (error) {
+    logger.error('Error getting daily background', error);
+    return null;
+  }
+}
+
+/**
+ * Save the daily background image data
+ */
+export async function setDailyBackground(
+  url: string,
+  category: FocusImageCategory
+): Promise<StorageResult> {
+  try {
+    const background: DailyBackground = {
+      url,
+      category,
+      date: getTodayDateString(),
+    };
+
+    return setInStorage(STORAGE_KEYS.DAILY_BACKGROUND, background, 'local');
+  } catch (error) {
+    logger.error('Error setting daily background', error);
+    return { success: false };
   }
 }
