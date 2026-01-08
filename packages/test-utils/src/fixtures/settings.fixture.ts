@@ -34,5 +34,7 @@ export const defaultSettings: Settings = {
   focusModeAutoEnter: false,
   goalViewMode: 'full',
   focusedGoalId: null,
+  quoteDisplayMode: 'bottom',
   enableQuoteAnimation: false,
+  focusPosition: 'center',
 };

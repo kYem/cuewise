@@ -107,6 +107,8 @@ export type LayoutDensity = 'compact' | 'comfortable' | 'spacious';
 export type SettingsLogLevel = 'none' | 'error' | 'warn' | 'info' | 'debug';
 export type GoalViewMode = 'full' | 'compact' | 'focus';
 export type TimeFormat = '12h' | '24h';
+export type QuoteDisplayMode = 'normal' | 'compact' | 'bottom' | 'hidden';
+export type FocusPosition = 'top' | 'center' | 'bottom';
 
 // Focus mode image categories for Unsplash backgrounds
 export type FocusImageCategory = 'nature' | 'forest' | 'ocean' | 'mountains' | 'minimal' | 'dark';
@@ -187,8 +189,11 @@ export interface Settings {
   // Goal View Mode
   goalViewMode: GoalViewMode; // View mode for Today's Focus section (default 'full')
   focusedGoalId: string | null; // Selected goal ID for focus mode (default null)
-  // Quote Animation
+  // Quote Display
+  quoteDisplayMode: QuoteDisplayMode; // How quotes are displayed on home page (default 'bottom')
   enableQuoteAnimation: boolean; // Enable smart-ticker animation for quotes (default false)
+  // Focus Position
+  focusPosition: FocusPosition; // Vertical position of focus/goals section (default 'center')
 }
 
 // Storage keys
