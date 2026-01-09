@@ -1,11 +1,34 @@
 # Cuewise Development Roadmap
 
-**Last Updated**: 2026-01-03
-**Current Version**: v1.7.0 (Published on Chrome Web Store)
+**Last Updated**: 2026-01-09
+**Current Version**: v1.8.0 (Published on Chrome Web Store)
 
 ---
 
-## 🚧 In Progress (v1.8.0)
+## 🚧 In Progress (v1.9.0)
+
+*No features currently in progress*
+
+---
+
+## ✅ Recently Completed (v1.8.0)
+
+### Configurable Quote Display Mode
+- [x] Quote display mode setting with four options:
+  - Normal - Quote displayed at top with full controls
+  - Compact - Minimized quote display at top
+  - Bottom - Quote fixed at bottom of screen
+  - Hidden - Quote completely hidden for distraction-free view
+
+### Focus Position Setting
+- [x] Vertical position setting for goals/focus section when quote is at bottom or hidden
+- [x] Choose between Top, Center, or Bottom alignment
+- [x] Customize workspace layout based on preference
+
+### "Add Another" Button in Focus View
+- [x] "Add another" button when all tasks are completed in focus/glass mode
+- [x] Quickly add new tasks without switching to full goals view
+- [x] Input auto-focuses when clicking the button
 
 ### Goals Section View Modes
 - [x] Three view modes for Today's Focus: Full, Compact, and Focus
@@ -19,6 +42,8 @@
 - [x] Compact quote controls with circular progress ring for countdown
 - [x] Improved popover/dropdown visibility with frosted glass background (95% opacity + blur)
 - [x] Fixed reminders panel to open above button without overlapping
+- [x] Show parent objective on hover in focus mode for linked tasks
+- [x] Persist daily background image for glass theme
 
 ### Smart Ticker Animation
 - [x] Slot-machine style animation for author name and category badge using `@tombcato/smart-ticker`
@@ -27,7 +52,7 @@
 - [x] Settings toggle: "Animate quote transitions" (disabled by default)
 - [x] Animation uses Levenshtein diff algorithm for smooth character transitions
 
-**Status**: Merged to main, pending release
+**Version Released**: January 2026
 
 ---
 
@@ -648,7 +673,7 @@ When ready for growth:
 ---
 
 **Version History**
-- v1.8.0 (pending) - Goals view modes (Full/Compact/Focus), compact quote controls, smart ticker animation, UI improvements
+- v1.8.0 (2026-01) - Configurable quote display modes, focus position, "Add another" button, goals view modes, smart ticker animation
 - v1.7.0 (2025-12) - Glass theme, YouTube music player, notification sounds, floating reminder widget
 - v1.6.0 (2025-12) - Author autocomplete, streamlined quote management
 - v1.5.0 (2025-11) - Smart reminder templates, dedicated goals page, favorites filter
