@@ -83,14 +83,15 @@ export const CollectionList: React.FC<CollectionListProps> = ({ onCollectionClic
         </div>
       )}
 
-      {/* Collections List */}
-      {collections.length === 0 ? (
+      {/* Collections List - hidden when editing */}
+      {!editingCollection && collections.length === 0 && (
         <div className="text-center py-8">
           <FolderOpen className="w-12 h-12 mx-auto text-tertiary mb-3" />
           <p className="text-secondary">No collections yet</p>
           <p className="text-sm text-tertiary mt-1">Create a collection to organize your quotes</p>
         </div>
-      ) : (
+      )}
+      {!editingCollection && collections.length > 0 && (
         <div className="grid gap-3">
           {collections.map((collection) => {
             const quoteCount = getQuoteCount(collection.id);
