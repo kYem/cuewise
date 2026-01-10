@@ -21,8 +21,9 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({ compact = false 
     showFavoritesOnly,
     toggleFavoritesOnly,
     collections,
-    activeCollectionId,
-    setActiveCollection,
+    activeCollectionIds,
+    toggleCollection,
+    setActiveCollectionIds,
     quotes,
   } = useQuoteStore();
 
@@ -33,7 +34,7 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({ compact = false 
     enabledCategories.length === ALL_QUOTE_CATEGORIES.length &&
     showCustomQuotes &&
     !showFavoritesOnly &&
-    !activeCollectionId;
+    activeCollectionIds.length === 0;
 
   // Get quote count for a collection
   const getCollectionQuoteCount = (collectionId: string) => {
@@ -65,8 +66,8 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({ compact = false 
     if (showFavoritesOnly) {
       toggleFavoritesOnly();
     }
-    if (activeCollectionId) {
-      setActiveCollection(null);
+    if (activeCollectionIds.length > 0) {
+      setActiveCollectionIds([]);
     }
   };
 
@@ -78,8 +79,8 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({ compact = false 
     if (showFavoritesOnly) {
       toggleFavoritesOnly();
     }
-    if (activeCollectionId) {
-      setActiveCollection(null);
+    if (activeCollectionIds.length > 0) {
+      setActiveCollectionIds([]);
     }
   };
 
@@ -233,37 +234,37 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({ compact = false 
                   </span>
                 </div>
                 {collections.map((collection) => {
-                  const isActive = activeCollectionId === collection.id;
+                  const isEnabled = activeCollectionIds.includes(collection.id);
                   const quoteCount = getCollectionQuoteCount(collection.id);
 
                   return (
                     <button
                       key={collection.id}
                       type="button"
-                      onClick={() => setActiveCollection(isActive ? null : collection.id)}
+                      onClick={() => toggleCollection(collection.id)}
                       className="w-full flex items-center gap-3 px-4 py-2 hover:bg-surface-variant transition-colors"
                     >
                       <div
                         className={cn(
                           'w-5 h-5 rounded border-2 flex items-center justify-center transition-all',
-                          isActive
+                          isEnabled
                             ? 'border-primary-600 bg-primary-600'
                             : 'border-border bg-surface'
                         )}
                       >
-                        {isActive && <Check className="w-3 h-3 text-white" />}
+                        {isEnabled && <Check className="w-3 h-3 text-white" />}
                       </div>
                       <FolderOpen
                         className={cn(
                           'w-3 h-3 flex-shrink-0',
-                          isActive ? 'text-primary-600' : 'text-secondary'
+                          isEnabled ? 'text-primary-600' : 'text-secondary'
                         )}
                       />
                       <div className="flex-1 min-w-0 text-left">
                         <span
                           className={cn(
                             'text-sm block truncate',
-                            isActive ? 'text-primary' : 'text-secondary'
+                            isEnabled ? 'text-primary' : 'text-secondary'
                           )}
                         >
                           {collection.name}

@@ -28,8 +28,8 @@ export const QuoteManagementPage: React.FC = () => {
   const {
     quotes,
     collections,
-    activeCollectionId,
-    setActiveCollection,
+    activeCollectionIds,
+    setActiveCollectionIds,
     addQuotesToCollection,
     isLoading,
     error,
@@ -63,9 +63,11 @@ export const QuoteManagementPage: React.FC = () => {
   const filteredQuotes = useMemo(() => {
     let result = [...quotes];
 
-    // Apply collection filter first
-    if (activeCollectionId) {
-      result = result.filter((q) => q.collectionIds?.includes(activeCollectionId));
+    // Apply collection filter first (quote must be in at least one of the enabled collections)
+    if (activeCollectionIds.length > 0) {
+      result = result.filter((q) =>
+        q.collectionIds?.some((id) => activeCollectionIds.includes(id))
+      );
     }
 
     // Apply filter type
@@ -114,7 +116,7 @@ export const QuoteManagementPage: React.FC = () => {
     });
 
     return result;
-  }, [quotes, searchQuery, filterType, selectedCategory, activeCollectionId]);
+  }, [quotes, searchQuery, filterType, selectedCategory, activeCollectionIds]);
 
   // Selection state and handlers
   const {
@@ -294,10 +296,11 @@ export const QuoteManagementPage: React.FC = () => {
     hidden: quotes.filter((q) => q.isHidden).length,
   };
 
-  // Get active collection name for display
-  const activeCollection = activeCollectionId
-    ? collections.find((c) => c.id === activeCollectionId)
-    : null;
+  // Get active collection names for display
+  const activeCollectionNames = activeCollectionIds
+    .map((id) => collections.find((c) => c.id === id)?.name)
+    .filter(Boolean)
+    .join(', ');
 
   return (
     <div className="min-h-screen bg-background">
@@ -398,17 +401,18 @@ export const QuoteManagementPage: React.FC = () => {
             </div>
 
             {/* Active Collection Filter */}
-            {activeCollection && (
+            {activeCollectionIds.length > 0 && (
               <div className="flex items-center justify-between p-3 mb-6 bg-primary-50 dark:bg-primary-900/20 rounded-lg border border-primary-200 dark:border-primary-800">
                 <div className="flex items-center gap-2">
                   <FolderOpen className="w-4 h-4 text-primary-600 dark:text-primary-400" />
                   <span className="text-sm text-primary-700 dark:text-primary-300">
-                    Filtering by collection: <strong>{activeCollection.name}</strong>
+                    Filtering by collection{activeCollectionIds.length > 1 ? 's' : ''}:{' '}
+                    <strong>{activeCollectionNames}</strong>
                   </span>
                 </div>
                 <button
                   type="button"
-                  onClick={() => setActiveCollection(null)}
+                  onClick={() => setActiveCollectionIds([])}
                   className="text-sm text-primary-600 hover:text-primary-800 dark:text-primary-400 dark:hover:text-primary-200 font-medium"
                 >
                   Clear filter

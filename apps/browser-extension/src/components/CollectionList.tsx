@@ -13,8 +13,14 @@ interface CollectionListProps {
 }
 
 export const CollectionList: React.FC<CollectionListProps> = ({ onCollectionClick }) => {
-  const { collections, quotes, deleteCollection, activeCollectionId, setActiveCollection } =
-    useQuoteStore();
+  const {
+    collections,
+    quotes,
+    deleteCollection,
+    activeCollectionIds,
+    toggleCollection,
+    setActiveCollectionIds,
+  } = useQuoteStore();
 
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingCollection, setEditingCollection] = useState<QuoteCollection | null>(null);
@@ -41,11 +47,7 @@ export const CollectionList: React.FC<CollectionListProps> = ({ onCollectionClic
   };
 
   const handleCollectionSelect = (collectionId: string) => {
-    if (activeCollectionId === collectionId) {
-      setActiveCollection(null);
-    } else {
-      setActiveCollection(collectionId);
-    }
+    toggleCollection(collectionId);
     if (onCollectionClick) {
       onCollectionClick(collectionId);
     }
@@ -95,7 +97,7 @@ export const CollectionList: React.FC<CollectionListProps> = ({ onCollectionClic
         <div className="grid gap-3">
           {collections.map((collection) => {
             const quoteCount = getQuoteCount(collection.id);
-            const isActive = activeCollectionId === collection.id;
+            const isActive = activeCollectionIds.includes(collection.id);
 
             return (
               // biome-ignore lint/a11y/useSemanticElements: Card with nested action buttons requires div wrapper
@@ -179,15 +181,20 @@ export const CollectionList: React.FC<CollectionListProps> = ({ onCollectionClic
       )}
 
       {/* Active Collection Filter Indicator */}
-      {activeCollectionId && (
+      {activeCollectionIds.length > 0 && (
         <div className="flex items-center justify-between p-3 bg-primary-50 dark:bg-primary-900/20 rounded-lg border border-primary-200 dark:border-primary-800">
           <span className="text-sm text-primary-700 dark:text-primary-300">
             Filtering by:{' '}
-            <strong>{collections.find((c) => c.id === activeCollectionId)?.name}</strong>
+            <strong>
+              {activeCollectionIds
+                .map((id) => collections.find((c) => c.id === id)?.name)
+                .filter(Boolean)
+                .join(', ')}
+            </strong>
           </span>
           <button
             type="button"
-            onClick={() => setActiveCollection(null)}
+            onClick={() => setActiveCollectionIds([])}
             className="text-sm text-primary-600 hover:text-primary-800 dark:text-primary-400 dark:hover:text-primary-200 font-medium"
           >
             Clear filter

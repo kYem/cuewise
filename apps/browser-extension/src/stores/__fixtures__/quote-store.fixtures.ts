@@ -120,7 +120,7 @@ export const EMPTY_STORE_STATE = {
   quoteHistory: [],
   historyIndex: 0,
   collections: [],
-  activeCollectionId: null,
+  activeCollectionIds: [],
 };
 
 /**

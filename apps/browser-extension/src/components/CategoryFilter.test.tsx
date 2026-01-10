@@ -18,8 +18,9 @@ interface MockCategoryFilterStore {
   toggleCustomQuotes: Mock;
   toggleFavoritesOnly: Mock;
   collections: unknown[];
-  activeCollectionId: string | null;
-  setActiveCollection: Mock;
+  activeCollectionIds: string[];
+  toggleCollection: Mock;
+  setActiveCollectionIds: Mock;
   quotes: unknown[];
 }
 
@@ -35,8 +36,9 @@ function createMockStore(
     toggleCustomQuotes: vi.fn(),
     toggleFavoritesOnly: vi.fn(),
     collections: [],
-    activeCollectionId: null,
-    setActiveCollection: vi.fn(),
+    activeCollectionIds: [],
+    toggleCollection: vi.fn(),
+    setActiveCollectionIds: vi.fn(),
     quotes: [],
     ...overrides,
   };

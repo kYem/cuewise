@@ -32,7 +32,7 @@ interface QuoteStore {
 
   // Collections state
   collections: QuoteCollection[];
-  activeCollectionId: string | null; // Current collection filter (session-only)
+  activeCollectionIds: string[]; // Enabled collection filters (session-only)
 
   // Actions
   initialize: () => Promise<void>;
@@ -88,7 +88,8 @@ interface QuoteStore {
   addQuoteToCollection: (quoteId: string, collectionId: string) => Promise<boolean>;
   removeQuoteFromCollection: (quoteId: string, collectionId: string) => Promise<boolean>;
   addQuotesToCollection: (quoteIds: string[], collectionId: string) => Promise<boolean>;
-  setActiveCollection: (collectionId: string | null) => void;
+  toggleCollection: (collectionId: string) => void;
+  setActiveCollectionIds: (collectionIds: string[]) => void;
   getQuotesInCollection: (collectionId: string) => Quote[];
 }
 
@@ -103,7 +104,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
   showCustomQuotes: true,
   showFavoritesOnly: false,
   collections: [],
-  activeCollectionId: null,
+  activeCollectionIds: [],
 
   initialize: async () => {
     try {
@@ -164,7 +165,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         enabledCategories,
         showCustomQuotes,
         showFavoritesOnly,
-        activeCollectionId,
+        activeCollectionIds,
       } = get();
 
       // Pass current quote ID, enabled categories, custom filter, favorites filter, and collection filter
@@ -174,7 +175,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         enabledCategories,
         showCustomQuotes,
         showFavoritesOnly,
-        activeCollectionId
+        activeCollectionIds
       );
 
       if (newQuote) {
@@ -669,7 +670,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
 
   deleteCollection: async (id: string) => {
     try {
-      const { collections, quotes, activeCollectionId } = get();
+      const { collections, quotes, activeCollectionIds } = get();
 
       // Remove collection
       const updatedCollections = collections.filter((c) => c.id !== id);
@@ -687,13 +688,13 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       });
       await setQuotes(updatedQuotes);
 
-      // Clear active filter if the deleted collection was active
-      const newActiveId = activeCollectionId === id ? null : activeCollectionId;
+      // Remove deleted collection from active filters
+      const newActiveIds = activeCollectionIds.filter((cId) => cId !== id);
 
       set({
         collections: updatedCollections,
         quotes: updatedQuotes,
-        activeCollectionId: newActiveId,
+        activeCollectionIds: newActiveIds,
         error: null,
       });
 
@@ -814,8 +815,17 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     }
   },
 
-  setActiveCollection: (collectionId: string | null) => {
-    set({ activeCollectionId: collectionId });
+  toggleCollection: (collectionId: string) => {
+    const { activeCollectionIds } = get();
+    if (activeCollectionIds.includes(collectionId)) {
+      set({ activeCollectionIds: activeCollectionIds.filter((id) => id !== collectionId) });
+    } else {
+      set({ activeCollectionIds: [...activeCollectionIds, collectionId] });
+    }
+  },
+
+  setActiveCollectionIds: (collectionIds: string[]) => {
+    set({ activeCollectionIds: collectionIds });
   },
 
   getQuotesInCollection: (collectionId: string) => {
