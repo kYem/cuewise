@@ -11,6 +11,7 @@ import {
   type PlaylistProgress,
   type PomodoroSession,
   type Quote,
+  type QuoteCollection,
   type Reminder,
   type Settings,
   STORAGE_KEYS,
@@ -170,6 +171,18 @@ export async function setReminders(reminders: Reminder[]): Promise<StorageResult
   return setInStorage(STORAGE_KEYS.REMINDERS, reminders, area);
 }
 
+// Quote Collections
+export async function getCollections(): Promise<QuoteCollection[]> {
+  const area = await getStorageArea();
+  const collections = await getFromStorage<QuoteCollection[]>(STORAGE_KEYS.COLLECTIONS, area);
+  return collections ?? [];
+}
+
+export async function setCollections(collections: QuoteCollection[]): Promise<StorageResult> {
+  const area = await getStorageArea();
+  return setInStorage(STORAGE_KEYS.COLLECTIONS, collections, area);
+}
+
 // Pomodoro Sessions
 export async function getPomodoroSessions(): Promise<PomodoroSession[]> {
   const area = await getStorageArea();
@@ -320,6 +333,8 @@ export async function migrateStorageData(
     const reminders = (await getFromStorage<Reminder[]>(STORAGE_KEYS.REMINDERS, fromArea)) ?? [];
     const sessions =
       (await getFromStorage<PomodoroSession[]>(STORAGE_KEYS.POMODORO_SESSIONS, fromArea)) ?? [];
+    const collections =
+      (await getFromStorage<QuoteCollection[]>(STORAGE_KEYS.COLLECTIONS, fromArea)) ?? [];
 
     // Copy data to destination storage area
     // Note: Seed quotes are not migrated (always in local storage)
@@ -332,6 +347,7 @@ export async function migrateStorageData(
     results.push(await setInStorage(STORAGE_KEYS.GOALS, goals, toArea));
     results.push(await setInStorage(STORAGE_KEYS.REMINDERS, reminders, toArea));
     results.push(await setInStorage(STORAGE_KEYS.POMODORO_SESSIONS, sessions, toArea));
+    results.push(await setInStorage(STORAGE_KEYS.COLLECTIONS, collections, toArea));
 
     // Check if any operation failed
     const failedResult = results.find((r) => !r.success);

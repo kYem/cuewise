@@ -20,6 +20,9 @@ export interface MockQuoteStore {
   historyIndex: number;
   enabledCategories: QuoteCategory[];
   showCustomQuotes: boolean;
+  showFavoritesOnly: boolean;
+  collections: unknown[];
+  activeCollectionIds: string[];
   initialize: Mock;
   refreshQuote: Mock;
   goBack: Mock;
@@ -36,6 +39,9 @@ export interface MockQuoteStore {
   setEnabledCategories: Mock;
   toggleCategory: Mock;
   toggleCustomQuotes: Mock;
+  toggleFavoritesOnly: Mock;
+  toggleCollection: Mock;
+  setActiveCollectionIds: Mock;
 }
 
 // ============================================================================
@@ -55,6 +61,9 @@ export function createMockStore(overrides: Partial<MockQuoteStore> = {}): MockQu
     historyIndex: 0,
     enabledCategories: [...ALL_QUOTE_CATEGORIES],
     showCustomQuotes: true,
+    showFavoritesOnly: false,
+    collections: [],
+    activeCollectionIds: [],
     initialize: overrides.initialize || (vi.fn() as Mock),
     refreshQuote: overrides.refreshQuote || (vi.fn() as Mock),
     goBack: overrides.goBack || (vi.fn() as Mock),
@@ -71,6 +80,9 @@ export function createMockStore(overrides: Partial<MockQuoteStore> = {}): MockQu
     setEnabledCategories: overrides.setEnabledCategories || (vi.fn() as Mock),
     toggleCategory: overrides.toggleCategory || (vi.fn() as Mock),
     toggleCustomQuotes: overrides.toggleCustomQuotes || (vi.fn() as Mock),
+    toggleFavoritesOnly: overrides.toggleFavoritesOnly || (vi.fn() as Mock),
+    toggleCollection: overrides.toggleCollection || (vi.fn() as Mock),
+    setActiveCollectionIds: overrides.setActiveCollectionIds || (vi.fn() as Mock),
     ...overrides,
   };
 }

@@ -119,6 +119,8 @@ export const EMPTY_STORE_STATE = {
   error: null,
   quoteHistory: [],
   historyIndex: 0,
+  collections: [],
+  activeCollectionIds: [],
 };
 
 /**

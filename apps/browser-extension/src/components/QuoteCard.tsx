@@ -1,8 +1,10 @@
 import { CATEGORY_COLORS, QUOTE_CATEGORIES, type Quote } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
-import { Check, Edit2, Eye, EyeOff, Heart, Trash2 } from 'lucide-react';
+import { Check, Edit2, Eye, EyeOff, FolderPlus, Heart, Trash2 } from 'lucide-react';
 import type React from 'react';
 import { useState } from 'react';
+import { useQuoteStore } from '../stores/quote-store';
+import { CollectionPicker } from './CollectionPicker';
 
 export interface QuoteCardProps {
   quote: Quote;
@@ -25,8 +27,11 @@ export const QuoteCard: React.FC<QuoteCardProps> = ({
   onSelectChange,
   showCheckbox = false,
 }) => {
+  const { collections } = useQuoteStore();
   const categoryColor = CATEGORY_COLORS[quote.category];
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  const quoteCollectionCount = quote.collectionIds?.length ?? 0;
 
   const handleCheckboxChange = () => {
     onSelectChange?.(quote.id, !isSelected);
@@ -128,6 +133,36 @@ export const QuoteCard: React.FC<QuoteCardProps> = ({
           >
             {quote.isHidden ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
           </button>
+
+          {/* Collection Button */}
+          {collections.length > 0 && (
+            <CollectionPicker
+              quote={quote}
+              trigger={
+                <button
+                  type="button"
+                  className={cn(
+                    'p-2 rounded-full transition-all hover:scale-110 relative',
+                    quoteCollectionCount > 0
+                      ? 'bg-primary-600/20 text-primary-600 hover:bg-primary-600/30'
+                      : 'bg-surface-variant text-secondary hover:bg-border'
+                  )}
+                  title={
+                    quoteCollectionCount > 0
+                      ? `In ${quoteCollectionCount} collection${quoteCollectionCount > 1 ? 's' : ''}`
+                      : 'Add to collection'
+                  }
+                >
+                  <FolderPlus className="w-4 h-4" />
+                  {quoteCollectionCount > 0 && (
+                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-primary-600 text-white text-[10px] font-medium rounded-full flex items-center justify-center">
+                      {quoteCollectionCount}
+                    </span>
+                  )}
+                </button>
+              }
+            />
+          )}
         </div>
 
         {quote.isCustom && (

@@ -17,6 +17,11 @@ interface MockCategoryFilterStore {
   toggleCategory: Mock;
   toggleCustomQuotes: Mock;
   toggleFavoritesOnly: Mock;
+  collections: unknown[];
+  activeCollectionIds: string[];
+  toggleCollection: Mock;
+  setActiveCollectionIds: Mock;
+  quotes: unknown[];
 }
 
 function createMockStore(
@@ -30,6 +35,11 @@ function createMockStore(
     toggleCategory: vi.fn(),
     toggleCustomQuotes: vi.fn(),
     toggleFavoritesOnly: vi.fn(),
+    collections: [],
+    activeCollectionIds: [],
+    toggleCollection: vi.fn(),
+    setActiveCollectionIds: vi.fn(),
+    quotes: [],
     ...overrides,
   };
 }
@@ -107,7 +117,7 @@ describe('CategoryFilter', () => {
 
       render(<CategoryFilter />);
 
-      expect(screen.queryByText('Filter Categories')).not.toBeInTheDocument();
+      expect(screen.queryByText('Filter Quotes')).not.toBeInTheDocument();
     });
   });
 
@@ -120,7 +130,7 @@ describe('CategoryFilter', () => {
 
       await user.click(screen.getByTitle('Filter categories (11/11)'));
 
-      expect(screen.getByText('Filter Categories')).toBeInTheDocument();
+      expect(screen.getByText('Filter Quotes')).toBeInTheDocument();
     });
 
     it('should close dropdown when close button clicked', async () => {
@@ -130,13 +140,13 @@ describe('CategoryFilter', () => {
       render(<CategoryFilter />);
 
       await user.click(screen.getByTitle('Filter categories (11/11)'));
-      expect(screen.getByText('Filter Categories')).toBeInTheDocument();
+      expect(screen.getByText('Filter Quotes')).toBeInTheDocument();
 
       // Click the X button (it's the button with X icon in the header)
       const closeButton = screen.getByRole('button', { name: '' });
       await user.click(closeButton);
 
-      expect(screen.queryByText('Filter Categories')).not.toBeInTheDocument();
+      expect(screen.queryByText('Filter Quotes')).not.toBeInTheDocument();
     });
 
     it('should toggle dropdown when filter button clicked twice', async () => {
@@ -148,10 +158,10 @@ describe('CategoryFilter', () => {
       const filterButton = screen.getByTitle('Filter categories (11/11)');
 
       await user.click(filterButton);
-      expect(screen.getByText('Filter Categories')).toBeInTheDocument();
+      expect(screen.getByText('Filter Quotes')).toBeInTheDocument();
 
       await user.click(filterButton);
-      expect(screen.queryByText('Filter Categories')).not.toBeInTheDocument();
+      expect(screen.queryByText('Filter Quotes')).not.toBeInTheDocument();
     });
 
     it('should show all category options in dropdown', async () => {

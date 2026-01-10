@@ -304,9 +304,17 @@ export function getRandomQuote(
   currentQuoteId?: string,
   enabledCategories?: QuoteCategory[],
   showCustom = true,
-  showFavoritesOnly = false
+  showFavoritesOnly = false,
+  collectionIds?: string[]
 ): Quote | null {
   let visibleQuotes = quotes.filter((q) => !q.isHidden);
+
+  // Filter by collections if provided (quote must be in at least one of the enabled collections)
+  if (collectionIds && collectionIds.length > 0) {
+    visibleQuotes = visibleQuotes.filter((q) =>
+      q.collectionIds?.some((id) => collectionIds.includes(id))
+    );
+  }
 
   // Filter by favorites if enabled
   if (showFavoritesOnly) {

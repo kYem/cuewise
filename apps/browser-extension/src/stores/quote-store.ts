@@ -1,11 +1,20 @@
 import {
   ALL_QUOTE_CATEGORIES,
+  generateId,
   getRandomQuote,
   logger,
   type Quote,
   type QuoteCategory,
+  type QuoteCollection,
 } from '@cuewise/shared';
-import { getCurrentQuote, getQuotes, setCurrentQuote, setQuotes } from '@cuewise/storage';
+import {
+  getCollections,
+  getCurrentQuote,
+  getQuotes,
+  setCollections,
+  setCurrentQuote,
+  setQuotes,
+} from '@cuewise/storage';
 import { create } from 'zustand';
 import { SEED_QUOTES } from '../data/seed-quotes';
 import { useToastStore } from './toast-store';
@@ -20,6 +29,10 @@ interface QuoteStore {
   enabledCategories: QuoteCategory[]; // Categories to show (session-only, not persisted)
   showCustomQuotes: boolean; // Show custom quotes in filter (session-only)
   showFavoritesOnly: boolean; // Show only favorite quotes (session-only)
+
+  // Collections state
+  collections: QuoteCollection[];
+  activeCollectionIds: string[]; // Enabled collection filters (session-only)
 
   // Actions
   initialize: () => Promise<void>;
@@ -64,6 +77,20 @@ interface QuoteStore {
   restoreMissingQuotes: () => Promise<{ restored: number }>;
   resetAllQuotes: () => Promise<void>;
   getMissingSeedQuoteCount: () => number;
+
+  // Collection operations
+  createCollection: (name: string, description?: string) => Promise<boolean>;
+  updateCollection: (
+    id: string,
+    updates: Partial<Pick<QuoteCollection, 'name' | 'description'>>
+  ) => Promise<boolean>;
+  deleteCollection: (id: string) => Promise<boolean>;
+  addQuoteToCollection: (quoteId: string, collectionId: string) => Promise<boolean>;
+  removeQuoteFromCollection: (quoteId: string, collectionId: string) => Promise<boolean>;
+  addQuotesToCollection: (quoteIds: string[], collectionId: string) => Promise<boolean>;
+  toggleCollection: (collectionId: string) => void;
+  setActiveCollectionIds: (collectionIds: string[]) => void;
+  getQuotesInCollection: (collectionId: string) => Quote[];
 }
 
 export const useQuoteStore = create<QuoteStore>((set, get) => ({
@@ -76,6 +103,8 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
   enabledCategories: [...ALL_QUOTE_CATEGORIES],
   showCustomQuotes: true,
   showFavoritesOnly: false,
+  collections: [],
+  activeCollectionIds: [],
 
   initialize: async () => {
     try {
@@ -90,6 +119,9 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         await setQuotes(quotes);
       }
 
+      // Get collections from storage
+      const collections = await getCollections();
+
       // Get current quote or select a random one
       let currentQuote = await getCurrentQuote();
       if (!currentQuote || currentQuote.isHidden) {
@@ -102,7 +134,14 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       // Initialize history with current quote
       const quoteHistory = currentQuote ? [currentQuote.id] : [];
 
-      set({ quotes, currentQuote, quoteHistory, historyIndex: 0, isLoading: false });
+      set({
+        quotes,
+        currentQuote,
+        quoteHistory,
+        historyIndex: 0,
+        collections,
+        isLoading: false,
+      });
 
       // Increment view count for current quote
       if (currentQuote) {
@@ -126,15 +165,17 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         enabledCategories,
         showCustomQuotes,
         showFavoritesOnly,
+        activeCollectionIds,
       } = get();
 
-      // Pass current quote ID, enabled categories, custom filter, and favorites filter
+      // Pass current quote ID, enabled categories, custom filter, favorites filter, and collection filter
       const newQuote = getRandomQuote(
         quotes,
         currentQuote?.id,
         enabledCategories,
         showCustomQuotes,
-        showFavoritesOnly
+        showFavoritesOnly,
+        activeCollectionIds
       );
 
       if (newQuote) {
@@ -574,5 +615,221 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     const { quotes } = get();
     const existingIds = new Set(quotes.map((q) => q.id));
     return SEED_QUOTES.filter((sq) => !existingIds.has(sq.id)).length;
+  },
+
+  // Collection operations
+  createCollection: async (name: string, description?: string) => {
+    try {
+      const { collections } = get();
+      const now = new Date().toISOString();
+
+      const newCollection: QuoteCollection = {
+        id: generateId(),
+        name: name.trim(),
+        description: description?.trim(),
+        createdAt: now,
+      };
+
+      const updatedCollections = [...collections, newCollection];
+      await setCollections(updatedCollections);
+      set({ collections: updatedCollections, error: null });
+
+      useToastStore.getState().success(`Collection "${name}" created`);
+      return true;
+    } catch (error) {
+      logger.error('Error creating collection', error);
+      const errorMessage = 'Failed to create collection. Please try again.';
+      set({ error: errorMessage });
+      useToastStore.getState().error(errorMessage);
+      return false;
+    }
+  },
+
+  updateCollection: async (id: string, updates) => {
+    try {
+      const { collections } = get();
+      const now = new Date().toISOString();
+
+      const updatedCollections = collections.map((c) =>
+        c.id === id ? { ...c, ...updates, updatedAt: now } : c
+      );
+
+      await setCollections(updatedCollections);
+      set({ collections: updatedCollections, error: null });
+
+      useToastStore.getState().success('Collection updated');
+      return true;
+    } catch (error) {
+      logger.error('Error updating collection', error);
+      const errorMessage = 'Failed to update collection. Please try again.';
+      set({ error: errorMessage });
+      useToastStore.getState().error(errorMessage);
+      return false;
+    }
+  },
+
+  deleteCollection: async (id: string) => {
+    try {
+      const { collections, quotes, activeCollectionIds } = get();
+
+      // Remove collection
+      const updatedCollections = collections.filter((c) => c.id !== id);
+      await setCollections(updatedCollections);
+
+      // Remove collection ID from all quotes that had it
+      const updatedQuotes = quotes.map((q) => {
+        if (q.collectionIds?.includes(id)) {
+          return {
+            ...q,
+            collectionIds: q.collectionIds.filter((cId) => cId !== id),
+          };
+        }
+        return q;
+      });
+      await setQuotes(updatedQuotes);
+
+      // Remove deleted collection from active filters
+      const newActiveIds = activeCollectionIds.filter((cId) => cId !== id);
+
+      set({
+        collections: updatedCollections,
+        quotes: updatedQuotes,
+        activeCollectionIds: newActiveIds,
+        error: null,
+      });
+
+      useToastStore.getState().success('Collection deleted');
+      return true;
+    } catch (error) {
+      logger.error('Error deleting collection', error);
+      const errorMessage = 'Failed to delete collection. Please try again.';
+      set({ error: errorMessage });
+      useToastStore.getState().error(errorMessage);
+      return false;
+    }
+  },
+
+  addQuoteToCollection: async (quoteId: string, collectionId: string) => {
+    try {
+      const { quotes, currentQuote } = get();
+
+      const updatedQuotes = quotes.map((q) => {
+        if (q.id === quoteId) {
+          const currentIds = q.collectionIds ?? [];
+          if (currentIds.includes(collectionId)) {
+            return q; // Already in collection
+          }
+          return { ...q, collectionIds: [...currentIds, collectionId] };
+        }
+        return q;
+      });
+
+      await setQuotes(updatedQuotes);
+      set({ quotes: updatedQuotes, error: null });
+
+      // Update current quote if it was the one modified
+      if (currentQuote && currentQuote.id === quoteId) {
+        const updatedCurrentQuote = updatedQuotes.find((q) => q.id === quoteId);
+        if (updatedCurrentQuote) {
+          await setCurrentQuote(updatedCurrentQuote);
+          set({ currentQuote: updatedCurrentQuote });
+        }
+      }
+
+      return true;
+    } catch (error) {
+      logger.error('Error adding quote to collection', error);
+      const errorMessage = 'Failed to add quote to collection. Please try again.';
+      set({ error: errorMessage });
+      useToastStore.getState().error(errorMessage);
+      return false;
+    }
+  },
+
+  removeQuoteFromCollection: async (quoteId: string, collectionId: string) => {
+    try {
+      const { quotes, currentQuote } = get();
+
+      const updatedQuotes = quotes.map((q) => {
+        if (q.id === quoteId && q.collectionIds) {
+          return {
+            ...q,
+            collectionIds: q.collectionIds.filter((cId) => cId !== collectionId),
+          };
+        }
+        return q;
+      });
+
+      await setQuotes(updatedQuotes);
+      set({ quotes: updatedQuotes, error: null });
+
+      // Update current quote if it was the one modified
+      if (currentQuote && currentQuote.id === quoteId) {
+        const updatedCurrentQuote = updatedQuotes.find((q) => q.id === quoteId);
+        if (updatedCurrentQuote) {
+          await setCurrentQuote(updatedCurrentQuote);
+          set({ currentQuote: updatedCurrentQuote });
+        }
+      }
+
+      return true;
+    } catch (error) {
+      logger.error('Error removing quote from collection', error);
+      const errorMessage = 'Failed to remove quote from collection. Please try again.';
+      set({ error: errorMessage });
+      useToastStore.getState().error(errorMessage);
+      return false;
+    }
+  },
+
+  addQuotesToCollection: async (quoteIds: string[], collectionId: string) => {
+    try {
+      const { quotes, collections } = get();
+      const quoteIdSet = new Set(quoteIds);
+
+      const updatedQuotes = quotes.map((q) => {
+        if (quoteIdSet.has(q.id)) {
+          const currentIds = q.collectionIds ?? [];
+          if (currentIds.includes(collectionId)) {
+            return q; // Already in collection
+          }
+          return { ...q, collectionIds: [...currentIds, collectionId] };
+        }
+        return q;
+      });
+
+      await setQuotes(updatedQuotes);
+      set({ quotes: updatedQuotes, error: null });
+
+      const collection = collections.find((c) => c.id === collectionId);
+      const collectionName = collection?.name ?? 'collection';
+      useToastStore.getState().success(`${quoteIds.length} quotes added to "${collectionName}"`);
+
+      return true;
+    } catch (error) {
+      logger.error('Error adding quotes to collection', error);
+      const errorMessage = 'Failed to add quotes to collection. Please try again.';
+      set({ error: errorMessage });
+      useToastStore.getState().error(errorMessage);
+      return false;
+    }
+  },
+
+  toggleCollection: (collectionId: string) => {
+    const { activeCollectionIds } = get();
+    if (activeCollectionIds.includes(collectionId)) {
+      set({ activeCollectionIds: activeCollectionIds.filter((id) => id !== collectionId) });
+    } else {
+      set({ activeCollectionIds: [...activeCollectionIds, collectionId] });
+    }
+  },
+
+  setActiveCollectionIds: (collectionIds: string[]) => {
+    set({ activeCollectionIds: collectionIds });
+  },
+
+  getQuotesInCollection: (collectionId: string) => {
+    const { quotes } = get();
+    return quotes.filter((q) => q.collectionIds?.includes(collectionId));
   },
 }));
