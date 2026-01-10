@@ -24,6 +24,16 @@ export interface Quote {
   lastViewed?: string; // ISO date string
   source?: string; // Book, URL, or other reference
   notes?: string; // Personal notes about the quote
+  collectionIds?: string[]; // Collections this quote belongs to
+}
+
+// Quote collection for organizing quotes
+export interface QuoteCollection {
+  id: string;
+  name: string;
+  description?: string;
+  createdAt: string; // ISO date string
+  updatedAt?: string; // ISO date string
 }
 
 // Goal type - 'task' (default) or 'objective' for longer-term goals
@@ -210,6 +220,7 @@ export const STORAGE_KEYS = {
   CUSTOM_YOUTUBE_PLAYLISTS: 'customYoutubePlaylists', // User-added YouTube playlists
   YOUTUBE_PROGRESS: 'youtubeProgress', // YouTube playback progress (timestamps per video)
   DAILY_BACKGROUND: 'dailyBackground', // Daily background image (changes once per day)
+  COLLECTIONS: 'collections', // Quote collections
 } as const;
 
 // Daily background image data (persisted to change only once per day)

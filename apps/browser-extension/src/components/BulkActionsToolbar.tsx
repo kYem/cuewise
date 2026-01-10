@@ -1,6 +1,18 @@
-import { cn } from '@cuewise/ui';
-import { Eye, EyeOff, Heart, HeartOff, Square, SquareCheck, Trash2, X } from 'lucide-react';
+import type { QuoteCollection } from '@cuewise/shared';
+import { cn, Popover, PopoverContent, PopoverTrigger } from '@cuewise/ui';
+import {
+  Eye,
+  EyeOff,
+  FolderPlus,
+  Heart,
+  HeartOff,
+  Square,
+  SquareCheck,
+  Trash2,
+  X,
+} from 'lucide-react';
 import type React from 'react';
+import { useState } from 'react';
 
 interface BulkActionsToolbarProps {
   selectedCount: number;
@@ -14,6 +26,8 @@ interface BulkActionsToolbarProps {
   onBulkHide: () => void;
   onBulkUnhide: () => void;
   onBulkDelete: () => void;
+  onBulkAddToCollection?: (collectionId: string) => void;
+  collections?: QuoteCollection[];
   hasSelectedFavorites: boolean;
   hasSelectedUnfavorited: boolean;
   hasSelectedHidden: boolean;
@@ -33,6 +47,8 @@ export const BulkActionsToolbar: React.FC<BulkActionsToolbarProps> = ({
   onBulkHide,
   onBulkUnhide,
   onBulkDelete,
+  onBulkAddToCollection,
+  collections = [],
   hasSelectedFavorites,
   hasSelectedUnfavorited,
   hasSelectedHidden,
@@ -40,6 +56,14 @@ export const BulkActionsToolbar: React.FC<BulkActionsToolbarProps> = ({
   isLoading = false,
 }) => {
   const hasSelection = selectedCount > 0;
+  const [isCollectionPopoverOpen, setIsCollectionPopoverOpen] = useState(false);
+
+  const handleAddToCollection = (collectionId: string) => {
+    if (onBulkAddToCollection) {
+      onBulkAddToCollection(collectionId);
+    }
+    setIsCollectionPopoverOpen(false);
+  };
 
   return (
     <div className="bg-surface-variant border border-border rounded-lg p-3 mb-6">
@@ -158,6 +182,41 @@ export const BulkActionsToolbar: React.FC<BulkActionsToolbarProps> = ({
                     <Eye className="w-4 h-4" />
                     Unhide
                   </button>
+                )}
+
+                {/* Add to Collection */}
+                {collections.length > 0 && onBulkAddToCollection && (
+                  <Popover open={isCollectionPopoverOpen} onOpenChange={setIsCollectionPopoverOpen}>
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        disabled={isLoading}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-primary-600 bg-primary-50 hover:bg-primary-100 rounded-md transition-colors disabled:opacity-50"
+                        title="Add to collection"
+                      >
+                        <FolderPlus className="w-4 h-4" />
+                        Add to Collection
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent
+                      className="w-48 p-1 bg-surface/95 backdrop-blur-xl"
+                      align="start"
+                    >
+                      <div className="max-h-48 overflow-y-auto">
+                        {collections.map((collection) => (
+                          <button
+                            key={collection.id}
+                            type="button"
+                            onClick={() => handleAddToCollection(collection.id)}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-primary hover:bg-surface-variant rounded-md transition-colors text-left"
+                          >
+                            <FolderPlus className="w-4 h-4 text-secondary" />
+                            <span className="truncate">{collection.name}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
                 )}
 
                 {/* Delete */}

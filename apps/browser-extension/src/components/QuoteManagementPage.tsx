@@ -6,13 +6,14 @@ import {
   type QuoteCategory,
 } from '@cuewise/shared';
 import { cn, Select } from '@cuewise/ui';
-import { Plus, Search } from 'lucide-react';
+import { FolderOpen, Plus, Search } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { useQuoteSelection } from '../hooks/useQuoteSelection';
 import { useQuoteStore } from '../stores/quote-store';
 import { AddQuoteForm } from './AddQuoteForm';
 import { BulkActionsToolbar } from './BulkActionsToolbar';
+import { CollectionList } from './CollectionList';
 import { ConfirmationDialog } from './ConfirmationDialog';
 import { EditQuoteModal } from './EditQuoteModal';
 import { ErrorFallback } from './ErrorFallback';
@@ -21,10 +22,15 @@ import { QuoteCard } from './QuoteCard';
 import { QuoteRestorationMenu } from './QuoteRestorationMenu';
 
 type FilterType = 'all' | 'custom' | 'default' | 'favorites' | 'hidden';
+type TabType = 'quotes' | 'collections';
 
 export const QuoteManagementPage: React.FC = () => {
   const {
     quotes,
+    collections,
+    activeCollectionId,
+    setActiveCollection,
+    addQuotesToCollection,
     isLoading,
     error,
     initialize,
@@ -41,6 +47,7 @@ export const QuoteManagementPage: React.FC = () => {
     getMissingSeedQuoteCount,
   } = useQuoteStore();
 
+  const [activeTab, setActiveTab] = useState<TabType>('quotes');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<FilterType>('all');
   const [selectedCategory, setSelectedCategory] = useState<QuoteCategory | 'all'>('all');
@@ -55,6 +62,11 @@ export const QuoteManagementPage: React.FC = () => {
   // Filter and search quotes
   const filteredQuotes = useMemo(() => {
     let result = [...quotes];
+
+    // Apply collection filter first
+    if (activeCollectionId) {
+      result = result.filter((q) => q.collectionIds?.includes(activeCollectionId));
+    }
 
     // Apply filter type
     if (filterType === 'custom') {
@@ -102,7 +114,7 @@ export const QuoteManagementPage: React.FC = () => {
     });
 
     return result;
-  }, [quotes, searchQuery, filterType, selectedCategory]);
+  }, [quotes, searchQuery, filterType, selectedCategory, activeCollectionId]);
 
   // Selection state and handlers
   const {
@@ -214,6 +226,17 @@ export const QuoteManagementPage: React.FC = () => {
     }
   };
 
+  const handleBulkAddToCollection = async (collectionId: string) => {
+    setIsBulkLoading(true);
+    try {
+      await addQuotesToCollection(Array.from(selectedQuoteIds), collectionId);
+    } catch (err) {
+      logger.error('Bulk add to collection operation failed', err);
+    } finally {
+      setIsBulkLoading(false);
+    }
+  };
+
   const handleToggleFavorite = async (quoteId: string) => {
     await toggleFavorite(quoteId);
   };
@@ -271,6 +294,11 @@ export const QuoteManagementPage: React.FC = () => {
     hidden: quotes.filter((q) => q.isHidden).length,
   };
 
+  // Get active collection name for display
+  const activeCollection = activeCollectionId
+    ? collections.find((c) => c.id === activeCollectionId)
+    : null;
+
   return (
     <div className="min-h-screen bg-background">
       {/* Page Header with Navigation */}
@@ -280,159 +308,231 @@ export const QuoteManagementPage: React.FC = () => {
         subtitle={`Manage your collection of ${stats.total} quotes`}
       />
 
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 py-6">
-        {/* Add Quote Button and Restoration Menu */}
-        <div className="flex justify-end gap-3 mb-6">
-          <QuoteRestorationMenu
-            missingSeedQuoteCount={missingSeedQuoteCount}
-            onRestoreMissing={handleRestoreMissing}
-            onResetAll={() => setShowResetAllConfirm(true)}
-            isLoading={isBulkLoading}
-          />
-          <button
-            type="button"
-            onClick={() => setShowAddForm(!showAddForm)}
-            className="flex items-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium shadow-sm hover:shadow-md"
-          >
-            <Plus className="w-5 h-5" />
-            Add Quote
-          </button>
+      {/* Tab Navigation */}
+      <div className="border-b border-border bg-surface">
+        <div className="max-w-7xl mx-auto px-4">
+          <nav className="flex gap-4" aria-label="Tabs">
+            <button
+              type="button"
+              onClick={() => setActiveTab('quotes')}
+              className={cn(
+                'py-4 px-1 border-b-2 font-medium text-sm transition-colors',
+                activeTab === 'quotes'
+                  ? 'border-primary-600 text-primary-600'
+                  : 'border-transparent text-secondary hover:text-primary hover:border-border'
+              )}
+            >
+              Quotes
+              <span className="ml-2 px-2 py-0.5 text-xs rounded-full bg-surface-variant">
+                {quotes.length}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('collections')}
+              className={cn(
+                'py-4 px-1 border-b-2 font-medium text-sm transition-colors flex items-center gap-2',
+                activeTab === 'collections'
+                  ? 'border-primary-600 text-primary-600'
+                  : 'border-transparent text-secondary hover:text-primary hover:border-border'
+              )}
+            >
+              <FolderOpen className="w-4 h-4" />
+              Collections
+              <span className="px-2 py-0.5 text-xs rounded-full bg-surface-variant">
+                {collections.length}
+              </span>
+            </button>
+          </nav>
         </div>
+      </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          <div className="bg-primary-50 rounded-lg p-4">
-            <div className="text-2xl font-bold text-primary-700">{stats.total}</div>
-            <div className="text-sm text-primary-600">Total Quotes</div>
-          </div>
-          <div className="bg-primary-100 rounded-lg p-4">
-            <div className="text-2xl font-bold text-primary-800">{stats.custom}</div>
-            <div className="text-sm text-primary-700">Custom Quotes</div>
-          </div>
-          <div className="bg-surface-variant rounded-lg p-4 border border-border">
-            <div className="text-2xl font-bold text-primary">{stats.favorites}</div>
-            <div className="text-sm text-secondary">Favorites</div>
-          </div>
-          <div className="bg-surface rounded-lg p-4 border border-border">
-            <div className="text-2xl font-bold text-primary">{stats.hidden}</div>
-            <div className="text-sm text-secondary">Hidden</div>
-          </div>
+      {/* Collections Tab Content */}
+      {activeTab === 'collections' && (
+        <div className="max-w-4xl mx-auto px-4 py-6">
+          <CollectionList onCollectionClick={() => setActiveTab('quotes')} />
         </div>
+      )}
 
-        {/* Add Quote Form */}
-        {showAddForm && (
-          <div className="bg-surface-variant rounded-xl p-6 mb-6 border-2 border-border">
-            <AddQuoteForm
-              onSuccess={() => setShowAddForm(false)}
-              onCancel={() => setShowAddForm(false)}
-            />
-          </div>
-        )}
-
-        {/* Search and Filters */}
-        <div className="space-y-4">
-          {/* Search Bar */}
-          <div className="relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-tertiary" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search quotes by text, author, source, or notes..."
-              className="w-full pl-12 pr-4 py-3 rounded-lg border-2 border-border text-primary placeholder:text-secondary focus:border-primary-500 focus:outline-none transition-colors"
-            />
-          </div>
-
-          {/* Filters */}
-          <div className="flex flex-wrap gap-3">
-            {/* Filter Type */}
-            <div className="flex gap-2">
-              {(['all', 'custom', 'default', 'favorites', 'hidden'] as const).map((type) => (
-                <button
-                  key={type}
-                  type="button"
-                  onClick={() => setFilterType(type)}
-                  className={cn(
-                    'px-4 py-2 rounded-lg font-medium transition-all',
-                    filterType === type
-                      ? 'bg-primary-600 text-white shadow-md'
-                      : 'bg-surface text-primary hover:bg-surface-variant'
-                  )}
-                >
-                  {type.charAt(0).toUpperCase() + type.slice(1)}
-                </button>
-              ))}
+      {/* Quotes Tab Content */}
+      {activeTab === 'quotes' && (
+        <>
+          {/* Main Content */}
+          <div className="max-w-7xl mx-auto px-4 py-6">
+            {/* Add Quote Button and Restoration Menu */}
+            <div className="flex justify-end gap-3 mb-6">
+              <QuoteRestorationMenu
+                missingSeedQuoteCount={missingSeedQuoteCount}
+                onRestoreMissing={handleRestoreMissing}
+                onResetAll={() => setShowResetAllConfirm(true)}
+                isLoading={isBulkLoading}
+              />
+              <button
+                type="button"
+                onClick={() => setShowAddForm(!showAddForm)}
+                className="flex items-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium shadow-sm hover:shadow-md"
+              >
+                <Plus className="w-5 h-5" />
+                Add Quote
+              </button>
             </div>
 
-            {/* Category Filter */}
-            <Select
-              value={selectedCategory}
-              onChange={(value) => setSelectedCategory(value as QuoteCategory | 'all')}
-              options={[
-                { value: 'all', label: 'All Categories' },
-                ...Object.entries(QUOTE_CATEGORIES).map(([key, label]) => ({
-                  value: key,
-                  label: label,
-                  color: CATEGORY_COLORS[key as QuoteCategory],
-                })),
-              ]}
-              aria-label="Filter by category"
+            {/* Stats */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+              <div className="bg-primary-50 rounded-lg p-4">
+                <div className="text-2xl font-bold text-primary-700">{stats.total}</div>
+                <div className="text-sm text-primary-600">Total Quotes</div>
+              </div>
+              <div className="bg-primary-100 rounded-lg p-4">
+                <div className="text-2xl font-bold text-primary-800">{stats.custom}</div>
+                <div className="text-sm text-primary-700">Custom Quotes</div>
+              </div>
+              <div className="bg-surface-variant rounded-lg p-4 border border-border">
+                <div className="text-2xl font-bold text-primary">{stats.favorites}</div>
+                <div className="text-sm text-secondary">Favorites</div>
+              </div>
+              <div className="bg-surface rounded-lg p-4 border border-border">
+                <div className="text-2xl font-bold text-primary">{stats.hidden}</div>
+                <div className="text-sm text-secondary">Hidden</div>
+              </div>
+            </div>
+
+            {/* Active Collection Filter */}
+            {activeCollection && (
+              <div className="flex items-center justify-between p-3 mb-6 bg-primary-50 dark:bg-primary-900/20 rounded-lg border border-primary-200 dark:border-primary-800">
+                <div className="flex items-center gap-2">
+                  <FolderOpen className="w-4 h-4 text-primary-600 dark:text-primary-400" />
+                  <span className="text-sm text-primary-700 dark:text-primary-300">
+                    Filtering by collection: <strong>{activeCollection.name}</strong>
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveCollection(null)}
+                  className="text-sm text-primary-600 hover:text-primary-800 dark:text-primary-400 dark:hover:text-primary-200 font-medium"
+                >
+                  Clear filter
+                </button>
+              </div>
+            )}
+
+            {/* Add Quote Form */}
+            {showAddForm && (
+              <div className="bg-surface-variant rounded-xl p-6 mb-6 border-2 border-border">
+                <AddQuoteForm
+                  onSuccess={() => setShowAddForm(false)}
+                  onCancel={() => setShowAddForm(false)}
+                />
+              </div>
+            )}
+
+            {/* Search and Filters */}
+            <div className="space-y-4">
+              {/* Search Bar */}
+              <div className="relative">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-tertiary" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search quotes by text, author, source, or notes..."
+                  className="w-full pl-12 pr-4 py-3 rounded-lg border-2 border-border text-primary placeholder:text-secondary focus:border-primary-500 focus:outline-none transition-colors"
+                />
+              </div>
+
+              {/* Filters */}
+              <div className="flex flex-wrap gap-3">
+                {/* Filter Type */}
+                <div className="flex gap-2">
+                  {(['all', 'custom', 'default', 'favorites', 'hidden'] as const).map((type) => (
+                    <button
+                      key={type}
+                      type="button"
+                      onClick={() => setFilterType(type)}
+                      className={cn(
+                        'px-4 py-2 rounded-lg font-medium transition-all',
+                        filterType === type
+                          ? 'bg-primary-600 text-white shadow-md'
+                          : 'bg-surface text-primary hover:bg-surface-variant'
+                      )}
+                    >
+                      {type.charAt(0).toUpperCase() + type.slice(1)}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Category Filter */}
+                <Select
+                  value={selectedCategory}
+                  onChange={(value) => setSelectedCategory(value as QuoteCategory | 'all')}
+                  options={[
+                    { value: 'all', label: 'All Categories' },
+                    ...Object.entries(QUOTE_CATEGORIES).map(([key, label]) => ({
+                      value: key,
+                      label: label,
+                      color: CATEGORY_COLORS[key as QuoteCategory],
+                    })),
+                  ]}
+                  aria-label="Filter by category"
+                />
+              </div>
+
+              {/* Results count */}
+              <div className="text-sm text-secondary">
+                Showing {filteredQuotes.length} {filteredQuotes.length === 1 ? 'quote' : 'quotes'}
+              </div>
+            </div>
+          </div>
+
+          {/* Quote Grid */}
+          <div className="max-w-7xl mx-auto px-4 py-8">
+            {/* Bulk Actions Toolbar */}
+            <BulkActionsToolbar
+              selectedCount={selectedQuoteIds.size}
+              totalCount={filteredQuotes.length}
+              isSelectionMode={isSelectionMode}
+              onToggleSelectionMode={handleToggleSelectionMode}
+              onSelectAll={handleSelectAll}
+              onDeselectAll={handleDeselectAll}
+              onBulkFavorite={handleBulkFavorite}
+              onBulkUnfavorite={handleBulkUnfavorite}
+              onBulkHide={handleBulkHide}
+              onBulkUnhide={handleBulkUnhide}
+              onBulkDelete={() => setShowBulkDeleteConfirm(true)}
+              onBulkAddToCollection={handleBulkAddToCollection}
+              collections={collections}
+              hasSelectedFavorites={hasSelectedFavorites}
+              hasSelectedUnfavorited={hasSelectedUnfavorited}
+              hasSelectedHidden={hasSelectedHidden}
+              hasSelectedVisible={hasSelectedVisible}
+              isLoading={isBulkLoading}
             />
-          </div>
 
-          {/* Results count */}
-          <div className="text-sm text-secondary">
-            Showing {filteredQuotes.length} {filteredQuotes.length === 1 ? 'quote' : 'quotes'}
+            {filteredQuotes.length === 0 ? (
+              <div className="text-center py-16">
+                <p className="text-xl text-secondary mb-4">No quotes found</p>
+                <p className="text-tertiary">Try adjusting your filters or search query</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredQuotes.map((quote) => (
+                  <QuoteCard
+                    key={quote.id}
+                    quote={quote}
+                    onEdit={handleEdit}
+                    onDelete={handleDelete}
+                    onToggleFavorite={handleToggleFavorite}
+                    onToggleHidden={handleToggleHidden}
+                    isSelected={selectedQuoteIds.has(quote.id)}
+                    onSelectChange={handleSelectQuote}
+                    showCheckbox={isSelectionMode}
+                  />
+                ))}
+              </div>
+            )}
           </div>
-        </div>
-      </div>
-
-      {/* Quote Grid */}
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        {/* Bulk Actions Toolbar */}
-        <BulkActionsToolbar
-          selectedCount={selectedQuoteIds.size}
-          totalCount={filteredQuotes.length}
-          isSelectionMode={isSelectionMode}
-          onToggleSelectionMode={handleToggleSelectionMode}
-          onSelectAll={handleSelectAll}
-          onDeselectAll={handleDeselectAll}
-          onBulkFavorite={handleBulkFavorite}
-          onBulkUnfavorite={handleBulkUnfavorite}
-          onBulkHide={handleBulkHide}
-          onBulkUnhide={handleBulkUnhide}
-          onBulkDelete={() => setShowBulkDeleteConfirm(true)}
-          hasSelectedFavorites={hasSelectedFavorites}
-          hasSelectedUnfavorited={hasSelectedUnfavorited}
-          hasSelectedHidden={hasSelectedHidden}
-          hasSelectedVisible={hasSelectedVisible}
-          isLoading={isBulkLoading}
-        />
-
-        {filteredQuotes.length === 0 ? (
-          <div className="text-center py-16">
-            <p className="text-xl text-secondary mb-4">No quotes found</p>
-            <p className="text-tertiary">Try adjusting your filters or search query</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredQuotes.map((quote) => (
-              <QuoteCard
-                key={quote.id}
-                quote={quote}
-                onEdit={handleEdit}
-                onDelete={handleDelete}
-                onToggleFavorite={handleToggleFavorite}
-                onToggleHidden={handleToggleHidden}
-                isSelected={selectedQuoteIds.has(quote.id)}
-                onSelectChange={handleSelectQuote}
-                showCheckbox={isSelectionMode}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+        </>
+      )}
 
       {/* Edit Modal */}
       {editingQuote && (
