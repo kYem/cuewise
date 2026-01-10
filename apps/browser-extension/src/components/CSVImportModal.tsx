@@ -1,6 +1,7 @@
 import {
   type CSVParseResult,
   type CSVQuoteRow,
+  generateQuoteCSVTemplate,
   parseQuotesCSV,
   validateCSVFile,
 } from '@cuewise/shared';
@@ -9,6 +10,7 @@ import {
   AlertCircle,
   AlertTriangle,
   CheckCircle2,
+  Download,
   FileSpreadsheet,
   FolderPlus,
   Upload,
@@ -120,6 +122,20 @@ export const CSVImportModal: React.FC<CSVImportModalProps> = ({ onClose }) => {
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
+  };
+
+  // Download template
+  const handleDownloadTemplate = () => {
+    const template = generateQuoteCSVTemplate();
+    const blob = new Blob([template], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'quotes-template.csv';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   // Handle import
@@ -238,32 +254,42 @@ export const CSVImportModal: React.FC<CSVImportModalProps> = ({ onClose }) => {
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {/* File Upload Area */}
           {!selectedFile ? (
-            <button
-              type="button"
-              onDrop={handleDrop}
-              onDragOver={handleDragOver}
-              onClick={() => fileInputRef.current?.click()}
-              className={cn(
-                'w-full border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all',
-                'hover:border-primary-400 hover:bg-primary-50/50 dark:hover:bg-primary-900/10',
-                'focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2',
-                fileError ? 'border-red-400 bg-red-50/50' : 'border-border bg-transparent'
-              )}
-            >
-              <Upload className="w-12 h-12 mx-auto text-tertiary mb-4" />
-              <p className="text-primary font-medium mb-1">Drop your CSV file here</p>
-              <p className="text-sm text-secondary">or click to browse</p>
-              <p className="text-xs text-tertiary mt-3">
-                Required columns: text, author. Optional: category, source, notes
-              </p>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".csv"
-                onChange={handleInputChange}
-                className="hidden"
-              />
-            </button>
+            <div className="space-y-3">
+              <button
+                type="button"
+                onDrop={handleDrop}
+                onDragOver={handleDragOver}
+                onClick={() => fileInputRef.current?.click()}
+                className={cn(
+                  'w-full border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all',
+                  'hover:border-primary-400 hover:bg-primary-50/50 dark:hover:bg-primary-900/10',
+                  'focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2',
+                  fileError ? 'border-red-400 bg-red-50/50' : 'border-border bg-transparent'
+                )}
+              >
+                <Upload className="w-12 h-12 mx-auto text-tertiary mb-4" />
+                <p className="text-primary font-medium mb-1">Drop your CSV file here</p>
+                <p className="text-sm text-secondary">or click to browse</p>
+                <p className="text-xs text-tertiary mt-3">
+                  Required columns: text, author. Optional: category, source, notes
+                </p>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".csv"
+                  onChange={handleInputChange}
+                  className="hidden"
+                />
+              </button>
+              <button
+                type="button"
+                onClick={handleDownloadTemplate}
+                className="flex items-center justify-center gap-2 w-full py-2 text-sm text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 transition-colors"
+              >
+                <Download className="w-4 h-4" />
+                Download CSV Template
+              </button>
+            </div>
           ) : (
             <div className="flex items-center justify-between p-3 bg-surface-variant rounded-lg border border-border">
               <div className="flex items-center gap-3">
