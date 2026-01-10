@@ -1,6 +1,6 @@
 import { ALL_QUOTE_CATEGORIES, CATEGORY_COLORS, QUOTE_CATEGORIES } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
-import { Check, Filter, Heart, Sparkles, X } from 'lucide-react';
+import { Check, Filter, FolderOpen, Heart, Sparkles, X } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useQuoteStore } from '../stores/quote-store';
@@ -20,6 +20,10 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({ compact = false 
     toggleCustomQuotes,
     showFavoritesOnly,
     toggleFavoritesOnly,
+    collections,
+    activeCollectionId,
+    setActiveCollection,
+    quotes,
   } = useQuoteStore();
 
   // Count includes categories + custom (if enabled)
@@ -28,7 +32,13 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({ compact = false 
   const allEnabled =
     enabledCategories.length === ALL_QUOTE_CATEGORIES.length &&
     showCustomQuotes &&
-    !showFavoritesOnly;
+    !showFavoritesOnly &&
+    !activeCollectionId;
+
+  // Get quote count for a collection
+  const getCollectionQuoteCount = (collectionId: string) => {
+    return quotes.filter((q) => !q.isHidden && q.collectionIds?.includes(collectionId)).length;
+  };
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -55,6 +65,9 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({ compact = false 
     if (showFavoritesOnly) {
       toggleFavoritesOnly();
     }
+    if (activeCollectionId) {
+      setActiveCollection(null);
+    }
   };
 
   const handleClearAll = () => {
@@ -64,6 +77,9 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({ compact = false 
     }
     if (showFavoritesOnly) {
       toggleFavoritesOnly();
+    }
+    if (activeCollectionId) {
+      setActiveCollection(null);
     }
   };
 
@@ -99,7 +115,7 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({ compact = false 
         <div className="absolute bottom-full mb-2 right-0 w-64 bg-surface/95 backdrop-blur-xl rounded-lg shadow-xl border border-border z-50 animate-fade-in">
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-            <span className="font-semibold text-primary">Filter Categories</span>
+            <span className="font-semibold text-primary">Filter Quotes</span>
             <button
               type="button"
               onClick={() => setIsOpen(false)}
@@ -207,8 +223,68 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({ compact = false 
               </span>
             </button>
 
+            {/* Collections Section */}
+            {collections.length > 0 && (
+              <>
+                <div className="border-t border-border my-2" />
+                <div className="px-4 py-1">
+                  <span className="text-xs font-medium text-tertiary uppercase tracking-wide">
+                    Collections
+                  </span>
+                </div>
+                {collections.map((collection) => {
+                  const isActive = activeCollectionId === collection.id;
+                  const quoteCount = getCollectionQuoteCount(collection.id);
+
+                  return (
+                    <button
+                      key={collection.id}
+                      type="button"
+                      onClick={() => setActiveCollection(isActive ? null : collection.id)}
+                      className="w-full flex items-center gap-3 px-4 py-2 hover:bg-surface-variant transition-colors"
+                    >
+                      <div
+                        className={cn(
+                          'w-5 h-5 rounded border-2 flex items-center justify-center transition-all',
+                          isActive
+                            ? 'border-primary-600 bg-primary-600'
+                            : 'border-border bg-surface'
+                        )}
+                      >
+                        {isActive && <Check className="w-3 h-3 text-white" />}
+                      </div>
+                      <FolderOpen
+                        className={cn(
+                          'w-3 h-3 flex-shrink-0',
+                          isActive ? 'text-primary-600' : 'text-secondary'
+                        )}
+                      />
+                      <div className="flex-1 min-w-0 text-left">
+                        <span
+                          className={cn(
+                            'text-sm block truncate',
+                            isActive ? 'text-primary' : 'text-secondary'
+                          )}
+                        >
+                          {collection.name}
+                        </span>
+                        <span className="text-xs text-tertiary">
+                          {quoteCount} {quoteCount === 1 ? 'quote' : 'quotes'}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </>
+            )}
+
             {/* Divider */}
             <div className="border-t border-border my-2" />
+            <div className="px-4 py-1">
+              <span className="text-xs font-medium text-tertiary uppercase tracking-wide">
+                Categories
+              </span>
+            </div>
 
             {/* Category Options */}
             {ALL_QUOTE_CATEGORIES.map((category) => {

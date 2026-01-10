@@ -164,15 +164,17 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         enabledCategories,
         showCustomQuotes,
         showFavoritesOnly,
+        activeCollectionId,
       } = get();
 
-      // Pass current quote ID, enabled categories, custom filter, and favorites filter
+      // Pass current quote ID, enabled categories, custom filter, favorites filter, and collection filter
       const newQuote = getRandomQuote(
         quotes,
         currentQuote?.id,
         enabledCategories,
         showCustomQuotes,
-        showFavoritesOnly
+        showFavoritesOnly,
+        activeCollectionId
       );
 
       if (newQuote) {
