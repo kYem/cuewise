@@ -1,36 +1,55 @@
-import type { QuoteCollection } from '@cuewise/shared';
-import { cn } from '@cuewise/ui';
-import { Edit2, FolderOpen, ListPlus, Plus, Trash2 } from 'lucide-react';
+import type { Quote, QuoteCollection } from '@cuewise/shared';
+import { ArrowLeft, Edit2, FolderOpen, ListPlus, Plus, Trash2 } from 'lucide-react';
 import type React from 'react';
 import { useState } from 'react';
 import { useQuoteStore } from '../stores/quote-store';
 import { AddQuotesToCollectionModal } from './AddQuotesToCollectionModal';
 import { CollectionForm } from './CollectionForm';
 import { ConfirmationDialog } from './ConfirmationDialog';
+import { QuoteCard } from './QuoteCard';
 
-interface CollectionListProps {
-  onCollectionClick?: (collectionId: string) => void;
-}
-
-export const CollectionList: React.FC<CollectionListProps> = ({ onCollectionClick }) => {
+export const CollectionList: React.FC = () => {
   const {
     collections,
     quotes,
     deleteCollection,
-    activeCollectionIds,
-    toggleCollection,
-    setActiveCollectionIds,
+    toggleFavorite,
+    hideQuote,
+    unhideQuote,
+    deleteQuote,
   } = useQuoteStore();
 
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingCollection, setEditingCollection] = useState<QuoteCollection | null>(null);
   const [deletingCollection, setDeletingCollection] = useState<QuoteCollection | null>(null);
   const [addingToCollection, setAddingToCollection] = useState<QuoteCollection | null>(null);
+  const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
+  // TODO: Add quote editing UI within collection view
+  const [_editingQuote, setEditingQuote] = useState<Quote | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleToggleHidden = async (quoteId: string) => {
+    const quote = quotes.find((q) => q.id === quoteId);
+    if (quote) {
+      if (quote.isHidden) {
+        await unhideQuote(quoteId);
+      } else {
+        await hideQuote(quoteId);
+      }
+    }
+  };
 
   const getQuoteCount = (collectionId: string) => {
     return quotes.filter((q) => q.collectionIds?.includes(collectionId)).length;
   };
+
+  const getQuotesInCollection = (collectionId: string) => {
+    return quotes.filter((q) => !q.isHidden && q.collectionIds?.includes(collectionId));
+  };
+
+  const selectedCollection = selectedCollectionId
+    ? collections.find((c) => c.id === selectedCollectionId)
+    : null;
 
   const handleDelete = async () => {
     if (!deletingCollection) {
@@ -47,11 +66,77 @@ export const CollectionList: React.FC<CollectionListProps> = ({ onCollectionClic
   };
 
   const handleCollectionSelect = (collectionId: string) => {
-    toggleCollection(collectionId);
-    if (onCollectionClick) {
-      onCollectionClick(collectionId);
-    }
+    setSelectedCollectionId(collectionId);
   };
+
+  const handleBackToCollections = () => {
+    setSelectedCollectionId(null);
+  };
+
+  // Show quotes in selected collection
+  if (selectedCollection) {
+    const collectionQuotes = getQuotesInCollection(selectedCollection.id);
+
+    return (
+      <div className="space-y-4">
+        {/* Header with Back Button */}
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={handleBackToCollections}
+            className="p-2 text-secondary hover:text-primary hover:bg-surface-variant rounded-lg transition-colors"
+            title="Back to collections"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <div className="flex-1">
+            <h3 className="text-lg font-semibold text-primary">{selectedCollection.name}</h3>
+            {selectedCollection.description && (
+              <p className="text-sm text-secondary">{selectedCollection.description}</p>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => setAddingToCollection(selectedCollection)}
+            className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium"
+          >
+            <ListPlus className="w-4 h-4" />
+            Add Quotes
+          </button>
+        </div>
+
+        {/* Quotes in Collection */}
+        {collectionQuotes.length === 0 ? (
+          <div className="text-center py-8">
+            <FolderOpen className="w-12 h-12 mx-auto text-tertiary mb-3" />
+            <p className="text-secondary">No quotes in this collection</p>
+            <p className="text-sm text-tertiary mt-1">Add quotes to get started</p>
+          </div>
+        ) : (
+          <div className="grid gap-3">
+            {collectionQuotes.map((quote) => (
+              <QuoteCard
+                key={quote.id}
+                quote={quote}
+                onEdit={setEditingQuote}
+                onDelete={deleteQuote}
+                onToggleFavorite={toggleFavorite}
+                onToggleHidden={handleToggleHidden}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Add Quotes to Collection Modal */}
+        {addingToCollection && (
+          <AddQuotesToCollectionModal
+            collection={addingToCollection}
+            onClose={() => setAddingToCollection(null)}
+          />
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -97,18 +182,12 @@ export const CollectionList: React.FC<CollectionListProps> = ({ onCollectionClic
         <div className="grid gap-3">
           {collections.map((collection) => {
             const quoteCount = getQuoteCount(collection.id);
-            const isActive = activeCollectionIds.includes(collection.id);
 
             return (
               // biome-ignore lint/a11y/useSemanticElements: Card with nested action buttons requires div wrapper
               <div
                 key={collection.id}
-                className={cn(
-                  'group flex items-center justify-between p-4 rounded-lg border transition-all cursor-pointer',
-                  isActive
-                    ? 'bg-primary-50 border-primary-300 dark:bg-primary-900/20 dark:border-primary-700'
-                    : 'bg-surface border-border hover:bg-surface-variant'
-                )}
+                className="group flex items-center justify-between p-4 rounded-lg border transition-all cursor-pointer bg-surface border-border hover:bg-surface-variant"
                 onClick={() => handleCollectionSelect(collection.id)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
@@ -120,12 +199,7 @@ export const CollectionList: React.FC<CollectionListProps> = ({ onCollectionClic
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <FolderOpen
-                      className={cn(
-                        'w-5 h-5 flex-shrink-0',
-                        isActive ? 'text-primary-600' : 'text-tertiary'
-                      )}
-                    />
+                    <FolderOpen className="w-5 h-5 flex-shrink-0 text-tertiary" />
                     <h4 className="font-medium text-primary truncate">{collection.name}</h4>
                     <span className="text-sm text-secondary">
                       ({quoteCount} {quoteCount === 1 ? 'quote' : 'quotes'})
@@ -177,28 +251,6 @@ export const CollectionList: React.FC<CollectionListProps> = ({ onCollectionClic
               </div>
             );
           })}
-        </div>
-      )}
-
-      {/* Active Collection Filter Indicator */}
-      {activeCollectionIds.length > 0 && (
-        <div className="flex items-center justify-between p-3 bg-primary-50 dark:bg-primary-900/20 rounded-lg border border-primary-200 dark:border-primary-800">
-          <span className="text-sm text-primary-700 dark:text-primary-300">
-            Filtering by:{' '}
-            <strong>
-              {activeCollectionIds
-                .map((id) => collections.find((c) => c.id === id)?.name)
-                .filter(Boolean)
-                .join(', ')}
-            </strong>
-          </span>
-          <button
-            type="button"
-            onClick={() => setActiveCollectionIds([])}
-            className="text-sm text-primary-600 hover:text-primary-800 dark:text-primary-400 dark:hover:text-primary-200 font-medium"
-          >
-            Clear filter
-          </button>
         </div>
       )}
 

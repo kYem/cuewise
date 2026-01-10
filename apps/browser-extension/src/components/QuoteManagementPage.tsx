@@ -353,7 +353,7 @@ export const QuoteManagementPage: React.FC = () => {
       {/* Collections Tab Content */}
       {activeTab === 'collections' && (
         <div className="max-w-4xl mx-auto px-4 py-6">
-          <CollectionList onCollectionClick={() => setActiveTab('quotes')} />
+          <CollectionList />
         </div>
       )}
 
