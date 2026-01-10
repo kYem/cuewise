@@ -24,6 +24,8 @@ vi.mock('@cuewise/storage', () => ({
   setQuotes: vi.fn(),
   getCurrentQuote: vi.fn(),
   setCurrentQuote: vi.fn(),
+  getCollections: vi.fn(),
+  setCollections: vi.fn(),
 }));
 
 // Mock toast store
@@ -42,6 +44,9 @@ describe('Quote Store', () => {
 
     // Clear all mocks
     vi.clearAllMocks();
+
+    // Default mock for collections (empty by default)
+    vi.mocked(storage.getCollections).mockResolvedValue([]);
   });
 
   describe('initialize', () => {
