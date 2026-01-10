@@ -143,6 +143,21 @@ describe('CSV Utilities', () => {
 
         expect(result.valid).toHaveLength(2);
       });
+
+      it('should skip comment lines starting with #', () => {
+        const csv = `# This is a comment
+text,author
+# Another comment
+"Quote one",Author One
+# Comment between rows
+"Quote two",Author Two`;
+        const result = parseQuotesCSV(csv);
+
+        expect(result.valid).toHaveLength(2);
+        expect(result.errors).toHaveLength(0);
+        expect(result.valid[0].text).toBe('Quote one');
+        expect(result.valid[1].text).toBe('Quote two');
+      });
     });
 
     describe('quoted fields and special characters', () => {
@@ -388,20 +403,37 @@ describe('CSV Utilities', () => {
   });
 
   describe('generateQuoteCSVTemplate', () => {
+    it('should include comment with valid categories', () => {
+      const template = generateQuoteCSVTemplate();
+      const lines = template.split('\n');
+
+      expect(lines[0]).toMatch(/^# Valid categories:/);
+      expect(lines[0]).toContain('inspiration');
+      expect(lines[0]).toContain('learning');
+      expect(lines[0]).toContain('productivity');
+      expect(lines[0]).toContain('mindfulness');
+      expect(lines[0]).toContain('success');
+      expect(lines[0]).toContain('creativity');
+      expect(lines[0]).toContain('resilience');
+      expect(lines[0]).toContain('leadership');
+      expect(lines[0]).toContain('health');
+      expect(lines[0]).toContain('growth');
+    });
+
     it('should generate valid CSV with header row', () => {
       const template = generateQuoteCSVTemplate();
       const lines = template.split('\n');
 
-      expect(lines[0]).toBe('text,author,category,source,notes');
+      expect(lines[1]).toBe('text,author,category,source,notes');
     });
 
     it('should include example rows', () => {
       const template = generateQuoteCSVTemplate();
       const lines = template.split('\n');
 
-      expect(lines).toHaveLength(3);
-      expect(lines[1]).toContain('Steve Jobs');
+      expect(lines).toHaveLength(4);
       expect(lines[2]).toContain('Steve Jobs');
+      expect(lines[3]).toContain('Steve Jobs');
     });
 
     it('should be parseable by parseQuotesCSV', () => {

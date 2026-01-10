@@ -91,8 +91,10 @@ export function parseQuotesCSV(csvText: string): CSVParseResult {
     warnings: [],
   };
 
-  // Split into lines and filter empty ones
-  const lines = csvText.split(/\r?\n/).filter((line) => line.trim() !== '');
+  // Split into lines and filter empty ones and comment lines
+  const lines = csvText
+    .split(/\r?\n/)
+    .filter((line) => line.trim() !== '' && !line.trim().startsWith('#'));
 
   if (lines.length === 0) {
     result.errors.push({ row: 0, message: 'CSV file is empty' });
@@ -200,13 +202,14 @@ export function parseQuotesCSV(csvText: string): CSVParseResult {
  * Generate a sample CSV template for quote import
  */
 export function generateQuoteCSVTemplate(): string {
+  const categoriesComment = `# Valid categories: ${ALL_QUOTE_CATEGORIES.join(', ')}`;
   const header = 'text,author,category,source,notes';
   const example1 =
     '"The only way to do great work is to love what you do.",Steve Jobs,inspiration,Stanford Commencement 2005,';
   const example2 =
     '"Stay hungry, stay foolish.",Steve Jobs,growth,Stanford Commencement 2005,My favorite quote';
 
-  return [header, example1, example2].join('\n');
+  return [categoriesComment, header, example1, example2].join('\n');
 }
 
 /**
