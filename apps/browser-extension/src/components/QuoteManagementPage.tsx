@@ -6,7 +6,7 @@ import {
   type QuoteCategory,
 } from '@cuewise/shared';
 import { cn, Select } from '@cuewise/ui';
-import { FolderOpen, Plus, Search } from 'lucide-react';
+import { FileSpreadsheet, FolderOpen, Plus, Search } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { useQuoteSelection } from '../hooks/useQuoteSelection';
@@ -15,6 +15,7 @@ import { AddQuoteForm } from './AddQuoteForm';
 import { BulkActionsToolbar } from './BulkActionsToolbar';
 import { CollectionList } from './CollectionList';
 import { ConfirmationDialog } from './ConfirmationDialog';
+import { CSVImportModal } from './CSVImportModal';
 import { EditQuoteModal } from './EditQuoteModal';
 import { ErrorFallback } from './ErrorFallback';
 import { PageHeader } from './PageHeader';
@@ -53,6 +54,7 @@ export const QuoteManagementPage: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState<QuoteCategory | 'all'>('all');
   const [editingQuote, setEditingQuote] = useState<Quote | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [showCSVImport, setShowCSVImport] = useState(false);
 
   // Confirmation dialogs
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
@@ -362,7 +364,7 @@ export const QuoteManagementPage: React.FC = () => {
         <>
           {/* Main Content */}
           <div className="max-w-7xl mx-auto px-4 py-6">
-            {/* Add Quote Button and Restoration Menu */}
+            {/* Add Quote Button, Import CSV, and Restoration Menu */}
             <div className="flex justify-end gap-3 mb-6">
               <QuoteRestorationMenu
                 missingSeedQuoteCount={missingSeedQuoteCount}
@@ -370,6 +372,14 @@ export const QuoteManagementPage: React.FC = () => {
                 onResetAll={() => setShowResetAllConfirm(true)}
                 isLoading={isBulkLoading}
               />
+              <button
+                type="button"
+                onClick={() => setShowCSVImport(true)}
+                className="flex items-center gap-2 px-4 py-3 bg-surface text-primary border-2 border-border rounded-lg hover:bg-surface-variant transition-colors font-medium"
+              >
+                <FileSpreadsheet className="w-5 h-5" />
+                Import CSV
+              </button>
               <button
                 type="button"
                 onClick={() => setShowAddForm(!showAddForm)}
@@ -570,6 +580,9 @@ export const QuoteManagementPage: React.FC = () => {
         variant="danger"
         isLoading={isBulkLoading}
       />
+
+      {/* CSV Import Modal */}
+      {showCSVImport && <CSVImportModal onClose={() => setShowCSVImport(false)} />}
     </div>
   );
 };

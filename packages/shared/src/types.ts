@@ -364,3 +364,30 @@ export interface ImportOptions {
   importPomodoroSessions: boolean;
   skipDuplicates: boolean; // Skip items with matching IDs
 }
+
+// CSV Import types for bulk quote import
+export interface CSVQuoteRow {
+  text: string;
+  author: string;
+  category?: QuoteCategory;
+  source?: string;
+  notes?: string;
+}
+
+export interface CSVParseError {
+  row: number;
+  message: string;
+}
+
+export interface CSVParseResult {
+  valid: CSVQuoteRow[];
+  errors: CSVParseError[];
+  warnings: string[];
+}
+
+export interface BulkImportResult {
+  success: boolean;
+  imported: number;
+  failed: number;
+  errors: string[];
+}

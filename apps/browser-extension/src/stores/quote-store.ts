@@ -1,5 +1,7 @@
 import {
   ALL_QUOTE_CATEGORIES,
+  type BulkImportResult,
+  type CSVQuoteRow,
   generateId,
   getRandomQuote,
   logger,
@@ -91,6 +93,9 @@ interface QuoteStore {
   toggleCollection: (collectionId: string) => void;
   setActiveCollectionIds: (collectionIds: string[]) => void;
   getQuotesInCollection: (collectionId: string) => Quote[];
+
+  // CSV Import
+  bulkAddQuotes: (quoteRows: CSVQuoteRow[], collectionId?: string) => Promise<BulkImportResult>;
 }
 
 export const useQuoteStore = create<QuoteStore>((set, get) => ({
@@ -831,5 +836,60 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
   getQuotesInCollection: (collectionId: string) => {
     const { quotes } = get();
     return quotes.filter((q) => q.collectionIds?.includes(collectionId));
+  },
+
+  // CSV Import - Bulk add quotes with optional collection assignment
+  bulkAddQuotes: async (quoteRows: CSVQuoteRow[], collectionId?: string) => {
+    const result: BulkImportResult = {
+      success: false,
+      imported: 0,
+      failed: 0,
+      errors: [],
+    };
+
+    if (quoteRows.length === 0) {
+      result.errors.push('No quotes to import');
+      return result;
+    }
+
+    try {
+      const { quotes } = get();
+      const timestamp = Date.now();
+
+      // Create Quote objects from CSV rows
+      const newQuotes: Quote[] = quoteRows.map((row, index) => ({
+        id: `custom-${timestamp}-${index}`,
+        text: row.text,
+        author: row.author,
+        category: row.category || 'inspiration',
+        isCustom: true,
+        isFavorite: false,
+        isHidden: false,
+        viewCount: 0,
+        source: row.source,
+        notes: row.notes,
+        collectionIds: collectionId ? [collectionId] : undefined,
+      }));
+
+      // Add to existing quotes
+      const updatedQuotes = [...quotes, ...newQuotes];
+      await setQuotes(updatedQuotes);
+      set({ quotes: updatedQuotes, error: null });
+
+      result.success = true;
+      result.imported = newQuotes.length;
+
+      const collectionText = collectionId ? ' and added to collection' : '';
+      useToastStore.getState().success(`Imported ${newQuotes.length} quotes${collectionText}`);
+
+      return result;
+    } catch (error) {
+      logger.error('Error bulk adding quotes', error);
+      const errorMessage = 'Failed to import quotes. Please try again.';
+      result.errors.push(errorMessage);
+      set({ error: errorMessage });
+      useToastStore.getState().error(errorMessage);
+      return result;
+    }
   },
 }));
