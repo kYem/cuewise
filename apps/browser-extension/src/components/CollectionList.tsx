@@ -1,9 +1,10 @@
 import type { QuoteCollection } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
-import { Edit2, FolderOpen, Plus, Trash2 } from 'lucide-react';
+import { Edit2, FolderOpen, ListPlus, Plus, Trash2 } from 'lucide-react';
 import type React from 'react';
 import { useState } from 'react';
 import { useQuoteStore } from '../stores/quote-store';
+import { AddQuotesToCollectionModal } from './AddQuotesToCollectionModal';
 import { CollectionForm } from './CollectionForm';
 import { ConfirmationDialog } from './ConfirmationDialog';
 
@@ -18,6 +19,7 @@ export const CollectionList: React.FC<CollectionListProps> = ({ onCollectionClic
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingCollection, setEditingCollection] = useState<QuoteCollection | null>(null);
   const [deletingCollection, setDeletingCollection] = useState<QuoteCollection | null>(null);
+  const [addingToCollection, setAddingToCollection] = useState<QuoteCollection | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
   const getQuoteCount = (collectionId: string) => {
@@ -139,6 +141,17 @@ export const CollectionList: React.FC<CollectionListProps> = ({ onCollectionClic
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
+                      setAddingToCollection(collection);
+                    }}
+                    className="p-2 text-secondary hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors"
+                    title="Add quotes to collection"
+                  >
+                    <ListPlus className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
                       setEditingCollection(collection);
                     }}
                     className="p-2 text-secondary hover:text-primary hover:bg-surface-variant rounded-lg transition-colors"
@@ -192,6 +205,14 @@ export const CollectionList: React.FC<CollectionListProps> = ({ onCollectionClic
         variant="danger"
         isLoading={isDeleting}
       />
+
+      {/* Add Quotes to Collection Modal */}
+      {addingToCollection && (
+        <AddQuotesToCollectionModal
+          collection={addingToCollection}
+          onClose={() => setAddingToCollection(null)}
+        />
+      )}
     </div>
   );
 };
