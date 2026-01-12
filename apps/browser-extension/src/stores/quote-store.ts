@@ -2,6 +2,7 @@ import {
   ALL_QUOTE_CATEGORIES,
   type BulkImportResult,
   type CSVQuoteRow,
+  DEFAULT_SETTINGS,
   generateId,
   getRandomQuote,
   logger,
@@ -13,9 +14,11 @@ import {
   getCollections,
   getCurrentQuote,
   getQuotes,
+  getSettings,
   setCollections,
   setCurrentQuote,
   setQuotes,
+  setSettings,
 } from '@cuewise/storage';
 import { create } from 'zustand';
 import { SEED_QUOTES } from '../data/seed-quotes';
@@ -28,13 +31,13 @@ interface QuoteStore {
   error: string | null;
   quoteHistory: string[]; // Array of quote IDs in viewing order
   historyIndex: number; // Current position in history (0 = most recent)
-  enabledCategories: QuoteCategory[]; // Categories to show (session-only, not persisted)
-  showCustomQuotes: boolean; // Show custom quotes in filter (session-only)
-  showFavoritesOnly: boolean; // Show only favorite quotes (session-only)
+  enabledCategories: QuoteCategory[]; // Categories to show (persisted to settings)
+  showCustomQuotes: boolean; // Show custom quotes in filter (persisted to settings)
+  showFavoritesOnly: boolean; // Show only favorite quotes (persisted to settings)
 
   // Collections state
   collections: QuoteCollection[];
-  activeCollectionIds: string[]; // Enabled collection filters (session-only)
+  activeCollectionIds: string[]; // Enabled collection filters (persisted to settings)
 
   // Actions
   initialize: () => Promise<void>;
@@ -65,10 +68,10 @@ interface QuoteStore {
   ) => Promise<void>;
   deleteQuote: (quoteId: string) => Promise<void>;
   incrementViewCount: (quoteId: string) => Promise<void>;
-  setEnabledCategories: (categories: QuoteCategory[]) => void;
-  toggleCategory: (category: QuoteCategory) => void;
-  toggleCustomQuotes: () => void;
-  toggleFavoritesOnly: () => void;
+  setEnabledCategories: (categories: QuoteCategory[]) => Promise<void>;
+  toggleCategory: (category: QuoteCategory) => Promise<void>;
+  toggleCustomQuotes: () => Promise<void>;
+  toggleFavoritesOnly: () => Promise<void>;
 
   // Bulk operations
   bulkDelete: (quoteIds: string[]) => Promise<void>;
@@ -90,12 +93,32 @@ interface QuoteStore {
   addQuoteToCollection: (quoteId: string, collectionId: string) => Promise<boolean>;
   removeQuoteFromCollection: (quoteId: string, collectionId: string) => Promise<boolean>;
   addQuotesToCollection: (quoteIds: string[], collectionId: string) => Promise<boolean>;
-  toggleCollection: (collectionId: string) => void;
-  setActiveCollectionIds: (collectionIds: string[]) => void;
+  toggleCollection: (collectionId: string) => Promise<void>;
+  setActiveCollectionIds: (collectionIds: string[]) => Promise<void>;
   getQuotesInCollection: (collectionId: string) => Quote[];
 
   // CSV Import
   bulkAddQuotes: (quoteRows: CSVQuoteRow[], collectionId?: string) => Promise<BulkImportResult>;
+}
+
+/**
+ * Persists current filter settings to storage.
+ * Called when filter state changes (categories, custom, favorites, collections).
+ */
+async function persistFilterSettings(state: QuoteStore): Promise<void> {
+  try {
+    const currentSettings = await getSettings();
+    const updatedSettings = {
+      ...currentSettings,
+      quoteFilterEnabledCategories: state.enabledCategories,
+      quoteFilterShowCustomQuotes: state.showCustomQuotes,
+      quoteFilterShowFavoritesOnly: state.showFavoritesOnly,
+      quoteFilterActiveCollectionIds: state.activeCollectionIds,
+    };
+    await setSettings(updatedSettings);
+  } catch (error) {
+    logger.error('Error persisting filter settings', error);
+  }
 }
 
 export const useQuoteStore = create<QuoteStore>((set, get) => ({
@@ -127,6 +150,20 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       // Get collections from storage
       const collections = await getCollections();
 
+      // Load persisted filter settings
+      const settings = await getSettings();
+      const enabledCategories =
+        settings?.quoteFilterEnabledCategories ?? DEFAULT_SETTINGS.quoteFilterEnabledCategories;
+      const showCustomQuotes =
+        settings?.quoteFilterShowCustomQuotes ?? DEFAULT_SETTINGS.quoteFilterShowCustomQuotes;
+      const showFavoritesOnly =
+        settings?.quoteFilterShowFavoritesOnly ?? DEFAULT_SETTINGS.quoteFilterShowFavoritesOnly;
+      // Filter out any collection IDs that no longer exist
+      const collectionIds = new Set(collections.map((c) => c.id));
+      const activeCollectionIds = (
+        settings?.quoteFilterActiveCollectionIds ?? DEFAULT_SETTINGS.quoteFilterActiveCollectionIds
+      ).filter((id) => collectionIds.has(id));
+
       // Get current quote or select a random one
       let currentQuote = await getCurrentQuote();
       if (!currentQuote || currentQuote.isHidden) {
@@ -145,6 +182,10 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         quoteHistory,
         historyIndex: 0,
         collections,
+        enabledCategories,
+        showCustomQuotes,
+        showFavoritesOnly,
+        activeCollectionIds,
         isLoading: false,
       });
 
@@ -439,11 +480,12 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     }
   },
 
-  setEnabledCategories: (categories: QuoteCategory[]) => {
+  setEnabledCategories: async (categories: QuoteCategory[]) => {
     set({ enabledCategories: categories });
+    await persistFilterSettings(get());
   },
 
-  toggleCategory: (category: QuoteCategory) => {
+  toggleCategory: async (category: QuoteCategory) => {
     const { enabledCategories } = get();
     const isEnabled = enabledCategories.includes(category);
 
@@ -452,16 +494,19 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     } else {
       set({ enabledCategories: [...enabledCategories, category] });
     }
+    await persistFilterSettings(get());
   },
 
-  toggleCustomQuotes: () => {
+  toggleCustomQuotes: async () => {
     const { showCustomQuotes } = get();
     set({ showCustomQuotes: !showCustomQuotes });
+    await persistFilterSettings(get());
   },
 
-  toggleFavoritesOnly: () => {
+  toggleFavoritesOnly: async () => {
     const { showFavoritesOnly } = get();
     set({ showFavoritesOnly: !showFavoritesOnly });
+    await persistFilterSettings(get());
   },
 
   // Bulk operations
@@ -820,17 +865,19 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     }
   },
 
-  toggleCollection: (collectionId: string) => {
+  toggleCollection: async (collectionId: string) => {
     const { activeCollectionIds } = get();
     if (activeCollectionIds.includes(collectionId)) {
       set({ activeCollectionIds: activeCollectionIds.filter((id) => id !== collectionId) });
     } else {
       set({ activeCollectionIds: [...activeCollectionIds, collectionId] });
     }
+    await persistFilterSettings(get());
   },
 
-  setActiveCollectionIds: (collectionIds: string[]) => {
+  setActiveCollectionIds: async (collectionIds: string[]) => {
     set({ activeCollectionIds: collectionIds });
+    await persistFilterSettings(get());
   },
 
   getQuotesInCollection: (collectionId: string) => {

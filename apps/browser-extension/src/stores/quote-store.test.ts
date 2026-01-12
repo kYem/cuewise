@@ -1,5 +1,6 @@
 import * as storage from '@cuewise/storage';
 import { quoteFactory } from '@cuewise/test-utils/factories';
+import { defaultSettings } from '@cuewise/test-utils/fixtures';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SEED_QUOTES } from '../data/seed-quotes';
 import {
@@ -26,6 +27,8 @@ vi.mock('@cuewise/storage', () => ({
   setCurrentQuote: vi.fn(),
   getCollections: vi.fn(),
   setCollections: vi.fn(),
+  getSettings: vi.fn(),
+  setSettings: vi.fn(),
 }));
 
 // Mock toast store
@@ -47,6 +50,9 @@ describe('Quote Store', () => {
 
     // Default mock for collections (empty by default)
     vi.mocked(storage.getCollections).mockResolvedValue([]);
+    // Default mock for settings
+    vi.mocked(storage.getSettings).mockResolvedValue(defaultSettings);
+    vi.mocked(storage.setSettings).mockResolvedValue({ success: true });
   });
 
   describe('initialize', () => {

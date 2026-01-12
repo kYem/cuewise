@@ -204,6 +204,11 @@ export interface Settings {
   enableQuoteAnimation: boolean; // Enable smart-ticker animation for quotes (default false)
   // Focus Position
   focusPosition: FocusPosition; // Vertical position of focus/goals section (default 'center')
+  // Quote Filter Persistence
+  quoteFilterEnabledCategories: QuoteCategory[]; // Enabled categories for quote filter (default all)
+  quoteFilterShowCustomQuotes: boolean; // Show custom quotes in filter (default true)
+  quoteFilterShowFavoritesOnly: boolean; // Show only favorites (default false)
+  quoteFilterActiveCollectionIds: string[]; // Active collection IDs for filter (default [])
 }
 
 // Storage keys

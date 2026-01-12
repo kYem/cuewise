@@ -10,6 +10,25 @@ import type {
   YoutubePlaylist,
 } from './types';
 
+// Quote categories with display names
+export const QUOTE_CATEGORIES: Record<QuoteCategory, string> = {
+  inspiration: 'Inspiration',
+  learning: 'Learning',
+  productivity: 'Productivity',
+  mindfulness: 'Mindfulness',
+  success: 'Success',
+  creativity: 'Creativity',
+  resilience: 'Resilience',
+  leadership: 'Leadership',
+  health: 'Health',
+  growth: 'Growth',
+};
+
+// All quote categories as an array (for filters)
+export const ALL_QUOTE_CATEGORIES: QuoteCategory[] = Object.keys(
+  QUOTE_CATEGORIES
+) as QuoteCategory[];
+
 // Default settings
 export const DEFAULT_SETTINGS: Settings = {
   pomodoroWorkDuration: 25,
@@ -53,26 +72,12 @@ export const DEFAULT_SETTINGS: Settings = {
   enableQuoteAnimation: false, // Disabled by default (can be CPU-intensive)
   // Focus Position
   focusPosition: 'center', // Center goals section by default
+  // Quote Filter Persistence
+  quoteFilterEnabledCategories: ALL_QUOTE_CATEGORIES,
+  quoteFilterShowCustomQuotes: true,
+  quoteFilterShowFavoritesOnly: false,
+  quoteFilterActiveCollectionIds: [],
 };
-
-// Quote categories with display names
-export const QUOTE_CATEGORIES: Record<QuoteCategory, string> = {
-  inspiration: 'Inspiration',
-  learning: 'Learning',
-  productivity: 'Productivity',
-  mindfulness: 'Mindfulness',
-  success: 'Success',
-  creativity: 'Creativity',
-  resilience: 'Resilience',
-  leadership: 'Leadership',
-  health: 'Health',
-  growth: 'Growth',
-};
-
-// All quote categories as an array (for filters)
-export const ALL_QUOTE_CATEGORIES: QuoteCategory[] = Object.keys(
-  QUOTE_CATEGORIES
-) as QuoteCategory[];
 
 // Category colors (for UI)
 export const CATEGORY_COLORS: Record<QuoteCategory, string> = {

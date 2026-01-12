@@ -1,4 +1,4 @@
-import type { Settings } from '@cuewise/shared';
+import { ALL_QUOTE_CATEGORIES, type Settings } from '@cuewise/shared';
 
 export const defaultSettings: Settings = {
   pomodoroWorkDuration: 25,
@@ -37,4 +37,8 @@ export const defaultSettings: Settings = {
   quoteDisplayMode: 'bottom',
   enableQuoteAnimation: false,
   focusPosition: 'center',
+  quoteFilterEnabledCategories: ALL_QUOTE_CATEGORIES,
+  quoteFilterShowCustomQuotes: true,
+  quoteFilterShowFavoritesOnly: false,
+  quoteFilterActiveCollectionIds: [],
 };
