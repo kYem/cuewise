@@ -104,6 +104,7 @@ interface QuoteStore {
 /**
  * Persists current filter settings to storage.
  * Called when filter state changes (categories, custom, favorites, collections).
+ * Shows a warning toast if persistence fails (non-blocking - filter still works in memory).
  */
 async function persistFilterSettings(state: QuoteStore): Promise<void> {
   try {
@@ -118,6 +119,9 @@ async function persistFilterSettings(state: QuoteStore): Promise<void> {
     await setSettings(updatedSettings);
   } catch (error) {
     logger.error('Error persisting filter settings', error);
+    useToastStore
+      .getState()
+      .warning('Failed to save filter preferences. Your changes may not persist.');
   }
 }
 
