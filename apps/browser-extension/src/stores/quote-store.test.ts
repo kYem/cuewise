@@ -792,6 +792,60 @@ describe('Quote Store', () => {
       });
     });
 
+    describe('deleteCollection - persistence', () => {
+      it('should persist updated activeCollectionIds when deleting an active collection', async () => {
+        const mockCollections: QuoteCollection[] = [
+          { id: 'col-1', name: 'Collection 1', createdAt: new Date().toISOString() },
+          { id: 'col-2', name: 'Collection 2', createdAt: new Date().toISOString() },
+        ];
+        const mockQuotes = quoteFactory.buildList(3);
+
+        vi.mocked(storage.setCollections).mockResolvedValue({ success: true });
+
+        useQuoteStore.setState({
+          quotes: mockQuotes,
+          collections: mockCollections,
+          activeCollectionIds: ['col-1', 'col-2'],
+          isLoading: false,
+        });
+
+        await useQuoteStore.getState().deleteCollection('col-1');
+
+        expect(storage.setSettings).toHaveBeenCalledWith(
+          expect.objectContaining({
+            quoteFilterActiveCollectionIds: ['col-2'],
+          })
+        );
+        expect(useQuoteStore.getState().activeCollectionIds).toEqual(['col-2']);
+      });
+
+      it('should not call setSettings when deleted collection was not in active filters', async () => {
+        const mockCollections: QuoteCollection[] = [
+          { id: 'col-1', name: 'Collection 1', createdAt: new Date().toISOString() },
+          { id: 'col-2', name: 'Collection 2', createdAt: new Date().toISOString() },
+        ];
+        const mockQuotes = quoteFactory.buildList(3);
+
+        vi.mocked(storage.setCollections).mockResolvedValue({ success: true });
+
+        useQuoteStore.setState({
+          quotes: mockQuotes,
+          collections: mockCollections,
+          activeCollectionIds: ['col-2'], // col-1 is not active
+          isLoading: false,
+        });
+
+        await useQuoteStore.getState().deleteCollection('col-1');
+
+        // Should still persist because activeCollectionIds state changed (even if same values)
+        expect(storage.setSettings).toHaveBeenCalledWith(
+          expect.objectContaining({
+            quoteFilterActiveCollectionIds: ['col-2'],
+          })
+        );
+      });
+    });
+
     describe('persistFilterSettings - error handling', () => {
       it('should show warning toast when persistence fails', async () => {
         const mockQuotes = quoteFactory.buildList(3);

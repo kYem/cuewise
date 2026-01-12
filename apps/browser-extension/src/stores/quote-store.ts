@@ -752,6 +752,9 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         error: null,
       });
 
+      // Persist updated filter settings (collection removed from active filters)
+      await persistFilterSettings(get());
+
       useToastStore.getState().success('Collection deleted');
       return true;
     } catch (error) {
