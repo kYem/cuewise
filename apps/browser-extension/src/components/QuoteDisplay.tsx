@@ -31,13 +31,23 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
   const [timeRemaining, setTimeRemaining] = useState(quoteChangeInterval);
 
   // State values - use useShallow to prevent re-renders when unrelated state changes
-  const { currentQuote, isLoading, error, enabledCategories, showCustomQuotes } = useQuoteStore(
+  const {
+    currentQuote,
+    isLoading,
+    error,
+    enabledCategories,
+    showCustomQuotes,
+    showFavoritesOnly,
+    activeCollectionIds,
+  } = useQuoteStore(
     useShallow((state) => ({
       currentQuote: state.currentQuote,
       isLoading: state.isLoading,
       error: state.error,
       enabledCategories: state.enabledCategories,
       showCustomQuotes: state.showCustomQuotes,
+      showFavoritesOnly: state.showFavoritesOnly,
+      activeCollectionIds: state.activeCollectionIds,
     }))
   );
 
@@ -53,7 +63,11 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
   const setEnabledCategories = useQuoteStore((state) => state.setEnabledCategories);
   const toggleCustomQuotes = useQuoteStore((state) => state.toggleCustomQuotes);
 
-  const isFiltered = enabledCategories.length < ALL_QUOTE_CATEGORIES.length || !showCustomQuotes;
+  const isFiltered =
+    enabledCategories.length < ALL_QUOTE_CATEGORIES.length ||
+    !showCustomQuotes ||
+    showFavoritesOnly ||
+    activeCollectionIds.length > 0;
 
   // Countdown timer for auto-refresh
   useEffect(() => {

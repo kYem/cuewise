@@ -1,5 +1,7 @@
+import { ALL_QUOTE_CATEGORIES, type QuoteCollection, type Settings } from '@cuewise/shared';
 import * as storage from '@cuewise/storage';
 import { quoteFactory } from '@cuewise/test-utils/factories';
+import { defaultSettings } from '@cuewise/test-utils/fixtures';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SEED_QUOTES } from '../data/seed-quotes';
 import {
@@ -26,13 +28,21 @@ vi.mock('@cuewise/storage', () => ({
   setCurrentQuote: vi.fn(),
   getCollections: vi.fn(),
   setCollections: vi.fn(),
+  getSettings: vi.fn(),
+  setSettings: vi.fn(),
 }));
 
-// Mock toast store
+// Mock toast store with all methods
+const mockToastError = vi.fn();
+const mockToastWarning = vi.fn();
+const mockToastSuccess = vi.fn();
+
 vi.mock('./toast-store', () => ({
   useToastStore: {
     getState: () => ({
-      error: vi.fn(),
+      error: mockToastError,
+      warning: mockToastWarning,
+      success: mockToastSuccess,
     }),
   },
 }));
@@ -44,9 +54,15 @@ describe('Quote Store', () => {
 
     // Clear all mocks
     vi.clearAllMocks();
+    mockToastError.mockClear();
+    mockToastWarning.mockClear();
+    mockToastSuccess.mockClear();
 
     // Default mock for collections (empty by default)
     vi.mocked(storage.getCollections).mockResolvedValue([]);
+    // Default mock for settings
+    vi.mocked(storage.getSettings).mockResolvedValue(defaultSettings);
+    vi.mocked(storage.setSettings).mockResolvedValue({ success: true });
   });
 
   describe('initialize', () => {
@@ -504,6 +520,216 @@ describe('Quote Store', () => {
 
       const result = useQuoteStore.getState().currentQuote;
       expect(result?.id).toBe(favoriteInspiration.id);
+    });
+  });
+
+  describe('Filter Persistence', () => {
+    // Helper to set up initialize mocks
+    const setupInitializeMocks = (
+      settings: Partial<Settings>,
+      collections: QuoteCollection[] = []
+    ) => {
+      const mockQuotes = quoteFactory.buildList(3);
+      vi.mocked(storage.getQuotes).mockResolvedValue(mockQuotes);
+      vi.mocked(storage.getCurrentQuote).mockResolvedValue(mockQuotes[0]);
+      vi.mocked(storage.getCollections).mockResolvedValue(collections);
+      vi.mocked(storage.getSettings).mockResolvedValue({ ...defaultSettings, ...settings });
+    };
+
+    // Helper to set up toggle test state
+    const setupToggleState = (state: Record<string, unknown>) => {
+      useQuoteStore.setState({ quotes: quoteFactory.buildList(3), isLoading: false, ...state });
+    };
+
+    describe('initialize - loading persisted settings', () => {
+      it('should load all persisted filter settings', async () => {
+        const collections = [
+          { id: 'col-1', name: 'C1', createdAt: new Date().toISOString() },
+          { id: 'col-2', name: 'C2', createdAt: new Date().toISOString() },
+        ];
+        setupInitializeMocks(
+          {
+            quoteFilterEnabledCategories: ['inspiration', 'productivity'],
+            quoteFilterShowCustomQuotes: false,
+            quoteFilterShowFavoritesOnly: true,
+            quoteFilterActiveCollectionIds: ['col-1', 'col-2'],
+          },
+          collections
+        );
+
+        await useQuoteStore.getState().initialize();
+
+        const state = useQuoteStore.getState();
+        expect(state.enabledCategories).toEqual(['inspiration', 'productivity']);
+        expect(state.showCustomQuotes).toBe(false);
+        expect(state.showFavoritesOnly).toBe(true);
+        expect(state.activeCollectionIds).toEqual(['col-1', 'col-2']);
+      });
+
+      it('should filter out deleted collection IDs on load', async () => {
+        const collections = [{ id: 'col-1', name: 'C1', createdAt: new Date().toISOString() }];
+        setupInitializeMocks(
+          { quoteFilterActiveCollectionIds: ['col-1', 'col-2', 'col-3'] },
+          collections
+        );
+
+        await useQuoteStore.getState().initialize();
+
+        expect(useQuoteStore.getState().activeCollectionIds).toEqual(['col-1']);
+      });
+
+      it('should use default values when settings are null', async () => {
+        const mockQuotes = quoteFactory.buildList(3);
+        vi.mocked(storage.getQuotes).mockResolvedValue(mockQuotes);
+        vi.mocked(storage.getCurrentQuote).mockResolvedValue(mockQuotes[0]);
+        vi.mocked(storage.getSettings).mockResolvedValue(null as unknown as Settings);
+
+        await useQuoteStore.getState().initialize();
+
+        const state = useQuoteStore.getState();
+        expect(state.enabledCategories).toEqual(ALL_QUOTE_CATEGORIES);
+        expect(state.showCustomQuotes).toBe(true);
+        expect(state.showFavoritesOnly).toBe(false);
+        expect(state.activeCollectionIds).toEqual([]);
+      });
+    });
+
+    describe('toggle methods - persistence', () => {
+      it('should persist when toggling category off', async () => {
+        setupToggleState({ enabledCategories: [...ALL_QUOTE_CATEGORIES] });
+        await useQuoteStore.getState().toggleCategory('inspiration');
+        expect(storage.setSettings).toHaveBeenCalledWith(
+          expect.objectContaining({
+            quoteFilterEnabledCategories: expect.not.arrayContaining(['inspiration']),
+          })
+        );
+      });
+
+      it('should persist when toggling category on', async () => {
+        setupToggleState({ enabledCategories: ['productivity'] });
+        await useQuoteStore.getState().toggleCategory('inspiration');
+        expect(storage.setSettings).toHaveBeenCalledWith(
+          expect.objectContaining({
+            quoteFilterEnabledCategories: expect.arrayContaining(['productivity', 'inspiration']),
+          })
+        );
+      });
+
+      it('should persist setEnabledCategories', async () => {
+        setupToggleState({ enabledCategories: [...ALL_QUOTE_CATEGORIES] });
+        await useQuoteStore.getState().setEnabledCategories(['inspiration', 'creativity']);
+        expect(storage.setSettings).toHaveBeenCalledWith(
+          expect.objectContaining({ quoteFilterEnabledCategories: ['inspiration', 'creativity'] })
+        );
+      });
+
+      it('should persist toggleCustomQuotes', async () => {
+        setupToggleState({ showCustomQuotes: true });
+        await useQuoteStore.getState().toggleCustomQuotes();
+        expect(storage.setSettings).toHaveBeenCalledWith(
+          expect.objectContaining({ quoteFilterShowCustomQuotes: false })
+        );
+      });
+
+      it('should persist toggleFavoritesOnly', async () => {
+        setupToggleState({ showFavoritesOnly: false });
+        await useQuoteStore.getState().toggleFavoritesOnly();
+        expect(storage.setSettings).toHaveBeenCalledWith(
+          expect.objectContaining({ quoteFilterShowFavoritesOnly: true })
+        );
+      });
+
+      it('should persist toggleCollection on', async () => {
+        setupToggleState({ activeCollectionIds: [] });
+        await useQuoteStore.getState().toggleCollection('col-1');
+        expect(storage.setSettings).toHaveBeenCalledWith(
+          expect.objectContaining({ quoteFilterActiveCollectionIds: ['col-1'] })
+        );
+      });
+
+      it('should persist toggleCollection off', async () => {
+        setupToggleState({ activeCollectionIds: ['col-1', 'col-2'] });
+        await useQuoteStore.getState().toggleCollection('col-1');
+        expect(storage.setSettings).toHaveBeenCalledWith(
+          expect.objectContaining({ quoteFilterActiveCollectionIds: ['col-2'] })
+        );
+      });
+
+      it('should persist setActiveCollectionIds', async () => {
+        setupToggleState({ activeCollectionIds: [] });
+        await useQuoteStore.getState().setActiveCollectionIds(['col-1', 'col-2']);
+        expect(storage.setSettings).toHaveBeenCalledWith(
+          expect.objectContaining({ quoteFilterActiveCollectionIds: ['col-1', 'col-2'] })
+        );
+      });
+    });
+
+    describe('deleteCollection - persistence', () => {
+      it('should persist updated activeCollectionIds when deleting active collection', async () => {
+        const collections = [
+          { id: 'col-1', name: 'C1', createdAt: new Date().toISOString() },
+          { id: 'col-2', name: 'C2', createdAt: new Date().toISOString() },
+        ];
+        vi.mocked(storage.setCollections).mockResolvedValue({ success: true });
+        useQuoteStore.setState({
+          quotes: quoteFactory.buildList(3),
+          collections,
+          activeCollectionIds: ['col-1', 'col-2'],
+          isLoading: false,
+        });
+
+        await useQuoteStore.getState().deleteCollection('col-1');
+
+        expect(storage.setSettings).toHaveBeenCalledWith(
+          expect.objectContaining({ quoteFilterActiveCollectionIds: ['col-2'] })
+        );
+      });
+    });
+
+    describe('persistFilterSettings - error handling', () => {
+      it('should show warning toast when persistence fails', async () => {
+        const mockQuotes = quoteFactory.buildList(3);
+        useQuoteStore.setState({
+          quotes: mockQuotes,
+          showFavoritesOnly: false,
+          isLoading: false,
+        });
+
+        // Make setSettings fail
+        vi.mocked(storage.setSettings).mockRejectedValue(new Error('Storage error'));
+
+        await useQuoteStore.getState().toggleFavoritesOnly();
+
+        // State should still be updated in memory
+        expect(useQuoteStore.getState().showFavoritesOnly).toBe(true);
+
+        // Warning toast should be shown
+        expect(mockToastWarning).toHaveBeenCalledWith(
+          'Failed to save filter preferences. Your changes may not persist.'
+        );
+      });
+
+      it('should show warning toast when getSettings fails during persistence', async () => {
+        const mockQuotes = quoteFactory.buildList(3);
+        useQuoteStore.setState({
+          quotes: mockQuotes,
+          enabledCategories: [...ALL_QUOTE_CATEGORIES],
+          isLoading: false,
+        });
+
+        // Make getSettings fail during persistence (after initialize)
+        vi.mocked(storage.getSettings).mockRejectedValue(new Error('Cannot read settings'));
+
+        await useQuoteStore.getState().toggleCategory('inspiration');
+
+        // State should still be updated in memory
+        expect(useQuoteStore.getState().enabledCategories).not.toContain('inspiration');
+
+        // Warning toast should be shown
+        expect(mockToastWarning).toHaveBeenCalledWith(
+          'Failed to save filter preferences. Your changes may not persist.'
+        );
+      });
     });
   });
 });
