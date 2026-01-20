@@ -293,8 +293,9 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
 
             {/* Personal Notes (for custom quotes) - hide in bottom mode */}
             {!isBottom && currentQuote.notes && (
-              <div className="text-sm text-primary bg-orange-500/10 border border-orange-500/30 rounded-lg px-density-md py-density-sm inline-block">
-                💭 {currentQuote.notes}
+              <div className="text-xs text-primary/80 bg-surface/40 backdrop-blur-sm rounded-full px-3 py-1 inline-flex items-center gap-1.5">
+                <span className="text-base">💭</span>
+                <span>{currentQuote.notes}</span>
               </div>
             )}
           </footer>
