@@ -33,7 +33,7 @@ interface QuoteStore {
   historyIndex: number; // Current position in history (0 = most recent)
   enabledCategories: QuoteCategory[]; // Categories to show (persisted to settings)
   showCustomQuotes: boolean; // Show custom quotes in filter (persisted to settings)
-  showFavoritesOnly: boolean; // Show only favorite quotes (persisted to settings)
+  showFavorites: boolean; // Include favorites in filter (persisted to settings)
 
   // Collections state
   collections: QuoteCollection[];
@@ -71,7 +71,7 @@ interface QuoteStore {
   setEnabledCategories: (categories: QuoteCategory[]) => Promise<void>;
   toggleCategory: (category: QuoteCategory) => Promise<void>;
   toggleCustomQuotes: () => Promise<void>;
-  toggleFavoritesOnly: () => Promise<void>;
+  toggleFavorites: () => Promise<void>;
 
   // Bulk operations
   bulkDelete: (quoteIds: string[]) => Promise<void>;
@@ -113,7 +113,7 @@ async function persistFilterSettings(state: QuoteStore): Promise<void> {
       ...currentSettings,
       quoteFilterEnabledCategories: state.enabledCategories,
       quoteFilterShowCustomQuotes: state.showCustomQuotes,
-      quoteFilterShowFavoritesOnly: state.showFavoritesOnly,
+      quoteFilterShowFavorites: state.showFavorites,
       quoteFilterActiveCollectionIds: state.activeCollectionIds,
     };
     await setSettings(updatedSettings);
@@ -134,7 +134,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
   historyIndex: 0,
   enabledCategories: [...ALL_QUOTE_CATEGORIES],
   showCustomQuotes: true,
-  showFavoritesOnly: false,
+  showFavorites: false,
   collections: [],
   activeCollectionIds: [],
 
@@ -160,8 +160,8 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         settings?.quoteFilterEnabledCategories ?? DEFAULT_SETTINGS.quoteFilterEnabledCategories;
       const showCustomQuotes =
         settings?.quoteFilterShowCustomQuotes ?? DEFAULT_SETTINGS.quoteFilterShowCustomQuotes;
-      const showFavoritesOnly =
-        settings?.quoteFilterShowFavoritesOnly ?? DEFAULT_SETTINGS.quoteFilterShowFavoritesOnly;
+      const showFavorites =
+        settings?.quoteFilterShowFavorites ?? DEFAULT_SETTINGS.quoteFilterShowFavorites;
       // Filter out any collection IDs that no longer exist
       const collectionIds = new Set(collections.map((c) => c.id));
       const activeCollectionIds = (
@@ -188,7 +188,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         collections,
         enabledCategories,
         showCustomQuotes,
-        showFavoritesOnly,
+        showFavorites,
         activeCollectionIds,
         isLoading: false,
       });
@@ -214,7 +214,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         historyIndex,
         enabledCategories,
         showCustomQuotes,
-        showFavoritesOnly,
+        showFavorites,
         activeCollectionIds,
       } = get();
 
@@ -224,7 +224,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         currentQuote?.id,
         enabledCategories,
         showCustomQuotes,
-        showFavoritesOnly,
+        showFavorites,
         activeCollectionIds
       );
 
@@ -507,9 +507,9 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     await persistFilterSettings(get());
   },
 
-  toggleFavoritesOnly: async () => {
-    const { showFavoritesOnly } = get();
-    set({ showFavoritesOnly: !showFavoritesOnly });
+  toggleFavorites: async () => {
+    const { showFavorites } = get();
+    set({ showFavorites: !showFavorites });
     await persistFilterSettings(get());
   },
 

@@ -18,8 +18,8 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({ compact = false 
     toggleCategory,
     showCustomQuotes,
     toggleCustomQuotes,
-    showFavoritesOnly,
-    toggleFavoritesOnly,
+    showFavorites,
+    toggleFavorites,
     collections,
     activeCollectionIds,
     toggleCollection,
@@ -33,7 +33,7 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({ compact = false 
   const allEnabled =
     enabledCategories.length === ALL_QUOTE_CATEGORIES.length &&
     showCustomQuotes &&
-    !showFavoritesOnly &&
+    !showFavorites &&
     activeCollectionIds.length === 0;
 
   // Get quote count for a collection
@@ -63,8 +63,8 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({ compact = false 
     if (!showCustomQuotes) {
       toggleCustomQuotes();
     }
-    if (showFavoritesOnly) {
-      toggleFavoritesOnly();
+    if (showFavorites) {
+      toggleFavorites();
     }
     if (activeCollectionIds.length > 0) {
       setActiveCollectionIds([]);
@@ -76,8 +76,8 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({ compact = false 
     if (showCustomQuotes) {
       toggleCustomQuotes();
     }
-    if (showFavoritesOnly) {
-      toggleFavoritesOnly();
+    if (showFavorites) {
+      toggleFavorites();
     }
     if (activeCollectionIds.length > 0) {
       setActiveCollectionIds([]);
@@ -193,33 +193,29 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({ compact = false 
             {/* Favorites Only Option */}
             <button
               type="button"
-              onClick={toggleFavoritesOnly}
+              onClick={toggleFavorites}
               className="w-full flex items-center gap-3 px-4 py-2 hover:bg-surface-variant transition-colors"
             >
               {/* Checkbox */}
               <div
                 className={cn(
                   'w-5 h-5 rounded border-2 flex items-center justify-center transition-all',
-                  showFavoritesOnly
-                    ? 'border-primary-600 bg-primary-600'
-                    : 'border-border bg-surface'
+                  showFavorites ? 'border-primary-600 bg-primary-600' : 'border-border bg-surface'
                 )}
               >
-                {showFavoritesOnly && <Check className="w-3 h-3 text-white" />}
+                {showFavorites && <Check className="w-3 h-3 text-white" />}
               </div>
 
               {/* Icon */}
               <Heart
                 className={cn(
                   'w-3 h-3 flex-shrink-0',
-                  showFavoritesOnly ? 'text-red-500 fill-current' : 'text-secondary'
+                  showFavorites ? 'text-red-500 fill-current' : 'text-secondary'
                 )}
               />
 
               {/* Label */}
-              <span
-                className={cn('text-sm', showFavoritesOnly ? 'text-primary' : 'text-secondary')}
-              >
+              <span className={cn('text-sm', showFavorites ? 'text-primary' : 'text-secondary')}>
                 Favorites Only
               </span>
             </button>

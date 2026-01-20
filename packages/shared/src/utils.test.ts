@@ -694,8 +694,8 @@ describe('Import Utilities', () => {
     });
   });
 
-  describe('getRandomQuote with favorites filtering', () => {
-    it('should filter quotes to favorites only when showFavoritesOnly is true', () => {
+  describe('getRandomQuote with favorites filtering (OR logic)', () => {
+    it('should include favorites when showFavorites is true (even without categories)', () => {
       const quotes = [
         {
           id: '1',
@@ -719,14 +719,15 @@ describe('Import Utilities', () => {
         },
       ];
 
-      const result = getRandomQuote(quotes, undefined, undefined, true, true);
+      // No categories enabled, but favorites enabled - should return only favorites
+      const result = getRandomQuote(quotes, undefined, [], false, true);
 
       expect(result).not.toBeNull();
       expect(result?.id).toBe('1');
       expect(result?.isFavorite).toBe(true);
     });
 
-    it('should return null when showFavoritesOnly is true but no favorites exist', () => {
+    it('should return null when showFavorites is true but no favorites exist and no other filters', () => {
       const quotes = [
         {
           id: '1',
@@ -740,12 +741,13 @@ describe('Import Utilities', () => {
         },
       ];
 
-      const result = getRandomQuote(quotes, undefined, undefined, true, true);
+      // No categories, no custom, only favorites filter - but no favorites exist
+      const result = getRandomQuote(quotes, undefined, [], false, true);
 
       expect(result).toBeNull();
     });
 
-    it('should combine favorites filter with category filter (AND logic)', () => {
+    it('should combine favorites filter with category filter using OR logic', () => {
       const quotes = [
         {
           id: '1',
@@ -779,16 +781,17 @@ describe('Import Utilities', () => {
         },
       ];
 
-      // Only productivity + favorites only
-      const result = getRandomQuote(quotes, undefined, ['productivity'], true, true);
+      // productivity category OR favorites - should return quotes 2 and 3 (both productivity) and quote 1 (favorite)
+      const result = getRandomQuote(quotes, undefined, ['productivity'], false, true);
 
       expect(result).not.toBeNull();
-      expect(result?.id).toBe('2');
-      expect(result?.category).toBe('productivity');
-      expect(result?.isFavorite).toBe(true);
+      // Result should be either productivity OR favorite
+      const isProductivity = result?.category === 'productivity';
+      const isFavorite = result?.isFavorite === true;
+      expect(isProductivity || isFavorite).toBe(true);
     });
 
-    it('should return all quotes when showFavoritesOnly is false', () => {
+    it('should return category quotes when showFavorites is false', () => {
       const quotes = [
         {
           id: '1',
@@ -812,7 +815,7 @@ describe('Import Utilities', () => {
         },
       ];
 
-      const result = getRandomQuote(quotes, undefined, undefined, true, false);
+      const result = getRandomQuote(quotes, undefined, ['inspiration'], true, false);
 
       expect(result).not.toBeNull();
     });

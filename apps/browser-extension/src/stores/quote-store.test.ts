@@ -475,17 +475,17 @@ describe('Quote Store', () => {
   });
 
   describe('Favorites Filter', () => {
-    it('should toggle showFavoritesOnly state', () => {
-      useQuoteStore.setState({ showFavoritesOnly: false });
-      useQuoteStore.getState().toggleFavoritesOnly();
-      expect(useQuoteStore.getState().showFavoritesOnly).toBe(true);
+    it('should toggle showFavorites state', () => {
+      useQuoteStore.setState({ showFavorites: false });
+      useQuoteStore.getState().toggleFavorites();
+      expect(useQuoteStore.getState().showFavorites).toBe(true);
 
-      useQuoteStore.getState().toggleFavoritesOnly();
-      expect(useQuoteStore.getState().showFavoritesOnly).toBe(false);
+      useQuoteStore.getState().toggleFavorites();
+      expect(useQuoteStore.getState().showFavorites).toBe(false);
     });
 
-    it('should only return favorites when filter enabled', async () => {
-      const { state } = createFavoritesScenario({ showFavoritesOnly: true });
+    it('should include favorites when filter enabled', async () => {
+      const { state } = createFavoritesScenario({ showFavorites: true });
       useQuoteStore.setState(state);
 
       await useQuoteStore.getState().refreshQuote();
@@ -493,8 +493,8 @@ describe('Quote Store', () => {
       expect(useQuoteStore.getState().currentQuote?.isFavorite).toBe(true);
     });
 
-    it('should return null when no favorites exist', async () => {
-      const { state } = createFavoritesScenario({ showFavoritesOnly: true, hasFavorites: false });
+    it('should return null when no favorites exist and only favorites enabled', async () => {
+      const { state } = createFavoritesScenario({ showFavorites: true, hasFavorites: false });
       useQuoteStore.setState(state);
 
       await useQuoteStore.getState().refreshQuote();
@@ -502,8 +502,8 @@ describe('Quote Store', () => {
       expect(useQuoteStore.getState().currentQuote).toBeNull();
     });
 
-    it('should combine with category filter', async () => {
-      const { quotes, favoriteInspiration, currentQuote } = createCategoryFavoritesScenario();
+    it('should combine with category filter using OR logic', async () => {
+      const { quotes, currentQuote } = createCategoryFavoritesScenario();
       useQuoteStore.setState({
         quotes,
         currentQuote,
@@ -511,7 +511,7 @@ describe('Quote Store', () => {
         historyIndex: 0,
         isLoading: false,
         error: null,
-        showFavoritesOnly: true,
+        showFavorites: true,
         enabledCategories: ['inspiration'],
         showCustomQuotes: true,
       });
@@ -519,7 +519,10 @@ describe('Quote Store', () => {
       await useQuoteStore.getState().refreshQuote();
 
       const result = useQuoteStore.getState().currentQuote;
-      expect(result?.id).toBe(favoriteInspiration.id);
+      // With OR logic, result should be either inspiration OR favorite (or both)
+      const isInspiration = result?.category === 'inspiration';
+      const isFavorite = result?.isFavorite === true;
+      expect(isInspiration || isFavorite).toBe(true);
     });
   });
 
@@ -551,7 +554,7 @@ describe('Quote Store', () => {
           {
             quoteFilterEnabledCategories: ['inspiration', 'productivity'],
             quoteFilterShowCustomQuotes: false,
-            quoteFilterShowFavoritesOnly: true,
+            quoteFilterShowFavorites: true,
             quoteFilterActiveCollectionIds: ['col-1', 'col-2'],
           },
           collections
@@ -562,7 +565,7 @@ describe('Quote Store', () => {
         const state = useQuoteStore.getState();
         expect(state.enabledCategories).toEqual(['inspiration', 'productivity']);
         expect(state.showCustomQuotes).toBe(false);
-        expect(state.showFavoritesOnly).toBe(true);
+        expect(state.showFavorites).toBe(true);
         expect(state.activeCollectionIds).toEqual(['col-1', 'col-2']);
       });
 
@@ -589,7 +592,7 @@ describe('Quote Store', () => {
         const state = useQuoteStore.getState();
         expect(state.enabledCategories).toEqual(ALL_QUOTE_CATEGORIES);
         expect(state.showCustomQuotes).toBe(true);
-        expect(state.showFavoritesOnly).toBe(false);
+        expect(state.showFavorites).toBe(false);
         expect(state.activeCollectionIds).toEqual([]);
       });
     });
@@ -631,11 +634,11 @@ describe('Quote Store', () => {
         );
       });
 
-      it('should persist toggleFavoritesOnly', async () => {
-        setupToggleState({ showFavoritesOnly: false });
-        await useQuoteStore.getState().toggleFavoritesOnly();
+      it('should persist toggleFavorites', async () => {
+        setupToggleState({ showFavorites: false });
+        await useQuoteStore.getState().toggleFavorites();
         expect(storage.setSettings).toHaveBeenCalledWith(
-          expect.objectContaining({ quoteFilterShowFavoritesOnly: true })
+          expect.objectContaining({ quoteFilterShowFavorites: true })
         );
       });
 
@@ -691,17 +694,17 @@ describe('Quote Store', () => {
         const mockQuotes = quoteFactory.buildList(3);
         useQuoteStore.setState({
           quotes: mockQuotes,
-          showFavoritesOnly: false,
+          showFavorites: false,
           isLoading: false,
         });
 
         // Make setSettings fail
         vi.mocked(storage.setSettings).mockRejectedValue(new Error('Storage error'));
 
-        await useQuoteStore.getState().toggleFavoritesOnly();
+        await useQuoteStore.getState().toggleFavorites();
 
         // State should still be updated in memory
-        expect(useQuoteStore.getState().showFavoritesOnly).toBe(true);
+        expect(useQuoteStore.getState().showFavorites).toBe(true);
 
         // Warning toast should be shown
         expect(mockToastWarning).toHaveBeenCalledWith(

@@ -37,7 +37,7 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
     error,
     enabledCategories,
     showCustomQuotes,
-    showFavoritesOnly,
+    showFavorites,
     activeCollectionIds,
   } = useQuoteStore(
     useShallow((state) => ({
@@ -46,7 +46,7 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
       error: state.error,
       enabledCategories: state.enabledCategories,
       showCustomQuotes: state.showCustomQuotes,
-      showFavoritesOnly: state.showFavoritesOnly,
+      showFavorites: state.showFavorites,
       activeCollectionIds: state.activeCollectionIds,
     }))
   );
@@ -66,7 +66,7 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
   const isFiltered =
     enabledCategories.length < ALL_QUOTE_CATEGORIES.length ||
     !showCustomQuotes ||
-    showFavoritesOnly ||
+    showFavorites ||
     activeCollectionIds.length > 0;
 
   // Countdown timer for auto-refresh

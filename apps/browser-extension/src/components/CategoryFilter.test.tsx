@@ -12,11 +12,11 @@ vi.mock('../stores/quote-store', () => ({
 interface MockCategoryFilterStore {
   enabledCategories: string[];
   showCustomQuotes: boolean;
-  showFavoritesOnly: boolean;
+  showFavorites: boolean;
   setEnabledCategories: Mock;
   toggleCategory: Mock;
   toggleCustomQuotes: Mock;
-  toggleFavoritesOnly: Mock;
+  toggleFavorites: Mock;
   collections: unknown[];
   activeCollectionIds: string[];
   toggleCollection: Mock;
@@ -30,11 +30,11 @@ function createMockStore(
   return {
     enabledCategories: [...ALL_QUOTE_CATEGORIES],
     showCustomQuotes: true,
-    showFavoritesOnly: false,
+    showFavorites: false,
     setEnabledCategories: vi.fn(),
     toggleCategory: vi.fn(),
     toggleCustomQuotes: vi.fn(),
-    toggleFavoritesOnly: vi.fn(),
+    toggleFavorites: vi.fn(),
     collections: [],
     activeCollectionIds: [],
     toggleCollection: vi.fn(),
@@ -481,11 +481,11 @@ describe('CategoryFilter', () => {
       expect(screen.getByText('Favorites Only')).toBeInTheDocument();
     });
 
-    it('should call toggleFavoritesOnly when Favorites Only clicked', async () => {
+    it('should call toggleFavorites when Favorites Only clicked', async () => {
       const user = userEvent.setup();
-      const toggleFavoritesOnly = vi.fn();
+      const toggleFavorites = vi.fn();
       vi.mocked(useQuoteStore).mockImplementation(
-        createSelectorMock(createMockStore({ toggleFavoritesOnly }))
+        createSelectorMock(createMockStore({ toggleFavorites }))
       );
 
       render(<CategoryFilter />);
@@ -493,14 +493,14 @@ describe('CategoryFilter', () => {
       await user.click(screen.getByTitle('Filter categories (11/11)'));
       await user.click(screen.getByText('Favorites Only'));
 
-      expect(toggleFavoritesOnly).toHaveBeenCalledTimes(1);
+      expect(toggleFavorites).toHaveBeenCalledTimes(1);
     });
 
-    it('should show badge when showFavoritesOnly is true', () => {
+    it('should show badge when showFavorites is true', () => {
       vi.mocked(useQuoteStore).mockImplementation(
         createSelectorMock(
           createMockStore({
-            showFavoritesOnly: true,
+            showFavorites: true,
           })
         )
       );
@@ -511,12 +511,12 @@ describe('CategoryFilter', () => {
       expect(screen.getByText('11')).toBeInTheDocument();
     });
 
-    it('should show favorites checkbox as checked when showFavoritesOnly is true', async () => {
+    it('should show favorites checkbox as checked when showFavorites is true', async () => {
       const user = userEvent.setup();
       vi.mocked(useQuoteStore).mockImplementation(
         createSelectorMock(
           createMockStore({
-            showFavoritesOnly: true,
+            showFavorites: true,
           })
         )
       );
@@ -530,16 +530,16 @@ describe('CategoryFilter', () => {
       expect(checkboxDiv?.className).toContain('bg-primary-600');
     });
 
-    it('should call toggleFavoritesOnly on Select All when favorites is enabled', async () => {
+    it('should call toggleFavorites on Select All when favorites is enabled', async () => {
       const user = userEvent.setup();
-      const toggleFavoritesOnly = vi.fn();
+      const toggleFavorites = vi.fn();
       const setEnabledCategories = vi.fn();
       vi.mocked(useQuoteStore).mockImplementation(
         createSelectorMock(
           createMockStore({
             enabledCategories: ['inspiration'],
-            showFavoritesOnly: true,
-            toggleFavoritesOnly,
+            showFavorites: true,
+            toggleFavorites,
             setEnabledCategories,
           })
         )
@@ -550,12 +550,12 @@ describe('CategoryFilter', () => {
       await user.click(screen.getByTitle('Filter categories (2/11)'));
       await user.click(screen.getByText('Select All'));
 
-      expect(toggleFavoritesOnly).toHaveBeenCalledTimes(1);
+      expect(toggleFavorites).toHaveBeenCalledTimes(1);
     });
 
-    it('should not call toggleFavoritesOnly on Select All when favorites is disabled', async () => {
+    it('should not call toggleFavorites on Select All when favorites is disabled', async () => {
       const user = userEvent.setup();
-      const toggleFavoritesOnly = vi.fn();
+      const toggleFavorites = vi.fn();
       const setEnabledCategories = vi.fn();
       const toggleCustomQuotes = vi.fn();
       vi.mocked(useQuoteStore).mockImplementation(
@@ -563,8 +563,8 @@ describe('CategoryFilter', () => {
           createMockStore({
             enabledCategories: ['inspiration'],
             showCustomQuotes: false,
-            showFavoritesOnly: false,
-            toggleFavoritesOnly,
+            showFavorites: false,
+            toggleFavorites,
             setEnabledCategories,
             toggleCustomQuotes,
           })
@@ -576,19 +576,19 @@ describe('CategoryFilter', () => {
       await user.click(screen.getByTitle('Filter categories (1/11)'));
       await user.click(screen.getByText('Select All'));
 
-      expect(toggleFavoritesOnly).not.toHaveBeenCalled();
+      expect(toggleFavorites).not.toHaveBeenCalled();
     });
 
-    it('should call toggleFavoritesOnly on Clear All when favorites is enabled', async () => {
+    it('should call toggleFavorites on Clear All when favorites is enabled', async () => {
       const user = userEvent.setup();
-      const toggleFavoritesOnly = vi.fn();
+      const toggleFavorites = vi.fn();
       const setEnabledCategories = vi.fn();
       const toggleCustomQuotes = vi.fn();
       vi.mocked(useQuoteStore).mockImplementation(
         createSelectorMock(
           createMockStore({
-            showFavoritesOnly: true,
-            toggleFavoritesOnly,
+            showFavorites: true,
+            toggleFavorites,
             setEnabledCategories,
             toggleCustomQuotes,
           })
@@ -600,19 +600,19 @@ describe('CategoryFilter', () => {
       await user.click(screen.getByTitle('Filter categories (11/11)'));
       await user.click(screen.getByText('Clear All'));
 
-      expect(toggleFavoritesOnly).toHaveBeenCalledTimes(1);
+      expect(toggleFavorites).toHaveBeenCalledTimes(1);
     });
 
-    it('should not call toggleFavoritesOnly on Clear All when favorites is disabled', async () => {
+    it('should not call toggleFavorites on Clear All when favorites is disabled', async () => {
       const user = userEvent.setup();
-      const toggleFavoritesOnly = vi.fn();
+      const toggleFavorites = vi.fn();
       const setEnabledCategories = vi.fn();
       const toggleCustomQuotes = vi.fn();
       vi.mocked(useQuoteStore).mockImplementation(
         createSelectorMock(
           createMockStore({
-            showFavoritesOnly: false,
-            toggleFavoritesOnly,
+            showFavorites: false,
+            toggleFavorites,
             setEnabledCategories,
             toggleCustomQuotes,
           })
@@ -624,7 +624,7 @@ describe('CategoryFilter', () => {
       await user.click(screen.getByTitle('Filter categories (11/11)'));
       await user.click(screen.getByText('Clear All'));
 
-      expect(toggleFavoritesOnly).not.toHaveBeenCalled();
+      expect(toggleFavorites).not.toHaveBeenCalled();
     });
   });
 });
