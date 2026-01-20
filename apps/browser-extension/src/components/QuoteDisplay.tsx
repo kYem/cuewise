@@ -261,8 +261,10 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
               <cite
                 className={cn(
                   'font-semibold not-italic text-primary-600 dark:text-primary-500',
-                  isBottom ? 'text-base md:text-lg' : 'text-xl md:text-2xl'
+                  isBottom ? 'text-base md:text-lg' : 'text-xl md:text-2xl',
+                  currentQuote.source && 'cursor-help'
                 )}
+                title={currentQuote.source ? `Source: ${currentQuote.source}` : undefined}
               >
                 {enableQuoteAnimation ? (
                   <AuthorTicker author={currentQuote.author} />
@@ -285,11 +287,6 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
                 </span>
               )}
             </div>
-
-            {/* Source (for custom quotes) - hide in bottom mode */}
-            {!isBottom && currentQuote.source && (
-              <div className="text-sm text-secondary italic">Source: {currentQuote.source}</div>
-            )}
 
             {/* Personal Notes (for custom quotes) - hide in bottom mode */}
             {!isBottom && currentQuote.notes && (
