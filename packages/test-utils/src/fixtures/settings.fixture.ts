@@ -39,6 +39,6 @@ export const defaultSettings: Settings = {
   focusPosition: 'center',
   quoteFilterEnabledCategories: ALL_QUOTE_CATEGORIES,
   quoteFilterShowCustomQuotes: true,
-  quoteFilterShowFavorites: false,
+  quoteFilterShowFavoritesOnly: false,
   quoteFilterActiveCollectionIds: [],
 };

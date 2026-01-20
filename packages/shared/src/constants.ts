@@ -75,7 +75,7 @@ export const DEFAULT_SETTINGS: Settings = {
   // Quote Filter Persistence
   quoteFilterEnabledCategories: ALL_QUOTE_CATEGORIES,
   quoteFilterShowCustomQuotes: true,
-  quoteFilterShowFavorites: false,
+  quoteFilterShowFavoritesOnly: false,
   quoteFilterActiveCollectionIds: [],
 };
 

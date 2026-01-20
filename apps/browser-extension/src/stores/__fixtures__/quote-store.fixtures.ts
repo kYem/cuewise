@@ -319,14 +319,14 @@ export function createForwardHistoryClearScenario() {
 
 /**
  * Creates a test scenario for favorites filter with store state ready to use.
- * Uses OR filter logic: when showFavorites=true and other filters disabled,
+ * Uses OR filter logic: when showFavoritesOnly=true and other filters disabled,
  * only favorites will be returned.
  */
 export function createFavoritesScenario(options: {
-  showFavorites: boolean;
+  showFavoritesOnly: boolean;
   hasFavorites?: boolean;
 }) {
-  const { showFavorites, hasFavorites = true } = options;
+  const { showFavoritesOnly, hasFavorites = true } = options;
 
   const favoriteQuotes = hasFavorites ? quoteFactory.buildList(2, { isFavorite: true }) : [];
   const nonFavoriteQuotes = quoteFactory.buildList(2, { isFavorite: false });
@@ -341,7 +341,7 @@ export function createFavoritesScenario(options: {
       historyIndex: 0,
       isLoading: false,
       error: null,
-      showFavorites,
+      showFavoritesOnly,
       // Disable other filters to test favorites in isolation with OR logic
       enabledCategories: [] as QuoteCategory[],
       showCustomQuotes: false,

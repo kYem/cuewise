@@ -207,7 +207,7 @@ export interface Settings {
   // Quote Filter Persistence
   quoteFilterEnabledCategories: QuoteCategory[]; // Enabled categories for quote filter (default all)
   quoteFilterShowCustomQuotes: boolean; // Show custom quotes in filter (default true)
-  quoteFilterShowFavorites: boolean; // Include favorites in filter (default false)
+  quoteFilterShowFavoritesOnly: boolean; // Show only favorites (default false)
   quoteFilterActiveCollectionIds: string[]; // Active collection IDs for filter (default [])
 }
 
