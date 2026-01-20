@@ -1,8 +1,10 @@
 import {
+  ALL_QUOTE_CATEGORIES,
   type CSVParseResult,
   type CSVQuoteRow,
   generateQuoteCSVTemplate,
   parseQuotesCSV,
+  QUOTE_CATEGORIES,
   validateCSVFile,
 } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
@@ -10,6 +12,7 @@ import {
   AlertCircle,
   AlertTriangle,
   CheckCircle2,
+  Copy,
   Download,
   FileSpreadsheet,
   FolderPlus,
@@ -19,6 +22,7 @@ import {
 import type React from 'react';
 import { useRef, useState } from 'react';
 import { useQuoteStore } from '../stores/quote-store';
+import { useToastStore } from '../stores/toast-store';
 
 interface CSVImportModalProps {
   onClose: () => void;
@@ -136,6 +140,48 @@ export const CSVImportModal: React.FC<CSVImportModalProps> = ({ onClose }) => {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+  };
+
+  // Copy AI prompt to clipboard
+  const handleCopyAIPrompt = async () => {
+    const categoryList = ALL_QUOTE_CATEGORIES.map(
+      (cat) => `  - ${cat}: ${QUOTE_CATEGORIES[cat]}`
+    ).join('\n');
+
+    const prompt = `Generate a CSV file with motivational quotes for a personal quote collection app.
+
+## CSV Format
+The CSV must have these columns:
+- text (required): The quote text
+- author (required): Who said/wrote the quote
+- category (optional): One of the categories below
+- source (optional): Book, speech, or reference where the quote is from
+- notes (optional): Personal notes about the quote
+
+## Available Categories
+${categoryList}
+
+## Requirements
+1. Generate 20-30 high-quality, meaningful quotes
+2. Include a mix of categories for variety
+3. Use accurate attributions (don't make up authors)
+4. Include the source when known (book title, speech name, etc.)
+5. Output as valid CSV with proper escaping for quotes containing commas
+
+## Example Output
+text,author,category,source,notes
+"The only way to do great work is to love what you do.",Steve Jobs,success,Stanford Commencement Speech 2005,
+"Be the change you wish to see in the world.",Mahatma Gandhi,inspiration,,Often misattributed
+"The mind is everything. What you think you become.",Buddha,mindfulness,,
+
+Please generate the CSV now, focusing on [SPECIFY YOUR THEME OR TOPIC HERE - e.g., "stoic philosophy", "entrepreneurship", "mindfulness and meditation", "leadership wisdom"].`;
+
+    try {
+      await navigator.clipboard.writeText(prompt);
+      useToastStore.getState().success('AI prompt copied to clipboard');
+    } catch {
+      useToastStore.getState().error('Failed to copy to clipboard');
+    }
   };
 
   // Handle import
@@ -281,14 +327,25 @@ export const CSVImportModal: React.FC<CSVImportModalProps> = ({ onClose }) => {
                   className="hidden"
                 />
               </button>
-              <button
-                type="button"
-                onClick={handleDownloadTemplate}
-                className="flex items-center justify-center gap-2 w-full py-2 text-sm text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 transition-colors"
-              >
-                <Download className="w-4 h-4" />
-                Download CSV Template
-              </button>
+              <div className="flex items-center justify-center gap-4">
+                <button
+                  type="button"
+                  onClick={handleDownloadTemplate}
+                  className="flex items-center gap-2 py-2 text-sm text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 transition-colors"
+                >
+                  <Download className="w-4 h-4" />
+                  Download CSV Template
+                </button>
+                <span className="text-tertiary">•</span>
+                <button
+                  type="button"
+                  onClick={handleCopyAIPrompt}
+                  className="flex items-center gap-2 py-2 text-sm text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 transition-colors"
+                >
+                  <Copy className="w-4 h-4" />
+                  Copy AI Prompt
+                </button>
+              </div>
             </div>
           ) : (
             <div className="flex items-center justify-between p-3 bg-surface-variant rounded-lg border border-border">
