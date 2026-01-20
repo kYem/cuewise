@@ -1,8 +1,14 @@
-import type { Quote, QuoteCollection } from '@cuewise/shared';
-import { ArrowLeft, Edit2, FolderOpen, ListPlus, Plus, Trash2 } from 'lucide-react';
+import {
+  ALL_QUOTE_CATEGORIES,
+  QUOTE_CATEGORIES,
+  type Quote,
+  type QuoteCollection,
+} from '@cuewise/shared';
+import { ArrowLeft, Copy, Edit2, FolderOpen, ListPlus, Plus, Trash2 } from 'lucide-react';
 import type React from 'react';
 import { useState } from 'react';
 import { useQuoteStore } from '../stores/quote-store';
+import { useToastStore } from '../stores/toast-store';
 import { AddQuotesToCollectionModal } from './AddQuotesToCollectionModal';
 import { CollectionForm } from './CollectionForm';
 import { ConfirmationDialog } from './ConfirmationDialog';
@@ -73,6 +79,69 @@ export const CollectionList: React.FC = () => {
     setSelectedCollectionId(null);
   };
 
+  const handleCopyAIPrompt = async (collection: QuoteCollection, collectionQuotes: Quote[]) => {
+    const categoryList = ALL_QUOTE_CATEGORIES.map(
+      (cat) => `  - ${cat}: ${QUOTE_CATEGORIES[cat]}`
+    ).join('\n');
+
+    const existingQuotesList =
+      collectionQuotes.length > 0
+        ? collectionQuotes.map((q) => `  - "${q.text}" — ${q.author} (${q.category})`).join('\n')
+        : '  (No quotes yet)';
+
+    // Check if all quotes are from the same author
+    const uniqueAuthors = new Set(collectionQuotes.map((q) => q.author));
+    const isSingleAuthor = uniqueAuthors.size === 1 && collectionQuotes.length > 0;
+    const singleAuthorName = isSingleAuthor ? collectionQuotes[0].author : null;
+
+    const authorInstruction = isSingleAuthor
+      ? `3. All quotes must be from **${singleAuthorName}** (this is an author-specific collection)`
+      : '3. Offer variety in authors and perspectives';
+
+    const prompt = `Generate more quotes for my "${collection.name}" collection.
+
+## Collection Details
+- **Name**: ${collection.name}
+${collection.description ? `- **Description**: ${collection.description}` : ''}
+${isSingleAuthor ? `- **Author Focus**: ${singleAuthorName}` : ''}
+
+## Existing Quotes in Collection (${collectionQuotes.length} quotes)
+${existingQuotesList}
+
+## Your Task
+Generate 10-15 NEW quotes that complement this collection. The new quotes should:
+1. Match the theme/vibe of the existing quotes
+2. NOT duplicate any existing quotes
+${authorInstruction}
+4. Be authentic, verified quotes (not made up)
+
+## Output Format (CSV)
+Provide the quotes in CSV format with these columns:
+- text (required): The quote text (without surrounding quotes)
+- author (required): Who said/wrote the quote
+- category (required): One of the categories below
+- source (optional): Book, speech, or reference
+- notes (optional): Why this quote fits the collection
+
+## Available Categories
+${categoryList}
+
+## Example Output
+\`\`\`csv
+text,author,category,source,notes
+The only way to do great work is to love what you do,Steve Jobs,inspiration,Stanford commencement speech 2005,Fits the motivational theme
+\`\`\`
+
+Please generate the CSV data now:`;
+
+    try {
+      await navigator.clipboard.writeText(prompt);
+      useToastStore.getState().success('AI prompt copied to clipboard');
+    } catch {
+      useToastStore.getState().error('Failed to copy prompt');
+    }
+  };
+
   // Show quotes in selected collection
   if (selectedCollection) {
     const collectionQuotes = getQuotesInCollection(selectedCollection.id);
@@ -95,14 +164,25 @@ export const CollectionList: React.FC = () => {
               <p className="text-sm text-secondary">{selectedCollection.description}</p>
             )}
           </div>
-          <button
-            type="button"
-            onClick={() => setAddingToCollection(selectedCollection)}
-            className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium"
-          >
-            <ListPlus className="w-4 h-4" />
-            Add Quotes
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => handleCopyAIPrompt(selectedCollection, collectionQuotes)}
+              className="flex items-center gap-2 px-3 py-2 text-secondary hover:text-primary border border-border rounded-lg hover:bg-surface-variant transition-colors text-sm"
+              title="Copy AI prompt to generate more quotes for this collection"
+            >
+              <Copy className="w-4 h-4" />
+              <span className="hidden sm:inline">Copy AI Prompt</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setAddingToCollection(selectedCollection)}
+              className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium"
+            >
+              <ListPlus className="w-4 h-4" />
+              Add Quotes
+            </button>
+          </div>
         </div>
 
         {/* Quotes in Collection */}

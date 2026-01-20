@@ -1,4 +1,4 @@
-import { ALL_QUOTE_CATEGORIES, type Quote, type QuoteCategory } from '@cuewise/shared';
+import type { Quote, QuoteCategory } from '@cuewise/shared';
 import { quoteFactory } from '@cuewise/test-utils/factories';
 import type { Mock } from 'vitest';
 
@@ -318,7 +318,9 @@ export function createForwardHistoryClearScenario() {
 }
 
 /**
- * Creates a test scenario for favorites filter with store state ready to use
+ * Creates a test scenario for favorites filter with store state ready to use.
+ * Uses OR filter logic: when showFavoritesOnly=true and other filters disabled,
+ * only favorites will be returned.
  */
 export function createFavoritesScenario(options: {
   showFavoritesOnly: boolean;
@@ -340,8 +342,9 @@ export function createFavoritesScenario(options: {
       isLoading: false,
       error: null,
       showFavoritesOnly,
-      enabledCategories: [...ALL_QUOTE_CATEGORIES] as QuoteCategory[],
-      showCustomQuotes: true,
+      // Disable other filters to test favorites in isolation with OR logic
+      enabledCategories: [] as QuoteCategory[],
+      showCustomQuotes: false,
     },
     favoriteQuotes,
     nonFavoriteQuotes,

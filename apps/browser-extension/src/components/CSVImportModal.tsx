@@ -1,8 +1,10 @@
 import {
+  ALL_QUOTE_CATEGORIES,
   type CSVParseResult,
   type CSVQuoteRow,
   generateQuoteCSVTemplate,
   parseQuotesCSV,
+  QUOTE_CATEGORIES,
   validateCSVFile,
 } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
@@ -10,6 +12,8 @@ import {
   AlertCircle,
   AlertTriangle,
   CheckCircle2,
+  ClipboardPaste,
+  Copy,
   Download,
   FileSpreadsheet,
   FolderPlus,
@@ -19,21 +23,29 @@ import {
 import type React from 'react';
 import { useRef, useState } from 'react';
 import { useQuoteStore } from '../stores/quote-store';
+import { useToastStore } from '../stores/toast-store';
 
 interface CSVImportModalProps {
   onClose: () => void;
 }
 
 type CollectionMode = 'none' | 'new' | 'existing';
+type InputMode = 'file' | 'paste';
 
 export const CSVImportModal: React.FC<CSVImportModalProps> = ({ onClose }) => {
   const { collections, createCollection, bulkAddQuotes } = useQuoteStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Input mode state
+  const [inputMode, setInputMode] = useState<InputMode>('file');
+
   // File state
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [parseResult, setParseResult] = useState<CSVParseResult | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
+
+  // Paste state
+  const [pastedText, setPastedText] = useState('');
 
   // Collection state
   const [collectionMode, setCollectionMode] = useState<CollectionMode>('none');
@@ -124,6 +136,67 @@ export const CSVImportModal: React.FC<CSVImportModalProps> = ({ onClose }) => {
     }
   };
 
+  // Handle pasted text parsing
+  const handleParsePastedText = () => {
+    if (!pastedText.trim()) {
+      setFileError('Please paste some CSV text');
+      setParseResult(null);
+      return;
+    }
+
+    setFileError(null);
+    setImportComplete(false);
+
+    try {
+      const result = parseQuotesCSV(pastedText);
+      setParseResult(result);
+
+      // If a source is common among quotes, suggest it as collection name
+      if (result.valid.length > 0) {
+        const sources = result.valid
+          .map((q) => q.source)
+          .filter((s): s is string => !!s && s.trim() !== '');
+        if (sources.length > 0) {
+          const sourceCounts = sources.reduce(
+            (acc, s) => {
+              acc[s] = (acc[s] || 0) + 1;
+              return acc;
+            },
+            {} as Record<string, number>
+          );
+          const mostCommon = Object.entries(sourceCounts).sort((a, b) => b[1] - a[1])[0];
+          if (mostCommon && mostCommon[1] >= result.valid.length / 2) {
+            setNewCollectionName(mostCommon[0]);
+          }
+        }
+      }
+    } catch {
+      setFileError('Failed to parse CSV text');
+    }
+  };
+
+  // Clear pasted text
+  const handleClearPaste = () => {
+    setPastedText('');
+    setParseResult(null);
+    setFileError(null);
+    setImportComplete(false);
+  };
+
+  // Handle input mode switch
+  const handleInputModeChange = (mode: InputMode) => {
+    setInputMode(mode);
+    // Clear state when switching modes
+    setSelectedFile(null);
+    setPastedText('');
+    setParseResult(null);
+    setFileError(null);
+    setImportComplete(false);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   // Download template
   const handleDownloadTemplate = () => {
     const template = generateQuoteCSVTemplate();
@@ -136,6 +209,48 @@ export const CSVImportModal: React.FC<CSVImportModalProps> = ({ onClose }) => {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+  };
+
+  // Copy AI prompt to clipboard
+  const handleCopyAIPrompt = async () => {
+    const categoryList = ALL_QUOTE_CATEGORIES.map(
+      (cat) => `  - ${cat}: ${QUOTE_CATEGORIES[cat]}`
+    ).join('\n');
+
+    const prompt = `Generate a CSV file with motivational quotes for a personal quote collection app.
+
+## CSV Format
+The CSV must have these columns:
+- text (required): The quote text
+- author (required): Who said/wrote the quote
+- category (optional): One of the categories below
+- source (optional): Book, speech, or reference where the quote is from
+- notes (optional): Personal notes about the quote
+
+## Available Categories
+${categoryList}
+
+## Requirements
+1. Generate 20-30 high-quality, meaningful quotes
+2. Include a mix of categories for variety
+3. Use accurate attributions (don't make up authors)
+4. Include the source when known (book title, speech name, etc.)
+5. Output as valid CSV with proper escaping for quotes containing commas
+
+## Example Output
+text,author,category,source,notes
+"The only way to do great work is to love what you do.",Steve Jobs,success,Stanford Commencement Speech 2005,
+"Be the change you wish to see in the world.",Mahatma Gandhi,inspiration,,Often misattributed
+"The mind is everything. What you think you become.",Buddha,mindfulness,,
+
+Please generate the CSV now, focusing on [SPECIFY YOUR THEME OR TOPIC HERE - e.g., "stoic philosophy", "entrepreneurship", "mindfulness and meditation", "leadership wisdom"].`;
+
+    try {
+      await navigator.clipboard.writeText(prompt);
+      useToastStore.getState().success('AI prompt copied to clipboard');
+    } catch {
+      useToastStore.getState().error('Failed to copy to clipboard');
+    }
   };
 
   // Handle import
@@ -252,57 +367,136 @@ export const CSVImportModal: React.FC<CSVImportModalProps> = ({ onClose }) => {
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {/* File Upload Area */}
-          {!selectedFile ? (
-            <div className="space-y-3">
-              <button
-                type="button"
-                onDrop={handleDrop}
-                onDragOver={handleDragOver}
-                onClick={() => fileInputRef.current?.click()}
-                className={cn(
-                  'w-full border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all',
-                  'hover:border-primary-400 hover:bg-primary-50/50 dark:hover:bg-primary-900/10',
-                  'focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2',
-                  fileError ? 'border-red-400 bg-red-50/50' : 'border-border bg-transparent'
-                )}
-              >
-                <Upload className="w-12 h-12 mx-auto text-tertiary mb-4" />
-                <p className="text-primary font-medium mb-1">Drop your CSV file here</p>
-                <p className="text-sm text-secondary">or click to browse</p>
-                <p className="text-xs text-tertiary mt-3">
-                  Required columns: text, author. Optional: category, source, notes
-                </p>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".csv"
-                  onChange={handleInputChange}
-                  className="hidden"
-                />
-              </button>
-              <button
-                type="button"
-                onClick={handleDownloadTemplate}
-                className="flex items-center justify-center gap-2 w-full py-2 text-sm text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 transition-colors"
-              >
-                <Download className="w-4 h-4" />
-                Download CSV Template
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center justify-between p-3 bg-surface-variant rounded-lg border border-border">
-              <div className="flex items-center gap-3">
-                <FileSpreadsheet className="w-5 h-5 text-primary-600" />
-                <span className="text-primary font-medium">{selectedFile.name}</span>
+          {/* Input Mode Tabs */}
+          <div className="flex gap-2 p-1 bg-surface-variant rounded-lg">
+            <button
+              type="button"
+              onClick={() => handleInputModeChange('file')}
+              className={cn(
+                'flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all',
+                inputMode === 'file'
+                  ? 'bg-surface text-primary shadow-sm'
+                  : 'text-secondary hover:text-primary'
+              )}
+            >
+              <Upload className="w-4 h-4" />
+              Upload File
+            </button>
+            <button
+              type="button"
+              onClick={() => handleInputModeChange('paste')}
+              className={cn(
+                'flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all',
+                inputMode === 'paste'
+                  ? 'bg-surface text-primary shadow-sm'
+                  : 'text-secondary hover:text-primary'
+              )}
+            >
+              <ClipboardPaste className="w-4 h-4" />
+              Paste Text
+            </button>
+          </div>
+
+          {/* File Upload Mode */}
+          {inputMode === 'file' &&
+            (!selectedFile ? (
+              <div className="space-y-3">
+                <button
+                  type="button"
+                  onDrop={handleDrop}
+                  onDragOver={handleDragOver}
+                  onClick={() => fileInputRef.current?.click()}
+                  className={cn(
+                    'w-full border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all',
+                    'hover:border-primary-400 hover:bg-primary-50/50 dark:hover:bg-primary-900/10',
+                    'focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2',
+                    fileError ? 'border-red-400 bg-red-50/50' : 'border-border bg-transparent'
+                  )}
+                >
+                  <Upload className="w-12 h-12 mx-auto text-tertiary mb-4" />
+                  <p className="text-primary font-medium mb-1">Drop your CSV file here</p>
+                  <p className="text-sm text-secondary">or click to browse</p>
+                  <p className="text-xs text-tertiary mt-3">
+                    Required columns: text, author. Optional: category, source, notes
+                  </p>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".csv"
+                    onChange={handleInputChange}
+                    className="hidden"
+                  />
+                </button>
+                <div className="flex items-center justify-center gap-4">
+                  <button
+                    type="button"
+                    onClick={handleDownloadTemplate}
+                    className="flex items-center gap-2 py-2 text-sm text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 transition-colors"
+                  >
+                    <Download className="w-4 h-4" />
+                    Download CSV Template
+                  </button>
+                </div>
               </div>
-              <button
-                type="button"
-                onClick={handleClearFile}
-                className="p-1 text-secondary hover:text-red-500 transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
+            ) : (
+              <div className="flex items-center justify-between p-3 bg-surface-variant rounded-lg border border-border">
+                <div className="flex items-center gap-3">
+                  <FileSpreadsheet className="w-5 h-5 text-primary-600" />
+                  <span className="text-primary font-medium">{selectedFile.name}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleClearFile}
+                  className="p-1 text-secondary hover:text-red-500 transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+
+          {/* Paste Text Mode */}
+          {inputMode === 'paste' && (
+            <div className="space-y-3">
+              <div className="relative">
+                <textarea
+                  value={pastedText}
+                  onChange={(e) => setPastedText(e.target.value)}
+                  placeholder={`Paste your CSV text here...\n\nExample:\ntext,author,category\n"The only way to do great work is to love what you do.",Steve Jobs,inspiration`}
+                  className={cn(
+                    'w-full h-48 px-3 py-2 rounded-lg border bg-surface text-primary placeholder:text-tertiary',
+                    'focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500',
+                    'font-mono text-sm resize-none',
+                    fileError ? 'border-red-400' : 'border-border'
+                  )}
+                />
+                {pastedText && (
+                  <button
+                    type="button"
+                    onClick={handleClearPaste}
+                    className="absolute top-2 right-2 p-1 text-secondary hover:text-red-500 transition-colors bg-surface rounded"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={handleCopyAIPrompt}
+                  className="flex items-center gap-2 py-2 text-sm text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 transition-colors"
+                >
+                  <Copy className="w-4 h-4" />
+                  Copy AI Prompt
+                </button>
+                <button
+                  type="button"
+                  onClick={handleParsePastedText}
+                  disabled={!pastedText.trim()}
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Parse CSV
+                </button>
+              </div>
             </div>
           )}
 
