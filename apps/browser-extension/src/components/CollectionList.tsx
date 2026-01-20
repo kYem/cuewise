@@ -89,11 +89,21 @@ export const CollectionList: React.FC = () => {
         ? collectionQuotes.map((q) => `  - "${q.text}" — ${q.author} (${q.category})`).join('\n')
         : '  (No quotes yet)';
 
+    // Check if all quotes are from the same author
+    const uniqueAuthors = new Set(collectionQuotes.map((q) => q.author));
+    const isSingleAuthor = uniqueAuthors.size === 1 && collectionQuotes.length > 0;
+    const singleAuthorName = isSingleAuthor ? collectionQuotes[0].author : null;
+
+    const authorInstruction = isSingleAuthor
+      ? `3. All quotes must be from **${singleAuthorName}** (this is an author-specific collection)`
+      : '3. Offer variety in authors and perspectives';
+
     const prompt = `Generate more quotes for my "${collection.name}" collection.
 
 ## Collection Details
 - **Name**: ${collection.name}
 ${collection.description ? `- **Description**: ${collection.description}` : ''}
+${isSingleAuthor ? `- **Author Focus**: ${singleAuthorName}` : ''}
 
 ## Existing Quotes in Collection (${collectionQuotes.length} quotes)
 ${existingQuotesList}
@@ -102,7 +112,7 @@ ${existingQuotesList}
 Generate 10-15 NEW quotes that complement this collection. The new quotes should:
 1. Match the theme/vibe of the existing quotes
 2. NOT duplicate any existing quotes
-3. Offer variety in authors and perspectives
+${authorInstruction}
 4. Be authentic, verified quotes (not made up)
 
 ## Output Format (CSV)
