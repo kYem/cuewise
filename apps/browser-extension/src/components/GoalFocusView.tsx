@@ -55,7 +55,7 @@ export const GoalFocusView: React.FC<GoalFocusViewProps> = ({ showAddInput, onCl
     return (
       <div className="flex flex-col items-center justify-center py-8">
         <div className="w-full max-w-xl">
-          <GoalInput />
+          <GoalInput variant="minimal" />
         </div>
       </div>
     );
@@ -76,7 +76,7 @@ export const GoalFocusView: React.FC<GoalFocusViewProps> = ({ showAddInput, onCl
         {/* Add another task */}
         {showAddInDone ? (
           <div className="w-full max-w-xl mt-6">
-            <GoalInput autoFocus onTaskAdded={() => setShowAddInDone(false)} />
+            <GoalInput variant="minimal" autoFocus onTaskAdded={() => setShowAddInDone(false)} />
           </div>
         ) : (
           <button
@@ -157,7 +157,7 @@ export const GoalFocusView: React.FC<GoalFocusViewProps> = ({ showAddInput, onCl
       {/* Add Goal Input (when shown) */}
       {showAddInput && (
         <div className="w-full max-w-xl mt-6">
-          <GoalInput onTaskAdded={onCloseAddInput} />
+          <GoalInput variant="minimal" onTaskAdded={onCloseAddInput} />
         </div>
       )}
     </div>
