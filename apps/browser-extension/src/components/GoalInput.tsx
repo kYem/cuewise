@@ -64,33 +64,116 @@ interface SelectedGoalIndicatorProps {
   onRemove: () => void;
 }
 
+const INDICATOR_STYLES = {
+  minimal: {
+    container: 'flex items-center gap-1 text-xs text-white/80 mt-2',
+    button: 'ml-1 text-white/60 hover:text-white underline',
+    label: 'Linked to:',
+    textShadow: '0 1px 2px rgba(0,0,0,0.3)',
+  },
+  boxed: {
+    container: 'flex items-center gap-1 text-xs text-primary-600',
+    button: 'ml-1 text-secondary hover:text-primary underline',
+    label: 'Will link to:',
+    textShadow: undefined,
+  },
+} as const;
+
 function SelectedGoalIndicator({
   goalText,
   variant,
   onRemove,
 }: SelectedGoalIndicatorProps): React.ReactElement {
-  const isMinimal = variant === 'minimal';
-  const containerClass = isMinimal
-    ? 'flex items-center gap-1 text-xs text-white/80 mt-2'
-    : 'flex items-center gap-1 text-xs text-primary-600';
-  const buttonClass = isMinimal
-    ? 'ml-1 text-white/60 hover:text-white underline'
-    : 'ml-1 text-secondary hover:text-primary underline';
-  const labelText = isMinimal ? 'Linked to:' : 'Will link to:';
+  const styles = INDICATOR_STYLES[variant];
 
   return (
-    <div
-      className={containerClass}
-      style={isMinimal ? { textShadow: '0 1px 2px rgba(0,0,0,0.3)' } : undefined}
-    >
+    <div className={styles.container} style={{ textShadow: styles.textShadow }}>
       <Link2 className="w-3 h-3" />
       <span>
-        {labelText} {goalText}
+        {styles.label} {goalText}
       </span>
-      <button type="button" onClick={onRemove} className={buttonClass}>
+      <button type="button" onClick={onRemove} className={styles.button}>
         Remove
       </button>
     </div>
+  );
+}
+
+interface GoalLinkButtonProps {
+  variant: 'minimal' | 'boxed';
+  isSelected: boolean;
+  selectedGoalText?: string;
+}
+
+const LINK_BUTTON_STYLES = {
+  minimal: {
+    base: 'p-2 rounded-full transition-all',
+    selected: 'bg-primary-500/80 text-white',
+    unselected: 'text-white/60 hover:text-white hover:bg-white/10',
+  },
+  boxed: {
+    base: 'p-3 rounded-lg border-2 transition-all',
+    selected: 'bg-primary-50 border-primary-500 text-primary-600',
+    unselected: 'border-border text-secondary hover:border-primary-300 hover:text-primary-500',
+  },
+} as const;
+
+function GoalLinkButton({
+  variant,
+  isSelected,
+  selectedGoalText,
+}: GoalLinkButtonProps): React.ReactElement {
+  const styles = LINK_BUTTON_STYLES[variant];
+  const title = isSelected ? `Linked to: ${selectedGoalText ?? 'Goal'}` : 'Link to goal';
+
+  return (
+    <button
+      type="button"
+      className={`${styles.base} ${isSelected ? styles.selected : styles.unselected}`}
+      title={title}
+    >
+      <Link2 className="w-5 h-5" />
+    </button>
+  );
+}
+
+interface GoalPickerProps {
+  variant: 'minimal' | 'boxed';
+  isOpen: boolean;
+  onOpenChange: (open: boolean) => void;
+  activeGoals: Goal[];
+  selectedGoalId: string | null;
+  selectedGoalText?: string;
+  getGoalProgress: (goalId: string) => { percent: number } | null;
+  onSelect: (goalId: string | null) => void;
+}
+
+function GoalPicker({
+  variant,
+  isOpen,
+  onOpenChange,
+  activeGoals,
+  selectedGoalId,
+  selectedGoalText,
+  getGoalProgress,
+  onSelect,
+}: GoalPickerProps): React.ReactElement {
+  return (
+    <Popover open={isOpen} onOpenChange={onOpenChange}>
+      <PopoverTrigger asChild>
+        <GoalLinkButton
+          variant={variant}
+          isSelected={!!selectedGoalId}
+          selectedGoalText={selectedGoalText}
+        />
+      </PopoverTrigger>
+      <GoalPickerContent
+        activeGoals={activeGoals}
+        selectedGoalId={selectedGoalId}
+        getGoalProgress={getGoalProgress}
+        onSelect={onSelect}
+      />
+    </Popover>
   );
 }
 
@@ -198,29 +281,16 @@ export function GoalInput({
 
         {hasGoals && (
           <div className="mt-4">
-            <Popover open={isPickerOpen} onOpenChange={setIsPickerOpen}>
-              <PopoverTrigger asChild>
-                <button
-                  type="button"
-                  className={`p-2 rounded-full transition-all ${
-                    selectedGoalId
-                      ? 'bg-primary-500/80 text-white'
-                      : 'text-white/60 hover:text-white hover:bg-white/10'
-                  }`}
-                  title={
-                    selectedGoalId ? `Linked to: ${selectedGoal?.text ?? 'Goal'}` : 'Link to goal'
-                  }
-                >
-                  <Link2 className="w-5 h-5" />
-                </button>
-              </PopoverTrigger>
-              <GoalPickerContent
-                activeGoals={activeGoals}
-                selectedGoalId={selectedGoalId}
-                getGoalProgress={getGoalProgress}
-                onSelect={handleGoalSelect}
-              />
-            </Popover>
+            <GoalPicker
+              variant="minimal"
+              isOpen={isPickerOpen}
+              onOpenChange={setIsPickerOpen}
+              activeGoals={activeGoals}
+              selectedGoalId={selectedGoalId}
+              selectedGoalText={selectedGoal?.text}
+              getGoalProgress={getGoalProgress}
+              onSelect={handleGoalSelect}
+            />
           </div>
         )}
 
@@ -251,29 +321,16 @@ export function GoalInput({
         />
 
         {hasGoals && (
-          <Popover open={isPickerOpen} onOpenChange={setIsPickerOpen}>
-            <PopoverTrigger asChild>
-              <button
-                type="button"
-                className={`p-3 rounded-lg border-2 transition-all ${
-                  selectedGoalId
-                    ? 'bg-primary-50 border-primary-500 text-primary-600'
-                    : 'border-border text-secondary hover:border-primary-300 hover:text-primary-500'
-                }`}
-                title={
-                  selectedGoalId ? `Linked to: ${selectedGoal?.text ?? 'Goal'}` : 'Link to goal'
-                }
-              >
-                <Link2 className="w-5 h-5" />
-              </button>
-            </PopoverTrigger>
-            <GoalPickerContent
-              activeGoals={activeGoals}
-              selectedGoalId={selectedGoalId}
-              getGoalProgress={getGoalProgress}
-              onSelect={handleGoalSelect}
-            />
-          </Popover>
+          <GoalPicker
+            variant="boxed"
+            isOpen={isPickerOpen}
+            onOpenChange={setIsPickerOpen}
+            activeGoals={activeGoals}
+            selectedGoalId={selectedGoalId}
+            selectedGoalText={selectedGoal?.text}
+            getGoalProgress={getGoalProgress}
+            onSelect={handleGoalSelect}
+          />
         )}
 
         <button
