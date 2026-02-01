@@ -244,9 +244,10 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
           <p
             className={cn(
               getQuoteFontSize(currentQuote.text),
-              'font-semibold text-primary leading-relaxed text-center text-balance transition-all duration-300 drop-shadow-sm',
+              'font-semibold text-primary leading-relaxed text-center text-balance transition-all duration-300',
               isBottom ? 'mb-2' : 'mb-6'
             )}
+            style={{ textShadow: '0 2px 8px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.3)' }}
           >
             {currentQuote.text}
           </p>
@@ -264,6 +265,7 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
                   isBottom ? 'text-base md:text-lg' : 'text-xl md:text-2xl',
                   currentQuote.source && 'cursor-help'
                 )}
+                style={{ textShadow: '0 1px 4px rgba(0,0,0,0.3)' }}
                 title={currentQuote.source ? `Source: ${currentQuote.source}` : undefined}
               >
                 {enableQuoteAnimation ? (
