@@ -81,10 +81,7 @@ const quotes = await storage.get<Quote[]>('quotes');
 
 ### 3. Pure Business Logic in Shared Package
 
-`packages/shared/` contains:
-- **Types**: Quote, Goal, Reminder, PomodoroSession, Settings, InsightsData
-- **Constants**: QUOTE_CATEGORIES, CATEGORY_COLORS, DEFAULT_SETTINGS
-- **Utils**: Date formatting, random selection, streak calculation
+`packages/shared/` contains types, constants, utilities, CSV parsing, and the logger. Also includes analytics types (InsightsData, AdvancedAnalytics), YouTube/sound types, and import/export types.
 
 **Key Rule**: This package must be platform-agnostic (no browser/DOM/React dependencies).
 
@@ -95,93 +92,121 @@ cuewise/
 ├── apps/
 │   └── browser-extension/
 │       ├── src/
-│       │   ├── components/      # React components
-│       │   │   ├── QuoteDisplay.tsx
-│       │   │   ├── GoalsSection.tsx
-│       │   │   ├── AddQuoteForm.tsx
-│       │   │   └── Clock.tsx
-│       │   ├── stores/          # Zustand stores
+│       │   ├── components/           # ~60 React components
+│       │   │   ├── FocusMode/        # Focus mode (timer, quote, controls, background)
+│       │   │   ├── goals/            # Goal cards, forms, pickers
+│       │   │   ├── settings/         # Settings panels (pomodoro, notifications, focus, etc.)
+│       │   │   ├── sounds/           # Soundscapes, YouTube, mini player
+│       │   │   ├── __fixtures__/     # Test fixtures for component tests
+│       │   │   ├── NewTabPage.tsx     # Home page
+│       │   │   ├── PomodoroPage.tsx   # Pomodoro timer page
+│       │   │   ├── InsightsPage.tsx   # Analytics page
+│       │   │   ├── QuoteManagementPage.tsx  # Quote management
+│       │   │   ├── GoalsPage.tsx      # Goals overview
+│       │   │   └── ...               # QuoteDisplay, Clock, Modals, etc.
+│       │   ├── stores/               # Zustand stores
 │       │   │   ├── quote-store.ts
-│       │   │   └── goal-store.ts
+│       │   │   ├── goal-store.ts
+│       │   │   ├── pomodoro-store.ts
+│       │   │   ├── reminder-store.ts
+│       │   │   ├── settings-store.ts
+│       │   │   ├── focus-mode-store.ts
+│       │   │   ├── sounds-store.ts
+│       │   │   ├── insights-store.ts
+│       │   │   ├── toast-store.ts
+│       │   │   └── __fixtures__/     # Test fixtures for store tests
 │       │   ├── data/
 │       │   │   └── seed-quotes.ts
-│       │   ├── App.tsx
+│       │   ├── App.tsx               # Hash-based routing (#pomodoro, #insights, etc.)
 │       │   └── main.tsx
-│       ├── manifest.json        # Extension manifest (Manifest V3)
-│       └── dist/                # Build output (load in Chrome)
+│       ├── manifest.json             # Extension manifest (Manifest V3)
+│       └── dist/                     # Build output (load in Chrome)
 │
 ├── packages/
 │   ├── shared/
 │   │   └── src/
-│   │       ├── types.ts         # Core TypeScript interfaces
-│   │       ├── constants.ts     # Shared constants
-│   │       ├── utils.ts         # Pure utility functions
+│   │       ├── types.ts              # 50+ interfaces/types
+│   │       ├── constants.ts          # Categories, themes, sounds, templates
+│   │       ├── utils.ts              # Pure utility functions
+│   │       ├── csv-utils.ts          # CSV parsing for bulk import
+│   │       ├── logger.ts             # Configurable logger
 │   │       └── index.ts
 │   │
 │   ├── storage/
 │   │   └── src/
-│   │       ├── storage-interface.ts      # StorageAdapter interface
+│   │       ├── storage-interface.ts
 │   │       ├── adapters/
 │   │       │   ├── chrome-storage-adapter.ts
 │   │       │   ├── local-storage-adapter.ts
 │   │       │   └── async-storage-adapter.ts
-│   │       ├── storage-helpers.ts        # Typed helper functions
+│   │       ├── chrome-storage.ts     # Chrome storage API wrapper
+│   │       ├── storage-helpers.ts    # Typed helper functions
+│   │       └── index.ts
+│   │
+│   ├── test-utils/
+│   │   └── src/
+│   │       ├── factories/            # quote, goal, pomodoro, reminder factories
+│   │       ├── mocks/                # zustand, chrome-storage mocks
+│   │       ├── fixtures/             # settings fixtures
 │   │       └── index.ts
 │   │
 │   └── ui/
 │       └── src/
-│           ├── components/      # Shared React components
-│           └── lib/            # UI utilities (cn helper)
+│           ├── components/           # Button, Badge, Card, Input, Toast, Chart, etc.
+│           └── lib/                  # cn() helper
 │
 ├── pnpm-workspace.yaml
 ├── turbo.json
-├── biome.json                   # Biome configuration
-├── README.md
-├── ARCHITECTURE.md
-├── LINTING.md
-└── CLAUDE.md                    # This file
+├── biome.json
+└── CLAUDE.md
 ```
+
+## Pages & Routing
+
+Hash-based routing in `App.tsx`:
+- `#` → `NewTabPage` (home - quote display, clock, goals)
+- `#pomodoro` → `PomodoroPage` (timer, heatmap, active widget)
+- `#insights` → `InsightsPage` (analytics, trends, charts)
+- `#quotes` → `QuoteManagementPage` (browse, filter, bulk actions, import/export)
+- `#goals` → `GoalsPage` (goals overview, completion charts)
 
 ## Key Data Types
 
-### Quote
-```typescript
-interface Quote {
-  id: string;
-  text: string;
-  author: string;
-  category: QuoteCategory;  // 10 categories
-  isCustom: boolean;        // User-created quote
-  isFavorite: boolean;
-  isHidden: boolean;
-  viewCount: number;
-  lastViewed?: string;      // ISO date
-  source?: string;          // Book, URL, reference
-  notes?: string;           // Personal notes
-}
-```
+All types are in `packages/shared/src/types.ts`. Key interfaces:
 
-### Goal
-```typescript
-interface Goal {
-  id: string;
-  text: string;
-  completed: boolean;
-  createdAt: string;        // ISO date
-  date: string;             // YYYY-MM-DD
-}
-```
+- **Quote**: id, text, author, category (10 types), isCustom, isFavorite, isHidden, viewCount, lastViewed, source, notes, `collectionIds`
+- **QuoteCollection**: id, name, description, createdAt, updatedAt
+- **Goal**: id, text, completed, createdAt, date, `type` ('task' | 'objective'), `parentId`, `transferCount`, `description`
+- **Reminder**: id, text, dueDate, completed, notified, recurring, category ('health' | 'productivity' | 'personal'), completedAt
+- **PomodoroSession**: id, startedAt, completedAt, interrupted, duration, type ('work' | 'break' | 'longBreak'), goalId
+- **Settings**: 50+ properties covering pomodoro, notifications, UI themes, focus mode, goals, quotes
+- **InsightsData**: Analytics data — streak, completion rates, focus time, category view counts
+- **AdvancedAnalytics**: dailyTrends, weeklyTrends, monthlyTrends, goalCompletionRate, pomodoroHeatmap
+
+### Key Type Aliases
+- `QuoteCategory`: 'inspiration' | 'learning' | 'productivity' | 'mindfulness' | 'success' | 'creativity' | 'resilience' | 'leadership' | 'health' | 'growth'
+- `ColorTheme`: 'purple' | 'forest' | 'rose' | 'glass'
+- `LayoutDensity`: 'compact' | 'comfortable' | 'spacious'
+- `QuoteDisplayMode`: 'normal' | 'compact' | 'bottom' | 'hidden'
+- `FocusImageCategory`: 'nature' | 'forest' | 'ocean' | 'mountains' | 'minimal' | 'dark'
 
 ### Storage Keys
 All storage keys are defined in `packages/shared/src/types.ts`:
 ```typescript
-const STORAGE_KEYS = {
-  QUOTES: 'quotes',
+STORAGE_KEYS = {
+  QUOTES: 'quotes',              // Legacy
+  SEED_QUOTES: 'seedQuotes',     // Always in local storage
+  CUSTOM_QUOTES: 'customQuotes', // In sync storage when enabled
   GOALS: 'goals',
   REMINDERS: 'reminders',
   POMODORO_SESSIONS: 'pomodoroSessions',
+  POMODORO_STATE: 'pomodoroState',
   SETTINGS: 'settings',
   CURRENT_QUOTE: 'currentQuote',
+  CUSTOM_YOUTUBE_PLAYLISTS: 'customYoutubePlaylists',
+  YOUTUBE_PROGRESS: 'youtubeProgress',
+  DAILY_BACKGROUND: 'dailyBackground',
+  COLLECTIONS: 'collections',
 }
 ```
 
@@ -189,139 +214,55 @@ const STORAGE_KEYS = {
 
 Uses **Zustand** for state management. Stores are in `apps/browser-extension/src/stores/`.
 
-### Example: Quote Store Pattern
-```typescript
-import { create } from 'zustand';
-import { getQuotes, setQuotes } from '@cuewise/storage';
-import { getRandomQuote } from '@cuewise/shared';
+### Stores
 
-interface QuoteStore {
-  quotes: Quote[];
-  currentQuote: Quote | null;
-  isLoading: boolean;
+| Store | Purpose |
+|-------|---------|
+| `quote-store` | Quote CRUD, history navigation, favorites, hiding |
+| `goal-store` | Goals CRUD, completion tracking, transfer between days |
+| `pomodoro-store` | Timer state, sessions, work/break cycles |
+| `reminder-store` | Reminders CRUD, recurring reminders, notifications |
+| `settings-store` | All user settings (50+ properties) |
+| `focus-mode-store` | Focus mode state, background images |
+| `sounds-store` | Ambient sounds, YouTube playback, playlists |
+| `insights-store` | Analytics data, trends, heatmaps |
+| `toast-store` | Toast notifications with auto-logging |
 
-  // Actions
-  initialize: () => Promise<void>;
-  refreshQuote: () => Promise<void>;
-  toggleFavorite: (quoteId: string) => Promise<void>;
-}
-
-export const useQuoteStore = create<QuoteStore>((set, get) => ({
-  quotes: [],
-  currentQuote: null,
-  isLoading: true,
-
-  initialize: async () => {
-    // Load from storage, seed if empty
-    let quotes = await getQuotes();
-    if (quotes.length === 0) {
-      quotes = SEED_QUOTES;
-      await setQuotes(quotes);
-    }
-    set({ quotes, isLoading: false });
-  },
-
-  // Other actions...
-}));
-```
-
-**Key Pattern**:
-- Store handles both local state AND persistence
-- Uses storage helpers from `@cuewise/storage`
-- Uses business logic from `@cuewise/shared`
+**Key Pattern**: Each store handles both local state AND persistence via `@cuewise/storage` helpers, and uses business logic from `@cuewise/shared`.
 
 ## Error Handling & Logging Pattern
 
 ### Use the Logger, Not console.error
 
-**IMPORTANT**: Never use `console.error`, `console.log`, `console.warn`, or `console.debug` directly. Always use the project's logger from `@cuewise/shared`:
+**IMPORTANT**: Never use `console.error/log/warn/debug` directly. Use `logger` from `@cuewise/shared`:
 
 ```typescript
 import { logger } from '@cuewise/shared';
 
-// CORRECT
 logger.error('Error updating settings', error);
 logger.warn('Deprecated API usage');
 logger.info('User logged in');
 logger.debug('Debug info', { userId: 123 });
-
-// WRONG - Never use console directly
-console.error('Error:', error);
-console.log('Debug:', data);
 ```
 
-The logger:
-- Can be controlled via settings (log level: none, error, warn, info, debug)
-- Provides consistent formatting with timestamps and prefixes
-- Can be extended to integrate with services like Sentry or LogRocket
-- Respects user preferences for logging verbosity
+The logger is configurable via settings (log level: none, error, warn, info, debug). **Location**: `packages/shared/src/logger.ts`
 
-**Location**: `packages/shared/src/logger.ts`
+### Error Handling Pattern in Stores
 
-### Unified Error Handling with Toast Store
-
-**Problem**: Avoid repetitive error handling patterns where we call both logger and toast separately:
+Use `logger.error()` for the raw error object, then `useToastStore` for user-facing feedback:
 
 ```typescript
-// AVOID THIS PATTERN:
-const errorMessage = 'Failed to load quotes';
-logger.error(errorMessage, error);
-useToastStore.getState().error(errorMessage);
-```
-
-**Solution**: The `toast-store` automatically logs all messages to the console, providing a unified approach for error handling, warnings, and success messages.
-
-**Location**: `apps/browser-extension/src/stores/toast-store.ts`
-
-### Toast Store Pattern
-
-```typescript
-import { logger } from '@cuewise/shared';
-import { useToastStore } from '../stores/toast-store';
-
-// In Zustand store actions
 try {
-  await setSettings(updatedSettings);
-  set({ settings: updatedSettings });
+  await someAsyncOperation();
 } catch (error) {
-  logger.error('Error updating settings', error);
-  const errorMessage = 'Failed to update settings. Please try again.';
+  logger.error('Error context for debugging', error);
+  const errorMessage = 'User-friendly error message';
   set({ error: errorMessage });
   useToastStore.getState().error(errorMessage);
 }
 ```
 
-**Key Features**:
-- **Controllable logging**: Logger respects user's log level settings
-- **Type-safe**: Uses TypeScript for error typing
-- **Consistent UX**: User sees toast notification, developer sees formatted logs
-- **Three severity levels**: `error`, `warning`, `success`
-
-### Best Practices
-
-1. **Always log the underlying error object** first with `logger.error()` for debugging
-2. **Create user-friendly error messages** for the toast notification
-3. **Use toast store for user-facing feedback**:
-   ```typescript
-   useToastStore.getState().error('User-friendly message');
-   useToastStore.getState().warning('Warning message');
-   useToastStore.getState().success('Success message');
-   ```
-
-4. **Pattern for store error handling**:
-   ```typescript
-   try {
-     // operation
-     await someAsyncOperation();
-   } catch (error) {
-     logger.error('Error context for debugging', error);
-     const errorMessage = 'User-friendly error message';
-     set({ error: errorMessage }); // Update store error state
-     useToastStore.getState().error(errorMessage); // Show user notification
-   }
-   ```
-
-5. **Don't duplicate logging**: Since toast store logs automatically, avoid calling both `logger` and toast for the same message
+Toast store supports three levels: `error()`, `warning()`, `success()`. **Location**: `apps/browser-extension/src/stores/toast-store.ts`
 
 ## Component Patterns
 
@@ -345,23 +286,10 @@ import { useQuoteStore } from '../stores/quote-store';
 ```
 
 ### Styling Pattern
-- Uses **Tailwind CSS** utility classes
+- **Tailwind CSS** utility classes
 - Category colors from `CATEGORY_COLORS` constant
 - `cn()` helper for conditional classes (from `@cuewise/ui`)
-
-```typescript
-const categoryColor = CATEGORY_COLORS[quote.category];
-
-<span
-  className={cn(
-    'rounded-full transition-all',
-    isFavorite ? 'bg-red-500' : 'bg-white'
-  )}
-  style={{ backgroundColor: categoryColor }}
->
-  {category}
-</span>
-```
+- 4 color themes: purple, forest, rose, glass (glass uses Unsplash background images)
 
 ## Common Development Tasks
 
@@ -373,26 +301,6 @@ const categoryColor = CATEGORY_COLORS[quote.category];
 4. **Create Zustand store** in `apps/browser-extension/src/stores/`
 5. **Create components** in `apps/browser-extension/src/components/`
 6. **Wire up in App.tsx**
-
-### Adding a New Shared Package
-
-```bash
-# Create package directory
-mkdir -p packages/new-package/src
-
-# Create package.json
-{
-  "name": "@cuewise/new-package",
-  "version": "1.0.0",
-  "private": true,
-  "main": "./src/index.ts",
-  "dependencies": {
-    "@cuewise/shared": "workspace:*"
-  }
-}
-
-# Update pnpm-workspace.yaml (already includes packages/*)
-```
 
 ### Running the Extension
 
@@ -545,123 +453,14 @@ if (condition) doSomething();
 
 ### Test Fixtures Pattern
 
-**Use fixtures to eliminate duplication and improve maintainability.** Store reusable test data, mock builders, and assertion helpers in `__fixtures__` directories alongside test files.
+Store reusable test data, mock builders, and assertion helpers in `__fixtures__` directories alongside test files:
 
-**Example Structure**:
 ```
-src/
-  stores/
-    __fixtures__/
-      quote-store.fixtures.ts    # Reusable test helpers for store tests
-    quote-store.ts
-    quote-store.test.ts
-  components/
-    __fixtures__/
-      quote-display.fixtures.ts  # Reusable mocks for component tests
-    QuoteDisplay.tsx
-    QuoteDisplay.test.tsx
+src/stores/__fixtures__/quote-store.fixtures.ts   # Data builders, state presets, assertions
+src/components/__fixtures__/quote-display.fixtures.ts  # Mock stores, default props
 ```
 
-**Fixture Categories**:
-
-1. **Test Data Builders** - Create consistent test data
-```typescript
-// quote-store.fixtures.ts
-export function createNavigationQuotes(count = 3) {
-  const quotes = quoteFactory.buildList(count);
-  return {
-    quotes,
-    quote1: quotes[0],
-    quote2: quotes[1],
-    quote3: quotes[2],
-  };
-}
-```
-
-2. **State Presets** - Pre-configured states for common scenarios
-```typescript
-export const EMPTY_STORE_STATE = {
-  quotes: [],
-  currentQuote: null,
-  isLoading: true,
-  error: null,
-  quoteHistory: [],
-  historyIndex: 0,
-};
-
-export function createAtBeginningState(quotes: Quote[], history: Quote[]) {
-  return {
-    quotes,
-    currentQuote: history[0],
-    quoteHistory: history.map(q => q.id),
-    historyIndex: 0,  // At most recent
-    isLoading: false,
-    error: null,
-  };
-}
-```
-
-3. **Mock Builders** - Create mocks with sensible defaults
-```typescript
-// quote-display.fixtures.ts
-export function createLoadedMockStore(quote?: Quote) {
-  const currentQuote = quote || quoteFactory.build();
-  return {
-    currentQuote,
-    quotes: [currentQuote],
-    isLoading: false,
-    error: null,
-    goBack: vi.fn(),
-    goForward: vi.fn(),
-    canGoBack: vi.fn(() => false),
-    canGoForward: vi.fn(() => false),
-    // ... other methods
-  };
-}
-```
-
-4. **Assertion Helpers** - Reusable test assertions
-```typescript
-export function expectNavigationToQuote(
-  state: any,
-  expectedQuote: Quote,
-  expectedIndex: number
-) {
-  expect(state.currentQuote?.id).toBe(expectedQuote.id);
-  expect(state.historyIndex).toBe(expectedIndex);
-}
-```
-
-5. **Test Scenarios** - Complex test setups
-```typescript
-export function createHiddenQuoteScenario() {
-  const visibleQuotes = quoteFactory.buildList(2);
-  const hiddenQuote = quoteFactory.build({ isHidden: true });
-
-  return {
-    allQuotes: [visibleQuotes[0], hiddenQuote, visibleQuotes[1]],
-    visibleQuotes,
-    hiddenQuote,
-    history: [visibleQuotes[0].id, hiddenQuote.id, visibleQuotes[1].id],
-  };
-}
-```
-
-**Usage in Tests**:
-```typescript
-import { createNavigationQuotes, expectNavigationToQuote } from './__fixtures__/quote-store.fixtures';
-
-it('should navigate to previous quote', async () => {
-  const { quotes, quote1, quote2 } = createNavigationQuotes(2);
-  const state = createAtBeginningState(quotes, [quote1, quote2]);
-
-  useQuoteStore.setState(state);
-  await useQuoteStore.getState().goBack();
-
-  const newState = useQuoteStore.getState();
-  expectNavigationToQuote(newState, quote2, 1);
-});
-```
+**Fixture categories**: Test data builders, state presets, mock builders, assertion helpers, complex test scenarios. See existing `__fixtures__/` directories for examples.
 
 ### Testing Best Practices
 
@@ -753,34 +552,23 @@ pnpm install
 
 ## Future Platform Expansion
 
-### Adding Web App
-
-1. Create `apps/web` with Next.js
-2. Use `LocalStorageAdapter` for storage
-3. Reuse all `@cuewise/shared` logic
-4. Reuse `@cuewise/ui` components
-5. Add routing with Next.js App Router
-
-### Adding Mobile App
-
-1. Create `apps/mobile` with React Native
-2. Use `AsyncStorageAdapter` for storage
-3. Reuse all `@cuewise/shared` logic
-4. Create `packages/ui-native` OR use cross-platform UI library (Tamagui/NativeWind)
-
-See [ARCHITECTURE.md](./ARCHITECTURE.md) for detailed multi-platform strategy.
+See [ARCHITECTURE.md](./ARCHITECTURE.md) for adding web (Next.js) and mobile (React Native) apps. The storage adapter pattern and `@cuewise/shared` are designed for multi-platform reuse.
 
 ## Key Files Reference
 
 | File | Purpose | When to Edit |
 |------|---------|--------------|
-| `packages/shared/src/types.ts` | Core data types | Adding new entities/interfaces |
-| `packages/shared/src/constants.ts` | Shared constants | Adding categories, defaults |
+| `packages/shared/src/types.ts` | Core data types (50+ interfaces) | Adding new entities/interfaces |
+| `packages/shared/src/constants.ts` | Categories, themes, sounds, templates | Adding categories, defaults |
 | `packages/shared/src/utils.ts` | Business logic utilities | Adding platform-agnostic functions |
+| `packages/shared/src/csv-utils.ts` | CSV parsing for bulk import | Modifying import/export |
+| `packages/shared/src/logger.ts` | Configurable logger | Changing log behavior |
 | `packages/storage/src/storage-helpers.ts` | Typed storage helpers | Adding new storage operations |
-| `apps/browser-extension/src/stores/` | State management | Adding new features with state |
-| `apps/browser-extension/src/components/` | UI components | Adding new UI elements |
-| `apps/browser-extension/manifest.json` | Extension config | Changing permissions/behavior |
+| `packages/test-utils/src/` | Factories, mocks, fixtures | Adding test infrastructure |
+| `apps/browser-extension/src/stores/` | 9 Zustand stores | Adding features with state |
+| `apps/browser-extension/src/components/` | ~60 React components | Adding new UI elements |
+| `apps/browser-extension/src/App.tsx` | Hash routing, theme system | Adding new pages |
+| `apps/browser-extension/manifest.json` | Extension config (Manifest V3) | Changing permissions/behavior |
 | `turbo.json` | Build pipeline | Optimizing builds |
 | `biome.json` | Linting/formatting | Changing code style rules |
 
@@ -812,68 +600,24 @@ pnpm clean
 
 ## Testing with Playwright (Browser Automation)
 
-For manual testing, visual verification, and browser automation, you can use Playwright to interact with the extension via the dev server:
-
-### Starting the Dev Server
-
-**Important**: Always check if the dev server is already running before starting it:
+Dev server at `http://localhost:5173/` supports Playwright, Puppeteer, or Selenium for visual testing.
 
 ```bash
-# Check if port 5173 is in use
+# Check if dev server is already running
 lsof -i :5173
 
-# If nothing is returned, start the dev server
+# Start if not running
 pnpm --filter @cuewise/browser-extension dev
 ```
 
-The dev server will start on `http://localhost:5173/` with hot module replacement (HMR) enabled.
+**Key pages to test**: Home (`/`), Pomodoro (`#pomodoro`), Insights (`#insights`), Quotes (`#quotes`), Goals (`#goals`). Test density modes, color themes (4), light/dark mode, and focus mode.
 
-### Testing with Playwright
-
-1. **Navigate to the extension**
-   ```javascript
-   await page.goto('http://localhost:5173/');
-   ```
-
-2. **Interact with features**
-   ```javascript
-   // Navigate to Pomodoro timer
-   await page.getByRole('button', { name: 'Pomodoro' }).click();
-
-   // Switch density modes
-   await page.getByRole('button', { name: 'Compact' }).click();
-   await page.getByRole('button', { name: 'Spacious' }).click();
-
-   // Take screenshots for verification
-   await page.screenshot({ path: 'screenshot.png' });
-   ```
-
-3. **Test responsive features**
-   - Click "Pomodoro" to access the Pomodoro timer
-   - Click "Menu" to access settings panel
-   - Test density modes (Compact/Comfortable/Spacious)
-   - Switch between light/dark modes
-   - Test all color themes
-   - Verify layouts and animations
-
-### Benefits of Dev Server Testing
-
-- ✅ **Instant Hot Reload**: Changes reflect immediately without rebuilding
-- ✅ **Better Debugging**: Source maps, console logs, detailed error messages
-- ✅ **Faster Iteration**: No need to reload extension in Chrome
-- ✅ **Browser Automation**: Compatible with Playwright, Puppeteer, Selenium
-- ✅ **Visual Testing**: Easy to capture screenshots and verify layouts
-
-### Important Notes
-
-- **Dev Server vs Production**: The dev server uses Vite's HMR. For production testing, load the built extension from `apps/browser-extension/dist` as an unpacked extension in Chrome.
-- **Port Conflicts**: If port 5173 is in use, Vite will automatically try another port. Check the terminal output for the actual port number.
-- **Stop Dev Server**: Use `Ctrl+C` in the terminal or kill the process when done.
+**Note**: Dev server uses Vite HMR. For production testing, load `apps/browser-extension/dist` as unpacked extension in Chrome.
 
 ## Package Naming Convention
 
 - **Apps**: `@cuewise/browser-extension`, `@cuewise/web`, `@cuewise/mobile`
-- **Shared**: `@cuewise/shared`, `@cuewise/storage`, `@cuewise/ui`
+- **Shared**: `@cuewise/shared`, `@cuewise/storage`, `@cuewise/ui`, `@cuewise/test-utils`
 - **Scope**: Always use `@cuewise/` prefix
 
 ## Version Control
@@ -897,6 +641,4 @@ The dev server will start on `http://localhost:5173/` with hot module replacemen
 
 ---
 
-**Last Updated**: 2025-11-16
-
-This guide should give you (Claude) a solid understanding of the codebase structure, patterns, and conventions. When in doubt, refer to existing code in similar contexts.
+**Last Updated**: 2026-03-31
