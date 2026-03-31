@@ -33,6 +33,7 @@ import type {
   QuoteCategory,
   Reminder,
   ReminderCategory,
+  Subtask,
   WeeklyTrend,
 } from './types';
 import { EXPORT_FORMAT_VERSION } from './types';
@@ -285,6 +286,165 @@ export function calculateAvgGoalProgress(goals: Goal[]): number {
   }, 0);
 
   return Math.round(totalProgress / activeGoals.length);
+}
+
+// ============================================================================
+// Subtask utilities
+// ============================================================================
+
+/**
+ * Add a subtask to a goal. Returns a new Goal with the subtask appended.
+ */
+export function addSubtaskToGoal(goal: Goal, text: string): Goal {
+  const subtask: Subtask = {
+    id: generateId(),
+    text,
+    completed: false,
+  };
+  return {
+    ...goal,
+    subtasks: [...(goal.subtasks ?? []), subtask],
+  };
+}
+
+/**
+ * Toggle a subtask's completed status. Returns a new Goal with the updated subtask.
+ */
+export function toggleSubtaskInGoal(goal: Goal, subtaskId: string): Goal {
+  const subtasks = goal.subtasks ?? [];
+  return {
+    ...goal,
+    subtasks: subtasks.map((s) => {
+      if (s.id === subtaskId) {
+        return { ...s, completed: !s.completed };
+      }
+      return s;
+    }),
+  };
+}
+
+/**
+ * Remove a subtask from a goal. Returns a new Goal without the subtask.
+ */
+export function removeSubtaskFromGoal(goal: Goal, subtaskId: string): Goal {
+  const subtasks = goal.subtasks ?? [];
+  return {
+    ...goal,
+    subtasks: subtasks.filter((s) => s.id !== subtaskId),
+  };
+}
+
+/**
+ * Get subtask progress for a goal.
+ * Returns { completed, total } counts.
+ */
+export function getSubtaskProgress(goal: Goal): { completed: number; total: number } {
+  const subtasks = goal.subtasks ?? [];
+  return {
+    completed: subtasks.filter((s) => s.completed).length,
+    total: subtasks.length,
+  };
+}
+
+// ============================================================================
+// Task duplication and reordering
+// ============================================================================
+
+/**
+ * Duplicate a goal with a new ID. Resets completed, transferCount, and generates a new createdAt.
+ * Subtasks are deep-copied with new IDs and reset to incomplete.
+ */
+export function duplicateGoal(goal: Goal): Goal {
+  return {
+    ...goal,
+    id: generateId(),
+    completed: false,
+    createdAt: new Date().toISOString(),
+    transferCount: 0,
+    subtasks: (goal.subtasks ?? []).map((s) => ({
+      ...s,
+      id: generateId(),
+      completed: false,
+    })),
+  };
+}
+
+/**
+ * Reorder goals by moving an item from one index to another.
+ * Returns a new array with updated sortOrder values.
+ */
+export function reorderGoals(goals: Goal[], fromIndex: number, toIndex: number): Goal[] {
+  if (fromIndex === toIndex) {
+    return goals;
+  }
+  if (fromIndex < 0 || fromIndex >= goals.length || toIndex < 0 || toIndex >= goals.length) {
+    return goals;
+  }
+
+  const result = [...goals];
+  const [moved] = result.splice(fromIndex, 1);
+  result.splice(toIndex, 0, moved);
+
+  return result.map((goal, index) => ({
+    ...goal,
+    sortOrder: index,
+  }));
+}
+
+// ============================================================================
+// Due date utilities
+// ============================================================================
+
+/**
+ * Get tasks with a dueDate in the future (upcoming tasks).
+ * @param goals - Array of all goals
+ * @param daysAhead - Number of days ahead to look (default: 14)
+ */
+export function getUpcomingTasks(goals: Goal[], daysAhead = 14): Goal[] {
+  const today = getTodayDateString();
+  const cutoff = format(new Date(Date.now() + daysAhead * 24 * 60 * 60 * 1000), 'yyyy-MM-dd');
+
+  return goals.filter((g) => {
+    if (!isTask(g) || !g.dueDate) {
+      return false;
+    }
+    return g.dueDate > today && g.dueDate <= cutoff;
+  });
+}
+
+/**
+ * Get a short human-readable label for a due date.
+ * Returns "Today", "Tomorrow", day name for this week, or "Mon, Jan 15" for further dates.
+ */
+export function getDueDateLabel(dueDate: string): string {
+  const today = getTodayDateString();
+  const tomorrow = getNextDayDateString();
+
+  if (dueDate === today) {
+    return 'Today';
+  }
+  if (dueDate === tomorrow) {
+    return 'Tomorrow';
+  }
+
+  const dueDateObj = parseISO(dueDate);
+  const todayObj = new Date();
+  const diffDays = Math.ceil(
+    (dueDateObj.getTime() - startOfDay(todayObj).getTime()) / (1000 * 60 * 60 * 24)
+  );
+
+  // Within this week (next 6 days), show day name
+  if (diffDays > 0 && diffDays <= 6) {
+    return format(dueDateObj, 'EEEE'); // "Monday", "Tuesday", etc.
+  }
+
+  // Past due
+  if (diffDays < 0) {
+    return format(dueDateObj, 'MMM d'); // "Jan 15"
+  }
+
+  // Further out - show abbreviated date
+  return format(dueDateObj, 'EEE, MMM d'); // "Mon, Jan 15"
 }
 
 /**
@@ -1206,6 +1366,14 @@ function validateGoals(goals: unknown[], errors: ImportValidationError[]): Goal[
       completed: Boolean(goal.completed),
       createdAt: (goal.createdAt as string) || new Date().toISOString(),
       date: (goal.date as string) || getTodayDateString(),
+      // Preserve optional fields when present
+      ...(goal.type === 'task' || goal.type === 'objective' ? { type: goal.type } : {}),
+      ...(typeof goal.parentId === 'string' ? { parentId: goal.parentId } : {}),
+      ...(typeof goal.transferCount === 'number' ? { transferCount: goal.transferCount } : {}),
+      ...(typeof goal.description === 'string' ? { description: goal.description } : {}),
+      ...(typeof goal.dueDate === 'string' ? { dueDate: goal.dueDate } : {}),
+      ...(typeof goal.sortOrder === 'number' ? { sortOrder: goal.sortOrder } : {}),
+      ...(Array.isArray(goal.subtasks) ? { subtasks: goal.subtasks as Subtask[] } : {}),
     });
   }
 

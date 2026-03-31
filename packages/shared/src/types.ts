@@ -39,13 +39,20 @@ export interface QuoteCollection {
 // Goal type - 'task' (default) or 'objective' for longer-term goals
 export type GoalType = 'task' | 'objective';
 
+// Subtask - lightweight checklist item embedded within a task
+export interface Subtask {
+  id: string;
+  text: string;
+  completed: boolean;
+}
+
 // Goal interface - supports both daily tasks and objectives
 export interface Goal {
   id: string;
   text: string;
   completed: boolean;
   createdAt: string; // ISO date string
-  date: string; // YYYY-MM-DD (due date for both tasks and objectives)
+  date: string; // YYYY-MM-DD (assignment date - the day this task belongs to)
 
   // Optional type - defaults to 'task' if not set (backward compatible)
   type?: GoalType;
@@ -53,6 +60,9 @@ export interface Goal {
   // Task-specific (optional)
   parentId?: string; // Links task to parent objective
   transferCount?: number; // Number of times goal was transferred to next day
+  dueDate?: string; // YYYY-MM-DD deadline (distinct from date which is assignment date)
+  sortOrder?: number; // Position within its list, 0-based
+  subtasks?: Subtask[]; // Embedded checklist items within a task
 
   // Objective-specific (optional)
   description?: string; // Longer description for objectives

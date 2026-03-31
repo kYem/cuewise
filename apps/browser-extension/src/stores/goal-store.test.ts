@@ -1,6 +1,10 @@
 import { type Goal, getTodayDateString } from '@cuewise/shared';
 import * as storage from '@cuewise/storage';
-import { completedGoalFactory, goalFactory } from '@cuewise/test-utils/factories';
+import {
+  completedGoalFactory,
+  goalFactory,
+  taskWithSubtasksFactory,
+} from '@cuewise/test-utils/factories';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useGoalStore } from './goal-store';
 
@@ -552,6 +556,295 @@ describe('Goal Store', () => {
         const state = useGoalStore.getState();
         expect(state.todayTasks).toHaveLength(1);
         expect(state.todayTasks[0].id).toBe(todayTask.id);
+      });
+    });
+  });
+
+  describe('Task Enhancement Actions', () => {
+    describe('duplicateTask', () => {
+      it('should create a copy of a task with a new ID', async () => {
+        const today = getTodayDateString();
+        const task = goalFactory.build({ date: today, text: 'Original' });
+
+        vi.mocked(storage.getGoals).mockResolvedValue([task]);
+        vi.mocked(storage.setGoals).mockResolvedValue({ success: true } as never);
+
+        useGoalStore.setState({ goals: [task], todayTasks: [task] });
+
+        const result = await useGoalStore.getState().duplicateTask(task.id);
+
+        expect(result).toBe(true);
+        const state = useGoalStore.getState();
+        expect(state.goals).toHaveLength(2);
+        expect(state.goals[1].text).toBe('Original');
+        expect(state.goals[1].id).not.toBe(task.id);
+        expect(state.goals[1].completed).toBe(false);
+      });
+
+      it('should return false for non-existent task', async () => {
+        useGoalStore.setState({ goals: [], todayTasks: [] });
+
+        const result = await useGoalStore.getState().duplicateTask('non-existent');
+
+        expect(result).toBe(false);
+      });
+
+      it('should not duplicate objectives', async () => {
+        const objective = createObjective();
+
+        useGoalStore.setState({ goals: [objective], todayTasks: [] });
+
+        const result = await useGoalStore.getState().duplicateTask(objective.id);
+
+        expect(result).toBe(false);
+      });
+    });
+
+    describe('setTaskDueDate', () => {
+      it('should set a due date on a task', async () => {
+        const today = getTodayDateString();
+        const task = goalFactory.build({ date: today });
+
+        vi.mocked(storage.setGoals).mockResolvedValue({ success: true } as never);
+        useGoalStore.setState({ goals: [task], todayTasks: [task] });
+
+        const result = await useGoalStore.getState().setTaskDueDate(task.id, '2026-05-01');
+
+        expect(result).toBe(true);
+        const state = useGoalStore.getState();
+        expect(state.goals[0].dueDate).toBe('2026-05-01');
+      });
+
+      it('should remove due date when set to null', async () => {
+        const today = getTodayDateString();
+        const task = goalFactory.build({ date: today, dueDate: '2026-05-01' });
+
+        vi.mocked(storage.setGoals).mockResolvedValue({ success: true } as never);
+        useGoalStore.setState({ goals: [task], todayTasks: [task] });
+
+        const result = await useGoalStore.getState().setTaskDueDate(task.id, null);
+
+        expect(result).toBe(true);
+        const state = useGoalStore.getState();
+        expect(state.goals[0].dueDate).toBeUndefined();
+      });
+    });
+
+    describe('addSubtask', () => {
+      it('should add a subtask to a task', async () => {
+        const today = getTodayDateString();
+        const task = goalFactory.build({ date: today });
+
+        vi.mocked(storage.setGoals).mockResolvedValue({ success: true } as never);
+        useGoalStore.setState({ goals: [task], todayTasks: [task] });
+
+        const result = await useGoalStore.getState().addSubtask(task.id, 'New subtask');
+
+        expect(result).toBe(true);
+        const state = useGoalStore.getState();
+        expect(state.goals[0].subtasks).toHaveLength(1);
+        expect(state.goals[0].subtasks?.[0].text).toBe('New subtask');
+        expect(state.goals[0].subtasks?.[0].completed).toBe(false);
+      });
+
+      it('should return false for empty text', async () => {
+        const result = await useGoalStore.getState().addSubtask('task-1', '   ');
+
+        expect(result).toBe(false);
+      });
+    });
+
+    describe('toggleSubtask', () => {
+      it('should toggle a subtask completion', async () => {
+        const today = getTodayDateString();
+        const task = taskWithSubtasksFactory.build({ date: today });
+
+        vi.mocked(storage.setGoals).mockResolvedValue({ success: true } as never);
+        useGoalStore.setState({ goals: [task], todayTasks: [task] });
+
+        // taskWithSubtasksFactory uses hardcoded IDs: 'sub-1', 'sub-2'
+        const result = await useGoalStore.getState().toggleSubtask(task.id, 'sub-1');
+
+        expect(result).toBe(true);
+        const state = useGoalStore.getState();
+        expect(state.goals[0].subtasks?.[0].completed).toBe(true);
+      });
+    });
+
+    describe('removeSubtask', () => {
+      it('should remove a subtask', async () => {
+        const today = getTodayDateString();
+        const task = taskWithSubtasksFactory.build({ date: today });
+
+        vi.mocked(storage.setGoals).mockResolvedValue({ success: true } as never);
+        useGoalStore.setState({ goals: [task], todayTasks: [task] });
+
+        // taskWithSubtasksFactory uses hardcoded IDs: 'sub-1', 'sub-2'
+        const result = await useGoalStore.getState().removeSubtask(task.id, 'sub-1');
+
+        expect(result).toBe(true);
+        const state = useGoalStore.getState();
+        expect(state.goals[0].subtasks).toHaveLength(1);
+      });
+    });
+
+    describe('reorderTasks', () => {
+      it('should reorder today tasks and update sortOrder', async () => {
+        const today = getTodayDateString();
+        const task1 = goalFactory.build({ date: today, text: 'First', sortOrder: 0 });
+        const task2 = goalFactory.build({ date: today, text: 'Second', sortOrder: 1 });
+        const task3 = goalFactory.build({ date: today, text: 'Third', sortOrder: 2 });
+
+        vi.mocked(storage.setGoals).mockResolvedValue({ success: true } as never);
+        useGoalStore.setState({
+          goals: [task1, task2, task3],
+          todayTasks: [task1, task2, task3],
+        });
+
+        const result = await useGoalStore.getState().reorderTasks(0, 2);
+
+        expect(result).toBe(true);
+        const state = useGoalStore.getState();
+        expect(state.todayTasks.map((t) => t.text)).toEqual(['Second', 'Third', 'First']);
+        expect(state.todayTasks[0].sortOrder).toBe(0);
+        expect(state.todayTasks[1].sortOrder).toBe(1);
+        expect(state.todayTasks[2].sortOrder).toBe(2);
+      });
+    });
+
+    describe('todayTasks respects sortOrder', () => {
+      it('should sort today tasks by sortOrder', async () => {
+        const today = getTodayDateString();
+        const task1 = goalFactory.build({ date: today, text: 'C', sortOrder: 2 });
+        const task2 = goalFactory.build({ date: today, text: 'A', sortOrder: 0 });
+        const task3 = goalFactory.build({ date: today, text: 'B', sortOrder: 1 });
+
+        vi.mocked(storage.getGoals).mockResolvedValue([task1, task2, task3]);
+
+        await useGoalStore.getState().initialize();
+
+        const state = useGoalStore.getState();
+        expect(state.todayTasks.map((t) => t.text)).toEqual(['A', 'B', 'C']);
+      });
+    });
+
+    describe('error handling for new actions', () => {
+      it('duplicateTask should handle storage errors', async () => {
+        const today = getTodayDateString();
+        const task = goalFactory.build({ date: today });
+
+        vi.mocked(storage.setGoals).mockRejectedValue(new Error('Storage error'));
+        useGoalStore.setState({ goals: [task], todayTasks: [task] });
+
+        const result = await useGoalStore.getState().duplicateTask(task.id);
+
+        expect(result).toBe(false);
+        expect(useGoalStore.getState().error).toBeTruthy();
+        expect(useGoalStore.getState().goals).toHaveLength(1); // unchanged
+      });
+
+      it('setTaskDueDate should handle storage errors', async () => {
+        const today = getTodayDateString();
+        const task = goalFactory.build({ date: today });
+
+        vi.mocked(storage.setGoals).mockRejectedValue(new Error('Storage error'));
+        useGoalStore.setState({ goals: [task], todayTasks: [task] });
+
+        const result = await useGoalStore.getState().setTaskDueDate(task.id, '2026-05-01');
+
+        expect(result).toBe(false);
+        expect(useGoalStore.getState().error).toBeTruthy();
+      });
+
+      it('setTaskDueDate should return false for non-existent goal', async () => {
+        useGoalStore.setState({ goals: [], todayTasks: [] });
+
+        const result = await useGoalStore.getState().setTaskDueDate('non-existent', '2026-05-01');
+
+        expect(result).toBe(false);
+      });
+
+      it('addSubtask should handle storage errors', async () => {
+        const today = getTodayDateString();
+        const task = goalFactory.build({ date: today });
+
+        vi.mocked(storage.setGoals).mockRejectedValue(new Error('Storage error'));
+        useGoalStore.setState({ goals: [task], todayTasks: [task] });
+
+        const result = await useGoalStore.getState().addSubtask(task.id, 'New subtask');
+
+        expect(result).toBe(false);
+        expect(useGoalStore.getState().error).toBeTruthy();
+      });
+
+      it('addSubtask should return false for non-existent goal', async () => {
+        useGoalStore.setState({ goals: [], todayTasks: [] });
+
+        const result = await useGoalStore.getState().addSubtask('non-existent', 'Text');
+
+        expect(result).toBe(false);
+      });
+
+      it('reorderTasks should handle storage errors', async () => {
+        const today = getTodayDateString();
+        const task1 = goalFactory.build({ date: today, sortOrder: 0 });
+        const task2 = goalFactory.build({ date: today, sortOrder: 1 });
+
+        vi.mocked(storage.setGoals).mockRejectedValue(new Error('Storage error'));
+        useGoalStore.setState({ goals: [task1, task2], todayTasks: [task1, task2] });
+
+        const result = await useGoalStore.getState().reorderTasks(0, 1);
+
+        expect(result).toBe(false);
+        expect(useGoalStore.getState().error).toBeTruthy();
+      });
+    });
+
+    describe('reorderTasks full goals array', () => {
+      it('should update sortOrder in the full goals array and leave non-today goals untouched', async () => {
+        const today = getTodayDateString();
+        const todayTask1 = goalFactory.build({ date: today, text: 'A', sortOrder: 0 });
+        const todayTask2 = goalFactory.build({ date: today, text: 'B', sortOrder: 1 });
+        const yesterdayTask = goalFactory.build({ date: '2025-01-01', text: 'Old', sortOrder: 5 });
+
+        vi.mocked(storage.setGoals).mockResolvedValue({ success: true } as never);
+        useGoalStore.setState({
+          goals: [todayTask1, todayTask2, yesterdayTask],
+          todayTasks: [todayTask1, todayTask2],
+        });
+
+        await useGoalStore.getState().reorderTasks(0, 1);
+
+        const state = useGoalStore.getState();
+        // Today tasks reordered
+        expect(state.todayTasks.map((t) => t.text)).toEqual(['B', 'A']);
+
+        // Full goals array also updated
+        const goalA = state.goals.find((g) => g.id === todayTask1.id);
+        const goalB = state.goals.find((g) => g.id === todayTask2.id);
+        expect(goalB?.sortOrder).toBe(0);
+        expect(goalA?.sortOrder).toBe(1);
+
+        // Non-today goal untouched
+        const oldGoal = state.goals.find((g) => g.id === yesterdayTask.id);
+        expect(oldGoal?.sortOrder).toBe(5);
+      });
+    });
+
+    describe('duplicateTask todayTasks integration', () => {
+      it('should add duplicate to todayTasks', async () => {
+        const today = getTodayDateString();
+        const task = goalFactory.build({ date: today, text: 'Original' });
+
+        vi.mocked(storage.setGoals).mockResolvedValue({ success: true } as never);
+        useGoalStore.setState({ goals: [task], todayTasks: [task] });
+
+        await useGoalStore.getState().duplicateTask(task.id);
+
+        const state = useGoalStore.getState();
+        expect(state.todayTasks).toHaveLength(2);
+        expect(state.todayTasks[1].text).toBe('Original');
+        expect(state.todayTasks[1].id).not.toBe(task.id);
       });
     });
   });
