@@ -1,0 +1,184 @@
+import {
+  goalFactory,
+  taskWithDueDateFactory,
+  taskWithSubtasksFactory,
+} from '@cuewise/test-utils/factories';
+import { fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { useGoalStore } from '../stores/goal-store';
+import { useSettingsStore } from '../stores/settings-store';
+import {
+  createGoalStoreMock,
+  createMockGoalStore,
+  createSettingsStoreMock,
+} from './__fixtures__/goals-list.fixtures';
+import { GoalsList } from './GoalsList';
+
+vi.mock('../stores/goal-store', () => ({
+  useGoalStore: vi.fn(),
+}));
+
+vi.mock('../stores/settings-store', () => ({
+  useSettingsStore: vi.fn(),
+}));
+
+describe('GoalsList - Duplicate task', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useSettingsStore).mockImplementation(createSettingsStoreMock());
+  });
+
+  it('shows a duplicate button while editing a task and calls duplicateTask on click', async () => {
+    const user = userEvent.setup();
+    const task = goalFactory.build({ text: 'Write report', completed: false });
+    const store = createMockGoalStore({ todayTasks: [task], goals: [task] });
+    vi.mocked(useGoalStore).mockImplementation(createGoalStoreMock(store));
+
+    render(<GoalsList />);
+
+    // Enter edit mode by clicking the task text
+    await user.click(screen.getByRole('button', { name: 'Write report' }));
+
+    const duplicateButton = screen.getByRole('button', { name: 'Duplicate task' });
+    await user.click(duplicateButton);
+
+    expect(store.duplicateTask).toHaveBeenCalledWith(task.id);
+  });
+
+  it('does not show a duplicate button when the task is not being edited', () => {
+    const task = goalFactory.build({ text: 'Write report', completed: false });
+    const store = createMockGoalStore({ todayTasks: [task], goals: [task] });
+    vi.mocked(useGoalStore).mockImplementation(createGoalStoreMock(store));
+
+    render(<GoalsList />);
+
+    expect(screen.queryByRole('button', { name: 'Duplicate task' })).not.toBeInTheDocument();
+  });
+});
+
+describe('GoalsList - Due dates', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useSettingsStore).mockImplementation(createSettingsStoreMock());
+  });
+
+  it('shows a due-date badge with the human label when a task has a dueDate', () => {
+    // taskWithDueDateFactory defaults dueDate to tomorrow -> label "Tomorrow"
+    const task = taskWithDueDateFactory.build({ text: 'Ship release' });
+    const store = createMockGoalStore({ todayTasks: [task], goals: [task] });
+    vi.mocked(useGoalStore).mockImplementation(createGoalStoreMock(store));
+
+    render(<GoalsList />);
+
+    expect(screen.getByText('Tomorrow')).toBeInTheDocument();
+  });
+
+  it('exposes the due-date control while editing a task', async () => {
+    const user = userEvent.setup();
+    const task = goalFactory.build({ text: 'Write report', completed: false });
+    const store = createMockGoalStore({ todayTasks: [task], goals: [task] });
+    vi.mocked(useGoalStore).mockImplementation(createGoalStoreMock(store));
+
+    render(<GoalsList />);
+    await user.click(screen.getByRole('button', { name: 'Write report' }));
+
+    expect(screen.getByRole('button', { name: 'Set due date' })).toBeInTheDocument();
+  });
+
+  it('calls setTaskDueDate with the task id and chosen date when a date is picked', async () => {
+    const user = userEvent.setup();
+    const task = goalFactory.build({ text: 'Write report', completed: false });
+    const store = createMockGoalStore({ todayTasks: [task], goals: [task] });
+    vi.mocked(useGoalStore).mockImplementation(createGoalStoreMock(store));
+
+    render(<GoalsList />);
+    await user.click(screen.getByRole('button', { name: 'Write report' }));
+    await user.click(screen.getByRole('button', { name: 'Set due date' }));
+
+    fireEvent.change(screen.getByLabelText('Due date'), { target: { value: '2026-06-20' } });
+
+    expect(store.setTaskDueDate).toHaveBeenCalledWith(task.id, '2026-06-20');
+  });
+});
+
+describe('GoalsList - Subtasks', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useSettingsStore).mockImplementation(createSettingsStoreMock());
+  });
+
+  it('renders subtask progress for a task that has subtasks', () => {
+    const task = taskWithSubtasksFactory.build({ text: 'Plan trip' });
+    const store = createMockGoalStore({ todayTasks: [task], goals: [task] });
+    vi.mocked(useGoalStore).mockImplementation(createGoalStoreMock(store));
+
+    render(<GoalsList />);
+
+    expect(screen.getByText('0/2')).toBeInTheDocument();
+  });
+
+  it('calls toggleSubtask with the task id and subtask id', async () => {
+    const user = userEvent.setup();
+    const task = taskWithSubtasksFactory.build({ text: 'Plan trip' });
+    const store = createMockGoalStore({ todayTasks: [task], goals: [task] });
+    vi.mocked(useGoalStore).mockImplementation(createGoalStoreMock(store));
+
+    render(<GoalsList />);
+    await user.click(screen.getByRole('button', { name: 'Show subtasks' }));
+    await user.click(screen.getByRole('button', { name: 'Mark "Subtask 1" complete' }));
+
+    expect(store.toggleSubtask).toHaveBeenCalledWith(task.id, 'sub-1');
+  });
+
+  it('offers the add-subtask affordance when editing a task without subtasks', async () => {
+    const user = userEvent.setup();
+    const task = goalFactory.build({ text: 'Write report', completed: false });
+    const store = createMockGoalStore({ todayTasks: [task], goals: [task] });
+    vi.mocked(useGoalStore).mockImplementation(createGoalStoreMock(store));
+
+    render(<GoalsList />);
+    await user.click(screen.getByRole('button', { name: 'Write report' }));
+
+    expect(screen.getByRole('button', { name: 'Add subtask' })).toBeInTheDocument();
+  });
+
+  // Regression: clicking "Add subtask" blurs the inline-edit input. The subtask
+  // UI must survive that blur so the first subtask can actually be created.
+  it('adds a first subtask to a task that has none, after the edit input blurs', async () => {
+    const user = userEvent.setup();
+    const task = goalFactory.build({ text: 'Write report', completed: false });
+    const store = createMockGoalStore({ todayTasks: [task], goals: [task] });
+    vi.mocked(useGoalStore).mockImplementation(createGoalStoreMock(store));
+
+    render(<GoalsList />);
+    await user.click(screen.getByRole('button', { name: 'Write report' }));
+    await user.click(screen.getByRole('button', { name: 'Add subtask' }));
+
+    const input = screen.getByLabelText('Add a subtask');
+    await user.type(input, 'Outline sections{Enter}');
+
+    expect(store.addSubtask).toHaveBeenCalledWith(task.id, 'Outline sections');
+  });
+});
+
+describe('GoalsList - Reorder', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useSettingsStore).mockImplementation(createSettingsStoreMock());
+  });
+
+  it('renders a drag handle for each today task', () => {
+    const taskA = goalFactory.build({ text: 'First task' });
+    const taskB = goalFactory.build({ text: 'Second task' });
+    const store = createMockGoalStore({
+      todayTasks: [taskA, taskB],
+      goals: [taskA, taskB],
+    });
+    vi.mocked(useGoalStore).mockImplementation(createGoalStoreMock(store));
+
+    render(<GoalsList />);
+
+    expect(screen.getAllByRole('button', { name: 'Drag to reorder' })).toHaveLength(2);
+  });
+});
