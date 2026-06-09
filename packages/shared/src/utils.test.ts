@@ -950,6 +950,33 @@ describe('Subtask Utilities', () => {
 
       expect(result.subtasks?.[0].completed).toBe(false);
     });
+
+    it('completes the parent goal when the last incomplete subtask is checked', () => {
+      const goal = createTestTask({
+        completed: false,
+        subtasks: [
+          { id: 'sub-1', text: 'First', completed: true },
+          { id: 'sub-2', text: 'Second', completed: false },
+        ],
+      });
+      const result = toggleSubtaskInGoal(goal, 'sub-2');
+
+      expect(result.subtasks?.every((s) => s.completed)).toBe(true);
+      expect(result.completed).toBe(true);
+    });
+
+    it('reopens a completed parent goal when a subtask is unchecked', () => {
+      const goal = createTestTask({
+        completed: true,
+        subtasks: [
+          { id: 'sub-1', text: 'First', completed: true },
+          { id: 'sub-2', text: 'Second', completed: true },
+        ],
+      });
+      const result = toggleSubtaskInGoal(goal, 'sub-2');
+
+      expect(result.completed).toBe(false);
+    });
   });
 
   describe('removeSubtaskFromGoal', () => {

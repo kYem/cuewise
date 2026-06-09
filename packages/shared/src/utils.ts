@@ -311,16 +311,17 @@ export function addSubtaskToGoal(goal: Goal, text: string): Goal {
  * Toggle a subtask's completed status. Returns a new Goal with the updated subtask.
  */
 export function toggleSubtaskInGoal(goal: Goal, subtaskId: string): Goal {
-  const subtasks = goal.subtasks ?? [];
-  return {
-    ...goal,
-    subtasks: subtasks.map((s) => {
-      if (s.id === subtaskId) {
-        return { ...s, completed: !s.completed };
-      }
-      return s;
-    }),
-  };
+  const subtasks = (goal.subtasks ?? []).map((s) => {
+    if (s.id === subtaskId) {
+      return { ...s, completed: !s.completed };
+    }
+    return s;
+  });
+  // A task with subtasks is complete exactly when all of them are, so toggling a
+  // subtask rolls the parent's completion up (complete on the last check, reopen
+  // when one is unchecked). Direct task completion is still allowed separately.
+  const completed = subtasks.length > 0 && subtasks.every((s) => s.completed);
+  return { ...goal, subtasks, completed };
 }
 
 /**

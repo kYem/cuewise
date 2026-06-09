@@ -677,6 +677,22 @@ describe('Goal Store', () => {
         const state = useGoalStore.getState();
         expect(state.goals[0].subtasks?.[0].completed).toBe(true);
       });
+
+      it('completes the parent task once every subtask is checked', async () => {
+        const today = getTodayDateString();
+        const task = taskWithSubtasksFactory.build({ date: today, completed: false });
+
+        vi.mocked(storage.setGoals).mockResolvedValue({ success: true } as never);
+        useGoalStore.setState({ goals: [task], todayTasks: [task] });
+
+        // taskWithSubtasksFactory uses hardcoded IDs: 'sub-1', 'sub-2'
+        await useGoalStore.getState().toggleSubtask(task.id, 'sub-1');
+        await useGoalStore.getState().toggleSubtask(task.id, 'sub-2');
+
+        const state = useGoalStore.getState();
+        expect(state.goals[0].subtasks?.every((s) => s.completed)).toBe(true);
+        expect(state.goals[0].completed).toBe(true);
+      });
     });
 
     describe('removeSubtask', () => {
