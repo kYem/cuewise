@@ -213,3 +213,19 @@ describe('GoalsList - Upcoming section', () => {
     expect(screen.getByRole('button', { name: 'Show upcoming tasks' })).toBeInTheDocument();
   });
 });
+
+describe('GoalsList - Empty state', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useSettingsStore).mockImplementation(createSettingsStoreMock());
+  });
+
+  it('shows the empty-state title when there are no today tasks', () => {
+    const store = createMockGoalStore({ todayTasks: [], goals: [] });
+    vi.mocked(useGoalStore).mockImplementation(createGoalStoreMock(store));
+
+    render(<GoalsList />);
+
+    expect(screen.getByText('No tasks for today')).toBeInTheDocument();
+  });
+});

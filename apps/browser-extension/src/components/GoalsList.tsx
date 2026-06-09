@@ -38,10 +38,12 @@ import {
 } from 'lucide-react';
 import type React from 'react';
 import { useMemo } from 'react';
+import emptyTasksAnimation from '../assets/lottie/empty/tasks.json';
 import { useGoalEditing } from '../hooks/useGoalEditing';
 import { useGoalStore } from '../stores/goal-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { DueDateControl } from './DueDateControl';
+import { EmptyState } from './EmptyState';
 import { GoalInput } from './GoalInput';
 import { getDragEndReorder, SortableTaskItem } from './SortableTaskItem';
 import { SubtaskList } from './SubtaskList';
@@ -161,15 +163,15 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
           {viewMode === 'compact' ? (
             <GoalInput />
           ) : (
-            <>
-              <Circle className="w-16 h-16 mx-auto mb-4 text-tertiary" />
-              <p className="text-lg text-secondary mb-2">No tasks for today</p>
-              <p className="text-sm text-tertiary">
-                {hasOtherGoals
+            <EmptyState
+              animationData={emptyTasksAnimation}
+              title="No tasks for today"
+              description={
+                hasOtherGoals
                   ? 'View incomplete tasks below'
-                  : 'Add your first task to get started!'}
-              </p>
-            </>
+                  : 'Add your first task to get started!'
+              }
+            />
           )}
         </div>
       )}
