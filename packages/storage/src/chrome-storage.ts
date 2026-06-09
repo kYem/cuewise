@@ -116,8 +116,15 @@ export async function removeFromStorage(
   area: StorageArea = 'local'
 ): Promise<boolean> {
   try {
-    const storage = area === 'local' ? chrome.storage.local : chrome.storage.sync;
-    await storage.remove(key);
+    // Check if chrome.storage is available
+    if (typeof chrome !== 'undefined' && chrome.storage) {
+      const storage = area === 'local' ? chrome.storage.local : chrome.storage.sync;
+      await storage.remove(key);
+      return true;
+    }
+
+    // Fallback to localStorage for development
+    localStorage.removeItem(key);
     return true;
   } catch (error) {
     logger.error(`Error removing ${key} from storage`, error);
@@ -130,8 +137,15 @@ export async function removeFromStorage(
  */
 export async function clearStorage(area: StorageArea = 'local'): Promise<boolean> {
   try {
-    const storage = area === 'local' ? chrome.storage.local : chrome.storage.sync;
-    await storage.clear();
+    // Check if chrome.storage is available
+    if (typeof chrome !== 'undefined' && chrome.storage) {
+      const storage = area === 'local' ? chrome.storage.local : chrome.storage.sync;
+      await storage.clear();
+      return true;
+    }
+
+    // Fallback to localStorage for development
+    localStorage.clear();
     return true;
   } catch (error) {
     logger.error('Error clearing storage', error);
