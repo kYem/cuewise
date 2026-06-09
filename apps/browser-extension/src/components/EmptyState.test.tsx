@@ -10,7 +10,11 @@ vi.mock('lottie-web/build/player/lottie_light', () => ({
 }));
 
 function fakeAnimation(): AnimationItem {
-  return { addEventListener: vi.fn(), destroy: vi.fn() } as unknown as AnimationItem;
+  return {
+    addEventListener: vi.fn(),
+    destroy: vi.fn(),
+    goToAndStop: vi.fn(),
+  } as unknown as AnimationItem;
 }
 
 const data = { v: '5.7.4', fr: 30, ip: 0, op: 60, w: 10, h: 10, layers: [] };

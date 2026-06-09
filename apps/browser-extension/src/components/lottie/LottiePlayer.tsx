@@ -37,6 +37,12 @@ export function LottiePlayer({
       animationData,
     });
 
+    // Explicitly hold the first frame when not autoplaying (reduced-motion),
+    // rather than relying on the renderer's incidental frame-0 paint.
+    if (!autoplay) {
+      animation.goToAndStop(0, true);
+    }
+
     if (onComplete !== undefined) {
       animation.addEventListener('complete', onComplete);
     }
