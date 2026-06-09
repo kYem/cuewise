@@ -12,7 +12,7 @@ export const useCelebrationStore = create<CelebrationStore>((set, get) => ({
   active: null,
 
   celebrate: (type: CelebrationType) => {
-    // Debounce: ignore new triggers while a celebration is already showing,
+    // Guard: ignore new triggers while a celebration is already showing,
     // so one action satisfying two triggers fires only once.
     if (get().active !== null) {
       return;

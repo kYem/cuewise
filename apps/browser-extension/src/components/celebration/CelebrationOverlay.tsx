@@ -31,7 +31,7 @@ export function CelebrationOverlay() {
   const shouldShow = active !== null && celebrationsEnabled && !reducedMotion;
 
   // If a celebration was queued but we shouldn't show it (disabled / reduced
-  // motion), clear it so the store's debounce doesn't get stuck.
+  // motion), clear it so the store's guard doesn't get stuck.
   useEffect(() => {
     if (active !== null && !shouldShow) {
       dismiss();
