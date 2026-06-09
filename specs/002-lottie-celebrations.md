@@ -2,7 +2,7 @@
 
 **Spec ID:** 002
 **Date:** 2026-06-09
-**Status:** Draft
+**Status:** Accepted
 
 ---
 
