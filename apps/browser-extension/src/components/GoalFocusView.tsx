@@ -39,7 +39,7 @@ export const GoalFocusView: React.FC<GoalFocusViewProps> = ({ showAddInput, onCl
   const subtaskProgress = displayGoal
     ? getSubtaskProgress(displayGoal)
     : { completed: 0, total: 0 };
-  const hasSubtasks = (displayGoal?.subtasks?.length ?? 0) > 0;
+  const hasSubtasks = subtaskProgress.total > 0;
 
   const handleToggle = async () => {
     if (displayGoal) {
