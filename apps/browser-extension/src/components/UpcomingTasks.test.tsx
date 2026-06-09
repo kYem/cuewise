@@ -48,6 +48,17 @@ describe('UpcomingTasks', () => {
     expect(screen.queryByText('Done already')).not.toBeInTheDocument();
   });
 
+  it('excludes a task due today (only future due dates are "upcoming")', () => {
+    const task = taskWithDueDateFactory.build({ text: 'Due today', dueDate: getTodayDateString() });
+    const store = createMockGoalStore({ goals: [task] });
+    vi.mocked(useGoalStore).mockImplementation(createGoalStoreMock(store));
+
+    const { container } = render(<UpcomingTasks defaultExpanded />);
+
+    expect(screen.queryByText('Due today')).not.toBeInTheDocument();
+    expect(container).toBeEmptyDOMElement();
+  });
+
   it('returns nothing when there are no upcoming tasks', () => {
     const store = createMockGoalStore({ goals: [] });
     vi.mocked(useGoalStore).mockImplementation(createGoalStoreMock(store));

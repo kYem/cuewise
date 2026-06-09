@@ -21,7 +21,7 @@ export const UpcomingTasks: React.FC<UpcomingTasksProps> = ({ defaultExpanded = 
     () =>
       getUpcomingTasks(goals)
         .filter((task) => !task.completed)
-        .sort((a, b) => (a.dueDate as string).localeCompare(b.dueDate as string)),
+        .sort((a, b) => a.dueDate.localeCompare(b.dueDate)),
     [goals]
   );
 
@@ -63,7 +63,7 @@ export const UpcomingTasks: React.FC<UpcomingTasksProps> = ({ defaultExpanded = 
               <span className="flex-1 min-w-0 text-sm text-primary truncate">{task.text}</span>
               <span className="flex items-center gap-1 flex-shrink-0 text-xs text-secondary bg-surface-variant px-1.5 py-0.5 rounded-full">
                 <CalendarClock className="w-3 h-3" />
-                {getDueDateLabel(task.dueDate as string)}
+                {getDueDateLabel(task.dueDate)}
               </span>
               {task.date !== today && (
                 <button

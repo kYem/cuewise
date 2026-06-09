@@ -400,11 +400,11 @@ export function reorderGoals(goals: Goal[], fromIndex: number, toIndex: number):
  * @param goals - Array of all goals
  * @param daysAhead - Number of days ahead to look (default: 14)
  */
-export function getUpcomingTasks(goals: Goal[], daysAhead = 14): Goal[] {
+export function getUpcomingTasks(goals: Goal[], daysAhead = 14): (Goal & { dueDate: string })[] {
   const today = getTodayDateString();
   const cutoff = format(new Date(Date.now() + daysAhead * 24 * 60 * 60 * 1000), 'yyyy-MM-dd');
 
-  return goals.filter((g) => {
+  return goals.filter((g): g is Goal & { dueDate: string } => {
     if (!isTask(g) || !g.dueDate) {
       return false;
     }
