@@ -132,6 +132,16 @@ describe('GoalsList - Subtasks', () => {
     expect(screen.getByText('0/2')).toBeInTheDocument();
   });
 
+  it('renders subtask progress in compact view as well', () => {
+    const task = taskWithSubtasksFactory.build({ text: 'Plan trip' });
+    const store = createMockGoalStore({ todayTasks: [task], goals: [task] });
+    vi.mocked(useGoalStore).mockImplementation(createGoalStoreMock(store));
+
+    render(<GoalsList viewMode="compact" />);
+
+    expect(screen.getByText('0/2')).toBeInTheDocument();
+  });
+
   it('calls toggleSubtask with the task id and subtask id', async () => {
     const user = userEvent.setup();
     const task = taskWithSubtasksFactory.build({ text: 'Plan trip' });

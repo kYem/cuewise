@@ -413,15 +413,14 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
                       </div>
                     </div>
 
-                    {/* Mounted regardless of edit mode so the add affordance survives the input blur */}
-                    {viewMode === 'full' && (
-                      <SubtaskList
-                        goal={goal}
-                        onAdd={(text) => addSubtask(goal.id, text)}
-                        onToggle={(subtaskId) => toggleSubtask(goal.id, subtaskId)}
-                        onRemove={(subtaskId) => removeSubtask(goal.id, subtaskId)}
-                      />
-                    )}
+                    {/* Full and compact both show subtasks; mounted regardless of edit
+                        mode so the add affordance survives the input blur */}
+                    <SubtaskList
+                      goal={goal}
+                      onAdd={(text) => addSubtask(goal.id, text)}
+                      onToggle={(subtaskId) => toggleSubtask(goal.id, subtaskId)}
+                      onRemove={(subtaskId) => removeSubtask(goal.id, subtaskId)}
+                    />
                   </div>
                 </SortableTaskItem>
               ))}

@@ -1,5 +1,6 @@
+import { getDueDateLabel, getSubtaskProgress } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
-import { CheckCircle2, Circle, Plus } from 'lucide-react';
+import { CalendarClock, CheckCircle2, Circle, ListChecks, Plus } from 'lucide-react';
 import type React from 'react';
 import { useState } from 'react';
 import { useGoalStore } from '../stores/goal-store';
@@ -33,6 +34,12 @@ export const GoalFocusView: React.FC<GoalFocusViewProps> = ({ showAddInput, onCl
   const parentObjective = displayGoal?.parentId
     ? goals.find((g) => g.id === displayGoal.parentId)
     : null;
+
+  // Read-only metadata for the focused task (focus mode stays distraction-free)
+  const subtaskProgress = displayGoal
+    ? getSubtaskProgress(displayGoal)
+    : { completed: 0, total: 0 };
+  const hasSubtasks = (displayGoal?.subtasks?.length ?? 0) > 0;
 
   const handleToggle = async () => {
     if (displayGoal) {
@@ -140,6 +147,27 @@ export const GoalFocusView: React.FC<GoalFocusViewProps> = ({ showAddInput, onCl
             >
               {displayGoal.text}
             </span>
+
+            {/* Read-only due-date + subtask progress for the focused task */}
+            {(displayGoal.dueDate || hasSubtasks) && (
+              <div
+                className="flex items-center gap-3 text-sm text-white/70"
+                style={{ textShadow: '0 1px 3px rgba(0,0,0,0.5)' }}
+              >
+                {displayGoal.dueDate && (
+                  <span className="flex items-center gap-1">
+                    <CalendarClock className="w-3.5 h-3.5" />
+                    {getDueDateLabel(displayGoal.dueDate)}
+                  </span>
+                )}
+                {hasSubtasks && (
+                  <span className="flex items-center gap-1">
+                    <ListChecks className="w-3.5 h-3.5" />
+                    {subtaskProgress.completed}/{subtaskProgress.total}
+                  </span>
+                )}
+              </div>
+            )}
 
             {/* Parent objective - shows on hover */}
             {parentObjective && (
