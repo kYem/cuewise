@@ -19,4 +19,11 @@ describe('confetti.json', () => {
   it('is a finite, non-looping clip (op > ip)', () => {
     expect(confetti.op).toBeGreaterThan(confetti.ip);
   });
+
+  it('contains no Lottie expressions (CSP-safe for the lottie_light build)', () => {
+    // Lottie expressions are string-valued `x` fields; easing handles use numeric
+    // `x`. Guards the documented asset-swap path from breaking MV3 CSP.
+    const serialized = JSON.stringify(confetti);
+    expect(serialized).not.toMatch(/"x":"/);
+  });
 });
