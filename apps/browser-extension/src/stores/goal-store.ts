@@ -20,6 +20,7 @@ import {
 } from '@cuewise/shared';
 import { getGoals as loadAllGoals, setGoals as saveAllGoals } from '@cuewise/storage';
 import { create } from 'zustand';
+import { useCelebrationStore } from './celebration-store';
 import { useToastStore } from './toast-store';
 
 export type CompletionFilter = 'all' | 'completed' | 'incomplete';
@@ -166,7 +167,23 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
 
       await saveAllGoals(updatedGoals);
 
-      set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
+      const updatedTodayTasks = filterTodayTasks(updatedGoals);
+      set({ goals: updatedGoals, todayTasks: updatedTodayTasks });
+
+      // Celebrate only when the user just completed the last remaining task today.
+      const today = getTodayDateString();
+      const toggledGoal = updatedGoals.find((goal) => goal.id === goalId);
+      const justCompletedTodayTask =
+        toggledGoal !== undefined &&
+        isTask(toggledGoal) &&
+        toggledGoal.date === today &&
+        toggledGoal.completed === true;
+      const allTodayComplete =
+        updatedTodayTasks.length > 0 && updatedTodayTasks.every((task) => task.completed);
+      if (justCompletedTodayTask && allTodayComplete) {
+        useCelebrationStore.getState().celebrate('allGoals');
+      }
+
       return true;
     } catch (error) {
       logger.error('Error toggling goal', error);

@@ -42,6 +42,14 @@ vi.mock('./toast-store', () => ({
   },
 }));
 
+const { celebrateMock } = vi.hoisted(() => ({ celebrateMock: vi.fn() }));
+
+vi.mock('./celebration-store', () => ({
+  useCelebrationStore: {
+    getState: () => ({ celebrate: celebrateMock, active: null, dismiss: vi.fn() }),
+  },
+}));
+
 describe('Goal Store', () => {
   beforeEach(() => {
     // Reset store to initial state
@@ -847,5 +855,45 @@ describe('Goal Store', () => {
         expect(state.todayTasks[1].id).not.toBe(task.id);
       });
     });
+  });
+});
+
+describe('toggleTask celebration trigger', () => {
+  beforeEach(() => {
+    celebrateMock.mockClear();
+    vi.mocked(storage.setGoals).mockResolvedValue({ success: true });
+  });
+
+  it('celebrates when the last incomplete task of today is completed', async () => {
+    const today = getTodayDateString();
+    const done = goalFactory.build({ date: today, completed: true });
+    const last = goalFactory.build({ date: today, completed: false });
+    useGoalStore.setState({ goals: [done, last], todayTasks: [done, last] });
+
+    await useGoalStore.getState().toggleTask(last.id);
+
+    expect(celebrateMock).toHaveBeenCalledWith('allGoals');
+  });
+
+  it('does not celebrate when other tasks remain incomplete', async () => {
+    const today = getTodayDateString();
+    const a = goalFactory.build({ date: today, completed: false });
+    const b = goalFactory.build({ date: today, completed: false });
+    useGoalStore.setState({ goals: [a, b], todayTasks: [a, b] });
+
+    await useGoalStore.getState().toggleTask(a.id);
+
+    expect(celebrateMock).not.toHaveBeenCalled();
+  });
+
+  it('does not celebrate when un-checking a completed task', async () => {
+    const today = getTodayDateString();
+    const a = goalFactory.build({ date: today, completed: true });
+    const b = goalFactory.build({ date: today, completed: true });
+    useGoalStore.setState({ goals: [a, b], todayTasks: [a, b] });
+
+    await useGoalStore.getState().toggleTask(a.id);
+
+    expect(celebrateMock).not.toHaveBeenCalled();
   });
 });
