@@ -24,6 +24,7 @@
     "@tombcato/smart-ticker": "^1.0.4",
     "chrono-node": "^2.9.0",
     "date-fns": "catalog:",
+    "lottie-web": "^5.13.0",
     "lucide-react": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
