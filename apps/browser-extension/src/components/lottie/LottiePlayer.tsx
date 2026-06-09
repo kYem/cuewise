@@ -4,17 +4,20 @@ import { useEffect, useRef } from 'react';
 interface LottiePlayerProps {
   animationData: object;
   loop?: boolean;
+  autoplay?: boolean;
   onComplete?: () => void;
   className?: string;
 }
 
 /**
  * Thin wrapper around the lottie-web light build (no expressions / no eval, so it
- * is Manifest V3 CSP-safe). Plays once by default and reports completion.
+ * is Manifest V3 CSP-safe). Plays once by default; with `autoplay={false}` it
+ * renders the first frame statically (used for reduced-motion).
  */
 export function LottiePlayer({
   animationData,
   loop = false,
+  autoplay = true,
   onComplete,
   className,
 }: LottiePlayerProps) {
@@ -30,7 +33,7 @@ export function LottiePlayer({
       container,
       renderer: 'svg',
       loop,
-      autoplay: true,
+      autoplay,
       animationData,
     });
 
@@ -41,7 +44,7 @@ export function LottiePlayer({
     return () => {
       animation.destroy();
     };
-  }, [animationData, loop, onComplete]);
+  }, [animationData, loop, autoplay, onComplete]);
 
   return <div ref={containerRef} className={className} aria-hidden="true" />;
 }

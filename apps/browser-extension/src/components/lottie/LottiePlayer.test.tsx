@@ -81,4 +81,14 @@ describe('LottiePlayer', () => {
     const config = vi.mocked(lottie.loadAnimation).mock.calls[0][0] as AnimationConfigWithData;
     expect(config.loop).toBe(true);
   });
+
+  it('passes autoplay=false to loadAnimation when autoplay is disabled', () => {
+    const fake = createFakeAnimation();
+    vi.mocked(lottie.loadAnimation).mockReturnValue(fake.item);
+
+    render(<LottiePlayer animationData={sampleData} autoplay={false} />);
+
+    const config = vi.mocked(lottie.loadAnimation).mock.calls[0][0] as AnimationConfigWithData;
+    expect(config.autoplay).toBe(false);
+  });
 });
