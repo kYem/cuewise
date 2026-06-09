@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import confetti from '../../assets/lottie/confetti.json';
 import { useCelebrationStore } from '../../stores/celebration-store';
 import { useSettingsStore } from '../../stores/settings-store';
+import { setReducedMotion } from '../__fixtures__/motion.fixtures';
 import { CelebrationOverlay } from './CelebrationOverlay';
 
 vi.mock('lottie-web/build/player/lottie_light', () => ({
@@ -21,19 +22,6 @@ function fakeAnimation(): AnimationItem {
     }
   });
   return { addEventListener, destroy: vi.fn() } as unknown as AnimationItem;
-}
-
-function setReducedMotion(matches: boolean) {
-  window.matchMedia = vi.fn().mockImplementation((query: string) => ({
-    matches,
-    media: query,
-    onchange: null,
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-    addListener: vi.fn(),
-    removeListener: vi.fn(),
-    dispatchEvent: vi.fn(),
-  }));
 }
 
 function setCelebrationsEnabled(enabled: boolean) {

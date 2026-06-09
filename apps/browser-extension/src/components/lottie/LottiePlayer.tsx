@@ -10,9 +10,9 @@ interface LottiePlayerProps {
 }
 
 /**
- * Thin wrapper around the lottie-web light build (no expressions / no eval, so it
- * is Manifest V3 CSP-safe). Plays once by default; with `autoplay={false}` it
- * renders the first frame statically (used for reduced-motion).
+ * Thin wrapper around the lottie-web light build — no expressions/eval, so it's
+ * Manifest V3 CSP-safe. Defaults to play-once (loop=false), autoplaying; with
+ * autoplay={false} it freezes at frame 0 (the reduced-motion path).
  */
 export function LottiePlayer({
   animationData,

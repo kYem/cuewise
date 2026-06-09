@@ -49,6 +49,7 @@ describe('LottiePlayer', () => {
     expect(config.animationData).toBe(sampleData);
     expect(config.loop).toBe(false);
     expect(config.autoplay).toBe(true);
+    expect(config.renderer).toBe('svg');
   });
 
   it('calls onComplete when the animation completes', () => {

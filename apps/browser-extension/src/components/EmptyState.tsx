@@ -24,9 +24,9 @@ const SIZE_STYLES = {
 } as const;
 
 /**
- * Reusable empty-state: a gently looping Lottie illustration with a title,
- * optional description, and optional actions. Under prefers-reduced-motion the
- * illustration shows a static frame instead of animating.
+ * Reusable empty-state: a gently looping Lottie illustration with a title and
+ * optional description/children. Under prefers-reduced-motion the illustration
+ * shows a static frame instead of animating.
  */
 export function EmptyState({
   animationData,

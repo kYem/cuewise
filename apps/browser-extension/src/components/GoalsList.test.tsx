@@ -228,4 +228,14 @@ describe('GoalsList - Empty state', () => {
 
     expect(screen.getByText('No tasks for today')).toBeInTheDocument();
   });
+
+  it('renders the goal input instead of an empty state in compact mode with no tasks', () => {
+    const store = createMockGoalStore({ todayTasks: [], goals: [] });
+    vi.mocked(useGoalStore).mockImplementation(createGoalStoreMock(store));
+
+    render(<GoalsList viewMode="compact" />);
+
+    expect(screen.queryByText('No tasks for today')).not.toBeInTheDocument();
+    expect(screen.getByRole('textbox')).toBeInTheDocument();
+  });
 });
