@@ -70,6 +70,7 @@ export const DEFAULT_SETTINGS: Settings = {
   // Quote Display
   quoteDisplayMode: 'bottom', // Show quotes below goals by default
   enableQuoteAnimation: false, // Disabled by default (can be CPU-intensive)
+  celebrationsEnabled: true,
   // Focus Position
   focusPosition: 'center', // Center goals section by default
   // Quote Filter Persistence

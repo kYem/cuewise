@@ -219,6 +219,8 @@ export interface Settings {
   quoteFilterShowCustomQuotes: boolean; // Show custom quotes in filter (default true)
   quoteFilterShowFavoritesOnly: boolean; // Show only favorites (default false)
   quoteFilterActiveCollectionIds: string[]; // Active collection IDs for filter (default [])
+  // Celebrations
+  celebrationsEnabled: boolean; // Play a Lottie burst on pomodoro/goal completion (default true)
 }
 
 // Storage keys

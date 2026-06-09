@@ -41,4 +41,5 @@ export const defaultSettings: Settings = {
   quoteFilterShowCustomQuotes: true,
   quoteFilterShowFavoritesOnly: false,
   quoteFilterActiveCollectionIds: [],
+  celebrationsEnabled: true,
 };
