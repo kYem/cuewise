@@ -4,7 +4,7 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { getDragEndReorder, getDragReorderIndices, SortableTaskItem } from './SortableTaskItem';
 
-function dragEnd(activeId: string, overId: string | null): DragEndEvent {
+function dragEnd(activeId: string | number, overId: string | number | null): DragEndEvent {
   return {
     active: { id: activeId },
     over: overId === null ? null : { id: overId },
@@ -39,6 +39,14 @@ describe('getDragEndReorder', () => {
 
   it('returns null when dropped on itself (active === over)', () => {
     expect(getDragEndReorder(dragEnd('b', 'b'), ['a', 'b', 'c'])).toBeNull();
+  });
+
+  it('returns null when an id is not in the ordered list', () => {
+    expect(getDragEndReorder(dragEnd('x', 'y'), ['a', 'b', 'c'])).toBeNull();
+  });
+
+  it('coerces dnd-kit numeric ids to strings before matching', () => {
+    expect(getDragEndReorder(dragEnd(1, 3), ['1', '2', '3'])).toEqual({ from: 0, to: 2 });
   });
 });
 

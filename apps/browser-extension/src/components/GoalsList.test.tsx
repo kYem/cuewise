@@ -1,3 +1,4 @@
+import { getNextDayDateString } from '@cuewise/shared';
 import {
   goalFactory,
   taskWithDueDateFactory,
@@ -72,6 +73,8 @@ describe('GoalsList - Due dates', () => {
     render(<GoalsList />);
 
     expect(screen.getByText('Tomorrow')).toBeInTheDocument();
+    // A future due date is not styled as overdue
+    expect(screen.getByTitle(`Due ${getNextDayDateString()}`)).not.toHaveClass('text-red-600');
   });
 
   it('styles the due-date badge red for an overdue task', () => {
