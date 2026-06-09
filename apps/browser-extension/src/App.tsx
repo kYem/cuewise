@@ -1,6 +1,7 @@
 import { ToastContainer } from '@cuewise/ui';
 import { Coffee } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { CelebrationOverlay } from './components/celebration/CelebrationOverlay';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { GoalsPage } from './components/GoalsPage';
 import { InsightsPage } from './components/InsightsPage';
@@ -194,6 +195,8 @@ function App() {
 
       {/* Toast notifications */}
       <ToastContainer toasts={toasts} onClose={removeToast} position="top-right" />
+      {/* Completion celebrations */}
+      <CelebrationOverlay />
     </ErrorBoundary>
   );
 }

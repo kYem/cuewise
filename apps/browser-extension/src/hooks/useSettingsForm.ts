@@ -29,6 +29,7 @@ export interface SettingsFormState {
 
   // Notification settings
   enableNotifications: boolean;
+  celebrationsEnabled: boolean;
 
   // Chrome sync
   syncEnabled: boolean;
@@ -74,6 +75,7 @@ function settingsToFormState(settings: Settings): SettingsFormState {
     pomodoroMusicAutoStart: settings.pomodoroMusicAutoStart,
     pomodoroMusicPlayDuringBreaks: settings.pomodoroMusicPlayDuringBreaks,
     enableNotifications: settings.enableNotifications,
+    celebrationsEnabled: settings.celebrationsEnabled,
     syncEnabled: settings.syncEnabled,
     showClock: settings.showClock,
     timeFormat: settings.timeFormat,
@@ -176,6 +178,7 @@ export function useSettingsForm({
       pomodoroMusicAutoStart: form.pomodoroMusicAutoStart,
       pomodoroMusicPlayDuringBreaks: form.pomodoroMusicPlayDuringBreaks,
       enableNotifications: form.enableNotifications,
+      celebrationsEnabled: form.celebrationsEnabled,
       syncEnabled: form.syncEnabled,
       showClock: form.showClock,
       timeFormat: form.timeFormat,

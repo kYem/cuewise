@@ -10,7 +10,7 @@ interface NotificationsSettingsProps {
 
 /**
  * Notifications settings section.
- * Handles browser notification preferences.
+ * Handles browser notification preferences and completion celebrations.
  */
 export const NotificationsSettings: React.FC<NotificationsSettingsProps> = ({ form, setField }) => {
   const Icon = form.enableNotifications ? Bell : BellOff;
@@ -24,12 +24,18 @@ export const NotificationsSettings: React.FC<NotificationsSettingsProps> = ({ fo
         <h3 className="text-lg font-semibold text-primary">Notifications</h3>
       </div>
 
-      <div className="pl-7">
+      <div className="pl-7 space-y-4">
         <SettingsToggle
           label="Enable notifications"
           description="Get notified when Pomodoro sessions complete and reminders are due"
           checked={form.enableNotifications}
           onChange={(checked) => setField('enableNotifications', checked)}
+        />
+        <SettingsToggle
+          label="Celebrate completions"
+          description="Play a short animation when you finish a focus session or all of today's tasks"
+          checked={form.celebrationsEnabled}
+          onChange={(checked) => setField('celebrationsEnabled', checked)}
         />
       </div>
     </section>
