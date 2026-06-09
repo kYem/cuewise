@@ -2,10 +2,12 @@ import { cn } from '@cuewise/ui';
 import { AlertCircle, Bell, ChevronDown, ExternalLink, Plus } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import emptyRemindersAnimation from '../assets/lottie/empty/reminders.json';
 import { useReminderStore } from '../stores/reminder-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { AddReminderForm } from './AddReminderForm';
 import { EditReminderForm } from './EditReminderForm';
+import { EmptyState } from './EmptyState';
 import { ErrorFallback } from './ErrorFallback';
 import { Modal } from './Modal';
 import { ReminderItem } from './ReminderItem';
@@ -213,11 +215,12 @@ export const ReminderWidget: React.FC = () => {
                   ))}
                 </div>
               ) : (
-                <div className="text-center py-6">
-                  <Bell className="w-10 h-10 mx-auto mb-2 text-tertiary" />
-                  <p className="text-sm text-secondary">No active reminders</p>
-                  <p className="text-xs text-tertiary mt-1">Add one to stay on track</p>
-                </div>
+                <EmptyState
+                  size="sm"
+                  animationData={emptyRemindersAnimation}
+                  title="No active reminders"
+                  description="Add one to stay on track"
+                />
               )}
             </div>
 

@@ -21,4 +21,4 @@ Files are numbered sequentially: `001-feature-name.md`, `002-another-feature.md`
 |----|------|--------|
 | 001 | [Objectives](./001-objectives.md) | Accepted |
 | 002 | [Lottie Celebrations](./002-lottie-celebrations.md) | Accepted |
-| 003 | [Empty-State Illustrations](./003-empty-state-illustrations.md) | Draft |
+| 003 | [Empty-State Illustrations](./003-empty-state-illustrations.md) | Accepted |

@@ -1,7 +1,9 @@
-import { Flag, Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import type React from 'react';
 import { useState } from 'react';
+import emptyGoalsAnimation from '../../assets/lottie/empty/goals.json';
 import { useGoalStore } from '../../stores/goal-store';
+import { EmptyState } from '../EmptyState';
 import { Modal } from '../Modal';
 import { GoalCard } from './GoalCard';
 import { GoalDetailView } from './GoalDetailView';
@@ -74,13 +76,11 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({
           </div>
         )}
 
-        <div className="text-center py-12">
-          <Flag className="w-12 h-12 mx-auto mb-4 text-tertiary" />
-          <p className="text-secondary text-sm mb-2">
-            {showCompleted ? 'No goals yet' : 'No active goals'}
-          </p>
-          <p className="text-tertiary text-xs">Create a goal to track what you want to achieve</p>
-        </div>
+        <EmptyState
+          animationData={emptyGoalsAnimation}
+          title={showCompleted ? 'No goals yet' : 'No active goals'}
+          description="Create a goal to track what you want to achieve"
+        />
 
         {/* Create Objective Modal */}
         <Modal isOpen={isFormOpen} onClose={() => setIsFormOpen(false)} title="New Goal">
