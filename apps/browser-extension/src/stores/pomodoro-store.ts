@@ -12,6 +12,7 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { chromeLocalStorage } from '../adapters/zustand-chrome-adapter';
 import { playCompletionSound, playStartSound } from '../utils/sounds';
+import { useCelebrationStore } from './celebration-store';
 import { useFocusModeStore } from './focus-mode-store';
 import { useSettingsStore } from './settings-store';
 import { useToastStore } from './toast-store';
@@ -410,6 +411,9 @@ export const usePomodoroStore = create<PomodoroStore>()(
 
           // Auto-switch logic
           if (sessionType === 'work') {
+            // Celebrate a completed focus session.
+            useCelebrationStore.getState().celebrate('pomodoro');
+
             // Increment consecutive work sessions
             const newConsecutiveCount = consecutiveWorkSessions + 1;
 

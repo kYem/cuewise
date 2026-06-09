@@ -26,6 +26,14 @@ vi.mock('../utils/sounds', () => ({
   playStartSound: vi.fn(),
 }));
 
+const { celebrateMock } = vi.hoisted(() => ({ celebrateMock: vi.fn() }));
+
+vi.mock('./celebration-store', () => ({
+  useCelebrationStore: {
+    getState: () => ({ celebrate: celebrateMock, active: null, dismiss: vi.fn() }),
+  },
+}));
+
 // Mock Notification API
 const mockNotification = vi.fn();
 globalThis.Notification = mockNotification as unknown as typeof Notification;
@@ -317,5 +325,26 @@ describe('Pomodoro Store - Auto-Start Breaks', () => {
       const state = usePomodoroStore.getState();
       expect(state.timeRemaining).toBe(originalTimeRemaining - 10); // Adjusted by ~10 seconds
     });
+  });
+});
+
+describe('completeSession celebration trigger', () => {
+  beforeEach(() => {
+    celebrateMock.mockClear();
+    vi.mocked(storage.getSettings).mockResolvedValue(defaultSettings);
+    // setPomodoroSessions returns Promise<StorageResult> = { success: boolean }.
+    vi.mocked(storage.setPomodoroSessions).mockResolvedValue({ success: true });
+  });
+
+  it('celebrates when a work session completes', async () => {
+    setupWorkSession();
+    await usePomodoroStore.getState().completeSession();
+    expect(celebrateMock).toHaveBeenCalledWith('pomodoro');
+  });
+
+  it('does not celebrate when a break completes', async () => {
+    setupBreakSession('break');
+    await usePomodoroStore.getState().completeSession();
+    expect(celebrateMock).not.toHaveBeenCalled();
   });
 });
