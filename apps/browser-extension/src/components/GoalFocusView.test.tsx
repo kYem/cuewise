@@ -1,5 +1,6 @@
 import { getNextDayDateString } from '@cuewise/shared';
 import {
+  completedGoalFactory,
   goalFactory,
   taskWithDueDateFactory,
   taskWithSubtasksFactory,
@@ -69,5 +70,37 @@ describe('GoalFocusView - task metadata', () => {
     expect(screen.getByText('Bare task')).toBeInTheDocument();
     expect(screen.queryByText('Tomorrow')).not.toBeInTheDocument();
     expect(screen.queryByText(/^\d+\/\d+$/)).not.toBeInTheDocument();
+  });
+});
+
+describe('GoalFocusView - completed focused task', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('shows the All done screen when every task is complete, even if a completed task is still focused', () => {
+    // Focused task was completed from another view, so focusedGoalId still points at it.
+    const done = completedGoalFactory.build({ text: 'Finished it' });
+    const store = createMockGoalStore({ todayTasks: [done], goals: [done] });
+    vi.mocked(useGoalStore).mockImplementation(createGoalStoreMock(store));
+    mockSettings(done.id);
+
+    render(<GoalFocusView />);
+
+    expect(screen.getByText('All done!')).toBeInTheDocument();
+    expect(screen.queryByText('Finished it')).not.toBeInTheDocument();
+  });
+
+  it('skips a completed focused task and advances to the next incomplete one', () => {
+    const done = completedGoalFactory.build({ text: 'Already done' });
+    const next = goalFactory.build({ text: 'Do this next' });
+    const store = createMockGoalStore({ todayTasks: [done, next], goals: [done, next] });
+    vi.mocked(useGoalStore).mockImplementation(createGoalStoreMock(store));
+    mockSettings(done.id);
+
+    render(<GoalFocusView />);
+
+    expect(screen.getByText('Do this next')).toBeInTheDocument();
+    expect(screen.queryByText('Already done')).not.toBeInTheDocument();
   });
 });

@@ -27,8 +27,10 @@ export const GoalFocusView: React.FC<GoalFocusViewProps> = ({ showAddInput, onCl
   const focusedGoal = todayTasks.find((g) => g.id === focusedGoalId);
   const incompleteGoals = todayTasks.filter((g) => !g.completed);
 
-  // If focused goal doesn't exist or is completed, suggest first incomplete
-  const displayGoal = focusedGoal || incompleteGoals[0] || null;
+  // Use the focused goal only while it's still incomplete; once it's done (e.g.
+  // completed from another view) fall through to the next open task.
+  const activeFocusedGoal = focusedGoal && !focusedGoal.completed ? focusedGoal : null;
+  const displayGoal = activeFocusedGoal ?? incompleteGoals[0] ?? null;
 
   // Find the parent objective if this task is linked to one
   const parentObjective = displayGoal?.parentId
@@ -68,8 +70,8 @@ export const GoalFocusView: React.FC<GoalFocusViewProps> = ({ showAddInput, onCl
     );
   }
 
-  // All tasks completed
-  if (incompleteGoals.length === 0 && !focusedGoal) {
+  // All tasks completed (regardless of whether a now-completed task is still focused)
+  if (incompleteGoals.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-8">
         <CheckCircle2 className="w-12 h-12 mb-3 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]" />
