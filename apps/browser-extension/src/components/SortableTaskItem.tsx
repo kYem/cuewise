@@ -1,3 +1,4 @@
+import type { DragEndEvent } from '@dnd-kit/core';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { GripVertical } from 'lucide-react';
@@ -21,6 +22,21 @@ export function getDragReorderIndices(
     return null;
   }
   return { from, to };
+}
+
+/**
+ * Resolve a dnd-kit drag-end event to from/to indices. Returns null when the
+ * item was dropped outside any target (no `over`).
+ */
+export function getDragEndReorder(
+  event: DragEndEvent,
+  orderedIds: string[]
+): { from: number; to: number } | null {
+  const { active, over } = event;
+  if (!over) {
+    return null;
+  }
+  return getDragReorderIndices(orderedIds, String(active.id), String(over.id));
 }
 
 interface SortableTaskItemProps {

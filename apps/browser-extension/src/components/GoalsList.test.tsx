@@ -74,6 +74,17 @@ describe('GoalsList - Due dates', () => {
     expect(screen.getByText('Tomorrow')).toBeInTheDocument();
   });
 
+  it('styles the due-date badge red for an overdue task', () => {
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const task = taskWithDueDateFactory.build({ text: 'Overdue task', dueDate: yesterday });
+    const store = createMockGoalStore({ todayTasks: [task], goals: [task] });
+    vi.mocked(useGoalStore).mockImplementation(createGoalStoreMock(store));
+
+    render(<GoalsList />);
+
+    expect(screen.getByTitle(`Due ${yesterday}`)).toHaveClass('text-red-600');
+  });
+
   it('exposes the due-date control while editing a task', async () => {
     const user = userEvent.setup();
     const task = goalFactory.build({ text: 'Write report', completed: false });

@@ -66,6 +66,30 @@ describe('SubtaskList', () => {
     expect(handlers.onAdd).toHaveBeenCalledWith('Draft outline');
   });
 
+  it('clears the input after a subtask is added', async () => {
+    const user = userEvent.setup();
+    const goal = taskWithSubtasksFactory.build();
+    render(<SubtaskList goal={goal} {...noopHandlers()} />);
+
+    await user.click(screen.getByRole('button', { name: 'Show subtasks' }));
+    const input = screen.getByLabelText('Add a subtask');
+    await user.type(input, 'Draft outline{Enter}');
+
+    expect(input).toHaveValue('');
+  });
+
+  it('ignores an empty or whitespace-only subtask submit', async () => {
+    const user = userEvent.setup();
+    const goal = taskWithSubtasksFactory.build();
+    const handlers = noopHandlers();
+    render(<SubtaskList goal={goal} {...handlers} />);
+
+    await user.click(screen.getByRole('button', { name: 'Show subtasks' }));
+    await user.type(screen.getByLabelText('Add a subtask'), '   {Enter}');
+
+    expect(handlers.onAdd).not.toHaveBeenCalled();
+  });
+
   it('offers an "Add subtask" toggle when the task has no subtasks', async () => {
     const user = userEvent.setup();
     const goal = goalFactory.build(); // no subtasks

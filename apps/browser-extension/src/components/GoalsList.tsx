@@ -43,7 +43,7 @@ import { useGoalStore } from '../stores/goal-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { DueDateControl } from './DueDateControl';
 import { GoalInput } from './GoalInput';
-import { getDragReorderIndices, SortableTaskItem } from './SortableTaskItem';
+import { getDragEndReorder, SortableTaskItem } from './SortableTaskItem';
 import { SubtaskList } from './SubtaskList';
 import { UpcomingTasks } from './UpcomingTasks';
 
@@ -83,14 +83,9 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
   );
 
   const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (!over) {
-      return;
-    }
-    const indices = getDragReorderIndices(
-      todayTasks.map((task) => task.id),
-      String(active.id),
-      String(over.id)
+    const indices = getDragEndReorder(
+      event,
+      todayTasks.map((task) => task.id)
     );
     if (indices) {
       reorderTasks(indices.from, indices.to);
@@ -297,7 +292,6 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
                           </span>
                         )}
 
-                        {/* Due date control - only show in edit mode */}
                         {isEditing(goal.id) && (
                           <DueDateControl
                             dueDate={goal.dueDate}
@@ -419,8 +413,7 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
                       </div>
                     </div>
 
-                    {/* Subtasks - full view only. Always mounted (independent of
-                        edit mode) so the add affordance survives the input blur. */}
+                    {/* Mounted regardless of edit mode so the add affordance survives the input blur */}
                     {viewMode === 'full' && (
                       <SubtaskList
                         goal={goal}
