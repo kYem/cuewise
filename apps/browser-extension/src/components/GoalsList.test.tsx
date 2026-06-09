@@ -182,3 +182,20 @@ describe('GoalsList - Reorder', () => {
     expect(screen.getAllByRole('button', { name: 'Drag to reorder' })).toHaveLength(2);
   });
 });
+
+describe('GoalsList - Upcoming section', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useSettingsStore).mockImplementation(createSettingsStoreMock());
+  });
+
+  it('renders the Upcoming section when there are future-due tasks', () => {
+    const upcoming = taskWithDueDateFactory.build({ text: 'Ship release' });
+    const store = createMockGoalStore({ todayTasks: [], goals: [upcoming] });
+    vi.mocked(useGoalStore).mockImplementation(createGoalStoreMock(store));
+
+    render(<GoalsList />);
+
+    expect(screen.getByRole('button', { name: 'Show upcoming tasks' })).toBeInTheDocument();
+  });
+});

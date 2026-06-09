@@ -45,6 +45,7 @@ import { DueDateControl } from './DueDateControl';
 import { GoalInput } from './GoalInput';
 import { getDragReorderIndices, SortableTaskItem } from './SortableTaskItem';
 import { SubtaskList } from './SubtaskList';
+import { UpcomingTasks } from './UpcomingTasks';
 
 interface GoalsListProps {
   viewMode?: GoalViewMode;
@@ -521,6 +522,8 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
           )}
         </div>
       )}
+
+      {viewMode === 'full' && <UpcomingTasks defaultExpanded={false} />}
     </div>
   );
 };
