@@ -896,4 +896,23 @@ describe('toggleTask celebration trigger', () => {
 
     expect(celebrateMock).not.toHaveBeenCalled();
   });
+
+  it('does not celebrate when completing an objective (not a task)', async () => {
+    const today = getTodayDateString();
+    const objective = goalFactory.build({ type: 'objective', date: today, completed: false });
+    useGoalStore.setState({ goals: [objective], todayTasks: [] });
+
+    await useGoalStore.getState().toggleTask(objective.id);
+
+    expect(celebrateMock).not.toHaveBeenCalled();
+  });
+
+  it('does not celebrate when completing a task not dated today', async () => {
+    const past = goalFactory.build({ date: '2020-01-01', completed: false });
+    useGoalStore.setState({ goals: [past], todayTasks: [] });
+
+    await useGoalStore.getState().toggleTask(past.id);
+
+    expect(celebrateMock).not.toHaveBeenCalled();
+  });
 });

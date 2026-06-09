@@ -71,4 +71,14 @@ describe('LottiePlayer', () => {
 
     expect(fake.destroy).toHaveBeenCalledTimes(1);
   });
+
+  it('passes loop=true to loadAnimation when loop is set', () => {
+    const fake = createFakeAnimation();
+    vi.mocked(lottie.loadAnimation).mockReturnValue(fake.item);
+
+    render(<LottiePlayer animationData={sampleData} loop />);
+
+    const config = vi.mocked(lottie.loadAnimation).mock.calls[0][0] as AnimationConfigWithData;
+    expect(config.loop).toBe(true);
+  });
 });

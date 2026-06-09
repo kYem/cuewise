@@ -60,7 +60,7 @@ interface PomodoroStore {
   reset: () => void;
   skip: () => void;
   tick: () => void;
-  completeSession: () => Promise<void>;
+  completeSession: (options?: { isRecovery?: boolean }) => Promise<void>;
   switchToBreak: () => void;
   switchToLongBreak: () => void;
   switchToWork: () => void;
@@ -158,8 +158,8 @@ export const usePomodoroStore = create<PomodoroStore>()(
                   isLoading: false,
                   timeRemaining: 0,
                 });
-                // Complete the session
-                get().completeSession();
+                // Complete the session (recovery: don't celebrate on cold start)
+                get().completeSession({ isRecovery: true });
               } else {
                 logger.debug('Timer still has time, resuming with adjusted time');
                 // Timer still has time left - resume with adjusted time
@@ -352,7 +352,8 @@ export const usePomodoroStore = create<PomodoroStore>()(
         }
       },
 
-      completeSession: async () => {
+      completeSession: async (options) => {
+        const isRecovery = options?.isRecovery === true;
         const {
           currentSessionId,
           sessionType,
@@ -411,8 +412,12 @@ export const usePomodoroStore = create<PomodoroStore>()(
 
           // Auto-switch logic
           if (sessionType === 'work') {
-            // Celebrate a completed focus session.
-            useCelebrationStore.getState().celebrate('pomodoro');
+            // Celebrate a completed focus session — but not on a background-recovery
+            // completion (timer expired while all tabs were closed), which would fire
+            // confetti on cold start for a session the user never watched finish.
+            if (!isRecovery) {
+              useCelebrationStore.getState().celebrate('pomodoro');
+            }
 
             // Increment consecutive work sessions
             const newConsecutiveCount = consecutiveWorkSessions + 1;

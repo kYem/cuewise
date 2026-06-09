@@ -347,4 +347,16 @@ describe('completeSession celebration trigger', () => {
     await usePomodoroStore.getState().completeSession();
     expect(celebrateMock).not.toHaveBeenCalled();
   });
+
+  it('does not celebrate when a long break completes', async () => {
+    setupBreakSession('longBreak');
+    await usePomodoroStore.getState().completeSession();
+    expect(celebrateMock).not.toHaveBeenCalled();
+  });
+
+  it('does not celebrate on a background-recovery completion', async () => {
+    setupWorkSession();
+    await usePomodoroStore.getState().completeSession({ isRecovery: true });
+    expect(celebrateMock).not.toHaveBeenCalled();
+  });
 });

@@ -21,6 +21,12 @@ function prefersReducedMotion(): boolean {
  * Top-level, non-interactive overlay that plays a celebration animation when the
  * celebration store has an active type. Gated by the celebrationsEnabled setting
  * and prefers-reduced-motion; mounted once in App next to the toast container.
+ *
+ * INVARIANT: this overlay must stay permanently mounted. The store's debounce
+ * (celebrate() is a no-op while `active` is set) relies on this component clearing
+ * `active` via dismiss() — both on completion and on the disabled/reduced-motion
+ * path below. If the overlay were conditionally unmounted, a celebrate() fired
+ * while it was absent would leave `active` stuck and block all future celebrations.
  */
 export function CelebrationOverlay() {
   const active = useCelebrationStore((state) => state.active);
