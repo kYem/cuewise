@@ -3,19 +3,13 @@ import confetti from '../../assets/lottie/confetti.json';
 import type { CelebrationType } from '../../stores/celebration-store';
 import { useCelebrationStore } from '../../stores/celebration-store';
 import { useSettingsStore } from '../../stores/settings-store';
+import { prefersReducedMotion } from '../../utils/prefers-reduced-motion';
 import { LottiePlayer } from './LottiePlayer';
 
 const CELEBRATION_ASSETS: Record<CelebrationType, object> = {
   pomodoro: confetti,
   allGoals: confetti,
 };
-
-function prefersReducedMotion(): boolean {
-  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
-    return false;
-  }
-  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-}
 
 /**
  * Top-level, non-interactive overlay that plays a celebration animation when the
