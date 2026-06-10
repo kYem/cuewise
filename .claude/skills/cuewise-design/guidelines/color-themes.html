@@ -1,0 +1,37 @@
+<!-- @dsCard group="Colors" viewport="700x150" name="Themes" subtitle="Purple · Forest · Rose · Glass — each light/dark" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { background: var(--color-surface); padding: 22px 28px; }
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  .theme { display: flex; flex-direction: column; gap: 8px; }
+  .swatches { display: flex; gap: 5px; }
+  .s { width: 30px; height: 36px; border-radius: 7px; }
+  .name { font-family: var(--font-sans); font-size: 11px; font-weight: 600; color: var(--color-text-primary); }
+  .sub { font-family: var(--font-sans); font-size: 10px; color: var(--color-text-tertiary); }
+</style>
+</head>
+<body>
+  <div class="grid">
+    <div class="theme">
+      <div class="swatches"><span class="s" style="background:#6d4ad9"></span><span class="s" style="background:#faf5ff"></span><span class="s" style="background:#2b2150"></span></div>
+      <div class="name">Purple</div><div class="sub">default · violet 285°</div>
+    </div>
+    <div class="theme">
+      <div class="swatches"><span class="s" style="background:#2f9e63"></span><span class="s" style="background:#f0fdf4"></span><span class="s" style="background:#21372b"></span></div>
+      <div class="name">Forest</div><div class="sub">green 145°</div>
+    </div>
+    <div class="theme">
+      <div class="swatches"><span class="s" style="background:#d6356e"></span><span class="s" style="background:#fff1f2"></span><span class="s" style="background:#3a1f28"></span></div>
+      <div class="name">Rose</div><div class="sub">pink 2°</div>
+    </div>
+    <div class="theme">
+      <div class="swatches"><span class="s" style="background:linear-gradient(135deg,#374151,#111827)"></span><span class="s" style="background:rgba(255,255,255,0.35);outline:1px solid #cbd5e1"></span><span class="s" style="background:rgba(0,0,0,0.35)"></span></div>
+      <div class="name">Glass</div><div class="sub">frosted · image bg</div>
+    </div>
+  </div>
+</body>
+</html>

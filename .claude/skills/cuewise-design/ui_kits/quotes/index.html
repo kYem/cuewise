@@ -1,0 +1,80 @@
+<!-- @dsCard group="Quotes" viewport="1280x900" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Cuewise — Quote Management</title>
+<link rel="stylesheet" href="../../styles.css" />
+<style>
+  html, body { min-height: 100%; }
+  body { background: var(--gradient-background); }
+  #root { min-height: 100vh; }
+  .qm { max-width: 1240px; margin: 0 auto; padding: 36px 32px 60px; }
+
+  .qm-head { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; }
+  .back-link { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: var(--radius-full);
+    color: var(--color-text-primary); text-decoration: none; transition: background var(--duration-fast) ease; }
+  .back-link:hover { background: var(--color-surface-variant); }
+  .qm-head .grow { flex: 1; }
+  .qm-title { font-family: var(--font-display); font-weight: 700; font-size: 34px; color: var(--color-text-primary); line-height: 1.1; }
+  .qm-sub { font-size: 15px; color: var(--color-text-secondary); margin-top: 2px; }
+  .add-quote { display: inline-flex; align-items: center; gap: 8px; padding: 12px 20px; border: none; border-radius: var(--radius-md);
+    background: var(--color-primary-600); color: #fff; font-family: var(--font-sans); font-weight: 600; font-size: 15px; box-shadow: var(--shadow-md);
+    transition: background var(--duration-fast) ease; }
+  .add-quote:hover { background: var(--color-primary-700); }
+
+  .qm-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 22px; }
+  @media (max-width: 760px) { .qm-stats { grid-template-columns: repeat(2, 1fr); } }
+  .qm-stat { border-radius: var(--radius-lg); padding: 16px 20px; }
+  .qm-stat-n { font-family: var(--font-display); font-weight: 700; font-size: 26px; line-height: 1; }
+  .qm-stat-l { font-size: 13px; font-weight: 600; margin-top: 6px; }
+
+  .search { display: flex; align-items: center; gap: 10px; padding: 14px 18px; background: var(--color-surface-elevated);
+    border: 1px solid var(--color-border); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); margin-bottom: 18px; }
+  .search input { flex: 1; border: none; outline: none; background: transparent; font-family: var(--font-sans); font-size: 15px; color: var(--color-text-primary); }
+  .search input::placeholder { color: var(--color-text-tertiary); }
+
+  .filter-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 8px; }
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+  .tab { padding: 8px 16px; border: none; border-radius: var(--radius-md); background: transparent; color: var(--color-text-secondary);
+    font-family: var(--font-sans); font-weight: 600; font-size: 14px; transition: background var(--duration-fast) ease, color var(--duration-fast) ease; }
+  .tab:hover { background: var(--color-surface-variant); }
+  .tab.active { background: var(--color-primary-600); color: #fff; }
+  .cat-select { display: inline-flex; align-items: center; gap: 8px; padding: 9px 16px; background: var(--color-surface-elevated);
+    border: 1px solid var(--color-border); border-radius: var(--radius-md); font-size: 14px; color: var(--color-text-primary); box-shadow: var(--shadow-sm); }
+  .showing { font-size: 14px; color: var(--color-text-secondary); margin: 14px 0 18px; }
+
+  .qcard-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+  @media (max-width: 920px) { .qcard-grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 600px) { .qcard-grid { grid-template-columns: 1fr; } }
+  .qcard { background: var(--color-surface-elevated); border: 1px solid var(--color-border); border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-md); padding: 22px; display: flex; flex-direction: column; transition: box-shadow var(--duration-fast) ease, transform var(--duration-fast) ease; }
+  .qcard:hover { box-shadow: var(--shadow-lg); transform: translateY(-2px); }
+  .qcard-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .cat-badge { color: #fff; font-weight: 600; font-size: 12px; padding: 4px 12px; border-radius: var(--radius-full); }
+  .custom-tag { font-size: 12px; font-weight: 600; color: var(--category-learning); background: color-mix(in srgb, var(--category-learning) 12%, transparent);
+    padding: 4px 10px; border-radius: var(--radius-full); }
+  .qcard-text { font-size: 16px; font-weight: 500; line-height: 1.45; color: var(--color-text-primary); }
+  .qcard-author { font-size: 14px; color: var(--color-text-secondary); margin-top: 12px; }
+  .qcard-meta { font-size: 12px; color: var(--color-text-tertiary); margin-top: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--color-divider); }
+  .qcard-actions { display: flex; align-items: center; gap: 8px; margin-top: 14px; }
+  .qact { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border: none; border-radius: var(--radius-full);
+    background: color-mix(in srgb, var(--color-error) 9%, transparent); color: var(--color-error); transition: transform var(--duration-fast) ease; }
+  .qact:hover { transform: scale(1.08); }
+  .qact.on { color: var(--color-error); }
+  .qact:nth-child(2) { background: var(--color-surface-variant); color: var(--color-text-tertiary); }
+  .qact-spacer { flex: 1; }
+  .qact.edit { background: color-mix(in srgb, var(--color-primary-500) 12%, transparent); color: var(--color-primary-600); }
+  .qact.del { background: color-mix(in srgb, var(--color-error) 10%, transparent); color: var(--color-error); }
+</style>
+</head>
+<body>
+  <div id="root"></div>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+  <script type="text/babel" src="../_lib/icons.jsx"></script>
+  <script type="text/babel" src="app.jsx"></script>
+</body>
+</html>

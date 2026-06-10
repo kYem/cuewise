@@ -1,0 +1,7 @@
+/* ============================================================
+   Cuewise — Webfonts
+   The product loads Poppins + Inter from Google Fonts. We mirror
+   that here so consumers of the design system get identical type.
+   ============================================================ */
+
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@600;700;800&display=swap");

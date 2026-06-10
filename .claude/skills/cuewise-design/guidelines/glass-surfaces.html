@@ -1,0 +1,46 @@
+<!-- @dsCard group="Glass" viewport="700x300" name="Glass surfaces" subtitle="Frosted cards + tokens over a photo (data-theme=glass)" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { margin: 0; }
+  .wrap { position: relative; height: 300px; overflow: hidden; }
+  .bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .scrim { position: absolute; inset: 0; background: var(--glass-scrim); }
+  .inner { position: relative; z-index: 2; height: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; padding: 26px 30px; align-items: center; }
+  .gcard { background: var(--glass-card); backdrop-filter: blur(var(--glass-blur)); border: 1px solid var(--glass-hairline);
+    border-radius: var(--radius-xl); box-shadow: var(--shadow-xl); padding: 18px 20px; }
+  .gcard h3 { font-family: var(--font-display); font-weight: 600; font-size: 18px; color: #fff; margin: 0; text-shadow: var(--glass-text-shadow); }
+  .gcard p { font-family: var(--font-sans); font-size: 12.5px; color: rgba(255,255,255,0.75); margin: 4px 0 0; }
+  .gbtn { margin-top: 14px; display: inline-flex; padding: 8px 16px; border: 1px solid var(--glass-hairline); border-radius: var(--radius-md);
+    background: rgba(255,255,255,0.16); color: #fff; font: 600 13px var(--font-sans); }
+  .tokens { display: flex; flex-direction: column; gap: 9px; }
+  .tok { display: flex; align-items: center; gap: 10px; font-family: var(--font-sans); font-size: 11.5px; color: #fff; text-shadow: var(--glass-text-shadow); white-space: nowrap; }
+  .chip { width: 30px; height: 22px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.35); flex-shrink: 0; }
+  .name { color: rgba(255,255,255,0.92); }
+  .val { color: rgba(255,255,255,0.6); font-size: 10.5px; margin-left: auto; }
+</style>
+</head>
+<body>
+  <div class="wrap" data-theme="glass">
+    <img class="bg" src="../assets/bg-aurora.png" alt="" />
+    <div class="scrim"></div>
+    <div class="inner">
+      <div class="gcard">
+        <h3>Frosted surface</h3>
+        <p>rgba black + 16px backdrop-blur, hairline white border, xl shadow.</p>
+        <span class="gbtn">Primary action</span>
+      </div>
+      <div class="tokens">
+        <div class="tok"><span class="chip" style="background:var(--glass-card)"></span><span class="name">--glass-card</span><span class="val">rgba(0,0,0,.25)</span></div>
+        <div class="tok"><span class="chip" style="background:var(--glass-card-elevated)"></span><span class="name">--glass-card-elevated</span><span class="val">rgba(0,0,0,.35)</span></div>
+        <div class="tok"><span class="chip" style="background:rgba(255,255,255,0.2)"></span><span class="name">--glass-hairline</span><span class="val">rgba(255,255,255,.2)</span></div>
+        <div class="tok"><span class="chip" style="background:#fff"></span><span class="name">text-primary</span><span class="val">#fff</span></div>
+        <div class="tok"><span class="chip" style="background:rgba(255,255,255,0.75)"></span><span class="name">text-secondary</span><span class="val">75%</span></div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

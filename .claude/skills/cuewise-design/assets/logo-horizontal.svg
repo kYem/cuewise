@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 110" fill="none">
+  <g transform="translate(2,-5) scale(0.72)">
+    <path d="M92 88 A 42 42 0 1 1 92 32" stroke="#7c3aed" stroke-width="15" stroke-linecap="round"></path>
+    <circle cx="92" cy="60" r="11" fill="#8b5cf6"></circle>
+  </g>
+  <text x="104" y="68" font-family="Poppins, sans-serif" font-weight="700" font-size="52" letter-spacing="-1" fill="#221b3d">Cuewise</text>
+</svg>

@@ -1,0 +1,30 @@
+<!-- @dsCard group="Colors" viewport="700x150" name="Primary — Violet" subtitle="Brand scale, 600 = primary action" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { background: var(--color-surface); padding: 24px 28px; }
+  .scale { display: grid; grid-template-columns: repeat(10, 1fr); gap: 6px; }
+  .sw { height: 56px; border-radius: 8px; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 5px; font-family: var(--font-sans); font-size: 10px; }
+  .lbl { font-family: var(--font-sans); font-size: 10px; color: var(--color-text-tertiary); text-align: center; margin-top: 5px; }
+</style>
+</head>
+<body>
+  <div class="scale" id="s"></div>
+  <div class="scale" id="l" style="margin-top:0"></div>
+  <script>
+    const steps=[50,100,200,300,400,500,600,700,800,900];
+    const s=document.getElementById('s'), l=document.getElementById('l');
+    steps.forEach(n=>{
+      const d=document.createElement('div'); d.className='sw';
+      d.style.background=`var(--color-primary-${n})`;
+      d.style.color = n>=400 ? '#fff' : 'var(--color-primary-800)';
+      if(n===600){d.textContent='★';d.style.fontSize='13px';}
+      s.appendChild(d);
+      const t=document.createElement('div'); t.className='lbl'; t.textContent=n; l.appendChild(t);
+    });
+  </script>
+</body>
+</html>
