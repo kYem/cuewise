@@ -1,5 +1,51 @@
 # @cuewise/shared
 
+## 1.9.0
+
+### Minor Changes
+
+- a403b84: Add CSV bulk quote import feature
+
+  - Import quotes from CSV files with drag & drop or file picker
+  - CSV parsing with support for quoted fields, escaped quotes, and commas
+  - Validation with clear error messages for invalid rows
+  - Optional collection assignment for imported quotes
+  - Download CSV template with all valid categories listed
+  - Comprehensive test coverage for CSV parsing utilities
+
+- c8b9d8c: Persist quote filter settings across browser sessions
+
+  - Remember enabled categories, custom quotes toggle, favorites-only mode
+  - Remember active collection filters
+  - Filter out deleted collection IDs on load
+  - Show warning toast if filter preferences fail to save
+  - Persist filter state when deleting collections
+
+- 541153e: Add quote collections feature for organizing quotes into themed groups
+
+  - Create custom collections with name and description
+  - Add individual quotes to collections via CollectionPicker popover
+  - Bulk add multiple quotes to a collection
+  - View and manage collections in Quote Management page (new Collections tab)
+  - Filter quotes by active collection
+  - Collection count badges on quote cards
+  - Full CRUD operations for collections
+
+- 04e9997: Auto-complete a task when all its subtasks are done
+
+  Checking the last open subtask now marks the parent task complete, and
+  unchecking a subtask reopens it — a task with subtasks is complete exactly when
+  all of them are. Completing the task directly (via its own checkbox) is still
+  allowed.
+
+- 6eddbc7: Add task enhancements: subtasks, due dates, reordering, duplication, and an upcoming-tasks view
+
+  - **Subtasks**: add a checklist to any task with add / toggle / remove and a progress indicator
+  - **Due dates**: set a per-task due date with a picker; a badge shows the relative day and overdue tasks are highlighted red
+  - **Drag-to-reorder**: reorder Today's Focus tasks via a drag handle (keyboard-accessible); order is persisted
+  - **Duplicate**: one-click duplicate of a task (copies subtasks and due date, reset to incomplete)
+  - **Upcoming**: a collapsible "Upcoming" section on the home list and the Goals page surfaces tasks due within the next 14 days, with inline complete and "move to today"
+
 ## 1.8.0
 
 ### Minor Changes
