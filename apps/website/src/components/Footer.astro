@@ -1,23 +1,25 @@
 ---
 import { SITE } from '../lib/site';
+
+const year = new Date().getFullYear();
 ---
 
 <footer>
   <div class="wrap">
     <div class="foot">
-      <a class="brand" href="/"><img src="/images/logo-mark-white.svg" alt="Cuewise logo" /> Cuewise</a>
+      <a class="brand" href="/"><img src="/images/logo-mark-white.svg" alt="" /> Cuewise</a>
       <div class="foot-links">
         <a href="/#features">Features</a>
         <a href="/#how">How it works</a>
         <a href="/cuewise-vs-momentum">Cuewise vs Momentum</a>
         <a href="/support">Support & FAQ</a>
         <a href="/privacy">Privacy Policy</a>
-        <a href={SITE.githubUrl} target="_blank" rel="noopener">GitHub</a>
-        <a href={SITE.storeUrl} target="_blank" rel="noopener">Get the extension</a>
+        <a href={SITE.githubUrl} target="_blank" rel="noopener noreferrer">GitHub</a>
+        <a href={SITE.storeUrl} target="_blank" rel="noopener noreferrer">Get the extension</a>
       </div>
     </div>
     <p class="foot-copy">
-      © 2026 Cuewise · Turn every new tab into a moment of intention · Privacy-first, all data stored locally.
+      © {year} Cuewise · Turn every new tab into a moment of intention · Privacy-first, all data stored locally.
     </p>
   </div>
 </footer>
