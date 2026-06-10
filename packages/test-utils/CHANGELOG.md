@@ -1,5 +1,12 @@
 # @cuewise/test-utils
 
+## 1.0.3
+
+### Patch Changes
+
+- Updated dependencies [b6719ff]
+  - @cuewise/shared@1.9.1
+
 ## 1.0.2
 
 ### Patch Changes
