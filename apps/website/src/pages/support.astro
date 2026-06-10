@@ -1,0 +1,205 @@
+---
+import Base from '../layouts/Base.astro';
+import { SITE } from '../lib/site';
+---
+
+<Base
+  title="Support & FAQ - Cuewise"
+  description="Find answers to common questions about the Cuewise new tab extension — installation, privacy, supported browsers, and troubleshooting."
+>
+  <main>
+
+    <!-- 1. Page Hero -->
+    <section class="page-hero">
+      <div class="wrap">
+        <div class="eyebrow">
+          <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+            <path d="M12 17h.01"/>
+          </svg>
+          We're Here to Help
+        </div>
+        <h1>Cuewise Support</h1>
+        <p class="hero-sub">Find answers to common questions, troubleshooting tips, and ways to get in touch with our team.</p>
+      </div>
+    </section>
+
+    <!-- 2. FAQ Section -->
+    <section class="section-pad" id="faq">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <p class="kicker">FAQ</p>
+          <h2 class="section-title">Frequently Asked Questions</h2>
+        </div>
+
+        <details class="faq-item glass reveal">
+          <summary>How do I install Cuewise?</summary>
+          <div class="faq-body">
+            <p>Installing Cuewise is quick and easy:</p>
+            <ol>
+              <li>Visit the <a href={SITE.storeUrl} target="_blank" rel="noopener noreferrer">Chrome Web Store</a></li>
+              <li>Click "Add to Chrome"</li>
+              <li>Confirm the installation when prompted</li>
+              <li>The extension icon will appear in your browser toolbar</li>
+            </ol>
+            <p>Setup takes less than 2 minutes!</p>
+          </div>
+        </details>
+
+        <details class="faq-item glass reveal">
+          <summary>Is Cuewise really free?</summary>
+          <div class="faq-body">
+            <p>Yes! Cuewise is completely free to use, forever. We believe in making mindful productivity accessible to everyone. There are no hidden fees, premium tiers, or paid features. It's also open source — you can <a href={SITE.githubUrl}>read the code on GitHub</a>.</p>
+          </div>
+        </details>
+
+        <details class="faq-item glass reveal">
+          <summary>How does Cuewise handle my data?</summary>
+          <div class="faq-body">
+            <p>Privacy is our top priority. All your goals, notes, and progress are stored locally on your device. We don't collect, track, or share your personal data. Your productivity journey is yours alone.</p>
+          </div>
+        </details>
+
+        <details class="faq-item glass reveal">
+          <summary>Which browsers are supported?</summary>
+          <div class="faq-body">
+            <p>Cuewise currently supports:</p>
+            <ul>
+              <li>Google Chrome</li>
+              <li>Microsoft Edge</li>
+              <li>Brave</li>
+              <li>Other Chromium-based browsers</li>
+            </ul>
+            <p>Firefox support is coming soon!</p>
+          </div>
+        </details>
+
+        <details class="faq-item glass reveal">
+          <summary>What features does Cuewise offer?</summary>
+          <div class="faq-body">
+            <p>Cuewise includes:</p>
+            <ul>
+              <li>Daily wisdom quotes with 10 categories and custom collections</li>
+              <li>Goal tracking with tasks, objectives and subtasks</li>
+              <li>A full Pomodoro timer with session history and heatmaps</li>
+              <li>Focus Mode with beautiful backgrounds</li>
+              <li>Ambient soundscapes and YouTube focus music</li>
+              <li>Gentle reminders to stay on track</li>
+              <li>Progress insights that celebrate your momentum</li>
+              <li>Four themes including the signature Glass mode</li>
+            </ul>
+          </div>
+        </details>
+
+        <details class="faq-item glass reveal">
+          <summary>Can I sync my data across devices?</summary>
+          <div class="faq-body">
+            <p>Currently, data is stored locally on each device for maximum privacy. We're exploring optional sync features that would maintain our privacy-first approach while allowing you to access your goals across devices.</p>
+          </div>
+        </details>
+      </div>
+    </section>
+
+    <!-- 3. Troubleshooting Section -->
+    <section class="section-pad" id="troubleshooting" style="padding-top:0;">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <p class="kicker">Troubleshooting</p>
+          <h2 class="section-title">Quick fixes for common hiccups</h2>
+        </div>
+        <div class="feat-grid" style="grid-template-columns: repeat(2, 1fr);">
+          <div class="feat glass reveal">
+            <div class="feat-icon" style="background:linear-gradient(135deg,#8B5CF6,#6d28d9)">
+              <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+            </div>
+            <h3>Extension Not Showing?</h3>
+            <ul>
+              <li>Check if the extension is enabled in chrome://extensions</li>
+              <li>Pin the extension to your toolbar for easy access</li>
+              <li>Refresh your browser after installation</li>
+            </ul>
+          </div>
+          <div class="feat glass reveal">
+            <div class="feat-icon" style="background:linear-gradient(135deg,#3B82F6,#2563eb)">
+              <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 10h.01M12 10h.01M16 10h.01"/></svg>
+            </div>
+            <h3>Data Not Saving?</h3>
+            <ul>
+              <li>Ensure you're not in Incognito/Private mode</li>
+              <li>Check browser storage permissions</li>
+              <li>Try clearing browser cache and reinstalling</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. Get in Touch Section -->
+    <section class="section-pad" id="contact" style="padding-top:0;">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <p class="kicker">Contact</p>
+          <h2 class="section-title">Get in Touch</h2>
+        </div>
+        <div class="feat-grid">
+          <div class="feat glass reveal">
+            <div class="feat-icon" style="background:linear-gradient(135deg,#8B5CF6,#6d28d9)">
+              <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+            </div>
+            <h3>Email Support</h3>
+            <p>Send us an email for any questions or feedback.</p>
+            <div style="margin-top:20px;">
+              <a class="btn btn-ghost" href={`mailto:${SITE.supportEmail}`}>
+                Contact Us
+              </a>
+            </div>
+          </div>
+          <div class="feat glass reveal">
+            <div class="feat-icon" style="background:linear-gradient(135deg,#10B981,#059669)">
+              <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+            </div>
+            <h3>GitHub Issues</h3>
+            <p>Report bugs or suggest features on GitHub.</p>
+            <div style="margin-top:20px;">
+              <a class="btn btn-ghost" href={SITE.githubIssuesUrl} target="_blank" rel="noopener noreferrer">
+                Open Issue
+              </a>
+            </div>
+          </div>
+          <div class="feat glass reveal">
+            <div class="feat-icon" style="background:linear-gradient(135deg,#F59E0B,#d97706)">
+              <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            </div>
+            <h3>Community</h3>
+            <p>Join our community and connect with other users.</p>
+            <div style="margin-top:20px;">
+              <a class="btn btn-ghost" href={SITE.githubDiscussionsUrl} target="_blank" rel="noopener noreferrer">
+                Join Discussion
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5. Bottom CTA -->
+    <section class="section-pad" style="padding-top:0;">
+      <div class="wrap">
+        <div class="final glass reveal">
+          <div class="final-inner">
+            <h2>Ready to Start Your Journey?</h2>
+            <p>Transform your daily productivity with Cuewise.</p>
+            <div class="hero-cta">
+              <a class="btn btn-primary btn-lg" href={SITE.storeUrl} target="_blank" rel="noopener noreferrer">
+                <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><line x1="21.17" y1="8" x2="12" y2="8"/><line x1="3.95" y1="6.06" x2="8.54" y2="14"/><line x1="10.88" y1="21.94" x2="15.46" y2="14"/></svg>
+                Add to Chrome — Free
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</Base>
