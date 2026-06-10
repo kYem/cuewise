@@ -1,0 +1,69 @@
+/* ============================================================
+   Cuewise — Base element defaults + semantic helper utilities
+   Mirrors the product's @layer base/utilities so design-system
+   HTML (specimen cards, components, UI kits) renders faithfully
+   without Tailwind.
+   ============================================================ */
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html {
+  font-size: calc(16px * var(--font-scale, 1));
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--gradient-background);
+  color: var(--color-text-primary);
+  line-height: var(--leading-normal);
+  transition: background-color var(--duration-base) ease, color var(--duration-base) ease;
+}
+
+button { cursor: pointer; font-family: inherit; }
+button:disabled { cursor: not-allowed; }
+
+/* ---- Surfaces ---- */
+.bg-background { background-color: var(--color-background); }
+.bg-surface { background-color: var(--color-surface); }
+.bg-surface-elevated { background-color: var(--color-surface-elevated); }
+.bg-surface-variant { background-color: var(--color-surface-variant); }
+
+/* ---- Text ---- */
+.text-primary { color: var(--color-text-primary); }
+.text-secondary { color: var(--color-text-secondary); }
+.text-tertiary { color: var(--color-text-tertiary); }
+.font-display { font-family: var(--font-display); }
+.text-balance { text-wrap: balance; }
+.text-pretty { text-wrap: pretty; }
+
+/* ---- Borders ---- */
+.border-border { border-color: var(--color-border); }
+.border-divider { border-color: var(--color-divider); }
+
+/* ---- Functional ---- */
+.text-success { color: var(--color-success); }
+.text-warning { color: var(--color-warning); }
+.text-error { color: var(--color-error); }
+
+/* ---- Scrollbar (theme-aware) ---- */
+* { scrollbar-width: thin; scrollbar-color: var(--color-text-tertiary) var(--color-surface-variant); }
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-track { background: var(--color-surface-variant); border-radius: 4px; }
+*::-webkit-scrollbar-thumb { background: var(--color-text-tertiary); border-radius: 4px; }
+*::-webkit-scrollbar-thumb:hover { background: var(--color-primary-600); }
+
+/* ---- Animations (product) ---- */
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slideUp { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.animate-fade-in { animation: fadeIn 0.5s ease-in-out; }
+.animate-slide-up { animation: slideUp 0.4s var(--ease-out); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

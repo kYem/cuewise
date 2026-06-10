@@ -1,0 +1,62 @@
+/* ============================================================
+   Cuewise — Spacing, radius, shadow & motion tokens
+   The product drives spacing from a density-aware scale
+   (compact / comfortable / spacious). Defaults below = comfortable.
+   ============================================================ */
+
+:root {
+  /* ---- Density spacing scale (comfortable defaults) ----
+     Overridden per density below — mirrors the product. */
+  --spacing-xs: 0.5rem;   /* 8px  */
+  --spacing-sm: 0.75rem;  /* 12px */
+  --spacing-md: 1rem;     /* 16px */
+  --spacing-lg: 1.5rem;   /* 24px */
+  --spacing-xl: 2rem;     /* 32px */
+  --spacing-2xl: 3rem;    /* 48px */
+  --spacing-scale: 1;
+
+  /* ---- Corner radii ---- */
+  --radius-sm: 0.375rem;  /* 6px  — inline editable chips */
+  --radius-md: 0.5rem;    /* 8px  — buttons, inputs, list rows */
+  --radius-lg: 0.75rem;   /* 12px — stat cards, panels */
+  --radius-xl: 1rem;      /* 16px — primary cards (rounded-2xl) */
+  --radius-2xl: 1.5rem;   /* 24px */
+  --radius-full: 9999px;  /* pills, icon buttons, badges */
+
+  /* ---- Shadows (soft, diffuse — calm aesthetic) ---- */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+
+  /* ---- Glassmorphism (Glass theme + floating chrome) ---- */
+  --glass-surface: rgba(0, 0, 0, 0.25);
+  --glass-surface-elevated: rgba(0, 0, 0, 0.35);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-blur: 12px;
+
+  /* ---- Motion ---- */
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --ease-in-out: ease-in-out;
+  --duration-fast: 200ms;   /* hover / color transitions */
+  --duration-base: 300ms;   /* quote fade, theme switch */
+  --duration-slow: 500ms;   /* progress fills */
+}
+
+/* ---- Density overrides (set [data-density] on a root element) ---- */
+[data-density="compact"] {
+  --spacing-scale: 0.75;
+  --spacing-xs: 0.375rem; --spacing-sm: 0.5rem; --spacing-md: 0.75rem;
+  --spacing-lg: 1rem; --spacing-xl: 1.5rem; --spacing-2xl: 2rem;
+}
+[data-density="comfortable"] {
+  --spacing-scale: 1;
+  --spacing-xs: 0.5rem; --spacing-sm: 0.75rem; --spacing-md: 1rem;
+  --spacing-lg: 1.5rem; --spacing-xl: 2rem; --spacing-2xl: 3rem;
+}
+[data-density="spacious"] {
+  --spacing-scale: 1.25;
+  --spacing-xs: 0.625rem; --spacing-sm: 1rem; --spacing-md: 1.25rem;
+  --spacing-lg: 2rem; --spacing-xl: 2.5rem; --spacing-2xl: 4rem;
+}
