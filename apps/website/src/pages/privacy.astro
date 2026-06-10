@@ -1,0 +1,249 @@
+---
+import Base from '../layouts/Base.astro';
+import { SITE } from '../lib/site';
+---
+
+<Base
+  title="Privacy Policy - Cuewise"
+  description="Cuewise privacy policy — all your data stays local on your device. No tracking, no analytics, no selling."
+>
+  <main>
+
+    <!-- 1. Page Hero -->
+    <section class="page-hero">
+      <div class="wrap">
+        <div class="eyebrow">
+          <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          </svg>
+          Your Privacy Matters
+        </div>
+        <h1>Privacy Policy</h1>
+        <p class="hero-sub">At Cuewise, your privacy is our priority. This policy explains how we handle your data.</p>
+        <p class="last-updated">Last Updated: November 15, 2025</p>
+      </div>
+    </section>
+
+    <!-- 2. Policy Cards -->
+    <section class="section-pad">
+      <div class="wrap">
+
+        <!-- Card 1: Our Commitment -->
+        <div class="content-card glass reveal">
+          <h2>
+            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+            Our Commitment
+          </h2>
+          <p>Cuewise is a browser extension designed with privacy at its core. We believe your productivity journey is personal, and your data should remain yours alone.</p>
+          <p><strong>We do not collect, store, or share any of your personal information on our servers.</strong></p>
+        </div>
+
+        <!-- Card 2: What Data We Collect -->
+        <div class="content-card glass reveal">
+          <h2>
+            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+            </svg>
+            What Data We Collect
+          </h2>
+          <div>
+            <h3>Extension Usage Data:</h3>
+            <ul>
+              <li>Your daily goals and tasks (stored locally on your device)</li>
+              <li>Your preferences and settings (stored locally on your device)</li>
+              <li>Your progress and completion history (stored locally on your device)</li>
+            </ul>
+          </div>
+          <div>
+            <h3>Newsletter Subscription (Optional):</h3>
+            <ul>
+              <li>Email address (only if you choose to subscribe to our newsletter)</li>
+              <li>Subscription timestamp</li>
+            </ul>
+            <p>Newsletter subscriptions are completely optional and separate from extension usage.</p>
+          </div>
+        </div>
+
+        <!-- Card 3: How We Store Your Data -->
+        <div class="content-card glass reveal">
+          <h2>
+            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
+            </svg>
+            How We Store Your Data
+          </h2>
+          <div>
+            <h3>Local Storage Only:</h3>
+            <p>All your goals, tasks, and productivity data are stored exclusively on your device using your browser's local storage. This means:</p>
+            <ul>
+              <li>We never see your personal data</li>
+              <li>Your data never leaves your device</li>
+              <li>No servers store your productivity information</li>
+              <li>You have complete control over your data</li>
+            </ul>
+          </div>
+          <div>
+            <h3>Newsletter Data:</h3>
+            <p>If you subscribe to our newsletter, your email is stored securely and used only to send you:</p>
+            <ul>
+              <li>Product updates and announcements</li>
+              <li>Tips for mindful productivity</li>
+              <li>Feature releases and improvements</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Card 4: What We Don't Do -->
+        <div class="content-card glass reveal">
+          <h2>
+            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+            What We Don't Do
+          </h2>
+          <ul class="policy-checklist">
+            <li>
+              <span class="check-mark" aria-hidden="true">✓</span>
+              <span><strong>No Tracking:</strong> We don't track your browsing activity or behavior</span>
+            </li>
+            <li>
+              <span class="check-mark" aria-hidden="true">✓</span>
+              <span><strong>No Analytics:</strong> We don't use third-party analytics services</span>
+            </li>
+            <li>
+              <span class="check-mark" aria-hidden="true">✓</span>
+              <span><strong>No Selling:</strong> We never sell, rent, or share your data with third parties</span>
+            </li>
+            <li>
+              <span class="check-mark" aria-hidden="true">✓</span>
+              <span><strong>No Advertising:</strong> We don't use your data for advertising purposes</span>
+            </li>
+            <li>
+              <span class="check-mark" aria-hidden="true">✓</span>
+              <span><strong>No Profiling:</strong> We don't create profiles or analyze your habits</span>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Card 5: Your Rights -->
+        <div class="content-card glass reveal">
+          <h2>
+            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+            Your Rights
+          </h2>
+          <p>You have complete control over your data:</p>
+          <ul>
+            <li><strong>Access:</strong> All your data is stored locally and accessible to you at any time</li>
+            <li><strong>Delete:</strong> You can delete your data by clearing your browser's local storage or uninstalling the extension</li>
+            <li><strong>Export:</strong> Your data is stored in standard browser storage format</li>
+            <li><strong>Unsubscribe:</strong> You can unsubscribe from our newsletter at any time using the link in any email</li>
+          </ul>
+        </div>
+
+        <!-- Card 6: Third-Party Services -->
+        <div class="content-card glass reveal">
+          <h2>
+            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+            </svg>
+            Third-Party Services
+          </h2>
+          <p>Cuewise uses minimal third-party services:</p>
+          <ul>
+            <li><strong>Email Delivery:</strong> We use Resend to send newsletter emails. They only have access to your email address if you subscribe.</li>
+            <li><strong>Chrome Web Store:</strong> Extension downloads are managed by Google according to their privacy policy.</li>
+          </ul>
+        </div>
+
+        <!-- Card 7: Changes to This Policy -->
+        <div class="content-card glass reveal">
+          <h2>
+            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+            </svg>
+            Changes to This Policy
+          </h2>
+          <p>We may update this privacy policy from time to time. When we do, we will:</p>
+          <ul>
+            <li>Update the "Last Updated" date at the top of this page</li>
+            <li>Notify users through our newsletter (if subscribed)</li>
+            <li>Continue to respect your privacy as our top priority</li>
+          </ul>
+        </div>
+
+        <!-- Card 8: Contact Us -->
+        <div class="content-card glass reveal">
+          <h2>
+            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+            </svg>
+            Contact Us
+          </h2>
+          <p>If you have any questions or concerns about this privacy policy or how we handle your data, please reach out to us:</p>
+          <ul>
+            <li><strong>Email:</strong> <a href={`mailto:${SITE.privacyEmail}`}>{SITE.privacyEmail}</a></li>
+            <li><strong>GitHub:</strong> <a href={SITE.githubIssuesUrl} target="_blank" rel="noopener noreferrer">Open an issue</a></li>
+            <li><strong>Support:</strong> <a href="/support/">Visit our support page</a></li>
+          </ul>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- 3. Bottom CTA -->
+    <section class="section-pad" style="padding-top:0;">
+      <div class="wrap">
+        <div class="final glass reveal">
+          <div class="final-inner">
+            <h2>Ready to Start Your Journey?</h2>
+            <p>Experience mindful productivity with complete privacy</p>
+            <div class="hero-cta">
+              <a class="btn btn-ghost btn-lg" href="/">
+                <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+                Back to Home
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</Base>
+
+<style>
+  .content-card h2 svg {
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0;
+  }
+
+  .policy-checklist {
+    list-style: none;
+    padding-left: 0;
+  }
+
+  .policy-checklist li {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    margin-bottom: 0.6rem;
+  }
+
+  .check-mark {
+    color: #10B981;
+    font-weight: 700;
+    flex-shrink: 0;
+    margin-top: 0.05rem;
+  }
+
+  .last-updated {
+    margin-top: 12px;
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.55);
+  }
+</style>

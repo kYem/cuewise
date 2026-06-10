@@ -1,0 +1,43 @@
+<!-- @dsCard group="Colors" viewport="700x170" name="Surfaces, Text & Functional" subtitle="Neutrals + success / warning / error" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { background: var(--color-surface); padding: 22px 28px; }
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; }
+  .col { display: flex; flex-direction: column; gap: 8px; }
+  .h { font-family: var(--font-sans); font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-text-tertiary); }
+  .item { display: flex; align-items: center; gap: 8px; font-family: var(--font-sans); font-size: 11px; color: var(--color-text-secondary); }
+  .chip { width: 22px; height: 22px; border-radius: 6px; border: 1px solid var(--color-border); flex-shrink: 0; }
+</style>
+</head>
+<body>
+  <div class="grid">
+    <div class="col">
+      <div class="h">Surfaces</div>
+      <div class="item"><span class="chip" style="background:var(--color-background)"></span>background</div>
+      <div class="item"><span class="chip" style="background:var(--color-surface)"></span>surface</div>
+      <div class="item"><span class="chip" style="background:var(--color-surface-variant)"></span>variant</div>
+    </div>
+    <div class="col">
+      <div class="h">Text</div>
+      <div class="item"><span class="chip" style="background:var(--color-text-primary)"></span>primary</div>
+      <div class="item"><span class="chip" style="background:var(--color-text-secondary)"></span>secondary</div>
+      <div class="item"><span class="chip" style="background:var(--color-text-tertiary)"></span>tertiary</div>
+    </div>
+    <div class="col">
+      <div class="h">Lines</div>
+      <div class="item"><span class="chip" style="background:var(--color-border)"></span>border</div>
+      <div class="item"><span class="chip" style="background:var(--color-divider)"></span>divider</div>
+    </div>
+    <div class="col">
+      <div class="h">Functional</div>
+      <div class="item"><span class="chip" style="background:var(--color-success)"></span>success</div>
+      <div class="item"><span class="chip" style="background:var(--color-warning)"></span>warning</div>
+      <div class="item"><span class="chip" style="background:var(--color-error)"></span>error</div>
+    </div>
+  </div>
+</body>
+</html>

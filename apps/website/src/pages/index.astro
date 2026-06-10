@@ -1,0 +1,33 @@
+---
+import Features from '../components/Features.astro';
+import FinalCta from '../components/FinalCta.astro';
+import Hero from '../components/Hero.astro';
+import HowItWorks from '../components/HowItWorks.astro';
+import Showcase from '../components/Showcase.astro';
+import Base from '../layouts/Base.astro';
+import { SITE } from '../lib/site';
+
+const jsonLd = JSON.stringify({
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  '@id': SITE.url,
+  name: 'Cuewise',
+  operatingSystem: 'Chrome, Edge (Chromium browsers)',
+  applicationCategory: 'BrowserApplication',
+  offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+  url: SITE.url,
+  installUrl: SITE.storeUrl,
+  description: SITE.defaultDescription,
+}).replace(/</g, '\\u003c');
+---
+
+<Base title="Cuewise — Turn every new tab into a meaningful moment">
+  <script type="application/ld+json" set:html={jsonLd} slot="head" />
+  <main>
+    <Hero />
+    <Features />
+    <Showcase />
+    <HowItWorks />
+    <FinalCta />
+  </main>
+</Base>

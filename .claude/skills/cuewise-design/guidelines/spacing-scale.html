@@ -1,0 +1,22 @@
+<!-- @dsCard group="Spacing" viewport="700x150" name="Spacing Scale" subtitle="Density-aware — comfortable shown" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { background: var(--color-surface); padding: 26px 28px; }
+  .row { display: flex; align-items: center; gap: 14px; margin-bottom: 11px; }
+  .bar { height: 16px; background: var(--color-primary-400); border-radius: 4px; }
+  .lbl { font-family: var(--font-sans); font-size: 11px; color: var(--color-text-secondary); width: 110px; }
+</style>
+</head>
+<body>
+  <div class="row"><span class="lbl">xs · 8px</span><span class="bar" style="width:var(--spacing-xs)"></span></div>
+  <div class="row"><span class="lbl">sm · 12px</span><span class="bar" style="width:var(--spacing-sm)"></span></div>
+  <div class="row"><span class="lbl">md · 16px</span><span class="bar" style="width:var(--spacing-md)"></span></div>
+  <div class="row"><span class="lbl">lg · 24px</span><span class="bar" style="width:var(--spacing-lg)"></span></div>
+  <div class="row"><span class="lbl">xl · 32px</span><span class="bar" style="width:var(--spacing-xl)"></span></div>
+  <div class="row"><span class="lbl">2xl · 48px</span><span class="bar" style="width:var(--spacing-2xl)"></span></div>
+</body>
+</html>

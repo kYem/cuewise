@@ -1,0 +1,23 @@
+---
+import { SITE } from '../lib/site';
+import NewsletterForm from './NewsletterForm.astro';
+---
+
+<section class="section-pad" id="get" style="padding-top:0;">
+  <div class="wrap">
+    <div class="final glass reveal">
+      <div class="final-inner">
+        <h2>Your most intentional day starts on the next tab</h2>
+        <p>Join the calm side of productivity. Free forever, private by design, and ready in two minutes.</p>
+        <div class="hero-cta">
+          <a class="btn btn-primary btn-lg" href={SITE.storeUrl} target="_blank" rel="noopener noreferrer">
+            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><line x1="21.17" y1="8" x2="12" y2="8"/><line x1="3.95" y1="6.06" x2="8.54" y2="14"/><line x1="10.88" y1="21.94" x2="15.46" y2="14"/></svg>
+            Add to Chrome — Free
+          </a>
+        </div>
+        <NewsletterForm />
+        <p class="final-note">Works on Chrome and Chromium browsers · No tracking · All data stays on your device</p>
+      </div>
+    </div>
+  </div>
+</section>

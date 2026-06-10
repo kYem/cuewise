@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Cuewise — Logo Exploration</title>
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  :root{
+    --v500:#7b5cf0; --v600:#6d4ad9; --v700:#5a36c4; --v800:#48289e;
+    --ink:#221b3d; --paper:#faf7ff;
+  }
+  body{ font-family:var(--font-sans); }
+  .stage{ display:flex; flex-direction:column; align-items:center; justify-content:center; gap:30px; height:100%; padding:28px; }
+  .stage.dark{ background:#1b1530; }
+  .lockup{ display:flex; align-items:center; gap:18px; }
+  .wordmark{ font-family:var(--font-display); font-weight:700; font-size:40px; letter-spacing:-0.02em; color:var(--ink); }
+  .wordmark .w{ color:var(--v600); }
+  .dark .wordmark{ color:#fff; }
+  .tag{ font-family:var(--font-sans); font-size:12px; letter-spacing:0.14em; text-transform:uppercase; color:var(--color-text-tertiary); }
+  .dark .tag{ color:rgba(255,255,255,0.5); }
+  .mini-row{ display:flex; align-items:center; gap:14px; }
+  .chip{ width:44px;height:44px;border-radius:12px; display:flex;align-items:center;justify-content:center; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="design-canvas.jsx"></script>
+
+<script type="text/babel">
+const { useId } = React;
+
+/* ---------- Marks (each ~120 viewBox) ---------- */
+
+// 1 — Cue Dot: open ring (C) cradling a focal "cue" dot
+function CueDot({ s = 120, c = 'var(--v600)', dot = 'var(--v500)' }) {
+  return (
+    <svg width={s} height={s} viewBox="0 0 120 120" fill="none">
+      <path d="M92 88 A 42 42 0 1 1 92 32" stroke={c} strokeWidth="15" strokeLinecap="round" />
+      <circle cx="92" cy="60" r="11" fill={dot} />
+    </svg>
+  );
+}
+
+// 2 — Dawn Arc: C as a rising-sun arc over a horizon
+function DawnArc({ s = 120, c = 'var(--v600)', dot = 'var(--v500)' }) {
+  return (
+    <svg width={s} height={s} viewBox="0 0 120 120" fill="none">
+      <path d="M30 74 A 34 34 0 1 1 90 74" stroke={c} strokeWidth="14" strokeLinecap="round" />
+      <circle cx="60" cy="74" r="9" fill={dot} />
+      <line x1="20" y1="90" x2="100" y2="90" stroke={c} strokeWidth="14" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+// 3 — Quote C: a C whose upper terminal carries a quotation cut
+function QuoteC({ s = 120, c = 'var(--v600)' }) {
+  return (
+    <svg width={s} height={s} viewBox="0 0 120 120" fill="none">
+      <path d="M90 86 A 40 40 0 1 1 90 34" stroke={c} strokeWidth="15" strokeLinecap="round" />
+      <path d="M70 30 q 8 6 8 16" stroke="var(--paper)" strokeWidth="7" strokeLinecap="round" fill="none" />
+      <circle cx="70" cy="30" r="4.5" fill="var(--paper)" />
+    </svg>
+  );
+}
+
+// 4 — Focus Rings: two concentric C arcs (calm / focus)
+function FocusRings({ s = 120, c = 'var(--v600)', c2 = 'var(--v500)' }) {
+  return (
+    <svg width={s} height={s} viewBox="0 0 120 120" fill="none">
+      <path d="M88 86 A 38 38 0 1 1 88 34" stroke={c} strokeWidth="13" strokeLinecap="round" />
+      <path d="M80 76 A 24 24 0 1 1 80 44" stroke={c2} strokeWidth="9" strokeLinecap="round" opacity="0.55" />
+    </svg>
+  );
+}
+
+// 5 — Spark C: C paired with a four-point sparkle (the "wise" cue)
+function SparkC({ s = 120, c = 'var(--v600)', dot = 'var(--v500)' }) {
+  return (
+    <svg width={s} height={s} viewBox="0 0 120 120" fill="none">
+      <path d="M86 90 A 40 40 0 1 1 86 30" stroke={c} strokeWidth="15" strokeLinecap="round" />
+      <path d="M90 44 c 1.6 7.8 4.4 10.6 12.2 12.2 -7.8 1.6 -10.6 4.4 -12.2 12.2 -1.6 -7.8 -4.4 -10.6 -12.2 -12.2 7.8 -1.6 10.6 -4.4 12.2 -12.2 Z" fill={dot} />
+    </svg>
+  );
+}
+
+// Squircle icon container (app/favicon form)
+function Squircle({ children, grad = true }) {
+  const id = useId().replace(/:/g, '');
+  return (
+    <svg width="96" height="96" viewBox="0 0 96 96">
+      <defs>
+        <linearGradient id={id} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#7b5cf0" />
+          <stop offset="1" stopColor="#5a36c4" />
+        </linearGradient>
+      </defs>
+      <rect x="0" y="0" width="96" height="96" rx="26"
+        fill={grad ? `url(#${id})` : 'var(--paper)'} />
+      <g transform="translate(48,48) scale(0.62) translate(-60,-60)">{children}</g>
+    </svg>
+  );
+}
+
+const Word = ({ dark }) => (
+  <div className="wordmark"><span className="w">C</span>uewise</div>
+);
+
+function Concept({ MarkComp, title }) {
+  return (
+    <div className="stage">
+      <MarkComp s={108} />
+      <div className="lockup">
+        <MarkComp s={48} />
+        <Word />
+      </div>
+      <div className="mini-row">
+        <span className="chip" style={{background:'var(--paper)', border:'1px solid #ece6fb'}}><MarkComp s={30} /></span>
+        <Squircle><MarkComp s={120} c="#fff" dot="rgba(255,255,255,0.85)" c2="rgba(255,255,255,0.6)" /></Squircle>
+      </div>
+      <div className="tag">{title}</div>
+    </div>
+  );
+}
+
+const { DesignCanvas, DCSection, DCArtboard } = window;
+
+function App() {
+  const W = 380, H = 360;
+  return (
+    <DesignCanvas>
+      <DCSection id="marks" title="Cuewise — Logo Directions" subtitle="Violet brand · 6 concepts · mark, lockup, app-icon">
+        <DCArtboard id="cuedot" label="1 · Cue Dot" width={W} height={H}><Concept MarkComp={CueDot} title="Cue Dot — focus nested in an open ring" /></DCArtboard>
+        <DCArtboard id="dawn" label="2 · Dawn" width={W} height={H}><Concept MarkComp={DawnArc} title="Dawn — a fresh start each new tab" /></DCArtboard>
+        <DCArtboard id="quote" label="3 · Quote C" width={W} height={H}><Concept MarkComp={QuoteC} title="Quote C — wisdom & quotations" /></DCArtboard>
+        <DCArtboard id="focus" label="4 · Focus Rings" width={W} height={H}><Concept MarkComp={FocusRings} title="Focus Rings — calm, concentric" /></DCArtboard>
+        <DCArtboard id="spark" label="5 · Spark C" width={W} height={H}><Concept MarkComp={SparkC} title="Spark C — the wise cue" /></DCArtboard>
+        <DCArtboard id="dark" label="6 · On dark" width={W} height={H}>
+          <div className="stage dark">
+            <CueDot s={108} c="#b9a6ff" dot="#fff" />
+            <div className="lockup"><CueDot s={46} c="#b9a6ff" dot="#fff" /><div className="wordmark">Cuewise</div></div>
+            <div className="tag">Cue Dot reversed for dark surfaces</div>
+          </div>
+        </DCArtboard>
+      </DCSection>
+    </DesignCanvas>
+  );
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

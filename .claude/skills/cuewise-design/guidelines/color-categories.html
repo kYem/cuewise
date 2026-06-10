@@ -1,0 +1,30 @@
+<!-- @dsCard group="Colors" viewport="700x180" name="Quote Categories" subtitle="10 life categories — badges & insight bars" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { background: var(--color-surface); padding: 24px 28px; }
+  .grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+  .cell { display: flex; flex-direction: column; gap: 7px; align-items: flex-start; }
+  .pill { color: #fff; font-family: var(--font-sans); font-size: 11px; font-weight: 600; padding: 4px 12px; border-radius: 9999px; }
+  .hex { font-family: var(--font-sans); font-size: 10px; color: var(--color-text-tertiary); }
+</style>
+</head>
+<body>
+  <div class="grid" id="g"></div>
+  <script>
+    const cats=[['Inspiration','inspiration'],['Learning','learning'],['Productivity','productivity'],['Mindfulness','mindfulness'],['Success','success'],['Creativity','creativity'],['Resilience','resilience'],['Leadership','leadership'],['Health','health'],['Growth','growth']];
+    const g=document.getElementById('g');
+    cats.forEach(([label,key])=>{
+      const c=document.createElement('div'); c.className='cell';
+      const p=document.createElement('span'); p.className='pill'; p.textContent=label;
+      p.style.background=`var(--category-${key})`;
+      const h=document.createElement('span'); h.className='hex';
+      h.textContent=getComputedStyle(document.documentElement).getPropertyValue(`--category-${key}`).trim();
+      c.appendChild(p); c.appendChild(h); g.appendChild(c);
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,48 @@
+/* ============================================================
+   Cuewise — Typography tokens
+   Fonts: Poppins (display headings, clock, big numbers) +
+   Inter (body, UI). Loaded via fonts.css (Google Fonts).
+   ============================================================ */
+
+:root {
+  /* ---- Families ---- */
+  --font-sans: "Inter", system-ui, sans-serif;     /* body + UI */
+  --font-display: "Poppins", system-ui, sans-serif; /* headings, clock, hero */
+  --font-mono: ui-monospace, "SF Mono", "Roboto Mono", monospace; /* timer digits */
+
+  /* ---- Weights ---- */
+  --weight-light: 300;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;  /* default heading weight */
+  --weight-bold: 700;
+  --weight-extrabold: 800; /* clock / hero display */
+
+  /* ---- Type scale (rem; html base = 16px × density font-scale) ---- */
+  --text-xs: 0.75rem;    /* 12px — meta, badges, captions */
+  --text-sm: 0.875rem;   /* 14px — secondary UI text */
+  --text-base: 1rem;     /* 16px — body */
+  --text-lg: 1.125rem;   /* 18px */
+  --text-xl: 1.25rem;    /* 20px — author cite */
+  --text-2xl: 1.5rem;    /* 24px — section headings (h2) */
+  --text-3xl: 1.875rem;  /* 30px */
+  --text-4xl: 2.25rem;   /* 36px — page titles */
+  --text-5xl: 3rem;      /* 48px — short quote display */
+  --text-6xl: 3.75rem;   /* 60px — pomodoro timer */
+  --text-7xl: 4.5rem;    /* 72px — clock */
+
+  /* ---- Line heights ---- */
+  --leading-tight: 1.1;     /* display numerals */
+  --leading-snug: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.625; /* quote bodies */
+
+  /* ---- Density font scaling (set on [data-density]) ---- */
+  --font-scale: 1;
+}
+
+/* Density scales the root font-size in the product:
+   compact 0.875 (14px) · comfortable 1 (16px) · spacious 1.125 (18px) */
+[data-density="compact"]     { --font-scale: 0.875; }
+[data-density="comfortable"] { --font-scale: 1; }
+[data-density="spacious"]    { --font-scale: 1.125; }

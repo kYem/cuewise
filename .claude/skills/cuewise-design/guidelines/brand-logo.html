@@ -1,0 +1,61 @@
+<!-- @dsCard group="Brand" viewport="700x340" name="Logo — Cue Dot" subtitle="Mark, wordmark lockup, app icon, clear space" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { background: var(--color-surface); padding: 26px 30px; }
+  .grid { display: grid; grid-template-columns: 1.1fr 1.4fr; gap: 24px 30px; align-items: center; }
+  .cell { display: flex; flex-direction: column; gap: 10px; }
+  .h { font-family: var(--font-sans); font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-text-tertiary); }
+  .row { display: flex; align-items: center; gap: 16px; }
+  .wm { font-family: var(--font-display); font-weight: 700; font-size: 42px; letter-spacing: -0.02em; color: #221b3d; }
+  .wm .c { color: #7c3aed; }
+  .icons { display: flex; align-items: flex-end; gap: 14px; }
+  .tile { border-radius: 12px; overflow: hidden; box-shadow: var(--shadow-md); }
+  .dark { background: #1b1530; border-radius: 14px; padding: 16px 22px; display: flex; align-items: center; gap: 14px; }
+  .dark .wm { color: #fff; font-size: 30px; }
+  .swatchrow { display: flex; gap: 0; border-radius: 8px; overflow: hidden; width: fit-content; }
+  .sw { width: 64px; height: 30px; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 3px; font: 600 9px var(--font-sans); color: #fff; }
+</style>
+</head>
+<body>
+  <div class="grid">
+    <div class="cell">
+      <span class="h">Primary mark</span>
+      <img src="../assets/logo-mark.svg" width="92" height="92" alt="Cuewise mark" />
+    </div>
+    <div class="cell">
+      <span class="h">Horizontal lockup</span>
+      <div class="row">
+        <img src="../assets/logo-mark.svg" width="50" height="50" alt="" />
+        <span class="wm"><span class="c">C</span>uewise</span>
+      </div>
+      <div class="dark">
+        <img src="../assets/logo-mark-white.svg" width="34" height="34" alt="" />
+        <span class="wm">Cuewise</span>
+      </div>
+    </div>
+
+    <div class="cell">
+      <span class="h">App icon · favicon</span>
+      <div class="icons">
+        <img class="tile" src="../assets/icon-128.png" width="72" height="72" alt="128" />
+        <img class="tile" src="../assets/icon-48.png" width="48" height="48" alt="48" />
+        <img class="tile" src="../assets/icon-16.png" width="16" height="16" alt="16" />
+      </div>
+    </div>
+    <div class="cell">
+      <span class="h">Brand violet</span>
+      <div class="swatchrow">
+        <span class="sw" style="background:#a78bfa">400</span>
+        <span class="sw" style="background:#8b5cf6">500</span>
+        <span class="sw" style="background:#7c3aed">600</span>
+        <span class="sw" style="background:#6d28d9">700</span>
+      </div>
+      <span style="font:400 11px var(--font-sans); color:var(--color-text-tertiary); margin-top:2px;">Mark = an open ring (a fresh tab) cradling a focal “cue” dot.</span>
+    </div>
+  </div>
+</body>
+</html>

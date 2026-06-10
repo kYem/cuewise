@@ -1,0 +1,30 @@
+<!-- @dsCard group="Spacing" viewport="700x150" name="Radius & Shadow" subtitle="Soft corners, diffuse shadows" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { background: var(--color-surface); padding: 24px 28px; display: flex; gap: 40px; }
+  .group { display: flex; gap: 16px; }
+  .item { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .box { width: 52px; height: 52px; background: var(--color-surface-elevated); border: 1px solid var(--color-border); }
+  .sh { width: 52px; height: 52px; background: var(--color-surface-elevated); border-radius: 12px; }
+  .lbl { font-family: var(--font-sans); font-size: 10px; color: var(--color-text-tertiary); }
+</style>
+</head>
+<body>
+  <div class="group">
+    <div class="item"><div class="box" style="border-radius:var(--radius-md)"></div><span class="lbl">md · 8</span></div>
+    <div class="item"><div class="box" style="border-radius:var(--radius-lg)"></div><span class="lbl">lg · 12</span></div>
+    <div class="item"><div class="box" style="border-radius:var(--radius-xl)"></div><span class="lbl">xl · 16</span></div>
+    <div class="item"><div class="box" style="border-radius:var(--radius-full)"></div><span class="lbl">full</span></div>
+  </div>
+  <div class="group">
+    <div class="item"><div class="sh" style="box-shadow:var(--shadow-sm)"></div><span class="lbl">sm</span></div>
+    <div class="item"><div class="sh" style="box-shadow:var(--shadow-md)"></div><span class="lbl">md</span></div>
+    <div class="item"><div class="sh" style="box-shadow:var(--shadow-lg)"></div><span class="lbl">lg</span></div>
+    <div class="item"><div class="sh" style="box-shadow:var(--shadow-xl)"></div><span class="lbl">xl</span></div>
+  </div>
+</body>
+</html>

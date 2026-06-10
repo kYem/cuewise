@@ -1,0 +1,72 @@
+<!-- @dsCard group="Pomodoro" viewport="1280x740" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Cuewise — Pomodoro</title>
+<link rel="stylesheet" href="../../styles.css" />
+<style>
+  html, body { min-height: 100%; }
+  body { background: var(--gradient-background); }
+  #root { min-height: 100vh; }
+  .pomo-page { position: relative; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 40px; }
+  .back-link { position: absolute; top: 28px; left: 28px; display: inline-flex; align-items: center; justify-content: center;
+    width: 42px; height: 42px; border-radius: var(--radius-full); background: color-mix(in srgb, var(--color-surface) 70%, transparent);
+    backdrop-filter: blur(6px); box-shadow: var(--shadow-md); color: var(--color-text-primary); text-decoration: none; }
+  .pomo-grid { width: 100%; max-width: 1100px; display: grid; grid-template-columns: 380px 1fr; gap: 56px; align-items: center; }
+  @media (max-width: 840px) { .pomo-grid { grid-template-columns: 1fr; gap: 36px; } }
+
+  /* Timer card */
+  .timer-card { background: var(--color-surface-elevated); border: 1px solid var(--color-border); border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-lg); padding: 28px; }
+  .tc-head { display: flex; align-items: center; gap: 14px; margin-bottom: 22px; }
+  .head-chip { display: inline-flex; padding: 9px; border-radius: var(--radius-md); background: var(--color-primary-100); }
+  .tc-title { font-family: var(--font-display); font-weight: 600; font-size: 22px; color: var(--color-text-primary); }
+  .tc-sub { font-size: 14px; color: var(--color-text-secondary); margin-top: 1px; }
+
+  .ring-wrap { position: relative; width: 256px; height: 256px; margin: 8px auto 24px; }
+  .ring-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .ring-time { font-family: ui-monospace, "SF Mono", monospace; font-weight: 700; font-size: 56px; color: var(--color-text-primary); letter-spacing: -0.02em; }
+  .ring-label { margin-top: 6px; font-size: 14px; font-weight: 600; letter-spacing: 0.12em; color: var(--color-primary-600); }
+
+  .status-pill { display: block; width: fit-content; margin: 0 auto 22px; padding: 8px 22px; border: 1.5px solid var(--color-primary-400);
+    border-radius: var(--radius-full); color: var(--color-primary-600); font-weight: 600; font-size: 14px; }
+
+  .tc-controls { display: flex; align-items: center; justify-content: center; gap: 12px; }
+  .ctrl-main { display: inline-flex; align-items: center; gap: 8px; padding: 12px 24px; border: none; border-radius: var(--radius-md);
+    background: var(--color-warning); color: #fff; font-family: var(--font-sans); font-weight: 600; font-size: 15px; box-shadow: var(--shadow-md);
+    transition: filter var(--duration-fast) ease; }
+  .ctrl-main:hover { filter: brightness(0.94); }
+  .ctrl-icon { display: inline-flex; align-items: center; justify-content: center; width: 46px; height: 46px; border: none;
+    border-radius: var(--radius-md); background: var(--color-surface-variant); color: var(--color-text-secondary); box-shadow: var(--shadow-sm);
+    transition: background var(--duration-fast) ease; }
+  .ctrl-icon:hover { background: var(--color-border); }
+  .tc-help { text-align: center; font-size: 13px; color: var(--color-text-tertiary); margin-top: 22px; }
+  .tc-help b { color: var(--color-text-secondary); font-weight: 600; }
+
+  /* Quote (right) */
+  .quote-wrap { text-align: center; }
+  .badge-row { display: flex; justify-content: center; margin-bottom: 22px; }
+  .cat-badge { color: #fff; font-weight: 600; font-size: 13px; padding: 5px 16px; border-radius: var(--radius-full); box-shadow: var(--shadow-sm); }
+  .quote-text { font-family: var(--font-display); font-weight: 600; line-height: 1.25; color: var(--color-text-primary); text-wrap: balance; }
+  .quote-author { font-size: 22px; font-weight: 600; color: var(--color-primary-600); margin-top: 22px; }
+  .quote-actions { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 24px; }
+  .qa { display: inline-flex; align-items: center; justify-content: center; width: 42px; height: 42px; border: none; border-radius: var(--radius-full);
+    background: color-mix(in srgb, var(--color-surface) 70%, transparent); color: var(--color-text-secondary); box-shadow: var(--shadow-sm);
+    transition: transform var(--duration-fast) ease; }
+  .qa:hover { transform: scale(1.06); }
+  .qa-pill { width: auto; gap: 8px; padding: 0 20px; height: 46px; color: var(--color-text-primary); font-weight: 600; font-size: 15px; font-family: var(--font-sans); }
+  .qa-fav { background: var(--color-error); color: #fff; }
+  .views { font-size: 13px; color: var(--color-text-tertiary); margin-top: 18px; }
+</style>
+</head>
+<body>
+  <div id="root"></div>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+  <script type="text/babel" src="../_lib/icons.jsx"></script>
+  <script type="text/babel" src="app.jsx"></script>
+</body>
+</html>
