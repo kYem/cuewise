@@ -1,0 +1,17 @@
+---
+interface Props {
+  src: string;
+  alt: string;
+  label: string;
+}
+
+const { src, alt, label } = Astro.props;
+---
+
+<div class="browser">
+  <div class="browser-bar">
+    <div class="dots"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+    <div class="url">{label}</div>
+  </div>
+  <img src={src} alt={alt} loading="lazy" />
+</div>
