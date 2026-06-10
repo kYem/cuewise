@@ -26,6 +26,7 @@ overrides:
 
 allowBuilds:
   esbuild: true
+  sharp: true
 
 catalog:
   '@biomejs/biome': ^2.3.5
