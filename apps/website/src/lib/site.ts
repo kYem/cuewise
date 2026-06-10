@@ -8,5 +8,5 @@ export const SITE = {
   supportEmail: 'support@cuewise.app',
   privacyEmail: 'privacy@cuewise.app',
   defaultDescription:
-    'Cuewise brings daily wisdom and mindful productivity to your browser. A hand-picked quote, your focus for the day, and a calm Pomodoro timer — on every new tab.',
+    'The new tab productivity extension that brings daily wisdom to your browser — a hand-picked quote, your focus for the day, and a calm Pomodoro timer.',
 } as const;
