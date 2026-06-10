@@ -2,6 +2,13 @@ packages:
   - apps/*
   - packages/*
 
+# Supply-chain cooldown: ignore registry versions published < 14 days ago
+# (20160 minutes), so a poisoned fresh publish has time to be caught/yanked.
+# Internal @cuewise/* packages resolve via workspace:* and never hit the
+# registry, so no exclude is needed (a scope-wildcard exclude would also let a
+# malicious public @cuewise/* publish bypass the cooldown).
+minimumReleaseAge: 20160
+
 allowBuilds:
   esbuild: true
 
