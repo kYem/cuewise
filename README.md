@@ -2,7 +2,9 @@
 
 **Your personal productivity companion.** A beautiful browser extension that combines motivational quotes, goal tracking, Pomodoro timer, and productivity insights in your new tab.
 
-**Current Version:** 1.1.0 | **Status:** Feature-complete for Chrome/Edge
+**Current Version:** 1.9.1 | **Status:** Live on the Chrome Web Store
+
+**[Install from the Chrome Web Store](https://chromewebstore.google.com/detail/cuewise/abjkbnhoepcnmbabflkedbapbldnpkbf)** · **[cuewise.app](https://cuewise.app)**
 
 ---
 
@@ -37,7 +39,7 @@
 
 ### 🎨 Beautiful Customization
 - **Dark Mode**: Seamless light/dark/auto theme switching
-- **3 Color Themes**: Purple, Forest Green, and Rose Pink
+- **4 Color Themes**: Purple, Forest Green, Rose Pink, and the signature Glass mode
 - **3 Density Modes**: Compact, Comfortable, and Spacious layouts
 - **Live Preview**: See theme changes in real-time before applying
 - **Persistent Settings**: All preferences saved locally
@@ -202,11 +204,10 @@ Smart hybrid approach for performance and sync:
 
 ## 🔮 Planned Enhancements
 
-### Near-Term (v1.2)
-- Chrome Web Store publication
-- Export/import data backup
+### Near-Term
+- Spaced repetition for quotes (review mode)
 - Onboarding tutorial for new users
-- Accessibility improvements (ARIA labels, keyboard navigation)
+- Firefox support
 
 ### Future Platforms
 - 🌐 **Web App** (Next.js) - Use without browser extension
