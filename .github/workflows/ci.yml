@@ -33,7 +33,7 @@ jobs:
         run: pnpm type-check
 
       - name: Run tests
-        run: pnpm --filter @cuewise/browser-extension test
+        run: pnpm test
 
       - name: Build
         run: pnpm build
