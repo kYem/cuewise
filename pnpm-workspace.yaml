@@ -9,6 +9,21 @@ packages:
 # malicious public @cuewise/* publish bypass the cooldown).
 minimumReleaseAge: 20160
 
+# Force patched versions of transitive deps flagged by Dependabot. Major-scoped
+# so unrelated majors are untouched. All targets are >14 days old, so they clear
+# the minimumReleaseAge cooldown above.
+overrides:
+  undici@7: 7.24.0
+  ws@8: 8.20.1
+  lodash@4: 4.18.0
+  minimatch@5: 5.1.8
+  minimatch@9: 9.0.7
+  rollup@2: 2.80.0
+  flatted@3: 3.4.2
+  fast-uri@3: 3.1.2
+  brace-expansion@2: 2.0.3
+  picomatch@4: 4.0.4
+
 allowBuilds:
   esbuild: true
 
@@ -30,7 +45,7 @@ catalog:
   fishery: ^2.4.0
   jsdom: ^25.0.1
   lucide-react: ^0.553.0
-  postcss: ^8.5.6
+  postcss: ^8.5.15
   react: ^18.3.1
   react-dom: ^18.3.1
   recharts: 2.15.4
@@ -38,6 +53,6 @@ catalog:
   tailwindcss: ^4.1.18
   turbo: ^2.6.1
   typescript: ^5.9.3
-  vite: ^6.0.7
+  vite: ^6.4.2
   vitest: 3.2.4
   zustand: 5.0.8
