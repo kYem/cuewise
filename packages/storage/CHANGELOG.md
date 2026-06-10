@@ -1,5 +1,12 @@
 # @cuewise/storage
 
+## 1.9.1
+
+### Patch Changes
+
+- Updated dependencies [b6719ff]
+  - @cuewise/shared@1.9.1
+
 ## 1.9.0
 
 ### Minor Changes
