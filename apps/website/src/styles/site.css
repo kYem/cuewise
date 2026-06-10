@@ -704,6 +704,16 @@ footer {
   .btn-lg {
     padding: 14px 22px;
   }
+  .newsletter-row {
+    flex-wrap: wrap;
+  }
+  .newsletter input[type="email"] {
+    min-width: 0;
+    flex-basis: 100%;
+  }
+  .newsletter-row .btn {
+    flex: 1;
+  }
 }
 
 /* ---------- Inner-page scaffolding (support / privacy / comparison) ---------- */
@@ -859,6 +869,9 @@ footer {
 }
 
 /* ---------- Comparison table ---------- */
+.vs-table-wrap {
+  overflow-x: auto;
+}
 .vs-table {
   width: 100%;
   border-collapse: collapse;
