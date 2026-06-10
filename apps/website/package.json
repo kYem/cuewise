@@ -8,7 +8,9 @@
     "build": "astro build",
     "preview": "astro preview",
     "type-check": "astro check",
-    "clean": "rm -rf dist .astro"
+    "clean": "rm -rf dist .astro",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "astro": "catalog:",
