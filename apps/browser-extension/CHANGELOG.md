@@ -1,5 +1,84 @@
 # @cuewise/browser-extension
 
+## 1.9.0
+
+### Minor Changes
+
+- a403b84: Add CSV bulk quote import feature
+
+  - Import quotes from CSV files with drag & drop or file picker
+  - CSV parsing with support for quoted fields, escaped quotes, and commas
+  - Validation with clear error messages for invalid rows
+  - Optional collection assignment for imported quotes
+  - Download CSV template with all valid categories listed
+  - Comprehensive test coverage for CSV parsing utilities
+
+- c8b9d8c: Persist quote filter settings across browser sessions
+
+  - Remember enabled categories, custom quotes toggle, favorites-only mode
+  - Remember active collection filters
+  - Filter out deleted collection IDs on load
+  - Show warning toast if filter preferences fail to save
+  - Persist filter state when deleting collections
+
+- 541153e: Add quote collections feature for organizing quotes into themed groups
+
+  - Create custom collections with name and description
+  - Add individual quotes to collections via CollectionPicker popover
+  - Bulk add multiple quotes to a collection
+  - View and manage collections in Quote Management page (new Collections tab)
+  - Filter quotes by active collection
+  - Collection count badges on quote cards
+  - Full CRUD operations for collections
+
+- 04e9997: Auto-complete a task when all its subtasks are done
+
+  Checking the last open subtask now marks the parent task complete, and
+  unchecking a subtask reopens it — a task with subtasks is complete exactly when
+  all of them are. Completing the task directly (via its own checkbox) is still
+  allowed.
+
+- 6eddbc7: Add task enhancements: subtasks, due dates, reordering, duplication, and an upcoming-tasks view
+
+  - **Subtasks**: add a checklist to any task with add / toggle / remove and a progress indicator
+  - **Due dates**: set a per-task due date with a picker; a badge shows the relative day and overdue tasks are highlighted red
+  - **Drag-to-reorder**: reorder Today's Focus tasks via a drag handle (keyboard-accessible); order is persisted
+  - **Duplicate**: one-click duplicate of a task (copies subtasks and due date, reset to incomplete)
+  - **Upcoming**: a collapsible "Upcoming" section on the home list and the Goals page surfaces tasks due within the next 14 days, with inline complete and "move to today"
+
+### Patch Changes
+
+- 585c03b: Replace the placeholder extension icon with the violet "Cue Dot" brand mark
+
+  The toolbar, store, and notification icon now use the cohesive violet "Cue Dot"
+  logo (an open ring + dot reading as a C), matching the app's violet UI. The
+  previous icon was an off-brand green/coral mark that clashed with the product's
+  visual identity.
+
+- 7e8a70f: Fix focus mode lingering on a completed task
+
+  Focus mode now shows the "All done" screen once every task is complete, and
+  advances to the next open task — even when the focused task was completed from
+  another view. Previously a now-completed focused task stayed on screen
+  (struck-through) instead of advancing or celebrating.
+
+- a0463c2: Surface task features in compact and focus view modes
+
+  - **Compact** Today's Focus now shows **subtasks** (progress + add/toggle/remove),
+    matching full view (it already had due dates, reorder, and duplicate).
+  - **Focus** mode now shows read-only **due-date** and **subtask progress**
+    indicators on the focused task, while staying distraction-free (no
+    editing/reorder/duplicate controls).
+
+- Updated dependencies [a403b84]
+- Updated dependencies [c8b9d8c]
+- Updated dependencies [541153e]
+- Updated dependencies [04e9997]
+- Updated dependencies [6eddbc7]
+  - @cuewise/shared@1.9.0
+  - @cuewise/storage@1.9.0
+  - @cuewise/ui@1.9.0
+
 ## 1.8.0
 
 ### Minor Changes
