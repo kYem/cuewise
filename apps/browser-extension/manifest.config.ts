@@ -13,10 +13,12 @@ export default defineManifest(async (env) => {
 
   return {
     manifest_version: 3,
-    name: 'Cuewise',
+    // Store title and search summary — keep keyword-rich (CWS search indexes both)
+    name: 'Cuewise: New Tab Quotes, Goals & Pomodoro Timer',
+    short_name: 'Cuewise',
     version: pkg.version,
     description:
-      'Turn your day into a meaningful journey. Daily wisdom, mindful goals, and progress tracking.',
+      'Beautiful new tab page with daily motivational quotes, to-do goals, Pomodoro timer, focus mode & insights. Free and private.',
     icons: {
       16: 'icons/icon-16.png',
       48: 'icons/icon-48.png',
