@@ -10,6 +10,7 @@ import { SITE } from '../lib/site';
 const jsonLd = JSON.stringify({
   '@context': 'https://schema.org',
   '@type': 'SoftwareApplication',
+  '@id': SITE.url,
   name: 'Cuewise',
   operatingSystem: 'Chrome, Edge (Chromium browsers)',
   applicationCategory: 'BrowserApplication',
@@ -17,7 +18,7 @@ const jsonLd = JSON.stringify({
   url: SITE.url,
   installUrl: SITE.storeUrl,
   description: SITE.defaultDescription,
-});
+}).replace(/</g, '\\u003c');
 ---
 
 <Base title="Cuewise — Turn every new tab into a meaningful moment">

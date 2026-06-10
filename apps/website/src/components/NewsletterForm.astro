@@ -3,7 +3,7 @@
     <svg aria-hidden="true" focusable="false" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
     Get launch updates and productivity tips
   </p>
-  <form id="newsletter-form" novalidate>
+  <form data-newsletter-form novalidate>
     <div class="newsletter-row">
       <input type="email" name="email" placeholder="Enter your email" required aria-label="Email address" />
       <input class="hp" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" />
@@ -14,8 +14,7 @@
 </div>
 
 <script>
-  const form = document.getElementById('newsletter-form') as HTMLFormElement | null;
-  if (form !== null) {
+  for (const form of document.querySelectorAll<HTMLFormElement>('[data-newsletter-form]')) {
     const msg = form.querySelector<HTMLParagraphElement>('.newsletter-msg');
     const button = form.querySelector<HTMLButtonElement>('button[type="submit"]');
     form.addEventListener('submit', async (event) => {
@@ -35,6 +34,7 @@
       }
       button.disabled = true;
       button.textContent = 'Subscribing…';
+      let succeeded = false;
       try {
         const res = await fetch('/api/newsletter/subscribe', {
           method: 'POST',
@@ -42,8 +42,10 @@
           body: JSON.stringify({ email, website }),
         });
         if (res.ok) {
+          succeeded = true;
           msg.textContent = "You're in — welcome to the journey.";
           msg.classList.add('ok');
+          button.textContent = 'Subscribed ✓';
           form.reset();
         } else {
           const body = (await res.json().catch(() => null)) as { error?: string } | null;
@@ -54,8 +56,10 @@
         msg.textContent = 'Network error — please try again.';
         msg.classList.add('err');
       } finally {
-        button.disabled = false;
-        button.textContent = 'Subscribe';
+        if (!succeeded) {
+          button.disabled = false;
+          button.textContent = 'Subscribe';
+        }
       }
     });
   }
