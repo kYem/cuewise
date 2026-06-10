@@ -1,13 +1,13 @@
 # Cuewise Development Roadmap
 
-**Last Updated**: 2026-06-08
+**Last Updated**: 2026-06-10
 **Current Version**: v1.8.0 (Published on Chrome Web Store)
 
 ---
 
-## 🚧 In Progress (v1.9.0)
+## ✅ Ready to Release (v1.9.0)
 
-### Task Enhancements (inspired by Momentum v2.26)
+### Task Enhancements
 
 Bringing richer task management to Today's Focus / Goals — subtasks, due
 dates, manual ordering, and quick duplication.
@@ -28,7 +28,7 @@ dates, manual ordering, and quick duplication.
       `taskWithDueDateFactory`, `taskWithSubtasksFactory`,
       `objectiveFactory`)
 
-#### Phase 2 — UI Wiring — ⚠️ MOSTLY COMPLETE
+#### Phase 2 — UI Wiring — ✅ COMPLETE
 - [x] Subtask checklist UI on task cards (`SubtaskList`: add / toggle / remove,
       progress pill, collapse/expand)
 - [x] Due-date picker on tasks (`DueDateControl`) + due-date badge with
@@ -38,8 +38,9 @@ dates, manual ordering, and quick duplication.
 - [x] "Duplicate task" action in the task edit cluster
 - [x] Component tests for new interactions (24 new tests across
       `GoalsList`, `DueDateControl`, `SubtaskList`, `SortableTaskItem`)
-- [ ] Upcoming tasks surfacing via `getUpcomingTasks` (still unused in UI —
-      deferred; util + store support already exist)
+- [x] Upcoming tasks surfacing via `getUpcomingTasks` (`UpcomingTasks` —
+      collapsible due-soon list with complete + move-to-today actions;
+      shipped in #51, rendered on the home list full view and the Goals page)
 
 ---
 
@@ -668,38 +669,37 @@ differentiators that build on existing Focus Mode + quote infrastructure.)
 
 ## 🎯 Recommended Next Priorities
 
-*Ordered, dated plan as of 2026-06-08. Effort: S = days, M = ~1 week, L = 2+ weeks.*
+*Ordered, dated plan as of 2026-06-10. Effort: S = days, M = ~1 week, L = 2+ weeks.*
 
-1. **Finish v1.9.0 Task Enhancements — Phase 2 UI** (Priority: HIGH · Effort: M)
-   - Store/data layer is done (commit `2bfb906`); only UI wiring remains.
-   - Subtask checklists, due-date picker/badges, drag-to-reorder, duplicate action.
-   - See "In Progress (v1.9.0)" above for the full checklist.
+> ✅ **v1.9.0 Task Enhancements — DONE.** Phase 1 (data/store, commit `2bfb906`)
+> and Phase 2 (UI, PRs #51/#54) are both complete, including upcoming-tasks
+> surfacing (`UpcomingTasks`). v1.9.0 is ready to release.
 
-2. **Quick Links / Shortcuts widget** (Priority: HIGH · Effort: S–M)
+1. **Quick Links / Shortcuts widget** (Priority: HIGH · Effort: S–M)
    - Pinned site tiles on the new tab — table-stakes feature every competitor
      has and we lack. New `quickLinks` setting + store + grid component.
 
-3. **Weather widget** (Priority: MEDIUM · Effort: M)
+2. **Weather widget** (Priority: MEDIUM · Effort: M)
    - Current + today's forecast. Needs a free weather API + a location source
      (manual entry first to avoid Momentum's geolocation-permission backlash).
 
-4. **Site Blocker during Focus/Pomodoro** (Priority: MEDIUM · Effort: M–L)
+3. **Site Blocker during Focus/Pomodoro** (Priority: MEDIUM · Effort: M–L)
    - Block distracting sites while a session runs. Extends existing Focus Mode;
      free vs. Momentum Plus / Forest paywall. Needs `declarativeNetRequest` or
      a content-script redirect + a blocklist setting.
 
-5. **Spaced Repetition for quotes** (Priority: MEDIUM · Effort: M)
+4. **Spaced Repetition for quotes** (Priority: MEDIUM · Effort: M)
    - The unique moat — no competitor has it. Spec in
      `docs/next-steps-roadmap.md`; reuses `source`/`notes`/`viewCount` fields.
 
-6. **Quote Collections** (Priority: MEDIUM · Effort: M) — Not Started
+5. **Quote Collections** (Priority: MEDIUM · Effort: M) — Not Started
    - Types already exist (`QuoteCollection`, `collectionIds`). Create/manage
      themed collections + collection-scoped rotation.
 
-7. **Notes / scratchpad widget** (Priority: LOW · Effort: S)
+6. **Notes / scratchpad widget** (Priority: LOW · Effort: S)
    - Quick-capture note on the new tab (Tabliss/Infinity parity).
 
-8. **Habit tracking / Metrics** (Priority: LOW · Effort: M)
+7. **Habit tracking / Metrics** (Priority: LOW · Effort: M)
    - Pairs with recurring tasks; reuse streak logic from Insights.
 
 > Competitive rationale and the full gap analysis live in
