@@ -402,6 +402,9 @@ h2.section-title {
   grid-template-columns: repeat(3, 1fr);
   gap: 20px;
 }
+.feat-grid.cols-2 {
+  grid-template-columns: repeat(2, 1fr);
+}
 .feat {
   padding: 28px;
   transition:
@@ -687,6 +690,9 @@ footer {
 }
 @media (max-width: 560px) {
   .feat-grid {
+    grid-template-columns: 1fr;
+  }
+  .feat-grid.cols-2 {
     grid-template-columns: 1fr;
   }
   .section-pad {
