@@ -8,16 +8,14 @@
     "build": "astro build",
     "preview": "astro preview",
     "type-check": "astro check",
-    "test": "vitest run",
-    "test:watch": "vitest",
     "clean": "rm -rf dist .astro"
   },
   "dependencies": {
-    "astro": "^5.0.0",
-    "@astrojs/sitemap": "^3.2.0"
+    "astro": "catalog:",
+    "@astrojs/sitemap": "catalog:"
   },
   "devDependencies": {
-    "@astrojs/check": "^0.9.4",
+    "@astrojs/check": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }
