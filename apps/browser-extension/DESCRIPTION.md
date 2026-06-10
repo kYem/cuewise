@@ -4,122 +4,109 @@
 
 ---
 
-What if every new tab could inspire you, focus you, and track your growth?
+Cuewise replaces your new tab page with a beautiful productivity dashboard: daily motivational quotes, a focused to-do list, a Pomodoro timer, ambient focus sounds, and insights that show your progress over time.
 
-Cuewise transforms your browser into a companion for meaningful productivity. No overwhelming task lists. No artificial deadlines. Just wisdom, intention, and progress—beautifully designed to help you navigate your day with purpose.
+No accounts. No tracking. No paywalls. Every feature is free, and your data stays in your browser.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-✨ YOUR DAILY COMPASS
+✨ EVERYTHING IN YOUR NEW TAB
 
-Every time you open a new tab, you're greeted with:
-
-📖 WISDOM THAT RESONATES
+📖 DAILY MOTIVATIONAL QUOTES
 • 100+ handpicked quotes across 10 life categories (Inspiration, Learning, Productivity, Mindfulness, Success, Creativity, Resilience, Leadership, Health, Growth)
-• Add your own meaningful quotes from books, mentors, or experiences
-• Save favorites and revisit them when you need them most
-• Sources and personal notes for deeper reflection
+• Add your own quotes with author, source, and personal notes
+• Organize quotes into collections — or bulk import your collection from CSV
+• Favorite the ones that resonate, hide the ones that don't
+• Four display modes: normal, compact, bottom, or fully hidden for a distraction-free tab
 
-🎯 GOALS THAT MATTER
-• Simple, focused daily goals—no complexity, just clarity
-• Visual progress tracking that celebrates small wins
-• Archive completed tasks to see how far you've come
-• Goals organized by date for easy weekly review
+🎯 TODAY'S FOCUS — A TO-DO LIST THAT STAYS SIMPLE
+• Plan your day with a short, focused list of goals
+• Break tasks into subtasks with visual progress
+• Due dates with overdue highlighting and an "Upcoming" view of what's ahead
+• Drag to reorder, duplicate tasks, move unfinished work to tomorrow in one click
+• Full goal history organized by date — see how far you've come
 
-⏰ REMINDERS THAT ACTUALLY WORK
-• Smart notifications that respect your attention
-• Snooze options (5min, 15min, 1hr, 1 day) for real life
-• Recurring reminders for habits and routines
-• Countdown timers for approaching deadlines
+🍅 POMODORO TIMER & FOCUS MODE
+• Classic Pomodoro technique: 25-minute focus sessions with short and long breaks, all customizable
+• Distraction-free focus mode with beautiful background images
+• Ambient soundscapes and YouTube focus playlists to stay in the zone
+• Session history and a heatmap of your most productive hours
 
-🍅 FOCUS THAT FLOWS
-• Built-in Pomodoro timer (25-minute focus, 5-minute breaks)
-• Circular progress visualization keeps you in the zone
-• Session history tracks your deep work streaks
-• Customizable work and break durations
+⏰ SMART REMINDERS
+• One-off and recurring reminders (daily, weekly, monthly)
+• Browser notifications with snooze options (5 min, 15 min, 1 hr, 1 day)
 
-📊 INSIGHTS THAT INSPIRE
-• Current and longest goal completion streaks
-• Weekly, monthly, and all-time progress stats
-• Quote category analytics—discover what resonates with you
-• Pomodoro session tracking for focused work patterns
+📊 PRODUCTIVITY INSIGHTS
+• Goal completion streaks — current and longest
+• Daily, weekly, and monthly trends
+• Pomodoro heatmaps and focus-time stats
+• Export your data anytime as JSON or CSV
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-🎨 DESIGNED FOR CLARITY
-
-Clean, minimalist interface that gets out of your way. Beautiful typography, soothing colors, and thoughtful spacing create a calm digital environment. Dark mode included.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-🔒 PRIVACY BY DESIGN
-
-Your data never leaves your device. No accounts. No tracking. No cloud sync. No analytics. What you write, set, and achieve stays yours alone.
-
-All data stored locally in your browser using Chrome's secure storage API. Export your data anytime. Delete everything with one click.
+🎨 MAKE IT YOURS
+• Light, dark, and auto modes
+• 4 color themes, including a glass theme with a fresh background photo every day
+• Compact, comfortable, or spacious layouts
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-💡 WHO IS THIS FOR?
+🔒 PRIVATE BY DESIGN
+
+Your data never leaves your browser. No accounts, no external servers, no analytics, no tracking. Optionally use Chrome's built-in sync to carry your data across your own devices. Export or delete everything anytime.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💡 WHO IS CUEWISE FOR?
 
 ✓ Remote workers wanting to start each day with intention
-✓ Students building sustainable study habits
+✓ Students building sustainable study habits with Pomodoro focus sessions
 ✓ Professionals seeking balance between productivity and reflection
+✓ Quote collectors who want their favorite wisdom in view, not buried in notes
 ✓ Anyone tired of productivity apps that create more stress than they solve
-✓ People who appreciate meaningful design and thoughtful tools
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 🌟 THE CUEWISE PHILOSOPHY
 
-Productivity isn't about doing more—it's about moving forward with purpose. Every quote, goal, and completed session is a step on your journey.
+Productivity isn't about doing more — it's about moving forward with purpose. Every quote, goal, and completed focus session is a step on your journey.
 
-We believe:
-• Wisdom should be accessible in everyday moments
-• Progress happens one mindful step at a time
-• The best productivity tool respects your privacy and attention
-• Beautiful design makes intentional living easier
-
-Your new tab shouldn't just be functional—it should be a moment to breathe, refocus, and remember what matters.
+Your new tab shouldn't just be functional — it should be a moment to breathe, refocus, and remember what matters.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 🚀 GET STARTED IN SECONDS
 
-Install Cuewise, open a new tab, and start your journey. No setup. No tutorials. Just you, your goals, and the wisdom to guide you forward.
+Install Cuewise, open a new tab, and type your first goal. No setup. No signup. Just you, your goals, and the wisdom to guide you forward.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ❓ FAQ
 
+Q: Is Cuewise really free?
+A: Yes. Every feature is free — no premium tier, no upsells, no ads.
+
 Q: Does this sync across devices?
-A: No. All data stays local for privacy. Each browser has its own data.
+A: Optionally. Your data can sync through Chrome's built-in sync between your own browsers — it never touches our servers.
 
 Q: Can I export my data?
-A: Yes! Export all your quotes, goals, and settings anytime (coming in v1.1).
-
-Q: Will this slow down my browser?
-A: No. Cuewise is lightweight and optimized for performance.
+A: Yes! Export your quotes, goals, and sessions as JSON or CSV anytime.
 
 Q: Do you collect any data?
 A: Absolutely not. Zero tracking, zero analytics, zero accounts.
 
-Q: Can I customize the quote categories?
-A: Categories are fixed, but you can add custom quotes in any category.
+Q: Will this slow down my browser?
+A: No. Cuewise is lightweight, loads instantly, and works offline.
 
 Q: What happens if I uninstall?
-A: All local data is removed. Make sure to export first if you want to keep it.
+A: All local data is removed. Export first if you want to keep it.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 🛠️ COMING SOON
 
-• Data export/import
-• Quote search and filtering
+• Spaced repetition for your saved quotes — remember what you read
+• Calendar widget for today's events
 • Weekly review summaries
-• More customization options
-• Browser sync (optional, privacy-first)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Turn your day into a meaningful journey. Install Cuewise today.
+Turn every new tab into a moment of focus. Install Cuewise today.
