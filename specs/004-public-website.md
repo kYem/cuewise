@@ -105,7 +105,7 @@ apps/website/                    # @cuewise/website (private)
 - Honeypot field (`website`) in the form; silently accept-and-drop when filled.
 - Add contact to Resend audience via REST (`POST https://api.resend.com/audiences/{id}/contacts`).
 - Secrets: `RESEND_API_KEY`, `RESEND_AUDIENCE_ID` (Cloudflare Pages env vars — **Kes provides from the Replit deployment**).
-- Responses: 200 `{ success: true }`, 400 invalid, 500 upstream failure (logged, no details leaked).
+- Responses: 200 `{ success: true }`, 400 invalid, 502 upstream failure (logged, no details leaked); 500 when Resend env vars are missing.
 - Unit-tested with Vitest (validation paths; Resend call mocked).
 
 ## 7. SEO
