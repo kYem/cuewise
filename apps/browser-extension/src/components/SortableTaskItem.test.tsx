@@ -51,8 +51,8 @@ describe('getDragEndReorder', () => {
 });
 
 describe('SortableTaskItem', () => {
-  it('renders a drag handle alongside its children', () => {
-    render(
+  it('hides the drag handle by default and reveals it in edit mode (showHandle)', () => {
+    const { rerender } = render(
       <DndContext>
         <SortableContext items={['task-1']}>
           <SortableTaskItem id="task-1">
@@ -62,7 +62,19 @@ describe('SortableTaskItem', () => {
       </DndContext>
     );
 
-    expect(screen.getByRole('button', { name: 'Drag to reorder' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Drag to reorder' })).not.toBeInTheDocument();
     expect(screen.getByText('Task body')).toBeInTheDocument();
+
+    rerender(
+      <DndContext>
+        <SortableContext items={['task-1']}>
+          <SortableTaskItem id="task-1" showHandle>
+            <span>Task body</span>
+          </SortableTaskItem>
+        </SortableContext>
+      </DndContext>
+    );
+
+    expect(screen.getByRole('button', { name: 'Drag to reorder' })).toBeInTheDocument();
   });
 });

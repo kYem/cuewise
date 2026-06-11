@@ -25,13 +25,10 @@ import {
   CalendarClock,
   Check,
   CheckCircle2,
-  ChevronDown,
-  ChevronUp,
   Circle,
   Copy,
   ExternalLink,
   Flag,
-  History,
   Link2,
   MoveRight,
   Trash2,
@@ -58,12 +55,12 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
     todayTasks,
     goals,
     showAllTasks,
+    showUpcoming,
     toggleTask,
     updateTask,
     deleteTask,
     transferTaskToNextDay,
     moveTaskToToday,
-    toggleShowAllTasks,
     isLoading,
     getActiveGoals,
     linkTaskToGoal,
@@ -134,8 +131,6 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
     return <div className="text-center py-8 text-secondary">Loading goals...</div>;
   }
 
-  const totalCount = todayTasks.length;
-
   // Get incomplete goals from the last 2 weeks (excluding today)
   const recentIncompleteGoals = useMemo(() => {
     const today = getTodayDateString();
@@ -160,12 +155,10 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
     });
   }, [goals]);
 
-  const recentIncompleteCount = recentIncompleteGoals.length;
-
   const hasOtherGoals = goals.length > todayTasks.length;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-2.5">
       {/* Empty State - Only show when no today's tasks */}
       {todayTasks.length === 0 && (
         <div className="text-center py-8">
@@ -192,18 +185,18 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
             items={visibleTasks.map((task) => task.id)}
             strategy={verticalListSortingStrategy}
           >
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {visibleTasks.map((goal) => (
-                <SortableTaskItem key={goal.id} id={goal.id}>
+                <SortableTaskItem key={goal.id} id={goal.id} showHandle={isEditing(goal.id)}>
                   <div
                     className={cn(
-                      'group p-2.5 rounded-xl border transition-all',
+                      'group px-3 py-2 rounded-xl border transition-all',
                       goal.completed
                         ? 'bg-surface-variant/40 border-border/60'
                         : 'bg-surface-variant/30 border-border hover:border-primary-300'
                     )}
                   >
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2.5">
                       {/* Checkbox */}
                       <button
                         type="button"
@@ -430,86 +423,54 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
         </div>
       )}
 
-      {/* Incomplete Goals Dropdown - hide in compact mode */}
-      {viewMode === 'full' && (
-        <div className={cn('pt-4', totalCount > 0 && 'border-t border-border')}>
-          <button
-            type="button"
-            onClick={toggleShowAllTasks}
-            className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium text-secondary hover:text-primary-600 transition-colors"
-          >
-            <History className="w-3.5 h-3.5" />
-            <span>{showAllTasks ? 'Hide incomplete' : 'Show incomplete'}</span>
-            {showAllTasks ? (
-              <ChevronUp className="w-3.5 h-3.5" />
-            ) : (
-              <ChevronDown className="w-3.5 h-3.5" />
-            )}
-            {!showAllTasks && recentIncompleteCount > 0 && (
-              <span className="ml-1 text-[10px] bg-primary-600 text-white px-1.5 py-0.5 rounded-full">
-                {recentIncompleteCount}
-              </span>
-            )}
-          </button>
-
-          {/* Expanded Section: Incomplete Goals from Last 2 Weeks */}
-          {showAllTasks && (
-            <div className="mt-4 space-y-4">
-              {recentIncompleteGoals.length === 0 ? (
-                <p className="text-center text-sm text-tertiary py-4">
-                  No incomplete goals from the last 2 weeks
-                </p>
-              ) : (
-                <div className="space-y-2">
-                  {recentIncompleteGoals.map((goal) => (
-                    <div
-                      key={goal.id}
-                      className="group flex items-start gap-3 p-3 rounded-lg border-2 border-border bg-surface hover:border-primary-300 transition-all"
-                    >
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          await toggleTask(goal.id);
-                        }}
-                        className="flex-shrink-0 mt-0.5 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 rounded-full"
-                        aria-label="Mark as complete"
-                      >
-                        <Circle className="w-5 h-5 text-tertiary group-hover:text-primary-500 transition-colors" />
-                      </button>
-                      <div className="flex-1 min-w-0">
-                        <span className="text-sm text-primary block">{goal.text}</span>
-                        <span className="text-xs text-tertiary">{goal.date}</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          await moveTaskToToday(goal.id);
-                        }}
-                        className="flex-shrink-0 p-1.5 text-secondary hover:text-primary-600 hover:bg-primary-50 rounded transition-colors opacity-0 group-hover:opacity-100"
-                        aria-label="Move to today"
-                        title="Move to today"
-                      >
-                        <MoveRight className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Link to full Goals page */}
-              <a
-                href="#goals"
-                className="flex items-center justify-center gap-2 py-2 text-sm text-secondary hover:text-primary-600 transition-colors"
+      {/* Recent incomplete backlog — revealed from the ⚙ menu (Show incomplete) */}
+      {viewMode === 'full' && showAllTasks && recentIncompleteGoals.length > 0 && (
+        <div className="pt-2.5 border-t border-border space-y-1.5">
+          <div className="px-0.5 text-xs font-medium text-tertiary">From the last 2 weeks</div>
+          {recentIncompleteGoals.map((goal) => (
+            <div
+              key={goal.id}
+              className="group flex items-center gap-2.5 px-3 py-2 rounded-xl border border-border bg-surface-variant/30 hover:border-primary-300 transition-all"
+            >
+              <button
+                type="button"
+                onClick={async () => {
+                  await toggleTask(goal.id);
+                }}
+                className="flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-primary-500 rounded-full"
+                aria-label="Mark as complete"
               >
-                <span>View all goals</span>
-                <ExternalLink className="w-3 h-3" />
-              </a>
+                <Circle className="w-5 h-5 text-tertiary group-hover:text-primary-500 transition-colors" />
+              </button>
+              <div className="flex-1 min-w-0">
+                <span className="block truncate text-sm text-primary">{goal.text}</span>
+                <span className="text-xs text-tertiary">{goal.date}</span>
+              </div>
+              <button
+                type="button"
+                onClick={async () => {
+                  await moveTaskToToday(goal.id);
+                }}
+                className="flex-shrink-0 p-1 text-secondary hover:text-primary-600 hover:bg-primary-50 rounded transition-colors opacity-0 group-hover:opacity-100"
+                aria-label="Move to today"
+                title="Move to today"
+              >
+                <MoveRight className="w-4 h-4" />
+              </button>
             </div>
-          )}
+          ))}
+          <a
+            href="#goals"
+            className="flex items-center justify-center gap-1.5 py-1 text-xs text-secondary hover:text-primary-600 transition-colors"
+          >
+            <span>View all goals</span>
+            <ExternalLink className="w-3 h-3" />
+          </a>
         </div>
       )}
 
-      {viewMode === 'full' && <UpcomingTasks defaultExpanded={false} />}
+      {/* Upcoming — revealed from the ⚙ menu */}
+      {viewMode === 'full' && showUpcoming && <UpcomingTasks showTrigger={false} />}
     </div>
   );
 };

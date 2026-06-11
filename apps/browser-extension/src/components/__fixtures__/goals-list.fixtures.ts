@@ -12,6 +12,7 @@ export interface MockGoalStore {
   todayTasks: Goal[];
   goals: Goal[];
   showAllTasks: boolean;
+  showUpcoming: boolean;
   isLoading: boolean;
   toggleTask: Mock;
   updateTask: Mock;
@@ -36,6 +37,7 @@ export function createMockGoalStore(overrides: Partial<MockGoalStore> = {}): Moc
     todayTasks: [],
     goals: [],
     showAllTasks: false,
+    showUpcoming: false,
     isLoading: false,
     toggleTask: vi.fn(async () => true),
     updateTask: vi.fn(async () => true),

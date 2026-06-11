@@ -1,12 +1,19 @@
-import type { Goal, GoalViewMode } from '@cuewise/shared';
+import {
+  type Goal,
+  type GoalViewMode,
+  getTodayDateString,
+  getUpcomingTasks,
+} from '@cuewise/shared';
 import { getStorageUsage, type StorageUsageInfo } from '@cuewise/storage';
 import { cn, Popover, PopoverContent, PopoverTrigger } from '@cuewise/ui';
 import {
   AlignJustify,
+  CalendarClock,
   Check,
   CheckCircle2,
   Circle,
   Eye,
+  History,
   List,
   Settings2,
   Target,
@@ -30,14 +37,19 @@ const VIEW_MODES: { mode: GoalViewMode; icon: typeof List; label: string }[] = [
 
 export const GoalsSection: React.FC = () => {
   // State values - use useShallow to prevent re-renders when unrelated state changes
-  const { isLoading, error, todayTasks } = useGoalStore(
+  const { isLoading, error, todayTasks, goals, showAllTasks, showUpcoming } = useGoalStore(
     useShallow((state) => ({
       isLoading: state.isLoading,
       error: state.error,
       todayTasks: state.todayTasks,
+      goals: state.goals,
+      showAllTasks: state.showAllTasks,
+      showUpcoming: state.showUpcoming,
     }))
   );
   const initialize = useGoalStore((state) => state.initialize);
+  const toggleShowAllTasks = useGoalStore((state) => state.toggleShowAllTasks);
+  const toggleShowUpcoming = useGoalStore((state) => state.toggleShowUpcoming);
 
   // Settings - use useShallow for multiple values, individual selector for action
   const settings = useSettingsStore(useShallow((state) => state.settings));
@@ -48,6 +60,16 @@ export const GoalsSection: React.FC = () => {
   const completedCount = todayTasks.filter((t) => t.completed).length;
   const totalCount = todayTasks.length;
   const incompleteCount = totalCount - completedCount;
+
+  // Counts for the menu's "Show incomplete" (recent backlog) and "Upcoming" entries
+  const todayStr = getTodayDateString();
+  const twoWeeksAgo = new Date();
+  twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+  const twoWeeksAgoStr = twoWeeksAgo.toISOString().split('T')[0];
+  const recentIncompleteCount = goals.filter(
+    (g) => g.date !== todayStr && !g.completed && g.date >= twoWeeksAgoStr
+  ).length;
+  const upcomingCount = getUpcomingTasks(goals).filter((t) => !t.completed).length;
   const focusedGoalId = settings.focusedGoalId;
   const focusedGoal = todayTasks.find((g) => g.id === focusedGoalId);
   const displayGoal = focusedGoal || todayTasks.find((g) => !g.completed) || null;
@@ -78,7 +100,7 @@ export const GoalsSection: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="w-full max-w-2xl mx-auto">
+      <div className="w-full max-w-[400px] mx-auto">
         <div className="bg-surface/80 backdrop-blur-sm rounded-2xl shadow-lg p-6 border border-border">
           <div className="flex items-center justify-center min-h-[200px]">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
@@ -90,7 +112,7 @@ export const GoalsSection: React.FC = () => {
 
   if (error) {
     return (
-      <div className="w-full max-w-2xl mx-auto">
+      <div className="w-full max-w-[400px] mx-auto">
         <div className="bg-surface/80 backdrop-blur-sm rounded-2xl shadow-lg p-6 border border-border">
           <ErrorFallback error={error} title="Failed to load goals" onRetry={initialize} />
         </div>
@@ -114,7 +136,7 @@ export const GoalsSection: React.FC = () => {
         <button
           type="button"
           className={cn(
-            'p-2 rounded-full bg-surface-variant/80 hover:bg-surface-variant backdrop-blur-sm text-secondary hover:text-primary transition-all border border-border',
+            'w-8 h-8 flex items-center justify-center rounded-lg bg-surface-variant/80 hover:bg-surface-variant backdrop-blur-sm text-secondary hover:text-primary transition-all border border-border',
             triggerClassName
           )}
           aria-label="View options"
@@ -190,6 +212,46 @@ export const GoalsSection: React.FC = () => {
                 />
               </span>
             </button>
+
+            {recentIncompleteCount > 0 && (
+              <button
+                type="button"
+                onClick={toggleShowAllTasks}
+                aria-pressed={showAllTasks}
+                className={cn(
+                  'w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-colors',
+                  showAllTasks
+                    ? 'bg-primary-50 text-primary-600'
+                    : 'text-primary hover:bg-surface-variant'
+                )}
+              >
+                <History className="w-4 h-4" />
+                <span className="flex-1 text-left">Show incomplete</span>
+                <span className="min-w-[18px] px-1 text-center text-[10px] font-bold rounded-full bg-primary-600 text-white">
+                  {recentIncompleteCount}
+                </span>
+              </button>
+            )}
+
+            {upcomingCount > 0 && (
+              <button
+                type="button"
+                onClick={toggleShowUpcoming}
+                aria-pressed={showUpcoming}
+                className={cn(
+                  'w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-colors',
+                  showUpcoming
+                    ? 'bg-primary-50 text-primary-600'
+                    : 'text-primary hover:bg-surface-variant'
+                )}
+              >
+                <CalendarClock className="w-4 h-4" />
+                <span className="flex-1 text-left">Upcoming</span>
+                <span className="min-w-[18px] px-1 text-center text-[10px] font-bold rounded-full bg-primary-600 text-white">
+                  {upcomingCount}
+                </span>
+              </button>
+            )}
           </>
         )}
       </PopoverContent>
@@ -211,41 +273,41 @@ export const GoalsSection: React.FC = () => {
     );
   }
 
-  const minHeight = viewMode === 'compact' ? 'min-h-[120px]' : 'min-h-[200px]';
+  const minHeight = viewMode === 'compact' ? '' : 'min-h-[120px]';
 
   // Full and Compact modes render with container
   return (
-    <div className="w-full max-w-2xl mx-auto">
+    <div className="w-full max-w-[400px] mx-auto">
       <div
         className={cn(
-          'group bg-surface/80 backdrop-blur-sm rounded-2xl shadow-lg p-6 border border-border flex flex-col',
+          'group bg-surface/80 backdrop-blur-sm rounded-2xl shadow-lg p-5 border border-border flex flex-col',
           minHeight
         )}
       >
         {/* Header */}
         {viewMode === 'full' ? (
-          <div className="flex items-center gap-3 mb-5">
+          <div className="flex items-center gap-2.5 mb-4">
             {totalCount > 0 ? (
-              <GoalProgressRing completed={completedCount} total={totalCount} />
+              <GoalProgressRing completed={completedCount} total={totalCount} size={40} />
             ) : (
-              <div className="w-11 h-11 flex items-center justify-center rounded-xl bg-primary-100 flex-shrink-0">
+              <div className="w-10 h-10 flex items-center justify-center rounded-xl bg-primary-100 flex-shrink-0">
                 <Target className="w-5 h-5 text-primary-600" />
               </div>
             )}
             <div className="flex-1 min-w-0">
-              <h2 className="text-xl font-semibold text-primary font-display">Today's Focus</h2>
-              <p className="text-sm text-secondary">{subtitle}</p>
+              <h2 className="text-base font-semibold text-primary font-display">Today's Focus</h2>
+              <p className="text-xs text-secondary">{subtitle}</p>
             </div>
             {optionsMenu()}
           </div>
         ) : (
-          <div className="flex items-center gap-2 mb-3">
-            <Target className="w-5 h-5 text-primary-600 flex-shrink-0" />
-            <h2 className="text-lg font-semibold text-primary font-display flex-1">
+          <div className="flex items-center gap-2 mb-2.5">
+            <Target className="w-4 h-4 text-primary-600 flex-shrink-0" />
+            <h2 className="text-base font-semibold text-primary font-display flex-1">
               Today's Focus
             </h2>
             {totalCount > 0 && (
-              <span className="text-sm text-secondary tabular-nums">
+              <span className="text-xs text-secondary tabular-nums">
                 {completedCount}/{totalCount}
               </span>
             )}

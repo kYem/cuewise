@@ -41,7 +41,16 @@ export const SubtaskList: React.FC<SubtaskListProps> = ({
   };
 
   return (
-    <div className="mt-1 pl-9">
+    <div
+      className={cn(
+        'pl-9',
+        // No-subtask rows stay one-line until hover/focus so resting tiles are
+        // compact, matching the widget design.
+        total > 0 || expanded
+          ? 'mt-1'
+          : 'max-h-0 overflow-hidden opacity-0 transition-all duration-200 group-hover:mt-1 group-hover:max-h-8 group-hover:opacity-100 focus-within:mt-1 focus-within:max-h-8 focus-within:opacity-100'
+      )}
+    >
       {total > 0 ? (
         <button
           type="button"
@@ -67,11 +76,7 @@ export const SubtaskList: React.FC<SubtaskListProps> = ({
         <button
           type="button"
           onClick={() => setExpanded((open) => !open)}
-          className={cn(
-            'flex items-center gap-1 text-xs text-tertiary hover:text-primary-600 transition-all focus:opacity-100',
-            // Always rendered per row; reveal on hover (or when open) to avoid clutter
-            expanded ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-          )}
+          className="flex items-center gap-1 text-xs text-tertiary hover:text-primary-600 transition-colors"
         >
           <Plus className="w-3 h-3" />
           <span>Add subtask</span>

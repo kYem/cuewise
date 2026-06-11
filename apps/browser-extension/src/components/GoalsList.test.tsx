@@ -192,7 +192,8 @@ describe('GoalsList - Reorder', () => {
     vi.mocked(useSettingsStore).mockImplementation(createSettingsStoreMock());
   });
 
-  it('renders a drag handle for each today task', () => {
+  it('shows a drag handle only for the task being edited', async () => {
+    const user = userEvent.setup();
     const taskA = goalFactory.build({ text: 'First task' });
     const taskB = goalFactory.build({ text: 'Second task' });
     const store = createMockGoalStore({
@@ -203,7 +204,12 @@ describe('GoalsList - Reorder', () => {
 
     render(<GoalsList />);
 
-    expect(screen.getAllByRole('button', { name: 'Drag to reorder' })).toHaveLength(2);
+    // No handle while resting
+    expect(screen.queryByRole('button', { name: 'Drag to reorder' })).not.toBeInTheDocument();
+
+    // Editing a task reveals its handle
+    await user.click(screen.getByRole('button', { name: 'First task' }));
+    expect(screen.getAllByRole('button', { name: 'Drag to reorder' })).toHaveLength(1);
   });
 });
 
@@ -213,14 +219,24 @@ describe('GoalsList - Upcoming section', () => {
     vi.mocked(useSettingsStore).mockImplementation(createSettingsStoreMock());
   });
 
-  it('renders the Upcoming section when there are future-due tasks', () => {
+  it('renders upcoming tasks when showUpcoming is enabled from the menu', () => {
     const upcoming = taskWithDueDateFactory.build({ text: 'Ship release' });
-    const store = createMockGoalStore({ todayTasks: [], goals: [upcoming] });
+    const store = createMockGoalStore({ todayTasks: [], goals: [upcoming], showUpcoming: true });
     vi.mocked(useGoalStore).mockImplementation(createGoalStoreMock(store));
 
     render(<GoalsList />);
 
-    expect(screen.getByRole('button', { name: 'Show upcoming tasks' })).toBeInTheDocument();
+    expect(screen.getByText('Ship release')).toBeInTheDocument();
+  });
+
+  it('hides upcoming tasks when showUpcoming is off', () => {
+    const upcoming = taskWithDueDateFactory.build({ text: 'Ship release' });
+    const store = createMockGoalStore({ todayTasks: [], goals: [upcoming], showUpcoming: false });
+    vi.mocked(useGoalStore).mockImplementation(createGoalStoreMock(store));
+
+    render(<GoalsList />);
+
+    expect(screen.queryByText('Ship release')).not.toBeInTheDocument();
   });
 });
 
