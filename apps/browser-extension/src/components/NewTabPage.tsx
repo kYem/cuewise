@@ -1,8 +1,17 @@
-import { formatClockTime, formatLongDate, getGreeting } from '@cuewise/shared';
+import {
+  calculateStreak,
+  formatClockTime,
+  formatLongDate,
+  getGreeting,
+  getTodayDateString,
+  REVIEW_URL,
+  shouldShowReviewPrompt,
+} from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
 import { BarChart3, BookMarked, Flag, PanelRight, Settings, Timer } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useGoalStore } from '../stores/goal-store';
 import { usePomodoroStorageSync, usePomodoroStore } from '../stores/pomodoro-store';
 import { useQuoteStore } from '../stores/quote-store';
 import { useSettingsStore } from '../stores/settings-store';
@@ -13,6 +22,7 @@ import { GoalsSection } from './GoalsSection';
 import { GoalButton } from './goals';
 import { QuoteDisplay } from './QuoteDisplay';
 import { ReminderWidget } from './ReminderWidget';
+import { ReviewPromptModal } from './ReviewPromptModal';
 import { SettingsModal } from './SettingsModal';
 import { WelcomeModal } from './WelcomeModal';
 
@@ -29,15 +39,23 @@ export const NewTabPage: React.FC = () => {
   const quoteDisplayMode = useSettingsStore((state) => state.settings.quoteDisplayMode);
   const focusPosition = useSettingsStore((state) => state.settings.focusPosition);
   const hasSeenOnboarding = useSettingsStore((state) => state.settings.hasSeenOnboarding);
+  const reviewPromptDismissed = useSettingsStore((state) => state.settings.reviewPromptDismissed);
+  const reviewPromptCount = useSettingsStore((state) => state.settings.reviewPromptCount);
+  const reviewPromptLastShownAt = useSettingsStore(
+    (state) => state.settings.reviewPromptLastShownAt
+  );
   const updateSettings = useSettingsStore((state) => state.updateSettings);
   const initializePomodoro = usePomodoroStore((state) => state.initialize);
   const pomodoroStatus = usePomodoroStore((state) => state.status);
+  const pomodoroSessions = usePomodoroStore((state) => state.sessions);
+  const goals = useGoalStore((state) => state.goals);
 
   // Enable cross-tab synchronization for Pomodoro timer
   usePomodoroStorageSync();
 
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isWelcomeOpen, setIsWelcomeOpen] = useState(false);
+  const [isReviewPromptOpen, setIsReviewPromptOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [lastManualRefresh, setLastManualRefresh] = useState(Date.now());
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -93,6 +111,60 @@ export const NewTabPage: React.FC = () => {
       setIsWelcomeOpen(true);
     }
   }, [settingsLoading, hasSeenOnboarding]);
+
+  // Surface the review prompt at a calm tab-open moment once a delight milestone
+  // is reached. Counting the show here keeps it to at most twice (see the util).
+  useEffect(() => {
+    if (settingsLoading || isReviewPromptOpen || pomodoroStatus !== 'idle') {
+      return;
+    }
+    const streakCurrent = calculateStreak(
+      goals.filter((g) => g.completed).map((g) => g.date)
+    ).current;
+    const completedPomodoros = pomodoroSessions.filter(
+      (s) => s.type === 'work' && !s.interrupted
+    ).length;
+    const eligible = shouldShowReviewPrompt({
+      streakCurrent,
+      completedPomodoros,
+      hasSeenOnboarding,
+      state: {
+        dismissed: reviewPromptDismissed,
+        count: reviewPromptCount,
+        lastShownAt: reviewPromptLastShownAt,
+      },
+      today: getTodayDateString(),
+    });
+    if (eligible) {
+      setIsReviewPromptOpen(true);
+      updateSettings({
+        reviewPromptCount: reviewPromptCount + 1,
+        reviewPromptLastShownAt: getTodayDateString(),
+      });
+    }
+  }, [
+    settingsLoading,
+    isReviewPromptOpen,
+    pomodoroStatus,
+    goals,
+    pomodoroSessions,
+    hasSeenOnboarding,
+    reviewPromptDismissed,
+    reviewPromptCount,
+    reviewPromptLastShownAt,
+    updateSettings,
+  ]);
+
+  const handleReviewClick = () => {
+    window.open(REVIEW_URL, '_blank', 'noopener,noreferrer');
+    updateSettings({ reviewPromptDismissed: true });
+    setIsReviewPromptOpen(false);
+  };
+
+  const handleReviewDismiss = () => {
+    updateSettings({ reviewPromptDismissed: true });
+    setIsReviewPromptOpen(false);
+  };
 
   // Auto-refresh quotes based on interval setting
   useEffect(() => {
@@ -462,6 +534,14 @@ export const NewTabPage: React.FC = () => {
 
       {/* Welcome Modal - First-time users */}
       <WelcomeModal isOpen={isWelcomeOpen} onClose={handleCloseWelcome} />
+
+      {/* Store review prompt - shown at a delight milestone */}
+      <ReviewPromptModal
+        isOpen={isReviewPromptOpen}
+        onReview={handleReviewClick}
+        onLater={() => setIsReviewPromptOpen(false)}
+        onDismiss={handleReviewDismiss}
+      />
     </div>
   );
 };
