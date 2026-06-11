@@ -197,10 +197,10 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
                 <SortableTaskItem key={goal.id} id={goal.id}>
                   <div
                     className={cn(
-                      'group p-3 rounded-lg border-2 transition-all',
+                      'group p-2.5 rounded-xl border transition-all',
                       goal.completed
-                        ? 'bg-surface-variant border-border'
-                        : 'bg-surface border-border hover:border-primary-300'
+                        ? 'bg-surface-variant/40 border-border/60'
+                        : 'bg-surface-variant/30 border-border hover:border-primary-300'
                     )}
                   >
                     <div className="flex items-center gap-3">
@@ -212,9 +212,9 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
                         aria-label={goal.completed ? 'Mark as incomplete' : 'Mark as complete'}
                       >
                         {goal.completed ? (
-                          <CheckCircle2 className="w-6 h-6 text-primary-600" />
+                          <CheckCircle2 className="w-5 h-5 text-primary-600" />
                         ) : (
-                          <Circle className="w-6 h-6 text-tertiary group-hover:text-primary-500 transition-colors" />
+                          <Circle className="w-5 h-5 text-tertiary group-hover:text-primary-500 transition-colors" />
                         )}
                       </button>
 
@@ -235,7 +235,7 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
                           type="button"
                           onClick={() => startEditing(goal.id, goal.text)}
                           className={cn(
-                            'flex-1 text-base text-left transition-all hover:bg-surface-variant px-2 py-1 rounded',
+                            'flex-1 text-sm text-left transition-all hover:bg-surface-variant px-2 py-1 rounded',
                             goal.completed ? 'text-tertiary line-through' : 'text-primary'
                           )}
                         >
@@ -410,6 +410,7 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
                         mode so the add affordance survives the input blur */}
                     <SubtaskList
                       goal={goal}
+                      compact={viewMode === 'compact'}
                       onAdd={(text) => addSubtask(goal.id, text)}
                       onToggle={(subtaskId) => toggleSubtask(goal.id, subtaskId)}
                       onRemove={(subtaskId) => removeSubtask(goal.id, subtaskId)}
@@ -425,7 +426,7 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
       {/* Add a goal — bottom add row (full mode only, mirrors the widget design) */}
       {viewMode === 'full' && (
         <div className="pt-1">
-          <GoalInput />
+          <GoalInput variant="widget" />
         </div>
       )}
 
@@ -435,13 +436,17 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
           <button
             type="button"
             onClick={toggleShowAllTasks}
-            className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-lg bg-surface-variant hover:bg-primary-100 text-secondary hover:text-primary-600 transition-all font-medium"
+            className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium text-secondary hover:text-primary-600 transition-colors"
           >
-            <History className="w-4 h-4" />
-            <span>{showAllTasks ? 'Hide Incomplete' : 'Show Incomplete'}</span>
-            {showAllTasks ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            <History className="w-3.5 h-3.5" />
+            <span>{showAllTasks ? 'Hide incomplete' : 'Show incomplete'}</span>
+            {showAllTasks ? (
+              <ChevronUp className="w-3.5 h-3.5" />
+            ) : (
+              <ChevronDown className="w-3.5 h-3.5" />
+            )}
             {!showAllTasks && recentIncompleteCount > 0 && (
-              <span className="ml-1 text-xs bg-primary-600 text-white px-2 py-0.5 rounded-full">
+              <span className="ml-1 text-[10px] bg-primary-600 text-white px-1.5 py-0.5 rounded-full">
                 {recentIncompleteCount}
               </span>
             )}

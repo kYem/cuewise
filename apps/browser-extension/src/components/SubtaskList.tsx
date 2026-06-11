@@ -9,13 +9,21 @@ interface SubtaskListProps {
   onAdd: (text: string) => void;
   onToggle: (subtaskId: string) => void;
   onRemove: (subtaskId: string) => void;
+  /** Compact rows show an inline mini progress bar; full rows show only n/m */
+  compact?: boolean;
 }
 
 /**
  * Collapsible checklist of a task's subtasks: a progress toggle, per-subtask
  * complete/remove controls, and an inline add input.
  */
-export const SubtaskList: React.FC<SubtaskListProps> = ({ goal, onAdd, onToggle, onRemove }) => {
+export const SubtaskList: React.FC<SubtaskListProps> = ({
+  goal,
+  onAdd,
+  onToggle,
+  onRemove,
+  compact = false,
+}) => {
   const subtasks = goal.subtasks ?? [];
   const { completed, total } = getSubtaskProgress(goal);
   const progressPercentage = total > 0 ? (completed / total) * 100 : 0;
@@ -42,12 +50,14 @@ export const SubtaskList: React.FC<SubtaskListProps> = ({ goal, onAdd, onToggle,
           aria-label={expanded ? 'Hide subtasks' : 'Show subtasks'}
         >
           <ListChecks className="w-3.5 h-3.5" />
-          <span className="w-14 h-1.5 bg-divider rounded-full overflow-hidden" aria-hidden="true">
-            <span
-              className="block h-full bg-primary-600 rounded-full transition-all duration-300 ease-out"
-              style={{ width: `${progressPercentage}%` }}
-            />
-          </span>
+          {compact && (
+            <span className="w-14 h-1.5 bg-divider rounded-full overflow-hidden" aria-hidden="true">
+              <span
+                className="block h-full bg-primary-600 rounded-full transition-all duration-300 ease-out"
+                style={{ width: `${progressPercentage}%` }}
+              />
+            </span>
+          )}
           <span className="font-medium tabular-nums">
             {completed}/{total}
           </span>
