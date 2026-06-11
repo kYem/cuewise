@@ -1,17 +1,26 @@
-// Base UI components
-
-// Settings sections
-export { ChromeSyncSettings } from './ChromeSyncSettings';
-export { ClockTimeSettings } from './ClockTimeSettings';
-export { DebugSettings } from './DebugSettings';
-export { FocusModeSettings } from './FocusModeSettings';
-export { FocusMusicSettings } from './FocusMusicSettings';
-export { GoalTransferSettings } from './GoalTransferSettings';
-export { NotificationSoundsSettings } from './NotificationSoundsSettings';
-export { NotificationsSettings } from './NotificationsSettings';
-export { PomodoroSettings } from './PomodoroSettings';
-export { QuoteIntervalSettings } from './QuoteIntervalSettings';
-export { SettingsSection } from './SettingsSection';
-export { SettingsSelect } from './SettingsSelect';
-export { SettingsSlider } from './SettingsSlider';
-export { SettingsToggle } from './SettingsToggle';
+// Settings modal building blocks (redesigned, theme-aware)
+export { PresetGrid } from './PresetGrid';
+export {
+  Segmented,
+  SelectControl,
+  SettingDivider,
+  SettingRow,
+  SettingSubgroup,
+  Stepper,
+  Switch,
+} from './SettingControls';
+export {
+  SECTION_IDS,
+  SETTINGS_SECTIONS,
+  type SectionId,
+  type SettingsSection,
+} from './SettingsSections';
+export {
+  POMODORO_KEYS,
+  planSettingsSideEffects,
+  type SettingsSideEffects,
+} from './settings-apply';
+export { quoteIntervalToSeconds } from './settings-interval';
+export { settingsMatch } from './settings-match';
+export type { SetSettings, SettingsSectionProps } from './settings-types';
+export { ThumbPicker } from './ThumbPicker';
