@@ -1,6 +1,7 @@
 import {
   type GoalViewMode,
   getDueDateLabel,
+  getSubtaskProgress,
   getTodayDateString,
   isObjective,
   isPastGoalTransferTime,
@@ -25,16 +26,20 @@ import {
   CalendarClock,
   Check,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   Circle,
   Copy,
   ExternalLink,
   Flag,
   Link2,
   MoveRight,
+  Plus,
   Trash2,
+  X,
 } from 'lucide-react';
 import type React from 'react';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import emptyTasksAnimation from '../assets/lottie/empty/tasks.json';
 import { useGoalEditing } from '../hooks/useGoalEditing';
 import { useGoalStore } from '../stores/goal-store';
@@ -126,6 +131,12 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
   // Check if transfer button should be shown
   const showTransferButton =
     settings.enableGoalTransfer && isPastGoalTransferTime(settings.goalTransferTime);
+
+  // Per-row subtask UI state: a single accordion expand (full mode) and the
+  // inline add field (edit mode only).
+  const [expandedSubtaskId, setExpandedSubtaskId] = useState<string | null>(null);
+  const [addingSubtaskId, setAddingSubtaskId] = useState<string | null>(null);
+  const [subtaskDraft, setSubtaskDraft] = useState('');
 
   if (isLoading) {
     return <div className="text-center py-8 text-secondary">Loading goals...</div>;
@@ -221,7 +232,7 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
                           onBlur={handleBlur}
                           onKeyDown={handleKeyDown}
                           maxLength={200}
-                          className="flex-1 text-base px-2 py-1 border-2 border-primary-500 rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          className="flex-1 min-w-0 text-sm px-2 py-1 border-2 border-primary-500 rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
                         />
                       ) : (
                         <button
@@ -261,6 +272,32 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
                             }
                             return null;
                           })()}
+
+                        {/* Subtask count toggle (resting, full mode) — expands list below */}
+                        {!isEditing(goal.id) &&
+                          viewMode === 'full' &&
+                          (goal.subtasks?.length ?? 0) > 0 && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setExpandedSubtaskId(expandedSubtaskId === goal.id ? null : goal.id)
+                              }
+                              aria-label={
+                                expandedSubtaskId === goal.id ? 'Hide subtasks' : 'Show subtasks'
+                              }
+                              className="flex items-center gap-1 text-xs text-secondary hover:text-primary-600 transition-colors"
+                            >
+                              <span className="font-medium tabular-nums">
+                                {getSubtaskProgress(goal).completed}/
+                                {getSubtaskProgress(goal).total}
+                              </span>
+                              {expandedSubtaskId === goal.id ? (
+                                <ChevronUp className="w-3 h-3" />
+                              ) : (
+                                <ChevronDown className="w-3 h-3" />
+                              )}
+                            </button>
+                          )}
 
                         {/* Due date badge - hide in edit mode (control shown instead) */}
                         {!isEditing(goal.id) && goal.dueDate && (
@@ -399,15 +436,148 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
                       </div>
                     </div>
 
-                    {/* Full and compact both show subtasks; mounted regardless of edit
-                        mode so the add affordance survives the input blur */}
-                    <SubtaskList
-                      goal={goal}
-                      compact={viewMode === 'compact'}
-                      onAdd={(text) => addSubtask(goal.id, text)}
-                      onToggle={(subtaskId) => toggleSubtask(goal.id, subtaskId)}
-                      onRemove={(subtaskId) => removeSubtask(goal.id, subtaskId)}
-                    />
+                    {/* Compact mode keeps the slim-row mini-bar summary + accordion */}
+                    {viewMode === 'compact' && (
+                      <SubtaskList
+                        goal={goal}
+                        compact
+                        onAdd={(text) => addSubtask(goal.id, text)}
+                        onToggle={(subtaskId) => toggleSubtask(goal.id, subtaskId)}
+                        onRemove={(subtaskId) => removeSubtask(goal.id, subtaskId)}
+                      />
+                    )}
+
+                    {/* Full mode: read-only subtasks revealed by the inline n/m toggle */}
+                    {viewMode === 'full' &&
+                      !isEditing(goal.id) &&
+                      expandedSubtaskId === goal.id &&
+                      (goal.subtasks?.length ?? 0) > 0 && (
+                        <div className="mt-1.5 pl-9 space-y-1">
+                          {(goal.subtasks ?? []).map((subtask) => (
+                            <button
+                              key={subtask.id}
+                              type="button"
+                              onClick={() => toggleSubtask(goal.id, subtask.id)}
+                              className="flex w-full items-center gap-2 text-left"
+                              aria-label={
+                                subtask.completed
+                                  ? `Mark "${subtask.text}" incomplete`
+                                  : `Mark "${subtask.text}" complete`
+                              }
+                            >
+                              {subtask.completed ? (
+                                <CheckCircle2 className="w-4 h-4 text-primary-600 flex-shrink-0" />
+                              ) : (
+                                <Circle className="w-4 h-4 text-tertiary flex-shrink-0" />
+                              )}
+                              <span
+                                className={cn(
+                                  'text-sm',
+                                  subtask.completed ? 'text-tertiary line-through' : 'text-primary'
+                                )}
+                              >
+                                {subtask.text}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                    {/* Full mode edit: editable subtasks + add (kept mounted while adding
+                        so the edit-input blur doesn't drop the add field) */}
+                    {viewMode === 'full' && (isEditing(goal.id) || addingSubtaskId === goal.id) && (
+                      <div className="mt-2 pl-9 space-y-1">
+                        {(goal.subtasks ?? []).map((subtask) => (
+                          <div key={subtask.id} className="group/sub flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => toggleSubtask(goal.id, subtask.id)}
+                              className="flex-shrink-0 rounded-full focus:outline-none focus:ring-2 focus:ring-primary-500"
+                              aria-label={
+                                subtask.completed
+                                  ? `Mark "${subtask.text}" incomplete`
+                                  : `Mark "${subtask.text}" complete`
+                              }
+                            >
+                              {subtask.completed ? (
+                                <CheckCircle2 className="w-4 h-4 text-primary-600" />
+                              ) : (
+                                <Circle className="w-4 h-4 text-tertiary" />
+                              )}
+                            </button>
+                            <span
+                              className={cn(
+                                'flex-1 text-sm',
+                                subtask.completed ? 'text-tertiary line-through' : 'text-primary'
+                              )}
+                            >
+                              {subtask.text}
+                            </span>
+                            <button
+                              type="button"
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={() => removeSubtask(goal.id, subtask.id)}
+                              className="flex-shrink-0 rounded p-0.5 text-secondary hover:text-red-500 opacity-0 group-hover/sub:opacity-100 focus:opacity-100"
+                              aria-label={`Remove "${subtask.text}"`}
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+
+                        {addingSubtaskId === goal.id ? (
+                          <form
+                            onSubmit={(e) => {
+                              e.preventDefault();
+                              const text = subtaskDraft.trim();
+                              if (text) {
+                                addSubtask(goal.id, text);
+                              }
+                              setSubtaskDraft('');
+                              setAddingSubtaskId(null);
+                            }}
+                            className="flex items-center gap-2"
+                          >
+                            <Plus className="w-4 h-4 text-tertiary flex-shrink-0" />
+                            <input
+                              ref={(el) => el?.focus()}
+                              type="text"
+                              aria-label="Add a subtask"
+                              placeholder="Add a subtask"
+                              value={subtaskDraft}
+                              onChange={(e) => setSubtaskDraft(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Escape') {
+                                  setSubtaskDraft('');
+                                  setAddingSubtaskId(null);
+                                }
+                              }}
+                              onBlur={() => {
+                                const text = subtaskDraft.trim();
+                                if (text) {
+                                  addSubtask(goal.id, text);
+                                }
+                                setSubtaskDraft('');
+                                setAddingSubtaskId(null);
+                              }}
+                              maxLength={200}
+                              className="min-w-0 flex-1 border-b border-border bg-transparent px-2 py-1 text-sm text-primary placeholder:text-tertiary focus:border-primary-500 focus:outline-none"
+                            />
+                          </form>
+                        ) : (
+                          <button
+                            type="button"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => setAddingSubtaskId(goal.id)}
+                            aria-label="Add subtask"
+                            className="flex items-center gap-1 text-xs text-tertiary hover:text-primary-600 transition-colors"
+                          >
+                            <Plus className="w-3 h-3" />
+                            <span>Add subtask</span>
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </SortableTaskItem>
               ))}
