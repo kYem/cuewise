@@ -224,6 +224,40 @@ describe('GoalsList - Upcoming section', () => {
   });
 });
 
+describe('GoalsList - Show completed filter', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('shows completed tasks when showCompletedGoals is true (default)', () => {
+    vi.mocked(useSettingsStore).mockImplementation(createSettingsStoreMock());
+    const done = goalFactory.build({ text: 'Finished thing', completed: true });
+    const open = goalFactory.build({ text: 'Open thing', completed: false });
+    const store = createMockGoalStore({ todayTasks: [done, open], goals: [done, open] });
+    vi.mocked(useGoalStore).mockImplementation(createGoalStoreMock(store));
+
+    render(<GoalsList />);
+
+    expect(screen.getByRole('button', { name: 'Finished thing' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open thing' })).toBeInTheDocument();
+  });
+
+  it('hides completed tasks when showCompletedGoals is false', () => {
+    vi.mocked(useSettingsStore).mockImplementation(
+      createSettingsStoreMock({ showCompletedGoals: false })
+    );
+    const done = goalFactory.build({ text: 'Finished thing', completed: true });
+    const open = goalFactory.build({ text: 'Open thing', completed: false });
+    const store = createMockGoalStore({ todayTasks: [done, open], goals: [done, open] });
+    vi.mocked(useGoalStore).mockImplementation(createGoalStoreMock(store));
+
+    render(<GoalsList />);
+
+    expect(screen.queryByRole('button', { name: 'Finished thing' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open thing' })).toBeInTheDocument();
+  });
+});
+
 describe('GoalsList - Empty state', () => {
   beforeEach(() => {
     vi.clearAllMocks();

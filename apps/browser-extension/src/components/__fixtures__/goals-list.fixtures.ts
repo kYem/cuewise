@@ -1,4 +1,4 @@
-import type { Goal } from '@cuewise/shared';
+import type { Goal, Settings } from '@cuewise/shared';
 import { defaultSettings } from '@cuewise/test-utils/fixtures';
 import { type Mock, vi } from 'vitest';
 
@@ -73,6 +73,6 @@ export function createGoalStoreMock(store: MockGoalStore) {
   return mock;
 }
 
-export function createSettingsStoreMock() {
-  return () => ({ settings: defaultSettings });
+export function createSettingsStoreMock(settingsOverrides: Partial<Settings> = {}) {
+  return () => ({ settings: { ...defaultSettings, ...settingsOverrides } });
 }

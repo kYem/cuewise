@@ -79,18 +79,29 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
   const activeGoals = getActiveGoals();
   const today = getTodayDateString();
 
+  // When "show completed" is off, hide finished tasks from the list (header
+  // counts still reflect the full set).
+  const visibleTasks = settings.showCompletedGoals
+    ? todayTasks
+    : todayTasks.filter((task) => !task.completed);
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
+  // Map drag positions within the visible list back to the full task order so
+  // hiding completed tasks never corrupts ordering.
   const handleDragEnd = (event: DragEndEvent) => {
-    const indices = getDragEndReorder(
-      event,
-      todayTasks.map((task) => task.id)
-    );
-    if (indices) {
-      reorderTasks(indices.from, indices.to);
+    const visibleIds = visibleTasks.map((task) => task.id);
+    const indices = getDragEndReorder(event, visibleIds);
+    if (!indices) {
+      return;
+    }
+    const from = todayTasks.findIndex((t) => t.id === visibleIds[indices.from]);
+    const to = todayTasks.findIndex((t) => t.id === visibleIds[indices.to]);
+    if (from !== -1 && to !== -1) {
+      reorderTasks(from, to);
     }
   };
 
@@ -123,9 +134,7 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
     return <div className="text-center py-8 text-secondary">Loading goals...</div>;
   }
 
-  const completedCount = todayTasks.filter((g) => g.completed).length;
   const totalCount = todayTasks.length;
-  const progressPercentage = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
 
   // Get incomplete goals from the last 2 weeks (excluding today)
   const recentIncompleteGoals = useMemo(() => {
@@ -176,33 +185,15 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
         </div>
       )}
 
-      {/* Progress Bar - hide in compact mode */}
-      {viewMode === 'full' && totalCount > 0 && (
-        <div className="space-y-2">
-          <div className="flex justify-between text-sm text-secondary">
-            <span>Progress</span>
-            <span className="font-medium">
-              {completedCount} of {totalCount} completed
-            </span>
-          </div>
-          <div className="h-2 bg-divider rounded-full overflow-hidden">
-            <div
-              className="h-full bg-primary-600 transition-all duration-500 ease-out rounded-full"
-              style={{ width: `${progressPercentage}%` }}
-            />
-          </div>
-        </div>
-      )}
-
       {/* Goals List */}
-      {totalCount > 0 && (
+      {visibleTasks.length > 0 && (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext
-            items={todayTasks.map((task) => task.id)}
+            items={visibleTasks.map((task) => task.id)}
             strategy={verticalListSortingStrategy}
           >
             <div className="space-y-2">
-              {todayTasks.map((goal) => (
+              {visibleTasks.map((goal) => (
                 <SortableTaskItem key={goal.id} id={goal.id}>
                   <div
                     className={cn(
@@ -431,15 +422,11 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
         </DndContext>
       )}
 
-      {/* Clear Completed Button - hide in compact mode */}
-      {viewMode === 'full' && completedCount > 0 && (
-        <button
-          type="button"
-          onClick={() => useGoalStore.getState().clearCompleted()}
-          className="w-full py-2 text-sm text-secondary hover:text-primary transition-colors"
-        >
-          Clear {completedCount} completed {completedCount === 1 ? 'goal' : 'goals'}
-        </button>
+      {/* Add a goal — bottom add row (full mode only, mirrors the widget design) */}
+      {viewMode === 'full' && (
+        <div className="pt-1">
+          <GoalInput />
+        </div>
       )}
 
       {/* Incomplete Goals Dropdown - hide in compact mode */}

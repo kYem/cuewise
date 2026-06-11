@@ -18,6 +18,7 @@ interface SubtaskListProps {
 export const SubtaskList: React.FC<SubtaskListProps> = ({ goal, onAdd, onToggle, onRemove }) => {
   const subtasks = goal.subtasks ?? [];
   const { completed, total } = getSubtaskProgress(goal);
+  const progressPercentage = total > 0 ? (completed / total) * 100 : 0;
   const [expanded, setExpanded] = useState(false);
   const [newText, setNewText] = useState('');
 
@@ -41,7 +42,13 @@ export const SubtaskList: React.FC<SubtaskListProps> = ({ goal, onAdd, onToggle,
           aria-label={expanded ? 'Hide subtasks' : 'Show subtasks'}
         >
           <ListChecks className="w-3.5 h-3.5" />
-          <span className="font-medium">
+          <span className="w-14 h-1.5 bg-divider rounded-full overflow-hidden" aria-hidden="true">
+            <span
+              className="block h-full bg-primary-600 rounded-full transition-all duration-300 ease-out"
+              style={{ width: `${progressPercentage}%` }}
+            />
+          </span>
+          <span className="font-medium tabular-nums">
             {completed}/{total}
           </span>
           {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
