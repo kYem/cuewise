@@ -1,11 +1,25 @@
 # @cuewise/browser-extension
 
+## 1.10.0
+
+### Minor Changes
+
+- 784ed5e: Redesign the settings modal into a compact, theme-aware sidebar layout
+  - Six sidebar categories (Timer, Sound & music, Focus mode, Home screen,
+    Goals & alerts, Advanced) replace the long single-scroll list
+  - Instant-save with a quiet "saved" footer indicator — no more Save button;
+    reset is a two-tap confirm under Advanced
+  - Denser controls: session-recipe presets, steppers, segmented controls,
+    chips, and a background thumbnail picker, with inline helper text
+  - Search filters settings across every category
+  - Debug log level and Chrome sync demoted under Advanced
+  - Adapts across all four color themes; full parity with the existing settings
+
 ## 1.9.1
 
 ### Patch Changes
 
 - b6719ff: Refresh Chrome Web Store listing metadata and default to the glass theme
-
   - Store title is now "Cuewise: New Tab Quotes, Goals & Pomodoro Timer"
     (keyword-rich for store search, 47 chars per ASO guidance), with
     `short_name` "Cuewise" so browser UI surfaces keep the short name
@@ -28,7 +42,6 @@
 ### Minor Changes
 
 - a403b84: Add CSV bulk quote import feature
-
   - Import quotes from CSV files with drag & drop or file picker
   - CSV parsing with support for quoted fields, escaped quotes, and commas
   - Validation with clear error messages for invalid rows
@@ -37,7 +50,6 @@
   - Comprehensive test coverage for CSV parsing utilities
 
 - c8b9d8c: Persist quote filter settings across browser sessions
-
   - Remember enabled categories, custom quotes toggle, favorites-only mode
   - Remember active collection filters
   - Filter out deleted collection IDs on load
@@ -45,7 +57,6 @@
   - Persist filter state when deleting collections
 
 - 541153e: Add quote collections feature for organizing quotes into themed groups
-
   - Create custom collections with name and description
   - Add individual quotes to collections via CollectionPicker popover
   - Bulk add multiple quotes to a collection
@@ -62,7 +73,6 @@
   allowed.
 
 - 6eddbc7: Add task enhancements: subtasks, due dates, reordering, duplication, and an upcoming-tasks view
-
   - **Subtasks**: add a checklist to any task with add / toggle / remove and a progress indicator
   - **Due dates**: set a per-task due date with a picker; a badge shows the relative day and overdue tasks are highlighted red
   - **Drag-to-reorder**: reorder Today's Focus tasks via a drag handle (keyboard-accessible); order is persisted
@@ -86,7 +96,6 @@
   (struck-through) instead of advancing or celebrating.
 
 - a0463c2: Surface task features in compact and focus view modes
-
   - **Compact** Today's Focus now shows **subtasks** (progress + add/toggle/remove),
     matching full view (it already had due dates, reorder, and duplicate).
   - **Focus** mode now shows read-only **due-date** and **subtask progress**
@@ -109,7 +118,6 @@
 - ea2b22f: ## New Features
 
   ### Configurable Quote Display Mode
-
   - Add quote display mode setting with four options:
     - **Normal** - Quote displayed at top with full controls
     - **Compact** - Minimized quote display at top
@@ -117,19 +125,16 @@
     - **Hidden** - Quote completely hidden for distraction-free view
 
   ### Focus Position Setting
-
   - Add vertical position setting for goals/focus section when quote is at bottom or hidden
   - Choose between Top, Center, or Bottom alignment
   - Allows customization of workspace layout based on preference
 
   ### "Add Another" Button in Focus View
-
   - Add "Add another" button when all tasks are completed in focus/glass mode
   - Allows quickly adding new tasks without switching to full goals view
   - Input auto-focuses when clicking the button for immediate typing
 
   ## Improvements
-
   - Show parent objective on hover in focus mode for linked tasks
   - Persist daily background image for glass theme
 
@@ -138,46 +143,39 @@
   Add slot-machine style animation for author name and category badge when quotes change, using the `@tombcato/smart-ticker` library.
 
   ### Features
-
   - **Animated category badge**: Category name scrolls through characters when transitioning
   - **Animated author name**: Author name uses slot-machine animation on quote changes
   - **Settings toggle**: Enable/disable animation via Settings → Quote Change Interval → "Animate quote transitions"
   - **Disabled by default**: Animation is opt-in to avoid CPU usage on lower-end devices
 
   ### New Components
-
   - `AuthorTicker`: Animated author name display with character-level scrolling
   - `CategoryTicker`: Animated category badge with smooth transitions
 
   ### Settings
-
   - Added `enableQuoteAnimation` setting (default: `false`)
   - Animation only affects category badge and author name, not the quote text itself
 
 - e2f24c1: ## Goals Section View Modes
 
   Add three view modes for the Today's Focus section, allowing users to customize how their daily goals are displayed:
-
   - **Full mode**: Complete view with input field, progress bar, task list, and incomplete section
   - **Compact mode**: Minimal task list with edit controls only - perfect for users who want less visual clutter
   - **Focus mode**: Single task display without container wrapper, designed for glass theme compatibility
 
   ### Focus Mode Features
-
   - Settings popover for switching between modes and selecting which goal to focus on
   - Goal selector only appears when multiple tasks exist
   - Seamless integration with glass theme (no container wrapper)
   - View mode preference persists across sessions via Chrome storage
 
   ### UI Improvements
-
   - Compact quote controls with uniform button sizing
   - Circular progress ring around refresh button showing countdown to next quote
   - Improved popover/dropdown visibility with frosted glass background (95% opacity + backdrop blur)
   - Fixed reminders panel positioning to open above the bell button without overlapping
 
   ### Technical Changes
-
   - Added `GoalViewMode` type (`'full' | 'compact' | 'focus'`) to shared types
   - Added `goalViewMode` and `focusedGoalId` settings for persistence
   - New `GoalFocusView` component for minimal focus display
@@ -199,22 +197,18 @@
 - ## New Features
 
   ### Glass Theme with Dynamic Backgrounds
-
   - Add new glass theme with frosted glass effect and dynamic Unsplash background images
   - Improve glass theme loading with animated shimmer indicator
 
   ### YouTube Music Player for Pomodoro
-
   - Add embedded YouTube music player for focus sessions
   - Play ambient music, lo-fi beats, or custom playlists during Pomodoro sessions
 
   ### Customizable Notification Sounds
-
   - Add customizable notification sounds for Pomodoro timer events
   - Choose from multiple sound options for work/break transitions
 
   ### Compact Floating Reminder Widget
-
   - Replace side-by-side reminders panel with compact floating widget in bottom-right corner
   - Show up to 3 priority reminders (overdue first, then upcoming)
   - Add "View all" modal for full reminder list
@@ -222,16 +216,13 @@
   - Add snooze buttons for approaching reminders
 
   ### Goals with Link-to-Task Feature
-
   - Add goals feature with ability to link tasks to goals
   - Rename objectives terminology to goals throughout the app
 
   ### Storage Quota Error Handling
-
   - Surface Chrome storage quota errors in frontend with user-friendly messages
 
   ## Improvements
-
   - Replace manual click-outside detection with Radix popover component
   - Simplify error handling by re-throwing from stores
   - Add error handling to async event handlers to prevent silent failures
@@ -239,7 +230,6 @@
   - Center Goals section as full-width after layout change
 
   ## Fixes
-
   - Remove footer from new tab page
   - Fix missing await in async event handlers
   - Add error handling to goal form async operations
@@ -249,7 +239,6 @@
 ### Minor Changes
 
 - d5ebdd6: Add author autocomplete and streamline quote management
-
   - Add reusable Autocomplete component to @cuewise/ui with keyboard navigation and accessibility support
   - Add author autocomplete to Add Quote and Edit Quote forms, suggesting existing authors
   - Remove floating "Add Custom Quote" button from home page - quotes can now be added via the dedicated Quote Management page
@@ -266,7 +255,6 @@
 - ## Smart Reminder Templates
 
   Add pre-built reminder templates for common tasks with context-aware time suggestions:
-
   - **Health & Wellness**: Drink Water, Stretch Break, Eye Rest, Medication, Exercise
   - **Productivity**: Daily Standup, End of Day Review, Weekly Review
   - **Personal**: Daily Journal, Gratitude
@@ -276,23 +264,19 @@
   ## Dedicated Goals Page
 
   New full-page goals view with:
-
   - Goals history and statistics
   - Filter by date range
   - Visual progress tracking
 
   ## Quick Reminder Presets
-
   - Natural language date picker ("tomorrow", "next week")
   - Quick time presets for common scheduling patterns
 
   ## Favorites Filter
-
   - Filter quotes by favorites in the category filter dropdown
   - Quick access to your favorite quotes
 
   ## Fixes
-
   - Fix template icon visibility in light mode
   - Fix dark mode variant behavior for explicit light mode selection (Tailwind v4 class-based dark mode)
   - Improved error handling with user feedback for reminder operations
@@ -303,7 +287,6 @@
 ### Minor Changes
 
 - b02da15: Add accessibility improvements
-
   - Semantic HTML landmarks (`<main>`, `<nav>`, `<header>`) for screen reader navigation
   - Skip-to-main-content link for keyboard users
   - `aria-live` regions for toast notifications and quote changes
@@ -314,20 +297,17 @@
 - 3e219ae: Add bulk quote operations and quote restoration functionality
 
   ## Bulk Operations
-
   - Multi-select checkboxes on quote cards in Quote Management page
   - Select all / deselect all for current filtered view
   - Bulk delete, favorite/unfavorite, hide/unhide actions
   - Confirmation dialog for destructive actions
 
   ## Quote Restoration
-
   - "Restore Missing Quotes" - adds back deleted default quotes without affecting custom quotes
   - "Reset All Quotes" - completely resets to factory defaults (with confirmation)
   - Accessible via "More Options" dropdown in Quote Management page
 
   ## New Components
-
   - ConfirmationDialog - reusable modal for destructive action confirmations
   - BulkActionsToolbar - selection mode toggle and action buttons
   - QuoteRestorationMenu - restore/reset dropdown menu
@@ -335,7 +315,6 @@
 - Add full-screen Focus Mode with Unsplash background images
 
   ## Focus Mode Features
-
   - Full-screen overlay with scenic Unsplash background images
   - Large timer display with play/pause controls
   - Optional motivational quote display during focus sessions
@@ -343,14 +322,12 @@
   - Escape key to quickly exit focus mode
 
   ## Background Image System
-
   - Integration with Unsplash API for high-quality scenic images
   - 10 fallback images per category (nature, water, forest, mountains, sky)
   - Smart image preloading and caching for smooth transitions
   - Random selection with cache-busting to ensure variety
 
   ## New Components
-
   - FocusMode - main full-screen overlay component
   - FocusModeTimer - large timer display
   - FocusModeControls - play/pause and exit controls
@@ -358,13 +335,11 @@
   - BackgroundImage - handles image loading with fallbacks
 
   ## New Store
-
   - focus-mode-store - manages focus mode state, image loading, and preloading
 
 ### Patch Changes
 
 - 9ac8b71: Improve charts with shadcn/Recharts best practices
-
   - Add CSS variable injection for theme-aware chart colors
   - Fix tooltip styling for dark mode compatibility
   - Add `hideName` prop to ChartTooltipContent for cleaner tooltips
@@ -386,14 +361,12 @@
 ### Minor Changes
 
 - ### Features
-
   - Add category filter for quotes with custom quote toggle
   - Add data import functionality with version compatibility checking
   - Add welcome modal for first-time users
   - Add version info to main page footer with changelog link
 
   ### Improvements
-
   - Replace console.error/warn/log with centralized logger
 
 ## 1.2.0
