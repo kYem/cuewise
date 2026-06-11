@@ -104,7 +104,6 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
     }
   };
 
-  // Use shared editing hook
   const {
     editText,
     inputRef,

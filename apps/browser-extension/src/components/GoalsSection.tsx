@@ -126,8 +126,8 @@ export const GoalsSection: React.FC = () => {
         ? 'All done — well earned'
         : `${incompleteCount} to go — keep your momentum`;
 
-  // Consolidated view-options menu (⚙) — view mode + show-completed (or the
-  // focus-on picker in focus mode). Reused across all three modes.
+  // Consolidated view-options menu (⚙) — view mode + show-completed / incomplete
+  // / upcoming toggles (or the focus-on picker in focus mode). Used in all modes.
   const optionsMenu = (triggerClassName?: string) => (
     <Popover>
       <PopoverTrigger asChild>

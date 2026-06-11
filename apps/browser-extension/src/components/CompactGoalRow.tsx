@@ -13,8 +13,8 @@ interface CompactGoalRowProps {
 
 /**
  * Slim glanceable goal row for compact view: a flag/check pill, the goal text
- * with an inline subtask progress bar, and an accordion chevron. Read-only
- * (editing/management lives in full view), matching the widget design.
+ * with an inline subtask progress bar, and an accordion chevron. Completing and
+ * toggling subtasks is allowed; renaming/deleting/reordering live in full view.
  */
 export const CompactGoalRow: React.FC<CompactGoalRowProps> = ({
   goal,

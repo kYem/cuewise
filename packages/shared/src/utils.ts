@@ -423,7 +423,7 @@ export function getRecentIncompleteTasks(goals: Goal[], daysBack = 14): Goal[] {
   const today = getTodayDateString();
   const cutoff = format(new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000), 'yyyy-MM-dd');
 
-  return goals.filter((g) => !g.completed && g.date !== today && g.date >= cutoff);
+  return goals.filter((g) => isTask(g) && !g.completed && g.date !== today && g.date >= cutoff);
 }
 
 /**

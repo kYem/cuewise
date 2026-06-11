@@ -230,6 +230,32 @@ describe('GoalsList - Subtasks', () => {
 
     expect(store.removeSubtask).toHaveBeenCalledWith(task.id, 'sub-1');
   });
+
+  // Single-open accordion: expanding one row's subtasks collapses any other.
+  it('keeps only one subtask accordion open at a time', async () => {
+    const user = userEvent.setup();
+    const taskA = goalFactory.build({
+      text: 'Task A',
+      subtasks: [{ id: 'a1', text: 'Alpha sub', completed: false }],
+    });
+    const taskB = goalFactory.build({
+      text: 'Task B',
+      subtasks: [{ id: 'b1', text: 'Beta sub', completed: false }],
+    });
+    const store = createMockGoalStore({ todayTasks: [taskA, taskB], goals: [taskA, taskB] });
+    vi.mocked(useGoalStore).mockImplementation(createGoalStoreMock(store));
+
+    render(<GoalsList />);
+
+    // Expand A
+    await user.click(screen.getAllByRole('button', { name: 'Show subtasks' })[0]);
+    expect(screen.getByText('Alpha sub')).toBeInTheDocument();
+
+    // Expand B — A's chevron is now "Hide subtasks", so the only "Show subtasks" is B
+    await user.click(screen.getByRole('button', { name: 'Show subtasks' }));
+    expect(screen.getByText('Beta sub')).toBeInTheDocument();
+    expect(screen.queryByText('Alpha sub')).not.toBeInTheDocument();
+  });
 });
 
 describe('GoalsList - Reorder', () => {
