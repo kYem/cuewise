@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useReviewPrompt } from './useReviewPrompt';
 
 const workSession = (overrides: Partial<PomodoroSession> = {}): PomodoroSession => ({
-  id: `s-${overrides.id ?? Math.random()}`,
+  id: 'session',
   startedAt: '2026-01-01T09:00:00.000Z',
   interrupted: false,
   duration: 25,
@@ -54,10 +54,16 @@ function Harness({
     reviewPromptLastShownAt?: string | null;
   }) => {
     updateSpy(patch);
+    // Mirror the real store's plain spread-merge: a key present in the patch
+    // overwrites (including an explicit null), absent keys keep their value.
     setState((cur) => ({
-      dismissed: patch.reviewPromptDismissed ?? cur.dismissed,
-      count: patch.reviewPromptCount ?? cur.count,
-      lastShownAt: patch.reviewPromptLastShownAt ?? cur.lastShownAt,
+      dismissed:
+        patch.reviewPromptDismissed === undefined ? cur.dismissed : patch.reviewPromptDismissed,
+      count: patch.reviewPromptCount === undefined ? cur.count : patch.reviewPromptCount,
+      lastShownAt:
+        patch.reviewPromptLastShownAt === undefined
+          ? cur.lastShownAt
+          : patch.reviewPromptLastShownAt,
     }));
   };
   const rp = useReviewPrompt({
@@ -135,6 +141,18 @@ describe('useReviewPrompt', () => {
 
     expect(isOpen()).toBe(false);
     expect(updateSpy).not.toHaveBeenCalled();
+  });
+
+  it('opens once the pomodoro returns to idle', () => {
+    const updateSpy = vi.fn();
+    const { rerender } = render(
+      <Harness sessions={tenWorkSessions} pomodoroIdle={false} updateSpy={updateSpy} />
+    );
+    expect(isOpen()).toBe(false);
+
+    rerender(<Harness sessions={tenWorkSessions} pomodoroIdle={true} updateSpy={updateSpy} />);
+
+    expect(isOpen()).toBe(true);
   });
 
   it('does not run before settings are ready', () => {

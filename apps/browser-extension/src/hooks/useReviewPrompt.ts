@@ -19,6 +19,8 @@ interface UseReviewPromptParams {
   hasSeenOnboarding: boolean;
   goals: Goal[];
   sessions: PomodoroSession[];
+  // The review-prompt settings, flattened from ReviewPromptState so the effect
+  // deps stay referentially stable (an object literal would change each render).
   dismissed: boolean;
   count: number;
   lastShownAt: string | null;
