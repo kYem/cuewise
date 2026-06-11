@@ -438,9 +438,10 @@ const REVIEW_MAX_SHOWS = 2;
 const REVIEW_RESHOW_DAYS = 7;
 
 /**
- * Whether to surface the store-review prompt: a delight milestone reached, past
- * onboarding, not dismissed, shown < 2 times, and the second ask spaced a week
- * after the first. Pure so the trigger is unit-testable.
+ * Whether to surface the store-review prompt: a delight milestone reached (7-day
+ * streak or 10 pomodoros), past onboarding, not dismissed, shown < 2 times, and
+ * the second ask spaced a week after the first. Pure so the trigger is
+ * unit-testable. `today` and `state.lastShownAt` are `yyyy-MM-dd` day strings.
  */
 export function shouldShowReviewPrompt(params: {
   streakCurrent: number;
@@ -461,14 +462,15 @@ export function shouldShowReviewPrompt(params: {
     return false;
   }
 
-  // The second ask waits at least a week after the first.
+  // The second ask waits at least a week after the first. A missing or malformed
+  // lastShownAt makes daysSince NaN; the negated comparison keeps the prompt hidden.
   if (state.count >= 1) {
     if (!state.lastShownAt) {
       return false;
     }
     const daysSince =
       (new Date(today).getTime() - new Date(state.lastShownAt).getTime()) / 86_400_000;
-    if (daysSince < REVIEW_RESHOW_DAYS) {
+    if (!(daysSince >= REVIEW_RESHOW_DAYS)) {
       return false;
     }
   }

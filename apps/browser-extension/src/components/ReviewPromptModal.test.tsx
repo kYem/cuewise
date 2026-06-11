@@ -54,4 +54,14 @@ describe('ReviewPromptModal', () => {
 
     expect(h.onLater).toHaveBeenCalledTimes(1);
   });
+
+  it('treats a backdrop click as "later"', async () => {
+    const user = userEvent.setup();
+    const h = handlers();
+    render(<ReviewPromptModal isOpen {...h} />);
+
+    await user.click(screen.getByRole('button', { name: 'Dismiss review prompt' }));
+
+    expect(h.onLater).toHaveBeenCalledTimes(1);
+  });
 });

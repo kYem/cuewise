@@ -227,7 +227,7 @@ export interface Settings {
   // Store review prompt
   reviewPromptDismissed: boolean; // Never surface the review prompt again (default false)
   reviewPromptCount: number; // Times the review prompt has been shown (default 0)
-  reviewPromptLastShownAt: string | null; // Date the review prompt was last shown (default null)
+  reviewPromptLastShownAt: string | null; // yyyy-MM-dd day-string of the last show; drives the 7-day gap (default null)
 }
 
 // Storage keys

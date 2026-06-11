@@ -1248,6 +1248,30 @@ describe('Due Date Utilities', () => {
         })
       ).toBe(true);
     });
+
+    it('shows on the first eligible milestone (count 0, no lastShownAt)', () => {
+      expect(shouldShowReviewPrompt({ ...base, completedPomodoros: 10 })).toBe(true);
+    });
+
+    it('shows when both signals are met', () => {
+      expect(shouldShowReviewPrompt({ ...base, streakCurrent: 7, completedPomodoros: 10 })).toBe(
+        true
+      );
+    });
+
+    it('stays hidden when a prior show has no/invalid lastShownAt', () => {
+      const seen = { dismissed: false, count: 1 };
+      expect(
+        shouldShowReviewPrompt({ ...base, streakCurrent: 7, state: { ...seen, lastShownAt: null } })
+      ).toBe(false);
+      expect(
+        shouldShowReviewPrompt({
+          ...base,
+          streakCurrent: 7,
+          state: { ...seen, lastShownAt: 'not-a-date' },
+        })
+      ).toBe(false);
+    });
   });
 
   describe('getDueDateLabel', () => {
