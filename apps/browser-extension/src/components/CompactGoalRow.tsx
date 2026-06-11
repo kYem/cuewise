@@ -26,7 +26,13 @@ export const CompactGoalRow: React.FC<CompactGoalRowProps> = ({
   const subtasks = goal.subtasks ?? [];
   const hasSubtasks = subtasks.length > 0;
   const { completed, total } = getSubtaskProgress(goal);
-  const ratio = goal.completed ? 1 : total > 0 ? completed / total : 0;
+  // A completed goal reads as a full bar regardless of subtask state.
+  let ratio = 0;
+  if (goal.completed) {
+    ratio = 1;
+  } else if (total > 0) {
+    ratio = completed / total;
+  }
   const progressPercentage = Math.min(1, Math.max(0, ratio)) * 100;
 
   return (

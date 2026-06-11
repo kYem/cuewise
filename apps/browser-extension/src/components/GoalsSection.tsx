@@ -35,6 +35,50 @@ const VIEW_MODES: { mode: GoalViewMode; icon: typeof List; label: string }[] = [
   { mode: 'focus', icon: Target, label: 'Focus' },
 ];
 
+function getSubtitle(totalCount: number, incompleteCount: number): string {
+  if (totalCount === 0) {
+    return 'What matters most today?';
+  }
+  if (incompleteCount === 0) {
+    return 'All done — well earned';
+  }
+  return `${incompleteCount} to go — keep your momentum`;
+}
+
+// Reveal toggle in the ⚙ menu (e.g. Show incomplete / Upcoming): icon + label +
+// count badge, highlighted while active.
+function MenuToggleItem({
+  icon: Icon,
+  label,
+  count,
+  active,
+  onToggle,
+}: {
+  icon: typeof List;
+  label: string;
+  count: number;
+  active: boolean;
+  onToggle: () => void;
+}): React.ReactElement {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-pressed={active}
+      className={cn(
+        'w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-colors',
+        active ? 'bg-primary-50 text-primary-600' : 'text-primary hover:bg-surface-variant'
+      )}
+    >
+      <Icon className="w-4 h-4" />
+      <span className="flex-1 text-left">{label}</span>
+      <span className="min-w-[18px] px-1 text-center text-[10px] font-bold rounded-full bg-primary-600 text-white">
+        {count}
+      </span>
+    </button>
+  );
+}
+
 export const GoalsSection: React.FC = () => {
   // State values - use useShallow to prevent re-renders when unrelated state changes
   const { isLoading, error, todayTasks, goals } = useGoalStore(
@@ -119,12 +163,7 @@ export const GoalsSection: React.FC = () => {
   }
 
   // Encouragement line under the title, mirroring the goals-widget design
-  const subtitle =
-    totalCount === 0
-      ? 'What matters most today?'
-      : incompleteCount === 0
-        ? 'All done — well earned'
-        : `${incompleteCount} to go — keep your momentum`;
+  const subtitle = getSubtitle(totalCount, incompleteCount);
 
   // Consolidated view-options menu (⚙) — view mode + show-completed / incomplete
   // / upcoming toggles (or the focus-on picker in focus mode). Used in all modes.
@@ -212,43 +251,23 @@ export const GoalsSection: React.FC = () => {
             </button>
 
             {recentIncompleteCount > 0 && (
-              <button
-                type="button"
-                onClick={handleToggleShowIncomplete}
-                aria-pressed={settings.showIncompleteGoals}
-                className={cn(
-                  'w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-colors',
-                  settings.showIncompleteGoals
-                    ? 'bg-primary-50 text-primary-600'
-                    : 'text-primary hover:bg-surface-variant'
-                )}
-              >
-                <History className="w-4 h-4" />
-                <span className="flex-1 text-left">Show incomplete</span>
-                <span className="min-w-[18px] px-1 text-center text-[10px] font-bold rounded-full bg-primary-600 text-white">
-                  {recentIncompleteCount}
-                </span>
-              </button>
+              <MenuToggleItem
+                icon={History}
+                label="Show incomplete"
+                count={recentIncompleteCount}
+                active={settings.showIncompleteGoals}
+                onToggle={handleToggleShowIncomplete}
+              />
             )}
 
             {upcomingCount > 0 && (
-              <button
-                type="button"
-                onClick={handleToggleShowUpcoming}
-                aria-pressed={settings.showUpcomingGoals}
-                className={cn(
-                  'w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-colors',
-                  settings.showUpcomingGoals
-                    ? 'bg-primary-50 text-primary-600'
-                    : 'text-primary hover:bg-surface-variant'
-                )}
-              >
-                <CalendarClock className="w-4 h-4" />
-                <span className="flex-1 text-left">Upcoming</span>
-                <span className="min-w-[18px] px-1 text-center text-[10px] font-bold rounded-full bg-primary-600 text-white">
-                  {upcomingCount}
-                </span>
-              </button>
+              <MenuToggleItem
+                icon={CalendarClock}
+                label="Upcoming"
+                count={upcomingCount}
+                active={settings.showUpcomingGoals}
+                onToggle={handleToggleShowUpcoming}
+              />
             )}
           </>
         )}

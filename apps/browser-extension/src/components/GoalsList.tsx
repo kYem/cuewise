@@ -1,4 +1,5 @@
 import {
+  type Goal,
   type GoalViewMode,
   getDueDateLabel,
   getRecentIncompleteTasks,
@@ -54,6 +55,45 @@ import { UpcomingTasks } from './UpcomingTasks';
 
 interface GoalsListProps {
   viewMode?: GoalViewMode;
+}
+
+// Checkbox-style icon shared by the read-only and editable subtask rows.
+function SubtaskCheckIcon({ completed }: { completed: boolean }): React.ReactElement {
+  if (completed) {
+    return <CheckCircle2 className="w-4 h-4 text-primary-600 flex-shrink-0" />;
+  }
+  return <Circle className="w-4 h-4 text-tertiary flex-shrink-0" />;
+}
+
+function subtaskTextClass(completed: boolean): string {
+  return cn('text-sm', completed ? 'text-tertiary line-through' : 'text-primary');
+}
+
+function subtaskToggleLabel(text: string, completed: boolean): string {
+  return completed ? `Mark "${text}" incomplete` : `Mark "${text}" complete`;
+}
+
+// Resting badge showing the objective a task is linked to (null if it resolves to none).
+function LinkedGoalBadge({
+  parentId,
+  goals,
+}: {
+  parentId: string;
+  goals: Goal[];
+}): React.ReactElement | null {
+  const linkedGoal = goals.find((g) => g.id === parentId && isObjective(g));
+  if (!linkedGoal) {
+    return null;
+  }
+  return (
+    <span
+      className="flex items-center gap-1 text-xs text-primary-600 bg-primary-50 px-1.5 py-0.5 rounded-full"
+      title={`Linked to: ${linkedGoal.text}`}
+    >
+      <Flag className="w-3 h-3" />
+      <span className="max-w-[80px] truncate">{linkedGoal.text}</span>
+    </span>
+  );
 }
 
 export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
@@ -140,13 +180,13 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
     }
   }, [addingSubtaskId]);
 
-  if (isLoading) {
-    return <div className="text-center py-8 text-secondary">Loading goals...</div>;
-  }
-
   const recentIncompleteGoals = useMemo(() => getRecentIncompleteTasks(goals), [goals]);
 
   const hasOtherGoals = goals.length > todayTasks.length;
+
+  if (isLoading) {
+    return <div className="text-center py-8 text-secondary">Loading goals...</div>;
+  }
 
   return (
     <div className="space-y-2.5">
@@ -248,25 +288,9 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
                           className="flex items-center gap-1 flex-shrink-0"
                         >
                           {/* Goal link badge - hide in edit mode */}
-                          {!isEditing(goal.id) &&
-                            goal.parentId &&
-                            (() => {
-                              const linkedGoal = goals.find(
-                                (g) => g.id === goal.parentId && isObjective(g)
-                              );
-                              if (linkedGoal) {
-                                return (
-                                  <span
-                                    className="flex items-center gap-1 text-xs text-primary-600 bg-primary-50 px-1.5 py-0.5 rounded-full"
-                                    title={`Linked to: ${linkedGoal.text}`}
-                                  >
-                                    <Flag className="w-3 h-3" />
-                                    <span className="max-w-[80px] truncate">{linkedGoal.text}</span>
-                                  </span>
-                                );
-                              }
-                              return null;
-                            })()}
+                          {!isEditing(goal.id) && goal.parentId && (
+                            <LinkedGoalBadge parentId={goal.parentId} goals={goals} />
+                          )}
 
                           {/* Subtask count toggle (resting, full mode) — expands list below */}
                           {!isEditing(goal.id) &&
@@ -445,25 +469,10 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
                                 type="button"
                                 onClick={() => toggleSubtask(goal.id, subtask.id)}
                                 className="flex w-full items-center gap-2 text-left"
-                                aria-label={
-                                  subtask.completed
-                                    ? `Mark "${subtask.text}" incomplete`
-                                    : `Mark "${subtask.text}" complete`
-                                }
+                                aria-label={subtaskToggleLabel(subtask.text, subtask.completed)}
                               >
-                                {subtask.completed ? (
-                                  <CheckCircle2 className="w-4 h-4 text-primary-600 flex-shrink-0" />
-                                ) : (
-                                  <Circle className="w-4 h-4 text-tertiary flex-shrink-0" />
-                                )}
-                                <span
-                                  className={cn(
-                                    'text-sm',
-                                    subtask.completed
-                                      ? 'text-tertiary line-through'
-                                      : 'text-primary'
-                                  )}
-                                >
+                                <SubtaskCheckIcon completed={subtask.completed} />
+                                <span className={subtaskTextClass(subtask.completed)}>
                                   {subtask.text}
                                 </span>
                               </button>
@@ -482,26 +491,11 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
                                   type="button"
                                   onClick={() => toggleSubtask(goal.id, subtask.id)}
                                   className="flex-shrink-0 rounded-full focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                  aria-label={
-                                    subtask.completed
-                                      ? `Mark "${subtask.text}" incomplete`
-                                      : `Mark "${subtask.text}" complete`
-                                  }
+                                  aria-label={subtaskToggleLabel(subtask.text, subtask.completed)}
                                 >
-                                  {subtask.completed ? (
-                                    <CheckCircle2 className="w-4 h-4 text-primary-600" />
-                                  ) : (
-                                    <Circle className="w-4 h-4 text-tertiary" />
-                                  )}
+                                  <SubtaskCheckIcon completed={subtask.completed} />
                                 </button>
-                                <span
-                                  className={cn(
-                                    'flex-1 text-sm',
-                                    subtask.completed
-                                      ? 'text-tertiary line-through'
-                                      : 'text-primary'
-                                  )}
-                                >
+                                <span className={cn('flex-1', subtaskTextClass(subtask.completed))}>
                                   {subtask.text}
                                 </span>
                                 <button
