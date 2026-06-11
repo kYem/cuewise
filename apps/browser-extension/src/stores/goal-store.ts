@@ -30,7 +30,6 @@ interface GoalStore {
   todayTasks: Goal[];
   isLoading: boolean;
   error: string | null;
-  showAllTasks: boolean;
   completionFilter: CompletionFilter;
 
   // Task Actions (daily tasks) - return false on error, true on success
@@ -42,7 +41,6 @@ interface GoalStore {
   clearCompleted: () => Promise<boolean>;
   transferTaskToNextDay: (goalId: string) => Promise<boolean>;
   moveTaskToToday: (goalId: string) => Promise<boolean>;
-  toggleShowAllTasks: () => void;
   setCompletionFilter: (filter: CompletionFilter) => void;
   getFilteredTasksByDate: () => Array<{ date: string; goals: Goal[] }>;
 
@@ -82,7 +80,6 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
   todayTasks: [],
   isLoading: true,
   error: null,
-  showAllTasks: false,
   completionFilter: 'all',
 
   initialize: async () => {
@@ -296,10 +293,6 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       useToastStore.getState().error(errorMessage);
       return false;
     }
-  },
-
-  toggleShowAllTasks: () => {
-    set((state) => ({ showAllTasks: !state.showAllTasks }));
   },
 
   setCompletionFilter: (filter: CompletionFilter) => {

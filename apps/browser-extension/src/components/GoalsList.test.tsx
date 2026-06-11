@@ -184,6 +184,78 @@ describe('GoalsList - Subtasks', () => {
 
     expect(store.addSubtask).toHaveBeenCalledWith(task.id, 'Outline sections');
   });
+
+  // The add field commits on blur too (not only Enter), and must survive the
+  // edit-input blur to do so.
+  it('commits a subtask on blur of the add field', async () => {
+    const user = userEvent.setup();
+    const task = goalFactory.build({ text: 'Write report', completed: false });
+    const store = createMockGoalStore({ todayTasks: [task], goals: [task] });
+    vi.mocked(useGoalStore).mockImplementation(createGoalStoreMock(store));
+
+    render(<GoalsList />);
+    await user.click(screen.getByRole('button', { name: 'Write report' }));
+    await user.click(screen.getByRole('button', { name: 'Add subtask' }));
+
+    await user.type(screen.getByLabelText('Add a subtask'), 'Outline sections');
+    await user.tab(); // blur the field
+
+    expect(store.addSubtask).toHaveBeenCalledWith(task.id, 'Outline sections');
+  });
+
+  it('ignores an empty or whitespace-only subtask submit', async () => {
+    const user = userEvent.setup();
+    const task = goalFactory.build({ text: 'Write report', completed: false });
+    const store = createMockGoalStore({ todayTasks: [task], goals: [task] });
+    vi.mocked(useGoalStore).mockImplementation(createGoalStoreMock(store));
+
+    render(<GoalsList />);
+    await user.click(screen.getByRole('button', { name: 'Write report' }));
+    await user.click(screen.getByRole('button', { name: 'Add subtask' }));
+
+    await user.type(screen.getByLabelText('Add a subtask'), '   {Enter}');
+
+    expect(store.addSubtask).not.toHaveBeenCalled();
+  });
+
+  it('removes a subtask via the remove control while editing', async () => {
+    const user = userEvent.setup();
+    const task = taskWithSubtasksFactory.build({ text: 'Plan trip' });
+    const store = createMockGoalStore({ todayTasks: [task], goals: [task] });
+    vi.mocked(useGoalStore).mockImplementation(createGoalStoreMock(store));
+
+    render(<GoalsList />);
+    await user.click(screen.getByRole('button', { name: 'Plan trip' }));
+    await user.click(screen.getByRole('button', { name: 'Remove "Subtask 1"' }));
+
+    expect(store.removeSubtask).toHaveBeenCalledWith(task.id, 'sub-1');
+  });
+
+  // Single-open accordion: expanding one row's subtasks collapses any other.
+  it('keeps only one subtask accordion open at a time', async () => {
+    const user = userEvent.setup();
+    const taskA = goalFactory.build({
+      text: 'Task A',
+      subtasks: [{ id: 'a1', text: 'Alpha sub', completed: false }],
+    });
+    const taskB = goalFactory.build({
+      text: 'Task B',
+      subtasks: [{ id: 'b1', text: 'Beta sub', completed: false }],
+    });
+    const store = createMockGoalStore({ todayTasks: [taskA, taskB], goals: [taskA, taskB] });
+    vi.mocked(useGoalStore).mockImplementation(createGoalStoreMock(store));
+
+    render(<GoalsList />);
+
+    // Expand A
+    await user.click(screen.getAllByRole('button', { name: 'Show subtasks' })[0]);
+    expect(screen.getByText('Alpha sub')).toBeInTheDocument();
+
+    // Expand B — A's chevron is now "Hide subtasks", so the only "Show subtasks" is B
+    await user.click(screen.getByRole('button', { name: 'Show subtasks' }));
+    expect(screen.getByText('Beta sub')).toBeInTheDocument();
+    expect(screen.queryByText('Alpha sub')).not.toBeInTheDocument();
+  });
 });
 
 describe('GoalsList - Reorder', () => {
@@ -192,7 +264,8 @@ describe('GoalsList - Reorder', () => {
     vi.mocked(useSettingsStore).mockImplementation(createSettingsStoreMock());
   });
 
-  it('renders a drag handle for each today task', () => {
+  it('shows a drag handle only for the task being edited', async () => {
+    const user = userEvent.setup();
     const taskA = goalFactory.build({ text: 'First task' });
     const taskB = goalFactory.build({ text: 'Second task' });
     const store = createMockGoalStore({
@@ -203,7 +276,12 @@ describe('GoalsList - Reorder', () => {
 
     render(<GoalsList />);
 
-    expect(screen.getAllByRole('button', { name: 'Drag to reorder' })).toHaveLength(2);
+    // No handle while resting
+    expect(screen.queryByRole('button', { name: 'Drag to reorder' })).not.toBeInTheDocument();
+
+    // Editing a task reveals its handle
+    await user.click(screen.getByRole('button', { name: 'First task' }));
+    expect(screen.getAllByRole('button', { name: 'Drag to reorder' })).toHaveLength(1);
   });
 });
 
@@ -213,14 +291,61 @@ describe('GoalsList - Upcoming section', () => {
     vi.mocked(useSettingsStore).mockImplementation(createSettingsStoreMock());
   });
 
-  it('renders the Upcoming section when there are future-due tasks', () => {
+  it('renders upcoming tasks when showUpcomingGoals is enabled', () => {
+    vi.mocked(useSettingsStore).mockImplementation(
+      createSettingsStoreMock({ showUpcomingGoals: true })
+    );
     const upcoming = taskWithDueDateFactory.build({ text: 'Ship release' });
     const store = createMockGoalStore({ todayTasks: [], goals: [upcoming] });
     vi.mocked(useGoalStore).mockImplementation(createGoalStoreMock(store));
 
     render(<GoalsList />);
 
-    expect(screen.getByRole('button', { name: 'Show upcoming tasks' })).toBeInTheDocument();
+    expect(screen.getByText('Ship release')).toBeInTheDocument();
+  });
+
+  it('hides upcoming tasks when showUpcomingGoals is off (default)', () => {
+    const upcoming = taskWithDueDateFactory.build({ text: 'Ship release' });
+    const store = createMockGoalStore({ todayTasks: [], goals: [upcoming] });
+    vi.mocked(useGoalStore).mockImplementation(createGoalStoreMock(store));
+
+    render(<GoalsList />);
+
+    expect(screen.queryByText('Ship release')).not.toBeInTheDocument();
+  });
+});
+
+describe('GoalsList - Show completed filter', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('shows completed tasks when showCompletedGoals is true (default)', () => {
+    vi.mocked(useSettingsStore).mockImplementation(createSettingsStoreMock());
+    const done = goalFactory.build({ text: 'Finished thing', completed: true });
+    const open = goalFactory.build({ text: 'Open thing', completed: false });
+    const store = createMockGoalStore({ todayTasks: [done, open], goals: [done, open] });
+    vi.mocked(useGoalStore).mockImplementation(createGoalStoreMock(store));
+
+    render(<GoalsList />);
+
+    expect(screen.getByRole('button', { name: 'Finished thing' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open thing' })).toBeInTheDocument();
+  });
+
+  it('hides completed tasks when showCompletedGoals is false', () => {
+    vi.mocked(useSettingsStore).mockImplementation(
+      createSettingsStoreMock({ showCompletedGoals: false })
+    );
+    const done = goalFactory.build({ text: 'Finished thing', completed: true });
+    const open = goalFactory.build({ text: 'Open thing', completed: false });
+    const store = createMockGoalStore({ todayTasks: [done, open], goals: [done, open] });
+    vi.mocked(useGoalStore).mockImplementation(createGoalStoreMock(store));
+
+    render(<GoalsList />);
+
+    expect(screen.queryByRole('button', { name: 'Finished thing' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open thing' })).toBeInTheDocument();
   });
 });
 

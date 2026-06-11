@@ -1,4 +1,4 @@
-import type { Goal } from '@cuewise/shared';
+import type { Goal, Settings } from '@cuewise/shared';
 import { defaultSettings } from '@cuewise/test-utils/fixtures';
 import { type Mock, vi } from 'vitest';
 
@@ -11,14 +11,12 @@ import { type Mock, vi } from 'vitest';
 export interface MockGoalStore {
   todayTasks: Goal[];
   goals: Goal[];
-  showAllTasks: boolean;
   isLoading: boolean;
   toggleTask: Mock;
   updateTask: Mock;
   deleteTask: Mock;
   transferTaskToNextDay: Mock;
   moveTaskToToday: Mock;
-  toggleShowAllTasks: Mock;
   getActiveGoals: Mock;
   linkTaskToGoal: Mock;
   clearCompleted: Mock;
@@ -35,14 +33,12 @@ export function createMockGoalStore(overrides: Partial<MockGoalStore> = {}): Moc
   return {
     todayTasks: [],
     goals: [],
-    showAllTasks: false,
     isLoading: false,
     toggleTask: vi.fn(async () => true),
     updateTask: vi.fn(async () => true),
     deleteTask: vi.fn(async () => true),
     transferTaskToNextDay: vi.fn(async () => true),
     moveTaskToToday: vi.fn(async () => true),
-    toggleShowAllTasks: vi.fn(),
     getActiveGoals: vi.fn(() => []),
     linkTaskToGoal: vi.fn(async () => true),
     clearCompleted: vi.fn(async () => true),
@@ -73,6 +69,6 @@ export function createGoalStoreMock(store: MockGoalStore) {
   return mock;
 }
 
-export function createSettingsStoreMock() {
-  return () => ({ settings: defaultSettings });
+export function createSettingsStoreMock(settingsOverrides: Partial<Settings> = {}) {
+  return () => ({ settings: { ...defaultSettings, ...settingsOverrides } });
 }

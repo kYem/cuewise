@@ -2,7 +2,12 @@ import { DndContext, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext } from '@dnd-kit/sortable';
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { getDragEndReorder, getDragReorderIndices, SortableTaskItem } from './SortableTaskItem';
+import {
+  getDragEndReorder,
+  getDragReorderIndices,
+  getFilteredReorder,
+  SortableTaskItem,
+} from './SortableTaskItem';
 
 function dragEnd(activeId: string | number, overId: string | number | null): DragEndEvent {
   return {
@@ -50,9 +55,28 @@ describe('getDragEndReorder', () => {
   });
 });
 
+describe('getFilteredReorder', () => {
+  // Regression: with completed rows hidden, a drag within the visible list must
+  // resolve to indices in the FULL task list so ordering isn't corrupted.
+  it('maps a visible-list drag back to full-list indices when a row is hidden', () => {
+    const full = ['done', 'a', 'b'];
+    const visible = ['a', 'b'];
+    expect(getFilteredReorder(dragEnd('a', 'b'), full, visible)).toEqual({ from: 1, to: 2 });
+  });
+
+  it('is identity when nothing is hidden', () => {
+    const ids = ['a', 'b', 'c'];
+    expect(getFilteredReorder(dragEnd('c', 'a'), ids, ids)).toEqual({ from: 2, to: 0 });
+  });
+
+  it('returns null when dropped outside any target', () => {
+    expect(getFilteredReorder(dragEnd('a', null), ['done', 'a', 'b'], ['a', 'b'])).toBeNull();
+  });
+});
+
 describe('SortableTaskItem', () => {
-  it('renders a drag handle alongside its children', () => {
-    render(
+  it('hides the drag handle by default and reveals it in edit mode (showHandle)', () => {
+    const { rerender } = render(
       <DndContext>
         <SortableContext items={['task-1']}>
           <SortableTaskItem id="task-1">
@@ -62,7 +86,19 @@ describe('SortableTaskItem', () => {
       </DndContext>
     );
 
-    expect(screen.getByRole('button', { name: 'Drag to reorder' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Drag to reorder' })).not.toBeInTheDocument();
     expect(screen.getByText('Task body')).toBeInTheDocument();
+
+    rerender(
+      <DndContext>
+        <SortableContext items={['task-1']}>
+          <SortableTaskItem id="task-1" showHandle>
+            <span>Task body</span>
+          </SortableTaskItem>
+        </SortableContext>
+      </DndContext>
+    );
+
+    expect(screen.getByRole('button', { name: 'Drag to reorder' })).toBeInTheDocument();
   });
 });

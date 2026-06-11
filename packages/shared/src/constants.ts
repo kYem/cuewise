@@ -67,6 +67,9 @@ export const DEFAULT_SETTINGS: Settings = {
   // Goal View Mode
   goalViewMode: 'full', // Full view by default
   focusedGoalId: null, // No focused goal by default
+  showCompletedGoals: true, // Show completed tasks in Today's Focus by default
+  showIncompleteGoals: false, // Recent-incomplete backlog collapsed by default
+  showUpcomingGoals: false, // Upcoming section collapsed by default
   // Quote Display
   quoteDisplayMode: 'bottom', // Show quotes below goals by default
   enableQuoteAnimation: false, // Disabled by default (can be CPU-intensive)

@@ -1,7 +1,23 @@
-import type { Goal, GoalViewMode } from '@cuewise/shared';
+import {
+  type Goal,
+  type GoalViewMode,
+  getRecentIncompleteTasks,
+  getUpcomingTasks,
+} from '@cuewise/shared';
 import { getStorageUsage, type StorageUsageInfo } from '@cuewise/storage';
 import { cn, Popover, PopoverContent, PopoverTrigger } from '@cuewise/ui';
-import { AlignJustify, Check, CheckCircle2, Circle, List, Settings2, Target } from 'lucide-react';
+import {
+  AlignJustify,
+  CalendarClock,
+  Check,
+  CheckCircle2,
+  Circle,
+  Eye,
+  History,
+  List,
+  Settings2,
+  Target,
+} from 'lucide-react';
 import type React from 'react';
 import { useEffect, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
@@ -9,17 +25,68 @@ import { useGoalStore } from '../stores/goal-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { ErrorFallback } from './ErrorFallback';
 import { GoalFocusView } from './GoalFocusView';
-import { GoalInput } from './GoalInput';
+import { GoalProgressRing } from './GoalProgressRing';
 import { GoalsList } from './GoalsList';
 import { StorageIndicator } from './StorageIndicator';
 
+const VIEW_MODES: { mode: GoalViewMode; icon: typeof List; label: string }[] = [
+  { mode: 'full', icon: List, label: 'Full' },
+  { mode: 'compact', icon: AlignJustify, label: 'Compact' },
+  { mode: 'focus', icon: Target, label: 'Focus' },
+];
+
+function getSubtitle(totalCount: number, incompleteCount: number): string {
+  if (totalCount === 0) {
+    return 'What matters most today?';
+  }
+  if (incompleteCount === 0) {
+    return 'All done — well earned';
+  }
+  return `${incompleteCount} to go — keep your momentum`;
+}
+
+// Reveal toggle in the ⚙ menu (e.g. Show incomplete / Upcoming): icon + label +
+// count badge, highlighted while active.
+function MenuToggleItem({
+  icon: Icon,
+  label,
+  count,
+  active,
+  onToggle,
+}: {
+  icon: typeof List;
+  label: string;
+  count: number;
+  active: boolean;
+  onToggle: () => void;
+}): React.ReactElement {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-pressed={active}
+      className={cn(
+        'w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-colors',
+        active ? 'bg-primary-50 text-primary-600' : 'text-primary hover:bg-surface-variant'
+      )}
+    >
+      <Icon className="w-4 h-4" />
+      <span className="flex-1 text-left">{label}</span>
+      <span className="min-w-[18px] px-1 text-center text-[10px] font-bold rounded-full bg-primary-600 text-white">
+        {count}
+      </span>
+    </button>
+  );
+}
+
 export const GoalsSection: React.FC = () => {
   // State values - use useShallow to prevent re-renders when unrelated state changes
-  const { isLoading, error, todayTasks } = useGoalStore(
+  const { isLoading, error, todayTasks, goals } = useGoalStore(
     useShallow((state) => ({
       isLoading: state.isLoading,
       error: state.error,
       todayTasks: state.todayTasks,
+      goals: state.goals,
     }))
   );
   const initialize = useGoalStore((state) => state.initialize);
@@ -30,7 +97,13 @@ export const GoalsSection: React.FC = () => {
   const [storageUsage, setStorageUsage] = useState<StorageUsageInfo | null>(null);
   const [showAddInput, setShowAddInput] = useState(false);
 
-  const incompleteCount = todayTasks.filter((t) => !t.completed).length;
+  const completedCount = todayTasks.filter((t) => t.completed).length;
+  const totalCount = todayTasks.length;
+  const incompleteCount = totalCount - completedCount;
+
+  // Counts for the menu's "Show incomplete" (recent backlog) and "Upcoming" entries
+  const recentIncompleteCount = getRecentIncompleteTasks(goals).length;
+  const upcomingCount = getUpcomingTasks(goals).filter((t) => !t.completed).length;
   const focusedGoalId = settings.focusedGoalId;
   const focusedGoal = todayTasks.find((g) => g.id === focusedGoalId);
   const displayGoal = focusedGoal || todayTasks.find((g) => !g.completed) || null;
@@ -55,9 +128,21 @@ export const GoalsSection: React.FC = () => {
     updateSettings({ goalViewMode: mode });
   };
 
+  const handleToggleShowCompleted = () => {
+    updateSettings({ showCompletedGoals: !settings.showCompletedGoals });
+  };
+
+  const handleToggleShowIncomplete = () => {
+    updateSettings({ showIncompleteGoals: !settings.showIncompleteGoals });
+  };
+
+  const handleToggleShowUpcoming = () => {
+    updateSettings({ showUpcomingGoals: !settings.showUpcomingGoals });
+  };
+
   if (isLoading) {
     return (
-      <div className="w-full max-w-2xl mx-auto">
+      <div className="w-full max-w-[400px] mx-auto">
         <div className="bg-surface/80 backdrop-blur-sm rounded-2xl shadow-lg p-6 border border-border">
           <div className="flex items-center justify-center min-h-[200px]">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
@@ -69,7 +154,7 @@ export const GoalsSection: React.FC = () => {
 
   if (error) {
     return (
-      <div className="w-full max-w-2xl mx-auto">
+      <div className="w-full max-w-[400px] mx-auto">
         <div className="bg-surface/80 backdrop-blur-sm rounded-2xl shadow-lg p-6 border border-border">
           <ErrorFallback error={error} title="Failed to load goals" onRetry={initialize} />
         </div>
@@ -77,103 +162,52 @@ export const GoalsSection: React.FC = () => {
     );
   }
 
-  // Determine minimum height based on view mode
-  const minHeight = viewMode === 'compact' ? 'min-h-[200px]' : 'min-h-[400px]';
+  // Encouragement line under the title, mirroring the goals-widget design
+  const subtitle = getSubtitle(totalCount, incompleteCount);
 
-  // Mode toggle component (reused in both layouts)
-  const modeToggle = (
-    <div className="flex items-center gap-1 bg-surface-variant/80 backdrop-blur-sm rounded-lg p-1">
-      <ModeButton
-        mode="full"
-        currentMode={viewMode}
-        icon={<List className="w-4 h-4" />}
-        label="Full view"
-        onClick={() => handleModeChange('full')}
-      />
-      <ModeButton
-        mode="compact"
-        currentMode={viewMode}
-        icon={<AlignJustify className="w-4 h-4" />}
-        label="Compact view"
-        onClick={() => handleModeChange('compact')}
-      />
-      <ModeButton
-        mode="focus"
-        currentMode={viewMode}
-        icon={<Target className="w-4 h-4" />}
-        label="Focus view"
-        onClick={() => handleModeChange('focus')}
-      />
-    </div>
-  );
-
-  // Combined settings popover for focus mode
-  const focusModeSettings = (
+  // Consolidated view-options menu (⚙) — view mode + show-completed / incomplete
+  // / upcoming toggles (or the focus-on picker in focus mode). Used in all modes.
+  const optionsMenu = (triggerClassName?: string) => (
     <Popover>
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="p-2 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-sm text-secondary/80 hover:text-primary transition-all border border-white/10"
-          title="Settings"
+          className={cn(
+            'w-8 h-8 flex items-center justify-center rounded-lg bg-surface-variant/80 hover:bg-surface-variant backdrop-blur-sm text-secondary hover:text-primary transition-all border border-border',
+            triggerClassName
+          )}
+          aria-label="View options"
+          title="View options"
         >
           <Settings2 className="w-4 h-4" />
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-56 p-2 bg-surface/95 backdrop-blur-xl" align="end">
-        {/* View Mode Section */}
-        <div className="mb-2">
-          <div className="text-xs font-medium text-tertiary px-2 py-1">View Mode</div>
-          <div className="space-y-0.5">
+        <div className="text-xs font-medium text-tertiary px-2 py-1">View Mode</div>
+        <div className="space-y-0.5">
+          {VIEW_MODES.map(({ mode, icon: Icon, label }) => (
             <button
+              key={mode}
               type="button"
-              onClick={() => handleModeChange('full')}
+              onClick={() => handleModeChange(mode)}
               className={cn(
                 'w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-colors',
-                viewMode === 'full'
+                viewMode === mode
                   ? 'bg-primary-50 text-primary-600'
                   : 'text-primary hover:bg-surface-variant'
               )}
             >
-              <List className="w-4 h-4" />
-              <span>Full</span>
-              {viewMode === 'full' && <Check className="w-4 h-4 ml-auto" />}
+              <Icon className="w-4 h-4" />
+              <span>{label}</span>
+              {viewMode === mode && <Check className="w-4 h-4 ml-auto" />}
             </button>
-            <button
-              type="button"
-              onClick={() => handleModeChange('compact')}
-              className={cn(
-                'w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-colors',
-                viewMode === 'compact'
-                  ? 'bg-primary-50 text-primary-600'
-                  : 'text-primary hover:bg-surface-variant'
-              )}
-            >
-              <AlignJustify className="w-4 h-4" />
-              <span>Compact</span>
-              {viewMode === 'compact' && <Check className="w-4 h-4 ml-auto" />}
-            </button>
-            <button
-              type="button"
-              onClick={() => handleModeChange('focus')}
-              className={cn(
-                'w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-colors',
-                viewMode === 'focus'
-                  ? 'bg-primary-50 text-primary-600'
-                  : 'text-primary hover:bg-surface-variant'
-              )}
-            >
-              <Target className="w-4 h-4" />
-              <span>Focus</span>
-              {viewMode === 'focus' && <Check className="w-4 h-4 ml-auto" />}
-            </button>
-          </div>
+          ))}
         </div>
 
-        {/* Goal Selection Section - only show if multiple tasks */}
-        {todayTasks.length > 1 && (
-          <>
-            <div className="border-t border-border my-2" />
-            <div>
+        {viewMode === 'focus' ? (
+          todayTasks.length > 1 && (
+            <>
+              <div className="border-t border-border my-2" />
               <div className="text-xs font-medium text-tertiary px-2 py-1">
                 Focus on ({incompleteCount} remaining)
               </div>
@@ -187,7 +221,54 @@ export const GoalsSection: React.FC = () => {
                   />
                 ))}
               </div>
-            </div>
+            </>
+          )
+        ) : (
+          <>
+            <div className="border-t border-border my-2" />
+            <button
+              type="button"
+              onClick={handleToggleShowCompleted}
+              role="menuitemcheckbox"
+              aria-checked={settings.showCompletedGoals}
+              className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-colors text-primary hover:bg-surface-variant"
+            >
+              <Eye className="w-4 h-4" />
+              <span className="flex-1 text-left">Show completed</span>
+              <span
+                className={cn(
+                  'relative w-8 h-[18px] rounded-full transition-colors flex-shrink-0',
+                  settings.showCompletedGoals ? 'bg-primary-600' : 'bg-divider'
+                )}
+              >
+                <span
+                  className={cn(
+                    'absolute top-0.5 left-0.5 w-3.5 h-3.5 rounded-full bg-white transition-transform',
+                    settings.showCompletedGoals && 'translate-x-3.5'
+                  )}
+                />
+              </span>
+            </button>
+
+            {recentIncompleteCount > 0 && (
+              <MenuToggleItem
+                icon={History}
+                label="Show incomplete"
+                count={recentIncompleteCount}
+                active={settings.showIncompleteGoals}
+                onToggle={handleToggleShowIncomplete}
+              />
+            )}
+
+            {upcomingCount > 0 && (
+              <MenuToggleItem
+                icon={CalendarClock}
+                label="Upcoming"
+                count={upcomingCount}
+                active={settings.showUpcomingGoals}
+                onToggle={handleToggleShowUpcoming}
+              />
+            )}
           </>
         )}
       </PopoverContent>
@@ -201,65 +282,59 @@ export const GoalsSection: React.FC = () => {
         {/* Focus view - centered */}
         <GoalFocusView showAddInput={showAddInput} onCloseAddInput={() => setShowAddInput(false)} />
 
-        {/* Settings button - inline, appears on hover */}
+        {/* Options menu - inline, appears on hover */}
         <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-          {focusModeSettings}
+          {optionsMenu('bg-white/10 hover:bg-white/20 text-secondary/80 border-white/10')}
         </div>
       </div>
     );
   }
 
+  const minHeight = viewMode === 'compact' ? '' : 'min-h-[120px]';
+
   // Full and Compact modes render with container
   return (
-    <div className="w-full max-w-2xl mx-auto">
+    <div className="w-full max-w-[400px] mx-auto">
       <div
         className={cn(
-          'group bg-surface/80 backdrop-blur-sm rounded-2xl shadow-lg p-6 border border-border flex flex-col',
+          'group bg-surface/80 backdrop-blur-sm rounded-2xl shadow-lg p-5 border border-border flex flex-col',
           minHeight
         )}
       >
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            {viewMode === 'full' && (
-              <div className="p-2 bg-primary-100 rounded-lg">
-                <Target className="w-6 h-6 text-primary-600" />
+        {viewMode === 'full' ? (
+          <div className="flex items-center gap-2.5 mb-4">
+            {totalCount > 0 ? (
+              <GoalProgressRing completed={completedCount} total={totalCount} size={40} />
+            ) : (
+              <div className="w-10 h-10 flex items-center justify-center rounded-xl bg-primary-100 flex-shrink-0">
+                <Target className="w-5 h-5 text-primary-600" />
               </div>
             )}
-            <div>
-              <h2
-                className={cn(
-                  'font-semibold text-primary',
-                  viewMode === 'full' ? 'text-2xl' : 'text-xl'
-                )}
-              >
-                Today's Focus
-              </h2>
-              {viewMode === 'full' && (
-                <p className="text-sm text-secondary">What matters most today?</p>
-              )}
+            <div className="flex-1 min-w-0">
+              <h2 className="text-base font-semibold text-primary font-display">Today's Focus</h2>
+              <p className="text-xs text-secondary">{subtitle}</p>
             </div>
+            {optionsMenu()}
           </div>
-
-          {/* Mode Toggle - hidden by default in compact, visible on hover */}
-          <div
-            className={cn(
-              'transition-opacity duration-200',
-              viewMode === 'compact' && 'opacity-0 group-hover:opacity-100'
+        ) : (
+          <div className="flex items-center gap-2 mb-2.5">
+            <Target className="w-4 h-4 text-primary-600 flex-shrink-0" />
+            <h2 className="text-base font-semibold text-primary font-display flex-1">
+              Today's Focus
+            </h2>
+            {totalCount > 0 && (
+              <span className="text-xs text-secondary tabular-nums">
+                {completedCount}/{totalCount}
+              </span>
             )}
-          >
-            {modeToggle}
+            {optionsMenu()}
           </div>
-        </div>
+        )}
 
         {/* Full Mode Content */}
         {viewMode === 'full' && (
           <>
-            {/* Goal Input */}
-            <div className="mb-6">
-              <GoalInput />
-            </div>
-
             {/* Storage Warning - only show if warning or critical */}
             {storageUsage && (storageUsage.isWarning || storageUsage.isCritical) && (
               <div className="mb-4">
@@ -267,7 +342,7 @@ export const GoalsSection: React.FC = () => {
               </div>
             )}
 
-            {/* Goals List */}
+            {/* Goals List (tiles + bottom add input + history + upcoming) */}
             <div className="flex-1">
               <GoalsList viewMode="full" />
             </div>
@@ -286,44 +361,7 @@ export const GoalsSection: React.FC = () => {
 };
 
 /**
- * Mode toggle button component
- */
-function ModeButton({
-  mode,
-  currentMode,
-  icon,
-  label,
-  onClick,
-}: {
-  mode: GoalViewMode;
-  currentMode: GoalViewMode;
-  icon: React.ReactNode;
-  label: string;
-  onClick: () => void;
-}) {
-  const isActive = mode === currentMode;
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        'p-2 rounded-md transition-all',
-        isActive
-          ? 'bg-surface text-primary-600 shadow-sm'
-          : 'text-secondary hover:text-primary hover:bg-surface/50'
-      )}
-      aria-label={label}
-      aria-pressed={isActive}
-      title={label}
-    >
-      {icon}
-    </button>
-  );
-}
-
-/**
- * Individual goal item in the selector dropdown
+ * Individual goal item in the focus-on selector dropdown
  */
 function GoalSelectorItem({
   goal,

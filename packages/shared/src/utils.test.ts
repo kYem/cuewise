@@ -24,6 +24,7 @@ import {
   getDueDateLabel,
   getNextDayDateString,
   getRandomQuote,
+  getRecentIncompleteTasks,
   getSubtaskProgress,
   getTodayDateString,
   getUpcomingTasks,
@@ -1130,6 +1131,51 @@ describe('Due Date Utilities', () => {
       const result = getUpcomingTasks(goals);
 
       expect(result).toEqual([]);
+    });
+  });
+
+  describe('getRecentIncompleteTasks', () => {
+    const daysAgo = (n: number): string =>
+      new Date(Date.now() - n * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+    it('returns incomplete tasks dated in the recent past', () => {
+      const goals = [createTestTask({ id: '1', date: daysAgo(2) })];
+      const result = getRecentIncompleteTasks(goals);
+
+      expect(result.map((g) => g.id)).toEqual(['1']);
+    });
+
+    it("excludes today's tasks", () => {
+      const goals = [createTestTask({ id: '1', date: getTodayDateString() })];
+
+      expect(getRecentIncompleteTasks(goals)).toEqual([]);
+    });
+
+    it('excludes completed tasks', () => {
+      const goals = [createTestTask({ id: '1', date: daysAgo(2), completed: true })];
+
+      expect(getRecentIncompleteTasks(goals)).toEqual([]);
+    });
+
+    it('excludes tasks older than the day window', () => {
+      const recent = createTestTask({ id: 'recent', date: daysAgo(10) });
+      const old = createTestTask({ id: 'old', date: daysAgo(20) });
+      const result = getRecentIncompleteTasks([recent, old]);
+
+      expect(result.map((g) => g.id)).toEqual(['recent']);
+    });
+
+    it('respects a custom daysBack window', () => {
+      const goals = [createTestTask({ id: '1', date: daysAgo(5) })];
+
+      expect(getRecentIncompleteTasks(goals, 3)).toEqual([]);
+      expect(getRecentIncompleteTasks(goals, 7).map((g) => g.id)).toEqual(['1']);
+    });
+
+    it('excludes objectives (only tasks belong in the backlog)', () => {
+      const goals = [createTestTask({ id: '1', date: daysAgo(2), type: 'objective' })];
+
+      expect(getRecentIncompleteTasks(goals)).toEqual([]);
     });
   });
 

@@ -5,6 +5,9 @@ import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useGoalStore } from '../stores/goal-store';
 
+/** 'minimal' for direct background use, 'boxed' for panels/modals, 'widget' for the soft pill add-row */
+type GoalInputVariant = 'minimal' | 'boxed' | 'widget';
+
 interface GoalPickerContentProps {
   activeGoals: Goal[];
   selectedGoalId: string | null;
@@ -60,11 +63,14 @@ function GoalPickerContent({
 
 interface SelectedGoalIndicatorProps {
   goalText: string;
-  variant: 'minimal' | 'boxed';
+  variant: GoalInputVariant;
   onRemove: () => void;
 }
 
-const INDICATOR_STYLES = {
+const INDICATOR_STYLES: Record<
+  GoalInputVariant,
+  { container: string; button: string; label: string; textShadow: string | undefined }
+> = {
   minimal: {
     container: 'flex items-center gap-1 text-xs text-white/80 mt-2',
     button: 'ml-1 text-white/60 hover:text-white underline',
@@ -77,7 +83,13 @@ const INDICATOR_STYLES = {
     label: 'Will link to:',
     textShadow: undefined,
   },
-} as const;
+  widget: {
+    container: 'flex items-center gap-1 text-xs text-primary-600 mt-1',
+    button: 'ml-1 text-secondary hover:text-primary underline',
+    label: 'Will link to:',
+    textShadow: undefined,
+  },
+};
 
 function SelectedGoalIndicator({
   goalText,
@@ -100,12 +112,15 @@ function SelectedGoalIndicator({
 }
 
 interface GoalLinkButtonProps {
-  variant: 'minimal' | 'boxed';
+  variant: GoalInputVariant;
   isSelected: boolean;
   selectedGoalText?: string;
 }
 
-const LINK_BUTTON_STYLES = {
+const LINK_BUTTON_STYLES: Record<
+  GoalInputVariant,
+  { base: string; selected: string; unselected: string }
+> = {
   minimal: {
     base: 'p-2 rounded-full transition-all',
     selected: 'bg-primary-500/80 text-white',
@@ -116,7 +131,13 @@ const LINK_BUTTON_STYLES = {
     selected: 'bg-primary-50 border-primary-500 text-primary-600',
     unselected: 'border-border text-secondary hover:border-primary-300 hover:text-primary-500',
   },
-} as const;
+  widget: {
+    base: 'px-2.5 py-2 rounded-xl border transition-all flex items-center justify-center',
+    selected: 'bg-primary-50 border-primary-400 text-primary-600',
+    unselected:
+      'bg-surface-variant/50 border-border text-secondary hover:border-primary-300 hover:text-primary-500',
+  },
+};
 
 function GoalLinkButton({
   variant,
@@ -138,7 +159,7 @@ function GoalLinkButton({
 }
 
 interface GoalPickerProps {
-  variant: 'minimal' | 'boxed';
+  variant: GoalInputVariant;
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   activeGoals: Goal[];
@@ -181,8 +202,7 @@ interface GoalInputProps {
   defaultGoalId?: string;
   onTaskAdded?: () => void;
   autoFocus?: boolean;
-  /** 'minimal' for direct background use, 'boxed' for panels/modals */
-  variant?: 'minimal' | 'boxed';
+  variant?: GoalInputVariant;
 }
 
 export function GoalInput({
@@ -298,6 +318,56 @@ export function GoalInput({
           <SelectedGoalIndicator
             goalText={selectedGoal.text}
             variant="minimal"
+            onRemove={() => setSelectedGoalId(null)}
+          />
+        )}
+      </form>
+    );
+  }
+
+  // Widget variant - soft pill add-row matching the goals-widget design
+  if (variant === 'widget') {
+    return (
+      <form onSubmit={handleSubmit} className="space-y-1">
+        <div className="flex gap-2">
+          <input
+            ref={inputRef}
+            type="text"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Add a goal…"
+            className="flex-1 min-w-0 px-3 py-2 rounded-xl border border-border bg-surface-variant/50 focus:border-primary-400 focus:outline-none transition-colors text-sm text-primary placeholder:text-tertiary"
+            maxLength={200}
+          />
+
+          {hasGoals && (
+            <GoalPicker
+              variant="widget"
+              isOpen={isPickerOpen}
+              onOpenChange={setIsPickerOpen}
+              activeGoals={activeGoals}
+              selectedGoalId={selectedGoalId}
+              selectedGoalText={selectedGoal?.text}
+              getGoalProgress={getGoalProgress}
+              onSelect={handleGoalSelect}
+            />
+          )}
+
+          <button
+            type="submit"
+            disabled={!text.trim()}
+            className="px-3.5 py-2 rounded-xl border border-border bg-surface-variant/70 hover:bg-surface-variant text-primary text-sm font-medium flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add</span>
+          </button>
+        </div>
+
+        {selectedGoalId && selectedGoal && (
+          <SelectedGoalIndicator
+            goalText={selectedGoal.text}
+            variant="widget"
             onRemove={() => setSelectedGoalId(null)}
           />
         )}

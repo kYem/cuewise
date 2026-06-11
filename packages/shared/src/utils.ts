@@ -414,6 +414,19 @@ export function getUpcomingTasks(goals: Goal[], daysAhead = 14): (Goal & { dueDa
 }
 
 /**
+ * Get incomplete goals from the recent past (excluding today) — the carry-over
+ * backlog surfaced in the goals widget. Uses local-time date strings throughout.
+ * @param goals - Array of all goals
+ * @param daysBack - How many days back to include (default: 14)
+ */
+export function getRecentIncompleteTasks(goals: Goal[], daysBack = 14): Goal[] {
+  const today = getTodayDateString();
+  const cutoff = format(new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000), 'yyyy-MM-dd');
+
+  return goals.filter((g) => isTask(g) && !g.completed && g.date !== today && g.date >= cutoff);
+}
+
+/**
  * Get a short human-readable label for a due date.
  * Returns "Today", "Tomorrow", day name for this week, or "Mon, Jan 15" for further dates.
  */
