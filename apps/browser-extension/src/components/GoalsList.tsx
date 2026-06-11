@@ -1,6 +1,7 @@
 import {
   type GoalViewMode,
   getDueDateLabel,
+  getRecentIncompleteTasks,
   getSubtaskProgress,
   getTodayDateString,
   isObjective,
@@ -39,7 +40,7 @@ import {
   X,
 } from 'lucide-react';
 import type React from 'react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import emptyTasksAnimation from '../assets/lottie/empty/tasks.json';
 import { useGoalEditing } from '../hooks/useGoalEditing';
 import { useGoalStore } from '../stores/goal-store';
@@ -48,7 +49,7 @@ import { CompactGoalRow } from './CompactGoalRow';
 import { DueDateControl } from './DueDateControl';
 import { EmptyState } from './EmptyState';
 import { GoalInput } from './GoalInput';
-import { getDragEndReorder, SortableTaskItem } from './SortableTaskItem';
+import { getFilteredReorder, SortableTaskItem } from './SortableTaskItem';
 import { UpcomingTasks } from './UpcomingTasks';
 
 interface GoalsListProps {
@@ -59,8 +60,6 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
   const {
     todayTasks,
     goals,
-    showAllTasks,
-    showUpcoming,
     toggleTask,
     updateTask,
     deleteTask,
@@ -95,15 +94,13 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
   // Map drag positions within the visible list back to the full task order so
   // hiding completed tasks never corrupts ordering.
   const handleDragEnd = (event: DragEndEvent) => {
-    const visibleIds = visibleTasks.map((task) => task.id);
-    const indices = getDragEndReorder(event, visibleIds);
-    if (!indices) {
-      return;
-    }
-    const from = todayTasks.findIndex((t) => t.id === visibleIds[indices.from]);
-    const to = todayTasks.findIndex((t) => t.id === visibleIds[indices.to]);
-    if (from !== -1 && to !== -1) {
-      reorderTasks(from, to);
+    const indices = getFilteredReorder(
+      event,
+      todayTasks.map((task) => task.id),
+      visibleTasks.map((task) => task.id)
+    );
+    if (indices) {
+      reorderTasks(indices.from, indices.to);
     }
   };
 
@@ -128,43 +125,27 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
     linkTaskToGoal,
   });
 
-  // Check if transfer button should be shown
   const showTransferButton =
     settings.enableGoalTransfer && isPastGoalTransferTime(settings.goalTransferTime);
 
-  // Per-row subtask UI state: a single accordion expand (full mode) and the
-  // inline add field (edit mode only).
+  // Which row's subtasks are expanded (one at a time) and the inline add field
   const [expandedSubtaskId, setExpandedSubtaskId] = useState<string | null>(null);
   const [addingSubtaskId, setAddingSubtaskId] = useState<string | null>(null);
   const [subtaskDraft, setSubtaskDraft] = useState('');
+  const subtaskInputRef = useRef<HTMLInputElement>(null);
+
+  // Focus the inline subtask field when it opens (once, not on every keystroke)
+  useEffect(() => {
+    if (addingSubtaskId) {
+      subtaskInputRef.current?.focus();
+    }
+  }, [addingSubtaskId]);
 
   if (isLoading) {
     return <div className="text-center py-8 text-secondary">Loading goals...</div>;
   }
 
-  // Get incomplete goals from the last 2 weeks (excluding today)
-  const recentIncompleteGoals = useMemo(() => {
-    const today = getTodayDateString();
-    const twoWeeksAgo = new Date();
-    twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
-    const twoWeeksAgoStr = twoWeeksAgo.toISOString().split('T')[0];
-
-    return goals.filter((goal) => {
-      // Exclude today's goals (already shown above)
-      if (goal.date === today) {
-        return false;
-      }
-      // Only incomplete goals
-      if (goal.completed) {
-        return false;
-      }
-      // Only goals from the last 2 weeks
-      if (goal.date < twoWeeksAgoStr) {
-        return false;
-      }
-      return true;
-    });
-  }, [goals]);
+  const recentIncompleteGoals = useMemo(() => getRecentIncompleteTasks(goals), [goals]);
 
   const hasOtherGoals = goals.length > todayTasks.length;
 
@@ -551,7 +532,7 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
                               >
                                 <Plus className="w-4 h-4 text-tertiary flex-shrink-0" />
                                 <input
-                                  ref={(el) => el?.focus()}
+                                  ref={subtaskInputRef}
                                   type="text"
                                   aria-label="Add a subtask"
                                   placeholder="Add a subtask"
@@ -606,7 +587,7 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
       )}
 
       {/* Recent incomplete backlog — revealed from the ⚙ menu (Show incomplete) */}
-      {viewMode === 'full' && showAllTasks && recentIncompleteGoals.length > 0 && (
+      {viewMode === 'full' && settings.showIncompleteGoals && recentIncompleteGoals.length > 0 && (
         <div className="pt-2.5 border-t border-border space-y-1.5">
           <div className="px-0.5 text-xs font-medium text-tertiary">From the last 2 weeks</div>
           {recentIncompleteGoals.map((goal) => (
@@ -652,7 +633,7 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
       )}
 
       {/* Upcoming — revealed from the ⚙ menu */}
-      {viewMode === 'full' && showUpcoming && <UpcomingTasks showTrigger={false} />}
+      {viewMode === 'full' && settings.showUpcomingGoals && <UpcomingTasks showTrigger={false} />}
     </div>
   );
 };

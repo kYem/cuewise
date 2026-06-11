@@ -11,15 +11,12 @@ import { type Mock, vi } from 'vitest';
 export interface MockGoalStore {
   todayTasks: Goal[];
   goals: Goal[];
-  showAllTasks: boolean;
-  showUpcoming: boolean;
   isLoading: boolean;
   toggleTask: Mock;
   updateTask: Mock;
   deleteTask: Mock;
   transferTaskToNextDay: Mock;
   moveTaskToToday: Mock;
-  toggleShowAllTasks: Mock;
   getActiveGoals: Mock;
   linkTaskToGoal: Mock;
   clearCompleted: Mock;
@@ -36,15 +33,12 @@ export function createMockGoalStore(overrides: Partial<MockGoalStore> = {}): Moc
   return {
     todayTasks: [],
     goals: [],
-    showAllTasks: false,
-    showUpcoming: false,
     isLoading: false,
     toggleTask: vi.fn(async () => true),
     updateTask: vi.fn(async () => true),
     deleteTask: vi.fn(async () => true),
     transferTaskToNextDay: vi.fn(async () => true),
     moveTaskToToday: vi.fn(async () => true),
-    toggleShowAllTasks: vi.fn(),
     getActiveGoals: vi.fn(() => []),
     linkTaskToGoal: vi.fn(async () => true),
     clearCompleted: vi.fn(async () => true),

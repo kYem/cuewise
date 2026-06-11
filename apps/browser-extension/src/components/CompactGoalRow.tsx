@@ -26,7 +26,8 @@ export const CompactGoalRow: React.FC<CompactGoalRowProps> = ({
   const subtasks = goal.subtasks ?? [];
   const hasSubtasks = subtasks.length > 0;
   const { completed, total } = getSubtaskProgress(goal);
-  const progressPercentage = goal.completed ? 100 : total > 0 ? (completed / total) * 100 : 0;
+  const ratio = goal.completed ? 1 : total > 0 ? completed / total : 0;
+  const progressPercentage = Math.min(1, Math.max(0, ratio)) * 100;
 
   return (
     <div
@@ -56,7 +57,11 @@ export const CompactGoalRow: React.FC<CompactGoalRowProps> = ({
         {/* Text + inline progress bar */}
         <button
           type="button"
-          onClick={() => hasSubtasks && onToggleExpand()}
+          onClick={() => {
+            if (hasSubtasks) {
+              onToggleExpand();
+            }
+          }}
           className={cn('min-w-0 flex-1 text-left', !hasSubtasks && 'cursor-default')}
         >
           <span

@@ -1,7 +1,7 @@
 import {
   type Goal,
   type GoalViewMode,
-  getTodayDateString,
+  getRecentIncompleteTasks,
   getUpcomingTasks,
 } from '@cuewise/shared';
 import { getStorageUsage, type StorageUsageInfo } from '@cuewise/storage';
@@ -37,19 +37,15 @@ const VIEW_MODES: { mode: GoalViewMode; icon: typeof List; label: string }[] = [
 
 export const GoalsSection: React.FC = () => {
   // State values - use useShallow to prevent re-renders when unrelated state changes
-  const { isLoading, error, todayTasks, goals, showAllTasks, showUpcoming } = useGoalStore(
+  const { isLoading, error, todayTasks, goals } = useGoalStore(
     useShallow((state) => ({
       isLoading: state.isLoading,
       error: state.error,
       todayTasks: state.todayTasks,
       goals: state.goals,
-      showAllTasks: state.showAllTasks,
-      showUpcoming: state.showUpcoming,
     }))
   );
   const initialize = useGoalStore((state) => state.initialize);
-  const toggleShowAllTasks = useGoalStore((state) => state.toggleShowAllTasks);
-  const toggleShowUpcoming = useGoalStore((state) => state.toggleShowUpcoming);
 
   // Settings - use useShallow for multiple values, individual selector for action
   const settings = useSettingsStore(useShallow((state) => state.settings));
@@ -62,13 +58,7 @@ export const GoalsSection: React.FC = () => {
   const incompleteCount = totalCount - completedCount;
 
   // Counts for the menu's "Show incomplete" (recent backlog) and "Upcoming" entries
-  const todayStr = getTodayDateString();
-  const twoWeeksAgo = new Date();
-  twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
-  const twoWeeksAgoStr = twoWeeksAgo.toISOString().split('T')[0];
-  const recentIncompleteCount = goals.filter(
-    (g) => g.date !== todayStr && !g.completed && g.date >= twoWeeksAgoStr
-  ).length;
+  const recentIncompleteCount = getRecentIncompleteTasks(goals).length;
   const upcomingCount = getUpcomingTasks(goals).filter((t) => !t.completed).length;
   const focusedGoalId = settings.focusedGoalId;
   const focusedGoal = todayTasks.find((g) => g.id === focusedGoalId);
@@ -96,6 +86,14 @@ export const GoalsSection: React.FC = () => {
 
   const handleToggleShowCompleted = () => {
     updateSettings({ showCompletedGoals: !settings.showCompletedGoals });
+  };
+
+  const handleToggleShowIncomplete = () => {
+    updateSettings({ showIncompleteGoals: !settings.showIncompleteGoals });
+  };
+
+  const handleToggleShowUpcoming = () => {
+    updateSettings({ showUpcomingGoals: !settings.showUpcomingGoals });
   };
 
   if (isLoading) {
@@ -216,11 +214,11 @@ export const GoalsSection: React.FC = () => {
             {recentIncompleteCount > 0 && (
               <button
                 type="button"
-                onClick={toggleShowAllTasks}
-                aria-pressed={showAllTasks}
+                onClick={handleToggleShowIncomplete}
+                aria-pressed={settings.showIncompleteGoals}
                 className={cn(
                   'w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-colors',
-                  showAllTasks
+                  settings.showIncompleteGoals
                     ? 'bg-primary-50 text-primary-600'
                     : 'text-primary hover:bg-surface-variant'
                 )}
@@ -236,11 +234,11 @@ export const GoalsSection: React.FC = () => {
             {upcomingCount > 0 && (
               <button
                 type="button"
-                onClick={toggleShowUpcoming}
-                aria-pressed={showUpcoming}
+                onClick={handleToggleShowUpcoming}
+                aria-pressed={settings.showUpcomingGoals}
                 className={cn(
                   'w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-colors',
-                  showUpcoming
+                  settings.showUpcomingGoals
                     ? 'bg-primary-50 text-primary-600'
                     : 'text-primary hover:bg-surface-variant'
                 )}

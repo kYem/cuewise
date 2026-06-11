@@ -2,7 +2,12 @@ import { DndContext, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext } from '@dnd-kit/sortable';
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { getDragEndReorder, getDragReorderIndices, SortableTaskItem } from './SortableTaskItem';
+import {
+  getDragEndReorder,
+  getDragReorderIndices,
+  getFilteredReorder,
+  SortableTaskItem,
+} from './SortableTaskItem';
 
 function dragEnd(activeId: string | number, overId: string | number | null): DragEndEvent {
   return {
@@ -47,6 +52,25 @@ describe('getDragEndReorder', () => {
 
   it('coerces dnd-kit numeric ids to strings before matching', () => {
     expect(getDragEndReorder(dragEnd(1, 3), ['1', '2', '3'])).toEqual({ from: 0, to: 2 });
+  });
+});
+
+describe('getFilteredReorder', () => {
+  // Regression: with completed rows hidden, a drag within the visible list must
+  // resolve to indices in the FULL task list so ordering isn't corrupted.
+  it('maps a visible-list drag back to full-list indices when a row is hidden', () => {
+    const full = ['done', 'a', 'b'];
+    const visible = ['a', 'b'];
+    expect(getFilteredReorder(dragEnd('a', 'b'), full, visible)).toEqual({ from: 1, to: 2 });
+  });
+
+  it('is identity when nothing is hidden', () => {
+    const ids = ['a', 'b', 'c'];
+    expect(getFilteredReorder(dragEnd('c', 'a'), ids, ids)).toEqual({ from: 2, to: 0 });
+  });
+
+  it('returns null when dropped outside any target', () => {
+    expect(getFilteredReorder(dragEnd('a', null), ['done', 'a', 'b'], ['a', 'b'])).toBeNull();
   });
 });
 

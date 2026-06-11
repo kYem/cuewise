@@ -18,7 +18,7 @@ export const GoalProgressRing: React.FC<GoalProgressRingProps> = ({
 }) => {
   const radius = (size - 4) / 2;
   const circumference = 2 * Math.PI * radius;
-  const fraction = total > 0 ? completed / total : 0;
+  const fraction = total > 0 ? Math.min(1, Math.max(0, completed / total)) : 0;
   const center = size / 2;
 
   return (

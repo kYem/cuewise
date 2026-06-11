@@ -39,6 +39,28 @@ export function getDragEndReorder(
   return getDragReorderIndices(orderedIds, String(active.id), String(over.id));
 }
 
+/**
+ * Resolve a drag over a filtered (visible) list back to from/to indices in the
+ * full ordered list, so reordering stays correct when completed rows are hidden.
+ * Returns null when the drop has no valid target.
+ */
+export function getFilteredReorder(
+  event: DragEndEvent,
+  fullIds: string[],
+  visibleIds: string[]
+): { from: number; to: number } | null {
+  const indices = getDragEndReorder(event, visibleIds);
+  if (!indices) {
+    return null;
+  }
+  const from = fullIds.indexOf(visibleIds[indices.from]);
+  const to = fullIds.indexOf(visibleIds[indices.to]);
+  if (from === -1 || to === -1) {
+    return null;
+  }
+  return { from, to };
+}
+
 interface SortableTaskItemProps {
   id: string;
   children: React.ReactNode;

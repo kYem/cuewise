@@ -5,6 +5,9 @@ import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useGoalStore } from '../stores/goal-store';
 
+/** 'minimal' for direct background use, 'boxed' for panels/modals, 'widget' for the soft pill add-row */
+type GoalInputVariant = 'minimal' | 'boxed' | 'widget';
+
 interface GoalPickerContentProps {
   activeGoals: Goal[];
   selectedGoalId: string | null;
@@ -60,11 +63,14 @@ function GoalPickerContent({
 
 interface SelectedGoalIndicatorProps {
   goalText: string;
-  variant: 'minimal' | 'boxed' | 'widget';
+  variant: GoalInputVariant;
   onRemove: () => void;
 }
 
-const INDICATOR_STYLES = {
+const INDICATOR_STYLES: Record<
+  GoalInputVariant,
+  { container: string; button: string; label: string; textShadow: string | undefined }
+> = {
   minimal: {
     container: 'flex items-center gap-1 text-xs text-white/80 mt-2',
     button: 'ml-1 text-white/60 hover:text-white underline',
@@ -83,7 +89,7 @@ const INDICATOR_STYLES = {
     label: 'Will link to:',
     textShadow: undefined,
   },
-} as const;
+};
 
 function SelectedGoalIndicator({
   goalText,
@@ -106,12 +112,15 @@ function SelectedGoalIndicator({
 }
 
 interface GoalLinkButtonProps {
-  variant: 'minimal' | 'boxed' | 'widget';
+  variant: GoalInputVariant;
   isSelected: boolean;
   selectedGoalText?: string;
 }
 
-const LINK_BUTTON_STYLES = {
+const LINK_BUTTON_STYLES: Record<
+  GoalInputVariant,
+  { base: string; selected: string; unselected: string }
+> = {
   minimal: {
     base: 'p-2 rounded-full transition-all',
     selected: 'bg-primary-500/80 text-white',
@@ -128,7 +137,7 @@ const LINK_BUTTON_STYLES = {
     unselected:
       'bg-surface-variant/50 border-border text-secondary hover:border-primary-300 hover:text-primary-500',
   },
-} as const;
+};
 
 function GoalLinkButton({
   variant,
@@ -150,7 +159,7 @@ function GoalLinkButton({
 }
 
 interface GoalPickerProps {
-  variant: 'minimal' | 'boxed' | 'widget';
+  variant: GoalInputVariant;
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   activeGoals: Goal[];
@@ -193,8 +202,7 @@ interface GoalInputProps {
   defaultGoalId?: string;
   onTaskAdded?: () => void;
   autoFocus?: boolean;
-  /** 'minimal' for direct background use, 'boxed' for panels/modals, 'widget' for the soft pill add-row */
-  variant?: 'minimal' | 'boxed' | 'widget';
+  variant?: GoalInputVariant;
 }
 
 export function GoalInput({

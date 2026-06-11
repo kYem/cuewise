@@ -184,6 +184,52 @@ describe('GoalsList - Subtasks', () => {
 
     expect(store.addSubtask).toHaveBeenCalledWith(task.id, 'Outline sections');
   });
+
+  // The add field commits on blur too (not only Enter), and must survive the
+  // edit-input blur to do so.
+  it('commits a subtask on blur of the add field', async () => {
+    const user = userEvent.setup();
+    const task = goalFactory.build({ text: 'Write report', completed: false });
+    const store = createMockGoalStore({ todayTasks: [task], goals: [task] });
+    vi.mocked(useGoalStore).mockImplementation(createGoalStoreMock(store));
+
+    render(<GoalsList />);
+    await user.click(screen.getByRole('button', { name: 'Write report' }));
+    await user.click(screen.getByRole('button', { name: 'Add subtask' }));
+
+    await user.type(screen.getByLabelText('Add a subtask'), 'Outline sections');
+    await user.tab(); // blur the field
+
+    expect(store.addSubtask).toHaveBeenCalledWith(task.id, 'Outline sections');
+  });
+
+  it('ignores an empty or whitespace-only subtask submit', async () => {
+    const user = userEvent.setup();
+    const task = goalFactory.build({ text: 'Write report', completed: false });
+    const store = createMockGoalStore({ todayTasks: [task], goals: [task] });
+    vi.mocked(useGoalStore).mockImplementation(createGoalStoreMock(store));
+
+    render(<GoalsList />);
+    await user.click(screen.getByRole('button', { name: 'Write report' }));
+    await user.click(screen.getByRole('button', { name: 'Add subtask' }));
+
+    await user.type(screen.getByLabelText('Add a subtask'), '   {Enter}');
+
+    expect(store.addSubtask).not.toHaveBeenCalled();
+  });
+
+  it('removes a subtask via the remove control while editing', async () => {
+    const user = userEvent.setup();
+    const task = taskWithSubtasksFactory.build({ text: 'Plan trip' });
+    const store = createMockGoalStore({ todayTasks: [task], goals: [task] });
+    vi.mocked(useGoalStore).mockImplementation(createGoalStoreMock(store));
+
+    render(<GoalsList />);
+    await user.click(screen.getByRole('button', { name: 'Plan trip' }));
+    await user.click(screen.getByRole('button', { name: 'Remove "Subtask 1"' }));
+
+    expect(store.removeSubtask).toHaveBeenCalledWith(task.id, 'sub-1');
+  });
 });
 
 describe('GoalsList - Reorder', () => {
@@ -219,9 +265,12 @@ describe('GoalsList - Upcoming section', () => {
     vi.mocked(useSettingsStore).mockImplementation(createSettingsStoreMock());
   });
 
-  it('renders upcoming tasks when showUpcoming is enabled from the menu', () => {
+  it('renders upcoming tasks when showUpcomingGoals is enabled', () => {
+    vi.mocked(useSettingsStore).mockImplementation(
+      createSettingsStoreMock({ showUpcomingGoals: true })
+    );
     const upcoming = taskWithDueDateFactory.build({ text: 'Ship release' });
-    const store = createMockGoalStore({ todayTasks: [], goals: [upcoming], showUpcoming: true });
+    const store = createMockGoalStore({ todayTasks: [], goals: [upcoming] });
     vi.mocked(useGoalStore).mockImplementation(createGoalStoreMock(store));
 
     render(<GoalsList />);
@@ -229,9 +278,9 @@ describe('GoalsList - Upcoming section', () => {
     expect(screen.getByText('Ship release')).toBeInTheDocument();
   });
 
-  it('hides upcoming tasks when showUpcoming is off', () => {
+  it('hides upcoming tasks when showUpcomingGoals is off (default)', () => {
     const upcoming = taskWithDueDateFactory.build({ text: 'Ship release' });
-    const store = createMockGoalStore({ todayTasks: [], goals: [upcoming], showUpcoming: false });
+    const store = createMockGoalStore({ todayTasks: [], goals: [upcoming] });
     vi.mocked(useGoalStore).mockImplementation(createGoalStoreMock(store));
 
     render(<GoalsList />);

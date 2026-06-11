@@ -35,6 +35,8 @@ export const defaultSettings: Settings = {
   goalViewMode: 'full',
   focusedGoalId: null,
   showCompletedGoals: true,
+  showIncompleteGoals: false,
+  showUpcomingGoals: false,
   quoteDisplayMode: 'bottom',
   enableQuoteAnimation: false,
   focusPosition: 'center',

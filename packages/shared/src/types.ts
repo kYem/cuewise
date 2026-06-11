@@ -210,6 +210,8 @@ export interface Settings {
   goalViewMode: GoalViewMode; // View mode for Today's Focus section (default 'full')
   focusedGoalId: string | null; // Selected goal ID for focus mode (default null)
   showCompletedGoals: boolean; // Show completed tasks in Today's Focus list (default true)
+  showIncompleteGoals: boolean; // Reveal the recent-incomplete backlog in the widget (default false)
+  showUpcomingGoals: boolean; // Reveal the upcoming (due-soon) section in the widget (default false)
   // Quote Display
   quoteDisplayMode: QuoteDisplayMode; // How quotes are displayed on home page (default 'bottom')
   enableQuoteAnimation: boolean; // Enable smart-ticker animation for quotes (default false)
