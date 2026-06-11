@@ -70,8 +70,9 @@ export const CompactGoalRow: React.FC<CompactGoalRowProps> = ({
           {hasSubtasks && (
             <span className="mt-1 flex items-center gap-2">
               <span className="h-1 flex-1 overflow-hidden rounded-full bg-divider">
+                {/* Foreground-tinted fill via currentColor: light on glass, dark on light themes */}
                 <span
-                  className="block h-full rounded-full bg-primary-600 transition-all duration-300 ease-out"
+                  className="block h-full rounded-full bg-current text-primary/80 transition-all duration-300 ease-out"
                   style={{ width: `${progressPercentage}%` }}
                 />
               </span>
