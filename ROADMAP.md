@@ -1,15 +1,47 @@
 # Cuewise Development Roadmap
 
-**Last Updated**: 2026-06-10
-**Current Version**: v1.8.0 (Published on Chrome Web Store)
+**Last Updated**: 2026-06-11
+**Current Version**: v1.10.0 (Published on Chrome Web Store)
 
 ---
 
-## ✅ Ready to Release (v1.9.0)
+## ✅ Recently Completed (v1.10.0)
+
+### Settings Modal Redesign
+
+Replaced the long single-scroll settings modal with a compact, theme-aware
+sidebar layout.
+
+- [x] Six sidebar categories (Timer, Sound & music, Focus mode, Home screen,
+      Goals & alerts, Advanced) replace the single-scroll list
+- [x] Instant-save with a quiet "saved" footer indicator (no Save button);
+      reset is a two-tap confirm under Advanced
+- [x] Denser controls: session-recipe presets, steppers, segmented controls,
+      chips, and a background thumbnail picker, with inline helper text
+- [x] Search filters settings across every category
+- [x] Debug log level and Chrome sync demoted under Advanced
+- [x] Full parity across all four color themes
+
+---
+
+## ✅ Recently Completed (v1.9.1)
+
+### Chrome Web Store Listing Refresh (ASO)
+- [x] Keyword-rich store title + `short_name`; search summary rewritten around
+      the queries people actually use (new tab, motivational quotes, goals,
+      Pomodoro timer, focus mode)
+- [x] Store description rewritten for the v1.9 feature set; stale FAQ corrected
+- [x] New installs default to the glass color theme (existing users keep theirs)
+
+**Version Released**: June 2026
+
+---
+
+## ✅ Recently Completed (v1.9.0)
 
 ### Task Enhancements
 
-Bringing richer task management to Today's Focus / Goals — subtasks, due
+Brought richer task management to Today's Focus / Goals — subtasks, due
 dates, manual ordering, and quick duplication.
 
 #### Phase 1 — Data & Store Layer — ✅ COMPLETE (commit `2bfb906`)
@@ -41,6 +73,19 @@ dates, manual ordering, and quick duplication.
 - [x] Upcoming tasks surfacing via `getUpcomingTasks` (`UpcomingTasks` —
       collapsible due-soon list with complete + move-to-today actions;
       shipped in #51, rendered on the home list full view and the Goals page)
+
+### Other v1.9.0 Features
+- [x] CSV bulk quote import (`csv-utils`, bulk import on the Quotes page)
+- [x] Quote Collections — create/manage themed collections; active-collection
+      filter scopes the new-tab quote pool (`QuoteCollection`, `collectionIds`)
+- [x] Tasks in compact & focus view modes (subtasks + due dates surfaced)
+- [x] Auto-complete a parent task when all its subtasks are done (completion rollup)
+- [x] Focus-mode fix: a completed focused task no longer lingers on screen
+- [x] Persist quote filters across sessions
+- [x] New violet "Cue Dot" logo + icon set
+- [x] Tooling: pnpm 11.5.2, Node 22 CI, refreshed GitHub Actions
+
+**Version Released**: June 2026
 
 ---
 
@@ -407,11 +452,11 @@ dates, manual ordering, and quick duplication.
 - [ ] Custom date ranges (optional enhancement)
 - [ ] Goal categories/tagging (optional)
 
-#### 3.2 Quote Collections - ❌ NOT STARTED
-- [ ] Create custom collections
-- [ ] Collection management
-- [ ] Collection rotation
-- [ ] Share/import collections
+#### 3.2 Quote Collections - ✅ MOSTLY COMPLETE (shipped v1.9.0)
+- [x] Create custom collections
+- [x] Collection management (add/remove quotes, edit, delete)
+- [x] Collection rotation (active-collection filter scopes the new-tab pool)
+- [ ] Share/import collections (optional enhancement)
 
 **User value**: MEDIUM - Great for themed quotes
 
@@ -671,9 +716,11 @@ differentiators that build on existing Focus Mode + quote infrastructure.)
 
 *Ordered, dated plan as of 2026-06-10. Effort: S = days, M = ~1 week, L = 2+ weeks.*
 
-> ✅ **v1.9.0 Task Enhancements — DONE.** Phase 1 (data/store, commit `2bfb906`)
-> and Phase 2 (UI, PRs #51/#54) are both complete, including upcoming-tasks
-> surfacing (`UpcomingTasks`). v1.9.0 is ready to release.
+> ✅ **v1.9.0 + v1.9.1 — RELEASED (June 2026).** Task Enhancements (subtasks,
+> due dates, reorder, duplicate, upcoming), CSV import, Quote Collections,
+> compact/focus tasks, and subtask-completion rollup shipped in v1.9.0; the
+> Chrome Web Store listing refresh shipped in v1.9.1. The settings-modal
+> redesign shipped in **v1.10.0**.
 
 1. **Quick Links / Shortcuts widget** (Priority: HIGH · Effort: S–M)
    - Pinned site tiles on the new tab — table-stakes feature every competitor
@@ -692,9 +739,9 @@ differentiators that build on existing Focus Mode + quote infrastructure.)
    - The unique moat — no competitor has it. Spec in
      `docs/next-steps-roadmap.md`; reuses `source`/`notes`/`viewCount` fields.
 
-5. **Quote Collections** (Priority: MEDIUM · Effort: M) — Not Started
-   - Types already exist (`QuoteCollection`, `collectionIds`). Create/manage
-     themed collections + collection-scoped rotation.
+5. **Quote Collections** — ✅ SHIPPED (v1.9.0)
+   - Create/manage themed collections + active-collection filtering that scopes
+     the new-tab rotation. Only share/import collections remains (optional).
 
 6. **Notes / scratchpad widget** (Priority: LOW · Effort: S)
    - Quick-capture note on the new tab (Tabliss/Infinity parity).
@@ -770,6 +817,9 @@ When ready for growth:
 ---
 
 **Version History**
+- v1.10.0 (2026-06) - Settings modal redesigned into a compact, theme-aware sidebar layout
+- v1.9.1 (2026-06) - Chrome Web Store listing refresh (ASO), glass theme default for new installs
+- v1.9.0 (2026-06) - Task enhancements (subtasks, due dates, reorder, duplicate, upcoming), CSV quote import, quote collections, compact/focus tasks, subtask auto-complete, Cue Dot logo
 - v1.8.0 (2026-01) - Configurable quote display modes, focus position, "Add another" button, goals view modes, smart ticker animation
 - v1.7.0 (2025-12) - Glass theme, YouTube music player, notification sounds, floating reminder widget
 - v1.6.0 (2025-12) - Author autocomplete, streamlined quote management
