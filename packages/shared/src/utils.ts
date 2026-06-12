@@ -434,7 +434,7 @@ export interface ReviewPromptState {
 
 const REVIEW_STREAK_THRESHOLD = 7;
 const REVIEW_POMODORO_THRESHOLD = 10;
-const REVIEW_MAX_SHOWS = 2;
+export const REVIEW_MAX_SHOWS = 2;
 const REVIEW_RESHOW_DAYS = 7;
 
 /**
@@ -462,15 +462,13 @@ export function shouldShowReviewPrompt(params: {
     return false;
   }
 
-  // The second ask waits at least a week after the first. A missing or malformed
-  // lastShownAt makes daysSince NaN; the negated comparison keeps the prompt hidden.
+  // The second ask waits at least a week after the first. daysBetween returns NaN
+  // for a missing/malformed lastShownAt; the negated comparison keeps it hidden.
   if (state.count >= 1) {
     if (!state.lastShownAt) {
       return false;
     }
-    const daysSince =
-      (new Date(today).getTime() - new Date(state.lastShownAt).getTime()) / 86_400_000;
-    if (!(daysSince >= REVIEW_RESHOW_DAYS)) {
+    if (!(daysBetween(state.lastShownAt, today) >= REVIEW_RESHOW_DAYS)) {
       return false;
     }
   }

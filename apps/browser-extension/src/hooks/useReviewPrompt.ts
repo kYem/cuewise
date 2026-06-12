@@ -3,6 +3,7 @@ import {
   type Goal,
   getTodayDateString,
   type PomodoroSession,
+  REVIEW_MAX_SHOWS,
   REVIEW_URL,
   type Settings,
   shouldShowReviewPrompt,
@@ -53,7 +54,8 @@ export function useReviewPrompt({
   const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
-    if (!ready || isOpen || !pomodoroIdle) {
+    // Bail before the streak/session compute once the prompt can never show again.
+    if (!ready || isOpen || !pomodoroIdle || dismissed || count >= REVIEW_MAX_SHOWS) {
       return;
     }
     const streakCurrent = calculateStreak(
@@ -88,8 +90,12 @@ export function useReviewPrompt({
   ]);
 
   const onReview = () => {
-    window.open(REVIEW_URL, '_blank', 'noopener,noreferrer');
-    updateSettings({ reviewPromptDismissed: true });
+    const opened = window.open(REVIEW_URL, '_blank', 'noopener,noreferrer');
+    // Only stop asking if the store tab actually opened; a blocked popup must
+    // not permanently kill the prompt.
+    if (opened) {
+      updateSettings({ reviewPromptDismissed: true });
+    }
     setIsOpen(false);
   };
 

@@ -164,7 +164,7 @@ describe('useReviewPrompt', () => {
 
   it('opens the store and stops asking on review', async () => {
     const user = userEvent.setup();
-    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+    const open = vi.spyOn(window, 'open').mockReturnValue({} as Window);
     const updateSpy = vi.fn();
     render(<Harness sessions={tenWorkSessions} updateSpy={updateSpy} />);
 
@@ -172,6 +172,18 @@ describe('useReviewPrompt', () => {
 
     expect(open).toHaveBeenCalledWith(REVIEW_URL, '_blank', 'noopener,noreferrer');
     expect(updateSpy).toHaveBeenCalledWith({ reviewPromptDismissed: true });
+    expect(isOpen()).toBe(false);
+  });
+
+  it('does not permanently dismiss when the review popup is blocked', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, 'open').mockReturnValue(null);
+    const updateSpy = vi.fn();
+    render(<Harness sessions={tenWorkSessions} updateSpy={updateSpy} />);
+
+    await user.click(screen.getByRole('button', { name: 'review' }));
+
+    expect(updateSpy).not.toHaveBeenCalledWith({ reviewPromptDismissed: true });
     expect(isOpen()).toBe(false);
   });
 
