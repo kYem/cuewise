@@ -58,8 +58,11 @@ export function useReviewPrompt({
     if (!ready || isOpen || !pomodoroIdle || dismissed || count >= REVIEW_MAX_SHOWS) {
       return;
     }
+    // Exclude future-dated completions (objectives carry a future target date)
+    // so they can't collapse calculateStreak's today-anchored current streak.
+    const today = getTodayDateString();
     const streakCurrent = calculateStreak(
-      goals.filter((g) => g.completed).map((g) => g.date)
+      goals.filter((g) => g.completed && g.date <= today).map((g) => g.date)
     ).current;
     const completedPomodoros = sessions.filter((s) => s.type === 'work' && !s.interrupted).length;
     const eligible = shouldShowReviewPrompt({
@@ -67,7 +70,7 @@ export function useReviewPrompt({
       completedPomodoros,
       hasSeenOnboarding,
       state: { dismissed, count, lastShownAt },
-      today: getTodayDateString(),
+      today,
     });
     if (eligible) {
       setIsOpen(true);
@@ -90,12 +93,10 @@ export function useReviewPrompt({
   ]);
 
   const onReview = () => {
-    const opened = window.open(REVIEW_URL, '_blank', 'noopener,noreferrer');
-    // Only stop asking if the store tab actually opened; a blocked popup must
-    // not permanently kill the prompt.
-    if (opened) {
-      updateSettings({ reviewPromptDismissed: true });
-    }
+    // Always dismiss: the click is user-activated so the tab opens, and with
+    // noopener window.open returns null regardless, so its result can't gate this.
+    window.open(REVIEW_URL, '_blank', 'noopener,noreferrer');
+    updateSettings({ reviewPromptDismissed: true });
     setIsOpen(false);
   };
 

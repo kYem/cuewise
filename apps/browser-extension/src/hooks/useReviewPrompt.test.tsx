@@ -122,6 +122,19 @@ describe('useReviewPrompt', () => {
     expect(isOpen()).toBe(true);
   });
 
+  it('ignores future-dated completions so they cannot collapse the streak', () => {
+    const goals = [
+      ...Array.from({ length: 7 }, (_, i) =>
+        goalFactory.build({ completed: true, date: daysAgo(i) })
+      ),
+      // A completed objective with a future target date (daysAgo(-1) === tomorrow)
+      goalFactory.build({ completed: true, date: daysAgo(-1) }),
+    ];
+    render(<Harness goals={goals} updateSpy={vi.fn()} />);
+
+    expect(isOpen()).toBe(true);
+  });
+
   it('does not count interrupted or break sessions toward the pomodoro signal', () => {
     const updateSpy = vi.fn();
     const sessions = [
@@ -164,7 +177,9 @@ describe('useReviewPrompt', () => {
 
   it('opens the store and stops asking on review', async () => {
     const user = userEvent.setup();
-    const open = vi.spyOn(window, 'open').mockReturnValue({} as Window);
+    // window.open with noopener returns null even on success, so behaviour must
+    // not depend on its return value.
+    const open = vi.spyOn(window, 'open').mockReturnValue(null);
     const updateSpy = vi.fn();
     render(<Harness sessions={tenWorkSessions} updateSpy={updateSpy} />);
 
@@ -172,18 +187,6 @@ describe('useReviewPrompt', () => {
 
     expect(open).toHaveBeenCalledWith(REVIEW_URL, '_blank', 'noopener,noreferrer');
     expect(updateSpy).toHaveBeenCalledWith({ reviewPromptDismissed: true });
-    expect(isOpen()).toBe(false);
-  });
-
-  it('does not permanently dismiss when the review popup is blocked', async () => {
-    const user = userEvent.setup();
-    vi.spyOn(window, 'open').mockReturnValue(null);
-    const updateSpy = vi.fn();
-    render(<Harness sessions={tenWorkSessions} updateSpy={updateSpy} />);
-
-    await user.click(screen.getByRole('button', { name: 'review' }));
-
-    expect(updateSpy).not.toHaveBeenCalledWith({ reviewPromptDismissed: true });
     expect(isOpen()).toBe(false);
   });
 
