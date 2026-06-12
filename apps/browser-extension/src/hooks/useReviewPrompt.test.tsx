@@ -24,12 +24,20 @@ const daysAgo = (n: number): string => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
+interface ReviewState {
+  dismissed: boolean;
+  count: number;
+  lastShownAt: string | null;
+}
+
 interface HarnessProps {
   sessions?: PomodoroSession[];
   goals?: Goal[];
   ready?: boolean;
   pomodoroIdle?: boolean;
   hasSeenOnboarding?: boolean;
+  // Seeds the modelled store; defaults to a never-shown prompt.
+  initialState?: ReviewState;
   updateSpy: (patch: Record<string, unknown>) => void;
 }
 
@@ -41,13 +49,10 @@ function Harness({
   ready = true,
   pomodoroIdle = true,
   hasSeenOnboarding = true,
+  initialState = { dismissed: false, count: 0, lastShownAt: null },
   updateSpy,
 }: HarnessProps) {
-  const [state, setState] = useState({
-    dismissed: false,
-    count: 0,
-    lastShownAt: null as string | null,
-  });
+  const [state, setState] = useState(initialState);
   const updateSettings = (patch: {
     reviewPromptDismissed?: boolean;
     reviewPromptCount?: number;
@@ -210,6 +215,33 @@ describe('useReviewPrompt', () => {
 
     // Only the count write from opening; "later" itself writes nothing and the
     // spaced-out gate keeps it from re-opening the same day.
+    expect(updateSpy).toHaveBeenCalledTimes(1);
+    expect(isOpen()).toBe(false);
+  });
+
+  it('records the second show as count + 1, then stops at the cap', async () => {
+    const user = userEvent.setup();
+    const updateSpy = vi.fn();
+    // Already shown once a week ago: the spacing gate is met, so an eligible
+    // milestone opens it a second (and final) time.
+    render(
+      <Harness
+        sessions={tenWorkSessions}
+        initialState={{ dismissed: false, count: 1, lastShownAt: daysAgo(8) }}
+        updateSpy={updateSpy}
+      />
+    );
+
+    expect(isOpen()).toBe(true);
+    // count + 1 (not a hard-coded 1) is what caps the prompt at two shows.
+    expect(updateSpy).toHaveBeenCalledWith({
+      reviewPromptCount: 2,
+      reviewPromptLastShownAt: getTodayDateString(),
+    });
+
+    // count now equals REVIEW_MAX_SHOWS, so closing must not re-open it.
+    await user.click(screen.getByRole('button', { name: 'later' }));
+
     expect(updateSpy).toHaveBeenCalledTimes(1);
     expect(isOpen()).toBe(false);
   });
