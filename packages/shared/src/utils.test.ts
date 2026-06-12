@@ -13,6 +13,7 @@ import {
   calculateGoalCompletionRate,
   calculateMonthlyTrends,
   calculatePomodoroHeatmap,
+  calculateStreak,
   calculateWeeklyTrends,
   compareVersions,
   duplicateGoal,
@@ -1108,6 +1109,33 @@ describe('reorderGoals', () => {
     const result = reorderGoals(goals, -1, 5);
 
     expect(result).toEqual(goals);
+  });
+});
+
+describe('calculateStreak', () => {
+  // Local yyyy-MM-dd offset from today, matching how the app stores goal dates.
+  const dayString = (offset: number): string => {
+    const d = new Date();
+    d.setDate(d.getDate() + offset);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+
+  it('returns zero for no dates', () => {
+    expect(calculateStreak([])).toEqual({ current: 0, longest: 0 });
+  });
+
+  it('counts consecutive days ending today, de-duplicating repeats', () => {
+    const dates = [dayString(0), dayString(0), dayString(-1), dayString(-2)];
+    expect(calculateStreak(dates)).toEqual({ current: 3, longest: 3 });
+  });
+
+  it('ignores future-dated entries so they cannot collapse the current streak', () => {
+    // Tomorrow would otherwise sort to index 0 and break the today-anchored run.
+    expect(calculateStreak([dayString(1), dayString(0), dayString(-1)]).current).toBe(2);
+  });
+
+  it('reports a current streak of zero when the run ended before today', () => {
+    expect(calculateStreak([dayString(-1), dayString(-2)]).current).toBe(0);
   });
 });
 

@@ -603,9 +603,12 @@ export function getRandomQuote(
 export function calculateStreak(dates: string[]): { current: number; longest: number } {
   if (dates.length === 0) return { current: 0, longest: 0 };
 
-  // Parse and normalize dates to start of day, remove duplicates
+  // Streak is anchored to today; drop future-dated entries (e.g. a completed
+  // objective with a future due date) so they can't collapse the current streak.
+  const today = startOfDay(new Date());
   const uniqueDates = [...new Set(dates)]
     .map((dateStr) => startOfDay(parseISO(dateStr)))
+    .filter((date) => date.getTime() <= today.getTime())
     .sort((a, b) => b.getTime() - a.getTime()); // Sort descending (newest first)
 
   let current = 0;

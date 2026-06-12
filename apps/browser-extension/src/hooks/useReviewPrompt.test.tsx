@@ -1,21 +1,23 @@
-import { type Goal, getTodayDateString, type PomodoroSession, REVIEW_URL } from '@cuewise/shared';
-import { goalFactory } from '@cuewise/test-utils/factories';
+import {
+  type Goal,
+  getTodayDateString,
+  type PomodoroSession,
+  REVIEW_URL,
+  type ReviewPromptState,
+} from '@cuewise/shared';
+import {
+  breakPomodoroFactory,
+  goalFactory,
+  interruptedPomodoroFactory,
+  pomodoroFactory,
+} from '@cuewise/test-utils/factories';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useReviewPrompt } from './useReviewPrompt';
 
-const workSession = (overrides: Partial<PomodoroSession> = {}): PomodoroSession => ({
-  id: 'session',
-  startedAt: '2026-01-01T09:00:00.000Z',
-  interrupted: false,
-  duration: 25,
-  type: 'work',
-  ...overrides,
-});
-
-const tenWorkSessions = Array.from({ length: 10 }, (_, i) => workSession({ id: `w${i}` }));
+const tenWorkSessions = pomodoroFactory.buildList(10);
 
 // Local yyyy-MM-dd, matching getTodayDateString so calculateStreak aligns by day.
 const daysAgo = (n: number): string => {
@@ -24,12 +26,6 @@ const daysAgo = (n: number): string => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
-interface ReviewState {
-  dismissed: boolean;
-  count: number;
-  lastShownAt: string | null;
-}
-
 interface HarnessProps {
   sessions?: PomodoroSession[];
   goals?: Goal[];
@@ -37,7 +33,7 @@ interface HarnessProps {
   pomodoroIdle?: boolean;
   hasSeenOnboarding?: boolean;
   // Seeds the modelled store; defaults to a never-shown prompt.
-  initialState?: ReviewState;
+  initialState?: ReviewPromptState;
   updateSpy: (patch: Record<string, unknown>) => void;
 }
 
@@ -143,9 +139,9 @@ describe('useReviewPrompt', () => {
   it('does not count interrupted or break sessions toward the pomodoro signal', () => {
     const updateSpy = vi.fn();
     const sessions = [
-      ...Array.from({ length: 9 }, (_, i) => workSession({ id: `w${i}` })),
-      workSession({ id: 'int', interrupted: true }),
-      workSession({ id: 'brk', type: 'break' }),
+      ...pomodoroFactory.buildList(9),
+      interruptedPomodoroFactory.build(),
+      breakPomodoroFactory.build(),
     ];
     render(<Harness sessions={sessions} updateSpy={updateSpy} />);
 

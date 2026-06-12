@@ -58,11 +58,9 @@ export function useReviewPrompt({
     if (!ready || isOpen || !pomodoroIdle || dismissed || count >= REVIEW_MAX_SHOWS) {
       return;
     }
-    // Exclude future-dated completions (objectives carry a future target date)
-    // so they can't collapse calculateStreak's today-anchored current streak.
     const today = getTodayDateString();
     const streakCurrent = calculateStreak(
-      goals.filter((g) => g.completed && g.date <= today).map((g) => g.date)
+      goals.filter((g) => g.completed).map((g) => g.date)
     ).current;
     const completedPomodoros = sessions.filter((s) => s.type === 'work' && !s.interrupted).length;
     const eligible = shouldShowReviewPrompt({
@@ -76,7 +74,7 @@ export function useReviewPrompt({
       setIsOpen(true);
       updateSettings({
         reviewPromptCount: count + 1,
-        reviewPromptLastShownAt: getTodayDateString(),
+        reviewPromptLastShownAt: today,
       });
     }
   }, [
