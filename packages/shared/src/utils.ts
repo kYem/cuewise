@@ -426,6 +426,56 @@ export function getRecentIncompleteTasks(goals: Goal[], daysBack = 14): Goal[] {
   return goals.filter((g) => isTask(g) && !g.completed && g.date !== today && g.date >= cutoff);
 }
 
+export interface ReviewPromptState {
+  dismissed: boolean;
+  count: number;
+  lastShownAt: string | null;
+}
+
+const REVIEW_STREAK_THRESHOLD = 7;
+const REVIEW_POMODORO_THRESHOLD = 10;
+export const REVIEW_MAX_SHOWS = 2;
+const REVIEW_RESHOW_DAYS = 7;
+
+/**
+ * Whether to surface the store-review prompt: a delight milestone reached (7-day
+ * streak or 10 pomodoros), past onboarding, not dismissed, shown < 2 times, and
+ * the second ask spaced a week after the first. Pure so the trigger is
+ * unit-testable. `today` and `state.lastShownAt` are `yyyy-MM-dd` day strings.
+ */
+export function shouldShowReviewPrompt(params: {
+  streakCurrent: number;
+  completedPomodoros: number;
+  hasSeenOnboarding: boolean;
+  state: ReviewPromptState;
+  today: string;
+}): boolean {
+  const { streakCurrent, completedPomodoros, hasSeenOnboarding, state, today } = params;
+
+  if (state.dismissed || !hasSeenOnboarding || state.count >= REVIEW_MAX_SHOWS) {
+    return false;
+  }
+
+  const reachedMilestone =
+    streakCurrent >= REVIEW_STREAK_THRESHOLD || completedPomodoros >= REVIEW_POMODORO_THRESHOLD;
+  if (!reachedMilestone) {
+    return false;
+  }
+
+  // The second ask waits at least a week after the first. daysBetween returns NaN
+  // for a missing/malformed lastShownAt; the negated comparison keeps it hidden.
+  if (state.count >= 1) {
+    if (!state.lastShownAt) {
+      return false;
+    }
+    if (!(daysBetween(state.lastShownAt, today) >= REVIEW_RESHOW_DAYS)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 /**
  * Get a short human-readable label for a due date.
  * Returns "Today", "Tomorrow", day name for this week, or "Mon, Jan 15" for further dates.
@@ -553,9 +603,12 @@ export function getRandomQuote(
 export function calculateStreak(dates: string[]): { current: number; longest: number } {
   if (dates.length === 0) return { current: 0, longest: 0 };
 
-  // Parse and normalize dates to start of day, remove duplicates
+  // Streak is anchored to today; drop future-dated entries (e.g. a completed
+  // objective with a future due date) so they can't collapse the current streak.
+  const today = startOfDay(new Date());
   const uniqueDates = [...new Set(dates)]
     .map((dateStr) => startOfDay(parseISO(dateStr)))
+    .filter((date) => date.getTime() <= today.getTime())
     .sort((a, b) => b.getTime() - a.getTime()); // Sort descending (newest first)
 
   let current = 0;

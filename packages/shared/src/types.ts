@@ -224,6 +224,10 @@ export interface Settings {
   quoteFilterActiveCollectionIds: string[]; // Active collection IDs for filter (default [])
   // Celebrations
   celebrationsEnabled: boolean; // Play a Lottie burst on pomodoro/goal completion (default true)
+  // Store review prompt
+  reviewPromptDismissed: boolean; // Never surface the review prompt again (default false)
+  reviewPromptCount: number; // Times the review prompt has been shown (default 0)
+  reviewPromptLastShownAt: string | null; // yyyy-MM-dd day-string of the last show; drives the 7-day gap (default null)
 }
 
 // Storage keys

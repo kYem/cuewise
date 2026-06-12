@@ -1,0 +1,244 @@
+import {
+  type Goal,
+  getTodayDateString,
+  type PomodoroSession,
+  REVIEW_URL,
+  type ReviewPromptState,
+} from '@cuewise/shared';
+import {
+  breakPomodoroFactory,
+  goalFactory,
+  interruptedPomodoroFactory,
+  pomodoroFactory,
+} from '@cuewise/test-utils/factories';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { useState } from 'react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { useReviewPrompt } from './useReviewPrompt';
+
+const tenWorkSessions = pomodoroFactory.buildList(10);
+
+// Local yyyy-MM-dd, matching getTodayDateString so calculateStreak aligns by day.
+const daysAgo = (n: number): string => {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+interface HarnessProps {
+  sessions?: PomodoroSession[];
+  goals?: Goal[];
+  ready?: boolean;
+  pomodoroIdle?: boolean;
+  hasSeenOnboarding?: boolean;
+  // Seeds the modelled store; defaults to a never-shown prompt.
+  initialState?: ReviewPromptState;
+  updateSpy: (patch: Record<string, unknown>) => void;
+}
+
+// Models the settings store: updateSettings updates local state, which feeds
+// back into the hook params — exactly how the real store re-renders NewTabPage.
+function Harness({
+  sessions = [],
+  goals = [],
+  ready = true,
+  pomodoroIdle = true,
+  hasSeenOnboarding = true,
+  initialState = { dismissed: false, count: 0, lastShownAt: null },
+  updateSpy,
+}: HarnessProps) {
+  const [state, setState] = useState(initialState);
+  const updateSettings = (patch: {
+    reviewPromptDismissed?: boolean;
+    reviewPromptCount?: number;
+    reviewPromptLastShownAt?: string | null;
+  }) => {
+    updateSpy(patch);
+    // Mirror the real store's plain spread-merge: a key present in the patch
+    // overwrites (including an explicit null), absent keys keep their value.
+    setState((cur) => ({
+      dismissed:
+        patch.reviewPromptDismissed === undefined ? cur.dismissed : patch.reviewPromptDismissed,
+      count: patch.reviewPromptCount === undefined ? cur.count : patch.reviewPromptCount,
+      lastShownAt:
+        patch.reviewPromptLastShownAt === undefined
+          ? cur.lastShownAt
+          : patch.reviewPromptLastShownAt,
+    }));
+  };
+  const rp = useReviewPrompt({
+    ready,
+    pomodoroIdle,
+    hasSeenOnboarding,
+    goals,
+    sessions,
+    dismissed: state.dismissed,
+    count: state.count,
+    lastShownAt: state.lastShownAt,
+    updateSettings,
+  });
+
+  return (
+    <div>
+      <span data-testid="open">{String(rp.isOpen)}</span>
+      <button type="button" onClick={rp.onReview}>
+        review
+      </button>
+      <button type="button" onClick={rp.onLater}>
+        later
+      </button>
+      <button type="button" onClick={rp.onDismiss}>
+        dismiss
+      </button>
+    </div>
+  );
+}
+
+const isOpen = () => screen.getByTestId('open').textContent === 'true';
+
+describe('useReviewPrompt', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('opens and records the show when 10 pomodoros are completed', () => {
+    const updateSpy = vi.fn();
+    render(<Harness sessions={tenWorkSessions} updateSpy={updateSpy} />);
+
+    expect(isOpen()).toBe(true);
+    expect(updateSpy).toHaveBeenCalledTimes(1);
+    expect(updateSpy).toHaveBeenCalledWith({
+      reviewPromptCount: 1,
+      reviewPromptLastShownAt: getTodayDateString(),
+    });
+  });
+
+  it('opens on a 7-day completed-goal streak', () => {
+    const goals = Array.from({ length: 7 }, (_, i) =>
+      goalFactory.build({ completed: true, date: daysAgo(i) })
+    );
+    render(<Harness goals={goals} updateSpy={vi.fn()} />);
+
+    expect(isOpen()).toBe(true);
+  });
+
+  it('ignores future-dated completions so they cannot collapse the streak', () => {
+    const goals = [
+      ...Array.from({ length: 7 }, (_, i) =>
+        goalFactory.build({ completed: true, date: daysAgo(i) })
+      ),
+      // A completed objective with a future target date (daysAgo(-1) === tomorrow)
+      goalFactory.build({ completed: true, date: daysAgo(-1) }),
+    ];
+    render(<Harness goals={goals} updateSpy={vi.fn()} />);
+
+    expect(isOpen()).toBe(true);
+  });
+
+  it('does not count interrupted or break sessions toward the pomodoro signal', () => {
+    const updateSpy = vi.fn();
+    const sessions = [
+      ...pomodoroFactory.buildList(9),
+      interruptedPomodoroFactory.build(),
+      breakPomodoroFactory.build(),
+    ];
+    render(<Harness sessions={sessions} updateSpy={updateSpy} />);
+
+    expect(isOpen()).toBe(false);
+    expect(updateSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not interrupt a running pomodoro', () => {
+    const updateSpy = vi.fn();
+    render(<Harness sessions={tenWorkSessions} pomodoroIdle={false} updateSpy={updateSpy} />);
+
+    expect(isOpen()).toBe(false);
+    expect(updateSpy).not.toHaveBeenCalled();
+  });
+
+  it('opens once the pomodoro returns to idle', () => {
+    const updateSpy = vi.fn();
+    const { rerender } = render(
+      <Harness sessions={tenWorkSessions} pomodoroIdle={false} updateSpy={updateSpy} />
+    );
+    expect(isOpen()).toBe(false);
+
+    rerender(<Harness sessions={tenWorkSessions} pomodoroIdle={true} updateSpy={updateSpy} />);
+
+    expect(isOpen()).toBe(true);
+  });
+
+  it('does not run before settings are ready', () => {
+    const updateSpy = vi.fn();
+    render(<Harness sessions={tenWorkSessions} ready={false} updateSpy={updateSpy} />);
+
+    expect(updateSpy).not.toHaveBeenCalled();
+  });
+
+  it('opens the store and stops asking on review', async () => {
+    const user = userEvent.setup();
+    // window.open with noopener returns null even on success, so behaviour must
+    // not depend on its return value.
+    const open = vi.spyOn(window, 'open').mockReturnValue(null);
+    const updateSpy = vi.fn();
+    render(<Harness sessions={tenWorkSessions} updateSpy={updateSpy} />);
+
+    await user.click(screen.getByRole('button', { name: 'review' }));
+
+    expect(open).toHaveBeenCalledWith(REVIEW_URL, '_blank', 'noopener,noreferrer');
+    expect(updateSpy).toHaveBeenCalledWith({ reviewPromptDismissed: true });
+    expect(isOpen()).toBe(false);
+  });
+
+  it('stops asking permanently on dismiss and does not re-open', async () => {
+    const user = userEvent.setup();
+    const updateSpy = vi.fn();
+    render(<Harness sessions={tenWorkSessions} updateSpy={updateSpy} />);
+
+    await user.click(screen.getByRole('button', { name: 'dismiss' }));
+
+    expect(updateSpy).toHaveBeenCalledWith({ reviewPromptDismissed: true });
+    expect(isOpen()).toBe(false);
+  });
+
+  it('does not re-open after "later" (the show was already counted)', async () => {
+    const user = userEvent.setup();
+    const updateSpy = vi.fn();
+    render(<Harness sessions={tenWorkSessions} updateSpy={updateSpy} />);
+
+    await user.click(screen.getByRole('button', { name: 'later' }));
+
+    // Only the count write from opening; "later" itself writes nothing and the
+    // spaced-out gate keeps it from re-opening the same day.
+    expect(updateSpy).toHaveBeenCalledTimes(1);
+    expect(isOpen()).toBe(false);
+  });
+
+  it('records the second show as count + 1, then stops at the cap', async () => {
+    const user = userEvent.setup();
+    const updateSpy = vi.fn();
+    // Already shown once a week ago: the spacing gate is met, so an eligible
+    // milestone opens it a second (and final) time.
+    render(
+      <Harness
+        sessions={tenWorkSessions}
+        initialState={{ dismissed: false, count: 1, lastShownAt: daysAgo(8) }}
+        updateSpy={updateSpy}
+      />
+    );
+
+    expect(isOpen()).toBe(true);
+    // count + 1 (not a hard-coded 1) is what caps the prompt at two shows.
+    expect(updateSpy).toHaveBeenCalledWith({
+      reviewPromptCount: 2,
+      reviewPromptLastShownAt: getTodayDateString(),
+    });
+
+    // count now equals REVIEW_MAX_SHOWS, so closing must not re-open it.
+    await user.click(screen.getByRole('button', { name: 'later' }));
+
+    expect(updateSpy).toHaveBeenCalledTimes(1);
+    expect(isOpen()).toBe(false);
+  });
+});

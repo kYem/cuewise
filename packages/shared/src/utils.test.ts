@@ -13,6 +13,7 @@ import {
   calculateGoalCompletionRate,
   calculateMonthlyTrends,
   calculatePomodoroHeatmap,
+  calculateStreak,
   calculateWeeklyTrends,
   compareVersions,
   duplicateGoal,
@@ -31,6 +32,7 @@ import {
   parseImportData,
   removeSubtaskFromGoal,
   reorderGoals,
+  shouldShowReviewPrompt,
   toggleSubtaskInGoal,
 } from './utils';
 
@@ -1110,6 +1112,33 @@ describe('reorderGoals', () => {
   });
 });
 
+describe('calculateStreak', () => {
+  // Local yyyy-MM-dd offset from today, matching how the app stores goal dates.
+  const dayString = (offset: number): string => {
+    const d = new Date();
+    d.setDate(d.getDate() + offset);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+
+  it('returns zero for no dates', () => {
+    expect(calculateStreak([])).toEqual({ current: 0, longest: 0 });
+  });
+
+  it('counts consecutive days ending today, de-duplicating repeats', () => {
+    const dates = [dayString(0), dayString(0), dayString(-1), dayString(-2)];
+    expect(calculateStreak(dates)).toEqual({ current: 3, longest: 3 });
+  });
+
+  it('ignores future-dated entries so they cannot collapse the current streak', () => {
+    // Tomorrow would otherwise sort to index 0 and break the today-anchored run.
+    expect(calculateStreak([dayString(1), dayString(0), dayString(-1)]).current).toBe(2);
+  });
+
+  it('reports a current streak of zero when the run ended before today', () => {
+    expect(calculateStreak([dayString(-1), dayString(-2)]).current).toBe(0);
+  });
+});
+
 describe('Due Date Utilities', () => {
   describe('getUpcomingTasks', () => {
     it('should return tasks with a future dueDate', () => {
@@ -1176,6 +1205,100 @@ describe('Due Date Utilities', () => {
       const goals = [createTestTask({ id: '1', date: daysAgo(2), type: 'objective' })];
 
       expect(getRecentIncompleteTasks(goals)).toEqual([]);
+    });
+  });
+
+  describe('shouldShowReviewPrompt', () => {
+    const base = {
+      streakCurrent: 0,
+      completedPomodoros: 0,
+      hasSeenOnboarding: true,
+      state: { dismissed: false, count: 0, lastShownAt: null as string | null },
+      today: '2026-06-11',
+    };
+
+    it('shows once a delight milestone is reached (7-day streak)', () => {
+      expect(shouldShowReviewPrompt({ ...base, streakCurrent: 7 })).toBe(true);
+    });
+
+    it('shows once 10 pomodoros are completed', () => {
+      expect(shouldShowReviewPrompt({ ...base, completedPomodoros: 10 })).toBe(true);
+    });
+
+    it('does not show below either threshold', () => {
+      expect(shouldShowReviewPrompt({ ...base, streakCurrent: 6, completedPomodoros: 9 })).toBe(
+        false
+      );
+    });
+
+    it('does not show before onboarding is complete', () => {
+      expect(shouldShowReviewPrompt({ ...base, streakCurrent: 7, hasSeenOnboarding: false })).toBe(
+        false
+      );
+    });
+
+    it('does not show once permanently dismissed', () => {
+      expect(
+        shouldShowReviewPrompt({
+          ...base,
+          streakCurrent: 7,
+          state: { ...base.state, dismissed: true },
+        })
+      ).toBe(false);
+    });
+
+    it('does not show after it has been shown twice', () => {
+      expect(
+        shouldShowReviewPrompt({
+          ...base,
+          streakCurrent: 7,
+          state: { dismissed: false, count: 2, lastShownAt: '2026-06-01' },
+        })
+      ).toBe(false);
+    });
+
+    it('spaces the second ask at least 7 days after the first', () => {
+      const seen = { dismissed: false, count: 1 };
+      // 6 days later — too soon
+      expect(
+        shouldShowReviewPrompt({
+          ...base,
+          streakCurrent: 7,
+          state: { ...seen, lastShownAt: '2026-06-05' },
+        })
+      ).toBe(false);
+      // 7 days later — eligible again
+      expect(
+        shouldShowReviewPrompt({
+          ...base,
+          streakCurrent: 7,
+          state: { ...seen, lastShownAt: '2026-06-04' },
+        })
+      ).toBe(true);
+    });
+
+    it('shows on the first eligible milestone (count 0, no lastShownAt)', () => {
+      expect(shouldShowReviewPrompt({ ...base, completedPomodoros: 10 })).toBe(true);
+    });
+
+    it('shows when both signals are met', () => {
+      expect(shouldShowReviewPrompt({ ...base, streakCurrent: 7, completedPomodoros: 10 })).toBe(
+        true
+      );
+    });
+
+    it('stays hidden when a prior show has no/invalid lastShownAt', () => {
+      const seen = { dismissed: false, count: 1 };
+      expect(
+        shouldShowReviewPrompt({ ...base, streakCurrent: 7, state: { ...seen, lastShownAt: null } })
+      ).toBe(false);
+      expect(
+        shouldShowReviewPrompt({
+          ...base,
+          streakCurrent: 7,
+          state: { ...seen, lastShownAt: 'not-a-date' },
+        })
+      ).toBe(false);
     });
   });
 

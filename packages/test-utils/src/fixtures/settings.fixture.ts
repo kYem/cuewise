@@ -45,4 +45,7 @@ export const defaultSettings: Settings = {
   quoteFilterShowFavoritesOnly: false,
   quoteFilterActiveCollectionIds: [],
   celebrationsEnabled: true,
+  reviewPromptDismissed: false,
+  reviewPromptCount: 0,
+  reviewPromptLastShownAt: null,
 };

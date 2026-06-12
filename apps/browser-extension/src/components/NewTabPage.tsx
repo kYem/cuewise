@@ -3,6 +3,8 @@ import { cn } from '@cuewise/ui';
 import { BarChart3, BookMarked, Flag, PanelRight, Settings, Timer } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useReviewPrompt } from '../hooks/useReviewPrompt';
+import { useGoalStore } from '../stores/goal-store';
 import { usePomodoroStorageSync, usePomodoroStore } from '../stores/pomodoro-store';
 import { useQuoteStore } from '../stores/quote-store';
 import { useSettingsStore } from '../stores/settings-store';
@@ -13,6 +15,7 @@ import { GoalsSection } from './GoalsSection';
 import { GoalButton } from './goals';
 import { QuoteDisplay } from './QuoteDisplay';
 import { ReminderWidget } from './ReminderWidget';
+import { ReviewPromptModal } from './ReviewPromptModal';
 import { SettingsModal } from './SettingsModal';
 import { WelcomeModal } from './WelcomeModal';
 
@@ -29,15 +32,34 @@ export const NewTabPage: React.FC = () => {
   const quoteDisplayMode = useSettingsStore((state) => state.settings.quoteDisplayMode);
   const focusPosition = useSettingsStore((state) => state.settings.focusPosition);
   const hasSeenOnboarding = useSettingsStore((state) => state.settings.hasSeenOnboarding);
+  const reviewPromptDismissed = useSettingsStore((state) => state.settings.reviewPromptDismissed);
+  const reviewPromptCount = useSettingsStore((state) => state.settings.reviewPromptCount);
+  const reviewPromptLastShownAt = useSettingsStore(
+    (state) => state.settings.reviewPromptLastShownAt
+  );
   const updateSettings = useSettingsStore((state) => state.updateSettings);
   const initializePomodoro = usePomodoroStore((state) => state.initialize);
   const pomodoroStatus = usePomodoroStore((state) => state.status);
+  const pomodoroSessions = usePomodoroStore((state) => state.sessions);
+  const goals = useGoalStore((state) => state.goals);
 
   // Enable cross-tab synchronization for Pomodoro timer
   usePomodoroStorageSync();
 
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isWelcomeOpen, setIsWelcomeOpen] = useState(false);
+
+  const reviewPrompt = useReviewPrompt({
+    ready: !settingsLoading,
+    pomodoroIdle: pomodoroStatus === 'idle',
+    hasSeenOnboarding,
+    goals,
+    sessions: pomodoroSessions,
+    dismissed: reviewPromptDismissed,
+    count: reviewPromptCount,
+    lastShownAt: reviewPromptLastShownAt,
+    updateSettings,
+  });
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [lastManualRefresh, setLastManualRefresh] = useState(Date.now());
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -462,6 +484,14 @@ export const NewTabPage: React.FC = () => {
 
       {/* Welcome Modal - First-time users */}
       <WelcomeModal isOpen={isWelcomeOpen} onClose={handleCloseWelcome} />
+
+      {/* Store review prompt - shown at a delight milestone */}
+      <ReviewPromptModal
+        isOpen={reviewPrompt.isOpen}
+        onReview={reviewPrompt.onReview}
+        onLater={reviewPrompt.onLater}
+        onDismiss={reviewPrompt.onDismiss}
+      />
     </div>
   );
 };

@@ -81,7 +81,15 @@ export const DEFAULT_SETTINGS: Settings = {
   quoteFilterShowCustomQuotes: true,
   quoteFilterShowFavoritesOnly: false,
   quoteFilterActiveCollectionIds: [],
+  // Store review prompt
+  reviewPromptDismissed: false,
+  reviewPromptCount: 0,
+  reviewPromptLastShownAt: null,
 };
+
+/** Chrome Web Store reviews tab — where the in-app prompt sends users. */
+export const REVIEW_URL =
+  'https://chromewebstore.google.com/detail/cuewise/abjkbnhoepcnmbabflkedbapbldnpkbf/reviews';
 
 // Category colors (for UI)
 export const CATEGORY_COLORS: Record<QuoteCategory, string> = {
