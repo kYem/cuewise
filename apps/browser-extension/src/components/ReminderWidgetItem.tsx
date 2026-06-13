@@ -1,6 +1,16 @@
-import type { Reminder } from '@cuewise/shared';
+import { formatReminderCadence, type Reminder } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
-import { Bell, CheckCircle2, Circle, Clock, Pencil, Repeat, Trash2 } from 'lucide-react';
+import {
+  Bell,
+  CheckCircle2,
+  Circle,
+  Clock,
+  Pause,
+  Pencil,
+  Play,
+  Repeat,
+  Trash2,
+} from 'lucide-react';
 import type React from 'react';
 import { useEffect, useState } from 'react';
 import { formatCountdown, formatDueDate } from '../utils/reminder-date-utils';
@@ -11,6 +21,7 @@ interface ReminderWidgetItemProps {
   onDelete: (id: string) => void;
   onEdit: (id: string) => void;
   onSnooze?: (id: string, minutes: number) => void;
+  onPauseToggle?: (id: string, paused: boolean) => void;
 }
 
 /**
@@ -38,13 +49,18 @@ export const ReminderWidgetItem: React.FC<ReminderWidgetItemProps> = ({
   onDelete,
   onEdit,
   onSnooze,
+  onPauseToggle,
 }) => {
   const [countdown, setCountdown] = useState('');
   const { text, isOverdue, isSoon } = formatDueDate(reminder.dueDate);
+  const isPaused = reminder.paused === true;
+  // A paused reminder's dueDate is frozen, so suppress all "soon"/"overdue" affordances.
+  const showSoon = isSoon && !isPaused;
+  const showOverdue = isOverdue && !isPaused;
 
   // Update countdown every second for reminders that are approaching
   useEffect(() => {
-    if (!reminder.completed && isSoon) {
+    if (!reminder.completed && showSoon) {
       // Set initial countdown value immediately
       setCountdown(formatCountdown(reminder.dueDate));
 
@@ -54,7 +70,7 @@ export const ReminderWidgetItem: React.FC<ReminderWidgetItemProps> = ({
 
       return () => clearInterval(timer);
     }
-  }, [reminder.dueDate, reminder.completed, isSoon]);
+  }, [reminder.dueDate, reminder.completed, showSoon]);
 
   const handleSnooze = (minutes: number) => {
     if (onSnooze) {
@@ -66,7 +82,7 @@ export const ReminderWidgetItem: React.FC<ReminderWidgetItemProps> = ({
     <div
       className={cn(
         'rounded-lg border-2 p-3 transition-all',
-        getContainerClasses(reminder.completed, isOverdue, isSoon)
+        getContainerClasses(reminder.completed, showOverdue, showSoon)
       )}
     >
       <div className="flex items-start gap-2">
@@ -75,7 +91,13 @@ export const ReminderWidgetItem: React.FC<ReminderWidgetItemProps> = ({
           type="button"
           onClick={() => onToggle(reminder.id)}
           className="flex-shrink-0 mt-0.5 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 rounded-full"
-          aria-label={reminder.completed ? 'Mark as incomplete' : 'Mark as complete'}
+          aria-label={
+            reminder.completed
+              ? 'Mark as incomplete'
+              : reminder.recurring
+                ? 'Mark done and advance to next occurrence'
+                : 'Mark as complete'
+          }
         >
           {reminder.completed ? (
             <CheckCircle2 className="w-5 h-5 text-primary-600" />
@@ -83,7 +105,7 @@ export const ReminderWidgetItem: React.FC<ReminderWidgetItemProps> = ({
             <Circle
               className={cn(
                 'w-5 h-5 transition-colors',
-                isOverdue ? 'text-red-400' : isSoon ? 'text-orange-400' : 'text-tertiary'
+                showOverdue ? 'text-red-400' : showSoon ? 'text-orange-400' : 'text-tertiary'
               )}
             />
           )}
@@ -108,9 +130,9 @@ export const ReminderWidgetItem: React.FC<ReminderWidgetItemProps> = ({
                 'w-3 h-3',
                 reminder.completed
                   ? 'text-tertiary'
-                  : isOverdue
+                  : showOverdue
                     ? 'text-red-500'
-                    : isSoon
+                    : showSoon
                       ? 'text-orange-500'
                       : 'text-secondary'
               )}
@@ -120,28 +142,47 @@ export const ReminderWidgetItem: React.FC<ReminderWidgetItemProps> = ({
                 'text-xs',
                 reminder.completed
                   ? 'text-tertiary'
-                  : isOverdue
+                  : showOverdue
                     ? 'text-red-600 font-medium'
-                    : isSoon
+                    : showSoon
                       ? 'text-orange-600 font-semibold'
                       : 'text-secondary'
               )}
             >
-              {isSoon && !reminder.completed ? countdown : text}
+              {showSoon && !reminder.completed ? countdown : text}
             </span>
 
             {/* Recurring Indicator */}
-            {reminder.recurring?.enabled && (
+            {reminder.recurring && (
               <div className="flex items-center gap-0.5 ml-1">
-                <Repeat className="w-3 h-3 text-primary-500" />
-                <span className="text-xs text-primary-600 capitalize">
-                  {reminder.recurring.frequency}
+                <Repeat
+                  className={cn('w-3 h-3', isPaused ? 'text-tertiary' : 'text-primary-500')}
+                />
+                <span
+                  className={cn(
+                    'text-xs first-letter:uppercase',
+                    isPaused ? 'text-tertiary' : 'text-primary-600'
+                  )}
+                >
+                  {formatReminderCadence(reminder.recurring)}
+                  {isPaused ? ' (paused)' : ''}
                 </span>
+                {onPauseToggle && (
+                  <button
+                    type="button"
+                    onClick={() => onPauseToggle(reminder.id, !isPaused)}
+                    className="ml-0.5 p-0.5 text-secondary hover:text-primary-500 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 rounded"
+                    aria-label={isPaused ? 'Resume reminder' : 'Pause reminder'}
+                    title={isPaused ? 'Resume' : 'Pause'}
+                  >
+                    {isPaused ? <Play className="w-3 h-3" /> : <Pause className="w-3 h-3" />}
+                  </button>
+                )}
               </div>
             )}
 
             {/* Approaching Indicator */}
-            {isSoon && !reminder.completed && (
+            {showSoon && !reminder.completed && (
               <Bell className="w-3 h-3 text-orange-500 animate-pulse" />
             )}
           </div>
@@ -168,8 +209,8 @@ export const ReminderWidgetItem: React.FC<ReminderWidgetItemProps> = ({
         </div>
       </div>
 
-      {/* Snooze Buttons (show when approaching) */}
-      {isSoon && !reminder.completed && onSnooze && (
+      {/* Snooze Buttons (show when approaching, but not on paused reminders) */}
+      {isSoon && !reminder.completed && !isPaused && onSnooze && (
         <div className="flex items-center gap-1 mt-2 pt-2 border-t border-border/50">
           <span className="text-xs text-secondary mr-1">Snooze:</span>
           <button

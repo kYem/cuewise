@@ -263,6 +263,15 @@ export const REMINDER_CATEGORIES: Record<ReminderCategory, string> = {
 export const REMINDER_TEMPLATES: ReminderTemplate[] = [
   // Health & Wellness
   {
+    id: 'move',
+    name: 'Move',
+    text: 'Time to move — stretch or take a short walk 🚶',
+    defaultTime: '09:30',
+    frequency: 'interval',
+    category: 'health',
+    intervalMinutes: 30,
+  },
+  {
     id: 'water',
     name: 'Drink Water',
     text: 'Time to drink water',
@@ -345,3 +354,12 @@ export const REMINDER_TEMPLATES: ReminderTemplate[] = [
     category: 'personal',
   },
 ];
+
+// Movement / interval reminder cadence (minutes)
+export const REMINDER_INTERVAL_MIN = 1;
+export const REMINDER_INTERVAL_MAX = 480; // 8 hours
+export const DEFAULT_REMINDER_INTERVAL_MINUTES = 30;
+export const REMINDER_INTERVAL_PRESETS = [30, 45, 60, 90] as const;
+
+// Minutes a reminder notification's "Snooze" button defers the next alarm.
+export const REMINDER_SNOOZE_MINUTES = 5;

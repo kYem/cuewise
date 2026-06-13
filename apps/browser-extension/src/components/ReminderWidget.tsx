@@ -25,6 +25,7 @@ export const ReminderWidget: React.FC = () => {
     toggleReminder,
     deleteReminder,
     snoozeReminder,
+    setReminderPaused,
     initialize,
     isLoading,
     error,
@@ -211,6 +212,7 @@ export const ReminderWidget: React.FC = () => {
                       onDelete={deleteReminder}
                       onEdit={(id) => setEditingReminderId(id)}
                       onSnooze={snoozeReminder}
+                      onPauseToggle={setReminderPaused}
                     />
                   ))}
                 </div>
@@ -276,6 +278,7 @@ export const ReminderWidget: React.FC = () => {
                       setEditingReminderId(id);
                     }}
                     onSnooze={snoozeReminder}
+                    onPauseToggle={setReminderPaused}
                   />
                 ))}
               </div>
@@ -300,6 +303,7 @@ export const ReminderWidget: React.FC = () => {
                       setEditingReminderId(id);
                     }}
                     onSnooze={snoozeReminder}
+                    onPauseToggle={setReminderPaused}
                   />
                 ))}
               </div>

@@ -54,6 +54,7 @@ const FREQUENCY_LABELS: Record<ReminderFrequency, string> = {
   daily: 'Daily',
   weekly: 'Weekly',
   monthly: 'Monthly',
+  interval: 'Every N min',
 };
 
 interface ReminderTemplateGridProps {
@@ -112,8 +113,15 @@ export const ReminderTemplateGrid: React.FC<ReminderTemplateGridProps> = ({ onSe
               <div className="flex-1 min-w-0">
                 <div className="font-medium text-primary text-sm truncate">{template.name}</div>
                 <div className="text-xs text-secondary mt-0.5">
-                  {FREQUENCY_LABELS[template.frequency]} at{' '}
-                  {formatTemplateTime(template.defaultTime)}
+                  {/* Interval templates fire now+interval, so they have no clock time. */}
+                  {template.frequency === 'interval' ? (
+                    <>Every {template.intervalMinutes} min</>
+                  ) : (
+                    <>
+                      {FREQUENCY_LABELS[template.frequency]} at{' '}
+                      {formatTemplateTime(template.defaultTime)}
+                    </>
+                  )}
                 </div>
               </div>
             </button>

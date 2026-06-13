@@ -16,6 +16,12 @@ import {
   subMonths,
   subWeeks,
 } from 'date-fns';
+import {
+  DEFAULT_REMINDER_INTERVAL_MINUTES,
+  REMINDER_INTERVAL_MAX,
+  REMINDER_INTERVAL_MIN,
+  REMINDER_SNOOZE_MINUTES,
+} from './constants';
 import type {
   AdvancedAnalytics,
   DailyDataPoint,
@@ -33,6 +39,7 @@ import type {
   QuoteCategory,
   Reminder,
   ReminderCategory,
+  ReminderFrequency,
   Subtask,
   WeeklyTrend,
 } from './types';
@@ -1698,4 +1705,123 @@ export function suggestTimesByDayPart(
   const evening = suggestOptimalTime(eveningReminders, undefined, 2);
 
   return { morning, afternoon, evening };
+}
+
+/**
+ * Clamp a user-supplied interval to a whole number of minutes within range.
+ * NaN falls back to the default; ±Infinity clamps to the [min, max] bounds.
+ */
+export function clampIntervalMinutes(value: number): number {
+  if (Number.isNaN(value)) {
+    return DEFAULT_REMINDER_INTERVAL_MINUTES;
+  }
+  const floored = Math.floor(value);
+  if (!(floored >= REMINDER_INTERVAL_MIN)) {
+    return REMINDER_INTERVAL_MIN; // catches -Infinity and sub-min values
+  }
+  if (floored > REMINDER_INTERVAL_MAX) {
+    return REMINDER_INTERVAL_MAX; // catches +Infinity and over-max values
+  }
+  return floored;
+}
+
+/** A Date `minutes` from now — the fire-time anchor for interval cadences. */
+export function intervalDueDateFromNow(minutes: number): Date {
+  return new Date(Date.now() + minutes * 60_000);
+}
+
+/**
+ * Next due date strictly after `now` for a recurring reminder.
+ * 'interval' anchors to fire-time (now + intervalMinutes); the calendar
+ * frequencies advance from the stored dueDate until they land in the future.
+ */
+export function nextReminderDueDate(reminder: Reminder, now: Date): Date {
+  const recurring = reminder.recurring;
+  if (recurring?.frequency === 'interval') {
+    const minutes = clampIntervalMinutes(
+      recurring.intervalMinutes ?? DEFAULT_REMINDER_INTERVAL_MINUTES
+    );
+    return new Date(now.getTime() + minutes * 60_000);
+  }
+
+  const frequency = recurring?.frequency;
+  const next = new Date(reminder.dueDate);
+  while (next <= now) {
+    if (frequency === 'weekly') {
+      next.setDate(next.getDate() + 7);
+    } else if (frequency === 'monthly') {
+      next.setMonth(next.getMonth() + 1);
+    } else {
+      next.setDate(next.getDate() + 1); // daily / default
+    }
+  }
+  return next;
+}
+
+/**
+ * Build a reminder's `recurring` payload from form state.
+ * Interval cadences carry `intervalMinutes`; calendar cadences are frequency-only;
+ * a non-recurring reminder is `undefined`. Pass an already-clamped interval.
+ */
+export function buildReminderRecurring(
+  isRecurring: boolean,
+  frequency: ReminderFrequency,
+  clampedIntervalMinutes: number
+): Reminder['recurring'] {
+  if (!isRecurring) {
+    return undefined;
+  }
+  if (frequency === 'interval') {
+    return { frequency, intervalMinutes: clampedIntervalMinutes };
+  }
+  return { frequency };
+}
+
+/**
+ * Human-readable cadence label for a recurring reminder.
+ * 'interval' renders as "every N min"; calendar frequencies pass through.
+ */
+export function formatReminderCadence(recurring: NonNullable<Reminder['recurring']>): string {
+  if (recurring.frequency === 'interval') {
+    return `every ${clampIntervalMinutes(recurring.intervalMinutes ?? DEFAULT_REMINDER_INTERVAL_MINUTES)} min`;
+  }
+  return recurring.frequency;
+}
+
+export type ReminderNotificationAction =
+  | { type: 'complete' }
+  | { type: 'snooze'; dueDate: string }
+  | { type: 'dismiss' };
+
+/**
+ * Decide what a notification button does, free of chrome.* side effects so it's
+ * unit-testable. buttonIndex 0 = Done, 1 = Snooze. `now` is the current time.
+ */
+export function resolveReminderNotificationAction(
+  reminder: Reminder | undefined,
+  buttonIndex: number,
+  now: Date
+): ReminderNotificationAction {
+  if (!reminder) {
+    return { type: 'dismiss' };
+  }
+  if (buttonIndex === 0) {
+    // Done: complete one-offs. An active recurring reminder was already advanced
+    // on fire, and a paused one must not be completed — just dismiss.
+    if (!reminder.recurring) {
+      return { type: 'complete' };
+    }
+    return { type: 'dismiss' };
+  }
+  if (buttonIndex === 1) {
+    // Snooze: never resurrect a paused recurring reminder.
+    if (reminder.recurring && reminder.paused) {
+      return { type: 'dismiss' };
+    }
+    return {
+      type: 'snooze',
+      dueDate: new Date(now.getTime() + REMINDER_SNOOZE_MINUTES * 60_000).toISOString(),
+    };
+  }
+  return { type: 'dismiss' };
 }

@@ -1,7 +1,16 @@
-import { logger, type Reminder, type ReminderFrequency } from '@cuewise/shared';
+import {
+  buildReminderRecurring,
+  clampIntervalMinutes,
+  DEFAULT_REMINDER_INTERVAL_MINUTES,
+  intervalDueDateFromNow,
+  logger,
+  type Reminder,
+  type ReminderFrequency,
+} from '@cuewise/shared';
 import type React from 'react';
 import { useState } from 'react';
 import { useReminderStore } from '../stores/reminder-store';
+import { IntervalCadencePicker } from './IntervalCadencePicker';
 
 interface EditReminderFormProps {
   reminder: Reminder;
@@ -22,36 +31,47 @@ export const EditReminderForm: React.FC<EditReminderFormProps> = ({
   const [text, setText] = useState(reminder.text);
   const [date, setDate] = useState(existingDateString);
   const [time, setTime] = useState(existingTimeString);
-  const [isRecurring, setIsRecurring] = useState(reminder.recurring?.enabled ?? false);
+  // Initialize from presence, not `.enabled` — a paused reminder still recurs.
+  const [isRecurring, setIsRecurring] = useState(reminder.recurring != null);
   const [recurringFrequency, setRecurringFrequency] = useState<ReminderFrequency>(
     reminder.recurring?.frequency ?? 'daily'
   );
+  const [intervalMinutes, setIntervalMinutes] = useState(
+    reminder.recurring?.intervalMinutes ?? DEFAULT_REMINDER_INTERVAL_MINUTES
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const isInterval = isRecurring && recurringFrequency === 'interval';
 
   const updateReminder = useReminderStore((state) => state.updateReminder);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!text.trim() || !date || !time) {
+    // Interval reminders fire one interval out, so they don't need a picked date/time.
+    if (!text.trim() || ((!date || !time) && !isInterval)) {
       return;
     }
 
     setIsSubmitting(true);
 
     try {
-      // Combine date and time into a Date object
-      const dueDate = new Date(`${date}T${time}`);
+      const clampedInterval = clampIntervalMinutes(intervalMinutes);
+      // Interval reminders fire one interval out, not at the picked date/time.
+      const dueDate = isInterval
+        ? intervalDueDateFromNow(clampedInterval)
+        : new Date(`${date}T${time}`);
+
+      // Partial merge in updateReminder preserves the reminder's existing `paused`.
+      const recurring = buildReminderRecurring(isRecurring, recurringFrequency, clampedInterval);
 
       await updateReminder(reminder.id, {
         text: text.trim(),
         dueDate: dueDate.toISOString(),
-        recurring: isRecurring
-          ? {
-              frequency: recurringFrequency,
-              enabled: true,
-            }
-          : undefined,
+        recurring,
+        // Dropping recurrence must also drop a lingering paused flag — a one-off
+        // reminder can't be paused, and the pause toggle is gated on `recurring`.
+        ...(recurring ? {} : { paused: undefined }),
       });
 
       onSuccess();
@@ -149,7 +169,17 @@ export const EditReminderForm: React.FC<EditReminderFormProps> = ({
               <option value="daily">Daily</option>
               <option value="weekly">Weekly</option>
               <option value="monthly">Monthly</option>
+              <option value="interval">Every N minutes</option>
             </select>
+
+            {isInterval && (
+              <div className="mt-3">
+                <IntervalCadencePicker value={intervalMinutes} onChange={setIntervalMinutes} />
+                <p className="mt-1 text-xs text-secondary">
+                  Reschedules to fire {clampIntervalMinutes(intervalMinutes)} min from now.
+                </p>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -165,7 +195,7 @@ export const EditReminderForm: React.FC<EditReminderFormProps> = ({
         </button>
         <button
           type="submit"
-          disabled={!text.trim() || !date || !time || isSubmitting}
+          disabled={!text.trim() || ((!date || !time) && !isInterval) || isSubmitting}
           className="px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium shadow-sm hover:shadow-md"
         >
           {isSubmitting ? 'Updating...' : 'Update Reminder'}

@@ -2,7 +2,12 @@
  * Background Service Worker for handling alarms and notifications
  */
 
-import { logger, type Reminder } from '@cuewise/shared';
+import {
+  logger,
+  nextReminderDueDate,
+  type Reminder,
+  resolveReminderNotificationAction,
+} from '@cuewise/shared';
 import { getReminders, setReminders } from '@cuewise/storage';
 
 // Listen for alarm triggers
@@ -34,6 +39,11 @@ async function handleReminderAlarm(reminderId: string) {
       return;
     }
 
+    // Paused recurring reminders must neither notify nor re-arm.
+    if (reminder.recurring && reminder.paused) {
+      return;
+    }
+
     // Show notification with custom icon
     await chrome.notifications.create(`reminder-${reminderId}`, {
       type: 'basic',
@@ -42,6 +52,7 @@ async function handleReminderAlarm(reminderId: string) {
       message: reminder.text,
       priority: 2,
       requireInteraction: true, // Notification stays until user dismisses
+      buttons: [{ title: 'Done' }, { title: 'Snooze 5 min' }],
     });
 
     // Mark as notified
@@ -50,8 +61,8 @@ async function handleReminderAlarm(reminderId: string) {
     );
     await setReminders(updatedReminders);
 
-    // Handle recurring reminders
-    if (reminder.recurring?.enabled) {
+    // Handle recurring reminders (paused ones already returned above)
+    if (reminder.recurring) {
       await scheduleRecurringReminder(reminder);
     }
   } catch (error) {
@@ -63,45 +74,21 @@ async function handleReminderAlarm(reminderId: string) {
  * Schedule the next occurrence of a recurring reminder
  */
 async function scheduleRecurringReminder(reminder: Reminder) {
-  if (!reminder.recurring) return;
-
-  const currentDueDate = new Date(reminder.dueDate);
-  let nextDueDate: Date;
-
-  switch (reminder.recurring.frequency) {
-    case 'daily':
-      nextDueDate = new Date(currentDueDate.getTime() + 24 * 60 * 60 * 1000);
-      break;
-    case 'weekly':
-      nextDueDate = new Date(currentDueDate.getTime() + 7 * 24 * 60 * 60 * 1000);
-      break;
-    case 'monthly':
-      nextDueDate = new Date(currentDueDate);
-      nextDueDate.setMonth(nextDueDate.getMonth() + 1);
-      break;
-    default:
-      return;
+  if (!reminder.recurring) {
+    return;
   }
 
-  // Update reminder with new due date
+  const nextDueDate = nextReminderDueDate(reminder, new Date());
+
   const reminders = await getReminders();
   const updatedReminders = reminders.map((r) =>
     r.id === reminder.id
-      ? {
-          ...r,
-          dueDate: nextDueDate.toISOString(),
-          notified: false,
-          completed: false,
-        }
+      ? { ...r, dueDate: nextDueDate.toISOString(), notified: false, completed: false }
       : r
   );
-
   await setReminders(updatedReminders);
 
-  // Schedule next alarm
-  await chrome.alarms.create(`reminder-${reminder.id}`, {
-    when: nextDueDate.getTime(),
-  });
+  await chrome.alarms.create(`reminder-${reminder.id}`, { when: nextDueDate.getTime() });
 }
 
 /**
@@ -127,20 +114,35 @@ chrome.notifications.onClicked.addListener(async (notificationId) => {
 });
 
 /**
- * Handle notification button clicks (mark as complete)
+ * Handle notification button clicks (Done / Snooze 5 min)
  */
 chrome.notifications.onButtonClicked.addListener(async (notificationId, buttonIndex) => {
-  if (notificationId.startsWith('reminder-') && buttonIndex === 0) {
+  try {
+    if (!notificationId.startsWith('reminder-')) {
+      return;
+    }
     const reminderId = notificationId.replace('reminder-', '');
-
-    // Mark reminder as completed
     const reminders = await getReminders();
-    const updatedReminders = reminders.map((r) =>
-      r.id === reminderId ? { ...r, completed: true } : r
-    );
-    await setReminders(updatedReminders);
+    const reminder = reminders.find((r) => r.id === reminderId);
+    const action = resolveReminderNotificationAction(reminder, buttonIndex, new Date());
 
-    // Clear the notification
+    if (action.type === 'complete') {
+      const updated = reminders.map((r) => (r.id === reminderId ? { ...r, completed: true } : r));
+      await setReminders(updated);
+    } else if (action.type === 'snooze') {
+      const updated = reminders.map((r) =>
+        r.id === reminderId
+          ? { ...r, dueDate: action.dueDate, notified: false, completed: false }
+          : r
+      );
+      await setReminders(updated);
+      await chrome.alarms.create(`reminder-${reminderId}`, {
+        when: new Date(action.dueDate).getTime(),
+      });
+    }
+
     await chrome.notifications.clear(notificationId);
+  } catch (error) {
+    logger.error('Error handling reminder notification button click', error);
   }
 });

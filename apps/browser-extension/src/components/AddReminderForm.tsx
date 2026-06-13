@@ -1,5 +1,9 @@
 import {
+  buildReminderRecurring,
+  clampIntervalMinutes,
   createScheduledDate,
+  DEFAULT_REMINDER_INTERVAL_MINUTES,
+  intervalDueDateFromNow,
   logger,
   type ReminderCategory,
   type ReminderFrequency,
@@ -12,6 +16,7 @@ import { useMemo, useState } from 'react';
 import { useReminderStore } from '../stores/reminder-store';
 import { useToastStore } from '../stores/toast-store';
 import { DateTimePresetPicker } from './DateTimePresetPicker';
+import { IntervalCadencePicker } from './IntervalCadencePicker';
 import { ReminderTemplateGrid } from './ReminderTemplateGrid';
 
 type FormMode = 'custom' | 'template';
@@ -26,6 +31,7 @@ export const AddReminderForm: React.FC<AddReminderFormProps> = ({ onSuccess }) =
   const [dueDate, setDueDate] = useState<Date | null>(null);
   const [isRecurring, setIsRecurring] = useState(false);
   const [recurringFrequency, setRecurringFrequency] = useState<ReminderFrequency>('daily');
+  const [intervalMinutes, setIntervalMinutes] = useState(DEFAULT_REMINDER_INTERVAL_MINUTES);
   const [category, setCategory] = useState<ReminderCategory | undefined>(undefined);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -40,6 +46,27 @@ export const AddReminderForm: React.FC<AddReminderFormProps> = ({ onSuccess }) =
 
   // Handle template selection - create reminder directly
   const handleSelectTemplate = async (template: ReminderTemplate) => {
+    // Interval templates (e.g. "Move") fire one interval out from now.
+    if (template.frequency === 'interval') {
+      const minutes = clampIntervalMinutes(
+        template.intervalMinutes ?? DEFAULT_REMINDER_INTERVAL_MINUTES
+      );
+      try {
+        await addReminder(
+          template.text,
+          intervalDueDateFromNow(minutes),
+          { frequency: 'interval', intervalMinutes: minutes },
+          template.category
+        );
+        useToastStore.getState().success(`Created "${template.name}" reminder`);
+        onSuccess();
+      } catch (error) {
+        logger.error('Failed to create reminder from template', error);
+        useToastStore.getState().error('Failed to create reminder. Please try again.');
+      }
+      return;
+    }
+
     // Validate time format
     const timeParts = template.defaultTime?.split(':');
     if (!timeParts || timeParts.length !== 2) {
@@ -80,7 +107,6 @@ export const AddReminderForm: React.FC<AddReminderFormProps> = ({ onSuccess }) =
         dueDate,
         {
           frequency: template.frequency,
-          enabled: true,
         },
         template.category
       );
@@ -93,40 +119,46 @@ export const AddReminderForm: React.FC<AddReminderFormProps> = ({ onSuccess }) =
     }
   };
 
+  // Interval reminders fire one interval out, so they don't require a picked "When".
+  const isInterval = isRecurring && recurringFrequency === 'interval';
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!text.trim() || !dueDate) {
+    if (!text.trim() || (!dueDate && !isInterval)) {
       return;
     }
 
     setIsSubmitting(true);
 
     try {
-      // Validate that the date is in the future
-      if (dueDate <= new Date()) {
-        useToastStore.getState().warning('Please select a future date and time');
+      const clampedInterval = clampIntervalMinutes(intervalMinutes);
+      let effectiveDueDate: Date;
+      if (isInterval) {
+        effectiveDueDate = intervalDueDateFromNow(clampedInterval);
+      } else if (dueDate) {
+        // Validate that the picked date is in the future.
+        if (dueDate <= new Date()) {
+          useToastStore.getState().warning('Please select a future date and time');
+          setIsSubmitting(false);
+          return;
+        }
+        effectiveDueDate = dueDate;
+      } else {
         setIsSubmitting(false);
         return;
       }
 
-      await addReminder(
-        text.trim(),
-        dueDate,
-        isRecurring
-          ? {
-              frequency: recurringFrequency,
-              enabled: true,
-            }
-          : undefined,
-        category
-      );
+      const recurring = buildReminderRecurring(isRecurring, recurringFrequency, clampedInterval);
+
+      await addReminder(text.trim(), effectiveDueDate, recurring, category);
 
       // Reset form
       setText('');
       setDueDate(null);
       setIsRecurring(false);
       setRecurringFrequency('daily');
+      setIntervalMinutes(DEFAULT_REMINDER_INTERVAL_MINUTES);
       setCategory(undefined);
 
       onSuccess();
@@ -235,7 +267,17 @@ export const AddReminderForm: React.FC<AddReminderFormProps> = ({ onSuccess }) =
                   <option value="daily">Daily</option>
                   <option value="weekly">Weekly</option>
                   <option value="monthly">Monthly</option>
+                  <option value="interval">Every N minutes</option>
                 </select>
+
+                {recurringFrequency === 'interval' && (
+                  <div className="mt-3">
+                    <IntervalCadencePicker value={intervalMinutes} onChange={setIntervalMinutes} />
+                    <p className="mt-1 text-xs text-secondary">
+                      First reminder fires {clampIntervalMinutes(intervalMinutes)} min from now.
+                    </p>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -244,7 +286,7 @@ export const AddReminderForm: React.FC<AddReminderFormProps> = ({ onSuccess }) =
           <div className="flex justify-end gap-3 pt-4">
             <button
               type="submit"
-              disabled={!text.trim() || !dueDate || isSubmitting}
+              disabled={!text.trim() || (!dueDate && !isInterval) || isSubmitting}
               className="px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium shadow-sm hover:shadow-md"
             >
               {isSubmitting ? 'Adding...' : 'Add Reminder'}

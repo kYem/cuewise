@@ -82,7 +82,7 @@ export interface GoalProgress {
 export type ReminderCategory = 'health' | 'productivity' | 'personal';
 
 // Reminder frequency for recurring reminders and templates
-export type ReminderFrequency = 'daily' | 'weekly' | 'monthly';
+export type ReminderFrequency = 'daily' | 'weekly' | 'monthly' | 'interval';
 
 // Reminder interface
 export interface Reminder {
@@ -93,8 +93,10 @@ export interface Reminder {
   notified: boolean;
   recurring?: {
     frequency: ReminderFrequency;
-    enabled: boolean;
+    // Required when frequency === 'interval'. Minutes between occurrences.
+    intervalMinutes?: number;
   };
+  paused?: boolean; // true when a recurring reminder is paused (won't fire)
   // Context-aware suggestions
   category?: ReminderCategory; // Optional category for suggestions
   completedAt?: string; // ISO timestamp when marked complete (for suggestions)
@@ -108,6 +110,7 @@ export interface ReminderTemplate {
   defaultTime: string; // HH:MM format (e.g., "09:00")
   frequency: ReminderFrequency;
   category: ReminderCategory;
+  intervalMinutes?: number; // for 'interval' templates
 }
 
 // Pomodoro session interface
