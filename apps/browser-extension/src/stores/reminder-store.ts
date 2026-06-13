@@ -61,8 +61,16 @@ function categorizeReminders(reminders: Reminder[]) {
     }
   }
 
-  // Sort upcoming by due date (soonest first)
-  upcoming.sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+  // Sort upcoming by due date (soonest first), but rank paused reminders last —
+  // their frozen dueDate must not displace active reminders from priority slots.
+  upcoming.sort((a, b) => {
+    const aPaused = a.recurring?.enabled === false;
+    const bPaused = b.recurring?.enabled === false;
+    if (aPaused !== bPaused) {
+      return aPaused ? 1 : -1;
+    }
+    return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+  });
 
   // Sort overdue by due date (most overdue first)
   overdue.sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());

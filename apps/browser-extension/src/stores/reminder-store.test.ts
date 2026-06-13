@@ -126,4 +126,21 @@ describe('categorizeReminders with a paused reminder', () => {
     expect(upcomingReminders[0].id).toBe('paused-2');
     expect(overdueReminders).toHaveLength(0);
   });
+
+  it('ranks a paused reminder after active ones despite an earlier due date', () => {
+    const activeUpcoming: Reminder = {
+      id: 'active-1',
+      text: 'Move',
+      dueDate: new Date(Date.now() + 30 * 60_000).toISOString(),
+      completed: false,
+      notified: false,
+      recurring: { frequency: 'interval', enabled: true, intervalMinutes: 30 },
+    };
+    useReminderStore.setState({ reminders: [pausedPastReminder, activeUpcoming] });
+
+    useReminderStore.getState().refreshLists();
+
+    const { upcomingReminders } = useReminderStore.getState();
+    expect(upcomingReminders.map((r) => r.id)).toEqual(['active-1', 'paused-2']);
+  });
 });
