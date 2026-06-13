@@ -6,16 +6,22 @@ This directory contains all the required promotional images and screenshots for 
 
 ```
 store-assets/
-├── screenshots/          # Product screenshots (1280x800)
-│   ├── 01-main-view.png
-│   ├── 02-new-tab.png
-│   ├── 03-pomodoro.png
-│   ├── 04-insights.png
-│   └── 05-quote-management.png
+├── screenshots/          # Product screenshots (1280x800) — generated locally, NOT committed
+│   ├── 01-main-view.png      # Today's Focus (full goals view)
+│   ├── 02-focus-view.png     # Distraction-free focus mode
+│   ├── 03-pomodoro.png       # Pomodoro timer (active session)
+│   ├── 04-insights.png       # Insights / analytics
+│   └── 05-settings.png       # Settings (compact sidebar)
 └── promo/               # Promotional tiles
     ├── small-promo-tile-440x280.png
     └── marquee-promo-tile-1400x560.png
 ```
+
+> **Screenshots are not version-controlled.** `screenshots/` is gitignored — these
+> are regenerable marketing assets (photographic PNGs that would bloat history).
+> Regenerate them against the dev server at 1280×800 on the glass theme, then
+> upload to the Chrome Web Store listing manually. The list above is the intended
+> lineup, not a set of tracked files.
 
 ## Chrome Web Store Requirements
 
