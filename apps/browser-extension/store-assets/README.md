@@ -12,16 +12,16 @@ store-assets/
 │   ├── 03-pomodoro.png       # Pomodoro timer (active session)
 │   ├── 04-insights.png       # Insights / analytics
 │   └── 05-settings.png       # Settings (compact sidebar)
-└── promo/               # Promotional tiles
-    ├── small-promo-tile-440x280.png
-    └── marquee-promo-tile-1400x560.png
+└── promo/               # Promotional tiles — generated locally, NOT committed
+    ├── small-promo-tile-440x280.png    # focus view, downscaled 2x
+    └── marquee-promo-tile-1400x560.png # focus view, wide banner
 ```
 
-> **Screenshots are not version-controlled.** `screenshots/` is gitignored — these
-> are regenerable marketing assets (photographic PNGs that would bloat history).
-> Regenerate them against the dev server at 1280×800 on the glass theme, then
-> upload to the Chrome Web Store listing manually. The list above is the intended
-> lineup, not a set of tracked files.
+> **These images are not version-controlled.** Both `screenshots/` and `promo/`
+> are gitignored — they're regenerable marketing assets (photographic PNGs that
+> would bloat history). Regenerate them against the dev server on the glass theme
+> at the sizes above, then upload to the Chrome Web Store listing manually. The
+> lists above are the intended lineup, not tracked files.
 
 ## Chrome Web Store Requirements
 
