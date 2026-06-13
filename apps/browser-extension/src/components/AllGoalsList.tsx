@@ -1,19 +1,10 @@
 import { getRelativeDateLabel, getTodayDateString, isObjective } from '@cuewise/shared';
 import { cn, Popover, PopoverContent, PopoverTrigger } from '@cuewise/ui';
-import {
-  ArrowRight,
-  Calendar,
-  Check,
-  CheckCircle2,
-  Circle,
-  Flag,
-  Link2,
-  MoveRight,
-  Trash2,
-} from 'lucide-react';
+import { ArrowRight, Calendar, Check, Flag, Link2, MoveRight, Trash2 } from 'lucide-react';
 import type React from 'react';
 import { useGoalEditing } from '../hooks/useGoalEditing';
 import { useGoalStore } from '../stores/goal-store';
+import { AnimatedCheckbox } from './AnimatedCheckbox';
 
 export const AllGoalsList: React.FC = () => {
   const {
@@ -132,11 +123,7 @@ export const AllGoalsList: React.FC = () => {
                     className="flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 rounded-full"
                     aria-label={goal.completed ? 'Mark as incomplete' : 'Mark as complete'}
                   >
-                    {goal.completed ? (
-                      <CheckCircle2 className="w-6 h-6 text-primary-600" />
-                    ) : (
-                      <Circle className="w-6 h-6 text-tertiary group-hover:text-primary-500 transition-colors" />
-                    )}
+                    <AnimatedCheckbox checked={goal.completed} size="lg" />
                   </button>
 
                   {/* Goal Text */}
