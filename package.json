@@ -18,7 +18,8 @@
     "version": "changeset version",
     "release:prepare": "pnpm version && pnpm build",
     "release:extension": "pnpm --filter @cuewise/browser-extension build:store",
-    "publish:chrome": "node --experimental-strip-types scripts/publish-chrome.mts"
+    "publish:chrome": "node --experimental-strip-types scripts/publish-chrome.mts",
+    "release:status": "node --experimental-strip-types scripts/release-status.mts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.3.10",
