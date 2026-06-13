@@ -2,7 +2,7 @@ import type { Goal } from '@cuewise/shared';
 import { Popover, PopoverContent, PopoverTrigger } from '@cuewise/ui';
 import { Check, Flag, Link2, Plus } from 'lucide-react';
 import type React from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { forwardRef, useEffect, useRef, useState } from 'react';
 import { useGoalStore } from '../stores/goal-store';
 
 /** 'minimal' for direct background use, 'boxed' for panels/modals, 'widget' for the soft pill add-row */
@@ -139,24 +139,27 @@ const LINK_BUTTON_STYLES: Record<
   },
 };
 
-function GoalLinkButton({
-  variant,
-  isSelected,
-  selectedGoalText,
-}: GoalLinkButtonProps): React.ReactElement {
+// forwardRef + prop spread so Radix's PopoverTrigger (asChild) can wire its
+// onClick/ref onto the real button — without this the picker never opens.
+const GoalLinkButton = forwardRef<
+  HTMLButtonElement,
+  GoalLinkButtonProps & React.ComponentPropsWithoutRef<'button'>
+>(function GoalLinkButton({ variant, isSelected, selectedGoalText, ...props }, ref) {
   const styles = LINK_BUTTON_STYLES[variant];
   const title = isSelected ? `Linked to: ${selectedGoalText ?? 'Goal'}` : 'Link to goal';
 
   return (
     <button
+      ref={ref}
       type="button"
       className={`${styles.base} ${isSelected ? styles.selected : styles.unselected}`}
       title={title}
+      {...props}
     >
       <Link2 className="w-5 h-5" />
     </button>
   );
-}
+});
 
 interface GoalPickerProps {
   variant: GoalInputVariant;
