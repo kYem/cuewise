@@ -5,6 +5,12 @@ import {
   createTestPomodoroSessions,
   createTrendTestGoals,
 } from './__fixtures__/analytics.fixtures';
+import {
+  DEFAULT_REMINDER_INTERVAL_MINUTES,
+  REMINDER_INTERVAL_MAX,
+  REMINDER_INTERVAL_MIN,
+  REMINDER_TEMPLATES,
+} from './constants';
 import type { Goal } from './types';
 import {
   addSubtaskToGoal,
@@ -37,11 +43,6 @@ import {
   shouldShowReviewPrompt,
   toggleSubtaskInGoal,
 } from './utils';
-import {
-  DEFAULT_REMINDER_INTERVAL_MINUTES,
-  REMINDER_INTERVAL_MAX,
-  REMINDER_INTERVAL_MIN,
-} from './constants';
 
 describe('Analytics Utilities', () => {
   describe('calculateDailyTrends', () => {
@@ -1416,5 +1417,15 @@ describe('nextReminderDueDate', () => {
       recurring: { frequency: 'weekly' as const, enabled: true },
     };
     expect(nextReminderDueDate(reminder, now).toISOString()).toBe('2026-06-19T08:00:00.000Z');
+  });
+});
+
+describe('REMINDER_TEMPLATES move preset', () => {
+  it('includes a 30-minute interval movement template', () => {
+    const move = REMINDER_TEMPLATES.find((t) => t.id === 'move');
+    expect(move).toBeDefined();
+    expect(move?.frequency).toBe('interval');
+    expect(move?.intervalMinutes).toBe(30);
+    expect(move?.category).toBe('health');
   });
 });

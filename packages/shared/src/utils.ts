@@ -16,6 +16,11 @@ import {
   subMonths,
   subWeeks,
 } from 'date-fns';
+import {
+  DEFAULT_REMINDER_INTERVAL_MINUTES,
+  REMINDER_INTERVAL_MAX,
+  REMINDER_INTERVAL_MIN,
+} from './constants';
 import type {
   AdvancedAnalytics,
   DailyDataPoint,
@@ -36,11 +41,6 @@ import type {
   Subtask,
   WeeklyTrend,
 } from './types';
-import {
-  DEFAULT_REMINDER_INTERVAL_MINUTES,
-  REMINDER_INTERVAL_MAX,
-  REMINDER_INTERVAL_MIN,
-} from './constants';
 import { EXPORT_FORMAT_VERSION } from './types';
 
 /**

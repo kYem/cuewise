@@ -263,6 +263,15 @@ export const REMINDER_CATEGORIES: Record<ReminderCategory, string> = {
 export const REMINDER_TEMPLATES: ReminderTemplate[] = [
   // Health & Wellness
   {
+    id: 'move',
+    name: 'Move',
+    text: 'Time to move — stretch or take a short walk 🚶',
+    defaultTime: '09:30',
+    frequency: 'interval',
+    category: 'health',
+    intervalMinutes: 30,
+  },
+  {
     id: 'water',
     name: 'Drink Water',
     text: 'Time to drink water',
