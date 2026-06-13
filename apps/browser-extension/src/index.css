@@ -128,6 +128,49 @@ html.dark[data-theme="rose"] {
   animation-delay: 0.4s;
 }
 
+/* Animated checkbox (spinner-to-check) */
+@keyframes checkbox-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes checkbox-draw {
+  from {
+    stroke-dashoffset: 16;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes checkbox-pop {
+  0% {
+    transform: scale(0.8);
+  }
+  45% {
+    transform: scale(1.12);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.animate-checkbox-spin {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: checkbox-spin 0.3s ease-in-out;
+}
+
+.animate-checkbox-draw {
+  animation: checkbox-draw 0.42s ease-out forwards;
+}
+
+.animate-checkbox-pop {
+  transform-origin: center;
+  animation: checkbox-pop 0.5s ease-out;
+}
+
 @layer theme {
   /* Dark mode base adjustments - Vibrant Violet Theme (Higher Contrast) */
   .dark {
