@@ -6,11 +6,13 @@ import {
   taskWithSubtasksFactory,
 } from '@cuewise/test-utils/factories';
 import { defaultSettings } from '@cuewise/test-utils/fixtures';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { act } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useGoalStore } from '../stores/goal-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { createGoalStoreMock, createMockGoalStore } from './__fixtures__/goals-list.fixtures';
+import { setReducedMotion } from './__fixtures__/motion.fixtures';
 import { GoalFocusView } from './GoalFocusView';
 
 vi.mock('../stores/goal-store', () => ({
@@ -102,5 +104,90 @@ describe('GoalFocusView - completed focused task', () => {
 
     expect(screen.getByText('Do this next')).toBeInTheDocument();
     expect(screen.queryByText('Already done')).not.toBeInTheDocument();
+  });
+});
+
+describe('GoalFocusView - completing the focused task', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setReducedMotion(false);
+  });
+
+  function setup(toggleResult: boolean) {
+    const updateSettings = vi.fn();
+    const current = goalFactory.build({ text: 'Current task', completed: false });
+    const next = goalFactory.build({ text: 'Next task', completed: false });
+    const store = createMockGoalStore({
+      todayTasks: [current, next],
+      goals: [current, next],
+      toggleTask: vi.fn(async () => toggleResult),
+    });
+    vi.mocked(useGoalStore).mockImplementation(createGoalStoreMock(store));
+    vi.mocked(useSettingsStore).mockImplementation(() => ({
+      settings: { ...defaultSettings, focusedGoalId: current.id },
+      updateSettings,
+    }));
+    return { store, updateSettings, current, next };
+  }
+
+  it('holds the completed task and only advances after the tick delay', async () => {
+    vi.useFakeTimers();
+    const { store, updateSettings, current, next } = setup(true);
+
+    render(<GoalFocusView />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Current task/ }));
+    });
+
+    expect(store.toggleTask).toHaveBeenCalledWith(current.id);
+    expect(updateSettings).not.toHaveBeenCalled();
+
+    await act(async () => {
+      vi.advanceTimersByTime(720);
+    });
+
+    expect(updateSettings).toHaveBeenCalledWith({ focusedGoalId: next.id });
+    vi.useRealTimers();
+  });
+
+  it('advances immediately under reduced motion with no hold', async () => {
+    setReducedMotion(true);
+    const { updateSettings, next } = setup(true);
+
+    render(<GoalFocusView />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Current task/ }));
+    });
+
+    expect(updateSettings).toHaveBeenCalledWith({ focusedGoalId: next.id });
+  });
+
+  it('does not advance or hold when the toggle fails to persist', async () => {
+    const { store, updateSettings, current } = setup(false);
+
+    render(<GoalFocusView />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Current task/ }));
+    });
+
+    expect(store.toggleTask).toHaveBeenCalledWith(current.id);
+    expect(updateSettings).not.toHaveBeenCalled();
+  });
+
+  it('ignores a second click while the tick is still playing', async () => {
+    vi.useFakeTimers();
+    const { store } = setup(true);
+
+    render(<GoalFocusView />);
+    const button = screen.getByRole('button', { name: /Current task/ });
+    await act(async () => {
+      fireEvent.click(button);
+    });
+    await act(async () => {
+      fireEvent.click(button);
+    });
+
+    expect(store.toggleTask).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
   });
 });

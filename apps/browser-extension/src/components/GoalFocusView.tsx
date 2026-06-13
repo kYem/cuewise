@@ -2,7 +2,7 @@ import { type Goal, getDueDateLabel, getSubtaskProgress } from '@cuewise/shared'
 import { cn } from '@cuewise/ui';
 import { CalendarClock, CheckCircle2, ListChecks, Plus } from 'lucide-react';
 import type React from 'react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useGoalStore } from '../stores/goal-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { prefersReducedMotion } from '../utils/prefers-reduced-motion';
@@ -29,6 +29,17 @@ export const GoalFocusView: React.FC<GoalFocusViewProps> = ({ showAddInput, onCl
   // A just-completed task we keep on screen so its tick animation can finish
   // playing before the view advances to the next task / "All done".
   const [animatingGoal, setAnimatingGoal] = useState<Goal | null>(null);
+  // Pending "advance" timer — cleared on unmount so a view left mid-hold doesn't
+  // mutate persisted settings after it's gone.
+  const advanceTimer = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (advanceTimer.current !== null) {
+        window.clearTimeout(advanceTimer.current);
+      }
+    };
+  }, []);
 
   const focusedGoalId = settings.focusedGoalId;
 
@@ -70,7 +81,14 @@ export const GoalFocusView: React.FC<GoalFocusViewProps> = ({ showAddInput, onCl
       setAnimatingGoal({ ...displayGoal, completed: true });
     }
 
-    await toggleTask(completedId);
+    const ok = await toggleTask(completedId);
+
+    // toggleTask surfaces its own error toast on failure. Drop the optimistic
+    // hold and don't advance, so the view matches the unchanged store state.
+    if (!ok) {
+      setAnimatingGoal(null);
+      return;
+    }
 
     // Only completing a task advances the focus; un-completing stays put.
     if (!justCompleted) {
@@ -79,6 +97,7 @@ export const GoalFocusView: React.FC<GoalFocusViewProps> = ({ showAddInput, onCl
 
     const nextIncomplete = incompleteGoals.find((g) => g.id !== completedId);
     const advance = () => {
+      advanceTimer.current = null;
       setAnimatingGoal(null);
       updateSettings({ focusedGoalId: nextIncomplete ? nextIncomplete.id : null });
     };
@@ -87,7 +106,7 @@ export const GoalFocusView: React.FC<GoalFocusViewProps> = ({ showAddInput, onCl
       advance();
       return;
     }
-    window.setTimeout(advance, TICK_HOLD_MS);
+    advanceTimer.current = window.setTimeout(advance, TICK_HOLD_MS);
   };
 
   // Empty state - show input directly

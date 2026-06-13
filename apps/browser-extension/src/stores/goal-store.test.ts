@@ -42,6 +42,16 @@ vi.mock('./toast-store', () => ({
   },
 }));
 
+// Spy on the celebration store so we can assert toggleTask never triggers it
+// (the all-goals confetti was removed in favour of the per-checkbox tick).
+const { celebrateMock } = vi.hoisted(() => ({ celebrateMock: vi.fn() }));
+
+vi.mock('./celebration-store', () => ({
+  useCelebrationStore: {
+    getState: () => ({ celebrate: celebrateMock, active: null, dismiss: vi.fn() }),
+  },
+}));
+
 describe('Goal Store', () => {
   beforeEach(() => {
     // Reset store to initial state
@@ -863,5 +873,23 @@ describe('Goal Store', () => {
         expect(state.todayTasks[1].id).not.toBe(task.id);
       });
     });
+  });
+});
+
+describe('toggleTask does not celebrate (confetti removed)', () => {
+  beforeEach(() => {
+    celebrateMock.mockClear();
+    vi.mocked(storage.setGoals).mockResolvedValue({ success: true });
+  });
+
+  it('does not celebrate when completing the last incomplete task today', async () => {
+    const today = getTodayDateString();
+    const done = goalFactory.build({ date: today, completed: true });
+    const last = goalFactory.build({ date: today, completed: false });
+    useGoalStore.setState({ goals: [done, last], todayTasks: [done, last] });
+
+    await useGoalStore.getState().toggleTask(last.id);
+
+    expect(celebrateMock).not.toHaveBeenCalled();
   });
 });
