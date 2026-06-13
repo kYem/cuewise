@@ -27,10 +27,8 @@ import {
   ArrowRight,
   CalendarClock,
   Check,
-  CheckCircle2,
   ChevronDown,
   ChevronUp,
-  Circle,
   Copy,
   ExternalLink,
   Flag,
@@ -46,6 +44,7 @@ import emptyTasksAnimation from '../assets/lottie/empty/tasks.json';
 import { useGoalEditing } from '../hooks/useGoalEditing';
 import { useGoalStore } from '../stores/goal-store';
 import { useSettingsStore } from '../stores/settings-store';
+import { AnimatedCheckbox } from './AnimatedCheckbox';
 import { CompactGoalRow } from './CompactGoalRow';
 import { DueDateControl } from './DueDateControl';
 import { EmptyState } from './EmptyState';
@@ -59,10 +58,7 @@ interface GoalsListProps {
 
 // Checkbox-style icon shared by the read-only and editable subtask rows.
 function SubtaskCheckIcon({ completed }: { completed: boolean }): React.ReactElement {
-  if (completed) {
-    return <CheckCircle2 className="w-4 h-4 text-primary-600 flex-shrink-0" />;
-  }
-  return <Circle className="w-4 h-4 text-tertiary flex-shrink-0" />;
+  return <AnimatedCheckbox checked={completed} size="sm" className="flex-shrink-0" />;
 }
 
 function subtaskTextClass(completed: boolean): string {
@@ -252,11 +248,7 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
                           className="flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 rounded-full"
                           aria-label={goal.completed ? 'Mark as incomplete' : 'Mark as complete'}
                         >
-                          {goal.completed ? (
-                            <CheckCircle2 className="w-5 h-5 text-primary-600" />
-                          ) : (
-                            <Circle className="w-5 h-5 text-tertiary group-hover:text-primary-500 transition-colors" />
-                          )}
+                          <AnimatedCheckbox checked={goal.completed} size="md" />
                         </button>
 
                         {/* Goal Text */}
@@ -598,7 +590,7 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
                 className="flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-primary-500 rounded-full"
                 aria-label="Mark as complete"
               >
-                <Circle className="w-5 h-5 text-tertiary group-hover:text-primary-500 transition-colors" />
+                <AnimatedCheckbox checked={goal.completed} size="md" />
               </button>
               <div className="flex-1 min-w-0">
                 <span className="block truncate text-sm text-primary">{goal.text}</span>
