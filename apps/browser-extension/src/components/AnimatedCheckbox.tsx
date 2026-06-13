@@ -9,8 +9,10 @@ type CheckboxPhase = 'idle' | 'spin' | 'draw';
 const SIZE_PX: Record<CheckboxSize, number> = { sm: 16, md: 20, lg: 24, xl: 40 };
 
 // On = completed color, off = resting color (brightens on row hover via `group`).
+// `off` uses text-secondary (not tertiary) so the resting ring sits close in
+// visual weight to the completed ring rather than reading as a thinner outline.
 const TONE_COLOR: Record<CheckboxTone, { on: string; off: string }> = {
-  default: { on: 'text-primary-600', off: 'text-tertiary group-hover:text-primary-500' },
+  default: { on: 'text-primary-600', off: 'text-secondary group-hover:text-primary-500' },
   onImage: { on: 'text-white', off: 'text-white/80 group-hover:text-white' },
 };
 
