@@ -90,12 +90,12 @@ export const ReminderItem: React.FC<ReminderItemProps> = ({
         aria-label={
           reminder.completed
             ? 'Mark as incomplete'
-            : reminder.recurring?.enabled
+            : reminder.recurring
               ? 'Mark done and advance to next occurrence'
               : 'Mark as complete'
         }
         title={
-          reminder.recurring?.enabled && !reminder.completed
+          reminder.recurring && !reminder.completed
             ? 'Mark done and advance to next occurrence'
             : undefined
         }
