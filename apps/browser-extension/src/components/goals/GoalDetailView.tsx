@@ -15,6 +15,7 @@ import {
 import type React from 'react';
 import { useState } from 'react';
 import { useGoalStore } from '../../stores/goal-store';
+import { AnimatedCheckbox } from '../AnimatedCheckbox';
 import { ConfirmationDialog } from '../ConfirmationDialog';
 import { GoalInput } from '../GoalInput';
 import { Modal } from '../Modal';
@@ -316,13 +317,10 @@ export const GoalDetailView: React.FC<GoalDetailViewProps> = ({ goalId, onClose 
                   <button
                     type="button"
                     onClick={() => handleToggleTask(task.id)}
-                    className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${
-                      task.completed
-                        ? 'bg-green-500 border-green-500 text-white'
-                        : 'border-border hover:border-primary-500'
-                    }`}
+                    aria-label={task.completed ? 'Mark as incomplete' : 'Mark as complete'}
+                    className="flex-shrink-0 rounded-full focus:outline-none focus:ring-2 focus:ring-primary-500"
                   >
-                    {task.completed && <Check className="w-3 h-3" />}
+                    <AnimatedCheckbox checked={task.completed} size="md" />
                   </button>
 
                   <span
