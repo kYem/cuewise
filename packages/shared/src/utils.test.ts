@@ -30,6 +30,7 @@ import {
   getSubtaskProgress,
   getTodayDateString,
   getUpcomingTasks,
+  nextReminderDueDate,
   parseImportData,
   removeSubtaskFromGoal,
   reorderGoals,
@@ -1376,5 +1377,44 @@ describe('clampIntervalMinutes', () => {
   it('falls back to the default for non-finite input', () => {
     expect(clampIntervalMinutes(Number.NaN)).toBe(DEFAULT_REMINDER_INTERVAL_MINUTES);
     expect(clampIntervalMinutes(Number.POSITIVE_INFINITY)).toBe(REMINDER_INTERVAL_MAX);
+  });
+});
+
+describe('nextReminderDueDate', () => {
+  const base = {
+    id: 'r1',
+    text: 'x',
+    completed: false,
+    notified: false,
+  } as const;
+
+  it("anchors 'interval' to fire-time (now + intervalMinutes)", () => {
+    const now = new Date('2026-06-13T10:00:00.000Z');
+    const reminder = {
+      ...base,
+      dueDate: '2026-06-13T09:00:00.000Z', // stale; must be ignored
+      recurring: { frequency: 'interval' as const, enabled: true, intervalMinutes: 30 },
+    };
+    expect(nextReminderDueDate(reminder, now).toISOString()).toBe('2026-06-13T10:30:00.000Z');
+  });
+
+  it("advances 'daily' to the next future occurrence", () => {
+    const now = new Date('2026-06-13T10:00:00.000Z');
+    const reminder = {
+      ...base,
+      dueDate: '2026-06-10T08:00:00.000Z', // 3 days overdue
+      recurring: { frequency: 'daily' as const, enabled: true },
+    };
+    expect(nextReminderDueDate(reminder, now).toISOString()).toBe('2026-06-14T08:00:00.000Z');
+  });
+
+  it("advances 'weekly' by 7 days from the due date", () => {
+    const now = new Date('2026-06-13T10:00:00.000Z');
+    const reminder = {
+      ...base,
+      dueDate: '2026-06-12T08:00:00.000Z',
+      recurring: { frequency: 'weekly' as const, enabled: true },
+    };
+    expect(nextReminderDueDate(reminder, now).toISOString()).toBe('2026-06-19T08:00:00.000Z');
   });
 });

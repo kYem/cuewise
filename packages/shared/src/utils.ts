@@ -1722,3 +1722,30 @@ export function clampIntervalMinutes(value: number): number {
   }
   return floored;
 }
+
+/**
+ * Next due date strictly after `now` for a recurring reminder.
+ * 'interval' anchors to fire-time (now + intervalMinutes); the calendar
+ * frequencies advance from the stored dueDate until they land in the future.
+ */
+export function nextReminderDueDate(reminder: Reminder, now: Date): Date {
+  const recurring = reminder.recurring;
+  if (recurring?.frequency === 'interval') {
+    const minutes = clampIntervalMinutes(
+      recurring.intervalMinutes ?? DEFAULT_REMINDER_INTERVAL_MINUTES
+    );
+    return new Date(now.getTime() + minutes * 60_000);
+  }
+
+  const next = new Date(reminder.dueDate);
+  while (next <= now) {
+    if (recurring?.frequency === 'weekly') {
+      next.setDate(next.getDate() + 7);
+    } else if (recurring?.frequency === 'monthly') {
+      next.setMonth(next.getMonth() + 1);
+    } else {
+      next.setDate(next.getDate() + 1); // daily / default
+    }
+  }
+  return next;
+}
