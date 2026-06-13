@@ -36,6 +36,11 @@ import type {
   Subtask,
   WeeklyTrend,
 } from './types';
+import {
+  DEFAULT_REMINDER_INTERVAL_MINUTES,
+  REMINDER_INTERVAL_MAX,
+  REMINDER_INTERVAL_MIN,
+} from './constants';
 import { EXPORT_FORMAT_VERSION } from './types';
 
 /**
@@ -1698,4 +1703,22 @@ export function suggestTimesByDayPart(
   const evening = suggestOptimalTime(eveningReminders, undefined, 2);
 
   return { morning, afternoon, evening };
+}
+
+/**
+ * Clamp a user-supplied interval to a whole number of minutes within range.
+ * NaN falls back to the default; ±Infinity clamps to the [min, max] bounds.
+ */
+export function clampIntervalMinutes(value: number): number {
+  if (Number.isNaN(value)) {
+    return DEFAULT_REMINDER_INTERVAL_MINUTES;
+  }
+  const floored = Math.floor(value);
+  if (!(floored >= REMINDER_INTERVAL_MIN)) {
+    return REMINDER_INTERVAL_MIN; // catches -Infinity and sub-min values
+  }
+  if (floored > REMINDER_INTERVAL_MAX) {
+    return REMINDER_INTERVAL_MAX; // catches +Infinity and over-max values
+  }
+  return floored;
 }

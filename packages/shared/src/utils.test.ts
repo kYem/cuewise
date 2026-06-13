@@ -15,6 +15,7 @@ import {
   calculatePomodoroHeatmap,
   calculateStreak,
   calculateWeeklyTrends,
+  clampIntervalMinutes,
   compareVersions,
   duplicateGoal,
   exportDailyTrendsCSV,
@@ -35,6 +36,11 @@ import {
   shouldShowReviewPrompt,
   toggleSubtaskInGoal,
 } from './utils';
+import {
+  DEFAULT_REMINDER_INTERVAL_MINUTES,
+  REMINDER_INTERVAL_MAX,
+  REMINDER_INTERVAL_MIN,
+} from './constants';
 
 describe('Analytics Utilities', () => {
   describe('calculateDailyTrends', () => {
@@ -1345,5 +1351,30 @@ describe('Due Date Utilities', () => {
 
       expect(label).toBe('Jan 15');
     });
+  });
+});
+
+describe('clampIntervalMinutes', () => {
+  it('returns the value when within range', () => {
+    expect(clampIntervalMinutes(30)).toBe(30);
+    expect(clampIntervalMinutes(REMINDER_INTERVAL_MAX)).toBe(480);
+  });
+
+  it('floors to an integer', () => {
+    expect(clampIntervalMinutes(30.7)).toBe(30);
+  });
+
+  it('clamps below the minimum up to 1', () => {
+    expect(clampIntervalMinutes(0)).toBe(REMINDER_INTERVAL_MIN);
+    expect(clampIntervalMinutes(-5)).toBe(REMINDER_INTERVAL_MIN);
+  });
+
+  it('clamps above the maximum down to 480', () => {
+    expect(clampIntervalMinutes(10000)).toBe(REMINDER_INTERVAL_MAX);
+  });
+
+  it('falls back to the default for non-finite input', () => {
+    expect(clampIntervalMinutes(Number.NaN)).toBe(DEFAULT_REMINDER_INTERVAL_MINUTES);
+    expect(clampIntervalMinutes(Number.POSITIVE_INFINITY)).toBe(REMINDER_INTERVAL_MAX);
   });
 });
