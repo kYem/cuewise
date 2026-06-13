@@ -453,7 +453,7 @@ export const NewTabPage: React.FC = () => {
           )}
 
           {/* Goals Section - Centered */}
-          <div className="max-w-2xl mx-auto">
+          <div className="max-w-4xl mx-auto">
             <GoalsSection />
           </div>
         </div>

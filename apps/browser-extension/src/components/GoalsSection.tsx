@@ -278,7 +278,7 @@ export const GoalsSection: React.FC = () => {
   // Focus mode renders without container wrapper
   if (viewMode === 'focus') {
     return (
-      <div className="group flex items-center justify-center gap-3 w-full max-w-2xl mx-auto">
+      <div className="group flex items-center justify-center gap-3 w-full max-w-4xl mx-auto">
         {/* Focus view - centered */}
         <GoalFocusView showAddInput={showAddInput} onCloseAddInput={() => setShowAddInput(false)} />
 
