@@ -190,22 +190,24 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
 
   return (
     <div className="space-y-2.5">
-      {/* Empty State - Only show when no today's tasks */}
-      {todayTasks.length === 0 && (
+      {/* Compact: show the add-row whenever nothing is visible — no tasks, or
+          every task completed while "show completed" is off */}
+      {viewMode === 'compact' && visibleTasks.length === 0 && (
+        <div className="py-2">
+          <GoalInput variant="widget" />
+        </div>
+      )}
+
+      {/* Full: illustrated empty state when there are no tasks at all */}
+      {viewMode !== 'compact' && todayTasks.length === 0 && (
         <div className="text-center py-8">
-          {viewMode === 'compact' ? (
-            <GoalInput />
-          ) : (
-            <EmptyState
-              animationData={emptyTasksAnimation}
-              title="No tasks for today"
-              description={
-                hasOtherGoals
-                  ? 'View incomplete tasks below'
-                  : 'Add your first task to get started!'
-              }
-            />
-          )}
+          <EmptyState
+            animationData={emptyTasksAnimation}
+            title="No tasks for today"
+            description={
+              hasOtherGoals ? 'View incomplete tasks below' : 'Add your first task to get started!'
+            }
+          />
         </div>
       )}
 
@@ -580,7 +582,7 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
       )}
 
       {/* Recent incomplete backlog — revealed from the ⚙ menu (Show incomplete) */}
-      {viewMode === 'full' && settings.showIncompleteGoals && recentIncompleteGoals.length > 0 && (
+      {settings.showIncompleteGoals && recentIncompleteGoals.length > 0 && (
         <div className="pt-2.5 border-t border-border space-y-1.5">
           <div className="px-0.5 text-xs font-medium text-tertiary">From the last 2 weeks</div>
           {recentIncompleteGoals.map((goal) => (
@@ -625,8 +627,8 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
         </div>
       )}
 
-      {/* Upcoming — revealed from the ⚙ menu */}
-      {viewMode === 'full' && settings.showUpcomingGoals && <UpcomingTasks showTrigger={false} />}
+      {/* Upcoming — revealed from the ⚙ menu (both list views) */}
+      {settings.showUpcomingGoals && <UpcomingTasks showTrigger={false} />}
     </div>
   );
 };
