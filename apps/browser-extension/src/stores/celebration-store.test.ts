@@ -13,12 +13,12 @@ describe('Celebration Store', () => {
 
   it('ignores a second celebrate while one is active (debounce)', () => {
     useCelebrationStore.getState().celebrate('pomodoro');
-    useCelebrationStore.getState().celebrate('allGoals');
+    useCelebrationStore.getState().celebrate('pomodoro');
     expect(useCelebrationStore.getState().active).toBe('pomodoro');
   });
 
   it('clears active on dismiss', () => {
-    useCelebrationStore.getState().celebrate('allGoals');
+    useCelebrationStore.getState().celebrate('pomodoro');
     useCelebrationStore.getState().dismiss();
     expect(useCelebrationStore.getState().active).toBe(null);
   });

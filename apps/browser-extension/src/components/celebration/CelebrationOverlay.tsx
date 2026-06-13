@@ -8,7 +8,6 @@ import { LottiePlayer } from '../lottie/LottiePlayer';
 
 const CELEBRATION_ASSETS: Record<CelebrationType, object> = {
   pomodoro: confetti,
-  allGoals: confetti,
 };
 
 /**

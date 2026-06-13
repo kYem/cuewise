@@ -69,7 +69,7 @@ describe('CelebrationOverlay', () => {
 
   it('renders nothing and clears active when celebrations are disabled', () => {
     setCelebrationsEnabled(false);
-    useCelebrationStore.setState({ active: 'allGoals' });
+    useCelebrationStore.setState({ active: 'pomodoro' });
 
     render(<CelebrationOverlay />);
 
@@ -87,8 +87,8 @@ describe('CelebrationOverlay', () => {
     expect(useCelebrationStore.getState().active).toBe(null);
   });
 
-  it('plays the confetti asset when the active celebration is allGoals', () => {
-    useCelebrationStore.setState({ active: 'allGoals' });
+  it('plays the confetti asset when a celebration is active', () => {
+    useCelebrationStore.setState({ active: 'pomodoro' });
     render(<CelebrationOverlay />);
 
     expect(lottie.loadAnimation).toHaveBeenCalledTimes(1);
@@ -103,7 +103,7 @@ describe('CelebrationOverlay', () => {
     expect(useCelebrationStore.getState().active).toBe(null);
 
     // The store debounce must not be stuck: a fresh celebrate still works.
-    useCelebrationStore.getState().celebrate('allGoals');
-    expect(useCelebrationStore.getState().active).toBe('allGoals');
+    useCelebrationStore.getState().celebrate('pomodoro');
+    expect(useCelebrationStore.getState().active).toBe('pomodoro');
   });
 });
