@@ -54,8 +54,9 @@ export const ReminderWidgetItem: React.FC<ReminderWidgetItemProps> = ({
   const [countdown, setCountdown] = useState('');
   const { text, isOverdue, isSoon } = formatDueDate(reminder.dueDate);
   const isPaused = reminder.recurring?.enabled === false;
-  // A paused reminder's dueDate is frozen, so suppress all "soon" affordances.
+  // A paused reminder's dueDate is frozen, so suppress all "soon"/"overdue" affordances.
   const showSoon = isSoon && !isPaused;
+  const showOverdue = isOverdue && !isPaused;
 
   // Update countdown every second for reminders that are approaching
   useEffect(() => {
@@ -81,7 +82,7 @@ export const ReminderWidgetItem: React.FC<ReminderWidgetItemProps> = ({
     <div
       className={cn(
         'rounded-lg border-2 p-3 transition-all',
-        getContainerClasses(reminder.completed, isOverdue, showSoon)
+        getContainerClasses(reminder.completed, showOverdue, showSoon)
       )}
     >
       <div className="flex items-start gap-2">
@@ -98,7 +99,7 @@ export const ReminderWidgetItem: React.FC<ReminderWidgetItemProps> = ({
             <Circle
               className={cn(
                 'w-5 h-5 transition-colors',
-                isOverdue ? 'text-red-400' : showSoon ? 'text-orange-400' : 'text-tertiary'
+                showOverdue ? 'text-red-400' : showSoon ? 'text-orange-400' : 'text-tertiary'
               )}
             />
           )}
@@ -123,7 +124,7 @@ export const ReminderWidgetItem: React.FC<ReminderWidgetItemProps> = ({
                 'w-3 h-3',
                 reminder.completed
                   ? 'text-tertiary'
-                  : isOverdue
+                  : showOverdue
                     ? 'text-red-500'
                     : showSoon
                       ? 'text-orange-500'
@@ -135,7 +136,7 @@ export const ReminderWidgetItem: React.FC<ReminderWidgetItemProps> = ({
                 'text-xs',
                 reminder.completed
                   ? 'text-tertiary'
-                  : isOverdue
+                  : showOverdue
                     ? 'text-red-600 font-medium'
                     : showSoon
                       ? 'text-orange-600 font-semibold'

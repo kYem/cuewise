@@ -51,8 +51,9 @@ export const ReminderItem: React.FC<ReminderItemProps> = ({
   const [countdown, setCountdown] = useState('');
   const { text, isOverdue, isSoon } = formatDueDate(reminder.dueDate);
   const isPaused = reminder.recurring?.enabled === false;
-  // A paused reminder's dueDate is frozen, so suppress all "soon" affordances.
+  // A paused reminder's dueDate is frozen, so suppress all "soon"/"overdue" affordances.
   const showSoon = isSoon && !isPaused;
+  const showOverdue = isOverdue && !isPaused;
 
   // Update countdown every second for reminders that are approaching
   useEffect(() => {
@@ -78,7 +79,7 @@ export const ReminderItem: React.FC<ReminderItemProps> = ({
     <div
       className={cn(
         'group flex items-center gap-3 p-3 rounded-lg border-2 transition-all',
-        getContainerClasses(reminder.completed, isOverdue, showSoon)
+        getContainerClasses(reminder.completed, showOverdue, showSoon)
       )}
     >
       {/* Checkbox */}
@@ -105,7 +106,7 @@ export const ReminderItem: React.FC<ReminderItemProps> = ({
           <Circle
             className={cn(
               'w-6 h-6 transition-colors',
-              isOverdue
+              showOverdue
                 ? 'text-red-400 group-hover:text-red-500'
                 : 'text-tertiary group-hover:text-primary-500'
             )}
@@ -132,7 +133,7 @@ export const ReminderItem: React.FC<ReminderItemProps> = ({
               'w-3.5 h-3.5',
               reminder.completed
                 ? 'text-tertiary'
-                : isOverdue
+                : showOverdue
                   ? 'text-red-500'
                   : showSoon
                     ? 'text-orange-500'
@@ -144,7 +145,7 @@ export const ReminderItem: React.FC<ReminderItemProps> = ({
               'text-sm',
               reminder.completed
                 ? 'text-tertiary'
-                : isOverdue
+                : showOverdue
                   ? 'text-red-600 font-medium'
                   : showSoon
                     ? 'text-orange-600 font-semibold'
