@@ -153,3 +153,7 @@ build/
 
 # Local docs/research (not tracked)
 docs/
+
+# macOS
+.DS_Store
+**/.DS_Store
