@@ -1,6 +1,7 @@
 import {
   generateId,
   logger,
+  nextReminderDueDate,
   type Reminder,
   type ReminderCategory,
   type ReminderFrequency,
@@ -21,61 +22,16 @@ interface ReminderStore {
   addReminder: (
     text: string,
     dueDate: Date,
-    recurring?: { frequency: ReminderFrequency; enabled: boolean },
+    recurring?: { frequency: ReminderFrequency; enabled: boolean; intervalMinutes?: number },
     category?: ReminderCategory
   ) => Promise<void>;
   toggleReminder: (reminderId: string) => Promise<void>;
   deleteReminder: (reminderId: string) => Promise<void>;
   updateReminder: (reminderId: string, updates: Partial<Omit<Reminder, 'id'>>) => Promise<void>;
   snoozeReminder: (reminderId: string, minutes: number) => Promise<void>;
+  setReminderPaused: (reminderId: string, paused: boolean) => Promise<void>;
   markAsNotified: (reminderId: string) => Promise<void>;
   refreshLists: () => void;
-}
-
-/**
- * Calculate the next occurrence for a recurring reminder
- */
-function calculateNextOccurrence(currentDueDate: Date, frequency: ReminderFrequency): Date {
-  const nextDueDate = new Date(currentDueDate);
-
-  switch (frequency) {
-    case 'daily':
-      nextDueDate.setDate(nextDueDate.getDate() + 1);
-      break;
-    case 'weekly':
-      nextDueDate.setDate(nextDueDate.getDate() + 7);
-      break;
-    case 'monthly':
-      nextDueDate.setMonth(nextDueDate.getMonth() + 1);
-      break;
-  }
-
-  return nextDueDate;
-}
-
-/**
- * Advance a recurring reminder to the next future occurrence
- * If the reminder is overdue, keep advancing until it's in the future
- */
-function advanceToNextFutureOccurrence(reminder: Reminder): Reminder {
-  if (!reminder.recurring?.enabled) {
-    return reminder;
-  }
-
-  const now = new Date();
-  let nextDueDate = new Date(reminder.dueDate);
-
-  // Keep advancing until the due date is in the future
-  while (nextDueDate <= now) {
-    nextDueDate = calculateNextOccurrence(nextDueDate, reminder.recurring.frequency);
-  }
-
-  return {
-    ...reminder,
-    dueDate: nextDueDate.toISOString(),
-    completed: false,
-    notified: false,
-  };
 }
 
 /**
@@ -130,7 +86,13 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
           new Date(reminder.dueDate) < now
         ) {
           hasAdvanced = true;
-          const advanced = advanceToNextFutureOccurrence(reminder);
+          const nextDueDate = nextReminderDueDate(reminder, now);
+          const advanced: Reminder = {
+            ...reminder,
+            dueDate: nextDueDate.toISOString(),
+            completed: false,
+            notified: false,
+          };
           logger.info(`Auto-advanced recurring reminder "${reminder.text}" to ${advanced.dueDate}`);
           return advanced;
         }
@@ -228,9 +190,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
 
       // For recurring reminders, advance to next occurrence instead of marking complete
       if (isCompleting && reminder.recurring?.enabled) {
-        // Always calculate the next occurrence from current due date
-        const currentDueDate = new Date(reminder.dueDate);
-        const nextDueDate = calculateNextOccurrence(currentDueDate, reminder.recurring.frequency);
+        const nextDueDate = nextReminderDueDate(reminder, new Date());
 
         const advancedReminder: Reminder = {
           ...reminder,
@@ -408,6 +368,41 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       const errorMessage = 'Failed to snooze reminder. Please try again.';
       set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
+    }
+  },
+
+  setReminderPaused: async (reminderId: string, paused: boolean) => {
+    try {
+      const { reminders } = get();
+      const reminder = reminders.find((r) => r.id === reminderId);
+      if (!reminder || !reminder.recurring) {
+        return;
+      }
+
+      const updated = reminders.map((r) =>
+        r.id === reminderId && r.recurring
+          ? { ...r, recurring: { ...r.recurring, enabled: !paused } }
+          : r
+      );
+      await setReminders(updated);
+
+      const { upcoming, overdue } = categorizeReminders(updated);
+      set({ reminders: updated, upcomingReminders: upcoming, overdueReminders: overdue });
+
+      if (chrome?.alarms) {
+        if (paused) {
+          await chrome.alarms.clear(`reminder-${reminderId}`);
+        } else {
+          const nextDueDate = nextReminderDueDate(
+            { ...reminder, recurring: { ...reminder.recurring, enabled: true } },
+            new Date()
+          );
+          await chrome.alarms.create(`reminder-${reminderId}`, { when: nextDueDate.getTime() });
+        }
+      }
+    } catch (error) {
+      logger.error('Error pausing reminder', error);
+      useToastStore.getState().error('Failed to update reminder. Please try again.');
     }
   },
 
