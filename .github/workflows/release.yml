@@ -30,6 +30,8 @@ jobs:
       version: ${{ steps.version.outputs.version }}
     steps:
       - name: Harden runner
+        # TODO: flip to `block` once a real release run's StepSecurity insights
+        # confirm this job's egress (npm registry + GitHub/Actions endpoints).
         uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2
         with:
           egress-policy: audit
@@ -143,26 +145,36 @@ jobs:
       contents: read
     steps:
       - name: Harden runner
-        # Tighten to `block` once the allowed egress is confirmed from audit logs
-        # (needs oauth2.googleapis.com + www.googleapis.com for the CWS API).
+        # Block egress: this job holds the store tokens and runs no third-party
+        # code (the publish script uses only Node built-ins), so the allowlist is
+        # tight. If a needed connection is dropped, find it on the StepSecurity
+        # insights page for the run and add it here.
         uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2
         with:
-          egress-policy: audit
+          egress-policy: block
+          disable-sudo: true
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            codeload.github.com:443
+            objects.githubusercontent.com:443
+            results-receiver.actions.githubusercontent.com:443
+            *.blob.core.windows.net:443
+            oauth2.googleapis.com:443
+            www.googleapis.com:443
 
-      - name: Checkout
+      # Only the first-party publish script is needed — no install, no tsx, so no
+      # dependency code ever runs in the job that holds the secrets.
+      - name: Checkout publish script
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6
+        with:
+          sparse-checkout: scripts/publish-chrome.mts
+          sparse-checkout-cone-mode: false
 
       - name: Setup Node.js
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: '22'
-          cache: 'pnpm'
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
 
       - name: Download extension zip
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
@@ -178,7 +190,7 @@ jobs:
           # Client Secret and Refresh Token are sensitive, stored as environment secrets
           CHROME_CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
           CHROME_REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
-        run: pnpm publish:chrome "apps/browser-extension/build/cuewise-extension-${{ needs.build.outputs.version }}.zip"
+        run: node --experimental-strip-types scripts/publish-chrome.mts "apps/browser-extension/build/cuewise-extension-${{ needs.build.outputs.version }}.zip"
 
   summary:
     name: Summary
