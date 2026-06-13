@@ -5,8 +5,10 @@ dist/
 *.zip
 cuewise-extension-*.zip
 
-# Screenshots (source images)
+# Regenerable marketing images — not version-controlled (uploaded to the store manually):
+# dev/source screenshots, store-asset screenshots, and store promo tiles.
 screenshots/
+store-assets/promo/
 
 # OS files
 .DS_Store
