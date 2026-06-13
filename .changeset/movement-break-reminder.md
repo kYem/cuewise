@@ -1,5 +1,5 @@
 ---
-"@cuewise/browser-extension": patch
+"@cuewise/browser-extension": minor
 ---
 
 Add a movement-break reminder: a recurring "time to move" notification on a
