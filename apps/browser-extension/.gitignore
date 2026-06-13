@@ -5,8 +5,9 @@ dist/
 *.zip
 cuewise-extension-*.zip
 
-# Screenshots (source images)
-screenshots/
+# Dev/source screenshots (throwaway). Anchored so it doesn't also ignore
+# store-assets/screenshots/, which are tracked Chrome Web Store listing images.
+/screenshots/
 
 # OS files
 .DS_Store
