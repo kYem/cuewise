@@ -153,11 +153,12 @@ export const ReminderWidgetItem: React.FC<ReminderWidgetItemProps> = ({
                 />
                 <span
                   className={cn(
-                    'text-xs capitalize',
+                    'text-xs first-letter:uppercase',
                     reminder.recurring.enabled === false ? 'text-tertiary' : 'text-primary-600'
                   )}
                 >
                   {formatReminderCadence(reminder.recurring)}
+                  {reminder.recurring.enabled === false ? ' (paused)' : ''}
                 </span>
                 {onPauseToggle && (
                   <button

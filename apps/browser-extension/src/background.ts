@@ -114,10 +114,21 @@ chrome.notifications.onButtonClicked.addListener(async (notificationId, buttonIn
   const reminders = await getReminders();
 
   if (buttonIndex === 0) {
-    // Done: mark this occurrence complete (recurring already rescheduled on fire)
-    const updated = reminders.map((r) => (r.id === reminderId ? { ...r, completed: true } : r));
-    await setReminders(updated);
+    // Done: mark one-off reminders complete. An active recurring reminder has
+    // already been advanced to its next occurrence on fire, so completing it
+    // here would make handleReminderAlarm skip that next fire — just dismiss.
+    const reminder = reminders.find((r) => r.id === reminderId);
+    if (!reminder?.recurring?.enabled) {
+      const updated = reminders.map((r) => (r.id === reminderId ? { ...r, completed: true } : r));
+      await setReminders(updated);
+    }
   } else if (buttonIndex === 1) {
+    // Don't resurrect a recurring reminder paused while the notification lingered
+    const reminder = reminders.find((r) => r.id === reminderId);
+    if (reminder?.recurring && reminder.recurring.enabled === false) {
+      await chrome.notifications.clear(notificationId);
+      return;
+    }
     // Snooze 5 min: pull the next alarm in to 5 minutes from now
     const snoozeAt = Date.now() + 5 * 60_000;
     const updated = reminders.map((r) =>

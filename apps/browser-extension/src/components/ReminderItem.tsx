@@ -162,7 +162,7 @@ export const ReminderItem: React.FC<ReminderItemProps> = ({
               />
               <span
                 className={cn(
-                  'text-xs capitalize',
+                  'text-xs first-letter:uppercase',
                   reminder.recurring.enabled === false ? 'text-tertiary' : 'text-primary-600'
                 )}
               >
