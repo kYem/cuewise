@@ -1510,6 +1510,14 @@ describe('resolveReminderNotificationAction', () => {
     });
   });
 
+  it('Snooze reschedules a one-off reminder to now + 5 min', () => {
+    const reminder = { ...base, recurring: undefined };
+    expect(resolveReminderNotificationAction(reminder, 1, now)).toEqual({
+      type: 'snooze',
+      dueDate: expectedSnoozeDueDate,
+    });
+  });
+
   it('Snooze dismisses a paused recurring reminder', () => {
     const reminder = { ...base, recurring: { frequency: 'daily' as const }, paused: true };
     expect(resolveReminderNotificationAction(reminder, 1, now)).toEqual({ type: 'dismiss' });
