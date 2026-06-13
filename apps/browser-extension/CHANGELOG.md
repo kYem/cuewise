@@ -1,5 +1,59 @@
 # @cuewise/browser-extension
 
+## 1.11.0
+
+### Minor Changes
+
+- 9b1712d: Redesign the Today's Focus goals widget to match the design system (full, compact, and focus views)
+  - **Full view** leads with a progress ring + encouragement line; soft pill rows
+    with the subtask `n/m` count on the right that expands the subtasks inline; the
+    add-a-goal input moved to the bottom of the card
+  - **Compact view** is now slim glanceable rows: flag/check pill, an inline subtask
+    progress bar, and an accordion chevron
+  - A single ⚙ menu consolidates the view-mode switcher (Full / Compact / Focus) and
+    the **Show completed / Show incomplete / Upcoming** toggles, replacing the old
+    header trio and in-card buttons
+  - Subtask management (add / remove / reorder) is edit-mode only; the drag handle
+    appears only while editing
+  - New persisted settings — `showCompletedGoals` (default on), `showIncompleteGoals`,
+    and `showUpcomingGoals` — so the toggles survive reload
+  - Removed the standalone progress bar and the "Clear completed" button (the ring
+    and the show-completed filter cover them)
+
+- 89252ee: Add a gentle in-app store-review prompt (ENG-3)
+
+  Surfaces a dismissible "Enjoying Cuewise?" modal at a moment of delight — a 7-day
+  goal streak or 10 completed pomodoros — at a calm tab-open moment (never on
+  install, never during an active pomodoro). It's shown at most twice, spaced a
+  week apart; "Leave a review" opens the Chrome Web Store reviews tab and "Don't
+  ask again" stops it permanently. The trigger lives in a pure, unit-tested
+  `shouldShowReviewPrompt` helper, backed by three new persisted settings
+  (`reviewPromptDismissed`, `reviewPromptCount`, `reviewPromptLastShownAt`).
+
+### Patch Changes
+
+- 67b7b3a: Fix the compact "Today's Focus" widget: add-row overflow, dead empty state, and
+  inert menu toggles
+  - The compact add-row rendered the boxed input variant, whose `min-w-[280px]`
+    plus the wide Add button overflowed the 400px card — truncating the placeholder
+    and clipping the "Add" button off the right edge. It now uses the soft-pill
+    `widget` variant that fits.
+  - Completing every task with "Show completed" off left a dead widget with no way
+    to add a task (the add-row only appeared when there were literally zero tasks).
+    The add-row now shows whenever the visible list is empty.
+  - The compact menu's "Show incomplete" and "Upcoming" toggles did nothing — those
+    sections were full-mode only. They now render in compact too, so the toggles
+    are meaningful in both views.
+
+- 89252ee: Fix the current streak collapsing to zero when a completed goal carries a future
+  date
+
+  `calculateStreak` is anchored to today, so a completed objective whose date is a
+  future due-date sorted ahead of today and reset the current streak to 0 — most
+  visibly on the Insights page. The streak now ignores future-dated entries at the
+  shared-utility level, so every caller (Insights and the new review prompt) stays
+  correct.
+
 ## 1.10.0
 
 ### Minor Changes
