@@ -1,5 +1,59 @@
 # @cuewise/browser-extension
 
+## 1.12.0
+
+### Minor Changes
+
+- dd614f4: Replace the goal-completion confetti with a satisfying animated tick checkbox
+  - New `AnimatedCheckbox` — a presentational, theme-aware SVG that plays a quick
+    ring **spin** and then **draws** the checkmark on when you complete a task,
+    with a subtle pop. It tints to the active theme (and a white `onImage` variant
+    for the glass theme), respects `prefers-reduced-motion` (the check appears
+    instantly, no spin), and never replays the animation for tasks that are
+    already complete when they load
+  - Adopted across every interactive completion toggle: the Today's Focus tiles,
+    backlog rows, and subtasks; the compact rows (the flag pill is now the standard
+    animated ring); the focus-mode check; the all-goals list; upcoming tasks; and
+    the goal detail task rows (which also gain a previously-missing accessible
+    label)
+  - Removed the "all goals done" confetti celebration in favour of the per-checkbox
+    tick — completing your last task of the day no longer triggers a random burst.
+    The Pomodoro-completion confetti and the `celebrationsEnabled` setting are
+    unchanged
+
+- 26e1c04: Add a movement-break reminder: a recurring "time to move" notification on a
+  custom "every N minutes" interval (presets 30/45/60/90 + custom, default 30),
+  with a one-tap "Move" preset, Done / Snooze-5-min notification buttons, and a
+  pause/resume toggle for recurring reminders. Inspired by the NPR _Body Electric_
+  "move every 30 minutes" study.
+- 56a8451: Redesign the Pomodoro timer into a compact, on-brand card with a goal-picker header
+  - **Compact card** — smaller ring, digits, and controls, with a density-aware
+    width (compact / comfortable / spacious)
+  - **The header is the goal picker** — the title shows the chosen goal or the
+    session label ("Focus Session"); a chevron opens a dropdown of today's
+    incomplete goals with an in-list "Clear goal" option, and it closes on
+    click-outside. A long goal title shrinks to fit two lines, then fades at the
+    bottom edge instead of hard-truncating
+  - **Settings as a compact icon row** — ⏱ focus · ☕ break · 🛏 long break ·
+    ↻ interval; each value opens its preset menu in a single click (no more bulky
+    inline select), and the active-sound line uses a Lucide icon instead of an emoji
+  - The "until long break" session dots now sit just below the ring
+
+### Patch Changes
+
+- e4246e5: Fix the goal add-row "link to goal" button and show the Cuewise logo on the welcome screen
+  - The link button in the Today's Focus add-row did nothing: it's rendered via
+    Radix `PopoverTrigger asChild`, but `GoalLinkButton` was a plain function
+    component that didn't forward the trigger's ref/onClick to its `<button>`, so
+    the picker never opened. It now uses `forwardRef` and spreads the trigger props.
+  - The welcome modal showed a generic sparkles icon; it now shows the actual
+    Cuewise logo.
+
+- a9ad3e7: Add a `release:status` script that reports the Chrome Web Store published vs.
+  last-uploaded version (compared to package.json), so you can tell whether the
+  latest release is live or still in review. Dependency-free, same credentials as
+  `publish:chrome`.
+
 ## 1.11.0
 
 ### Minor Changes
