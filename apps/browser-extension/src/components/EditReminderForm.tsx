@@ -60,20 +60,15 @@ export const EditReminderForm: React.FC<EditReminderFormProps> = ({
         ? new Date(Date.now() + clampedInterval * 60_000)
         : new Date(`${date}T${time}`);
 
-      // Preserve the existing pause state so editing a paused reminder keeps it paused.
-      const enabled = reminder.recurring?.enabled ?? true;
-
-      let recurring:
-        | { frequency: ReminderFrequency; enabled: boolean; intervalMinutes?: number }
-        | undefined;
+      // Partial merge in updateReminder preserves the reminder's existing `paused`.
+      let recurring: { frequency: ReminderFrequency; intervalMinutes?: number } | undefined;
       if (isInterval) {
         recurring = {
           frequency: recurringFrequency,
-          enabled,
           intervalMinutes: clampedInterval,
         };
       } else if (isRecurring) {
-        recurring = { frequency: recurringFrequency, enabled };
+        recurring = { frequency: recurringFrequency };
       } else {
         recurring = undefined;
       }

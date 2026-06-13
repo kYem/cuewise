@@ -93,10 +93,10 @@ export interface Reminder {
   notified: boolean;
   recurring?: {
     frequency: ReminderFrequency;
-    enabled: boolean;
     // Required when frequency === 'interval'. Minutes between occurrences.
     intervalMinutes?: number;
   };
+  paused?: boolean; // true when a recurring reminder is paused (won't fire)
   // Context-aware suggestions
   category?: ReminderCategory; // Optional category for suggestions
   completedAt?: string; // ISO timestamp when marked complete (for suggestions)

@@ -1395,7 +1395,7 @@ describe('nextReminderDueDate', () => {
     const reminder = {
       ...base,
       dueDate: '2026-06-13T09:00:00.000Z', // stale; must be ignored
-      recurring: { frequency: 'interval' as const, enabled: true, intervalMinutes: 30 },
+      recurring: { frequency: 'interval' as const, intervalMinutes: 30 },
     };
     expect(nextReminderDueDate(reminder, now).toISOString()).toBe('2026-06-13T10:30:00.000Z');
   });
@@ -1405,7 +1405,7 @@ describe('nextReminderDueDate', () => {
     const reminder = {
       ...base,
       dueDate: '2026-06-10T08:00:00.000Z', // 3 days overdue
-      recurring: { frequency: 'daily' as const, enabled: true },
+      recurring: { frequency: 'daily' as const },
     };
     expect(nextReminderDueDate(reminder, now).toISOString()).toBe('2026-06-14T08:00:00.000Z');
   });
@@ -1415,7 +1415,7 @@ describe('nextReminderDueDate', () => {
     const reminder = {
       ...base,
       dueDate: '2026-06-12T08:00:00.000Z',
-      recurring: { frequency: 'weekly' as const, enabled: true },
+      recurring: { frequency: 'weekly' as const },
     };
     expect(nextReminderDueDate(reminder, now).toISOString()).toBe('2026-06-19T08:00:00.000Z');
   });
@@ -1433,11 +1433,11 @@ describe('REMINDER_TEMPLATES move preset', () => {
 
 describe('formatReminderCadence', () => {
   it('formats interval reminders in minutes', () => {
-    expect(
-      formatReminderCadence({ frequency: 'interval', enabled: true, intervalMinutes: 30 })
-    ).toBe('every 30 min');
+    expect(formatReminderCadence({ frequency: 'interval', intervalMinutes: 30 })).toBe(
+      'every 30 min'
+    );
   });
   it('passes calendar frequencies through', () => {
-    expect(formatReminderCadence({ frequency: 'daily', enabled: true })).toBe('daily');
+    expect(formatReminderCadence({ frequency: 'daily' })).toBe('daily');
   });
 });

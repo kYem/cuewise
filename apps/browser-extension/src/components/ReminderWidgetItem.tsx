@@ -53,7 +53,7 @@ export const ReminderWidgetItem: React.FC<ReminderWidgetItemProps> = ({
 }) => {
   const [countdown, setCountdown] = useState('');
   const { text, isOverdue, isSoon } = formatDueDate(reminder.dueDate);
-  const isPaused = reminder.recurring?.enabled === false;
+  const isPaused = reminder.paused === true;
   // A paused reminder's dueDate is frozen, so suppress all "soon"/"overdue" affordances.
   const showSoon = isSoon && !isPaused;
   const showOverdue = isOverdue && !isPaused;

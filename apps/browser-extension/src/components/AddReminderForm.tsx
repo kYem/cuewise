@@ -53,7 +53,7 @@ export const AddReminderForm: React.FC<AddReminderFormProps> = ({ onSuccess }) =
         await addReminder(
           template.text,
           new Date(Date.now() + minutes * 60_000),
-          { frequency: 'interval', enabled: true, intervalMinutes: minutes },
+          { frequency: 'interval', intervalMinutes: minutes },
           template.category
         );
         useToastStore.getState().success(`Created "${template.name}" reminder`);
@@ -105,7 +105,6 @@ export const AddReminderForm: React.FC<AddReminderFormProps> = ({ onSuccess }) =
         dueDate,
         {
           frequency: template.frequency,
-          enabled: true,
         },
         template.category
       );
@@ -148,17 +147,14 @@ export const AddReminderForm: React.FC<AddReminderFormProps> = ({ onSuccess }) =
         return;
       }
 
-      let recurring:
-        | { frequency: ReminderFrequency; enabled: true; intervalMinutes?: number }
-        | undefined;
+      let recurring: { frequency: ReminderFrequency; intervalMinutes?: number } | undefined;
       if (isInterval) {
         recurring = {
           frequency: recurringFrequency,
-          enabled: true,
           intervalMinutes: clampedInterval,
         };
       } else if (isRecurring) {
-        recurring = { frequency: recurringFrequency, enabled: true };
+        recurring = { frequency: recurringFrequency };
       } else {
         recurring = undefined;
       }

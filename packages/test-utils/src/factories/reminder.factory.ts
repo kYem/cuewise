@@ -13,7 +13,6 @@ export const reminderFactory = Factory.define<Reminder>(({ sequence }) => ({
 export const recurringReminderFactory = reminderFactory.params({
   recurring: {
     frequency: 'daily' as const,
-    enabled: true,
   },
 });
 

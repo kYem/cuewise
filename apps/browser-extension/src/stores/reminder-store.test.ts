@@ -44,26 +44,24 @@ beforeEach(() => {
 });
 
 describe('setReminderPaused', () => {
-  it('disables recurring and clears the alarm when pausing', async () => {
+  it('pauses the reminder and clears the alarm when pausing', async () => {
     const store = useReminderStore.getState();
     await store.addReminder('Move', new Date(Date.now() + 60_000), {
       frequency: 'interval',
-      enabled: true,
       intervalMinutes: 30,
     });
     const id = useReminderStore.getState().reminders[0].id;
 
     await useReminderStore.getState().setReminderPaused(id, true);
 
-    expect(useReminderStore.getState().reminders[0].recurring?.enabled).toBe(false);
+    expect(useReminderStore.getState().reminders[0].paused).toBe(true);
     expect(alarmsMock.clear).toHaveBeenCalledWith(`reminder-${id}`);
   });
 
-  it('re-enables recurring and recreates the alarm when resuming', async () => {
+  it('unpauses the reminder and recreates the alarm when resuming', async () => {
     const store = useReminderStore.getState();
     await store.addReminder('Move', new Date(Date.now() + 60_000), {
       frequency: 'interval',
-      enabled: true,
       intervalMinutes: 30,
     });
     const id = useReminderStore.getState().reminders[0].id;
@@ -74,7 +72,7 @@ describe('setReminderPaused', () => {
     await useReminderStore.getState().setReminderPaused(id, false);
 
     const resumed = useReminderStore.getState().reminders[0];
-    expect(resumed.recurring?.enabled).toBe(true);
+    expect(resumed.paused).toBe(false);
     // Resume advances dueDate to the next occurrence (now + interval), not a stale past time.
     expect(new Date(resumed.dueDate).getTime()).toBeGreaterThan(beforeResume);
     expect(alarmsMock.create).toHaveBeenCalledWith(`reminder-${id}`, expect.any(Object));
@@ -88,7 +86,8 @@ describe('toggleReminder on a paused recurring reminder', () => {
     dueDate: new Date(Date.now() - 60_000).toISOString(),
     completed: false,
     notified: false,
-    recurring: { frequency: 'interval', enabled: false, intervalMinutes: 30 },
+    recurring: { frequency: 'interval', intervalMinutes: 30 },
+    paused: true,
   };
 
   it('advances the due date and stays paused without completing or arming an alarm', async () => {
@@ -99,7 +98,7 @@ describe('toggleReminder on a paused recurring reminder', () => {
 
     const updated = useReminderStore.getState().reminders[0];
     expect(updated.completed).toBe(false);
-    expect(updated.recurring?.enabled).toBe(false);
+    expect(updated.paused).toBe(true);
     // Advanced to the next occurrence (now + interval), no longer in the past.
     expect(new Date(updated.dueDate).getTime()).toBeGreaterThan(before);
     expect(alarmsMock.create).not.toHaveBeenCalled();
@@ -113,7 +112,8 @@ describe('categorizeReminders with a paused reminder', () => {
     dueDate: new Date(Date.now() - 60_000).toISOString(),
     completed: false,
     notified: false,
-    recurring: { frequency: 'interval', enabled: false, intervalMinutes: 30 },
+    recurring: { frequency: 'interval', intervalMinutes: 30 },
+    paused: true,
   };
 
   it('places a paused reminder with a past due date in upcoming, not overdue', () => {
@@ -134,7 +134,7 @@ describe('categorizeReminders with a paused reminder', () => {
       dueDate: new Date(Date.now() + 30 * 60_000).toISOString(),
       completed: false,
       notified: false,
-      recurring: { frequency: 'interval', enabled: true, intervalMinutes: 30 },
+      recurring: { frequency: 'interval', intervalMinutes: 30 },
     };
     useReminderStore.setState({ reminders: [pausedPastReminder, activeUpcoming] });
 

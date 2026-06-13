@@ -35,7 +35,7 @@ async function handleReminderAlarm(reminderId: string) {
     }
 
     // Paused recurring reminders must neither notify nor re-arm.
-    if (reminder.recurring && reminder.recurring.enabled === false) {
+    if (reminder.paused) {
       return;
     }
 
@@ -56,8 +56,8 @@ async function handleReminderAlarm(reminderId: string) {
     );
     await setReminders(updatedReminders);
 
-    // Handle recurring reminders
-    if (reminder.recurring?.enabled) {
+    // Handle recurring reminders (paused ones already returned above)
+    if (reminder.recurring) {
       await scheduleRecurringReminder(reminder);
     }
   } catch (error) {
@@ -130,7 +130,7 @@ chrome.notifications.onButtonClicked.addListener(async (notificationId, buttonIn
   } else if (buttonIndex === 1) {
     // Don't resurrect a recurring reminder paused while the notification lingered
     const reminder = reminders.find((r) => r.id === reminderId);
-    if (reminder?.recurring && reminder.recurring.enabled === false) {
+    if (reminder?.paused) {
       await chrome.notifications.clear(notificationId);
       return;
     }
