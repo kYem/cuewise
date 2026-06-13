@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node --experimental-strip-types
+#!/usr/bin/env -S node
 /**
  * Chrome Web Store Publishing Script
  *
@@ -8,7 +8,7 @@
  * Usage:
  *   pnpm publish:chrome <zip-file-path>   - Upload and publish
  *   pnpm publish:chrome --dry-run         - Test credentials only
- *   node --experimental-strip-types --env-file=.env.chrome scripts/publish-chrome.mts --dry-run
+ *   node --env-file=.env.chrome scripts/publish-chrome.mts --dry-run
  *
  * Required environment variables:
  *   CHROME_EXTENSION_ID    - Extension ID from Chrome Web Store
@@ -165,9 +165,7 @@ async function main() {
     console.error('  pnpm publish:chrome --dry-run         - Test credentials only');
     console.error('');
     console.error('With env file:');
-    console.error(
-      '  node --experimental-strip-types --env-file=.env.chrome scripts/publish-chrome.mts --dry-run'
-    );
+    console.error('  node --env-file=.env.chrome scripts/publish-chrome.mts --dry-run');
     process.exit(1);
   }
 

@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node --experimental-strip-types
+#!/usr/bin/env -S node
 /**
  * Chrome Web Store release status
  *
@@ -9,7 +9,7 @@
  *
  * Usage:
  *   pnpm release:status   (with the 4 CHROME_* env vars already set)
- *   node --experimental-strip-types --env-file=.env.chrome scripts/release-status.mts
+ *   node --env-file=.env.chrome scripts/release-status.mts
  *
  * Required environment variables:
  *   CHROME_EXTENSION_ID, CHROME_CLIENT_ID, CHROME_CLIENT_SECRET, CHROME_REFRESH_TOKEN

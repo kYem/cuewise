@@ -197,7 +197,7 @@ jobs:
           # Client Secret and Refresh Token are sensitive, stored as environment secrets
           CHROME_CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
           CHROME_REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
-        run: node --experimental-strip-types scripts/publish-chrome.mts "apps/browser-extension/build/cuewise-extension-${{ needs.build.outputs.version }}.zip"
+        run: node scripts/publish-chrome.mts "apps/browser-extension/build/cuewise-extension-${{ needs.build.outputs.version }}.zip"
 
   summary:
     name: Summary
