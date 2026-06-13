@@ -58,7 +58,7 @@ async function getAccessToken(): Promise<string> {
 async function getItem(
   accessToken: string,
   projection: 'DRAFT' | 'PUBLISHED'
-): Promise<ItemResource> {
+): Promise<ItemResource | null> {
   const id = process.env.CHROME_EXTENSION_ID as string;
   const response = await fetch(
     `${CWS_API_BASE}/chromewebstore/v1.1/items/${id}?projection=${projection}`,
@@ -67,6 +67,12 @@ async function getItem(
 
   const text = await response.text();
   if (!response.ok) {
+    // The CWS API frequently rejects projection=PUBLISHED with "append ?projection=DRAFT"
+    // (no separately-queryable published resource for this item). Treat it as
+    // "not reported" rather than fatal — DRAFT carries the version + uploadState.
+    if (projection === 'PUBLISHED' && text.includes('projection=DRAFT')) {
+      return null;
+    }
     throw new Error(
       `items.get (${projection}): ${response.status} ${response.statusText} - ${text}`
     );
@@ -104,25 +110,29 @@ async function main() {
   console.log('');
 
   const accessToken = await getAccessToken();
-  const published = await getItem(accessToken, 'PUBLISHED');
   const draft = await getItem(accessToken, 'DRAFT');
+  const published = await getItem(accessToken, 'PUBLISHED'); // null when the API won't report it
 
-  const live = published.crxVersion ?? '(not reported)';
-  console.log(`Published (live to users):   ${live}`);
+  const uploaded = draft?.crxVersion ?? '(not reported)';
+  const live = published?.crxVersion ?? '(not exposed by the API)';
   console.log(
-    `Draft (last uploaded):       ${draft.crxVersion ?? '(not reported)'}  [uploadState: ${draft.uploadState ?? 'unknown'}]`
+    `Last uploaded (draft):        ${uploaded}  [uploadState: ${draft?.uploadState ?? 'unknown'}]`
   );
-  for (const e of draft.itemError ?? []) {
+  console.log(`Published (live to users):    ${live}`);
+  for (const e of draft?.itemError ?? []) {
     console.log(`  itemError ${e.error_code}: ${e.error_detail}`);
   }
   console.log('');
 
-  if (published.crxVersion === ours) {
+  if (published?.crxVersion === ours) {
     console.log(`✅ v${ours} is the published version — the latest release is live.`);
-  } else {
+  } else if (uploaded === ours) {
     console.log(
-      `⏳ v${ours} is not the published version yet (store shows ${live}). It's likely still in review.`
+      `✅ v${ours} is uploaded${draft?.uploadState ? ` (uploadState: ${draft.uploadState})` : ''}. ` +
+        'Live/review status is not exposed by the API — confirm on the Chrome Web Store dashboard.'
     );
+  } else {
+    console.log(`⏳ v${ours} is not the latest uploaded version (store shows ${uploaded}).`);
   }
 }
 
