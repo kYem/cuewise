@@ -1749,3 +1749,14 @@ export function nextReminderDueDate(reminder: Reminder, now: Date): Date {
   }
   return next;
 }
+
+/**
+ * Human-readable cadence label for a recurring reminder.
+ * 'interval' renders as "every N min"; calendar frequencies pass through.
+ */
+export function formatReminderCadence(recurring: NonNullable<Reminder['recurring']>): string {
+  if (recurring.frequency === 'interval') {
+    return `every ${clampIntervalMinutes(recurring.intervalMinutes ?? DEFAULT_REMINDER_INTERVAL_MINUTES)} min`;
+  }
+  return recurring.frequency;
+}

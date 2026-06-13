@@ -1,6 +1,16 @@
-import type { Reminder } from '@cuewise/shared';
+import { formatReminderCadence, type Reminder } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
-import { Bell, CheckCircle2, Circle, Clock, Pencil, Repeat, Trash2 } from 'lucide-react';
+import {
+  Bell,
+  CheckCircle2,
+  Circle,
+  Clock,
+  Pause,
+  Pencil,
+  Play,
+  Repeat,
+  Trash2,
+} from 'lucide-react';
 import type React from 'react';
 import { useEffect, useState } from 'react';
 import { formatCountdown, formatDueDate } from '../utils/reminder-date-utils';
@@ -11,6 +21,7 @@ interface ReminderItemProps {
   onDelete: (id: string) => void;
   onEdit: (id: string) => void;
   onSnooze?: (id: string, minutes: number) => void;
+  onPauseToggle?: (id: string, paused: boolean) => void;
 }
 
 /**
@@ -35,6 +46,7 @@ export const ReminderItem: React.FC<ReminderItemProps> = ({
   onDelete,
   onEdit,
   onSnooze,
+  onPauseToggle,
 }) => {
   const [countdown, setCountdown] = useState('');
   const { text, isOverdue, isSoon } = formatDueDate(reminder.dueDate);
@@ -140,12 +152,40 @@ export const ReminderItem: React.FC<ReminderItemProps> = ({
           </span>
 
           {/* Recurring Indicator */}
-          {reminder.recurring?.enabled && (
+          {reminder.recurring && (
             <div className="flex items-center gap-1 ml-2">
-              <Repeat className="w-3.5 h-3.5 text-primary-500" />
-              <span className="text-xs text-primary-600 capitalize">
-                {reminder.recurring.frequency}
+              <Repeat
+                className={cn(
+                  'w-3.5 h-3.5',
+                  reminder.recurring.enabled === false ? 'text-tertiary' : 'text-primary-500'
+                )}
+              />
+              <span
+                className={cn(
+                  'text-xs capitalize',
+                  reminder.recurring.enabled === false ? 'text-tertiary' : 'text-primary-600'
+                )}
+              >
+                {formatReminderCadence(reminder.recurring)}
+                {reminder.recurring.enabled === false ? ' (paused)' : ''}
               </span>
+              {onPauseToggle && (
+                <button
+                  type="button"
+                  onClick={() => onPauseToggle(reminder.id, reminder.recurring?.enabled !== false)}
+                  className="ml-1 p-0.5 text-secondary hover:text-primary-500 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 rounded"
+                  aria-label={
+                    reminder.recurring.enabled === false ? 'Resume reminder' : 'Pause reminder'
+                  }
+                  title={reminder.recurring.enabled === false ? 'Resume' : 'Pause'}
+                >
+                  {reminder.recurring.enabled === false ? (
+                    <Play className="w-3.5 h-3.5" />
+                  ) : (
+                    <Pause className="w-3.5 h-3.5" />
+                  )}
+                </button>
+              )}
             </div>
           )}
 

@@ -29,6 +29,7 @@ import {
   exportMonthlyTrendsCSV,
   exportPomodoroSessionsCSV,
   exportWeeklyTrendsCSV,
+  formatReminderCadence,
   getDueDateLabel,
   getNextDayDateString,
   getRandomQuote,
@@ -1427,5 +1428,16 @@ describe('REMINDER_TEMPLATES move preset', () => {
     expect(move?.frequency).toBe('interval');
     expect(move?.intervalMinutes).toBe(30);
     expect(move?.category).toBe('health');
+  });
+});
+
+describe('formatReminderCadence', () => {
+  it('formats interval reminders in minutes', () => {
+    expect(
+      formatReminderCadence({ frequency: 'interval', enabled: true, intervalMinutes: 30 })
+    ).toBe('every 30 min');
+  });
+  it('passes calendar frequencies through', () => {
+    expect(formatReminderCadence({ frequency: 'daily', enabled: true })).toBe('daily');
   });
 });
