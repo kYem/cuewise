@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: 'Dry run (skip actual release creation)'
+        description: 'Dry run (skip release creation and Chrome publish)'
         required: false
         default: false
         type: boolean
@@ -14,26 +14,47 @@ on:
         default: false
         type: boolean
 
+# Least privilege by default; each job escalates only what it needs.
 permissions:
-  contents: write
+  contents: read
+
+# Disable build-tool telemetry so nothing phones home from CI
+# (Turbo -> telemetry.vercel.com, Astro -> telemetry.astro.build).
+env:
+  DO_NOT_TRACK: '1'
+  TURBO_TELEMETRY_DISABLED: '1'
+  ASTRO_TELEMETRY_DISABLED: '1'
 
 jobs:
-  release:
-    name: Build and Release
+  build:
+    name: Build and Test
+    # Releases only ever run from main.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
+      - name: Harden runner
+        # TODO: flip to `block` once a real release run's StepSecurity insights
+        # confirm this job's egress (npm registry + GitHub/Actions endpoints).
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2
+        with:
+          egress-policy: audit
+
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           fetch-depth: 0
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
-          node-version: '22'
+          node-version: '24'
           cache: 'pnpm'
 
       - name: Install dependencies
@@ -58,69 +79,143 @@ jobs:
         id: version
         run: |
           VERSION=$(node -p "require('./apps/browser-extension/package.json').version")
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Version: $VERSION"
+
+      - name: Upload extension zip
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: cuewise-extension-${{ steps.version.outputs.version }}
+          path: apps/browser-extension/build/cuewise-extension-${{ steps.version.outputs.version }}.zip
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2
+        with:
+          egress-policy: audit
+
+      # Checkout is needed only for the CHANGELOG used as the release body.
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          sparse-checkout: apps/browser-extension/CHANGELOG.md
+          sparse-checkout-cone-mode: false
+
+      - name: Download extension zip
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: cuewise-extension-${{ needs.build.outputs.version }}
+          path: dist-artifact
 
       - name: Check if release exists
         id: check_release
         run: |
-          if gh release view "v${{ steps.version.outputs.version }}" &>/dev/null; then
-            echo "exists=true" >> $GITHUB_OUTPUT
+          if gh release view "v${{ needs.build.outputs.version }}" &>/dev/null; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
           else
-            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create GitHub Release
-        if: ${{ !inputs.dry_run && steps.check_release.outputs.exists == 'false' }}
-        uses: softprops/action-gh-release@v3
+        if: ${{ steps.check_release.outputs.exists == 'false' }}
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3
         with:
-          tag_name: v${{ steps.version.outputs.version }}
-          name: Cuewise v${{ steps.version.outputs.version }}
+          tag_name: v${{ needs.build.outputs.version }}
+          name: Cuewise v${{ needs.build.outputs.version }}
           body_path: apps/browser-extension/CHANGELOG.md
-          files: |
-            apps/browser-extension/build/cuewise-extension-${{ steps.version.outputs.version }}.zip
+          files: dist-artifact/cuewise-extension-${{ needs.build.outputs.version }}.zip
           draft: false
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload artifact (for dry run or existing release)
-        if: ${{ inputs.dry_run || steps.check_release.outputs.exists == 'true' }}
-        uses: actions/upload-artifact@v7
+  publish:
+    name: Publish to Chrome Web Store
+    needs: build
+    if: ${{ inputs.publish_chrome && !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    # The CWS tokens live ONLY in this environment. Add a required reviewer to
+    # the `chrome-web-store` environment so a human must approve every publish.
+    environment: chrome-web-store
+    permissions:
+      contents: read
+    steps:
+      - name: Harden runner
+        # Block egress: this job holds the store tokens and runs no third-party
+        # code (the publish script uses only Node built-ins), so the allowlist is
+        # tight. If a needed connection is dropped, find it on the StepSecurity
+        # insights page for the run and add it here.
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2
         with:
-          name: cuewise-extension-${{ steps.version.outputs.version }}
-          path: apps/browser-extension/build/cuewise-extension-${{ steps.version.outputs.version }}.zip
+          egress-policy: block
+          disable-sudo: true
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            codeload.github.com:443
+            objects.githubusercontent.com:443
+            results-receiver.actions.githubusercontent.com:443
+            *.blob.core.windows.net:443
+            oauth2.googleapis.com:443
+            www.googleapis.com:443
+
+      # Only the first-party publish script is needed — no install, no tsx, so no
+      # dependency code ever runs in the job that holds the secrets.
+      - name: Checkout publish script
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          sparse-checkout: scripts/publish-chrome.mts
+          sparse-checkout-cone-mode: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: '24'
+
+      - name: Download extension zip
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: cuewise-extension-${{ needs.build.outputs.version }}
+          path: apps/browser-extension/build
 
       - name: Publish to Chrome Web Store
-        if: ${{ inputs.publish_chrome && !inputs.dry_run }}
         env:
           # Extension ID and Client ID are non-sensitive, stored as variables
           CHROME_EXTENSION_ID: ${{ vars.CHROME_EXTENSION_ID }}
           CHROME_CLIENT_ID: ${{ vars.CHROME_CLIENT_ID }}
-          # Client Secret and Refresh Token are sensitive, stored as secrets
+          # Client Secret and Refresh Token are sensitive, stored as environment secrets
           CHROME_CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
           CHROME_REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
-        run: pnpm publish:chrome "apps/browser-extension/build/cuewise-extension-${{ steps.version.outputs.version }}.zip"
+        run: node --experimental-strip-types scripts/publish-chrome.mts "apps/browser-extension/build/cuewise-extension-${{ needs.build.outputs.version }}.zip"
 
-      - name: Summary
+  summary:
+    name: Summary
+    needs: [build, release, publish]
+    # Run even if release/publish were skipped (dry run or publish disabled).
+    if: ${{ always() && needs.build.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Write summary
         run: |
-          echo "## Release Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Version:** v${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Dry Run:** ${{ inputs.dry_run }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Release Exists:** ${{ steps.check_release.outputs.exists }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Chrome Publish:** ${{ inputs.publish_chrome }}" >> $GITHUB_STEP_SUMMARY
-          if [[ "${{ inputs.dry_run }}" == "true" ]]; then
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "This was a dry run. No release was created." >> $GITHUB_STEP_SUMMARY
-            echo "The extension zip has been uploaded as an artifact." >> $GITHUB_STEP_SUMMARY
-          elif [[ "${{ steps.check_release.outputs.exists }}" == "true" ]]; then
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "Release v${{ steps.version.outputs.version }} already exists." >> $GITHUB_STEP_SUMMARY
-            echo "The extension zip has been uploaded as an artifact." >> $GITHUB_STEP_SUMMARY
-          else
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "Release created successfully!" >> $GITHUB_STEP_SUMMARY
-          fi
+          {
+            echo "## Release Summary"
+            echo ""
+            echo "**Version:** v${{ needs.build.outputs.version }}"
+            echo "**Dry Run:** ${{ inputs.dry_run }}"
+            echo "**Chrome Publish:** ${{ inputs.publish_chrome }}"
+            echo "**Release job:** ${{ needs.release.result }}"
+            echo "**Publish job:** ${{ needs.publish.result }}"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,11 +1,14 @@
-#!/usr/bin/env npx tsx
+#!/usr/bin/env -S node --experimental-strip-types
 /**
  * Chrome Web Store Publishing Script
  *
+ * Dependency-free (Node built-in TS type stripping, no tsx) so it can run in the
+ * locked-down publish job that holds the store credentials.
+ *
  * Usage:
- *   pnpm publish:chrome <zip-file-path>                              - Upload and publish
- *   pnpm publish:chrome --dry-run                                    - Test credentials only
- *   pnpm tsx --env-file .env.chrome scripts/publish-chrome.ts --dry-run  - With env file
+ *   pnpm publish:chrome <zip-file-path>   - Upload and publish
+ *   pnpm publish:chrome --dry-run         - Test credentials only
+ *   node --experimental-strip-types --env-file=.env.chrome scripts/publish-chrome.mts --dry-run
  *
  * Required environment variables:
  *   CHROME_EXTENSION_ID    - Extension ID from Chrome Web Store
@@ -162,7 +165,9 @@ async function main() {
     console.error('  pnpm publish:chrome --dry-run         - Test credentials only');
     console.error('');
     console.error('With env file:');
-    console.error('  pnpm tsx --env-file .env.chrome scripts/publish-chrome.ts --dry-run');
+    console.error(
+      '  node --experimental-strip-types --env-file=.env.chrome scripts/publish-chrome.mts --dry-run'
+    );
     process.exit(1);
   }
 
