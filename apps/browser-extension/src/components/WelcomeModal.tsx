@@ -1,4 +1,4 @@
-import { CheckCircle2, Sparkles, Target, Timer } from 'lucide-react';
+import { CheckCircle2, Target, Timer } from 'lucide-react';
 import type React from 'react';
 import { useEffect } from 'react';
 
@@ -65,9 +65,11 @@ export const WelcomeModal: React.FC<WelcomeModalProps> = ({ isOpen, onClose }) =
         {/* Header with gradient accent */}
         <div className="px-6 pt-6 pb-4 text-center">
           <div className="flex justify-center mb-3">
-            <div className="w-14 h-14 flex items-center justify-center rounded-full bg-primary-500/20">
-              <Sparkles className="w-7 h-7 text-primary-600 dark:text-primary-400" />
-            </div>
+            <img
+              src="/icons/icon.svg"
+              alt="Cuewise logo"
+              className="w-14 h-14 rounded-2xl shadow-sm"
+            />
           </div>
           <h2 className="text-2xl font-bold text-primary">Welcome to Cuewise!</h2>
           <p className="mt-2 text-secondary">Your personal productivity companion</p>
