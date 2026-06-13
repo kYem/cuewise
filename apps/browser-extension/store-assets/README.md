@@ -7,11 +7,11 @@ This directory contains all the required promotional images and screenshots for 
 ```
 store-assets/
 ├── screenshots/          # Product screenshots (1280x800)
-│   ├── 01-main-view.png
-│   ├── 02-new-tab.png
-│   ├── 03-pomodoro.png
-│   ├── 04-insights.png
-│   └── 05-quote-management.png
+│   ├── 01-main-view.png      # Today's Focus (full goals view)
+│   ├── 02-focus-view.png     # Distraction-free focus mode
+│   ├── 03-pomodoro.png       # Pomodoro timer (active session)
+│   ├── 04-insights.png       # Insights / analytics
+│   └── 05-settings.png       # Settings (compact sidebar)
 └── promo/               # Promotional tiles
     ├── small-promo-tile-440x280.png
     └── marquee-promo-tile-1400x560.png
