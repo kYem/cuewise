@@ -1,7 +1,21 @@
-import { formatTimeRemaining } from '@cuewise/shared';
-import { Maximize2, Pause, Play, RotateCcw, SkipForward, Target } from 'lucide-react';
+import { formatTimeRemaining, type LayoutDensity } from '@cuewise/shared';
+import {
+  Bed,
+  Check,
+  ChevronDown,
+  Coffee,
+  Maximize2,
+  Music,
+  Pause,
+  Play,
+  Repeat,
+  RotateCcw,
+  SkipForward,
+  Timer,
+  X,
+} from 'lucide-react';
 import type React from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { usePomodoroLeader } from '../hooks/usePomodoroLeader';
 import { useSoundsLeader } from '../hooks/useSoundsLeader';
@@ -12,6 +26,52 @@ import { useSettingsStore } from '../stores/settings-store';
 import { useSoundsStore } from '../stores/sounds-store';
 import { getSessionStyles } from '../utils/pomodoro-styles';
 import { EditableValue } from './EditableValue';
+
+// Per-density card + ring sizing. Geometry invariant per entry: center = viewBox / 2, radius < center.
+const TIMER_SIZES: Record<
+  LayoutDensity,
+  {
+    card: string;
+    container: string;
+    radius: number;
+    center: number;
+    strokeWidth: number;
+    fontSize: string;
+    labelSize: string;
+    viewBox: string;
+  }
+> = {
+  compact: {
+    card: 'w-[300px]',
+    container: 'w-40 h-40',
+    radius: 73,
+    center: 80,
+    strokeWidth: 7,
+    fontSize: 'text-3xl',
+    labelSize: 'text-xs',
+    viewBox: '0 0 160 160',
+  },
+  comfortable: {
+    card: 'w-[340px]',
+    container: 'w-48 h-48',
+    radius: 88,
+    center: 96,
+    strokeWidth: 8,
+    fontSize: 'text-4xl',
+    labelSize: 'text-xs',
+    viewBox: '0 0 192 192',
+  },
+  spacious: {
+    card: 'w-[400px]',
+    container: 'w-64 h-64',
+    radius: 118,
+    center: 128,
+    strokeWidth: 10,
+    fontSize: 'text-6xl',
+    labelSize: 'text-sm',
+    viewBox: '0 0 256 256',
+  },
+};
 
 export const PomodoroTimer: React.FC = () => {
   // Pomodoro state - use useShallow to prevent re-renders when unrelated state changes
@@ -75,6 +135,25 @@ export const PomodoroTimer: React.FC = () => {
   const getActiveSourceName = useSoundsStore((state) => state.getActiveSourceName);
 
   const [showGoalPicker, setShowGoalPicker] = useState(false);
+  const goalPickerRef = useRef<HTMLDivElement>(null);
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const [titleFaded, setTitleFaded] = useState(false);
+
+  // Close the goal dropdown when clicking outside it
+  useEffect(() => {
+    if (!showGoalPicker) {
+      return;
+    }
+    const handlePointerDown = (event: MouseEvent) => {
+      if (goalPickerRef.current && !goalPickerRef.current.contains(event.target as Node)) {
+        setShowGoalPicker(false);
+      }
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+    };
+  }, [showGoalPicker]);
 
   // Enable cross-tab synchronization
   usePomodoroStorageSync();
@@ -155,146 +234,135 @@ export const PomodoroTimer: React.FC = () => {
   // Find selected goal
   const selectedGoal = todayTasks.find((g) => g.id === selectedGoalId);
 
+  // Header title: the chosen goal (fitted into two lines by the title effect below) or session label
+  const headerTitle = selectedGoal ? selectedGoal.text : label;
+
+  // Today's incomplete tasks, shown in the goal picker
+  const activeGoals = todayTasks.filter((g) => !g.completed);
+
   // Calculate sessions until long break
   const sessionsUntilLongBreak = longBreakInterval - consecutiveWorkSessions;
 
   // Get density-aware sizing
   const density = settings.layoutDensity;
-  const timerSizes = {
-    compact: {
-      container: 'w-48 h-48',
-      radius: 90,
-      center: 96,
-      strokeWidth: 6,
-      fontSize: 'text-4xl',
-      labelSize: 'text-xs',
-      viewBox: '0 0 192 192',
-    },
-    comfortable: {
-      container: 'w-64 h-64',
-      radius: 120,
-      center: 128,
-      strokeWidth: 8,
-      fontSize: 'text-6xl',
-      labelSize: 'text-sm',
-      viewBox: '0 0 256 256',
-    },
-    spacious: {
-      container: 'w-80 h-80',
-      radius: 150,
-      center: 160,
-      strokeWidth: 10,
-      fontSize: 'text-7xl',
-      labelSize: 'text-base',
-      viewBox: '0 0 320 320',
-    },
-  };
-  const timerSize = timerSizes[density];
+  const timerSize = TIMER_SIZES[density];
+
+  // Fit the goal title into two lines: shrink 16px → 11.5px; if it still overflows, fade the bottom edge
+  useLayoutEffect(() => {
+    const el = titleRef.current;
+    if (!el) {
+      return;
+    }
+    let overflows = true;
+    for (const size of [16, 14, 12.5, 11.5]) {
+      el.style.fontSize = `${size}px`;
+      if (el.scrollHeight <= el.clientHeight + 1) {
+        overflows = false;
+        break;
+      }
+    }
+    setTitleFaded(overflows);
+    // isWork: the work title node unmounts during breaks; re-run the fit when it remounts
+  }, [headerTitle, density, isWork]);
 
   return (
-    <div className="w-full max-w-md mx-auto">
+    <div className={`${timerSize.card} max-w-[92vw] mx-auto`}>
       <div className="bg-black/25 backdrop-blur-md rounded-2xl shadow-lg p-density-lg border border-white/10">
-        {/* Header */}
-        <div className="flex items-center gap-density-sm mb-density-md">
-          <div className={`p-2 ${bgColor} rounded-lg`}>
-            <SessionIcon className={`w-6 h-6 ${color}`} />
-          </div>
-          <div className="flex-1">
-            <h2 className="text-2xl font-semibold text-white">Pomodoro Timer</h2>
-            <p className="text-sm text-white/70">{label}</p>
-          </div>
-        </div>
+        {/* Header - icon + goal picker (work) or session label (break). During work
+            the title IS the goal selector: the chosen goal or "Focus Session" + a
+            chevron opening today's goals; Clear lives inside that dropdown. */}
+        <div ref={goalPickerRef} className="relative mb-density-md">
+          <div className="flex items-center gap-density-sm">
+            <div className={`p-2 ${bgColor} rounded-lg flex-shrink-0`}>
+              <SessionIcon className={`w-5 h-5 ${color}`} />
+            </div>
 
-        {/* Goal Selection (only show for work sessions when idle) */}
-        {isWork && status === 'idle' && (
-          <div className="mb-density-md">
-            {selectedGoal ? (
-              <div className="flex items-center gap-2 p-3 bg-white/10 rounded-lg border border-white/20">
-                <Target className="w-4 h-4 text-primary-400 flex-shrink-0" />
-                <span className="text-sm text-white flex-1">{selectedGoal.text}</span>
-                <button
-                  type="button"
-                  onClick={() => setSelectedGoal(null)}
-                  className="text-xs text-white/70 hover:text-white"
-                  title="Clear goal"
-                >
-                  Clear
-                </button>
-              </div>
-            ) : (
+            {isWork ? (
               <button
                 type="button"
                 onClick={() => setShowGoalPicker(!showGoalPicker)}
-                className="w-full flex items-center gap-2 p-3 bg-white/10 rounded-lg border border-white/20 hover:bg-white/20 transition-colors"
-                title="Select a goal"
+                className="flex flex-1 min-w-0 items-center gap-1.5 text-left"
+                title={selectedGoal ? 'Change goal' : 'Select a goal'}
+                aria-haspopup="menu"
+                aria-expanded={showGoalPicker}
               >
-                <Target className="w-4 h-4 text-white/70" />
-                <span className="text-sm text-white/70">Work on a goal (optional)</span>
-              </button>
-            )}
-
-            {/* Goal Picker Dropdown */}
-            {showGoalPicker && !selectedGoal && (
-              <div className="mt-2 p-2 bg-black/50 backdrop-blur-md rounded-lg border border-white/20 shadow-lg max-h-48 overflow-y-auto">
-                {todayTasks.filter((g) => !g.completed).length === 0 ? (
-                  <p className="text-sm text-white/70 p-2">No active goals for today</p>
-                ) : (
-                  todayTasks
-                    .filter((g) => !g.completed)
-                    .map((goal) => (
-                      <button
-                        key={goal.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedGoal(goal.id);
-                          setShowGoalPicker(false);
-                        }}
-                        className="w-full text-left p-2 text-sm text-white hover:bg-white/20 rounded transition-colors"
-                      >
-                        {goal.text}
-                      </button>
-                    ))
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Active Goal Display (during session) */}
-        {isWork && status !== 'idle' && selectedGoal && (
-          <div className="mb-density-md flex items-center gap-2 p-3 bg-white/10 rounded-lg border border-white/20">
-            <Target className="w-4 h-4 text-primary-400 flex-shrink-0" />
-            <span className="text-sm text-white">{selectedGoal.text}</span>
-          </div>
-        )}
-
-        {/* Long Break Progress */}
-        {isWork && sessionsUntilLongBreak > 0 && (
-          <div className="mb-density-md text-center">
-            <p className="text-xs text-white/70">
-              {sessionsUntilLongBreak} session{sessionsUntilLongBreak !== 1 ? 's' : ''} until long
-              break
-            </p>
-            <div className="mt-2 flex gap-1 justify-center">
-              {Array.from({ length: longBreakInterval }).map((_, i) => (
-                <div
-                  key={i}
-                  className={`h-1.5 w-8 rounded-full ${
-                    i < consecutiveWorkSessions ? '' : 'bg-white/20'
+                <h2
+                  ref={titleRef}
+                  className="min-w-0 flex-1 font-semibold text-white"
+                  style={{
+                    lineHeight: 1.2,
+                    maxHeight: '2.4em',
+                    overflow: 'hidden',
+                    overflowWrap: 'anywhere',
+                    ...(titleFaded
+                      ? {
+                          maskImage: 'linear-gradient(to bottom, #000 60%, transparent)',
+                          WebkitMaskImage: 'linear-gradient(to bottom, #000 60%, transparent)',
+                        }
+                      : {}),
+                  }}
+                >
+                  {headerTitle}
+                </h2>
+                <ChevronDown
+                  className={`w-4 h-4 text-white/60 flex-shrink-0 transition-transform ${
+                    showGoalPicker ? 'rotate-180' : ''
                   }`}
-                  style={
-                    i < consecutiveWorkSessions ? { backgroundColor: progressColor } : undefined
-                  }
                 />
-              ))}
-            </div>
+              </button>
+            ) : (
+              <h2 className="text-lg font-semibold text-white flex-1 min-w-0 truncate">{label}</h2>
+            )}
           </div>
-        )}
+
+          {/* Goal Picker Dropdown */}
+          {isWork && showGoalPicker && (
+            <div className="absolute left-0 right-0 top-full mt-2 z-20 p-2 bg-black/50 backdrop-blur-md rounded-lg border border-white/20 shadow-lg max-h-48 overflow-y-auto">
+              <p className="px-2 pb-1.5 pt-1 text-[11px] font-semibold uppercase tracking-wider text-white/50">
+                Work on a goal
+              </p>
+              {activeGoals.length === 0 ? (
+                <p className="p-2 text-sm text-white/70">No active goals for today</p>
+              ) : (
+                activeGoals.map((goal) => (
+                  <button
+                    key={goal.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedGoal(goal.id);
+                      setShowGoalPicker(false);
+                    }}
+                    className="flex w-full items-center gap-2 rounded p-2 text-left text-sm text-white transition-colors hover:bg-white/20"
+                  >
+                    <span className="min-w-0 flex-1 truncate">{goal.text}</span>
+                    {selectedGoalId === goal.id && <Check className="h-4 w-4 flex-shrink-0" />}
+                  </button>
+                ))
+              )}
+              {selectedGoal && (
+                <>
+                  <div className="my-1 h-px bg-white/15" />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedGoal(null);
+                      setShowGoalPicker(false);
+                    }}
+                    className="flex w-full items-center gap-2 rounded p-2 text-left text-sm text-white/70 transition-colors hover:bg-white/20 hover:text-white"
+                  >
+                    <X className="h-4 w-4 flex-shrink-0" />
+                    <span>Clear goal</span>
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Timer Display */}
-        <div className="flex flex-col items-center mb-density-lg">
+        <div className="flex flex-col items-center mb-density-md">
           {/* Circular Progress */}
-          <div className={`relative ${timerSize.container} mb-density-md`}>
+          <div className={`relative ${timerSize.container}`}>
             {/* Background circle */}
             <svg
               className="w-full h-full transform -rotate-90"
@@ -341,6 +409,26 @@ export const PomodoroTimer: React.FC = () => {
           </div>
         </div>
 
+        {/* Long Break Progress - dots + "N until long break", below the ring */}
+        {isWork && sessionsUntilLongBreak > 0 && (
+          <div className="mb-density-md flex items-center justify-center gap-2">
+            <div className="flex gap-1">
+              {Array.from({ length: longBreakInterval }).map((_, i) => (
+                <div
+                  key={i}
+                  className={`h-1.5 w-5 rounded-full ${
+                    i < consecutiveWorkSessions ? '' : 'bg-white/20'
+                  }`}
+                  style={
+                    i < consecutiveWorkSessions ? { backgroundColor: progressColor } : undefined
+                  }
+                />
+              ))}
+            </div>
+            <span className="text-xs text-white/60">{sessionsUntilLongBreak} until long break</span>
+          </div>
+        )}
+
         {/* Controls */}
         <div className="flex items-center justify-center gap-density-sm">
           {/* Start/Pause/Resume Button */}
@@ -348,11 +436,11 @@ export const PomodoroTimer: React.FC = () => {
             <button
               type="button"
               onClick={start}
-              className="flex items-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors shadow-md hover:shadow-lg"
+              className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors shadow-md hover:shadow-lg"
               title="Start timer"
             >
-              <Play className="w-5 h-5" />
-              <span className="font-medium">Start</span>
+              <Play className="w-4 h-4" />
+              <span className="text-sm font-medium">Start</span>
             </button>
           )}
 
@@ -360,11 +448,11 @@ export const PomodoroTimer: React.FC = () => {
             <button
               type="button"
               onClick={pause}
-              className="flex items-center gap-2 px-6 py-3 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors shadow-md hover:shadow-lg"
+              className="flex items-center gap-2 px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors shadow-md hover:shadow-lg"
               title="Pause timer"
             >
-              <Pause className="w-5 h-5" />
-              <span className="font-medium">Pause</span>
+              <Pause className="w-4 h-4" />
+              <span className="text-sm font-medium">Pause</span>
             </button>
           )}
 
@@ -372,11 +460,11 @@ export const PomodoroTimer: React.FC = () => {
             <button
               type="button"
               onClick={resume}
-              className="flex items-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors shadow-md hover:shadow-lg"
+              className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors shadow-md hover:shadow-lg"
               title="Resume timer"
             >
-              <Play className="w-5 h-5" />
-              <span className="font-medium">Resume</span>
+              <Play className="w-4 h-4" />
+              <span className="text-sm font-medium">Resume</span>
             </button>
           )}
 
@@ -385,10 +473,10 @@ export const PomodoroTimer: React.FC = () => {
             <button
               type="button"
               onClick={reset}
-              className="p-3 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-colors shadow-md hover:shadow-lg"
+              className="p-2.5 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-colors shadow-md hover:shadow-lg"
               title="Reset timer"
             >
-              <RotateCcw className="w-5 h-5" />
+              <RotateCcw className="w-4 h-4" />
             </button>
           )}
 
@@ -396,10 +484,10 @@ export const PomodoroTimer: React.FC = () => {
           <button
             type="button"
             onClick={skip}
-            className="p-3 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-colors shadow-md hover:shadow-lg"
+            className="p-2.5 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-colors shadow-md hover:shadow-lg"
             title={`Skip to ${isWork ? 'break' : 'work'}`}
           >
-            <SkipForward className="w-5 h-5" />
+            <SkipForward className="w-4 h-4" />
           </button>
 
           {/* Focus Mode Button */}
@@ -407,60 +495,82 @@ export const PomodoroTimer: React.FC = () => {
             <button
               type="button"
               onClick={() => useFocusModeStore.getState().enterFocusMode()}
-              className="p-3 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-colors shadow-md hover:shadow-lg"
+              className="p-2.5 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-colors shadow-md hover:shadow-lg"
               title="Enter focus mode"
             >
-              <Maximize2 className="w-5 h-5" />
+              <Maximize2 className="w-4 h-4" />
             </button>
           )}
         </div>
 
-        {/* Help Text - Interactive Settings */}
-        <div className="mt-density-md text-center text-xs text-white/70">
-          <p className="leading-relaxed">
-            Focus for{' '}
-            <EditableValue
-              value={workDuration}
-              unit="minutes"
-              presets={[15, 20, 25, 30, 45, 60]}
-              onChange={async (value) => {
-                await updateSettings({ ...settings, pomodoroWorkDuration: value });
-                await reloadSettings();
-              }}
-            />{' '}
-            •{' '}
-            <EditableValue
-              value={breakDuration}
-              unit="minute"
-              presets={[3, 5, 10, 15]}
-              onChange={async (value) => {
-                await updateSettings({ ...settings, pomodoroBreakDuration: value });
-                await reloadSettings();
-              }}
-            />{' '}
-            breaks •{' '}
-            <EditableValue
-              value={longBreakDuration}
-              unit="minute"
-              presets={[15, 20, 25, 30]}
-              onChange={async (value) => {
-                await updateSettings({ ...settings, pomodoroLongBreakDuration: value });
-                await reloadSettings();
-              }}
-            />{' '}
-            long break every{' '}
-            <EditableValue
-              value={longBreakInterval}
-              unit={longBreakInterval === 1 ? 'session' : 'sessions'}
-              presets={[2, 3, 4, 5, 6, 8]}
-              onChange={async (value) => {
-                await updateSettings({ ...settings, pomodoroLongBreakInterval: value });
-                await reloadSettings();
-              }}
-            />
-          </p>
+        {/* Settings - compact icon row: ⏱25m ☕5m 🛏15m ↻4 (each value click-to-edit) */}
+        <div className="mt-density-md">
+          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-xs text-white/60">
+            <span className="inline-flex items-center gap-1.5" title="Focus duration">
+              <Timer className="w-3.5 h-3.5" />
+              <EditableValue
+                value={workDuration}
+                unit="minutes"
+                compact
+                suffix="m"
+                tone="onGlass"
+                presets={[15, 20, 25, 30, 45, 60]}
+                onChange={async (value) => {
+                  await updateSettings({ ...settings, pomodoroWorkDuration: value });
+                  await reloadSettings();
+                }}
+              />
+            </span>
+            <span className="inline-flex items-center gap-1.5" title="Break length">
+              <Coffee className="w-3.5 h-3.5" />
+              <EditableValue
+                value={breakDuration}
+                unit="minutes"
+                compact
+                suffix="m"
+                tone="onGlass"
+                presets={[3, 5, 10, 15]}
+                onChange={async (value) => {
+                  await updateSettings({ ...settings, pomodoroBreakDuration: value });
+                  await reloadSettings();
+                }}
+              />
+            </span>
+            <span className="inline-flex items-center gap-1.5" title="Long break length">
+              <Bed className="w-3.5 h-3.5" />
+              <EditableValue
+                value={longBreakDuration}
+                unit="minutes"
+                compact
+                suffix="m"
+                tone="onGlass"
+                presets={[15, 20, 25, 30]}
+                onChange={async (value) => {
+                  await updateSettings({ ...settings, pomodoroLongBreakDuration: value });
+                  await reloadSettings();
+                }}
+              />
+            </span>
+            <span className="inline-flex items-center gap-1.5" title="Long break interval">
+              <Repeat className="w-3.5 h-3.5" />
+              <EditableValue
+                value={longBreakInterval}
+                unit="sessions"
+                compact
+                tone="onGlass"
+                presets={[2, 3, 4, 5, 6, 8]}
+                onChange={async (value) => {
+                  await updateSettings({ ...settings, pomodoroLongBreakInterval: value });
+                  await reloadSettings();
+                }}
+              />
+            </span>
+          </div>
           {activeSource !== 'none' && isSoundsPlaying && isWork && (
-            <p className={`mt-1 ${color}`}>🎵 {getActiveSourceName()}</p>
+            <p className="mt-2 flex items-center justify-center gap-1.5 text-xs text-white/60">
+              <Music className="w-3 h-3" />
+              <span>{getActiveSourceName()}</span>
+            </p>
           )}
         </div>
       </div>

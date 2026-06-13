@@ -8,6 +8,12 @@ interface EditableValueProps {
   presets?: number[];
   onChange: (value: number) => void;
   className?: string;
+  // Compact trigger: render `${value}${suffix}` (e.g. "25m", or just "4" with no
+  // suffix) instead of `${value} ${unit}`. Presets still show the full `${preset} ${unit}`.
+  compact?: boolean;
+  suffix?: string;
+  // 'onGlass' uses white text for legibility over the photo/frosted backgrounds.
+  tone?: 'primary' | 'onGlass';
 }
 
 export const EditableValue: React.FC<EditableValueProps> = ({
@@ -16,6 +22,9 @@ export const EditableValue: React.FC<EditableValueProps> = ({
   presets,
   onChange,
   className = '',
+  compact = false,
+  suffix = '',
+  tone = 'primary',
 }) => {
   const [isEditing, setIsEditing] = useState(false);
 
@@ -23,15 +32,21 @@ export const EditableValue: React.FC<EditableValueProps> = ({
     setIsEditing(true);
   };
 
+  const triggerLabel = compact ? `${value}${suffix}` : `${value} ${unit}`;
+  const toneClasses =
+    tone === 'onGlass'
+      ? 'text-white/90 hover:text-white'
+      : 'text-primary-600 hover:text-primary-700';
+
   if (!isEditing) {
     return (
       <button
         type="button"
         onClick={handleClick}
-        className={`text-primary-600 hover:text-primary-700 font-semibold underline decoration-dotted underline-offset-2 cursor-pointer transition-colors ${className}`}
+        className={`${toneClasses} font-semibold underline decoration-dotted underline-offset-2 cursor-pointer transition-colors ${className}`}
         title="Click to edit"
       >
-        {value} {unit}
+        {triggerLabel}
       </button>
     );
   }

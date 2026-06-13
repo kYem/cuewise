@@ -35,6 +35,20 @@ describe('EditableValue', () => {
       const button = screen.getByRole('button');
       expect(button).toHaveClass('custom-class');
     });
+
+    it('should render a compact label with a suffix', () => {
+      render(<EditableValue {...defaultProps} compact suffix="m" />);
+
+      expect(screen.getByRole('button')).toHaveTextContent('25m');
+    });
+
+    it('should render a compact label with no suffix and omit the unit', () => {
+      render(<EditableValue {...defaultProps} value={4} unit="sessions" compact />);
+
+      const button = screen.getByRole('button');
+      expect(button).toHaveTextContent('4');
+      expect(button).not.toHaveTextContent('sessions');
+    });
   });
 
   describe('Entering Edit Mode', () => {
@@ -181,6 +195,18 @@ describe('EditableValue', () => {
       await waitFor(() => {
         expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
       });
+    });
+
+    it('should keep the full unit in preset options when the trigger is compact', async () => {
+      const user = userEvent.setup();
+
+      render(<EditableValue {...defaultProps} compact suffix="m" presets={presets} />);
+
+      await user.click(screen.getByRole('button'));
+      const selectTrigger = screen.getByRole('button', { expanded: false });
+      await user.click(selectTrigger);
+
+      expect(screen.getByRole('option', { name: '30 minutes' })).toBeInTheDocument();
     });
   });
 
