@@ -50,6 +50,7 @@ export const ReminderItem: React.FC<ReminderItemProps> = ({
 }) => {
   const [countdown, setCountdown] = useState('');
   const { text, isOverdue, isSoon } = formatDueDate(reminder.dueDate);
+  const isPaused = reminder.recurring?.enabled === false;
 
   // Update countdown every second for reminders that are approaching
   useEffect(() => {
@@ -155,35 +156,26 @@ export const ReminderItem: React.FC<ReminderItemProps> = ({
           {reminder.recurring && (
             <div className="flex items-center gap-1 ml-2">
               <Repeat
-                className={cn(
-                  'w-3.5 h-3.5',
-                  reminder.recurring.enabled === false ? 'text-tertiary' : 'text-primary-500'
-                )}
+                className={cn('w-3.5 h-3.5', isPaused ? 'text-tertiary' : 'text-primary-500')}
               />
               <span
                 className={cn(
                   'text-xs first-letter:uppercase',
-                  reminder.recurring.enabled === false ? 'text-tertiary' : 'text-primary-600'
+                  isPaused ? 'text-tertiary' : 'text-primary-600'
                 )}
               >
                 {formatReminderCadence(reminder.recurring)}
-                {reminder.recurring.enabled === false ? ' (paused)' : ''}
+                {isPaused ? ' (paused)' : ''}
               </span>
               {onPauseToggle && (
                 <button
                   type="button"
-                  onClick={() => onPauseToggle(reminder.id, reminder.recurring?.enabled !== false)}
+                  onClick={() => onPauseToggle(reminder.id, !isPaused)}
                   className="ml-1 p-0.5 text-secondary hover:text-primary-500 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 rounded"
-                  aria-label={
-                    reminder.recurring.enabled === false ? 'Resume reminder' : 'Pause reminder'
-                  }
-                  title={reminder.recurring.enabled === false ? 'Resume' : 'Pause'}
+                  aria-label={isPaused ? 'Resume reminder' : 'Pause reminder'}
+                  title={isPaused ? 'Resume' : 'Pause'}
                 >
-                  {reminder.recurring.enabled === false ? (
-                    <Play className="w-3.5 h-3.5" />
-                  ) : (
-                    <Pause className="w-3.5 h-3.5" />
-                  )}
+                  {isPaused ? <Play className="w-3.5 h-3.5" /> : <Pause className="w-3.5 h-3.5" />}
                 </button>
               )}
             </div>
@@ -195,8 +187,8 @@ export const ReminderItem: React.FC<ReminderItemProps> = ({
           )}
         </div>
 
-        {/* Snooze Buttons (show when approaching) */}
-        {isSoon && !reminder.completed && onSnooze && (
+        {/* Snooze Buttons (show when approaching, but not on paused reminders) */}
+        {isSoon && !reminder.completed && !isPaused && onSnooze && (
           <div className="flex items-center gap-1 mt-2">
             <span className="text-xs text-secondary mr-1">Snooze:</span>
             <button

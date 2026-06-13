@@ -34,6 +34,11 @@ async function handleReminderAlarm(reminderId: string) {
       return;
     }
 
+    // Paused recurring reminders must neither notify nor re-arm.
+    if (reminder.recurring && reminder.recurring.enabled === false) {
+      return;
+    }
+
     // Show notification with custom icon
     await chrome.notifications.create(`reminder-${reminderId}`, {
       type: 'basic',

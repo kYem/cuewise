@@ -379,9 +379,17 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
         return;
       }
 
+      // On resume, advance dueDate to the next occurrence so it isn't stale/overdue.
+      const resumedDueDate = paused
+        ? reminder.dueDate
+        : nextReminderDueDate(
+            { ...reminder, recurring: { ...reminder.recurring, enabled: true } },
+            new Date()
+          ).toISOString();
+
       const updated = reminders.map((r) =>
         r.id === reminderId && r.recurring
-          ? { ...r, recurring: { ...r.recurring, enabled: !paused } }
+          ? { ...r, dueDate: resumedDueDate, recurring: { ...r.recurring, enabled: !paused } }
           : r
       );
       await setReminders(updated);
@@ -393,11 +401,9 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
         if (paused) {
           await chrome.alarms.clear(`reminder-${reminderId}`);
         } else {
-          const nextDueDate = nextReminderDueDate(
-            { ...reminder, recurring: { ...reminder.recurring, enabled: true } },
-            new Date()
-          );
-          await chrome.alarms.create(`reminder-${reminderId}`, { when: nextDueDate.getTime() });
+          await chrome.alarms.create(`reminder-${reminderId}`, {
+            when: new Date(resumedDueDate).getTime(),
+          });
         }
       }
     } catch (error) {

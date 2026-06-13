@@ -29,7 +29,8 @@ export const EditReminderForm: React.FC<EditReminderFormProps> = ({
   const [text, setText] = useState(reminder.text);
   const [date, setDate] = useState(existingDateString);
   const [time, setTime] = useState(existingTimeString);
-  const [isRecurring, setIsRecurring] = useState(reminder.recurring?.enabled ?? false);
+  // Initialize from presence, not `.enabled` — a paused reminder still recurs.
+  const [isRecurring, setIsRecurring] = useState(reminder.recurring != null);
   const [recurringFrequency, setRecurringFrequency] = useState<ReminderFrequency>(
     reminder.recurring?.frequency ?? 'daily'
   );
@@ -45,7 +46,8 @@ export const EditReminderForm: React.FC<EditReminderFormProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!text.trim() || !date || !time) {
+    // Interval reminders fire one interval out, so they don't need a picked date/time.
+    if (!text.trim() || ((!date || !time) && !isInterval)) {
       return;
     }
 
@@ -58,17 +60,20 @@ export const EditReminderForm: React.FC<EditReminderFormProps> = ({
         ? new Date(Date.now() + clampedInterval * 60_000)
         : new Date(`${date}T${time}`);
 
+      // Preserve the existing pause state so editing a paused reminder keeps it paused.
+      const enabled = reminder.recurring?.enabled ?? true;
+
       let recurring:
-        | { frequency: ReminderFrequency; enabled: true; intervalMinutes?: number }
+        | { frequency: ReminderFrequency; enabled: boolean; intervalMinutes?: number }
         | undefined;
       if (isInterval) {
         recurring = {
           frequency: recurringFrequency,
-          enabled: true,
+          enabled,
           intervalMinutes: clampedInterval,
         };
       } else if (isRecurring) {
-        recurring = { frequency: recurringFrequency, enabled: true };
+        recurring = { frequency: recurringFrequency, enabled };
       } else {
         recurring = undefined;
       }
@@ -200,7 +205,7 @@ export const EditReminderForm: React.FC<EditReminderFormProps> = ({
         </button>
         <button
           type="submit"
-          disabled={!text.trim() || !date || !time || isSubmitting}
+          disabled={!text.trim() || ((!date || !time) && !isInterval) || isSubmitting}
           className="px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium shadow-sm hover:shadow-md"
         >
           {isSubmitting ? 'Updating...' : 'Update Reminder'}

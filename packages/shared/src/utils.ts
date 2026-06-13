@@ -1737,11 +1737,12 @@ export function nextReminderDueDate(reminder: Reminder, now: Date): Date {
     return new Date(now.getTime() + minutes * 60_000);
   }
 
+  const frequency = recurring?.frequency;
   const next = new Date(reminder.dueDate);
   while (next <= now) {
-    if (recurring?.frequency === 'weekly') {
+    if (frequency === 'weekly') {
       next.setDate(next.getDate() + 7);
-    } else if (recurring?.frequency === 'monthly') {
+    } else if (frequency === 'monthly') {
       next.setMonth(next.getMonth() + 1);
     } else {
       next.setDate(next.getDate() + 1); // daily / default

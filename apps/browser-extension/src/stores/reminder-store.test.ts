@@ -69,9 +69,13 @@ describe('setReminderPaused', () => {
     await useReminderStore.getState().setReminderPaused(id, true);
     alarmsMock.create.mockClear();
 
+    const beforeResume = Date.now();
     await useReminderStore.getState().setReminderPaused(id, false);
 
-    expect(useReminderStore.getState().reminders[0].recurring?.enabled).toBe(true);
+    const resumed = useReminderStore.getState().reminders[0];
+    expect(resumed.recurring?.enabled).toBe(true);
+    // Resume advances dueDate to the next occurrence (now + interval), not a stale past time.
+    expect(new Date(resumed.dueDate).getTime()).toBeGreaterThan(beforeResume);
     expect(alarmsMock.create).toHaveBeenCalledWith(`reminder-${id}`, expect.any(Object));
   });
 });
