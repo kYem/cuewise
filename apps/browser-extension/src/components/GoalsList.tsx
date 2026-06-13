@@ -194,7 +194,7 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
       {todayTasks.length === 0 && (
         <div className="text-center py-8">
           {viewMode === 'compact' ? (
-            <GoalInput />
+            <GoalInput variant="widget" />
           ) : (
             <EmptyState
               animationData={emptyTasksAnimation}
