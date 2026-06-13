@@ -6,12 +6,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useGoalStore } from '../stores/goal-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { prefersReducedMotion } from '../utils/prefers-reduced-motion';
-import { AnimatedCheckbox } from './AnimatedCheckbox';
+import { AnimatedCheckbox, CHECKBOX_TICK_MS } from './AnimatedCheckbox';
 import { GoalInput } from './GoalInput';
-
-// How long to keep a just-completed task on screen so its tick can play before
-// advancing — matches the AnimatedCheckbox spin→draw duration.
-const TICK_HOLD_MS = 720;
 
 interface GoalFocusViewProps {
   showAddInput?: boolean;
@@ -32,6 +28,9 @@ export const GoalFocusView: React.FC<GoalFocusViewProps> = ({ showAddInput, onCl
   // Pending "advance" timer — cleared on unmount so a view left mid-hold doesn't
   // mutate persisted settings after it's gone.
   const advanceTimer = useRef<number | null>(null);
+  // Synchronous latch so a rapid second click (or a click under reduced motion,
+  // where `animatingGoal` is never set) can't fire toggleTask twice.
+  const isToggling = useRef(false);
 
   useEffect(() => {
     return () => {
@@ -65,10 +64,12 @@ export const GoalFocusView: React.FC<GoalFocusViewProps> = ({ showAddInput, onCl
   const hasSubtasks = subtaskProgress.total > 0;
 
   const handleToggle = async () => {
-    // Ignore re-entry while a completion tick is still playing.
-    if (animatingGoal || !displayGoal) {
+    // Synchronous re-entry guard — covers rapid double-clicks and the
+    // reduced-motion path, where `animatingGoal` is never set.
+    if (isToggling.current || animatingGoal || !displayGoal) {
       return;
     }
+    isToggling.current = true;
 
     const justCompleted = !displayGoal.completed;
     const completedId = displayGoal.id;
@@ -83,21 +84,18 @@ export const GoalFocusView: React.FC<GoalFocusViewProps> = ({ showAddInput, onCl
 
     const ok = await toggleTask(completedId);
 
-    // toggleTask surfaces its own error toast on failure. Drop the optimistic
-    // hold and don't advance, so the view matches the unchanged store state.
-    if (!ok) {
+    // On failure (toggleTask surfaces its own toast) or an un-complete, drop the
+    // optimistic hold, release the latch, and don't advance.
+    if (!ok || !justCompleted) {
       setAnimatingGoal(null);
-      return;
-    }
-
-    // Only completing a task advances the focus; un-completing stays put.
-    if (!justCompleted) {
+      isToggling.current = false;
       return;
     }
 
     const nextIncomplete = incompleteGoals.find((g) => g.id !== completedId);
     const advance = () => {
       advanceTimer.current = null;
+      isToggling.current = false;
       setAnimatingGoal(null);
       updateSettings({ focusedGoalId: nextIncomplete ? nextIncomplete.id : null });
     };
@@ -106,7 +104,7 @@ export const GoalFocusView: React.FC<GoalFocusViewProps> = ({ showAddInput, onCl
       advance();
       return;
     }
-    advanceTimer.current = window.setTimeout(advance, TICK_HOLD_MS);
+    advanceTimer.current = window.setTimeout(advance, CHECKBOX_TICK_MS);
   };
 
   // Empty state - show input directly

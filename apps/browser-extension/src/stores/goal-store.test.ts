@@ -893,3 +893,16 @@ describe('toggleTask does not celebrate (confetti removed)', () => {
     expect(celebrateMock).not.toHaveBeenCalled();
   });
 });
+
+describe('toggleTask persistence', () => {
+  it('reports failure and does not optimistically complete when the save fails', async () => {
+    vi.mocked(storage.setGoals).mockResolvedValue({ success: false });
+    const task = goalFactory.build({ date: getTodayDateString(), completed: false });
+    useGoalStore.setState({ goals: [task], todayTasks: [task] });
+
+    const result = await useGoalStore.getState().toggleTask(task.id);
+
+    expect(result).toBe(false);
+    expect(useGoalStore.getState().goals[0].completed).toBe(false);
+  });
+});

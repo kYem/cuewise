@@ -13,6 +13,7 @@ import { useGoalStore } from '../stores/goal-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { createGoalStoreMock, createMockGoalStore } from './__fixtures__/goals-list.fixtures';
 import { setReducedMotion } from './__fixtures__/motion.fixtures';
+import { CHECKBOX_TICK_MS } from './AnimatedCheckbox';
 import { GoalFocusView } from './GoalFocusView';
 
 vi.mock('../stores/goal-store', () => ({
@@ -143,7 +144,7 @@ describe('GoalFocusView - completing the focused task', () => {
     expect(updateSettings).not.toHaveBeenCalled();
 
     await act(async () => {
-      vi.advanceTimersByTime(720);
+      vi.advanceTimersByTime(CHECKBOX_TICK_MS);
     });
 
     expect(updateSettings).toHaveBeenCalledWith({ focusedGoalId: next.id });

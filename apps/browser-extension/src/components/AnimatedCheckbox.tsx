@@ -26,6 +26,12 @@ interface AnimatedCheckboxProps {
 const RING_RADIUS = 9;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
+// Spin→draw→idle timing (ms). Kept in lockstep with .animate-checkbox-* in
+// index.css (spin 0.3s, draw 0.42s). Exported so consumers that wait for the
+// tick to finish (e.g. GoalFocusView) share one source of truth.
+export const CHECKBOX_SPIN_MS = 280;
+export const CHECKBOX_TICK_MS = 720;
+
 /**
  * Presentational spinner-to-check visual. Renders aria-hidden — the wrapping
  * button owns the click handler and aria-label. On a real false->true toggle it
@@ -49,17 +55,17 @@ export function AnimatedCheckbox({
 
     if (checked && !wasChecked && !reduced) {
       setPhase('spin');
-      // Keep in sync with .animate-checkbox-* in index.css: 280 ≈ spin (0.3s),
-      // 720 = draw start + draw (0.42s) + a small buffer.
-      const toDraw = window.setTimeout(() => setPhase('draw'), 280);
-      const toIdle = window.setTimeout(() => setPhase('idle'), 720);
+      const toDraw = window.setTimeout(() => setPhase('draw'), CHECKBOX_SPIN_MS);
+      const toIdle = window.setTimeout(() => setPhase('idle'), CHECKBOX_TICK_MS);
       return () => {
         window.clearTimeout(toDraw);
         window.clearTimeout(toIdle);
       };
     }
 
-    if (!checked) {
+    // Reset to the static state when unchecking — and also if reduced-motion
+    // turns on mid-animation, so `phase` can't get stuck on 'spin'/'draw'.
+    if (!checked || reduced) {
       setPhase('idle');
     }
   }, [checked, reduced]);

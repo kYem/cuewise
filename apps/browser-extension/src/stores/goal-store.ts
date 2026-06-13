@@ -161,7 +161,16 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
         goal.id === goalId ? { ...goal, completed: !goal.completed } : goal
       );
 
-      await saveAllGoals(updatedGoals);
+      const result = await saveAllGoals(updatedGoals);
+      // Honor the persist result rather than optimistically marking the toggle
+      // saved: a failed write (e.g. quota) resolves {success:false} instead of
+      // throwing, and silently "succeeding" would revert on reload.
+      if (result?.success === false) {
+        const errorMessage = 'Failed to update goal. Please try again.';
+        set({ error: errorMessage });
+        useToastStore.getState().error(errorMessage);
+        return false;
+      }
 
       const updatedTodayTasks = filterTodayTasks(updatedGoals);
       set({ goals: updatedGoals, todayTasks: updatedTodayTasks });

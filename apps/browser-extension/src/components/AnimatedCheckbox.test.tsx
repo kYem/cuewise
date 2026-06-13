@@ -2,7 +2,7 @@ import { render } from '@testing-library/react';
 import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setReducedMotion } from './__fixtures__/motion.fixtures';
-import { AnimatedCheckbox } from './AnimatedCheckbox';
+import { AnimatedCheckbox, CHECKBOX_SPIN_MS, CHECKBOX_TICK_MS } from './AnimatedCheckbox';
 
 describe('AnimatedCheckbox', () => {
   beforeEach(() => {
@@ -41,12 +41,12 @@ describe('AnimatedCheckbox', () => {
     expect(getByTestId('animated-checkbox').getAttribute('data-phase')).toBe('spin');
 
     act(() => {
-      vi.advanceTimersByTime(280);
+      vi.advanceTimersByTime(CHECKBOX_SPIN_MS);
     });
     expect(getByTestId('animated-checkbox').getAttribute('data-phase')).toBe('draw');
 
     act(() => {
-      vi.advanceTimersByTime(440);
+      vi.advanceTimersByTime(CHECKBOX_TICK_MS - CHECKBOX_SPIN_MS);
     });
     expect(getByTestId('animated-checkbox').getAttribute('data-phase')).toBe('idle');
   });
