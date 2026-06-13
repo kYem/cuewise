@@ -119,11 +119,11 @@ chrome.notifications.onButtonClicked.addListener(async (notificationId, buttonIn
   const reminders = await getReminders();
 
   if (buttonIndex === 0) {
-    // Done: mark one-off reminders complete. An active recurring reminder has
-    // already been advanced to its next occurrence on fire, so completing it
-    // here would make handleReminderAlarm skip that next fire — just dismiss.
+    // Done: only mark one-off reminders complete. Any recurring reminder
+    // (active OR paused) is just dismissed — an active one was already advanced
+    // on fire, and a paused one must not be permanently completed.
     const reminder = reminders.find((r) => r.id === reminderId);
-    if (!reminder?.recurring?.enabled) {
+    if (!reminder?.recurring) {
       const updated = reminders.map((r) => (r.id === reminderId ? { ...r, completed: true } : r));
       await setReminders(updated);
     }

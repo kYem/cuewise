@@ -43,7 +43,15 @@ function categorizeReminders(reminders: Reminder[]) {
   const overdue: Reminder[] = [];
 
   for (const reminder of reminders) {
-    if (reminder.completed) continue;
+    if (reminder.completed) {
+      continue;
+    }
+
+    // A paused recurring reminder can never fire, so it's never overdue.
+    if (reminder.recurring && reminder.recurring.enabled === false) {
+      upcoming.push(reminder);
+      continue;
+    }
 
     const dueDate = new Date(reminder.dueDate);
     if (dueDate < now) {
@@ -188,10 +196,12 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
 
       const isCompleting = !reminder.completed;
 
-      // For recurring reminders, advance to next occurrence instead of marking complete
-      if (isCompleting && reminder.recurring?.enabled) {
+      // Any recurring reminder (active OR paused) advances to its next occurrence
+      // instead of being marked complete, which would permanently destroy it.
+      if (isCompleting && reminder.recurring) {
         const nextDueDate = nextReminderDueDate(reminder, new Date());
 
+        // Preserve the existing recurring config so a paused reminder stays paused.
         const advancedReminder: Reminder = {
           ...reminder,
           dueDate: nextDueDate.toISOString(),
@@ -210,12 +220,14 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
           overdueReminders: overdue,
         });
 
-        // Reschedule alarm for next occurrence
+        // Only (re)arm an alarm when the reminder is active; a paused one must not fire.
         if (chrome?.alarms) {
           await chrome.alarms.clear(`reminder-${reminderId}`);
-          await chrome.alarms.create(`reminder-${reminderId}`, {
-            when: new Date(advancedReminder.dueDate).getTime(),
-          });
+          if (reminder.recurring.enabled !== false) {
+            await chrome.alarms.create(`reminder-${reminderId}`, {
+              when: new Date(advancedReminder.dueDate).getTime(),
+            });
+          }
         }
 
         useToastStore.getState().success('Recurring reminder advanced to next occurrence');
@@ -315,9 +327,13 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       // Update alarm if dueDate changed
       if (updates.dueDate && chrome?.alarms) {
         await chrome.alarms.clear(`reminder-${reminderId}`);
-        await chrome.alarms.create(`reminder-${reminderId}`, {
-          when: new Date(updates.dueDate).getTime(),
-        });
+        // Don't re-arm a paused reminder; editing it must leave it silent.
+        const updatedReminder = updatedReminders.find((r) => r.id === reminderId);
+        if (updatedReminder?.recurring?.enabled !== false) {
+          await chrome.alarms.create(`reminder-${reminderId}`, {
+            when: new Date(updates.dueDate).getTime(),
+          });
+        }
       }
     } catch (error) {
       logger.error('Error updating reminder', error);

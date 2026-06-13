@@ -54,10 +54,12 @@ export const ReminderWidgetItem: React.FC<ReminderWidgetItemProps> = ({
   const [countdown, setCountdown] = useState('');
   const { text, isOverdue, isSoon } = formatDueDate(reminder.dueDate);
   const isPaused = reminder.recurring?.enabled === false;
+  // A paused reminder's dueDate is frozen, so suppress all "soon" affordances.
+  const showSoon = isSoon && !isPaused;
 
   // Update countdown every second for reminders that are approaching
   useEffect(() => {
-    if (!reminder.completed && isSoon) {
+    if (!reminder.completed && showSoon) {
       // Set initial countdown value immediately
       setCountdown(formatCountdown(reminder.dueDate));
 
@@ -67,7 +69,7 @@ export const ReminderWidgetItem: React.FC<ReminderWidgetItemProps> = ({
 
       return () => clearInterval(timer);
     }
-  }, [reminder.dueDate, reminder.completed, isSoon]);
+  }, [reminder.dueDate, reminder.completed, showSoon]);
 
   const handleSnooze = (minutes: number) => {
     if (onSnooze) {
@@ -79,7 +81,7 @@ export const ReminderWidgetItem: React.FC<ReminderWidgetItemProps> = ({
     <div
       className={cn(
         'rounded-lg border-2 p-3 transition-all',
-        getContainerClasses(reminder.completed, isOverdue, isSoon)
+        getContainerClasses(reminder.completed, isOverdue, showSoon)
       )}
     >
       <div className="flex items-start gap-2">
@@ -96,7 +98,7 @@ export const ReminderWidgetItem: React.FC<ReminderWidgetItemProps> = ({
             <Circle
               className={cn(
                 'w-5 h-5 transition-colors',
-                isOverdue ? 'text-red-400' : isSoon ? 'text-orange-400' : 'text-tertiary'
+                isOverdue ? 'text-red-400' : showSoon ? 'text-orange-400' : 'text-tertiary'
               )}
             />
           )}
@@ -123,7 +125,7 @@ export const ReminderWidgetItem: React.FC<ReminderWidgetItemProps> = ({
                   ? 'text-tertiary'
                   : isOverdue
                     ? 'text-red-500'
-                    : isSoon
+                    : showSoon
                       ? 'text-orange-500'
                       : 'text-secondary'
               )}
@@ -135,12 +137,12 @@ export const ReminderWidgetItem: React.FC<ReminderWidgetItemProps> = ({
                   ? 'text-tertiary'
                   : isOverdue
                     ? 'text-red-600 font-medium'
-                    : isSoon
+                    : showSoon
                       ? 'text-orange-600 font-semibold'
                       : 'text-secondary'
               )}
             >
-              {isSoon && !reminder.completed ? countdown : text}
+              {showSoon && !reminder.completed ? countdown : text}
             </span>
 
             {/* Recurring Indicator */}
@@ -173,7 +175,7 @@ export const ReminderWidgetItem: React.FC<ReminderWidgetItemProps> = ({
             )}
 
             {/* Approaching Indicator */}
-            {isSoon && !reminder.completed && (
+            {showSoon && !reminder.completed && (
               <Bell className="w-3 h-3 text-orange-500 animate-pulse" />
             )}
           </div>

@@ -51,10 +51,12 @@ export const ReminderItem: React.FC<ReminderItemProps> = ({
   const [countdown, setCountdown] = useState('');
   const { text, isOverdue, isSoon } = formatDueDate(reminder.dueDate);
   const isPaused = reminder.recurring?.enabled === false;
+  // A paused reminder's dueDate is frozen, so suppress all "soon" affordances.
+  const showSoon = isSoon && !isPaused;
 
   // Update countdown every second for reminders that are approaching
   useEffect(() => {
-    if (!reminder.completed && isSoon) {
+    if (!reminder.completed && showSoon) {
       // Set initial countdown value immediately
       setCountdown(formatCountdown(reminder.dueDate));
 
@@ -64,7 +66,7 @@ export const ReminderItem: React.FC<ReminderItemProps> = ({
 
       return () => clearInterval(timer);
     }
-  }, [reminder.dueDate, reminder.completed, isSoon]);
+  }, [reminder.dueDate, reminder.completed, showSoon]);
 
   const handleSnooze = (minutes: number) => {
     if (onSnooze) {
@@ -76,7 +78,7 @@ export const ReminderItem: React.FC<ReminderItemProps> = ({
     <div
       className={cn(
         'group flex items-center gap-3 p-3 rounded-lg border-2 transition-all',
-        getContainerClasses(reminder.completed, isOverdue, isSoon)
+        getContainerClasses(reminder.completed, isOverdue, showSoon)
       )}
     >
       {/* Checkbox */}
@@ -132,7 +134,7 @@ export const ReminderItem: React.FC<ReminderItemProps> = ({
                 ? 'text-tertiary'
                 : isOverdue
                   ? 'text-red-500'
-                  : isSoon
+                  : showSoon
                     ? 'text-orange-500'
                     : 'text-secondary'
             )}
@@ -144,12 +146,12 @@ export const ReminderItem: React.FC<ReminderItemProps> = ({
                 ? 'text-tertiary'
                 : isOverdue
                   ? 'text-red-600 font-medium'
-                  : isSoon
+                  : showSoon
                     ? 'text-orange-600 font-semibold'
                     : 'text-secondary'
             )}
           >
-            {isSoon && !reminder.completed ? countdown : text}
+            {showSoon && !reminder.completed ? countdown : text}
           </span>
 
           {/* Recurring Indicator */}
@@ -182,7 +184,7 @@ export const ReminderItem: React.FC<ReminderItemProps> = ({
           )}
 
           {/* Approaching Indicator */}
-          {isSoon && !reminder.completed && (
+          {showSoon && !reminder.completed && (
             <Bell className="w-3.5 h-3.5 text-orange-500 animate-pulse" />
           )}
         </div>
