@@ -1,7 +1,14 @@
-import { logger, type Reminder, type ReminderFrequency } from '@cuewise/shared';
+import {
+  clampIntervalMinutes,
+  DEFAULT_REMINDER_INTERVAL_MINUTES,
+  logger,
+  type Reminder,
+  type ReminderFrequency,
+} from '@cuewise/shared';
 import type React from 'react';
 import { useState } from 'react';
 import { useReminderStore } from '../stores/reminder-store';
+import { IntervalCadencePicker } from './IntervalCadencePicker';
 
 interface EditReminderFormProps {
   reminder: Reminder;
@@ -26,7 +33,12 @@ export const EditReminderForm: React.FC<EditReminderFormProps> = ({
   const [recurringFrequency, setRecurringFrequency] = useState<ReminderFrequency>(
     reminder.recurring?.frequency ?? 'daily'
   );
+  const [intervalMinutes, setIntervalMinutes] = useState(
+    reminder.recurring?.intervalMinutes ?? DEFAULT_REMINDER_INTERVAL_MINUTES
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const isInterval = isRecurring && recurringFrequency === 'interval';
 
   const updateReminder = useReminderStore((state) => state.updateReminder);
 
@@ -40,18 +52,31 @@ export const EditReminderForm: React.FC<EditReminderFormProps> = ({
     setIsSubmitting(true);
 
     try {
-      // Combine date and time into a Date object
-      const dueDate = new Date(`${date}T${time}`);
+      const clampedInterval = clampIntervalMinutes(intervalMinutes);
+      // Interval reminders fire one interval out, not at the picked date/time.
+      const dueDate = isInterval
+        ? new Date(Date.now() + clampedInterval * 60_000)
+        : new Date(`${date}T${time}`);
+
+      let recurring:
+        | { frequency: ReminderFrequency; enabled: true; intervalMinutes?: number }
+        | undefined;
+      if (isInterval) {
+        recurring = {
+          frequency: recurringFrequency,
+          enabled: true,
+          intervalMinutes: clampedInterval,
+        };
+      } else if (isRecurring) {
+        recurring = { frequency: recurringFrequency, enabled: true };
+      } else {
+        recurring = undefined;
+      }
 
       await updateReminder(reminder.id, {
         text: text.trim(),
         dueDate: dueDate.toISOString(),
-        recurring: isRecurring
-          ? {
-              frequency: recurringFrequency,
-              enabled: true,
-            }
-          : undefined,
+        recurring,
       });
 
       onSuccess();
@@ -149,7 +174,17 @@ export const EditReminderForm: React.FC<EditReminderFormProps> = ({
               <option value="daily">Daily</option>
               <option value="weekly">Weekly</option>
               <option value="monthly">Monthly</option>
+              <option value="interval">Every N minutes</option>
             </select>
+
+            {isInterval && (
+              <div className="mt-3">
+                <IntervalCadencePicker value={intervalMinutes} onChange={setIntervalMinutes} />
+                <p className="mt-1 text-xs text-secondary">
+                  Reschedules to fire {clampIntervalMinutes(intervalMinutes)} min from now.
+                </p>
+              </div>
+            )}
           </div>
         )}
       </div>

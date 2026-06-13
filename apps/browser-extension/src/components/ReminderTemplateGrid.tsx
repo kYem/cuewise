@@ -54,6 +54,7 @@ const FREQUENCY_LABELS: Record<ReminderFrequency, string> = {
   daily: 'Daily',
   weekly: 'Weekly',
   monthly: 'Monthly',
+  interval: 'Every N min',
 };
 
 interface ReminderTemplateGridProps {
