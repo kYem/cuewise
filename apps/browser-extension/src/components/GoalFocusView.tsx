@@ -147,7 +147,7 @@ export const GoalFocusView: React.FC<GoalFocusViewProps> = ({ showAddInput, onCl
           onClick={handleToggle}
           className={cn(
             'group flex items-center gap-4 px-4 py-3 rounded-xl transition-all',
-            'focus:outline-none focus:ring-2 focus:ring-white/30'
+            'focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30'
           )}
         >
           {/* Checkbox - hidden by default, shows on hover */}

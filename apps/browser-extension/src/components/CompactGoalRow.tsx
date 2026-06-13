@@ -49,7 +49,7 @@ export const CompactGoalRow: React.FC<CompactGoalRowProps> = ({
           type="button"
           onClick={onToggleComplete}
           aria-label={goal.completed ? 'Mark as incomplete' : 'Mark as complete'}
-          className="flex flex-shrink-0 items-center justify-center rounded-full focus:outline-none focus:ring-2 focus:ring-primary-500"
+          className="flex flex-shrink-0 items-center justify-center rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
         >
           <AnimatedCheckbox checked={goal.completed} size="md" />
         </button>

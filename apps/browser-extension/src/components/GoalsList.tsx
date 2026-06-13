@@ -245,7 +245,7 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
                         <button
                           type="button"
                           onClick={() => toggleTask(goal.id)}
-                          className="flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 rounded-full"
+                          className="flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 rounded-full"
                           aria-label={goal.completed ? 'Mark as incomplete' : 'Mark as complete'}
                         >
                           <AnimatedCheckbox checked={goal.completed} size="md" />
@@ -484,7 +484,7 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
                                 <button
                                   type="button"
                                   onClick={() => toggleSubtask(goal.id, subtask.id)}
-                                  className="flex-shrink-0 rounded-full focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                  className="flex-shrink-0 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
                                   aria-label={subtaskToggleLabel(subtask.text, subtask.completed)}
                                 >
                                   <SubtaskCheckIcon completed={subtask.completed} />
@@ -587,7 +587,7 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
                 onClick={async () => {
                   await toggleTask(goal.id);
                 }}
-                className="flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-primary-500 rounded-full"
+                className="flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded-full"
                 aria-label="Mark as complete"
               >
                 <AnimatedCheckbox checked={goal.completed} size="md" />

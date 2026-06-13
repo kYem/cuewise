@@ -73,7 +73,7 @@ export const UpcomingTasks: React.FC<UpcomingTasksProps> = ({
               <button
                 type="button"
                 onClick={() => toggleTask(task.id)}
-                className="flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-primary-500 rounded-full"
+                className="flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded-full"
                 aria-label="Mark as complete"
               >
                 <AnimatedCheckbox checked={task.completed} size="md" />

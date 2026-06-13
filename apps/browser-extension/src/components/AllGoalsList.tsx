@@ -120,7 +120,7 @@ export const AllGoalsList: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => toggleTask(goal.id)}
-                    className="flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 rounded-full"
+                    className="flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 rounded-full"
                     aria-label={goal.completed ? 'Mark as incomplete' : 'Mark as complete'}
                   >
                     <AnimatedCheckbox checked={goal.completed} size="lg" />

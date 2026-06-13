@@ -318,7 +318,7 @@ export const GoalDetailView: React.FC<GoalDetailViewProps> = ({ goalId, onClose 
                     type="button"
                     onClick={() => handleToggleTask(task.id)}
                     aria-label={task.completed ? 'Mark as incomplete' : 'Mark as complete'}
-                    className="flex-shrink-0 rounded-full focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    className="flex-shrink-0 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
                   >
                     <AnimatedCheckbox checked={task.completed} size="md" />
                   </button>
