@@ -144,3 +144,29 @@ describe('categorizeReminders with a paused reminder', () => {
     expect(upcomingReminders.map((r) => r.id)).toEqual(['active-1', 'paused-2']);
   });
 });
+
+describe('updateReminder dropping recurrence', () => {
+  it('clears the paused flag and re-arms when a paused recurring reminder becomes a one-off', async () => {
+    const paused: Reminder = {
+      id: 'r-edit',
+      text: 'Move',
+      dueDate: new Date(Date.now() + 60_000).toISOString(),
+      completed: false,
+      notified: false,
+      recurring: { frequency: 'interval', intervalMinutes: 30 },
+      paused: true,
+    };
+    useReminderStore.setState({ reminders: [paused] });
+
+    await useReminderStore.getState().updateReminder('r-edit', {
+      dueDate: new Date(Date.now() + 3_600_000).toISOString(),
+      recurring: undefined,
+      paused: undefined,
+    });
+
+    const updated = useReminderStore.getState().reminders[0];
+    expect(updated.recurring).toBeUndefined();
+    expect(updated.paused).toBeFalsy();
+    expect(alarmsMock.create).toHaveBeenCalledWith('reminder-r-edit', expect.any(Object));
+  });
+});

@@ -77,6 +77,9 @@ export const EditReminderForm: React.FC<EditReminderFormProps> = ({
         text: text.trim(),
         dueDate: dueDate.toISOString(),
         recurring,
+        // Dropping recurrence must also drop a lingering paused flag — a one-off
+        // reminder can't be paused, and the pause toggle is gated on `recurring`.
+        ...(recurring ? {} : { paused: undefined }),
       });
 
       onSuccess();
