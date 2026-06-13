@@ -1,6 +1,8 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "globalDependencies": ["**/.env.*local"],
+  "//": "Pass telemetry opt-outs to tasks (Turbo runs strict env mode) so e.g. the Astro build honors them. Not in the cache hash.",
+  "globalPassThroughEnv": ["DO_NOT_TRACK", "TURBO_TELEMETRY_DISABLED", "ASTRO_TELEMETRY_DISABLED"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
