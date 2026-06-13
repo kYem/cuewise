@@ -1,6 +1,6 @@
-import { Select } from '@cuewise/ui';
+import { cn } from '@cuewise/ui';
 import type React from 'react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 interface EditableValueProps {
   value: number;
@@ -8,6 +8,12 @@ interface EditableValueProps {
   presets?: number[];
   onChange: (value: number) => void;
   className?: string;
+  // Compact trigger: render `${value}${suffix}` (e.g. "25m", or just "4" with no
+  // suffix) instead of `${value} ${unit}`. Options still show the full `${preset} ${unit}`.
+  compact?: boolean;
+  suffix?: string;
+  // 'onGlass' uses white text for legibility over the photo/frosted backgrounds.
+  tone?: 'primary' | 'onGlass';
 }
 
 export const EditableValue: React.FC<EditableValueProps> = ({
@@ -16,50 +22,83 @@ export const EditableValue: React.FC<EditableValueProps> = ({
   presets,
   onChange,
   className = '',
+  compact = false,
+  suffix = '',
+  tone = 'primary',
 }) => {
-  const [isEditing, setIsEditing] = useState(false);
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLSpanElement>(null);
 
-  const handleClick = () => {
-    setIsEditing(true);
+  // Close the preset menu when clicking outside it
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    const handlePointerDown = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+    };
+  }, [open]);
+
+  const triggerLabel = compact ? `${value}${suffix}` : `${value} ${unit}`;
+  const toneClasses =
+    tone === 'onGlass'
+      ? 'text-white/90 hover:text-white'
+      : 'text-primary-600 hover:text-primary-700';
+
+  const handleToggle = () => {
+    if (presets) {
+      setOpen((o) => !o);
+    }
   };
 
-  if (!isEditing) {
-    return (
+  return (
+    <span ref={ref} className="relative inline-block">
       <button
         type="button"
-        onClick={handleClick}
-        className={`text-primary-600 hover:text-primary-700 font-semibold underline decoration-dotted underline-offset-2 cursor-pointer transition-colors ${className}`}
+        onClick={handleToggle}
+        className={cn(
+          'cursor-pointer font-semibold underline decoration-dotted underline-offset-2 transition-colors',
+          toneClasses,
+          className
+        )}
         title="Click to edit"
+        aria-haspopup="listbox"
+        aria-expanded={open}
       >
-        {value} {unit}
+        {triggerLabel}
       </button>
-    );
-  }
-
-  // Show select dropdown with presets only
-  if (presets) {
-    return (
-      <span className="inline-block min-w-[120px] align-middle">
-        <Select
-          value={value.toString()}
-          onChange={(val) => {
-            onChange(Number.parseInt(val, 10));
-            setIsEditing(false);
-          }}
-          options={presets.map((preset) => ({
-            value: preset.toString(),
-            label: `${preset} ${unit}`,
-          }))}
-          className="text-xs [&>button]:py-1 [&>button]:px-2 [&>button]:min-h-0 [&>button]:h-auto"
-        />
-      </span>
-    );
-  }
-
-  // Fallback (should not happen if presets are always provided)
-  return (
-    <span className={`text-primary-600 font-semibold ${className}`}>
-      {value} {unit}
+      {/* Opens above the trigger — the settings row sits at the bottom of the card. */}
+      {open && presets && (
+        <span
+          role="listbox"
+          className="absolute bottom-[calc(100%+6px)] left-1/2 z-30 flex min-w-[92px] -translate-x-1/2 flex-col rounded-lg border border-white/15 bg-black/70 p-1 shadow-xl backdrop-blur-md"
+        >
+          {presets.map((preset) => (
+            <button
+              key={preset}
+              type="button"
+              role="option"
+              aria-selected={preset === value}
+              onClick={() => {
+                onChange(preset);
+                setOpen(false);
+              }}
+              className={cn(
+                'whitespace-nowrap rounded px-2.5 py-1.5 text-left text-xs text-white transition-colors hover:bg-white/15',
+                preset === value && 'bg-white/15'
+              )}
+            >
+              {preset} {unit}
+            </button>
+          ))}
+        </span>
+      )}
     </span>
   );
 };

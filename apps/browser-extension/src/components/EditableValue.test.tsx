@@ -18,148 +18,118 @@ describe('EditableValue', () => {
     it('should render the value with unit', () => {
       render(<EditableValue {...defaultProps} />);
 
-      const button = screen.getByRole('button');
-      expect(button).toHaveTextContent('25 minutes');
+      expect(screen.getByRole('button')).toHaveTextContent('25 minutes');
     });
 
     it('should show helpful title on hover', () => {
       render(<EditableValue {...defaultProps} />);
 
-      const button = screen.getByRole('button');
-      expect(button).toHaveAttribute('title', 'Click to edit');
+      expect(screen.getByRole('button')).toHaveAttribute('title', 'Click to edit');
     });
 
     it('should apply custom className', () => {
       render(<EditableValue {...defaultProps} className="custom-class" />);
 
+      expect(screen.getByRole('button')).toHaveClass('custom-class');
+    });
+
+    it('should render a compact label with a suffix', () => {
+      render(<EditableValue {...defaultProps} compact suffix="m" />);
+
+      expect(screen.getByRole('button')).toHaveTextContent('25m');
+    });
+
+    it('should render a compact label with no suffix and omit the unit', () => {
+      render(<EditableValue {...defaultProps} value={4} unit="sessions" compact />);
+
       const button = screen.getByRole('button');
-      expect(button).toHaveClass('custom-class');
+      expect(button).toHaveTextContent('4');
+      expect(button).not.toHaveTextContent('sessions');
     });
   });
 
-  describe('Entering Edit Mode', () => {
-    it('should show select dropdown when clicking and presets are provided', async () => {
+  describe('Opening the preset menu', () => {
+    const presets = [15, 20, 25, 30];
+
+    it('opens the preset listbox on the first click', async () => {
       const user = userEvent.setup();
-      const presets = [15, 20, 25, 30];
 
       render(<EditableValue {...defaultProps} presets={presets} />);
 
-      const displayButton = screen.getByRole('button');
-      await user.click(displayButton);
+      const trigger = screen.getByRole('button');
+      expect(trigger).toHaveAttribute('aria-haspopup', 'listbox');
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
 
-      // Custom Select uses a button with aria-haspopup="listbox"
-      const selectTrigger = screen.getByRole('button', { expanded: false });
-      expect(selectTrigger).toBeInTheDocument();
-      expect(selectTrigger).toHaveAttribute('aria-haspopup', 'listbox');
+      await user.click(trigger);
+
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      expect(screen.getByRole('listbox')).toBeInTheDocument();
     });
 
-    it('should show fallback text when no presets provided', async () => {
+    it('does not open a listbox when no presets are provided', async () => {
       const user = userEvent.setup();
 
       render(<EditableValue {...defaultProps} />);
 
-      const button = screen.getByRole('button');
-      await user.click(button);
+      await user.click(screen.getByRole('button'));
 
-      // Should show fallback span - no select trigger with aria-haspopup
-      const buttons = screen.queryAllByRole('button');
-      const selectTrigger = buttons.find((btn) => btn.getAttribute('aria-haspopup') === 'listbox');
-      expect(selectTrigger).toBeUndefined();
-      expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument();
+      expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
     });
   });
 
   describe('Preset Selection', () => {
     const presets = [15, 20, 25, 30, 45, 60];
 
-    it('should display all preset options', async () => {
+    it('displays all preset options', async () => {
       const user = userEvent.setup();
 
       render(<EditableValue {...defaultProps} presets={presets} />);
 
       await user.click(screen.getByRole('button'));
 
-      // Click the select trigger to open dropdown
-      const selectTrigger = screen.getByRole('button', { expanded: false });
-      await user.click(selectTrigger);
-
-      const listbox = screen.getByRole('listbox');
-      const options = within(listbox).getAllByRole('option');
-
+      const options = within(screen.getByRole('listbox')).getAllByRole('option');
       expect(options).toHaveLength(presets.length);
     });
 
-    it('should call onChange when selecting a preset', async () => {
+    it('calls onChange with the chosen preset', async () => {
       const user = userEvent.setup();
       const onChange = vi.fn();
 
       render(<EditableValue {...defaultProps} presets={presets} onChange={onChange} />);
 
       await user.click(screen.getByRole('button'));
-
-      // Open the dropdown
-      const selectTrigger = screen.getByRole('button', { expanded: false });
-      await user.click(selectTrigger);
-
-      // Click the option with "30 minutes"
-      const option = screen.getByRole('option', { name: '30 minutes' });
-      await user.click(option);
+      await user.click(screen.getByRole('option', { name: '30 minutes' }));
 
       expect(onChange).toHaveBeenCalledWith(30);
     });
 
-    it('should exit edit mode after selecting a preset', async () => {
+    it('closes the listbox after selecting a preset', async () => {
       const user = userEvent.setup();
 
       render(<EditableValue {...defaultProps} presets={presets} />);
 
       await user.click(screen.getByRole('button'));
-
-      // Open the dropdown
-      const selectTrigger = screen.getByRole('button', { expanded: false });
-      await user.click(selectTrigger);
-
-      // Click an option
-      const option = screen.getByRole('option', { name: '30 minutes' });
-      await user.click(option);
+      await user.click(screen.getByRole('option', { name: '30 minutes' }));
 
       await waitFor(() => {
         expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
       });
-      // Should return to display mode with "Click to edit" button (value unchanged since onChange is mocked)
-      const displayButton = screen.getByRole('button', { name: /minutes/i });
-      expect(displayButton).toHaveAttribute('title', 'Click to edit');
     });
 
-    it('should show current value as selected in dropdown', async () => {
+    it('marks the current value as the selected option', async () => {
       const user = userEvent.setup();
 
       render(<EditableValue {...defaultProps} value={30} presets={presets} />);
 
       await user.click(screen.getByRole('button'));
 
-      // Open the dropdown
-      const selectTrigger = screen.getByRole('button', { expanded: false });
-      await user.click(selectTrigger);
-
-      // Check that the 30 minutes option has aria-selected="true"
-      // Note: selected option name includes "Selected" from checkmark icon title
-      const selectedOption = screen.getByRole('option', { name: /30 minutes/i });
-      expect(selectedOption).toHaveAttribute('aria-selected', 'true');
+      expect(screen.getByRole('option', { name: '30 minutes' })).toHaveAttribute(
+        'aria-selected',
+        'true'
+      );
     });
 
-    it('should show select trigger when entering edit mode', async () => {
-      const user = userEvent.setup();
-
-      render(<EditableValue {...defaultProps} presets={presets} />);
-
-      await user.click(screen.getByRole('button'));
-
-      const selectTrigger = screen.getByRole('button', { expanded: false });
-      expect(selectTrigger).toBeInTheDocument();
-    });
-
-    it('should exit edit mode when clicking outside', async () => {
+    it('closes the listbox when clicking outside', async () => {
       const user = userEvent.setup();
 
       render(
@@ -170,17 +140,23 @@ describe('EditableValue', () => {
       );
 
       await user.click(screen.getByRole('button', { name: /25 minutes/i }));
+      expect(screen.getByRole('listbox')).toBeInTheDocument();
 
-      // Open the dropdown
-      const selectTrigger = screen.getByRole('button', { expanded: false });
-      await user.click(selectTrigger);
-
-      // Click outside
       await user.click(screen.getByRole('button', { name: 'Outside' }));
 
       await waitFor(() => {
         expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
       });
+    });
+
+    it('keeps the full unit in preset options when the trigger is compact', async () => {
+      const user = userEvent.setup();
+
+      render(<EditableValue {...defaultProps} compact suffix="m" presets={presets} />);
+
+      await user.click(screen.getByRole('button'));
+
+      expect(screen.getByRole('option', { name: '30 minutes' })).toBeInTheDocument();
     });
   });
 
