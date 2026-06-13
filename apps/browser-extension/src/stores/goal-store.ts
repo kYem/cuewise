@@ -20,7 +20,6 @@ import {
 } from '@cuewise/shared';
 import { getGoals as loadAllGoals, setGoals as saveAllGoals } from '@cuewise/storage';
 import { create } from 'zustand';
-import { useCelebrationStore } from './celebration-store';
 import { useToastStore } from './toast-store';
 
 export type CompletionFilter = 'all' | 'completed' | 'incomplete';
@@ -162,24 +161,19 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
         goal.id === goalId ? { ...goal, completed: !goal.completed } : goal
       );
 
-      await saveAllGoals(updatedGoals);
+      const result = await saveAllGoals(updatedGoals);
+      // Honor the persist result rather than optimistically marking the toggle
+      // saved: a failed write (e.g. quota) resolves {success:false} instead of
+      // throwing, and silently "succeeding" would revert on reload.
+      if (result?.success === false) {
+        const errorMessage = 'Failed to update goal. Please try again.';
+        set({ error: errorMessage });
+        useToastStore.getState().error(errorMessage);
+        return false;
+      }
 
       const updatedTodayTasks = filterTodayTasks(updatedGoals);
       set({ goals: updatedGoals, todayTasks: updatedTodayTasks });
-
-      // Celebrate only when the user just completed the last remaining task today.
-      const today = getTodayDateString();
-      const toggledGoal = updatedGoals.find((goal) => goal.id === goalId);
-      const justCompletedTodayTask =
-        toggledGoal !== undefined &&
-        isTask(toggledGoal) &&
-        toggledGoal.date === today &&
-        toggledGoal.completed === true;
-      const allTodayComplete =
-        updatedTodayTasks.length > 0 && updatedTodayTasks.every((task) => task.completed);
-      if (justCompletedTodayTask && allTodayComplete) {
-        useCelebrationStore.getState().celebrate('allGoals');
-      }
 
       return true;
     } catch (error) {

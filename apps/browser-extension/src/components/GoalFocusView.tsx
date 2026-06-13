@@ -1,10 +1,12 @@
-import { getDueDateLabel, getSubtaskProgress } from '@cuewise/shared';
+import { type Goal, getDueDateLabel, getSubtaskProgress } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
-import { CalendarClock, CheckCircle2, Circle, ListChecks, Plus } from 'lucide-react';
+import { CalendarClock, CheckCircle2, ListChecks, Plus } from 'lucide-react';
 import type React from 'react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useGoalStore } from '../stores/goal-store';
 import { useSettingsStore } from '../stores/settings-store';
+import { prefersReducedMotion } from '../utils/prefers-reduced-motion';
+import { AnimatedCheckbox, CHECKBOX_TICK_MS } from './AnimatedCheckbox';
 import { GoalInput } from './GoalInput';
 
 interface GoalFocusViewProps {
@@ -20,6 +22,23 @@ export const GoalFocusView: React.FC<GoalFocusViewProps> = ({ showAddInput, onCl
   const { todayTasks, toggleTask, goals } = useGoalStore();
   const { settings, updateSettings } = useSettingsStore();
   const [showAddInDone, setShowAddInDone] = useState(false);
+  // A just-completed task we keep on screen so its tick animation can finish
+  // playing before the view advances to the next task / "All done".
+  const [animatingGoal, setAnimatingGoal] = useState<Goal | null>(null);
+  // Pending "advance" timer — cleared on unmount so a view left mid-hold doesn't
+  // mutate persisted settings after it's gone.
+  const advanceTimer = useRef<number | null>(null);
+  // Synchronous latch so a rapid second click (or a click under reduced motion,
+  // where `animatingGoal` is never set) can't fire toggleTask twice.
+  const isToggling = useRef(false);
+
+  useEffect(() => {
+    return () => {
+      if (advanceTimer.current !== null) {
+        window.clearTimeout(advanceTimer.current);
+      }
+    };
+  }, []);
 
   const focusedGoalId = settings.focusedGoalId;
 
@@ -28,9 +47,10 @@ export const GoalFocusView: React.FC<GoalFocusViewProps> = ({ showAddInput, onCl
   const incompleteGoals = todayTasks.filter((g) => !g.completed);
 
   // Use the focused goal only while it's still incomplete; once it's done (e.g.
-  // completed from another view) fall through to the next open task.
+  // completed from another view) fall through to the next open task. The held
+  // (animating) goal wins so its completion tick can finish playing.
   const activeFocusedGoal = focusedGoal && !focusedGoal.completed ? focusedGoal : null;
-  const displayGoal = activeFocusedGoal ?? incompleteGoals[0] ?? null;
+  const displayGoal = animatingGoal ?? activeFocusedGoal ?? incompleteGoals[0] ?? null;
 
   // Find the parent objective if this task is linked to one
   const parentObjective = displayGoal?.parentId
@@ -44,19 +64,47 @@ export const GoalFocusView: React.FC<GoalFocusViewProps> = ({ showAddInput, onCl
   const hasSubtasks = subtaskProgress.total > 0;
 
   const handleToggle = async () => {
-    if (displayGoal) {
-      await toggleTask(displayGoal.id);
-      // If completing the goal, clear the focused goal so it moves to next
-      if (!displayGoal.completed) {
-        // Find next incomplete goal after this one
-        const nextIncomplete = incompleteGoals.find((g) => g.id !== displayGoal.id);
-        if (nextIncomplete) {
-          updateSettings({ focusedGoalId: nextIncomplete.id });
-        } else {
-          updateSettings({ focusedGoalId: null });
-        }
-      }
+    // Synchronous re-entry guard — covers rapid double-clicks and the
+    // reduced-motion path, where `animatingGoal` is never set.
+    if (isToggling.current || animatingGoal || !displayGoal) {
+      return;
     }
+    isToggling.current = true;
+
+    const justCompleted = !displayGoal.completed;
+    const completedId = displayGoal.id;
+    const reducedMotion = prefersReducedMotion();
+
+    // Hold the completed task on screen so its tick can play before advancing.
+    // Set before the async toggle so the row doesn't flicker to the next task in
+    // between. Skipped under reduced motion (there's no animation to wait for).
+    if (justCompleted && !reducedMotion) {
+      setAnimatingGoal({ ...displayGoal, completed: true });
+    }
+
+    const ok = await toggleTask(completedId);
+
+    // On failure (toggleTask surfaces its own toast) or an un-complete, drop the
+    // optimistic hold, release the latch, and don't advance.
+    if (!ok || !justCompleted) {
+      setAnimatingGoal(null);
+      isToggling.current = false;
+      return;
+    }
+
+    const nextIncomplete = incompleteGoals.find((g) => g.id !== completedId);
+    const advance = () => {
+      advanceTimer.current = null;
+      isToggling.current = false;
+      setAnimatingGoal(null);
+      updateSettings({ focusedGoalId: nextIncomplete ? nextIncomplete.id : null });
+    };
+
+    if (reducedMotion) {
+      advance();
+      return;
+    }
+    advanceTimer.current = window.setTimeout(advance, CHECKBOX_TICK_MS);
   };
 
   // Empty state - show input directly
@@ -70,8 +118,9 @@ export const GoalFocusView: React.FC<GoalFocusViewProps> = ({ showAddInput, onCl
     );
   }
 
-  // All tasks completed (regardless of whether a now-completed task is still focused)
-  if (incompleteGoals.length === 0) {
+  // All tasks completed (regardless of whether a now-completed task is still
+  // focused). While the final task's tick is still playing, keep showing it.
+  if (!animatingGoal && incompleteGoals.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-8">
         <CheckCircle2 className="w-12 h-12 mb-3 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]" />
@@ -115,7 +164,7 @@ export const GoalFocusView: React.FC<GoalFocusViewProps> = ({ showAddInput, onCl
           onClick={handleToggle}
           className={cn(
             'group flex items-center gap-4 px-4 py-3 rounded-xl transition-all',
-            'focus:outline-none focus:ring-2 focus:ring-white/30'
+            'focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30'
           )}
         >
           {/* Checkbox - hidden by default, shows on hover */}
@@ -125,11 +174,7 @@ export const GoalFocusView: React.FC<GoalFocusViewProps> = ({ showAddInput, onCl
               displayGoal.completed ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
             )}
           >
-            {displayGoal.completed ? (
-              <CheckCircle2 className="w-10 h-10 text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]" />
-            ) : (
-              <Circle className="w-10 h-10 text-white/80 group-hover:text-white transition-colors drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]" />
-            )}
+            <AnimatedCheckbox checked={displayGoal.completed} size="xl" tone="onImage" />
           </div>
 
           {/* Goal Text and Parent - stacked vertically */}

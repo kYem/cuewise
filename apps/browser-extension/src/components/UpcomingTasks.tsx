@@ -1,9 +1,10 @@
 import { getDueDateLabel, getTodayDateString, getUpcomingTasks } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
-import { CalendarClock, ChevronDown, ChevronUp, Circle, MoveRight } from 'lucide-react';
+import { CalendarClock, ChevronDown, ChevronUp, MoveRight } from 'lucide-react';
 import type React from 'react';
 import { useMemo, useState } from 'react';
 import { useGoalStore } from '../stores/goal-store';
+import { AnimatedCheckbox } from './AnimatedCheckbox';
 
 interface UpcomingTasksProps {
   defaultExpanded?: boolean;
@@ -72,10 +73,10 @@ export const UpcomingTasks: React.FC<UpcomingTasksProps> = ({
               <button
                 type="button"
                 onClick={() => toggleTask(task.id)}
-                className="flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-primary-500 rounded-full"
+                className="flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded-full"
                 aria-label="Mark as complete"
               >
-                <Circle className="w-5 h-5 text-tertiary group-hover:text-primary-500 transition-colors" />
+                <AnimatedCheckbox checked={task.completed} size="md" />
               </button>
               <span className="flex-1 min-w-0 text-sm text-primary truncate">{task.text}</span>
               <span className="flex items-center gap-1 flex-shrink-0 text-xs text-secondary bg-surface-variant px-1.5 py-0.5 rounded-full">

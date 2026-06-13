@@ -42,6 +42,8 @@ vi.mock('./toast-store', () => ({
   },
 }));
 
+// Spy on the celebration store so we can assert toggleTask never triggers it
+// (the all-goals confetti was removed in favour of the per-checkbox tick).
 const { celebrateMock } = vi.hoisted(() => ({ celebrateMock: vi.fn() }));
 
 vi.mock('./celebration-store', () => ({
@@ -874,13 +876,13 @@ describe('Goal Store', () => {
   });
 });
 
-describe('toggleTask celebration trigger', () => {
+describe('toggleTask does not celebrate (confetti removed)', () => {
   beforeEach(() => {
     celebrateMock.mockClear();
     vi.mocked(storage.setGoals).mockResolvedValue({ success: true });
   });
 
-  it('celebrates when the last incomplete task of today is completed', async () => {
+  it('does not celebrate when completing the last incomplete task today', async () => {
     const today = getTodayDateString();
     const done = goalFactory.build({ date: today, completed: true });
     const last = goalFactory.build({ date: today, completed: false });
@@ -888,47 +890,19 @@ describe('toggleTask celebration trigger', () => {
 
     await useGoalStore.getState().toggleTask(last.id);
 
-    expect(celebrateMock).toHaveBeenCalledWith('allGoals');
-  });
-
-  it('does not celebrate when other tasks remain incomplete', async () => {
-    const today = getTodayDateString();
-    const a = goalFactory.build({ date: today, completed: false });
-    const b = goalFactory.build({ date: today, completed: false });
-    useGoalStore.setState({ goals: [a, b], todayTasks: [a, b] });
-
-    await useGoalStore.getState().toggleTask(a.id);
-
     expect(celebrateMock).not.toHaveBeenCalled();
   });
+});
 
-  it('does not celebrate when un-checking a completed task', async () => {
-    const today = getTodayDateString();
-    const a = goalFactory.build({ date: today, completed: true });
-    const b = goalFactory.build({ date: today, completed: true });
-    useGoalStore.setState({ goals: [a, b], todayTasks: [a, b] });
+describe('toggleTask persistence', () => {
+  it('reports failure and does not optimistically complete when the save fails', async () => {
+    vi.mocked(storage.setGoals).mockResolvedValue({ success: false });
+    const task = goalFactory.build({ date: getTodayDateString(), completed: false });
+    useGoalStore.setState({ goals: [task], todayTasks: [task] });
 
-    await useGoalStore.getState().toggleTask(a.id);
+    const result = await useGoalStore.getState().toggleTask(task.id);
 
-    expect(celebrateMock).not.toHaveBeenCalled();
-  });
-
-  it('does not celebrate when completing an objective (not a task)', async () => {
-    const today = getTodayDateString();
-    const objective = goalFactory.build({ type: 'objective', date: today, completed: false });
-    useGoalStore.setState({ goals: [objective], todayTasks: [] });
-
-    await useGoalStore.getState().toggleTask(objective.id);
-
-    expect(celebrateMock).not.toHaveBeenCalled();
-  });
-
-  it('does not celebrate when completing a task not dated today', async () => {
-    const past = goalFactory.build({ date: '2020-01-01', completed: false });
-    useGoalStore.setState({ goals: [past], todayTasks: [] });
-
-    await useGoalStore.getState().toggleTask(past.id);
-
-    expect(celebrateMock).not.toHaveBeenCalled();
+    expect(result).toBe(false);
+    expect(useGoalStore.getState().goals[0].completed).toBe(false);
   });
 });

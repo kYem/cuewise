@@ -1,7 +1,8 @@
 import { type Goal, getDueDateLabel, getSubtaskProgress } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
-import { CalendarClock, Check, CheckCircle2, ChevronRight, Circle, Flag } from 'lucide-react';
+import { CalendarClock, ChevronRight } from 'lucide-react';
 import type React from 'react';
+import { AnimatedCheckbox } from './AnimatedCheckbox';
 
 interface CompactGoalRowProps {
   goal: Goal;
@@ -12,7 +13,7 @@ interface CompactGoalRowProps {
 }
 
 /**
- * Slim glanceable goal row for compact view: a flag/check pill, the goal text
+ * Slim glanceable goal row for compact view: a completion ring, the goal text
  * with an inline subtask progress bar, and an accordion chevron. Completing and
  * toggling subtasks is allowed; renaming/deleting/reordering live in full view.
  */
@@ -43,21 +44,14 @@ export const CompactGoalRow: React.FC<CompactGoalRowProps> = ({
       )}
     >
       <div className="flex items-center gap-2.5 px-2 py-1.5">
-        {/* Flag (incomplete) / check (complete) pill */}
+        {/* Completion toggle */}
         <button
           type="button"
           onClick={onToggleComplete}
           aria-label={goal.completed ? 'Mark as incomplete' : 'Mark as complete'}
-          className={cn(
-            'flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500',
-            goal.completed ? 'bg-primary-100' : 'bg-surface-variant hover:bg-primary-50'
-          )}
+          className="flex flex-shrink-0 items-center justify-center rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
         >
-          {goal.completed ? (
-            <Check className="w-3.5 h-3.5 text-primary-600" />
-          ) : (
-            <Flag className="w-3 h-3 text-secondary" />
-          )}
+          <AnimatedCheckbox checked={goal.completed} size="md" />
         </button>
 
         {/* Text + inline progress bar */}
@@ -125,11 +119,7 @@ export const CompactGoalRow: React.FC<CompactGoalRowProps> = ({
                   : `Mark "${subtask.text}" complete`
               }
             >
-              {subtask.completed ? (
-                <CheckCircle2 className="w-3.5 h-3.5 text-primary-600 flex-shrink-0" />
-              ) : (
-                <Circle className="w-3.5 h-3.5 text-tertiary flex-shrink-0" />
-              )}
+              <AnimatedCheckbox checked={subtask.completed} size="sm" className="flex-shrink-0" />
               <span
                 className={cn(
                   'text-xs',

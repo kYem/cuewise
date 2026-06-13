@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type CelebrationType = 'pomodoro' | 'allGoals';
+export type CelebrationType = 'pomodoro';
 
 interface CelebrationStore {
   active: CelebrationType | null;
