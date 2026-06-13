@@ -1,10 +1,11 @@
 import { getDueDateLabel, getSubtaskProgress } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
-import { CalendarClock, CheckCircle2, Circle, ListChecks, Plus } from 'lucide-react';
+import { CalendarClock, CheckCircle2, ListChecks, Plus } from 'lucide-react';
 import type React from 'react';
 import { useState } from 'react';
 import { useGoalStore } from '../stores/goal-store';
 import { useSettingsStore } from '../stores/settings-store';
+import { AnimatedCheckbox } from './AnimatedCheckbox';
 import { GoalInput } from './GoalInput';
 
 interface GoalFocusViewProps {
@@ -125,11 +126,7 @@ export const GoalFocusView: React.FC<GoalFocusViewProps> = ({ showAddInput, onCl
               displayGoal.completed ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
             )}
           >
-            {displayGoal.completed ? (
-              <CheckCircle2 className="w-10 h-10 text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]" />
-            ) : (
-              <Circle className="w-10 h-10 text-white/80 group-hover:text-white transition-colors drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]" />
-            )}
+            <AnimatedCheckbox checked={displayGoal.completed} size="xl" tone="onImage" />
           </div>
 
           {/* Goal Text and Parent - stacked vertically */}
