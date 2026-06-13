@@ -1,7 +1,9 @@
 import {
+  buildReminderRecurring,
   clampIntervalMinutes,
   createScheduledDate,
   DEFAULT_REMINDER_INTERVAL_MINUTES,
+  intervalDueDateFromNow,
   logger,
   type ReminderCategory,
   type ReminderFrequency,
@@ -52,7 +54,7 @@ export const AddReminderForm: React.FC<AddReminderFormProps> = ({ onSuccess }) =
       try {
         await addReminder(
           template.text,
-          new Date(Date.now() + minutes * 60_000),
+          intervalDueDateFromNow(minutes),
           { frequency: 'interval', intervalMinutes: minutes },
           template.category
         );
@@ -133,7 +135,7 @@ export const AddReminderForm: React.FC<AddReminderFormProps> = ({ onSuccess }) =
       const clampedInterval = clampIntervalMinutes(intervalMinutes);
       let effectiveDueDate: Date;
       if (isInterval) {
-        effectiveDueDate = new Date(Date.now() + clampedInterval * 60_000);
+        effectiveDueDate = intervalDueDateFromNow(clampedInterval);
       } else if (dueDate) {
         // Validate that the picked date is in the future.
         if (dueDate <= new Date()) {
@@ -147,17 +149,7 @@ export const AddReminderForm: React.FC<AddReminderFormProps> = ({ onSuccess }) =
         return;
       }
 
-      let recurring: { frequency: ReminderFrequency; intervalMinutes?: number } | undefined;
-      if (isInterval) {
-        recurring = {
-          frequency: recurringFrequency,
-          intervalMinutes: clampedInterval,
-        };
-      } else if (isRecurring) {
-        recurring = { frequency: recurringFrequency };
-      } else {
-        recurring = undefined;
-      }
+      const recurring = buildReminderRecurring(isRecurring, recurringFrequency, clampedInterval);
 
       await addReminder(text.trim(), effectiveDueDate, recurring, category);
 

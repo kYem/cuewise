@@ -9,11 +9,13 @@ import {
   DEFAULT_REMINDER_INTERVAL_MINUTES,
   REMINDER_INTERVAL_MAX,
   REMINDER_INTERVAL_MIN,
+  REMINDER_SNOOZE_MINUTES,
   REMINDER_TEMPLATES,
 } from './constants';
 import type { Goal } from './types';
 import {
   addSubtaskToGoal,
+  buildReminderRecurring,
   calculateAdvancedAnalytics,
   calculateDailyTrends,
   calculateGoalCompletionRate,
@@ -37,10 +39,12 @@ import {
   getSubtaskProgress,
   getTodayDateString,
   getUpcomingTasks,
+  intervalDueDateFromNow,
   nextReminderDueDate,
   parseImportData,
   removeSubtaskFromGoal,
   reorderGoals,
+  resolveReminderNotificationAction,
   shouldShowReviewPrompt,
   toggleSubtaskInGoal,
 } from './utils';
@@ -1441,5 +1445,82 @@ describe('formatReminderCadence', () => {
   });
   it('passes calendar frequencies through', () => {
     expect(formatReminderCadence({ frequency: 'daily' })).toBe('daily');
+  });
+});
+
+describe('buildReminderRecurring', () => {
+  it('returns undefined when not recurring', () => {
+    expect(buildReminderRecurring(false, 'daily', 30)).toBeUndefined();
+  });
+
+  it('returns a frequency-only payload for calendar cadences', () => {
+    expect(buildReminderRecurring(true, 'daily', 30)).toEqual({ frequency: 'daily' });
+  });
+
+  it('carries intervalMinutes for interval cadences', () => {
+    expect(buildReminderRecurring(true, 'interval', 30)).toEqual({
+      frequency: 'interval',
+      intervalMinutes: 30,
+    });
+  });
+});
+
+describe('intervalDueDateFromNow', () => {
+  it('returns a Date roughly N minutes in the future', () => {
+    const before = Date.now();
+    const d = intervalDueDateFromNow(30);
+    expect(d.getTime()).toBeGreaterThanOrEqual(before + 30 * 60_000);
+    expect(d.getTime()).toBeLessThanOrEqual(Date.now() + 30 * 60_000 + 1000);
+  });
+});
+
+describe('resolveReminderNotificationAction', () => {
+  const base = {
+    id: 'r1',
+    text: 'x',
+    dueDate: '2026-06-13T09:00:00.000Z',
+    completed: false,
+    notified: false,
+  } as const;
+  const now = new Date('2026-06-13T10:00:00.000Z');
+  const expectedSnoozeDueDate = new Date(
+    now.getTime() + REMINDER_SNOOZE_MINUTES * 60_000
+  ).toISOString();
+
+  it('Done completes a one-off reminder', () => {
+    const reminder = { ...base, recurring: undefined };
+    expect(resolveReminderNotificationAction(reminder, 0, now)).toEqual({ type: 'complete' });
+  });
+
+  it('Done dismisses an active recurring reminder', () => {
+    const reminder = { ...base, recurring: { frequency: 'daily' as const } };
+    expect(resolveReminderNotificationAction(reminder, 0, now)).toEqual({ type: 'dismiss' });
+  });
+
+  it('Done dismisses a paused recurring reminder', () => {
+    const reminder = { ...base, recurring: { frequency: 'daily' as const }, paused: true };
+    expect(resolveReminderNotificationAction(reminder, 0, now)).toEqual({ type: 'dismiss' });
+  });
+
+  it('Snooze reschedules an active recurring reminder to now + 5 min', () => {
+    const reminder = { ...base, recurring: { frequency: 'daily' as const } };
+    expect(resolveReminderNotificationAction(reminder, 1, now)).toEqual({
+      type: 'snooze',
+      dueDate: expectedSnoozeDueDate,
+    });
+  });
+
+  it('Snooze dismisses a paused recurring reminder', () => {
+    const reminder = { ...base, recurring: { frequency: 'daily' as const }, paused: true };
+    expect(resolveReminderNotificationAction(reminder, 1, now)).toEqual({ type: 'dismiss' });
+  });
+
+  it('dismisses an undefined reminder', () => {
+    expect(resolveReminderNotificationAction(undefined, 0, now)).toEqual({ type: 'dismiss' });
+  });
+
+  it('dismisses an unknown button index', () => {
+    const reminder = { ...base, recurring: undefined };
+    expect(resolveReminderNotificationAction(reminder, 2, now)).toEqual({ type: 'dismiss' });
   });
 });

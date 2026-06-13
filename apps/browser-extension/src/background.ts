@@ -2,7 +2,12 @@
  * Background Service Worker for handling alarms and notifications
  */
 
-import { logger, nextReminderDueDate, type Reminder } from '@cuewise/shared';
+import {
+  logger,
+  nextReminderDueDate,
+  type Reminder,
+  resolveReminderNotificationAction,
+} from '@cuewise/shared';
 import { getReminders, setReminders } from '@cuewise/storage';
 
 // Listen for alarm triggers
@@ -118,32 +123,22 @@ chrome.notifications.onButtonClicked.addListener(async (notificationId, buttonIn
     }
     const reminderId = notificationId.replace('reminder-', '');
     const reminders = await getReminders();
+    const reminder = reminders.find((r) => r.id === reminderId);
+    const action = resolveReminderNotificationAction(reminder, buttonIndex, new Date());
 
-    if (buttonIndex === 0) {
-      // Done: only mark one-off reminders complete. Any recurring reminder
-      // (active OR paused) is just dismissed — an active one was already advanced
-      // on fire, and a paused one must not be permanently completed.
-      const reminder = reminders.find((r) => r.id === reminderId);
-      if (!reminder?.recurring) {
-        const updated = reminders.map((r) => (r.id === reminderId ? { ...r, completed: true } : r));
-        await setReminders(updated);
-      }
-    } else if (buttonIndex === 1) {
-      // Don't resurrect a recurring reminder paused while the notification lingered
-      const reminder = reminders.find((r) => r.id === reminderId);
-      if (reminder?.recurring && reminder.paused) {
-        await chrome.notifications.clear(notificationId);
-        return;
-      }
-      // Snooze 5 min: pull the next alarm in to 5 minutes from now
-      const snoozeAt = Date.now() + 5 * 60_000;
+    if (action.type === 'complete') {
+      const updated = reminders.map((r) => (r.id === reminderId ? { ...r, completed: true } : r));
+      await setReminders(updated);
+    } else if (action.type === 'snooze') {
       const updated = reminders.map((r) =>
         r.id === reminderId
-          ? { ...r, dueDate: new Date(snoozeAt).toISOString(), notified: false, completed: false }
+          ? { ...r, dueDate: action.dueDate, notified: false, completed: false }
           : r
       );
       await setReminders(updated);
-      await chrome.alarms.create(`reminder-${reminderId}`, { when: snoozeAt });
+      await chrome.alarms.create(`reminder-${reminderId}`, {
+        when: new Date(action.dueDate).getTime(),
+      });
     }
 
     await chrome.notifications.clear(notificationId);

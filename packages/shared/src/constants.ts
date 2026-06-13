@@ -360,3 +360,6 @@ export const REMINDER_INTERVAL_MIN = 1;
 export const REMINDER_INTERVAL_MAX = 480; // 8 hours
 export const DEFAULT_REMINDER_INTERVAL_MINUTES = 30;
 export const REMINDER_INTERVAL_PRESETS = [30, 45, 60, 90] as const;
+
+// Minutes a reminder notification's "Snooze" button defers the next alarm.
+export const REMINDER_SNOOZE_MINUTES = 5;

@@ -1,6 +1,8 @@
 import {
+  buildReminderRecurring,
   clampIntervalMinutes,
   DEFAULT_REMINDER_INTERVAL_MINUTES,
+  intervalDueDateFromNow,
   logger,
   type Reminder,
   type ReminderFrequency,
@@ -57,21 +59,11 @@ export const EditReminderForm: React.FC<EditReminderFormProps> = ({
       const clampedInterval = clampIntervalMinutes(intervalMinutes);
       // Interval reminders fire one interval out, not at the picked date/time.
       const dueDate = isInterval
-        ? new Date(Date.now() + clampedInterval * 60_000)
+        ? intervalDueDateFromNow(clampedInterval)
         : new Date(`${date}T${time}`);
 
       // Partial merge in updateReminder preserves the reminder's existing `paused`.
-      let recurring: { frequency: ReminderFrequency; intervalMinutes?: number } | undefined;
-      if (isInterval) {
-        recurring = {
-          frequency: recurringFrequency,
-          intervalMinutes: clampedInterval,
-        };
-      } else if (isRecurring) {
-        recurring = { frequency: recurringFrequency };
-      } else {
-        recurring = undefined;
-      }
+      const recurring = buildReminderRecurring(isRecurring, recurringFrequency, clampedInterval);
 
       await updateReminder(reminder.id, {
         text: text.trim(),
