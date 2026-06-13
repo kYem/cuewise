@@ -1,5 +1,5 @@
-import type { Reminder } from '@cuewise/shared';
 import * as storage from '@cuewise/storage';
+import { recurringReminderFactory } from '@cuewise/test-utils/factories';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useReminderStore } from './reminder-store';
 
@@ -80,15 +80,13 @@ describe('setReminderPaused', () => {
 });
 
 describe('toggleReminder on a paused recurring reminder', () => {
-  const pausedReminder: Reminder = {
+  const pausedReminder = recurringReminderFactory.build({
     id: 'paused-1',
     text: 'Move',
     dueDate: new Date(Date.now() - 60_000).toISOString(),
-    completed: false,
-    notified: false,
     recurring: { frequency: 'interval', intervalMinutes: 30 },
     paused: true,
-  };
+  });
 
   it('advances the due date and stays paused without completing or arming an alarm', async () => {
     useReminderStore.setState({ reminders: [pausedReminder] });
@@ -106,15 +104,13 @@ describe('toggleReminder on a paused recurring reminder', () => {
 });
 
 describe('categorizeReminders with a paused reminder', () => {
-  const pausedPastReminder: Reminder = {
+  const pausedPastReminder = recurringReminderFactory.build({
     id: 'paused-2',
     text: 'Stretch',
     dueDate: new Date(Date.now() - 60_000).toISOString(),
-    completed: false,
-    notified: false,
     recurring: { frequency: 'interval', intervalMinutes: 30 },
     paused: true,
-  };
+  });
 
   it('places a paused reminder with a past due date in upcoming, not overdue', () => {
     useReminderStore.setState({ reminders: [pausedPastReminder] });
@@ -128,14 +124,12 @@ describe('categorizeReminders with a paused reminder', () => {
   });
 
   it('ranks a paused reminder after active ones despite an earlier due date', () => {
-    const activeUpcoming: Reminder = {
+    const activeUpcoming = recurringReminderFactory.build({
       id: 'active-1',
       text: 'Move',
       dueDate: new Date(Date.now() + 30 * 60_000).toISOString(),
-      completed: false,
-      notified: false,
       recurring: { frequency: 'interval', intervalMinutes: 30 },
-    };
+    });
     useReminderStore.setState({ reminders: [pausedPastReminder, activeUpcoming] });
 
     useReminderStore.getState().refreshLists();
@@ -147,15 +141,13 @@ describe('categorizeReminders with a paused reminder', () => {
 
 describe('updateReminder dropping recurrence', () => {
   it('clears the paused flag and re-arms when a paused recurring reminder becomes a one-off', async () => {
-    const paused: Reminder = {
+    const paused = recurringReminderFactory.build({
       id: 'r-edit',
       text: 'Move',
       dueDate: new Date(Date.now() + 60_000).toISOString(),
-      completed: false,
-      notified: false,
       recurring: { frequency: 'interval', intervalMinutes: 30 },
       paused: true,
-    };
+    });
     useReminderStore.setState({ reminders: [paused] });
 
     await useReminderStore.getState().updateReminder('r-edit', {
@@ -168,5 +160,60 @@ describe('updateReminder dropping recurrence', () => {
     expect(updated.recurring).toBeUndefined();
     expect(updated.paused).toBeFalsy();
     expect(alarmsMock.create).toHaveBeenCalledWith('reminder-r-edit', expect.any(Object));
+  });
+});
+
+describe('initialize with a paused reminder', () => {
+  it('skips paused reminders: no advance, no alarm', async () => {
+    const pastDueDate = new Date(Date.now() - 60_000).toISOString();
+    const pausedPast = recurringReminderFactory.build({
+      id: 'paused-init',
+      text: 'Move',
+      dueDate: pastDueDate,
+      recurring: { frequency: 'interval', intervalMinutes: 30 },
+      paused: true,
+    });
+    getRemindersMock.mockResolvedValue([pausedPast]);
+
+    await useReminderStore.getState().initialize();
+
+    const reminder = useReminderStore.getState().reminders[0];
+    expect(reminder.paused).toBe(true);
+    // Frozen: a paused reminder must not auto-advance on init.
+    expect(reminder.dueDate).toBe(pastDueDate);
+    expect(alarmsMock.create).not.toHaveBeenCalledWith('reminder-paused-init', expect.any(Object));
+  });
+});
+
+describe('updateReminder keeping recurrence', () => {
+  it('keeps paused when only the text is edited', async () => {
+    const paused = recurringReminderFactory.build({
+      id: 'r-keep',
+      text: 'Move',
+      dueDate: new Date(Date.now() + 60_000).toISOString(),
+      recurring: { frequency: 'interval', intervalMinutes: 30 },
+      paused: true,
+    });
+    useReminderStore.setState({ reminders: [paused] });
+
+    await useReminderStore.getState().updateReminder('r-keep', { text: 'New text' });
+
+    const updated = useReminderStore.getState().reminders[0];
+    expect(updated.paused).toBe(true);
+    expect(updated.recurring).toBeDefined();
+  });
+});
+
+describe('addReminder with an interval recurrence', () => {
+  it('schedules the alarm at the reminder due date', async () => {
+    const dueDate = new Date(Date.now() + 60_000);
+
+    await useReminderStore.getState().addReminder('Move', dueDate, {
+      frequency: 'interval',
+      intervalMinutes: 30,
+    });
+
+    const id = useReminderStore.getState().reminders[0].id;
+    expect(alarmsMock.create).toHaveBeenCalledWith(`reminder-${id}`, { when: dueDate.getTime() });
   });
 });

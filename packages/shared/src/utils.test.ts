@@ -1359,6 +1359,7 @@ describe('Due Date Utilities', () => {
 
 describe('clampIntervalMinutes', () => {
   it('returns the value when within range', () => {
+    expect(clampIntervalMinutes(1)).toBe(1);
     expect(clampIntervalMinutes(30)).toBe(30);
     expect(clampIntervalMinutes(REMINDER_INTERVAL_MAX)).toBe(480);
   });
@@ -1379,6 +1380,7 @@ describe('clampIntervalMinutes', () => {
   it('falls back to the default for non-finite input', () => {
     expect(clampIntervalMinutes(Number.NaN)).toBe(DEFAULT_REMINDER_INTERVAL_MINUTES);
     expect(clampIntervalMinutes(Number.POSITIVE_INFINITY)).toBe(REMINDER_INTERVAL_MAX);
+    expect(clampIntervalMinutes(Number.NEGATIVE_INFINITY)).toBe(REMINDER_INTERVAL_MIN);
   });
 });
 

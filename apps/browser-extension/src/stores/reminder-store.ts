@@ -210,7 +210,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       if (isCompleting && reminder.recurring) {
         const nextDueDate = nextReminderDueDate(reminder, new Date());
 
-        // Preserve the existing recurring config so a paused reminder stays paused.
+        // The full spread preserves paused/recurring, so a paused reminder stays paused.
         const advancedReminder: Reminder = {
           ...reminder,
           dueDate: nextDueDate.toISOString(),
