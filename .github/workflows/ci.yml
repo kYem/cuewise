@@ -9,6 +9,13 @@ on:
 permissions:
   contents: read
 
+# Disable build-tool telemetry so nothing phones home from CI
+# (Turbo -> telemetry.vercel.com, Astro -> telemetry.astro.build).
+env:
+  DO_NOT_TRACK: '1'
+  TURBO_TELEMETRY_DISABLED: '1'
+  ASTRO_TELEMETRY_DISABLED: '1'
+
 jobs:
   build:
     name: Build and Test
