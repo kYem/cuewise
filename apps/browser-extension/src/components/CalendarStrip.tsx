@@ -17,7 +17,7 @@ function formatTime(iso: string, twentyFour: boolean): string {
   const h = d.getHours();
   const m = d.getMinutes();
   if (twentyFour) {
-    return `${h}:${String(m).padStart(2, '0')}`;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
   }
   const hour12 = h % 12 || 12;
   const ampm = h >= 12 ? 'pm' : 'am';
