@@ -132,23 +132,19 @@ interface AgendaGroup {
 const byDueDateAsc = (a: Reminder, b: Reminder): number =>
   new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
 
-/** Calm groups (Later today / Upcoming) collapse past this many rows; urgent groups never cap. */
+/** The calm Scheduled group collapses past this many rows; urgent groups never cap. */
 const GROUP_LIMIT = 4;
 
 /** Build groups in severity order, sorting each by dueDate ascending, dropping empties. */
 function buildGroups(reminders: Reminder[], states: Map<string, ReminderState>): AgendaGroup[] {
   // 'done' is intentionally absent: the panel only receives active reminders (store filters completed).
-  // 'upcoming' is split by calendar day into "Later today" and "Upcoming"; both share upcoming styling.
-  const upcoming = reminders.filter((r) => states.get(r.id) === 'upcoming').sort(byDueDateAsc);
-  const laterToday = upcoming.filter((r) => isToday(parseISO(r.dueDate)));
-  const afterToday = upcoming.filter((r) => !isToday(parseISO(r.dueDate)));
+  const scheduled = reminders.filter((r) => states.get(r.id) === 'upcoming').sort(byDueDateAsc);
 
   const order: AgendaGroup[] = [
     { key: 'notified', styleKey: 'notified', label: 'Needs response', items: [] },
     { key: 'overdue', styleKey: 'overdue', label: 'Overdue', items: [] },
     { key: 'soon', styleKey: 'soon', label: 'Up next', items: [] },
-    { key: 'later-today', styleKey: 'upcoming', label: 'Later today', items: laterToday },
-    { key: 'upcoming', styleKey: 'upcoming', label: 'Upcoming', items: afterToday },
+    { key: 'scheduled', styleKey: 'upcoming', label: 'Scheduled', items: scheduled },
   ];
   for (const group of order) {
     if (group.styleKey !== 'upcoming') {
@@ -160,7 +156,7 @@ function buildGroups(reminders: Reminder[], states: Map<string, ReminderState>):
 
 /**
  * Agenda (C) reminders panel: a time rail with connector segments, grouped by
- * Needs response / Overdue / Up next / Later today / Upcoming. Scannable; the
+ * Needs response / Overdue / Up next / Scheduled. Scannable; the
  * nudging rows expand with snooze. The widget owns positioning.
  */
 export function AgendaReminderPanel({
@@ -229,7 +225,7 @@ export function AgendaReminderPanel({
         <div className="px-4 pb-1">
           {groups.map((group) => {
             const isExpanded = expandedGroups.has(group.key);
-            const cappable = group.key === 'later-today' || group.key === 'upcoming';
+            const cappable = group.key === 'scheduled';
             const overflow = cappable ? group.items.length - GROUP_LIMIT : 0;
             const visibleItems =
               overflow > 0 && !isExpanded ? group.items.slice(0, GROUP_LIMIT) : group.items;

@@ -65,9 +65,9 @@ describe('ReminderWidget', () => {
     render(<ReminderWidget />);
     expandPanel();
 
-    // "Scheduled" is a composed-only subheader.
-    expect(screen.getByText('Scheduled')).toBeInTheDocument();
-    expect(screen.queryByText('Later today')).not.toBeInTheDocument();
+    // The "N habits · N scheduled" sub-note is unique to the composed layout.
+    expect(screen.getByText(/habits ·/)).toBeInTheDocument();
+    expect(screen.queryByText('On schedule')).not.toBeInTheDocument();
   });
 
   it('mounts the agenda layout when reminderPanelLayout is "agenda"', () => {
@@ -77,9 +77,9 @@ describe('ReminderWidget', () => {
     render(<ReminderWidget />);
     expandPanel();
 
-    // "Later today" is an agenda-only group label.
-    expect(screen.getByText('Later today')).toBeInTheDocument();
-    expect(screen.queryByText('Scheduled')).not.toBeInTheDocument();
+    // The "On schedule" sub-note is unique to the agenda layout.
+    expect(screen.getByText('On schedule')).toBeInTheDocument();
+    expect(screen.queryByText(/habits ·/)).not.toBeInTheDocument();
   });
 
   it('renders the error fallback and no panel when the store reports an error', () => {

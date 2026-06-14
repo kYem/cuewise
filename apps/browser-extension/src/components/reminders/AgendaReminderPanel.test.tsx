@@ -55,37 +55,42 @@ function defaultProps() {
 }
 
 describe('AgendaReminderPanel', () => {
-  it('groups a past-due notified reminder under Needs response and a future one under Later today', () => {
+  it('groups a past-due notified reminder under Needs response and a future one under Scheduled', () => {
     const { notified, upcoming } = buildReminders();
     render(<AgendaReminderPanel reminders={[notified, upcoming]} {...defaultProps()} />);
 
     expect(screen.getByText('Needs response')).toBeInTheDocument();
     expect(screen.getByText('Submit timesheet')).toBeInTheDocument();
-    expect(screen.getByText('Later today')).toBeInTheDocument();
+    expect(screen.getByText('Scheduled')).toBeInTheDocument();
     expect(screen.getByText('Review pull request')).toBeInTheDocument();
   });
 
-  it('splits upcoming into Later today (due today) and Upcoming (due a later day)', () => {
+  it('merges today and later-day upcoming reminders into one Scheduled group, with a TMRW rail for the next-day row', () => {
     const laterToday = reminderFactory.build({
       id: 'later-today-1',
       text: 'Stretch break',
       category: 'health',
       dueDate: laterTodayDueDate(),
     });
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(9, 0, 0, 0);
     const nextDay = reminderFactory.build({
       id: 'next-day-1',
       text: 'Dentist appointment',
       category: 'personal',
-      dueDate: new Date(Date.now() + 50 * HOUR_MS).toISOString(),
+      dueDate: tomorrow.toISOString(),
     });
     render(<AgendaReminderPanel reminders={[laterToday, nextDay]} {...defaultProps()} />);
 
-    const laterTodayGroup = groupContainerFor('Later today');
-    expect(within(laterTodayGroup).getByText('Stretch break')).toBeInTheDocument();
-    expect(within(laterTodayGroup).queryByText('Dentist appointment')).not.toBeInTheDocument();
+    expect(screen.queryByText('Later today')).not.toBeInTheDocument();
+    expect(screen.queryByText('Upcoming')).not.toBeInTheDocument();
 
-    const upcomingGroup = groupContainerFor('Upcoming');
-    expect(within(upcomingGroup).getByText('Dentist appointment')).toBeInTheDocument();
+    const scheduledGroup = groupContainerFor('Scheduled');
+    expect(within(scheduledGroup).getByText('Stretch break')).toBeInTheDocument();
+    expect(within(scheduledGroup).getByText('Dentist appointment')).toBeInTheDocument();
+    // The next-day row still carries its day-rail label (TMRW for due-tomorrow items).
+    expect(within(scheduledGroup).getByText('TMRW')).toBeInTheDocument();
   });
 
   it('renders a TMRW day label on an upcoming row due tomorrow', () => {
@@ -100,12 +105,12 @@ describe('AgendaReminderPanel', () => {
     });
     render(<AgendaReminderPanel reminders={[tomorrowItem]} {...defaultProps()} />);
 
-    const group = groupContainerFor('Upcoming');
+    const group = groupContainerFor('Scheduled');
     expect(within(group).getByText('TMRW')).toBeInTheDocument();
   });
 
-  it('caps a long Later today group at GROUP_LIMIT and reveals the rest via the show-more toggle', () => {
-    // 6 reminders all due later today (staggered times) so they share the "Later today" group.
+  it('caps a long Scheduled group at GROUP_LIMIT and reveals the rest via the show-more toggle', () => {
+    // 6 reminders all due later today (staggered times) so they share the "Scheduled" group.
     const reminders = Array.from({ length: 6 }, (_, i) =>
       reminderFactory.build({
         id: `later-today-${i}`,
@@ -116,7 +121,7 @@ describe('AgendaReminderPanel', () => {
     );
     render(<AgendaReminderPanel reminders={reminders} {...defaultProps()} />);
 
-    const group = groupContainerFor('Later today');
+    const group = groupContainerFor('Scheduled');
     // Only the first GROUP_LIMIT (4) rows show; the 5th and 6th are hidden.
     expect(within(group).getByText('Later task 1')).toBeInTheDocument();
     expect(within(group).getByText('Later task 4')).toBeInTheDocument();
