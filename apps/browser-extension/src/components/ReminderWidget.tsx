@@ -66,22 +66,24 @@ export const ReminderWidget: React.FC = () => {
     return () => clearInterval(interval);
   }, [fireDueReminders]);
 
-  // Handle click outside to collapse
+  // Collapse on outside click — but not while a reminder modal (add / edit /
+  // manage) is open, so opening the add form keeps the alerts card in place.
   useEffect(() => {
+    const anyModalOpen = isAddModalOpen || editingReminderId !== null || showAllModal;
     const handleClickOutside = (event: MouseEvent) => {
       if (widgetRef.current && !widgetRef.current.contains(event.target as Node)) {
         setIsExpanded(false);
       }
     };
 
-    if (isExpanded) {
+    if (isExpanded && !anyModalOpen) {
       document.addEventListener('mousedown', handleClickOutside);
     }
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [isExpanded]);
+  }, [isExpanded, isAddModalOpen, editingReminderId, showAllModal]);
 
   // Active reminders drive both the count badge and the chosen panel.
   const allActiveReminders = [...overdueReminders, ...upcomingReminders];
