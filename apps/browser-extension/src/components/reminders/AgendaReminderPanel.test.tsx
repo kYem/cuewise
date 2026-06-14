@@ -31,7 +31,8 @@ function buildReminders() {
     id: 'upcoming-1',
     text: 'Review pull request',
     category: 'productivity',
-    dueDate: new Date(Date.now() + 3 * HOUR_MS).toISOString(),
+    // Same-day so it lands in "Later today" regardless of when the test runs.
+    dueDate: laterTodayDueDate(),
   });
   return { notified, upcoming };
 }
