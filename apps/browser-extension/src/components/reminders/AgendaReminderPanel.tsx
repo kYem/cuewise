@@ -1,4 +1,4 @@
-import type { Reminder } from '@cuewise/shared';
+import { formatClockTime, type Reminder } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
 import { isToday, parseISO } from 'date-fns';
 import { ChevronDown, ChevronUp, Plus } from 'lucide-react';
@@ -25,6 +25,28 @@ export type { ReminderPanelProps } from './types';
 /** States where the row expands with snooze actions (and earns the accent rail time). */
 function isNudging(state: ReminderState): boolean {
   return state === 'soon' || state === 'overdue' || state === 'notified';
+}
+
+/**
+ * Rail clock with a smaller, de-emphasized AM/PM so "12:18 AM" stays on one line
+ * in the narrow rail (the period would otherwise wrap below the time).
+ */
+function RailClock({
+  dueDate,
+  timeFormat,
+  className,
+}: {
+  dueDate: string;
+  timeFormat: '12h' | '24h';
+  className?: string;
+}) {
+  const { time, period } = formatClockTime(parseISO(dueDate), timeFormat);
+  return (
+    <span className={cn('whitespace-nowrap', className)}>
+      {time}
+      {period && <span className="text-[9px] font-medium ml-0.5">{period}</span>}
+    </span>
+  );
 }
 
 /** Compact rail label per state: "now"/"past"/countdown/clock. Ported from `railTime`. */
@@ -77,10 +99,18 @@ function AgendaRow({
             <span className="text-[9px] font-semibold tracking-wide text-tertiary">
               {dayLabel(reminder.dueDate)}
             </span>
-            <span className="text-xs tabular-nums text-secondary">
-              {formatReminderClock(reminder.dueDate, timeFormat)}
-            </span>
+            <RailClock
+              dueDate={reminder.dueDate}
+              timeFormat={timeFormat}
+              className="text-xs tabular-nums text-secondary"
+            />
           </span>
+        ) : state === 'upcoming' ? (
+          <RailClock
+            dueDate={reminder.dueDate}
+            timeFormat={timeFormat}
+            className="text-xs leading-tight tabular-nums mt-px font-medium text-secondary"
+          />
         ) : (
           <span
             className={cn(
