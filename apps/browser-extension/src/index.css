@@ -176,15 +176,21 @@ html.dark[data-theme="rose"] {
 @keyframes reminder-glow {
   0%,
   100% {
-    box-shadow: 0 0 16px 0 rgb(248 113 113 / 0.22);
+    box-shadow:
+      0 0 0 1px rgb(248 113 113 / 0.45),
+      0 0 16px 0 rgb(248 113 113 / 0.22);
   }
   50% {
-    box-shadow: 0 0 32px 4px rgb(248 113 113 / 0.45);
+    box-shadow:
+      0 0 0 1px rgb(248 113 113 / 0.6),
+      0 0 32px 4px rgb(248 113 113 / 0.45);
   }
 }
 
 .reminder-glow-pulse {
-  box-shadow: 0 0 18px 0 rgb(248 113 113 / 0.25);
+  box-shadow:
+    0 0 0 1px rgb(248 113 113 / 0.45),
+    0 0 18px 0 rgb(248 113 113 / 0.25);
   animation: reminder-glow 1.8s ease-in-out infinite;
 }
 

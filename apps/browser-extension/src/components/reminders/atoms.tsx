@@ -279,6 +279,13 @@ export function ReminderHeroCard({
   const { text: dueText } = formatDueDate(reminder.dueDate);
   const EyebrowIcon = state === 'notified' ? BellRing : AlertCircle;
 
+  let statusLabel = 'Remaining';
+  if (state === 'notified') {
+    statusLabel = 'Unanswered';
+  } else if (state === 'overdue') {
+    statusLabel = 'Overdue';
+  }
+
   // Live per-second countdown while urgent; mirrors ReminderItem's effect.
   useEffect(() => {
     if (!urgent) {
@@ -309,8 +316,8 @@ export function ReminderHeroCard({
         <RecurrencePauseControl reminder={reminder} onPauseToggle={onPauseToggle} />
       </div>
 
-      {/* Body: toggle + text + due + live countdown */}
-      <div className="flex items-start gap-3 mt-3">
+      {/* Body: toggle + text/due (left) + prominent countdown + status (right) */}
+      <div className="flex items-center gap-3 mt-3">
         <ReminderCategoryCheck reminder={reminder} state={state} onToggle={onToggle} size={28} />
         <div className="flex-1 min-w-0">
           <span
@@ -321,17 +328,26 @@ export function ReminderHeroCard({
           >
             {reminder.text}
           </span>
-          <div className="flex items-baseline gap-2 mt-1">
-            <span className="text-sm text-secondary">{dueText}</span>
-            {urgent && <span className={cn('text-lg font-bold', styles.text)}>{countdown}</span>}
-          </div>
+          <span className="block text-sm text-secondary mt-0.5">{dueText}</span>
         </div>
+        {urgent && (
+          <div className="flex-none text-right">
+            <div className={cn('text-2xl font-bold tabular-nums leading-none', styles.text)}>
+              {countdown}
+            </div>
+            <span className="block text-[10px] font-medium uppercase tracking-wide text-tertiary mt-1">
+              {statusLabel}
+            </span>
+          </div>
+        )}
       </div>
 
-      {/* Snooze actions */}
-      <div className="mt-3">
-        <ReminderSnoozeRow onSnooze={onSnooze} state={state} />
-      </div>
+      {/* Snooze actions, separated from the body by a hairline divider */}
+      {urgent && (
+        <div className={cn('mt-3 pt-3 border-t', styles.border)}>
+          <ReminderSnoozeRow onSnooze={onSnooze} state={state} />
+        </div>
+      )}
     </div>
   );
 }
