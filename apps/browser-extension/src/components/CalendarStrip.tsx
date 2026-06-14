@@ -81,7 +81,7 @@ export const CalendarStrip: React.FC<CalendarStripProps> = ({ lean = false }) =>
       {header(
         <button
           type="button"
-          onClick={refresh}
+          onClick={() => refresh()}
           title="Refresh"
           className="text-white/55 transition-colors hover:text-white"
         >
