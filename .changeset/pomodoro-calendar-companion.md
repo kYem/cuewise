@@ -14,8 +14,9 @@ both, chosen via a Quote/Calendar/Both control in Timer settings.
   "Up next" mode for the stacked Calendar + Quote layout
 - read-only Google Calendar sync via `chrome.identity` + the Calendar API
   (`calendar.readonly`), entirely client-side — no Cuewise backend involved
-- falls back to sample data where `chrome.identity` is absent (dev server) or no
-  OAuth client id is configured, so the feature ships safely un-provisioned
+- ships safely un-provisioned: the dev server shows sample data, and a
+  production build without an OAuth client id reports the calendar isn't set up
+  rather than fabricating events
 
 Setup for the OAuth client id is documented in
 `apps/browser-extension/GOOGLE_CALENDAR.md`.

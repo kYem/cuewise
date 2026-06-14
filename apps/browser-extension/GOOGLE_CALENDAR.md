@@ -5,8 +5,9 @@ Google Calendar. It is read-only (`calendar.readonly`), entirely client-side —
 the extension talks to Google directly via `chrome.identity.getAuthToken`, and
 no Cuewise backend ever sees calendar data.
 
-Until an OAuth client id is configured, the strip falls back to sample data, so
-the feature is safe to ship un-configured.
+The feature is safe to ship un-configured: in development the strip shows sample
+data, and a production build without an OAuth client id reports that the
+calendar isn't set up rather than connecting.
 
 The steps below mint the OAuth client and are done **once by a maintainer** in
 the Google Cloud console — Claude does not perform credential steps.

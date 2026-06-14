@@ -12,14 +12,18 @@ interface GoogleEventInput {
 
 // chrome.identity / chrome.runtime aren't in the shared vitest setup (which only
 // mocks chrome.storage), so each test installs the bits google-calendar.ts uses.
-function installIdentity(options: { token?: string; clientId?: string } = {}) {
+// stringToken models Chrome's older bare-string callback (vs the {token} object).
+function installIdentity(
+  options: { token?: string; stringToken?: string; clientId?: string; lastError?: string } = {}
+) {
+  const result = options.stringToken !== undefined ? options.stringToken : { token: options.token };
   const identity = {
-    getAuthToken: vi.fn((_details: unknown, cb: (result: { token?: string }) => void) =>
-      cb({ token: options.token })
+    getAuthToken: vi.fn((_details: unknown, cb: (result: { token?: string } | string) => void) =>
+      cb(result)
     ),
   };
   const runtime = {
-    lastError: undefined as { message: string } | undefined,
+    lastError: options.lastError ? { message: options.lastError } : undefined,
     getManifest: vi.fn(() => ({
       oauth2: options.clientId ? { client_id: options.clientId } : undefined,
     })),
@@ -91,11 +95,12 @@ describe('fetchTodayEvents', () => {
       { id: 'a1', summary: 'Holiday', start: { date: '2026-06-14' }, end: { date: '2026-06-15' } },
     ]);
 
-    const [event] = await fetchTodayEvents();
+    const events = await fetchTodayEvents();
 
-    expect(event.allDay).toBe(true);
-    expect(event.start).toBe('2026-06-14');
-    expect(event.color).toBeUndefined();
+    expect(events).toHaveLength(1);
+    expect(events[0].allDay).toBe(true);
+    expect(events[0].start).toBe('2026-06-14');
+    expect(events[0].color).toBeUndefined();
   });
 
   it('falls back to a placeholder title when summary is missing', async () => {
@@ -107,9 +112,10 @@ describe('fetchTodayEvents', () => {
       },
     ]);
 
-    const [event] = await fetchTodayEvents();
+    const events = await fetchTodayEvents();
 
-    expect(event.title).toBe('(no title)');
+    expect(events).toHaveLength(1);
+    expect(events[0].title).toBe('(no title)');
   });
 
   it('drops malformed events that have no start or end', async () => {
@@ -136,5 +142,36 @@ describe('fetchTodayEvents', () => {
     );
 
     await expect(fetchTodayEvents()).rejects.toThrow('Calendar API: 401 Unauthorized');
+  });
+});
+
+describe('getToken (via fetchTodayEvents)', () => {
+  it('rejects when no token is returned', async () => {
+    installIdentity({ token: undefined, clientId: 'abc.apps.googleusercontent.com' });
+
+    await expect(fetchTodayEvents()).rejects.toThrow('No auth token');
+  });
+
+  it('rejects with the chrome runtime error message', async () => {
+    installIdentity({ lastError: 'consent required', clientId: 'abc.apps.googleusercontent.com' });
+
+    await expect(fetchTodayEvents()).rejects.toThrow('consent required');
+  });
+
+  it('accepts a bare string token (older Chrome callback shape)', async () => {
+    installIdentity({ stringToken: 'tok', clientId: 'abc.apps.googleusercontent.com' });
+    stubFetchItems([
+      {
+        id: 's1',
+        summary: 'Sync',
+        start: { dateTime: '2026-06-14T09:00:00Z' },
+        end: { dateTime: '2026-06-14T09:30:00Z' },
+      },
+    ]);
+
+    const events = await fetchTodayEvents();
+
+    expect(events).toHaveLength(1);
+    expect(events[0].id).toBe('s1');
   });
 });
