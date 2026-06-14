@@ -24,9 +24,13 @@ function isNudging(state: ReminderState): boolean {
   return state === 'soon' || state === 'overdue' || state === 'notified';
 }
 
-/** Drop the "Today at "/"Tomorrow at " prefix so only the clock time remains. */
+/** Short time for the clock column: "Past" when overdue, else just the clock. */
 function clockLabel(dueDate: string): string {
-  return formatDueDate(dueDate).text.replace('Today at ', '').replace('Tomorrow at ', 'Tmrw ');
+  const info = formatDueDate(dueDate);
+  if (info.isOverdue) {
+    return 'Past';
+  }
+  return info.text.replace('Today at ', '').replace('Tomorrow at ', 'Tmrw ');
 }
 
 interface HabitPillProps {

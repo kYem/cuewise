@@ -9,7 +9,7 @@ import { EditReminderForm } from './EditReminderForm';
 import { ErrorFallback } from './ErrorFallback';
 import { Modal } from './Modal';
 import { ReminderItem } from './ReminderItem';
-import { AgendaReminderPanel, ComposedReminderPanel } from './reminders';
+import { AgendaReminderPanel, ComposedReminderPanel, EmptyReminders } from './reminders';
 
 /**
  * Floating reminder widget in the bottom-right corner. The bell expands the
@@ -247,12 +247,7 @@ export const ReminderWidget: React.FC = () => {
           )}
 
           {/* Empty State */}
-          {allActiveReminders.length === 0 && (
-            <div className="text-center py-8">
-              <Bell className="w-12 h-12 mx-auto mb-3 text-tertiary" />
-              <p className="text-secondary">No active reminders</p>
-            </div>
-          )}
+          {allActiveReminders.length === 0 && <EmptyReminders />}
         </div>
       </Modal>
     </>
