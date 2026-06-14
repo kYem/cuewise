@@ -297,7 +297,7 @@ export function ReminderHeroCard({
         'rounded-xl border-2 p-4 transition-all',
         styles.bg,
         styles.border,
-        state === 'notified' && 'animate-pulse'
+        state === 'notified' && 'reminder-glow-pulse'
       )}
     >
       {/* Eyebrow: state label + recurrence control */}
