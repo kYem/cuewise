@@ -1542,6 +1542,15 @@ describe('isUpcomingRecurringOccurrence', () => {
     };
     expect(isUpcomingRecurringOccurrence(reminder, now)).toBe(false);
   });
+
+  it('is false when dueDate exactly equals now (strict >, so it restarts not skips)', () => {
+    const reminder = {
+      ...base,
+      dueDate: new Date(now.getTime()).toISOString(),
+      recurring: { frequency: 'interval' as const, intervalMinutes: 30 },
+    };
+    expect(isUpcomingRecurringOccurrence(reminder, now)).toBe(false);
+  });
 });
 
 describe('REMINDER_TEMPLATES move preset', () => {

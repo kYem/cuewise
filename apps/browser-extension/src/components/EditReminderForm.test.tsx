@@ -9,8 +9,9 @@ vi.mock('../stores/reminder-store', () => ({
 }));
 
 // The form reads only `updateReminder` via selector — return it for any selector.
+// Resolves true: onSuccess() is now gated on a successful write.
 function mockUpdateReminder() {
-  const updateReminder = vi.fn().mockResolvedValue(undefined);
+  const updateReminder = vi.fn().mockResolvedValue(true);
   vi.mocked(useReminderStore).mockImplementation((selector) =>
     selector({ updateReminder } as unknown as Parameters<typeof selector>[0])
   );

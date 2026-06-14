@@ -33,14 +33,17 @@ export const AddReminderForm: React.FC<AddReminderFormProps> = ({ onSuccess }) =
         template.intervalMinutes ?? DEFAULT_REMINDER_INTERVAL_MINUTES
       );
       try {
-        await addReminder(
+        const created = await addReminder(
           template.text,
           intervalDueDateFromNow(minutes),
           { frequency: 'interval', intervalMinutes: minutes },
           template.category
         );
-        useToastStore.getState().success(`Created "${template.name}" reminder`);
-        onSuccess();
+        // Store already toasts the error on a failed write; only confirm on success.
+        if (created) {
+          useToastStore.getState().success(`Created "${template.name}" reminder`);
+          onSuccess();
+        }
       } catch (error) {
         logger.error('Failed to create reminder from template', error);
         useToastStore.getState().error('Failed to create reminder. Please try again.');
@@ -83,7 +86,7 @@ export const AddReminderForm: React.FC<AddReminderFormProps> = ({ onSuccess }) =
     try {
       const dueDate = createScheduledDate(hours, minutes);
 
-      await addReminder(
+      const created = await addReminder(
         template.text,
         dueDate,
         {
@@ -92,8 +95,11 @@ export const AddReminderForm: React.FC<AddReminderFormProps> = ({ onSuccess }) =
         template.category
       );
 
-      useToastStore.getState().success(`Created "${template.name}" reminder`);
-      onSuccess();
+      // Store already toasts the error on a failed write; only confirm on success.
+      if (created) {
+        useToastStore.getState().success(`Created "${template.name}" reminder`);
+        onSuccess();
+      }
     } catch (error) {
       logger.error('Failed to create reminder from template', error);
       useToastStore.getState().error('Failed to create reminder. Please try again.');
@@ -140,8 +146,11 @@ export const AddReminderForm: React.FC<AddReminderFormProps> = ({ onSuccess }) =
           mode="add"
           onCancel={onSuccess}
           onSubmit={async ({ text, dueDate, recurring }) => {
-            await addReminder(text, dueDate, recurring, undefined);
-            onSuccess();
+            // Close the modal only on a successful write; the store toasts on failure.
+            const created = await addReminder(text, dueDate, recurring, undefined);
+            if (created) {
+              onSuccess();
+            }
           }}
         />
       )}

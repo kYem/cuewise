@@ -23,7 +23,7 @@ export const EditReminderForm: React.FC<EditReminderFormProps> = ({
       mode="edit"
       onCancel={onCancel}
       onSubmit={async ({ text, dueDate, recurring }) => {
-        await updateReminder(reminder.id, {
+        const saved = await updateReminder(reminder.id, {
           text,
           dueDate: dueDate.toISOString(),
           recurring,
@@ -31,7 +31,10 @@ export const EditReminderForm: React.FC<EditReminderFormProps> = ({
           // reminder can't be paused, and the pause toggle is gated on `recurring`.
           ...(recurring ? {} : { paused: undefined }),
         });
-        onSuccess();
+        // Close the modal only on a successful write; the store toasts on failure.
+        if (saved) {
+          onSuccess();
+        }
       }}
     />
   );
