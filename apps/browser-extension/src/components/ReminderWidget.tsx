@@ -1,21 +1,19 @@
 import { cn } from '@cuewise/ui';
-import { AlertCircle, Bell, ChevronDown, ExternalLink, Plus } from 'lucide-react';
+import { AlertCircle, Bell } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import emptyRemindersAnimation from '../assets/lottie/empty/reminders.json';
 import { useReminderStore } from '../stores/reminder-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { AddReminderForm } from './AddReminderForm';
 import { EditReminderForm } from './EditReminderForm';
-import { EmptyState } from './EmptyState';
 import { ErrorFallback } from './ErrorFallback';
 import { Modal } from './Modal';
 import { ReminderItem } from './ReminderItem';
-import { ReminderWidgetItem } from './ReminderWidgetItem';
+import { AgendaReminderPanel, ComposedReminderPanel } from './reminders';
 
 /**
- * Compact floating reminder widget positioned in the bottom-right corner.
- * Shows the priority reminder (overdue first, then soonest upcoming).
+ * Floating reminder widget in the bottom-right corner. The bell expands the
+ * panel layout chosen by the `reminderPanelLayout` setting (composed | agenda).
  */
 export const ReminderWidget: React.FC = () => {
   const {
@@ -32,6 +30,7 @@ export const ReminderWidget: React.FC = () => {
   } = useReminderStore();
 
   const showThemeSwitcher = useSettingsStore((state) => state.settings.showThemeSwitcher);
+  const reminderPanelLayout = useSettingsStore((state) => state.settings.reminderPanelLayout);
 
   const [isExpanded, setIsExpanded] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -62,11 +61,20 @@ export const ReminderWidget: React.FC = () => {
     };
   }, [isExpanded]);
 
-  // Calculate priority reminders (up to 3) and total count
+  // Active reminders drive both the count badge and the chosen panel.
   const allActiveReminders = [...overdueReminders, ...upcomingReminders];
-  const priorityReminders = allActiveReminders.slice(0, 3);
   const totalCount = allActiveReminders.length;
   const hasOverdue = overdueReminders.length > 0;
+
+  // Bind store actions to the shared panel contract (both layouts use this).
+  const panelProps = {
+    reminders: allActiveReminders,
+    onToggle: toggleReminder,
+    onSnooze: snoozeReminder,
+    onPauseToggle: setReminderPaused,
+    onAdd: () => setIsAddModalOpen(true),
+    onManage: () => setShowAllModal(true),
+  };
 
   // Find reminder being edited
   const editingReminder = editingReminderId
@@ -149,94 +157,22 @@ export const ReminderWidget: React.FC = () => {
           )}
         </button>
 
-        {/* Expanded Panel - positioned above the button */}
+        {/* Expanded Panel - positioned above the button; layout chosen by setting */}
         {isExpanded && (
-          <div className="absolute bottom-full right-0 mb-2 w-80 bg-surface/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-border overflow-hidden animate-in slide-in-from-bottom-2 fade-in duration-200">
-            {/* Header */}
-            <div className="flex items-center justify-between p-3 border-b border-border">
-              <div className="flex items-center gap-2">
-                {error ? (
-                  <AlertCircle className="w-5 h-5 text-orange-500" />
-                ) : (
-                  <Bell
-                    className={cn('w-5 h-5', hasOverdue ? 'text-red-500' : 'text-primary-600')}
-                  />
-                )}
-                <span className="font-semibold text-primary">Reminders</span>
-                {!error && totalCount > 0 && (
-                  <span className="text-sm text-secondary">({totalCount})</span>
-                )}
-              </div>
-              <div className="flex items-center gap-1">
-                {/* View All Icon Link - show when more than 3 reminders */}
-                {allActiveReminders.length > 3 && (
-                  <button
-                    type="button"
-                    onClick={() => setShowAllModal(true)}
-                    className="p-1.5 hover:bg-surface-variant rounded-lg transition-colors text-secondary hover:text-primary"
-                    aria-label="View all reminders"
-                    title="View all reminders"
-                  >
-                    <ExternalLink className="w-4 h-4" />
-                  </button>
-                )}
-                {/* Collapse Button */}
-                <button
-                  type="button"
-                  onClick={() => setIsExpanded(false)}
-                  className="p-1.5 hover:bg-surface-variant rounded-lg transition-colors"
-                  aria-label="Collapse widget"
-                >
-                  <ChevronDown className="w-5 h-5 text-secondary" />
-                </button>
-              </div>
-            </div>
-
-            {/* Content */}
-            <div className="p-3">
-              {/* Error State */}
-              {error ? (
+          <div className="absolute bottom-full right-0 mb-2 animate-in slide-in-from-bottom-2 fade-in duration-200">
+            {error ? (
+              <div className="w-[380px] rounded-2xl bg-surface/95 backdrop-blur-xl border border-border shadow-2xl overflow-hidden p-3">
                 <ErrorFallback
                   error={error}
                   title="Failed to load reminders"
                   onRetry={initialize}
                 />
-              ) : priorityReminders.length > 0 ? (
-                /* Priority Reminders (up to 3) */
-                <div className="space-y-2">
-                  {priorityReminders.map((reminder) => (
-                    <ReminderWidgetItem
-                      key={reminder.id}
-                      reminder={reminder}
-                      onToggle={toggleReminder}
-                      onDelete={deleteReminder}
-                      onEdit={(id) => setEditingReminderId(id)}
-                      onSnooze={snoozeReminder}
-                      onPauseToggle={setReminderPaused}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <EmptyState
-                  size="sm"
-                  animationData={emptyRemindersAnimation}
-                  title="No active reminders"
-                  description="Add one to stay on track"
-                />
-              )}
-            </div>
-
-            {/* Footer Actions */}
-            <div className="flex items-center justify-end p-3 border-t border-border bg-surface-variant/30">
-              <button
-                type="button"
-                onClick={() => setIsAddModalOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium"
-              >
-                <Plus className="w-4 h-4" />
-                Add
-              </button>
-            </div>
+              </div>
+            ) : reminderPanelLayout === 'agenda' ? (
+              <AgendaReminderPanel {...panelProps} />
+            ) : (
+              <ComposedReminderPanel {...panelProps} />
+            )}
           </div>
         )}
       </div>
