@@ -98,8 +98,10 @@ export const ReminderWidget: React.FC = () => {
     onPauseToggle: setReminderPaused,
     onAdd: () => setIsAddModalOpen(true),
     onManage: () => setShowAllModal(true),
-    layout: reminderPanelLayout,
-    onLayoutChange: (next) => updateSettings({ reminderPanelLayout: next }),
+    viewSwitcher: {
+      layout: reminderPanelLayout,
+      onChange: (next) => updateSettings({ reminderPanelLayout: next }),
+    },
   };
 
   // Find reminder being edited

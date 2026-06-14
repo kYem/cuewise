@@ -97,18 +97,17 @@ describe('ComposedReminderPanel', () => {
 
   it('switches layout via the in-header view switcher', () => {
     const { habit } = buildMixedReminders();
-    const onLayoutChange = vi.fn();
+    const onChange = vi.fn();
     render(
       <ComposedReminderPanel
         reminders={[habit]}
         {...defaultProps()}
-        layout="composed"
-        onLayoutChange={onLayoutChange}
+        viewSwitcher={{ layout: 'composed', onChange }}
       />
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Agenda view' }));
-    expect(onLayoutChange).toHaveBeenCalledWith('agenda');
+    expect(onChange).toHaveBeenCalledWith('agenda');
   });
 
   it('shows today and tomorrow scheduled items in one merged list with a "TMRW" day label', () => {

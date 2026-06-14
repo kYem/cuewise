@@ -196,8 +196,7 @@ export function AgendaReminderPanel({
   onPauseToggle,
   onAdd,
   onManage,
-  layout,
-  onLayoutChange,
+  viewSwitcher,
 }: ReminderPanelProps) {
   // Force a re-render each second so classification and countdowns stay fresh.
   const [, setTick] = useState(0);
@@ -232,7 +231,10 @@ export function AgendaReminderPanel({
   });
 
   const groups = buildGroups(reminders, states);
-  const subNote = buildReminderUrgencyNote(reminders, states) ?? { text: 'On schedule' };
+  const subNote = buildReminderUrgencyNote(reminders, states) ?? {
+    text: 'On schedule',
+    tone: null,
+  };
   const isEmpty = reminders.length === 0;
 
   return (
@@ -242,8 +244,7 @@ export function AgendaReminderPanel({
           count={reminders.length}
           hasUrgent={hasUrgent}
           subNote={subNote}
-          layout={layout}
-          onLayoutChange={onLayoutChange}
+          viewSwitcher={viewSwitcher}
         />
       </div>
 
