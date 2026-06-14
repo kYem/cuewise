@@ -31,7 +31,7 @@ export function classifyReminder(reminder: Reminder, now: Date = new Date()): Re
 export function buildReminderUrgencyNote(
   reminders: Reminder[],
   states: Map<string, ReminderState>
-): { text: string; tone: ReminderState } | null {
+): { text: string; tone: ReminderState | null } | null {
   const notified = reminders.filter((r) => states.get(r.id) === 'notified');
   if (notified.length > 0) {
     return { text: 'Awaiting your response', tone: 'notified' };

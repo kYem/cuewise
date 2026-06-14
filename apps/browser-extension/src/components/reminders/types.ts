@@ -18,6 +18,5 @@ export interface ReminderPanelProps {
   /** Optional: open the "all reminders" manage modal (edit/delete live there). */
   onManage?: () => void;
   /** Current panel layout + setter, to show an in-header view switcher. When omitted, no switcher renders. */
-  layout?: ReminderPanelLayout;
-  onLayoutChange?: (layout: ReminderPanelLayout) => void;
+  viewSwitcher?: { layout: ReminderPanelLayout; onChange: (layout: ReminderPanelLayout) => void };
 }

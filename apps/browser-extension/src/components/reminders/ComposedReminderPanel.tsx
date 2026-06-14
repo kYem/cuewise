@@ -283,8 +283,7 @@ export function ComposedReminderPanel({
   onPauseToggle,
   onAdd,
   onManage,
-  layout,
-  onLayoutChange,
+  viewSwitcher,
 }: ReminderPanelProps) {
   // Force a re-render each second so classification and countdowns stay fresh.
   const [, setTick] = useState(0);
@@ -332,10 +331,10 @@ export function ComposedReminderPanel({
           subNote={
             buildReminderUrgencyNote(reminders, states) ?? {
               text: `${habits.length} habits · ${scheduled.length} scheduled`,
+              tone: null,
             }
           }
-          layout={layout}
-          onLayoutChange={onLayoutChange}
+          viewSwitcher={viewSwitcher}
         />
       </div>
 

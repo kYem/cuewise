@@ -226,9 +226,8 @@ function LayoutSwitch({ layout, onLayoutChange }: LayoutSwitchProps) {
 interface ReminderPanelHeaderProps {
   count: number;
   hasUrgent: boolean;
-  subNote?: { text: string; tone?: ReminderState };
-  layout?: ReminderPanelLayout;
-  onLayoutChange?: (layout: ReminderPanelLayout) => void;
+  subNote?: { text: string; tone: ReminderState | null };
+  viewSwitcher?: { layout: ReminderPanelLayout; onChange: (layout: ReminderPanelLayout) => void };
 }
 
 /** Panel header: bell tile (red when urgent), title + count, optional sub-note and layout switcher. */
@@ -236,8 +235,7 @@ export function ReminderPanelHeader({
   count,
   hasUrgent,
   subNote,
-  layout,
-  onLayoutChange,
+  viewSwitcher,
 }: ReminderPanelHeaderProps) {
   const noteTone = subNote?.tone ? REMINDER_STATE_STYLES[subNote.tone].text : 'text-secondary';
 
@@ -262,7 +260,9 @@ export function ReminderPanelHeader({
           {subNote && <div className={cn('text-xs mt-0.5', noteTone)}>{subNote.text}</div>}
         </div>
       </div>
-      {layout && onLayoutChange && <LayoutSwitch layout={layout} onLayoutChange={onLayoutChange} />}
+      {viewSwitcher && (
+        <LayoutSwitch layout={viewSwitcher.layout} onLayoutChange={viewSwitcher.onChange} />
+      )}
     </div>
   );
 }
