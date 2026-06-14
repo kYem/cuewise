@@ -1,4 +1,5 @@
 import type { Reminder } from '@cuewise/shared';
+import { formatCountdown } from './reminder-date-utils';
 
 export type ReminderState = 'notified' | 'overdue' | 'soon' | 'upcoming' | 'done';
 
@@ -24,6 +25,28 @@ export function classifyReminder(reminder: Reminder, now: Date = new Date()): Re
     return 'soon';
   }
   return 'upcoming';
+}
+
+/** The most pressing reminder as a header sub-note, or null when nothing is urgent. */
+export function buildReminderUrgencyNote(
+  reminders: Reminder[],
+  states: Map<string, ReminderState>
+): { text: string; tone: ReminderState } | null {
+  const notified = reminders.filter((r) => states.get(r.id) === 'notified');
+  if (notified.length > 0) {
+    return { text: 'Awaiting your response', tone: 'notified' };
+  }
+  const overdue = reminders.filter((r) => states.get(r.id) === 'overdue');
+  if (overdue.length > 0) {
+    return { text: `${overdue.length} overdue`, tone: 'overdue' };
+  }
+  const soon = reminders
+    .filter((r) => states.get(r.id) === 'soon')
+    .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+  if (soon.length > 0) {
+    return { text: `Next in ${formatCountdown(soon[0].dueDate)}`, tone: 'soon' };
+  }
+  return null;
 }
 
 /** Split into ambient interval "habits" and clock-anchored "scheduled" reminders. */

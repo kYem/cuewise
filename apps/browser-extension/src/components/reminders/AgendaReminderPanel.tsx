@@ -3,7 +3,11 @@ import { cn } from '@cuewise/ui';
 import { isToday, parseISO } from 'date-fns';
 import { Plus } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { classifyReminder, type ReminderState } from '../../utils/reminder-classify';
+import {
+  buildReminderUrgencyNote,
+  classifyReminder,
+  type ReminderState,
+} from '../../utils/reminder-classify';
 import { formatCountdown, formatDueDate } from '../../utils/reminder-date-utils';
 import {
   EmptyReminders,
@@ -137,28 +141,6 @@ function buildGroups(reminders: Reminder[], states: Map<string, ReminderState>):
   return order.filter((group) => group.items.length > 0);
 }
 
-/** The sub-note reflecting the most pressing reminder, mirroring the design `soonNote`. */
-function buildSubNote(
-  reminders: Reminder[],
-  states: Map<string, ReminderState>
-): { text: string; tone?: ReminderState } {
-  const notified = reminders.filter((r) => states.get(r.id) === 'notified');
-  if (notified.length > 0) {
-    return { text: 'Awaiting your response', tone: 'notified' };
-  }
-  const overdue = reminders.filter((r) => states.get(r.id) === 'overdue');
-  if (overdue.length > 0) {
-    return { text: `${overdue.length} overdue`, tone: 'overdue' };
-  }
-  const soon = reminders
-    .filter((r) => states.get(r.id) === 'soon')
-    .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
-  if (soon.length > 0) {
-    return { text: `Next in ${formatCountdown(soon[0].dueDate)}`, tone: 'soon' };
-  }
-  return { text: 'On schedule' };
-}
-
 /**
  * Agenda (C) reminders panel: a time rail with connector segments, grouped by
  * Needs response / Overdue / Up next / Later today / Upcoming. Scannable; the
@@ -193,7 +175,7 @@ export function AgendaReminderPanel({
   });
 
   const groups = buildGroups(reminders, states);
-  const subNote = buildSubNote(reminders, states);
+  const subNote = buildReminderUrgencyNote(reminders, states) ?? { text: 'On schedule' };
   const isEmpty = reminders.length === 0;
 
   return (

@@ -4,11 +4,12 @@ import { isToday, parseISO } from 'date-fns';
 import { CheckCircle2, ChevronDown, ChevronUp, Pause, Plus } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import {
+  buildReminderUrgencyNote,
   classifyReminder,
   type ReminderState,
   splitReminders,
 } from '../../utils/reminder-classify';
-import { formatDueDate } from '../../utils/reminder-date-utils';
+import { formatCountdown, formatDueDate } from '../../utils/reminder-date-utils';
 import {
   EmptyReminders,
   RecurrencePauseControl,
@@ -16,6 +17,7 @@ import {
   ReminderHeroCard,
   ReminderPanelHeader,
 } from './atoms';
+import { REMINDER_STATE_STYLES } from './reminder-state-styles';
 import type { ReminderPanelProps } from './types';
 
 export type { ReminderPanelProps } from './types';
@@ -207,7 +209,16 @@ function SchedRow({ reminder, state, first, onToggle, onPauseToggle }: SchedRowP
         first ? 'border-t-0' : 'border-t border-border/60'
       )}
     >
-      {today ? (
+      {state === 'soon' ? (
+        <span
+          className={cn(
+            'w-16 flex-none text-xs font-bold tabular-nums text-right whitespace-nowrap',
+            REMINDER_STATE_STYLES.soon.text
+          )}
+        >
+          {formatCountdown(reminder.dueDate)}
+        </span>
+      ) : today ? (
         <span className="w-16 flex-none text-xs text-secondary tabular-nums text-right whitespace-nowrap">
           {clockLabel(reminder.dueDate)}
         </span>
@@ -290,7 +301,11 @@ export function ComposedReminderPanel({
         <ReminderPanelHeader
           count={reminders.length}
           hasUrgent={hasUrgent}
-          subNote={{ text: `${habits.length} habits · ${scheduled.length} scheduled` }}
+          subNote={
+            buildReminderUrgencyNote(reminders, states) ?? {
+              text: `${habits.length} habits · ${scheduled.length} scheduled`,
+            }
+          }
           layout={layout}
           onLayoutChange={onLayoutChange}
         />

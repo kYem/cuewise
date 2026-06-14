@@ -1,15 +1,25 @@
+import type { Reminder } from '@cuewise/shared';
 import {
   completedReminderFactory,
   recurringReminderFactory,
   reminderFactory,
 } from '@cuewise/test-utils/factories';
 import { describe, expect, it } from 'vitest';
-import { classifyReminder, splitReminders } from './reminder-classify';
+import {
+  buildReminderUrgencyNote,
+  classifyReminder,
+  type ReminderState,
+  splitReminders,
+} from './reminder-classify';
 
 const NOW = new Date('2026-06-14T10:00:00.000Z');
 
 function dueIn(ms: number): string {
   return new Date(NOW.getTime() + ms).toISOString();
+}
+
+function statesFor(reminders: Reminder[]): Map<string, ReminderState> {
+  return new Map(reminders.map((r) => [r.id, classifyReminder(r, NOW)]));
 }
 
 describe('classifyReminder', () => {
@@ -44,6 +54,46 @@ describe('classifyReminder', () => {
   it('returns "upcoming" for a reminder due in ~10 minutes', () => {
     const reminder = reminderFactory.build({ dueDate: dueIn(10 * 60 * 1000) });
     expect(classifyReminder(reminder, NOW)).toBe('upcoming');
+  });
+});
+
+describe('buildReminderUrgencyNote', () => {
+  it('prioritizes a notified reminder with "Awaiting your response"', () => {
+    const notified = reminderFactory.build({ dueDate: dueIn(-60 * 1000), notified: true });
+    const overdue = reminderFactory.build({ dueDate: dueIn(-60 * 1000), notified: false });
+    const reminders = [notified, overdue];
+
+    expect(buildReminderUrgencyNote(reminders, statesFor(reminders))).toEqual({
+      text: 'Awaiting your response',
+      tone: 'notified',
+    });
+  });
+
+  it('counts overdue reminders when none are notified', () => {
+    const reminders = [
+      reminderFactory.build({ dueDate: dueIn(-60 * 1000), notified: false }),
+      reminderFactory.build({ dueDate: dueIn(-120 * 1000), notified: false }),
+    ];
+
+    expect(buildReminderUrgencyNote(reminders, statesFor(reminders))).toEqual({
+      text: '2 overdue',
+      tone: 'overdue',
+    });
+  });
+
+  it('surfaces the soonest reminder with a "Next in" countdown', () => {
+    const reminders = [reminderFactory.build({ dueDate: dueIn(2 * 60 * 1000) })];
+
+    const note = buildReminderUrgencyNote(reminders, statesFor(reminders));
+
+    expect(note?.tone).toBe('soon');
+    expect(note?.text).toMatch(/^Next in /);
+  });
+
+  it('returns null when nothing is urgent', () => {
+    const reminders = [reminderFactory.build({ dueDate: dueIn(30 * 60 * 1000) })];
+
+    expect(buildReminderUrgencyNote(reminders, statesFor(reminders))).toBeNull();
   });
 });
 

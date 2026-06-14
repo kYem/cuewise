@@ -20,7 +20,7 @@ import {
 import { useEffect, useState } from 'react';
 import emptyRemindersAnimation from '../../assets/lottie/empty/reminders.json';
 import type { ReminderState } from '../../utils/reminder-classify';
-import { formatCountdown, formatDueDate } from '../../utils/reminder-date-utils';
+import { formatCountdown, formatDueDate, formatTimeAgo } from '../../utils/reminder-date-utils';
 import { EmptyState } from '../EmptyState';
 import { REMINDER_CATEGORY_ICON, REMINDER_STATE_STYLES } from './reminder-state-styles';
 
@@ -276,7 +276,8 @@ export function ReminderHeroCard({
   const [countdown, setCountdown] = useState('');
   const styles = REMINDER_STATE_STYLES[state];
   const urgent = isUrgentState(state);
-  const { text: dueText } = formatDueDate(reminder.dueDate);
+  const isPast = new Date(reminder.dueDate).getTime() < Date.now();
+  const dueText = isPast ? formatTimeAgo(reminder.dueDate) : formatDueDate(reminder.dueDate).text;
   const EyebrowIcon = state === 'notified' ? BellRing : AlertCircle;
 
   let statusLabel = 'Remaining';
