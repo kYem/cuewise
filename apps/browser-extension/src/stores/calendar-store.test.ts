@@ -162,8 +162,19 @@ describe('refresh', () => {
 });
 
 describe('initialize', () => {
+  // Fixed clock so the synced-today / previous-day boundary is deterministic.
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-14T12:00:00'));
+    isAvailableMock.mockReturnValue(true);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('hydrates connected state from storage without refetching when synced today', async () => {
-    const lastSync = new Date().toISOString();
+    const lastSync = new Date('2026-06-14T08:00:00').toISOString();
     getCalendarStateMock.mockResolvedValue({ connected: true, events: [liveEvent], lastSync });
 
     await useCalendarStore.getState().initialize();
@@ -172,20 +183,36 @@ describe('initialize', () => {
     expect(state.connected).toBe(true);
     expect(state.events).toEqual([liveEvent]);
     expect(state.lastSync).toBe(lastSync);
+    // isAvailable is true, so a regressed always-refresh would call this.
     expect(fetchTodayEventsMock).not.toHaveBeenCalled();
   });
 
-  it('refreshes when the cached events are from a previous day', async () => {
-    isAvailableMock.mockReturnValue(true);
-    getCalendarStateMock.mockResolvedValue({
-      connected: true,
-      events: [liveEvent],
-      lastSync: '2020-01-01T00:00:00Z',
-    });
+  it('refreshes when the cached events are from the previous day', async () => {
+    const lastSync = new Date('2026-06-13T20:00:00').toISOString();
+    getCalendarStateMock.mockResolvedValue({ connected: true, events: [liveEvent], lastSync });
 
     await useCalendarStore.getState().initialize();
 
     expect(fetchTodayEventsMock).toHaveBeenCalledOnce();
+  });
+
+  it('refreshes when there is no prior sync timestamp', async () => {
+    getCalendarStateMock.mockResolvedValue({ connected: true, events: [], lastSync: null });
+
+    await useCalendarStore.getState().initialize();
+
+    expect(fetchTodayEventsMock).toHaveBeenCalledOnce();
+  });
+
+  it('refreshes silently on mount — no error toast when the live fetch fails', async () => {
+    fetchTodayEventsMock.mockRejectedValue(new Error('boom'));
+    const lastSync = new Date('2026-06-13T20:00:00').toISOString();
+    getCalendarStateMock.mockResolvedValue({ connected: true, events: [liveEvent], lastSync });
+
+    await useCalendarStore.getState().initialize();
+
+    expect(fetchTodayEventsMock).toHaveBeenCalledOnce();
+    expect(errorToastMock).not.toHaveBeenCalled();
   });
 
   it('does not refresh a disconnected stored state', async () => {
@@ -254,5 +281,22 @@ describe('disconnect', () => {
 
     expect(useCalendarStore.getState().connected).toBe(false);
     expect(errorToastMock).toHaveBeenCalledWith('Failed to disconnect calendar');
+  });
+
+  it('clears local state even when token revocation throws', async () => {
+    isAvailableMock.mockReturnValue(true);
+    disconnectCalendarMock.mockRejectedValue(new Error('revoke failed'));
+    useCalendarStore.setState({ connected: true, events: [liveEvent] });
+
+    await useCalendarStore.getState().disconnect();
+
+    const state = useCalendarStore.getState();
+    expect(state.connected).toBe(false);
+    expect(state.events).toEqual([]);
+    expect(setCalendarStateMock).toHaveBeenCalledWith({
+      connected: false,
+      events: [],
+      lastSync: null,
+    });
   });
 });

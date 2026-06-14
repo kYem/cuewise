@@ -21,7 +21,8 @@ interface CalendarStore {
   initialize: () => Promise<void>;
   connect: () => Promise<void>;
   disconnect: () => Promise<void>;
-  refresh: () => Promise<void>;
+  // `silent` suppresses failure toasts for background refreshes (e.g. on mount).
+  refresh: (options?: { silent?: boolean }) => Promise<void>;
 }
 
 // Dev-only fallback agenda: chrome.identity doesn't exist in the Vite dev
@@ -95,7 +96,8 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
         stored.lastSync !== null &&
         new Date(stored.lastSync).toDateString() === new Date().toDateString();
       if (stored.connected && !syncedToday) {
-        await get().refresh();
+        // Background refresh — a failure here logs but must not toast on mount.
+        await get().refresh({ silent: true });
       }
     } catch (error) {
       logger.error('Failed to load calendar state', error);
@@ -157,10 +159,11 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
     }
   },
 
-  refresh: async () => {
+  refresh: async (options) => {
     if (!get().connected) {
       return;
     }
+    const silent = options?.silent === true;
     set({ isLoading: true, error: null });
     try {
       let events: CalendarEvent[];
@@ -177,12 +180,16 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
       const result = await setCalendarState({ connected: true, events, lastSync });
       if (!result.success) {
         logger.error('Failed to persist calendar state', result.error);
-        useToastStore.getState().warning('Refreshed, but saving calendar state failed');
+        if (!silent) {
+          useToastStore.getState().warning('Refreshed, but saving calendar state failed');
+        }
       }
     } catch (error) {
       logger.error('Failed to refresh calendar', error);
       set({ isLoading: false, error: 'Failed to refresh calendar' });
-      useToastStore.getState().error('Failed to refresh Google Calendar');
+      if (!silent) {
+        useToastStore.getState().error('Failed to refresh Google Calendar');
+      }
     }
   },
 }));
