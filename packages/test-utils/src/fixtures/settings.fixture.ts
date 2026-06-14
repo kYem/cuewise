@@ -15,6 +15,7 @@ export const defaultSettings: Settings = {
   pomodoroMusicAutoStart: true,
   pomodoroMusicPlaylistId: '',
   pomodoroMusicPlayDuringBreaks: false,
+  pomodoroCompanion: 'quote',
   enableNotifications: true,
   theme: 'light',
   quoteChangeInterval: 10,

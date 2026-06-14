@@ -46,6 +46,7 @@ export const DEFAULT_SETTINGS: Settings = {
   pomodoroMusicAutoStart: false,
   pomodoroMusicPlaylistId: '',
   pomodoroMusicPlayDuringBreaks: false,
+  pomodoroCompanion: 'quote', // What shows beside the timer: quote | calendar | both
   enableNotifications: true,
   theme: 'auto',
   quoteChangeInterval: 10, // 0 = manual, 10+ = auto-refresh interval in seconds
