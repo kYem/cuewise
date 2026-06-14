@@ -1,23 +1,18 @@
 import {
-  buildReminderRecurring,
   clampIntervalMinutes,
   createScheduledDate,
   DEFAULT_REMINDER_INTERVAL_MINUTES,
   intervalDueDateFromNow,
   logger,
-  type ReminderCategory,
-  type ReminderFrequency,
   type ReminderTemplate,
-  suggestOptimalTime,
 } from '@cuewise/shared';
 import { LayoutTemplate, PenLine } from 'lucide-react';
 import type React from 'react';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useReminderStore } from '../stores/reminder-store';
 import { useToastStore } from '../stores/toast-store';
-import { DateTimePresetPicker } from './DateTimePresetPicker';
-import { IntervalCadencePicker } from './IntervalCadencePicker';
 import { ReminderTemplateGrid } from './ReminderTemplateGrid';
+import { ReminderFormBody } from './reminders/ReminderFormBody';
 
 type FormMode = 'custom' | 'template';
 
@@ -27,22 +22,8 @@ interface AddReminderFormProps {
 
 export const AddReminderForm: React.FC<AddReminderFormProps> = ({ onSuccess }) => {
   const [mode, setMode] = useState<FormMode>('template');
-  const [text, setText] = useState('');
-  const [dueDate, setDueDate] = useState<Date | null>(null);
-  const [isRecurring, setIsRecurring] = useState(false);
-  const [recurringFrequency, setRecurringFrequency] = useState<ReminderFrequency>('daily');
-  const [intervalMinutes, setIntervalMinutes] = useState(DEFAULT_REMINDER_INTERVAL_MINUTES);
-  const [category, setCategory] = useState<ReminderCategory | undefined>(undefined);
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const addReminder = useReminderStore((state) => state.addReminder);
-  const reminders = useReminderStore((state) => state.reminders);
-
-  // Compute suggested time based on completion patterns
-  const suggestion = useMemo(() => {
-    // Use category if set (from template), otherwise get general suggestion
-    return suggestOptimalTime(reminders, category);
-  }, [reminders, category]);
 
   // Handle template selection - create reminder directly
   const handleSelectTemplate = async (template: ReminderTemplate) => {
@@ -119,58 +100,6 @@ export const AddReminderForm: React.FC<AddReminderFormProps> = ({ onSuccess }) =
     }
   };
 
-  // Interval reminders fire one interval out, so they don't require a picked "When".
-  const isInterval = isRecurring && recurringFrequency === 'interval';
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!text.trim() || (!dueDate && !isInterval)) {
-      return;
-    }
-
-    setIsSubmitting(true);
-
-    try {
-      const clampedInterval = clampIntervalMinutes(intervalMinutes);
-      let effectiveDueDate: Date;
-      if (isInterval) {
-        effectiveDueDate = intervalDueDateFromNow(clampedInterval);
-      } else if (dueDate) {
-        // Validate that the picked date is in the future.
-        if (dueDate <= new Date()) {
-          useToastStore.getState().warning('Please select a future date and time');
-          setIsSubmitting(false);
-          return;
-        }
-        effectiveDueDate = dueDate;
-      } else {
-        setIsSubmitting(false);
-        return;
-      }
-
-      const recurring = buildReminderRecurring(isRecurring, recurringFrequency, clampedInterval);
-
-      await addReminder(text.trim(), effectiveDueDate, recurring, category);
-
-      // Reset form
-      setText('');
-      setDueDate(null);
-      setIsRecurring(false);
-      setRecurringFrequency('daily');
-      setIntervalMinutes(DEFAULT_REMINDER_INTERVAL_MINUTES);
-      setCategory(undefined);
-
-      onSuccess();
-    } catch (error) {
-      // This catch handles any unexpected errors not caught by the store
-      logger.error('Unexpected error in reminder form submission', error);
-      useToastStore.getState().error('Something went wrong. Please try again.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
   return (
     <div className="space-y-6">
       {/* Mode Tabs */}
@@ -206,93 +135,15 @@ export const AddReminderForm: React.FC<AddReminderFormProps> = ({ onSuccess }) =
 
       {/* Custom Mode - Form */}
       {mode === 'custom' && (
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Reminder Text */}
-          <div>
-            <label htmlFor="reminder-text" className="block text-sm font-medium text-primary mb-2">
-              Reminder <span className="text-red-500">*</span>
-            </label>
-            <textarea
-              id="reminder-text"
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              placeholder="What do you want to be reminded about?"
-              required
-              rows={3}
-              maxLength={200}
-              className="w-full px-4 py-3 rounded-lg border-2 border-border focus:border-primary-500 focus:outline-none transition-colors resize-none text-primary placeholder:text-secondary"
-            />
-            <p className="mt-1 text-xs text-secondary">{text.length}/200 characters</p>
-          </div>
-
-          {/* Date and Time Picker */}
-          <DateTimePresetPicker
-            value={dueDate}
-            onChange={setDueDate}
-            label="When"
-            required
-            suggestion={suggestion}
-          />
-
-          {/* Recurring Option */}
-          <div className="space-y-3">
-            <div className="flex items-center">
-              <input
-                id="reminder-recurring"
-                type="checkbox"
-                checked={isRecurring}
-                onChange={(e) => setIsRecurring(e.target.checked)}
-                className="w-4 h-4 text-primary-600 border-border rounded focus:ring-primary-500"
-              />
-              <label htmlFor="reminder-recurring" className="ml-2 text-sm font-medium text-primary">
-                Repeat this reminder
-              </label>
-            </div>
-
-            {/* Frequency Selector (only shown when recurring is enabled) */}
-            {isRecurring && (
-              <div className="ml-6">
-                <label
-                  htmlFor="reminder-frequency"
-                  className="block text-sm font-medium text-primary mb-2"
-                >
-                  Frequency
-                </label>
-                <select
-                  id="reminder-frequency"
-                  value={recurringFrequency}
-                  onChange={(e) => setRecurringFrequency(e.target.value as ReminderFrequency)}
-                  className="w-full px-4 py-3 rounded-lg border-2 border-border focus:border-primary-500 focus:outline-none transition-colors text-primary"
-                >
-                  <option value="daily">Daily</option>
-                  <option value="weekly">Weekly</option>
-                  <option value="monthly">Monthly</option>
-                  <option value="interval">Every N minutes</option>
-                </select>
-
-                {recurringFrequency === 'interval' && (
-                  <div className="mt-3">
-                    <IntervalCadencePicker value={intervalMinutes} onChange={setIntervalMinutes} />
-                    <p className="mt-1 text-xs text-secondary">
-                      First reminder fires {clampIntervalMinutes(intervalMinutes)} min from now.
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Submit Button */}
-          <div className="flex justify-end gap-3 pt-4">
-            <button
-              type="submit"
-              disabled={!text.trim() || (!dueDate && !isInterval) || isSubmitting}
-              className="px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium shadow-sm hover:shadow-md"
-            >
-              {isSubmitting ? 'Adding...' : 'Add Reminder'}
-            </button>
-          </div>
-        </form>
+        <ReminderFormBody
+          submitLabel="Add reminder"
+          requireFuture
+          onCancel={onSuccess}
+          onSubmit={async ({ text, dueDate, recurring }) => {
+            await addReminder(text, dueDate, recurring, undefined);
+            onSuccess();
+          }}
+        />
       )}
     </div>
   );
