@@ -82,7 +82,7 @@ export function ReminderCategoryCheck({
       {showCheck ? (
         <Check style={{ width: iconSize, height: iconSize }} strokeWidth={3} />
       ) : (
-        <CategoryIcon style={{ width: iconSize, height: iconSize }} strokeWidth={2} />
+        <CategoryIcon style={{ width: iconSize, height: iconSize }} strokeWidth={2.5} />
       )}
     </button>
   );
