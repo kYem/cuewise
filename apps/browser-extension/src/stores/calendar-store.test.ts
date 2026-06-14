@@ -298,5 +298,7 @@ describe('disconnect', () => {
       events: [],
       lastSync: null,
     });
+    // Best-effort revoke failure must not surface as a disconnect error.
+    expect(errorToastMock).not.toHaveBeenCalled();
   });
 });

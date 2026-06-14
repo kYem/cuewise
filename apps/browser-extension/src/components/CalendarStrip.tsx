@@ -79,9 +79,13 @@ export const CalendarStrip: React.FC<CalendarStripProps> = ({ lean = false }) =>
     );
   }
 
-  // Single now-line before the first upcoming event (only when something is
-  // already past). Computed once so overlapping events can't draw it twice.
-  const nowLineIndex = lean ? -1 : visible.findIndex((e) => !isPast(e));
+  // Single now-line at the first past→upcoming transition. Computed once (so
+  // overlapping events can't draw it twice) and transition-based rather than
+  // "first upcoming event" so a leading non-past all-day banner or a long event
+  // spanning now doesn't suppress it when real past events follow.
+  const nowLineIndex = lean
+    ? -1
+    : visible.findIndex((e, i) => i > 0 && isPast(visible[i - 1]) && !isPast(e));
 
   const syncStatus = (
     <span className="flex items-center gap-1.5 text-xs text-white/55">
@@ -113,7 +117,7 @@ export const CalendarStrip: React.FC<CalendarStripProps> = ({ lean = false }) =>
         <div className="flex flex-col">
           {visible.map((event, i) => {
             const past = !lean && isPast(event);
-            const showNow = i === nowLineIndex && nowLineIndex > 0;
+            const showNow = i === nowLineIndex;
             return (
               <Fragment key={event.id}>
                 {showNow && (
