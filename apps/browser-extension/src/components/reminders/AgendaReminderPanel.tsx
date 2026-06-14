@@ -248,7 +248,7 @@ export function AgendaReminderPanel({
         <button
           type="button"
           onClick={onAdd}
-          className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-primary-600 text-white text-sm font-semibold hover:bg-primary-700 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1"
+          className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-primary-600 text-white text-sm font-semibold hover:bg-primary-700 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-1"
         >
           <Plus className="w-4 h-4" />
           Add reminder
@@ -257,7 +257,7 @@ export function AgendaReminderPanel({
           <button
             type="button"
             onClick={onManage}
-            className="px-3 py-2 rounded-lg text-sm font-medium text-secondary hover:text-primary-500 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="px-3 py-2 rounded-lg text-sm font-medium text-secondary hover:text-primary-500 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
           >
             Manage
           </button>

@@ -1725,6 +1725,19 @@ export function clampIntervalMinutes(value: number): number {
   return floored;
 }
 
+/** Ultra-compact interval label: "30m", "1h", "1h 30m". */
+export function formatCompactInterval(minutes: number): string {
+  if (minutes < 60) {
+    return `${minutes}m`;
+  }
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  if (mins === 0) {
+    return `${hours}h`;
+  }
+  return `${hours}h ${mins}m`;
+}
+
 /** A Date `minutes` from now — the fire-time anchor for interval cadences. */
 export function intervalDueDateFromNow(minutes: number): Date {
   return new Date(Date.now() + minutes * 60_000);

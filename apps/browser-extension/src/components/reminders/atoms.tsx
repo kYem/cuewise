@@ -69,7 +69,7 @@ export function ReminderCategoryCheck({
       aria-label={completed ? 'Mark not done' : 'Mark done'}
       className={cn(
         'flex-none inline-flex items-center justify-center rounded-full border-2 transition-all',
-        'focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1',
+        'focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-1',
         urgent || completed ? cn(styles.text, styles.border) : 'border-current'
       )}
       style={{
@@ -120,7 +120,7 @@ export function RecurrencePauseControl({ reminder, onPauseToggle }: RecurrencePa
         type="button"
         onClick={() => onPauseToggle(reminder.id, !paused)}
         className={cn(
-          'p-0.5 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500',
+          'p-0.5 rounded transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500',
           paused ? 'text-tertiary hover:text-primary-500' : 'text-secondary hover:text-primary-500'
         )}
         aria-label={paused ? 'Resume reminder' : 'Pause reminder'}
@@ -156,7 +156,7 @@ export function ReminderSnoozeRow({ onSnooze, state = 'soon' }: ReminderSnoozeRo
           onClick={() => onSnooze(minutes)}
           className={cn(
             'px-2.5 py-1 rounded-full text-xs font-semibold transition-colors',
-            'bg-surface-variant hover:bg-surface border',
+            'bg-surface hover:bg-surface-variant border',
             styles.text,
             styles.border
           )}
@@ -183,7 +183,7 @@ function LayoutSwitch({ layout, onLayoutChange }: LayoutSwitchProps) {
         aria-label="Composed view"
         title="Composed view"
         className={cn(
-          'p-1.5 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500',
+          'p-1.5 rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500',
           layout === 'composed'
             ? 'bg-surface text-primary-600 shadow-sm'
             : 'text-tertiary hover:text-primary'
@@ -197,7 +197,7 @@ function LayoutSwitch({ layout, onLayoutChange }: LayoutSwitchProps) {
         aria-label="Agenda view"
         title="Agenda view"
         className={cn(
-          'p-1.5 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500',
+          'p-1.5 rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500',
           layout === 'agenda'
             ? 'bg-surface text-primary-600 shadow-sm'
             : 'text-tertiary hover:text-primary'

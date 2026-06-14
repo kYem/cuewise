@@ -1,4 +1,4 @@
-import { REMINDER_CATEGORY_META, type Reminder } from '@cuewise/shared';
+import { formatCompactInterval, REMINDER_CATEGORY_META, type Reminder } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
 import { isToday, parseISO } from 'date-fns';
 import { CheckCircle2, ChevronDown, ChevronUp, Pause, Plus } from 'lucide-react';
@@ -54,19 +54,6 @@ function clockOnly(dueDate: string): string {
   return parseISO(dueDate).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
 
-/** Ultra-compact interval label for habit pills: "30m", "1h", "1h 30m". */
-function compactInterval(minutes: number): string {
-  if (minutes < 60) {
-    return `${minutes}m`;
-  }
-  const hours = Math.floor(minutes / 60);
-  const mins = minutes % 60;
-  if (mins === 0) {
-    return `${hours}h`;
-  }
-  return `${hours}h ${mins}m`;
-}
-
 interface HabitPillProps {
   reminder: Reminder;
   state: ReminderState;
@@ -89,7 +76,7 @@ function HabitPill({ reminder, state, onToggle, onPauseToggle }: HabitPillProps)
   const category = reminder.category ?? 'productivity';
   const categoryColor = REMINDER_CATEGORY_META[category].color;
   const showCheck = nudging || justAcked || (!paused && hover);
-  const cadence = compactInterval(reminder.recurring?.intervalMinutes ?? 0);
+  const cadence = formatCompactInterval(reminder.recurring?.intervalMinutes ?? 0);
 
   useEffect(() => {
     if (!justAcked) {
@@ -118,7 +105,7 @@ function HabitPill({ reminder, state, onToggle, onPauseToggle }: HabitPillProps)
       title={paused ? 'Paused — tap to resume' : 'Tap to mark done'}
       className={cn(
         'inline-flex items-center gap-2 pl-2.5 pr-3 py-1.5 rounded-full border transition-all',
-        'focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1',
+        'focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-1',
         nudging && 'animate-pulse',
         justAcked && 'scale-105',
         paused
@@ -180,7 +167,7 @@ function HabitStrip({ habits, states, onToggle, onPauseToggle }: HabitStripProps
           <button
             type="button"
             onClick={() => setExpanded((e) => !e)}
-            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium text-secondary hover:text-primary-500 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium text-secondary hover:text-primary-500 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
           >
             {expanded ? 'Show less' : `+${overflow} more`}
             {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
@@ -385,7 +372,7 @@ export function ComposedReminderPanel({
         <button
           type="button"
           onClick={onAdd}
-          className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-primary-600 text-white text-sm font-semibold hover:bg-primary-700 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1"
+          className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-primary-600 text-white text-sm font-semibold hover:bg-primary-700 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-1"
         >
           <Plus className="w-4 h-4" />
           Add reminder
@@ -394,7 +381,7 @@ export function ComposedReminderPanel({
           <button
             type="button"
             onClick={onManage}
-            className="px-3 py-2 rounded-lg text-sm font-medium text-secondary hover:text-primary-500 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="px-3 py-2 rounded-lg text-sm font-medium text-secondary hover:text-primary-500 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
           >
             Manage
           </button>
