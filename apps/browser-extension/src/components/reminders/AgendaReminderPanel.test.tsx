@@ -1,9 +1,23 @@
 import { reminderFactory } from '@cuewise/test-utils';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { AgendaReminderPanel } from './AgendaReminderPanel';
 
 const HOUR_MS = 60 * 60 * 1000;
+
+/**
+ * A dueDate later TODAY: now + 90min, but if that crosses midnight, anchor to a
+ * fixed early-evening time today so the calendar day stays unambiguous.
+ */
+function laterTodayDueDate(): string {
+  const candidate = new Date(Date.now() + 90 * 60 * 1000);
+  if (candidate.getDate() !== new Date().getDate()) {
+    const earlyEvening = new Date();
+    earlyEvening.setHours(18, 0, 0, 0);
+    return earlyEvening.toISOString();
+  }
+  return candidate.toISOString();
+}
 
 function buildReminders() {
   const notified = reminderFactory.build({
@@ -20,6 +34,13 @@ function buildReminders() {
     dueDate: new Date(Date.now() + 3 * HOUR_MS).toISOString(),
   });
   return { notified, upcoming };
+}
+
+/** The group wrapper for a header label, so we can scope queries to one group. */
+function groupContainerFor(label: string): HTMLElement {
+  const container = screen.getByText(label).closest('.mb-2');
+  expect(container).toBeInstanceOf(HTMLElement);
+  return container as HTMLElement;
 }
 
 function defaultProps() {
@@ -40,6 +61,29 @@ describe('AgendaReminderPanel', () => {
     expect(screen.getByText('Submit timesheet')).toBeInTheDocument();
     expect(screen.getByText('Later today')).toBeInTheDocument();
     expect(screen.getByText('Review pull request')).toBeInTheDocument();
+  });
+
+  it('splits upcoming into Later today (due today) and Upcoming (due a later day)', () => {
+    const laterToday = reminderFactory.build({
+      id: 'later-today-1',
+      text: 'Stretch break',
+      category: 'health',
+      dueDate: laterTodayDueDate(),
+    });
+    const nextDay = reminderFactory.build({
+      id: 'next-day-1',
+      text: 'Dentist appointment',
+      category: 'personal',
+      dueDate: new Date(Date.now() + 50 * HOUR_MS).toISOString(),
+    });
+    render(<AgendaReminderPanel reminders={[laterToday, nextDay]} {...defaultProps()} />);
+
+    const laterTodayGroup = groupContainerFor('Later today');
+    expect(within(laterTodayGroup).getByText('Stretch break')).toBeInTheDocument();
+    expect(within(laterTodayGroup).queryByText('Dentist appointment')).not.toBeInTheDocument();
+
+    const upcomingGroup = groupContainerFor('Upcoming');
+    expect(within(upcomingGroup).getByText('Dentist appointment')).toBeInTheDocument();
   });
 
   it('calls onToggle with the reminder id when its category-check is clicked', () => {

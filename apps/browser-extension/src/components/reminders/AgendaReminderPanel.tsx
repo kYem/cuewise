@@ -1,5 +1,6 @@
 import type { Reminder } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
+import { isToday, parseISO } from 'date-fns';
 import { Plus } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { classifyReminder, type ReminderState } from '../../utils/reminder-classify';
@@ -102,30 +103,38 @@ function AgendaRow({ reminder, state, last, onToggle, onSnooze, onPauseToggle }:
 }
 
 interface AgendaGroup {
-  key: ReminderState;
+  /** Unique grouping/React key. */
+  key: string;
+  /** State driving the group's accent styling. */
+  styleKey: ReminderState;
   label: string;
   items: Reminder[];
 }
 
+const byDueDateAsc = (a: Reminder, b: Reminder): number =>
+  new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+
 /** Build groups in severity order, sorting each by dueDate ascending, dropping empties. */
 function buildGroups(reminders: Reminder[], states: Map<string, ReminderState>): AgendaGroup[] {
   // 'done' is intentionally absent: the panel only receives active reminders (store filters completed).
-  const order: { key: ReminderState; label: string }[] = [
-    { key: 'notified', label: 'Needs response' },
-    { key: 'overdue', label: 'Overdue' },
-    { key: 'soon', label: 'Up next' },
-    { key: 'upcoming', label: 'Later today' },
+  // 'upcoming' is split by calendar day into "Later today" and "Upcoming"; both share upcoming styling.
+  const upcoming = reminders.filter((r) => states.get(r.id) === 'upcoming').sort(byDueDateAsc);
+  const laterToday = upcoming.filter((r) => isToday(parseISO(r.dueDate)));
+  const afterToday = upcoming.filter((r) => !isToday(parseISO(r.dueDate)));
+
+  const order: AgendaGroup[] = [
+    { key: 'notified', styleKey: 'notified', label: 'Needs response', items: [] },
+    { key: 'overdue', styleKey: 'overdue', label: 'Overdue', items: [] },
+    { key: 'soon', styleKey: 'soon', label: 'Up next', items: [] },
+    { key: 'later-today', styleKey: 'upcoming', label: 'Later today', items: laterToday },
+    { key: 'upcoming', styleKey: 'upcoming', label: 'Upcoming', items: afterToday },
   ];
-  const groups: AgendaGroup[] = [];
-  for (const { key, label } of order) {
-    const items = reminders
-      .filter((r) => states.get(r.id) === key)
-      .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
-    if (items.length > 0) {
-      groups.push({ key, label, items });
+  for (const group of order) {
+    if (group.styleKey !== 'upcoming') {
+      group.items = reminders.filter((r) => states.get(r.id) === group.styleKey).sort(byDueDateAsc);
     }
   }
-  return groups;
+  return order.filter((group) => group.items.length > 0);
 }
 
 /** The sub-note reflecting the most pressing reminder, mirroring the design `soonNote`. */
@@ -152,8 +161,8 @@ function buildSubNote(
 
 /**
  * Agenda (C) reminders panel: a time rail with connector segments, grouped by
- * Needs response / Overdue / Up next / Later today. Scannable; the nudging rows
- * expand with snooze. The widget owns positioning.
+ * Needs response / Overdue / Up next / Later today / Upcoming. Scannable; the
+ * nudging rows expand with snooze. The widget owns positioning.
  */
 export function AgendaReminderPanel({
   reminders,
@@ -203,7 +212,7 @@ export function AgendaReminderPanel({
                 <span
                   className={cn(
                     'text-[10.5px] font-bold tracking-wider uppercase',
-                    REMINDER_STATE_STYLES[group.key].text
+                    REMINDER_STATE_STYLES[group.styleKey].text
                   )}
                 >
                   {group.label}
