@@ -89,6 +89,22 @@ describe('CalendarStrip - lean mode', () => {
     expect(screen.getByText('Future three')).toBeInTheDocument();
     expect(screen.queryByText('Future four')).not.toBeInTheDocument();
   });
+
+  it('keeps timed meetings visible when all-day events would fill the slots', () => {
+    const store = createCalendarStore({
+      events: [
+        allDayEvent('a1', '2026-06-14', '2026-06-15', 'PTO'),
+        allDayEvent('a2', '2026-06-14', '2026-06-15', 'Conference'),
+        allDayEvent('a3', '2026-06-14', '2026-06-15', 'Birthday'),
+        timedEvent('m', '2026-06-14T15:00:00', '2026-06-14T16:00:00', 'Afternoon meeting'),
+      ],
+    });
+    mountWith(store);
+
+    render(<CalendarStrip lean />);
+
+    expect(screen.getByText('Afternoon meeting')).toBeInTheDocument();
+  });
 });
 
 describe('CalendarStrip - full mode (past + now-line)', () => {
@@ -118,6 +134,24 @@ describe('CalendarStrip - full mode (past + now-line)', () => {
     render(<CalendarStrip />);
 
     expect(screen.getByText('Yesterday onward').className).not.toContain('line-through');
+  });
+
+  it('draws the now-line only once when a long event overlaps later past events', () => {
+    const store = createCalendarStore({
+      events: [
+        timedEvent('p1', '2026-06-14T08:00:00', '2026-06-14T09:00:00', 'Early standup'),
+        timedEvent('long', '2026-06-14T09:00:00', '2026-06-14T14:00:00', 'Focus block'),
+        timedEvent('p2', '2026-06-14T09:30:00', '2026-06-14T09:45:00', 'Quick sync'),
+        timedEvent('f', '2026-06-14T13:30:00', '2026-06-14T14:30:00', 'Review'),
+      ],
+    });
+    mountWith(store);
+
+    render(<CalendarStrip />);
+
+    // The "now" marker (noon) must appear exactly once despite two past→future
+    // transitions in the start-sorted list.
+    expect(screen.getAllByText('12pm')).toHaveLength(1);
   });
 });
 
