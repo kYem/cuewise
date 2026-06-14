@@ -58,14 +58,20 @@ function getToken(interactive: boolean): Promise<string> {
   });
 }
 
-function mapEvent(item: GoogleEvent): CalendarEvent {
-  const allDay = !item.start?.dateTime;
+// Returns null for malformed rows (no start/end) so callers can drop them
+// rather than emit a CalendarEvent with empty strings that break `new Date(...)`.
+function mapEvent(item: GoogleEvent): CalendarEvent | null {
+  const start = item.start?.dateTime ?? item.start?.date;
+  const end = item.end?.dateTime ?? item.end?.date;
+  if (!start || !end) {
+    return null;
+  }
   return {
     id: item.id,
     title: item.summary ?? '(no title)',
-    start: item.start?.dateTime ?? item.start?.date ?? '',
-    end: item.end?.dateTime ?? item.end?.date ?? '',
-    allDay,
+    start,
+    end,
+    allDay: !item.start?.dateTime,
     color: item.colorId ? EVENT_COLORS[item.colorId] : undefined,
     htmlLink: item.htmlLink,
   };
@@ -96,7 +102,7 @@ export async function fetchTodayEvents(): Promise<CalendarEvent[]> {
     throw new Error(`Calendar API: ${response.status} ${response.statusText}`);
   }
   const data = (await response.json()) as { items?: GoogleEvent[] };
-  return (data.items ?? []).map(mapEvent);
+  return (data.items ?? []).map(mapEvent).filter((event): event is CalendarEvent => event !== null);
 }
 
 // Revoke + drop the cached token so disconnect is a clean state reset.
