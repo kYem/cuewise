@@ -13,15 +13,9 @@ export interface ReminderStateStyle {
   chip: { bg: string; text: string; border: string };
   /** Human-readable state label. */
   label: string;
-  /** Whether the state should pulse (only `notified`). */
-  pulse?: boolean;
 }
 
-/**
- * Severity ramp mapped to design tokens (calm primary → red), mirroring the
- * glass `R_STATE` palette from the design handoff. `notified` is the loudest:
- * the alarm already fired and is awaiting a response, so it pulses.
- */
+/** Severity ramp (calm primary → red), as Tailwind token classes per state. */
 export const REMINDER_STATE_STYLES: Record<ReminderState, ReminderStateStyle> = {
   notified: {
     text: 'text-red-500',
@@ -29,7 +23,6 @@ export const REMINDER_STATE_STYLES: Record<ReminderState, ReminderStateStyle> = 
     bg: 'bg-red-500/10',
     chip: { bg: 'bg-red-500/20', text: 'text-red-400', border: 'border-red-500/40' },
     label: 'Needs response',
-    pulse: true,
   },
   overdue: {
     text: 'text-orange-500',

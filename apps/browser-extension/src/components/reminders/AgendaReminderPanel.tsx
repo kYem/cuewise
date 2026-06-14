@@ -74,7 +74,7 @@ function AgendaRow({
       <div className="flex flex-col items-center flex-none w-[52px]">
         {showDay ? (
           <span className="flex flex-col items-center leading-tight">
-            <span className="text-[10px] font-semibold text-tertiary">
+            <span className="text-[9px] font-semibold tracking-wide text-tertiary">
               {dayLabel(reminder.dueDate)}
             </span>
             <span className="text-xs tabular-nums text-secondary">

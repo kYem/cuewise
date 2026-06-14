@@ -97,9 +97,18 @@ function HabitPill({ reminder, state, onToggle, onPauseToggle }: HabitPillProps)
         justAcked && 'scale-105',
         paused
           ? 'bg-surface-variant border-border text-tertiary'
-          : 'bg-surface border-border text-primary hover:border-primary-300'
+          : 'text-primary hover:brightness-110'
       )}
-      style={nudging || justAcked ? { borderColor: categoryColor } : undefined}
+      style={
+        paused
+          ? undefined
+          : {
+              // Lighter category-tinted fill (like the snooze chips) so the pill
+              // reads as filled rather than blending into the panel background.
+              backgroundColor: `${categoryColor}26`,
+              borderColor: nudging || justAcked ? categoryColor : `${categoryColor}66`,
+            }
+      }
     >
       <span className="inline-flex items-center justify-center w-4 h-4 flex-none">
         {paused ? (
@@ -231,8 +240,10 @@ function SchedRow({ reminder, state, first, timeFormat, onToggle, onPauseToggle 
         </span>
       ) : (
         <span className="w-16 flex-none text-right">
-          <span className="block text-xs text-secondary">{dayLabel(reminder.dueDate)}</span>
-          <span className="block text-[11px] text-tertiary tabular-nums">
+          <span className="block text-[9px] font-semibold tracking-wide uppercase text-tertiary">
+            {dayLabel(reminder.dueDate)}
+          </span>
+          <span className="block text-xs tabular-nums text-secondary">
             {clockOnly(reminder.dueDate, timeFormat)}
           </span>
         </span>
