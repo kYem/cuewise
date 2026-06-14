@@ -360,12 +360,15 @@ export function ComposedReminderPanel({
               ))}
               {upcomingRows.length > 0 && (
                 <>
-                  <div className="flex items-center gap-1.5 pt-2.5 pb-2">
-                    <span className="text-[10.5px] font-bold tracking-wider uppercase text-tertiary">
-                      Upcoming
-                    </span>
-                    <span className="flex-1 h-px bg-border" />
-                  </div>
+                  {/* Only label "Upcoming" when there's today-content above to separate from. */}
+                  {(hero !== undefined || todayRows.length > 0) && (
+                    <div className="flex items-center gap-1.5 pt-2.5 pb-2">
+                      <span className="text-[10.5px] font-bold tracking-wider uppercase text-tertiary">
+                        Upcoming
+                      </span>
+                      <span className="flex-1 h-px bg-border" />
+                    </div>
+                  )}
                   {upcomingRows.map((reminder, index) => (
                     <SchedRow
                       key={reminder.id}
