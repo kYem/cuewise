@@ -1,5 +1,6 @@
 import {
   generateId,
+  isUpcomingRecurringOccurrence,
   logger,
   nextReminderDueDate,
   type Reminder,
@@ -214,8 +215,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
         // A not-yet-due occurrence is skipped to the one after it (calendar reminders keep
         // their clock time, e.g. tonight 9pm → tomorrow 9pm); a due/overdue one restarts
         // its cadence from now.
-        const isFutureOccurrence = new Date(reminder.dueDate).getTime() > now.getTime();
-        const nextDueDate = isFutureOccurrence
+        const nextDueDate = isUpcomingRecurringOccurrence(reminder, now)
           ? skipReminderOccurrence(reminder)
           : nextReminderDueDate(reminder, now);
 

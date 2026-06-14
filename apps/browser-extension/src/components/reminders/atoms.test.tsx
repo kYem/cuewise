@@ -19,6 +19,18 @@ describe('ReminderCategoryCheck', () => {
 
     expect(screen.getByRole('button', { name: 'Mark not done' })).toBeInTheDocument();
   });
+
+  it('shows a skip affordance for an upcoming recurring occurrence', () => {
+    const reminder = recurringReminderFactory.build({
+      category: 'health',
+      dueDate: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+      recurring: { frequency: 'interval', intervalMinutes: 30 },
+    });
+    render(<ReminderCategoryCheck reminder={reminder} state="upcoming" onToggle={vi.fn()} />);
+
+    expect(screen.getByRole('button', { name: 'Skip to next occurrence' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Mark done' })).not.toBeInTheDocument();
+  });
 });
 
 describe('ReminderHeroCard', () => {

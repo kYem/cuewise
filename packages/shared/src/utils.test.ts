@@ -41,6 +41,7 @@ import {
   getTodayDateString,
   getUpcomingTasks,
   intervalDueDateFromNow,
+  isUpcomingRecurringOccurrence,
   nextReminderDueDate,
   parseImportData,
   removeSubtaskFromGoal,
@@ -1502,6 +1503,44 @@ describe('skipReminderOccurrence', () => {
     expect(result.getDate()).toBe(10);
     expect(result.getHours()).toBe(8);
     expect(result.getMinutes()).toBe(0);
+  });
+});
+
+describe('isUpcomingRecurringOccurrence', () => {
+  const now = new Date('2026-06-13T12:00:00.000Z');
+  const base = { id: 'r1', text: 'x', completed: false, notified: false } as const;
+
+  it('is true for a recurring reminder whose dueDate is still in the future', () => {
+    const reminder = {
+      ...base,
+      dueDate: new Date(now.getTime() + 30 * 60_000).toISOString(),
+      recurring: { frequency: 'interval' as const, intervalMinutes: 30 },
+    };
+    expect(isUpcomingRecurringOccurrence(reminder, now)).toBe(true);
+  });
+
+  it('is false once a recurring reminder is due/overdue (restart, not skip)', () => {
+    const reminder = {
+      ...base,
+      dueDate: new Date(now.getTime() - 60_000).toISOString(),
+      recurring: { frequency: 'interval' as const, intervalMinutes: 30 },
+    };
+    expect(isUpcomingRecurringOccurrence(reminder, now)).toBe(false);
+  });
+
+  it('is false for a non-recurring reminder even when it is in the future', () => {
+    const reminder = { ...base, dueDate: new Date(now.getTime() + 60_000).toISOString() };
+    expect(isUpcomingRecurringOccurrence(reminder, now)).toBe(false);
+  });
+
+  it('is false for a completed recurring reminder', () => {
+    const reminder = {
+      ...base,
+      completed: true,
+      dueDate: new Date(now.getTime() + 60_000).toISOString(),
+      recurring: { frequency: 'daily' as const },
+    };
+    expect(isUpcomingRecurringOccurrence(reminder, now)).toBe(false);
   });
 });
 

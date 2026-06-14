@@ -1797,6 +1797,19 @@ export function skipReminderOccurrence(reminder: Reminder): Date {
 }
 
 /**
+ * True when checking off this reminder would SKIP an upcoming occurrence
+ * (recurring + not yet fired) rather than complete/restart it. Drives both the
+ * store's skip-vs-restart branch and the check control's skip affordance, so the
+ * icon can never disagree with the action.
+ */
+export function isUpcomingRecurringOccurrence(reminder: Reminder, now: Date): boolean {
+  if (!reminder.recurring || reminder.completed) {
+    return false;
+  }
+  return new Date(reminder.dueDate).getTime() > now.getTime();
+}
+
+/**
  * Build a reminder's `recurring` payload from form state.
  * Interval cadences carry `intervalMinutes`; calendar cadences are frequency-only;
  * a non-recurring reminder is `undefined`. Pass an already-clamped interval.

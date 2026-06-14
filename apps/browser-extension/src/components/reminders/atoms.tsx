@@ -1,5 +1,6 @@
 import {
   formatReminderCadence,
+  isUpcomingRecurringOccurrence,
   REMINDER_CATEGORY_META,
   type Reminder,
   type ReminderPanelLayout,
@@ -16,6 +17,7 @@ import {
   Pause,
   Play,
   Repeat,
+  SkipForward,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import emptyRemindersAnimation from '../../assets/lottie/empty/reminders.json';
@@ -58,7 +60,17 @@ export function ReminderCategoryCheck({
 
   // Accent: state color when urgent, otherwise the category hue.
   const accentColor = urgent || completed ? undefined : categoryColor;
-  const showCheck = completed || hover;
+  // Clicking a not-yet-due recurring occurrence skips it rather than completing —
+  // surface a skip glyph + label on hover so the affordance matches the action.
+  const skipping = isUpcomingRecurringOccurrence(reminder, new Date());
+  const showActionIcon = completed || hover;
+  const ActionIcon = skipping ? SkipForward : Check;
+  let actionLabel = 'Mark done';
+  if (completed) {
+    actionLabel = 'Mark not done';
+  } else if (skipping) {
+    actionLabel = 'Skip to next occurrence';
+  }
   const iconSize = Math.round(size * 0.5);
 
   return (
@@ -67,7 +79,8 @@ export function ReminderCategoryCheck({
       onClick={onToggle}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
-      aria-label={completed ? 'Mark not done' : 'Mark done'}
+      aria-label={actionLabel}
+      title={actionLabel}
       className={cn(
         'flex-none inline-flex items-center justify-center rounded-full border-2 transition-all',
         'focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-1',
@@ -80,8 +93,8 @@ export function ReminderCategoryCheck({
         borderColor: accentColor,
       }}
     >
-      {showCheck ? (
-        <Check style={{ width: iconSize, height: iconSize }} strokeWidth={3} />
+      {showActionIcon ? (
+        <ActionIcon style={{ width: iconSize, height: iconSize }} strokeWidth={3} />
       ) : (
         <CategoryIcon style={{ width: iconSize, height: iconSize }} strokeWidth={2.5} />
       )}
