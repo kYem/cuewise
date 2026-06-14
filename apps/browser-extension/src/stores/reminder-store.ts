@@ -364,9 +364,9 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
         return;
       }
 
-      // Calculate new due date
-      const currentDueDate = new Date(reminder.dueDate);
-      const newDueDate = new Date(currentDueDate.getTime() + minutes * 60 * 1000);
+      // Snooze reschedules to N minutes from NOW, not from the (possibly past)
+      // due date — otherwise snoozing an overdue reminder leaves it in the past.
+      const newDueDate = new Date(Date.now() + minutes * 60 * 1000);
 
       // Update reminder with new due date
       const updatedReminders = reminders.map((r) =>

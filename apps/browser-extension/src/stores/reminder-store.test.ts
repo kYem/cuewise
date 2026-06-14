@@ -243,3 +243,26 @@ describe('addReminder with an interval recurrence', () => {
     expect(alarmsMock.create).toHaveBeenCalledWith(`reminder-${id}`, { when: dueDate.getTime() });
   });
 });
+
+describe('snoozeReminder', () => {
+  it('reschedules an overdue reminder to N minutes from now, not from its past due date', async () => {
+    const overdue = reminderFactory.build({
+      id: 'snooze-1',
+      text: 'Submit report',
+      dueDate: new Date(Date.now() - 90 * 60_000).toISOString(), // 90 min overdue
+      notified: true,
+    });
+    useReminderStore.setState({ reminders: [overdue] });
+
+    const before = Date.now();
+    await useReminderStore.getState().snoozeReminder('snooze-1', 5);
+
+    const updated = useReminderStore.getState().reminders[0];
+    const newDue = new Date(updated.dueDate).getTime();
+    // Snoozed to ~now + 5 min (future), not 85 min still in the past; notified cleared.
+    expect(newDue).toBeGreaterThanOrEqual(before + 5 * 60_000);
+    expect(newDue).toBeLessThanOrEqual(Date.now() + 5 * 60_000 + 1000);
+    expect(updated.notified).toBe(false);
+    expect(alarmsMock.create).toHaveBeenCalledWith('reminder-snooze-1', { when: newDue });
+  });
+});
