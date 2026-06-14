@@ -440,3 +440,62 @@ describe('write failures', () => {
     expect(useReminderStore.getState().reminders).toHaveLength(0);
   });
 });
+
+describe('alarm scheduling failures', () => {
+  it('keeps the snooze saved and warns distinctly when arming the alarm throws', async () => {
+    const overdue = reminderFactory.build({
+      id: 'arm-fail',
+      text: 'Submit report',
+      dueDate: new Date(Date.now() - 90 * 60_000).toISOString(),
+      notified: true,
+    });
+    useReminderStore.setState({ reminders: [overdue] });
+    alarmsMock.create.mockRejectedValueOnce(new Error('MAX_SUSTAINED_ALARMS'));
+
+    const before = Date.now();
+    await useReminderStore.getState().snoozeReminder('arm-fail', 5);
+
+    const updated = useReminderStore.getState().reminders[0];
+    // The data write + state commit stand: the reminder was rescheduled into the future.
+    expect(new Date(updated.dueDate).getTime()).toBeGreaterThanOrEqual(before + 5 * 60_000);
+    expect(updated.notified).toBe(false);
+    // Distinct warning, not the generic save error.
+    expect(toastWarning).toHaveBeenCalledWith(
+      "Reminder saved, but we couldn't schedule its alert."
+    );
+    expect(toastError).not.toHaveBeenCalled();
+  });
+
+  it('keeps the added reminder and warns distinctly when arming the alarm throws', async () => {
+    alarmsMock.create.mockRejectedValueOnce(new Error('MAX_SUSTAINED_ALARMS'));
+
+    const result = await useReminderStore
+      .getState()
+      .addReminder('New reminder', new Date(Date.now() + 60_000));
+
+    // Add still succeeds — the reminder is saved despite the scheduling throw.
+    expect(result).toBe(true);
+    expect(useReminderStore.getState().reminders).toHaveLength(1);
+    expect(toastWarning).toHaveBeenCalledWith(
+      "Reminder saved, but we couldn't schedule its alert."
+    );
+    expect(toastError).not.toHaveBeenCalled();
+  });
+
+  it('still removes the reminder and stays silent when clearing the alarm throws', async () => {
+    const reminder = reminderFactory.build({
+      id: 'clear-fail',
+      text: 'Drink water',
+      dueDate: new Date(Date.now() + 60 * 60_000).toISOString(),
+    });
+    useReminderStore.setState({ reminders: [reminder] });
+    alarmsMock.clear.mockRejectedValueOnce(new Error('alarm gone'));
+
+    await useReminderStore.getState().deleteReminder('clear-fail');
+
+    // Deletion stands; a clear failure only logs — no user-facing toast.
+    expect(useReminderStore.getState().reminders).toHaveLength(0);
+    expect(toastError).not.toHaveBeenCalled();
+    expect(toastWarning).not.toHaveBeenCalled();
+  });
+});
