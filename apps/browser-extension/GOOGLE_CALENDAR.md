@@ -29,6 +29,16 @@ the Google Cloud console — Claude does not perform credential steps.
 
 ## 3. Create the Chrome-Extension OAuth client
 
+> **This is a *separate* OAuth client from the one used to publish to the Chrome
+> Web Store.** Don't reuse the publishing credentials (`CHROME_CLIENT_ID` /
+> `CHROME_CLIENT_SECRET` in `.env.chrome`). That one is a **Web application**
+> client (it has a client *secret* and a registered redirect URI, and uses the
+> `chromewebstore` scope). `chrome.identity.getAuthToken` requires a **Chrome
+> Extension** client — no secret, bound to the extension ID — and Google rejects
+> a Web-application client id here. Create this new client in the **same Google
+> Cloud project** (reusing the consent screen above); the two clients sit side by
+> side in the project's Credentials list.
+
 1. **APIs & Services → Credentials → Create credentials → OAuth client ID**.
 2. Application type: **Chrome Extension**.
 3. **Item ID**: the extension's ID.
