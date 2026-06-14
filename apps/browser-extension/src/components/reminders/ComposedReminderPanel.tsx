@@ -140,7 +140,7 @@ interface HabitStripProps {
 
 const HABIT_COLLAPSE = 6;
 
-/** Scheduled today/upcoming row lists collapse past this many rows. */
+/** The scheduled row list collapses past this many rows. */
 const SCHEDULED_LIMIT = 3;
 
 /** "HABITS {n}" subheader + wrapping pills, collapsing past 6 (nudging first). */
@@ -274,8 +274,7 @@ export function ComposedReminderPanel({
     return () => clearInterval(timer);
   }, []);
 
-  const [showAllToday, setShowAllToday] = useState(false);
-  const [showAllUpcoming, setShowAllUpcoming] = useState(false);
+  const [showAllScheduled, setShowAllScheduled] = useState(false);
 
   const now = new Date();
   const states = new Map<string, ReminderState>(
@@ -295,21 +294,11 @@ export function ComposedReminderPanel({
     const state = states.get(r.id);
     return state === 'notified' || state === 'overdue';
   });
+  // One time-sorted list — SchedRow renders today's clock vs a future day/time per row.
   const rows = hero ? sortedScheduled.filter((r) => r.id !== hero.id) : sortedScheduled;
-  // Today's rows keep the clean clock; tomorrow-onward get their own "Upcoming" sub-group.
-  const todayRows = rows.filter((r) => isToday(parseISO(r.dueDate)));
-  const upcomingRows = rows.filter((r) => !isToday(parseISO(r.dueDate)));
-  const todayOverflow = todayRows.length - SCHEDULED_LIMIT;
-  const visibleToday =
-    todayOverflow > 0 && !showAllToday ? todayRows.slice(0, SCHEDULED_LIMIT) : todayRows;
-  const upcomingOverflow = upcomingRows.length - SCHEDULED_LIMIT;
-  const visibleUpcoming =
-    upcomingOverflow > 0 && !showAllUpcoming
-      ? upcomingRows.slice(0, SCHEDULED_LIMIT)
-      : upcomingRows;
-  // The "Upcoming" sub-divider only renders when today-content sits above it; otherwise
-  // upcoming rows sit directly under the SCHEDULED header, so its toggle moves up there.
-  const showUpcomingDivider = hero !== undefined || todayRows.length > 0;
+  const scheduledOverflow = rows.length - SCHEDULED_LIMIT;
+  const visibleRows =
+    scheduledOverflow > 0 && !showAllScheduled ? rows.slice(0, SCHEDULED_LIMIT) : rows;
   const isEmpty = reminders.length === 0;
 
   return (
@@ -352,29 +341,14 @@ export function ComposedReminderPanel({
                   Scheduled
                 </span>
                 <span className="text-xs text-tertiary">{scheduled.length}</span>
-                {todayOverflow > 0 && (
+                {scheduledOverflow > 0 && (
                   <button
                     type="button"
-                    onClick={() => setShowAllToday((v) => !v)}
+                    onClick={() => setShowAllScheduled((v) => !v)}
                     className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium text-secondary hover:text-primary-500 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
                   >
-                    {showAllToday ? 'Show less' : `+${todayOverflow} more`}
-                    {showAllToday ? (
-                      <ChevronUp className="w-3 h-3" />
-                    ) : (
-                      <ChevronDown className="w-3 h-3" />
-                    )}
-                  </button>
-                )}
-                {/* No today-content: the upcoming list is what sits under this header, so it owns the toggle. */}
-                {!showUpcomingDivider && upcomingOverflow > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setShowAllUpcoming((v) => !v)}
-                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium text-secondary hover:text-primary-500 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
-                  >
-                    {showAllUpcoming ? 'Show less' : `+${upcomingOverflow} more`}
-                    {showAllUpcoming ? (
+                    {showAllScheduled ? 'Show less' : `+${scheduledOverflow} more`}
+                    {showAllScheduled ? (
                       <ChevronUp className="w-3 h-3" />
                     ) : (
                       <ChevronDown className="w-3 h-3" />
@@ -394,7 +368,7 @@ export function ComposedReminderPanel({
                   />
                 </div>
               )}
-              {visibleToday.map((reminder, index) => (
+              {visibleRows.map((reminder, index) => (
                 <SchedRow
                   key={reminder.id}
                   reminder={reminder}
@@ -404,43 +378,6 @@ export function ComposedReminderPanel({
                   onPauseToggle={onPauseToggle}
                 />
               ))}
-              {upcomingRows.length > 0 && (
-                <>
-                  {/* Only label "Upcoming" when there's today-content above to separate from. */}
-                  {showUpcomingDivider && (
-                    <div className="flex items-center gap-1.5 pt-2.5 pb-2">
-                      <span className="text-[10.5px] font-bold tracking-wider uppercase text-tertiary">
-                        Upcoming
-                      </span>
-                      {upcomingOverflow > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => setShowAllUpcoming((v) => !v)}
-                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium text-secondary hover:text-primary-500 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
-                        >
-                          {showAllUpcoming ? 'Show less' : `+${upcomingOverflow} more`}
-                          {showAllUpcoming ? (
-                            <ChevronUp className="w-3 h-3" />
-                          ) : (
-                            <ChevronDown className="w-3 h-3" />
-                          )}
-                        </button>
-                      )}
-                      <span className="flex-1 h-px bg-border" />
-                    </div>
-                  )}
-                  {visibleUpcoming.map((reminder, index) => (
-                    <SchedRow
-                      key={reminder.id}
-                      reminder={reminder}
-                      state={states.get(reminder.id) ?? 'upcoming'}
-                      first={index === 0}
-                      onToggle={() => onToggle(reminder.id)}
-                      onPauseToggle={onPauseToggle}
-                    />
-                  ))}
-                </>
-              )}
             </div>
           )}
         </>

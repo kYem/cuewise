@@ -93,7 +93,7 @@ describe('ComposedReminderPanel', () => {
     expect(onLayoutChange).toHaveBeenCalledWith('agenda');
   });
 
-  it('splits tomorrow scheduled items into an Upcoming sub-group with a "Tmrw" day label', () => {
+  it('shows today and tomorrow scheduled items in one merged list with a "Tmrw" day label', () => {
     const todayItem = reminderFactory.build({
       id: 'sched-today',
       text: 'Today catch-up',
@@ -108,14 +108,16 @@ describe('ComposedReminderPanel', () => {
     });
     render(<ComposedReminderPanel reminders={[todayItem, tomorrowItem]} {...defaultProps()} />);
 
-    // The tomorrow item moves under an "Upcoming" divider with a compact day label.
-    expect(screen.getByText('Upcoming')).toBeInTheDocument();
+    // Both items share the single Scheduled list — no separate "Upcoming" divider.
+    expect(screen.queryByText('Upcoming')).not.toBeInTheDocument();
+    expect(screen.getByText('Today catch-up')).toBeInTheDocument();
     expect(screen.getByText('Tomorrow planning session')).toBeInTheDocument();
+    // The tomorrow row still renders its compact "Tmrw" day label inline.
     expect(screen.getByText('Tmrw')).toBeInTheDocument();
   });
 
-  it('caps today scheduled rows at 3 and reveals the rest on "+N more"', () => {
-    // 5 future same-day daily reminders all classify as upcoming today rows (none overdue/notified, so no hero).
+  it('caps scheduled rows at 3 and reveals the rest on "+N more"', () => {
+    // 5 future same-day daily reminders all classify as upcoming rows (none overdue/notified, so no hero).
     const items = Array.from({ length: 5 }, (_, i) =>
       reminderFactory.build({
         id: `sched-today-${i}`,
