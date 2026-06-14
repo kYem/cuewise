@@ -187,7 +187,7 @@ export const ReminderWidget: React.FC = () => {
         {isExpanded && (
           <div className="absolute bottom-full right-0 mb-2 animate-in slide-in-from-bottom-2 fade-in duration-200">
             {error ? (
-              <div className="w-[380px] rounded-2xl bg-surface/95 backdrop-blur-xl border border-border shadow-2xl overflow-hidden p-3">
+              <div className="w-[380px] rounded-2xl bg-surface-elevated backdrop-blur-xl border border-border shadow-2xl overflow-hidden p-3">
                 <ErrorFallback
                   error={error}
                   title="Failed to load reminders"

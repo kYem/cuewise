@@ -197,7 +197,7 @@ export function AgendaReminderPanel({
   const isEmpty = reminders.length === 0;
 
   return (
-    <div className="w-[380px] rounded-2xl bg-surface/95 backdrop-blur-xl border border-border shadow-2xl overflow-hidden">
+    <div className="w-[380px] rounded-2xl bg-surface-elevated backdrop-blur-xl border border-border shadow-2xl overflow-hidden">
       <div className="px-4 pt-4 pb-3">
         <ReminderPanelHeader
           count={reminders.length}

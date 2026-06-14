@@ -1,4 +1,4 @@
-import { formatReminderCadence, REMINDER_CATEGORY_META, type Reminder } from '@cuewise/shared';
+import { REMINDER_CATEGORY_META, type Reminder } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
 import { isToday, parseISO } from 'date-fns';
 import { CheckCircle2, ChevronDown, ChevronUp, Pause, Plus } from 'lucide-react';
@@ -54,6 +54,19 @@ function clockOnly(dueDate: string): string {
   return parseISO(dueDate).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
 
+/** Ultra-compact interval label for habit pills: "30m", "1h", "1h 30m". */
+function compactInterval(minutes: number): string {
+  if (minutes < 60) {
+    return `${minutes}m`;
+  }
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  if (mins === 0) {
+    return `${hours}h`;
+  }
+  return `${hours}h ${mins}m`;
+}
+
 interface HabitPillProps {
   reminder: Reminder;
   state: ReminderState;
@@ -76,7 +89,7 @@ function HabitPill({ reminder, state, onToggle, onPauseToggle }: HabitPillProps)
   const category = reminder.category ?? 'productivity';
   const categoryColor = REMINDER_CATEGORY_META[category].color;
   const showCheck = nudging || justAcked || (!paused && hover);
-  const cadence = reminder.recurring ? formatReminderCadence(reminder.recurring) : '';
+  const cadence = compactInterval(reminder.recurring?.intervalMinutes ?? 0);
 
   useEffect(() => {
     if (!justAcked) {
@@ -285,7 +298,7 @@ export function ComposedReminderPanel({
   const isEmpty = reminders.length === 0;
 
   return (
-    <div className="w-[380px] rounded-2xl bg-surface/95 backdrop-blur-xl border border-border shadow-2xl overflow-hidden">
+    <div className="w-[380px] rounded-2xl bg-surface-elevated backdrop-blur-xl border border-border shadow-2xl overflow-hidden">
       <div className="px-4 pt-4 pb-3">
         <ReminderPanelHeader
           count={reminders.length}
