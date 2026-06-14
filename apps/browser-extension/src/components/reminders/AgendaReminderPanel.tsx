@@ -1,7 +1,7 @@
 import type { Reminder } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
 import { isToday, parseISO } from 'date-fns';
-import { Plus } from 'lucide-react';
+import { ChevronDown, ChevronUp, Plus } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import {
   buildReminderUrgencyNote,
@@ -118,6 +118,9 @@ interface AgendaGroup {
 const byDueDateAsc = (a: Reminder, b: Reminder): number =>
   new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
 
+/** Calm groups (Later today / Upcoming) collapse past this many rows; urgent groups never cap. */
+const GROUP_LIMIT = 4;
+
 /** Build groups in severity order, sorting each by dueDate ascending, dropping empties. */
 function buildGroups(reminders: Reminder[], states: Map<string, ReminderState>): AgendaGroup[] {
   // 'done' is intentionally absent: the panel only receives active reminders (store filters completed).
@@ -165,6 +168,19 @@ export function AgendaReminderPanel({
     return () => clearInterval(timer);
   }, []);
 
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  function toggleGroup(key: string) {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }
+
   const now = new Date();
   const states = new Map<string, ReminderState>(
     reminders.map((r) => [r.id, classifyReminder(r, now)])
@@ -196,33 +212,55 @@ export function AgendaReminderPanel({
         </div>
       ) : (
         <div className="px-4 pb-1">
-          {groups.map((group) => (
-            <div key={group.key} className="mb-2">
-              <div className="flex items-center gap-1.5 pt-1.5 pb-2.5">
-                <span
-                  className={cn(
-                    'text-[10.5px] font-bold tracking-wider uppercase',
-                    REMINDER_STATE_STYLES[group.styleKey].text
+          {groups.map((group) => {
+            const isExpanded = expandedGroups.has(group.key);
+            const cappable = group.key === 'later-today' || group.key === 'upcoming';
+            const overflow = cappable ? group.items.length - GROUP_LIMIT : 0;
+            const visibleItems =
+              overflow > 0 && !isExpanded ? group.items.slice(0, GROUP_LIMIT) : group.items;
+
+            return (
+              <div key={group.key} className="mb-2">
+                <div className="flex items-center gap-1.5 pt-1.5 pb-2.5">
+                  <span
+                    className={cn(
+                      'text-[10.5px] font-bold tracking-wider uppercase',
+                      REMINDER_STATE_STYLES[group.styleKey].text
+                    )}
+                  >
+                    {group.label}
+                  </span>
+                  <span className="text-xs text-tertiary">{group.items.length}</span>
+                  {overflow > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => toggleGroup(group.key)}
+                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium text-secondary hover:text-primary-500 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                    >
+                      {isExpanded ? 'Show less' : `+${overflow} more`}
+                      {isExpanded ? (
+                        <ChevronUp className="w-3 h-3" />
+                      ) : (
+                        <ChevronDown className="w-3 h-3" />
+                      )}
+                    </button>
                   )}
-                >
-                  {group.label}
-                </span>
-                <span className="text-xs text-tertiary">{group.items.length}</span>
-                <span className="flex-1 h-px bg-border" />
+                  <span className="flex-1 h-px bg-border" />
+                </div>
+                {visibleItems.map((reminder, index) => (
+                  <AgendaRow
+                    key={reminder.id}
+                    reminder={reminder}
+                    state={states.get(reminder.id) ?? 'upcoming'}
+                    last={index === visibleItems.length - 1}
+                    onToggle={() => onToggle(reminder.id)}
+                    onSnooze={(minutes) => onSnooze(reminder.id, minutes)}
+                    onPauseToggle={onPauseToggle}
+                  />
+                ))}
               </div>
-              {group.items.map((reminder, index) => (
-                <AgendaRow
-                  key={reminder.id}
-                  reminder={reminder}
-                  state={states.get(reminder.id) ?? 'upcoming'}
-                  last={index === group.items.length - 1}
-                  onToggle={() => onToggle(reminder.id)}
-                  onSnooze={(minutes) => onSnooze(reminder.id, minutes)}
-                  onPauseToggle={onPauseToggle}
-                />
-              ))}
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
