@@ -2,21 +2,103 @@ import {
   buildReminderRecurring,
   clampIntervalMinutes,
   DEFAULT_REMINDER_INTERVAL_MINUTES,
+  formatCompactInterval,
   intervalDueDateFromNow,
   logger,
   type Reminder,
   type ReminderFrequency,
 } from '@cuewise/shared';
+import { cn } from '@cuewise/ui';
+import { CalendarClock } from 'lucide-react';
 import type React from 'react';
 import { useState } from 'react';
 import { useReminderStore } from '../stores/reminder-store';
 import { IntervalCadencePicker } from './IntervalCadencePicker';
+import { Switch } from './settings/SettingControls';
 
 interface EditReminderFormProps {
   reminder: Reminder;
   onSuccess: () => void;
   onCancel: () => void;
 }
+
+type PresetKind = 'hour' | 'evening' | 'tomorrow' | 'nextWeek';
+
+const STARTS_PRESETS: { label: string; kind: PresetKind }[] = [
+  { label: 'In 1 hour', kind: 'hour' },
+  { label: 'Evening', kind: 'evening' },
+  { label: 'Tomorrow', kind: 'tomorrow' },
+  { label: 'Next week', kind: 'nextWeek' },
+];
+
+// A future Date for each quick-preset chip.
+function presetDate(kind: PresetKind): Date {
+  const d = new Date();
+  if (kind === 'hour') {
+    d.setHours(d.getHours() + 1);
+  } else if (kind === 'evening') {
+    if (d.getHours() >= 18) {
+      d.setDate(d.getDate() + 1);
+    }
+    d.setHours(18, 0, 0, 0);
+  } else if (kind === 'tomorrow') {
+    d.setDate(d.getDate() + 1);
+    d.setHours(9, 0, 0, 0);
+  } else {
+    d.setDate(d.getDate() + 7);
+    d.setHours(9, 0, 0, 0);
+  }
+  return d;
+}
+
+function toDateString(d: Date): string {
+  return `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`;
+}
+
+function toTimeString(d: Date): string {
+  return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+}
+
+// "7:02 PM" from a "HH:MM" input value, or empty when unset.
+function formatTimeLabel(time: string): string {
+  if (!time) {
+    return '';
+  }
+  const [hourStr, minuteStr] = time.split(':');
+  const hours = Number(hourStr);
+  const minutes = Number(minuteStr);
+  if (Number.isNaN(hours) || Number.isNaN(minutes)) {
+    return '';
+  }
+  const period = hours >= 12 ? 'PM' : 'AM';
+  const hour12 = hours % 12 === 0 ? 12 : hours % 12;
+  return `${hour12}:${minutes.toString().padStart(2, '0')} ${period}`;
+}
+
+// "January 15" from a "YYYY-MM-DD" input value, or empty when unset.
+function formatDateLabel(date: string): string {
+  if (!date) {
+    return '';
+  }
+  const [year, month, day] = date.split('-').map(Number);
+  if (Number.isNaN(year) || Number.isNaN(month) || Number.isNaN(day)) {
+    return '';
+  }
+  return new Date(year, month - 1, day).toLocaleDateString(undefined, {
+    month: 'long',
+    day: 'numeric',
+  });
+}
+
+const chipClass = (active: boolean): string =>
+  cn(
+    'rounded-full border px-3 py-1.5 text-xs font-medium transition-colors',
+    active
+      ? 'border-transparent bg-primary-600 text-white'
+      : 'border-border bg-surface text-secondary hover:bg-surface-variant hover:text-primary'
+  );
+
+const eyebrowClass = 'block text-xs font-semibold uppercase tracking-wider text-secondary';
 
 export const EditReminderForm: React.FC<EditReminderFormProps> = ({
   reminder,
@@ -25,8 +107,8 @@ export const EditReminderForm: React.FC<EditReminderFormProps> = ({
 }) => {
   // Parse the existing reminder's dueDate to extract date and time
   const existingDate = new Date(reminder.dueDate);
-  const existingDateString = existingDate.toISOString().split('T')[0];
-  const existingTimeString = `${existingDate.getHours().toString().padStart(2, '0')}:${existingDate.getMinutes().toString().padStart(2, '0')}`;
+  const existingDateString = toDateString(existingDate);
+  const existingTimeString = toTimeString(existingDate);
 
   const [text, setText] = useState(reminder.text);
   const [date, setDate] = useState(existingDateString);
@@ -44,6 +126,34 @@ export const EditReminderForm: React.FC<EditReminderFormProps> = ({
   const isInterval = isRecurring && recurringFrequency === 'interval';
 
   const updateReminder = useReminderStore((state) => state.updateReminder);
+
+  // Mirror a preset Date into the date + time input strings.
+  const applyPreset = (kind: PresetKind) => {
+    const d = presetDate(kind);
+    setDate(toDateString(d));
+    setTime(toTimeString(d));
+  };
+
+  const schedulePreview = (() => {
+    const timeLabel = formatTimeLabel(time) || 'the chosen time';
+    if (isInterval) {
+      const clamped = clampIntervalMinutes(intervalMinutes);
+      return `Repeats every ${formatCompactInterval(clamped)} · starting now`;
+    }
+    if (isRecurring && recurringFrequency === 'daily') {
+      return `Daily at ${timeLabel}`;
+    }
+    if (isRecurring && recurringFrequency === 'weekly') {
+      return `Weekly at ${timeLabel}`;
+    }
+    if (isRecurring && recurringFrequency === 'monthly') {
+      return `Monthly at ${timeLabel}`;
+    }
+    if (!date || !time) {
+      return 'Pick a date & time';
+    }
+    return `One-time · ${formatDateLabel(date)} at ${formatTimeLabel(time)}`;
+  })();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -87,7 +197,7 @@ export const EditReminderForm: React.FC<EditReminderFormProps> = ({
     <form onSubmit={handleSubmit} className="space-y-6">
       {/* Reminder Text */}
       <div>
-        <label htmlFor="reminder-text" className="block text-sm font-medium text-primary mb-2">
+        <label htmlFor="reminder-text" className={cn(eyebrowClass, 'mb-2')}>
           Reminder <span className="text-red-500">*</span>
         </label>
         <textarea
@@ -103,93 +213,111 @@ export const EditReminderForm: React.FC<EditReminderFormProps> = ({
         <p className="mt-1 text-xs text-secondary">{text.length}/200 characters</p>
       </div>
 
-      {/* Date and Time */}
-      <div className="grid grid-cols-2 gap-4">
-        {/* Date */}
-        <div>
-          <label htmlFor="reminder-date" className="block text-sm font-medium text-primary mb-2">
-            Date <span className="text-red-500">*</span>
-          </label>
-          <input
-            id="reminder-date"
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            required
-            className="w-full px-4 py-3 rounded-lg border-2 border-border focus:border-primary-500 focus:outline-none transition-colors text-primary"
-          />
-        </div>
+      {/* Starts — hidden for interval reminders, which fire one interval from now. */}
+      {!isInterval && (
+        <div className="space-y-3">
+          <span className={eyebrowClass}>
+            Starts <span className="text-red-500">*</span>
+          </span>
 
-        {/* Time */}
-        <div>
-          <label htmlFor="reminder-time" className="block text-sm font-medium text-primary mb-2">
-            Time <span className="text-red-500">*</span>
-          </label>
-          <input
-            id="reminder-time"
-            type="time"
-            value={time}
-            onChange={(e) => setTime(e.target.value)}
-            required
-            className="w-full px-4 py-3 rounded-lg border-2 border-border focus:border-primary-500 focus:outline-none transition-colors text-primary"
-          />
-        </div>
-      </div>
-
-      {/* Recurring Option */}
-      <div className="space-y-3">
-        <div className="flex items-center">
-          <input
-            id="reminder-recurring"
-            type="checkbox"
-            checked={isRecurring}
-            onChange={(e) => setIsRecurring(e.target.checked)}
-            className="w-4 h-4 text-primary-600 border-border rounded focus:ring-primary-500"
-          />
-          <label htmlFor="reminder-recurring" className="ml-2 text-sm font-medium text-primary">
-            Repeat this reminder
-          </label>
-        </div>
-
-        {/* Frequency Selector (only shown when recurring is enabled) */}
-        {isRecurring && (
-          <div className="ml-6">
-            <label
-              htmlFor="reminder-frequency"
-              className="block text-sm font-medium text-primary mb-2"
-            >
-              Frequency
-            </label>
-            <select
-              id="reminder-frequency"
-              value={recurringFrequency}
-              onChange={(e) => setRecurringFrequency(e.target.value as ReminderFrequency)}
-              className="w-full px-4 py-3 rounded-lg border-2 border-border focus:border-primary-500 focus:outline-none transition-colors text-primary"
-            >
-              <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
-              <option value="monthly">Monthly</option>
-              <option value="interval">Every N minutes</option>
-            </select>
-
-            {isInterval && (
-              <div className="mt-3">
-                <IntervalCadencePicker value={intervalMinutes} onChange={setIntervalMinutes} />
-                <p className="mt-1 text-xs text-secondary">
-                  Reschedules to fire {clampIntervalMinutes(intervalMinutes)} min from now.
-                </p>
-              </div>
-            )}
+          <div className="flex flex-wrap gap-2">
+            {STARTS_PRESETS.map((preset) => (
+              <button
+                key={preset.kind}
+                type="button"
+                onClick={() => applyPreset(preset.kind)}
+                className={chipClass(false)}
+              >
+                {preset.label}
+              </button>
+            ))}
           </div>
-        )}
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label
+                htmlFor="reminder-date"
+                className="block text-xs font-medium text-secondary mb-1"
+              >
+                Date
+              </label>
+              <input
+                id="reminder-date"
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                required
+                className="w-full px-4 py-3 rounded-lg border-2 border-border focus:border-primary-500 focus:outline-none transition-colors text-primary"
+              />
+            </div>
+
+            <div>
+              <label
+                htmlFor="reminder-time"
+                className="block text-xs font-medium text-secondary mb-1"
+              >
+                Time
+              </label>
+              <input
+                id="reminder-time"
+                type="time"
+                value={time}
+                onChange={(e) => setTime(e.target.value)}
+                required
+                className="w-full px-4 py-3 rounded-lg border-2 border-border focus:border-primary-500 focus:outline-none transition-colors text-primary"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Repeat toggle */}
+      <div className="flex items-center justify-between gap-4 rounded-lg border border-border px-4 py-3">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-primary">Repeat</p>
+          <p className="text-xs text-secondary">
+            {isRecurring ? 'On — fires on a schedule' : 'Off — one-time reminder'}
+          </p>
+        </div>
+        <Switch label="Repeat this reminder" checked={isRecurring} onChange={setIsRecurring} />
       </div>
 
-      {/* Submit and Cancel Buttons */}
-      <div className="flex justify-end gap-3 pt-4">
+      {/* Frequency (only when Repeat is on) */}
+      {isRecurring && (
+        <div className="space-y-3">
+          <label htmlFor="reminder-frequency" className={eyebrowClass}>
+            Frequency
+          </label>
+          <select
+            id="reminder-frequency"
+            value={recurringFrequency}
+            onChange={(e) => setRecurringFrequency(e.target.value as ReminderFrequency)}
+            className="w-full px-4 py-3 rounded-lg border-2 border-border focus:border-primary-500 focus:outline-none transition-colors text-primary"
+          >
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+            <option value="interval">Every N minutes</option>
+          </select>
+
+          {isInterval && (
+            <IntervalCadencePicker value={intervalMinutes} onChange={setIntervalMinutes} />
+          )}
+        </div>
+      )}
+
+      {/* Schedule preview */}
+      <p className="flex items-center gap-1.5 text-xs text-secondary">
+        <CalendarClock className="w-3.5 h-3.5 flex-none" />
+        {schedulePreview}
+      </p>
+
+      {/* Footer */}
+      <div className="flex justify-end gap-3 pt-2">
         <button
           type="button"
           onClick={onCancel}
-          className="px-6 py-3 bg-surface-variant text-primary rounded-lg hover:bg-border transition-all font-medium shadow-sm hover:shadow-md"
+          className="px-6 py-3 text-primary rounded-lg hover:bg-surface-variant transition-colors font-medium"
         >
           Cancel
         </button>
@@ -198,7 +326,7 @@ export const EditReminderForm: React.FC<EditReminderFormProps> = ({
           disabled={!text.trim() || ((!date || !time) && !isInterval) || isSubmitting}
           className="px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium shadow-sm hover:shadow-md"
         >
-          {isSubmitting ? 'Updating...' : 'Update Reminder'}
+          {isSubmitting ? 'Saving...' : 'Save reminder'}
         </button>
       </div>
     </form>
