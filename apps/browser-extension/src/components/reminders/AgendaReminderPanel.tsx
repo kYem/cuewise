@@ -109,6 +109,7 @@ interface AgendaGroup {
 
 /** Build groups in severity order, sorting each by dueDate ascending, dropping empties. */
 function buildGroups(reminders: Reminder[], states: Map<string, ReminderState>): AgendaGroup[] {
+  // 'done' is intentionally absent: the panel only receives active reminders (store filters completed).
   const order: { key: ReminderState; label: string }[] = [
     { key: 'notified', label: 'Needs response' },
     { key: 'overdue', label: 'Overdue' },

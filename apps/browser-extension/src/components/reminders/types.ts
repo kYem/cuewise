@@ -5,7 +5,7 @@ import type { Reminder } from '@cuewise/shared';
  * The widget (Task 5) owns the positioned wrapper; panels render only the card.
  */
 export interface ReminderPanelProps {
-  /** Active reminders; store already sorts overdue → upcoming. */
+  /** Active reminders to render — panels group and sort internally. */
   reminders: Reminder[];
   /** store.toggleReminder — advancing a recurring reminder is its "ack". */
   onToggle: (id: string) => void;

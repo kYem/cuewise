@@ -261,14 +261,11 @@ export const REMINDER_CATEGORIES: Record<ReminderCategory, string> = {
   personal: 'Personal',
 };
 
-/** Accent color + Lucide icon per reminder category, for the redesigned panels. */
-export const REMINDER_CATEGORY_META: Record<
-  ReminderCategory,
-  { color: string; icon: string; label: string }
-> = {
-  health: { color: '#34d399', icon: 'heart-pulse', label: 'Health' },
-  productivity: { color: '#60a5fa', icon: 'briefcase', label: 'Productivity' },
-  personal: { color: '#c4b5fd', icon: 'sparkles', label: 'Personal' },
+/** Accent color per reminder category, for the redesigned reminder panels. */
+export const REMINDER_CATEGORY_META: Record<ReminderCategory, { color: string }> = {
+  health: { color: '#34d399' },
+  productivity: { color: '#60a5fa' },
+  personal: { color: '#c4b5fd' },
 };
 
 // Built-in reminder templates for quick creation

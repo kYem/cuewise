@@ -24,12 +24,12 @@ function isNudging(state: ReminderState): boolean {
   return state === 'soon' || state === 'overdue' || state === 'notified';
 }
 
-/** Short time for the clock column: "Past" when overdue, else just the clock. */
+/** Short time for the clock column: "Past" for any overdue item, else the clock. */
 function clockLabel(dueDate: string): string {
-  const info = formatDueDate(dueDate);
-  if (info.isOverdue) {
+  if (new Date(dueDate).getTime() < Date.now()) {
     return 'Past';
   }
+  const info = formatDueDate(dueDate);
   return info.text.replace('Today at ', '').replace('Tomorrow at ', 'Tmrw ');
 }
 
@@ -226,7 +226,7 @@ export function ComposedReminderPanel({
   const sortedScheduled = [...scheduled].sort(
     (a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()
   );
-  // The most urgent scheduled item becomes the hero; the rest stay as rows.
+  // The earliest overdue/awaiting-response scheduled item becomes the hero; the rest stay as rows.
   const hero = sortedScheduled.find((r) => {
     const state = states.get(r.id);
     return state === 'notified' || state === 'overdue';

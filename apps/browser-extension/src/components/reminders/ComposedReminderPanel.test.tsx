@@ -62,4 +62,31 @@ describe('ComposedReminderPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Mark Drink water done' }));
     expect(props.onToggle).toHaveBeenCalledWith('habit-1');
   });
+
+  it('keeps a nudging habit visible when the collapsed strip overflows', () => {
+    // 8 interval habits exceeds the collapse threshold (6), forcing a "+N more".
+    const calm = Array.from({ length: 7 }, (_, i) =>
+      reminderFactory.build({
+        id: `habit-calm-${i}`,
+        text: `Calm habit ${i}`,
+        category: 'health',
+        dueDate: new Date(Date.now() + 2 * HOUR_MS).toISOString(),
+        recurring: { frequency: 'interval', intervalMinutes: 30 },
+      })
+    );
+    // One overdue habit must surface despite collapse via nudging-first sort.
+    const nudging = reminderFactory.build({
+      id: 'habit-nudging',
+      text: 'Stretch now',
+      category: 'health',
+      dueDate: new Date(Date.now() - HOUR_MS).toISOString(),
+      recurring: { frequency: 'interval', intervalMinutes: 30 },
+    });
+    render(<ComposedReminderPanel reminders={[...calm, nudging]} {...defaultProps()} />);
+
+    // Collapsed: an overflow control hides the surplus calm pills.
+    expect(screen.getByText('+2 more')).toBeInTheDocument();
+    // The nudging habit is surfaced first, so it stays visible.
+    expect(screen.getByText('Stretch now')).toBeInTheDocument();
+  });
 });
