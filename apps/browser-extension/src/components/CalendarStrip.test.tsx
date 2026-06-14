@@ -175,6 +175,35 @@ describe('CalendarStrip - full mode (past + now-line)', () => {
     // still render at the real past→upcoming boundary further down the list.
     expect(screen.getByText('12pm')).toBeInTheDocument();
   });
+
+  it('shows no now-line when every event is still upcoming', () => {
+    const store = createCalendarStore({
+      events: [
+        timedEvent('f1', '2026-06-14T13:00:00', '2026-06-14T14:00:00', 'Afternoon review'),
+        timedEvent('f2', '2026-06-14T15:00:00', '2026-06-14T16:00:00', 'Sync'),
+      ],
+    });
+    mountWith(store);
+
+    render(<CalendarStrip />);
+
+    // No past→upcoming transition exists, so the now-line marker must be absent.
+    expect(screen.queryByText('12pm')).not.toBeInTheDocument();
+  });
+
+  it('shows no now-line when every event is already past', () => {
+    const store = createCalendarStore({
+      events: [
+        timedEvent('p1', '2026-06-14T08:00:00', '2026-06-14T09:00:00', 'Early standup'),
+        timedEvent('p2', '2026-06-14T09:30:00', '2026-06-14T10:00:00', 'Quick sync'),
+      ],
+    });
+    mountWith(store);
+
+    render(<CalendarStrip />);
+
+    expect(screen.queryByText('12pm')).not.toBeInTheDocument();
+  });
 });
 
 describe('CalendarStrip - time formatting', () => {
