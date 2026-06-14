@@ -220,4 +220,15 @@ describe('disconnect', () => {
     expect(disconnectCalendarMock).not.toHaveBeenCalled();
     expect(useCalendarStore.getState().connected).toBe(false);
   });
+
+  it('clears state and surfaces an error when persistence fails', async () => {
+    isAvailableMock.mockReturnValue(true);
+    setCalendarStateMock.mockResolvedValue({ success: false });
+    useCalendarStore.setState({ connected: true, events: [liveEvent] });
+
+    await useCalendarStore.getState().disconnect();
+
+    expect(useCalendarStore.getState().connected).toBe(false);
+    expect(errorToastMock).toHaveBeenCalledWith('Failed to disconnect calendar');
+  });
 });
