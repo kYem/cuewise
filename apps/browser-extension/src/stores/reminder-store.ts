@@ -37,6 +37,31 @@ interface ReminderStore {
   refreshLists: () => void;
 }
 
+// Alarm scheduling is best-effort: the reminder is already saved, so a failure
+// (e.g. Chrome's alarm rate limit) must not revert it — log, and warn distinctly.
+async function clearReminderAlarm(reminderId: string): Promise<void> {
+  if (!chrome?.alarms) {
+    return;
+  }
+  try {
+    await chrome.alarms.clear(`reminder-${reminderId}`);
+  } catch (error) {
+    logger.error(`Failed to clear alarm for reminder ${reminderId}`, error);
+  }
+}
+
+async function armReminderAlarm(reminderId: string, whenMs: number): Promise<void> {
+  if (!chrome?.alarms) {
+    return;
+  }
+  try {
+    await chrome.alarms.create(`reminder-${reminderId}`, { when: whenMs });
+  } catch (error) {
+    logger.error(`Failed to schedule alarm for reminder ${reminderId}`, error);
+    useToastStore.getState().warning("Reminder saved, but we couldn't schedule its alert.");
+  }
+}
+
 /**
  * Filter reminders into upcoming and overdue categories
  */
@@ -130,14 +155,10 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
           reminders = advancedReminders;
 
           // Reschedule alarms for advanced reminders
-          if (chrome?.alarms) {
-            for (const reminder of reminders) {
-              if (reminder.recurring && !reminder.paused) {
-                await chrome.alarms.clear(`reminder-${reminder.id}`);
-                await chrome.alarms.create(`reminder-${reminder.id}`, {
-                  when: new Date(reminder.dueDate).getTime(),
-                });
-              }
+          for (const reminder of reminders) {
+            if (reminder.recurring && !reminder.paused) {
+              await clearReminderAlarm(reminder.id);
+              await armReminderAlarm(reminder.id, new Date(reminder.dueDate).getTime());
             }
           }
         }
@@ -198,11 +219,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       });
 
       // Schedule alarm for this reminder
-      if (chrome?.alarms) {
-        await chrome.alarms.create(`reminder-${newReminder.id}`, {
-          when: dueDate.getTime(),
-        });
-      }
+      await armReminderAlarm(newReminder.id, dueDate.getTime());
 
       return true;
     } catch (error) {
@@ -263,13 +280,9 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
         });
 
         // Only (re)arm an alarm when the reminder is active; a paused one must not fire.
-        if (chrome?.alarms) {
-          await chrome.alarms.clear(`reminder-${reminderId}`);
-          if (!reminder.paused) {
-            await chrome.alarms.create(`reminder-${reminderId}`, {
-              when: new Date(advancedReminder.dueDate).getTime(),
-            });
-          }
+        await clearReminderAlarm(reminderId);
+        if (!reminder.paused) {
+          await armReminderAlarm(reminderId, new Date(advancedReminder.dueDate).getTime());
         }
 
         useToastStore.getState().success('Recurring reminder advanced to next occurrence');
@@ -304,8 +317,8 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       });
 
       // Cancel alarm if completed
-      if (isCompleting && chrome?.alarms) {
-        await chrome.alarms.clear(`reminder-${reminderId}`);
+      if (isCompleting) {
+        await clearReminderAlarm(reminderId);
       }
     } catch (error) {
       logger.error('Error toggling reminder', error);
@@ -343,9 +356,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       });
 
       // Cancel alarm
-      if (chrome?.alarms) {
-        await chrome.alarms.clear(`reminder-${reminderId}`);
-      }
+      await clearReminderAlarm(reminderId);
     } catch (error) {
       logger.error('Error deleting reminder', error);
       const errorMessage = 'Failed to delete reminder. Please try again.';
@@ -387,14 +398,12 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       });
 
       // Update alarm if dueDate changed
-      if (updates.dueDate && chrome?.alarms) {
-        await chrome.alarms.clear(`reminder-${reminderId}`);
+      if (updates.dueDate) {
+        await clearReminderAlarm(reminderId);
         // Don't re-arm a paused reminder; editing it must leave it silent.
         const updatedReminder = updatedReminders.find((r) => r.id === reminderId);
         if (!updatedReminder?.paused) {
-          await chrome.alarms.create(`reminder-${reminderId}`, {
-            when: new Date(updates.dueDate).getTime(),
-          });
+          await armReminderAlarm(reminderId, new Date(updates.dueDate).getTime());
         }
       }
 
@@ -444,12 +453,8 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       });
 
       // Update alarm
-      if (chrome?.alarms) {
-        await chrome.alarms.clear(`reminder-${reminderId}`);
-        await chrome.alarms.create(`reminder-${reminderId}`, {
-          when: newDueDate.getTime(),
-        });
-      }
+      await clearReminderAlarm(reminderId);
+      await armReminderAlarm(reminderId, newDueDate.getTime());
     } catch (error) {
       logger.error('Error snoozing reminder', error);
       const errorMessage = 'Failed to snooze reminder. Please try again.';
@@ -486,14 +491,10 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       const { upcoming, overdue } = categorizeReminders(updated);
       set({ reminders: updated, upcomingReminders: upcoming, overdueReminders: overdue });
 
-      if (chrome?.alarms) {
-        if (paused) {
-          await chrome.alarms.clear(`reminder-${reminderId}`);
-        } else {
-          await chrome.alarms.create(`reminder-${reminderId}`, {
-            when: new Date(resumedDueDate).getTime(),
-          });
-        }
+      if (paused) {
+        await clearReminderAlarm(reminderId);
+      } else {
+        await armReminderAlarm(reminderId, new Date(resumedDueDate).getTime());
       }
     } catch (error) {
       logger.error('Error pausing reminder', error);
