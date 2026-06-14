@@ -84,6 +84,12 @@ export type ReminderCategory = 'health' | 'productivity' | 'personal';
 // Reminder frequency for recurring reminders and templates
 export type ReminderFrequency = 'daily' | 'weekly' | 'monthly' | 'interval';
 
+// Recurrence cadence. The union ties intervalMinutes to the 'interval' arm: an
+// interval cadence always carries it; calendar cadences never do.
+export type ReminderRecurrence =
+  | { frequency: 'daily' | 'weekly' | 'monthly' }
+  | { frequency: 'interval'; intervalMinutes: number };
+
 // Reminder interface
 export interface Reminder {
   id: string;
@@ -91,11 +97,7 @@ export interface Reminder {
   dueDate: string; // ISO date string
   completed: boolean;
   notified: boolean;
-  recurring?: {
-    frequency: ReminderFrequency;
-    // Required when frequency === 'interval'. Minutes between occurrences.
-    intervalMinutes?: number;
-  };
+  recurring?: ReminderRecurrence;
   paused?: boolean; // true when a recurring reminder is paused (won't fire)
   // Context-aware suggestions
   category?: ReminderCategory; // Optional category for suggestions
