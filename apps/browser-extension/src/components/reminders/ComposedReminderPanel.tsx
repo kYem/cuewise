@@ -1,5 +1,6 @@
 import { formatReminderCadence, REMINDER_CATEGORY_META, type Reminder } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
+import { isToday, parseISO } from 'date-fns';
 import { CheckCircle2, ChevronDown, ChevronUp, Pause, Plus } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import {
@@ -31,6 +32,26 @@ function clockLabel(dueDate: string): string {
   }
   const info = formatDueDate(dueDate);
   return info.text.replace('Today at ', '').replace('Tomorrow at ', 'Tmrw ');
+}
+
+// Compact day label for upcoming scheduled rows: "Tmrw", a short weekday, or a short date.
+function dayLabel(dueDate: string): string {
+  const date = parseISO(dueDate);
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  if (date.toDateString() === tomorrow.toDateString()) {
+    return 'Tmrw';
+  }
+  const days = Math.round((date.getTime() - Date.now()) / 86_400_000);
+  if (days >= 0 && days < 7) {
+    return date.toLocaleDateString(undefined, { weekday: 'short' });
+  }
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+/** Just the clock time for an upcoming row's second line. */
+function clockOnly(dueDate: string): string {
+  return parseISO(dueDate).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
 
 interface HabitPillProps {
@@ -178,6 +199,7 @@ interface SchedRowProps {
 
 /** Clean scheduled row: [time] · category-check · text · recurrence control. */
 function SchedRow({ reminder, state, first, onToggle, onPauseToggle }: SchedRowProps) {
+  const today = isToday(parseISO(reminder.dueDate));
   return (
     <div
       className={cn(
@@ -185,12 +207,22 @@ function SchedRow({ reminder, state, first, onToggle, onPauseToggle }: SchedRowP
         first ? 'border-t-0' : 'border-t border-border/60'
       )}
     >
-      <span className="w-16 flex-none text-xs text-secondary tabular-nums text-right whitespace-nowrap">
-        {clockLabel(reminder.dueDate)}
-      </span>
+      {today ? (
+        <span className="w-16 flex-none text-xs text-secondary tabular-nums text-right whitespace-nowrap">
+          {clockLabel(reminder.dueDate)}
+        </span>
+      ) : (
+        <span className="w-16 flex-none text-right">
+          <span className="block text-xs text-secondary">{dayLabel(reminder.dueDate)}</span>
+          <span className="block text-[11px] text-tertiary tabular-nums">
+            {clockOnly(reminder.dueDate)}
+          </span>
+        </span>
+      )}
       <ReminderCategoryCheck reminder={reminder} state={state} onToggle={onToggle} size={20} />
       <div className="flex-1 min-w-0 flex items-center gap-2">
         <span
+          title={reminder.text}
           className={cn(
             'flex-1 min-w-0 text-sm truncate',
             reminder.completed ? 'text-tertiary line-through' : 'text-primary'
@@ -247,6 +279,9 @@ export function ComposedReminderPanel({
     return state === 'notified' || state === 'overdue';
   });
   const rows = hero ? sortedScheduled.filter((r) => r.id !== hero.id) : sortedScheduled;
+  // Today's rows keep the clean clock; tomorrow-onward get their own "Upcoming" sub-group.
+  const todayRows = rows.filter((r) => isToday(parseISO(r.dueDate)));
+  const upcomingRows = rows.filter((r) => !isToday(parseISO(r.dueDate)));
   const isEmpty = reminders.length === 0;
 
   return (
@@ -298,16 +333,36 @@ export function ComposedReminderPanel({
                   />
                 </div>
               )}
-              {rows.map((reminder, index) => (
+              {todayRows.map((reminder, index) => (
                 <SchedRow
                   key={reminder.id}
                   reminder={reminder}
                   state={states.get(reminder.id) ?? 'upcoming'}
-                  first={index === 0 && !hero}
+                  first={!hero && index === 0}
                   onToggle={() => onToggle(reminder.id)}
                   onPauseToggle={onPauseToggle}
                 />
               ))}
+              {upcomingRows.length > 0 && (
+                <>
+                  <div className="flex items-center gap-1.5 pt-2.5 pb-2">
+                    <span className="text-[10.5px] font-bold tracking-wider uppercase text-tertiary">
+                      Upcoming
+                    </span>
+                    <span className="flex-1 h-px bg-border" />
+                  </div>
+                  {upcomingRows.map((reminder, index) => (
+                    <SchedRow
+                      key={reminder.id}
+                      reminder={reminder}
+                      state={states.get(reminder.id) ?? 'upcoming'}
+                      first={index === 0}
+                      onToggle={() => onToggle(reminder.id)}
+                      onPauseToggle={onPauseToggle}
+                    />
+                  ))}
+                </>
+              )}
             </div>
           )}
         </>

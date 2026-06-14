@@ -5,6 +5,20 @@ import { ComposedReminderPanel } from './ComposedReminderPanel';
 
 const HOUR_MS = 60 * 60 * 1000;
 
+/**
+ * A dueDate later TODAY: now + 2h, but if that crosses midnight, anchor to a
+ * fixed early-evening time today so the calendar day stays unambiguous.
+ */
+function laterTodayDueDate(): string {
+  const candidate = new Date(Date.now() + 2 * HOUR_MS);
+  if (candidate.getDate() !== new Date().getDate()) {
+    const earlyEvening = new Date();
+    earlyEvening.setHours(18, 0, 0, 0);
+    return earlyEvening.toISOString();
+  }
+  return candidate.toISOString();
+}
+
 function buildMixedReminders() {
   const habit = reminderFactory.build({
     id: 'habit-1',
@@ -77,6 +91,27 @@ describe('ComposedReminderPanel', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Agenda view' }));
     expect(onLayoutChange).toHaveBeenCalledWith('agenda');
+  });
+
+  it('splits tomorrow scheduled items into an Upcoming sub-group with a "Tmrw" day label', () => {
+    const todayItem = reminderFactory.build({
+      id: 'sched-today',
+      text: 'Today catch-up',
+      category: 'productivity',
+      dueDate: laterTodayDueDate(),
+    });
+    const tomorrowItem = reminderFactory.build({
+      id: 'sched-tomorrow',
+      text: 'Tomorrow planning session',
+      category: 'productivity',
+      dueDate: new Date(Date.now() + 26 * HOUR_MS).toISOString(),
+    });
+    render(<ComposedReminderPanel reminders={[todayItem, tomorrowItem]} {...defaultProps()} />);
+
+    // The tomorrow item moves under an "Upcoming" divider with a compact day label.
+    expect(screen.getByText('Upcoming')).toBeInTheDocument();
+    expect(screen.getByText('Tomorrow planning session')).toBeInTheDocument();
+    expect(screen.getByText('Tmrw')).toBeInTheDocument();
   });
 
   it('keeps a nudging habit visible when the collapsed strip overflows', () => {
