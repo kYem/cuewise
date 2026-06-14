@@ -235,7 +235,7 @@ export function ReminderPanelHeader({
           className={cn(
             'w-8 h-8 flex-none inline-flex items-center justify-center rounded-lg border',
             hasUrgent
-              ? 'bg-red-500/10 border-red-500/40 text-red-500'
+              ? 'bg-red-400/10 border-red-400/40 text-red-400'
               : 'bg-surface border-border text-primary'
           )}
         >

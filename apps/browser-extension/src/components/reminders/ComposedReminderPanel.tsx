@@ -177,7 +177,7 @@ function HabitStrip({ habits, states, onToggle, onPauseToggle }: HabitStripProps
         </span>
         <span className="text-xs text-tertiary">{habits.length}</span>
         {nudgingCount > 0 && (
-          <span className="text-xs text-primary-600">· {nudgingCount} nudging now</span>
+          <span className="text-xs text-emerald-400">· {nudgingCount} nudging now</span>
         )}
         <span className="flex-1 h-px bg-border" />
         {overflow > 0 && (

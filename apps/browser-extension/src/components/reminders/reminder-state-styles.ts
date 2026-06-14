@@ -18,10 +18,10 @@ export interface ReminderStateStyle {
 /** Severity ramp (calm primary → red), as Tailwind token classes per state. */
 export const REMINDER_STATE_STYLES: Record<ReminderState, ReminderStateStyle> = {
   notified: {
-    text: 'text-red-500',
-    border: 'border-red-500/40',
-    bg: 'bg-red-500/10',
-    chip: { bg: 'bg-red-500/20', text: 'text-red-400', border: 'border-red-500/40' },
+    text: 'text-red-400',
+    border: 'border-red-400/40',
+    bg: 'bg-red-400/10',
+    chip: { bg: 'bg-red-400/20', text: 'text-red-400', border: 'border-red-400/40' },
     label: 'Needs response',
   },
   overdue: {

@@ -214,7 +214,7 @@ export const ReminderFormBody: React.FC<ReminderFormBodyProps> = ({
       {/* Reminder Text */}
       <div>
         <label htmlFor="reminder-text" className={cn(eyebrowClass, 'mb-2')}>
-          Reminder <span className="text-red-500">*</span>
+          Reminder <span className="text-red-400">*</span>
         </label>
         <textarea
           id="reminder-text"
@@ -233,7 +233,7 @@ export const ReminderFormBody: React.FC<ReminderFormBodyProps> = ({
       {!isInterval && (
         <div className="space-y-3">
           <span className={eyebrowClass}>
-            Starts <span className="text-red-500">*</span>
+            Starts <span className="text-red-400">*</span>
           </span>
 
           <div className="flex flex-wrap gap-2">

@@ -148,7 +148,7 @@ export const ReminderWidget: React.FC = () => {
           className={cn(
             'relative p-3 rounded-full shadow-lg hover:shadow-xl hover:scale-105 transition-all',
             'bg-surface/90 backdrop-blur-sm border',
-            error ? 'border-orange-500/50' : hasOverdue ? 'border-red-500/50' : 'border-border'
+            error ? 'border-orange-500/50' : hasOverdue ? 'border-red-400/50' : 'border-border'
           )}
           aria-label={
             error
@@ -159,7 +159,7 @@ export const ReminderWidget: React.FC = () => {
           {error ? (
             <AlertCircle className="w-6 h-6 text-orange-500" />
           ) : (
-            <Bell className={cn('w-6 h-6', hasOverdue ? 'text-red-500' : 'text-primary-600')} />
+            <Bell className={cn('w-6 h-6', hasOverdue ? 'text-red-400' : 'text-primary-600')} />
           )}
 
           {/* Error Badge */}
@@ -175,7 +175,7 @@ export const ReminderWidget: React.FC = () => {
               className={cn(
                 'absolute -top-1 -right-1 min-w-[20px] h-5 flex items-center justify-center',
                 'text-xs font-bold rounded-full',
-                hasOverdue ? 'bg-red-500 text-white' : 'bg-primary-600 text-white'
+                hasOverdue ? 'bg-red-400 text-white' : 'bg-primary-600 text-white'
               )}
             >
               {totalCount > 9 ? '9+' : totalCount}
