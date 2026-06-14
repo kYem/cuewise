@@ -47,6 +47,7 @@ import {
   reorderGoals,
   resolveReminderNotificationAction,
   shouldShowReviewPrompt,
+  skipReminderOccurrence,
   toggleSubtaskInGoal,
 } from './utils';
 
@@ -1441,6 +1442,66 @@ describe('nextReminderDueDate', () => {
       recurring: { frequency: 'weekly' as const },
     };
     expect(nextReminderDueDate(reminder, now).toISOString()).toBe('2026-06-19T08:00:00.000Z');
+  });
+});
+
+describe('skipReminderOccurrence', () => {
+  const base = {
+    id: 'r1',
+    text: 'x',
+    completed: false,
+    notified: false,
+  } as const;
+
+  it('adds one cadence to the scheduled dueDate for interval reminders', () => {
+    const dueTime = new Date('2026-06-13T09:30:00.000Z').getTime();
+    const reminder = {
+      ...base,
+      dueDate: new Date(dueTime).toISOString(),
+      recurring: { frequency: 'interval' as const, intervalMinutes: 30 },
+    };
+    expect(skipReminderOccurrence(reminder).getTime()).toBe(dueTime + 30 * 60_000);
+  });
+
+  it('advances a daily reminder one day keeping its clock time', () => {
+    // 9pm local today → 9pm local tomorrow, regardless of "now".
+    const due = new Date(2026, 5, 13, 21, 0, 0, 0);
+    const reminder = {
+      ...base,
+      dueDate: due.toISOString(),
+      recurring: { frequency: 'daily' as const },
+    };
+    const result = skipReminderOccurrence(reminder);
+    expect(result.getHours()).toBe(21);
+    expect(result.getMinutes()).toBe(0);
+    expect(result.getDate()).toBe(due.getDate() + 1);
+  });
+
+  it('advances a weekly reminder by 7 days keeping its clock time', () => {
+    const due = new Date(2026, 5, 12, 8, 15, 0, 0);
+    const reminder = {
+      ...base,
+      dueDate: due.toISOString(),
+      recurring: { frequency: 'weekly' as const },
+    };
+    const result = skipReminderOccurrence(reminder);
+    expect(result.getTime()).toBe(due.getTime() + 7 * 24 * 60 * 60_000);
+    expect(result.getHours()).toBe(8);
+    expect(result.getMinutes()).toBe(15);
+  });
+
+  it('advances a monthly reminder by one month keeping its day and clock time', () => {
+    const due = new Date(2026, 5, 10, 8, 0, 0, 0); // June 10
+    const reminder = {
+      ...base,
+      dueDate: due.toISOString(),
+      recurring: { frequency: 'monthly' as const },
+    };
+    const result = skipReminderOccurrence(reminder);
+    expect(result.getMonth()).toBe(6); // July
+    expect(result.getDate()).toBe(10);
+    expect(result.getHours()).toBe(8);
+    expect(result.getMinutes()).toBe(0);
   });
 });
 

@@ -5,6 +5,7 @@ import {
   type Reminder,
   type ReminderCategory,
   type ReminderFrequency,
+  skipReminderOccurrence,
 } from '@cuewise/shared';
 import { getReminders, setReminders } from '@cuewise/storage';
 import { create } from 'zustand';
@@ -209,7 +210,14 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       // Any recurring reminder (active OR paused) advances to its next occurrence
       // instead of being marked complete, which would permanently destroy it.
       if (isCompleting && reminder.recurring) {
-        const nextDueDate = nextReminderDueDate(reminder, new Date());
+        const now = new Date();
+        // A not-yet-due occurrence is skipped to the one after it (calendar reminders keep
+        // their clock time, e.g. tonight 9pm → tomorrow 9pm); a due/overdue one restarts
+        // its cadence from now.
+        const isFutureOccurrence = new Date(reminder.dueDate).getTime() > now.getTime();
+        const nextDueDate = isFutureOccurrence
+          ? skipReminderOccurrence(reminder)
+          : nextReminderDueDate(reminder, now);
 
         // The full spread preserves paused/recurring, so a paused reminder stays paused.
         const advancedReminder: Reminder = {

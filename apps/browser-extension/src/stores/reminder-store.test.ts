@@ -103,6 +103,47 @@ describe('toggleReminder on a paused recurring reminder', () => {
   });
 });
 
+describe('toggleReminder on a future recurring reminder', () => {
+  it('skips the upcoming interval occurrence (dueDate + cadence, not now + cadence)', async () => {
+    const reminder = recurringReminderFactory.build({
+      id: 'future-interval',
+      text: 'Move',
+      dueDate: new Date(Date.now() + 30 * 60_000).toISOString(),
+      recurring: { frequency: 'interval', intervalMinutes: 30 },
+    });
+    const dueTime = new Date(reminder.dueDate).getTime();
+    useReminderStore.setState({ reminders: [reminder] });
+
+    await useReminderStore.getState().toggleReminder('future-interval');
+
+    const updated = useReminderStore.getState().reminders[0];
+    // Deterministic: skip anchors to the scheduled dueDate, not to "now".
+    expect(new Date(updated.dueDate).getTime()).toBe(dueTime + 30 * 60_000);
+    expect(updated.completed).toBe(false);
+  });
+
+  it('advances a future daily occurrence one day keeping the clock time', async () => {
+    const reminder = recurringReminderFactory.build({
+      id: 'future-daily',
+      text: 'Stand up',
+      dueDate: new Date(Date.now() + 2 * 60 * 60_000).toISOString(),
+      recurring: { frequency: 'daily' },
+    });
+    const dueDate = new Date(reminder.dueDate);
+    const dueTime = dueDate.getTime();
+    useReminderStore.setState({ reminders: [reminder] });
+
+    await useReminderStore.getState().toggleReminder('future-daily');
+
+    const updated = new Date(useReminderStore.getState().reminders[0].dueDate);
+    expect(updated.getHours()).toBe(dueDate.getHours());
+    expect(updated.getMinutes()).toBe(dueDate.getMinutes());
+    // ~24h later; DST-safe bounds.
+    expect(updated.getTime()).toBeGreaterThan(dueTime + 23 * 60 * 60_000);
+    expect(updated.getTime()).toBeLessThan(dueTime + 25 * 60 * 60_000);
+  });
+});
+
 describe('categorizeReminders with a paused reminder', () => {
   const pausedPastReminder = recurringReminderFactory.build({
     id: 'paused-2',
