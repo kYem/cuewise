@@ -161,7 +161,8 @@ describe('ComposedReminderPanel', () => {
   });
 
   it('keeps a nudging habit visible when the collapsed strip overflows', () => {
-    // Short titles let the dynamic cap land at its max of 4; 6 habits then overflow by 2.
+    // Six habits exceed the dynamic cap (max 4), so the strip always overflows —
+    // the exact surplus depends on cap tuning, which this test must not pin.
     const shortTitles = ['Go', 'Up', 'Be', 'Do', 'Hi'];
     const calm = shortTitles.map((title, i) =>
       reminderFactory.build({
@@ -182,9 +183,9 @@ describe('ComposedReminderPanel', () => {
     });
     render(<ComposedReminderPanel reminders={[...calm, nudging]} {...defaultProps()} />);
 
-    // Collapsed: the dynamic cap shows 4 pills, an overflow control hides the surplus 2.
-    expect(screen.getByText('+2 more')).toBeInTheDocument();
-    // The nudging habit is surfaced first, so it stays visible.
+    // Collapsed: the strip caps the pills and a "+N more" control hides the surplus.
+    expect(screen.getByText(/\+\d+ more/)).toBeInTheDocument();
+    // The nudging habit is surfaced first (nudging-first sort), so it stays visible.
     expect(screen.getByText('Ok')).toBeInTheDocument();
   });
 
