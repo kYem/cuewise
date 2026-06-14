@@ -1,6 +1,22 @@
-import { formatReminderCadence, REMINDER_CATEGORY_META, type Reminder } from '@cuewise/shared';
+import {
+  formatReminderCadence,
+  REMINDER_CATEGORY_META,
+  type Reminder,
+  type ReminderPanelLayout,
+} from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
-import { AlarmClock, AlertCircle, Bell, BellRing, Check, Pause, Play, Repeat } from 'lucide-react';
+import {
+  AlarmClock,
+  AlertCircle,
+  Bell,
+  BellRing,
+  CalendarClock,
+  Check,
+  LayoutList,
+  Pause,
+  Play,
+  Repeat,
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
 import emptyRemindersAnimation from '../../assets/lottie/empty/reminders.json';
 import type { ReminderState } from '../../utils/reminder-classify';
@@ -152,35 +168,87 @@ export function ReminderSnoozeRow({ onSnooze, state = 'soon' }: ReminderSnoozeRo
   );
 }
 
+interface LayoutSwitchProps {
+  layout: ReminderPanelLayout;
+  onLayoutChange: (layout: ReminderPanelLayout) => void;
+}
+
+/** Compact 2-button segmented pill to flip the panel layout in place. */
+function LayoutSwitch({ layout, onLayoutChange }: LayoutSwitchProps) {
+  return (
+    <div className="flex-none inline-flex items-center gap-0.5 rounded-full border border-border bg-surface-variant p-0.5">
+      <button
+        type="button"
+        onClick={() => onLayoutChange('composed')}
+        aria-label="Composed view"
+        title="Composed view"
+        className={cn(
+          'p-1.5 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500',
+          layout === 'composed'
+            ? 'bg-surface text-primary-600 shadow-sm'
+            : 'text-tertiary hover:text-primary'
+        )}
+      >
+        <LayoutList className="w-3.5 h-3.5" />
+      </button>
+      <button
+        type="button"
+        onClick={() => onLayoutChange('agenda')}
+        aria-label="Agenda view"
+        title="Agenda view"
+        className={cn(
+          'p-1.5 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500',
+          layout === 'agenda'
+            ? 'bg-surface text-primary-600 shadow-sm'
+            : 'text-tertiary hover:text-primary'
+        )}
+      >
+        <CalendarClock className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  );
+}
+
 interface ReminderPanelHeaderProps {
   count: number;
   hasUrgent: boolean;
   subNote?: { text: string; tone?: ReminderState };
+  layout?: ReminderPanelLayout;
+  onLayoutChange?: (layout: ReminderPanelLayout) => void;
 }
 
-/** Panel header: bell tile (red when urgent), title + count, optional sub-note. */
-export function ReminderPanelHeader({ count, hasUrgent, subNote }: ReminderPanelHeaderProps) {
+/** Panel header: bell tile (red when urgent), title + count, optional sub-note and layout switcher. */
+export function ReminderPanelHeader({
+  count,
+  hasUrgent,
+  subNote,
+  layout,
+  onLayoutChange,
+}: ReminderPanelHeaderProps) {
   const noteTone = subNote?.tone ? REMINDER_STATE_STYLES[subNote.tone].text : 'text-secondary';
 
   return (
-    <div className="flex items-center gap-2.5 min-w-0">
-      <span
-        className={cn(
-          'w-8 h-8 flex-none inline-flex items-center justify-center rounded-lg border',
-          hasUrgent
-            ? 'bg-red-500/10 border-red-500/40 text-red-500'
-            : 'bg-surface border-border text-primary'
-        )}
-      >
-        <Bell className="w-4 h-4" />
-      </span>
-      <div className="min-w-0">
-        <div className="flex items-baseline gap-1.5">
-          <span className="font-display font-semibold text-base text-primary">Reminders</span>
-          {count > 0 && <span className="text-sm text-secondary">{count}</span>}
+    <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center gap-2.5 min-w-0">
+        <span
+          className={cn(
+            'w-8 h-8 flex-none inline-flex items-center justify-center rounded-lg border',
+            hasUrgent
+              ? 'bg-red-500/10 border-red-500/40 text-red-500'
+              : 'bg-surface border-border text-primary'
+          )}
+        >
+          <Bell className="w-4 h-4" />
+        </span>
+        <div className="min-w-0">
+          <div className="flex items-baseline gap-1.5">
+            <span className="font-display font-semibold text-base text-primary">Reminders</span>
+            {count > 0 && <span className="text-sm text-secondary">{count}</span>}
+          </div>
+          {subNote && <div className={cn('text-xs mt-0.5', noteTone)}>{subNote.text}</div>}
         </div>
-        {subNote && <div className={cn('text-xs mt-0.5', noteTone)}>{subNote.text}</div>}
       </div>
+      {layout && onLayoutChange && <LayoutSwitch layout={layout} onLayoutChange={onLayoutChange} />}
     </div>
   );
 }

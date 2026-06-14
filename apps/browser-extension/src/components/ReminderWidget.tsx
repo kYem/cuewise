@@ -9,7 +9,12 @@ import { EditReminderForm } from './EditReminderForm';
 import { ErrorFallback } from './ErrorFallback';
 import { Modal } from './Modal';
 import { ReminderItem } from './ReminderItem';
-import { AgendaReminderPanel, ComposedReminderPanel, EmptyReminders } from './reminders';
+import {
+  AgendaReminderPanel,
+  ComposedReminderPanel,
+  EmptyReminders,
+  type ReminderPanelProps,
+} from './reminders';
 
 /**
  * Floating reminder widget in the bottom-right corner. The bell expands the
@@ -31,6 +36,7 @@ export const ReminderWidget: React.FC = () => {
 
   const showThemeSwitcher = useSettingsStore((state) => state.settings.showThemeSwitcher);
   const reminderPanelLayout = useSettingsStore((state) => state.settings.reminderPanelLayout);
+  const updateSettings = useSettingsStore((state) => state.updateSettings);
 
   const [isExpanded, setIsExpanded] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -67,13 +73,15 @@ export const ReminderWidget: React.FC = () => {
   const hasOverdue = overdueReminders.length > 0;
 
   // Bind store actions to the shared panel contract (both layouts use this).
-  const panelProps = {
+  const panelProps: ReminderPanelProps = {
     reminders: allActiveReminders,
     onToggle: toggleReminder,
     onSnooze: snoozeReminder,
     onPauseToggle: setReminderPaused,
     onAdd: () => setIsAddModalOpen(true),
     onManage: () => setShowAllModal(true),
+    layout: reminderPanelLayout,
+    onLayoutChange: (next) => updateSettings({ reminderPanelLayout: next }),
   };
 
   // Find reminder being edited

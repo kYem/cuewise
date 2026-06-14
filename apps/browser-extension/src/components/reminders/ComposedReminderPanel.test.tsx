@@ -63,6 +63,22 @@ describe('ComposedReminderPanel', () => {
     expect(props.onToggle).toHaveBeenCalledWith('habit-1');
   });
 
+  it('switches layout via the in-header view switcher', () => {
+    const { habit } = buildMixedReminders();
+    const onLayoutChange = vi.fn();
+    render(
+      <ComposedReminderPanel
+        reminders={[habit]}
+        {...defaultProps()}
+        layout="composed"
+        onLayoutChange={onLayoutChange}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Agenda view' }));
+    expect(onLayoutChange).toHaveBeenCalledWith('agenda');
+  });
+
   it('keeps a nudging habit visible when the collapsed strip overflows', () => {
     // 8 interval habits exceeds the collapse threshold (6), forcing a "+N more".
     const calm = Array.from({ length: 7 }, (_, i) =>

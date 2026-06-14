@@ -1,4 +1,4 @@
-import type { Reminder } from '@cuewise/shared';
+import type { Reminder, ReminderPanelLayout } from '@cuewise/shared';
 
 /**
  * Shared contract for every reminders-panel layout variant (Composed, etc.).
@@ -17,4 +17,7 @@ export interface ReminderPanelProps {
   onAdd: () => void;
   /** Optional: open the "all reminders" manage modal (edit/delete live there). */
   onManage?: () => void;
+  /** Current panel layout + setter, to show an in-header view switcher. When omitted, no switcher renders. */
+  layout?: ReminderPanelLayout;
+  onLayoutChange?: (layout: ReminderPanelLayout) => void;
 }

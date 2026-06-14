@@ -1,6 +1,6 @@
 import { formatReminderCadence, REMINDER_CATEGORY_META, type Reminder } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
-import { Check, ChevronDown, ChevronUp, Pause, Plus } from 'lucide-react';
+import { CheckCircle2, ChevronDown, ChevronUp, Pause, Plus } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import {
   classifyReminder,
@@ -47,18 +47,30 @@ interface HabitPillProps {
  */
 function HabitPill({ reminder, state, onToggle, onPauseToggle }: HabitPillProps) {
   const [hover, setHover] = useState(false);
+  // Brief tick confirmation after a tap — acking just re-anchors the timer, so
+  // without this the pill looks like nothing happened.
+  const [justAcked, setJustAcked] = useState(false);
   const paused = reminder.paused === true;
   const nudging = isNudging(state);
   const category = reminder.category ?? 'productivity';
   const categoryColor = REMINDER_CATEGORY_META[category].color;
-  const showCheck = nudging || (!paused && hover);
+  const showCheck = nudging || justAcked || (!paused && hover);
   const cadence = reminder.recurring ? formatReminderCadence(reminder.recurring) : '';
+
+  useEffect(() => {
+    if (!justAcked) {
+      return;
+    }
+    const timer = setTimeout(() => setJustAcked(false), 900);
+    return () => clearTimeout(timer);
+  }, [justAcked]);
 
   function handleClick() {
     if (paused) {
       onPauseToggle(reminder.id, false);
       return;
     }
+    setJustAcked(true);
     onToggle();
   }
 
@@ -74,17 +86,18 @@ function HabitPill({ reminder, state, onToggle, onPauseToggle }: HabitPillProps)
         'inline-flex items-center gap-2 pl-2.5 pr-3 py-1.5 rounded-full border transition-all',
         'focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1',
         nudging && 'animate-pulse',
+        justAcked && 'scale-105',
         paused
           ? 'bg-surface-variant border-border text-tertiary'
           : 'bg-surface border-border text-primary hover:border-primary-300'
       )}
-      style={nudging ? { borderColor: categoryColor } : undefined}
+      style={nudging || justAcked ? { borderColor: categoryColor } : undefined}
     >
       <span className="inline-flex items-center justify-center w-4 h-4 flex-none">
         {paused ? (
           <Pause className="w-3 h-3 text-tertiary" />
         ) : showCheck ? (
-          <Check className="w-3.5 h-3.5" strokeWidth={2.5} style={{ color: categoryColor }} />
+          <CheckCircle2 className="w-4 h-4" strokeWidth={2.5} style={{ color: categoryColor }} />
         ) : (
           <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: categoryColor }} />
         )}
@@ -203,6 +216,8 @@ export function ComposedReminderPanel({
   onPauseToggle,
   onAdd,
   onManage,
+  layout,
+  onLayoutChange,
 }: ReminderPanelProps) {
   // Force a re-render each second so classification and countdowns stay fresh.
   const [, setTick] = useState(0);
@@ -241,6 +256,8 @@ export function ComposedReminderPanel({
           count={reminders.length}
           hasUrgent={hasUrgent}
           subNote={{ text: `${habits.length} habits · ${scheduled.length} scheduled` }}
+          layout={layout}
+          onLayoutChange={onLayoutChange}
         />
       </div>
 

@@ -171,6 +171,8 @@ export function AgendaReminderPanel({
   onPauseToggle,
   onAdd,
   onManage,
+  layout,
+  onLayoutChange,
 }: ReminderPanelProps) {
   // Force a re-render each second so classification and countdowns stay fresh.
   const [, setTick] = useState(0);
@@ -197,7 +199,13 @@ export function AgendaReminderPanel({
   return (
     <div className="w-[380px] rounded-2xl bg-surface/95 backdrop-blur-xl border border-border shadow-2xl overflow-hidden">
       <div className="px-4 pt-4 pb-3">
-        <ReminderPanelHeader count={reminders.length} hasUrgent={hasUrgent} subNote={subNote} />
+        <ReminderPanelHeader
+          count={reminders.length}
+          hasUrgent={hasUrgent}
+          subNote={subNote}
+          layout={layout}
+          onLayoutChange={onLayoutChange}
+        />
       </div>
 
       {isEmpty ? (
