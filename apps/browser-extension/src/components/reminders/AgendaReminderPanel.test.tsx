@@ -40,7 +40,7 @@ function buildReminders() {
 
 /** The group wrapper for a header label, so we can scope queries to one group. */
 function groupContainerFor(label: string): HTMLElement {
-  const container = screen.getByText(label).closest('.mb-2');
+  const container = screen.getByText(label).closest('.mb-1\\.5');
   expect(container).toBeInstanceOf(HTMLElement);
   return container as HTMLElement;
 }

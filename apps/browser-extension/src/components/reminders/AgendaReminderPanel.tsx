@@ -82,9 +82,9 @@ function AgendaRow({
         <div className="mt-1.5">
           <ReminderCategoryCheck reminder={reminder} state={state} onToggle={onToggle} size={24} />
         </div>
-        {!last && <span className="flex-1 w-0.5 bg-border mt-1 min-h-[14px]" />}
+        {!last && <span className="flex-1 w-0.5 bg-border mt-1 min-h-[10px]" />}
       </div>
-      <div className={cn('flex-1 min-w-0 pt-1', last ? 'pb-0' : 'pb-4')}>
+      <div className={cn('flex-1 min-w-0 pt-0.5', last ? 'pb-0' : 'pb-3')}>
         <span
           className={cn(
             'block text-sm leading-snug',
@@ -94,12 +94,12 @@ function AgendaRow({
           {reminder.text}
         </span>
         {reminder.recurring && (
-          <div className="mt-1.5">
+          <div className="mt-1">
             <RecurrencePauseControl reminder={reminder} onPauseToggle={onPauseToggle} />
           </div>
         )}
         {expand && (
-          <div className="mt-2.5">
+          <div className="mt-2">
             <ReminderSnoozeRow onSnooze={onSnooze} state={state} />
           </div>
         )}
@@ -223,8 +223,8 @@ export function AgendaReminderPanel({
               overflow > 0 && !isExpanded ? group.items.slice(0, GROUP_LIMIT) : group.items;
 
             return (
-              <div key={group.key} className="mb-2">
-                <div className="flex items-center gap-1.5 pt-1.5 pb-2.5">
+              <div key={group.key} className="mb-1.5">
+                <div className="flex items-center gap-1.5 pt-1 pb-2">
                   <span
                     className={cn(
                       'text-[10.5px] font-bold tracking-wider uppercase',

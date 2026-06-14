@@ -209,7 +209,7 @@ function SchedRow({ reminder, state, first, timeFormat, onToggle, onPauseToggle 
   return (
     <div
       className={cn(
-        'flex items-center gap-3 py-2.5',
+        'flex items-center gap-3 py-2',
         first ? 'border-t-0' : 'border-t border-border/60'
       )}
     >
@@ -326,7 +326,7 @@ export function ComposedReminderPanel({
       ) : (
         <>
           {habits.length > 0 && (
-            <div className="px-4 pb-3.5">
+            <div className="px-4 pb-3">
               <HabitStrip
                 habits={habits}
                 states={states}
@@ -338,7 +338,7 @@ export function ComposedReminderPanel({
 
           {scheduled.length > 0 && (
             <div className="px-4 pb-1.5">
-              <div className="flex items-center gap-1.5 pt-1 pb-3">
+              <div className="flex items-center gap-1.5 pt-0.5 pb-2">
                 <span className="text-[10.5px] font-bold tracking-wider uppercase text-secondary">
                   Scheduled
                 </span>
@@ -360,7 +360,7 @@ export function ComposedReminderPanel({
                 <span className="flex-1 h-px bg-border" />
               </div>
               {hero && (
-                <div className="mb-3.5">
+                <div className="mb-3">
                   <ReminderHeroCard
                     reminder={hero}
                     state={states.get(hero.id) ?? 'upcoming'}
