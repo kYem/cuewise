@@ -4,6 +4,7 @@ import {
   NOTIFICATION_SOUNDS,
   type NotificationSoundType,
   type QuoteDisplayMode,
+  type ReminderPanelLayout,
   type SettingsLogLevel,
   type TimeFormat,
 } from '@cuewise/shared';
@@ -68,6 +69,11 @@ const FOCUS_POSITION_OPTIONS: { value: FocusPosition; label: string }[] = [
 const TIME_FORMAT_OPTIONS: { value: TimeFormat; label: string }[] = [
   { value: '12h', label: '2:30 PM' },
   { value: '24h', label: '14:30' },
+];
+
+const REMINDER_LAYOUT_OPTIONS: { value: ReminderPanelLayout; label: string }[] = [
+  { value: 'composed', label: 'Composed' },
+  { value: 'agenda', label: 'Agenda' },
 ];
 
 const QUOTE_UNIT_OPTIONS: { value: 'sec' | 'min'; label: string }[] = [
@@ -528,6 +534,19 @@ function GoalsSection({ s, set, filter }: SettingsSectionProps) {
         />
       </SettingRow>
       <SettingRow
+        label="Reminders layout"
+        filter={filter}
+        help="How the reminders panel is arranged — Composed (habits + timeline) or Agenda (time rail)"
+        keywords="reminders layout composed agenda timeline panel habits"
+      >
+        <Segmented
+          value={s.reminderPanelLayout}
+          options={REMINDER_LAYOUT_OPTIONS}
+          onChange={(v) => set({ reminderPanelLayout: v })}
+        />
+      </SettingRow>
+      <SettingDivider />
+      <SettingRow
         label="Celebrate completions"
         filter={filter}
         help="A short animation when you finish a session or all of today's goals"
@@ -706,7 +725,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     icon: Bell,
     component: GoalsSection,
     terms:
-      'goals alerts notifications celebrate completions carry transfer tomorrow end of day reminders',
+      'goals alerts notifications celebrate completions carry transfer tomorrow end of day reminders layout composed agenda timeline panel',
   },
   {
     id: 'advanced',

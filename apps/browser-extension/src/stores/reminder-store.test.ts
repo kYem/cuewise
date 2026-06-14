@@ -1,5 +1,5 @@
 import * as storage from '@cuewise/storage';
-import { recurringReminderFactory } from '@cuewise/test-utils/factories';
+import { recurringReminderFactory, reminderFactory } from '@cuewise/test-utils/factories';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useReminderStore } from './reminder-store';
 
@@ -204,6 +204,32 @@ describe('updateReminder keeping recurrence', () => {
   });
 });
 
+describe('fireDueReminders', () => {
+  it('marks past-due active reminders as notified while leaving future ones untouched', async () => {
+    const due = reminderFactory.build({
+      id: 'due-1',
+      text: 'Stand up',
+      dueDate: new Date(Date.now() - 60_000).toISOString(),
+      notified: false,
+    });
+    const future = reminderFactory.build({
+      id: 'future-1',
+      text: 'Later',
+      dueDate: new Date(Date.now() + 60 * 60_000).toISOString(),
+      notified: false,
+    });
+    useReminderStore.setState({ reminders: [due, future] });
+
+    await useReminderStore.getState().fireDueReminders();
+
+    const { reminders } = useReminderStore.getState();
+    const updatedDue = reminders.find((r) => r.id === 'due-1');
+    const updatedFuture = reminders.find((r) => r.id === 'future-1');
+    expect(updatedDue?.notified).toBe(true);
+    expect(updatedFuture?.notified).toBe(false);
+  });
+});
+
 describe('addReminder with an interval recurrence', () => {
   it('schedules the alarm at the reminder due date', async () => {
     const dueDate = new Date(Date.now() + 60_000);
@@ -215,5 +241,28 @@ describe('addReminder with an interval recurrence', () => {
 
     const id = useReminderStore.getState().reminders[0].id;
     expect(alarmsMock.create).toHaveBeenCalledWith(`reminder-${id}`, { when: dueDate.getTime() });
+  });
+});
+
+describe('snoozeReminder', () => {
+  it('reschedules an overdue reminder to N minutes from now, not from its past due date', async () => {
+    const overdue = reminderFactory.build({
+      id: 'snooze-1',
+      text: 'Submit report',
+      dueDate: new Date(Date.now() - 90 * 60_000).toISOString(), // 90 min overdue
+      notified: true,
+    });
+    useReminderStore.setState({ reminders: [overdue] });
+
+    const before = Date.now();
+    await useReminderStore.getState().snoozeReminder('snooze-1', 5);
+
+    const updated = useReminderStore.getState().reminders[0];
+    const newDue = new Date(updated.dueDate).getTime();
+    // Snoozed to ~now + 5 min (future), not 85 min still in the past; notified cleared.
+    expect(newDue).toBeGreaterThanOrEqual(before + 5 * 60_000);
+    expect(newDue).toBeLessThanOrEqual(Date.now() + 5 * 60_000 + 1000);
+    expect(updated.notified).toBe(false);
+    expect(alarmsMock.create).toHaveBeenCalledWith('reminder-snooze-1', { when: newDue });
   });
 });

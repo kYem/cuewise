@@ -31,6 +31,7 @@ import {
   exportMonthlyTrendsCSV,
   exportPomodoroSessionsCSV,
   exportWeeklyTrendsCSV,
+  formatCompactInterval,
   formatReminderCadence,
   getDueDateLabel,
   getNextDayDateString,
@@ -1385,6 +1386,22 @@ describe('clampIntervalMinutes', () => {
     expect(clampIntervalMinutes(Number.NaN)).toBe(DEFAULT_REMINDER_INTERVAL_MINUTES);
     expect(clampIntervalMinutes(Number.POSITIVE_INFINITY)).toBe(REMINDER_INTERVAL_MAX);
     expect(clampIntervalMinutes(Number.NEGATIVE_INFINITY)).toBe(REMINDER_INTERVAL_MIN);
+  });
+});
+
+describe('formatCompactInterval', () => {
+  it('renders sub-hour minutes with an "m" suffix', () => {
+    expect(formatCompactInterval(30)).toBe('30m');
+    expect(formatCompactInterval(45)).toBe('45m');
+  });
+
+  it('renders whole hours with an "h" suffix', () => {
+    expect(formatCompactInterval(60)).toBe('1h');
+    expect(formatCompactInterval(180)).toBe('3h');
+  });
+
+  it('renders hours and minutes together', () => {
+    expect(formatCompactInterval(90)).toBe('1h 30m');
   });
 });
 
