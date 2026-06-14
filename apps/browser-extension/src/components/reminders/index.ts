@@ -1,3 +1,4 @@
+export { AgendaReminderPanel } from './AgendaReminderPanel';
 export {
   EmptyReminders,
   RecurrencePauseControl,
