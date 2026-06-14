@@ -114,7 +114,7 @@ export function formatCountdown(dueDate: string): string {
   const seconds = differenceInSeconds(date, now);
 
   if (seconds < 0) {
-    return 'Now!';
+    return 'Now';
   }
   if (seconds < 60) {
     return `${seconds}s`;
