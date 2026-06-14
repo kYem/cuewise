@@ -67,7 +67,21 @@ export const CalendarStrip: React.FC<CalendarStripProps> = ({ lean = false }) =>
   // All-day events carry a date-only string (UTC-parsed), so never treat them as
   // past — they span the whole day and shouldn't be struck through or filtered.
   const isPast = (e: CalendarEvent) => !e.allDay && new Date(e.end) < now;
-  const visible = lean ? events.filter((e) => !isPast(e)).slice(0, 3) : events;
+
+  // Lean "Up next": timed events first so all-day banners (never past, sorted
+  // first by the API) don't fill all three slots and hide actual meetings.
+  let visible = events;
+  if (lean) {
+    const upcoming = events.filter((e) => !isPast(e));
+    visible = [...upcoming.filter((e) => !e.allDay), ...upcoming.filter((e) => e.allDay)].slice(
+      0,
+      3
+    );
+  }
+
+  // Single now-line before the first upcoming event (only when something is
+  // already past). Computed once so overlapping events can't draw it twice.
+  const nowLineIndex = lean ? -1 : visible.findIndex((e) => !isPast(e));
 
   const syncStatus = (
     <span className="flex items-center gap-1.5 text-xs text-white/55">
@@ -99,8 +113,7 @@ export const CalendarStrip: React.FC<CalendarStripProps> = ({ lean = false }) =>
         <div className="flex flex-col">
           {visible.map((event, i) => {
             const past = !lean && isPast(event);
-            const prev = visible[i - 1];
-            const showNow = !lean && prev && isPast(prev) && !isPast(event);
+            const showNow = i === nowLineIndex && nowLineIndex > 0;
             return (
               <Fragment key={event.id}>
                 {showNow && (

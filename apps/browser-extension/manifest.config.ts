@@ -15,9 +15,11 @@ export default defineManifest(async (env) => {
   // Cuewise API for dynamic content loading and YouTube proxy page
   const hostPermissions: string[] = ['https://images.unsplash.com/*', 'https://*.cuewise.app/*'];
 
-  // googleapis host only when the Google Calendar integration is configured
+  // googleapis (Calendar API) + oauth2 (token revoke on disconnect) hosts, only
+  // when the Google Calendar integration is configured
   if (calendarEnabled) {
     hostPermissions.push('https://www.googleapis.com/*');
+    hostPermissions.push('https://oauth2.googleapis.com/*');
   }
 
   // Add host_permissions for dev server in development mode only
