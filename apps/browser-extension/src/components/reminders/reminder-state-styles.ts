@@ -1,0 +1,62 @@
+import type { ReminderCategory } from '@cuewise/shared';
+import { Briefcase, HeartPulse, type LucideIcon, Sparkles } from 'lucide-react';
+import type { ReminderState } from '../../utils/reminder-classify';
+
+export interface ReminderStateStyle {
+  /** Foreground/accent text class. */
+  text: string;
+  /** Border class. */
+  border: string;
+  /** Background class. */
+  bg: string;
+  /** Human-readable state label. */
+  label: string;
+  /** Whether the state should pulse (only `notified`). */
+  pulse?: boolean;
+}
+
+/**
+ * Severity ramp mapped to design tokens (calm primary → red), mirroring the
+ * glass `R_STATE` palette from the design handoff. `notified` is the loudest:
+ * the alarm already fired and is awaiting a response, so it pulses.
+ */
+export const REMINDER_STATE_STYLES: Record<ReminderState, ReminderStateStyle> = {
+  notified: {
+    text: 'text-red-500',
+    border: 'border-red-500/40',
+    bg: 'bg-red-500/10',
+    label: 'Needs response',
+    pulse: true,
+  },
+  overdue: {
+    text: 'text-orange-500',
+    border: 'border-orange-500/30',
+    bg: 'bg-orange-500/10',
+    label: 'Overdue',
+  },
+  soon: {
+    text: 'text-amber-500',
+    border: 'border-amber-500/30',
+    bg: 'bg-amber-500/10',
+    label: 'Due soon',
+  },
+  upcoming: {
+    text: 'text-primary-600',
+    border: 'border-border',
+    bg: 'bg-surface',
+    label: 'Upcoming',
+  },
+  done: {
+    text: 'text-tertiary',
+    border: 'border-border',
+    bg: 'bg-surface-variant',
+    label: 'Done',
+  },
+};
+
+/** Lucide icon per reminder category; color comes from REMINDER_CATEGORY_META. */
+export const REMINDER_CATEGORY_ICON: Record<ReminderCategory, LucideIcon> = {
+  health: HeartPulse,
+  productivity: Briefcase,
+  personal: Sparkles,
+};
