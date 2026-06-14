@@ -22,6 +22,21 @@ export function formatReminderClock(dueDate: string, timeFormat: '12h' | '24h'):
   return period ? `${time} ${period}` : time;
 }
 
+/** Compact uppercase day label for upcoming rows: "TMRW", a short weekday, or a short date. */
+export function dayLabel(dueDate: string): string {
+  const date = parseISO(dueDate);
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  if (date.toDateString() === tomorrow.toDateString()) {
+    return 'Tmrw'.toUpperCase();
+  }
+  const days = Math.round((date.getTime() - Date.now()) / 86_400_000);
+  if (days >= 0 && days < 7) {
+    return date.toLocaleDateString(undefined, { weekday: 'short' }).toUpperCase();
+  }
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }).toUpperCase();
+}
+
 /**
  * Format the due date in a human-readable way
  */

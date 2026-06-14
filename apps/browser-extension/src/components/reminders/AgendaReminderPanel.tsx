@@ -9,7 +9,7 @@ import {
   classifyReminder,
   type ReminderState,
 } from '../../utils/reminder-classify';
-import { formatCountdown, formatReminderClock } from '../../utils/reminder-date-utils';
+import { dayLabel, formatCountdown, formatReminderClock } from '../../utils/reminder-date-utils';
 import {
   EmptyReminders,
   RecurrencePauseControl,
@@ -67,18 +67,30 @@ function AgendaRow({
 }: AgendaRowProps) {
   const styles = REMINDER_STATE_STYLES[state];
   const expand = isNudging(state);
+  const showDay = state === 'upcoming' && !isToday(parseISO(reminder.dueDate));
 
   return (
     <div className="flex gap-3">
       <div className="flex flex-col items-center flex-none w-[52px]">
-        <span
-          className={cn(
-            'text-xs text-center leading-tight tabular-nums mt-px',
-            expand ? cn('font-bold', styles.text) : 'font-medium text-secondary'
-          )}
-        >
-          {railTime(reminder, state, timeFormat)}
-        </span>
+        {showDay ? (
+          <span className="flex flex-col items-center leading-tight">
+            <span className="text-[10px] font-semibold text-tertiary">
+              {dayLabel(reminder.dueDate)}
+            </span>
+            <span className="text-xs tabular-nums text-secondary">
+              {formatReminderClock(reminder.dueDate, timeFormat)}
+            </span>
+          </span>
+        ) : (
+          <span
+            className={cn(
+              'text-xs text-center leading-tight tabular-nums mt-px',
+              expand ? cn('font-bold', styles.text) : 'font-medium text-secondary'
+            )}
+          >
+            {railTime(reminder, state, timeFormat)}
+          </span>
+        )}
         <div className="mt-1.5">
           <ReminderCategoryCheck reminder={reminder} state={state} onToggle={onToggle} size={24} />
         </div>

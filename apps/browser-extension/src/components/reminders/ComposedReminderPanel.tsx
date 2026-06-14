@@ -10,7 +10,7 @@ import {
   type ReminderState,
   splitReminders,
 } from '../../utils/reminder-classify';
-import { formatCountdown, formatReminderClock } from '../../utils/reminder-date-utils';
+import { dayLabel, formatCountdown, formatReminderClock } from '../../utils/reminder-date-utils';
 import {
   EmptyReminders,
   RecurrencePauseControl,
@@ -34,21 +34,6 @@ function clockLabel(dueDate: string, timeFormat: '12h' | '24h'): string {
     return 'Past';
   }
   return formatReminderClock(dueDate, timeFormat);
-}
-
-// Compact day label for upcoming scheduled rows: "Tmrw", a short weekday, or a short date.
-function dayLabel(dueDate: string): string {
-  const date = parseISO(dueDate);
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  if (date.toDateString() === tomorrow.toDateString()) {
-    return 'Tmrw';
-  }
-  const days = Math.round((date.getTime() - Date.now()) / 86_400_000);
-  if (days >= 0 && days < 7) {
-    return date.toLocaleDateString(undefined, { weekday: 'short' });
-  }
-  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
 /** Just the clock time for an upcoming row's second line. */
