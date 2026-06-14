@@ -31,6 +31,7 @@ interface ReminderStore {
   snoozeReminder: (reminderId: string, minutes: number) => Promise<void>;
   setReminderPaused: (reminderId: string, paused: boolean) => Promise<void>;
   markAsNotified: (reminderId: string) => Promise<void>;
+  fireDueReminders: () => Promise<void>;
   refreshLists: () => void;
 }
 
@@ -447,6 +448,38 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       logger.error('Error marking reminder as notified', error);
       // Track error in state for debugging, but don't show toast since this is a background operation
       set({ error: 'Failed to update notification status' });
+    }
+  },
+
+  // Fallback for platforms without chrome.alarms: mark newly-due reminders as
+  // notified so they surface in the panel. The alarm path owns recurrence rescheduling.
+  fireDueReminders: async () => {
+    try {
+      const { reminders } = get();
+      const now = new Date();
+
+      const dueNow = reminders.filter(
+        (r) =>
+          !r.completed && r.paused !== true && r.notified !== true && new Date(r.dueDate) <= now
+      );
+
+      if (dueNow.length === 0) {
+        return;
+      }
+
+      const firedIds = new Set(dueNow.map((r) => r.id));
+      const updated = reminders.map((r) => (firedIds.has(r.id) ? { ...r, notified: true } : r));
+
+      await setReminders(updated);
+
+      const { upcoming, overdue } = categorizeReminders(updated);
+      set({ reminders: updated, upcomingReminders: upcoming, overdueReminders: overdue });
+
+      for (const r of dueNow) {
+        useToastStore.getState().warning(`Reminder: ${r.text}`);
+      }
+    } catch (error) {
+      logger.error('Error firing due reminders', error);
     }
   },
 

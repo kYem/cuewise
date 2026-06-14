@@ -1,5 +1,5 @@
 import * as storage from '@cuewise/storage';
-import { recurringReminderFactory } from '@cuewise/test-utils/factories';
+import { recurringReminderFactory, reminderFactory } from '@cuewise/test-utils/factories';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useReminderStore } from './reminder-store';
 
@@ -201,6 +201,32 @@ describe('updateReminder keeping recurrence', () => {
     const updated = useReminderStore.getState().reminders[0];
     expect(updated.paused).toBe(true);
     expect(updated.recurring).toBeDefined();
+  });
+});
+
+describe('fireDueReminders', () => {
+  it('marks past-due active reminders as notified while leaving future ones untouched', async () => {
+    const due = reminderFactory.build({
+      id: 'due-1',
+      text: 'Stand up',
+      dueDate: new Date(Date.now() - 60_000).toISOString(),
+      notified: false,
+    });
+    const future = reminderFactory.build({
+      id: 'future-1',
+      text: 'Later',
+      dueDate: new Date(Date.now() + 60 * 60_000).toISOString(),
+      notified: false,
+    });
+    useReminderStore.setState({ reminders: [due, future] });
+
+    await useReminderStore.getState().fireDueReminders();
+
+    const { reminders } = useReminderStore.getState();
+    const updatedDue = reminders.find((r) => r.id === 'due-1');
+    const updatedFuture = reminders.find((r) => r.id === 'future-1');
+    expect(updatedDue?.notified).toBe(true);
+    expect(updatedFuture?.notified).toBe(false);
   });
 });
 

@@ -29,6 +29,7 @@ export const ReminderWidget: React.FC = () => {
     deleteReminder,
     snoozeReminder,
     setReminderPaused,
+    fireDueReminders,
     initialize,
     isLoading,
     error,
@@ -49,6 +50,18 @@ export const ReminderWidget: React.FC = () => {
   useEffect(() => {
     initialize();
   }, [initialize]);
+
+  // No native alarm scheduler (dev server / web) → fire due reminders in-page.
+  // The packed extension fires via the background service worker, so skip it there.
+  useEffect(() => {
+    if (chrome?.alarms) {
+      return;
+    }
+    const interval = setInterval(() => {
+      fireDueReminders();
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [fireDueReminders]);
 
   // Handle click outside to collapse
   useEffect(() => {
