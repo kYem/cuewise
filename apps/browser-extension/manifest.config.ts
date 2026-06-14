@@ -1,15 +1,26 @@
 import { defineManifest } from '@crxjs/vite-plugin';
+import { loadEnv } from 'vite';
 import pkg from './package.json';
 
 export default defineManifest(async (env) => {
   // Unsplash CDN for focus mode background images
   // Cuewise API for dynamic content loading and YouTube proxy page
-  const hostPermissions: string[] = ['https://images.unsplash.com/*', 'https://*.cuewise.app/*'];
+  // googleapis for the optional Google Calendar "Up next" integration
+  const hostPermissions: string[] = [
+    'https://images.unsplash.com/*',
+    'https://*.cuewise.app/*',
+    'https://www.googleapis.com/*',
+  ];
 
   // Add host_permissions for dev server in development mode only
   if (env.mode !== 'production') {
     hostPermissions.push('http://localhost:5173/*');
   }
+
+  // Chrome-Extension OAuth client id for Google Calendar (set per build env).
+  // Empty until the user registers a client in Google Cloud — the calendar
+  // feature falls back to sample data when this is absent.
+  const oauthClientId = loadEnv(env.mode, process.cwd(), '').VITE_GOOGLE_OAUTH_CLIENT_ID ?? '';
 
   // connect-src: scope fetch/XHR to the hosts we call (YouTube oEmbed, Cuewise
   // API/proxy, Unsplash) instead of a wildcard. Dev adds the Vite HMR socket.
@@ -36,8 +47,12 @@ export default defineManifest(async (env) => {
       48: 'icons/icon-48.png',
       128: 'icons/icon-128.png',
     },
-    permissions: ['storage', 'notifications', 'alarms', 'favicon'],
+    permissions: ['storage', 'notifications', 'alarms', 'favicon', 'identity'],
     host_permissions: hostPermissions,
+    oauth2: {
+      client_id: oauthClientId,
+      scopes: ['https://www.googleapis.com/auth/calendar.readonly'],
+    },
     chrome_url_overrides: {
       newtab: 'index.html',
     },

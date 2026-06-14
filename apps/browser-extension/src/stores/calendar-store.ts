@@ -1,6 +1,12 @@
 import { type CalendarEvent, getTodayDateString, logger } from '@cuewise/shared';
 import { getCalendarState, setCalendarState } from '@cuewise/storage';
 import { create } from 'zustand';
+import {
+  connectCalendar,
+  disconnectCalendar,
+  fetchTodayEvents,
+  isCalendarAvailable,
+} from '../utils/google-calendar';
 import { useToastStore } from './toast-store';
 
 interface CalendarStore {
@@ -18,8 +24,9 @@ interface CalendarStore {
   refresh: () => Promise<void>;
 }
 
-// Phase A placeholder agenda so the "Up next" UI is testable before the real
-// Google Calendar OAuth lands. Times are anchored to today.
+// Dev fallback agenda: chrome.identity doesn't exist in the Vite dev server,
+// so connect/refresh fall back to this sample data when the API is unavailable.
+// Times are anchored to today.
 function sampleEvents(): CalendarEvent[] {
   const today = getTodayDateString();
   const at = (hhmm: string) => `${today}T${hhmm}:00`;
@@ -85,24 +92,34 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
     }
   },
 
-  // Phase A stub: loads sample events. Pass 2 replaces the internals with
-  // chrome.identity.getAuthToken + a Google Calendar API fetch (UI unchanged).
+  // Interactive consent, then pull today's events. Falls back to sample data in
+  // the dev server, where chrome.identity is absent.
   connect: async () => {
     set({ isLoading: true, error: null });
     try {
-      const events = sampleEvents();
+      const live = isCalendarAvailable();
+      if (live) {
+        await connectCalendar();
+      }
+      const events = live ? await fetchTodayEvents() : sampleEvents();
       const lastSync = new Date().toISOString();
       set({ connected: true, events, lastSync, isLoading: false });
       await setCalendarState({ connected: true, events, lastSync });
-      useToastStore.getState().success('Calendar connected (sample data — live sync coming soon)');
+      const message = live
+        ? 'Google Calendar connected'
+        : 'Calendar connected (sample data — live sync needs the installed extension)';
+      useToastStore.getState().success(message);
     } catch (error) {
       logger.error('Failed to connect calendar', error);
       set({ isLoading: false, error: 'Failed to connect calendar' });
-      useToastStore.getState().error('Failed to connect calendar');
+      useToastStore.getState().error('Failed to connect Google Calendar');
     }
   },
 
   disconnect: async () => {
+    if (isCalendarAvailable()) {
+      await disconnectCalendar();
+    }
     set({ connected: false, events: [], lastSync: null, error: null });
     try {
       await setCalendarState({ connected: false, events: [], lastSync: null });
@@ -116,9 +133,15 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
       return;
     }
     set({ isLoading: true, error: null });
-    const events = sampleEvents();
-    const lastSync = new Date().toISOString();
-    set({ events, lastSync, isLoading: false });
-    await setCalendarState({ connected: true, events, lastSync });
+    try {
+      const events = isCalendarAvailable() ? await fetchTodayEvents() : sampleEvents();
+      const lastSync = new Date().toISOString();
+      set({ events, lastSync, isLoading: false });
+      await setCalendarState({ connected: true, events, lastSync });
+    } catch (error) {
+      logger.error('Failed to refresh calendar', error);
+      set({ isLoading: false, error: 'Failed to refresh calendar' });
+      useToastStore.getState().error('Failed to refresh Google Calendar');
+    }
   },
 }));
