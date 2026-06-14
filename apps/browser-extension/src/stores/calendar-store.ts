@@ -85,8 +85,17 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
   initialize: async () => {
     try {
       const stored = await getCalendarState();
-      if (stored) {
-        set({ connected: stored.connected, events: stored.events, lastSync: stored.lastSync });
+      if (!stored) {
+        return;
+      }
+      set({ connected: stored.connected, events: stored.events, lastSync: stored.lastSync });
+      // Cached events can be from a previous day; refetch when connected and the
+      // last sync wasn't today so the strip shows the current agenda, not stale one.
+      const syncedToday =
+        stored.lastSync !== null &&
+        new Date(stored.lastSync).toDateString() === new Date().toDateString();
+      if (stored.connected && !syncedToday) {
+        await get().refresh();
       }
     } catch (error) {
       logger.error('Failed to load calendar state', error);
@@ -132,8 +141,13 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
   },
 
   disconnect: async () => {
-    if (isCalendarAvailable()) {
-      await disconnectCalendar();
+    // Best-effort token revocation must never block the local disconnect.
+    try {
+      if (isCalendarAvailable()) {
+        await disconnectCalendar();
+      }
+    } catch (error) {
+      logger.warn('Calendar token revocation failed', { error });
     }
     set({ connected: false, events: [], lastSync: null, error: null });
     const result = await setCalendarState({ connected: false, events: [], lastSync: null });

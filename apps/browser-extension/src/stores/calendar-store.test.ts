@@ -162,19 +162,43 @@ describe('refresh', () => {
 });
 
 describe('initialize', () => {
-  it('hydrates connected state from storage', async () => {
-    getCalendarStateMock.mockResolvedValue({
-      connected: true,
-      events: [liveEvent],
-      lastSync: '2026-06-14T00:00:00Z',
-    });
+  it('hydrates connected state from storage without refetching when synced today', async () => {
+    const lastSync = new Date().toISOString();
+    getCalendarStateMock.mockResolvedValue({ connected: true, events: [liveEvent], lastSync });
 
     await useCalendarStore.getState().initialize();
 
     const state = useCalendarStore.getState();
     expect(state.connected).toBe(true);
     expect(state.events).toEqual([liveEvent]);
-    expect(state.lastSync).toBe('2026-06-14T00:00:00Z');
+    expect(state.lastSync).toBe(lastSync);
+    expect(fetchTodayEventsMock).not.toHaveBeenCalled();
+  });
+
+  it('refreshes when the cached events are from a previous day', async () => {
+    isAvailableMock.mockReturnValue(true);
+    getCalendarStateMock.mockResolvedValue({
+      connected: true,
+      events: [liveEvent],
+      lastSync: '2020-01-01T00:00:00Z',
+    });
+
+    await useCalendarStore.getState().initialize();
+
+    expect(fetchTodayEventsMock).toHaveBeenCalledOnce();
+  });
+
+  it('does not refresh a disconnected stored state', async () => {
+    getCalendarStateMock.mockResolvedValue({
+      connected: false,
+      events: [],
+      lastSync: '2020-01-01T00:00:00Z',
+    });
+
+    await useCalendarStore.getState().initialize();
+
+    expect(fetchTodayEventsMock).not.toHaveBeenCalled();
+    expect(useCalendarStore.getState().connected).toBe(false);
   });
 
   it('leaves defaults when nothing is stored', async () => {
