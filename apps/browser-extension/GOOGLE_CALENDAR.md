@@ -55,15 +55,17 @@ public (it ships in the manifest), so it does not need to be kept secret.
 ## Stable local ID (for testing real OAuth before publishing)
 
 A Chrome-Extension OAuth client is bound to one extension ID, so an unpacked
-build needs a fixed ID that matches the registered client. Pin it by adding the
-extension's public `key` to the manifest (`manifest.config.ts`); Chrome then
+build needs a fixed ID that matches the registered client. This is a manual
+step — the committed `manifest.config.ts` has no `key` field. To pin the ID, add
+a `key` (the extension's public key) to the generated manifest; Chrome then
 derives the same ID every load. Use the published item's key, or generate a
 keypair and register that ID with the OAuth client. Do **not** commit the key —
-keep it in the build env alongside the client id.
+inject it from the build env alongside the client id.
 
 ## Verifying
 
 In the installed extension, open the Pomodoro page, set the companion to
 **Calendar** (or **Both**) in Settings, and click **Connect Google Calendar**.
-The first connect prompts for consent; subsequent loads are silent. The dev
+The first connect prompts for consent; refreshing afterward is silent (it
+reuses Chrome's cached token — nothing fetches a token on page load). The dev
 server (`pnpm dev`) has no `chrome.identity`, so it always shows sample data.

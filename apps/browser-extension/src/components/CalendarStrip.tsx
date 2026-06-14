@@ -64,7 +64,9 @@ export const CalendarStrip: React.FC<CalendarStripProps> = ({ lean = false }) =>
   }
 
   const now = new Date();
-  const isPast = (e: CalendarEvent) => new Date(e.end) < now;
+  // All-day events carry a date-only string (UTC-parsed), so never treat them as
+  // past — they span the whole day and shouldn't be struck through or filtered.
+  const isPast = (e: CalendarEvent) => !e.allDay && new Date(e.end) < now;
   const visible = lean ? events.filter((e) => !isPast(e)).slice(0, 3) : events;
 
   const syncStatus = (
@@ -112,7 +114,7 @@ export const CalendarStrip: React.FC<CalendarStripProps> = ({ lean = false }) =>
                 )}
                 <div className="flex items-center gap-3 py-1.5" style={{ opacity: past ? 0.5 : 1 }}>
                   <span className="w-14 flex-none text-right text-xs font-semibold tabular-nums text-white/85">
-                    {formatTime(event.start, twentyFour)}
+                    {event.allDay ? 'All day' : formatTime(event.start, twentyFour)}
                   </span>
                   <span
                     className="w-[3px] flex-none self-stretch rounded-full"

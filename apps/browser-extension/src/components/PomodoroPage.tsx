@@ -132,7 +132,6 @@ export const PomodoroPage: React.FC = () => {
             <PomodoroTimer />
           </div>
 
-          {/* Companion (Quote / Calendar / Both) - shown on large screens */}
           <div className="hidden lg:flex lg:max-w-2xl">{companion}</div>
         </div>
       </div>
