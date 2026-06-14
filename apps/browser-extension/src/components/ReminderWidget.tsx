@@ -46,13 +46,16 @@ export const ReminderWidget: React.FC = () => {
 
   const widgetRef = useRef<HTMLDivElement>(null);
 
-  // Initialize reminder store on mount
+  // Initialize on mount, then catch up any reminder whose alarm never fired —
+  // a missed-alarm safety net (browser closed at the due time, or a dropped
+  // alarm) that also serves as the first firing pass in dev.
   useEffect(() => {
-    initialize();
-  }, [initialize]);
+    initialize().then(() => fireDueReminders());
+  }, [initialize, fireDueReminders]);
 
-  // No native alarm scheduler (dev server / web) → fire due reminders in-page.
-  // The packed extension fires via the background service worker, so skip it there.
+  // No native alarm scheduler (dev server / web) → keep firing due reminders
+  // in-page. The packed extension fires via the background worker + the on-mount
+  // catch-up above, so the ongoing poll is skipped there.
   useEffect(() => {
     if (chrome?.alarms) {
       return;
