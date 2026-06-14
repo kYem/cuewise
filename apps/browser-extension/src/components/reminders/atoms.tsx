@@ -155,10 +155,10 @@ export function ReminderSnoozeRow({ onSnooze, state = 'soon' }: ReminderSnoozeRo
           type="button"
           onClick={() => onSnooze(minutes)}
           className={cn(
-            'px-2.5 py-1 rounded-full text-xs font-semibold transition-colors',
-            'bg-surface hover:bg-surface-variant border',
-            styles.text,
-            styles.border
+            'px-2.5 py-1 rounded-full text-xs font-semibold border transition hover:brightness-110',
+            styles.chip.bg,
+            styles.chip.text,
+            styles.chip.border
           )}
         >
           {minutes}m
