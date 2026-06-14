@@ -1,7 +1,7 @@
 import { reminderFactory } from '@cuewise/test-utils';
 import { defaultSettings } from '@cuewise/test-utils/fixtures';
 import { fireEvent, render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useSettingsStore } from '../../stores/settings-store';
 import { ComposedReminderPanel } from './ComposedReminderPanel';
 
@@ -19,18 +19,9 @@ function mockTimeFormat(timeFormat: '12h' | '24h') {
   );
 }
 
-/**
- * A dueDate later TODAY: now + 2h, but if that crosses midnight, anchor to a
- * fixed early-evening time today so the calendar day stays unambiguous.
- */
+/** A dueDate later TODAY (now + 2h). The clock is frozen at 09:00, so this stays same-day. */
 function laterTodayDueDate(): string {
-  const candidate = new Date(Date.now() + 2 * HOUR_MS);
-  if (candidate.getDate() !== new Date().getDate()) {
-    const earlyEvening = new Date();
-    earlyEvening.setHours(18, 0, 0, 0);
-    return earlyEvening.toISOString();
-  }
-  return candidate.toISOString();
+  return new Date(Date.now() + 2 * HOUR_MS).toISOString();
 }
 
 function buildMixedReminders() {
@@ -71,7 +62,15 @@ function defaultProps() {
 describe('ComposedReminderPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Freeze the clock to a fixed mid-morning Monday so day-boundary math is
+    // deterministic. Fake only Date so component timers and RTL are unaffected.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-06-15T09:00:00'));
     mockTimeFormat('12h');
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('renders a habit pill for the interval reminder and a hero card for the notified one', () => {
@@ -123,7 +122,7 @@ describe('ComposedReminderPanel', () => {
       id: 'sched-tomorrow',
       text: 'Tomorrow planning session',
       category: 'productivity',
-      dueDate: new Date(Date.now() + 26 * HOUR_MS).toISOString(),
+      dueDate: new Date(Date.now() + 24 * HOUR_MS).toISOString(),
     });
     render(<ComposedReminderPanel reminders={[todayItem, tomorrowItem]} {...defaultProps()} />);
 

@@ -1,23 +1,13 @@
 import { reminderFactory } from '@cuewise/test-utils';
 import { fireEvent, render, screen, within } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AgendaReminderPanel } from './AgendaReminderPanel';
 
 const HOUR_MS = 60 * 60 * 1000;
 
-/**
- * A dueDate later TODAY: now + `minutesFromNow`, but if that crosses midnight,
- * anchor to a fixed early-evening time today so the calendar day stays unambiguous.
- */
+/** A dueDate later TODAY (now + `minutesFromNow`). The clock is frozen at 09:00, so this stays same-day. */
 function laterTodayDueDate(minutesFromNow = 90): string {
-  const candidate = new Date(Date.now() + minutesFromNow * 60 * 1000);
-  if (candidate.getDate() !== new Date().getDate()) {
-    const earlyEvening = new Date();
-    earlyEvening.setHours(18, 0, 0, 0);
-    earlyEvening.setMinutes(minutesFromNow);
-    return earlyEvening.toISOString();
-  }
-  return candidate.toISOString();
+  return new Date(Date.now() + minutesFromNow * 60 * 1000).toISOString();
 }
 
 function buildReminders() {
@@ -32,7 +22,7 @@ function buildReminders() {
     id: 'upcoming-1',
     text: 'Review pull request',
     category: 'productivity',
-    // Same-day so it lands in "Later today" regardless of when the test runs.
+    // Same-day so it lands in the 'Scheduled' group regardless of when the test runs.
     dueDate: laterTodayDueDate(),
   });
   return { notified, upcoming };
@@ -55,6 +45,17 @@ function defaultProps() {
 }
 
 describe('AgendaReminderPanel', () => {
+  beforeEach(() => {
+    // Freeze the clock to a fixed mid-morning Monday so day-boundary math is
+    // deterministic. Fake only Date so component timers and RTL are unaffected.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-06-15T09:00:00'));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('groups a past-due notified reminder under Needs response and a future one under Scheduled', () => {
     const { notified, upcoming } = buildReminders();
     render(<AgendaReminderPanel reminders={[notified, upcoming]} {...defaultProps()} />);

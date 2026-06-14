@@ -278,7 +278,7 @@ interface ReminderHeroCardProps {
 /**
  * The one consequential reminder, rendered loud: state eyebrow, recurrence
  * control, the category-check toggle, due text, a live countdown (ticking every
- * second while urgent), and snooze actions. `notified` gets a pulsing border.
+ * second while urgent), and snooze actions. `notified` gets a pulsing glow.
  */
 export function ReminderHeroCard({
   reminder,

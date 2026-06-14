@@ -1,4 +1,9 @@
-import { formatCompactInterval, REMINDER_CATEGORY_META, type Reminder } from '@cuewise/shared';
+import {
+  DEFAULT_REMINDER_INTERVAL_MINUTES,
+  formatCompactInterval,
+  REMINDER_CATEGORY_META,
+  type Reminder,
+} from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
 import { isToday, parseISO } from 'date-fns';
 import { CheckCircle2, ChevronDown, ChevronUp, Pause, Plus } from 'lucide-react';
@@ -36,7 +41,6 @@ function clockLabel(dueDate: string, timeFormat: '12h' | '24h'): string {
   return formatReminderClock(dueDate, timeFormat);
 }
 
-/** Just the clock time for an upcoming row's second line. */
 function clockOnly(dueDate: string, timeFormat: '12h' | '24h'): string {
   return formatReminderClock(dueDate, timeFormat);
 }
@@ -63,7 +67,9 @@ function HabitPill({ reminder, state, onToggle, onPauseToggle }: HabitPillProps)
   const category = reminder.category ?? 'productivity';
   const categoryColor = REMINDER_CATEGORY_META[category].color;
   const showCheck = nudging || justAcked || (!paused && hover);
-  const cadence = formatCompactInterval(reminder.recurring?.intervalMinutes ?? 0);
+  const cadence = formatCompactInterval(
+    reminder.recurring?.intervalMinutes ?? DEFAULT_REMINDER_INTERVAL_MINUTES
+  );
 
   // Tint the border (and the glow keyframe's color, while nudging) by category.
   const pillStyle: CSSProperties = {};
