@@ -1,9 +1,23 @@
 import { reminderFactory } from '@cuewise/test-utils';
+import { defaultSettings } from '@cuewise/test-utils/fixtures';
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { useSettingsStore } from '../../stores/settings-store';
 import { ComposedReminderPanel } from './ComposedReminderPanel';
 
+vi.mock('../../stores/settings-store', () => ({
+  useSettingsStore: vi.fn(),
+}));
+
 const HOUR_MS = 60 * 60 * 1000;
+
+// The panel reads `state.settings.timeFormat` via selector — apply it on the mock.
+function mockTimeFormat(timeFormat: '12h' | '24h') {
+  const state = { settings: { ...defaultSettings, timeFormat } };
+  vi.mocked(useSettingsStore).mockImplementation((selector) =>
+    selector(state as Parameters<typeof selector>[0])
+  );
+}
 
 /**
  * A dueDate later TODAY: now + 2h, but if that crosses midnight, anchor to a
@@ -55,6 +69,11 @@ function defaultProps() {
 }
 
 describe('ComposedReminderPanel', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockTimeFormat('12h');
+  });
+
   it('renders a habit pill for the interval reminder and a hero card for the notified one', () => {
     const { habit, scheduled, notified } = buildMixedReminders();
     render(<ComposedReminderPanel reminders={[notified, scheduled, habit]} {...defaultProps()} />);
@@ -169,5 +188,24 @@ describe('ComposedReminderPanel', () => {
     expect(screen.getByText('+2 more')).toBeInTheDocument();
     // The nudging habit is surfaced first, so it stays visible.
     expect(screen.getByText('Ok')).toBeInTheDocument();
+  });
+
+  it('renders a 24-hour clock when the timeFormat setting is "24h"', () => {
+    mockTimeFormat('24h');
+    // Tomorrow at 17:30 local: a two-line scheduled row whose clock is unambiguous.
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(17, 30, 0, 0);
+    const item = reminderFactory.build({
+      id: 'sched-24h',
+      text: 'Evening review',
+      category: 'productivity',
+      dueDate: tomorrow.toISOString(),
+    });
+    render(<ComposedReminderPanel reminders={[item]} {...defaultProps()} />);
+
+    // The setting flows setting → panel → row: 24h shows "17:30" with no AM/PM.
+    expect(screen.getByText('17:30')).toBeInTheDocument();
+    expect(screen.queryByText(/PM/)).not.toBeInTheDocument();
   });
 });

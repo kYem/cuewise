@@ -137,7 +137,7 @@ export const AddReminderForm: React.FC<AddReminderFormProps> = ({ onSuccess }) =
       {mode === 'custom' && (
         <ReminderFormBody
           submitLabel="Add reminder"
-          requireFuture
+          mode="add"
           onCancel={onSuccess}
           onSubmit={async ({ text, dueDate, recurring }) => {
             await addReminder(text, dueDate, recurring, undefined);

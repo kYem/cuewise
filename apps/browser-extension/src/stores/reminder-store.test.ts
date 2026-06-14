@@ -228,6 +228,35 @@ describe('fireDueReminders', () => {
     expect(updatedDue?.notified).toBe(true);
     expect(updatedFuture?.notified).toBe(false);
   });
+
+  it('leaves already-notified and paused past-due reminders untouched (no re-fire)', async () => {
+    const alreadyNotified = reminderFactory.build({
+      id: 'notified-past',
+      text: 'Submit timesheet',
+      dueDate: new Date(Date.now() - 60_000).toISOString(),
+      notified: true,
+    });
+    const pausedPastDue = recurringReminderFactory.build({
+      id: 'paused-past',
+      text: 'Move',
+      dueDate: new Date(Date.now() - 60_000).toISOString(),
+      recurring: { frequency: 'interval', intervalMinutes: 30 },
+      paused: true,
+    });
+    useReminderStore.setState({ reminders: [alreadyNotified, pausedPastDue] });
+
+    await useReminderStore.getState().fireDueReminders();
+
+    const { reminders } = useReminderStore.getState();
+    const notified = reminders.find((r) => r.id === 'notified-past');
+    const paused = reminders.find((r) => r.id === 'paused-past');
+    // Only notified:false && !paused && !completed && due flips — these are skipped.
+    expect(notified?.notified).toBe(true);
+    expect(paused?.notified).not.toBe(true);
+    expect(paused?.paused).toBe(true);
+    // Nothing was due to fire, so no persistence write happened.
+    expect(setRemindersMock).not.toHaveBeenCalled();
+  });
 });
 
 describe('addReminder with an interval recurrence', () => {

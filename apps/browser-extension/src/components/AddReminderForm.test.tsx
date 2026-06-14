@@ -59,4 +59,24 @@ describe('AddReminderForm', () => {
     expect(category).toBeUndefined();
     expect(onSuccess).toHaveBeenCalled();
   });
+
+  it('does not call addReminder when a one-time custom reminder is set in the past', () => {
+    const addReminder = mockAddReminder();
+
+    render(<AddReminderForm onSuccess={vi.fn()} />);
+    openCustomTab();
+
+    fireEvent.change(screen.getByLabelText('Reminder *'), {
+      target: { value: 'Past appointment' },
+    });
+    // Yesterday's date + a fixed time — guaranteed in the past, so Add must reject it.
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const dateValue = `${yesterday.getFullYear()}-${(yesterday.getMonth() + 1).toString().padStart(2, '0')}-${yesterday.getDate().toString().padStart(2, '0')}`;
+    fireEvent.change(screen.getByLabelText('Date'), { target: { value: dateValue } });
+    fireEvent.change(screen.getByLabelText('Time'), { target: { value: '09:00' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add reminder' }));
+
+    expect(addReminder).not.toHaveBeenCalled();
+  });
 });

@@ -20,6 +20,7 @@ export const EditReminderForm: React.FC<EditReminderFormProps> = ({
     <ReminderFormBody
       initial={{ text: reminder.text, dueDate: reminder.dueDate, recurring: reminder.recurring }}
       submitLabel="Save reminder"
+      mode="edit"
       onCancel={onCancel}
       onSubmit={async ({ text, dueDate, recurring }) => {
         await updateReminder(reminder.id, {

@@ -16,12 +16,12 @@ import { useToastStore } from '../../stores/toast-store';
 import { IntervalCadencePicker } from '../IntervalCadencePicker';
 import { Segmented, Switch } from '../settings/SettingControls';
 
-interface ReminderFormBodyProps {
+export interface ReminderFormBodyProps {
   // Edit pre-fill; absent = blank (Add).
   initial?: { text: string; dueDate: string; recurring?: Reminder['recurring'] };
   submitLabel: string;
-  // Add: reject a past date/time with a warning toast.
-  requireFuture?: boolean;
+  // Add rejects a past one-time date/time; Edit accepts it (you may be fixing history).
+  mode: 'add' | 'edit';
   onSubmit: (result: {
     text: string;
     dueDate: Date;
@@ -122,10 +122,12 @@ const eyebrowClass = 'block text-xs font-semibold uppercase tracking-wider text-
 export const ReminderFormBody: React.FC<ReminderFormBodyProps> = ({
   initial,
   submitLabel,
-  requireFuture = false,
+  mode,
   onSubmit,
   onCancel,
 }) => {
+  // Only Add enforces a future date; Edit may legitimately fix a past one-time time.
+  const requireFuture = mode === 'add';
   // Derive initial date/time strings from a pre-fill, or leave blank for Add.
   const initialDate = initial ? new Date(initial.dueDate) : null;
 
@@ -185,7 +187,9 @@ export const ReminderFormBody: React.FC<ReminderFormBodyProps> = ({
       ? intervalDueDateFromNow(clampedInterval)
       : new Date(`${date}T${time}`);
 
-    // Add rejects past one-time reminders; interval reminders always start in the future.
+    // Add rejects past one-time reminders. Interval reminders are exempt: they
+    // roll forward to their next occurrence on fire, so a past first-occurrence
+    // is harmless (and they always start one interval out anyway).
     if (requireFuture && !isInterval && dueDate <= new Date()) {
       useToastStore.getState().warning('Please select a future date and time');
       return;
