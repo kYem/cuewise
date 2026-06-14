@@ -114,6 +114,33 @@ describe('ComposedReminderPanel', () => {
     expect(screen.getByText('Tmrw')).toBeInTheDocument();
   });
 
+  it('caps today scheduled rows at 3 and reveals the rest on "+N more"', () => {
+    // 5 future same-day daily reminders all classify as upcoming today rows (none overdue/notified, so no hero).
+    const items = Array.from({ length: 5 }, (_, i) =>
+      reminderFactory.build({
+        id: `sched-today-${i}`,
+        text: `Today task ${i}`,
+        category: 'productivity',
+        dueDate: laterTodayDueDate(),
+        recurring: { frequency: 'daily' },
+      })
+    );
+    render(<ComposedReminderPanel reminders={items} {...defaultProps()} />);
+
+    // Collapsed: only the first 3 rows show, with a "+2 more" control.
+    expect(screen.getByText('Today task 0')).toBeInTheDocument();
+    expect(screen.getByText('Today task 1')).toBeInTheDocument();
+    expect(screen.getByText('Today task 2')).toBeInTheDocument();
+    expect(screen.queryByText('Today task 3')).not.toBeInTheDocument();
+    expect(screen.queryByText('Today task 4')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /\+2 more/ }));
+
+    // Expanded: the surplus rows now appear.
+    expect(screen.getByText('Today task 3')).toBeInTheDocument();
+    expect(screen.getByText('Today task 4')).toBeInTheDocument();
+  });
+
   it('keeps a nudging habit visible when the collapsed strip overflows', () => {
     // 8 interval habits exceeds the collapse threshold (6), forcing a "+N more".
     const calm = Array.from({ length: 7 }, (_, i) =>
