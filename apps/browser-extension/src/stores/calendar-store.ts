@@ -24,8 +24,9 @@ interface CalendarStore {
   refresh: () => Promise<void>;
 }
 
-// Dev fallback agenda: chrome.identity doesn't exist in the Vite dev server,
-// so connect/refresh fall back to this sample data when the API is unavailable.
+// Dev-only fallback agenda: chrome.identity doesn't exist in the Vite dev
+// server, so connect/refresh use this sample data there. Gated behind DEV so a
+// production build never presents fabricated events as a real schedule.
 // Times are anchored to today.
 function sampleEvents(): CalendarEvent[] {
   const today = getTodayDateString();
@@ -92,22 +93,36 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
     }
   },
 
-  // Interactive consent, then pull today's events. Falls back to sample data in
-  // the dev server, where chrome.identity is absent.
+  // Interactive consent, then pull today's events. In the dev server (no
+  // chrome.identity) this uses sample data; a production build without a
+  // configured OAuth client id reports that the feature isn't set up rather
+  // than faking a connection.
   connect: async () => {
     set({ isLoading: true, error: null });
     try {
       const live = isCalendarAvailable();
+      let events: CalendarEvent[];
       if (live) {
         await connectCalendar();
+        events = await fetchTodayEvents();
+      } else if (import.meta.env.DEV) {
+        events = sampleEvents();
+      } else {
+        set({ isLoading: false, error: 'Google Calendar is not configured in this build' });
+        useToastStore.getState().error('Google Calendar is not set up in this build');
+        return;
       }
-      const events = live ? await fetchTodayEvents() : sampleEvents();
       const lastSync = new Date().toISOString();
       set({ connected: true, events, lastSync, isLoading: false });
-      await setCalendarState({ connected: true, events, lastSync });
+      const result = await setCalendarState({ connected: true, events, lastSync });
+      if (!result.success) {
+        logger.error('Failed to persist calendar state', result.error);
+        useToastStore.getState().warning('Connected, but saving calendar state failed');
+        return;
+      }
       const message = live
         ? 'Google Calendar connected'
-        : 'Calendar connected (sample data — live sync needs the installed extension)';
+        : 'Calendar connected (sample data — dev only)';
       useToastStore.getState().success(message);
     } catch (error) {
       logger.error('Failed to connect calendar', error);
@@ -121,10 +136,10 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
       await disconnectCalendar();
     }
     set({ connected: false, events: [], lastSync: null, error: null });
-    try {
-      await setCalendarState({ connected: false, events: [], lastSync: null });
-    } catch (error) {
-      logger.error('Failed to clear calendar state', error);
+    const result = await setCalendarState({ connected: false, events: [], lastSync: null });
+    if (!result.success) {
+      logger.error('Failed to clear calendar state', result.error);
+      useToastStore.getState().error('Failed to disconnect calendar');
     }
   },
 
@@ -134,10 +149,22 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
     }
     set({ isLoading: true, error: null });
     try {
-      const events = isCalendarAvailable() ? await fetchTodayEvents() : sampleEvents();
+      let events: CalendarEvent[];
+      if (isCalendarAvailable()) {
+        events = await fetchTodayEvents();
+      } else if (import.meta.env.DEV) {
+        events = sampleEvents();
+      } else {
+        set({ isLoading: false });
+        return;
+      }
       const lastSync = new Date().toISOString();
       set({ events, lastSync, isLoading: false });
-      await setCalendarState({ connected: true, events, lastSync });
+      const result = await setCalendarState({ connected: true, events, lastSync });
+      if (!result.success) {
+        logger.error('Failed to persist calendar state', result.error);
+        useToastStore.getState().warning('Refreshed, but saving calendar state failed');
+      }
     } catch (error) {
       logger.error('Failed to refresh calendar', error);
       set({ isLoading: false, error: 'Failed to refresh calendar' });
