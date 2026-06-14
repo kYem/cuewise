@@ -1,10 +1,12 @@
 import {
   generateId,
+  isUpcomingRecurringOccurrence,
   logger,
   nextReminderDueDate,
   type Reminder,
   type ReminderCategory,
   type ReminderFrequency,
+  skipReminderOccurrence,
 } from '@cuewise/shared';
 import { getReminders, setReminders } from '@cuewise/storage';
 import { create } from 'zustand';
@@ -24,13 +26,14 @@ interface ReminderStore {
     dueDate: Date,
     recurring?: { frequency: ReminderFrequency; intervalMinutes?: number },
     category?: ReminderCategory
-  ) => Promise<void>;
+  ) => Promise<boolean>;
   toggleReminder: (reminderId: string) => Promise<void>;
   deleteReminder: (reminderId: string) => Promise<void>;
-  updateReminder: (reminderId: string, updates: Partial<Omit<Reminder, 'id'>>) => Promise<void>;
+  updateReminder: (reminderId: string, updates: Partial<Omit<Reminder, 'id'>>) => Promise<boolean>;
   snoozeReminder: (reminderId: string, minutes: number) => Promise<void>;
   setReminderPaused: (reminderId: string, paused: boolean) => Promise<void>;
   markAsNotified: (reminderId: string) => Promise<void>;
+  fireDueReminders: () => Promise<void>;
   refreshLists: () => void;
 }
 
@@ -116,19 +119,25 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
         return reminder;
       });
 
-      // Save if any reminders were advanced
+      // Save if any reminders were advanced; only adopt the advanced list and
+      // reschedule alarms when the write actually persisted, else fall back to the
+      // original list so the panel still loads with un-advanced (stale) reminders.
       if (hasAdvanced) {
-        await setReminders(advancedReminders);
-        reminders = advancedReminders;
+        const result = await setReminders(advancedReminders);
+        if (result?.success === false) {
+          logger.error('Failed to persist auto-advanced reminders on init', result.error);
+        } else {
+          reminders = advancedReminders;
 
-        // Reschedule alarms for advanced reminders
-        if (chrome?.alarms) {
-          for (const reminder of reminders) {
-            if (reminder.recurring && !reminder.paused) {
-              await chrome.alarms.clear(`reminder-${reminder.id}`);
-              await chrome.alarms.create(`reminder-${reminder.id}`, {
-                when: new Date(reminder.dueDate).getTime(),
-              });
+          // Reschedule alarms for advanced reminders
+          if (chrome?.alarms) {
+            for (const reminder of reminders) {
+              if (reminder.recurring && !reminder.paused) {
+                await chrome.alarms.clear(`reminder-${reminder.id}`);
+                await chrome.alarms.create(`reminder-${reminder.id}`, {
+                  when: new Date(reminder.dueDate).getTime(),
+                });
+              }
             }
           }
         }
@@ -153,7 +162,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
   addReminder: async (text: string, dueDate: Date, recurring?, category?) => {
     if (!text.trim()) {
       logger.warn('addReminder called with empty text - ignoring request');
-      return;
+      return false;
     }
 
     try {
@@ -170,7 +179,16 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       const { reminders } = get();
       const updatedReminders = [...reminders, newReminder];
 
-      await setReminders(updatedReminders);
+      // Honor the persist result before committing state or arming an alarm: a
+      // failed write resolves {success:false} instead of throwing.
+      const result = await setReminders(updatedReminders);
+      if (result?.success === false) {
+        logger.error('Failed to persist new reminder', result.error);
+        const errorMessage = 'Failed to add reminder. Please try again.';
+        set({ error: errorMessage });
+        useToastStore.getState().error(errorMessage);
+        return false;
+      }
 
       const { upcoming, overdue } = categorizeReminders(updatedReminders);
       set({
@@ -185,11 +203,14 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
           when: dueDate.getTime(),
         });
       }
+
+      return true;
     } catch (error) {
       logger.error('Error adding reminder', error);
       const errorMessage = 'Failed to add reminder. Please try again.';
       set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
+      return false;
     }
   },
 
@@ -208,7 +229,13 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       // Any recurring reminder (active OR paused) advances to its next occurrence
       // instead of being marked complete, which would permanently destroy it.
       if (isCompleting && reminder.recurring) {
-        const nextDueDate = nextReminderDueDate(reminder, new Date());
+        const now = new Date();
+        // A not-yet-due occurrence is skipped to the one after it (calendar reminders keep
+        // their clock time, e.g. tonight 9pm → tomorrow 9pm); a due/overdue one restarts
+        // its cadence from now.
+        const nextDueDate = isUpcomingRecurringOccurrence(reminder, now)
+          ? skipReminderOccurrence(reminder)
+          : nextReminderDueDate(reminder, now);
 
         // The full spread preserves paused/recurring, so a paused reminder stays paused.
         const advancedReminder: Reminder = {
@@ -220,7 +247,13 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
 
         const updatedReminders = reminders.map((r) => (r.id === reminderId ? advancedReminder : r));
 
-        await setReminders(updatedReminders);
+        // Bail before committing state, arming an alarm, or toasting success on a failed write.
+        const result = await setReminders(updatedReminders);
+        if (result?.success === false) {
+          logger.error('Failed to persist advanced recurring reminder', result.error);
+          useToastStore.getState().error('Failed to update reminder. Please try again.');
+          return;
+        }
 
         const { upcoming, overdue } = categorizeReminders(updatedReminders);
         set({
@@ -255,7 +288,13 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
           : r
       );
 
-      await setReminders(updatedReminders);
+      // Bail before committing state or clearing the alarm on a failed write.
+      const result = await setReminders(updatedReminders);
+      if (result?.success === false) {
+        logger.error('Failed to persist reminder toggle', result.error);
+        useToastStore.getState().error('Failed to update reminder. Please try again.');
+        return;
+      }
 
       const { upcoming, overdue } = categorizeReminders(updatedReminders);
       set({
@@ -288,7 +327,13 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
 
       const updatedReminders = reminders.filter((reminder) => reminder.id !== reminderId);
 
-      await setReminders(updatedReminders);
+      // Bail before committing state or clearing the alarm on a failed write.
+      const result = await setReminders(updatedReminders);
+      if (result?.success === false) {
+        logger.error('Failed to persist reminder deletion', result.error);
+        useToastStore.getState().error('Failed to delete reminder. Please try again.');
+        return;
+      }
 
       const { upcoming, overdue } = categorizeReminders(updatedReminders);
       set({
@@ -317,14 +362,22 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       if (!reminderExists) {
         logger.warn(`updateReminder: Reminder with id ${reminderId} not found`);
         useToastStore.getState().warning('This reminder no longer exists');
-        return;
+        return false;
       }
 
       const updatedReminders = reminders.map((reminder) =>
         reminder.id === reminderId ? { ...reminder, ...updates } : reminder
       );
 
-      await setReminders(updatedReminders);
+      // Honor the persist result before committing state or updating the alarm.
+      const result = await setReminders(updatedReminders);
+      if (result?.success === false) {
+        logger.error('Failed to persist reminder update', result.error);
+        const errorMessage = 'Failed to update reminder. Please try again.';
+        set({ error: errorMessage });
+        useToastStore.getState().error(errorMessage);
+        return false;
+      }
 
       const { upcoming, overdue } = categorizeReminders(updatedReminders);
       set({
@@ -344,11 +397,14 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
           });
         }
       }
+
+      return true;
     } catch (error) {
       logger.error('Error updating reminder', error);
       const errorMessage = 'Failed to update reminder. Please try again.';
       set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
+      return false;
     }
   },
 
@@ -363,16 +419,22 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
         return;
       }
 
-      // Calculate new due date
-      const currentDueDate = new Date(reminder.dueDate);
-      const newDueDate = new Date(currentDueDate.getTime() + minutes * 60 * 1000);
+      // Snooze reschedules to N minutes from NOW, not from the (possibly past)
+      // due date — otherwise snoozing an overdue reminder leaves it in the past.
+      const newDueDate = new Date(Date.now() + minutes * 60 * 1000);
 
       // Update reminder with new due date
       const updatedReminders = reminders.map((r) =>
         r.id === reminderId ? { ...r, dueDate: newDueDate.toISOString(), notified: false } : r
       );
 
-      await setReminders(updatedReminders);
+      // Bail before committing state or rescheduling the alarm on a failed write.
+      const result = await setReminders(updatedReminders);
+      if (result?.success === false) {
+        logger.error('Failed to persist reminder snooze', result.error);
+        useToastStore.getState().error('Failed to snooze reminder. Please try again.');
+        return;
+      }
 
       const { upcoming, overdue } = categorizeReminders(updatedReminders);
       set({
@@ -412,7 +474,14 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       const updated = reminders.map((r) =>
         r.id === reminderId && r.recurring ? { ...r, dueDate: resumedDueDate, paused } : r
       );
-      await setReminders(updated);
+
+      // Bail before committing state or touching the alarm on a failed write.
+      const result = await setReminders(updated);
+      if (result?.success === false) {
+        logger.error('Failed to persist reminder pause state', result.error);
+        useToastStore.getState().error('Failed to update reminder. Please try again.');
+        return;
+      }
 
       const { upcoming, overdue } = categorizeReminders(updated);
       set({ reminders: updated, upcomingReminders: upcoming, overdueReminders: overdue });
@@ -440,13 +509,57 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
         reminder.id === reminderId ? { ...reminder, notified: true } : reminder
       );
 
-      await setReminders(updatedReminders);
+      // Bail before committing state on a failed write so notified stays consistent with storage.
+      const result = await setReminders(updatedReminders);
+      if (result?.success === false) {
+        logger.error('Failed to persist notified status', result.error);
+        set({ error: 'Failed to update notification status' });
+        return;
+      }
 
       set({ reminders: updatedReminders });
     } catch (error) {
       logger.error('Error marking reminder as notified', error);
       // Track error in state for debugging, but don't show toast since this is a background operation
       set({ error: 'Failed to update notification status' });
+    }
+  },
+
+  // Fallback for platforms without chrome.alarms: mark newly-due reminders as
+  // notified so they surface in the panel. The alarm path owns recurrence rescheduling.
+  fireDueReminders: async () => {
+    try {
+      const { reminders } = get();
+      const now = new Date();
+
+      const dueNow = reminders.filter(
+        (r) =>
+          !r.completed && r.paused !== true && r.notified !== true && new Date(r.dueDate) <= now
+      );
+
+      if (dueNow.length === 0) {
+        return;
+      }
+
+      const firedIds = new Set(dueNow.map((r) => r.id));
+      const updated = reminders.map((r) => (firedIds.has(r.id) ? { ...r, notified: true } : r));
+
+      // Bail on a failed write WITHOUT toasting: notified was never saved, so the next
+      // poll would re-fire and storm duplicate toasts every interval.
+      const result = await setReminders(updated);
+      if (result?.success === false) {
+        logger.error('Failed to persist fired reminders', result.error);
+        return;
+      }
+
+      const { upcoming, overdue } = categorizeReminders(updated);
+      set({ reminders: updated, upcomingReminders: upcoming, overdueReminders: overdue });
+
+      for (const r of dueNow) {
+        useToastStore.getState().warning(`Reminder: ${r.text}`);
+      }
+    } catch (error) {
+      logger.error('Error firing due reminders', error);
     }
   },
 

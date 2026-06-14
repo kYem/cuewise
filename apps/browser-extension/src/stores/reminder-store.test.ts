@@ -1,5 +1,5 @@
 import * as storage from '@cuewise/storage';
-import { recurringReminderFactory } from '@cuewise/test-utils/factories';
+import { recurringReminderFactory, reminderFactory } from '@cuewise/test-utils/factories';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useReminderStore } from './reminder-store';
 
@@ -9,13 +9,16 @@ vi.mock('@cuewise/storage', () => ({
   setReminders: vi.fn(),
 }));
 
-// Mock toast store
+// Mock toast store with module-level fns so each level is inspectable across getState() calls.
+const toastError = vi.fn();
+const toastWarning = vi.fn();
+const toastSuccess = vi.fn();
 vi.mock('./toast-store', () => ({
   useToastStore: {
     getState: () => ({
-      error: vi.fn(),
-      warning: vi.fn(),
-      success: vi.fn(),
+      error: toastError,
+      warning: toastWarning,
+      success: toastSuccess,
     }),
   },
 }));
@@ -100,6 +103,52 @@ describe('toggleReminder on a paused recurring reminder', () => {
     // Advanced to the next occurrence (now + interval), no longer in the past.
     expect(new Date(updated.dueDate).getTime()).toBeGreaterThan(before);
     expect(alarmsMock.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('toggleReminder on a future recurring reminder', () => {
+  it('skips the upcoming interval occurrence (dueDate + cadence, not now + cadence)', async () => {
+    const reminder = recurringReminderFactory.build({
+      id: 'future-interval',
+      text: 'Move',
+      dueDate: new Date(Date.now() + 30 * 60_000).toISOString(),
+      recurring: { frequency: 'interval', intervalMinutes: 30 },
+    });
+    const dueTime = new Date(reminder.dueDate).getTime();
+    useReminderStore.setState({ reminders: [reminder] });
+
+    await useReminderStore.getState().toggleReminder('future-interval');
+
+    const updated = useReminderStore.getState().reminders[0];
+    // Deterministic: skip anchors to the scheduled dueDate, not to "now".
+    expect(new Date(updated.dueDate).getTime()).toBe(dueTime + 30 * 60_000);
+    expect(updated.completed).toBe(false);
+    // The alarm is re-armed at the skipped occurrence (clear then create).
+    expect(alarmsMock.clear).toHaveBeenCalledWith('reminder-future-interval');
+    expect(alarmsMock.create).toHaveBeenCalledWith('reminder-future-interval', {
+      when: dueTime + 30 * 60_000,
+    });
+  });
+
+  it('advances a future daily occurrence one day keeping the clock time', async () => {
+    const reminder = recurringReminderFactory.build({
+      id: 'future-daily',
+      text: 'Stand up',
+      dueDate: new Date(Date.now() + 2 * 60 * 60_000).toISOString(),
+      recurring: { frequency: 'daily' },
+    });
+    const dueDate = new Date(reminder.dueDate);
+    const dueTime = dueDate.getTime();
+    useReminderStore.setState({ reminders: [reminder] });
+
+    await useReminderStore.getState().toggleReminder('future-daily');
+
+    const updated = new Date(useReminderStore.getState().reminders[0].dueDate);
+    expect(updated.getHours()).toBe(dueDate.getHours());
+    expect(updated.getMinutes()).toBe(dueDate.getMinutes());
+    // ~24h later; DST-safe bounds.
+    expect(updated.getTime()).toBeGreaterThan(dueTime + 23 * 60 * 60_000);
+    expect(updated.getTime()).toBeLessThan(dueTime + 25 * 60 * 60_000);
   });
 });
 
@@ -204,6 +253,61 @@ describe('updateReminder keeping recurrence', () => {
   });
 });
 
+describe('fireDueReminders', () => {
+  it('marks past-due active reminders as notified while leaving future ones untouched', async () => {
+    const due = reminderFactory.build({
+      id: 'due-1',
+      text: 'Stand up',
+      dueDate: new Date(Date.now() - 60_000).toISOString(),
+      notified: false,
+    });
+    const future = reminderFactory.build({
+      id: 'future-1',
+      text: 'Later',
+      dueDate: new Date(Date.now() + 60 * 60_000).toISOString(),
+      notified: false,
+    });
+    useReminderStore.setState({ reminders: [due, future] });
+
+    await useReminderStore.getState().fireDueReminders();
+
+    const { reminders } = useReminderStore.getState();
+    const updatedDue = reminders.find((r) => r.id === 'due-1');
+    const updatedFuture = reminders.find((r) => r.id === 'future-1');
+    expect(updatedDue?.notified).toBe(true);
+    expect(updatedFuture?.notified).toBe(false);
+  });
+
+  it('leaves already-notified and paused past-due reminders untouched (no re-fire)', async () => {
+    const alreadyNotified = reminderFactory.build({
+      id: 'notified-past',
+      text: 'Submit timesheet',
+      dueDate: new Date(Date.now() - 60_000).toISOString(),
+      notified: true,
+    });
+    const pausedPastDue = recurringReminderFactory.build({
+      id: 'paused-past',
+      text: 'Move',
+      dueDate: new Date(Date.now() - 60_000).toISOString(),
+      recurring: { frequency: 'interval', intervalMinutes: 30 },
+      paused: true,
+    });
+    useReminderStore.setState({ reminders: [alreadyNotified, pausedPastDue] });
+
+    await useReminderStore.getState().fireDueReminders();
+
+    const { reminders } = useReminderStore.getState();
+    const notified = reminders.find((r) => r.id === 'notified-past');
+    const paused = reminders.find((r) => r.id === 'paused-past');
+    // Only notified:false && !paused && !completed && due flips — these are skipped.
+    expect(notified?.notified).toBe(true);
+    expect(paused?.notified).not.toBe(true);
+    expect(paused?.paused).toBe(true);
+    // Nothing was due to fire, so no persistence write happened.
+    expect(setRemindersMock).not.toHaveBeenCalled();
+  });
+});
+
 describe('addReminder with an interval recurrence', () => {
   it('schedules the alarm at the reminder due date', async () => {
     const dueDate = new Date(Date.now() + 60_000);
@@ -215,5 +319,124 @@ describe('addReminder with an interval recurrence', () => {
 
     const id = useReminderStore.getState().reminders[0].id;
     expect(alarmsMock.create).toHaveBeenCalledWith(`reminder-${id}`, { when: dueDate.getTime() });
+  });
+});
+
+describe('snoozeReminder', () => {
+  it('reschedules an overdue reminder to N minutes from now, not from its past due date', async () => {
+    const overdue = reminderFactory.build({
+      id: 'snooze-1',
+      text: 'Submit report',
+      dueDate: new Date(Date.now() - 90 * 60_000).toISOString(), // 90 min overdue
+      notified: true,
+    });
+    useReminderStore.setState({ reminders: [overdue] });
+
+    const before = Date.now();
+    await useReminderStore.getState().snoozeReminder('snooze-1', 5);
+
+    const updated = useReminderStore.getState().reminders[0];
+    const newDue = new Date(updated.dueDate).getTime();
+    // Snoozed to ~now + 5 min (future), not 85 min still in the past; notified cleared.
+    expect(newDue).toBeGreaterThanOrEqual(before + 5 * 60_000);
+    expect(newDue).toBeLessThanOrEqual(Date.now() + 5 * 60_000 + 1000);
+    expect(updated.notified).toBe(false);
+    expect(alarmsMock.create).toHaveBeenCalledWith('reminder-snooze-1', { when: newDue });
+  });
+});
+
+describe('toggleReminder on an active overdue recurring reminder', () => {
+  it('restarts the cadence from now (not pastDueDate + interval) and re-arms the alarm', async () => {
+    const pastDueDate = new Date(Date.now() - 90 * 60_000).toISOString(); // 90 min overdue
+    const overdue = recurringReminderFactory.build({
+      id: 'overdue-interval',
+      text: 'Move',
+      dueDate: pastDueDate,
+      recurring: { frequency: 'interval', intervalMinutes: 30 },
+    });
+    useReminderStore.setState({ reminders: [overdue] });
+
+    const before = Date.now();
+    await useReminderStore.getState().toggleReminder('overdue-interval');
+    const after = Date.now();
+
+    const updated = useReminderStore.getState().reminders[0];
+    const newDue = new Date(updated.dueDate).getTime();
+    // Restart anchors to NOW + interval, not to the stale past dueDate + interval.
+    expect(newDue).toBeGreaterThanOrEqual(before + 30 * 60_000);
+    expect(newDue).toBeLessThanOrEqual(after + 30 * 60_000);
+    expect(updated.completed).toBe(false);
+    expect(alarmsMock.clear).toHaveBeenCalledWith('reminder-overdue-interval');
+    expect(alarmsMock.create).toHaveBeenCalledWith('reminder-overdue-interval', { when: newDue });
+  });
+});
+
+describe('toggleReminder on a non-recurring reminder', () => {
+  it('completes then uncompletes, tracking and clearing completedAt and the alarm', async () => {
+    const oneOff = reminderFactory.build({
+      id: 'one-off',
+      text: 'Submit form',
+      dueDate: new Date(Date.now() + 60 * 60_000).toISOString(),
+    });
+    useReminderStore.setState({ reminders: [oneOff] });
+
+    await useReminderStore.getState().toggleReminder('one-off');
+
+    const completed = useReminderStore.getState().reminders[0];
+    expect(completed.completed).toBe(true);
+    expect(typeof completed.completedAt).toBe('string');
+    expect(alarmsMock.clear).toHaveBeenCalledWith('reminder-one-off');
+
+    await useReminderStore.getState().toggleReminder('one-off');
+
+    const reopened = useReminderStore.getState().reminders[0];
+    expect(reopened.completed).toBe(false);
+    expect(reopened.completedAt).toBeUndefined();
+  });
+});
+
+describe('write failures', () => {
+  beforeEach(() => {
+    setRemindersMock.mockResolvedValue({
+      success: false,
+      error: {
+        type: 'quota_exceeded',
+        message: 'quota',
+        key: 'reminders',
+        area: 'local',
+      },
+    });
+  });
+
+  it('toggleReminder leaves state, alarm, and success toast untouched on a failed write', async () => {
+    const reminder = reminderFactory.build({
+      id: 'wf-toggle',
+      text: 'Drink water',
+      dueDate: new Date(Date.now() + 60 * 60_000).toISOString(),
+      completed: false,
+    });
+    const originalDueDate = reminder.dueDate;
+    useReminderStore.setState({ reminders: [reminder] });
+
+    await useReminderStore.getState().toggleReminder('wf-toggle');
+
+    const after = useReminderStore.getState().reminders[0];
+    // In-memory state must be unchanged — the UI must not lie about a write that failed.
+    expect(after.completed).toBe(false);
+    expect(after.dueDate).toBe(originalDueDate);
+    expect(toastError).toHaveBeenCalled();
+    expect(toastSuccess).not.toHaveBeenCalled();
+    expect(alarmsMock.create).not.toHaveBeenCalled();
+  });
+
+  it('addReminder returns false and shows an error toast on a failed write', async () => {
+    const result = await useReminderStore
+      .getState()
+      .addReminder('New reminder', new Date(Date.now() + 60_000));
+
+    expect(result).toBe(false);
+    expect(toastError).toHaveBeenCalled();
+    // Nothing committed to state.
+    expect(useReminderStore.getState().reminders).toHaveLength(0);
   });
 });

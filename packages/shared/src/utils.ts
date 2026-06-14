@@ -1725,9 +1725,33 @@ export function clampIntervalMinutes(value: number): number {
   return floored;
 }
 
+/** Ultra-compact interval label: "30m", "1h", "1h 30m". */
+export function formatCompactInterval(minutes: number): string {
+  if (minutes < 60) {
+    return `${minutes}m`;
+  }
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  if (mins === 0) {
+    return `${hours}h`;
+  }
+  return `${hours}h ${mins}m`;
+}
+
 /** A Date `minutes` from now — the fire-time anchor for interval cadences. */
 export function intervalDueDateFromNow(minutes: number): Date {
   return new Date(Date.now() + minutes * 60_000);
+}
+
+/** Advance a Date by one calendar cadence in place (daily / weekly / monthly). */
+function advanceCalendarDate(date: Date, frequency: ReminderFrequency | undefined): void {
+  if (frequency === 'weekly') {
+    date.setDate(date.getDate() + 7);
+  } else if (frequency === 'monthly') {
+    date.setMonth(date.getMonth() + 1);
+  } else {
+    date.setDate(date.getDate() + 1); // daily / default
+  }
 }
 
 /**
@@ -1747,15 +1771,42 @@ export function nextReminderDueDate(reminder: Reminder, now: Date): Date {
   const frequency = recurring?.frequency;
   const next = new Date(reminder.dueDate);
   while (next <= now) {
-    if (frequency === 'weekly') {
-      next.setDate(next.getDate() + 7);
-    } else if (frequency === 'monthly') {
-      next.setMonth(next.getMonth() + 1);
-    } else {
-      next.setDate(next.getDate() + 1); // daily / default
-    }
+    advanceCalendarDate(next, frequency);
   }
   return next;
+}
+
+/**
+ * Next due date when the user checks off an UPCOMING (not-yet-fired) recurring
+ * occurrence early — skip it and move to the one after, anchored to the scheduled
+ * dueDate (not `now`). Calendar cadences keep their clock time (tonight 9pm →
+ * tomorrow 9pm); interval adds one cadence.
+ */
+export function skipReminderOccurrence(reminder: Reminder): Date {
+  const recurring = reminder.recurring;
+  const next = new Date(reminder.dueDate);
+  if (recurring?.frequency === 'interval') {
+    const minutes = clampIntervalMinutes(
+      recurring.intervalMinutes ?? DEFAULT_REMINDER_INTERVAL_MINUTES
+    );
+    next.setTime(next.getTime() + minutes * 60_000);
+    return next;
+  }
+  advanceCalendarDate(next, recurring?.frequency);
+  return next;
+}
+
+/**
+ * True when checking off this reminder would SKIP an upcoming occurrence
+ * (recurring + not yet fired) rather than complete/restart it. Drives both the
+ * store's skip-vs-restart branch and the check control's skip affordance, so the
+ * icon can never disagree with the action.
+ */
+export function isUpcomingRecurringOccurrence(reminder: Reminder, now: Date): boolean {
+  if (!reminder.recurring || reminder.completed) {
+    return false;
+  }
+  return new Date(reminder.dueDate).getTime() > now.getTime();
 }
 
 /**

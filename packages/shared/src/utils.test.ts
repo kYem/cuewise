@@ -31,6 +31,7 @@ import {
   exportMonthlyTrendsCSV,
   exportPomodoroSessionsCSV,
   exportWeeklyTrendsCSV,
+  formatCompactInterval,
   formatReminderCadence,
   getDueDateLabel,
   getNextDayDateString,
@@ -40,12 +41,14 @@ import {
   getTodayDateString,
   getUpcomingTasks,
   intervalDueDateFromNow,
+  isUpcomingRecurringOccurrence,
   nextReminderDueDate,
   parseImportData,
   removeSubtaskFromGoal,
   reorderGoals,
   resolveReminderNotificationAction,
   shouldShowReviewPrompt,
+  skipReminderOccurrence,
   toggleSubtaskInGoal,
 } from './utils';
 
@@ -1388,6 +1391,22 @@ describe('clampIntervalMinutes', () => {
   });
 });
 
+describe('formatCompactInterval', () => {
+  it('renders sub-hour minutes with an "m" suffix', () => {
+    expect(formatCompactInterval(30)).toBe('30m');
+    expect(formatCompactInterval(45)).toBe('45m');
+  });
+
+  it('renders whole hours with an "h" suffix', () => {
+    expect(formatCompactInterval(60)).toBe('1h');
+    expect(formatCompactInterval(180)).toBe('3h');
+  });
+
+  it('renders hours and minutes together', () => {
+    expect(formatCompactInterval(90)).toBe('1h 30m');
+  });
+});
+
 describe('nextReminderDueDate', () => {
   const base = {
     id: 'r1',
@@ -1424,6 +1443,113 @@ describe('nextReminderDueDate', () => {
       recurring: { frequency: 'weekly' as const },
     };
     expect(nextReminderDueDate(reminder, now).toISOString()).toBe('2026-06-19T08:00:00.000Z');
+  });
+});
+
+describe('skipReminderOccurrence', () => {
+  const base = {
+    id: 'r1',
+    text: 'x',
+    completed: false,
+    notified: false,
+  } as const;
+
+  it('adds one cadence to the scheduled dueDate for interval reminders', () => {
+    const dueTime = new Date('2026-06-13T09:30:00.000Z').getTime();
+    const reminder = {
+      ...base,
+      dueDate: new Date(dueTime).toISOString(),
+      recurring: { frequency: 'interval' as const, intervalMinutes: 30 },
+    };
+    expect(skipReminderOccurrence(reminder).getTime()).toBe(dueTime + 30 * 60_000);
+  });
+
+  it('advances a daily reminder one day keeping its clock time', () => {
+    // 9pm local today → 9pm local tomorrow, regardless of "now".
+    const due = new Date(2026, 5, 13, 21, 0, 0, 0);
+    const reminder = {
+      ...base,
+      dueDate: due.toISOString(),
+      recurring: { frequency: 'daily' as const },
+    };
+    const result = skipReminderOccurrence(reminder);
+    expect(result.getHours()).toBe(21);
+    expect(result.getMinutes()).toBe(0);
+    expect(result.getDate()).toBe(due.getDate() + 1);
+  });
+
+  it('advances a weekly reminder by 7 days keeping its clock time', () => {
+    const due = new Date(2026, 5, 12, 8, 15, 0, 0);
+    const reminder = {
+      ...base,
+      dueDate: due.toISOString(),
+      recurring: { frequency: 'weekly' as const },
+    };
+    const result = skipReminderOccurrence(reminder);
+    expect(result.getTime()).toBe(due.getTime() + 7 * 24 * 60 * 60_000);
+    expect(result.getHours()).toBe(8);
+    expect(result.getMinutes()).toBe(15);
+  });
+
+  it('advances a monthly reminder by one month keeping its day and clock time', () => {
+    const due = new Date(2026, 5, 10, 8, 0, 0, 0); // June 10
+    const reminder = {
+      ...base,
+      dueDate: due.toISOString(),
+      recurring: { frequency: 'monthly' as const },
+    };
+    const result = skipReminderOccurrence(reminder);
+    expect(result.getMonth()).toBe(6); // July
+    expect(result.getDate()).toBe(10);
+    expect(result.getHours()).toBe(8);
+    expect(result.getMinutes()).toBe(0);
+  });
+});
+
+describe('isUpcomingRecurringOccurrence', () => {
+  const now = new Date('2026-06-13T12:00:00.000Z');
+  const base = { id: 'r1', text: 'x', completed: false, notified: false } as const;
+
+  it('is true for a recurring reminder whose dueDate is still in the future', () => {
+    const reminder = {
+      ...base,
+      dueDate: new Date(now.getTime() + 30 * 60_000).toISOString(),
+      recurring: { frequency: 'interval' as const, intervalMinutes: 30 },
+    };
+    expect(isUpcomingRecurringOccurrence(reminder, now)).toBe(true);
+  });
+
+  it('is false once a recurring reminder is due/overdue (restart, not skip)', () => {
+    const reminder = {
+      ...base,
+      dueDate: new Date(now.getTime() - 60_000).toISOString(),
+      recurring: { frequency: 'interval' as const, intervalMinutes: 30 },
+    };
+    expect(isUpcomingRecurringOccurrence(reminder, now)).toBe(false);
+  });
+
+  it('is false for a non-recurring reminder even when it is in the future', () => {
+    const reminder = { ...base, dueDate: new Date(now.getTime() + 60_000).toISOString() };
+    expect(isUpcomingRecurringOccurrence(reminder, now)).toBe(false);
+  });
+
+  it('is false for a completed recurring reminder', () => {
+    const reminder = {
+      ...base,
+      completed: true,
+      dueDate: new Date(now.getTime() + 60_000).toISOString(),
+      recurring: { frequency: 'daily' as const },
+    };
+    expect(isUpcomingRecurringOccurrence(reminder, now)).toBe(false);
+  });
+
+  it('is false when dueDate exactly equals now (strict >, so it restarts not skips)', () => {
+    const reminder = {
+      ...base,
+      dueDate: new Date(now.getTime()).toISOString(),
+      recurring: { frequency: 'interval' as const, intervalMinutes: 30 },
+    };
+    expect(isUpcomingRecurringOccurrence(reminder, now)).toBe(false);
   });
 });
 
