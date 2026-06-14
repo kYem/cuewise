@@ -47,6 +47,14 @@ export function isCalendarAvailable(): boolean {
   return Boolean(oauth2?.client_id);
 }
 
+// Whether to surface the calendar companion in the UI at all: a configured
+// OAuth client (installed extension) or the Vite dev server (sample-data
+// preview). A production build without a client id hides the companion entirely
+// so users never reach a dead "not set up" path.
+export function isCalendarFeatureEnabled(): boolean {
+  return isCalendarAvailable() || import.meta.env.DEV;
+}
+
 function getToken(interactive: boolean): Promise<string> {
   return new Promise((resolve, reject) => {
     chrome.identity.getAuthToken({ interactive }, (result) => {

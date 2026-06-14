@@ -4,6 +4,7 @@ import { useCalendarStore } from '../stores/calendar-store';
 import { useFocusModeStore } from '../stores/focus-mode-store';
 import { useQuoteStore } from '../stores/quote-store';
 import { useSettingsStore } from '../stores/settings-store';
+import { isCalendarFeatureEnabled } from '../utils/google-calendar';
 import { getPreloadedCurrentUrl } from '../utils/image-preload-cache';
 import { loadImageWithFallback } from '../utils/unsplash';
 import { CalendarStrip } from './CalendarStrip';
@@ -32,13 +33,18 @@ export const PomodoroPage: React.FC = () => {
     initializeSettings();
   }, [initialize, initializeSettings]);
 
+  // A build without a configured OAuth client (and not the dev server) hides the
+  // calendar entirely, so a stale/synced 'calendar' setting falls back to quote.
+  const calendarEnabled = isCalendarFeatureEnabled();
+  const companionMode = calendarEnabled ? pomodoroCompanion : 'quote';
+
   // Only touch calendar state when the companion actually shows it — avoids a
   // storage read + refresh for the default 'quote' users.
   useEffect(() => {
-    if (pomodoroCompanion !== 'quote') {
+    if (companionMode !== 'quote') {
       initCalendar();
     }
-  }, [pomodoroCompanion, initCalendar]);
+  }, [companionMode, initCalendar]);
 
   // Load background image (use preloaded if available)
   useEffect(() => {
@@ -95,9 +101,9 @@ export const PomodoroPage: React.FC = () => {
 
   // Companion shown beside the timer on large screens
   let companion: React.ReactNode;
-  if (pomodoroCompanion === 'calendar') {
+  if (companionMode === 'calendar') {
     companion = <CalendarStrip />;
-  } else if (pomodoroCompanion === 'both') {
+  } else if (companionMode === 'both') {
     companion = (
       <div className="flex w-full flex-col items-center gap-density-lg">
         <CalendarStrip lean />
