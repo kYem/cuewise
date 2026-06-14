@@ -14,7 +14,7 @@ import type React from 'react';
 import { useState } from 'react';
 import { useToastStore } from '../../stores/toast-store';
 import { IntervalCadencePicker } from '../IntervalCadencePicker';
-import { Switch } from '../settings/SettingControls';
+import { Segmented, Switch } from '../settings/SettingControls';
 
 interface ReminderFormBodyProps {
   // Edit pre-fill; absent = blank (Add).
@@ -29,6 +29,13 @@ interface ReminderFormBodyProps {
   }) => Promise<void>;
   onCancel: () => void;
 }
+
+const FREQUENCY_OPTIONS: { value: ReminderFrequency; label: string }[] = [
+  { value: 'daily', label: 'Daily' },
+  { value: 'weekly', label: 'Weekly' },
+  { value: 'monthly', label: 'Monthly' },
+  { value: 'interval', label: 'Interval' },
+];
 
 type PresetKind = 'hour' | 'evening' | 'tomorrow' | 'nextWeek';
 
@@ -252,7 +259,7 @@ export const ReminderFormBody: React.FC<ReminderFormBodyProps> = ({
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
                 required
-                className="w-full px-4 py-3 rounded-lg border-2 border-border focus:border-primary-500 focus:outline-none transition-colors text-primary"
+                className="w-full px-4 py-3 rounded-lg border-2 border-border focus:border-primary-500 focus:outline-none transition-colors text-primary dark:[color-scheme:dark]"
               />
             </div>
 
@@ -269,7 +276,7 @@ export const ReminderFormBody: React.FC<ReminderFormBodyProps> = ({
                 value={time}
                 onChange={(e) => setTime(e.target.value)}
                 required
-                className="w-full px-4 py-3 rounded-lg border-2 border-border focus:border-primary-500 focus:outline-none transition-colors text-primary"
+                className="w-full px-4 py-3 rounded-lg border-2 border-border focus:border-primary-500 focus:outline-none transition-colors text-primary dark:[color-scheme:dark]"
               />
             </div>
           </div>
@@ -290,20 +297,14 @@ export const ReminderFormBody: React.FC<ReminderFormBodyProps> = ({
       {/* Frequency (only when Repeat is on) */}
       {isRecurring && (
         <div className="space-y-3">
-          <label htmlFor="reminder-frequency" className={eyebrowClass}>
-            Frequency
-          </label>
-          <select
-            id="reminder-frequency"
-            value={recurringFrequency}
-            onChange={(e) => setRecurringFrequency(e.target.value as ReminderFrequency)}
-            className="w-full px-4 py-3 rounded-lg border-2 border-border focus:border-primary-500 focus:outline-none transition-colors text-primary"
-          >
-            <option value="daily">Daily</option>
-            <option value="weekly">Weekly</option>
-            <option value="monthly">Monthly</option>
-            <option value="interval">Every N minutes</option>
-          </select>
+          <span className={eyebrowClass}>Frequency</span>
+          <div className="flex">
+            <Segmented
+              value={recurringFrequency}
+              options={FREQUENCY_OPTIONS}
+              onChange={setRecurringFrequency}
+            />
+          </div>
 
           {isInterval && (
             <IntervalCadencePicker value={intervalMinutes} onChange={setIntervalMinutes} />
