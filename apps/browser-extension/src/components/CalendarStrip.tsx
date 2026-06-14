@@ -73,10 +73,9 @@ export const CalendarStrip: React.FC<CalendarStripProps> = ({ lean = false }) =>
   let visible = events;
   if (lean) {
     const upcoming = events.filter((e) => !isPast(e));
-    visible = [...upcoming.filter((e) => !e.allDay), ...upcoming.filter((e) => e.allDay)].slice(
-      0,
-      3
-    );
+    const timed = upcoming.filter((e) => !e.allDay);
+    const allDay = upcoming.filter((e) => e.allDay);
+    visible = [...timed, ...allDay].slice(0, 3);
   }
 
   // Single now-line at the first past→upcoming transition. Computed once (so
