@@ -40,7 +40,8 @@ export function isCalendarAvailable(): boolean {
     return false;
   }
   // Without a configured OAuth client id, getAuthToken can't succeed — treat as
-  // unavailable so callers fall back to sample data instead of erroring.
+  // unavailable so callers take the dev sample fallback / not-configured path
+  // instead of erroring on connect.
   const oauth2 = chrome.runtime.getManifest().oauth2 as { client_id?: string } | undefined;
   return Boolean(oauth2?.client_id);
 }

@@ -91,6 +91,36 @@ describe('CalendarStrip - lean mode', () => {
   });
 });
 
+describe('CalendarStrip - full mode (past + now-line)', () => {
+  it('strikes through past timed events and draws the now-line before the next one', () => {
+    const store = createCalendarStore({
+      events: [
+        timedEvent('past', '2026-06-14T08:00:00', '2026-06-14T09:00:00', 'Earlier'),
+        timedEvent('future', '2026-06-14T13:00:00', '2026-06-14T14:00:00', 'Later'),
+      ],
+    });
+    mountWith(store);
+
+    render(<CalendarStrip />);
+
+    expect(screen.getByText('Earlier').className).toContain('line-through');
+    expect(screen.getByText('Later').className).not.toContain('line-through');
+    // Now-line shows the current time (noon) between the past and future event.
+    expect(screen.getByText('12pm')).toBeInTheDocument();
+  });
+
+  it('never strikes through an all-day event even when its end is before now', () => {
+    const store = createCalendarStore({
+      events: [allDayEvent('h', '2026-06-13', '2026-06-14', 'Yesterday onward')],
+    });
+    mountWith(store);
+
+    render(<CalendarStrip />);
+
+    expect(screen.getByText('Yesterday onward').className).not.toContain('line-through');
+  });
+});
+
 describe('CalendarStrip - time formatting', () => {
   it('renders 12-hour times by default', () => {
     const store = createCalendarStore({
