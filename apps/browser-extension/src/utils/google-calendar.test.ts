@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fetchTodayEvents, isCalendarAvailable } from './google-calendar';
+import { fetchTodayEvents, isCalendarAvailable, isCalendarFeatureEnabled } from './google-calendar';
 
 interface GoogleEventInput {
   id: string;
@@ -40,6 +40,7 @@ function stubFetchItems(items: GoogleEventInput[]) {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 describe('isCalendarAvailable', () => {
@@ -55,6 +56,25 @@ describe('isCalendarAvailable', () => {
   it('is true when identity exists and a client id is configured', () => {
     installIdentity({ clientId: 'abc.apps.googleusercontent.com' });
     expect(isCalendarAvailable()).toBe(true);
+  });
+});
+
+describe('isCalendarFeatureEnabled', () => {
+  it('is enabled in the dev server even without a configured client id', () => {
+    vi.stubEnv('DEV', true);
+    expect(isCalendarFeatureEnabled()).toBe(true);
+  });
+
+  it('is hidden in a production build with no client id', () => {
+    vi.stubEnv('DEV', false);
+    installIdentity({ clientId: undefined });
+    expect(isCalendarFeatureEnabled()).toBe(false);
+  });
+
+  it('is enabled in a production build when a client id is configured', () => {
+    vi.stubEnv('DEV', false);
+    installIdentity({ clientId: 'abc.apps.googleusercontent.com' });
+    expect(isCalendarFeatureEnabled()).toBe(true);
   });
 });
 

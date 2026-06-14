@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useState } from 'react';
+import { isCalendarFeatureEnabled } from '../../utils/google-calendar';
 import { previewSound } from '../../utils/sounds';
 import { PresetGrid } from './PresetGrid';
 import {
@@ -181,23 +182,27 @@ function TimerSection({ s, set, filter }: SettingsSectionProps) {
           onChange={(v) => set({ pomodoroLongBreakInterval: v })}
         />
       </SettingRow>
-      <SettingDivider />
-      <SettingRow
-        label="Companion"
-        filter={filter}
-        help="What shows beside the timer"
-        keywords="pomodoro companion quote calendar agenda schedule beside timer up next"
-      >
-        <Segmented
-          value={s.pomodoroCompanion}
-          options={[
-            { value: 'quote', label: 'Quote' },
-            { value: 'calendar', label: 'Calendar' },
-            { value: 'both', label: 'Both' },
-          ]}
-          onChange={(v) => set({ pomodoroCompanion: v as PomodoroCompanion })}
-        />
-      </SettingRow>
+      {isCalendarFeatureEnabled() && (
+        <>
+          <SettingDivider />
+          <SettingRow
+            label="Companion"
+            filter={filter}
+            help="What shows beside the timer"
+            keywords="pomodoro companion quote calendar agenda schedule beside timer up next"
+          >
+            <Segmented
+              value={s.pomodoroCompanion}
+              options={[
+                { value: 'quote', label: 'Quote' },
+                { value: 'calendar', label: 'Calendar' },
+                { value: 'both', label: 'Both' },
+              ]}
+              onChange={(v) => set({ pomodoroCompanion: v as PomodoroCompanion })}
+            />
+          </SettingRow>
+        </>
+      )}
     </div>
   );
 }
