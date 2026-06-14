@@ -3,6 +3,7 @@
  */
 
 import {
+  type CalendarState,
   type ConceptCard,
   type DailyBackground,
   DEFAULT_SETTINGS,
@@ -207,6 +208,15 @@ export async function getConceptCards(): Promise<ConceptCard[]> {
 export async function setConceptCards(cards: ConceptCard[]): Promise<StorageResult> {
   const area = await getStorageArea();
   return setInStorage(STORAGE_KEYS.CONCEPT_CARDS, cards, area);
+}
+
+// Google Calendar (connection + cached events; always local)
+export async function getCalendarState(): Promise<CalendarState | null> {
+  return getFromStorage<CalendarState>(STORAGE_KEYS.CALENDAR, 'local');
+}
+
+export async function setCalendarState(state: CalendarState): Promise<StorageResult> {
+  return setInStorage(STORAGE_KEYS.CALENDAR, state, 'local');
 }
 
 // Pomodoro Sessions

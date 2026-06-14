@@ -1,10 +1,12 @@
 import type React from 'react';
 import { useEffect, useState } from 'react';
+import { useCalendarStore } from '../stores/calendar-store';
 import { useFocusModeStore } from '../stores/focus-mode-store';
 import { useQuoteStore } from '../stores/quote-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { getPreloadedCurrentUrl } from '../utils/image-preload-cache';
 import { loadImageWithFallback } from '../utils/unsplash';
+import { CalendarStrip } from './CalendarStrip';
 import { FocusMode } from './FocusMode';
 import { PageHeader } from './PageHeader';
 import { PomodoroTimer } from './PomodoroTimer';
@@ -18,6 +20,8 @@ export const PomodoroPage: React.FC = () => {
   const quoteChangeInterval = useSettingsStore((state) => state.settings.quoteChangeInterval);
   const focusModeImageCategory = useSettingsStore((state) => state.settings.focusModeImageCategory);
   const pomodoroMusicEnabled = useSettingsStore((state) => state.settings.pomodoroMusicEnabled);
+  const pomodoroCompanion = useSettingsStore((state) => state.settings.pomodoroCompanion);
+  const initCalendar = useCalendarStore((state) => state.initialize);
   const isFocusModeActive = useFocusModeStore((state) => state.isActive);
   const [lastManualRefresh, setLastManualRefresh] = useState(Date.now());
   const [backgroundImage, setBackgroundImage] = useState<string | null>(null);
@@ -26,7 +30,8 @@ export const PomodoroPage: React.FC = () => {
   useEffect(() => {
     initialize();
     initializeSettings();
-  }, [initialize, initializeSettings]);
+    initCalendar();
+  }, [initialize, initializeSettings, initCalendar]);
 
   // Load background image (use preloaded if available)
   useEffect(() => {
@@ -81,6 +86,21 @@ export const PomodoroPage: React.FC = () => {
     };
   }, [quoteChangeInterval, refreshQuote, lastManualRefresh]);
 
+  // Companion shown beside the timer on large screens
+  let companion: React.ReactNode;
+  if (pomodoroCompanion === 'calendar') {
+    companion = <CalendarStrip />;
+  } else if (pomodoroCompanion === 'both') {
+    companion = (
+      <div className="flex w-full flex-col items-center gap-density-lg">
+        <CalendarStrip lean />
+        <QuoteDisplay onManualRefresh={() => setLastManualRefresh(Date.now())} hideCategory />
+      </div>
+    );
+  } else {
+    companion = <QuoteDisplay onManualRefresh={() => setLastManualRefresh(Date.now())} />;
+  }
+
   return (
     <div className="min-h-screen w-full relative">
       {/* Background Image */}
@@ -112,10 +132,8 @@ export const PomodoroPage: React.FC = () => {
             <PomodoroTimer />
           </div>
 
-          {/* Quote Display - Hidden on small screens, shown on large screens */}
-          <div className="hidden lg:flex lg:max-w-2xl">
-            <QuoteDisplay onManualRefresh={() => setLastManualRefresh(Date.now())} />
-          </div>
+          {/* Companion (Quote / Calendar / Both) - shown on large screens */}
+          <div className="hidden lg:flex lg:max-w-2xl">{companion}</div>
         </div>
       </div>
 
