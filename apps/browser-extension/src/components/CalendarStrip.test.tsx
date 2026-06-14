@@ -90,7 +90,7 @@ describe('CalendarStrip - lean mode', () => {
     expect(screen.queryByText('Future four')).not.toBeInTheDocument();
   });
 
-  it('keeps timed meetings visible when all-day events would fill the slots', () => {
+  it('orders timed meetings before all-day events so meetings keep their slots', () => {
     const store = createCalendarStore({
       events: [
         allDayEvent('a1', '2026-06-14', '2026-06-15', 'PTO'),
@@ -103,7 +103,12 @@ describe('CalendarStrip - lean mode', () => {
 
     render(<CalendarStrip lean />);
 
-    expect(screen.getByText('Afternoon meeting')).toBeInTheDocument();
+    const meeting = screen.getByText('Afternoon meeting');
+    const pto = screen.getByText('PTO');
+    // Meeting renders before the all-day banners, and the 3-slot cap drops the
+    // third all-day rather than the meeting.
+    expect(meeting.compareDocumentPosition(pto) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByText('Birthday')).not.toBeInTheDocument();
   });
 });
 
@@ -152,6 +157,23 @@ describe('CalendarStrip - full mode (past + now-line)', () => {
     // The "now" marker (noon) must appear exactly once despite two past→future
     // transitions in the start-sorted list.
     expect(screen.getAllByText('12pm')).toHaveLength(1);
+  });
+
+  it('still draws the now-line when a non-past all-day event leads the list', () => {
+    const store = createCalendarStore({
+      events: [
+        allDayEvent('a', '2026-06-14', '2026-06-15', 'Company holiday'),
+        timedEvent('p', '2026-06-14T08:00:00', '2026-06-14T09:00:00', 'Morning standup'),
+        timedEvent('f', '2026-06-14T13:00:00', '2026-06-14T14:00:00', 'Afternoon review'),
+      ],
+    });
+    mountWith(store);
+
+    render(<CalendarStrip />);
+
+    // The all-day banner sorts first and is never "past", but the now-line must
+    // still render at the real past→upcoming boundary further down the list.
+    expect(screen.getByText('12pm')).toBeInTheDocument();
   });
 });
 
