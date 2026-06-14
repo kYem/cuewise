@@ -3,6 +3,7 @@
  */
 
 import {
+  type CalendarState,
   type DailyBackground,
   DEFAULT_SETTINGS,
   type FocusImageCategory,
@@ -181,6 +182,15 @@ export async function getCollections(): Promise<QuoteCollection[]> {
 export async function setCollections(collections: QuoteCollection[]): Promise<StorageResult> {
   const area = await getStorageArea();
   return setInStorage(STORAGE_KEYS.COLLECTIONS, collections, area);
+}
+
+// Google Calendar (connection + cached events; always local)
+export async function getCalendarState(): Promise<CalendarState | null> {
+  return getFromStorage<CalendarState>(STORAGE_KEYS.CALENDAR, 'local');
+}
+
+export async function setCalendarState(state: CalendarState): Promise<StorageResult> {
+  return setInStorage(STORAGE_KEYS.CALENDAR, state, 'local');
 }
 
 // Pomodoro Sessions
