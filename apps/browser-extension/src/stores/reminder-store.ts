@@ -5,7 +5,7 @@ import {
   nextReminderDueDate,
   type Reminder,
   type ReminderCategory,
-  type ReminderFrequency,
+  type ReminderRecurrence,
   skipReminderOccurrence,
 } from '@cuewise/shared';
 import { getReminders, setReminders } from '@cuewise/storage';
@@ -24,7 +24,7 @@ interface ReminderStore {
   addReminder: (
     text: string,
     dueDate: Date,
-    recurring?: { frequency: ReminderFrequency; intervalMinutes?: number },
+    recurring?: ReminderRecurrence,
     category?: ReminderCategory
   ) => Promise<boolean>;
   toggleReminder: (reminderId: string) => Promise<void>;

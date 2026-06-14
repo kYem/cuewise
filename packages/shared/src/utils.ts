@@ -1762,9 +1762,7 @@ function advanceCalendarDate(date: Date, frequency: ReminderFrequency | undefine
 export function nextReminderDueDate(reminder: Reminder, now: Date): Date {
   const recurring = reminder.recurring;
   if (recurring?.frequency === 'interval') {
-    const minutes = clampIntervalMinutes(
-      recurring.intervalMinutes ?? DEFAULT_REMINDER_INTERVAL_MINUTES
-    );
+    const minutes = clampIntervalMinutes(recurring.intervalMinutes);
     return new Date(now.getTime() + minutes * 60_000);
   }
 
@@ -1786,9 +1784,7 @@ export function skipReminderOccurrence(reminder: Reminder): Date {
   const recurring = reminder.recurring;
   const next = new Date(reminder.dueDate);
   if (recurring?.frequency === 'interval') {
-    const minutes = clampIntervalMinutes(
-      recurring.intervalMinutes ?? DEFAULT_REMINDER_INTERVAL_MINUTES
-    );
+    const minutes = clampIntervalMinutes(recurring.intervalMinutes);
     next.setTime(next.getTime() + minutes * 60_000);
     return next;
   }
@@ -1834,7 +1830,7 @@ export function buildReminderRecurring(
  */
 export function formatReminderCadence(recurring: NonNullable<Reminder['recurring']>): string {
   if (recurring.frequency === 'interval') {
-    return `every ${clampIntervalMinutes(recurring.intervalMinutes ?? DEFAULT_REMINDER_INTERVAL_MINUTES)} min`;
+    return `every ${clampIntervalMinutes(recurring.intervalMinutes)} min`;
   }
   return recurring.frequency;
 }

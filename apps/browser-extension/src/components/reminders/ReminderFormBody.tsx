@@ -139,7 +139,9 @@ export const ReminderFormBody: React.FC<ReminderFormBodyProps> = ({
     initial?.recurring?.frequency ?? 'daily'
   );
   const [intervalMinutes, setIntervalMinutes] = useState(
-    initial?.recurring?.intervalMinutes ?? DEFAULT_REMINDER_INTERVAL_MINUTES
+    initial?.recurring?.frequency === 'interval'
+      ? initial.recurring.intervalMinutes
+      : DEFAULT_REMINDER_INTERVAL_MINUTES
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
 
