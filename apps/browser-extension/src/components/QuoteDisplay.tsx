@@ -15,12 +15,15 @@ interface QuoteDisplayProps {
   onManualRefresh?: () => void;
   variant?: 'normal' | 'compact';
   position?: 'top' | 'bottom';
+  // Hide the category badge (used in the stacked Calendar + Quote layout to save space)
+  hideCategory?: boolean;
 }
 
 export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
   onManualRefresh,
   variant = 'normal',
   position = 'top',
+  hideCategory = false,
 }) => {
   const { quoteChangeInterval, enableQuoteAnimation } = useSettingsStore(
     useShallow((state) => ({
@@ -217,7 +220,7 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
   return (
     <div className="w-full max-w-4xl mx-auto animate-fade-in">
       {/* Category Badge - Only show at top position */}
-      {!isBottom && (
+      {!isBottom && !hideCategory && (
         <div className="flex justify-center mb-6">
           <span
             className="inline-flex items-center px-density-md py-density-xs rounded-full text-sm font-medium text-white shadow-sm"

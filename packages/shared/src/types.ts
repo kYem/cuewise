@@ -135,6 +135,8 @@ export type TimeFormat = '12h' | '24h';
 export type QuoteDisplayMode = 'normal' | 'compact' | 'bottom' | 'hidden';
 export type ReminderPanelLayout = 'composed' | 'agenda';
 export type FocusPosition = 'top' | 'center' | 'bottom';
+// What shows beside the Pomodoro timer
+export type PomodoroCompanion = 'quote' | 'calendar' | 'both';
 
 // Focus mode image categories for Unsplash backgrounds
 export type FocusImageCategory = 'nature' | 'forest' | 'ocean' | 'mountains' | 'minimal' | 'dark';
@@ -180,6 +182,24 @@ export interface QuickLink {
   url: string; // normalized absolute URL (http/https)
 }
 
+// Google Calendar (read-only) — shown beside the Pomodoro timer
+export interface CalendarEvent {
+  id: string;
+  title: string;
+  start: string; // ISO datetime; date-only for all-day events
+  end: string; // ISO datetime
+  allDay: boolean;
+  color?: string; // accent color (hex) for the strip
+  htmlLink?: string; // link to the event in Google Calendar
+}
+
+// Persisted calendar connection + cached events
+export interface CalendarState {
+  connected: boolean;
+  events: CalendarEvent[];
+  lastSync: string | null; // ISO timestamp of the last fetch
+}
+
 // Settings interface
 export interface Settings {
   pomodoroWorkDuration: number; // minutes (default 25)
@@ -197,6 +217,8 @@ export interface Settings {
   pomodoroMusicAutoStart: boolean; // Auto-play music when timer starts (default true)
   pomodoroMusicPlaylistId: string; // Selected playlist ID (default '')
   pomodoroMusicPlayDuringBreaks: boolean; // Continue music during breaks (default false)
+  // Pomodoro companion (what shows beside the timer)
+  pomodoroCompanion: PomodoroCompanion; // 'quote' | 'calendar' | 'both' (default 'quote')
   enableNotifications: boolean;
   theme: 'light' | 'dark' | 'auto';
   quoteChangeInterval: number; // seconds (0 = manual, 1-3600 = auto-refresh every N seconds)
@@ -262,6 +284,7 @@ export const STORAGE_KEYS = {
   DAILY_BACKGROUND: 'dailyBackground', // Daily background image (changes once per day)
   COLLECTIONS: 'collections', // Quote collections
   QUICK_LINKS: 'quickLinks', // Pinned shortcut tiles on the new tab
+  CALENDAR: 'calendar', // Google Calendar connection + cached events
 } as const;
 
 // Daily background image data (persisted to change only once per day)

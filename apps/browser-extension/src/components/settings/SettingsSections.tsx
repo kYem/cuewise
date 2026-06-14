@@ -3,6 +3,7 @@ import {
   type FocusPosition,
   NOTIFICATION_SOUNDS,
   type NotificationSoundType,
+  type PomodoroCompanion,
   type QuoteDisplayMode,
   type ReminderPanelLayout,
   type SettingsLogLevel,
@@ -178,6 +179,23 @@ function TimerSection({ s, set, filter }: SettingsSectionProps) {
           max={10}
           unit="sessions"
           onChange={(v) => set({ pomodoroLongBreakInterval: v })}
+        />
+      </SettingRow>
+      <SettingDivider />
+      <SettingRow
+        label="Companion"
+        filter={filter}
+        help="What shows beside the timer"
+        keywords="pomodoro companion quote calendar agenda schedule beside timer up next"
+      >
+        <Segmented
+          value={s.pomodoroCompanion}
+          options={[
+            { value: 'quote', label: 'Quote' },
+            { value: 'calendar', label: 'Calendar' },
+            { value: 'both', label: 'Both' },
+          ]}
+          onChange={(v) => set({ pomodoroCompanion: v as PomodoroCompanion })}
         />
       </SettingRow>
     </div>
