@@ -2,7 +2,7 @@ import { formatCompactInterval, REMINDER_CATEGORY_META, type Reminder } from '@c
 import { cn } from '@cuewise/ui';
 import { isToday, parseISO } from 'date-fns';
 import { CheckCircle2, ChevronDown, ChevronUp, Pause, Plus } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { type CSSProperties, useEffect, useState } from 'react';
 import { useSettingsStore } from '../../stores/settings-store';
 import {
   buildReminderUrgencyNote,
@@ -65,6 +65,18 @@ function HabitPill({ reminder, state, onToggle, onPauseToggle }: HabitPillProps)
   const showCheck = nudging || justAcked || (!paused && hover);
   const cadence = formatCompactInterval(reminder.recurring?.intervalMinutes ?? 0);
 
+  // Tint the border (and the glow keyframe's color, while nudging) by category.
+  const pillStyle: CSSProperties = {};
+  if (!paused) {
+    // Lighter category-tinted fill (like the snooze chips) so the pill reads as
+    // filled rather than blending into the panel background.
+    pillStyle.backgroundColor = `${categoryColor}26`;
+    pillStyle.borderColor = nudging || justAcked ? categoryColor : `${categoryColor}66`;
+  }
+  if (nudging) {
+    (pillStyle as Record<string, string>)['--habit-glow'] = categoryColor;
+  }
+
   useEffect(() => {
     if (!justAcked) {
       return;
@@ -93,22 +105,13 @@ function HabitPill({ reminder, state, onToggle, onPauseToggle }: HabitPillProps)
       className={cn(
         'inline-flex items-center gap-2 pl-2.5 pr-3 py-1.5 rounded-full border transition-all',
         'focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-1',
-        nudging && 'animate-pulse',
+        nudging && 'habit-glow-pulse',
         justAcked && 'scale-105',
         paused
           ? 'bg-surface-variant border-border text-tertiary'
           : 'text-primary hover:brightness-110'
       )}
-      style={
-        paused
-          ? undefined
-          : {
-              // Lighter category-tinted fill (like the snooze chips) so the pill
-              // reads as filled rather than blending into the panel background.
-              backgroundColor: `${categoryColor}26`,
-              borderColor: nudging || justAcked ? categoryColor : `${categoryColor}66`,
-            }
-      }
+      style={pillStyle}
     >
       <span className="inline-flex items-center justify-center w-4 h-4 flex-none">
         {paused ? (

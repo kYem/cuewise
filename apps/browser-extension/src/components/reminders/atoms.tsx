@@ -314,7 +314,12 @@ export function ReminderHeroCard({
     >
       {/* Eyebrow: state label + recurrence control */}
       <div className="flex items-center justify-between gap-2">
-        <span className={cn('inline-flex items-center gap-1.5 text-xs font-semibold', styles.text)}>
+        <span
+          className={cn(
+            'inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide',
+            styles.text
+          )}
+        >
           <EyebrowIcon className="w-3.5 h-3.5" />
           {styles.label}
         </span>

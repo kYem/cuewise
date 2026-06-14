@@ -194,6 +194,21 @@ html.dark[data-theme="rose"] {
   animation: reminder-glow 1.8s ease-in-out infinite;
 }
 
+/* Nudging habit pill: breathe an outer glow in the habit's category color, never opacity. */
+@keyframes habit-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 7px 0 color-mix(in srgb, var(--habit-glow, #34d399) 30%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 14px 2px color-mix(in srgb, var(--habit-glow, #34d399) 55%, transparent);
+  }
+}
+
+.habit-glow-pulse {
+  animation: habit-glow 1.9s ease-in-out infinite;
+}
+
 @layer theme {
   /* Dark mode base adjustments - Vibrant Violet Theme (Higher Contrast) */
   .dark {
