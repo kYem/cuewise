@@ -93,7 +93,7 @@ describe('ComposedReminderPanel', () => {
     expect(onLayoutChange).toHaveBeenCalledWith('agenda');
   });
 
-  it('shows today and tomorrow scheduled items in one merged list with a "Tmrw" day label', () => {
+  it('shows today and tomorrow scheduled items in one merged list with a "TMRW" day label', () => {
     const todayItem = reminderFactory.build({
       id: 'sched-today',
       text: 'Today catch-up',
@@ -112,8 +112,8 @@ describe('ComposedReminderPanel', () => {
     expect(screen.queryByText('Upcoming')).not.toBeInTheDocument();
     expect(screen.getByText('Today catch-up')).toBeInTheDocument();
     expect(screen.getByText('Tomorrow planning session')).toBeInTheDocument();
-    // The tomorrow row still renders its compact "Tmrw" day label inline.
-    expect(screen.getByText('Tmrw')).toBeInTheDocument();
+    // The tomorrow row still renders its compact "TMRW" day label inline.
+    expect(screen.getByText('TMRW')).toBeInTheDocument();
   });
 
   it('caps scheduled rows at 3 and reveals the rest on "+N more"', () => {
@@ -144,11 +144,12 @@ describe('ComposedReminderPanel', () => {
   });
 
   it('keeps a nudging habit visible when the collapsed strip overflows', () => {
-    // 8 interval habits exceeds the collapse threshold (6), forcing a "+N more".
-    const calm = Array.from({ length: 7 }, (_, i) =>
+    // Short titles let the dynamic cap land at its max of 4; 6 habits then overflow by 2.
+    const shortTitles = ['Go', 'Up', 'Be', 'Do', 'Hi'];
+    const calm = shortTitles.map((title, i) =>
       reminderFactory.build({
         id: `habit-calm-${i}`,
-        text: `Calm habit ${i}`,
+        text: title,
         category: 'health',
         dueDate: new Date(Date.now() + 2 * HOUR_MS).toISOString(),
         recurring: { frequency: 'interval', intervalMinutes: 30 },
@@ -157,16 +158,16 @@ describe('ComposedReminderPanel', () => {
     // One overdue habit must surface despite collapse via nudging-first sort.
     const nudging = reminderFactory.build({
       id: 'habit-nudging',
-      text: 'Stretch now',
+      text: 'Ok',
       category: 'health',
       dueDate: new Date(Date.now() - HOUR_MS).toISOString(),
       recurring: { frequency: 'interval', intervalMinutes: 30 },
     });
     render(<ComposedReminderPanel reminders={[...calm, nudging]} {...defaultProps()} />);
 
-    // Collapsed: an overflow control hides the surplus calm pills.
+    // Collapsed: the dynamic cap shows 4 pills, an overflow control hides the surplus 2.
     expect(screen.getByText('+2 more')).toBeInTheDocument();
     // The nudging habit is surfaced first, so it stays visible.
-    expect(screen.getByText('Stretch now')).toBeInTheDocument();
+    expect(screen.getByText('Ok')).toBeInTheDocument();
   });
 });

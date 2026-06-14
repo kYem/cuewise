@@ -88,6 +88,22 @@ describe('AgendaReminderPanel', () => {
     expect(within(upcomingGroup).getByText('Dentist appointment')).toBeInTheDocument();
   });
 
+  it('renders a TMRW day label on an upcoming row due tomorrow', () => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(9, 0, 0, 0);
+    const tomorrowItem = reminderFactory.build({
+      id: 'tomorrow-1',
+      text: 'Tomorrow planning',
+      category: 'productivity',
+      dueDate: tomorrow.toISOString(),
+    });
+    render(<AgendaReminderPanel reminders={[tomorrowItem]} {...defaultProps()} />);
+
+    const group = groupContainerFor('Upcoming');
+    expect(within(group).getByText('TMRW')).toBeInTheDocument();
+  });
+
   it('caps a long Later today group at GROUP_LIMIT and reveals the rest via the show-more toggle', () => {
     // 6 reminders all due later today (staggered times) so they share the "Later today" group.
     const reminders = Array.from({ length: 6 }, (_, i) =>

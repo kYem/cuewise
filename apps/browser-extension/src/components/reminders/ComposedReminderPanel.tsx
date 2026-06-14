@@ -123,12 +123,29 @@ interface HabitStripProps {
   onPauseToggle: (id: string, paused: boolean) => void;
 }
 
-const HABIT_COLLAPSE = 6;
-
 /** The scheduled row list collapses past this many rows. */
 const SCHEDULED_LIMIT = 3;
 
-/** "HABITS {n}" subheader + wrapping pills, collapsing past 6 (nudging first). */
+/** Collapsed habit count: ~2 rows of pills, fewer for long titles. Clamped 2-4. */
+function visibleHabitCount(ordered: Reminder[]): number {
+  const BUDGET = 46; // approx chars that fit in two rows at the panel width
+  let used = 0;
+  let count = 0;
+  for (const habit of ordered) {
+    const cost = habit.text.length + 9; // text + dot/cadence chrome
+    if (count >= 2 && used + cost > BUDGET) {
+      break;
+    }
+    used += cost;
+    count += 1;
+    if (count >= 4) {
+      break;
+    }
+  }
+  return Math.min(4, Math.max(2, count));
+}
+
+/** "HABITS {n}" subheader + wrapping pills, collapsing past a dynamic cap (nudging first). */
 function HabitStrip({ habits, states, onToggle, onPauseToggle }: HabitStripProps) {
   const [expanded, setExpanded] = useState(false);
   const nudgingCount = habits.filter((h) => isNudging(states.get(h.id) ?? 'upcoming')).length;
@@ -139,8 +156,9 @@ function HabitStrip({ habits, states, onToggle, onPauseToggle }: HabitStripProps
     const bNudging = isNudging(states.get(b.id) ?? 'upcoming') ? 1 : 0;
     return bNudging - aNudging;
   });
-  const overflow = ordered.length - HABIT_COLLAPSE;
-  const visible = expanded || overflow <= 0 ? ordered : ordered.slice(0, HABIT_COLLAPSE);
+  const cap = visibleHabitCount(ordered);
+  const overflow = ordered.length - cap;
+  const visible = expanded || overflow <= 0 ? ordered : ordered.slice(0, cap);
 
   return (
     <div>
@@ -328,6 +346,7 @@ export function ComposedReminderPanel({
                   Scheduled
                 </span>
                 <span className="text-xs text-tertiary">{scheduled.length}</span>
+                <span className="flex-1 h-px bg-border" />
                 {scheduledOverflow > 0 && (
                   <button
                     type="button"
@@ -342,7 +361,6 @@ export function ComposedReminderPanel({
                     )}
                   </button>
                 )}
-                <span className="flex-1 h-px bg-border" />
               </div>
               {hero && (
                 <div className="mb-3">

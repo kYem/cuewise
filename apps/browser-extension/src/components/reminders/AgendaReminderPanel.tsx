@@ -246,6 +246,7 @@ export function AgendaReminderPanel({
                     {group.label}
                   </span>
                   <span className="text-xs text-tertiary">{group.items.length}</span>
+                  <span className="flex-1 h-px bg-border" />
                   {overflow > 0 && (
                     <button
                       type="button"
@@ -260,7 +261,6 @@ export function AgendaReminderPanel({
                       )}
                     </button>
                   )}
-                  <span className="flex-1 h-px bg-border" />
                 </div>
                 {visibleItems.map((reminder, index) => (
                   <AgendaRow
