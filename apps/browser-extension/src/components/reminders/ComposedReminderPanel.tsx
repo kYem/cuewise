@@ -3,13 +3,14 @@ import { cn } from '@cuewise/ui';
 import { isToday, parseISO } from 'date-fns';
 import { CheckCircle2, ChevronDown, ChevronUp, Pause, Plus } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { useSettingsStore } from '../../stores/settings-store';
 import {
   buildReminderUrgencyNote,
   classifyReminder,
   type ReminderState,
   splitReminders,
 } from '../../utils/reminder-classify';
-import { formatCountdown, formatDueDate } from '../../utils/reminder-date-utils';
+import { formatCountdown, formatReminderClock } from '../../utils/reminder-date-utils';
 import {
   EmptyReminders,
   RecurrencePauseControl,
@@ -28,12 +29,11 @@ function isNudging(state: ReminderState): boolean {
 }
 
 /** Short time for the clock column: "Past" for any overdue item, else the clock. */
-function clockLabel(dueDate: string): string {
+function clockLabel(dueDate: string, timeFormat: '12h' | '24h'): string {
   if (new Date(dueDate).getTime() < Date.now()) {
     return 'Past';
   }
-  const info = formatDueDate(dueDate);
-  return info.text.replace('Today at ', '').replace('Tomorrow at ', 'Tmrw ');
+  return formatReminderClock(dueDate, timeFormat);
 }
 
 // Compact day label for upcoming scheduled rows: "Tmrw", a short weekday, or a short date.
@@ -52,8 +52,8 @@ function dayLabel(dueDate: string): string {
 }
 
 /** Just the clock time for an upcoming row's second line. */
-function clockOnly(dueDate: string): string {
-  return parseISO(dueDate).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+function clockOnly(dueDate: string, timeFormat: '12h' | '24h'): string {
+  return formatReminderClock(dueDate, timeFormat);
 }
 
 interface HabitPillProps {
@@ -198,12 +198,13 @@ interface SchedRowProps {
   reminder: Reminder;
   state: ReminderState;
   first: boolean;
+  timeFormat: '12h' | '24h';
   onToggle: () => void;
   onPauseToggle: (id: string, paused: boolean) => void;
 }
 
 /** Clean scheduled row: [time] · category-check · text · recurrence control. */
-function SchedRow({ reminder, state, first, onToggle, onPauseToggle }: SchedRowProps) {
+function SchedRow({ reminder, state, first, timeFormat, onToggle, onPauseToggle }: SchedRowProps) {
   const today = isToday(parseISO(reminder.dueDate));
   return (
     <div
@@ -223,13 +224,13 @@ function SchedRow({ reminder, state, first, onToggle, onPauseToggle }: SchedRowP
         </span>
       ) : today ? (
         <span className="w-16 flex-none text-xs text-secondary tabular-nums text-right whitespace-nowrap">
-          {clockLabel(reminder.dueDate)}
+          {clockLabel(reminder.dueDate, timeFormat)}
         </span>
       ) : (
         <span className="w-16 flex-none text-right">
           <span className="block text-xs text-secondary">{dayLabel(reminder.dueDate)}</span>
           <span className="block text-[11px] text-tertiary tabular-nums">
-            {clockOnly(reminder.dueDate)}
+            {clockOnly(reminder.dueDate, timeFormat)}
           </span>
         </span>
       )}
@@ -274,6 +275,7 @@ export function ComposedReminderPanel({
     return () => clearInterval(timer);
   }, []);
 
+  const timeFormat = useSettingsStore((state) => state.settings.timeFormat);
   const [showAllScheduled, setShowAllScheduled] = useState(false);
 
   const now = new Date();
@@ -374,6 +376,7 @@ export function ComposedReminderPanel({
                   reminder={reminder}
                   state={states.get(reminder.id) ?? 'upcoming'}
                   first={!hero && index === 0}
+                  timeFormat={timeFormat}
                   onToggle={() => onToggle(reminder.id)}
                   onPauseToggle={onPauseToggle}
                 />

@@ -3,12 +3,13 @@ import { cn } from '@cuewise/ui';
 import { isToday, parseISO } from 'date-fns';
 import { ChevronDown, ChevronUp, Plus } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { useSettingsStore } from '../../stores/settings-store';
 import {
   buildReminderUrgencyNote,
   classifyReminder,
   type ReminderState,
 } from '../../utils/reminder-classify';
-import { formatCountdown, formatDueDate } from '../../utils/reminder-date-utils';
+import { formatCountdown, formatReminderClock } from '../../utils/reminder-date-utils';
 import {
   EmptyReminders,
   RecurrencePauseControl,
@@ -26,16 +27,8 @@ function isNudging(state: ReminderState): boolean {
   return state === 'soon' || state === 'overdue' || state === 'notified';
 }
 
-/** Drop the day prefix so only the clock time remains, then strip the inner space. */
-function clockLabel(dueDate: string): string {
-  return formatDueDate(dueDate)
-    .text.replace('Today at ', '')
-    .replace('Tomorrow at ', 'Tmrw ')
-    .replace(' ', '');
-}
-
 /** Compact rail label per state: "now"/"past"/countdown/clock. Ported from `railTime`. */
-function railTime(reminder: Reminder, state: ReminderState): string {
+function railTime(reminder: Reminder, state: ReminderState, timeFormat: '12h' | '24h'): string {
   if (state === 'notified') {
     return 'now';
   }
@@ -45,13 +38,14 @@ function railTime(reminder: Reminder, state: ReminderState): string {
   if (state === 'soon') {
     return formatCountdown(reminder.dueDate);
   }
-  return clockLabel(reminder.dueDate);
+  return formatReminderClock(reminder.dueDate, timeFormat);
 }
 
 interface AgendaRowProps {
   reminder: Reminder;
   state: ReminderState;
   last: boolean;
+  timeFormat: '12h' | '24h';
   onToggle: () => void;
   onSnooze: (minutes: number) => void;
   onPauseToggle: (id: string, paused: boolean) => void;
@@ -62,7 +56,15 @@ interface AgendaRowProps {
  * column [text + recurrence control + snooze when nudging]. Ported from the
  * design `AgendaRow`.
  */
-function AgendaRow({ reminder, state, last, onToggle, onSnooze, onPauseToggle }: AgendaRowProps) {
+function AgendaRow({
+  reminder,
+  state,
+  last,
+  timeFormat,
+  onToggle,
+  onSnooze,
+  onPauseToggle,
+}: AgendaRowProps) {
   const styles = REMINDER_STATE_STYLES[state];
   const expand = isNudging(state);
 
@@ -75,7 +77,7 @@ function AgendaRow({ reminder, state, last, onToggle, onSnooze, onPauseToggle }:
             expand ? cn('font-bold', styles.text) : 'font-medium text-secondary'
           )}
         >
-          {railTime(reminder, state)}
+          {railTime(reminder, state, timeFormat)}
         </span>
         <div className="mt-1.5">
           <ReminderCategoryCheck reminder={reminder} state={state} onToggle={onToggle} size={24} />
@@ -168,6 +170,7 @@ export function AgendaReminderPanel({
     return () => clearInterval(timer);
   }, []);
 
+  const timeFormat = useSettingsStore((state) => state.settings.timeFormat);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   function toggleGroup(key: string) {
     setExpandedGroups((prev) => {
@@ -253,6 +256,7 @@ export function AgendaReminderPanel({
                     reminder={reminder}
                     state={states.get(reminder.id) ?? 'upcoming'}
                     last={index === visibleItems.length - 1}
+                    timeFormat={timeFormat}
                     onToggle={() => onToggle(reminder.id)}
                     onSnooze={(minutes) => onSnooze(reminder.id, minutes)}
                     onPauseToggle={onPauseToggle}

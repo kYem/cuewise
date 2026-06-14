@@ -1,10 +1,27 @@
 import { describe, expect, it } from 'vitest';
-import { formatTimeAgo } from './reminder-date-utils';
+import { formatReminderClock, formatTimeAgo } from './reminder-date-utils';
 
 /** ISO timestamp `ms` in the past relative to now. */
 function agoIso(ms: number): string {
   return new Date(Date.now() - ms).toISOString();
 }
+
+/** ISO string for a Date at the given local hour/minute today (clock formatting is local-time). */
+function localClockIso(hour: number, minute: number): string {
+  const date = new Date();
+  date.setHours(hour, minute, 0, 0);
+  return date.toISOString();
+}
+
+describe('formatReminderClock', () => {
+  it('formats afternoon time with an AM/PM period in 12h', () => {
+    expect(formatReminderClock(localClockIso(17, 36), '12h')).toBe('5:36 PM');
+  });
+
+  it('formats the same time without a period in 24h', () => {
+    expect(formatReminderClock(localClockIso(17, 36), '24h')).toBe('17:36');
+  });
+});
 
 describe('formatTimeAgo', () => {
   it('returns "Just now" for under a minute', () => {

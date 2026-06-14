@@ -1,3 +1,4 @@
+import { formatClockTime } from '@cuewise/shared';
 import {
   differenceInMinutes,
   differenceInSeconds,
@@ -15,10 +16,16 @@ export interface DueDateInfo {
   minutesUntil: number;
 }
 
+/** Clock time for a reminder respecting the user's 12h/24h setting: "5:36 PM" or "17:36". */
+export function formatReminderClock(dueDate: string, timeFormat: '12h' | '24h'): string {
+  const { time, period } = formatClockTime(parseISO(dueDate), timeFormat);
+  return period ? `${time} ${period}` : time;
+}
+
 /**
  * Format the due date in a human-readable way
  */
-export function formatDueDate(dueDate: string): DueDateInfo {
+export function formatDueDate(dueDate: string, timeFormat: '12h' | '24h' = '12h'): DueDateInfo {
   const date = parseISO(dueDate);
   const now = new Date();
   const minutesUntil = differenceInMinutes(date, now);
@@ -29,7 +36,7 @@ export function formatDueDate(dueDate: string): DueDateInfo {
 
   if (isToday(date)) {
     return {
-      text: `Today at ${date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`,
+      text: `Today at ${formatReminderClock(dueDate, timeFormat)}`,
       isOverdue: false,
       isSoon,
       minutesUntil,
@@ -38,7 +45,7 @@ export function formatDueDate(dueDate: string): DueDateInfo {
 
   if (isTomorrow(date)) {
     return {
-      text: `Tomorrow at ${date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`,
+      text: `Tomorrow at ${formatReminderClock(dueDate, timeFormat)}`,
       isOverdue: false,
       isSoon: false,
       minutesUntil,
