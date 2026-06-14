@@ -143,4 +143,15 @@ describe('CalendarStrip - time formatting', () => {
 
     expect(screen.getByText('13:00')).toBeInTheDocument();
   });
+
+  it('zero-pads single-digit hours in 24-hour mode', () => {
+    const store = createCalendarStore({
+      events: [timedEvent('e', '2026-06-14T09:00:00', '2026-06-14T10:00:00', 'Morning sync')],
+    });
+    mountWith(store, '24h');
+
+    render(<CalendarStrip />);
+
+    expect(screen.getByText('09:00')).toBeInTheDocument();
+  });
 });

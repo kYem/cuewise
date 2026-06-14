@@ -30,8 +30,15 @@ export const PomodoroPage: React.FC = () => {
   useEffect(() => {
     initialize();
     initializeSettings();
-    initCalendar();
-  }, [initialize, initializeSettings, initCalendar]);
+  }, [initialize, initializeSettings]);
+
+  // Only touch calendar state when the companion actually shows it — avoids a
+  // storage read + refresh for the default 'quote' users.
+  useEffect(() => {
+    if (pomodoroCompanion !== 'quote') {
+      initCalendar();
+    }
+  }, [pomodoroCompanion, initCalendar]);
 
   // Load background image (use preloaded if available)
   useEffect(() => {
