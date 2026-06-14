@@ -74,6 +74,8 @@ export const DEFAULT_SETTINGS: Settings = {
   quoteDisplayMode: 'bottom', // Show quotes below goals by default
   enableQuoteAnimation: false, // Disabled by default (can be CPU-intensive)
   celebrationsEnabled: true,
+  // Reminders
+  reminderPanelLayout: 'composed',
   // Focus Position
   focusPosition: 'center', // Center goals section by default
   // Quote Filter Persistence
@@ -257,6 +259,16 @@ export const REMINDER_CATEGORIES: Record<ReminderCategory, string> = {
   health: 'Health & Wellness',
   productivity: 'Productivity',
   personal: 'Personal',
+};
+
+/** Accent color + Lucide icon per reminder category, for the redesigned panels. */
+export const REMINDER_CATEGORY_META: Record<
+  ReminderCategory,
+  { color: string; icon: string; label: string }
+> = {
+  health: { color: '#34d399', icon: 'heart-pulse', label: 'Health' },
+  productivity: { color: '#60a5fa', icon: 'briefcase', label: 'Productivity' },
+  personal: { color: '#c4b5fd', icon: 'sparkles', label: 'Personal' },
 };
 
 // Built-in reminder templates for quick creation

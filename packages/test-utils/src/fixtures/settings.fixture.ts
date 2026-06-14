@@ -45,6 +45,7 @@ export const defaultSettings: Settings = {
   quoteFilterShowFavoritesOnly: false,
   quoteFilterActiveCollectionIds: [],
   celebrationsEnabled: true,
+  reminderPanelLayout: 'composed',
   reviewPromptDismissed: false,
   reviewPromptCount: 0,
   reviewPromptLastShownAt: null,

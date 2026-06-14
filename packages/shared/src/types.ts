@@ -131,6 +131,7 @@ export type SettingsLogLevel = 'none' | 'error' | 'warn' | 'info' | 'debug';
 export type GoalViewMode = 'full' | 'compact' | 'focus';
 export type TimeFormat = '12h' | '24h';
 export type QuoteDisplayMode = 'normal' | 'compact' | 'bottom' | 'hidden';
+export type ReminderPanelLayout = 'composed' | 'agenda';
 export type FocusPosition = 'top' | 'center' | 'bottom';
 
 // Focus mode image categories for Unsplash backgrounds
@@ -227,6 +228,8 @@ export interface Settings {
   quoteFilterActiveCollectionIds: string[]; // Active collection IDs for filter (default [])
   // Celebrations
   celebrationsEnabled: boolean; // Play a Lottie burst on pomodoro/goal completion (default true)
+  // Reminders
+  reminderPanelLayout: ReminderPanelLayout; // Reminders panel layout (default 'composed')
   // Store review prompt
   reviewPromptDismissed: boolean; // Never surface the review prompt again (default false)
   reviewPromptCount: number; // Times the review prompt has been shown (default 0)
