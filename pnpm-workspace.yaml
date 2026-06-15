@@ -53,6 +53,7 @@ catalog:
   react: ^18.3.1
   react-dom: ^18.3.1
   recharts: 3.8.1
+  sharp: ^0.34.0
   tailwind-merge: ^3.6.0
   tailwindcss: ^4.1.18
   turbo: ^2.6.1
