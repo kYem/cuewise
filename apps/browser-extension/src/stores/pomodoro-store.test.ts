@@ -11,11 +11,16 @@ vi.mock('@cuewise/storage', () => ({
   getSettings: vi.fn(),
 }));
 
-// Mock toast store
+// Mock toast store with module-level fns so each level is inspectable across getState() calls.
+const toastError = vi.fn();
+const toastWarning = vi.fn();
+const toastSuccess = vi.fn();
 vi.mock('./toast-store', () => ({
   useToastStore: {
     getState: () => ({
-      error: vi.fn(),
+      error: toastError,
+      warning: toastWarning,
+      success: toastSuccess,
     }),
   },
 }));

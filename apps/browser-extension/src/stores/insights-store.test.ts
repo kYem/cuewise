@@ -37,9 +37,13 @@ vi.mock('@cuewise/shared', async () => {
   return { ...actual, parseImportData: vi.fn() };
 });
 
+// Mock toast store with module-level fns so each level is inspectable across getState() calls.
+const toastError = vi.fn();
+const toastWarning = vi.fn();
+const toastSuccess = vi.fn();
 vi.mock('./toast-store', () => ({
   useToastStore: {
-    getState: () => ({ error: vi.fn(), warning: vi.fn(), success: vi.fn() }),
+    getState: () => ({ error: toastError, warning: toastWarning, success: toastSuccess }),
   },
 }));
 

@@ -1,6 +1,9 @@
-import type { Goal, Settings } from '@cuewise/shared';
-import { defaultSettings } from '@cuewise/test-utils/fixtures';
+import type { Goal } from '@cuewise/shared';
+import { createSelectorMock, createSettingsStoreMock } from '@cuewise/test-utils';
 import { type Mock, vi } from 'vitest';
+
+// Re-exported so existing GoalsList test imports keep resolving from this file.
+export { createSettingsStoreMock };
 
 /**
  * Shared fixtures for GoalsList component tests.
@@ -58,17 +61,5 @@ export function createMockGoalStore(overrides: Partial<MockGoalStore> = {}): Moc
  * `getState()` (used by GoalsList for clearCompleted).
  */
 export function createGoalStoreMock(store: MockGoalStore) {
-  // biome-ignore lint/suspicious/noExplicitAny: selector accepts the store state
-  const mock = (selector?: (state: any) => unknown) => {
-    if (selector) {
-      return selector(store);
-    }
-    return store;
-  };
-  mock.getState = () => store;
-  return mock;
-}
-
-export function createSettingsStoreMock(settingsOverrides: Partial<Settings> = {}) {
-  return () => ({ settings: { ...defaultSettings, ...settingsOverrides } });
+  return createSelectorMock(store);
 }

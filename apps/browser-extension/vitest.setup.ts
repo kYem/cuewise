@@ -1,5 +1,5 @@
 import type { MockChromeStorage } from '@cuewise/test-utils/mocks';
-import { createChromeStorageMock, resetAllStores } from '@cuewise/test-utils/mocks';
+import { createChromeStorageMock } from '@cuewise/test-utils/mocks';
 import { cleanup } from '@testing-library/react';
 import { afterEach, beforeEach, vi } from 'vitest';
 import '@testing-library/jest-dom';
@@ -45,5 +45,4 @@ beforeEach(() => {
 // Cleanup React Testing Library after each test
 afterEach(() => {
   cleanup();
-  resetAllStores();
 });

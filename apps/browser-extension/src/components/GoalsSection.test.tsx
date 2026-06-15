@@ -1,5 +1,5 @@
+import { createSelectorMock, createSettingsStoreMock } from '@cuewise/test-utils';
 import { goalFactory, taskWithDueDateFactory } from '@cuewise/test-utils/factories';
-import { defaultSettings } from '@cuewise/test-utils/fixtures';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -29,15 +29,10 @@ function mockStores(options: { goals?: ReturnType<typeof goalFactory.build>[] } 
     initialize: vi.fn(),
   };
   const updateSettings = vi.fn();
-  const settingsState = { settings: { ...defaultSettings, goalViewMode: 'full' }, updateSettings };
 
-  // biome-ignore lint/suspicious/noExplicitAny: selector accepts the store state
-  vi.mocked(useGoalStore).mockImplementation((selector?: (s: any) => unknown) =>
-    selector ? selector(goalState) : goalState
-  );
-  // biome-ignore lint/suspicious/noExplicitAny: selector accepts the store state
-  vi.mocked(useSettingsStore).mockImplementation((selector?: (s: any) => unknown) =>
-    selector ? selector(settingsState) : settingsState
+  vi.mocked(useGoalStore).mockImplementation(createSelectorMock(goalState));
+  vi.mocked(useSettingsStore).mockImplementation(
+    createSettingsStoreMock({ goalViewMode: 'full', updateSettings })
   );
 
   return { updateSettings };

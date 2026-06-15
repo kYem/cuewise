@@ -1,5 +1,4 @@
-import { reminderFactory } from '@cuewise/test-utils';
-import { defaultSettings } from '@cuewise/test-utils/fixtures';
+import { createSettingsStoreMock, reminderFactory } from '@cuewise/test-utils';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useReminderStore } from '../stores/reminder-store';
@@ -41,12 +40,8 @@ function mockReminderStore(overrides: Record<string, unknown> = {}) {
 }
 
 // The widget reads settings via selectors, so the mock must apply the selector.
-// Only `settings` is provided; cast covers the store fields the widget never touches.
 function mockSettings(reminderPanelLayout: 'composed' | 'agenda') {
-  const state = { settings: { ...defaultSettings, reminderPanelLayout } };
-  vi.mocked(useSettingsStore).mockImplementation((selector) =>
-    selector(state as Parameters<typeof selector>[0])
-  );
+  vi.mocked(useSettingsStore).mockImplementation(createSettingsStoreMock({ reminderPanelLayout }));
 }
 
 function expandPanel() {
