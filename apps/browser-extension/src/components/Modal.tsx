@@ -7,10 +7,19 @@ interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
   title?: string;
+  // Max width of the dialog. Defaults to '2xl' so existing modals are unchanged.
+  size?: 'md' | 'lg' | 'xl' | '2xl';
   children: React.ReactNode;
 }
 
-export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }) => {
+const SIZE_CLASS: Record<NonNullable<ModalProps['size']>, string> = {
+  md: 'max-w-md',
+  lg: 'max-w-lg',
+  xl: 'max-w-xl',
+  '2xl': 'max-w-2xl',
+};
+
+export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, size = '2xl', children }) => {
   // Close on Escape key
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -33,6 +42,9 @@ export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }
 
   if (!isOpen) return null;
 
+  // Compact sizes get a trimmer header + body padding to match their narrower frame.
+  const isCompact = size === 'md' || size === 'lg';
+
   // Use portal to render modal at document body level
   // This prevents issues with parent transforms/filters breaking fixed positioning
   return createPortal(
@@ -47,11 +59,17 @@ export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }
       />
 
       {/* Modal Content */}
-      <div className="relative bg-surface-elevated rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden animate-slide-up">
+      <div
+        className={`relative bg-surface-elevated rounded-2xl shadow-2xl ${SIZE_CLASS[size]} w-full max-h-[90vh] overflow-hidden animate-slide-up`}
+      >
         {/* Header - only show if title is provided */}
         {title && (
-          <div className="flex items-center justify-between p-6 border-b border-border">
-            <h2 className="text-2xl font-semibold text-primary">{title}</h2>
+          <div
+            className={`flex items-center justify-between border-b border-border ${isCompact ? 'px-5 py-3.5' : 'p-6'}`}
+          >
+            <h2 className={`font-semibold text-primary ${isCompact ? 'text-lg' : 'text-2xl'}`}>
+              {title}
+            </h2>
             <button
               type="button"
               onClick={onClose}
@@ -64,7 +82,9 @@ export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }
         )}
 
         {/* Body */}
-        <div className={`overflow-y-auto max-h-[calc(90vh-140px)] ${title ? 'p-6' : ''}`}>
+        <div
+          className={`overflow-y-auto max-h-[calc(90vh-140px)] ${title ? (isCompact ? 'p-5' : 'p-6') : ''}`}
+        >
           {children}
         </div>
       </div>

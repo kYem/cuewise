@@ -108,7 +108,7 @@ export const GoalDetailView: React.FC<GoalDetailViewProps> = ({ goalId, onClose 
 
   if (isEditing) {
     return (
-      <Modal isOpen={true} onClose={() => setIsEditing(false)} title="Edit Goal">
+      <Modal isOpen={true} onClose={() => setIsEditing(false)} title="Edit Goal" size="md">
         <GoalForm
           goal={goalItem}
           onCancel={() => setIsEditing(false)}

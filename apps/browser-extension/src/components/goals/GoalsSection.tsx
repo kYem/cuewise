@@ -83,7 +83,7 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({
         />
 
         {/* Create Objective Modal */}
-        <Modal isOpen={isFormOpen} onClose={() => setIsFormOpen(false)} title="New Goal">
+        <Modal isOpen={isFormOpen} onClose={() => setIsFormOpen(false)} title="New Goal" size="md">
           <GoalForm onCancel={() => setIsFormOpen(false)} onSuccess={handleFormSuccess} />
         </Modal>
       </div>
@@ -125,7 +125,7 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({
       </div>
 
       {/* Create Goal Modal */}
-      <Modal isOpen={isFormOpen} onClose={() => setIsFormOpen(false)} title="New Goal">
+      <Modal isOpen={isFormOpen} onClose={() => setIsFormOpen(false)} title="New Goal" size="md">
         <GoalForm onCancel={() => setIsFormOpen(false)} onSuccess={handleFormSuccess} />
       </Modal>
 
