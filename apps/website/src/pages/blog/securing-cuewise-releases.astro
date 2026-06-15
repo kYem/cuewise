@@ -80,16 +80,16 @@ const reportUrl = `${SITE.githubUrl}/security/advisories/new`;
           <p>If a file's signature doesn't trace back to our pipeline, it didn't come from us. We also keep a constant watch on everything Cuewise depends on: we get automatic alerts — and ready-made fixes — the moment a known vulnerability appears in a dependency, and we deliberately wait two weeks before adopting brand-new package versions, long enough for a malicious release to be caught and pulled before it could ever reach you.</p>
         </div>
 
-        <!-- Found along the way + report -->
+        <!-- Open source + report -->
         <div class="content-card glass reveal">
           <h2>
             <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+              <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
             </svg>
-            What We Found, and How to Reach Us
+            Don't Take Our Word for It
           </h2>
-          <p>Tightening all of this had a happy side effect. Looking closely at every place the extension reaches out, we noticed our YouTube focus-music player had quietly stopped working after an earlier website move — so we fixed it. A good security review tends to surface more than just security.</p>
-          <p>And none of this is only words: Cuewise is <a href={SITE.githubUrl} target="_blank" rel="noopener noreferrer">open source</a>, so you're welcome to read the pipeline yourself and hold us to every claim here. If you ever find a security issue, please report it privately through <a href={reportUrl} target="_blank" rel="noopener noreferrer">GitHub's security advisories</a> rather than a public issue — we'll get back to you quickly.</p>
+          <p>None of this is just words: Cuewise is <a href={SITE.githubUrl} target="_blank" rel="noopener noreferrer">open source</a>, so you're welcome to read the pipeline yourself and hold us to every claim on this page.</p>
+          <p>And if you ever spot a security issue, please report it privately through <a href={reportUrl} target="_blank" rel="noopener noreferrer">GitHub's security advisories</a> rather than a public issue — we'll get back to you quickly.</p>
         </div>
 
       </div>
