@@ -1,4 +1,4 @@
-import type { Goal, Subtask } from '@cuewise/shared';
+import type { Goal } from '@cuewise/shared';
 import { getNextDayDateString, getTodayDateString } from '@cuewise/shared';
 import { Factory } from 'fishery';
 
@@ -13,12 +13,6 @@ export const goalFactory = Factory.define<Goal>(({ sequence }) => ({
 export const completedGoalFactory = goalFactory.params({
   completed: true,
 });
-
-export const subtaskFactory = Factory.define<Subtask>(({ sequence }) => ({
-  id: `subtask-${sequence}`,
-  text: `Test subtask ${sequence}`,
-  completed: false,
-}));
 
 export const taskWithDueDateFactory = goalFactory.params({
   type: 'task',
