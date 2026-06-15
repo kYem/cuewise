@@ -154,6 +154,9 @@ build/
 # Local docs/research (not tracked)
 docs/
 
+# Internal feature specs (kept local, not tracked)
+/specs/
+
 # macOS
 .DS_Store
 **/.DS_Store
