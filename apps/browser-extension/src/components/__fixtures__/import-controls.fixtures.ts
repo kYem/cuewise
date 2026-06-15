@@ -1,8 +1,15 @@
 import type { ImportResult, ImportValidation } from '@cuewise/shared';
 import { vi } from 'vitest';
 
+// Canonical options live with the insights-store fixtures; re-export so both test suites share one source.
+export { DEFAULT_IMPORT_OPTIONS } from '../../stores/__fixtures__/insights-store.fixtures';
+
 /**
- * Creates a valid ImportValidation object for testing
+ * Creates a valid ImportValidation object for testing.
+ *
+ * Diverges from the insights-store fixture's same-named helper: this one ships
+ * populated sample goal/quote/session data and takes ImportValidation overrides,
+ * which the ImportControls render tests assert on. Not consolidated for that reason.
  */
 export function createValidImportValidation(
   overrides?: Partial<ImportValidation>
@@ -99,13 +106,3 @@ export function createDefaultProps() {
     onClearValidation: vi.fn(),
   };
 }
-
-/**
- * Default import options
- */
-export const DEFAULT_IMPORT_OPTIONS = {
-  importGoals: true,
-  importQuotes: true,
-  importPomodoroSessions: true,
-  skipDuplicates: true,
-};
