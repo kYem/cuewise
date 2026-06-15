@@ -154,7 +154,7 @@ export const GoalButton: React.FC<GoalButtonProps> = ({ className = '' }) => {
 
       {/* Form Modal */}
       {showForm && (
-        <Modal isOpen={true} onClose={() => setShowForm(false)} title="New Goal">
+        <Modal isOpen={true} onClose={() => setShowForm(false)} title="New Goal" size="md">
           <GoalForm onCancel={() => setShowForm(false)} onSuccess={handleFormSuccess} />
         </Modal>
       )}
