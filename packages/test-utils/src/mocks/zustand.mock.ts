@@ -1,19 +1,6 @@
 import type { Settings } from '@cuewise/shared';
-import { act } from '@testing-library/react';
 import { vi } from 'vitest';
 import { defaultSettings } from '../fixtures';
-
-// Store reset functions
-const storeResetFns = new Set<() => void>();
-
-// Reset all stores (call in afterEach)
-export const resetAllStores = () => {
-  act(() => {
-    storeResetFns.forEach((resetFn) => {
-      resetFn();
-    });
-  });
-};
 
 /**
  * Selector-aware mock for a Zustand hook: supports both `useStore()` and
