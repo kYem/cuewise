@@ -98,23 +98,15 @@ ChartContainer.displayName = 'ChartContainer';
 // Chart Tooltip
 const ChartTooltip = RechartsPrimitive.Tooltip;
 
-// recharts 3 dropped the top-level NameType export; mirror its definition.
-type TooltipNameType = number | string;
-
 // Chart Tooltip Content
 type ChartTooltipContentProps = Omit<
   React.ComponentPropsWithoutRef<typeof RechartsPrimitive.Tooltip>,
   'content' | 'wrapperStyle' | 'contentStyle' | 'itemStyle' | 'labelStyle'
 > &
-  Omit<React.ComponentPropsWithoutRef<'div'>, 'content'> &
+  React.ComponentPropsWithoutRef<'div'> &
   // recharts 3 exposes payload/label/formatter via DefaultTooltipContentProps, not via Tooltip props.
-  Omit<
-    RechartsPrimitive.DefaultTooltipContentProps<
-      RechartsPrimitive.TooltipValueType,
-      TooltipNameType
-    >,
-    'accessibilityLayer'
-  > & {
+  // (The default type args resolve to recharts' ValueType/NameType, so they're left implicit.)
+  Omit<RechartsPrimitive.DefaultTooltipContentProps, 'accessibilityLayer'> & {
     hideLabel?: boolean;
     hideIndicator?: boolean;
     hideName?: boolean;
