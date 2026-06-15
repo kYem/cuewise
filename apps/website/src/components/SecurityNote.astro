@@ -1,0 +1,105 @@
+---
+---
+
+<section class="section-pad" style="padding-top:0;">
+  <div class="wrap">
+    <a class="security-note glass reveal" href="/blog/securing-cuewise-releases/">
+      <div class="sn-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>
+          <path d="m9 12 2 2 4-4"/>
+        </svg>
+      </div>
+      <div class="sn-body">
+        <p class="kicker">Built to be trusted</p>
+        <h2 class="sn-title">Every update is reviewed, locked down, and signed</h2>
+        <p class="sn-text">Cuewise auto-updates in your browser — so we made sure what reaches you is exactly the code we wrote. Here's the whole pipeline, start to finish.</p>
+      </div>
+      <span class="sn-cta">
+        Read how we secure releases
+        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+      </span>
+    </a>
+  </div>
+</section>
+
+<style>
+  .security-note {
+    display: flex;
+    align-items: center;
+    gap: 22px;
+    padding: 26px 30px;
+    flex-wrap: wrap;
+    text-decoration: none;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .security-note:hover {
+    transform: translateY(-2px);
+  }
+
+  .sn-icon {
+    flex-shrink: 0;
+    width: 52px;
+    height: 52px;
+    display: grid;
+    place-items: center;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+  }
+
+  .sn-icon svg {
+    width: 26px;
+    height: 26px;
+    color: #fff;
+  }
+
+  .sn-body {
+    flex: 1 1 300px;
+    min-width: 0;
+  }
+
+  .security-note .kicker {
+    margin: 0 0 4px;
+  }
+
+  .sn-title {
+    font-size: clamp(18px, 2.2vw, 22px);
+    line-height: 1.25;
+    margin: 0 0 6px;
+  }
+
+  .sn-text {
+    margin: 0;
+    font-size: 15px;
+    color: rgba(255, 255, 255, 0.75);
+  }
+
+  .sn-cta {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    color: #fff;
+    white-space: nowrap;
+  }
+
+  .sn-cta svg {
+    width: 18px;
+    height: 18px;
+    transition: transform 0.2s ease;
+  }
+
+  .security-note:hover .sn-cta svg {
+    transform: translateX(3px);
+  }
+
+  @media (max-width: 760px) {
+    .security-note {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+  }
+</style>
