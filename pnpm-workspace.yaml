@@ -45,7 +45,7 @@ catalog:
   astro: ^5.0.0
   autoprefixer: ^10.4.23
   clsx: ^2.1.1
-  date-fns: ^4.1.0
+  date-fns: ^4.4.0
   fishery: ^2.4.0
   jsdom: ^29.1.1
   lucide-react: ^0.553.0
@@ -53,10 +53,10 @@ catalog:
   react: ^18.3.1
   react-dom: ^18.3.1
   recharts: 2.15.4
-  tailwind-merge: ^3.4.0
+  tailwind-merge: ^3.6.0
   tailwindcss: ^4.1.18
   turbo: ^2.6.1
   typescript: ^6.0.3
   vite: ^6.4.2
   vitest: 3.2.4
-  zustand: 5.0.8
+  zustand: 5.0.14
