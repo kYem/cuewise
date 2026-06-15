@@ -148,13 +148,41 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # The CHANGELOG holds every version; slice out only this release's section
+      # (from its `## <version>` heading to the next one) for the release body,
+      # then link back to the full changelog at this tag.
+      - name: Extract release notes for this version
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          # Write to the runner temp dir, not the working tree, so the
+          # generated notes never need gitignoring.
+          NOTES="$RUNNER_TEMP/RELEASE_NOTES.md"
+          # Capture from the exact `## <version>` heading up to the next
+          # version heading. The boundary requires a semver-shaped heading so a
+          # stray `## ...` line inside an entry body can't truncate the notes.
+          awk -v ver="## $VERSION" '
+            $0 == ver { capture = 1; next }
+            capture && /^## [0-9]+\.[0-9]+\.[0-9]+/ { exit }
+            capture { print }
+          ' apps/browser-extension/CHANGELOG.md > "$NOTES"
+          if [ ! -s "$NOTES" ]; then
+            echo "::warning::No CHANGELOG section found for $VERSION; using a fallback body."
+            echo "Cuewise v$VERSION" > "$NOTES"
+          fi
+          {
+            echo ""
+            echo "---"
+            echo "**Full changelog:** [CHANGELOG.md](https://github.com/${GITHUB_REPOSITORY}/blob/v${VERSION}/apps/browser-extension/CHANGELOG.md)"
+          } >> "$NOTES"
+
       - name: Create GitHub Release
         if: ${{ steps.check_release.outputs.exists == 'false' }}
         uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3
         with:
           tag_name: v${{ needs.build.outputs.version }}
           name: Cuewise v${{ needs.build.outputs.version }}
-          body_path: apps/browser-extension/CHANGELOG.md
+          body_path: ${{ runner.temp }}/RELEASE_NOTES.md
           files: dist-artifact/cuewise-extension-${{ needs.build.outputs.version }}.zip
           draft: false
           prerelease: false
