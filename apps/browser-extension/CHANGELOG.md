@@ -1,5 +1,49 @@
 # @cuewise/browser-extension
 
+## 1.13.0
+
+### Minor Changes
+
+- 1d6f2a8: Redesign the reminders panel with two selectable layouts, replacing the cramped
+  single-panel view. A new "Reminders layout" setting (Settings → Goals & alerts)
+  switches between:
+  - **Composed** (default) — an ambient habits strip for interval reminders
+    (tap to mark done) plus a scheduled timeline, with the one consequential
+    overdue item shown as a "Needs response" hero card.
+  - **Agenda** — a single time rail grouped by urgency (Needs response / Overdue /
+    Up next / Scheduled), each row a category-icon node that doubles as the
+    complete button.
+
+  Both layouts add a distinct "Needs response" state (the alarm fired and is
+  awaiting you), category accents, live countdowns, 12h/24h-aware times, and a
+  roomier layout — launched from the same bottom-right Alerts bell, with the same
+  Add / Edit / snooze / pause-resume actions, adapting to light/dark mode and all
+  four themes.
+
+  Also in this release:
+  - **Skip an upcoming occurrence.** Checking off a recurring reminder that has
+    not fired yet skips that occurrence and advances to the next one — keeping a
+    calendar reminder's clock time (tonight 9pm → tomorrow 9pm) — while checking
+    off a due or overdue one restarts its cadence from now. The check control
+    shows a skip glyph on hover when the click will skip.
+  - **Snooze from now**, not from the (possibly past) due date, so snoozing an
+    overdue reminder no longer leaves it in the past.
+  - **Missed-alarm catch-up** on open, plus an in-page firing fallback when the
+    alarms API is unavailable (dev server), so due reminders still surface.
+  - A single polished Add/Edit form shared across both flows.
+  - Write failures now surface an error instead of falsely reporting success.
+
+### Patch Changes
+
+- 6b17ba3: Polish the goal add/edit form to match the reminders modal: quick-pick due-date chips (Today / Tomorrow / Next week / In 2 weeks), a dark-mode-aware date input, and a relative due-date preview. The goal modals are also more compact (narrower width + tighter spacing) via a new optional `size` prop on the shared Modal.
+- 9d401dd: Reminders: if a reminder saves but its alarm can't be scheduled (e.g. the browser's alarm limit), show a distinct "saved, but we couldn't schedule its alert" warning instead of a generic failure — and never revert the saved reminder over a scheduling error.
+- 404d76d: Internal: tighten reminder panel prop types — group the view-switcher into one optional object (no dead-switcher state) and give the header sub-note a consistent `tone: ReminderState | null`. No behavior change.
+- e7fd59b: Internal type-safety: model `Reminder.recurring` as a discriminated union so an interval cadence always carries `intervalMinutes` and calendar cadences never do — removing defensive fallbacks. No behavior change.
+- Updated dependencies [e7fd59b]
+  - @cuewise/shared@1.13.0
+  - @cuewise/storage@1.13.0
+  - @cuewise/ui@1.13.0
+
 ## 1.12.0
 
 ### Minor Changes
