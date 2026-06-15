@@ -1,0 +1,6 @@
+# Code owners for security-sensitive paths. Pairs with branch protection;
+# turn on "Require review from Code Owners" once there's a second maintainer.
+/.github/workflows/                         @kYem
+/.github/dependabot.yml                     @kYem
+/scripts/                                   @kYem
+/apps/browser-extension/manifest.config.ts  @kYem

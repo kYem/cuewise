@@ -11,6 +11,18 @@ export default defineManifest(async (env) => {
     hostPermissions.push('http://localhost:5173/*');
   }
 
+  // connect-src: scope fetch/XHR to the hosts we call (YouTube oEmbed, Cuewise
+  // API/proxy, Unsplash) instead of a wildcard. Dev adds the Vite HMR socket.
+  const connectSrc = [
+    "'self'",
+    'https://images.unsplash.com',
+    'https://*.cuewise.app',
+    'https://www.youtube.com',
+  ];
+  if (env.mode !== 'production') {
+    connectSrc.push('http://localhost:5173', 'ws://localhost:5173');
+  }
+
   return {
     manifest_version: 3,
     // Store title and search summary — keep keyword-rich (CWS search indexes both)
@@ -36,10 +48,9 @@ export default defineManifest(async (env) => {
       service_worker: 'src/background.ts',
       type: 'module',
     },
-    // Content Security Policy for proxy page iframe and Google Fonts
+    // CSP: scoped connect-src (was a wildcard); proxy-page iframe + Google Fonts.
     content_security_policy: {
-      extension_pages:
-        "frame-src 'self' https://cuewise.app; default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src *; img-src * data: blob:;",
+      extension_pages: `frame-src 'self' https://cuewise.app; default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src ${connectSrc.join(' ')}; img-src * data: blob:;`,
     },
   };
 });
