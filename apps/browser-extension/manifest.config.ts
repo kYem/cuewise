@@ -33,13 +33,17 @@ export default defineManifest(async (env) => {
   }
 
   // connect-src: scope fetch/XHR to the hosts we call (YouTube oEmbed, Cuewise
-  // API/proxy, Unsplash) instead of a wildcard. Dev adds the Vite HMR socket.
+  // API/proxy, Unsplash) instead of a wildcard. Calendar (googleapis/oauth2) and
+  // the dev HMR socket are added conditionally.
   const connectSrc = [
     "'self'",
     'https://images.unsplash.com',
     'https://*.cuewise.app',
     'https://www.youtube.com',
   ];
+  if (calendarEnabled) {
+    connectSrc.push('https://www.googleapis.com', 'https://oauth2.googleapis.com');
+  }
   if (env.mode !== 'production') {
     connectSrc.push('http://localhost:5173', 'ws://localhost:5173');
   }
