@@ -79,12 +79,8 @@ describe('CategoryFilter', () => {
 
       render(<CategoryFilter />);
 
-      // Badge only shows when not all enabled - look for the count badge
-      const badges = screen.queryAllByText(/^\d+$/);
-      const badgeElements = badges.filter(
-        (el) => el.className.includes('absolute') && el.className.includes('rounded-full')
-      );
-      expect(badgeElements).toHaveLength(0);
+      // Badge only shows when not all enabled.
+      expect(screen.queryByTestId('category-count')).not.toBeInTheDocument();
     });
 
     it('should show badge with count when some categories disabled', () => {
@@ -428,14 +424,8 @@ describe('CategoryFilter', () => {
 
       await user.click(screen.getByTitle('Filter categories (1/11)'));
 
-      // The Inspiration button should have a checked checkbox (bg-primary-600)
-      const inspirationButton = screen.getByText('Inspiration').closest('button');
-      expect(inspirationButton).toBeInTheDocument();
-
-      // Check that the checkbox div has the checked styling
-      const checkboxes = inspirationButton?.querySelectorAll('div');
-      const checkboxDiv = checkboxes?.[0];
-      expect(checkboxDiv?.className).toContain('bg-primary-600');
+      const inspirationButton = screen.getByRole('button', { name: 'Inspiration' });
+      expect(inspirationButton).toHaveAttribute('aria-pressed', 'true');
     });
 
     it('should show custom checkbox as checked when showCustomQuotes is true', async () => {
@@ -453,9 +443,10 @@ describe('CategoryFilter', () => {
 
       await user.click(screen.getByTitle('Filter categories (1/11)'));
 
-      const customButton = screen.getByText('Custom').closest('button');
-      const checkboxDiv = customButton?.querySelector('div');
-      expect(checkboxDiv?.className).toContain('bg-primary-600');
+      expect(screen.getByRole('button', { name: 'Custom' })).toHaveAttribute(
+        'aria-pressed',
+        'true'
+      );
     });
   });
 
@@ -515,9 +506,10 @@ describe('CategoryFilter', () => {
 
       await user.click(screen.getByTitle('Filter categories (11/11)'));
 
-      const favoritesButton = screen.getByText('Favorites Only').closest('button');
-      const checkboxDiv = favoritesButton?.querySelector('div');
-      expect(checkboxDiv?.className).toContain('bg-primary-600');
+      expect(screen.getByRole('button', { name: 'Favorites Only' })).toHaveAttribute(
+        'aria-pressed',
+        'true'
+      );
     });
 
     it('should call toggleFavoritesOnly on Select All when favorites is enabled', async () => {

@@ -106,7 +106,10 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({ compact = false 
 
       {/* Badge showing filtered count */}
       {!allEnabled && (
-        <span className="absolute -top-1 -right-1 w-4 h-4 bg-primary-500 text-white text-xs rounded-full flex items-center justify-center font-medium">
+        <span
+          data-testid="category-count"
+          className="absolute -top-1 -right-1 w-4 h-4 bg-primary-500 text-white text-xs rounded-full flex items-center justify-center font-medium"
+        >
           {enabledCount}
         </span>
       )}
@@ -162,6 +165,7 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({ compact = false 
             <button
               type="button"
               onClick={toggleCustomQuotes}
+              aria-pressed={showCustomQuotes}
               className="w-full flex items-center gap-3 px-4 py-2 hover:bg-surface-variant transition-colors"
             >
               {/* Checkbox */}
@@ -194,6 +198,7 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({ compact = false 
             <button
               type="button"
               onClick={toggleFavoritesOnly}
+              aria-pressed={showFavoritesOnly}
               className="w-full flex items-center gap-3 px-4 py-2 hover:bg-surface-variant transition-colors"
             >
               {/* Checkbox */}
@@ -298,6 +303,7 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({ compact = false 
                   key={category}
                   type="button"
                   onClick={() => toggleCategory(category)}
+                  aria-pressed={isEnabled}
                   className="w-full flex items-center gap-3 px-4 py-2 hover:bg-surface-variant transition-colors"
                 >
                   {/* Checkbox */}

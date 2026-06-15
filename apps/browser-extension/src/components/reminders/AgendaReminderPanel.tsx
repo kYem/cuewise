@@ -262,7 +262,8 @@ export function AgendaReminderPanel({
               overflow > 0 && !isExpanded ? group.items.slice(0, GROUP_LIMIT) : group.items;
 
             return (
-              <div key={group.key} className="mb-1.5">
+              // biome-ignore lint/a11y/useSemanticElements: group wraps nested buttons, not a fieldset
+              <div key={group.key} className="mb-1.5" role="group" aria-label={group.label}>
                 <div className="flex items-center gap-1.5 pt-1 pb-2">
                   <span
                     className={cn(
