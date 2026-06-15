@@ -4,7 +4,7 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@cuewise/ui';
 import { format, parseISO } from 'date-fns';
 import { TrendingUp } from 'lucide-react';
 import type React from 'react';
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from 'recharts';
+import { Bar, BarChart, CartesianGrid, type TooltipValueType, XAxis, YAxis } from 'recharts';
 
 interface DataPoint {
   label: string;
@@ -96,8 +96,8 @@ export const TrendChart: React.FC<TrendChartProps> = ({ title, data, metric }) =
   // Get the chart config for this metric
   const chartConfig = chartConfigs[metric];
 
-  // Custom tooltip formatter
-  const tooltipFormatter = (value: string | number | (string | number)[]) => {
+  // Custom tooltip formatter; recharts 3 widens the value to TooltipValueType | undefined.
+  const tooltipFormatter = (value: TooltipValueType | undefined) => {
     const numValue = typeof value === 'number' ? value : Number(value);
     return formatValue(numValue);
   };

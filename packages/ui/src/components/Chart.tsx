@@ -98,20 +98,30 @@ ChartContainer.displayName = 'ChartContainer';
 // Chart Tooltip
 const ChartTooltip = RechartsPrimitive.Tooltip;
 
+// recharts 3 dropped the top-level NameType export; mirror its definition.
+type TooltipNameType = number | string;
+
 // Chart Tooltip Content
-interface ChartTooltipContentProps
-  extends Omit<
-      React.ComponentPropsWithoutRef<typeof RechartsPrimitive.Tooltip>,
-      'content' | 'wrapperStyle' | 'contentStyle' | 'itemStyle' | 'labelStyle'
+type ChartTooltipContentProps = Omit<
+  React.ComponentPropsWithoutRef<typeof RechartsPrimitive.Tooltip>,
+  'content' | 'wrapperStyle' | 'contentStyle' | 'itemStyle' | 'labelStyle'
+> &
+  Omit<React.ComponentPropsWithoutRef<'div'>, 'content'> &
+  // recharts 3 exposes payload/label/formatter via DefaultTooltipContentProps, not via Tooltip props.
+  Omit<
+    RechartsPrimitive.DefaultTooltipContentProps<
+      RechartsPrimitive.TooltipValueType,
+      TooltipNameType
     >,
-    Omit<React.ComponentPropsWithoutRef<'div'>, 'content'> {
-  hideLabel?: boolean;
-  hideIndicator?: boolean;
-  hideName?: boolean;
-  indicator?: 'line' | 'dot' | 'dashed';
-  nameKey?: string;
-  labelKey?: string;
-}
+    'accessibilityLayer'
+  > & {
+    hideLabel?: boolean;
+    hideIndicator?: boolean;
+    hideName?: boolean;
+    indicator?: 'line' | 'dot' | 'dashed';
+    nameKey?: string;
+    labelKey?: string;
+  };
 
 const ChartTooltipContent = React.forwardRef<HTMLDivElement, ChartTooltipContentProps>(
   (
@@ -241,12 +251,12 @@ ChartTooltipContent.displayName = 'ChartTooltipContent';
 const ChartLegend = RechartsPrimitive.Legend;
 
 // Chart Legend Content
-interface ChartLegendContentProps
-  extends React.ComponentPropsWithoutRef<'div'>,
-    Pick<RechartsPrimitive.LegendProps, 'payload' | 'verticalAlign'> {
-  hideIcon?: boolean;
-  nameKey?: string;
-}
+// recharts 3 moved payload/verticalAlign off LegendProps onto DefaultLegendContentProps.
+type ChartLegendContentProps = React.ComponentPropsWithoutRef<'div'> &
+  Pick<RechartsPrimitive.DefaultLegendContentProps, 'payload' | 'verticalAlign'> & {
+    hideIcon?: boolean;
+    nameKey?: string;
+  };
 
 const ChartLegendContent = React.forwardRef<HTMLDivElement, ChartLegendContentProps>(
   ({ className, hideIcon = false, payload, verticalAlign = 'bottom', nameKey }, ref) => {
