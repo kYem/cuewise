@@ -1,0 +1,180 @@
+---
+import Base from '../../layouts/Base.astro';
+import { SITE } from '../../lib/site';
+
+const reportUrl = `${SITE.githubUrl}/security/advisories/new`;
+---
+
+<Base
+  title="How we secure Cuewise's releases - Cuewise"
+  description="Cuewise lives in your new tab and updates itself. Here's how we make sure every update is exactly the code we reviewed and built — locked down, and cryptographically signed."
+>
+  <main>
+
+    <!-- Hero -->
+    <section class="page-hero">
+      <div class="wrap">
+        <div class="eyebrow">
+          <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>
+            <path d="m9 12 2 2 4-4"/>
+          </svg>
+          Security
+        </div>
+        <h1>How We Secure Cuewise's Releases</h1>
+        <p class="hero-sub">Cuewise lives in your new tab and quietly updates itself. The most important promise we can keep is that every update is exactly the code we reviewed and built — never something slipped in along the way. Here's how we make that true.</p>
+        <p class="post-meta">June 15, 2026 · The Cuewise team</p>
+      </div>
+    </section>
+
+    <section class="section-pad">
+      <div class="wrap">
+
+        <!-- What we're protecting -->
+        <div class="content-card glass reveal">
+          <h2>
+            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>
+            </svg>
+            What We're Protecting
+          </h2>
+          <p>Your data already stays on your device — your goals, your focus, your settings never touch our servers. That's our <a href="/privacy/">privacy promise</a>, and it hasn't changed. This post is about the other half of the story: the integrity of the extension itself.</p>
+          <p>Cuewise updates automatically inside your browser, and that convenience is exactly the thing most worth protecting. The real risk isn't someone reading your to-do list — it's a bad actor slipping tampered code into an update on its way to you. So we've built our release pipeline around a single promise: every version you receive is exactly the code we reviewed and built, and you never have to take that on faith.</p>
+        </div>
+
+        <!-- The path every update takes -->
+        <div class="content-card glass reveal">
+          <h2>
+            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/>
+            </svg>
+            The Path Every Update Takes
+          </h2>
+          <p>Before a single line of new code reaches your browser, it travels through a series of gates — each enforced automatically, not by anyone remembering to do the right thing:</p>
+          <div class="chain" role="list">
+            <span class="step" role="listitem">Reviewed pull request</span>
+            <span class="arrow" aria-hidden="true">→</span>
+            <span class="step" role="listitem">Tests pass</span>
+            <span class="arrow" aria-hidden="true">→</span>
+            <span class="step" role="listitem">Locked-down build</span>
+            <span class="arrow" aria-hidden="true">→</span>
+            <span class="step" role="listitem">Human approval</span>
+            <span class="arrow" aria-hidden="true">→</span>
+            <span class="step" role="listitem">Signed release</span>
+          </div>
+          <p>It starts with review. Every change is a pull request that has to pass our automated tests and checks before it can join <code>main</code> — the one branch we ever release from. That branch is locked: no force-pushing, no editing it directly, no shipping something that didn't pass. If a change didn't earn its way in, it doesn't go out.</p>
+          <p>When it's time to publish, the keys to the Chrome Web Store come into play — and those are the keys to the kingdom. They live in a sealed vault that only the release branch can open, and only after a human approves the release and a short cooldown passes. Just as important, the step that actually holds those keys runs <strong>none of our third-party code</strong>: it's a tiny, dependency-free script, so even a compromised library can never reach them.</p>
+          <p>And while a release is being built, the build machine is kept on a short leash. It can talk to a tiny list of services — our package registry and GitHub — and nothing else; every other connection is blocked outright. Modern software leans on hundreds of open-source packages, so if one were ever tampered with, it would have nowhere to send data and no way to pull in extra code during our build.</p>
+        </div>
+
+        <!-- Signed and watched -->
+        <div class="content-card glass reveal">
+          <h2>
+            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z"/><path d="m9 12 2 2 4-4"/>
+            </svg>
+            Signed, So You Can Verify It
+          </h2>
+          <p>When a release is finished, we don't just ask you to trust it — we give you a way to check. Every published build is cryptographically <strong>signed with a provenance attestation</strong> that ties the exact file to the exact commit and build that produced it. Anyone can verify it:</p>
+          <pre><code>gh attestation verify cuewise-extension-&lt;version&gt;.zip --repo kYem/cuewise</code></pre>
+          <p>If a file's signature doesn't trace back to our pipeline, it didn't come from us. We also keep a constant watch on everything Cuewise depends on: we get automatic alerts — and ready-made fixes — the moment a known vulnerability appears in a dependency, and we deliberately wait two weeks before adopting brand-new package versions, long enough for a malicious release to be caught and pulled before it could ever reach you.</p>
+        </div>
+
+        <!-- Open source + report -->
+        <div class="content-card glass reveal">
+          <h2>
+            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
+            </svg>
+            Don't Take Our Word for It
+          </h2>
+          <p>None of this is just words: Cuewise is <a href={SITE.githubUrl} target="_blank" rel="noopener noreferrer">open source</a>, so you're welcome to read the pipeline yourself and hold us to every claim on this page.</p>
+          <p>And if you ever spot a security issue, please report it privately through <a href={reportUrl} target="_blank" rel="noopener noreferrer">GitHub's security advisories</a> rather than a public issue — we'll get back to you quickly.</p>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- Bottom CTA -->
+    <section class="section-pad" style="padding-top:0;">
+      <div class="wrap">
+        <div class="final glass reveal">
+          <div class="final-inner">
+            <h2>Private by Design, Secure by Default</h2>
+            <p>Calm, mindful productivity you can actually trust.</p>
+            <div class="hero-cta">
+              <a class="btn btn-primary btn-lg" href={SITE.storeUrl} target="_blank" rel="noopener noreferrer">Get Cuewise</a>
+              <a class="btn btn-ghost btn-lg" href="/privacy/">Read our privacy promise</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</Base>
+
+<style>
+  .post-meta {
+    margin-top: 12px;
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.55);
+  }
+
+  .content-card h2 svg {
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0;
+  }
+
+  .content-card code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.88em;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 6px;
+    padding: 0.1em 0.4em;
+  }
+
+  .chain {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 10px;
+    margin: 18px 0;
+  }
+
+  .chain .step {
+    display: inline-block;
+    padding: 7px 14px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    font-size: 14px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  .chain .arrow {
+    color: rgba(255, 255, 255, 0.45);
+    font-weight: 700;
+  }
+
+  .content-card pre {
+    margin: 14px 0;
+    padding: 14px 16px;
+    background: rgba(0, 0, 0, 0.32);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 12px;
+    overflow-x: auto;
+  }
+
+  .content-card pre code {
+    font-size: 13.5px;
+    color: rgba(255, 255, 255, 0.92);
+    background: none;
+    border: none;
+    padding: 0;
+    white-space: pre;
+  }
+</style>
