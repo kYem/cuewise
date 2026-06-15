@@ -1,4 +1,5 @@
 import { ALL_QUOTE_CATEGORIES, QUOTE_CATEGORIES } from '@cuewise/shared';
+import { createSelectorMock } from '@cuewise/test-utils';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
@@ -41,17 +42,6 @@ function createMockStore(
     setActiveCollectionIds: vi.fn(),
     quotes: [],
     ...overrides,
-  };
-}
-
-// Helper to create a mock implementation that handles selector functions
-function createSelectorMock(store: MockCategoryFilterStore) {
-  // biome-ignore lint/suspicious/noExplicitAny: Mock needs flexible typing to handle selector functions
-  return (selector?: (state: any) => unknown) => {
-    if (selector) {
-      return selector(store);
-    }
-    return store;
   };
 }
 

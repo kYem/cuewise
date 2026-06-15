@@ -1,5 +1,4 @@
-import { reminderFactory } from '@cuewise/test-utils';
-import { defaultSettings } from '@cuewise/test-utils/fixtures';
+import { createSettingsStoreMock, reminderFactory } from '@cuewise/test-utils';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useSettingsStore } from '../../stores/settings-store';
@@ -13,10 +12,7 @@ const HOUR_MS = 60 * 60 * 1000;
 
 // The panel reads `state.settings.timeFormat` via selector — apply it on the mock.
 function mockTimeFormat(timeFormat: '12h' | '24h') {
-  const state = { settings: { ...defaultSettings, timeFormat } };
-  vi.mocked(useSettingsStore).mockImplementation((selector) =>
-    selector(state as Parameters<typeof selector>[0])
-  );
+  vi.mocked(useSettingsStore).mockImplementation(createSettingsStoreMock({ timeFormat }));
 }
 
 /** A dueDate later TODAY (now + 2h). The clock is frozen at 09:00, so this stays same-day. */

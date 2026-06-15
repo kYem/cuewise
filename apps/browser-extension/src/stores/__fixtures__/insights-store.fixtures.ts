@@ -39,15 +39,6 @@ export function createValidImportValidation(data: Partial<ExportData> = {}) {
   };
 }
 
-export function createInvalidImportValidation(errorMessage = 'Validation failed') {
-  return {
-    isValid: false,
-    errors: [{ field: 'file', message: errorMessage }],
-    warnings: [],
-    data: null,
-  };
-}
-
 // ============================================================================
 // Storage Mock Helpers
 // ============================================================================

@@ -10,10 +10,6 @@ export const pomodoroFactory = Factory.define<PomodoroSession>(({ sequence }) =>
   type: 'work' as const,
 }));
 
-export const completedPomodoroFactory = pomodoroFactory.params({
-  completedAt: new Date().toISOString(),
-});
-
 export const breakPomodoroFactory = pomodoroFactory.params({
   duration: 5,
   type: 'break' as const,

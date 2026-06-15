@@ -27,18 +27,3 @@ export const quoteFactory = Factory.define<Quote>(({ sequence }) => ({
   source: undefined,
   notes: undefined,
 }));
-
-// Named variants for common scenarios
-export const customQuoteFactory = Factory.define<Quote>(({ sequence }) => ({
-  ...quoteFactory.build(),
-  id: `custom-${sequence}`,
-  isCustom: true,
-}));
-
-export const favoriteQuoteFactory = quoteFactory.params({
-  isFavorite: true,
-});
-
-export const hiddenQuoteFactory = quoteFactory.params({
-  isHidden: true,
-});

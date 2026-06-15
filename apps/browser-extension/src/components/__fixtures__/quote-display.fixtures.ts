@@ -200,66 +200,6 @@ export function createNoNavigationMockStore(
 }
 
 // ============================================================================
-// Test Scenarios
-// ============================================================================
-
-/**
- * Navigation button test scenario
- */
-export interface NavigationButtonScenario {
-  description: string;
-  mockStore: MockQuoteStore;
-  buttonTitle: string;
-  expectedMethod: keyof MockQuoteStore;
-  shouldBeDisabled?: boolean;
-}
-
-/**
- * Creates test scenarios for all navigation button states
- */
-export function createNavigationButtonScenarios() {
-  const quote = quoteFactory.build();
-
-  return {
-    backEnabled: {
-      description: 'back button enabled when can go back',
-      mockStore: createAtBeginningMockStore(quote),
-      buttonTitle: 'Previous quote',
-      expectedMethod: 'goBack' as const,
-      shouldBeDisabled: false,
-    },
-    backDisabled: {
-      description: 'back button disabled when cannot go back',
-      mockStore: createNoNavigationMockStore(quote),
-      buttonTitle: 'Previous quote',
-      expectedMethod: 'goBack' as const,
-      shouldBeDisabled: true,
-    },
-    forwardEnabled: {
-      description: 'forward button enabled when can go forward',
-      mockStore: createAtEndMockStore(quote),
-      buttonTitle: 'Next quote',
-      expectedMethod: 'goForward' as const,
-      shouldBeDisabled: false,
-    },
-    forwardDisabled: {
-      description: 'forward button disabled when cannot go forward',
-      mockStore: createNoNavigationMockStore(quote),
-      buttonTitle: 'Next quote',
-      expectedMethod: 'goForward' as const,
-      shouldBeDisabled: true,
-    },
-    newQuote: {
-      description: 'new quote button always enabled',
-      mockStore: createLoadedMockStore(quote),
-      buttonTitle: 'New quote',
-      expectedMethod: 'refreshQuote' as const,
-      shouldBeDisabled: false,
-    },
-  };
-}
-
-// ============================================================================
 // Assertion Helpers
 // ============================================================================
 
