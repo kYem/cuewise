@@ -155,6 +155,9 @@ jobs:
         env:
           VERSION: ${{ needs.build.outputs.version }}
         run: |
+          # Write to the runner temp dir, not the working tree, so the
+          # generated notes never need gitignoring.
+          NOTES="$RUNNER_TEMP/RELEASE_NOTES.md"
           # Capture from the exact `## <version>` heading up to the next
           # version heading. The boundary requires a semver-shaped heading so a
           # stray `## ...` line inside an entry body can't truncate the notes.
@@ -162,16 +165,16 @@ jobs:
             $0 == ver { capture = 1; next }
             capture && /^## [0-9]+\.[0-9]+\.[0-9]+/ { exit }
             capture { print }
-          ' apps/browser-extension/CHANGELOG.md > RELEASE_NOTES.md
-          if [ ! -s RELEASE_NOTES.md ]; then
+          ' apps/browser-extension/CHANGELOG.md > "$NOTES"
+          if [ ! -s "$NOTES" ]; then
             echo "::warning::No CHANGELOG section found for $VERSION; using a fallback body."
-            echo "Cuewise v$VERSION" > RELEASE_NOTES.md
+            echo "Cuewise v$VERSION" > "$NOTES"
           fi
           {
             echo ""
             echo "---"
             echo "**Full changelog:** [CHANGELOG.md](https://github.com/${GITHUB_REPOSITORY}/blob/v${VERSION}/apps/browser-extension/CHANGELOG.md)"
-          } >> RELEASE_NOTES.md
+          } >> "$NOTES"
 
       - name: Create GitHub Release
         if: ${{ steps.check_release.outputs.exists == 'false' }}
@@ -179,7 +182,7 @@ jobs:
         with:
           tag_name: v${{ needs.build.outputs.version }}
           name: Cuewise v${{ needs.build.outputs.version }}
-          body_path: RELEASE_NOTES.md
+          body_path: ${{ runner.temp }}/RELEASE_NOTES.md
           files: dist-artifact/cuewise-extension-${{ needs.build.outputs.version }}.zip
           draft: false
           prerelease: false
