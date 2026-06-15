@@ -17,61 +17,8 @@ interface QuoteStoreState {
 }
 
 // ============================================================================
-// Mock Functions
-// ============================================================================
-
-export interface MockStorageFunctions {
-  getQuotes: Mock;
-  setQuotes: Mock;
-  getCurrentQuote: Mock;
-  setCurrentQuote: Mock;
-}
-
-export interface MockToastFunctions {
-  error: Mock;
-  warning: Mock;
-  success: Mock;
-}
-
-// ============================================================================
 // Test Data Builders
 // ============================================================================
-
-/**
- * Creates a quote history state with specified quotes
- * @param quotes - Array of quotes to use in history
- * @param currentIndex - Current position in history (default: 0)
- * @returns Object with quoteHistory array and historyIndex
- */
-export function createQuoteHistoryState(quotes: Quote[], currentIndex = 0) {
-  return {
-    quoteHistory: quotes.map((q) => q.id),
-    historyIndex: currentIndex,
-  };
-}
-
-/**
- * Creates a store state with navigation history
- * @param options - Configuration options
- * @returns Complete store state object
- */
-export function createStoreStateWithHistory(options: {
-  quotes: Quote[];
-  currentQuote: Quote;
-  historyQuotes: Quote[];
-  historyIndex?: number;
-}) {
-  const { quotes, currentQuote, historyQuotes, historyIndex = 0 } = options;
-
-  return {
-    quotes,
-    currentQuote,
-    quoteHistory: historyQuotes.map((q) => q.id),
-    historyIndex,
-    isLoading: false,
-    error: null,
-  };
-}
 
 /**
  * Creates a set of quotes for navigation testing
@@ -89,13 +36,6 @@ export function createNavigationQuotes(count = 3) {
     quote4: quotes[3],
     quote5: quotes[4],
   };
-}
-
-/**
- * Creates a quote with specific properties for testing
- */
-export function createQuoteWithProps(overrides: Partial<Quote> = {}) {
-  return quoteFactory.build(overrides);
 }
 
 /**
@@ -124,20 +64,6 @@ export const EMPTY_STORE_STATE = {
 };
 
 /**
- * Creates a loaded store state with quotes
- */
-export function createLoadedStoreState(quotes: Quote[], currentQuote?: Quote) {
-  return {
-    quotes,
-    currentQuote: currentQuote || quotes[0],
-    isLoading: false,
-    error: null,
-    quoteHistory: currentQuote ? [currentQuote.id] : quotes.length > 0 ? [quotes[0].id] : [],
-    historyIndex: 0,
-  };
-}
-
-/**
  * Creates a store state at the beginning of history (can only go back)
  */
 export function createAtBeginningState(quotes: Quote[], history: Quote[]) {
@@ -160,20 +86,6 @@ export function createAtEndState(quotes: Quote[], history: Quote[]) {
     currentQuote: history[history.length - 1],
     quoteHistory: history.map((q) => q.id),
     historyIndex: history.length - 1, // At the oldest
-    isLoading: false,
-    error: null,
-  };
-}
-
-/**
- * Creates a store state in the middle of history (can go both ways)
- */
-export function createInMiddleState(quotes: Quote[], history: Quote[], index: number) {
-  return {
-    quotes,
-    currentQuote: history[index],
-    quoteHistory: history.map((q) => q.id),
-    historyIndex: index,
     isLoading: false,
     error: null,
   };
@@ -224,46 +136,6 @@ export function expectHistoryStructure(
   if (expectedCurrentId && state.quoteHistory) {
     expect(state.quoteHistory[expectedIndex]).toBe(expectedCurrentId);
   }
-}
-
-/**
- * Validates that forward history was cleared
- */
-export function expectForwardHistoryCleared(state: QuoteStoreState, _fromIndex: number) {
-  // After clearing forward history from index, we should have:
-  // - New quote at index 0
-  // - Old history from fromIndex onwards
-  expect(state.historyIndex).toBe(0);
-  expect(state.quoteHistory?.[0]).toBe(state.currentQuote?.id);
-}
-
-// ============================================================================
-// Mock Setup Helpers
-// ============================================================================
-
-/**
- * Sets up storage mocks to return specific data
- */
-export function setupStorageMocks(
-  mocks: MockStorageFunctions,
-  options: {
-    quotes?: Quote[];
-    currentQuote?: Quote | null;
-  }
-) {
-  const { quotes = [], currentQuote = null } = options;
-
-  mocks.getQuotes.mockResolvedValue(quotes);
-  mocks.getCurrentQuote.mockResolvedValue(currentQuote);
-  mocks.setQuotes.mockResolvedValue(undefined);
-  mocks.setCurrentQuote.mockResolvedValue(undefined);
-}
-
-/**
- * Sets up storage mocks to simulate an error
- */
-export function setupStorageError(mocks: MockStorageFunctions, errorMessage = 'Storage error') {
-  mocks.getQuotes.mockRejectedValue(new Error(errorMessage));
 }
 
 // ============================================================================
