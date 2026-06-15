@@ -1,3 +1,4 @@
+import { createSelectorMock } from '@cuewise/test-utils';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useReminderStore } from '../stores/reminder-store';
@@ -11,9 +12,7 @@ vi.mock('../stores/reminder-store', () => ({
 // Resolves true: onSuccess() is now gated on a successful write.
 function mockAddReminder() {
   const addReminder = vi.fn().mockResolvedValue(true);
-  vi.mocked(useReminderStore).mockImplementation((selector) =>
-    selector({ addReminder } as unknown as Parameters<typeof selector>[0])
-  );
+  vi.mocked(useReminderStore).mockImplementation(createSelectorMock({ addReminder }));
   return addReminder;
 }
 

@@ -1,3 +1,4 @@
+import { createSelectorMock } from '@cuewise/test-utils';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -15,7 +16,6 @@ import {
   expectButtonState,
   expectCallbackCalledAfterNavigation,
   expectNavigationMethodCalled,
-  type MockQuoteStore,
 } from './__fixtures__/quote-display.fixtures';
 import { QuoteDisplay } from './QuoteDisplay';
 
@@ -23,17 +23,6 @@ import { QuoteDisplay } from './QuoteDisplay';
 vi.mock('../stores/quote-store', () => ({
   useQuoteStore: vi.fn(),
 }));
-
-// Helper to create a mock implementation that handles selector functions
-function createSelectorMock(store: MockQuoteStore) {
-  // biome-ignore lint/suspicious/noExplicitAny: Mock needs flexible typing to handle selector functions
-  return (selector?: (state: any) => unknown) => {
-    if (selector) {
-      return selector(store);
-    }
-    return store;
-  };
-}
 
 describe('QuoteDisplay - Navigation', () => {
   beforeEach(() => {

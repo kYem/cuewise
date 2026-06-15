@@ -1,11 +1,11 @@
 import { getNextDayDateString } from '@cuewise/shared';
+import { createSettingsStoreMock } from '@cuewise/test-utils';
 import {
   completedGoalFactory,
   goalFactory,
   taskWithDueDateFactory,
   taskWithSubtasksFactory,
 } from '@cuewise/test-utils/factories';
-import { defaultSettings } from '@cuewise/test-utils/fixtures';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { act } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -25,10 +25,7 @@ vi.mock('../stores/settings-store', () => ({
 }));
 
 function mockSettings(focusedGoalId: string | null) {
-  vi.mocked(useSettingsStore).mockImplementation(() => ({
-    settings: { ...defaultSettings, focusedGoalId },
-    updateSettings: vi.fn(),
-  }));
+  vi.mocked(useSettingsStore).mockImplementation(createSettingsStoreMock({ focusedGoalId }));
 }
 
 describe('GoalFocusView - task metadata', () => {
@@ -124,10 +121,9 @@ describe('GoalFocusView - completing the focused task', () => {
       toggleTask: vi.fn(async () => toggleResult),
     });
     vi.mocked(useGoalStore).mockImplementation(createGoalStoreMock(store));
-    vi.mocked(useSettingsStore).mockImplementation(() => ({
-      settings: { ...defaultSettings, focusedGoalId: current.id },
-      updateSettings,
-    }));
+    vi.mocked(useSettingsStore).mockImplementation(
+      createSettingsStoreMock({ focusedGoalId: current.id, updateSettings })
+    );
     return { store, updateSettings, current, next };
   }
 
