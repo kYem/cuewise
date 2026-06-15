@@ -1,11 +1,15 @@
 ---
+import { getImage } from 'astro:assets';
+import type { ImageMetadata } from 'astro';
+
 interface Props {
-  src: string;
+  src: ImageMetadata;
   alt: string;
   label: string;
 }
 
 const { src, alt, label } = Astro.props;
+const opt = await getImage({ src, format: 'webp' });
 ---
 
 <div class="browser">
@@ -13,5 +17,5 @@ const { src, alt, label } = Astro.props;
     <div class="dots"><span class="r"></span><span class="y"></span><span class="g"></span></div>
     <div class="url">{label}</div>
   </div>
-  <img src={src} alt={alt} loading="lazy" />
+  <img src={opt.src} alt={alt} loading="lazy" />
 </div>

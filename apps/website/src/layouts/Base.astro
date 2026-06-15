@@ -1,8 +1,12 @@
 ---
+import { getImage } from 'astro:assets';
+import bgAurora from '../assets/bg-aurora.png';
 import Footer from '../components/Footer.astro';
 import Nav from '../components/Nav.astro';
 import { SITE } from '../lib/site';
 import '../styles/site.css';
+
+const bgAuroraOpt = await getImage({ src: bgAurora, format: 'webp' });
 
 interface Props {
   title: string;
@@ -39,7 +43,6 @@ const ogImageUrl = new URL(ogImage, SITE.url).href;
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
     <meta name="twitter:image" content={ogImageUrl} />
-    <link rel="preload" as="image" href="/images/bg-aurora.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -50,7 +53,7 @@ const ogImageUrl = new URL(ogImage, SITE.url).href;
     <slot name="head" />
   </head>
   <body>
-    <div class="backdrop"><img src="/images/bg-aurora.png" alt="" /></div>
+    <div class="backdrop"><img src={bgAuroraOpt.src} alt="" loading="lazy" /></div>
     <div class="orb a"></div>
     <div class="orb b"></div>
     <Nav />

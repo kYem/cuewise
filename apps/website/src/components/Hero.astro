@@ -1,5 +1,9 @@
 ---
+import { getImage } from 'astro:assets';
+import focus from '../assets/focus.png';
 import { SITE } from '../lib/site';
+
+const focusOpt = await getImage({ src: focus, format: 'webp' });
 ---
 
 <header class="hero" id="top">
@@ -32,7 +36,7 @@ import { SITE } from '../lib/site';
           <div class="dots"><span class="r"></span><span class="y"></span><span class="g"></span></div>
           <div class="url"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> New Tab</div>
         </div>
-        <img src="/images/focus.png" alt="Cuewise Focus Mode — one goal, a calm timer, and a daily photo" loading="eager" fetchpriority="high" />
+        <img src={focusOpt.src} alt="Cuewise Focus Mode — one goal, a calm timer, and a daily photo" loading="eager" fetchpriority="high" />
       </div>
     </div>
   </div>

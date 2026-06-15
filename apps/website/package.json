@@ -19,6 +19,7 @@
   },
   "devDependencies": {
     "@astrojs/check": "catalog:",
+    "sharp": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

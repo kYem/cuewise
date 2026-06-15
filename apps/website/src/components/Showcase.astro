@@ -1,4 +1,7 @@
 ---
+import insights from '../assets/insights.png';
+import pomodoro from '../assets/pomodoro.png';
+import quotes from '../assets/quotes.png';
 import BrowserFrame from './BrowserFrame.astro';
 ---
 
@@ -23,7 +26,7 @@ import BrowserFrame from './BrowserFrame.astro';
         </ul>
       </div>
       <div class="show-media">
-        <BrowserFrame src="/images/pomodoro.png" alt="Cuewise Pomodoro timer in Glass mode" label="Pomodoro" />
+        <BrowserFrame src={pomodoro} alt="Cuewise Pomodoro timer in Glass mode" label="Pomodoro" />
       </div>
     </div>
 
@@ -39,7 +42,7 @@ import BrowserFrame from './BrowserFrame.astro';
         </ul>
       </div>
       <div class="show-media">
-        <BrowserFrame src="/images/insights.png" alt="Cuewise insights dashboard in Glass mode" label="Insights" />
+        <BrowserFrame src={insights} alt="Cuewise insights dashboard in Glass mode" label="Insights" />
       </div>
     </div>
 
@@ -55,7 +58,7 @@ import BrowserFrame from './BrowserFrame.astro';
         </ul>
       </div>
       <div class="show-media">
-        <BrowserFrame src="/images/quotes.png" alt="Cuewise quote management library in Glass mode" label="Quotes" />
+        <BrowserFrame src={quotes} alt="Cuewise quote management library in Glass mode" label="Quotes" />
       </div>
     </div>
   </div>
