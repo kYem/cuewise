@@ -43,7 +43,7 @@
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "catalog:",
     "@vitest/ui": "catalog:",
-    "archiver": "^7.0.1",
+    "archiver": "^8.0.0",
     "autoprefixer": "catalog:",
     "jsdom": "catalog:",
     "postcss": "catalog:",
