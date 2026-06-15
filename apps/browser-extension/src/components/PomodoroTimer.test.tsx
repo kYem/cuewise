@@ -1,6 +1,6 @@
 import type { Goal } from '@cuewise/shared';
+import { createSelectorMock, createSettingsStoreMock } from '@cuewise/test-utils';
 import { goalFactory } from '@cuewise/test-utils/factories';
-import { defaultSettings } from '@cuewise/test-utils/fixtures';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
@@ -56,11 +56,6 @@ function mockStores(options: MockOptions = {}) {
     reloadSettings: vi.fn(),
   };
   const goalState = { todayTasks: options.todayTasks ?? [], initialize: vi.fn() };
-  // focusModeEnabled: false keeps the focus button (and its store call) out of the tree.
-  const settingsState = {
-    settings: { ...defaultSettings, focusModeEnabled: false },
-    updateSettings: vi.fn(),
-  };
   const soundsState = {
     activeSource: 'none',
     isPlaying: false,
@@ -71,22 +66,13 @@ function mockStores(options: MockOptions = {}) {
     getActiveSourceName: vi.fn(() => ''),
   };
 
-  // biome-ignore lint/suspicious/noExplicitAny: selector accepts the store state
-  vi.mocked(usePomodoroStore).mockImplementation((s?: (state: any) => unknown) =>
-    s ? s(pomodoroState) : pomodoroState
+  vi.mocked(usePomodoroStore).mockImplementation(createSelectorMock(pomodoroState));
+  vi.mocked(useGoalStore).mockImplementation(createSelectorMock(goalState));
+  // focusModeEnabled: false keeps the focus button (and its store call) out of the tree.
+  vi.mocked(useSettingsStore).mockImplementation(
+    createSettingsStoreMock({ focusModeEnabled: false })
   );
-  // biome-ignore lint/suspicious/noExplicitAny: selector accepts the store state
-  vi.mocked(useGoalStore).mockImplementation((s?: (state: any) => unknown) =>
-    s ? s(goalState) : goalState
-  );
-  // biome-ignore lint/suspicious/noExplicitAny: selector accepts the store state
-  vi.mocked(useSettingsStore).mockImplementation((s?: (state: any) => unknown) =>
-    s ? s(settingsState) : settingsState
-  );
-  // biome-ignore lint/suspicious/noExplicitAny: selector accepts the store state
-  vi.mocked(useSoundsStore).mockImplementation((s?: (state: any) => unknown) =>
-    s ? s(soundsState) : soundsState
-  );
+  vi.mocked(useSoundsStore).mockImplementation(createSelectorMock(soundsState));
 
   return { setSelectedGoal };
 }
