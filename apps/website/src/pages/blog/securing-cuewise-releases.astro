@@ -38,8 +38,8 @@ const reportUrl = `${SITE.githubUrl}/security/advisories/new`;
             </svg>
             What We're Protecting
           </h2>
-          <p>Your data already stays on your device — we never see it. That's our <a href="/privacy/">privacy promise</a>. This page is about the other half: the integrity of the extension itself.</p>
-          <p>Because Cuewise auto-updates inside your browser, the real risk isn't someone reading your goals — it's a bad actor tampering with an <em>update</em> on its way to you. So we built the release pipeline to make that as hard as possible.</p>
+          <p>Your data already stays on your device — your goals, your focus, your settings never touch our servers. That's our <a href="/privacy/">privacy promise</a>, and it hasn't changed. This post is about the other half of the story: the integrity of the extension itself.</p>
+          <p>Cuewise updates automatically inside your browser, and that convenience is exactly the thing most worth protecting. The real risk isn't someone reading your to-do list — it's a bad actor slipping tampered code into an update on its way to you. So we've built our release pipeline around a single promise: every version you receive is exactly the code we reviewed and built, and you never have to take that on faith.</p>
         </div>
 
         <!-- The path every update takes -->
@@ -50,7 +50,7 @@ const reportUrl = `${SITE.githubUrl}/security/advisories/new`;
             </svg>
             The Path Every Update Takes
           </h2>
-          <p>Before an update reaches your browser, it passes through a series of gates — each enforced automatically, not by memory or good intentions:</p>
+          <p>Before a single line of new code reaches your browser, it travels through a series of gates — each enforced automatically, not by anyone remembering to do the right thing:</p>
           <div class="chain" role="list">
             <span class="step" role="listitem">Reviewed pull request</span>
             <span class="arrow" aria-hidden="true">→</span>
@@ -62,34 +62,12 @@ const reportUrl = `${SITE.githubUrl}/security/advisories/new`;
             <span class="arrow" aria-hidden="true">→</span>
             <span class="step" role="listitem">Signed release</span>
           </div>
-          <p>Nothing can skip a step. Our release branch can't be force-pushed or edited directly, and a change that doesn't pass review and tests simply never ships.</p>
+          <p>It starts with review. Every change is a pull request that has to pass our automated tests and checks before it can join <code>main</code> — the one branch we ever release from. That branch is locked: no force-pushing, no editing it directly, no shipping something that didn't pass. If a change didn't earn its way in, it doesn't go out.</p>
+          <p>When it's time to publish, the keys to the Chrome Web Store come into play — and those are the keys to the kingdom. They live in a sealed vault that only the release branch can open, and only after a human approves the release and a short cooldown passes. Just as important, the step that actually holds those keys runs <strong>none of our third-party code</strong>: it's a tiny, dependency-free script, so even a compromised library can never reach them.</p>
+          <p>And while a release is being built, the build machine is kept on a short leash. It can talk to a tiny list of services — our package registry and GitHub — and nothing else; every other connection is blocked outright. Modern software leans on hundreds of open-source packages, so if one were ever tampered with, it would have nowhere to send data and no way to pull in extra code during our build.</p>
         </div>
 
-        <!-- Locked-away keys -->
-        <div class="content-card glass reveal">
-          <h2>
-            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-            </svg>
-            The Publishing Keys Stay Locked Away
-          </h2>
-          <p>The credentials that let us publish to the Chrome Web Store are the keys to the kingdom, so they live in a sealed vault that <strong>only the release branch can open</strong> — and only after a human approves the publish and a short cooldown passes.</p>
-          <p>Just as important: the step that actually holds those keys runs <strong>none of our third-party code</strong>. It's a tiny, dependency-free script, so even a compromised library can't reach the keys.</p>
-        </div>
-
-        <!-- Build can't phone home -->
-        <div class="content-card glass reveal">
-          <h2>
-            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/>
-            </svg>
-            A Build That Can't Phone Home
-          </h2>
-          <p>When we build a release, the build machine is only allowed to talk to a tiny allow-list of services — the package registry and GitHub. Every other network connection is <strong>blocked</strong>.</p>
-          <p>That matters because modern apps lean on hundreds of open-source packages. If one of them were ever tampered with, it couldn't quietly send data out or pull in extra code during our build — the door simply isn't open.</p>
-        </div>
-
-        <!-- Signed releases -->
+        <!-- Signed and watched -->
         <div class="content-card glass reveal">
           <h2>
             <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -97,43 +75,21 @@ const reportUrl = `${SITE.githubUrl}/security/advisories/new`;
             </svg>
             Signed, So You Can Verify It
           </h2>
-          <p>Every release is cryptographically <strong>signed with a provenance attestation</strong> that ties the published file to the exact commit and the exact build that produced it. It's not a claim you have to take on trust — anyone can check it:</p>
+          <p>When a release is finished, we don't just ask you to trust it — we give you a way to check. Every published build is cryptographically <strong>signed with a provenance attestation</strong> that ties the exact file to the exact commit and build that produced it. Anyone can verify it:</p>
           <pre><code>gh attestation verify cuewise-extension-&lt;version&gt;.zip --repo kYem/cuewise</code></pre>
-          <p>If a file's signature doesn't match our pipeline, it didn't come from us.</p>
+          <p>If a file's signature doesn't trace back to our pipeline, it didn't come from us. We also keep a constant watch on everything Cuewise depends on: we get automatic alerts — and ready-made fixes — the moment a known vulnerability appears in a dependency, and we deliberately wait two weeks before adopting brand-new package versions, long enough for a malicious release to be caught and pulled before it could ever reach you.</p>
         </div>
 
-        <!-- Dependencies -->
+        <!-- Found along the way + report -->
         <div class="content-card glass reveal">
           <h2>
             <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>
+              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
             </svg>
-            Eyes On Our Dependencies
+            What We Found, and How to Reach Us
           </h2>
-          <p>We get automatic alerts — and ready-made fix proposals — the moment a known vulnerability appears in anything we depend on. And we deliberately ignore brand-new package versions for two weeks, so a malicious release that gets pulled doesn't make it into Cuewise in the meantime.</p>
-        </div>
-
-        <!-- Found along the way -->
-        <div class="content-card glass reveal">
-          <h2>
-            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
-            </svg>
-            What We Found Along the Way
-          </h2>
-          <p>Tightening the pipeline had a nice side effect: it made us look closely at everything the extension reaches out to. That's how we noticed our YouTube focus-music player had quietly stopped working after an earlier website migration — and fixed it. A good security review tends to surface more than just security.</p>
-        </div>
-
-        <!-- Report / open source -->
-        <div class="content-card glass reveal">
-          <h2>
-            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/>
-            </svg>
-            See It Yourself — or Report Something
-          </h2>
-          <p>None of this is just words: Cuewise is <a href={SITE.githubUrl} target="_blank" rel="noopener noreferrer">open source</a>, so you can read the pipeline and check our claims.</p>
-          <p>And if you ever spot a security issue, please tell us privately through <a href={reportUrl} target="_blank" rel="noopener noreferrer">GitHub's security advisories</a> rather than a public issue — we'll respond quickly.</p>
+          <p>Tightening all of this had a happy side effect. Looking closely at every place the extension reaches out, we noticed our YouTube focus-music player had quietly stopped working after an earlier website move — so we fixed it. A good security review tends to surface more than just security.</p>
+          <p>And none of this is only words: Cuewise is <a href={SITE.githubUrl} target="_blank" rel="noopener noreferrer">open source</a>, so you're welcome to read the pipeline yourself and hold us to every claim here. If you ever find a security issue, please report it privately through <a href={reportUrl} target="_blank" rel="noopener noreferrer">GitHub's security advisories</a> rather than a public issue — we'll get back to you quickly.</p>
         </div>
 
       </div>
@@ -171,12 +127,21 @@ const reportUrl = `${SITE.githubUrl}/security/advisories/new`;
     flex-shrink: 0;
   }
 
+  .content-card code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.88em;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 6px;
+    padding: 0.1em 0.4em;
+  }
+
   .chain {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: 8px 10px;
-    margin: 16px 0;
+    margin: 18px 0;
   }
 
   .chain .step {
@@ -196,7 +161,7 @@ const reportUrl = `${SITE.githubUrl}/security/advisories/new`;
   }
 
   .content-card pre {
-    margin: 14px 0 0;
+    margin: 14px 0;
     padding: 14px 16px;
     background: rgba(0, 0, 0, 0.32);
     border: 1px solid rgba(255, 255, 255, 0.14);
@@ -205,7 +170,6 @@ const reportUrl = `${SITE.githubUrl}/security/advisories/new`;
   }
 
   .content-card pre code {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     font-size: 13.5px;
     color: rgba(255, 255, 255, 0.92);
     background: none;
