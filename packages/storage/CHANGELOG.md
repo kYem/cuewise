@@ -1,5 +1,12 @@
 # @cuewise/storage
 
+## 1.13.0
+
+### Patch Changes
+
+- Updated dependencies [e7fd59b]
+  - @cuewise/shared@1.13.0
+
 ## 1.9.1
 
 ### Patch Changes
@@ -12,7 +19,6 @@
 ### Minor Changes
 
 - 541153e: Add quote collections feature for organizing quotes into themed groups
-
   - Create custom collections with name and description
   - Add individual quotes to collections via CollectionPicker popover
   - Bulk add multiple quotes to a collection

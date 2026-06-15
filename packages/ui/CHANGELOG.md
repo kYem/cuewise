@@ -1,5 +1,12 @@
 # @cuewise/ui
 
+## 1.13.0
+
+### Patch Changes
+
+- Updated dependencies [e7fd59b]
+  - @cuewise/shared@1.13.0
+
 ## 1.9.1
 
 ### Patch Changes
@@ -32,7 +39,6 @@
 ### Minor Changes
 
 - d5ebdd6: Add author autocomplete and streamline quote management
-
   - Add reusable Autocomplete component to @cuewise/ui with keyboard navigation and accessibility support
   - Add author autocomplete to Add Quote and Edit Quote forms, suggesting existing authors
   - Remove floating "Add Custom Quote" button from home page - quotes can now be added via the dedicated Quote Management page
@@ -42,7 +48,6 @@
 ### Patch Changes
 
 - b02da15: Add accessibility improvements
-
   - Semantic HTML landmarks (`<main>`, `<nav>`, `<header>`) for screen reader navigation
   - Skip-to-main-content link for keyboard users
   - `aria-live` regions for toast notifications and quote changes
@@ -51,7 +56,6 @@
   - `aria-current="page"` for active navigation tabs
 
 - 9ac8b71: Improve charts with shadcn/Recharts best practices
-
   - Add CSS variable injection for theme-aware chart colors
   - Fix tooltip styling for dark mode compatibility
   - Add `hideName` prop to ChartTooltipContent for cleaner tooltips
