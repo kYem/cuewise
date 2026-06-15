@@ -13,15 +13,6 @@ updates:
     commit-message:
       prefix: 'ci'
 
-  # npm/pnpm deps; one root entry covers the whole workspace.
-  - package-ecosystem: npm
-    directory: /
-    schedule:
-      interval: weekly
-    groups:
-      npm-minor-patch:
-        update-types:
-          - minor
-          - patch
-    commit-message:
-      prefix: 'chore(deps)'
+  # npm/pnpm version updates are managed manually via the pnpm catalog
+  # (pnpm-workspace.yaml). Dependabot SECURITY updates still run via the repo's
+  # security settings — only the routine weekly version bumps are turned off here.
