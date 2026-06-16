@@ -36,7 +36,7 @@ export default defineManifest(async (env) => {
       48: 'icons/icon-48.png',
       128: 'icons/icon-128.png',
     },
-    permissions: ['storage', 'notifications', 'alarms', 'favicon'],
+    permissions: ['storage', 'notifications', 'alarms'],
     host_permissions: hostPermissions,
     chrome_url_overrides: {
       newtab: 'index.html',
