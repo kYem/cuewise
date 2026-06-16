@@ -42,14 +42,15 @@ function mockStores(
   };
   const updateSettings = vi.fn();
 
+  const initCalendar = vi.fn();
   vi.mocked(isCalendarFeatureEnabled).mockReturnValue(options.calendarEnabled ?? false);
   vi.mocked(useGoalStore).mockImplementation(createSelectorMock(goalState));
-  vi.mocked(useCalendarStore).mockImplementation(createSelectorMock({ initialize: vi.fn() }));
+  vi.mocked(useCalendarStore).mockImplementation(createSelectorMock({ initialize: initCalendar }));
   vi.mocked(useSettingsStore).mockImplementation(
     createSettingsStoreMock({ goalViewMode: 'full', ...options.settings, updateSettings })
   );
 
-  return { updateSettings };
+  return { updateSettings, initCalendar };
 }
 
 describe('GoalsSection - options menu', () => {
@@ -237,5 +238,52 @@ describe('GoalsSection - calendar primary', () => {
     await user.click(screen.getByRole('button', { name: 'View options' }));
 
     expect(screen.queryByText('Calendar position')).not.toBeInTheDocument();
+  });
+
+  it('lets the user switch back to goals from calendar-only mode', async () => {
+    const user = userEvent.setup();
+    const { updateSettings } = mockStores({
+      settings: { newTabPrimary: 'calendar' },
+      calendarEnabled: true,
+    });
+
+    render(<GoalsSection />);
+    await user.click(screen.getByRole('button', { name: 'View options' }));
+    await user.click(screen.getByRole('button', { name: 'Full' }));
+
+    expect(updateSettings).toHaveBeenCalledWith({ goalViewMode: 'full', newTabPrimary: 'goals' });
+  });
+
+  it('initializes the calendar store when the calendar block is shown', () => {
+    const { initCalendar } = mockStores({
+      settings: { newTabPrimary: 'calendar' },
+      calendarEnabled: true,
+    });
+
+    render(<GoalsSection />);
+
+    expect(initCalendar).toHaveBeenCalled();
+  });
+
+  it('does not initialize the calendar store for goals-only', () => {
+    const { initCalendar } = mockStores({
+      settings: { newTabPrimary: 'goals' },
+      calendarEnabled: true,
+    });
+
+    render(<GoalsSection />);
+
+    expect(initCalendar).not.toHaveBeenCalled();
+  });
+
+  it('does not initialize the calendar store when the feature is disabled', () => {
+    const { initCalendar } = mockStores({
+      settings: { newTabPrimary: 'calendar' },
+      calendarEnabled: false,
+    });
+
+    render(<GoalsSection />);
+
+    expect(initCalendar).not.toHaveBeenCalled();
   });
 });

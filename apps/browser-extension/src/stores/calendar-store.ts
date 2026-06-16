@@ -59,8 +59,9 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
   // which has no chrome.identity) it reports that rather than fabricating events.
   connect: async () => {
     if (!isCalendarAvailable()) {
-      set({ error: 'Google Calendar is not available' });
-      useToastStore.getState().error('Google Calendar is not available in the dev server');
+      const message = 'Google Calendar is not available in the dev server';
+      set({ error: message });
+      useToastStore.getState().error(message);
       return;
     }
     set({ isLoading: true, error: null });
@@ -72,6 +73,9 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
       const result = await setCalendarState({ connected: true, events, lastSync });
       if (!result.success) {
         logger.error('Failed to persist calendar state', result.error);
+        // Keep the working in-memory connection, but reflect the degraded state
+        // so the strip's sync indicator isn't a misleading green.
+        set({ error: 'Connected, but saving failed; may not persist after reload' });
         useToastStore.getState().warning('Connected, but saving calendar state failed');
         return;
       }
@@ -113,6 +117,9 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
       const result = await setCalendarState({ connected: true, events, lastSync });
       if (!result.success) {
         logger.error('Failed to persist calendar state', result.error);
+        // Reflect the degraded state on the sync indicator even on a silent
+        // (background) refresh; cleared on the next successful refresh.
+        set({ error: 'Refreshed, but saving failed; may not persist after reload' });
         if (!silent) {
           useToastStore.getState().warning('Refreshed, but saving calendar state failed');
         }

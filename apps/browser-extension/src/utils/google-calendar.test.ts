@@ -249,6 +249,21 @@ describe('fetchTodayEvents', () => {
     expect(events[0].title).toBe('(no title)');
   });
 
+  it('leaves color undefined for a timed event without a colorId', async () => {
+    stubFetchItems([
+      {
+        id: 'nc',
+        summary: 'No color',
+        start: { dateTime: '2026-06-14T09:00:00Z' },
+        end: { dateTime: '2026-06-14T10:00:00Z' },
+      },
+    ]);
+
+    const events = await fetchTodayEvents();
+
+    expect(events[0].color).toBeUndefined();
+  });
+
   it('drops malformed events that have no start or end', async () => {
     stubFetchItems([
       { id: 'bad', summary: 'No times' },

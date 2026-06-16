@@ -84,34 +84,6 @@ describe('CalendarStrip - variant', () => {
   });
 });
 
-describe('CalendarStrip - time formatting', () => {
-  it('renders noon as 12pm and midnight as 12am in 12-hour mode', () => {
-    const store = createCalendarStore({
-      events: [
-        timedEvent('noon', '2026-06-14T12:00:00', '2026-06-14T12:30:00', 'Lunch'),
-        timedEvent('midnight', '2026-06-14T00:00:00', '2026-06-14T00:30:00', 'Late night'),
-      ],
-    });
-    mountWith(store, '12h');
-
-    render(<CalendarStrip />);
-
-    expect(screen.getByText('12pm')).toBeInTheDocument();
-    expect(screen.getByText('12am')).toBeInTheDocument();
-  });
-
-  it('includes minutes for non-zero 12-hour times', () => {
-    const store = createCalendarStore({
-      events: [timedEvent('sync', '2026-06-14T13:30:00', '2026-06-14T14:00:00', 'Sync')],
-    });
-    mountWith(store, '12h');
-
-    render(<CalendarStrip />);
-
-    expect(screen.getByText('1:30pm')).toBeInTheDocument();
-  });
-});
-
 describe('CalendarStrip - all-day events', () => {
   it('renders an "All day" label instead of a clock time', () => {
     const store = createCalendarStore({
@@ -306,5 +278,104 @@ describe('CalendarStrip - time formatting', () => {
     render(<CalendarStrip />);
 
     expect(screen.getByText('09:00')).toBeInTheDocument();
+  });
+
+  it('renders noon as 12pm and midnight as 12am in 12-hour mode', () => {
+    const store = createCalendarStore({
+      events: [
+        timedEvent('noon', '2026-06-14T12:00:00', '2026-06-14T12:30:00', 'Lunch'),
+        timedEvent('midnight', '2026-06-14T00:00:00', '2026-06-14T00:30:00', 'Late night'),
+      ],
+    });
+    mountWith(store, '12h');
+
+    render(<CalendarStrip />);
+
+    expect(screen.getByText('12pm')).toBeInTheDocument();
+    expect(screen.getByText('12am')).toBeInTheDocument();
+  });
+
+  it('includes minutes for non-zero 12-hour times', () => {
+    const store = createCalendarStore({
+      events: [timedEvent('sync', '2026-06-14T13:30:00', '2026-06-14T14:00:00', 'Sync')],
+    });
+    mountWith(store, '12h');
+
+    render(<CalendarStrip />);
+
+    expect(screen.getByText('1:30pm')).toBeInTheDocument();
+  });
+});
+
+describe('CalendarStrip - connected status & actions', () => {
+  it('calls refresh when the refresh button is clicked', () => {
+    const store = createCalendarStore({
+      connected: true,
+      events: [timedEvent('e', '2026-06-14T13:00:00', '2026-06-14T14:00:00', 'Sync')],
+    });
+    mountWith(store);
+
+    render(<CalendarStrip />);
+    fireEvent.click(screen.getByRole('button', { name: /refresh/i }));
+
+    expect(store.refresh).toHaveBeenCalledOnce();
+  });
+
+  it('shows "Calendar synced" when connected without an error', () => {
+    const store = createCalendarStore({ connected: true });
+    mountWith(store);
+
+    render(<CalendarStrip />);
+
+    expect(screen.getByText('Calendar synced')).toBeInTheDocument();
+  });
+
+  it('shows the failed-sync status when connected with an error', () => {
+    const store = createCalendarStore({ connected: true, error: 'Failed to refresh calendar' });
+    mountWith(store);
+
+    render(<CalendarStrip />);
+
+    expect(screen.getByText("Couldn't sync")).toBeInTheDocument();
+  });
+
+  it('surfaces the failed-sync status even in lean mode', () => {
+    const store = createCalendarStore({ connected: true, error: 'Failed to refresh calendar' });
+    mountWith(store);
+
+    render(<CalendarStrip lean />);
+
+    expect(screen.getByText("Couldn't sync")).toBeInTheDocument();
+  });
+
+  it('hides the synced status in lean mode when there is no error', () => {
+    const store = createCalendarStore({ connected: true });
+    mountWith(store);
+
+    render(<CalendarStrip lean />);
+
+    expect(screen.queryByText('Calendar synced')).not.toBeInTheDocument();
+  });
+
+  it('shows the empty-day message when connected with no events', () => {
+    const store = createCalendarStore({ connected: true, events: [] });
+    mountWith(store);
+
+    render(<CalendarStrip />);
+
+    expect(screen.getByText(/nothing left on the calendar today/i)).toBeInTheDocument();
+  });
+
+  it('renders events in the surface variant without overlay-white text', () => {
+    const store = createCalendarStore({
+      connected: true,
+      events: [timedEvent('e', '2026-06-14T13:00:00', '2026-06-14T14:00:00', 'Afternoon sync')],
+    });
+    mountWith(store);
+
+    const { container } = render(<CalendarStrip variant="surface" />);
+
+    expect(screen.getByText('Afternoon sync')).toBeInTheDocument();
+    expect(container.querySelector('.text-white')).not.toBeInTheDocument();
   });
 });

@@ -106,13 +106,27 @@ describe('connect', () => {
     expect(errorToastMock).toHaveBeenCalledWith('Failed to connect Google Calendar');
   });
 
-  it('warns but stays connected when persisting the calendar state fails', async () => {
+  it('surfaces an error and stays disconnected when consent is declined', async () => {
+    isAvailableMock.mockReturnValue(true);
+    connectCalendarMock.mockRejectedValue(new Error('Calendar permission was not granted'));
+
+    await useCalendarStore.getState().connect();
+
+    const state = useCalendarStore.getState();
+    expect(state.connected).toBe(false);
+    expect(fetchTodayEventsMock).not.toHaveBeenCalled();
+    expect(errorToastMock).toHaveBeenCalledWith('Failed to connect Google Calendar');
+  });
+
+  it('warns and flags a degraded state but stays connected when persisting fails', async () => {
     isAvailableMock.mockReturnValue(true);
     setCalendarStateMock.mockResolvedValue({ success: false });
 
     await useCalendarStore.getState().connect();
 
     expect(useCalendarStore.getState().connected).toBe(true);
+    // error is set so the strip's sync indicator reflects the failed save.
+    expect(useCalendarStore.getState().error).toBeTruthy();
     expect(warningMock).toHaveBeenCalledWith('Connected, but saving calendar state failed');
     expect(successMock).not.toHaveBeenCalled();
   });

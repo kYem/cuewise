@@ -1,3 +1,4 @@
+import { createSelectorMock } from '@cuewise/test-utils';
 import { render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useCalendarStore } from '../stores/calendar-store';
@@ -34,15 +35,10 @@ vi.mock('./sounds', () => ({ SoundsMiniPlayer: () => null }));
 
 const initCalendar = vi.fn();
 
-function selectorMock<T extends object>(store: T) {
-  // biome-ignore lint/suspicious/noExplicitAny: selector operates on the mock store shape
-  return (selector?: (state: any) => unknown) => (selector ? selector(store) : store);
-}
-
 function setup(companion: 'quote' | 'calendar' | 'both', calendarEnabled: boolean) {
   vi.mocked(isCalendarFeatureEnabled).mockReturnValue(calendarEnabled);
   vi.mocked(useSettingsStore).mockImplementation(
-    selectorMock({
+    createSelectorMock({
       initialize: vi.fn(),
       settings: {
         quoteChangeInterval: 0,
@@ -53,10 +49,10 @@ function setup(companion: 'quote' | 'calendar' | 'both', calendarEnabled: boolea
     })
   );
   vi.mocked(useQuoteStore).mockImplementation(
-    selectorMock({ initialize: vi.fn(), refreshQuote: vi.fn() })
+    createSelectorMock({ initialize: vi.fn(), refreshQuote: vi.fn() })
   );
-  vi.mocked(useCalendarStore).mockImplementation(selectorMock({ initialize: initCalendar }));
-  vi.mocked(useFocusModeStore).mockImplementation(selectorMock({ isActive: false }));
+  vi.mocked(useCalendarStore).mockImplementation(createSelectorMock({ initialize: initCalendar }));
+  vi.mocked(useFocusModeStore).mockImplementation(createSelectorMock({ isActive: false }));
 }
 
 beforeEach(() => {

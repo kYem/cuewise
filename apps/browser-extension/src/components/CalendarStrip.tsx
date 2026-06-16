@@ -162,7 +162,9 @@ export const CalendarStrip: React.FC<CalendarStripProps> = ({
         </button>
       )}
 
-      {!lean && <div className="mb-2 flex justify-end">{syncStatus}</div>}
+      {/* Lean normally hides the synced line to stay compact, but still surfaces
+          a failed sync so a stale/empty agenda isn't mistaken for "all clear". */}
+      {(!lean || error) && <div className="mb-2 flex justify-end">{syncStatus}</div>}
 
       {visible.length === 0 ? (
         <p className={cn('py-3 text-center text-sm', t.empty)}>
