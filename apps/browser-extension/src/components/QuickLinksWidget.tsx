@@ -11,7 +11,8 @@ import { createPortal } from 'react-dom';
 import { useQuickLinksStore } from '../stores/quick-links-store';
 
 function faviconUrl(url: string): string {
-  return `https://www.google.com/s2/favicons?sz=32&domain=${encodeURIComponent(url)}`;
+  const hostname = new URL(url).hostname;
+  return `https://www.google.com/s2/favicons?sz=32&domain=${encodeURIComponent(hostname)}`;
 }
 
 const TILE_CLASS =
