@@ -180,6 +180,35 @@ export interface QuickLink {
   url: string; // normalized absolute URL (http/https)
 }
 
+// Spaced-repetition (SM-2) schedule state for a concept card
+export interface ConceptSchedule {
+  dueDate: string; // yyyy-MM-dd — when the card next surfaces
+  interval: number; // days until next review (0 = new/relearning)
+  easeFactor: number; // SM-2 EF, starts 2.5, floor 1.3
+  repetitions: number; // consecutive non-"again" reviews
+  lapses: number; // times graded "again"
+  lastReviewedAt?: string; // ISO timestamp of the last grade
+}
+
+// A user-created concept/definition card reviewed via active recall
+export interface ConceptCard {
+  id: string;
+  term: string; // the prompt, e.g. "Saga pattern"
+  definition: string; // the reveal/answer
+  details?: string; // optional "how it works" / example
+  tags?: string[]; // optional learning-topic grouping
+  source?: string; // optional reference
+  createdAt: string; // ISO
+  schedule: ConceptSchedule;
+}
+
+export type ConceptGrade = 'again' | 'good' | 'easy';
+
+// How often a due concept surfaces in the blended rotation ("1 in N tabs" feel)
+export type ConceptCadence = 'every' | 'third' | 'ten' | 'off';
+// Calm occasional nudge vs an explicit "N due today" review pile
+export type ConceptFraming = 'ambient' | 'queue';
+
 // Settings interface
 export interface Settings {
   pomodoroWorkDuration: number; // minutes (default 25)
@@ -244,6 +273,10 @@ export interface Settings {
   reviewPromptDismissed: boolean; // Never surface the review prompt again (default false)
   reviewPromptCount: number; // Times the review prompt has been shown (default 0)
   reviewPromptLastShownAt: string | null; // yyyy-MM-dd day-string of the last show; drives the 7-day gap (default null)
+  // Concept cards (spaced repetition)
+  conceptCardsEnabled: boolean; // Master toggle; stays invisible until a card exists (default true)
+  conceptCadence: ConceptCadence; // How often a due card surfaces in the rotation (default 'third')
+  conceptFraming: ConceptFraming; // 'ambient' calm nudge vs 'queue' explicit due pile (default 'ambient')
 }
 
 // Storage keys
@@ -262,6 +295,7 @@ export const STORAGE_KEYS = {
   DAILY_BACKGROUND: 'dailyBackground', // Daily background image (changes once per day)
   COLLECTIONS: 'collections', // Quote collections
   QUICK_LINKS: 'quickLinks', // Pinned shortcut tiles on the new tab
+  CONCEPT_CARDS: 'conceptCards', // Spaced-repetition concept/definition cards
 } as const;
 
 // Daily background image data (persisted to change only once per day)

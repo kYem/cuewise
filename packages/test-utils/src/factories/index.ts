@@ -1,3 +1,4 @@
+export * from './conceptCard.factory';
 export * from './goal.factory';
 export * from './pomodoro.factory';
 export * from './quote.factory';

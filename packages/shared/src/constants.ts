@@ -88,6 +88,10 @@ export const DEFAULT_SETTINGS: Settings = {
   reviewPromptDismissed: false,
   reviewPromptCount: 0,
   reviewPromptLastShownAt: null,
+  // Concept cards
+  conceptCardsEnabled: true,
+  conceptCadence: 'third',
+  conceptFraming: 'ambient',
 };
 
 /** Chrome Web Store reviews tab — where the in-app prompt sends users. */
@@ -98,6 +102,11 @@ export const REVIEW_URL =
 export const QUICK_LINKS_VISIBLE = 3;
 /** Hard cap on total quick links a user can pin. */
 export const QUICK_LINKS_MAX = 12;
+
+/** Concept-card spaced-repetition (SM-2) bounds. */
+export const CONCEPT_EASE_DEFAULT = 2.5;
+export const CONCEPT_EASE_MIN = 1.3;
+export const CONCEPT_INTERVAL_MAX = 365; // cap intervals at ~1 year so cards keep resurfacing
 
 // Category colors (for UI)
 export const CATEGORY_COLORS: Record<QuoteCategory, string> = {
