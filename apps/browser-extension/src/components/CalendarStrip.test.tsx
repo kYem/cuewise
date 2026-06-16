@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useCalendarStore } from '../stores/calendar-store';
@@ -169,6 +169,23 @@ describe('CalendarStrip - full mode (past + now-line)', () => {
     expect(screen.getByText('Later').className).not.toContain('line-through');
     // Now-line shows the current time (noon) between the past and future event.
     expect(screen.getByText('12pm')).toBeInTheDocument();
+  });
+
+  it('re-evaluates past events as the minute tick advances "now"', () => {
+    const store = createCalendarStore({
+      events: [timedEvent('soon', '2026-06-14T12:10:00', '2026-06-14T12:30:00', 'Ending soon')],
+    });
+    mountWith(store);
+
+    render(<CalendarStrip />);
+    expect(screen.getByText('Ending soon').className).not.toContain('line-through');
+
+    // 35 minutes pass: the once-a-minute tick moves "now" past the event's end.
+    act(() => {
+      vi.advanceTimersByTime(35 * 60_000);
+    });
+
+    expect(screen.getByText('Ending soon').className).toContain('line-through');
   });
 
   it('never strikes through an all-day event even when its end is before now', () => {

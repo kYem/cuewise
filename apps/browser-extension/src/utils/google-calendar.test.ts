@@ -1,3 +1,4 @@
+import { getNextDayDateString, getTodayDateString, getYesterdayDateString } from '@cuewise/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   connectCalendar,
@@ -222,16 +223,55 @@ describe('fetchTodayEvents', () => {
   });
 
   it('flags all-day events and keeps their date-only strings', async () => {
+    const today = getTodayDateString();
     stubFetchItems([
-      { id: 'a1', summary: 'Holiday', start: { date: '2026-06-14' }, end: { date: '2026-06-15' } },
+      {
+        id: 'a1',
+        summary: 'Holiday',
+        start: { date: today },
+        end: { date: getNextDayDateString() },
+      },
     ]);
 
     const events = await fetchTodayEvents();
 
     expect(events).toHaveLength(1);
     expect(events[0].allDay).toBe(true);
-    expect(events[0].start).toBe('2026-06-14');
+    expect(events[0].start).toBe(today);
     expect(events[0].color).toBeUndefined();
+  });
+
+  it("drops an all-day event that doesn't cover today", async () => {
+    // Tomorrow's all-day banner can slip across the window boundary; it must not
+    // appear in today's agenda.
+    stubFetchItems([
+      {
+        id: 'tomorrow',
+        summary: 'Future holiday',
+        start: { date: getNextDayDateString() },
+        end: { date: '2999-01-01' },
+      },
+    ]);
+
+    const events = await fetchTodayEvents();
+
+    expect(events).toEqual([]);
+  });
+
+  it('keeps a multi-day all-day event that spans today', async () => {
+    stubFetchItems([
+      {
+        id: 'vacation',
+        summary: 'Vacation',
+        start: { date: getYesterdayDateString() },
+        end: { date: getNextDayDateString() },
+      },
+    ]);
+
+    const events = await fetchTodayEvents();
+
+    expect(events).toHaveLength(1);
+    expect(events[0].id).toBe('vacation');
   });
 
   it('falls back to a placeholder title when summary is missing', async () => {

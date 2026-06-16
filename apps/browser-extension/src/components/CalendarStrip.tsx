@@ -2,7 +2,7 @@ import type { CalendarEvent } from '@cuewise/shared';
 import { cn, Popover, PopoverContent, PopoverTrigger, Tooltip } from '@cuewise/ui';
 import { Calendar, MoreHorizontal, RefreshCw, Unplug } from 'lucide-react';
 import type React from 'react';
-import { Fragment } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useCalendarStore } from '../stores/calendar-store';
 import { useSettingsStore } from '../stores/settings-store';
@@ -81,6 +81,17 @@ export const CalendarStrip: React.FC<CalendarStripProps> = ({
   const disconnect = useCalendarStore((s) => s.disconnect);
   const twentyFour = useSettingsStore((s) => s.settings.timeFormat === '24h');
 
+  // Tick the reference time each minute so the now-line and past-event styling
+  // stay current on a long-open new tab — the store only re-renders on data change.
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    if (!connected) {
+      return;
+    }
+    const id = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(id);
+  }, [connected]);
+
   const t = variant === 'surface' ? SURFACE_TOKENS : OVERLAY_TOKENS;
   // Match the goals card (max-w-[400px]) in the surface/home layout so the
   // stacked "both" view lines up; the Pomodoro overlay keeps its 360px card and
@@ -126,7 +137,6 @@ export const CalendarStrip: React.FC<CalendarStripProps> = ({
     );
   }
 
-  const now = new Date();
   // All-day events carry a date-only string (UTC-parsed), so never treat them as
   // past — they span the whole day and shouldn't be struck through or filtered.
   const isPast = (e: CalendarEvent) => !e.allDay && new Date(e.end) < now;

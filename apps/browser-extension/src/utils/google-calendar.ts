@@ -1,4 +1,4 @@
-import { type CalendarEvent, logger } from '@cuewise/shared';
+import { type CalendarEvent, getTodayDateString, logger } from '@cuewise/shared';
 
 // Read-only Google Calendar access via chrome.identity. All client-side: the
 // extension talks to Google directly, no Cuewise backend ever sees the data.
@@ -150,6 +150,9 @@ export async function fetchTodayEvents(): Promise<CalendarEvent[]> {
   const params = new URLSearchParams({
     timeMin: startOfDay.toISOString(),
     timeMax: endOfDay.toISOString(),
+    // Resolve all-day boundaries in the browser's zone (not the calendar's), so
+    // the window lines up with the user's local day.
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     singleEvents: 'true',
     orderBy: 'startTime',
     maxResults: '25',
@@ -171,7 +174,17 @@ export async function fetchTodayEvents(): Promise<CalendarEvent[]> {
     throw new Error(`Calendar API: ${response.status} ${response.statusText}`);
   }
   const data = (await response.json()) as { items?: GoogleEvent[] };
-  return (data.items ?? []).map(mapEvent).filter((event): event is CalendarEvent => event !== null);
+  // Defense in depth for the all-day window: even with timeZone set, an adjacent
+  // day's banner can slip in across the exclusive timeMax boundary. Keep an
+  // all-day event only when today falls in its [start, end) date range (end is
+  // exclusive); timed events already sit inside the requested instant window.
+  const today = getTodayDateString();
+  const withinToday = (event: CalendarEvent): boolean =>
+    !event.allDay || (event.start <= today && today < event.end);
+  return (data.items ?? [])
+    .map(mapEvent)
+    .filter((event): event is CalendarEvent => event !== null)
+    .filter(withinToday);
 }
 
 // Hand the optional permissions back so a disconnected user keeps no
