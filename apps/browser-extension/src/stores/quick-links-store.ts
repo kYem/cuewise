@@ -12,6 +12,8 @@ import { useToastStore } from './toast-store';
 
 const INVALID_URL_MESSAGE = 'Enter a valid website address.';
 const SAVE_ERROR_MESSAGE = 'Failed to save quick link. Please try again.';
+const REMOVE_ERROR_MESSAGE = 'Failed to remove quick link. Please try again.';
+const LOAD_ERROR_MESSAGE = 'Failed to load quick links. Please refresh the page.';
 
 interface QuickLinksStore {
   quickLinks: QuickLink[];
@@ -43,8 +45,8 @@ export const useQuickLinksStore = create<QuickLinksStore>((set, get) => ({
       set({ quickLinks: links, isLoading: false });
     } catch (error) {
       logger.error('Error initializing quick links store', error);
-      set({ error: 'Failed to load quick links. Please refresh the page.', isLoading: false });
-      useToastStore.getState().error('Failed to load quick links. Please refresh the page.');
+      set({ isLoading: false });
+      reportError(set, LOAD_ERROR_MESSAGE);
     }
   },
 
@@ -126,14 +128,14 @@ export const useQuickLinksStore = create<QuickLinksStore>((set, get) => ({
 
       const result = await saveQuickLinks(updatedLinks);
       if (result?.success === false) {
-        return reportError(set, 'Failed to remove quick link. Please try again.');
+        return reportError(set, REMOVE_ERROR_MESSAGE);
       }
 
       set({ quickLinks: updatedLinks, error: null });
       return true;
     } catch (error) {
       logger.error('Error removing quick link', error);
-      return reportError(set, 'Failed to remove quick link. Please try again.');
+      return reportError(set, REMOVE_ERROR_MESSAGE);
     }
   },
 }));
