@@ -218,7 +218,7 @@ export const QuickLinksWidget: React.FC = () => {
             <div
               ref={dropdownRef}
               role="menu"
-              className="fixed z-[100] w-64 bg-surface rounded-xl shadow-xl border border-border overflow-hidden animate-in fade-in-0 zoom-in-95 duration-150"
+              className="fixed z-[100] w-64 bg-surface rounded-xl shadow-xl border border-border overflow-hidden animate-fade-in"
               style={{
                 top: (triggerRect?.bottom ?? 0) + 8,
                 left: triggerRect?.left ?? 0,

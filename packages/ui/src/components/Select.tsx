@@ -193,7 +193,7 @@ export function Select<T extends string = string>({
             'border-2 border-border',
             'rounded-lg shadow-xl',
             'max-h-64 overflow-y-auto',
-            'animate-in fade-in-0 zoom-in-95 duration-200'
+            'animate-fade-in'
           )}
         >
           {options.map((option, index) => (
