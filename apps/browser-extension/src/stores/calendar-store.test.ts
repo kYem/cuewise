@@ -202,6 +202,27 @@ describe('refresh', () => {
     expect(state.isLoading).toBe(false);
     expect(state.events).toEqual([]);
   });
+
+  it('discards a stale in-flight refresh after a reconnect (epoch guard)', async () => {
+    isAvailableMock.mockReturnValue(true);
+    useCalendarStore.setState({ connected: true });
+    const reconnectedEvents: CalendarEvent[] = [{ ...liveEvent, id: 'reconnected' }];
+    // Simulate disconnect→reconnect (epoch bumped, fresh events) while the
+    // original fetch is still in flight; it resolves last with the old account.
+    fetchTodayEventsMock.mockImplementation(async () => {
+      useCalendarStore.setState((s) => ({
+        epoch: s.epoch + 1,
+        connected: true,
+        events: reconnectedEvents,
+      }));
+      return [liveEvent];
+    });
+
+    await useCalendarStore.getState().refresh({ silent: true });
+
+    expect(useCalendarStore.getState().events).toEqual(reconnectedEvents);
+    expect(setCalendarStateMock).not.toHaveBeenCalled();
+  });
 });
 
 describe('initialize', () => {

@@ -13,6 +13,8 @@ interface GoogleEventInput {
   summary?: string;
   colorId?: string;
   htmlLink?: string;
+  status?: string;
+  attendees?: Array<{ self?: boolean; responseStatus?: string }>;
   start?: { dateTime?: string; date?: string };
   end?: { dateTime?: string; date?: string };
 }
@@ -350,6 +352,53 @@ describe('fetchTodayEvents', () => {
 
     expect(events).toHaveLength(1);
     expect(events[0].id).toBe('ok');
+  });
+
+  it('drops cancelled events', async () => {
+    stubFetchItems([
+      {
+        id: 'gone',
+        summary: 'Cancelled',
+        status: 'cancelled',
+        start: { dateTime: '2026-06-14T09:00:00Z' },
+        end: { dateTime: '2026-06-14T10:00:00Z' },
+      },
+      {
+        id: 'ok',
+        summary: 'Good',
+        start: { dateTime: '2026-06-14T11:00:00Z' },
+        end: { dateTime: '2026-06-14T12:00:00Z' },
+      },
+    ]);
+
+    const events = await fetchTodayEvents();
+
+    expect(events).toHaveLength(1);
+    expect(events[0].id).toBe('ok');
+  });
+
+  it('drops events the signed-in user has declined', async () => {
+    stubFetchItems([
+      {
+        id: 'declined',
+        summary: 'Optional sync',
+        attendees: [{ self: true, responseStatus: 'declined' }],
+        start: { dateTime: '2026-06-14T09:00:00Z' },
+        end: { dateTime: '2026-06-14T10:00:00Z' },
+      },
+      {
+        id: 'accepted',
+        summary: 'Standup',
+        attendees: [{ self: true, responseStatus: 'accepted' }],
+        start: { dateTime: '2026-06-14T11:00:00Z' },
+        end: { dateTime: '2026-06-14T12:00:00Z' },
+      },
+    ]);
+
+    const events = await fetchTodayEvents();
+
+    expect(events).toHaveLength(1);
+    expect(events[0].id).toBe('accepted');
   });
 
   it('throws when the Calendar API responds with an error', async () => {

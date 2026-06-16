@@ -16,6 +16,10 @@ interface CalendarStore {
   isLoading: boolean;
   error: string | null;
   lastSync: string | null;
+  // Bumped on every connect/disconnect so an in-flight refresh can tell the
+  // connection changed under it (disconnect, or disconnect→reconnect) and skip
+  // its now-stale commit instead of resurrecting or clobbering the account.
+  epoch: number;
 
   // Actions
   initialize: () => Promise<void>;
@@ -31,6 +35,7 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
   isLoading: false,
   error: null,
   lastSync: null,
+  epoch: 0,
 
   initialize: async () => {
     try {
@@ -64,7 +69,7 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
       useToastStore.getState().error(message);
       return;
     }
-    set({ isLoading: true, error: null });
+    set({ isLoading: true, error: null, epoch: get().epoch + 1 });
     try {
       await connectCalendar();
       const events = await fetchTodayEvents();
@@ -88,6 +93,9 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
   },
 
   disconnect: async () => {
+    // Bump first so any refresh already in flight skips its commit instead of
+    // re-persisting connected:true after we clear it.
+    set({ epoch: get().epoch + 1 });
     // Best-effort token revocation must never block the local disconnect.
     try {
       if (isCalendarAvailable()) {
@@ -114,12 +122,14 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
       return;
     }
     const silent = options?.silent === true;
+    const epoch = get().epoch;
     set({ isLoading: true, error: null });
     try {
       const events = await fetchTodayEvents();
-      // The user may have disconnected while the fetch was in flight; bail
-      // without re-persisting connected:true (which would resurrect the account).
-      if (!get().connected) {
+      // The connection may have changed while the fetch was in flight — the user
+      // disconnected, or disconnected then reconnected. Bail without committing
+      // stale events or re-persisting connected:true.
+      if (!get().connected || get().epoch !== epoch) {
         set({ isLoading: false });
         return;
       }

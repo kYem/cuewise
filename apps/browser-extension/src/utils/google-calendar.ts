@@ -41,8 +41,21 @@ interface GoogleEvent {
   summary?: string;
   htmlLink?: string;
   colorId?: string;
+  status?: string;
+  attendees?: Array<{ self?: boolean; responseStatus?: string }>;
   start?: { dateTime?: string; date?: string };
   end?: { dateTime?: string; date?: string };
+}
+
+// Hide events that shouldn't count toward "today" — a cancelled instance, or a
+// meeting the signed-in user explicitly declined — so the strip reflects the
+// agenda the user actually intends to keep.
+function isDismissed(item: GoogleEvent): boolean {
+  if (item.status === 'cancelled') {
+    return true;
+  }
+  const self = item.attendees?.find((attendee) => attendee.self === true);
+  return self?.responseStatus === 'declined';
 }
 
 export function isCalendarAvailable(): boolean {
@@ -188,6 +201,7 @@ export async function fetchTodayEvents(): Promise<CalendarEvent[]> {
   const withinToday = (event: CalendarEvent): boolean =>
     !event.allDay || (event.start <= today && today < event.end);
   return (data.items ?? [])
+    .filter((item) => !isDismissed(item))
     .map(mapEvent)
     .filter((event): event is CalendarEvent => event !== null)
     .filter(withinToday);
