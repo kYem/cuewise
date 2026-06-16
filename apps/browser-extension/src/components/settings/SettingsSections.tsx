@@ -3,6 +3,7 @@ import {
   type ConceptFraming,
   type FocusImageCategory,
   type FocusPosition,
+  formatHourMinute,
   NOTIFICATION_SOUNDS,
   type NotificationSoundType,
   type PomodoroCompanion,
@@ -126,7 +127,7 @@ function intervalLabel(seconds: number): string {
 
 function hourLabel(hour: number, timeFormat: TimeFormat): string {
   if (timeFormat === '12h') {
-    return `${hour % 12 || 12}:00 ${hour >= 12 ? 'PM' : 'AM'}`;
+    return formatHourMinute(hour);
   }
   return `${String(hour).padStart(2, '0')}:00`;
 }

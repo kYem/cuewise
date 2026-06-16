@@ -10,6 +10,7 @@ export interface MockCalendarStore {
   events: CalendarEvent[];
   isLoading: boolean;
   error: string | null;
+  lastSync: string | null;
   connect: ReturnType<typeof vi.fn>;
   refresh: ReturnType<typeof vi.fn>;
   disconnect: ReturnType<typeof vi.fn>;
@@ -21,6 +22,7 @@ export function createCalendarStore(overrides: Partial<MockCalendarStore> = {}):
     events: [],
     isLoading: false,
     error: null,
+    lastSync: null,
     connect: vi.fn(),
     refresh: vi.fn(),
     disconnect: vi.fn(),

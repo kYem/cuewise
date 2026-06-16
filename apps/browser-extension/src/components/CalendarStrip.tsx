@@ -82,15 +82,51 @@ export const CalendarStrip: React.FC<CalendarStripProps> = ({
   const twentyFour = useSettingsStore((s) => s.settings.timeFormat === '24h');
 
   // Tick the reference time each minute so the now-line and past-event styling
-  // stay current on a long-open new tab — the store only re-renders on data change.
+  // stay current on a long-open new tab — the store only re-renders on data
+  // change. When the day itself rolls over (tab left open past midnight), refetch:
+  // otherwise yesterday's events linger, all struck through as past, and the new
+  // day never loads.
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     if (!connected) {
       return;
     }
-    const id = setInterval(() => setNow(new Date()), 60_000);
+    let day = new Date().toDateString();
+    const id = setInterval(() => {
+      const next = new Date();
+      setNow(next);
+      const nextDay = next.toDateString();
+      if (nextDay !== day) {
+        day = nextDay;
+        refresh({ silent: true });
+      }
+    }, 60_000);
     return () => clearInterval(id);
-  }, [connected]);
+  }, [connected, refresh]);
+
+  // A backgrounded new tab can sit untouched for hours; refetch when it returns
+  // to the foreground so the agenda isn't stale — but only when the last sync is
+  // old enough to be worth a round-trip, so quick tab switches don't spam.
+  useEffect(() => {
+    if (!connected) {
+      return;
+    }
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') {
+        return;
+      }
+      const { lastSync, isLoading: loading } = useCalendarStore.getState();
+      if (loading) {
+        return;
+      }
+      const age = lastSync ? Date.now() - new Date(lastSync).getTime() : Number.POSITIVE_INFINITY;
+      if (age > 2 * 60_000) {
+        refresh({ silent: true });
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [connected, refresh]);
 
   const t = variant === 'surface' ? SURFACE_TOKENS : OVERLAY_TOKENS;
   // Match the goals card (max-w-[400px]) in the surface/home layout so the

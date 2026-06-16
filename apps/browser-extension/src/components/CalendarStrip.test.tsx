@@ -17,6 +17,8 @@ vi.mock('../stores/settings-store', () => ({ useSettingsStore: vi.fn() }));
 
 function mountWith(store: MockCalendarStore, timeFormat: '12h' | '24h' = '12h') {
   vi.mocked(useCalendarStore).mockImplementation(createSelectorMock(store));
+  // The visibility-refetch handler reads fresh lastSync/isLoading via getState().
+  Object.assign(useCalendarStore, { getState: () => store });
   vi.mocked(useSettingsStore).mockImplementation(createSelectorMock({ settings: { timeFormat } }));
 }
 
@@ -186,6 +188,66 @@ describe('CalendarStrip - full mode (past + now-line)', () => {
     });
 
     expect(screen.getByText('Ending soon').className).toContain('line-through');
+  });
+
+  it('refetches when the tab is left open past midnight', () => {
+    vi.setSystemTime(new Date('2026-06-14T23:59:30'));
+    const store = createCalendarStore({
+      events: [timedEvent('m', '2026-06-14T09:00:00', '2026-06-14T10:00:00', 'Morning')],
+    });
+    mountWith(store);
+
+    render(<CalendarStrip />);
+    expect(store.refresh).not.toHaveBeenCalled();
+
+    // One tick later it is the next day → the strip refetches the new agenda.
+    act(() => {
+      vi.advanceTimersByTime(60_000);
+    });
+
+    expect(store.refresh).toHaveBeenCalledWith({ silent: true });
+  });
+
+  it('does not refetch on a tick within the same day', () => {
+    const store = createCalendarStore({
+      events: [timedEvent('m', '2026-06-14T09:00:00', '2026-06-14T10:00:00', 'Morning')],
+    });
+    mountWith(store);
+
+    render(<CalendarStrip />);
+    act(() => {
+      vi.advanceTimersByTime(5 * 60_000);
+    });
+
+    expect(store.refresh).not.toHaveBeenCalled();
+  });
+
+  it('refetches when the tab returns to the foreground after a stale gap', () => {
+    const store = createCalendarStore({
+      lastSync: new Date('2026-06-14T11:00:00').toISOString(), // ~1h before "now"
+    });
+    mountWith(store);
+
+    render(<CalendarStrip />);
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+
+    expect(store.refresh).toHaveBeenCalledWith({ silent: true });
+  });
+
+  it('does not refetch on foreground when the last sync is recent', () => {
+    const store = createCalendarStore({
+      lastSync: new Date('2026-06-14T11:59:30').toISOString(), // 30s before "now"
+    });
+    mountWith(store);
+
+    render(<CalendarStrip />);
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+
+    expect(store.refresh).not.toHaveBeenCalled();
   });
 
   it('never strikes through an all-day event even when its end is before now', () => {
