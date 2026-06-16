@@ -327,7 +327,7 @@ describe('CalendarStrip - connected status & actions', () => {
 
     render(<CalendarStrip />);
 
-    expect(screen.getByTitle('Calendar synced')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Calendar synced' })).toBeInTheDocument();
   });
 
   it('shows the failed-sync status dot when connected with an error', () => {
@@ -336,7 +336,7 @@ describe('CalendarStrip - connected status & actions', () => {
 
     render(<CalendarStrip />);
 
-    expect(screen.getByTitle("Couldn't sync")).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: "Couldn't sync" })).toBeInTheDocument();
   });
 
   it('surfaces the failed-sync dot even in lean mode', () => {
@@ -345,7 +345,7 @@ describe('CalendarStrip - connected status & actions', () => {
 
     render(<CalendarStrip lean />);
 
-    expect(screen.getByTitle("Couldn't sync")).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: "Couldn't sync" })).toBeInTheDocument();
   });
 
   it('shows the status dot in lean mode too', () => {
@@ -354,7 +354,7 @@ describe('CalendarStrip - connected status & actions', () => {
 
     render(<CalendarStrip lean />);
 
-    expect(screen.getByTitle('Calendar synced')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Calendar synced' })).toBeInTheDocument();
   });
 
   it('shows the empty-day message when connected with no events', () => {

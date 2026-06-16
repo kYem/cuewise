@@ -1,5 +1,5 @@
 import type { CalendarEvent } from '@cuewise/shared';
-import { cn } from '@cuewise/ui';
+import { cn, Tooltip } from '@cuewise/ui';
 import { Calendar, RefreshCw } from 'lucide-react';
 import type React from 'react';
 import { Fragment } from 'react';
@@ -157,16 +157,17 @@ export const CalendarStrip: React.FC<CalendarStripProps> = ({
     ? -1
     : visible.findIndex((e, i) => i > 0 && isPast(visible[i - 1]) && !isPast(e));
 
-  // Sync status as a small dot beside the refresh button; the label is a tooltip
-  // (so it costs no row, and a failed sync still shows — red — even in lean mode).
+  // Sync status as a small dot beside the refresh button, with a proper tooltip
+  // label (so it costs no row, and a failed sync still shows — red — in lean mode).
   const statusLabel = error ? "Couldn't sync" : 'Calendar synced';
   const statusDot = (
-    <span
-      role="img"
-      title={statusLabel}
-      aria-label={statusLabel}
-      className={cn('h-2 w-2 shrink-0 rounded-full', error ? 'bg-red-400' : 'bg-green-400')}
-    />
+    <Tooltip label={statusLabel}>
+      <span
+        role="img"
+        aria-label={statusLabel}
+        className={cn('h-2 w-2 shrink-0 rounded-full', error ? 'bg-red-400' : 'bg-green-400')}
+      />
+    </Tooltip>
   );
 
   return (
