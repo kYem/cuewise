@@ -469,6 +469,18 @@ function HomeSection({ s, set, filter }: SettingsSectionProps) {
           </SettingRow>
         </SettingSubgroup>
       )}
+      <SettingRow
+        label="Quick links"
+        filter={filter}
+        help="Pinned shortcut tiles in the top-left of the home page"
+        keywords="shortcut bookmark favicon links tiles pinned sites"
+      >
+        <Switch
+          label="Quick links"
+          checked={s.showQuickLinks}
+          onChange={(v) => set({ showQuickLinks: v })}
+        />
+      </SettingRow>
       <SettingDivider />
       <SettingRow
         label="Quote display"

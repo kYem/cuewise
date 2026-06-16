@@ -173,6 +173,13 @@ export interface SoundscapeTile {
   icon: string; // Lucide icon name
 }
 
+// Quick link shortcut tile (pinned site on the new tab)
+export interface QuickLink {
+  id: string;
+  title: string;
+  url: string; // normalized absolute URL (http/https)
+}
+
 // Settings interface
 export interface Settings {
   pomodoroWorkDuration: number; // minutes (default 25)
@@ -200,6 +207,7 @@ export interface Settings {
   layoutDensity: LayoutDensity;
   showThemeSwitcher: boolean; // Show live theme switcher sidebar
   showClock: boolean; // Show clock and date on home page (default false)
+  showQuickLinks: boolean; // Show quick-link shortcut tiles top-left on home page (default true)
   // Goal Transfer
   enableGoalTransfer: boolean; // Enable goal transfer feature (default true)
   goalTransferTime: number; // Hour (0-23) when transfer button appears (default 20 for 8 PM)
@@ -253,6 +261,7 @@ export const STORAGE_KEYS = {
   YOUTUBE_PROGRESS: 'youtubeProgress', // YouTube playback progress (timestamps per video)
   DAILY_BACKGROUND: 'dailyBackground', // Daily background image (changes once per day)
   COLLECTIONS: 'collections', // Quote collections
+  QUICK_LINKS: 'quickLinks', // Pinned shortcut tiles on the new tab
 } as const;
 
 // Daily background image data (persisted to change only once per day)

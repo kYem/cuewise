@@ -55,6 +55,7 @@ export const DEFAULT_SETTINGS: Settings = {
   layoutDensity: 'comfortable',
   showThemeSwitcher: false,
   showClock: false, // Clock hidden by default for simpler UI
+  showQuickLinks: true, // Quick-link tiles shown by default
   enableGoalTransfer: true,
   goalTransferTime: 20, // 8 PM (20:00)
   logLevel: 'error', // Only show errors by default
@@ -92,6 +93,11 @@ export const DEFAULT_SETTINGS: Settings = {
 /** Chrome Web Store reviews tab — where the in-app prompt sends users. */
 export const REVIEW_URL =
   'https://chromewebstore.google.com/detail/cuewise/abjkbnhoepcnmbabflkedbapbldnpkbf/reviews';
+
+/** Quick-link tiles shown inline before the overflow "more" dropdown. */
+export const QUICK_LINKS_VISIBLE = 3;
+/** Hard cap on total quick links a user can pin. */
+export const QUICK_LINKS_MAX = 12;
 
 // Category colors (for UI)
 export const CATEGORY_COLORS: Record<QuoteCategory, string> = {

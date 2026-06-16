@@ -10,6 +10,7 @@ import {
   logger,
   type PlaylistProgress,
   type PomodoroSession,
+  type QuickLink,
   type Quote,
   type QuoteCollection,
   type Reminder,
@@ -183,6 +184,18 @@ export async function setCollections(collections: QuoteCollection[]): Promise<St
   return setInStorage(STORAGE_KEYS.COLLECTIONS, collections, area);
 }
 
+// Quick Links (pinned shortcut tiles on the new tab)
+export async function getQuickLinks(): Promise<QuickLink[]> {
+  const area = await getStorageArea();
+  const links = await getFromStorage<QuickLink[]>(STORAGE_KEYS.QUICK_LINKS, area);
+  return links ?? [];
+}
+
+export async function setQuickLinks(links: QuickLink[]): Promise<StorageResult> {
+  const area = await getStorageArea();
+  return setInStorage(STORAGE_KEYS.QUICK_LINKS, links, area);
+}
+
 // Pomodoro Sessions
 export async function getPomodoroSessions(): Promise<PomodoroSession[]> {
   const area = await getStorageArea();
@@ -335,6 +348,8 @@ export async function migrateStorageData(
       (await getFromStorage<PomodoroSession[]>(STORAGE_KEYS.POMODORO_SESSIONS, fromArea)) ?? [];
     const collections =
       (await getFromStorage<QuoteCollection[]>(STORAGE_KEYS.COLLECTIONS, fromArea)) ?? [];
+    const quickLinks =
+      (await getFromStorage<QuickLink[]>(STORAGE_KEYS.QUICK_LINKS, fromArea)) ?? [];
 
     // Copy data to destination storage area
     // Note: Seed quotes are not migrated (always in local storage)
@@ -348,6 +363,7 @@ export async function migrateStorageData(
     results.push(await setInStorage(STORAGE_KEYS.REMINDERS, reminders, toArea));
     results.push(await setInStorage(STORAGE_KEYS.POMODORO_SESSIONS, sessions, toArea));
     results.push(await setInStorage(STORAGE_KEYS.COLLECTIONS, collections, toArea));
+    results.push(await setInStorage(STORAGE_KEYS.QUICK_LINKS, quickLinks, toArea));
 
     // Check if any operation failed
     const failedResult = results.find((r) => !r.success);
