@@ -476,7 +476,7 @@ export const GoalsSection: React.FC = () => {
   if (showCalendar && !showGoals) {
     return (
       <div className="group flex items-center justify-center gap-3 w-full max-w-4xl mx-auto">
-        <CalendarStrip />
+        <CalendarStrip variant="surface" />
         <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200">
           {optionsMenu('bg-white/10 hover:bg-white/20 text-secondary/80 border-white/10')}
         </div>
@@ -492,9 +492,9 @@ export const GoalsSection: React.FC = () => {
   // Both: stack the calendar and goals, ordered by the calendar-position setting.
   return (
     <div className="flex flex-col items-center gap-density-lg w-full">
-      {calendarPosition === 'above' && <CalendarStrip />}
+      {calendarPosition === 'above' && <CalendarStrip variant="surface" />}
       {goalsContent}
-      {calendarPosition === 'below' && <CalendarStrip />}
+      {calendarPosition === 'below' && <CalendarStrip variant="surface" />}
     </div>
   );
 };

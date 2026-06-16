@@ -63,6 +63,27 @@ describe('CalendarStrip - not connected', () => {
   });
 });
 
+describe('CalendarStrip - variant', () => {
+  it('uses theme tokens in the surface variant', () => {
+    const store = createCalendarStore({ connected: false });
+    mountWith(store);
+
+    const { container } = render(<CalendarStrip variant="surface" />);
+
+    expect(container.querySelector('.text-primary')).toBeInTheDocument();
+    expect(container.querySelector('.text-white')).not.toBeInTheDocument();
+  });
+
+  it('uses the white-on-dark overlay by default', () => {
+    const store = createCalendarStore({ connected: false });
+    mountWith(store);
+
+    const { container } = render(<CalendarStrip />);
+
+    expect(container.querySelector('.text-white')).toBeInTheDocument();
+  });
+});
+
 describe('CalendarStrip - time formatting', () => {
   it('renders noon as 12pm and midnight as 12am in 12-hour mode', () => {
     const store = createCalendarStore({

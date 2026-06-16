@@ -1,4 +1,5 @@
 import type { CalendarEvent } from '@cuewise/shared';
+import { cn } from '@cuewise/ui';
 import { Calendar, RefreshCw } from 'lucide-react';
 import type React from 'react';
 import { Fragment } from 'react';
@@ -10,6 +11,47 @@ interface CalendarStripProps {
   // Wide single-line "Up next" variant for the stacked Calendar + Quote layout:
   // drops past events and the now-line, shows only the next few.
   lean?: boolean;
+  // 'overlay' (default): white-on-dark glass, for the Pomodoro image background.
+  // 'surface': theme tokens, for the home new tab where the background follows
+  // the theme (and can be light), matching the goals card / QuoteDisplay.
+  variant?: 'overlay' | 'surface';
+}
+
+// Per-variant color classes. 'overlay' keeps the immersive white-on-dark glass
+// look; 'surface' uses theme tokens so the strip is readable on light themes.
+function variantTokens(surface: boolean) {
+  if (surface) {
+    return {
+      card: 'bg-surface/80 backdrop-blur-sm border-border text-primary',
+      icon: 'text-secondary',
+      muted: 'text-secondary',
+      faint: 'text-tertiary',
+      time: 'text-secondary',
+      title: 'text-primary',
+      connectBtn: 'border-border bg-surface-variant text-primary hover:bg-surface-variant/70',
+      refresh: 'text-tertiary hover:text-primary',
+      nowLine: 'bg-divider',
+      nowDot: 'bg-primary',
+      bar: 'bg-divider',
+      empty: 'text-secondary',
+      error: 'text-red-500 dark:text-red-400',
+    };
+  }
+  return {
+    card: 'bg-black/25 backdrop-blur-md border-white/10 text-white',
+    icon: 'text-white/80',
+    muted: 'text-white/70',
+    faint: 'text-white/55',
+    time: 'text-white/85',
+    title: 'text-white',
+    connectBtn: 'border-white/20 bg-white/15 text-white hover:bg-white/25',
+    refresh: 'text-white/55 hover:text-white',
+    nowLine: 'bg-white/50',
+    nowDot: 'bg-white',
+    bar: 'bg-white/50',
+    empty: 'text-white/60',
+    error: 'text-red-300',
+  };
 }
 
 function formatTime(iso: string, twentyFour: boolean): string {
@@ -24,7 +66,10 @@ function formatTime(iso: string, twentyFour: boolean): string {
   return m === 0 ? `${hour12}${ampm}` : `${hour12}:${String(m).padStart(2, '0')}${ampm}`;
 }
 
-export const CalendarStrip: React.FC<CalendarStripProps> = ({ lean = false }) => {
+export const CalendarStrip: React.FC<CalendarStripProps> = ({
+  lean = false,
+  variant = 'overlay',
+}) => {
   const { connected, events, isLoading, error } = useCalendarStore(
     useShallow((s) => ({
       connected: s.connected,
@@ -37,13 +82,14 @@ export const CalendarStrip: React.FC<CalendarStripProps> = ({ lean = false }) =>
   const refresh = useCalendarStore((s) => s.refresh);
   const twentyFour = useSettingsStore((s) => s.settings.timeFormat === '24h');
 
+  const t = variantTokens(variant === 'surface');
   const width = lean ? 'w-full max-w-[520px]' : 'w-[360px] max-w-[92vw]';
-  const cardClass = `${width} mx-auto bg-black/25 backdrop-blur-md rounded-2xl shadow-lg border border-white/10 p-density-md text-white`;
+  const cardClass = cn(width, 'mx-auto rounded-2xl border p-density-md shadow-lg', t.card);
 
   const header = (right?: React.ReactNode) => (
     <div className="flex items-center justify-between mb-density-sm">
       <span className="flex items-center gap-2">
-        <Calendar className="w-4 h-4 text-white/80" />
+        <Calendar className={cn('w-4 h-4', t.icon)} />
         <span className="font-semibold">{lean ? 'Up next' : 'Today'}</span>
       </span>
       {right}
@@ -55,16 +101,19 @@ export const CalendarStrip: React.FC<CalendarStripProps> = ({ lean = false }) =>
       <div className={cardClass}>
         {header()}
         <div className="flex flex-col items-center gap-3 py-4 text-center">
-          <p className="text-sm text-white/70">See today's schedule right on your new tab.</p>
+          <p className={cn('text-sm', t.muted)}>See today's schedule right on your new tab.</p>
           <button
             type="button"
             onClick={connect}
             disabled={isLoading}
-            className="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/15 px-4 py-2 text-sm font-medium transition-colors hover:bg-white/25 disabled:opacity-60"
+            className={cn(
+              'inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-colors disabled:opacity-60',
+              t.connectBtn
+            )}
           >
             <Calendar className="w-4 h-4" /> {isLoading ? 'Connecting…' : 'Connect Google Calendar'}
           </button>
-          {error && <p className="max-w-[260px] text-xs text-red-300">{error}</p>}
+          {error && <p className={cn('max-w-[260px] text-xs', t.error)}>{error}</p>}
         </div>
       </div>
     );
@@ -94,8 +143,8 @@ export const CalendarStrip: React.FC<CalendarStripProps> = ({ lean = false }) =>
     : visible.findIndex((e, i) => i > 0 && isPast(visible[i - 1]) && !isPast(e));
 
   const syncStatus = (
-    <span className="flex items-center gap-1.5 text-xs text-white/55">
-      <span className={`h-1.5 w-1.5 rounded-full ${error ? 'bg-red-400' : 'bg-green-400'}`} />
+    <span className={cn('flex items-center gap-1.5 text-xs', t.faint)}>
+      <span className={cn('h-1.5 w-1.5 rounded-full', error ? 'bg-red-400' : 'bg-green-400')} />
       {error ? "Couldn't sync" : 'Calendar synced'}
     </span>
   );
@@ -107,16 +156,16 @@ export const CalendarStrip: React.FC<CalendarStripProps> = ({ lean = false }) =>
           type="button"
           onClick={() => refresh()}
           title="Refresh"
-          className="text-white/55 transition-colors hover:text-white"
+          className={cn('transition-colors', t.refresh)}
         >
-          <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+          <RefreshCw className={cn('h-3.5 w-3.5', isLoading && 'animate-spin')} />
         </button>
       )}
 
       {!lean && <div className="mb-2 flex justify-end">{syncStatus}</div>}
 
       {visible.length === 0 ? (
-        <p className="py-3 text-center text-sm text-white/60">
+        <p className={cn('py-3 text-center text-sm', t.empty)}>
           Nothing left on the calendar today.
         </p>
       ) : (
@@ -131,20 +180,32 @@ export const CalendarStrip: React.FC<CalendarStripProps> = ({ lean = false }) =>
                     <span className="text-[10px] font-bold tabular-nums">
                       {formatTime(now.toISOString(), twentyFour)}
                     </span>
-                    <span className="h-px flex-1 bg-white/50" />
-                    <span className="h-1.5 w-1.5 rounded-full bg-white" />
+                    <span className={cn('h-px flex-1', t.nowLine)} />
+                    <span className={cn('h-1.5 w-1.5 rounded-full', t.nowDot)} />
                   </div>
                 )}
                 <div className="flex items-center gap-3 py-1.5" style={{ opacity: past ? 0.5 : 1 }}>
-                  <span className="w-14 flex-none text-right text-xs font-semibold tabular-nums text-white/85">
+                  <span
+                    className={cn(
+                      'w-14 flex-none text-right text-xs font-semibold tabular-nums',
+                      t.time
+                    )}
+                  >
                     {event.allDay ? 'All day' : formatTime(event.start, twentyFour)}
                   </span>
                   <span
-                    className="w-[3px] flex-none self-stretch rounded-full"
-                    style={{ background: event.color ?? 'rgba(255,255,255,0.5)' }}
+                    className={cn(
+                      'w-[3px] flex-none self-stretch rounded-full',
+                      !event.color && t.bar
+                    )}
+                    style={event.color ? { background: event.color } : undefined}
                   />
                   <span
-                    className={`min-w-0 flex-1 truncate text-sm text-white ${past ? 'line-through' : ''}`}
+                    className={cn(
+                      'min-w-0 flex-1 truncate text-sm',
+                      t.title,
+                      past && 'line-through'
+                    )}
                   >
                     {event.title}
                   </span>

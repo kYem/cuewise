@@ -18,3 +18,6 @@ provisioned; an un-provisioned build always falls back to goals.
 - `GoalsSection` composes independent goals/calendar blocks ordered by position
 - reuses the existing `CalendarStrip` + calendar store; lazy-inits calendar only
   when the calendar block is shown
+- `CalendarStrip` gains a `variant`: the home page uses a theme-token `surface`
+  variant (readable on light themes), while the Pomodoro companion keeps the
+  white-on-dark `overlay` look on its image background
