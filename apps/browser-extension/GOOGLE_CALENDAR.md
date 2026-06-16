@@ -15,9 +15,9 @@ preview data — only the Connect prompt until a real connection succeeds.
 are declared as **optional** permissions, not install-time ones. They're
 requested at runtime when the user clicks **Connect Google Calendar** and
 released again on disconnect, so a user who never enables the calendar installs
-with only `storage`, `notifications`, and `alarms` — nothing Google-related. The
-`oauth2` block and the CSP `connect-src` entries are static manifest config (CSP
-can't vary per user), not user-facing grants.
+with only its base permissions (`storage`, `notifications`, `alarms`, `favicon`)
+— nothing Google-related. The `oauth2` block and the CSP `connect-src` entries
+are static manifest config (CSP can't vary per user), not user-facing grants.
 
 The steps below mint the OAuth client and are done **once by a maintainer** in
 the Google Cloud console — Claude does not perform credential steps.
