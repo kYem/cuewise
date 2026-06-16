@@ -43,6 +43,8 @@ export const NewTabPage: React.FC = () => {
   );
   const quotes = useQuoteStore((state) => state.quotes);
   const conceptCards = useConceptCardsStore((state) => state.cards);
+  const conceptsLoading = useConceptCardsStore((state) => state.isLoading);
+  const initializeConcepts = useConceptCardsStore((state) => state.initialize);
   const timeFormat = useSettingsStore((state) => state.settings.timeFormat);
   const focusModeImageCategory = useSettingsStore((state) => state.settings.focusModeImageCategory);
   const quoteDisplayMode = useSettingsStore((state) => state.settings.quoteDisplayMode);
@@ -82,7 +84,7 @@ export const NewTabPage: React.FC = () => {
     [quotes]
   );
   const conceptNudge = useConceptNudge({
-    ready: !settingsLoading,
+    ready: !settingsLoading && !conceptsLoading,
     enabled: conceptCardsEnabled,
     conceptCount: conceptCards.length,
     totalQuoteViews,
@@ -138,7 +140,8 @@ export const NewTabPage: React.FC = () => {
     initializeQuotes();
     initializeSettings();
     initializePomodoro();
-  }, [initializeQuotes, initializeSettings, initializePomodoro]);
+    initializeConcepts();
+  }, [initializeQuotes, initializeSettings, initializePomodoro, initializeConcepts]);
 
   // Show welcome modal on first visit
   useEffect(() => {

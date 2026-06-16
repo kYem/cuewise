@@ -58,9 +58,11 @@ export const ConceptRotation: React.FC<ConceptRotationProps> = ({ fallback, onAd
     initialize();
   }, [initialize]);
 
-  // Re-evaluate the once-per-tab decision when the surfacing settings change.
+  // Re-evaluate the once-per-tab decision (and clear the session deck) when the
+  // surfacing settings change, so the queue counter and total stay in sync.
   useEffect(() => {
     setDecision(null);
+    setHandledIds([]);
   }, [framing, cadence, enabled]);
 
   const due = useMemo(() => {
@@ -91,8 +93,12 @@ export const ConceptRotation: React.FC<ConceptRotationProps> = ({ fallback, onAd
     setDecision((prev) => (prev ? { ...prev, show: false } : prev));
   };
 
-  const handleGrade = (grade: ConceptGrade) => {
-    reviewCard(current.id, grade);
+  const handleGrade = async (grade: ConceptGrade) => {
+    // Only retire the card from the deck once the review actually persisted.
+    const ok = await reviewCard(current.id, grade);
+    if (!ok) {
+      return;
+    }
     setHandledIds((ids) => [...ids, current.id]);
     // Ambient: one moment of recall, then back to the calm quote rotation.
     if (framing === 'ambient') {
@@ -113,7 +119,7 @@ export const ConceptRotation: React.FC<ConceptRotationProps> = ({ fallback, onAd
 
   return (
     <ConceptCardDisplay
-      key={current.id}
+      key={`${current.id}-${activeRecall}`}
       card={current}
       activeRecall={activeRecall}
       onGrade={handleGrade}

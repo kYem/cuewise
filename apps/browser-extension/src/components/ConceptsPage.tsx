@@ -127,7 +127,10 @@ export const ConceptsPage: React.FC = () => {
                     <div className="flex items-center gap-1 flex-none">
                       <button
                         type="button"
-                        onClick={() => setEditingCard(card)}
+                        onClick={() => {
+                          setConfirmDeleteId(null);
+                          setEditingCard(card);
+                        }}
                         className="p-2 rounded-lg text-secondary hover:text-primary hover:bg-surface-variant transition-colors"
                         title="Edit"
                       >

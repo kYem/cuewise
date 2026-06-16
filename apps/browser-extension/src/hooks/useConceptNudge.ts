@@ -40,7 +40,17 @@ export function useConceptNudge({
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
-    if (!ready || isVisible || dismissed) {
+    if (!ready) {
+      return;
+    }
+    // Retract once the user is no longer a candidate (added a card, disabled, dismissed).
+    if (isVisible) {
+      if (conceptCount > 0 || !enabled || dismissed) {
+        setIsVisible(false);
+      }
+      return;
+    }
+    if (dismissed) {
       return;
     }
     const today = getTodayDateString();
