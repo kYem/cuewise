@@ -77,7 +77,7 @@ describe('connect', () => {
     );
   });
 
-  it('falls back to sample data when the Calendar API is unavailable', async () => {
+  it('stays disconnected and never fabricates events when unavailable', async () => {
     isAvailableMock.mockReturnValue(false);
 
     await useCalendarStore.getState().connect();
@@ -85,9 +85,12 @@ describe('connect', () => {
     expect(connectCalendarMock).not.toHaveBeenCalled();
     expect(fetchTodayEventsMock).not.toHaveBeenCalled();
     const state = useCalendarStore.getState();
-    expect(state.connected).toBe(true);
-    expect(state.events.length).toBeGreaterThan(0);
-    expect(state.events[0].id).toBe('s1');
+    expect(state.connected).toBe(false);
+    expect(state.events).toEqual([]);
+    expect(errorToastMock).toHaveBeenCalledWith(
+      'Google Calendar is not available in the dev server'
+    );
+    expect(setCalendarStateMock).not.toHaveBeenCalled();
   });
 
   it('surfaces an error and stays disconnected when the live fetch fails', async () => {
@@ -101,19 +104,6 @@ describe('connect', () => {
     expect(state.isLoading).toBe(false);
     expect(state.error).toBe('Failed to connect calendar');
     expect(errorToastMock).toHaveBeenCalledWith('Failed to connect Google Calendar');
-  });
-
-  it('reports not-configured in a production build with no client id', async () => {
-    isAvailableMock.mockReturnValue(false);
-    vi.stubEnv('DEV', false);
-
-    await useCalendarStore.getState().connect();
-
-    const state = useCalendarStore.getState();
-    expect(state.connected).toBe(false);
-    expect(state.isLoading).toBe(false);
-    expect(errorToastMock).toHaveBeenCalledWith('Google Calendar is not set up in this build');
-    expect(setCalendarStateMock).not.toHaveBeenCalled();
   });
 
   it('warns but stays connected when persisting the calendar state fails', async () => {
@@ -131,6 +121,15 @@ describe('connect', () => {
 describe('refresh', () => {
   it('does nothing when not connected', async () => {
     isAvailableMock.mockReturnValue(true);
+
+    await useCalendarStore.getState().refresh();
+
+    expect(fetchTodayEventsMock).not.toHaveBeenCalled();
+  });
+
+  it('does nothing when connected but the calendar is unavailable', async () => {
+    isAvailableMock.mockReturnValue(false);
+    useCalendarStore.setState({ connected: true });
 
     await useCalendarStore.getState().refresh();
 

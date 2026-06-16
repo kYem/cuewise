@@ -1,4 +1,4 @@
-import { type CalendarEvent, getTodayDateString, logger } from '@cuewise/shared';
+import { type CalendarEvent, logger } from '@cuewise/shared';
 import { getCalendarState, setCalendarState } from '@cuewise/storage';
 import { create } from 'zustand';
 import {
@@ -23,57 +23,6 @@ interface CalendarStore {
   disconnect: () => Promise<void>;
   // `silent` suppresses failure toasts for background refreshes (e.g. on mount).
   refresh: (options?: { silent?: boolean }) => Promise<void>;
-}
-
-// Dev-only fallback agenda: chrome.identity doesn't exist in the Vite dev
-// server, so connect/refresh use this sample data there. Gated behind DEV so a
-// production build never presents fabricated events as a real schedule.
-// Times are anchored to today.
-function sampleEvents(): CalendarEvent[] {
-  const today = getTodayDateString();
-  const at = (hhmm: string) => `${today}T${hhmm}:00`;
-  return [
-    {
-      id: 's1',
-      title: 'Daily standup',
-      start: at('09:00'),
-      end: at('09:15'),
-      allDay: false,
-      color: '#3b82f6',
-    },
-    {
-      id: 's2',
-      title: 'Design review',
-      start: at('10:30'),
-      end: at('11:30'),
-      allDay: false,
-      color: '#8b5cf6',
-    },
-    {
-      id: 's3',
-      title: 'Focus block · design system',
-      start: at('13:00'),
-      end: at('14:30'),
-      allDay: false,
-      color: '#22c55e',
-    },
-    {
-      id: 's4',
-      title: '1:1 with Sam',
-      start: at('15:30'),
-      end: at('16:00'),
-      allDay: false,
-      color: '#eab308',
-    },
-    {
-      id: 's5',
-      title: 'Wind down & plan tomorrow',
-      start: at('17:00'),
-      end: at('17:30'),
-      allDay: false,
-      color: '#14b8a6',
-    },
-  ];
 }
 
 export const useCalendarStore = create<CalendarStore>((set, get) => ({
@@ -104,25 +53,20 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
     }
   },
 
-  // Interactive consent, then pull today's events. In the dev server (no
-  // chrome.identity) this uses sample data; a production build without a
-  // configured OAuth client id reports that the feature isn't set up rather
-  // than faking a connection.
+  // Interactive consent, then pull today's events. Real connection only — there
+  // is no sample/preview agenda, so the strip shows the Connect prompt until a
+  // genuine connection succeeds. When unavailable (e.g. the Vite dev server,
+  // which has no chrome.identity) it reports that rather than fabricating events.
   connect: async () => {
+    if (!isCalendarAvailable()) {
+      set({ error: 'Google Calendar is not available' });
+      useToastStore.getState().error('Google Calendar is not available in the dev server');
+      return;
+    }
     set({ isLoading: true, error: null });
     try {
-      const live = isCalendarAvailable();
-      let events: CalendarEvent[];
-      if (live) {
-        await connectCalendar();
-        events = await fetchTodayEvents();
-      } else if (import.meta.env.DEV) {
-        events = sampleEvents();
-      } else {
-        set({ isLoading: false, error: 'Google Calendar is not configured in this build' });
-        useToastStore.getState().error('Google Calendar is not set up in this build');
-        return;
-      }
+      await connectCalendar();
+      const events = await fetchTodayEvents();
       const lastSync = new Date().toISOString();
       set({ connected: true, events, lastSync, isLoading: false });
       const result = await setCalendarState({ connected: true, events, lastSync });
@@ -131,10 +75,7 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
         useToastStore.getState().warning('Connected, but saving calendar state failed');
         return;
       }
-      const message = live
-        ? 'Google Calendar connected'
-        : 'Calendar connected (sample data — dev only)';
-      useToastStore.getState().success(message);
+      useToastStore.getState().success('Google Calendar connected');
     } catch (error) {
       logger.error('Failed to connect calendar', error);
       set({ isLoading: false, error: 'Failed to connect calendar' });
@@ -160,21 +101,13 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
   },
 
   refresh: async (options) => {
-    if (!get().connected) {
+    if (!get().connected || !isCalendarAvailable()) {
       return;
     }
     const silent = options?.silent === true;
     set({ isLoading: true, error: null });
     try {
-      let events: CalendarEvent[];
-      if (isCalendarAvailable()) {
-        events = await fetchTodayEvents();
-      } else if (import.meta.env.DEV) {
-        events = sampleEvents();
-      } else {
-        set({ isLoading: false });
-        return;
-      }
+      const events = await fetchTodayEvents();
       const lastSync = new Date().toISOString();
       set({ events, lastSync, isLoading: false });
       const result = await setCalendarState({ connected: true, events, lastSync });

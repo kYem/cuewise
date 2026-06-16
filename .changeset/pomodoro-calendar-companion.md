@@ -17,9 +17,9 @@ both, chosen via a Quote/Calendar/Both control in Timer settings.
 - `identity` and the Google API hosts are **optional** permissions (opt-in):
   requested only when the user clicks Connect and released on disconnect, so a
   user who never enables the calendar grants nothing Google-related at install
-- ships safely un-provisioned: the dev server shows sample data, and a
-  production build without an OAuth client id reports the calendar isn't set up
-  rather than fabricating events
+- no sample/preview data: the strip shows the Connect prompt until a real Google
+  Calendar connection succeeds. An un-provisioned build (no OAuth client id)
+  hides the companion entirely rather than fabricating events
 
 Setup for the OAuth client id is documented in
 `apps/browser-extension/GOOGLE_CALENDAR.md`.
