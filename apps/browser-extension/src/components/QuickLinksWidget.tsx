@@ -73,8 +73,9 @@ const QuickLinkForm: React.FC<QuickLinkFormProps> = ({
   const inputClass =
     'w-full px-2.5 py-1.5 text-sm bg-surface-variant border border-border rounded-lg text-primary placeholder:text-secondary focus:outline-none focus:ring-2 focus:ring-primary-500/40';
 
+  // noValidate: normalizeQuickLinkUrl owns validation, so bare domains (example.com) submit.
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-2 px-3 py-2.5">
+    <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-2 px-3 py-2.5">
       <input
         type="url"
         value={url}
