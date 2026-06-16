@@ -377,6 +377,40 @@ describe('fetchTodayEvents', () => {
     expect(events[0].id).toBe('ok');
   });
 
+  it('drops a cancelled event even when the user had accepted it', async () => {
+    stubFetchItems([
+      {
+        id: 'gone',
+        summary: 'Was on, now cancelled',
+        status: 'cancelled',
+        attendees: [{ self: true, responseStatus: 'accepted' }],
+        start: { dateTime: '2026-06-14T09:00:00Z' },
+        end: { dateTime: '2026-06-14T10:00:00Z' },
+      },
+    ]);
+
+    const events = await fetchTodayEvents();
+
+    expect(events).toEqual([]);
+  });
+
+  it('keeps an event the user has not yet responded to (needsAction)', async () => {
+    stubFetchItems([
+      {
+        id: 'maybe',
+        summary: 'Invite',
+        attendees: [{ self: true, responseStatus: 'needsAction' }],
+        start: { dateTime: '2026-06-14T09:00:00Z' },
+        end: { dateTime: '2026-06-14T10:00:00Z' },
+      },
+    ]);
+
+    const events = await fetchTodayEvents();
+
+    expect(events).toHaveLength(1);
+    expect(events[0].id).toBe('maybe');
+  });
+
   it('drops events the signed-in user has declined', async () => {
     stubFetchItems([
       {

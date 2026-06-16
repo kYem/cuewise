@@ -133,6 +133,24 @@ describe('connect', () => {
     expect(warningMock).toHaveBeenCalledWith('Connected, but saving calendar state failed');
     expect(successMock).not.toHaveBeenCalled();
   });
+
+  it('does not resurrect a connection disconnected during the handshake (epoch guard)', async () => {
+    isAvailableMock.mockReturnValue(true);
+    // Simulate the user disconnecting (epoch bump + connected:false) while the
+    // post-consent fetch is still in flight.
+    fetchTodayEventsMock.mockImplementation(async () => {
+      useCalendarStore.setState((s) => ({ epoch: s.epoch + 1, connected: false }));
+      return [liveEvent];
+    });
+
+    await useCalendarStore.getState().connect();
+
+    const state = useCalendarStore.getState();
+    expect(state.connected).toBe(false);
+    expect(state.isLoading).toBe(false);
+    expect(setCalendarStateMock).not.toHaveBeenCalled();
+    expect(successMock).not.toHaveBeenCalled();
+  });
 });
 
 describe('refresh', () => {

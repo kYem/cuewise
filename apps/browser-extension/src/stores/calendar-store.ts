@@ -70,9 +70,16 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
       return;
     }
     set({ isLoading: true, error: null, epoch: get().epoch + 1 });
+    const epoch = get().epoch;
     try {
       await connectCalendar();
       const events = await fetchTodayEvents();
+      // The user may have disconnected while consent/fetch was in flight; don't
+      // resurrect the connection they just cleared (same guard as refresh()).
+      if (get().epoch !== epoch) {
+        set({ isLoading: false });
+        return;
+      }
       const lastSync = new Date().toISOString();
       set({ connected: true, events, lastSync, isLoading: false });
       const result = await setCalendarState({ connected: true, events, lastSync });
