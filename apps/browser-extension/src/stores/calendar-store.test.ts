@@ -354,6 +354,27 @@ describe('disconnect', () => {
     expect(useCalendarStore.getState().connected).toBe(false);
   });
 
+  it('does not clobber a reconnect that lands during the revoke (epoch guard)', async () => {
+    isAvailableMock.mockReturnValue(true);
+    useCalendarStore.setState({ connected: true });
+    // Simulate a reconnect (epoch bump + fresh events) completing while the
+    // in-flight token revoke is still pending.
+    disconnectCalendarMock.mockImplementation(async () => {
+      useCalendarStore.setState((s) => ({
+        epoch: s.epoch + 1,
+        connected: true,
+        events: [liveEvent],
+      }));
+    });
+
+    await useCalendarStore.getState().disconnect();
+
+    const state = useCalendarStore.getState();
+    expect(state.connected).toBe(true);
+    expect(state.events).toEqual([liveEvent]);
+    expect(setCalendarStateMock).not.toHaveBeenCalled();
+  });
+
   it('clears state and surfaces an error when persistence fails', async () => {
     isAvailableMock.mockReturnValue(true);
     setCalendarStateMock.mockResolvedValue({ success: false });

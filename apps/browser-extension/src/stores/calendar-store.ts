@@ -102,7 +102,8 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
   disconnect: async () => {
     // Bump first so any refresh already in flight skips its commit instead of
     // re-persisting connected:true after we clear it.
-    set({ epoch: get().epoch + 1 });
+    const epoch = get().epoch + 1;
+    set({ epoch });
     // Best-effort token revocation must never block the local disconnect.
     try {
       if (isCalendarAvailable()) {
@@ -110,6 +111,11 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
       }
     } catch (error) {
       logger.warn('Calendar token revocation failed', { error });
+    }
+    // A reconnect that landed during the revoke is the user's latest intent —
+    // don't wipe it (mirror of the connect()/refresh() epoch guard).
+    if (get().epoch !== epoch) {
+      return;
     }
     set({ connected: false, events: [], lastSync: null, error: null });
     const result = await setCalendarState({ connected: false, events: [], lastSync: null });
