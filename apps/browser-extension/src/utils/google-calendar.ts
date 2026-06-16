@@ -12,6 +12,7 @@ import { type CalendarEvent, getTodayDateString, logger } from '@cuewise/shared'
 
 const CALENDAR_API = 'https://www.googleapis.com/calendar/v3';
 const REVOKE_URL = 'https://oauth2.googleapis.com/revoke';
+const REQUEST_TIMEOUT_MS = 15_000;
 
 // The optional permissions the calendar needs: requested together on Connect and
 // handed back on disconnect. Origins cover the Calendar API and token revoke.
@@ -158,8 +159,13 @@ export async function fetchTodayEvents(): Promise<CalendarEvent[]> {
     maxResults: '25',
   });
   const url = `${CALENDAR_API}/calendars/primary/events?${params}`;
+  // Time-box the request: a hung connection would otherwise leave the store's
+  // isLoading stuck true forever, which also blocks the visibility auto-refresh.
   const get = (authToken: string) =>
-    fetch(url, { headers: { Authorization: `Bearer ${authToken}` } });
+    fetch(url, {
+      headers: { Authorization: `Bearer ${authToken}` },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
 
   let token = await getToken(false);
   let response = await get(token);
@@ -206,7 +212,9 @@ export async function disconnectCalendar(): Promise<void> {
     const token = await getToken(false).catch(() => null);
     if (token) {
       await removeCachedToken(token);
-      await fetch(`${REVOKE_URL}?token=${token}`, { method: 'POST' }).catch(() => {});
+      await fetch(`${REVOKE_URL}?token=${encodeURIComponent(token)}`, { method: 'POST' }).catch(
+        () => {}
+      );
     }
   } catch (error) {
     logger.warn('Calendar disconnect cleanup failed', { error });

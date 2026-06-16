@@ -58,6 +58,9 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllEnvs();
+  // Backstop: a nested describe enables fake timers; ensure real timers are
+  // restored even if a test there throws before its own afterEach runs.
+  vi.useRealTimers();
 });
 
 describe('connect', () => {
@@ -171,6 +174,33 @@ describe('refresh', () => {
     expect(state.isLoading).toBe(false);
     expect(state.error).toBe('Failed to refresh calendar');
     expect(errorToastMock).toHaveBeenCalledWith('Failed to refresh Google Calendar');
+  });
+
+  it('skips a concurrent refresh while one is already in flight', async () => {
+    isAvailableMock.mockReturnValue(true);
+    useCalendarStore.setState({ connected: true, isLoading: true });
+
+    await useCalendarStore.getState().refresh();
+
+    expect(fetchTodayEventsMock).not.toHaveBeenCalled();
+  });
+
+  it('does not re-persist a connection that was disconnected mid-fetch', async () => {
+    isAvailableMock.mockReturnValue(true);
+    useCalendarStore.setState({ connected: true });
+    // Simulate the user disconnecting while the fetch is in flight.
+    fetchTodayEventsMock.mockImplementation(async () => {
+      useCalendarStore.setState({ connected: false, events: [], lastSync: null });
+      return [liveEvent];
+    });
+
+    await useCalendarStore.getState().refresh({ silent: true });
+
+    expect(setCalendarStateMock).not.toHaveBeenCalled();
+    const state = useCalendarStore.getState();
+    expect(state.connected).toBe(false);
+    expect(state.isLoading).toBe(false);
+    expect(state.events).toEqual([]);
   });
 });
 

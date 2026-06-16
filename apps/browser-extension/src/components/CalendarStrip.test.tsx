@@ -112,6 +112,39 @@ describe('CalendarStrip - all-day events', () => {
   });
 });
 
+describe('CalendarStrip - event links', () => {
+  it('links the title to the event in Google Calendar when htmlLink is present', () => {
+    const store = createCalendarStore({
+      events: [
+        {
+          ...timedEvent('e', '2026-06-14T15:00:00', '2026-06-14T16:00:00', 'Sync'),
+          htmlLink: 'https://calendar.google.com/event?eid=abc',
+        },
+      ],
+    });
+    mountWith(store);
+
+    render(<CalendarStrip />);
+
+    const link = screen.getByRole('link', { name: 'Sync' });
+    expect(link).toHaveAttribute('href', 'https://calendar.google.com/event?eid=abc');
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+  });
+
+  it('renders a plain (non-link) title when htmlLink is absent', () => {
+    const store = createCalendarStore({
+      events: [timedEvent('e', '2026-06-14T15:00:00', '2026-06-14T16:00:00', 'Plain')],
+    });
+    mountWith(store);
+
+    render(<CalendarStrip />);
+
+    expect(screen.getByText('Plain')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Plain' })).not.toBeInTheDocument();
+  });
+});
+
 describe('CalendarStrip - lean mode', () => {
   it('drops past events and caps the list at three', () => {
     const store = createCalendarStore({

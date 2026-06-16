@@ -144,6 +144,19 @@ describe('disconnectCalendar', () => {
     });
   });
 
+  it('url-encodes a token with reserved characters in the revoke request', async () => {
+    installIdentity({ token: 'a/b+c=', clientId: 'abc.apps.googleusercontent.com' });
+    const fetchMock = vi.fn(() => Promise.resolve({ ok: true }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await disconnectCalendar();
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://oauth2.googleapis.com/revoke?token=a%2Fb%2Bc%3D',
+      { method: 'POST' }
+    );
+  });
+
   it('releases the permissions even when the revoke request fails', async () => {
     const { permissions } = installIdentity({
       token: 'tok',

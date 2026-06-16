@@ -108,10 +108,21 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
     if (!get().connected || !isCalendarAvailable()) {
       return;
     }
+    // Auto-refresh fires from several places (mount, minute tick, tab refocus);
+    // skip if a fetch is already in flight so they don't stack duplicate calls.
+    if (get().isLoading) {
+      return;
+    }
     const silent = options?.silent === true;
     set({ isLoading: true, error: null });
     try {
       const events = await fetchTodayEvents();
+      // The user may have disconnected while the fetch was in flight; bail
+      // without re-persisting connected:true (which would resurrect the account).
+      if (!get().connected) {
+        set({ isLoading: false });
+        return;
+      }
       const lastSync = new Date().toISOString();
       set({ events, lastSync, isLoading: false });
       const result = await setCalendarState({ connected: true, events, lastSync });

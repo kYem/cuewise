@@ -115,6 +115,10 @@ export const CalendarStrip: React.FC<CalendarStripProps> = ({
       if (document.visibilityState !== 'visible') {
         return;
       }
+      // The clock drifts while the tab is hidden; resync immediately so the
+      // now-line and past styling are right on the first frame back, not a
+      // minute later when the interval next fires.
+      setNow(new Date());
       const { lastSync, isLoading: loading } = useCalendarStore.getState();
       if (loading) {
         return;
@@ -271,6 +275,11 @@ export const CalendarStrip: React.FC<CalendarStripProps> = ({
           {visible.map((event, i) => {
             const past = !lean && isPast(event);
             const showNow = i === nowLineIndex;
+            const titleClass = cn(
+              'min-w-0 flex-1 truncate text-sm',
+              t.title,
+              past && 'line-through'
+            );
             return (
               <Fragment key={event.id}>
                 {showNow && (
@@ -298,15 +307,18 @@ export const CalendarStrip: React.FC<CalendarStripProps> = ({
                     )}
                     style={event.color ? { background: event.color } : undefined}
                   />
-                  <span
-                    className={cn(
-                      'min-w-0 flex-1 truncate text-sm',
-                      t.title,
-                      past && 'line-through'
-                    )}
-                  >
-                    {event.title}
-                  </span>
+                  {event.htmlLink ? (
+                    <a
+                      href={event.htmlLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={cn(titleClass, 'hover:underline')}
+                    >
+                      {event.title}
+                    </a>
+                  ) : (
+                    <span className={titleClass}>{event.title}</span>
+                  )}
                 </div>
               </Fragment>
             );
