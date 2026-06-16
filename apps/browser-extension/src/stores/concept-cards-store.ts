@@ -63,7 +63,8 @@ function applyCardUpdates(card: ConceptCard, updates: ConceptCardUpdates): Conce
     next.details = updates.details.trim() || undefined;
   }
   if (updates.tags !== undefined) {
-    next.tags = updates.tags;
+    // Match the add path: an empty tag list collapses to undefined, not [].
+    next.tags = updates.tags.length > 0 ? updates.tags : undefined;
   }
   if (updates.source !== undefined) {
     next.source = updates.source.trim() || undefined;

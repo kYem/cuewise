@@ -40,14 +40,15 @@ export const ConceptForm: React.FC<ConceptFormProps> = ({ card, onSuccess, onCan
 
     setIsSubmitting(true);
     try {
+      const parsedTags = parseTags(tags);
       let ok: boolean;
       if (card) {
         // Pass explicit values so cleared fields actually clear on save.
-        ok = await updateCard(card.id, { term, definition, details, tags: parseTags(tags) });
+        ok = await updateCard(card.id, { term, definition, details, tags: parsedTags });
       } else {
         ok = await addCard(term, definition, {
           details: details.trim() || undefined,
-          tags: parseTags(tags).length > 0 ? parseTags(tags) : undefined,
+          tags: parsedTags.length > 0 ? parsedTags : undefined,
         });
       }
       if (ok) {

@@ -1,5 +1,6 @@
 import {
   CONCEPT_GRADES,
+  CONCEPT_INTERVAL_MAX,
   type ConceptCard,
   type ConceptGrade,
   conceptIntervalLabel,
@@ -7,7 +8,7 @@ import {
 } from '@cuewise/shared';
 import { BookOpen, Brain, ChevronRight, Eye, Plus, Repeat } from 'lucide-react';
 import type React from 'react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 // Grade accent colors — error/success adapt per theme; easy is a calm blue.
 const GRADE_COLOR: Record<ConceptGrade, string> = {
@@ -33,13 +34,9 @@ export const ConceptCardDisplay: React.FC<ConceptCardDisplayProps> = ({
   onAdd,
   queueLabel,
 }) => {
-  // Active recall hides the definition until "Reveal"; passive mode shows it upfront.
+  // Active recall hides the definition until "Reveal"; passive mode shows it
+  // upfront. The parent keys this component by card id, so state resets per card.
   const [revealed, setRevealed] = useState(!activeRecall);
-
-  // Reset when the card or the mode changes (the component is reused by position).
-  useEffect(() => {
-    setRevealed(!activeRecall);
-  }, [card.id, activeRecall]);
 
   const topic = card.tags?.[0];
 
@@ -119,11 +116,16 @@ export const ConceptCardDisplay: React.FC<ConceptCardDisplayProps> = ({
             <div className="mb-3 text-xs text-secondary">How well did you recall it?</div>
             <div className="flex items-stretch justify-center gap-2.5">
               {CONCEPT_GRADES.map((grade) => {
-                const nextInterval = projectConceptInterval(card.schedule, grade.id);
+                // Cap the preview at the same ceiling reviewConceptCard applies.
+                const nextInterval = Math.min(
+                  projectConceptInterval(card.schedule, grade.id),
+                  CONCEPT_INTERVAL_MAX
+                );
                 return (
                   <button
                     key={grade.id}
                     type="button"
+                    title={grade.hint}
                     onClick={() => onGrade(grade.id)}
                     style={{ borderColor: GRADE_COLOR[grade.id] }}
                     className="flex max-w-[150px] flex-1 flex-col items-center gap-0.5 rounded-lg border bg-surface/60 px-2 py-2.5 text-primary backdrop-blur-sm transition-all hover:-translate-y-0.5 hover:bg-surface-variant"

@@ -1,6 +1,6 @@
 import { createSelectorMock } from '@cuewise/test-utils';
 import { conceptCardFactory } from '@cuewise/test-utils/factories';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useConceptCardsStore } from '../stores/concept-cards-store';
 import { ConceptForm } from './ConceptForm';
@@ -28,13 +28,13 @@ describe('ConceptForm', () => {
     fireEvent.change(screen.getByLabelText(/term/i), { target: { value: 'Idempotency' } });
     fireEvent.change(screen.getByLabelText(/definition/i), { target: { value: 'Same effect.' } });
     fireEvent.change(screen.getByLabelText(/tags/i), { target: { value: 'http, retries' } });
-    fireEvent.click(screen.getByRole('button', { name: /save concept/i }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /save concept/i }));
+    });
 
-    await vi.waitFor(() => {
-      expect(addCard).toHaveBeenCalledWith('Idempotency', 'Same effect.', {
-        details: undefined,
-        tags: ['http', 'retries'],
-      });
+    expect(addCard).toHaveBeenCalledWith('Idempotency', 'Same effect.', {
+      details: undefined,
+      tags: ['http', 'retries'],
     });
     expect(onSuccess).toHaveBeenCalled();
   });
@@ -46,11 +46,11 @@ describe('ConceptForm', () => {
     render(<ConceptForm card={card} onSuccess={vi.fn()} onCancel={vi.fn()} />);
 
     fireEvent.change(screen.getByLabelText(/term/i), { target: { value: 'New term' } });
-    fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
-
-    await vi.waitFor(() => {
-      expect(updateCard).toHaveBeenCalled();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
     });
+
+    expect(updateCard).toHaveBeenCalled();
     expect(updateCard.mock.calls[0][0]).toBe('c1');
     expect(updateCard.mock.calls[0][1].term).toBe('New term');
   });

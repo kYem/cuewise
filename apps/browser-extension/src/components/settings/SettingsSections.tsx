@@ -796,7 +796,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     icon: House,
     component: HomeSection,
     terms:
-      'home screen clock time format 12 24 quote display compact bottom hidden goals position interval rotate animate',
+      'home screen clock time format 12 24 quote display compact bottom hidden goals position interval rotate animate concept cards recall spaced repetition flashcards learning definitions surfacing cadence',
   },
   {
     id: 'goals',

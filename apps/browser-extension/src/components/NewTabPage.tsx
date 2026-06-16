@@ -2,7 +2,7 @@ import { formatClockTime, formatLongDate, getGreeting } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
 import { BarChart3, BookMarked, Brain, Flag, PanelRight, Settings, Timer } from 'lucide-react';
 import type React from 'react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useConceptNudge } from '../hooks/useConceptNudge';
 import { useReviewPrompt } from '../hooks/useReviewPrompt';
 import { useConceptCardsStore } from '../stores/concept-cards-store';
@@ -77,7 +77,10 @@ export const NewTabPage: React.FC = () => {
     lastShownAt: reviewPromptLastShownAt,
     updateSettings,
   });
-  const totalQuoteViews = quotes.reduce((sum, quote) => sum + quote.viewCount, 0);
+  const totalQuoteViews = useMemo(
+    () => quotes.reduce((sum, quote) => sum + (quote.viewCount ?? 0), 0),
+    [quotes]
+  );
   const conceptNudge = useConceptNudge({
     ready: !settingsLoading,
     enabled: conceptCardsEnabled,
