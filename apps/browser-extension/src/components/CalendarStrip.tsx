@@ -15,6 +15,9 @@ interface CalendarStripProps {
   // 'surface': theme tokens, for the home new tab where the background follows
   // the theme (and can be light), matching the goals card / QuoteDisplay.
   variant?: 'overlay' | 'surface';
+  // Optional control rendered in the header beside the refresh button — e.g. the
+  // view-options menu when the strip is the home-page primary widget.
+  headerAction?: React.ReactNode;
 }
 
 // Per-variant color classes. 'overlay' keeps the immersive white-on-dark glass
@@ -69,6 +72,7 @@ function formatTime(iso: string, twentyFour: boolean): string {
 export const CalendarStrip: React.FC<CalendarStripProps> = ({
   lean = false,
   variant = 'overlay',
+  headerAction,
 }) => {
   const { connected, events, isLoading, error } = useCalendarStore(
     useShallow((s) => ({
@@ -83,7 +87,15 @@ export const CalendarStrip: React.FC<CalendarStripProps> = ({
   const twentyFour = useSettingsStore((s) => s.settings.timeFormat === '24h');
 
   const t = variantTokens(variant === 'surface');
-  const width = lean ? 'w-full max-w-[520px]' : 'w-[360px] max-w-[92vw]';
+  // Match the goals card (max-w-[400px]) in the surface/home layout so the
+  // stacked "both" view lines up; the Pomodoro overlay keeps its 360px card and
+  // the lean "Up next" strip stays wide.
+  let width = 'w-[360px] max-w-[92vw]';
+  if (lean) {
+    width = 'w-full max-w-[520px]';
+  } else if (variant === 'surface') {
+    width = 'w-full max-w-[400px]';
+  }
   const cardClass = cn(width, 'mx-auto rounded-2xl border p-density-md shadow-lg', t.card);
 
   const header = (right?: React.ReactNode) => (
@@ -92,7 +104,10 @@ export const CalendarStrip: React.FC<CalendarStripProps> = ({
         <Calendar className={cn('w-4 h-4', t.icon)} />
         <span className="font-semibold">{lean ? 'Up next' : 'Today'}</span>
       </span>
-      {right}
+      <span className="flex items-center gap-1.5">
+        {right}
+        {headerAction}
+      </span>
     </div>
   );
 

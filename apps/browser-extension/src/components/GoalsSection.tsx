@@ -471,16 +471,17 @@ export const GoalsSection: React.FC = () => {
       </div>
     );
 
-  // Calendar-only: show the strip with the options menu (on hover) so the user
-  // can switch back; mirrors the focus-mode inline menu.
+  // Calendar-only: the view-options menu lives inside the card header (beside
+  // refresh), like the compact goals card — so switching back is always one
+  // click away, not a floating control off to the side.
   if (showCalendar && !showGoals) {
     return (
-      <div className="group flex items-center justify-center gap-3 w-full max-w-4xl mx-auto">
-        <CalendarStrip variant="surface" />
-        <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-          {optionsMenu('bg-white/10 hover:bg-white/20 text-secondary/80 border-white/10')}
-        </div>
-      </div>
+      <CalendarStrip
+        variant="surface"
+        headerAction={optionsMenu(
+          'h-7 w-7 border-0 bg-transparent backdrop-blur-none hover:bg-surface-variant'
+        )}
+      />
     );
   }
 

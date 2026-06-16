@@ -378,4 +378,13 @@ describe('CalendarStrip - connected status & actions', () => {
     expect(screen.getByText('Afternoon sync')).toBeInTheDocument();
     expect(container.querySelector('.text-white')).not.toBeInTheDocument();
   });
+
+  it('renders a header action in the card header when provided', () => {
+    const store = createCalendarStore({ connected: true });
+    mountWith(store);
+
+    render(<CalendarStrip headerAction={<button type="button">View options</button>} />);
+
+    expect(screen.getByRole('button', { name: 'View options' })).toBeInTheDocument();
+  });
 });

@@ -3,6 +3,7 @@ import { createSelectorMock, createSettingsStoreMock } from '@cuewise/test-utils
 import { goalFactory, taskWithDueDateFactory } from '@cuewise/test-utils/factories';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useCalendarStore } from '../stores/calendar-store';
 import { useGoalStore } from '../stores/goal-store';
@@ -21,7 +22,11 @@ vi.mock('@cuewise/storage', () => ({
 vi.mock('./GoalsList', () => ({ GoalsList: () => null }));
 vi.mock('./GoalFocusView', () => ({ GoalFocusView: () => null }));
 vi.mock('./StorageIndicator', () => ({ StorageIndicator: () => null }));
-vi.mock('./CalendarStrip', () => ({ CalendarStrip: () => <div data-testid="calendar-strip" /> }));
+vi.mock('./CalendarStrip', () => ({
+  CalendarStrip: ({ headerAction }: { headerAction?: ReactNode }) => (
+    <div data-testid="calendar-strip">{headerAction}</div>
+  ),
+}));
 
 const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
