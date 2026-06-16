@@ -1,4 +1,6 @@
 import {
+  type ConceptCadence,
+  type ConceptFraming,
   type FocusImageCategory,
   type FocusPosition,
   NOTIFICATION_SOUNDS,
@@ -79,6 +81,18 @@ const REMINDER_LAYOUT_OPTIONS: { value: ReminderPanelLayout; label: string }[] =
 const QUOTE_UNIT_OPTIONS: { value: 'sec' | 'min'; label: string }[] = [
   { value: 'sec', label: 'sec' },
   { value: 'min', label: 'min' },
+];
+
+const CONCEPT_FRAMING_OPTIONS: { value: ConceptFraming; label: string }[] = [
+  { value: 'ambient', label: 'Ambient' },
+  { value: 'queue', label: 'Due queue' },
+];
+
+const CONCEPT_CADENCE_OPTIONS: { value: ConceptCadence; label: string }[] = [
+  { value: 'every', label: 'Every tab' },
+  { value: 'third', label: '1 in 3' },
+  { value: 'ten', label: '1 in 10' },
+  { value: 'off', label: 'Off' },
 ];
 
 const QUOTE_INTERVALS = [
@@ -524,6 +538,59 @@ function HomeSection({ s, set, filter }: SettingsSectionProps) {
             />
           </SettingRow>
         </>
+      )}
+      <SettingDivider />
+      <SettingRow
+        label="Concept cards"
+        filter={filter}
+        help="Resurface saved concepts for spaced-repetition review on the new tab"
+        keywords="recall spaced repetition flashcards concepts learning definitions"
+      >
+        <Switch
+          label="Concept cards"
+          checked={s.conceptCardsEnabled}
+          onChange={(v) => set({ conceptCardsEnabled: v })}
+        />
+      </SettingRow>
+      {s.conceptCardsEnabled && (
+        <SettingSubgroup>
+          <SettingRow
+            label="Surfacing"
+            filter={filter}
+            help="Calmly mix one in (ambient), or clear a due pile (queue)"
+            keywords="ambient queue surfacing framing"
+          >
+            <Segmented
+              value={s.conceptFraming}
+              options={CONCEPT_FRAMING_OPTIONS}
+              onChange={(v) => set({ conceptFraming: v })}
+            />
+          </SettingRow>
+          <SettingRow
+            label="How often"
+            filter={filter}
+            help="How often a due card appears in the rotation"
+            keywords="cadence frequency how often tabs"
+          >
+            <Segmented
+              value={s.conceptCadence}
+              options={CONCEPT_CADENCE_OPTIONS}
+              onChange={(v) => set({ conceptCadence: v })}
+            />
+          </SettingRow>
+          <SettingRow
+            label="Active recall"
+            filter={filter}
+            help="Hide the definition until you reveal it"
+            keywords="active recall reveal grade quiz definition"
+          >
+            <Switch
+              label="Active recall"
+              checked={s.conceptActiveRecall}
+              onChange={(v) => set({ conceptActiveRecall: v })}
+            />
+          </SettingRow>
+        </SettingSubgroup>
       )}
     </div>
   );

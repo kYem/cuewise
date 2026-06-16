@@ -1,32 +1,35 @@
-import { logger } from '@cuewise/shared';
+import { type ConceptCard, logger } from '@cuewise/shared';
 import { Input, Label, Textarea } from '@cuewise/ui';
 import { CalendarClock } from 'lucide-react';
 import type React from 'react';
 import { useState } from 'react';
 import { useConceptCardsStore } from '../stores/concept-cards-store';
 
-interface AddConceptFormProps {
+interface ConceptFormProps {
+  /** When provided, the form edits this card instead of adding a new one. */
+  card?: ConceptCard;
   onSuccess: () => void;
   onCancel: () => void;
 }
 
-function parseTags(input: string): string[] | undefined {
-  const tags = input
+function parseTags(input: string): string[] {
+  return input
     .split(',')
     .map((tag) => tag.trim())
     .filter((tag) => tag.length > 0);
-  return tags.length > 0 ? tags : undefined;
 }
 
-export const AddConceptForm: React.FC<AddConceptFormProps> = ({ onSuccess, onCancel }) => {
-  const [term, setTerm] = useState('');
-  const [definition, setDefinition] = useState('');
-  const [details, setDetails] = useState('');
-  const [tags, setTags] = useState('');
+export const ConceptForm: React.FC<ConceptFormProps> = ({ card, onSuccess, onCancel }) => {
+  const [term, setTerm] = useState(card?.term ?? '');
+  const [definition, setDefinition] = useState(card?.definition ?? '');
+  const [details, setDetails] = useState(card?.details ?? '');
+  const [tags, setTags] = useState(card?.tags?.join(', ') ?? '');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const addCard = useConceptCardsStore((state) => state.addCard);
+  const updateCard = useConceptCardsStore((state) => state.updateCard);
 
+  const isEdit = card !== undefined;
   const canSave = term.trim().length > 0 && definition.trim().length > 0;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -37,15 +40,21 @@ export const AddConceptForm: React.FC<AddConceptFormProps> = ({ onSuccess, onCan
 
     setIsSubmitting(true);
     try {
-      const ok = await addCard(term, definition, {
-        details: details.trim() || undefined,
-        tags: parseTags(tags),
-      });
+      let ok: boolean;
+      if (card) {
+        // Pass explicit values so cleared fields actually clear on save.
+        ok = await updateCard(card.id, { term, definition, details, tags: parseTags(tags) });
+      } else {
+        ok = await addCard(term, definition, {
+          details: details.trim() || undefined,
+          tags: parseTags(tags).length > 0 ? parseTags(tags) : undefined,
+        });
+      }
       if (ok) {
         onSuccess();
       }
     } catch (error) {
-      logger.error('Failed to add concept', error);
+      logger.error('Failed to save concept', error);
     } finally {
       setIsSubmitting(false);
     }
@@ -109,9 +118,13 @@ export const AddConceptForm: React.FC<AddConceptFormProps> = ({ onSuccess, onCan
       </div>
 
       <div className="flex items-center justify-between gap-3 pt-2">
-        <span className="inline-flex items-center gap-1.5 text-xs text-secondary">
-          <CalendarClock className="h-3.5 w-3.5" /> First review: today
-        </span>
+        {isEdit ? (
+          <span />
+        ) : (
+          <span className="inline-flex items-center gap-1.5 text-xs text-secondary">
+            <CalendarClock className="h-3.5 w-3.5" /> First review: today
+          </span>
+        )}
         <div className="flex gap-3">
           <button
             type="button"
@@ -126,7 +139,7 @@ export const AddConceptForm: React.FC<AddConceptFormProps> = ({ onSuccess, onCan
             disabled={!canSave || isSubmitting}
             className="px-5 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium shadow-sm hover:shadow-md"
           >
-            {isSubmitting ? 'Saving...' : 'Save concept'}
+            {isSubmitting ? 'Saving...' : isEdit ? 'Save changes' : 'Save concept'}
           </button>
         </div>
       </div>

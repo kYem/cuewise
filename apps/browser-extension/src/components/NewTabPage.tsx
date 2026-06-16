@@ -10,8 +10,8 @@ import { useQuoteStore } from '../stores/quote-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { preloadImages } from '../utils/image-preload-cache';
 import { ActivePomodoroWidget } from './ActivePomodoroWidget';
-import { AddConceptForm } from './AddConceptForm';
 import { Clock } from './Clock';
+import { ConceptForm } from './ConceptForm';
 import { ConceptRotation } from './ConceptRotation';
 import { GoalsSection } from './GoalsSection';
 import { GoalButton } from './goals';
@@ -188,9 +188,9 @@ export const NewTabPage: React.FC = () => {
     window.location.hash = 'quotes';
   };
 
-  const handleOpenAddConcept = () => {
+  const handleOpenConcepts = () => {
     setIsMenuOpen(false);
-    setIsAddConceptOpen(true);
+    window.location.hash = 'concepts';
   };
 
   const handleOpenSettings = () => {
@@ -301,11 +301,11 @@ export const NewTabPage: React.FC = () => {
                     <button
                       type="button"
                       role="menuitem"
-                      onClick={handleOpenAddConcept}
+                      onClick={handleOpenConcepts}
                       className="w-full flex items-center gap-3 px-4 py-3 text-primary hover:bg-surface-variant transition-colors border-t border-divider"
                     >
                       <Brain className="w-5 h-5 text-primary-600" />
-                      <span className="text-sm font-medium">Add concept</span>
+                      <span className="text-sm font-medium">Concepts</span>
                     </button>
                     <button
                       type="button"
@@ -424,11 +424,11 @@ export const NewTabPage: React.FC = () => {
                 <button
                   type="button"
                   role="menuitem"
-                  onClick={handleOpenAddConcept}
+                  onClick={handleOpenConcepts}
                   className="w-full flex items-center gap-3 px-4 py-3 text-primary hover:bg-surface-variant transition-colors border-t border-divider"
                 >
                   <Brain className="w-5 h-5 text-primary-600" />
-                  <span className="text-sm font-medium">Add concept</span>
+                  <span className="text-sm font-medium">Concepts</span>
                 </button>
                 <button
                   type="button"
@@ -531,7 +531,7 @@ export const NewTabPage: React.FC = () => {
         title="Add a concept"
         size="md"
       >
-        <AddConceptForm
+        <ConceptForm
           onSuccess={() => setIsAddConceptOpen(false)}
           onCancel={() => setIsAddConceptOpen(false)}
         />

@@ -1,6 +1,7 @@
 import { ToastContainer } from '@cuewise/ui';
 import { Coffee } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { ConceptsPage } from './components/ConceptsPage';
 import { CelebrationOverlay } from './components/celebration/CelebrationOverlay';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { GoalsPage } from './components/GoalsPage';
@@ -14,7 +15,7 @@ import { useToastStore } from './stores/toast-store';
 import { getPreloadedCurrentUrl, preloadImages } from './utils/image-preload-cache';
 import { loadImageWithFallback } from './utils/unsplash';
 
-type Page = 'home' | 'pomodoro' | 'insights' | 'quotes' | 'goals';
+type Page = 'home' | 'pomodoro' | 'insights' | 'quotes' | 'goals' | 'concepts';
 
 function App() {
   const [currentPage, setCurrentPage] = useState<Page>('home');
@@ -41,6 +42,8 @@ function App() {
         setCurrentPage('quotes');
       } else if (hash === 'goals') {
         setCurrentPage('goals');
+      } else if (hash === 'concepts') {
+        setCurrentPage('concepts');
       } else {
         setCurrentPage('home');
       }
@@ -151,9 +154,10 @@ function App() {
           />
 
           {/* Dark overlay for better readability on content-heavy pages (not home/pomodoro) */}
-          {(currentPage === 'goals' || currentPage === 'quotes' || currentPage === 'insights') && (
-            <div className="fixed inset-0 bg-black/25" />
-          )}
+          {(currentPage === 'goals' ||
+            currentPage === 'quotes' ||
+            currentPage === 'insights' ||
+            currentPage === 'concepts') && <div className="fixed inset-0 bg-black/25" />}
 
           {/* Loading indicator - shown while image loads */}
           {!imageLoaded && (
@@ -186,6 +190,7 @@ function App() {
           {currentPage === 'insights' && <InsightsPage />}
           {currentPage === 'quotes' && <QuoteManagementPage />}
           {currentPage === 'goals' && <GoalsPage />}
+          {currentPage === 'concepts' && <ConceptsPage />}
           {currentPage === 'home' && <NewTabPage />}
         </main>
 
