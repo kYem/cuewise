@@ -1,14 +1,19 @@
+import type { Settings } from '@cuewise/shared';
 import { createSelectorMock, createSettingsStoreMock } from '@cuewise/test-utils';
 import { goalFactory, taskWithDueDateFactory } from '@cuewise/test-utils/factories';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { useCalendarStore } from '../stores/calendar-store';
 import { useGoalStore } from '../stores/goal-store';
 import { useSettingsStore } from '../stores/settings-store';
+import { isCalendarFeatureEnabled } from '../utils/google-calendar';
 import { GoalsSection } from './GoalsSection';
 
 vi.mock('../stores/goal-store', () => ({ useGoalStore: vi.fn() }));
 vi.mock('../stores/settings-store', () => ({ useSettingsStore: vi.fn() }));
+vi.mock('../stores/calendar-store', () => ({ useCalendarStore: vi.fn() }));
+vi.mock('../utils/google-calendar', () => ({ isCalendarFeatureEnabled: vi.fn(() => false) }));
 vi.mock('@cuewise/storage', () => ({
   getStorageUsage: vi.fn(async () => ({ isWarning: false, isCritical: false })),
 }));
@@ -16,10 +21,17 @@ vi.mock('@cuewise/storage', () => ({
 vi.mock('./GoalsList', () => ({ GoalsList: () => null }));
 vi.mock('./GoalFocusView', () => ({ GoalFocusView: () => null }));
 vi.mock('./StorageIndicator', () => ({ StorageIndicator: () => null }));
+vi.mock('./CalendarStrip', () => ({ CalendarStrip: () => <div data-testid="calendar-strip" /> }));
 
 const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-function mockStores(options: { goals?: ReturnType<typeof goalFactory.build>[] } = {}) {
+function mockStores(
+  options: {
+    goals?: ReturnType<typeof goalFactory.build>[];
+    settings?: Partial<Settings>;
+    calendarEnabled?: boolean;
+  } = {}
+) {
   const today = goalFactory.build({ text: 'Today task', completed: false });
   const goalState = {
     isLoading: false,
@@ -30,9 +42,11 @@ function mockStores(options: { goals?: ReturnType<typeof goalFactory.build>[] } 
   };
   const updateSettings = vi.fn();
 
+  vi.mocked(isCalendarFeatureEnabled).mockReturnValue(options.calendarEnabled ?? false);
   vi.mocked(useGoalStore).mockImplementation(createSelectorMock(goalState));
+  vi.mocked(useCalendarStore).mockImplementation(createSelectorMock({ initialize: vi.fn() }));
   vi.mocked(useSettingsStore).mockImplementation(
-    createSettingsStoreMock({ goalViewMode: 'full', updateSettings })
+    createSettingsStoreMock({ goalViewMode: 'full', ...options.settings, updateSettings })
   );
 
   return { updateSettings };
@@ -51,7 +65,10 @@ describe('GoalsSection - options menu', () => {
     await user.click(screen.getByRole('button', { name: 'View options' }));
     await user.click(screen.getByRole('button', { name: 'Compact' }));
 
-    expect(updateSettings).toHaveBeenCalledWith({ goalViewMode: 'compact' });
+    expect(updateSettings).toHaveBeenCalledWith({
+      goalViewMode: 'compact',
+      newTabPrimary: 'goals',
+    });
   });
 
   it('toggles show-completed to the negated value', async () => {
@@ -99,5 +116,59 @@ describe('GoalsSection - options menu', () => {
     await user.click(screen.getByRole('button', { name: /Upcoming/ }));
 
     expect(updateSettings).toHaveBeenCalledWith({ showUpcomingGoals: true });
+  });
+});
+
+describe('GoalsSection - calendar primary', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('renders the calendar block when primary is calendar and the feature is enabled', () => {
+    mockStores({ settings: { newTabPrimary: 'calendar' }, calendarEnabled: true });
+
+    render(<GoalsSection />);
+
+    expect(screen.getByTestId('calendar-strip')).toBeInTheDocument();
+    expect(screen.queryByText("Today's Focus")).not.toBeInTheDocument();
+  });
+
+  it('falls back to goals when primary is calendar but the feature is disabled', () => {
+    mockStores({ settings: { newTabPrimary: 'calendar' }, calendarEnabled: false });
+
+    render(<GoalsSection />);
+
+    expect(screen.queryByTestId('calendar-strip')).not.toBeInTheDocument();
+    expect(screen.getByText("Today's Focus")).toBeInTheDocument();
+  });
+
+  it('stacks both blocks when primary is both', () => {
+    mockStores({ settings: { newTabPrimary: 'both' }, calendarEnabled: true });
+
+    render(<GoalsSection />);
+
+    expect(screen.getByTestId('calendar-strip')).toBeInTheDocument();
+    expect(screen.getByText("Today's Focus")).toBeInTheDocument();
+  });
+
+  it('hides the Calendar menu entry when the feature is disabled', async () => {
+    const user = userEvent.setup();
+    mockStores({ calendarEnabled: false });
+
+    render(<GoalsSection />);
+    await user.click(screen.getByRole('button', { name: 'View options' }));
+
+    expect(screen.queryByRole('button', { name: 'Calendar' })).not.toBeInTheDocument();
+  });
+
+  it('selects the calendar primary from the menu', async () => {
+    const user = userEvent.setup();
+    const { updateSettings } = mockStores({ calendarEnabled: true });
+
+    render(<GoalsSection />);
+    await user.click(screen.getByRole('button', { name: 'View options' }));
+    await user.click(screen.getByRole('button', { name: 'Calendar' }));
+
+    expect(updateSettings).toHaveBeenCalledWith({ newTabPrimary: 'calendar' });
   });
 });

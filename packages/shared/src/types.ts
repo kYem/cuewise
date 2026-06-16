@@ -131,6 +131,10 @@ export type ColorTheme = 'purple' | 'forest' | 'rose' | 'glass';
 export type LayoutDensity = 'compact' | 'comfortable' | 'spacious';
 export type SettingsLogLevel = 'none' | 'error' | 'warn' | 'info' | 'debug';
 export type GoalViewMode = 'full' | 'compact' | 'focus';
+
+// What the primary area on the new tab shows. 'both' is reserved for a later
+// stacked layout; only 'goals' and 'calendar' are exposed in the UI for now.
+export type NewTabPrimary = 'goals' | 'calendar' | 'both';
 export type TimeFormat = '12h' | '24h';
 export type QuoteDisplayMode = 'normal' | 'compact' | 'bottom' | 'hidden';
 export type ReminderPanelLayout = 'composed' | 'agenda';
@@ -244,6 +248,7 @@ export interface Settings {
   focusModeAutoEnter: boolean; // Auto-enter focus mode when timer starts (default false)
   // Goal View Mode
   goalViewMode: GoalViewMode; // View mode for Today's Focus section (default 'full')
+  newTabPrimary: NewTabPrimary; // Home primary area: goals | calendar | both (default 'goals')
   focusedGoalId: string | null; // Selected goal ID for focus mode (default null)
   showCompletedGoals: boolean; // Show completed tasks in Today's Focus list (default true)
   showIncompleteGoals: boolean; // Reveal the recent-incomplete backlog in the widget (default false)

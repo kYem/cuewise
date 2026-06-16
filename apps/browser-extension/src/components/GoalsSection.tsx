@@ -8,6 +8,7 @@ import { getStorageUsage, type StorageUsageInfo } from '@cuewise/storage';
 import { cn, Popover, PopoverContent, PopoverTrigger } from '@cuewise/ui';
 import {
   AlignJustify,
+  Calendar,
   CalendarClock,
   Check,
   CheckCircle2,
@@ -21,8 +22,11 @@ import {
 import type React from 'react';
 import { useEffect, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
+import { useCalendarStore } from '../stores/calendar-store';
 import { useGoalStore } from '../stores/goal-store';
 import { useSettingsStore } from '../stores/settings-store';
+import { isCalendarFeatureEnabled } from '../utils/google-calendar';
+import { CalendarStrip } from './CalendarStrip';
 import { ErrorFallback } from './ErrorFallback';
 import { GoalFocusView } from './GoalFocusView';
 import { GoalProgressRing } from './GoalProgressRing';
@@ -94,6 +98,7 @@ export const GoalsSection: React.FC = () => {
   // Settings - use useShallow for multiple values, individual selector for action
   const settings = useSettingsStore(useShallow((state) => state.settings));
   const updateSettings = useSettingsStore((state) => state.updateSettings);
+  const initCalendar = useCalendarStore((state) => state.initialize);
   const [storageUsage, setStorageUsage] = useState<StorageUsageInfo | null>(null);
   const [showAddInput, setShowAddInput] = useState(false);
 
@@ -114,18 +119,40 @@ export const GoalsSection: React.FC = () => {
 
   const viewMode = settings.goalViewMode;
 
+  // Primary-area composition. Independent blocks (not an exclusive branch) so the
+  // future 'both' layout drops in by selecting both. Calendar needs the feature
+  // provisioned; otherwise we always fall back to goals so a stale 'calendar'
+  // setting never yields a dead state on an un-provisioned build.
+  const calendarFeatureEnabled = isCalendarFeatureEnabled();
+  const primary = settings.newTabPrimary;
+  const calendarActive = primary === 'calendar';
+  const showCalendar = calendarFeatureEnabled && (primary === 'calendar' || primary === 'both');
+  const showGoals = primary === 'goals' || primary === 'both' || !calendarFeatureEnabled;
+
   useEffect(() => {
     initialize();
     loadStorageInfo();
   }, [initialize]);
+
+  // Only touch calendar state when the calendar block is actually shown.
+  useEffect(() => {
+    if (showCalendar) {
+      initCalendar();
+    }
+  }, [showCalendar, initCalendar]);
 
   const loadStorageInfo = async () => {
     const usage = await getStorageUsage();
     setStorageUsage(usage);
   };
 
+  // Picking a goals density also pins the primary area back to goals.
   const handleModeChange = (mode: GoalViewMode) => {
-    updateSettings({ goalViewMode: mode });
+    updateSettings({ goalViewMode: mode, newTabPrimary: 'goals' });
+  };
+
+  const handleSelectCalendar = () => {
+    updateSettings({ newTabPrimary: 'calendar' });
   };
 
   const handleToggleShowCompleted = () => {
@@ -185,99 +212,121 @@ export const GoalsSection: React.FC = () => {
       <PopoverContent className="w-56 p-2 bg-surface/95 backdrop-blur-xl" align="end">
         <div className="text-xs font-medium text-tertiary px-2 py-1">View Mode</div>
         <div className="space-y-0.5">
-          {VIEW_MODES.map(({ mode, icon: Icon, label }) => (
+          {VIEW_MODES.map(({ mode, icon: Icon, label }) => {
+            const active = !calendarActive && viewMode === mode;
+            return (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => handleModeChange(mode)}
+                className={cn(
+                  'w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-colors',
+                  active
+                    ? 'bg-primary-50 text-primary-600'
+                    : 'text-primary hover:bg-surface-variant'
+                )}
+              >
+                <Icon className="w-4 h-4" />
+                <span>{label}</span>
+                {active && <Check className="w-4 h-4 ml-auto" />}
+              </button>
+            );
+          })}
+          {calendarFeatureEnabled && (
             <button
-              key={mode}
               type="button"
-              onClick={() => handleModeChange(mode)}
+              onClick={handleSelectCalendar}
               className={cn(
                 'w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-colors',
-                viewMode === mode
+                calendarActive
                   ? 'bg-primary-50 text-primary-600'
                   : 'text-primary hover:bg-surface-variant'
               )}
             >
-              <Icon className="w-4 h-4" />
-              <span>{label}</span>
-              {viewMode === mode && <Check className="w-4 h-4 ml-auto" />}
+              <Calendar className="w-4 h-4" />
+              <span>Calendar</span>
+              {calendarActive && <Check className="w-4 h-4 ml-auto" />}
             </button>
-          ))}
+          )}
         </div>
 
-        {viewMode === 'focus' ? (
-          todayTasks.length > 1 && (
+        {showGoals &&
+          (viewMode === 'focus' ? (
+            todayTasks.length > 1 && (
+              <>
+                <div className="border-t border-border my-2" />
+                <div className="text-xs font-medium text-tertiary px-2 py-1">
+                  Focus on ({incompleteCount} remaining)
+                </div>
+                <div className="space-y-0.5 max-h-[200px] overflow-y-auto">
+                  {todayTasks.map((goal) => (
+                    <GoalSelectorItem
+                      key={goal.id}
+                      goal={goal}
+                      isSelected={goal.id === displayGoal?.id}
+                      onSelect={() => handleSelectGoal(goal.id)}
+                    />
+                  ))}
+                </div>
+              </>
+            )
+          ) : (
             <>
               <div className="border-t border-border my-2" />
-              <div className="text-xs font-medium text-tertiary px-2 py-1">
-                Focus on ({incompleteCount} remaining)
-              </div>
-              <div className="space-y-0.5 max-h-[200px] overflow-y-auto">
-                {todayTasks.map((goal) => (
-                  <GoalSelectorItem
-                    key={goal.id}
-                    goal={goal}
-                    isSelected={goal.id === displayGoal?.id}
-                    onSelect={() => handleSelectGoal(goal.id)}
-                  />
-                ))}
-              </div>
-            </>
-          )
-        ) : (
-          <>
-            <div className="border-t border-border my-2" />
-            <button
-              type="button"
-              onClick={handleToggleShowCompleted}
-              role="menuitemcheckbox"
-              aria-checked={settings.showCompletedGoals}
-              className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-colors text-primary hover:bg-surface-variant"
-            >
-              <Eye className="w-4 h-4" />
-              <span className="flex-1 text-left">Show completed</span>
-              <span
-                className={cn(
-                  'relative w-8 h-[18px] rounded-full transition-colors flex-shrink-0',
-                  settings.showCompletedGoals ? 'bg-primary-600' : 'bg-divider'
-                )}
+              <button
+                type="button"
+                onClick={handleToggleShowCompleted}
+                role="menuitemcheckbox"
+                aria-checked={settings.showCompletedGoals}
+                className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-colors text-primary hover:bg-surface-variant"
               >
+                <Eye className="w-4 h-4" />
+                <span className="flex-1 text-left">Show completed</span>
                 <span
                   className={cn(
-                    'absolute top-0.5 left-0.5 w-3.5 h-3.5 rounded-full bg-white transition-transform',
-                    settings.showCompletedGoals && 'translate-x-3.5'
+                    'relative w-8 h-[18px] rounded-full transition-colors flex-shrink-0',
+                    settings.showCompletedGoals ? 'bg-primary-600' : 'bg-divider'
                   )}
+                >
+                  <span
+                    className={cn(
+                      'absolute top-0.5 left-0.5 w-3.5 h-3.5 rounded-full bg-white transition-transform',
+                      settings.showCompletedGoals && 'translate-x-3.5'
+                    )}
+                  />
+                </span>
+              </button>
+
+              {recentIncompleteCount > 0 && (
+                <MenuToggleItem
+                  icon={History}
+                  label="Show incomplete"
+                  count={recentIncompleteCount}
+                  active={settings.showIncompleteGoals}
+                  onToggle={handleToggleShowIncomplete}
                 />
-              </span>
-            </button>
+              )}
 
-            {recentIncompleteCount > 0 && (
-              <MenuToggleItem
-                icon={History}
-                label="Show incomplete"
-                count={recentIncompleteCount}
-                active={settings.showIncompleteGoals}
-                onToggle={handleToggleShowIncomplete}
-              />
-            )}
-
-            {upcomingCount > 0 && (
-              <MenuToggleItem
-                icon={CalendarClock}
-                label="Upcoming"
-                count={upcomingCount}
-                active={settings.showUpcomingGoals}
-                onToggle={handleToggleShowUpcoming}
-              />
-            )}
-          </>
-        )}
+              {upcomingCount > 0 && (
+                <MenuToggleItem
+                  icon={CalendarClock}
+                  label="Upcoming"
+                  count={upcomingCount}
+                  active={settings.showUpcomingGoals}
+                  onToggle={handleToggleShowUpcoming}
+                />
+              )}
+            </>
+          ))}
       </PopoverContent>
     </Popover>
   );
 
-  // Focus mode renders without container wrapper
-  if (viewMode === 'focus') {
-    return (
+  const minHeight = viewMode === 'compact' ? '' : 'min-h-[120px]';
+
+  // Goals block: focus renders centered without the card; full/compact use the card.
+  const goalsContent =
+    viewMode === 'focus' ? (
       <div className="group flex items-center justify-center gap-3 w-full max-w-4xl mx-auto">
         {/* Focus view - centered */}
         <GoalFocusView showAddInput={showAddInput} onCloseAddInput={() => setShowAddInput(false)} />
@@ -287,75 +336,95 @@ export const GoalsSection: React.FC = () => {
           {optionsMenu('bg-white/10 hover:bg-white/20 text-secondary/80 border-white/10')}
         </div>
       </div>
+    ) : (
+      <div className="w-full max-w-[400px] mx-auto">
+        <div
+          className={cn(
+            'group bg-surface/80 backdrop-blur-sm rounded-2xl shadow-lg p-5 border border-border flex flex-col',
+            minHeight
+          )}
+        >
+          {/* Header */}
+          {viewMode === 'full' ? (
+            <div className="flex items-center gap-2.5 mb-4">
+              {totalCount > 0 ? (
+                <GoalProgressRing completed={completedCount} total={totalCount} size={40} />
+              ) : (
+                <div className="w-10 h-10 flex items-center justify-center rounded-xl bg-primary-100 flex-shrink-0">
+                  <Target className="w-5 h-5 text-primary-600" />
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <h2 className="text-base font-semibold text-primary font-display">Today's Focus</h2>
+                <p className="text-xs text-secondary">{subtitle}</p>
+              </div>
+              {optionsMenu()}
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 mb-2.5">
+              <Target className="w-4 h-4 text-primary-600 flex-shrink-0" />
+              <h2 className="text-base font-semibold text-primary font-display flex-1">
+                Today's Focus
+              </h2>
+              {totalCount > 0 && (
+                <span className="text-xs text-secondary tabular-nums">
+                  {completedCount}/{totalCount}
+                </span>
+              )}
+              {optionsMenu()}
+            </div>
+          )}
+
+          {/* Full Mode Content */}
+          {viewMode === 'full' && (
+            <>
+              {/* Storage Warning - only show if warning or critical */}
+              {storageUsage && (storageUsage.isWarning || storageUsage.isCritical) && (
+                <div className="mb-4">
+                  <StorageIndicator mode="compact" />
+                </div>
+              )}
+
+              {/* Goals List (tiles + bottom add input + history + upcoming) */}
+              <div className="flex-1">
+                <GoalsList viewMode="full" />
+              </div>
+            </>
+          )}
+
+          {/* Compact Mode Content */}
+          {viewMode === 'compact' && (
+            <div className="flex-1">
+              <GoalsList viewMode="compact" />
+            </div>
+          )}
+        </div>
+      </div>
+    );
+
+  // Calendar-only: show the strip with the options menu (on hover) so the user
+  // can switch back; mirrors the focus-mode inline menu.
+  if (showCalendar && !showGoals) {
+    return (
+      <div className="group flex items-center justify-center gap-3 w-full max-w-4xl mx-auto">
+        <CalendarStrip />
+        <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+          {optionsMenu('bg-white/10 hover:bg-white/20 text-secondary/80 border-white/10')}
+        </div>
+      </div>
     );
   }
 
-  const minHeight = viewMode === 'compact' ? '' : 'min-h-[120px]';
+  // Goals-only: unchanged behavior.
+  if (!showCalendar) {
+    return goalsContent;
+  }
 
-  // Full and Compact modes render with container
+  // Both: stack the calendar above the goals (above/below control is a follow-up).
   return (
-    <div className="w-full max-w-[400px] mx-auto">
-      <div
-        className={cn(
-          'group bg-surface/80 backdrop-blur-sm rounded-2xl shadow-lg p-5 border border-border flex flex-col',
-          minHeight
-        )}
-      >
-        {/* Header */}
-        {viewMode === 'full' ? (
-          <div className="flex items-center gap-2.5 mb-4">
-            {totalCount > 0 ? (
-              <GoalProgressRing completed={completedCount} total={totalCount} size={40} />
-            ) : (
-              <div className="w-10 h-10 flex items-center justify-center rounded-xl bg-primary-100 flex-shrink-0">
-                <Target className="w-5 h-5 text-primary-600" />
-              </div>
-            )}
-            <div className="flex-1 min-w-0">
-              <h2 className="text-base font-semibold text-primary font-display">Today's Focus</h2>
-              <p className="text-xs text-secondary">{subtitle}</p>
-            </div>
-            {optionsMenu()}
-          </div>
-        ) : (
-          <div className="flex items-center gap-2 mb-2.5">
-            <Target className="w-4 h-4 text-primary-600 flex-shrink-0" />
-            <h2 className="text-base font-semibold text-primary font-display flex-1">
-              Today's Focus
-            </h2>
-            {totalCount > 0 && (
-              <span className="text-xs text-secondary tabular-nums">
-                {completedCount}/{totalCount}
-              </span>
-            )}
-            {optionsMenu()}
-          </div>
-        )}
-
-        {/* Full Mode Content */}
-        {viewMode === 'full' && (
-          <>
-            {/* Storage Warning - only show if warning or critical */}
-            {storageUsage && (storageUsage.isWarning || storageUsage.isCritical) && (
-              <div className="mb-4">
-                <StorageIndicator mode="compact" />
-              </div>
-            )}
-
-            {/* Goals List (tiles + bottom add input + history + upcoming) */}
-            <div className="flex-1">
-              <GoalsList viewMode="full" />
-            </div>
-          </>
-        )}
-
-        {/* Compact Mode Content */}
-        {viewMode === 'compact' && (
-          <div className="flex-1">
-            <GoalsList viewMode="compact" />
-          </div>
-        )}
-      </div>
+    <div className="flex flex-col items-center gap-density-lg w-full">
+      <CalendarStrip />
+      {goalsContent}
     </div>
   );
 };
