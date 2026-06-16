@@ -8,8 +8,17 @@ export default defineManifest(async (env) => {
   // calendar optional-permissions/oauth2 block are omitted entirely so an
   // un-provisioned build ships a clean manifest (no empty client_id) and the
   // companion is hidden (not-configured mode).
-  const oauthClientId = loadEnv(env.mode, process.cwd(), '').VITE_GOOGLE_OAUTH_CLIENT_ID ?? '';
+  const viteEnv = loadEnv(env.mode, process.cwd(), '');
+  const oauthClientId = viteEnv.VITE_GOOGLE_OAUTH_CLIENT_ID ?? '';
   const calendarEnabled = oauthClientId !== '';
+
+  // Pinned extension key (base64 public key) for LOCAL unpacked builds only:
+  // forces the same extension ID as the Web Store item, so chrome.identity OAuth
+  // (which is bound to that ID) works in dev instead of failing with
+  // "bad client id". Set VITE_EXTENSION_KEY in .env locally; leave it unset for
+  // the release build so the published manifest omits `key` — the Web Store
+  // manages the published ID.
+  const extensionKey = viteEnv.VITE_EXTENSION_KEY ?? '';
 
   // Unsplash CDN for focus mode background images
   // Cuewise API for dynamic content loading and YouTube proxy page
@@ -53,6 +62,8 @@ export default defineManifest(async (env) => {
 
   return {
     manifest_version: 3,
+    // Local-only: pins the unpacked build to the Web Store ID (omitted in release).
+    ...(extensionKey ? { key: extensionKey } : {}),
     // Store title and search summary — keep keyword-rich (CWS search indexes both)
     name: 'Cuewise: New Tab Quotes, Goals & Pomodoro Timer',
     short_name: 'Cuewise',

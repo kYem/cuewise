@@ -76,12 +76,37 @@ public (it ships in the manifest), so it does not need to be kept secret.
 ## Stable local ID (for testing real OAuth before publishing)
 
 A Chrome-Extension OAuth client is bound to one extension ID, so an unpacked
-build needs a fixed ID that matches the registered client. This is a manual
-step — the committed `manifest.config.ts` has no `key` field. To pin the ID, add
-a `key` (the extension's public key) to the generated manifest; Chrome then
-derives the same ID every load. Use the published item's key, or generate a
-keypair and register that ID with the OAuth client. Do **not** commit the key —
-inject it from the build env alongside the client id.
+build needs a fixed ID that matches the registered client. The recommended
+setup is a **single** OAuth client bound to the Web Store Item ID, with the
+local build pinned to that same ID — one identity to verify, and dev mirrors
+production exactly.
+
+`manifest.config.ts` reads a `key` from `VITE_EXTENSION_KEY` and injects it into
+the manifest when set; Chrome then derives the same ID every load. Set it only in
+your local `.env` — leave it unset for the release build so the published
+manifest omits `key` (the Web Store manages the published ID):
+
+```
+VITE_EXTENSION_KEY=<base64 public key of the Web Store item>
+```
+
+The `key` is the extension's **public** key (not secret), but it's still kept
+out of git and the release build so contributors' local builds don't all
+masquerade as the production ID and the CWS package isn't shipped with a
+redundant key.
+
+**Getting the value for an already-published item:** the public key Chrome
+recorded for the installed Web Store extension lives in your Chrome profile's
+`Secure Preferences` under
+`extensions.settings.<extension-id>.manifest.key`. Copy that base64 string into
+`VITE_EXTENSION_KEY`. (Alternatively, extract the SubjectPublicKeyInfo from the
+item's `.crx` header.)
+
+The escape hatch — only if pinning the production key isn't workable (e.g. many
+developers with their own unpacked IDs): generate a keypair, set its public key
+as `VITE_EXTENSION_KEY`, and register that ID as a **separate** dev OAuth client
+kept in Testing. Extra upkeep, and that client stays unverified — avoid unless
+needed.
 
 ## Verifying
 
