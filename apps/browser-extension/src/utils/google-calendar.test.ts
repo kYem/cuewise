@@ -264,6 +264,24 @@ describe('fetchTodayEvents', () => {
     expect(events[0].color).toBeUndefined();
   });
 
+  it('evicts a stale token and retries once on a 401', async () => {
+    const { identity } = installIdentity({
+      token: 'tok',
+      clientId: 'abc.apps.googleusercontent.com',
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false, status: 401, statusText: 'Unauthorized' })
+      .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ items: [] }) });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const events = await fetchTodayEvents();
+
+    expect(identity.removeCachedAuthToken).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(events).toEqual([]);
+  });
+
   it('drops malformed events that have no start or end', async () => {
     stubFetchItems([
       { id: 'bad', summary: 'No times' },

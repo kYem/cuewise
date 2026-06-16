@@ -12,6 +12,7 @@ export interface MockCalendarStore {
   error: string | null;
   connect: ReturnType<typeof vi.fn>;
   refresh: ReturnType<typeof vi.fn>;
+  disconnect: ReturnType<typeof vi.fn>;
 }
 
 export function createCalendarStore(overrides: Partial<MockCalendarStore> = {}): MockCalendarStore {
@@ -22,6 +23,7 @@ export function createCalendarStore(overrides: Partial<MockCalendarStore> = {}):
     error: null,
     connect: vi.fn(),
     refresh: vi.fn(),
+    disconnect: vi.fn(),
     ...overrides,
   };
 }

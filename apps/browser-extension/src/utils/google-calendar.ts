@@ -131,8 +131,19 @@ export async function connectCalendar(): Promise<void> {
   await getToken(true);
 }
 
+// Evict a cached token so the next getToken() mints a fresh one — used after a
+// 401 and on disconnect.
+function removeCachedToken(token: string): Promise<void> {
+  return new Promise((resolve) => {
+    if (!chrome.identity?.removeCachedAuthToken) {
+      resolve();
+      return;
+    }
+    chrome.identity.removeCachedAuthToken({ token }, () => resolve());
+  });
+}
+
 export async function fetchTodayEvents(): Promise<CalendarEvent[]> {
-  const token = await getToken(false);
   const now = new Date();
   const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
@@ -143,10 +154,19 @@ export async function fetchTodayEvents(): Promise<CalendarEvent[]> {
     orderBy: 'startTime',
     maxResults: '25',
   });
+  const url = `${CALENDAR_API}/calendars/primary/events?${params}`;
+  const get = (authToken: string) =>
+    fetch(url, { headers: { Authorization: `Bearer ${authToken}` } });
 
-  const response = await fetch(`${CALENDAR_API}/calendars/primary/events?${params}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  let token = await getToken(false);
+  let response = await get(token);
+  // Chrome can hand back a stale cached token (401); evict it and retry once
+  // with a freshly minted one before surfacing the failure.
+  if (response.status === 401) {
+    await removeCachedToken(token);
+    token = await getToken(false);
+    response = await get(token);
+  }
   if (!response.ok) {
     throw new Error(`Calendar API: ${response.status} ${response.statusText}`);
   }
@@ -172,9 +192,7 @@ export async function disconnectCalendar(): Promise<void> {
   try {
     const token = await getToken(false).catch(() => null);
     if (token) {
-      await new Promise<void>((resolve) => {
-        chrome.identity.removeCachedAuthToken({ token }, () => resolve());
-      });
+      await removeCachedToken(token);
       await fetch(`${REVOKE_URL}?token=${token}`, { method: 'POST' }).catch(() => {});
     }
   } catch (error) {

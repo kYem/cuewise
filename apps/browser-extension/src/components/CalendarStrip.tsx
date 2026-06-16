@@ -1,6 +1,6 @@
 import type { CalendarEvent } from '@cuewise/shared';
-import { cn, Tooltip } from '@cuewise/ui';
-import { Calendar, RefreshCw } from 'lucide-react';
+import { cn, Popover, PopoverContent, PopoverTrigger, Tooltip } from '@cuewise/ui';
+import { Calendar, MoreHorizontal, RefreshCw, Unplug } from 'lucide-react';
 import type React from 'react';
 import { Fragment } from 'react';
 import { useShallow } from 'zustand/react/shallow';
@@ -78,6 +78,7 @@ export const CalendarStrip: React.FC<CalendarStripProps> = ({
   );
   const connect = useCalendarStore((s) => s.connect);
   const refresh = useCalendarStore((s) => s.refresh);
+  const disconnect = useCalendarStore((s) => s.disconnect);
   const twentyFour = useSettingsStore((s) => s.settings.timeFormat === '24h');
 
   const t = variant === 'surface' ? SURFACE_TOKENS : OVERLAY_TOKENS;
@@ -161,6 +162,41 @@ export const CalendarStrip: React.FC<CalendarStripProps> = ({
     </Tooltip>
   );
 
+  // Overflow menu: Reconnect (interactive re-auth, only when a sync failed) and
+  // Disconnect (revoke token + release the optional permissions).
+  const overflowMenu = (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          title="Calendar options"
+          aria-label="Calendar options"
+          className={cn('transition-colors', t.refresh)}
+        >
+          <MoreHorizontal className="h-3.5 w-3.5" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-44 p-1">
+        {error && (
+          <button
+            type="button"
+            onClick={() => connect()}
+            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-primary transition-colors hover:bg-surface-variant"
+          >
+            <RefreshCw className="h-4 w-4" /> Reconnect
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => disconnect()}
+          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-primary transition-colors hover:bg-surface-variant"
+        >
+          <Unplug className="h-4 w-4" /> Disconnect
+        </button>
+      </PopoverContent>
+    </Popover>
+  );
+
   return (
     <div className={cardClass}>
       {header(
@@ -174,12 +210,15 @@ export const CalendarStrip: React.FC<CalendarStripProps> = ({
           >
             <RefreshCw className={cn('h-3.5 w-3.5', isLoading && 'animate-spin')} />
           </button>
+          {overflowMenu}
         </>
       )}
 
       {visible.length === 0 ? (
         <p className={cn('py-3 text-center text-sm', t.empty)}>
-          Nothing left on the calendar today.
+          {error
+            ? "Couldn't load your calendar — try Reconnect."
+            : 'Nothing left on the calendar today.'}
         </p>
       ) : (
         <div className="flex flex-col">

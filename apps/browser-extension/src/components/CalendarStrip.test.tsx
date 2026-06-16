@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useCalendarStore } from '../stores/calendar-store';
 import { useSettingsStore } from '../stores/settings-store';
@@ -377,5 +378,57 @@ describe('CalendarStrip - connected status & actions', () => {
 
     expect(screen.getByText('Afternoon sync')).toBeInTheDocument();
     expect(container.querySelector('.text-white')).not.toBeInTheDocument();
+  });
+
+  it('disconnects from the overflow menu', async () => {
+    vi.useRealTimers(); // userEvent + Radix Popover + fake timers deadlocks
+    const user = userEvent.setup();
+    const store = createCalendarStore({ connected: true });
+    mountWith(store);
+
+    render(<CalendarStrip />);
+    await user.click(screen.getByRole('button', { name: 'Calendar options' }));
+    await user.click(screen.getByRole('button', { name: 'Disconnect' }));
+
+    expect(store.disconnect).toHaveBeenCalledOnce();
+  });
+
+  it('hides Reconnect when there is no sync error', async () => {
+    vi.useRealTimers();
+    const user = userEvent.setup();
+    const store = createCalendarStore({ connected: true });
+    mountWith(store);
+
+    render(<CalendarStrip />);
+    await user.click(screen.getByRole('button', { name: 'Calendar options' }));
+
+    expect(screen.queryByRole('button', { name: 'Reconnect' })).not.toBeInTheDocument();
+  });
+
+  it('reconnects from the overflow menu when a sync error is present', async () => {
+    vi.useRealTimers();
+    const user = userEvent.setup();
+    const store = createCalendarStore({ connected: true, error: 'Failed to refresh calendar' });
+    mountWith(store);
+
+    render(<CalendarStrip />);
+    await user.click(screen.getByRole('button', { name: 'Calendar options' }));
+    await user.click(screen.getByRole('button', { name: 'Reconnect' }));
+
+    expect(store.connect).toHaveBeenCalledOnce();
+  });
+
+  it('shows a load-failure message when errored with no events', () => {
+    const store = createCalendarStore({
+      connected: true,
+      events: [],
+      error: 'Failed to refresh calendar',
+    });
+    mountWith(store);
+
+    render(<CalendarStrip />);
+
+    expect(screen.getByText(/couldn't load your calendar/i)).toBeInTheDocument();
+    expect(screen.queryByText(/nothing left/i)).not.toBeInTheDocument();
   });
 });
