@@ -321,40 +321,40 @@ describe('CalendarStrip - connected status & actions', () => {
     expect(store.refresh).toHaveBeenCalledOnce();
   });
 
-  it('shows "Calendar synced" when connected without an error', () => {
+  it('shows the synced status dot (tooltip) when connected without an error', () => {
     const store = createCalendarStore({ connected: true });
     mountWith(store);
 
     render(<CalendarStrip />);
 
-    expect(screen.getByText('Calendar synced')).toBeInTheDocument();
+    expect(screen.getByTitle('Calendar synced')).toBeInTheDocument();
   });
 
-  it('shows the failed-sync status when connected with an error', () => {
+  it('shows the failed-sync status dot when connected with an error', () => {
     const store = createCalendarStore({ connected: true, error: 'Failed to refresh calendar' });
     mountWith(store);
 
     render(<CalendarStrip />);
 
-    expect(screen.getByText("Couldn't sync")).toBeInTheDocument();
+    expect(screen.getByTitle("Couldn't sync")).toBeInTheDocument();
   });
 
-  it('surfaces the failed-sync status even in lean mode', () => {
+  it('surfaces the failed-sync dot even in lean mode', () => {
     const store = createCalendarStore({ connected: true, error: 'Failed to refresh calendar' });
     mountWith(store);
 
     render(<CalendarStrip lean />);
 
-    expect(screen.getByText("Couldn't sync")).toBeInTheDocument();
+    expect(screen.getByTitle("Couldn't sync")).toBeInTheDocument();
   });
 
-  it('hides the synced status in lean mode when there is no error', () => {
+  it('shows the status dot in lean mode too', () => {
     const store = createCalendarStore({ connected: true });
     mountWith(store);
 
     render(<CalendarStrip lean />);
 
-    expect(screen.queryByText('Calendar synced')).not.toBeInTheDocument();
+    expect(screen.getByTitle('Calendar synced')).toBeInTheDocument();
   });
 
   it('shows the empty-day message when connected with no events', () => {

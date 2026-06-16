@@ -157,29 +157,33 @@ export const CalendarStrip: React.FC<CalendarStripProps> = ({
     ? -1
     : visible.findIndex((e, i) => i > 0 && isPast(visible[i - 1]) && !isPast(e));
 
-  const syncStatus = (
-    <span className={cn('flex items-center gap-1.5 text-xs', t.faint)}>
-      <span className={cn('h-1.5 w-1.5 rounded-full', error ? 'bg-red-400' : 'bg-green-400')} />
-      {error ? "Couldn't sync" : 'Calendar synced'}
-    </span>
+  // Sync status as a small dot beside the refresh button; the label is a tooltip
+  // (so it costs no row, and a failed sync still shows — red — even in lean mode).
+  const statusLabel = error ? "Couldn't sync" : 'Calendar synced';
+  const statusDot = (
+    <span
+      role="img"
+      title={statusLabel}
+      aria-label={statusLabel}
+      className={cn('h-2 w-2 shrink-0 rounded-full', error ? 'bg-red-400' : 'bg-green-400')}
+    />
   );
 
   return (
     <div className={cardClass}>
       {header(
-        <button
-          type="button"
-          onClick={() => refresh()}
-          title="Refresh"
-          className={cn('transition-colors', t.refresh)}
-        >
-          <RefreshCw className={cn('h-3.5 w-3.5', isLoading && 'animate-spin')} />
-        </button>
+        <>
+          {statusDot}
+          <button
+            type="button"
+            onClick={() => refresh()}
+            title="Refresh"
+            className={cn('transition-colors', t.refresh)}
+          >
+            <RefreshCw className={cn('h-3.5 w-3.5', isLoading && 'animate-spin')} />
+          </button>
+        </>
       )}
-
-      {/* Lean normally hides the synced line to stay compact, but still surfaces
-          a failed sync so a stale/empty agenda isn't mistaken for "all clear". */}
-      {(!lean || error) && <div className="mb-2 flex justify-end">{syncStatus}</div>}
 
       {visible.length === 0 ? (
         <p className={cn('py-3 text-center text-sm', t.empty)}>
