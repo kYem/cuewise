@@ -57,5 +57,9 @@ describe('Quick Link Utilities', () => {
         quickLinkMonogram(buildLink({ title: '   ', url: 'https://news.ycombinator.com' }))
       ).toBe('N');
     });
+
+    it('returns a whole emoji code point, not a half surrogate', () => {
+      expect(quickLinkMonogram(buildLink({ title: '🚀 Rocket' }))).toBe('🚀');
+    });
   });
 });

@@ -458,6 +458,17 @@ function HomeSection({ s, set, filter }: SettingsSectionProps) {
       >
         <Switch label="Clock" checked={s.showClock} onChange={(v) => set({ showClock: v })} />
       </SettingRow>
+      {s.showClock && (
+        <SettingSubgroup>
+          <SettingRow label="Time format" filter={filter} keywords="12 hour 24 hour clock am pm">
+            <Segmented
+              value={s.timeFormat}
+              onChange={(v) => set({ timeFormat: v })}
+              options={TIME_FORMAT_OPTIONS}
+            />
+          </SettingRow>
+        </SettingSubgroup>
+      )}
       <SettingRow
         label="Quick links"
         filter={filter}
@@ -470,17 +481,6 @@ function HomeSection({ s, set, filter }: SettingsSectionProps) {
           onChange={(v) => set({ showQuickLinks: v })}
         />
       </SettingRow>
-      {s.showClock && (
-        <SettingSubgroup>
-          <SettingRow label="Time format" filter={filter} keywords="12 hour 24 hour clock am pm">
-            <Segmented
-              value={s.timeFormat}
-              onChange={(v) => set({ timeFormat: v })}
-              options={TIME_FORMAT_OPTIONS}
-            />
-          </SettingRow>
-        </SettingSubgroup>
-      )}
       <SettingDivider />
       <SettingRow
         label="Quote display"

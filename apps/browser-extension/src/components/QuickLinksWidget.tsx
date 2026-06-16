@@ -26,6 +26,11 @@ const Favicon: React.FC<{ link: QuickLink }> = ({ link }) => {
   const src = faviconUrl(link.url);
   const [failed, setFailed] = useState(false);
 
+  // Reset the fallback when the URL changes (edit reuses the element by id).
+  useEffect(() => {
+    setFailed(false);
+  }, [src]);
+
   if (!src || failed) {
     return (
       <span className="flex h-5 w-5 items-center justify-center rounded bg-primary-600/15 text-[11px] font-semibold text-primary-600">
@@ -147,6 +152,14 @@ export const QuickLinksWidget: React.FC = () => {
     }
   }, [isOpen]);
 
+  // Drop any in-progress add/edit form when the dropdown closes.
+  useEffect(() => {
+    if (!isOpen) {
+      setAdding(false);
+      setEditingId(null);
+    }
+  }, [isOpen]);
+
   if (isLoading) {
     return null;
   }
@@ -154,6 +167,7 @@ export const QuickLinksWidget: React.FC = () => {
   const visibleLinks = quickLinks.slice(0, QUICK_LINKS_VISIBLE);
   const canAdd = quickLinks.length < QUICK_LINKS_MAX;
   const hasLinks = quickLinks.length > 0;
+  const triggerRect = isOpen ? triggerRef.current?.getBoundingClientRect() : undefined;
 
   return (
     <div className="flex items-center gap-density-sm">
@@ -195,8 +209,8 @@ export const QuickLinksWidget: React.FC = () => {
               role="menu"
               className="fixed z-[100] w-64 bg-surface rounded-xl shadow-xl border border-border overflow-hidden animate-in fade-in-0 zoom-in-95 duration-150"
               style={{
-                top: (triggerRef.current?.getBoundingClientRect().bottom ?? 0) + 8,
-                left: triggerRef.current?.getBoundingClientRect().left ?? 0,
+                top: (triggerRect?.bottom ?? 0) + 8,
+                left: triggerRect?.left ?? 0,
               }}
             >
               <div className="px-3 py-2.5 border-b border-border">

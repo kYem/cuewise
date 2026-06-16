@@ -97,7 +97,8 @@ export function deriveQuickLinkTitle(url: string): string {
  */
 export function quickLinkMonogram(link: QuickLink): string {
   const source = link.title.trim() || deriveQuickLinkTitle(link.url);
-  const firstChar = source.trim().charAt(0);
+  // Array.from splits by code point, so a leading emoji isn't cut into a lone surrogate.
+  const [firstChar] = Array.from(source.trim());
   return firstChar ? firstChar.toUpperCase() : '?';
 }
 

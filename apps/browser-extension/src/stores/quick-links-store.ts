@@ -23,9 +23,6 @@ interface QuickLinksStore {
   addQuickLink: (title: string, url: string) => Promise<boolean>;
   updateQuickLink: (id: string, updates: { title?: string; url?: string }) => Promise<boolean>;
   removeQuickLink: (id: string) => Promise<boolean>;
-
-  // Selectors
-  getQuickLinks: () => QuickLink[];
 }
 
 function reportError(set: (partial: Partial<QuickLinksStore>) => void, message: string): false {
@@ -139,6 +136,4 @@ export const useQuickLinksStore = create<QuickLinksStore>((set, get) => ({
       return reportError(set, 'Failed to remove quick link. Please try again.');
     }
   },
-
-  getQuickLinks: () => get().quickLinks,
 }));
