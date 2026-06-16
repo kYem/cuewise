@@ -92,6 +92,7 @@ export const DEFAULT_SETTINGS: Settings = {
   conceptCardsEnabled: true,
   conceptCadence: 'third',
   conceptFraming: 'ambient',
+  conceptActiveRecall: true,
 };
 
 /** Chrome Web Store reviews tab — where the in-app prompt sends users. */

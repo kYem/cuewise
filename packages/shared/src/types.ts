@@ -277,6 +277,7 @@ export interface Settings {
   conceptCardsEnabled: boolean; // Master toggle; stays invisible until a card exists (default true)
   conceptCadence: ConceptCadence; // How often a due card surfaces in the rotation (default 'third')
   conceptFraming: ConceptFraming; // 'ambient' calm nudge vs 'queue' explicit due pile (default 'ambient')
+  conceptActiveRecall: boolean; // Hide the definition until "Reveal" (true) vs show it upfront (default true)
 }
 
 // Storage keys

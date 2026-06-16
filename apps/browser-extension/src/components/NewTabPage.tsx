@@ -11,6 +11,7 @@ import { useSettingsStore } from '../stores/settings-store';
 import { preloadImages } from '../utils/image-preload-cache';
 import { ActivePomodoroWidget } from './ActivePomodoroWidget';
 import { Clock } from './Clock';
+import { ConceptRotation } from './ConceptRotation';
 import { GoalsSection } from './GoalsSection';
 import { GoalButton } from './goals';
 import { QuickLinksWidget } from './QuickLinksWidget';
@@ -450,9 +451,13 @@ export const NewTabPage: React.FC = () => {
           {/* Quote Display Section - Top position (normal or compact) */}
           {quoteDisplayMode !== 'hidden' && quoteDisplayMode !== 'bottom' && (
             <div className="flex justify-center">
-              <QuoteDisplay
-                onManualRefresh={() => setLastManualRefresh(Date.now())}
-                variant={quoteDisplayMode === 'compact' ? 'compact' : 'normal'}
+              <ConceptRotation
+                fallback={
+                  <QuoteDisplay
+                    onManualRefresh={() => setLastManualRefresh(Date.now())}
+                    variant={quoteDisplayMode === 'compact' ? 'compact' : 'normal'}
+                  />
+                }
               />
             </div>
           )}
@@ -471,10 +476,14 @@ export const NewTabPage: React.FC = () => {
         {quoteDisplayMode === 'bottom' && (
           <div className="pt-8 pb-4 w-full flex-shrink-0">
             <div className="flex justify-center">
-              <QuoteDisplay
-                onManualRefresh={() => setLastManualRefresh(Date.now())}
-                variant="compact"
-                position="bottom"
+              <ConceptRotation
+                fallback={
+                  <QuoteDisplay
+                    onManualRefresh={() => setLastManualRefresh(Date.now())}
+                    variant="compact"
+                    position="bottom"
+                  />
+                }
               />
             </div>
           </div>
