@@ -63,6 +63,34 @@ describe('CalendarStrip - not connected', () => {
   });
 });
 
+describe('CalendarStrip - time formatting', () => {
+  it('renders noon as 12pm and midnight as 12am in 12-hour mode', () => {
+    const store = createCalendarStore({
+      events: [
+        timedEvent('noon', '2026-06-14T12:00:00', '2026-06-14T12:30:00', 'Lunch'),
+        timedEvent('midnight', '2026-06-14T00:00:00', '2026-06-14T00:30:00', 'Late night'),
+      ],
+    });
+    mountWith(store, '12h');
+
+    render(<CalendarStrip />);
+
+    expect(screen.getByText('12pm')).toBeInTheDocument();
+    expect(screen.getByText('12am')).toBeInTheDocument();
+  });
+
+  it('includes minutes for non-zero 12-hour times', () => {
+    const store = createCalendarStore({
+      events: [timedEvent('sync', '2026-06-14T13:30:00', '2026-06-14T14:00:00', 'Sync')],
+    });
+    mountWith(store, '12h');
+
+    render(<CalendarStrip />);
+
+    expect(screen.getByText('1:30pm')).toBeInTheDocument();
+  });
+});
+
 describe('CalendarStrip - all-day events', () => {
   it('renders an "All day" label instead of a clock time', () => {
     const store = createCalendarStore({

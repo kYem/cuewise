@@ -131,6 +131,32 @@ describe('disconnectCalendar', () => {
     expect(permissions.remove).toHaveBeenCalledOnce();
   });
 
+  it('revokes the cached token at Google', async () => {
+    installIdentity({ token: 'tok', clientId: 'abc.apps.googleusercontent.com' });
+    const fetchMock = vi.fn(() => Promise.resolve({ ok: true }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await disconnectCalendar();
+
+    expect(fetchMock).toHaveBeenCalledWith('https://oauth2.googleapis.com/revoke?token=tok', {
+      method: 'POST',
+    });
+  });
+
+  it('releases the permissions even when the revoke request fails', async () => {
+    const { permissions } = installIdentity({
+      token: 'tok',
+      clientId: 'abc.apps.googleusercontent.com',
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.reject(new Error('network')))
+    );
+
+    await expect(disconnectCalendar()).resolves.toBeUndefined();
+    expect(permissions.remove).toHaveBeenCalledOnce();
+  });
+
   it('still releases the permissions when no token is cached', async () => {
     const { identity, permissions } = installIdentity({
       token: undefined,
