@@ -20,7 +20,7 @@ import { SITE } from '../lib/site';
         </div>
         <h1>Privacy Policy</h1>
         <p class="hero-sub">At Cuewise, your privacy is our priority. This policy explains how we handle your data.</p>
-        <p class="last-updated">Last Updated: November 15, 2025</p>
+        <p class="last-updated">Last Updated: June 16, 2026</p>
       </div>
     </section>
 
@@ -95,6 +95,37 @@ import { SITE } from '../lib/site';
           </div>
         </div>
 
+        <!-- Card: Google Calendar Integration -->
+        <div class="content-card glass reveal">
+          <h2>
+            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/>
+            </svg>
+            Google Calendar Integration (Optional)
+          </h2>
+          <p>Cuewise offers an <strong>optional, opt-in</strong> Google Calendar connection so you can see today's schedule beside your timer. It is off by default and only activates when you click <strong>"Connect Google Calendar."</strong></p>
+          <div>
+            <h3>What we access:</h3>
+            <ul>
+              <li>Read-only access to your <strong>primary</strong> Google Calendar (the <code>calendar.readonly</code> scope)</li>
+              <li>Only events for the <strong>current day</strong> are fetched, to show an "Up next" agenda</li>
+            </ul>
+          </div>
+          <div>
+            <h3>How it is handled:</h3>
+            <ul>
+              <li><strong>Client-side only:</strong> the extension requests this data directly from Google in your browser. It never passes through, and is never stored on, any Cuewise server.</li>
+              <li><strong>Local cache:</strong> fetched events are stored only in your browser for the current day and are removed when you disconnect.</li>
+              <li><strong>Read-only:</strong> Cuewise never creates, edits, or deletes calendar events.</li>
+              <li><strong>Revocable:</strong> disconnecting revokes the access token and removes the permission. You can also revoke access anytime at <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer">myaccount.google.com/permissions</a>.</li>
+            </ul>
+          </div>
+          <div>
+            <h3>Limited Use:</h3>
+            <p>Cuewise's use and transfer of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener noreferrer">Google API Services User Data Policy</a>, including the Limited Use requirements. Google Calendar data is never used for advertising, never sold, and never transferred to others — because access is entirely client-side, it is not transferred to us at all.</p>
+          </div>
+        </div>
+
         <!-- Card 4: What We Don't Do -->
         <div class="content-card glass reveal">
           <h2>
@@ -156,6 +187,7 @@ import { SITE } from '../lib/site';
           <ul>
             <li><strong>Email Delivery:</strong> We use Resend to send newsletter emails. They only have access to your email address if you subscribe.</li>
             <li><strong>Chrome Web Store:</strong> Extension downloads are managed by Google according to their privacy policy.</li>
+            <li><strong>Google Calendar (optional):</strong> if you connect it, the extension reads your calendar directly from Google's API; the data stays client-side and never reaches our servers. See "Google Calendar Integration" above.</li>
           </ul>
         </div>
 
