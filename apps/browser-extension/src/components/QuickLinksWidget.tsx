@@ -10,9 +10,13 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuickLinksStore } from '../stores/quick-links-store';
 
-function faviconUrl(url: string): string {
-  const hostname = new URL(url).hostname;
-  return `https://www.google.com/s2/favicons?sz=32&domain=${encodeURIComponent(hostname)}`;
+function faviconUrl(url: string): string | null {
+  try {
+    const { hostname } = new URL(url);
+    return `https://www.google.com/s2/favicons?sz=32&domain=${encodeURIComponent(hostname)}`;
+  } catch {
+    return null;
+  }
 }
 
 const TILE_CLASS =
@@ -28,7 +32,7 @@ const Favicon: React.FC<{ link: QuickLink }> = ({ link }) => {
     setFailed(false);
   }, [src]);
 
-  if (failed) {
+  if (failed || src === null) {
     return (
       <span className="flex h-5 w-5 items-center justify-center rounded bg-primary-600/15 text-[11px] font-semibold text-primary-600">
         {quickLinkMonogram(link)}
