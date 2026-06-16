@@ -53,6 +53,7 @@ export const ConceptRotation: React.FC<ConceptRotationProps> = ({ fallback, onAd
 
   const [handledIds, setHandledIds] = useState<string[]>([]);
   const [decision, setDecision] = useState<{ show: boolean; total: number } | null>(null);
+  const [grading, setGrading] = useState(false);
 
   useEffect(() => {
     initialize();
@@ -94,8 +95,13 @@ export const ConceptRotation: React.FC<ConceptRotationProps> = ({ fallback, onAd
   };
 
   const handleGrade = async (grade: ConceptGrade) => {
+    if (grading) {
+      return; // ignore rapid double-grades while the first review persists
+    }
+    setGrading(true);
     // Only retire the card from the deck once the review actually persisted.
     const ok = await reviewCard(current.id, grade);
+    setGrading(false);
     if (!ok) {
       return;
     }
@@ -119,7 +125,7 @@ export const ConceptRotation: React.FC<ConceptRotationProps> = ({ fallback, onAd
 
   return (
     <ConceptCardDisplay
-      key={`${current.id}-${activeRecall}`}
+      key={current.id}
       card={current}
       activeRecall={activeRecall}
       onGrade={handleGrade}
