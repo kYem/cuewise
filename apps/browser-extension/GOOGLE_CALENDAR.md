@@ -5,9 +5,9 @@ Google Calendar. It is read-only (`calendar.readonly`), entirely client-side —
 the extension talks to Google directly via `chrome.identity.getAuthToken`, and
 no Cuewise backend ever sees calendar data.
 
-The feature is safe to ship un-configured: in development the strip shows sample
-data, and a production build without an OAuth client id reports that the
-calendar isn't set up rather than connecting.
+The feature is safe to ship un-configured: a production build without an OAuth
+client id hides the companion entirely, and the strip never shows sample or
+preview data — only the Connect prompt until a real connection succeeds.
 
 ## Permissions are opt-in
 
@@ -91,4 +91,5 @@ The first connect prompts to grant the optional permission, then for Google
 consent; refreshing afterward is silent (it reuses Chrome's cached token —
 nothing fetches a token on page load). Disconnecting revokes the token and
 removes the optional permission, so a follow-up connect prompts again. The dev
-server (`pnpm dev`) has no `chrome.identity`, so it always shows sample data.
+server (`pnpm dev`) has no `chrome.identity`, so Connect reports the calendar
+isn't available there — there is no sample data to preview.
