@@ -29,6 +29,8 @@ function cadenceAllows(framing: ConceptFraming, cadence: ConceptCadence): boolea
 interface ConceptRotationProps {
   /** Rendered when no concept surfaces this tab (the normal quote rotation). */
   fallback: React.ReactNode;
+  /** Opens the add-concept modal from the card's "Add concept" affordance. */
+  onAdd?: () => void;
 }
 
 /**
@@ -36,7 +38,7 @@ interface ConceptRotationProps {
  * whether this tab surfaces concepts; in ambient framing one graded card then
  * yields back to quotes, while queue framing clears the due pile front-to-back.
  */
-export const ConceptRotation: React.FC<ConceptRotationProps> = ({ fallback }) => {
+export const ConceptRotation: React.FC<ConceptRotationProps> = ({ fallback, onAdd }) => {
   const enabled = useSettingsStore((state) => state.settings.conceptCardsEnabled);
   const cadence = useSettingsStore((state) => state.settings.conceptCadence);
   const framing = useSettingsStore((state) => state.settings.conceptFraming);
@@ -98,6 +100,7 @@ export const ConceptRotation: React.FC<ConceptRotationProps> = ({ fallback }) =>
       activeRecall={activeRecall}
       onGrade={handleGrade}
       onSkip={handleSkip}
+      onAdd={onAdd}
       queueLabel={queueLabel}
     />
   );

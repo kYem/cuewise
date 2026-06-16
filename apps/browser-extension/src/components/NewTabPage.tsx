@@ -1,6 +1,6 @@
 import { formatClockTime, formatLongDate, getGreeting } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
-import { BarChart3, BookMarked, Flag, PanelRight, Settings, Timer } from 'lucide-react';
+import { BarChart3, BookMarked, Brain, Flag, PanelRight, Settings, Timer } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useReviewPrompt } from '../hooks/useReviewPrompt';
@@ -10,10 +10,12 @@ import { useQuoteStore } from '../stores/quote-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { preloadImages } from '../utils/image-preload-cache';
 import { ActivePomodoroWidget } from './ActivePomodoroWidget';
+import { AddConceptForm } from './AddConceptForm';
 import { Clock } from './Clock';
 import { ConceptRotation } from './ConceptRotation';
 import { GoalsSection } from './GoalsSection';
 import { GoalButton } from './goals';
+import { Modal } from './Modal';
 import { QuickLinksWidget } from './QuickLinksWidget';
 import { QuoteDisplay } from './QuoteDisplay';
 import { ReminderWidget } from './ReminderWidget';
@@ -50,6 +52,7 @@ export const NewTabPage: React.FC = () => {
   usePomodoroStorageSync();
 
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isAddConceptOpen, setIsAddConceptOpen] = useState(false);
   const [isWelcomeOpen, setIsWelcomeOpen] = useState(false);
 
   const reviewPrompt = useReviewPrompt({
@@ -185,6 +188,11 @@ export const NewTabPage: React.FC = () => {
     window.location.hash = 'quotes';
   };
 
+  const handleOpenAddConcept = () => {
+    setIsMenuOpen(false);
+    setIsAddConceptOpen(true);
+  };
+
   const handleOpenSettings = () => {
     setIsMenuOpen(false);
     setIsSettingsModalOpen(true);
@@ -289,6 +297,15 @@ export const NewTabPage: React.FC = () => {
                     >
                       <BookMarked className="w-5 h-5 text-primary-600" />
                       <span className="text-sm font-medium">Manage Quotes</span>
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={handleOpenAddConcept}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-primary hover:bg-surface-variant transition-colors border-t border-divider"
+                    >
+                      <Brain className="w-5 h-5 text-primary-600" />
+                      <span className="text-sm font-medium">Add concept</span>
                     </button>
                     <button
                       type="button"
@@ -407,6 +424,15 @@ export const NewTabPage: React.FC = () => {
                 <button
                   type="button"
                   role="menuitem"
+                  onClick={handleOpenAddConcept}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-primary hover:bg-surface-variant transition-colors border-t border-divider"
+                >
+                  <Brain className="w-5 h-5 text-primary-600" />
+                  <span className="text-sm font-medium">Add concept</span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
                   onClick={handleOpenInsights}
                   className="w-full flex items-center gap-3 px-4 py-3 text-primary hover:bg-surface-variant transition-colors border-t border-divider"
                 >
@@ -452,6 +478,7 @@ export const NewTabPage: React.FC = () => {
           {quoteDisplayMode !== 'hidden' && quoteDisplayMode !== 'bottom' && (
             <div className="flex justify-center">
               <ConceptRotation
+                onAdd={() => setIsAddConceptOpen(true)}
                 fallback={
                   <QuoteDisplay
                     onManualRefresh={() => setLastManualRefresh(Date.now())}
@@ -477,6 +504,7 @@ export const NewTabPage: React.FC = () => {
           <div className="pt-8 pb-4 w-full flex-shrink-0">
             <div className="flex justify-center">
               <ConceptRotation
+                onAdd={() => setIsAddConceptOpen(true)}
                 fallback={
                   <QuoteDisplay
                     onManualRefresh={() => setLastManualRefresh(Date.now())}
@@ -495,6 +523,19 @@ export const NewTabPage: React.FC = () => {
 
       {/* Settings Modal */}
       <SettingsModal isOpen={isSettingsModalOpen} onClose={() => setIsSettingsModalOpen(false)} />
+
+      {/* Add Concept Modal */}
+      <Modal
+        isOpen={isAddConceptOpen}
+        onClose={() => setIsAddConceptOpen(false)}
+        title="Add a concept"
+        size="md"
+      >
+        <AddConceptForm
+          onSuccess={() => setIsAddConceptOpen(false)}
+          onCancel={() => setIsAddConceptOpen(false)}
+        />
+      </Modal>
 
       {/* Welcome Modal - First-time users */}
       <WelcomeModal isOpen={isWelcomeOpen} onClose={handleCloseWelcome} />
