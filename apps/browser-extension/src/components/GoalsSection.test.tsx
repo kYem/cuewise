@@ -3,7 +3,6 @@ import { createSelectorMock, createSettingsStoreMock } from '@cuewise/test-utils
 import { goalFactory, taskWithDueDateFactory } from '@cuewise/test-utils/factories';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useCalendarStore } from '../stores/calendar-store';
 import { useGoalStore } from '../stores/goal-store';
@@ -22,11 +21,7 @@ vi.mock('@cuewise/storage', () => ({
 vi.mock('./GoalsList', () => ({ GoalsList: () => null }));
 vi.mock('./GoalFocusView', () => ({ GoalFocusView: () => null }));
 vi.mock('./StorageIndicator', () => ({ StorageIndicator: () => null }));
-vi.mock('./CalendarStrip', () => ({
-  CalendarStrip: ({ headerAction }: { headerAction?: ReactNode }) => (
-    <div data-testid="calendar-strip">{headerAction}</div>
-  ),
-}));
+vi.mock('./CalendarStrip', () => ({ CalendarStrip: () => <div data-testid="calendar-strip" /> }));
 
 const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
@@ -71,10 +66,7 @@ describe('GoalsSection - options menu', () => {
     await user.click(screen.getByRole('button', { name: 'View options' }));
     await user.click(screen.getByRole('button', { name: 'Compact' }));
 
-    expect(updateSettings).toHaveBeenCalledWith({
-      goalViewMode: 'compact',
-      newTabPrimary: 'goals',
-    });
+    expect(updateSettings).toHaveBeenCalledWith({ goalViewMode: 'compact' });
   });
 
   it('toggles show-completed to the negated value', async () => {
@@ -125,22 +117,31 @@ describe('GoalsSection - options menu', () => {
   });
 });
 
-describe('GoalsSection - calendar primary', () => {
+describe('GoalsSection - calendar toggle', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('renders the calendar block when primary is calendar and the feature is enabled', () => {
-    mockStores({ settings: { newTabPrimary: 'calendar' }, calendarEnabled: true });
+  it('shows goals only by default (calendar off)', () => {
+    mockStores({ calendarEnabled: true });
 
     render(<GoalsSection />);
 
-    expect(screen.getByTestId('calendar-strip')).toBeInTheDocument();
-    expect(screen.queryByText("Today's Focus")).not.toBeInTheDocument();
+    expect(screen.getByText("Today's Focus")).toBeInTheDocument();
+    expect(screen.queryByTestId('calendar-strip')).not.toBeInTheDocument();
   });
 
-  it('falls back to goals when primary is calendar but the feature is disabled', () => {
-    mockStores({ settings: { newTabPrimary: 'calendar' }, calendarEnabled: false });
+  it('shows the calendar alongside goals when toggled on', () => {
+    mockStores({ settings: { newTabShowCalendar: true }, calendarEnabled: true });
+
+    render(<GoalsSection />);
+
+    expect(screen.getByText("Today's Focus")).toBeInTheDocument();
+    expect(screen.getByTestId('calendar-strip')).toBeInTheDocument();
+  });
+
+  it('keeps the calendar hidden when the feature is disabled even if toggled on', () => {
+    mockStores({ settings: { newTabShowCalendar: true }, calendarEnabled: false });
 
     render(<GoalsSection />);
 
@@ -148,50 +149,56 @@ describe('GoalsSection - calendar primary', () => {
     expect(screen.getByText("Today's Focus")).toBeInTheDocument();
   });
 
-  it('stacks both blocks when primary is both', () => {
-    mockStores({ settings: { newTabPrimary: 'both' }, calendarEnabled: true });
-
-    render(<GoalsSection />);
-
-    expect(screen.getByTestId('calendar-strip')).toBeInTheDocument();
-    expect(screen.getByText("Today's Focus")).toBeInTheDocument();
-  });
-
-  it('hides the Calendar menu entry when the feature is disabled', async () => {
+  it('hides the Calendar toggle row when the feature is disabled', async () => {
     const user = userEvent.setup();
     mockStores({ calendarEnabled: false });
 
     render(<GoalsSection />);
     await user.click(screen.getByRole('button', { name: 'View options' }));
 
-    expect(screen.queryByRole('button', { name: 'Calendar' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('switch', { name: 'Show calendar' })).not.toBeInTheDocument();
   });
 
-  it('selects the calendar primary from the menu', async () => {
+  it('toggles the calendar on from the menu', async () => {
     const user = userEvent.setup();
     const { updateSettings } = mockStores({ calendarEnabled: true });
 
     render(<GoalsSection />);
     await user.click(screen.getByRole('button', { name: 'View options' }));
-    await user.click(screen.getByRole('button', { name: 'Calendar' }));
+    await user.click(screen.getByRole('switch', { name: 'Show calendar' }));
 
-    expect(updateSettings).toHaveBeenCalledWith({ newTabPrimary: 'calendar' });
+    expect(updateSettings).toHaveBeenCalledWith({ newTabShowCalendar: true });
   });
 
-  it('selects the both layout from the menu', async () => {
+  it('shows the position control only when the calendar is on', async () => {
     const user = userEvent.setup();
-    const { updateSettings } = mockStores({ calendarEnabled: true });
+    mockStores({ settings: { newTabShowCalendar: false }, calendarEnabled: true });
 
     render(<GoalsSection />);
     await user.click(screen.getByRole('button', { name: 'View options' }));
-    await user.click(screen.getByRole('button', { name: 'Both' }));
 
-    expect(updateSettings).toHaveBeenCalledWith({ newTabPrimary: 'both' });
+    expect(
+      screen.queryByRole('button', { name: /Calendar (above|below) goals/ })
+    ).not.toBeInTheDocument();
+  });
+
+  it('flips the calendar position from the menu', async () => {
+    const user = userEvent.setup();
+    const { updateSettings } = mockStores({
+      settings: { newTabShowCalendar: true, newTabCalendarPosition: 'below' },
+      calendarEnabled: true,
+    });
+
+    render(<GoalsSection />);
+    await user.click(screen.getByRole('button', { name: 'View options' }));
+    await user.click(screen.getByRole('button', { name: 'Calendar below goals' }));
+
+    expect(updateSettings).toHaveBeenCalledWith({ newTabCalendarPosition: 'above' });
   });
 
   it('stacks the calendar above goals when position is above', () => {
     mockStores({
-      settings: { newTabPrimary: 'both', newTabCalendarPosition: 'above' },
+      settings: { newTabShowCalendar: true, newTabCalendarPosition: 'above' },
       calendarEnabled: true,
     });
 
@@ -207,7 +214,7 @@ describe('GoalsSection - calendar primary', () => {
 
   it('stacks the calendar below goals when position is below', () => {
     mockStores({
-      settings: { newTabPrimary: 'both', newTabCalendarPosition: 'below' },
+      settings: { newTabShowCalendar: true, newTabCalendarPosition: 'below' },
       calendarEnabled: true,
     });
 
@@ -221,47 +228,9 @@ describe('GoalsSection - calendar primary', () => {
     ).toBeGreaterThan(0);
   });
 
-  it('changes the calendar position from the menu in both mode', async () => {
-    const user = userEvent.setup();
-    const { updateSettings } = mockStores({
-      settings: { newTabPrimary: 'both', newTabCalendarPosition: 'below' },
-      calendarEnabled: true,
-    });
-
-    render(<GoalsSection />);
-    await user.click(screen.getByRole('button', { name: 'View options' }));
-    await user.click(screen.getByRole('button', { name: 'Above goals' }));
-
-    expect(updateSettings).toHaveBeenCalledWith({ newTabCalendarPosition: 'above' });
-  });
-
-  it('hides the calendar-position control when not in both mode', async () => {
-    const user = userEvent.setup();
-    mockStores({ settings: { newTabPrimary: 'calendar' }, calendarEnabled: true });
-
-    render(<GoalsSection />);
-    await user.click(screen.getByRole('button', { name: 'View options' }));
-
-    expect(screen.queryByText('Calendar position')).not.toBeInTheDocument();
-  });
-
-  it('lets the user switch back to goals from calendar-only mode', async () => {
-    const user = userEvent.setup();
-    const { updateSettings } = mockStores({
-      settings: { newTabPrimary: 'calendar' },
-      calendarEnabled: true,
-    });
-
-    render(<GoalsSection />);
-    await user.click(screen.getByRole('button', { name: 'View options' }));
-    await user.click(screen.getByRole('button', { name: 'Full' }));
-
-    expect(updateSettings).toHaveBeenCalledWith({ goalViewMode: 'full', newTabPrimary: 'goals' });
-  });
-
-  it('initializes the calendar store when the calendar block is shown', () => {
+  it('initializes the calendar store only when the calendar is shown', () => {
     const { initCalendar } = mockStores({
-      settings: { newTabPrimary: 'calendar' },
+      settings: { newTabShowCalendar: true },
       calendarEnabled: true,
     });
 
@@ -270,9 +239,9 @@ describe('GoalsSection - calendar primary', () => {
     expect(initCalendar).toHaveBeenCalled();
   });
 
-  it('does not initialize the calendar store for goals-only', () => {
+  it('does not initialize the calendar store when the calendar is off', () => {
     const { initCalendar } = mockStores({
-      settings: { newTabPrimary: 'goals' },
+      settings: { newTabShowCalendar: false },
       calendarEnabled: true,
     });
 
@@ -283,7 +252,7 @@ describe('GoalsSection - calendar primary', () => {
 
   it('does not initialize the calendar store when the feature is disabled', () => {
     const { initCalendar } = mockStores({
-      settings: { newTabPrimary: 'calendar' },
+      settings: { newTabShowCalendar: true },
       calendarEnabled: false,
     });
 

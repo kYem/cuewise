@@ -1,4 +1,8 @@
 import type { CalendarEvent } from '@cuewise/shared';
+
+// Re-export the canonical selector mock so CalendarStrip tests use the shared one.
+export { createSelectorMock } from '@cuewise/test-utils';
+
 import { vi } from 'vitest';
 
 export interface MockCalendarStore {
@@ -19,18 +23,6 @@ export function createCalendarStore(overrides: Partial<MockCalendarStore> = {}):
     connect: vi.fn(),
     refresh: vi.fn(),
     ...overrides,
-  };
-}
-
-// CalendarStrip calls the store both with a useShallow selector and with bare
-// selectors (s.connect, s.refresh); this mock handles both and the no-arg call.
-export function createSelectorMock<T extends object>(store: T) {
-  // biome-ignore lint/suspicious/noExplicitAny: selector operates on the store shape
-  return (selector?: (state: any) => unknown) => {
-    if (selector) {
-      return selector(store);
-    }
-    return store;
   };
 }
 

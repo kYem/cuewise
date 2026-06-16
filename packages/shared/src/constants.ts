@@ -68,8 +68,8 @@ export const DEFAULT_SETTINGS: Settings = {
   focusModeAutoEnter: false, // Don't auto-enter (user choice)
   // Goal View Mode
   goalViewMode: 'full', // Full view by default
-  newTabPrimary: 'goals', // Home primary area shows goals by default
-  newTabCalendarPosition: 'below', // In 'both', calendar sits below goals by default
+  newTabShowCalendar: false, // Calendar hidden on the new tab by default
+  newTabCalendarPosition: 'below', // When shown, calendar sits below goals by default
   focusedGoalId: null, // No focused goal by default
   showCompletedGoals: true, // Show completed tasks in Today's Focus by default
   showIncompleteGoals: false, // Recent-incomplete backlog collapsed by default

@@ -15,47 +15,42 @@ interface CalendarStripProps {
   // 'surface': theme tokens, for the home new tab where the background follows
   // the theme (and can be light), matching the goals card / QuoteDisplay.
   variant?: 'overlay' | 'surface';
-  // Optional control rendered in the header beside the refresh button — e.g. the
-  // view-options menu when the strip is the home-page primary widget.
-  headerAction?: React.ReactNode;
 }
 
-// Per-variant color classes. 'overlay' keeps the immersive white-on-dark glass
-// look; 'surface' uses theme tokens so the strip is readable on light themes.
-function variantTokens(surface: boolean) {
-  if (surface) {
-    return {
-      card: 'bg-surface/80 backdrop-blur-sm border-border text-primary',
-      icon: 'text-secondary',
-      muted: 'text-secondary',
-      faint: 'text-tertiary',
-      time: 'text-secondary',
-      title: 'text-primary',
-      connectBtn: 'border-border bg-surface-variant text-primary hover:bg-surface-variant/70',
-      refresh: 'text-tertiary hover:text-primary',
-      nowLine: 'bg-divider',
-      nowDot: 'bg-primary',
-      bar: 'bg-divider',
-      empty: 'text-secondary',
-      error: 'text-red-500 dark:text-red-400',
-    };
-  }
-  return {
-    card: 'bg-black/25 backdrop-blur-md border-white/10 text-white',
-    icon: 'text-white/80',
-    muted: 'text-white/70',
-    faint: 'text-white/55',
-    time: 'text-white/85',
-    title: 'text-white',
-    connectBtn: 'border-white/20 bg-white/15 text-white hover:bg-white/25',
-    refresh: 'text-white/55 hover:text-white',
-    nowLine: 'bg-white/50',
-    nowDot: 'bg-white',
-    bar: 'bg-white/50',
-    empty: 'text-white/60',
-    error: 'text-red-300',
-  };
-}
+// Per-variant color classes (module-level so they aren't rebuilt each render).
+// 'overlay' keeps the immersive white-on-dark glass look; 'surface' uses theme
+// tokens so the strip is readable on light themes.
+const SURFACE_TOKENS = {
+  card: 'bg-surface/80 backdrop-blur-sm border-border text-primary',
+  icon: 'text-secondary',
+  muted: 'text-secondary',
+  faint: 'text-tertiary',
+  time: 'text-secondary',
+  title: 'text-primary',
+  connectBtn: 'border-border bg-surface-variant text-primary hover:bg-surface-variant/70',
+  refresh: 'text-tertiary hover:text-primary',
+  nowLine: 'bg-divider',
+  nowDot: 'bg-primary',
+  bar: 'bg-divider',
+  empty: 'text-secondary',
+  error: 'text-red-500 dark:text-red-400',
+} as const;
+
+const OVERLAY_TOKENS = {
+  card: 'bg-black/25 backdrop-blur-md border-white/10 text-white',
+  icon: 'text-white/80',
+  muted: 'text-white/70',
+  faint: 'text-white/55',
+  time: 'text-white/85',
+  title: 'text-white',
+  connectBtn: 'border-white/20 bg-white/15 text-white hover:bg-white/25',
+  refresh: 'text-white/55 hover:text-white',
+  nowLine: 'bg-white/50',
+  nowDot: 'bg-white',
+  bar: 'bg-white/50',
+  empty: 'text-white/60',
+  error: 'text-red-300',
+} as const;
 
 function formatTime(iso: string, twentyFour: boolean): string {
   const d = new Date(iso);
@@ -72,7 +67,6 @@ function formatTime(iso: string, twentyFour: boolean): string {
 export const CalendarStrip: React.FC<CalendarStripProps> = ({
   lean = false,
   variant = 'overlay',
-  headerAction,
 }) => {
   const { connected, events, isLoading, error } = useCalendarStore(
     useShallow((s) => ({
@@ -86,7 +80,7 @@ export const CalendarStrip: React.FC<CalendarStripProps> = ({
   const refresh = useCalendarStore((s) => s.refresh);
   const twentyFour = useSettingsStore((s) => s.settings.timeFormat === '24h');
 
-  const t = variantTokens(variant === 'surface');
+  const t = variant === 'surface' ? SURFACE_TOKENS : OVERLAY_TOKENS;
   // Match the goals card (max-w-[400px]) in the surface/home layout so the
   // stacked "both" view lines up; the Pomodoro overlay keeps its 360px card and
   // the lean "Up next" strip stays wide.
@@ -104,10 +98,7 @@ export const CalendarStrip: React.FC<CalendarStripProps> = ({
         <Calendar className={cn('w-4 h-4', t.icon)} />
         <span className="font-semibold">{lean ? 'Up next' : 'Today'}</span>
       </span>
-      <span className="flex items-center gap-1.5">
-        {right}
-        {headerAction}
-      </span>
+      <span className="flex items-center gap-1.5">{right}</span>
     </div>
   );
 

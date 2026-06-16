@@ -3,7 +3,6 @@ import {
   type GoalViewMode,
   getRecentIncompleteTasks,
   getUpcomingTasks,
-  type NewTabCalendarPosition,
 } from '@cuewise/shared';
 import { getStorageUsage, type StorageUsageInfo } from '@cuewise/storage';
 import { cn, Popover, PopoverContent, PopoverTrigger } from '@cuewise/ui';
@@ -19,7 +18,6 @@ import {
   Eye,
   History,
   List,
-  Rows3,
   Settings2,
   Target,
 } from 'lucide-react';
@@ -41,12 +39,6 @@ const VIEW_MODES: { mode: GoalViewMode; icon: typeof List; label: string }[] = [
   { mode: 'full', icon: List, label: 'Full' },
   { mode: 'compact', icon: AlignJustify, label: 'Compact' },
   { mode: 'focus', icon: Target, label: 'Focus' },
-];
-
-// Calendar-vs-goals order options shown in the menu when the primary is 'both'.
-const POSITION_OPTIONS: { pos: NewTabCalendarPosition; icon: typeof List; label: string }[] = [
-  { pos: 'above', icon: ArrowUp, label: 'Above goals' },
-  { pos: 'below', icon: ArrowDown, label: 'Below goals' },
 ];
 
 function getSubtitle(totalCount: number, incompleteCount: number): string {
@@ -129,21 +121,11 @@ export const GoalsSection: React.FC = () => {
 
   const viewMode = settings.goalViewMode;
 
-  // Primary-area composition. Independent blocks (not an exclusive branch) so the
-  // 'both' layout just selects both. Calendar needs the feature provisioned;
-  // otherwise we always fall back to goals so a stale 'calendar'/'both' setting
-  // never yields a dead state on an un-provisioned build.
+  // Goals always show (with their density); the calendar is an optional add-on
+  // stacked above/below, gated on the integration being provisioned.
   const calendarFeatureEnabled = isCalendarFeatureEnabled();
-  const primary = settings.newTabPrimary;
   const calendarPosition = settings.newTabCalendarPosition;
-  const calendarActive = primary === 'calendar';
-  const bothActive = primary === 'both';
-  const showCalendar = calendarFeatureEnabled && (primary === 'calendar' || primary === 'both');
-  const showGoals = primary === 'goals' || primary === 'both' || !calendarFeatureEnabled;
-  // A goals density is "selected" only in pure goals mode (or an un-provisioned
-  // build, where goals always show). In 'calendar'/'both' the Calendar/Both entry
-  // owns the checkmark instead.
-  const goalsDensitySelected = primary === 'goals' || !calendarFeatureEnabled;
+  const showCalendar = calendarFeatureEnabled && settings.newTabShowCalendar;
 
   useEffect(() => {
     initialize();
@@ -162,21 +144,16 @@ export const GoalsSection: React.FC = () => {
     setStorageUsage(usage);
   };
 
-  // Picking a goals density also pins the primary area back to goals.
   const handleModeChange = (mode: GoalViewMode) => {
-    updateSettings({ goalViewMode: mode, newTabPrimary: 'goals' });
+    updateSettings({ goalViewMode: mode });
   };
 
-  const handleSelectCalendar = () => {
-    updateSettings({ newTabPrimary: 'calendar' });
+  const handleToggleCalendar = () => {
+    updateSettings({ newTabShowCalendar: !settings.newTabShowCalendar });
   };
 
-  const handleSelectBoth = () => {
-    updateSettings({ newTabPrimary: 'both' });
-  };
-
-  const handleSelectCalendarPosition = (pos: NewTabCalendarPosition) => {
-    updateSettings({ newTabCalendarPosition: pos });
+  const handleToggleCalendarPosition = () => {
+    updateSettings({ newTabCalendarPosition: calendarPosition === 'above' ? 'below' : 'above' });
   };
 
   const handleToggleShowCompleted = () => {
@@ -237,7 +214,7 @@ export const GoalsSection: React.FC = () => {
         <div className="text-xs font-medium text-tertiary px-2 py-1">View Mode</div>
         <div className="space-y-0.5">
           {VIEW_MODES.map(({ mode, icon: Icon, label }) => {
-            const active = goalsDensitySelected && viewMode === mode;
+            const active = viewMode === mode;
             return (
               <button
                 key={mode}
@@ -256,137 +233,125 @@ export const GoalsSection: React.FC = () => {
               </button>
             );
           })}
-          {calendarFeatureEnabled && (
-            <button
-              type="button"
-              onClick={handleSelectCalendar}
-              className={cn(
-                'w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-colors',
-                calendarActive
-                  ? 'bg-primary-50 text-primary-600'
-                  : 'text-primary hover:bg-surface-variant'
-              )}
-            >
-              <Calendar className="w-4 h-4" />
-              <span>Calendar</span>
-              {calendarActive && <Check className="w-4 h-4 ml-auto" />}
-            </button>
-          )}
-          {calendarFeatureEnabled && (
-            <button
-              type="button"
-              onClick={handleSelectBoth}
-              className={cn(
-                'w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-colors',
-                bothActive
-                  ? 'bg-primary-50 text-primary-600'
-                  : 'text-primary hover:bg-surface-variant'
-              )}
-            >
-              <Rows3 className="w-4 h-4" />
-              <span>Both</span>
-              {bothActive && <Check className="w-4 h-4 ml-auto" />}
-            </button>
-          )}
         </div>
 
-        {bothActive && (
+        {/* Calendar add-on: one row — toggle on/off, plus an above/below arrow when on. */}
+        {calendarFeatureEnabled && (
           <>
             <div className="border-t border-border my-2" />
-            <div className="text-xs font-medium text-tertiary px-2 py-1">Calendar position</div>
-            <div className="space-y-0.5">
-              {POSITION_OPTIONS.map(({ pos, icon: Icon, label }) => {
-                const active = calendarPosition === pos;
-                return (
-                  <button
-                    key={pos}
-                    type="button"
-                    onClick={() => handleSelectCalendarPosition(pos)}
-                    className={cn(
-                      'w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-colors',
-                      active
-                        ? 'bg-primary-50 text-primary-600'
-                        : 'text-primary hover:bg-surface-variant'
-                    )}
-                  >
-                    <Icon className="w-4 h-4" />
-                    <span>{label}</span>
-                    {active && <Check className="w-4 h-4 ml-auto" />}
-                  </button>
-                );
-              })}
+            <div className="flex items-center gap-2 px-2 py-1.5 text-sm text-primary">
+              <Calendar className="w-4 h-4" />
+              <span className="flex-1 text-left">Calendar</span>
+              {settings.newTabShowCalendar && (
+                <button
+                  type="button"
+                  onClick={handleToggleCalendarPosition}
+                  aria-label={
+                    calendarPosition === 'above' ? 'Calendar above goals' : 'Calendar below goals'
+                  }
+                  title={
+                    calendarPosition === 'above'
+                      ? 'Above goals — move below'
+                      : 'Below goals — move above'
+                  }
+                  className="flex h-6 w-6 items-center justify-center rounded-md text-secondary transition-colors hover:bg-surface-variant hover:text-primary"
+                >
+                  {calendarPosition === 'above' ? (
+                    <ArrowUp className="w-4 h-4" />
+                  ) : (
+                    <ArrowDown className="w-4 h-4" />
+                  )}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={handleToggleCalendar}
+                role="switch"
+                aria-checked={settings.newTabShowCalendar}
+                aria-label="Show calendar"
+                className={cn(
+                  'relative w-8 h-[18px] rounded-full transition-colors flex-shrink-0',
+                  settings.newTabShowCalendar ? 'bg-primary-600' : 'bg-divider'
+                )}
+              >
+                <span
+                  className={cn(
+                    'absolute top-0.5 left-0.5 w-3.5 h-3.5 rounded-full bg-white transition-transform',
+                    settings.newTabShowCalendar && 'translate-x-3.5'
+                  )}
+                />
+              </button>
             </div>
           </>
         )}
 
-        {showGoals &&
-          (viewMode === 'focus' ? (
-            todayTasks.length > 1 && (
-              <>
-                <div className="border-t border-border my-2" />
-                <div className="text-xs font-medium text-tertiary px-2 py-1">
-                  Focus on ({incompleteCount} remaining)
-                </div>
-                <div className="space-y-0.5 max-h-[200px] overflow-y-auto">
-                  {todayTasks.map((goal) => (
-                    <GoalSelectorItem
-                      key={goal.id}
-                      goal={goal}
-                      isSelected={goal.id === displayGoal?.id}
-                      onSelect={() => handleSelectGoal(goal.id)}
-                    />
-                  ))}
-                </div>
-              </>
-            )
-          ) : (
+        {viewMode === 'focus' ? (
+          todayTasks.length > 1 && (
             <>
               <div className="border-t border-border my-2" />
-              <button
-                type="button"
-                onClick={handleToggleShowCompleted}
-                role="menuitemcheckbox"
-                aria-checked={settings.showCompletedGoals}
-                className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-colors text-primary hover:bg-surface-variant"
+              <div className="text-xs font-medium text-tertiary px-2 py-1">
+                Focus on ({incompleteCount} remaining)
+              </div>
+              <div className="space-y-0.5 max-h-[200px] overflow-y-auto">
+                {todayTasks.map((goal) => (
+                  <GoalSelectorItem
+                    key={goal.id}
+                    goal={goal}
+                    isSelected={goal.id === displayGoal?.id}
+                    onSelect={() => handleSelectGoal(goal.id)}
+                  />
+                ))}
+              </div>
+            </>
+          )
+        ) : (
+          <>
+            <div className="border-t border-border my-2" />
+            <button
+              type="button"
+              onClick={handleToggleShowCompleted}
+              role="menuitemcheckbox"
+              aria-checked={settings.showCompletedGoals}
+              className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-colors text-primary hover:bg-surface-variant"
+            >
+              <Eye className="w-4 h-4" />
+              <span className="flex-1 text-left">Show completed</span>
+              <span
+                className={cn(
+                  'relative w-8 h-[18px] rounded-full transition-colors flex-shrink-0',
+                  settings.showCompletedGoals ? 'bg-primary-600' : 'bg-divider'
+                )}
               >
-                <Eye className="w-4 h-4" />
-                <span className="flex-1 text-left">Show completed</span>
                 <span
                   className={cn(
-                    'relative w-8 h-[18px] rounded-full transition-colors flex-shrink-0',
-                    settings.showCompletedGoals ? 'bg-primary-600' : 'bg-divider'
+                    'absolute top-0.5 left-0.5 w-3.5 h-3.5 rounded-full bg-white transition-transform',
+                    settings.showCompletedGoals && 'translate-x-3.5'
                   )}
-                >
-                  <span
-                    className={cn(
-                      'absolute top-0.5 left-0.5 w-3.5 h-3.5 rounded-full bg-white transition-transform',
-                      settings.showCompletedGoals && 'translate-x-3.5'
-                    )}
-                  />
-                </span>
-              </button>
-
-              {recentIncompleteCount > 0 && (
-                <MenuToggleItem
-                  icon={History}
-                  label="Show incomplete"
-                  count={recentIncompleteCount}
-                  active={settings.showIncompleteGoals}
-                  onToggle={handleToggleShowIncomplete}
                 />
-              )}
+              </span>
+            </button>
 
-              {upcomingCount > 0 && (
-                <MenuToggleItem
-                  icon={CalendarClock}
-                  label="Upcoming"
-                  count={upcomingCount}
-                  active={settings.showUpcomingGoals}
-                  onToggle={handleToggleShowUpcoming}
-                />
-              )}
-            </>
-          ))}
+            {recentIncompleteCount > 0 && (
+              <MenuToggleItem
+                icon={History}
+                label="Show incomplete"
+                count={recentIncompleteCount}
+                active={settings.showIncompleteGoals}
+                onToggle={handleToggleShowIncomplete}
+              />
+            )}
+
+            {upcomingCount > 0 && (
+              <MenuToggleItem
+                icon={CalendarClock}
+                label="Upcoming"
+                count={upcomingCount}
+                active={settings.showUpcomingGoals}
+                onToggle={handleToggleShowUpcoming}
+              />
+            )}
+          </>
+        )}
       </PopoverContent>
     </Popover>
   );
@@ -471,26 +436,11 @@ export const GoalsSection: React.FC = () => {
       </div>
     );
 
-  // Calendar-only: the view-options menu lives inside the card header (beside
-  // refresh), like the compact goals card — so switching back is always one
-  // click away, not a floating control off to the side.
-  if (showCalendar && !showGoals) {
-    return (
-      <CalendarStrip
-        variant="surface"
-        headerAction={optionsMenu(
-          'h-7 w-7 border-0 bg-transparent backdrop-blur-none hover:bg-surface-variant'
-        )}
-      />
-    );
-  }
-
-  // Goals-only: unchanged behavior.
+  // Goals always show; the calendar, when toggled on, stacks above or below.
   if (!showCalendar) {
     return goalsContent;
   }
 
-  // Both: stack the calendar and goals, ordered by the calendar-position setting.
   return (
     <div className="flex flex-col items-center gap-density-lg w-full">
       {calendarPosition === 'above' && <CalendarStrip variant="surface" />}
