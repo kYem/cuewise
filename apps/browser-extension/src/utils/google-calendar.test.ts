@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fetchTodayEvents, isCalendarAvailable, isCalendarFeatureEnabled } from './google-calendar';
+import {
+  connectCalendar,
+  disconnectCalendar,
+  fetchTodayEvents,
+  isCalendarAvailable,
+  isCalendarFeatureEnabled,
+} from './google-calendar';
 
 interface GoogleEventInput {
   id: string;
@@ -10,17 +16,28 @@ interface GoogleEventInput {
   end?: { dateTime?: string; date?: string };
 }
 
-// chrome.identity / chrome.runtime aren't in the shared vitest setup (which only
-// mocks chrome.storage), so each test installs the bits google-calendar.ts uses.
-// stringToken models Chrome's older bare-string callback (vs the {token} object).
+// chrome.identity / chrome.runtime / chrome.permissions aren't in the shared
+// vitest setup (which only mocks chrome.storage and rebuilds global.chrome before
+// each test), so each test installs the bits google-calendar.ts uses. stringToken
+// models Chrome's older bare-string callback (vs the {token} object).
+// withoutIdentity simulates a provisioned build before the optional `identity`
+// permission is granted; permissionGranted controls the request() outcome.
 function installIdentity(
-  options: { token?: string; stringToken?: string; clientId?: string; lastError?: string } = {}
+  options: {
+    token?: string;
+    stringToken?: string;
+    clientId?: string;
+    lastError?: string;
+    withoutIdentity?: boolean;
+    permissionGranted?: boolean;
+  } = {}
 ) {
   const result = options.stringToken !== undefined ? options.stringToken : { token: options.token };
   const identity = {
     getAuthToken: vi.fn((_details: unknown, cb: (result: { token?: string } | string) => void) =>
       cb(result)
     ),
+    removeCachedAuthToken: vi.fn((_details: unknown, cb: () => void) => cb()),
   };
   const runtime = {
     lastError: options.lastError ? { message: options.lastError } : undefined,
@@ -28,7 +45,18 @@ function installIdentity(
       oauth2: options.clientId ? { client_id: options.clientId } : undefined,
     })),
   };
-  Object.assign(global.chrome, { identity, runtime });
+  const permissions = {
+    request: vi.fn((_perms: unknown, cb: (granted: boolean) => void) =>
+      cb(options.permissionGranted ?? true)
+    ),
+    remove: vi.fn((_perms: unknown, cb: (removed: boolean) => void) => cb(true)),
+    contains: vi.fn((_perms: unknown, cb: (granted: boolean) => void) => cb(true)),
+  };
+  Object.assign(global.chrome, { runtime, permissions });
+  if (!options.withoutIdentity) {
+    Object.assign(global.chrome, { identity });
+  }
+  return { identity, runtime, permissions };
 }
 
 function stubFetchItems(items: GoogleEventInput[]) {
@@ -44,7 +72,7 @@ afterEach(() => {
 });
 
 describe('isCalendarAvailable', () => {
-  it('is false when chrome.identity is absent', () => {
+  it('is false outside the installed extension (no chrome.permissions/runtime)', () => {
     expect(isCalendarAvailable()).toBe(false);
   });
 
@@ -53,9 +81,66 @@ describe('isCalendarAvailable', () => {
     expect(isCalendarAvailable()).toBe(false);
   });
 
-  it('is true when identity exists and a client id is configured', () => {
-    installIdentity({ clientId: 'abc.apps.googleusercontent.com' });
+  it('is true for a provisioned build even before identity is granted', () => {
+    // withoutIdentity: chrome.identity is absent until the optional permission is
+    // granted, yet the feature must still be offered so the Connect button shows.
+    installIdentity({ clientId: 'abc.apps.googleusercontent.com', withoutIdentity: true });
     expect(isCalendarAvailable()).toBe(true);
+  });
+});
+
+describe('connectCalendar', () => {
+  it('requests the optional permission, then runs interactive consent', async () => {
+    const { identity, permissions } = installIdentity({
+      token: 'tok',
+      clientId: 'abc.apps.googleusercontent.com',
+      permissionGranted: true,
+    });
+
+    await connectCalendar();
+
+    expect(permissions.request).toHaveBeenCalledOnce();
+    expect(identity.getAuthToken).toHaveBeenCalledWith({ interactive: true }, expect.any(Function));
+  });
+
+  it('throws and skips consent when the permission is declined', async () => {
+    const { identity } = installIdentity({
+      clientId: 'abc.apps.googleusercontent.com',
+      permissionGranted: false,
+    });
+
+    await expect(connectCalendar()).rejects.toThrow('Calendar permission was not granted');
+    expect(identity.getAuthToken).not.toHaveBeenCalled();
+  });
+});
+
+describe('disconnectCalendar', () => {
+  it('revokes the token and releases the optional permissions', async () => {
+    const { identity, permissions } = installIdentity({
+      token: 'tok',
+      clientId: 'abc.apps.googleusercontent.com',
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve({ ok: true }))
+    );
+
+    await disconnectCalendar();
+
+    expect(identity.removeCachedAuthToken).toHaveBeenCalledOnce();
+    expect(permissions.remove).toHaveBeenCalledOnce();
+  });
+
+  it('still releases the permissions when no token is cached', async () => {
+    const { identity, permissions } = installIdentity({
+      token: undefined,
+      clientId: 'abc.apps.googleusercontent.com',
+    });
+
+    await disconnectCalendar();
+
+    expect(identity.removeCachedAuthToken).not.toHaveBeenCalled();
+    expect(permissions.remove).toHaveBeenCalledOnce();
   });
 });
 

@@ -9,6 +9,16 @@ The feature is safe to ship un-configured: in development the strip shows sample
 data, and a production build without an OAuth client id reports that the
 calendar isn't set up rather than connecting.
 
+## Permissions are opt-in
+
+`identity` and the Google API hosts (`googleapis.com`, `oauth2.googleapis.com`)
+are declared as **optional** permissions, not install-time ones. They're
+requested at runtime when the user clicks **Connect Google Calendar** and
+released again on disconnect, so a user who never enables the calendar installs
+with only `storage`, `notifications`, and `alarms` — nothing Google-related. The
+`oauth2` block and the CSP `connect-src` entries are static manifest config (CSP
+can't vary per user), not user-facing grants.
+
 The steps below mint the OAuth client and are done **once by a maintainer** in
 the Google Cloud console — Claude does not perform credential steps.
 
@@ -77,6 +87,8 @@ inject it from the build env alongside the client id.
 
 In the installed extension, open the Pomodoro page, set the companion to
 **Calendar** (or **Both**) in Settings, and click **Connect Google Calendar**.
-The first connect prompts for consent; refreshing afterward is silent (it
-reuses Chrome's cached token — nothing fetches a token on page load). The dev
+The first connect prompts to grant the optional permission, then for Google
+consent; refreshing afterward is silent (it reuses Chrome's cached token —
+nothing fetches a token on page load). Disconnecting revokes the token and
+removes the optional permission, so a follow-up connect prompts again. The dev
 server (`pnpm dev`) has no `chrome.identity`, so it always shows sample data.
