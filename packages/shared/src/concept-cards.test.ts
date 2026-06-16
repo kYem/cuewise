@@ -5,6 +5,7 @@ import {
   newConceptSchedule,
   projectConceptInterval,
   reviewConceptCard,
+  shouldShowConceptNudge,
 } from './concept-cards';
 import type { ConceptCard, ConceptSchedule } from './types';
 
@@ -150,6 +151,51 @@ describe('Concept card spaced repetition', () => {
       const due = getDueConceptCards([seenLater, seenEarlier], TODAY);
 
       expect(due.map((c) => c.id)).toEqual(['earlier', 'later']);
+    });
+  });
+
+  describe('shouldShowConceptNudge', () => {
+    const base = {
+      enabled: true,
+      conceptCount: 0,
+      totalQuoteViews: 150,
+      state: { dismissed: false, count: 0, lastShownAt: null },
+      today: '2026-06-16',
+    };
+
+    it('shows for an engaged user with no cards', () => {
+      expect(shouldShowConceptNudge(base)).toBe(true);
+    });
+
+    it('does not show when disabled, dismissed, or cards already exist', () => {
+      expect(shouldShowConceptNudge({ ...base, enabled: false })).toBe(false);
+      expect(shouldShowConceptNudge({ ...base, conceptCount: 1 })).toBe(false);
+      expect(shouldShowConceptNudge({ ...base, state: { ...base.state, dismissed: true } })).toBe(
+        false
+      );
+    });
+
+    it('does not show below the quote-view threshold', () => {
+      expect(shouldShowConceptNudge({ ...base, totalQuoteViews: 40 })).toBe(false);
+    });
+
+    it('stops after the max shows', () => {
+      expect(shouldShowConceptNudge({ ...base, state: { ...base.state, count: 2 } })).toBe(false);
+    });
+
+    it('respects the multi-day gap since the last show', () => {
+      expect(
+        shouldShowConceptNudge({
+          ...base,
+          state: { dismissed: false, count: 1, lastShownAt: '2026-06-15' },
+        })
+      ).toBe(false);
+      expect(
+        shouldShowConceptNudge({
+          ...base,
+          state: { dismissed: false, count: 1, lastShownAt: '2026-06-10' },
+        })
+      ).toBe(true);
     });
   });
 });

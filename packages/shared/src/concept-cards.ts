@@ -1,5 +1,12 @@
-import { addDays, format } from 'date-fns';
-import { CONCEPT_EASE_DEFAULT, CONCEPT_EASE_MIN, CONCEPT_INTERVAL_MAX } from './constants';
+import { addDays, differenceInCalendarDays, format, parseISO } from 'date-fns';
+import {
+  CONCEPT_EASE_DEFAULT,
+  CONCEPT_EASE_MIN,
+  CONCEPT_INTERVAL_MAX,
+  CONCEPT_NUDGE_AFTER_QUOTE_VIEWS,
+  CONCEPT_NUDGE_GAP_DAYS,
+  CONCEPT_NUDGE_MAX_SHOWS,
+} from './constants';
 import type { ConceptCard, ConceptGrade, ConceptSchedule } from './types';
 
 /**
@@ -126,4 +133,41 @@ export function getDueConceptCards(cards: ConceptCard[], today: Date): ConceptCa
       }
       return a.createdAt < b.createdAt ? -1 : 1;
     });
+}
+
+export interface ConceptNudgeState {
+  dismissed: boolean;
+  count: number;
+  lastShownAt: string | null; // yyyy-MM-dd of the last show
+}
+
+/**
+ * Whether to show the one-time discovery nudge. Surfaces only for an engaged
+ * user (≥ N quote views) who has no concept cards yet — capped at a couple of
+ * shows with a multi-day gap, and never once they've added a card. Pure.
+ */
+export function shouldShowConceptNudge(params: {
+  enabled: boolean;
+  conceptCount: number;
+  totalQuoteViews: number;
+  state: ConceptNudgeState;
+  today: string;
+}): boolean {
+  const { enabled, conceptCount, totalQuoteViews, state, today } = params;
+  if (!enabled || conceptCount > 0 || state.dismissed) {
+    return false;
+  }
+  if (state.count >= CONCEPT_NUDGE_MAX_SHOWS) {
+    return false;
+  }
+  if (totalQuoteViews < CONCEPT_NUDGE_AFTER_QUOTE_VIEWS) {
+    return false;
+  }
+  if (
+    state.lastShownAt &&
+    differenceInCalendarDays(parseISO(today), parseISO(state.lastShownAt)) < CONCEPT_NUDGE_GAP_DAYS
+  ) {
+    return false;
+  }
+  return true;
 }

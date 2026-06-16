@@ -3,7 +3,9 @@ import { cn } from '@cuewise/ui';
 import { BarChart3, BookMarked, Brain, Flag, PanelRight, Settings, Timer } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useConceptNudge } from '../hooks/useConceptNudge';
 import { useReviewPrompt } from '../hooks/useReviewPrompt';
+import { useConceptCardsStore } from '../stores/concept-cards-store';
 import { useGoalStore } from '../stores/goal-store';
 import { usePomodoroStorageSync, usePomodoroStore } from '../stores/pomodoro-store';
 import { useQuoteStore } from '../stores/quote-store';
@@ -12,6 +14,7 @@ import { preloadImages } from '../utils/image-preload-cache';
 import { ActivePomodoroWidget } from './ActivePomodoroWidget';
 import { Clock } from './Clock';
 import { ConceptForm } from './ConceptForm';
+import { ConceptNudge } from './ConceptNudge';
 import { ConceptRotation } from './ConceptRotation';
 import { GoalsSection } from './GoalsSection';
 import { GoalButton } from './goals';
@@ -32,6 +35,14 @@ export const NewTabPage: React.FC = () => {
   const showThemeSwitcher = useSettingsStore((state) => state.settings.showThemeSwitcher);
   const showClock = useSettingsStore((state) => state.settings.showClock);
   const showQuickLinks = useSettingsStore((state) => state.settings.showQuickLinks);
+  const conceptCardsEnabled = useSettingsStore((state) => state.settings.conceptCardsEnabled);
+  const conceptNudgeDismissed = useSettingsStore((state) => state.settings.conceptNudgeDismissed);
+  const conceptNudgeCount = useSettingsStore((state) => state.settings.conceptNudgeCount);
+  const conceptNudgeLastShownAt = useSettingsStore(
+    (state) => state.settings.conceptNudgeLastShownAt
+  );
+  const quotes = useQuoteStore((state) => state.quotes);
+  const conceptCards = useConceptCardsStore((state) => state.cards);
   const timeFormat = useSettingsStore((state) => state.settings.timeFormat);
   const focusModeImageCategory = useSettingsStore((state) => state.settings.focusModeImageCategory);
   const quoteDisplayMode = useSettingsStore((state) => state.settings.quoteDisplayMode);
@@ -64,6 +75,17 @@ export const NewTabPage: React.FC = () => {
     dismissed: reviewPromptDismissed,
     count: reviewPromptCount,
     lastShownAt: reviewPromptLastShownAt,
+    updateSettings,
+  });
+  const totalQuoteViews = quotes.reduce((sum, quote) => sum + quote.viewCount, 0);
+  const conceptNudge = useConceptNudge({
+    ready: !settingsLoading,
+    enabled: conceptCardsEnabled,
+    conceptCount: conceptCards.length,
+    totalQuoteViews,
+    dismissed: conceptNudgeDismissed,
+    count: conceptNudgeCount,
+    lastShownAt: conceptNudgeLastShownAt,
     updateSettings,
   });
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -493,6 +515,16 @@ export const NewTabPage: React.FC = () => {
           <div className="max-w-4xl mx-auto">
             <GoalsSection />
           </div>
+
+          {/* Concept-cards discovery nudge (engaged users with no cards yet) */}
+          {conceptNudge.isVisible && (
+            <div className="flex justify-center">
+              <ConceptNudge
+                onAdd={() => setIsAddConceptOpen(true)}
+                onDismiss={conceptNudge.onDismiss}
+              />
+            </div>
+          )}
         </div>
 
         {/* Spacer for center/top positioning - pushes quote to bottom */}

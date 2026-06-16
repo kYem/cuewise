@@ -278,6 +278,9 @@ export interface Settings {
   conceptCadence: ConceptCadence; // How often a due card surfaces in the rotation (default 'third')
   conceptFraming: ConceptFraming; // 'ambient' calm nudge vs 'queue' explicit due pile (default 'ambient')
   conceptActiveRecall: boolean; // Hide the definition until "Reveal" (true) vs show it upfront (default true)
+  conceptNudgeDismissed: boolean; // Discovery nudge permanently dismissed (default false)
+  conceptNudgeCount: number; // Times the discovery nudge has been shown (default 0)
+  conceptNudgeLastShownAt: string | null; // yyyy-MM-dd of the last nudge show (default null)
 }
 
 // Storage keys
