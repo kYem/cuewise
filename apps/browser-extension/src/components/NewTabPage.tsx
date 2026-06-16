@@ -13,6 +13,7 @@ import { ActivePomodoroWidget } from './ActivePomodoroWidget';
 import { Clock } from './Clock';
 import { GoalsSection } from './GoalsSection';
 import { GoalButton } from './goals';
+import { QuickLinksWidget } from './QuickLinksWidget';
 import { QuoteDisplay } from './QuoteDisplay';
 import { ReminderWidget } from './ReminderWidget';
 import { ReviewPromptModal } from './ReviewPromptModal';
@@ -27,6 +28,7 @@ export const NewTabPage: React.FC = () => {
   const quoteChangeInterval = useSettingsStore((state) => state.settings.quoteChangeInterval);
   const showThemeSwitcher = useSettingsStore((state) => state.settings.showThemeSwitcher);
   const showClock = useSettingsStore((state) => state.settings.showClock);
+  const showQuickLinks = useSettingsStore((state) => state.settings.showQuickLinks);
   const timeFormat = useSettingsStore((state) => state.settings.timeFormat);
   const focusModeImageCategory = useSettingsStore((state) => state.settings.focusModeImageCategory);
   const quoteDisplayMode = useSettingsStore((state) => state.settings.quoteDisplayMode);
@@ -335,7 +337,10 @@ export const NewTabPage: React.FC = () => {
             showStickyHeader ? 'opacity-0 pointer-events-none' : 'opacity-100'
           }`}
         >
-          <GoalButton />
+          <div className="flex items-center gap-density-sm">
+            <GoalButton />
+            {showQuickLinks && <QuickLinksWidget />}
+          </div>
         </div>
 
         {/* Floating Top Right Navigation - Only visible when not scrolled */}

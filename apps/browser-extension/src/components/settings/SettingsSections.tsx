@@ -458,6 +458,18 @@ function HomeSection({ s, set, filter }: SettingsSectionProps) {
       >
         <Switch label="Clock" checked={s.showClock} onChange={(v) => set({ showClock: v })} />
       </SettingRow>
+      <SettingRow
+        label="Quick links"
+        filter={filter}
+        help="Pinned shortcut tiles in the top-left of the home page"
+        keywords="shortcut bookmark favicon links tiles pinned sites"
+      >
+        <Switch
+          label="Quick links"
+          checked={s.showQuickLinks}
+          onChange={(v) => set({ showQuickLinks: v })}
+        />
+      </SettingRow>
       {s.showClock && (
         <SettingSubgroup>
           <SettingRow label="Time format" filter={filter} keywords="12 hour 24 hour clock am pm">
