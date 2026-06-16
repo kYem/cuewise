@@ -33,7 +33,7 @@ interface ThumbPickerProps {
 
 /** Visual grid for picking a focus-mode background category. */
 export const ThumbPicker: React.FC<ThumbPickerProps> = ({ value, onChange }) => (
-  <div className="grid grid-cols-3 gap-2.5">
+  <div className="grid grid-cols-6 gap-1.5">
     {ALL_FOCUS_IMAGE_CATEGORIES.map((category) => {
       const thumb = CATEGORY_THUMBS[category];
       const active = value === category;
@@ -49,16 +49,16 @@ export const ThumbPicker: React.FC<ThumbPickerProps> = ({ value, onChange }) => 
           onClick={() => onChange(category)}
           style={{ background }}
           className={cn(
-            'relative aspect-[16/10] overflow-hidden rounded-lg border border-border transition-transform hover:scale-[1.02]',
+            'relative h-14 overflow-hidden rounded-lg border border-border transition-transform hover:scale-[1.02]',
             active && 'border-transparent ring-2 ring-primary-600'
           )}
         >
-          <span className="absolute bottom-1.5 left-1.5 rounded-full bg-black/45 px-2 py-0.5 text-[11px] font-semibold text-white backdrop-blur-sm">
+          <span className="absolute bottom-1 left-0 right-0 text-center rounded-full bg-black/45 mx-1 py-0.5 text-[9px] font-semibold text-white backdrop-blur-sm truncate px-1">
             {FOCUS_IMAGE_CATEGORIES[category]}
           </span>
           {active && (
-            <span className="absolute right-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary-600">
-              <Check className="h-2.5 w-2.5 text-white" />
+            <span className="absolute right-1 top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-primary-600">
+              <Check className="h-2 w-2 text-white" />
             </span>
           )}
         </button>
