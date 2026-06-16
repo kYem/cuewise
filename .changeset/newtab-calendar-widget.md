@@ -12,7 +12,9 @@ provisioned; an un-provisioned build always falls back to goals.
 
 - new `newTabPrimary` setting (`goals | calendar | both`, default `goals`);
   `goalViewMode` stays purely goals density
-- `GoalsSection` composes independent goals/calendar blocks, so the future
-  stacked "both" layout (calendar above/below goals) drops in additively
+- a **Both** menu entry stacks goals + calendar, with a `newTabCalendarPosition`
+  (`above | below`, default `below`) control to order the calendar relative to
+  goals
+- `GoalsSection` composes independent goals/calendar blocks ordered by position
 - reuses the existing `CalendarStrip` + calendar store; lazy-inits calendar only
   when the calendar block is shown

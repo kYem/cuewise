@@ -171,4 +171,71 @@ describe('GoalsSection - calendar primary', () => {
 
     expect(updateSettings).toHaveBeenCalledWith({ newTabPrimary: 'calendar' });
   });
+
+  it('selects the both layout from the menu', async () => {
+    const user = userEvent.setup();
+    const { updateSettings } = mockStores({ calendarEnabled: true });
+
+    render(<GoalsSection />);
+    await user.click(screen.getByRole('button', { name: 'View options' }));
+    await user.click(screen.getByRole('button', { name: 'Both' }));
+
+    expect(updateSettings).toHaveBeenCalledWith({ newTabPrimary: 'both' });
+  });
+
+  it('stacks the calendar above goals when position is above', () => {
+    mockStores({
+      settings: { newTabPrimary: 'both', newTabCalendarPosition: 'above' },
+      calendarEnabled: true,
+    });
+
+    render(<GoalsSection />);
+
+    const calendar = screen.getByTestId('calendar-strip');
+    const goals = screen.getByText("Today's Focus");
+    // calendar precedes goals in document order
+    expect(
+      calendar.compareDocumentPosition(goals) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeGreaterThan(0);
+  });
+
+  it('stacks the calendar below goals when position is below', () => {
+    mockStores({
+      settings: { newTabPrimary: 'both', newTabCalendarPosition: 'below' },
+      calendarEnabled: true,
+    });
+
+    render(<GoalsSection />);
+
+    const calendar = screen.getByTestId('calendar-strip');
+    const goals = screen.getByText("Today's Focus");
+    // goals precedes calendar in document order
+    expect(
+      goals.compareDocumentPosition(calendar) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeGreaterThan(0);
+  });
+
+  it('changes the calendar position from the menu in both mode', async () => {
+    const user = userEvent.setup();
+    const { updateSettings } = mockStores({
+      settings: { newTabPrimary: 'both', newTabCalendarPosition: 'below' },
+      calendarEnabled: true,
+    });
+
+    render(<GoalsSection />);
+    await user.click(screen.getByRole('button', { name: 'View options' }));
+    await user.click(screen.getByRole('button', { name: 'Above goals' }));
+
+    expect(updateSettings).toHaveBeenCalledWith({ newTabCalendarPosition: 'above' });
+  });
+
+  it('hides the calendar-position control when not in both mode', async () => {
+    const user = userEvent.setup();
+    mockStores({ settings: { newTabPrimary: 'calendar' }, calendarEnabled: true });
+
+    render(<GoalsSection />);
+    await user.click(screen.getByRole('button', { name: 'View options' }));
+
+    expect(screen.queryByText('Calendar position')).not.toBeInTheDocument();
+  });
 });

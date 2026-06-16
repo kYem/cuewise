@@ -3,11 +3,14 @@ import {
   type GoalViewMode,
   getRecentIncompleteTasks,
   getUpcomingTasks,
+  type NewTabCalendarPosition,
 } from '@cuewise/shared';
 import { getStorageUsage, type StorageUsageInfo } from '@cuewise/storage';
 import { cn, Popover, PopoverContent, PopoverTrigger } from '@cuewise/ui';
 import {
   AlignJustify,
+  ArrowDown,
+  ArrowUp,
   Calendar,
   CalendarClock,
   Check,
@@ -16,6 +19,7 @@ import {
   Eye,
   History,
   List,
+  Rows3,
   Settings2,
   Target,
 } from 'lucide-react';
@@ -37,6 +41,12 @@ const VIEW_MODES: { mode: GoalViewMode; icon: typeof List; label: string }[] = [
   { mode: 'full', icon: List, label: 'Full' },
   { mode: 'compact', icon: AlignJustify, label: 'Compact' },
   { mode: 'focus', icon: Target, label: 'Focus' },
+];
+
+// Calendar-vs-goals order options shown in the menu when the primary is 'both'.
+const POSITION_OPTIONS: { pos: NewTabCalendarPosition; icon: typeof List; label: string }[] = [
+  { pos: 'above', icon: ArrowUp, label: 'Above goals' },
+  { pos: 'below', icon: ArrowDown, label: 'Below goals' },
 ];
 
 function getSubtitle(totalCount: number, incompleteCount: number): string {
@@ -120,14 +130,20 @@ export const GoalsSection: React.FC = () => {
   const viewMode = settings.goalViewMode;
 
   // Primary-area composition. Independent blocks (not an exclusive branch) so the
-  // future 'both' layout drops in by selecting both. Calendar needs the feature
-  // provisioned; otherwise we always fall back to goals so a stale 'calendar'
-  // setting never yields a dead state on an un-provisioned build.
+  // 'both' layout just selects both. Calendar needs the feature provisioned;
+  // otherwise we always fall back to goals so a stale 'calendar'/'both' setting
+  // never yields a dead state on an un-provisioned build.
   const calendarFeatureEnabled = isCalendarFeatureEnabled();
   const primary = settings.newTabPrimary;
+  const calendarPosition = settings.newTabCalendarPosition;
   const calendarActive = primary === 'calendar';
+  const bothActive = primary === 'both';
   const showCalendar = calendarFeatureEnabled && (primary === 'calendar' || primary === 'both');
   const showGoals = primary === 'goals' || primary === 'both' || !calendarFeatureEnabled;
+  // A goals density is "selected" only in pure goals mode (or an un-provisioned
+  // build, where goals always show). In 'calendar'/'both' the Calendar/Both entry
+  // owns the checkmark instead.
+  const goalsDensitySelected = primary === 'goals' || !calendarFeatureEnabled;
 
   useEffect(() => {
     initialize();
@@ -153,6 +169,14 @@ export const GoalsSection: React.FC = () => {
 
   const handleSelectCalendar = () => {
     updateSettings({ newTabPrimary: 'calendar' });
+  };
+
+  const handleSelectBoth = () => {
+    updateSettings({ newTabPrimary: 'both' });
+  };
+
+  const handleSelectCalendarPosition = (pos: NewTabCalendarPosition) => {
+    updateSettings({ newTabCalendarPosition: pos });
   };
 
   const handleToggleShowCompleted = () => {
@@ -213,7 +237,7 @@ export const GoalsSection: React.FC = () => {
         <div className="text-xs font-medium text-tertiary px-2 py-1">View Mode</div>
         <div className="space-y-0.5">
           {VIEW_MODES.map(({ mode, icon: Icon, label }) => {
-            const active = !calendarActive && viewMode === mode;
+            const active = goalsDensitySelected && viewMode === mode;
             return (
               <button
                 key={mode}
@@ -248,7 +272,52 @@ export const GoalsSection: React.FC = () => {
               {calendarActive && <Check className="w-4 h-4 ml-auto" />}
             </button>
           )}
+          {calendarFeatureEnabled && (
+            <button
+              type="button"
+              onClick={handleSelectBoth}
+              className={cn(
+                'w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-colors',
+                bothActive
+                  ? 'bg-primary-50 text-primary-600'
+                  : 'text-primary hover:bg-surface-variant'
+              )}
+            >
+              <Rows3 className="w-4 h-4" />
+              <span>Both</span>
+              {bothActive && <Check className="w-4 h-4 ml-auto" />}
+            </button>
+          )}
         </div>
+
+        {bothActive && (
+          <>
+            <div className="border-t border-border my-2" />
+            <div className="text-xs font-medium text-tertiary px-2 py-1">Calendar position</div>
+            <div className="space-y-0.5">
+              {POSITION_OPTIONS.map(({ pos, icon: Icon, label }) => {
+                const active = calendarPosition === pos;
+                return (
+                  <button
+                    key={pos}
+                    type="button"
+                    onClick={() => handleSelectCalendarPosition(pos)}
+                    className={cn(
+                      'w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-colors',
+                      active
+                        ? 'bg-primary-50 text-primary-600'
+                        : 'text-primary hover:bg-surface-variant'
+                    )}
+                  >
+                    <Icon className="w-4 h-4" />
+                    <span>{label}</span>
+                    {active && <Check className="w-4 h-4 ml-auto" />}
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        )}
 
         {showGoals &&
           (viewMode === 'focus' ? (
@@ -420,11 +489,12 @@ export const GoalsSection: React.FC = () => {
     return goalsContent;
   }
 
-  // Both: stack the calendar above the goals (above/below control is a follow-up).
+  // Both: stack the calendar and goals, ordered by the calendar-position setting.
   return (
     <div className="flex flex-col items-center gap-density-lg w-full">
-      <CalendarStrip />
+      {calendarPosition === 'above' && <CalendarStrip />}
       {goalsContent}
+      {calendarPosition === 'below' && <CalendarStrip />}
     </div>
   );
 };
