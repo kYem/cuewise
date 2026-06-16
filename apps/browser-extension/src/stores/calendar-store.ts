@@ -81,16 +81,22 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
         return;
       }
       const lastSync = new Date().toISOString();
-      set({ connected: true, events, lastSync, isLoading: false });
+      // Hold isLoading through the persist so a tick/visibility refresh can't slip
+      // past its in-flight guard into this tail and race the write.
+      set({ connected: true, events, lastSync });
       const result = await setCalendarState({ connected: true, events, lastSync });
       if (!result.success) {
         logger.error('Failed to persist calendar state', result.error);
         // Keep the working in-memory connection, but reflect the degraded state
         // so the strip's sync indicator isn't a misleading green.
-        set({ error: 'Connected, but saving failed; may not persist after reload' });
+        set({
+          isLoading: false,
+          error: 'Connected, but saving failed; may not persist after reload',
+        });
         useToastStore.getState().warning('Connected, but saving calendar state failed');
         return;
       }
+      set({ isLoading: false });
       useToastStore.getState().success('Google Calendar connected');
     } catch (error) {
       logger.error('Failed to connect calendar', error);
@@ -147,17 +153,24 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
         return;
       }
       const lastSync = new Date().toISOString();
-      set({ events, lastSync, isLoading: false });
+      // Hold isLoading through the persist so a concurrent tick/visibility
+      // refresh can't slip past the in-flight guard into this tail.
+      set({ events, lastSync });
       const result = await setCalendarState({ connected: true, events, lastSync });
       if (!result.success) {
         logger.error('Failed to persist calendar state', result.error);
         // Reflect the degraded state on the sync indicator even on a silent
         // (background) refresh; cleared on the next successful refresh.
-        set({ error: 'Refreshed, but saving failed; may not persist after reload' });
+        set({
+          isLoading: false,
+          error: 'Refreshed, but saving failed; may not persist after reload',
+        });
         if (!silent) {
           useToastStore.getState().warning('Refreshed, but saving calendar state failed');
         }
+        return;
       }
+      set({ isLoading: false });
     } catch (error) {
       logger.error('Failed to refresh calendar', error);
       set({ isLoading: false, error: 'Failed to refresh calendar' });

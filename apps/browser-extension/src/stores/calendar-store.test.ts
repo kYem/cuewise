@@ -203,6 +203,31 @@ describe('refresh', () => {
     expect(fetchTodayEventsMock).not.toHaveBeenCalled();
   });
 
+  it('holds the in-flight guard through the persist, blocking a concurrent refresh', async () => {
+    isAvailableMock.mockReturnValue(true);
+    useCalendarStore.setState({ connected: true });
+    let resolvePersist: (value: { success: boolean }) => void = () => {};
+    setCalendarStateMock.mockReturnValue(
+      new Promise<{ success: boolean }>((resolve) => {
+        resolvePersist = resolve;
+      })
+    );
+
+    const first = useCalendarStore.getState().refresh();
+    // Let the fetch resolve so the first refresh parks on the persist await.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(useCalendarStore.getState().isLoading).toBe(true);
+
+    // A second refresh now must bail on the in-flight guard, not start a fetch.
+    fetchTodayEventsMock.mockClear();
+    await useCalendarStore.getState().refresh();
+    expect(fetchTodayEventsMock).not.toHaveBeenCalled();
+
+    resolvePersist({ success: true });
+    await first;
+    expect(useCalendarStore.getState().isLoading).toBe(false);
+  });
+
   it('does not re-persist a connection that was disconnected mid-fetch', async () => {
     isAvailableMock.mockReturnValue(true);
     useCalendarStore.setState({ connected: true });
