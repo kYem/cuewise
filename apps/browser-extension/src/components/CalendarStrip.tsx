@@ -25,8 +25,13 @@ function formatTime(iso: string, twentyFour: boolean): string {
 }
 
 export const CalendarStrip: React.FC<CalendarStripProps> = ({ lean = false }) => {
-  const { connected, events, isLoading } = useCalendarStore(
-    useShallow((s) => ({ connected: s.connected, events: s.events, isLoading: s.isLoading }))
+  const { connected, events, isLoading, error } = useCalendarStore(
+    useShallow((s) => ({
+      connected: s.connected,
+      events: s.events,
+      isLoading: s.isLoading,
+      error: s.error,
+    }))
   );
   const connect = useCalendarStore((s) => s.connect);
   const refresh = useCalendarStore((s) => s.refresh);
@@ -54,10 +59,12 @@ export const CalendarStrip: React.FC<CalendarStripProps> = ({ lean = false }) =>
           <button
             type="button"
             onClick={connect}
-            className="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/15 px-4 py-2 text-sm font-medium transition-colors hover:bg-white/25"
+            disabled={isLoading}
+            className="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/15 px-4 py-2 text-sm font-medium transition-colors hover:bg-white/25 disabled:opacity-60"
           >
-            <Calendar className="w-4 h-4" /> Connect Google Calendar
+            <Calendar className="w-4 h-4" /> {isLoading ? 'Connecting…' : 'Connect Google Calendar'}
           </button>
+          {error && <p className="max-w-[260px] text-xs text-red-300">{error}</p>}
         </div>
       </div>
     );
@@ -88,8 +95,8 @@ export const CalendarStrip: React.FC<CalendarStripProps> = ({ lean = false }) =>
 
   const syncStatus = (
     <span className="flex items-center gap-1.5 text-xs text-white/55">
-      <span className="h-1.5 w-1.5 rounded-full bg-green-400" />
-      Calendar synced
+      <span className={`h-1.5 w-1.5 rounded-full ${error ? 'bg-red-400' : 'bg-green-400'}`} />
+      {error ? "Couldn't sync" : 'Calendar synced'}
     </span>
   );
 

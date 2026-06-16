@@ -7,7 +7,7 @@ export default defineManifest(async (env) => {
   // Empty until the user registers a client in Google Cloud. When absent, the
   // calendar optional-permissions/oauth2 block are omitted entirely so an
   // un-provisioned build ships a clean manifest (no empty client_id) and the
-  // feature runs in dev-sample / not-configured mode.
+  // companion is hidden (not-configured mode).
   const oauthClientId = loadEnv(env.mode, process.cwd(), '').VITE_GOOGLE_OAUTH_CLIENT_ID ?? '';
   const calendarEnabled = oauthClientId !== '';
 

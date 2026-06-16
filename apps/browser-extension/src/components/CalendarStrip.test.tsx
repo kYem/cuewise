@@ -42,6 +42,25 @@ describe('CalendarStrip - not connected', () => {
 
     expect(store.connect).toHaveBeenCalledOnce();
   });
+
+  it('surfaces a connection error beneath the connect button', () => {
+    const store = createCalendarStore({ connected: false, error: 'Failed to connect calendar' });
+    mountWith(store);
+
+    render(<CalendarStrip />);
+
+    expect(screen.getByText('Failed to connect calendar')).toBeInTheDocument();
+  });
+
+  it('shows a connecting state and disables the button while loading', () => {
+    const store = createCalendarStore({ connected: false, isLoading: true });
+    mountWith(store);
+
+    render(<CalendarStrip />);
+
+    const button = screen.getByRole('button', { name: /connecting/i });
+    expect(button).toBeDisabled();
+  });
 });
 
 describe('CalendarStrip - all-day events', () => {

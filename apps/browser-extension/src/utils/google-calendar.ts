@@ -50,7 +50,7 @@ export function isCalendarAvailable(): boolean {
   // chrome.identity: that API only appears once the user grants the optional
   // permission, yet the feature must be offered (the Connect button) before
   // then. In the Vite dev server `chrome` is absent, so this is false and
-  // callers take the sample-data path.
+  // Connect reports the calendar is unavailable (no events are fabricated).
   if (
     typeof chrome === 'undefined' ||
     !chrome.permissions?.request ||
@@ -63,9 +63,9 @@ export function isCalendarAvailable(): boolean {
 }
 
 // Whether to surface the calendar companion in the UI at all: a configured
-// OAuth client (installed extension) or the Vite dev server (sample-data
-// preview). A production build without a client id hides the companion entirely
-// so users never reach a dead "not set up" path.
+// OAuth client (installed extension), or the Vite dev server so the layout is
+// reviewable (Connect is unavailable there). A production build without a client
+// id hides the companion entirely so users never reach a dead "not set up" path.
 export function isCalendarFeatureEnabled(): boolean {
   return isCalendarAvailable() || import.meta.env.DEV;
 }
