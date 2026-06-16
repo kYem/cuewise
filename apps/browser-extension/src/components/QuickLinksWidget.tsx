@@ -10,18 +10,19 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuickLinksStore } from '../stores/quick-links-store';
 
-/** Build a local favicon URL via Chrome's `_favicon` API (needs the `favicon` permission). */
 function faviconUrl(url: string): string | null {
-  if (typeof chrome === 'undefined' || !chrome.runtime?.getURL) {
+  try {
+    const { hostname } = new URL(url);
+    return `https://www.google.com/s2/favicons?sz=32&domain=${encodeURIComponent(hostname)}`;
+  } catch {
     return null;
   }
-  return chrome.runtime.getURL(`/_favicon/?pageUrl=${encodeURIComponent(url)}&size=32`);
 }
 
 const TILE_CLASS =
   'flex h-10 w-10 items-center justify-center rounded-full bg-surface/80 backdrop-blur-sm shadow-md hover:shadow-lg hover:scale-110 transition-all';
 
-/** Favicon image with a theme-colored monogram fallback (dev / load failure). */
+/** Favicon image with a theme-colored monogram fallback on load failure. */
 const Favicon: React.FC<{ link: QuickLink }> = ({ link }) => {
   const src = faviconUrl(link.url);
   const [failed, setFailed] = useState(false);
@@ -31,7 +32,7 @@ const Favicon: React.FC<{ link: QuickLink }> = ({ link }) => {
     setFailed(false);
   }, [src]);
 
-  if (!src || failed) {
+  if (failed || src === null) {
     return (
       <span className="flex h-5 w-5 items-center justify-center rounded bg-primary-600/15 text-[11px] font-semibold text-primary-600">
         {quickLinkMonogram(link)}

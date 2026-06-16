@@ -308,20 +308,22 @@ function FocusSection({ s, set, filter }: SettingsSectionProps) {
           onChange={(v) => set({ focusModeEnabled: v })}
         />
       </SettingRow>
+      <SettingSubgroup>
+        <SettingRow
+          stack
+          label="Background"
+          filter={filter}
+          help="High-quality photos from Unsplash — also used as the Glass theme wallpaper"
+          keywords="image category nature forest ocean mountains minimal dark glass wallpaper"
+        >
+          <ThumbPicker
+            value={s.focusModeImageCategory}
+            onChange={(v: FocusImageCategory) => set({ focusModeImageCategory: v })}
+          />
+        </SettingRow>
+      </SettingSubgroup>
       {s.focusModeEnabled && (
         <SettingSubgroup>
-          <SettingRow
-            stack
-            label="Background"
-            filter={filter}
-            help="High-quality photos from Unsplash"
-            keywords="image category nature forest ocean mountains minimal dark"
-          >
-            <ThumbPicker
-              value={s.focusModeImageCategory}
-              onChange={(v: FocusImageCategory) => set({ focusModeImageCategory: v })}
-            />
-          </SettingRow>
           <SettingRow label="Show quote" filter={filter} keywords="quote overlay focus">
             <Switch
               label="Show quote"
