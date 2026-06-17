@@ -2,6 +2,7 @@ import { type CalendarEvent, logger } from '@cuewise/shared';
 import { getCalendarState, setCalendarState } from '@cuewise/storage';
 import { create } from 'zustand';
 import {
+  CalendarConsentError,
   connectCalendar,
   disconnectCalendar,
   fetchTodayEvents,
@@ -75,7 +76,8 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
       await connectCalendar();
       const events = await fetchTodayEvents();
       // The user may have disconnected while consent/fetch was in flight; don't
-      // resurrect the connection they just cleared (same guard as refresh()).
+      // resurrect the connection they just cleared (same epoch mechanism as
+      // refresh()/disconnect()).
       if (get().epoch !== epoch) {
         set({ isLoading: false });
         return;
@@ -99,6 +101,12 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
       set({ isLoading: false });
       useToastStore.getState().success('Google Calendar connected');
     } catch (error) {
+      // A cancelled permission/consent prompt is a deliberate "no", not a fault:
+      // return to the disconnected prompt with no error toast.
+      if (error instanceof CalendarConsentError) {
+        set({ isLoading: false, error: null });
+        return;
+      }
       logger.error('Failed to connect calendar', error);
       set({ isLoading: false, error: 'Failed to connect calendar' });
       useToastStore.getState().error('Failed to connect Google Calendar');

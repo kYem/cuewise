@@ -191,10 +191,11 @@ export const CalendarStrip: React.FC<CalendarStripProps> = ({
     visible = [...timed, ...allDay].slice(0, 3);
   }
 
-  // Single now-line at the first past→upcoming transition. Computed once (so
-  // overlapping events can't draw it twice) and transition-based rather than
-  // "first upcoming event" so a leading non-past all-day banner or a long event
-  // spanning now doesn't suppress it when real past events follow.
+  // Single now-line at the first past→upcoming transition (suppressed entirely in
+  // lean mode, which drops past events). Computed once (so overlapping events
+  // can't draw it twice) and transition-based rather than "first upcoming event"
+  // so a leading non-past all-day banner or a long event spanning now doesn't
+  // suppress it when real past events follow.
   const nowLineIndex = lean
     ? -1
     : visible.findIndex((e, i) => i > 0 && isPast(visible[i - 1]) && !isPast(e));

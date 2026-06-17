@@ -1,6 +1,7 @@
 import { getNextDayDateString, getTodayDateString, getYesterdayDateString } from '@cuewise/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  CalendarConsentError,
   connectCalendar,
   disconnectCalendar,
   fetchTodayEvents,
@@ -114,6 +115,28 @@ describe('connectCalendar', () => {
 
     await expect(connectCalendar()).rejects.toThrow('Calendar permission was not granted');
     expect(identity.getAuthToken).not.toHaveBeenCalled();
+  });
+
+  it('throws a CalendarConsentError (not a generic error) when permission is declined', async () => {
+    installIdentity({ clientId: 'abc.apps.googleusercontent.com', permissionGranted: false });
+
+    await expect(connectCalendar()).rejects.toBeInstanceOf(CalendarConsentError);
+  });
+
+  it('throws a CalendarConsentError when the user cancels the OAuth consent', async () => {
+    const { identity, runtime } = installIdentity({
+      clientId: 'abc.apps.googleusercontent.com',
+      permissionGranted: true,
+    });
+    // Permission is granted, but the interactive consent is cancelled.
+    identity.getAuthToken.mockImplementation(
+      (_details: unknown, cb: (r: { token?: string }) => void) => {
+        runtime.lastError = { message: 'The user did not approve access.' };
+        cb({ token: undefined });
+      }
+    );
+
+    await expect(connectCalendar()).rejects.toBeInstanceOf(CalendarConsentError);
   });
 });
 
@@ -334,6 +357,100 @@ describe('fetchTodayEvents', () => {
 
     expect(identity.removeCachedAuthToken).toHaveBeenCalledOnce();
     expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(events).toEqual([]);
+  });
+
+  it('throws when a second 401 follows the retry (re-minted token still rejected)', async () => {
+    const { identity } = installIdentity({
+      token: 'tok',
+      clientId: 'abc.apps.googleusercontent.com',
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false, status: 401, statusText: 'Unauthorized' })
+      .mockResolvedValueOnce({ ok: false, status: 401, statusText: 'Unauthorized' });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(fetchTodayEvents()).rejects.toThrow('Calendar API: 401');
+    expect(identity.removeCachedAuthToken).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries the 401 with a freshly minted token', async () => {
+    const { identity } = installIdentity({ clientId: 'abc.apps.googleusercontent.com' });
+    const tokens = ['stale', 'fresh'];
+    let mint = 0;
+    identity.getAuthToken.mockImplementation(
+      (_details: unknown, cb: (r: { token?: string }) => void) => cb({ token: tokens[mint++] })
+    );
+    const fetchMock = vi.fn(
+      (_url: string, _init: RequestInit): Promise<unknown> =>
+        Promise.resolve({ ok: true, json: () => Promise.resolve({ items: [] }) })
+    );
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 401, statusText: 'Unauthorized' });
+    fetchMock.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ items: [] }) });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await fetchTodayEvents();
+
+    expect(fetchMock.mock.calls[0][1].headers).toMatchObject({ Authorization: 'Bearer stale' });
+    expect(fetchMock.mock.calls[1][1].headers).toMatchObject({ Authorization: 'Bearer fresh' });
+  });
+
+  it('sends the bearer token and an abort signal, and rejects when aborted', async () => {
+    installIdentity({ token: 'tok', clientId: 'abc.apps.googleusercontent.com' });
+    const okMock = vi.fn(
+      (_url: string, _init: RequestInit): Promise<unknown> =>
+        Promise.resolve({ ok: true, json: () => Promise.resolve({ items: [] }) })
+    );
+    vi.stubGlobal('fetch', okMock);
+
+    await fetchTodayEvents();
+
+    const init = okMock.mock.calls[0][1];
+    expect(init.headers).toMatchObject({ Authorization: 'Bearer tok' });
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+
+    // A hung request that aborts must reject (so the store clears isLoading).
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.reject(new DOMException('timed out', 'TimeoutError')))
+    );
+    await expect(fetchTodayEvents()).rejects.toThrow();
+  });
+
+  it('requests primary events for the local day with the expected query params', async () => {
+    installIdentity({ token: 'tok', clientId: 'abc.apps.googleusercontent.com' });
+    const fetchMock = vi.fn(
+      (_url: string, _init: RequestInit): Promise<unknown> =>
+        Promise.resolve({ ok: true, json: () => Promise.resolve({ items: [] }) })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await fetchTodayEvents();
+
+    const url = fetchMock.mock.calls[0][0];
+    expect(url).toContain('/calendars/primary/events');
+    expect(url).toContain('singleEvents=true');
+    expect(url).toContain('orderBy=startTime');
+    expect(url).toContain('maxResults=25');
+    expect(url).toContain('timeZone=');
+    expect(url).toContain('timeMin=');
+    expect(url).toContain('timeMax=');
+  });
+
+  it('drops an all-day event whose exclusive end is today (ended at midnight)', async () => {
+    stubFetchItems([
+      {
+        id: 'ended',
+        summary: 'Yesterday all-day',
+        start: { date: getYesterdayDateString() },
+        end: { date: getTodayDateString() },
+      },
+    ]);
+
+    const events = await fetchTodayEvents();
+
     expect(events).toEqual([]);
   });
 

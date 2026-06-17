@@ -14,6 +14,7 @@ vi.mock('../utils/google-calendar', () => ({
   connectCalendar: vi.fn(),
   disconnectCalendar: vi.fn(),
   fetchTodayEvents: vi.fn(),
+  CalendarConsentError: class CalendarConsentError extends Error {},
 }));
 
 const successMock = vi.fn();
@@ -132,6 +133,19 @@ describe('connect', () => {
     expect(useCalendarStore.getState().error).toBeTruthy();
     expect(warningMock).toHaveBeenCalledWith('Connected, but saving calendar state failed');
     expect(successMock).not.toHaveBeenCalled();
+  });
+
+  it('treats a cancelled consent as a no-op — disconnected, no error toast', async () => {
+    isAvailableMock.mockReturnValue(true);
+    connectCalendarMock.mockRejectedValue(new gcal.CalendarConsentError('declined'));
+
+    await useCalendarStore.getState().connect();
+
+    const state = useCalendarStore.getState();
+    expect(state.connected).toBe(false);
+    expect(state.isLoading).toBe(false);
+    expect(state.error).toBeNull();
+    expect(errorToastMock).not.toHaveBeenCalled();
   });
 
   it('does not resurrect a connection disconnected during the handshake (epoch guard)', async () => {

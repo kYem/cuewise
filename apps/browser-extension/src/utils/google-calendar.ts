@@ -14,6 +14,19 @@ const CALENDAR_API = 'https://www.googleapis.com/calendar/v3';
 const REVOKE_URL = 'https://oauth2.googleapis.com/revoke';
 const REQUEST_TIMEOUT_MS = 15_000;
 
+// Thrown when the user cancels the optional-permission prompt or the Google
+// consent screen — a deliberate "no", not a failure, so the store can quietly
+// return to the disconnected state instead of showing a scary error.
+export class CalendarConsentError extends Error {}
+
+// Chrome's getAuthToken phrasing for a user-cancelled interactive consent.
+function isConsentDeclined(message: string | undefined): boolean {
+  if (!message) {
+    return false;
+  }
+  return /did not approve|not granted|access.+denied|canceled|cancelled|rejected/i.test(message);
+}
+
 // The optional permissions the calendar needs: requested together on Connect and
 // handed back on disconnect. Origins cover the Calendar API and token revoke.
 const CALENDAR_PERMISSIONS: chrome.permissions.Permissions = {
@@ -134,15 +147,24 @@ function requestCalendarPermission(): Promise<boolean> {
   });
 }
 
-// Grant the optional permissions, then run interactive Google consent. Throws if
-// the user declines either step so the store stays disconnected. Prompts the
-// first time; refreshes afterward are silent.
+// Grant the optional permissions, then run interactive Google consent. Throws
+// CalendarConsentError when the user cancels either step (so the store can treat
+// it as a cancellation, not a failure) and a generic Error on real faults.
+// Prompts the first time; refreshes afterward are silent.
 export async function connectCalendar(): Promise<void> {
   const granted = await requestCalendarPermission();
   if (!granted) {
-    throw new Error('Calendar permission was not granted');
+    throw new CalendarConsentError('Calendar permission was not granted');
   }
-  await getToken(true);
+  try {
+    await getToken(true);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : undefined;
+    if (isConsentDeclined(message)) {
+      throw new CalendarConsentError('Calendar consent was declined');
+    }
+    throw error;
+  }
 }
 
 // Evict a cached token so the next getToken() mints a fresh one — used after a

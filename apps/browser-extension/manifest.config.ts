@@ -34,9 +34,9 @@ export default defineManifest(async (env) => {
   // Calendar is opt-in: `identity` + the Google API hosts (Calendar API +
   // oauth2 token revoke) are declared optional and requested at runtime from the
   // Connect button (see google-calendar.ts), so users who never enable the
-  // calendar grant nothing Google-related at install. connect-src below still
-  // lists these hosts statically — CSP can't vary per user, but it isn't a
-  // user-facing grant.
+  // calendar grant nothing Google-related at install. connect-src below adds
+  // these hosts only on calendar-provisioned builds — CSP is fixed per build, not
+  // per user, but it isn't itself a user-facing grant.
   const optionalPermissions: string[] = [];
   const optionalHostPermissions: string[] = [];
   if (calendarEnabled) {

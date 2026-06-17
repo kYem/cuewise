@@ -235,7 +235,6 @@ export const GoalsSection: React.FC = () => {
           })}
         </div>
 
-        {/* Calendar add-on: one row — toggle on/off, plus an above/below arrow when on. */}
         {calendarFeatureEnabled && (
           <>
             <div className="border-t border-border my-2" />
