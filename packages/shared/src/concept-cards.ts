@@ -8,6 +8,7 @@ import {
   CONCEPT_NUDGE_MAX_SHOWS,
 } from './constants';
 import type { ConceptCard, ConceptGrade, ConceptSchedule } from './types';
+import type { NudgeShowState } from './utils';
 
 /**
  * Spaced repetition for concept cards — a simplified SM-2 with three grades.
@@ -18,11 +19,11 @@ import type { ConceptCard, ConceptGrade, ConceptSchedule } from './types';
 
 // Grade metadata for the recall UI (Again / Good / Easy). Colors are applied in
 // the component from theme tokens, so this stays DOM-free.
-export const CONCEPT_GRADES: { id: ConceptGrade; label: string; hint: string }[] = [
+export const CONCEPT_GRADES = [
   { id: 'again', label: 'Again', hint: 'Forgot' },
   { id: 'good', label: 'Good', hint: 'Recalled' },
   { id: 'easy', label: 'Easy', hint: 'Knew it' },
-];
+] as const satisfies readonly { id: ConceptGrade; label: string; hint: string }[];
 
 /** Initial review schedule for a brand-new card — due immediately. */
 export function newConceptSchedule(today: Date): ConceptSchedule {
@@ -41,23 +42,26 @@ export function projectConceptInterval(schedule: ConceptSchedule, grade: Concept
   const reps = schedule.repetitions || 0;
   const iv = schedule.interval || 0;
 
-  if (grade === 'again') {
-    return 0;
-  }
-  if (grade === 'good') {
-    if (reps === 0) {
-      return 1;
+  // Exhaustive switch: a future grade becomes a compile error, not silent math.
+  switch (grade) {
+    case 'again':
+      return 0;
+    case 'good': {
+      if (reps === 0) {
+        return 1;
+      }
+      if (reps === 1) {
+        return 6;
+      }
+      return Math.max(1, Math.round(iv * ease));
     }
-    if (reps === 1) {
-      return 6;
+    case 'easy': {
+      if (reps === 0) {
+        return 4;
+      }
+      return Math.max(4, Math.round((iv || 1) * ease * 1.3));
     }
-    return Math.max(1, Math.round(iv * ease));
   }
-  // easy
-  if (reps === 0) {
-    return 4;
-  }
-  return Math.max(4, Math.round((iv || 1) * ease * 1.3));
 }
 
 /** Friendly relative-time label for a day-count interval (e.g. "6d", "2w"). */
@@ -81,13 +85,14 @@ export function conceptIntervalLabel(days: number): string {
 }
 
 function nextEaseFactor(ease: number, grade: ConceptGrade): number {
-  if (grade === 'again') {
-    return Math.max(CONCEPT_EASE_MIN, ease - 0.2);
+  switch (grade) {
+    case 'again':
+      return Math.max(CONCEPT_EASE_MIN, ease - 0.2);
+    case 'easy':
+      return ease + 0.15;
+    case 'good':
+      return ease;
   }
-  if (grade === 'easy') {
-    return ease + 0.15;
-  }
-  return ease;
 }
 
 /** Apply a grade: returns the card with its review schedule advanced. Pure. */
@@ -135,12 +140,6 @@ export function getDueConceptCards(cards: ConceptCard[], today: Date): ConceptCa
     });
 }
 
-export interface ConceptNudgeState {
-  dismissed: boolean;
-  count: number;
-  lastShownAt: string | null; // yyyy-MM-dd of the last show
-}
-
 /**
  * Whether to show the one-time discovery nudge. Surfaces only for an engaged
  * user (≥ N quote views) who has no concept cards yet — capped at a couple of
@@ -150,7 +149,7 @@ export function shouldShowConceptNudge(params: {
   enabled: boolean;
   conceptCount: number;
   totalQuoteViews: number;
-  state: ConceptNudgeState;
+  state: NudgeShowState;
   today: string;
 }): boolean {
   const { enabled, conceptCount, totalQuoteViews, state, today } = params;

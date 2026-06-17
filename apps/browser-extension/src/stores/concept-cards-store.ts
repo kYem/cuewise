@@ -18,15 +18,10 @@ const SAVE_ERROR_MESSAGE = 'Failed to save concept. Please try again.';
 const DELETE_ERROR_MESSAGE = 'Failed to delete concept. Please try again.';
 const REVIEW_ERROR_MESSAGE = 'Failed to save review. Please try again.';
 
-interface ConceptCardExtras {
-  details?: string;
-  tags?: string[];
-  source?: string;
-}
+// Optional content fields, derived from ConceptCard so the two stay in lockstep.
+type ConceptCardExtras = Pick<ConceptCard, 'details' | 'tags' | 'source'>;
 
-type ConceptCardUpdates = Partial<
-  Pick<ConceptCard, 'term' | 'definition' | 'details' | 'tags' | 'source'>
->;
+type ConceptCardUpdates = Partial<Pick<ConceptCard, 'term' | 'definition'> & ConceptCardExtras>;
 
 interface ConceptCardsStore {
   cards: ConceptCard[];

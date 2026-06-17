@@ -10,6 +10,15 @@ import { useConceptCardsStore } from '../stores/concept-cards-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { ConceptCardDisplay } from './ConceptCardDisplay';
 
+// "1 in N tabs" period per ambient cadence; 'every'/'off' are handled before this
+// lookup, so adding a cadence forces an explicit period here (compile error otherwise).
+const CADENCE_PERIOD: Record<'third' | 'ten', number> = { third: 3, ten: 10 };
+
+interface SurfacingDecision {
+  show: boolean;
+  total: number;
+}
+
 // Whether this tab opens with a concept at all. 'queue' always surfaces the due
 // pile; 'ambient' draws per cadence so a card lands roughly "1 in N tabs".
 function cadenceAllows(framing: ConceptFraming, cadence: ConceptCadence): boolean {
@@ -22,8 +31,7 @@ function cadenceAllows(framing: ConceptFraming, cadence: ConceptCadence): boolea
   if (cadence === 'every') {
     return true;
   }
-  const period = cadence === 'third' ? 3 : 10;
-  return Math.random() < 1 / period;
+  return Math.random() < 1 / CADENCE_PERIOD[cadence];
 }
 
 interface ConceptRotationProps {
@@ -52,7 +60,7 @@ export const ConceptRotation: React.FC<ConceptRotationProps> = ({ fallback, onAd
   const reviewCard = useConceptCardsStore((state) => state.reviewCard);
 
   const [handledIds, setHandledIds] = useState<string[]>([]);
-  const [decision, setDecision] = useState<{ show: boolean; total: number } | null>(null);
+  const [decision, setDecision] = useState<SurfacingDecision | null>(null);
   const [grading, setGrading] = useState(false);
 
   useEffect(() => {

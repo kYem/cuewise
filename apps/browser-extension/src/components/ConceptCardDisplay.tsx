@@ -10,11 +10,11 @@ import { BookOpen, Brain, ChevronRight, Eye, Plus, Repeat } from 'lucide-react';
 import type React from 'react';
 import { useState } from 'react';
 
-// Grade accent colors — error/success adapt per theme; easy is a calm blue.
+// Grade accent colors, all theme tokens: error (red), success (green), brand violet.
 const GRADE_COLOR: Record<ConceptGrade, string> = {
   again: 'var(--color-error)',
   good: 'var(--color-success)',
-  easy: 'oklch(0.7 0.13 235)',
+  easy: 'var(--color-primary-600)',
 };
 
 interface ConceptCardDisplayProps {
