@@ -1,9 +1,11 @@
 import { formatClockTime, formatLongDate, getGreeting } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
-import { BarChart3, BookMarked, Flag, PanelRight, Settings, Timer } from 'lucide-react';
+import { BarChart3, BookMarked, Brain, Flag, PanelRight, Settings, Timer } from 'lucide-react';
 import type React from 'react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useConceptNudge } from '../hooks/useConceptNudge';
 import { useReviewPrompt } from '../hooks/useReviewPrompt';
+import { useConceptCardsStore } from '../stores/concept-cards-store';
 import { useGoalStore } from '../stores/goal-store';
 import { usePomodoroStorageSync, usePomodoroStore } from '../stores/pomodoro-store';
 import { useQuoteStore } from '../stores/quote-store';
@@ -11,8 +13,12 @@ import { useSettingsStore } from '../stores/settings-store';
 import { preloadImages } from '../utils/image-preload-cache';
 import { ActivePomodoroWidget } from './ActivePomodoroWidget';
 import { Clock } from './Clock';
+import { ConceptForm } from './ConceptForm';
+import { ConceptNudge } from './ConceptNudge';
+import { ConceptRotation } from './ConceptRotation';
 import { GoalsSection } from './GoalsSection';
 import { GoalButton } from './goals';
+import { Modal } from './Modal';
 import { QuickLinksWidget } from './QuickLinksWidget';
 import { QuoteDisplay } from './QuoteDisplay';
 import { ReminderWidget } from './ReminderWidget';
@@ -29,6 +35,16 @@ export const NewTabPage: React.FC = () => {
   const showThemeSwitcher = useSettingsStore((state) => state.settings.showThemeSwitcher);
   const showClock = useSettingsStore((state) => state.settings.showClock);
   const showQuickLinks = useSettingsStore((state) => state.settings.showQuickLinks);
+  const conceptCardsEnabled = useSettingsStore((state) => state.settings.conceptCardsEnabled);
+  const conceptNudgeDismissed = useSettingsStore((state) => state.settings.conceptNudgeDismissed);
+  const conceptNudgeCount = useSettingsStore((state) => state.settings.conceptNudgeCount);
+  const conceptNudgeLastShownAt = useSettingsStore(
+    (state) => state.settings.conceptNudgeLastShownAt
+  );
+  const quotes = useQuoteStore((state) => state.quotes);
+  const conceptCards = useConceptCardsStore((state) => state.cards);
+  const conceptsLoading = useConceptCardsStore((state) => state.isLoading);
+  const initializeConcepts = useConceptCardsStore((state) => state.initialize);
   const timeFormat = useSettingsStore((state) => state.settings.timeFormat);
   const focusModeImageCategory = useSettingsStore((state) => state.settings.focusModeImageCategory);
   const quoteDisplayMode = useSettingsStore((state) => state.settings.quoteDisplayMode);
@@ -49,6 +65,7 @@ export const NewTabPage: React.FC = () => {
   usePomodoroStorageSync();
 
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isAddConceptOpen, setIsAddConceptOpen] = useState(false);
   const [isWelcomeOpen, setIsWelcomeOpen] = useState(false);
 
   const reviewPrompt = useReviewPrompt({
@@ -60,6 +77,20 @@ export const NewTabPage: React.FC = () => {
     dismissed: reviewPromptDismissed,
     count: reviewPromptCount,
     lastShownAt: reviewPromptLastShownAt,
+    updateSettings,
+  });
+  const totalQuoteViews = useMemo(
+    () => quotes.reduce((sum, quote) => sum + (quote.viewCount ?? 0), 0),
+    [quotes]
+  );
+  const conceptNudge = useConceptNudge({
+    ready: !settingsLoading && !conceptsLoading,
+    enabled: conceptCardsEnabled,
+    conceptCount: conceptCards.length,
+    totalQuoteViews,
+    dismissed: conceptNudgeDismissed,
+    count: conceptNudgeCount,
+    lastShownAt: conceptNudgeLastShownAt,
     updateSettings,
   });
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -109,7 +140,8 @@ export const NewTabPage: React.FC = () => {
     initializeQuotes();
     initializeSettings();
     initializePomodoro();
-  }, [initializeQuotes, initializeSettings, initializePomodoro]);
+    initializeConcepts();
+  }, [initializeQuotes, initializeSettings, initializePomodoro, initializeConcepts]);
 
   // Show welcome modal on first visit
   useEffect(() => {
@@ -182,6 +214,11 @@ export const NewTabPage: React.FC = () => {
   const handleOpenQuoteManagement = () => {
     setIsMenuOpen(false);
     window.location.hash = 'quotes';
+  };
+
+  const handleOpenConcepts = () => {
+    setIsMenuOpen(false);
+    window.location.hash = 'concepts';
   };
 
   const handleOpenSettings = () => {
@@ -288,6 +325,15 @@ export const NewTabPage: React.FC = () => {
                     >
                       <BookMarked className="w-5 h-5 text-primary-600" />
                       <span className="text-sm font-medium">Manage Quotes</span>
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={handleOpenConcepts}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-primary hover:bg-surface-variant transition-colors border-t border-divider"
+                    >
+                      <Brain className="w-5 h-5 text-primary-600" />
+                      <span className="text-sm font-medium">Concepts</span>
                     </button>
                     <button
                       type="button"
@@ -406,6 +452,15 @@ export const NewTabPage: React.FC = () => {
                 <button
                   type="button"
                   role="menuitem"
+                  onClick={handleOpenConcepts}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-primary hover:bg-surface-variant transition-colors border-t border-divider"
+                >
+                  <Brain className="w-5 h-5 text-primary-600" />
+                  <span className="text-sm font-medium">Concepts</span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
                   onClick={handleOpenInsights}
                   className="w-full flex items-center gap-3 px-4 py-3 text-primary hover:bg-surface-variant transition-colors border-t border-divider"
                 >
@@ -450,9 +505,14 @@ export const NewTabPage: React.FC = () => {
           {/* Quote Display Section - Top position (normal or compact) */}
           {quoteDisplayMode !== 'hidden' && quoteDisplayMode !== 'bottom' && (
             <div className="flex justify-center">
-              <QuoteDisplay
-                onManualRefresh={() => setLastManualRefresh(Date.now())}
-                variant={quoteDisplayMode === 'compact' ? 'compact' : 'normal'}
+              <ConceptRotation
+                onAdd={() => setIsAddConceptOpen(true)}
+                fallback={
+                  <QuoteDisplay
+                    onManualRefresh={() => setLastManualRefresh(Date.now())}
+                    variant={quoteDisplayMode === 'compact' ? 'compact' : 'normal'}
+                  />
+                }
               />
             </div>
           )}
@@ -461,6 +521,16 @@ export const NewTabPage: React.FC = () => {
           <div className="max-w-4xl mx-auto">
             <GoalsSection />
           </div>
+
+          {/* Concept-cards discovery nudge (engaged users with no cards yet) */}
+          {conceptNudge.isVisible && (
+            <div className="flex justify-center">
+              <ConceptNudge
+                onAdd={() => setIsAddConceptOpen(true)}
+                onDismiss={conceptNudge.onDismiss}
+              />
+            </div>
+          )}
         </div>
 
         {/* Spacer for center/top positioning - pushes quote to bottom */}
@@ -471,10 +541,15 @@ export const NewTabPage: React.FC = () => {
         {quoteDisplayMode === 'bottom' && (
           <div className="pt-8 pb-4 w-full flex-shrink-0">
             <div className="flex justify-center">
-              <QuoteDisplay
-                onManualRefresh={() => setLastManualRefresh(Date.now())}
-                variant="compact"
-                position="bottom"
+              <ConceptRotation
+                onAdd={() => setIsAddConceptOpen(true)}
+                fallback={
+                  <QuoteDisplay
+                    onManualRefresh={() => setLastManualRefresh(Date.now())}
+                    variant="compact"
+                    position="bottom"
+                  />
+                }
               />
             </div>
           </div>
@@ -486,6 +561,19 @@ export const NewTabPage: React.FC = () => {
 
       {/* Settings Modal */}
       <SettingsModal isOpen={isSettingsModalOpen} onClose={() => setIsSettingsModalOpen(false)} />
+
+      {/* Add Concept Modal */}
+      <Modal
+        isOpen={isAddConceptOpen}
+        onClose={() => setIsAddConceptOpen(false)}
+        title="Add a concept"
+        size="md"
+      >
+        <ConceptForm
+          onSuccess={() => setIsAddConceptOpen(false)}
+          onCancel={() => setIsAddConceptOpen(false)}
+        />
+      </Modal>
 
       {/* Welcome Modal - First-time users */}
       <WelcomeModal isOpen={isWelcomeOpen} onClose={handleCloseWelcome} />

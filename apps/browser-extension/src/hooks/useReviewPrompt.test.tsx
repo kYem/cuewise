@@ -1,9 +1,9 @@
 import {
   type Goal,
   getTodayDateString,
+  type NudgeShowState,
   type PomodoroSession,
   REVIEW_URL,
-  type ReviewPromptState,
 } from '@cuewise/shared';
 import {
   breakPomodoroFactory,
@@ -33,7 +33,7 @@ interface HarnessProps {
   pomodoroIdle?: boolean;
   hasSeenOnboarding?: boolean;
   // Seeds the modelled store; defaults to a never-shown prompt.
-  initialState?: ReviewPromptState;
+  initialState?: NudgeShowState;
   updateSpy: (patch: Record<string, unknown>) => void;
 }
 

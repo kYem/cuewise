@@ -483,7 +483,7 @@ export function getRecentIncompleteTasks(goals: Goal[], daysBack = 14): Goal[] {
   return goals.filter((g) => isTask(g) && !g.completed && g.date !== today && g.date >= cutoff);
 }
 
-export interface ReviewPromptState {
+export interface NudgeShowState {
   dismissed: boolean;
   count: number;
   lastShownAt: string | null;
@@ -504,7 +504,7 @@ export function shouldShowReviewPrompt(params: {
   streakCurrent: number;
   completedPomodoros: number;
   hasSeenOnboarding: boolean;
-  state: ReviewPromptState;
+  state: NudgeShowState;
   today: string;
 }): boolean {
   const { streakCurrent, completedPomodoros, hasSeenOnboarding, state, today } = params;

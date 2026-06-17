@@ -1,5 +1,7 @@
 // Export all types
 
+// Export concept-card spaced repetition
+export * from './concept-cards';
 // Export constants
 export * from './constants';
 // Export CSV utilities

@@ -3,6 +3,7 @@
  */
 
 import {
+  type ConceptCard,
   type DailyBackground,
   DEFAULT_SETTINGS,
   type FocusImageCategory,
@@ -196,6 +197,18 @@ export async function setQuickLinks(links: QuickLink[]): Promise<StorageResult> 
   return setInStorage(STORAGE_KEYS.QUICK_LINKS, links, area);
 }
 
+// Concept Cards (spaced-repetition learning cards)
+export async function getConceptCards(): Promise<ConceptCard[]> {
+  const area = await getStorageArea();
+  const cards = await getFromStorage<ConceptCard[]>(STORAGE_KEYS.CONCEPT_CARDS, area);
+  return cards ?? [];
+}
+
+export async function setConceptCards(cards: ConceptCard[]): Promise<StorageResult> {
+  const area = await getStorageArea();
+  return setInStorage(STORAGE_KEYS.CONCEPT_CARDS, cards, area);
+}
+
 // Pomodoro Sessions
 export async function getPomodoroSessions(): Promise<PomodoroSession[]> {
   const area = await getStorageArea();
@@ -350,6 +363,8 @@ export async function migrateStorageData(
       (await getFromStorage<QuoteCollection[]>(STORAGE_KEYS.COLLECTIONS, fromArea)) ?? [];
     const quickLinks =
       (await getFromStorage<QuickLink[]>(STORAGE_KEYS.QUICK_LINKS, fromArea)) ?? [];
+    const conceptCards =
+      (await getFromStorage<ConceptCard[]>(STORAGE_KEYS.CONCEPT_CARDS, fromArea)) ?? [];
 
     // Copy data to destination storage area
     // Note: Seed quotes are not migrated (always in local storage)
@@ -364,6 +379,7 @@ export async function migrateStorageData(
     results.push(await setInStorage(STORAGE_KEYS.POMODORO_SESSIONS, sessions, toArea));
     results.push(await setInStorage(STORAGE_KEYS.COLLECTIONS, collections, toArea));
     results.push(await setInStorage(STORAGE_KEYS.QUICK_LINKS, quickLinks, toArea));
+    results.push(await setInStorage(STORAGE_KEYS.CONCEPT_CARDS, conceptCards, toArea));
 
     // Check if any operation failed
     const failedResult = results.find((r) => !r.success);
