@@ -20,11 +20,14 @@ const REQUEST_TIMEOUT_MS = 15_000;
 export class CalendarConsentError extends Error {}
 
 // Chrome's getAuthToken phrasing for a user-cancelled interactive consent.
+// Deliberately narrow: broad tokens like "not granted"/"rejected" also match
+// genuine faults ("Calendar permission not granted", "OAuth2 not granted or
+// revoked") that must surface as errors, not be silently swallowed.
 function isConsentDeclined(message: string | undefined): boolean {
   if (!message) {
     return false;
   }
-  return /did not approve|not granted|access.+denied|canceled|cancelled|rejected/i.test(message);
+  return /did not approve|access_denied|user (?:canceled|cancelled|denied)/i.test(message);
 }
 
 // The optional permissions the calendar needs: requested together on Connect and

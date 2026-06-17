@@ -148,6 +148,20 @@ describe('connect', () => {
     expect(errorToastMock).not.toHaveBeenCalled();
   });
 
+  it('keeps the prior sync error when a Reconnect is cancelled', async () => {
+    isAvailableMock.mockReturnValue(true);
+    useCalendarStore.setState({ connected: true, error: 'Failed to refresh calendar' });
+    connectCalendarMock.mockRejectedValue(new gcal.CalendarConsentError('declined'));
+
+    await useCalendarStore.getState().connect();
+
+    const state = useCalendarStore.getState();
+    // Still connected with the red sync indicator — not a falsely-healthy state.
+    expect(state.connected).toBe(true);
+    expect(state.error).toBe('Failed to refresh calendar');
+    expect(errorToastMock).not.toHaveBeenCalled();
+  });
+
   it('does not resurrect a connection disconnected during the handshake (epoch guard)', async () => {
     isAvailableMock.mockReturnValue(true);
     // Simulate the user disconnecting (epoch bump + connected:false) while the

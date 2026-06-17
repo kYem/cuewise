@@ -70,6 +70,9 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
       useToastStore.getState().error(message);
       return;
     }
+    // Remember the pre-attempt error so a cancelled Reconnect (which only shows
+    // when an error is set) can restore it instead of falsely clearing it.
+    const priorError = get().error;
     set({ isLoading: true, error: null, epoch: get().epoch + 1 });
     const epoch = get().epoch;
     try {
@@ -102,9 +105,10 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
       useToastStore.getState().success('Google Calendar connected');
     } catch (error) {
       // A cancelled permission/consent prompt is a deliberate "no", not a fault:
-      // return to the disconnected prompt with no error toast.
+      // restore the pre-attempt state (no toast). For a fresh connect priorError
+      // is null; for a declined Reconnect it keeps the prior sync error visible.
       if (error instanceof CalendarConsentError) {
-        set({ isLoading: false, error: null });
+        set({ isLoading: false, error: priorError });
         return;
       }
       logger.error('Failed to connect calendar', error);

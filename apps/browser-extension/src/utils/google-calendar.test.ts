@@ -138,6 +138,23 @@ describe('connectCalendar', () => {
 
     await expect(connectCalendar()).rejects.toBeInstanceOf(CalendarConsentError);
   });
+
+  it('does not misclassify a genuine token fault as a cancellation', async () => {
+    const { identity, runtime } = installIdentity({
+      clientId: 'abc.apps.googleusercontent.com',
+      permissionGranted: true,
+    });
+    // A revoked/expired grant is a real fault, not a user cancellation — it must
+    // propagate (so the store surfaces it), not be swallowed as a consent decline.
+    identity.getAuthToken.mockImplementation(
+      (_details: unknown, cb: (r: { token?: string }) => void) => {
+        runtime.lastError = { message: 'OAuth2 not granted or revoked.' };
+        cb({ token: undefined });
+      }
+    );
+
+    await expect(connectCalendar()).rejects.toThrow('OAuth2 not granted or revoked.');
+  });
 });
 
 describe('disconnectCalendar', () => {
