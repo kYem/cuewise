@@ -1,6 +1,6 @@
 import { createSelectorMock } from '@cuewise/test-utils';
 import { conceptCardFactory } from '@cuewise/test-utils/factories';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useConceptCardsStore } from '../stores/concept-cards-store';
 import { useSettingsStore } from '../stores/settings-store';
@@ -76,5 +76,30 @@ describe('ConceptRotation', () => {
     fireEvent.click(screen.getByRole('button', { name: /good/i }));
 
     expect(reviewCard).toHaveBeenCalledWith(dueCard.id, 'good');
+  });
+
+  it('yields back to the quote after grading in ambient framing', async () => {
+    setup({ framing: 'ambient', cards: [dueCard] });
+
+    render(<ConceptRotation fallback={<div>QUOTE</div>} />);
+    fireEvent.click(screen.getByRole('button', { name: /reveal answer/i }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /good/i }));
+    });
+
+    expect(screen.getByText('QUOTE')).toBeInTheDocument();
+    expect(screen.queryByText('Saga pattern')).not.toBeInTheDocument();
+  });
+
+  it('clears the queue once the only due card is graded', async () => {
+    setup({ framing: 'queue', cards: [dueCard] });
+
+    render(<ConceptRotation fallback={<div>QUOTE</div>} />);
+    fireEvent.click(screen.getByRole('button', { name: /reveal answer/i }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /good/i }));
+    });
+
+    expect(screen.getByText('QUOTE')).toBeInTheDocument();
   });
 });
