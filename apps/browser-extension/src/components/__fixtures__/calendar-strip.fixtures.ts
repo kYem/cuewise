@@ -1,4 +1,4 @@
-import type { CalendarEvent } from '@cuewise/shared';
+import type { AllDayCalendarEvent, CalendarEvent, TimedCalendarEvent } from '@cuewise/shared';
 
 // Re-export the canonical selector mock so CalendarStrip tests use the shared one.
 export { createSelectorMock } from '@cuewise/test-utils';
@@ -30,10 +30,15 @@ export function createCalendarStore(overrides: Partial<MockCalendarStore> = {}):
   };
 }
 
-export function timedEvent(id: string, start: string, end: string, title = id): CalendarEvent {
+export function timedEvent(id: string, start: string, end: string, title = id): TimedCalendarEvent {
   return { id, title, start, end, allDay: false };
 }
 
-export function allDayEvent(id: string, date: string, nextDate: string, title = id): CalendarEvent {
-  return { id, title, start: date, end: nextDate, allDay: true };
+export function allDayEvent(
+  id: string,
+  date: string,
+  nextDate: string,
+  title = id
+): AllDayCalendarEvent {
+  return { id, title, startDate: date, endDate: nextDate, allDay: true };
 }

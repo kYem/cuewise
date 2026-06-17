@@ -274,8 +274,7 @@ describe('fetchTodayEvents', () => {
     const events = await fetchTodayEvents();
 
     expect(events).toHaveLength(1);
-    expect(events[0].allDay).toBe(true);
-    expect(events[0].start).toBe(today);
+    expect(events[0]).toMatchObject({ allDay: true, startDate: today });
     expect(events[0].color).toBeUndefined();
   });
 

@@ -114,23 +114,23 @@ function getToken(interactive: boolean): Promise<string> {
   });
 }
 
-// Returns null for malformed rows (no start/end) so callers can drop them
-// rather than emit a CalendarEvent with empty strings that break `new Date(...)`.
+// Returns null for malformed rows (missing or mixed start/end) so callers can
+// drop them rather than emit an event with empty/half-typed times. A timed event
+// has dateTime on both ends; an all-day event has date on both.
 function mapEvent(item: GoogleEvent): CalendarEvent | null {
-  const start = item.start?.dateTime ?? item.start?.date;
-  const end = item.end?.dateTime ?? item.end?.date;
-  if (!start || !end) {
-    return null;
-  }
-  return {
+  const base = {
     id: item.id,
     title: item.summary ?? '(no title)',
-    start,
-    end,
-    allDay: !item.start?.dateTime,
     color: item.colorId ? EVENT_COLORS[item.colorId] : undefined,
     htmlLink: item.htmlLink,
   };
+  if (item.start?.dateTime && item.end?.dateTime) {
+    return { ...base, allDay: false, start: item.start.dateTime, end: item.end.dateTime };
+  }
+  if (item.start?.date && item.end?.date) {
+    return { ...base, allDay: true, startDate: item.start.date, endDate: item.end.date };
+  }
+  return null;
 }
 
 // Request the optional permissions. Must be called from a user gesture (the
@@ -220,8 +220,12 @@ export async function fetchTodayEvents(): Promise<CalendarEvent[]> {
   // all-day event only when today falls in its [start, end) date range (end is
   // exclusive); timed events already sit inside the requested instant window.
   const today = getTodayDateString();
-  const withinToday = (event: CalendarEvent): boolean =>
-    !event.allDay || (event.start <= today && today < event.end);
+  const withinToday = (event: CalendarEvent): boolean => {
+    if (!event.allDay) {
+      return true;
+    }
+    return event.startDate <= today && today < event.endDate;
+  };
   return (data.items ?? [])
     .filter((item) => !isDismissed(item))
     .map(mapEvent)

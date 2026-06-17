@@ -214,16 +214,29 @@ export type ConceptCadence = 'every' | 'third' | 'ten' | 'off';
 // Calm occasional nudge vs an explicit "N due today" review pile
 export type ConceptFraming = 'ambient' | 'queue';
 
-// Google Calendar (read-only) — shown beside the Pomodoro timer
-export interface CalendarEvent {
+// Google Calendar (read-only) — shown beside the Pomodoro timer.
+// Discriminated on `allDay` so the two time representations can't be confused:
+// timed events carry full ISO datetimes (safe for `new Date(...)`), all-day
+// events carry date-only YYYY-MM-DD strings (UTC-parsed — never feed them to
+// `new Date()` as instants). Callers must narrow on `allDay` before reading the
+// time fields, which makes that mistake unrepresentable.
+interface CalendarEventBase {
   id: string;
   title: string;
-  start: string; // ISO datetime; date-only for all-day events
-  end: string; // ISO datetime
-  allDay: boolean;
   color?: string; // accent color (hex) for the strip
   htmlLink?: string; // link to the event in Google Calendar
 }
+export interface TimedCalendarEvent extends CalendarEventBase {
+  allDay: false;
+  start: string; // ISO datetime
+  end: string; // ISO datetime
+}
+export interface AllDayCalendarEvent extends CalendarEventBase {
+  allDay: true;
+  startDate: string; // YYYY-MM-DD
+  endDate: string; // YYYY-MM-DD (exclusive)
+}
+export type CalendarEvent = TimedCalendarEvent | AllDayCalendarEvent;
 
 // Persisted calendar connection + cached events
 export interface CalendarState {
