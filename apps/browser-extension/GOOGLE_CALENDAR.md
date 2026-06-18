@@ -108,7 +108,7 @@ as `VITE_EXTENSION_KEY`, and register that ID as a **separate** dev OAuth client
 kept in Testing. Extra upkeep, and that client stays unverified — avoid unless
 needed.
 
-## Verifying
+## Verifying (locally)
 
 In the installed extension, open the Pomodoro page, set the companion to
 **Calendar** (or **Both**) in Settings, and click **Connect Google Calendar**.
@@ -118,3 +118,50 @@ nothing fetches a token on page load). Disconnecting revokes the token and
 removes the optional permission, so a follow-up connect prompts again. The dev
 server (`pnpm dev`) has no `chrome.identity`, so Connect reports the calendar
 isn't available there — there is no sample data to preview.
+
+## Publishing & sensitive-scope verification
+
+`calendar.readonly` is a **Sensitive** scope (not **Restricted**). That means
+Google approves it through the standard OAuth app verification — brand review +
+scope justification + a demo video — and it does **not** require the annual
+third-party security assessment (CASA) that restricted scopes (full Gmail/Drive)
+do. Reading only the primary calendar, read-only, keeps us on the lighter path.
+
+### Two publish modes (OAuth consent screen → Publishing status)
+
+| | **Testing** | **In production (verified)** |
+| --- | --- | --- |
+| Google review | none | required (sensitive scope) |
+| Audience | ≤100 named *Test users* | unlimited |
+| Consent screen | "Google hasn't verified this app" warning | clean |
+| Token lifetime | test refresh tokens expire after 7 days | normal |
+
+The 7-day test-token expiry is largely invisible here: `getAuthToken` re-mints
+silently and `fetchTodayEvents` evicts a stale token and retries on a 401
+(`google-calendar.ts`), so refreshes self-heal.
+
+### Verification flow (to go production)
+
+1. **Verify the domain** (`cuewise.app`) in Google Search Console and add it to
+   the consent screen's *Authorized domains*.
+2. **Privacy policy URL** disclosing the Google data use + Limited Use — already
+   written (`apps/website/src/pages/privacy.astro`, "Google Calendar
+   Integration" card; it states access is client-side, read-only, and revocable).
+3. **Scope justification** for `calendar.readonly` (consent screen's "How will
+   the scopes be used?").
+4. **Demo video** (unlisted YouTube) showing the OAuth consent screen with the
+   exact scope and how the data is used in-product. This is the one artifact not
+   yet produced.
+5. Submit and respond to any reviewer follow-ups. Sensitive-scope review is
+   typically days to a couple of weeks.
+
+Verification lives on the **consent screen / project**, so it covers the
+Chrome-Extension OAuth client automatically — no per-client step, and the
+extension itself doesn't change when the status flips to production.
+
+### Recommended sequence
+
+Ship in **Testing** to a small beta (≤100 test users) now — no review needed —
+while verifying the domain and recording the demo video in parallel. Flip the
+consent screen to **In production** once approved; the client id, manifest, and
+extension code stay identical.
