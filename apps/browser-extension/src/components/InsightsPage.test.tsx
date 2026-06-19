@@ -109,6 +109,8 @@ describe('InsightsPage — Concepts tab', () => {
       fireEvent.click(tab);
     }
     expect(screen.getByTestId('concept-insights')).toBeInTheDocument();
+    // Overview content is hidden while the Concepts tab is active.
+    expect(screen.queryByText('Category Insights')).toBeNull();
 
     // Last card deleted -> showConcepts flips false while the Concepts tab is active.
     setup({ enabled: true, cards: [] });
@@ -116,5 +118,8 @@ describe('InsightsPage — Concepts tab', () => {
 
     expect(screen.queryByTestId('concept-insights')).toBeNull();
     expect(conceptsTab()).toBeNull();
+    // The reset effect must have switched activeTab back to Overview — this fails
+    // if that effect is removed (activeTab would stay 'concepts', Overview hidden).
+    expect(screen.getByText('Category Insights')).toBeInTheDocument();
   });
 });
