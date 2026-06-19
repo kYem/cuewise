@@ -27,6 +27,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { useCalendarStore } from '../stores/calendar-store';
 import { useGoalStore } from '../stores/goal-store';
 import { useSettingsStore } from '../stores/settings-store';
+import { resolveNewTabCalendar } from '../utils/calendar-visibility';
 import { isCalendarFeatureEnabled } from '../utils/google-calendar';
 import { CalendarStrip } from './CalendarStrip';
 import { ErrorFallback } from './ErrorFallback';
@@ -122,10 +123,13 @@ export const GoalsSection: React.FC = () => {
   const viewMode = settings.goalViewMode;
 
   // Goals always show (with their density); the calendar is an optional add-on
-  // stacked above/below, gated on the integration being provisioned.
+  // stacked above/below. calendarFeatureEnabled gates the options-menu control;
+  // resolveNewTabCalendar folds that gate into the user's toggle for the strip.
   const calendarFeatureEnabled = isCalendarFeatureEnabled();
-  const calendarPosition = settings.newTabCalendarPosition;
-  const showCalendar = calendarFeatureEnabled && settings.newTabShowCalendar;
+  const { show: showCalendar, position: calendarPosition } = resolveNewTabCalendar(
+    settings,
+    calendarFeatureEnabled
+  );
 
   useEffect(() => {
     initialize();
