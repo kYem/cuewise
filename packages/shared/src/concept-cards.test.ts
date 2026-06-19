@@ -240,7 +240,9 @@ describe('Concept card spaced repetition', () => {
       expect(stats.retentionPct).toBe(50); // 2 reviewed, 1 never lapsed
       expect(stats.needsAttention).toEqual([]);
       expect(stats.dueForecast).toHaveLength(7);
-      expect(stats.dueForecast[0]).toEqual({ date: '2026-06-16', count: 1 });
+      // today's bar carries all due (incl. the overdue 'master') and reconciles with `due`
+      expect(stats.dueForecast[0]).toEqual({ date: '2026-06-16', count: 2 });
+      expect(stats.dueForecast[0].count).toBe(stats.due);
       expect(stats.dueForecast[3]).toEqual({ date: '2026-06-19', count: 1 });
     });
 
@@ -252,6 +254,41 @@ describe('Concept card spaced repetition', () => {
 
       expect(stats.learning).toBe(1);
       expect(stats.mastered).toBe(1);
+    });
+
+    it('buckets a lapsed (relearning) card as learning, not new', () => {
+      const relearning = card({
+        id: 'relearn',
+        schedule: schedule({
+          repetitions: 0,
+          interval: 0,
+          lapses: 1,
+          lastReviewedAt: '2026-06-15T00:00:00.000Z',
+        }),
+      });
+      const fresh = card({ id: 'fresh', schedule: schedule({ repetitions: 0, interval: 0 }) });
+
+      const stats = getConceptStats([relearning, fresh], TODAY);
+
+      expect(stats.newCount).toBe(1); // only 'fresh' is truly new
+      expect(stats.learning).toBe(1); // 'relearn' has review history
+    });
+
+    it('averages ease over reviewed cards only', () => {
+      const reviewedLowEase = card({
+        id: 'r',
+        schedule: schedule({
+          easeFactor: 1.5,
+          repetitions: 3,
+          interval: 10,
+          lastReviewedAt: '2026-06-10T00:00:00.000Z',
+        }),
+      });
+      const brandNew = card({ id: 'n', schedule: schedule({ easeFactor: 2.5, repetitions: 0 }) });
+
+      const stats = getConceptStats([reviewedLowEase, brandNew], TODAY);
+
+      expect(stats.avgEase).toBe(1.5); // the never-reviewed 2.5 default is excluded
     });
 
     it('returns null retention and ease for an empty deck', () => {

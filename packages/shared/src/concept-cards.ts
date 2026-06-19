@@ -181,7 +181,12 @@ const FORECAST_DAYS = 7;
  * schedule (no review log). `today` is passed in so the result is deterministic.
  */
 export function getConceptStats(cards: ConceptCard[], today: Date): ConceptStats {
-  const todayStr = format(today, 'yyyy-MM-dd');
+  // forecastDays[0] is today; the rest are the next 6 calendar days.
+  const forecastDays = Array.from({ length: FORECAST_DAYS }, (_, i) =>
+    format(addDays(today, i), 'yyyy-MM-dd')
+  );
+  const todayStr = forecastDays[0];
+  const forecastCounts = new Array(FORECAST_DAYS).fill(0);
   let due = 0;
   let newCount = 0;
   let learning = 0;
@@ -192,10 +197,20 @@ export function getConceptStats(cards: ConceptCard[], today: Date): ConceptStats
 
   for (const concept of cards) {
     const s = concept.schedule;
+    // Today's forecast bar carries everything due (incl. overdue), so it
+    // reconciles with `due`; later bars are that exact day's cards.
     if (s.dueDate <= todayStr) {
       due += 1;
+      forecastCounts[0] += 1;
+    } else {
+      const dayIndex = forecastDays.indexOf(s.dueDate);
+      if (dayIndex > 0) {
+        forecastCounts[dayIndex] += 1;
+      }
     }
-    if (s.repetitions === 0) {
+    // A card is "New" only until its first review; an "again" grade resets
+    // repetitions to 0 but keeps lastReviewedAt, so a lapsed card is "Learning".
+    if (s.repetitions === 0 && !s.lastReviewedAt) {
       newCount += 1;
     } else if (s.interval < MASTERED_INTERVAL_DAYS) {
       learning += 1;
@@ -204,22 +219,14 @@ export function getConceptStats(cards: ConceptCard[], today: Date): ConceptStats
     }
     if (s.lastReviewedAt) {
       reviewed += 1;
+      easeSum += s.easeFactor;
       if (s.lapses === 0) {
         neverLapsed += 1;
       }
     }
-    easeSum += s.easeFactor;
   }
 
-  const dueForecast: { date: string; count: number }[] = [];
-  for (let i = 0; i < FORECAST_DAYS; i += 1) {
-    const dayStr = format(addDays(today, i), 'yyyy-MM-dd');
-    dueForecast.push({
-      date: dayStr,
-      count: cards.filter((concept) => concept.schedule.dueDate === dayStr).length,
-    });
-  }
-
+  const dueForecast = forecastDays.map((date, i) => ({ date, count: forecastCounts[i] }));
   const needsAttention = cards
     .filter((concept) => concept.schedule.lapses >= 2)
     .sort((a, b) => b.schedule.lapses - a.schedule.lapses);
@@ -231,7 +238,7 @@ export function getConceptStats(cards: ConceptCard[], today: Date): ConceptStats
     learning,
     mastered,
     retentionPct: reviewed === 0 ? null : Math.round((neverLapsed / reviewed) * 100),
-    avgEase: cards.length === 0 ? null : easeSum / cards.length,
+    avgEase: reviewed === 0 ? null : easeSum / reviewed,
     needsAttention,
     dueForecast,
   };

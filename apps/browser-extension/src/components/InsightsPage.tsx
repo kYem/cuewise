@@ -50,6 +50,14 @@ export const InsightsPage: React.FC = () => {
     initializeConcepts();
   }, [initializeConcepts]);
 
+  // If the Concepts tab is open but its data goes away (feature disabled or the
+  // last card deleted), fall back to Overview so the page never renders blank.
+  useEffect(() => {
+    if (!showConcepts && activeTab === 'concepts') {
+      setActiveTab('overview');
+    }
+  }, [showConcepts, activeTab]);
+
   if (isLoading) {
     return (
       <div className="min-h-screen w-full p-8 bg-background flex items-center justify-center">

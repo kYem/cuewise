@@ -1,7 +1,7 @@
 import { type ConceptStats, getConceptStats } from '@cuewise/shared';
 import { AlertTriangle } from 'lucide-react';
 import type React from 'react';
-import { useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import { useConceptCardsStore } from '../stores/concept-cards-store';
 
 const StatCard: React.FC<{ label: string; value: string | number; hint?: string }> = ({
@@ -24,13 +24,9 @@ const CompositionItem: React.FC<{ label: string; value: number }> = ({ label, va
 );
 
 export const ConceptInsights: React.FC = () => {
+  // The store is initialized + gated (cards present) by InsightsPage before this
+  // renders, so no init is needed here.
   const cards = useConceptCardsStore((state) => state.cards);
-  const initialize = useConceptCardsStore((state) => state.initialize);
-
-  useEffect(() => {
-    initialize();
-  }, [initialize]);
-
   const stats: ConceptStats = useMemo(() => getConceptStats(cards, new Date()), [cards]);
 
   if (stats.total === 0) {
