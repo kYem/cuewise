@@ -1,0 +1,20 @@
+{
+  "projectId": "6edd7ce0-6566-481b-ae1c-7a5e76fb9ce7",
+  "shape": "package",
+  "pkg": "@cuewise/ui",
+  "globalName": "CuewiseUI",
+  "srcDir": "src",
+  "tsconfig": "tsconfig.json",
+  "buildCmd": "node .design-sync/prepare.mjs",
+  "entry": "packages/ui/dist/ds-entry.mjs",
+  "cssEntry": "dist/cuewise.css",
+  "readmeHeader": ".design-sync/conventions.md",
+  "guidelinesGlob": ["../../.design-sync/guidelines/**/*.md"],
+  "overrides": {
+    "Select": { "cardMode": "column" },
+    "Textarea": { "cardMode": "column" },
+    "ChartContainer": { "cardMode": "column" },
+    "Popover": { "cardMode": "single", "viewport": "380x300" },
+    "ToastContainer": { "cardMode": "single", "viewport": "400x420" }
+  }
+}

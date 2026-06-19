@@ -1,0 +1,7 @@
+/* design-sync: Tailwind entry for the CueWise UI design bundle.
+   Imports the extension's real token/theme stylesheet, then explicitly scans
+   the @cuewise/ui sources so every utility class the components use is emitted
+   (auto source-detection alone may not reach the sibling package). */
+@import "../apps/browser-extension/src/index.css";
+@source "../packages/ui/src";
+@source "../apps/browser-extension/src";
