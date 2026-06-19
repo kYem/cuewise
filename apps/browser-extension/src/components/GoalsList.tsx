@@ -451,9 +451,12 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
                         </div>
                       </div>
 
-                      {/* Full mode: read-only subtasks revealed by the inline n/m toggle */}
+                      {/* Full mode: read-only subtasks revealed by the inline n/m toggle.
+                        Suppressed while the add-field is open so it doesn't double up
+                        with the editable list below (which renders the same rows). */}
                       {viewMode === 'full' &&
                         !isEditing(goal.id) &&
+                        addingSubtaskId !== goal.id &&
                         expandedSubtaskId === goal.id &&
                         (goal.subtasks?.length ?? 0) > 0 && (
                           <div className="mt-1.5 pl-9 space-y-1">

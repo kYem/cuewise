@@ -256,6 +256,42 @@ describe('GoalsList - Subtasks', () => {
     expect(screen.getByText('Beta sub')).toBeInTheDocument();
     expect(screen.queryByText('Alpha sub')).not.toBeInTheDocument();
   });
+
+  // Regression: expanding subtasks then opening the add-field used to render the
+  // read-only list and the editable list at once, showing every subtask twice.
+  it('does not duplicate existing subtasks while the add-field is open', async () => {
+    const user = userEvent.setup();
+    const task = taskWithSubtasksFactory.build({ text: 'Plan trip' });
+    const store = createMockGoalStore({ todayTasks: [task], goals: [task] });
+    vi.mocked(useGoalStore).mockImplementation(createGoalStoreMock(store));
+
+    render(<GoalsList />);
+    await user.click(screen.getByRole('button', { name: 'Show subtasks' }));
+    await user.click(screen.getByRole('button', { name: 'Plan trip' }));
+    await user.click(screen.getByRole('button', { name: 'Add subtask' }));
+
+    expect(screen.getByLabelText('Add a subtask')).toBeInTheDocument();
+    expect(screen.getAllByText('Subtask 1')).toHaveLength(1);
+  });
+
+  // Bookend to the above: committing the new subtask must close the add-field and
+  // leave the existing subtasks rendered once (read-only list returns, no overlap).
+  it('shows existing subtasks exactly once after committing a new one', async () => {
+    const user = userEvent.setup();
+    const task = taskWithSubtasksFactory.build({ text: 'Plan trip' });
+    const store = createMockGoalStore({ todayTasks: [task], goals: [task] });
+    vi.mocked(useGoalStore).mockImplementation(createGoalStoreMock(store));
+
+    render(<GoalsList />);
+    await user.click(screen.getByRole('button', { name: 'Show subtasks' }));
+    await user.click(screen.getByRole('button', { name: 'Plan trip' }));
+    await user.click(screen.getByRole('button', { name: 'Add subtask' }));
+    await user.type(screen.getByLabelText('Add a subtask'), 'Book flights{Enter}');
+
+    expect(store.addSubtask).toHaveBeenCalledWith(task.id, 'Book flights');
+    expect(screen.queryByLabelText('Add a subtask')).not.toBeInTheDocument();
+    expect(screen.getAllByText('Subtask 1')).toHaveLength(1);
+  });
 });
 
 describe('GoalsList - Reorder', () => {
