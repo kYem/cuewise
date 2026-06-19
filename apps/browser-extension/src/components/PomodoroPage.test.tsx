@@ -94,6 +94,18 @@ describe('PomodoroPage - companion selection', () => {
     expect(initCalendar).toHaveBeenCalled();
   });
 
+  // 'both' is a distinct render branch (lean strip + category-less quote); make
+  // sure the feature gate collapses it to a plain quote too, not just 'calendar'.
+  it('falls back to the quote companion in "both" mode when the feature is disabled', () => {
+    setup('both', false);
+
+    render(<PomodoroPage />);
+
+    expect(screen.getByTestId('quote-display')).toBeInTheDocument();
+    expect(screen.queryByTestId('calendar-strip')).not.toBeInTheDocument();
+    expect(initCalendar).not.toHaveBeenCalled();
+  });
+
   it('does not initialize calendar for the default quote companion', () => {
     setup('quote', true);
 

@@ -1,9 +1,10 @@
 import type { NewTabCalendarPosition, PomodoroCompanion } from '@cuewise/shared';
 import { isCalendarFeatureEnabled } from './google-calendar';
 
-// Single source of truth for whether/where the calendar surfaces render. Every
-// resolver folds the build-time feature gate (isCalendarFeatureEnabled) into the
-// user's setting, so a build shipped without an OAuth client id — or a stale
+// Single source of truth for whether/where the calendar surfaces appear (and
+// what the Pomodoro companion falls back to when it's off). Every resolver folds
+// the build-time feature gate (isCalendarFeatureEnabled) into the user's
+// setting, so a build shipped without an OAuth client id — or a stale
 // 'calendar' setting synced from a provisioned profile — can never surface the
 // calendar. `featureEnabled` defaults to the live gate; pass it explicitly in
 // tests, or to share one gate read across resolvers.
