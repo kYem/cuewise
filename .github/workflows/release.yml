@@ -81,9 +81,18 @@ jobs:
 
       - name: Build all packages
         run: pnpm build
+        env:
+          # Public Chrome-Extension OAuth client id (ships in the manifest). When
+          # set, the build provisions the Google Calendar integration; empty ->
+          # the companion stays hidden. Set as a repo variable, not a secret.
+          VITE_GOOGLE_OAUTH_CLIENT_ID: ${{ vars.VITE_GOOGLE_OAUTH_CLIENT_ID }}
 
       - name: Build extension zip
         run: pnpm release:extension
+        env:
+          # release:extension rebuilds the extension (build:store), so the id
+          # must be present here too — this is the build that gets zipped.
+          VITE_GOOGLE_OAUTH_CLIENT_ID: ${{ vars.VITE_GOOGLE_OAUTH_CLIENT_ID }}
 
       - name: Get version from package.json
         id: version

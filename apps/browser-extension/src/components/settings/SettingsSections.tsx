@@ -3,8 +3,10 @@ import {
   type ConceptFraming,
   type FocusImageCategory,
   type FocusPosition,
+  formatHourMinute,
   NOTIFICATION_SOUNDS,
   type NotificationSoundType,
+  type PomodoroCompanion,
   type QuoteDisplayMode,
   type ReminderPanelLayout,
   type SettingsLogLevel,
@@ -26,6 +28,7 @@ import {
 } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useState } from 'react';
+import { isCalendarFeatureEnabled } from '../../utils/google-calendar';
 import { previewSound } from '../../utils/sounds';
 import { PresetGrid } from './PresetGrid';
 import {
@@ -124,7 +127,7 @@ function intervalLabel(seconds: number): string {
 
 function hourLabel(hour: number, timeFormat: TimeFormat): string {
   if (timeFormat === '12h') {
-    return `${hour % 12 || 12}:00 ${hour >= 12 ? 'PM' : 'AM'}`;
+    return formatHourMinute(hour);
   }
   return `${String(hour).padStart(2, '0')}:00`;
 }
@@ -194,6 +197,27 @@ function TimerSection({ s, set, filter }: SettingsSectionProps) {
           onChange={(v) => set({ pomodoroLongBreakInterval: v })}
         />
       </SettingRow>
+      {isCalendarFeatureEnabled() && (
+        <>
+          <SettingDivider />
+          <SettingRow
+            label="Companion"
+            filter={filter}
+            help="What shows beside the timer"
+            keywords="pomodoro companion quote calendar agenda schedule beside timer up next"
+          >
+            <Segmented
+              value={s.pomodoroCompanion}
+              options={[
+                { value: 'quote', label: 'Quote' },
+                { value: 'calendar', label: 'Calendar' },
+                { value: 'both', label: 'Both' },
+              ]}
+              onChange={(v) => set({ pomodoroCompanion: v as PomodoroCompanion })}
+            />
+          </SettingRow>
+        </>
+      )}
     </div>
   );
 }

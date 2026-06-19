@@ -85,7 +85,7 @@ export const GoalButton: React.FC<GoalButtonProps> = ({ className = '' }) => {
           createPortal(
             <div
               ref={dropdownRef}
-              className="fixed z-[100] min-w-[200px] bg-surface rounded-xl shadow-xl border border-border overflow-hidden animate-in fade-in-0 zoom-in-95 duration-150"
+              className="fixed z-[100] min-w-[200px] bg-surface rounded-xl shadow-xl border border-border overflow-hidden animate-fade-in"
               style={{
                 top: (triggerRef.current?.getBoundingClientRect().bottom ?? 0) + 8,
                 left: triggerRef.current?.getBoundingClientRect().left ?? 0,

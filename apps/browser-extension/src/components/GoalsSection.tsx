@@ -8,6 +8,9 @@ import { getStorageUsage, type StorageUsageInfo } from '@cuewise/storage';
 import { cn, Popover, PopoverContent, PopoverTrigger } from '@cuewise/ui';
 import {
   AlignJustify,
+  ArrowDown,
+  ArrowUp,
+  Calendar,
   CalendarClock,
   Check,
   CheckCircle2,
@@ -21,8 +24,12 @@ import {
 import type React from 'react';
 import { useEffect, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
+import { useCalendarStore } from '../stores/calendar-store';
 import { useGoalStore } from '../stores/goal-store';
 import { useSettingsStore } from '../stores/settings-store';
+import { resolveNewTabCalendar } from '../utils/calendar-visibility';
+import { isCalendarFeatureEnabled } from '../utils/google-calendar';
+import { CalendarStrip } from './CalendarStrip';
 import { ErrorFallback } from './ErrorFallback';
 import { GoalFocusView } from './GoalFocusView';
 import { GoalProgressRing } from './GoalProgressRing';
@@ -94,6 +101,7 @@ export const GoalsSection: React.FC = () => {
   // Settings - use useShallow for multiple values, individual selector for action
   const settings = useSettingsStore(useShallow((state) => state.settings));
   const updateSettings = useSettingsStore((state) => state.updateSettings);
+  const initCalendar = useCalendarStore((state) => state.initialize);
   const [storageUsage, setStorageUsage] = useState<StorageUsageInfo | null>(null);
   const [showAddInput, setShowAddInput] = useState(false);
 
@@ -114,10 +122,26 @@ export const GoalsSection: React.FC = () => {
 
   const viewMode = settings.goalViewMode;
 
+  // Goals always show (with their density); the calendar is an optional add-on
+  // stacked above/below. calendarFeatureEnabled gates the options-menu control;
+  // resolveNewTabCalendar folds that gate into the user's toggle for the strip.
+  const calendarFeatureEnabled = isCalendarFeatureEnabled();
+  const { show: showCalendar, position: calendarPosition } = resolveNewTabCalendar(
+    settings,
+    calendarFeatureEnabled
+  );
+
   useEffect(() => {
     initialize();
     loadStorageInfo();
   }, [initialize]);
+
+  // Only touch calendar state when the calendar block is actually shown.
+  useEffect(() => {
+    if (showCalendar) {
+      initCalendar();
+    }
+  }, [showCalendar, initCalendar]);
 
   const loadStorageInfo = async () => {
     const usage = await getStorageUsage();
@@ -126,6 +150,14 @@ export const GoalsSection: React.FC = () => {
 
   const handleModeChange = (mode: GoalViewMode) => {
     updateSettings({ goalViewMode: mode });
+  };
+
+  const handleToggleCalendar = () => {
+    updateSettings({ newTabShowCalendar: !settings.newTabShowCalendar });
+  };
+
+  const handleToggleCalendarPosition = () => {
+    updateSettings({ newTabCalendarPosition: calendarPosition === 'above' ? 'below' : 'above' });
   };
 
   const handleToggleShowCompleted = () => {
@@ -185,24 +217,76 @@ export const GoalsSection: React.FC = () => {
       <PopoverContent className="w-56 p-2 bg-surface/95 backdrop-blur-xl" align="end">
         <div className="text-xs font-medium text-tertiary px-2 py-1">View Mode</div>
         <div className="space-y-0.5">
-          {VIEW_MODES.map(({ mode, icon: Icon, label }) => (
-            <button
-              key={mode}
-              type="button"
-              onClick={() => handleModeChange(mode)}
-              className={cn(
-                'w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-colors',
-                viewMode === mode
-                  ? 'bg-primary-50 text-primary-600'
-                  : 'text-primary hover:bg-surface-variant'
-              )}
-            >
-              <Icon className="w-4 h-4" />
-              <span>{label}</span>
-              {viewMode === mode && <Check className="w-4 h-4 ml-auto" />}
-            </button>
-          ))}
+          {VIEW_MODES.map(({ mode, icon: Icon, label }) => {
+            const active = viewMode === mode;
+            return (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => handleModeChange(mode)}
+                className={cn(
+                  'w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-colors',
+                  active
+                    ? 'bg-primary-50 text-primary-600'
+                    : 'text-primary hover:bg-surface-variant'
+                )}
+              >
+                <Icon className="w-4 h-4" />
+                <span>{label}</span>
+                {active && <Check className="w-4 h-4 ml-auto" />}
+              </button>
+            );
+          })}
         </div>
+
+        {calendarFeatureEnabled && (
+          <>
+            <div className="border-t border-border my-2" />
+            <div className="flex items-center gap-2 px-2 py-1.5 text-sm text-primary">
+              <Calendar className="w-4 h-4" />
+              <span className="flex-1 text-left">Calendar</span>
+              {settings.newTabShowCalendar && (
+                <button
+                  type="button"
+                  onClick={handleToggleCalendarPosition}
+                  aria-label={
+                    calendarPosition === 'above' ? 'Calendar above goals' : 'Calendar below goals'
+                  }
+                  title={
+                    calendarPosition === 'above'
+                      ? 'Above goals — move below'
+                      : 'Below goals — move above'
+                  }
+                  className="flex h-6 w-6 items-center justify-center rounded-md text-secondary transition-colors hover:bg-surface-variant hover:text-primary"
+                >
+                  {calendarPosition === 'above' ? (
+                    <ArrowUp className="w-4 h-4" />
+                  ) : (
+                    <ArrowDown className="w-4 h-4" />
+                  )}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={handleToggleCalendar}
+                role="switch"
+                aria-checked={settings.newTabShowCalendar}
+                aria-label="Show calendar"
+                className={cn(
+                  'relative w-8 h-[18px] rounded-full transition-colors flex-shrink-0',
+                  settings.newTabShowCalendar ? 'bg-primary-600' : 'bg-divider'
+                )}
+              >
+                <span
+                  className={cn(
+                    'absolute top-0.5 left-0.5 w-3.5 h-3.5 rounded-full bg-white transition-transform',
+                    settings.newTabShowCalendar && 'translate-x-3.5'
+                  )}
+                />
+              </button>
+            </div>
+          </>
+        )}
 
         {viewMode === 'focus' ? (
           todayTasks.length > 1 && (
@@ -275,9 +359,11 @@ export const GoalsSection: React.FC = () => {
     </Popover>
   );
 
-  // Focus mode renders without container wrapper
-  if (viewMode === 'focus') {
-    return (
+  const minHeight = viewMode === 'compact' ? '' : 'min-h-[120px]';
+
+  // Goals block: focus renders centered without the card; full/compact use the card.
+  const goalsContent =
+    viewMode === 'focus' ? (
       <div className="group flex items-center justify-center gap-3 w-full max-w-4xl mx-auto">
         {/* Focus view - centered */}
         <GoalFocusView showAddInput={showAddInput} onCloseAddInput={() => setShowAddInput(false)} />
@@ -287,75 +373,88 @@ export const GoalsSection: React.FC = () => {
           {optionsMenu('bg-white/10 hover:bg-white/20 text-secondary/80 border-white/10')}
         </div>
       </div>
-    );
-  }
-
-  const minHeight = viewMode === 'compact' ? '' : 'min-h-[120px]';
-
-  // Full and Compact modes render with container
-  return (
-    <div className="w-full max-w-[400px] mx-auto">
-      <div
-        className={cn(
-          'group bg-surface/80 backdrop-blur-sm rounded-2xl shadow-lg p-5 border border-border flex flex-col',
-          minHeight
-        )}
-      >
-        {/* Header */}
-        {viewMode === 'full' ? (
-          <div className="flex items-center gap-2.5 mb-4">
-            {totalCount > 0 ? (
-              <GoalProgressRing completed={completedCount} total={totalCount} size={40} />
-            ) : (
-              <div className="w-10 h-10 flex items-center justify-center rounded-xl bg-primary-100 flex-shrink-0">
-                <Target className="w-5 h-5 text-primary-600" />
+    ) : (
+      <div className="w-full max-w-[400px] mx-auto">
+        <div
+          className={cn(
+            'group bg-surface/80 backdrop-blur-sm rounded-2xl shadow-lg p-5 border border-border flex flex-col',
+            minHeight
+          )}
+        >
+          {/* Header */}
+          {viewMode === 'full' ? (
+            <div className="flex items-center gap-2.5 mb-4">
+              {totalCount > 0 ? (
+                <GoalProgressRing completed={completedCount} total={totalCount} size={40} />
+              ) : (
+                <div className="w-10 h-10 flex items-center justify-center rounded-xl bg-primary-100 flex-shrink-0">
+                  <Target className="w-5 h-5 text-primary-600" />
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <h2 className="text-base font-semibold text-primary font-display">Today's Focus</h2>
+                <p className="text-xs text-secondary">{subtitle}</p>
               </div>
-            )}
-            <div className="flex-1 min-w-0">
-              <h2 className="text-base font-semibold text-primary font-display">Today's Focus</h2>
-              <p className="text-xs text-secondary">{subtitle}</p>
+              {optionsMenu()}
             </div>
-            {optionsMenu()}
-          </div>
-        ) : (
-          <div className="flex items-center gap-2 mb-2.5">
-            <Target className="w-4 h-4 text-primary-600 flex-shrink-0" />
-            <h2 className="text-base font-semibold text-primary font-display flex-1">
-              Today's Focus
-            </h2>
-            {totalCount > 0 && (
-              <span className="text-xs text-secondary tabular-nums">
-                {completedCount}/{totalCount}
-              </span>
-            )}
-            {optionsMenu()}
-          </div>
-        )}
+          ) : (
+            <div className="flex items-center gap-2 mb-2.5">
+              <Target className="w-4 h-4 text-primary-600 flex-shrink-0" />
+              <h2 className="text-base font-semibold text-primary font-display flex-1">
+                Today's Focus
+              </h2>
+              {totalCount > 0 && (
+                <span className="text-xs text-secondary tabular-nums">
+                  {completedCount}/{totalCount}
+                </span>
+              )}
+              {optionsMenu()}
+            </div>
+          )}
 
-        {/* Full Mode Content */}
-        {viewMode === 'full' && (
-          <>
-            {/* Storage Warning - only show if warning or critical */}
-            {storageUsage && (storageUsage.isWarning || storageUsage.isCritical) && (
-              <div className="mb-4">
-                <StorageIndicator mode="compact" />
+          {/* Full Mode Content */}
+          {viewMode === 'full' && (
+            <>
+              {/* Storage Warning - only show if warning or critical */}
+              {storageUsage && (storageUsage.isWarning || storageUsage.isCritical) && (
+                <div className="mb-4">
+                  <StorageIndicator mode="compact" />
+                </div>
+              )}
+
+              {/* Goals List (tiles + bottom add input + history + upcoming) */}
+              <div className="flex-1">
+                <GoalsList viewMode="full" />
               </div>
-            )}
+            </>
+          )}
 
-            {/* Goals List (tiles + bottom add input + history + upcoming) */}
+          {/* Compact Mode Content */}
+          {viewMode === 'compact' && (
             <div className="flex-1">
-              <GoalsList viewMode="full" />
+              <GoalsList viewMode="compact" />
             </div>
-          </>
-        )}
-
-        {/* Compact Mode Content */}
-        {viewMode === 'compact' && (
-          <div className="flex-1">
-            <GoalsList viewMode="compact" />
-          </div>
-        )}
+          )}
+        </div>
       </div>
+    );
+
+  // Goals always show; the calendar, when toggled on, stacks above or below.
+  // Always render the same wrapper so toggling the calendar doesn't remount the
+  // goals card (which would close the open options menu).
+  return (
+    <div className="flex flex-col items-center gap-density-lg w-full">
+      {showCalendar && calendarPosition === 'above' && (
+        <div className="w-full animate-fade-in motion-reduce:animate-none">
+          <CalendarStrip variant="surface" />
+        </div>
+      )}
+      {goalsContent}
+      {showCalendar && calendarPosition === 'below' && (
+        <div className="w-full animate-fade-in motion-reduce:animate-none">
+          <CalendarStrip variant="surface" />
+        </div>
+      )}
     </div>
   );
 };

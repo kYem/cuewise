@@ -1,7 +1,25 @@
 import { defineManifest } from '@crxjs/vite-plugin';
+import { loadEnv } from 'vite';
 import pkg from './package.json';
 
 export default defineManifest(async (env) => {
+  // Chrome-Extension OAuth client id for Google Calendar (set per build env).
+  // Empty until the user registers a client in Google Cloud. When absent, the
+  // calendar optional-permissions/oauth2 block are omitted entirely so an
+  // un-provisioned build ships a clean manifest (no empty client_id) and the
+  // companion is hidden (not-configured mode).
+  const viteEnv = loadEnv(env.mode, process.cwd(), '');
+  const oauthClientId = viteEnv.VITE_GOOGLE_OAUTH_CLIENT_ID ?? '';
+  const calendarEnabled = oauthClientId !== '';
+
+  // Pinned extension key (base64 public key) for LOCAL unpacked builds only:
+  // forces the same extension ID as the Web Store item, so chrome.identity OAuth
+  // (which is bound to that ID) works in dev instead of failing with
+  // "bad client id". Set VITE_EXTENSION_KEY in .env locally; leave it unset for
+  // the release build so the published manifest omits `key` — the Web Store
+  // manages the published ID.
+  const extensionKey = viteEnv.VITE_EXTENSION_KEY ?? '';
+
   // Unsplash CDN for focus mode background images
   // Cuewise API for dynamic content loading and YouTube proxy page
   const hostPermissions: string[] = ['https://images.unsplash.com/*', 'https://*.cuewise.app/*'];
@@ -11,20 +29,41 @@ export default defineManifest(async (env) => {
     hostPermissions.push('http://localhost:5173/*');
   }
 
+  const permissions: string[] = ['storage', 'notifications', 'alarms'];
+
+  // Calendar is opt-in: `identity` + the Google API hosts (Calendar API +
+  // oauth2 token revoke) are declared optional and requested at runtime from the
+  // Connect button (see google-calendar.ts), so users who never enable the
+  // calendar grant nothing Google-related at install. connect-src below adds
+  // these hosts only on calendar-provisioned builds — CSP is fixed per build, not
+  // per user, but it isn't itself a user-facing grant.
+  const optionalPermissions: string[] = [];
+  const optionalHostPermissions: string[] = [];
+  if (calendarEnabled) {
+    optionalPermissions.push('identity');
+    optionalHostPermissions.push('https://www.googleapis.com/*', 'https://oauth2.googleapis.com/*');
+  }
+
   // connect-src: scope fetch/XHR to the hosts we call (YouTube oEmbed, Cuewise
-  // API/proxy, Unsplash) instead of a wildcard. Dev adds the Vite HMR socket.
+  // API/proxy, Unsplash) instead of a wildcard. Calendar (googleapis/oauth2) and
+  // the dev HMR socket are added conditionally.
   const connectSrc = [
     "'self'",
     'https://images.unsplash.com',
     'https://*.cuewise.app',
     'https://www.youtube.com',
   ];
+  if (calendarEnabled) {
+    connectSrc.push('https://www.googleapis.com', 'https://oauth2.googleapis.com');
+  }
   if (env.mode !== 'production') {
     connectSrc.push('http://localhost:5173', 'ws://localhost:5173');
   }
 
   return {
     manifest_version: 3,
+    // Local-only: pins the unpacked build to the Web Store ID (omitted in release).
+    ...(extensionKey ? { key: extensionKey } : {}),
     // Store title and search summary — keep keyword-rich (CWS search indexes both)
     name: 'Cuewise: New Tab Quotes, Goals & Pomodoro Timer',
     short_name: 'Cuewise',
@@ -36,8 +75,18 @@ export default defineManifest(async (env) => {
       48: 'icons/icon-48.png',
       128: 'icons/icon-128.png',
     },
-    permissions: ['storage', 'notifications', 'alarms'],
+    permissions,
     host_permissions: hostPermissions,
+    ...(calendarEnabled
+      ? {
+          optional_permissions: optionalPermissions,
+          optional_host_permissions: optionalHostPermissions,
+          oauth2: {
+            client_id: oauthClientId,
+            scopes: ['https://www.googleapis.com/auth/calendar.readonly'],
+          },
+        }
+      : {}),
     chrome_url_overrides: {
       newtab: 'index.html',
     },

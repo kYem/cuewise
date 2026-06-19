@@ -46,6 +46,7 @@ export const DEFAULT_SETTINGS: Settings = {
   pomodoroMusicAutoStart: false,
   pomodoroMusicPlaylistId: '',
   pomodoroMusicPlayDuringBreaks: false,
+  pomodoroCompanion: 'quote', // What shows beside the timer: quote | calendar | both
   enableNotifications: true,
   theme: 'auto',
   quoteChangeInterval: 10, // 0 = manual, 10+ = auto-refresh interval in seconds
@@ -67,6 +68,8 @@ export const DEFAULT_SETTINGS: Settings = {
   focusModeAutoEnter: false, // Don't auto-enter (user choice)
   // Goal View Mode
   goalViewMode: 'full', // Full view by default
+  newTabShowCalendar: false, // Calendar hidden on the new tab by default
+  newTabCalendarPosition: 'below', // When shown, calendar sits below goals by default
   focusedGoalId: null, // No focused goal by default
   showCompletedGoals: true, // Show completed tasks in Today's Focus by default
   showIncompleteGoals: false, // Recent-incomplete backlog collapsed by default
