@@ -157,6 +157,13 @@ docs/
 # Internal feature specs (kept local, not tracked)
 /specs/
 
+# design-sync (claude.ai/design system sync) — durable inputs under .design-sync/ stay tracked
+.ds-sync/
+ds-bundle/
+.design-sync/.cache/
+.design-sync/learnings/
+.design-sync/node_modules/
+
 # macOS
 .DS_Store
 **/.DS_Store
