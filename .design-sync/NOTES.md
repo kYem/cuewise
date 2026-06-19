@@ -30,6 +30,14 @@ node .ds-sync/resync.mjs --config .design-sync/config.json --node-modules apps/b
 - `ToastContainer` — `position: fixed`; the preview wraps it in a `transform: translateZ(0)` ancestor to scope the fixed stack into the card. `cardMode: single`.
 - `Autocomplete` — open dropdown is focus-only and **cannot render statically**; only input states (default/value/error) are shown.
 
+## Guidelines (brand docs that ship to the design project)
+
+`.design-sync/guidelines/*.md` (colors, typography, spacing, brand) are wired via
+`guidelinesGlob` → they copy into the bundle's `guidelines/` on every sync. Keep
+their token values in step with `apps/browser-extension/src/index.css` (the real
+`@theme`) and `CATEGORY_COLORS` in `packages/shared/src/constants.ts`. They ship as
+markdown reference docs, not visual swatch cards.
+
 ## Known render warns (re-syncs: treat as clean)
 
 - `[FONT_REMOTE]` "Inter", "Poppins" — runtime remote Google Fonts, by design.

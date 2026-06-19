@@ -9,6 +9,7 @@
   "entry": "packages/ui/dist/ds-entry.mjs",
   "cssEntry": "dist/cuewise.css",
   "readmeHeader": ".design-sync/conventions.md",
+  "guidelinesGlob": ["../../.design-sync/guidelines/**/*.md"],
   "overrides": {
     "Select": { "cardMode": "column" },
     "Textarea": { "cardMode": "column" },
