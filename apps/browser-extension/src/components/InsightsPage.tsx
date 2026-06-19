@@ -345,9 +345,10 @@ export const InsightsPage: React.FC = () => {
           </div>
         )}
 
-        {/* Exports Tab */}
+        {/* Concepts Tab */}
         {activeTab === 'concepts' && showConcepts ? <ConceptInsights /> : null}
 
+        {/* Exports Tab */}
         {activeTab === 'exports' && (
           <div className="space-y-8">
             <ExportControls
