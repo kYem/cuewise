@@ -92,12 +92,16 @@ export function isCalendarAvailable(): boolean {
   return Boolean(oauth2?.client_id);
 }
 
-// Whether to surface the calendar companion in the UI at all: a configured
-// OAuth client (installed extension), or the Vite dev server so the layout is
-// reviewable (Connect is unavailable there). A production build without a client
-// id hides the companion entirely so users never reach a dead "not set up" path.
+// Whether to surface the calendar companion in the UI at all. Production keys off
+// isCalendarAvailable() (a provisioned manifest client id) — a build without one
+// hides the companion entirely so users never reach a dead "not set up" path. The
+// dev server, where isCalendarAvailable() is always false (no chrome.*), keys off
+// an explicit VITE_CALENDAR_PREVIEW opt-in, so dev mirrors the shipped build
+// unless you ask to preview the layout (Connect is still unavailable there).
 export function isCalendarFeatureEnabled(): boolean {
-  return isCalendarAvailable() || import.meta.env.DEV;
+  return import.meta.env.DEV
+    ? import.meta.env.VITE_CALENDAR_PREVIEW === 'true'
+    : isCalendarAvailable();
 }
 
 function getToken(interactive: boolean): Promise<string> {

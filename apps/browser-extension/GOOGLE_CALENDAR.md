@@ -115,9 +115,12 @@ In the installed extension, open the Pomodoro page, set the companion to
 The first connect prompts to grant the optional permission, then for Google
 consent; refreshing afterward is silent (it reuses Chrome's cached token —
 nothing fetches a token on page load). Disconnecting revokes the token and
-removes the optional permission, so a follow-up connect prompts again. The dev
-server (`pnpm dev`) has no `chrome.identity`, so Connect reports the calendar
-isn't available there — there is no sample data to preview.
+removes the optional permission, so a follow-up connect prompts again.
+
+The dev server (`pnpm dev`) has no `chrome.identity`, so the companion is hidden
+there by default — dev mirrors the shipped build. Set `VITE_CALENDAR_PREVIEW=true`
+in `.env` to render it for layout review; Connect still reports it's unavailable
+and there is no sample data to preview.
 
 ## Publishing & sensitive-scope verification
 

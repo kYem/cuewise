@@ -227,13 +227,29 @@ describe('disconnectCalendar', () => {
 });
 
 describe('isCalendarFeatureEnabled', () => {
-  it('is enabled in the dev server even without a configured client id', () => {
+  it('is hidden in the dev server unless the preview flag is opted in', () => {
     vi.stubEnv('DEV', true);
+    vi.stubEnv('VITE_CALENDAR_PREVIEW', '');
+    expect(isCalendarFeatureEnabled()).toBe(false);
+  });
+
+  it('is enabled in the dev server when VITE_CALENDAR_PREVIEW is set', () => {
+    vi.stubEnv('DEV', true);
+    vi.stubEnv('VITE_CALENDAR_PREVIEW', 'true');
     expect(isCalendarFeatureEnabled()).toBe(true);
   });
 
   it('is hidden in a production build with no client id', () => {
     vi.stubEnv('DEV', false);
+    installIdentity({ clientId: undefined });
+    expect(isCalendarFeatureEnabled()).toBe(false);
+  });
+
+  // The preview flag is a dev-only escape hatch — it must never enable a
+  // production build that lacks a real client id.
+  it('ignores the preview flag in a production build', () => {
+    vi.stubEnv('DEV', false);
+    vi.stubEnv('VITE_CALENDAR_PREVIEW', 'true');
     installIdentity({ clientId: undefined });
     expect(isCalendarFeatureEnabled()).toBe(false);
   });
