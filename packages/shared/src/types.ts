@@ -202,6 +202,19 @@ export interface ConceptCard {
   schedule: ConceptSchedule;
 }
 
+// Aggregate stats derived from a deck of concept cards (Insights view).
+export interface ConceptStats {
+  total: number;
+  due: number;
+  newCount: number;
+  learning: number;
+  mastered: number;
+  retentionPct: number | null;
+  avgEase: number | null;
+  needsAttention: ConceptCard[];
+  dueForecast: { date: string; count: number }[];
+}
+
 export type ConceptGrade = 'again' | 'good' | 'easy';
 
 // How often a due concept surfaces in the blended rotation ("1 in N tabs" feel)

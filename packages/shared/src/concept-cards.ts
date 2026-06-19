@@ -7,7 +7,7 @@ import {
   CONCEPT_NUDGE_GAP_DAYS,
   CONCEPT_NUDGE_MAX_SHOWS,
 } from './constants';
-import type { ConceptCard, ConceptGrade, ConceptSchedule } from './types';
+import type { ConceptCard, ConceptGrade, ConceptSchedule, ConceptStats } from './types';
 import type { NudgeShowState } from './utils';
 
 /**
@@ -169,4 +169,70 @@ export function shouldShowConceptNudge(params: {
     return false;
   }
   return true;
+}
+
+// A reviewed card is "mastered" once its interval reaches the standard
+// young→mature boundary (21d); reviewed but below that is still "learning".
+const MASTERED_INTERVAL_DAYS = 21;
+const FORECAST_DAYS = 7;
+
+/**
+ * Aggregate learning stats for a deck, derived purely from each card's current
+ * schedule (no review log). `today` is passed in so the result is deterministic.
+ */
+export function getConceptStats(cards: ConceptCard[], today: Date): ConceptStats {
+  const todayStr = format(today, 'yyyy-MM-dd');
+  let due = 0;
+  let newCount = 0;
+  let learning = 0;
+  let mastered = 0;
+  let reviewed = 0;
+  let neverLapsed = 0;
+  let easeSum = 0;
+
+  for (const concept of cards) {
+    const s = concept.schedule;
+    if (s.dueDate <= todayStr) {
+      due += 1;
+    }
+    if (s.repetitions === 0) {
+      newCount += 1;
+    } else if (s.interval < MASTERED_INTERVAL_DAYS) {
+      learning += 1;
+    } else {
+      mastered += 1;
+    }
+    if (s.lastReviewedAt) {
+      reviewed += 1;
+      if (s.lapses === 0) {
+        neverLapsed += 1;
+      }
+    }
+    easeSum += s.easeFactor;
+  }
+
+  const dueForecast: { date: string; count: number }[] = [];
+  for (let i = 0; i < FORECAST_DAYS; i += 1) {
+    const dayStr = format(addDays(today, i), 'yyyy-MM-dd');
+    dueForecast.push({
+      date: dayStr,
+      count: cards.filter((concept) => concept.schedule.dueDate === dayStr).length,
+    });
+  }
+
+  const needsAttention = cards
+    .filter((concept) => concept.schedule.lapses >= 2)
+    .sort((a, b) => b.schedule.lapses - a.schedule.lapses);
+
+  return {
+    total: cards.length,
+    due,
+    newCount,
+    learning,
+    mastered,
+    retentionPct: reviewed === 0 ? null : Math.round((neverLapsed / reviewed) * 100),
+    avgEase: cards.length === 0 ? null : easeSum / cards.length,
+    needsAttention,
+    dueForecast,
+  };
 }
