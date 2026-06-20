@@ -35,8 +35,48 @@ describe('ConceptForm', () => {
     expect(addCard).toHaveBeenCalledWith('Idempotency', 'Same effect.', {
       details: undefined,
       tags: ['http', 'retries'],
+      source: undefined,
     });
     expect(onSuccess).toHaveBeenCalled();
+  });
+
+  it('adds a concept with a source', async () => {
+    const { addCard } = mockStore();
+
+    render(<ConceptForm onSuccess={vi.fn()} onCancel={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText(/term/i), { target: { value: 'CAP theorem' } });
+    fireEvent.change(screen.getByLabelText(/definition/i), { target: { value: 'Pick two.' } });
+    fireEvent.change(screen.getByLabelText(/source/i), { target: { value: 'DDIA book' } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /save concept/i }));
+    });
+
+    expect(addCard).toHaveBeenCalledWith('CAP theorem', 'Pick two.', {
+      details: undefined,
+      tags: undefined,
+      source: 'DDIA book',
+    });
+  });
+
+  it('pre-fills and clears the source on edit', async () => {
+    const { updateCard } = mockStore();
+    const card = conceptCardFactory.build({
+      id: 'c2',
+      term: 'T',
+      definition: 'D',
+      source: 'Old source',
+    });
+
+    render(<ConceptForm card={card} onSuccess={vi.fn()} onCancel={vi.fn()} />);
+
+    expect(screen.getByLabelText(/source/i)).toHaveValue('Old source');
+    fireEvent.change(screen.getByLabelText(/source/i), { target: { value: '' } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
+    });
+
+    expect(updateCard.mock.calls[0][1].source).toBeUndefined();
   });
 
   it('edits an existing concept via updateCard', async () => {

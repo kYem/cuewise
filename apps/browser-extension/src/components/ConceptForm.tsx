@@ -24,6 +24,7 @@ export const ConceptForm: React.FC<ConceptFormProps> = ({ card, onSuccess, onCan
   const [definition, setDefinition] = useState(card?.definition ?? '');
   const [details, setDetails] = useState(card?.details ?? '');
   const [tags, setTags] = useState(card?.tags?.join(', ') ?? '');
+  const [source, setSource] = useState(card?.source ?? '');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const addCard = useConceptCardsStore((state) => state.addCard);
@@ -44,11 +45,18 @@ export const ConceptForm: React.FC<ConceptFormProps> = ({ card, onSuccess, onCan
       let ok: boolean;
       if (card) {
         // Pass explicit values so cleared fields actually clear on save.
-        ok = await updateCard(card.id, { term, definition, details, tags: parsedTags });
+        ok = await updateCard(card.id, {
+          term,
+          definition,
+          details,
+          tags: parsedTags,
+          source: source.trim() || undefined,
+        });
       } else {
         ok = await addCard(term, definition, {
           details: details.trim() || undefined,
           tags: parsedTags.length > 0 ? parsedTags : undefined,
+          source: source.trim() || undefined,
         });
       }
       if (ok) {
@@ -115,6 +123,18 @@ export const ConceptForm: React.FC<ConceptFormProps> = ({ card, onSuccess, onCan
           onChange={(e) => setTags(e.target.value)}
           placeholder="comma-separated, e.g. microservices, consistency"
           maxLength={120}
+        />
+      </div>
+
+      <div>
+        <Label htmlFor="concept-source">Source (optional)</Label>
+        <Input
+          id="concept-source"
+          type="text"
+          value={source}
+          onChange={(e) => setSource(e.target.value)}
+          placeholder="e.g. Microservices Patterns book"
+          maxLength={200}
         />
       </div>
 
