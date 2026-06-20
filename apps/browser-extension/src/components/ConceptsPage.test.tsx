@@ -113,4 +113,45 @@ describe('ConceptsPage', () => {
     expect(fresh).not.toBeNull();
     expect(fresh).not.toHaveClass('border-l-error');
   });
+
+  it('filters the list by search query', () => {
+    mockStore([
+      conceptCardFactory.build({ term: 'Saga pattern', definition: 'compensating txns' }),
+      conceptCardFactory.build({ term: 'Idempotency', definition: 'same effect' }),
+    ]);
+
+    render(<ConceptsPage />);
+    fireEvent.change(screen.getByLabelText('Search concepts'), { target: { value: 'saga' } });
+
+    expect(screen.getByText('Saga pattern')).toBeInTheDocument();
+    expect(screen.queryByText('Idempotency')).toBeNull();
+  });
+
+  it('filters by a tag chip and toggles it off', () => {
+    mockStore([
+      conceptCardFactory.build({ term: 'Saga pattern', tags: ['microservices'] }),
+      conceptCardFactory.build({ term: 'Idempotency', tags: ['http'] }),
+    ]);
+
+    render(<ConceptsPage />);
+    fireEvent.click(screen.getByRole('button', { name: 'microservices' }));
+
+    expect(screen.getByText('Saga pattern')).toBeInTheDocument();
+    expect(screen.queryByText('Idempotency')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'microservices' }));
+    expect(screen.getByText('Idempotency')).toBeInTheDocument();
+  });
+
+  it('shows a no-match message when nothing matches', () => {
+    mockStore([conceptCardFactory.build({ term: 'Saga pattern' })]);
+
+    render(<ConceptsPage />);
+    fireEvent.change(screen.getByLabelText('Search concepts'), {
+      target: { value: 'zzz nonexistent' },
+    });
+
+    expect(screen.getByText(/no concepts match/i)).toBeInTheDocument();
+    expect(screen.queryByText('Saga pattern')).toBeNull();
+  });
 });
