@@ -1,4 +1,4 @@
-import { formatClockTime, formatLongDate, getGreeting } from '@cuewise/shared';
+import { formatClockTime, formatLongDate, getDueConceptCards, getGreeting } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
 import { BarChart3, BookMarked, Brain, Flag, PanelRight, Settings, Timer } from 'lucide-react';
 import type React from 'react';
@@ -13,6 +13,7 @@ import { useSettingsStore } from '../stores/settings-store';
 import { preloadImages } from '../utils/image-preload-cache';
 import { ActivePomodoroWidget } from './ActivePomodoroWidget';
 import { Clock } from './Clock';
+import { ConceptDueBadge } from './ConceptDueBadge';
 import { ConceptForm } from './ConceptForm';
 import { ConceptNudge } from './ConceptNudge';
 import { ConceptRotation } from './ConceptRotation';
@@ -45,6 +46,10 @@ export const NewTabPage: React.FC = () => {
   const conceptCards = useConceptCardsStore((state) => state.cards);
   const conceptsLoading = useConceptCardsStore((state) => state.isLoading);
   const initializeConcepts = useConceptCardsStore((state) => state.initialize);
+  const conceptDueCount = useMemo(
+    () => (conceptCardsEnabled ? getDueConceptCards(conceptCards, new Date()).length : 0),
+    [conceptCardsEnabled, conceptCards]
+  );
   const timeFormat = useSettingsStore((state) => state.settings.timeFormat);
   const focusModeImageCategory = useSettingsStore((state) => state.settings.focusModeImageCategory);
   const quoteDisplayMode = useSettingsStore((state) => state.settings.quoteDisplayMode);
@@ -334,6 +339,7 @@ export const NewTabPage: React.FC = () => {
                     >
                       <Brain className="w-5 h-5 text-primary-600" />
                       <span className="text-sm font-medium">Concepts</span>
+                      <ConceptDueBadge count={conceptDueCount} />
                     </button>
                     <button
                       type="button"
@@ -457,6 +463,7 @@ export const NewTabPage: React.FC = () => {
                 >
                   <Brain className="w-5 h-5 text-primary-600" />
                   <span className="text-sm font-medium">Concepts</span>
+                  <ConceptDueBadge count={conceptDueCount} />
                 </button>
                 <button
                   type="button"

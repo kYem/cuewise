@@ -7,7 +7,7 @@ import {
   CONCEPT_NUDGE_GAP_DAYS,
   CONCEPT_NUDGE_MAX_SHOWS,
 } from './constants';
-import type { ConceptCard, ConceptGrade, ConceptSchedule } from './types';
+import type { ConceptCard, ConceptGrade, ConceptSchedule, ConceptStats } from './types';
 import type { NudgeShowState } from './utils';
 
 /**
@@ -169,4 +169,77 @@ export function shouldShowConceptNudge(params: {
     return false;
   }
   return true;
+}
+
+// A reviewed card is "mastered" once its interval reaches the standard
+// young→mature boundary (21d); reviewed but below that is still "learning".
+const MASTERED_INTERVAL_DAYS = 21;
+const FORECAST_DAYS = 7;
+
+/**
+ * Aggregate learning stats for a deck, derived purely from each card's current
+ * schedule (no review log). `today` is passed in so the result is deterministic.
+ */
+export function getConceptStats(cards: ConceptCard[], today: Date): ConceptStats {
+  // forecastDays[0] is today; the rest are the next 6 calendar days.
+  const forecastDays = Array.from({ length: FORECAST_DAYS }, (_, i) =>
+    format(addDays(today, i), 'yyyy-MM-dd')
+  );
+  const todayStr = forecastDays[0];
+  const forecastCounts = new Array(FORECAST_DAYS).fill(0);
+  let due = 0;
+  let newCount = 0;
+  let learning = 0;
+  let mastered = 0;
+  let reviewed = 0;
+  let neverLapsed = 0;
+  let easeSum = 0;
+
+  for (const concept of cards) {
+    const s = concept.schedule;
+    // Today's forecast bar carries everything due (incl. overdue), so it
+    // reconciles with `due`; later bars are that exact day's cards.
+    if (s.dueDate <= todayStr) {
+      due += 1;
+      forecastCounts[0] += 1;
+    } else {
+      const dayIndex = forecastDays.indexOf(s.dueDate);
+      if (dayIndex > 0) {
+        forecastCounts[dayIndex] += 1;
+      }
+    }
+    // A card is "New" only until its first review; an "again" grade resets
+    // repetitions to 0 but keeps lastReviewedAt, so a lapsed card is "Learning".
+    if (s.repetitions === 0 && !s.lastReviewedAt) {
+      newCount += 1;
+    } else if (s.interval < MASTERED_INTERVAL_DAYS) {
+      learning += 1;
+    } else {
+      mastered += 1;
+    }
+    if (s.lastReviewedAt) {
+      reviewed += 1;
+      easeSum += s.easeFactor;
+      if (s.lapses === 0) {
+        neverLapsed += 1;
+      }
+    }
+  }
+
+  const dueForecast = forecastDays.map((date, i) => ({ date, count: forecastCounts[i] }));
+  const needsAttention = cards
+    .filter((concept) => concept.schedule.lapses >= 2)
+    .sort((a, b) => b.schedule.lapses - a.schedule.lapses);
+
+  return {
+    total: cards.length,
+    due,
+    newCount,
+    learning,
+    mastered,
+    retentionPct: reviewed === 0 ? null : Math.round((neverLapsed / reviewed) * 100),
+    avgEase: reviewed === 0 ? null : easeSum / reviewed,
+    needsAttention,
+    dueForecast,
+  };
 }

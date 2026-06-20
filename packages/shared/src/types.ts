@@ -207,6 +207,26 @@ export interface ConceptCard {
   schedule: ConceptSchedule;
 }
 
+// One day in the 7-day due forecast (index 0 = today, which also carries overdue)
+export interface ConceptDueForecastDay {
+  date: string; // YYYY-MM-DD
+  count: number; // cards due that day
+}
+
+// Aggregate stats for a deck of concept cards (Insights view), derived from each
+// card's schedule. newCount + learning + mastered === total.
+export interface ConceptStats {
+  total: number;
+  due: number; // dueDate <= today (incl. overdue); equals dueForecast[0].count
+  newCount: number; // never reviewed
+  learning: number; // reviewed, interval < 21d (includes relearning)
+  mastered: number; // interval >= 21d
+  retentionPct: number | null; // 0-100 over reviewed cards; null when none reviewed
+  avgEase: number | null; // mean ease over reviewed cards; null together with retentionPct
+  needsAttention: ConceptCard[]; // lapses >= 2, sorted desc
+  dueForecast: ConceptDueForecastDay[]; // 7 days starting today
+}
+
 export type ConceptGrade = 'again' | 'good' | 'easy';
 
 // How often a due concept surfaces in the blended rotation ("1 in N tabs" feel)

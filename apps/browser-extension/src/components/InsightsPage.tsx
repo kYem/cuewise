@@ -7,7 +7,10 @@ import {
 import { Award, Calendar, Clock, Flag, Flame, Target, TrendingUp } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useState } from 'react';
+import { useConceptCardsStore } from '../stores/concept-cards-store';
 import { useInsightsStore } from '../stores/insights-store';
+import { useSettingsStore } from '../stores/settings-store';
+import { ConceptInsights } from './ConceptInsights';
 import { ExportControls } from './ExportControls';
 import { GoalCompletionChart } from './GoalCompletionChart';
 import { ImportControls } from './ImportControls';
@@ -31,11 +34,29 @@ export const InsightsPage: React.FC = () => {
     executeImport,
     clearImportValidation,
   } = useInsightsStore();
-  const [activeTab, setActiveTab] = useState<'overview' | 'analytics' | 'exports'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'analytics' | 'concepts' | 'exports'>(
+    'overview'
+  );
+  const conceptCards = useConceptCardsStore((state) => state.cards);
+  const initializeConcepts = useConceptCardsStore((state) => state.initialize);
+  const conceptsEnabled = useSettingsStore((state) => state.settings.conceptCardsEnabled);
+  const showConcepts = conceptsEnabled && conceptCards.length > 0;
 
   useEffect(() => {
     initialize();
   }, [initialize]);
+
+  useEffect(() => {
+    initializeConcepts();
+  }, [initializeConcepts]);
+
+  // If the Concepts tab is open but its data goes away (feature disabled or the
+  // last card deleted), fall back to Overview so the page never renders blank.
+  useEffect(() => {
+    if (!showConcepts && activeTab === 'concepts') {
+      setActiveTab('overview');
+    }
+  }, [showConcepts, activeTab]);
 
   if (isLoading) {
     return (
@@ -91,6 +112,19 @@ export const InsightsPage: React.FC = () => {
           >
             Advanced Analytics
           </button>
+          {showConcepts ? (
+            <button
+              type="button"
+              onClick={() => setActiveTab('concepts')}
+              className={`px-6 py-3 rounded-lg font-semibold transition-all ${
+                activeTab === 'concepts'
+                  ? 'bg-surface text-primary-600 shadow-lg'
+                  : 'bg-surface/50 text-secondary hover:bg-surface/80'
+              }`}
+            >
+              Concepts
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() => setActiveTab('exports')}
@@ -310,6 +344,9 @@ export const InsightsPage: React.FC = () => {
             <PomodoroHeatmap data={analytics.pomodoroHeatmap} />
           </div>
         )}
+
+        {/* Concepts Tab */}
+        {activeTab === 'concepts' && showConcepts ? <ConceptInsights /> : null}
 
         {/* Exports Tab */}
         {activeTab === 'exports' && (

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   conceptIntervalLabel,
+  getConceptStats,
   getDueConceptCards,
   newConceptSchedule,
   projectConceptInterval,
@@ -196,6 +197,142 @@ describe('Concept card spaced repetition', () => {
           state: { dismissed: false, count: 1, lastShownAt: '2026-06-10' },
         })
       ).toBe(true);
+    });
+  });
+
+  describe('getConceptStats', () => {
+    it('counts due, buckets, retention, attention, and a 7-day forecast', () => {
+      const cards = [
+        card({
+          id: 'new',
+          schedule: schedule({ dueDate: '2026-06-16', repetitions: 0, interval: 0 }),
+        }),
+        card({
+          id: 'learn',
+          schedule: schedule({
+            dueDate: '2026-06-19',
+            repetitions: 2,
+            interval: 6,
+            lapses: 0,
+            lastReviewedAt: '2026-06-13T00:00:00.000Z',
+          }),
+        }),
+        card({
+          id: 'master',
+          schedule: schedule({
+            dueDate: '2026-06-10',
+            repetitions: 5,
+            interval: 40,
+            easeFactor: 2.6,
+            lapses: 1,
+            lastReviewedAt: '2026-05-01T00:00:00.000Z',
+          }),
+        }),
+      ];
+
+      const stats = getConceptStats(cards, TODAY);
+
+      expect(stats.total).toBe(3);
+      expect(stats.due).toBe(2); // 'new' (today) + 'master' (overdue)
+      expect(stats.newCount).toBe(1);
+      expect(stats.learning).toBe(1);
+      expect(stats.mastered).toBe(1);
+      expect(stats.retentionPct).toBe(50); // 2 reviewed, 1 never lapsed
+      expect(stats.needsAttention).toEqual([]);
+      expect(stats.dueForecast).toHaveLength(7);
+      // today's bar carries all due (incl. the overdue 'master') and reconciles with `due`
+      expect(stats.dueForecast[0]).toEqual({ date: '2026-06-16', count: 2 });
+      expect(stats.dueForecast[0].count).toBe(stats.due);
+      expect(stats.dueForecast[3]).toEqual({ date: '2026-06-19', count: 1 });
+    });
+
+    it('treats interval 21 as mastered and 20 as learning', () => {
+      const at20 = card({ id: 'l', schedule: schedule({ repetitions: 3, interval: 20 }) });
+      const at21 = card({ id: 'm', schedule: schedule({ repetitions: 3, interval: 21 }) });
+
+      const stats = getConceptStats([at20, at21], TODAY);
+
+      expect(stats.learning).toBe(1);
+      expect(stats.mastered).toBe(1);
+    });
+
+    it('buckets a lapsed (relearning) card as learning, not new', () => {
+      const relearning = card({
+        id: 'relearn',
+        schedule: schedule({
+          repetitions: 0,
+          interval: 0,
+          lapses: 1,
+          lastReviewedAt: '2026-06-15T00:00:00.000Z',
+        }),
+      });
+      const fresh = card({ id: 'fresh', schedule: schedule({ repetitions: 0, interval: 0 }) });
+
+      const stats = getConceptStats([relearning, fresh], TODAY);
+
+      expect(stats.newCount).toBe(1); // only 'fresh' is truly new
+      expect(stats.learning).toBe(1); // 'relearn' has review history
+    });
+
+    it('averages ease over reviewed cards only', () => {
+      const reviewedLowEase = card({
+        id: 'r',
+        schedule: schedule({
+          easeFactor: 1.5,
+          repetitions: 3,
+          interval: 10,
+          lastReviewedAt: '2026-06-10T00:00:00.000Z',
+        }),
+      });
+      const brandNew = card({ id: 'n', schedule: schedule({ easeFactor: 2.5, repetitions: 0 }) });
+
+      const stats = getConceptStats([reviewedLowEase, brandNew], TODAY);
+
+      expect(stats.avgEase).toBe(1.5); // the never-reviewed 2.5 default is excluded
+    });
+
+    it('returns null retention and ease for an empty deck', () => {
+      const stats = getConceptStats([], TODAY);
+
+      expect(stats.total).toBe(0);
+      expect(stats.retentionPct).toBeNull();
+      expect(stats.avgEase).toBeNull();
+      expect(stats.dueForecast).toHaveLength(7);
+    });
+
+    it('sorts needs-attention by lapses desc and excludes lapses < 2', () => {
+      const cards = [
+        card({
+          id: 'a',
+          schedule: schedule({ lapses: 1, lastReviewedAt: '2026-06-10T00:00:00.000Z' }),
+        }),
+        card({
+          id: 'b',
+          schedule: schedule({ lapses: 4, lastReviewedAt: '2026-06-10T00:00:00.000Z' }),
+        }),
+        card({
+          id: 'c',
+          schedule: schedule({ lapses: 2, lastReviewedAt: '2026-06-10T00:00:00.000Z' }),
+        }),
+      ];
+
+      const stats = getConceptStats(cards, TODAY);
+
+      expect(stats.needsAttention.map((concept) => concept.id)).toEqual(['b', 'c']);
+    });
+
+    it('reports 100% retention when no reviewed card has lapsed', () => {
+      const cards = [
+        card({
+          id: 'r',
+          schedule: schedule({ lapses: 0, lastReviewedAt: '2026-06-10T00:00:00.000Z' }),
+        }),
+        card({ id: 'unseen', schedule: schedule({ lastReviewedAt: undefined }) }),
+      ];
+
+      const stats = getConceptStats(cards, TODAY);
+
+      expect(stats.retentionPct).toBe(100); // 'unseen' is excluded (never reviewed)
     });
   });
 });
