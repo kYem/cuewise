@@ -77,4 +77,40 @@ describe('ConceptsPage', () => {
     expect(screen.queryByRole('button', { name: 'Click again to delete' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument();
   });
+
+  it('tints a struggling card and leaves a new card unaccented', () => {
+    mockStore([
+      conceptCardFactory.build({
+        term: 'Struggling card',
+        schedule: {
+          dueDate: '2099-01-01',
+          interval: 5,
+          easeFactor: 1.6,
+          repetitions: 2,
+          lapses: 3,
+          lastReviewedAt: '2026-06-10T00:00:00.000Z',
+        },
+      }),
+      conceptCardFactory.build({
+        term: 'Fresh card',
+        schedule: {
+          dueDate: '2099-01-01',
+          interval: 0,
+          easeFactor: 2.5,
+          repetitions: 0,
+          lapses: 0,
+        },
+      }),
+    ]);
+
+    render(<ConceptsPage />);
+
+    const struggling = screen.getByText('Struggling card').closest('li');
+    expect(struggling).not.toBeNull();
+    expect(struggling).toHaveClass('border-l-error');
+
+    const fresh = screen.getByText('Fresh card').closest('li');
+    expect(fresh).not.toBeNull();
+    expect(fresh).not.toHaveClass('border-l-error');
+  });
 });

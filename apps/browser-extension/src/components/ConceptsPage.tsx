@@ -1,4 +1,9 @@
-import { type ConceptCard, getTodayDateString } from '@cuewise/shared';
+import {
+  type ConceptCard,
+  type ConceptDifficulty,
+  getConceptDifficulty,
+  getTodayDateString,
+} from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
 import { ArrowLeft, Brain, Pencil, Plus, Trash2 } from 'lucide-react';
 import type React from 'react';
@@ -6,6 +11,13 @@ import { useEffect, useState } from 'react';
 import { useConceptCardsStore } from '../stores/concept-cards-store';
 import { ConceptForm } from './ConceptForm';
 import { Modal } from './Modal';
+
+const DIFFICULTY_ACCENT: Record<ConceptDifficulty, string> = {
+  new: '',
+  struggling: 'border-l-4 border-l-error',
+  solid: 'border-l-4 border-l-warning',
+  strong: 'border-l-4 border-l-success',
+};
 
 export const ConceptsPage: React.FC = () => {
   const cards = useConceptCardsStore((state) => state.cards);
@@ -91,7 +103,13 @@ export const ConceptsPage: React.FC = () => {
             {cards.map((card) => {
               const due = card.schedule.dueDate <= today;
               return (
-                <li key={card.id} className="rounded-xl border border-border bg-surface p-4">
+                <li
+                  key={card.id}
+                  className={cn(
+                    'rounded-xl border border-border bg-surface p-4',
+                    DIFFICULTY_ACCENT[getConceptDifficulty(card)]
+                  )}
+                >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
