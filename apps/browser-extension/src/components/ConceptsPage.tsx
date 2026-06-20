@@ -1,4 +1,4 @@
-import { type ConceptCard, getTodayDateString } from '@cuewise/shared';
+import { type ConceptCard, getTodayDateString, matchesSearchQuery } from '@cuewise/shared';
 import { ArrowLeft, Brain, Plus } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
@@ -32,14 +32,11 @@ export const ConceptsPage: React.FC = () => {
     [cards]
   );
   const filteredCards = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
     return cards.filter((card) => {
-      const matchesQuery =
-        normalizedQuery.length === 0 ||
-        card.term.toLowerCase().includes(normalizedQuery) ||
-        card.definition.toLowerCase().includes(normalizedQuery) ||
-        (card.source ?? '').toLowerCase().includes(normalizedQuery) ||
-        (card.tags ?? []).some((tag) => tag.toLowerCase().includes(normalizedQuery));
+      const matchesQuery = matchesSearchQuery(
+        [card.term, card.definition, card.source, ...(card.tags ?? [])],
+        query
+      );
       const matchesTag = activeTag === null || (card.tags ?? []).includes(activeTag);
       return matchesQuery && matchesTag;
     });
