@@ -47,17 +47,17 @@ describe('ReminderPanelHeader pin toggle', () => {
     expect(onChange).toHaveBeenCalledWith(true);
   });
 
-  it('exposes the unpin label and pressed state when already pinned', () => {
+  it('exposes the unpin label and unpins when already pinned', () => {
+    const onChange = vi.fn();
     render(
-      <ReminderPanelHeader
-        count={0}
-        hasUrgent={false}
-        pinToggle={{ pinned: true, onChange: vi.fn() }}
-      />
+      <ReminderPanelHeader count={0} hasUrgent={false} pinToggle={{ pinned: true, onChange }} />
     );
 
     const pin = screen.getByRole('button', { name: 'Unpin reminders panel' });
     expect(pin).toHaveAttribute('aria-pressed', 'true');
+
+    fireEvent.click(pin);
+    expect(onChange).toHaveBeenCalledWith(false);
   });
 });
 
