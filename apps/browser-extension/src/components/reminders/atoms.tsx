@@ -3,7 +3,6 @@ import {
   isUpcomingRecurringOccurrence,
   REMINDER_CATEGORY_META,
   type Reminder,
-  type ReminderPanelLayout,
 } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
 import {
@@ -27,7 +26,7 @@ import type { ReminderState } from '../../utils/reminder-classify';
 import { formatCountdown, formatDueDate, formatTimeAgo } from '../../utils/reminder-date-utils';
 import { EmptyState } from '../EmptyState';
 import { REMINDER_CATEGORY_ICON, REMINDER_STATE_STYLES } from './reminder-state-styles';
-import type { PanelPinToggle } from './types';
+import type { PanelPinToggle, PanelViewSwitcher } from './types';
 
 /** States that warrant the loud accent treatment (and a live countdown). */
 function isUrgentState(state: ReminderState): boolean {
@@ -184,18 +183,13 @@ export function ReminderSnoozeRow({ onSnooze, state = 'soon' }: ReminderSnoozeRo
   );
 }
 
-interface LayoutSwitchProps {
-  layout: ReminderPanelLayout;
-  onLayoutChange: (layout: ReminderPanelLayout) => void;
-}
-
 /** Compact 2-button segmented pill to flip the panel layout in place. */
-function LayoutSwitch({ layout, onLayoutChange }: LayoutSwitchProps) {
+function LayoutSwitch({ layout, onChange }: PanelViewSwitcher) {
   return (
     <div className="flex-none inline-flex items-center gap-0.5 rounded-full border border-border bg-surface-variant p-0.5">
       <button
         type="button"
-        onClick={() => onLayoutChange('composed')}
+        onClick={() => onChange('composed')}
         aria-label="Composed view"
         title="Composed view"
         className={cn(
@@ -209,7 +203,7 @@ function LayoutSwitch({ layout, onLayoutChange }: LayoutSwitchProps) {
       </button>
       <button
         type="button"
-        onClick={() => onLayoutChange('agenda')}
+        onClick={() => onChange('agenda')}
         aria-label="Agenda view"
         title="Agenda view"
         className={cn(
@@ -252,7 +246,7 @@ interface ReminderPanelHeaderProps {
   hasUrgent: boolean;
   subNote?: { text: string; tone: ReminderState | null };
   pinToggle?: PanelPinToggle;
-  viewSwitcher?: { layout: ReminderPanelLayout; onChange: (layout: ReminderPanelLayout) => void };
+  viewSwitcher?: PanelViewSwitcher;
 }
 
 /** Panel header: bell tile (red when urgent), title + count, optional sub-note, pin toggle and layout switcher. */
@@ -288,10 +282,8 @@ export function ReminderPanelHeader({
       </div>
       {(pinToggle || viewSwitcher) && (
         <div className="flex-none inline-flex items-center gap-1.5">
-          {pinToggle && <PinToggle pinned={pinToggle.pinned} onChange={pinToggle.onChange} />}
-          {viewSwitcher && (
-            <LayoutSwitch layout={viewSwitcher.layout} onLayoutChange={viewSwitcher.onChange} />
-          )}
+          {pinToggle && <PinToggle {...pinToggle} />}
+          {viewSwitcher && <LayoutSwitch {...viewSwitcher} />}
         </div>
       )}
     </div>

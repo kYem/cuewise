@@ -68,16 +68,15 @@ export const ReminderWidget: React.FC = () => {
     return () => clearInterval(interval);
   }, [fireDueReminders]);
 
-  // Pinned panels auto-expand once per load (the guard keeps a later manual
-  // collapse from snapping back); unpinning re-arms it for a future re-pin.
+  // Auto-expand a pinned panel once per load; the guard trips only after the
+  // stored `true` hydrates, and a later manual collapse sticks (effect won't re-fire).
   useEffect(() => {
+    if (didAutoExpandRef.current) {
+      return;
+    }
     if (reminderPanelPinned) {
-      if (!didAutoExpandRef.current) {
-        didAutoExpandRef.current = true;
-        setIsExpanded(true);
-      }
-    } else {
-      didAutoExpandRef.current = false;
+      didAutoExpandRef.current = true;
+      setIsExpanded(true);
     }
   }, [reminderPanelPinned]);
 

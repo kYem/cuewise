@@ -6,6 +6,12 @@ export interface PanelPinToggle {
   onChange: (next: boolean) => void;
 }
 
+/** Current layout + setter for the in-header view switcher (composed | agenda). */
+export interface PanelViewSwitcher {
+  layout: ReminderPanelLayout;
+  onChange: (next: ReminderPanelLayout) => void;
+}
+
 /**
  * Shared contract for every reminders-panel layout variant (Composed, etc.).
  * The widget (Task 5) owns the positioned wrapper; panels render only the card.
@@ -26,5 +32,5 @@ export interface ReminderPanelProps {
   /** Current pinned state + setter, to show an in-header pin toggle. When omitted, no pin renders. */
   pinToggle?: PanelPinToggle;
   /** Current panel layout + setter, to show an in-header view switcher. When omitted, no switcher renders. */
-  viewSwitcher?: { layout: ReminderPanelLayout; onChange: (layout: ReminderPanelLayout) => void };
+  viewSwitcher?: PanelViewSwitcher;
 }
