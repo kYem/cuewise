@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   conceptIntervalLabel,
+  getConceptDifficulty,
   getConceptStats,
   getDueConceptCards,
   newConceptSchedule,
@@ -333,6 +334,22 @@ describe('Concept card spaced repetition', () => {
       const stats = getConceptStats(cards, TODAY);
 
       expect(stats.retentionPct).toBe(100); // 'unseen' is excluded (never reviewed)
+    });
+  });
+
+  describe('getConceptDifficulty', () => {
+    it('returns new for a never-reviewed card regardless of ease', () => {
+      const fresh = card({ schedule: schedule({ easeFactor: 1.5, lastReviewedAt: undefined }) });
+      expect(getConceptDifficulty(fresh)).toBe('new');
+    });
+
+    it('grades reviewed cards by ease factor at the thresholds', () => {
+      const reviewed = (easeFactor: number) =>
+        card({ schedule: schedule({ easeFactor, lastReviewedAt: '2026-06-10T00:00:00.000Z' }) });
+      expect(getConceptDifficulty(reviewed(2.09))).toBe('struggling');
+      expect(getConceptDifficulty(reviewed(2.1))).toBe('solid');
+      expect(getConceptDifficulty(reviewed(2.49))).toBe('solid');
+      expect(getConceptDifficulty(reviewed(2.5))).toBe('strong');
     });
   });
 });
