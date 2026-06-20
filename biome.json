@@ -11,6 +11,7 @@
       "**",
       "!**/index.css",
       "!.claude",
+      "!.agents",
       "!.design-bundle",
       "!apps/website/src/styles/tokens"
     ]
