@@ -1,7 +1,7 @@
 import { recurringReminderFactory, reminderFactory } from '@cuewise/test-utils';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { ReminderCategoryCheck, ReminderHeroCard } from './atoms';
+import { ReminderCategoryCheck, ReminderHeroCard, ReminderPanelHeader } from './atoms';
 
 describe('ReminderCategoryCheck', () => {
   it('calls onToggle when clicked', () => {
@@ -30,6 +30,34 @@ describe('ReminderCategoryCheck', () => {
 
     expect(screen.getByRole('button', { name: 'Skip to next occurrence' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Mark done' })).not.toBeInTheDocument();
+  });
+});
+
+describe('ReminderPanelHeader pin toggle', () => {
+  it('renders the pin control and toggles the pinned value when clicked', () => {
+    const onChange = vi.fn();
+    render(
+      <ReminderPanelHeader count={2} hasUrgent={false} pinToggle={{ pinned: false, onChange }} />
+    );
+
+    const pin = screen.getByRole('button', { name: 'Keep reminders open' });
+    expect(pin).toHaveAttribute('aria-pressed', 'false');
+
+    fireEvent.click(pin);
+    expect(onChange).toHaveBeenCalledWith(true);
+  });
+
+  it('exposes the unpin label and pressed state when already pinned', () => {
+    render(
+      <ReminderPanelHeader
+        count={0}
+        hasUrgent={false}
+        pinToggle={{ pinned: true, onChange: vi.fn() }}
+      />
+    );
+
+    const pin = screen.getByRole('button', { name: 'Unpin reminders panel' });
+    expect(pin).toHaveAttribute('aria-pressed', 'true');
   });
 });
 

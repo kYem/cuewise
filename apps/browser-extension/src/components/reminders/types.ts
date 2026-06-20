@@ -17,6 +17,8 @@ export interface ReminderPanelProps {
   onAdd: () => void;
   /** Optional: open the "all reminders" manage modal (edit/delete live there). */
   onManage?: () => void;
+  /** Current pinned state + setter, to show an in-header pin toggle. When omitted, no pin renders. */
+  pinToggle?: { pinned: boolean; onChange: (pinned: boolean) => void };
   /** Current panel layout + setter, to show an in-header view switcher. When omitted, no switcher renders. */
   viewSwitcher?: { layout: ReminderPanelLayout; onChange: (layout: ReminderPanelLayout) => void };
 }

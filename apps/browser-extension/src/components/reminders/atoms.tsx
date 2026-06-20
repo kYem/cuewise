@@ -15,6 +15,7 @@ import {
   Check,
   LayoutList,
   Pause,
+  Pin,
   Play,
   Repeat,
   SkipForward,
@@ -223,10 +224,38 @@ function LayoutSwitch({ layout, onLayoutChange }: LayoutSwitchProps) {
   );
 }
 
+interface PinToggleProps {
+  pinned: boolean;
+  onChange: (pinned: boolean) => void;
+}
+
+/** Pin button that keeps the panel open (no click-away collapse); sits left of the view switch. */
+function PinToggle({ pinned, onChange }: PinToggleProps) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!pinned)}
+      aria-pressed={pinned}
+      aria-label={pinned ? 'Unpin reminders panel' : 'Keep reminders open'}
+      title={pinned ? 'Unpin — closes on click away' : 'Keep open'}
+      className={cn(
+        'flex-none inline-flex items-center justify-center w-7 h-7 rounded-full border transition-colors',
+        'focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500',
+        pinned
+          ? 'bg-primary-600/10 border-primary-600/40 text-primary-600'
+          : 'border-border bg-surface-variant text-tertiary hover:text-primary'
+      )}
+    >
+      <Pin className="w-3.5 h-3.5" />
+    </button>
+  );
+}
+
 interface ReminderPanelHeaderProps {
   count: number;
   hasUrgent: boolean;
   subNote?: { text: string; tone: ReminderState | null };
+  pinToggle?: { pinned: boolean; onChange: (pinned: boolean) => void };
   viewSwitcher?: { layout: ReminderPanelLayout; onChange: (layout: ReminderPanelLayout) => void };
 }
 
@@ -235,6 +264,7 @@ export function ReminderPanelHeader({
   count,
   hasUrgent,
   subNote,
+  pinToggle,
   viewSwitcher,
 }: ReminderPanelHeaderProps) {
   const noteTone = subNote?.tone ? REMINDER_STATE_STYLES[subNote.tone].text : 'text-secondary';
@@ -260,8 +290,13 @@ export function ReminderPanelHeader({
           {subNote && <div className={cn('text-xs mt-0.5', noteTone)}>{subNote.text}</div>}
         </div>
       </div>
-      {viewSwitcher && (
-        <LayoutSwitch layout={viewSwitcher.layout} onLayoutChange={viewSwitcher.onChange} />
+      {(pinToggle || viewSwitcher) && (
+        <div className="flex-none inline-flex items-center gap-1.5">
+          {pinToggle && <PinToggle pinned={pinToggle.pinned} onChange={pinToggle.onChange} />}
+          {viewSwitcher && (
+            <LayoutSwitch layout={viewSwitcher.layout} onLayoutChange={viewSwitcher.onChange} />
+          )}
+        </div>
       )}
     </div>
   );
