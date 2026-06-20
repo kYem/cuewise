@@ -99,6 +99,15 @@ describe('Concept Cards Store', () => {
       );
       expect(await useConceptCardsStore.getState().updateCard('1', { definition: '' })).toBe(false);
     });
+
+    it('clears the source when emptied', async () => {
+      const card = conceptCardFactory.build({ id: '1', source: 'Old book' });
+      useConceptCardsStore.setState({ cards: [card] });
+
+      await useConceptCardsStore.getState().updateCard('1', { source: '' });
+
+      expect(useConceptCardsStore.getState().cards[0].source).toBeUndefined();
+    });
   });
 
   describe('deleteCard', () => {

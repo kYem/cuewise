@@ -50,7 +50,7 @@ export const ConceptForm: React.FC<ConceptFormProps> = ({ card, onSuccess, onCan
           definition,
           details,
           tags: parsedTags,
-          source: source.trim() || undefined,
+          source,
         });
       } else {
         ok = await addCard(term, definition, {

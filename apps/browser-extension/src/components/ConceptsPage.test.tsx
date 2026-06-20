@@ -164,6 +164,19 @@ describe('ConceptsPage', () => {
     expect(screen.queryByText('Idempotency')).toBeNull();
   });
 
+  it('matches search on the source field', () => {
+    mockStore([
+      conceptCardFactory.build({ term: 'CAP theorem', source: 'DDIA book' }),
+      conceptCardFactory.build({ term: 'Idempotency' }),
+    ]);
+
+    render(<ConceptsPage />);
+    fireEvent.change(screen.getByLabelText('Search concepts'), { target: { value: 'ddia' } });
+
+    expect(screen.getByText('CAP theorem')).toBeInTheDocument();
+    expect(screen.queryByText('Idempotency')).toBeNull();
+  });
+
   it('combines search and tag filter with AND', () => {
     mockStore([
       conceptCardFactory.build({ term: 'Saga pattern', tags: ['microservices'] }),

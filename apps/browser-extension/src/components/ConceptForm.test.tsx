@@ -76,7 +76,8 @@ describe('ConceptForm', () => {
       fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
     });
 
-    expect(updateCard.mock.calls[0][1].source).toBeUndefined();
+    // The form passes the raw cleared value; the store collapses '' -> undefined.
+    expect(updateCard.mock.calls[0][1].source).toBe('');
   });
 
   it('edits an existing concept via updateCard', async () => {

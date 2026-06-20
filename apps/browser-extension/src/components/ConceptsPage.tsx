@@ -7,7 +7,7 @@ import {
 import { cn, Input } from '@cuewise/ui';
 import { ArrowLeft, Brain, Pencil, Plus, Trash2 } from 'lucide-react';
 import type React from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useConceptCardsStore } from '../stores/concept-cards-store';
 import { ConceptForm } from './ConceptForm';
 import { Modal } from './Modal';
@@ -38,17 +38,23 @@ export const ConceptsPage: React.FC = () => {
   const today = getTodayDateString();
   const dueCount = cards.filter((card) => card.schedule.dueDate <= today).length;
 
-  const allTags = [...new Set(cards.flatMap((card) => card.tags ?? []))].sort();
-  const normalizedQuery = query.trim().toLowerCase();
-  const filteredCards = cards.filter((card) => {
-    const matchesQuery =
-      normalizedQuery.length === 0 ||
-      card.term.toLowerCase().includes(normalizedQuery) ||
-      card.definition.toLowerCase().includes(normalizedQuery) ||
-      (card.tags ?? []).some((tag) => tag.toLowerCase().includes(normalizedQuery));
-    const matchesTag = activeTag === null || (card.tags ?? []).includes(activeTag);
-    return matchesQuery && matchesTag;
-  });
+  const allTags = useMemo(
+    () => [...new Set(cards.flatMap((card) => card.tags ?? []))].sort(),
+    [cards]
+  );
+  const filteredCards = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    return cards.filter((card) => {
+      const matchesQuery =
+        normalizedQuery.length === 0 ||
+        card.term.toLowerCase().includes(normalizedQuery) ||
+        card.definition.toLowerCase().includes(normalizedQuery) ||
+        (card.source ?? '').toLowerCase().includes(normalizedQuery) ||
+        (card.tags ?? []).some((tag) => tag.toLowerCase().includes(normalizedQuery));
+      const matchesTag = activeTag === null || (card.tags ?? []).includes(activeTag);
+      return matchesQuery && matchesTag;
+    });
+  }, [cards, query, activeTag]);
 
   // Two-click delete: first click arms, second confirms.
   const handleDelete = (id: string) => {
