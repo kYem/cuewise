@@ -233,6 +233,8 @@ export type ConceptGrade = 'again' | 'good' | 'easy';
 export type ConceptCadence = 'every' | 'third' | 'ten' | 'off';
 // Calm occasional nudge vs an explicit "N due today" review pile
 export type ConceptFraming = 'ambient' | 'queue';
+// A card's at-a-glance difficulty from its ease factor (deck UI)
+export type ConceptDifficulty = 'new' | 'struggling' | 'solid' | 'strong';
 
 // Google Calendar (read-only) — shown beside the Pomodoro timer.
 // Discriminated on `allDay` so the two time representations can't be confused:

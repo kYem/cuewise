@@ -78,7 +78,7 @@ describe('ConceptsPage', () => {
     expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument();
   });
 
-  it('tints a struggling card and leaves a new card unaccented', () => {
+  it('tints each card by its difficulty level', () => {
     mockStore([
       conceptCardFactory.build({
         term: 'Struggling card',
@@ -101,6 +101,28 @@ describe('ConceptsPage', () => {
           lapses: 0,
         },
       }),
+      conceptCardFactory.build({
+        term: 'Solid card',
+        schedule: {
+          dueDate: '2099-01-01',
+          interval: 12,
+          easeFactor: 2.3,
+          repetitions: 3,
+          lapses: 1,
+          lastReviewedAt: '2026-06-10T00:00:00.000Z',
+        },
+      }),
+      conceptCardFactory.build({
+        term: 'Strong card',
+        schedule: {
+          dueDate: '2099-01-01',
+          interval: 40,
+          easeFactor: 2.6,
+          repetitions: 6,
+          lapses: 0,
+          lastReviewedAt: '2026-06-10T00:00:00.000Z',
+        },
+      }),
     ]);
 
     render(<ConceptsPage />);
@@ -112,6 +134,14 @@ describe('ConceptsPage', () => {
     const fresh = screen.getByText('Fresh card').closest('li');
     expect(fresh).not.toBeNull();
     expect(fresh).not.toHaveClass('border-l-error');
+
+    const solid = screen.getByText('Solid card').closest('li');
+    expect(solid).not.toBeNull();
+    expect(solid).toHaveClass('border-l-warning');
+
+    const strong = screen.getByText('Strong card').closest('li');
+    expect(strong).not.toBeNull();
+    expect(strong).toHaveClass('border-l-success');
   });
 
   it('filters the list by search query', () => {
@@ -125,6 +155,29 @@ describe('ConceptsPage', () => {
 
     expect(screen.getByText('Saga pattern')).toBeInTheDocument();
     expect(screen.queryByText('Idempotency')).toBeNull();
+
+    // also matches on the definition text
+    fireEvent.change(screen.getByLabelText('Search concepts'), {
+      target: { value: 'compensating' },
+    });
+    expect(screen.getByText('Saga pattern')).toBeInTheDocument();
+    expect(screen.queryByText('Idempotency')).toBeNull();
+  });
+
+  it('combines search and tag filter with AND', () => {
+    mockStore([
+      conceptCardFactory.build({ term: 'Saga pattern', tags: ['microservices'] }),
+      conceptCardFactory.build({ term: 'Sidecar', tags: ['microservices'] }),
+      conceptCardFactory.build({ term: 'Saga timeout', tags: ['http'] }),
+    ]);
+
+    render(<ConceptsPage />);
+    fireEvent.click(screen.getByRole('button', { name: 'microservices' }));
+    fireEvent.change(screen.getByLabelText('Search concepts'), { target: { value: 'saga' } });
+
+    expect(screen.getByText('Saga pattern')).toBeInTheDocument();
+    expect(screen.queryByText('Sidecar')).toBeNull(); // right tag, wrong query
+    expect(screen.queryByText('Saga timeout')).toBeNull(); // right query, wrong tag
   });
 
   it('filters by a tag chip and toggles it off', () => {

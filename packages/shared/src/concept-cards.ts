@@ -7,7 +7,13 @@ import {
   CONCEPT_NUDGE_GAP_DAYS,
   CONCEPT_NUDGE_MAX_SHOWS,
 } from './constants';
-import type { ConceptCard, ConceptGrade, ConceptSchedule, ConceptStats } from './types';
+import type {
+  ConceptCard,
+  ConceptDifficulty,
+  ConceptGrade,
+  ConceptSchedule,
+  ConceptStats,
+} from './types';
 import type { NudgeShowState } from './utils';
 
 /**
@@ -243,8 +249,6 @@ export function getConceptStats(cards: ConceptCard[], today: Date): ConceptStats
     dueForecast,
   };
 }
-
-export type ConceptDifficulty = 'new' | 'struggling' | 'solid' | 'strong';
 
 /**
  * A card's difficulty from its SM-2 ease factor, for the deck UI. A
