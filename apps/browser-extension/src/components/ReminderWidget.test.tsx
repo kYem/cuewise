@@ -40,8 +40,10 @@ function mockReminderStore(overrides: Record<string, unknown> = {}) {
 }
 
 // The widget reads settings via selectors, so the mock must apply the selector.
-function mockSettings(reminderPanelLayout: 'composed' | 'agenda') {
-  vi.mocked(useSettingsStore).mockImplementation(createSettingsStoreMock({ reminderPanelLayout }));
+function mockSettings(reminderPanelLayout: 'composed' | 'agenda', reminderPanelPinned = false) {
+  vi.mocked(useSettingsStore).mockImplementation(
+    createSettingsStoreMock({ reminderPanelLayout, reminderPanelPinned })
+  );
 }
 
 function expandPanel() {
@@ -86,5 +88,39 @@ describe('ReminderWidget', () => {
 
     expect(screen.getByText('Failed to load reminders')).toBeInTheDocument();
     expect(screen.queryByText('Scheduled')).not.toBeInTheDocument();
+  });
+
+  it('collapses on an outside click when not pinned', () => {
+    mockReminderStore();
+    mockSettings('composed', false);
+
+    render(<ReminderWidget />);
+    expandPanel();
+    expect(screen.getByText(/habits ·/)).toBeInTheDocument();
+
+    fireEvent.mouseDown(document.body);
+    expect(screen.queryByText(/habits ·/)).not.toBeInTheDocument();
+  });
+
+  it('stays open on an outside click when pinned', () => {
+    mockReminderStore();
+    mockSettings('composed', true);
+
+    render(<ReminderWidget />);
+    // Auto-expand already opened the panel; no bell click needed.
+    expect(screen.getByText(/habits ·/)).toBeInTheDocument();
+
+    fireEvent.mouseDown(document.body);
+    expect(screen.getByText(/habits ·/)).toBeInTheDocument();
+  });
+
+  it('auto-expands the panel on mount when pinned', () => {
+    mockReminderStore();
+    mockSettings('composed', true);
+
+    render(<ReminderWidget />);
+
+    // No bell click — the panel is already open because the setting is pinned.
+    expect(screen.getByText(/habits ·/)).toBeInTheDocument();
   });
 });
