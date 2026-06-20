@@ -123,4 +123,29 @@ describe('ReminderWidget', () => {
     // No bell click — the panel is already open because the setting is pinned.
     expect(screen.getByText(/habits ·/)).toBeInTheDocument();
   });
+
+  it('still collapses via the bell button when pinned', () => {
+    mockReminderStore();
+    mockSettings('composed', true);
+
+    render(<ReminderWidget />);
+    // Auto-expand opened it on mount; the bell must still toggle it closed.
+    expect(screen.getByText(/habits ·/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Click to collapse/ }));
+    expect(screen.queryByText(/habits ·/)).not.toBeInTheDocument();
+  });
+
+  it('keeps a manually collapsed pinned panel closed across a re-render', () => {
+    mockReminderStore();
+    mockSettings('composed', true);
+
+    const { rerender } = render(<ReminderWidget />);
+    fireEvent.click(screen.getByRole('button', { name: /Click to collapse/ }));
+    expect(screen.queryByText(/habits ·/)).not.toBeInTheDocument();
+
+    // A re-render with the same pinned value must not re-trip the auto-expand.
+    rerender(<ReminderWidget />);
+    expect(screen.queryByText(/habits ·/)).not.toBeInTheDocument();
+  });
 });

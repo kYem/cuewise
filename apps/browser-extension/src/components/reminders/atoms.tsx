@@ -27,6 +27,7 @@ import type { ReminderState } from '../../utils/reminder-classify';
 import { formatCountdown, formatDueDate, formatTimeAgo } from '../../utils/reminder-date-utils';
 import { EmptyState } from '../EmptyState';
 import { REMINDER_CATEGORY_ICON, REMINDER_STATE_STYLES } from './reminder-state-styles';
+import type { PanelPinToggle } from './types';
 
 /** States that warrant the loud accent treatment (and a live countdown). */
 function isUrgentState(state: ReminderState): boolean {
@@ -224,13 +225,8 @@ function LayoutSwitch({ layout, onLayoutChange }: LayoutSwitchProps) {
   );
 }
 
-interface PinToggleProps {
-  pinned: boolean;
-  onChange: (pinned: boolean) => void;
-}
-
-/** Pin button that keeps the panel open (no click-away collapse); sits left of the view switch. */
-function PinToggle({ pinned, onChange }: PinToggleProps) {
+/** Pin button: toggles the keep-open (no click-away collapse) state for the panel. */
+function PinToggle({ pinned, onChange }: PanelPinToggle) {
   return (
     <button
       type="button"
@@ -255,11 +251,11 @@ interface ReminderPanelHeaderProps {
   count: number;
   hasUrgent: boolean;
   subNote?: { text: string; tone: ReminderState | null };
-  pinToggle?: { pinned: boolean; onChange: (pinned: boolean) => void };
+  pinToggle?: PanelPinToggle;
   viewSwitcher?: { layout: ReminderPanelLayout; onChange: (layout: ReminderPanelLayout) => void };
 }
 
-/** Panel header: bell tile (red when urgent), title + count, optional sub-note and layout switcher. */
+/** Panel header: bell tile (red when urgent), title + count, optional sub-note, pin toggle and layout switcher. */
 export function ReminderPanelHeader({
   count,
   hasUrgent,
