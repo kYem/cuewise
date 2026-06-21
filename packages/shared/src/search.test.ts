@@ -5,6 +5,7 @@ describe('matchesSearchQuery', () => {
   it('matches case-insensitively against any field', () => {
     expect(matchesSearchQuery(['Saga pattern', 'compensating txns'], 'SAGA')).toBe(true);
     expect(matchesSearchQuery(['Saga pattern', 'compensating txns'], 'compensat')).toBe(true);
+    expect(matchesSearchQuery(['Saga pattern'], '  saga  ')).toBe(true); // the query is trimmed
   });
 
   it('returns false when no field contains the query', () => {

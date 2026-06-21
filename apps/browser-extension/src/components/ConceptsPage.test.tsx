@@ -51,6 +51,27 @@ describe('ConceptsPage', () => {
     expect(screen.getByText('Due now')).toBeInTheDocument();
   });
 
+  it('shows the scheduled date and review count for a not-due card', () => {
+    mockStore([
+      conceptCardFactory.build({
+        term: 'Later card',
+        schedule: {
+          dueDate: '2099-01-01',
+          interval: 12,
+          easeFactor: 2.5,
+          repetitions: 4,
+          lapses: 0,
+          lastReviewedAt: '2026-06-10T00:00:00.000Z',
+        },
+      }),
+    ]);
+
+    render(<ConceptsPage />);
+
+    expect(screen.getByText('Due 2099-01-01')).toBeInTheDocument();
+    expect(screen.getByText(/4 reviews .* interval 12d/)).toBeInTheDocument();
+  });
+
   it('requires two clicks to delete', () => {
     const { deleteCard } = mockStore([dueCard]);
 
