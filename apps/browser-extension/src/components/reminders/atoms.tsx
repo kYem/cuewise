@@ -249,7 +249,7 @@ interface ReminderPanelHeaderProps {
   viewSwitcher?: PanelViewSwitcher;
 }
 
-/** Panel header: bell tile (red when urgent), title + count, optional sub-note, pin toggle and layout switcher. */
+/** Panel header: bell tile (red when urgent), title + count, optional sub-note, pin toggle, and layout switcher. */
 export function ReminderPanelHeader({
   count,
   hasUrgent,
