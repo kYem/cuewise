@@ -331,6 +331,7 @@ export interface Settings {
   celebrationsEnabled: boolean; // Play a Lottie burst on pomodoro/goal completion (default true)
   // Reminders
   reminderPanelLayout: ReminderPanelLayout; // Reminders panel layout (default 'composed')
+  reminderPanelPinned: boolean; // Panel stays open: no click-away collapse; auto-expands once on load (default false)
   // Store review prompt
   reviewPromptDismissed: boolean; // Never surface the review prompt again (default false)
   reviewPromptCount: number; // Times the review prompt has been shown (default 0)

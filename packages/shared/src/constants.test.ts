@@ -9,4 +9,8 @@ describe('DEFAULT_SETTINGS', () => {
   it('defaults the reminders panel to the composed layout', () => {
     expect(DEFAULT_SETTINGS.reminderPanelLayout).toBe('composed');
   });
+
+  it('leaves the reminders panel unpinned by default', () => {
+    expect(DEFAULT_SETTINGS.reminderPanelPinned).toBe(false);
+  });
 });
