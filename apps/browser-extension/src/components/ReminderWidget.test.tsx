@@ -148,4 +148,32 @@ describe('ReminderWidget', () => {
     rerender(<ReminderWidget />);
     expect(screen.queryByText(/habits ·/)).not.toBeInTheDocument();
   });
+
+  it('re-arms click-away collapse after a live unpin', () => {
+    mockReminderStore();
+    mockSettings('composed', true);
+
+    const { rerender } = render(<ReminderWidget />);
+    expect(screen.getByText(/habits ·/)).toBeInTheDocument();
+
+    // Unpinning at runtime must re-attach the outside-click listener.
+    mockSettings('composed', false);
+    rerender(<ReminderWidget />);
+    fireEvent.mouseDown(document.body);
+    expect(screen.queryByText(/habits ·/)).not.toBeInTheDocument();
+  });
+
+  it('persists the pinned setting when the header pin is clicked', () => {
+    const updateSettings = vi.fn();
+    mockReminderStore();
+    vi.mocked(useSettingsStore).mockImplementation(
+      createSettingsStoreMock({ reminderPanelLayout: 'composed', updateSettings })
+    );
+
+    render(<ReminderWidget />);
+    expandPanel();
+    fireEvent.click(screen.getByRole('button', { name: 'Keep reminders open' }));
+
+    expect(updateSettings).toHaveBeenCalledWith({ reminderPanelPinned: true });
+  });
 });

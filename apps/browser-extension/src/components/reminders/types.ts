@@ -14,7 +14,7 @@ export interface PanelViewSwitcher {
 
 /**
  * Shared contract for every reminders-panel layout variant (Composed, etc.).
- * The widget (Task 5) owns the positioned wrapper; panels render only the card.
+ * The widget owns the positioned wrapper; panels render only the card.
  */
 export interface ReminderPanelProps {
   /** Active reminders to render — panels group and sort internally. */
