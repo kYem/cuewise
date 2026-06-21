@@ -187,6 +187,8 @@ export const QuickLinksWidget: React.FC = () => {
         <a
           key={link.id}
           href={link.url}
+          target="_blank"
+          rel="noopener noreferrer"
           title={link.title}
           aria-label={link.title}
           className={TILE_CLASS}
@@ -250,6 +252,8 @@ export const QuickLinksWidget: React.FC = () => {
                     >
                       <a
                         href={link.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
                         className="flex flex-1 items-center gap-2 min-w-0"
                         title={link.title}
                       >
