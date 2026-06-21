@@ -8,6 +8,8 @@ export * from './constants';
 export * from './csv-utils';
 // Export logger
 export * from './logger';
+// Export text search helpers
+export * from './search';
 export * from './types';
 // Export utilities
 export * from './utils';
