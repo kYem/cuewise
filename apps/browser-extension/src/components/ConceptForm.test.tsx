@@ -48,6 +48,45 @@ describe('ConceptForm', () => {
     expect(onSuccess).toHaveBeenCalled();
   });
 
+  it('folds in a tag typed but not committed when saving directly', async () => {
+    const { addCard } = mockStore();
+
+    render(<ConceptForm onSuccess={vi.fn()} onCancel={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText(/term/i), { target: { value: 'Idempotency' } });
+    fireEvent.change(screen.getByLabelText(/definition/i), { target: { value: 'Same effect.' } });
+    // Type a tag but do NOT press Enter, then Save directly.
+    fireEvent.change(screen.getByLabelText('Tags'), { target: { value: 'redis' } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /save concept/i }));
+    });
+
+    expect(addCard).toHaveBeenCalledWith(
+      'Idempotency',
+      'Same effect.',
+      expect.objectContaining({ tags: ['redis'] })
+    );
+  });
+
+  it('dedupes tags case-insensitively', async () => {
+    const { addCard } = mockStore();
+
+    render(<ConceptForm onSuccess={vi.fn()} onCancel={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText(/term/i), { target: { value: 'T' } });
+    fireEvent.change(screen.getByLabelText(/definition/i), { target: { value: 'D' } });
+    const tagInput = screen.getByLabelText('Tags');
+    fireEvent.change(tagInput, { target: { value: 'HTTP' } });
+    fireEvent.keyDown(tagInput, { key: 'Enter' });
+    fireEvent.change(tagInput, { target: { value: 'http' } });
+    fireEvent.keyDown(tagInput, { key: 'Enter' });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /save concept/i }));
+    });
+
+    expect(addCard).toHaveBeenCalledWith('T', 'D', expect.objectContaining({ tags: ['HTTP'] }));
+  });
+
   it('deletes a concept on the second Delete click in edit mode', async () => {
     const { deleteCard } = mockStore();
     const onSuccess = vi.fn();

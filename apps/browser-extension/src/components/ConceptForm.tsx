@@ -1,12 +1,11 @@
-import { type ConceptCard, getTodayDateString, logger } from '@cuewise/shared';
-import { Input, Label, Textarea } from '@cuewise/ui';
+import { type ConceptCard, getTodayDateString, logger, uniqueSorted } from '@cuewise/shared';
+import { Autocomplete, Input, Label, Textarea } from '@cuewise/ui';
 import { Trash2 } from 'lucide-react';
 import type React from 'react';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useConceptCardsStore } from '../stores/concept-cards-store';
 import { ConceptFormPreview } from './ConceptFormPreview';
-import { ConceptSourceInput } from './ConceptSourceInput';
-import { ConceptTagInput } from './ConceptTagInput';
+import { addTag, ConceptTagInput } from './ConceptTagInput';
 
 interface ConceptFormProps {
   /** When provided, the form edits this card instead of adding a new one. */
@@ -25,6 +24,8 @@ export const ConceptForm: React.FC<ConceptFormProps> = ({ card, onSuccess, onCan
   const [source, setSource] = useState(card?.source ?? '');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  // Latest uncommitted tag draft, so submit can fold in a tag typed but not entered.
+  const tagDraftRef = useRef('');
 
   const cards = useConceptCardsStore((state) => state.cards);
   const addCard = useConceptCardsStore((state) => state.addCard);
@@ -32,17 +33,8 @@ export const ConceptForm: React.FC<ConceptFormProps> = ({ card, onSuccess, onCan
   const deleteCard = useConceptCardsStore((state) => state.deleteCard);
 
   // Suggestions drawn from the rest of the deck so tags/sources stay consistent.
-  const existingTags = useMemo(
-    () => [...new Set(cards.flatMap((c) => c.tags ?? []))].sort((a, b) => a.localeCompare(b)),
-    [cards]
-  );
-  const existingSources = useMemo(
-    () =>
-      [...new Set(cards.map((c) => c.source).filter((s): s is string => Boolean(s)))].sort((a, b) =>
-        a.localeCompare(b)
-      ),
-    [cards]
-  );
+  const existingTags = useMemo(() => uniqueSorted(cards.flatMap((c) => c.tags ?? [])), [cards]);
+  const existingSources = useMemo(() => uniqueSorted(cards.map((c) => c.source)), [cards]);
 
   const isEdit = card !== undefined;
   const canSave = term.trim().length > 0 && definition.trim().length > 0;
@@ -62,14 +54,16 @@ export const ConceptForm: React.FC<ConceptFormProps> = ({ card, onSuccess, onCan
 
     setIsSubmitting(true);
     try {
+      // Fold in a tag typed but not yet committed (e.g. clicking Save directly).
+      const finalTags = addTag(tags, tagDraftRef.current);
       let ok: boolean;
       if (card) {
         // Pass explicit values so cleared fields actually clear on save.
-        ok = await updateCard(card.id, { term, definition, details, tags, source });
+        ok = await updateCard(card.id, { term, definition, details, tags: finalTags, source });
       } else {
         ok = await addCard(term, definition, {
           details: details.trim() || undefined,
-          tags: tags.length > 0 ? tags : undefined,
+          tags: finalTags.length > 0 ? finalTags : undefined,
           source: source.trim() || undefined,
         });
       }
@@ -147,12 +141,26 @@ export const ConceptForm: React.FC<ConceptFormProps> = ({ card, onSuccess, onCan
 
           <div>
             <Label htmlFor="concept-tags">Tags (optional)</Label>
-            <ConceptTagInput tags={tags} onChange={setTags} suggestions={existingTags} />
+            <ConceptTagInput
+              tags={tags}
+              onChange={setTags}
+              suggestions={existingTags}
+              onDraftChange={(value) => {
+                tagDraftRef.current = value;
+              }}
+            />
           </div>
 
           <div>
             <Label htmlFor="concept-source">Source (optional)</Label>
-            <ConceptSourceInput value={source} onChange={setSource} suggestions={existingSources} />
+            <Autocomplete
+              id="concept-source"
+              value={source}
+              onChange={setSource}
+              suggestions={existingSources}
+              placeholder="Search or type a source…"
+              maxLength={200}
+            />
           </div>
         </div>
 

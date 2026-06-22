@@ -1,4 +1,9 @@
-import { type ConceptCard, getTodayDateString, matchesSearchQuery } from '@cuewise/shared';
+import {
+  type ConceptCard,
+  getTodayDateString,
+  matchesSearchQuery,
+  uniqueSorted,
+} from '@cuewise/shared';
 import { ArrowLeft, Brain, Plus } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
@@ -27,10 +32,7 @@ export const ConceptsPage: React.FC = () => {
   const today = getTodayDateString();
   const dueCount = cards.filter((card) => card.schedule.dueDate <= today).length;
 
-  const allTags = useMemo(
-    () => [...new Set(cards.flatMap((card) => card.tags ?? []))].sort(),
-    [cards]
-  );
+  const allTags = useMemo(() => uniqueSorted(cards.flatMap((card) => card.tags ?? [])), [cards]);
   const filteredCards = useMemo(() => {
     return cards.filter((card) => {
       const matchesQuery = matchesSearchQuery(

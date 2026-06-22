@@ -3,11 +3,22 @@ import { Plus, X } from 'lucide-react';
 import type React from 'react';
 import { useRef, useState } from 'react';
 
+/** Append a trimmed tag, deduped case-insensitively. Returns the same array on no-op. */
+export function addTag(tags: string[], value: string): string[] {
+  const next = value.trim().replace(/,$/, '');
+  if (next.length === 0 || tags.some((tag) => tag.toLowerCase() === next.toLowerCase())) {
+    return tags;
+  }
+  return [...tags, next];
+}
+
 interface ConceptTagInputProps {
   tags: string[];
   onChange: (tags: string[]) => void;
   /** Existing tags across the deck, offered as suggestions (deduped, sorted). */
   suggestions: string[];
+  /** Mirrors the uncommitted draft so the form can fold it in on submit. */
+  onDraftChange?: (value: string) => void;
 }
 
 /**
@@ -19,14 +30,20 @@ export const ConceptTagInput: React.FC<ConceptTagInputProps> = ({
   tags,
   onChange,
   suggestions,
+  onDraftChange,
 }) => {
-  const [draft, setDraft] = useState('');
+  const [draft, setDraftState] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const setDraft = (value: string) => {
+    setDraftState(value);
+    onDraftChange?.(value);
+  };
+
   const commit = (value?: string) => {
-    const next = (value ?? draft).trim().replace(/,$/, '');
-    if (next.length > 0 && !tags.includes(next)) {
-      onChange([...tags, next]);
+    const updated = addTag(tags, value ?? draft);
+    if (updated !== tags) {
+      onChange(updated);
     }
     setDraft('');
   };

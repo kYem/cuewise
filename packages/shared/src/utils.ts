@@ -53,6 +53,13 @@ export function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 }
 
+/** Dedupe (dropping falsy values) and locale-sort a list of strings. */
+export function uniqueSorted(values: (string | undefined | null)[]): string[] {
+  return [...new Set(values.filter((value): value is string => Boolean(value)))].sort((a, b) =>
+    a.localeCompare(b)
+  );
+}
+
 /**
  * Normalize a user-entered URL into an absolute http(s) URL. Prepends https://
  * when no protocol is given. Returns null for anything that isn't a valid
