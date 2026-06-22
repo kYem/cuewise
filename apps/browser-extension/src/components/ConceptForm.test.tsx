@@ -10,8 +10,11 @@ vi.mock('../stores/concept-cards-store', () => ({ useConceptCardsStore: vi.fn() 
 function mockStore() {
   const addCard = vi.fn().mockResolvedValue(true);
   const updateCard = vi.fn().mockResolvedValue(true);
-  vi.mocked(useConceptCardsStore).mockImplementation(createSelectorMock({ addCard, updateCard }));
-  return { addCard, updateCard };
+  const deleteCard = vi.fn().mockResolvedValue(true);
+  vi.mocked(useConceptCardsStore).mockImplementation(
+    createSelectorMock({ addCard, updateCard, deleteCard, cards: [] })
+  );
+  return { addCard, updateCard, deleteCard };
 }
 
 describe('ConceptForm', () => {
@@ -27,7 +30,12 @@ describe('ConceptForm', () => {
 
     fireEvent.change(screen.getByLabelText(/term/i), { target: { value: 'Idempotency' } });
     fireEvent.change(screen.getByLabelText(/definition/i), { target: { value: 'Same effect.' } });
-    fireEvent.change(screen.getByLabelText(/tags/i), { target: { value: 'http, retries' } });
+    // Tags are chips now: type then Enter to commit each.
+    const tagInput = screen.getByLabelText('Tags');
+    fireEvent.change(tagInput, { target: { value: 'http' } });
+    fireEvent.keyDown(tagInput, { key: 'Enter' });
+    fireEvent.change(tagInput, { target: { value: 'retries' } });
+    fireEvent.keyDown(tagInput, { key: 'Enter' });
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /save concept/i }));
     });
@@ -37,6 +45,24 @@ describe('ConceptForm', () => {
       tags: ['http', 'retries'],
       source: undefined,
     });
+    expect(onSuccess).toHaveBeenCalled();
+  });
+
+  it('deletes a concept on the second Delete click in edit mode', async () => {
+    const { deleteCard } = mockStore();
+    const onSuccess = vi.fn();
+    const card = conceptCardFactory.build({ id: 'c9', term: 'T', definition: 'D' });
+
+    render(<ConceptForm card={card} onSuccess={onSuccess} onCancel={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /^delete$/i }));
+    expect(deleteCard).not.toHaveBeenCalled();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /confirm delete/i }));
+    });
+
+    expect(deleteCard).toHaveBeenCalledWith('c9');
     expect(onSuccess).toHaveBeenCalled();
   });
 

@@ -136,14 +136,14 @@ export const ConceptsPage: React.FC = () => {
         )}
       </div>
 
-      <Modal isOpen={isAdding} onClose={() => setIsAdding(false)} title="Add a concept" size="md">
+      <Modal isOpen={isAdding} onClose={() => setIsAdding(false)} title="Add a concept" size="2xl">
         <ConceptForm onSuccess={() => setIsAdding(false)} onCancel={() => setIsAdding(false)} />
       </Modal>
       <Modal
         isOpen={editingCard !== null}
         onClose={() => setEditingCard(null)}
         title="Edit concept"
-        size="md"
+        size="2xl"
       >
         {editingCard && (
           <ConceptForm

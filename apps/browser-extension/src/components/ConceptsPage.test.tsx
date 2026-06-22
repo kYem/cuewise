@@ -95,8 +95,9 @@ describe('ConceptsPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
 
+    // Opening the editor disarms the card's pending delete.
     expect(screen.queryByRole('button', { name: 'Click again to delete' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /save changes/i })).toBeInTheDocument();
   });
 
   it('tints each card by its difficulty level', () => {
