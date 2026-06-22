@@ -9,7 +9,7 @@ import {
 import { cn } from '@cuewise/ui';
 import { BookOpen, Brain, ChevronRight, Eye, Plus, Repeat } from 'lucide-react';
 import type React from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 // Per-grade accent (theme tokens: error / success / brand violet) — a soft
 // tinted border + faint hover fill, kept light to suit the calm glass surface.
@@ -41,6 +41,36 @@ export const ConceptCardDisplay: React.FC<ConceptCardDisplayProps> = ({
   const [revealed, setRevealed] = useState(!activeRecall);
 
   const topic = card.tags?.[0];
+
+  // Anki-style 1/2/3 grading, live only once the answer is revealed. Ignores
+  // modifier combos and keystrokes aimed at a text field.
+  useEffect(() => {
+    if (!revealed) {
+      return;
+    }
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) {
+        return;
+      }
+      const target = e.target as HTMLElement | null;
+      if (
+        target?.tagName === 'INPUT' ||
+        target?.tagName === 'TEXTAREA' ||
+        target?.tagName === 'SELECT' ||
+        target?.isContentEditable
+      ) {
+        return;
+      }
+      const index = ['1', '2', '3'].indexOf(e.key);
+      if (index === -1 || index >= CONCEPT_GRADES.length) {
+        return;
+      }
+      e.preventDefault();
+      onGrade(CONCEPT_GRADES[index].id);
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [revealed, onGrade]);
 
   return (
     <div className="w-full max-w-2xl mx-auto text-center text-primary">
@@ -117,7 +147,7 @@ export const ConceptCardDisplay: React.FC<ConceptCardDisplayProps> = ({
           <div className="mt-6">
             <div className="mb-3 text-xs text-secondary">How well did you recall it?</div>
             <div className="flex items-stretch justify-center gap-2.5">
-              {CONCEPT_GRADES.map((grade) => {
+              {CONCEPT_GRADES.map((grade, i) => {
                 // Cap the preview at the same ceiling reviewConceptCard applies.
                 const nextInterval = Math.min(
                   projectConceptInterval(card.schedule, grade.id),
@@ -127,15 +157,18 @@ export const ConceptCardDisplay: React.FC<ConceptCardDisplayProps> = ({
                   <button
                     key={grade.id}
                     type="button"
-                    title={grade.hint}
+                    title={`${grade.hint} (press ${i + 1})`}
                     onClick={() => onGrade(grade.id)}
                     className={cn(
-                      'flex max-w-[130px] flex-1 flex-col items-center gap-0.5 rounded-lg border bg-surface/60 px-2 py-2 text-primary backdrop-blur-sm transition-all hover:-translate-y-0.5',
+                      'relative flex max-w-[120px] flex-1 flex-col items-center gap-0 rounded-lg border bg-surface/60 px-2 py-1.5 text-primary backdrop-blur-sm transition-all hover:-translate-y-0.5',
                       GRADE_ACCENT[grade.id]
                     )}
                   >
-                    <span className="text-sm font-bold">{grade.label}</span>
-                    <span className="text-[11px] tabular-nums text-secondary">
+                    <kbd className="absolute right-1 top-1 rounded bg-surface-variant/70 px-1 text-[9px] font-semibold leading-tight text-tertiary">
+                      {i + 1}
+                    </kbd>
+                    <span className="text-[13px] font-bold leading-tight">{grade.label}</span>
+                    <span className="text-[10px] tabular-nums text-secondary">
                       {conceptIntervalLabel(nextInterval)}
                     </span>
                   </button>
