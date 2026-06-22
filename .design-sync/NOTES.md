@@ -11,7 +11,7 @@ node .design-sync/prepare.mjs                                                   
 node .ds-sync/resync.mjs --config .design-sync/config.json --node-modules apps/browser-extension/node_modules \
   --entry packages/ui/dist/ds-entry.mjs --out ./ds-bundle --remote .design-sync/.cache/remote-sync.json
 ```
-`.ds-sync/` deps: `npm i esbuild ts-morph @types/react playwright@1.61.0` (PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 — chromium build 1228 is cached; 1.61.0 pins it).
+`.ds-sync/` deps: `npm i esbuild ts-morph @types/react playwright@1.61.0` (the `.ds-sync/node_modules` is gitignored, so a fresh clone reinstalls them). Chromium build 1228 is cached and 1.61.0 pins it — **on macOS the cache is `~/Library/Caches/ms-playwright/` (NOT `~/.cache/ms-playwright`, which is the Linux path)**. Use `./node_modules/.bin/playwright install chromium`, not `npx playwright …` (npx re-resolves and hits the private registry).
 
 ## Repo-specific gotchas (why the config looks the way it does)
 
@@ -29,6 +29,7 @@ node .ds-sync/resync.mjs --config .design-sync/config.json --node-modules apps/b
 - `Popover` — `defaultOpen` + `cardMode: single` so the Radix portal renders in-card.
 - `ToastContainer` — `position: fixed`; the preview wraps it in a `transform: translateZ(0)` ancestor to scope the fixed stack into the card. `cardMode: single`.
 - `Autocomplete` — open dropdown is focus-only and **cannot render statically**; only input states (default/value/error) are shown.
+- `Tooltip` — Radix tooltip is hover/focus-only; the preview composes the parts (`TooltipProvider`/`TooltipRoot defaultOpen`/`TooltipTrigger`/`TooltipContent`) so the bubble renders statically. `cardMode: single`, `viewport: 360x220`, `side="bottom"`. The convenience `<Tooltip label … side …>` (wraps its own provider) is documented in the prompt/conventions; only the top-level `Tooltip` is authored — the 4 parts are floor cards.
 
 ## Guidelines (brand docs that ship to the design project)
 
@@ -48,7 +49,7 @@ markdown reference docs, not visual swatch cards.
 - The `@source` globs in `ds-tailwind.src.css` must still cover new component locations; a component placed outside `packages/ui/src` would ship unstyled.
 - The recharts explicit-dims workaround is tied to recharts staying split across instances / recharts 3's store model.
 - Captured font fidelity depends on network access (remote fonts); offline runs render fallback fonts but still pass.
-- 11 sub-part exports (CardHeader/CardTitle/CardContent, Popover* parts, Chart* parts) ship as **floor cards** by design — authorable on any re-sync if richer cards are wanted.
+- 15 sub-part exports (CardHeader/CardTitle/CardContent, Popover* parts, Chart* parts, Tooltip* parts) ship as **floor cards** by design — authorable on any re-sync if richer cards are wanted.
 
 ## Do NOT touch the other project
 

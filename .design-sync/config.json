@@ -15,6 +15,7 @@
     "Textarea": { "cardMode": "column" },
     "ChartContainer": { "cardMode": "column" },
     "Popover": { "cardMode": "single", "viewport": "380x300" },
-    "ToastContainer": { "cardMode": "single", "viewport": "400x420" }
+    "ToastContainer": { "cardMode": "single", "viewport": "400x420" },
+    "Tooltip": { "cardMode": "single", "viewport": "360x220" }
   }
 }
