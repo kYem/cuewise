@@ -60,6 +60,15 @@ export function uniqueSorted(values: (string | undefined | null)[]): string[] {
   );
 }
 
+/** Append a trimmed tag, deduped case-insensitively. Returns the same array on no-op. */
+export function addTag(tags: string[], value: string): string[] {
+  const next = value.trim().replace(/,$/, '');
+  if (next.length === 0 || tags.some((tag) => tag.toLowerCase() === next.toLowerCase())) {
+    return tags;
+  }
+  return [...tags, next];
+}
+
 /**
  * Normalize a user-entered URL into an absolute http(s) URL. Prepends https://
  * when no protocol is given. Returns null for anything that isn't a valid

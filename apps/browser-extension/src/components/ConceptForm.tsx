@@ -1,11 +1,17 @@
-import { type ConceptCard, getTodayDateString, logger, uniqueSorted } from '@cuewise/shared';
+import {
+  addTag,
+  type ConceptCard,
+  getTodayDateString,
+  logger,
+  uniqueSorted,
+} from '@cuewise/shared';
 import { Autocomplete, Input, Label, Textarea } from '@cuewise/ui';
 import { Trash2 } from 'lucide-react';
 import type React from 'react';
 import { useMemo, useRef, useState } from 'react';
 import { useConceptCardsStore } from '../stores/concept-cards-store';
 import { ConceptFormPreview } from './ConceptFormPreview';
-import { addTag, ConceptTagInput } from './ConceptTagInput';
+import { ConceptTagInput } from './ConceptTagInput';
 
 interface ConceptFormProps {
   /** When provided, the form edits this card instead of adding a new one. */
