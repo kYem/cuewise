@@ -7,9 +7,10 @@ import {
   projectConceptInterval,
 } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
-import { BookOpen, Brain, ChevronRight, Eye, Plus, Repeat } from 'lucide-react';
+import { BookOpen, Brain, CornerRightDown } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useState } from 'react';
+import { ConceptToolbar } from './ConceptToolbar';
 
 // Per-grade accent (theme tokens: error / success / brand violet) — a soft
 // tinted border + faint hover fill, kept light to suit the calm glass surface.
@@ -23,7 +24,12 @@ interface ConceptCardDisplayProps {
   card: ConceptCard;
   activeRecall: boolean;
   onGrade: (grade: ConceptGrade) => void;
-  onSkip?: () => void;
+  onPrev: () => void;
+  onNext: () => void;
+  isFavorite: boolean;
+  onToggleFavorite: () => void;
+  /** Cards due now, for the toolbar's filter badge. */
+  dueCount: number;
   onAdd?: () => void;
   queueLabel?: string;
 }
@@ -32,7 +38,11 @@ export const ConceptCardDisplay: React.FC<ConceptCardDisplayProps> = ({
   card,
   activeRecall,
   onGrade,
-  onSkip,
+  onPrev,
+  onNext,
+  isFavorite,
+  onToggleFavorite,
+  dueCount,
   onAdd,
   queueLabel,
 }) => {
@@ -93,20 +103,7 @@ export const ConceptCardDisplay: React.FC<ConceptCardDisplayProps> = ({
         {card.term}
       </h2>
 
-      {!revealed ? (
-        <div>
-          <p className="mx-auto mt-4 mb-6 max-w-[44ch] text-[clamp(14px,1.5vw,16px)] leading-relaxed text-secondary">
-            Bring the definition to mind — then check how close you were.
-          </p>
-          <button
-            type="button"
-            onClick={() => setRevealed(true)}
-            className="inline-flex h-12 items-center gap-2 rounded-full border border-border bg-surface/80 px-6 text-base font-semibold text-primary shadow-md backdrop-blur-sm transition-all hover:bg-surface-variant hover:shadow-lg"
-          >
-            <Eye className="h-[18px] w-[18px]" /> Reveal answer
-          </button>
-        </div>
-      ) : (
+      {revealed ? (
         <div className="animate-in fade-in-0 slide-in-from-bottom-2 mx-auto mt-5 max-w-[640px] rounded-2xl border border-border bg-surface-elevated/70 px-6 py-5 shadow-xl backdrop-blur-md duration-300">
           <p className="mx-auto max-w-[50ch] font-display text-[clamp(17px,1.9vw,21px)] font-medium leading-relaxed text-primary">
             {card.definition}
@@ -174,35 +171,23 @@ export const ConceptCardDisplay: React.FC<ConceptCardDisplayProps> = ({
             </div>
           </div>
         </div>
+      ) : (
+        <div className="mt-4 inline-flex items-center gap-2 text-[clamp(13px,1.4vw,15px)] text-secondary">
+          Bring it to mind, then reveal
+          <CornerRightDown className="h-3.5 w-3.5 text-tertiary" />
+        </div>
       )}
 
-      {/* meta row */}
-      <div className="mt-5 flex flex-wrap items-center justify-center gap-3.5 text-xs text-tertiary">
-        <span className="inline-flex items-center gap-1.5">
-          <Repeat className="h-3.5 w-3.5" /> {card.schedule.repetitions} reviews
-          {card.schedule.lapses > 0
-            ? ` · ${card.schedule.lapses} lapse${card.schedule.lapses > 1 ? 's' : ''}`
-            : ''}
-        </span>
-        {!revealed && onSkip && (
-          <button
-            type="button"
-            onClick={onSkip}
-            className="inline-flex items-center gap-1 text-tertiary transition-colors hover:text-primary"
-          >
-            <ChevronRight className="h-3.5 w-3.5" /> Skip
-          </button>
-        )}
-        {onAdd && (
-          <button
-            type="button"
-            onClick={onAdd}
-            className="inline-flex items-center gap-1 text-tertiary transition-colors hover:text-primary"
-          >
-            <Plus className="h-3.5 w-3.5" /> Add concept
-          </button>
-        )}
-      </div>
+      <ConceptToolbar
+        revealed={revealed}
+        onReveal={() => setRevealed(true)}
+        onPrev={onPrev}
+        onNext={onNext}
+        isFavorite={isFavorite}
+        onToggleFavorite={onToggleFavorite}
+        dueCount={dueCount}
+        onAdd={onAdd}
+      />
     </div>
   );
 };

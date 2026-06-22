@@ -1,5 +1,6 @@
 import {
   type ConceptCadence,
+  type ConceptCard,
   type ConceptFraming,
   type ConceptGrade,
   getDueConceptCards,
@@ -14,7 +15,7 @@ import { ConceptCardDisplay } from './ConceptCardDisplay';
 // lookup, so adding a cadence forces an explicit period here (compile error otherwise).
 const CADENCE_PERIOD: Record<'third' | 'ten', number> = { third: 3, ten: 10 };
 
-interface SurfacingDecision {
+export interface SurfacingDecision {
   show: boolean;
   // Card ids in the deck when this tab's surfacing was decided. A due card whose
   // id isn't here was added during the tab and surfaces without a refresh.
@@ -36,6 +37,29 @@ function cadenceAllows(framing: ConceptFraming, cadence: ConceptCadence): boolea
   return Math.random() < 1 / CADENCE_PERIOD[cadence];
 }
 
+/**
+ * The due card this tab shows and its browse position. When surfacing is on the
+ * user browses the whole due pile; when off, only cards added during the tab
+ * (ids not in the decision) surface — so a concept you just added appears even
+ * if the cadence gate kept this tab on quotes. `current` is undefined to fall
+ * back to quotes; `index` is a free-running counter wrapped into the deck.
+ */
+export function selectSurfacedCard(
+  due: ConceptCard[],
+  decision: SurfacingDecision | null,
+  index: number
+): { current: ConceptCard | undefined; position: number } {
+  if (decision === null) {
+    return { current: undefined, position: 0 };
+  }
+  const deck = decision.show ? due : due.filter((card) => !decision.knownIds.includes(card.id));
+  if (deck.length === 0) {
+    return { current: undefined, position: 0 };
+  }
+  const position = ((index % deck.length) + deck.length) % deck.length;
+  return { current: deck[position], position };
+}
+
 interface ConceptRotationProps {
   /** Rendered when no concept surfaces this tab (the normal quote rotation). */
   fallback: React.ReactNode;
@@ -47,8 +71,9 @@ interface ConceptRotationProps {
  * Blends due concept cards into the quote slot. Decides once per tab (in an
  * effect, so render stays pure) whether to surface concepts: ambient framing
  * yields back to quotes after one card, while queue framing clears the due pile
- * front-to-back. A handled (graded or skipped) card leaves the deck for the
- * rest of the tab, so a lapsing "Again" card never loops back immediately.
+ * front-to-back. A graded card leaves the deck for the rest of the tab (so a
+ * lapsing "Again" card never loops back immediately); the toolbar's prev/next
+ * browse what remains.
  */
 export const ConceptRotation: React.FC<ConceptRotationProps> = ({ fallback, onAdd }) => {
   const enabled = useSettingsStore((state) => state.settings.conceptCardsEnabled);
@@ -60,10 +85,13 @@ export const ConceptRotation: React.FC<ConceptRotationProps> = ({ fallback, onAd
   const isLoading = useConceptCardsStore((state) => state.isLoading);
   const initialize = useConceptCardsStore((state) => state.initialize);
   const reviewCard = useConceptCardsStore((state) => state.reviewCard);
+  const toggleFavorite = useConceptCardsStore((state) => state.toggleFavorite);
 
   const [handledIds, setHandledIds] = useState<string[]>([]);
   const [decision, setDecision] = useState<SurfacingDecision | null>(null);
   const [grading, setGrading] = useState(false);
+  // Browse position for the toolbar's prev/next within the surfaced deck.
+  const [index, setIndex] = useState(0);
 
   useEffect(() => {
     initialize();
@@ -74,6 +102,7 @@ export const ConceptRotation: React.FC<ConceptRotationProps> = ({ fallback, onAd
   useEffect(() => {
     setDecision(null);
     setHandledIds([]);
+    setIndex(0);
   }, [framing, cadence, enabled]);
 
   const due = useMemo(() => {
@@ -95,12 +124,7 @@ export const ConceptRotation: React.FC<ConceptRotationProps> = ({ fallback, onAd
     return <>{fallback}</>;
   }
 
-  // A due card whose id wasn't in the deck at decision time was added during this
-  // tab — surface it right away (no refresh), even if the cadence gate kept this
-  // tab on quotes. Show that new card rather than a pre-existing one it suppressed.
-  const newCards =
-    decision !== null ? due.filter((card) => !decision.knownIds.includes(card.id)) : [];
-  const current = decision?.show ? due[0] : newCards[0];
+  const { current, position } = selectSurfacedCard(due, decision, index);
   if (!current) {
     return <>{fallback}</>;
   }
@@ -108,6 +132,9 @@ export const ConceptRotation: React.FC<ConceptRotationProps> = ({ fallback, onAd
   const yieldToQuotes = () => {
     setDecision((prev) => (prev ? { ...prev, show: false } : prev));
   };
+
+  const goNext = () => setIndex((i) => i + 1);
+  const goPrev = () => setIndex((i) => i - 1);
 
   const handleGrade = async (grade: ConceptGrade) => {
     if (grading) {
@@ -127,16 +154,9 @@ export const ConceptRotation: React.FC<ConceptRotationProps> = ({ fallback, onAd
     }
   };
 
-  const handleSkip = () => {
-    setHandledIds((ids) => [...ids, current.id]);
-    if (framing === 'ambient') {
-      yieldToQuotes();
-    }
-  };
-
-  const total = due.length + handledIds.length;
-  const queueLabel =
-    framing === 'queue' ? `Card ${Math.min(handledIds.length + 1, total)} of ${total}` : undefined;
+  // Queue framing always sets decision.show, so browseDeck === due and `position`
+  // indexes into `due` — the label's denominator matches the card on screen.
+  const queueLabel = framing === 'queue' ? `Card ${position + 1} of ${due.length}` : undefined;
 
   return (
     <ConceptCardDisplay
@@ -144,7 +164,11 @@ export const ConceptRotation: React.FC<ConceptRotationProps> = ({ fallback, onAd
       card={current}
       activeRecall={activeRecall}
       onGrade={handleGrade}
-      onSkip={handleSkip}
+      onPrev={goPrev}
+      onNext={goNext}
+      isFavorite={current.isFavorite ?? false}
+      onToggleFavorite={() => toggleFavorite(current.id)}
+      dueCount={due.length}
       onAdd={onAdd}
       queueLabel={queueLabel}
     />

@@ -574,7 +574,7 @@ export const NewTabPage: React.FC = () => {
         isOpen={isAddConceptOpen}
         onClose={() => setIsAddConceptOpen(false)}
         title="Add a concept"
-        size="md"
+        size="2xl"
       >
         <ConceptForm
           onSuccess={() => setIsAddConceptOpen(false)}

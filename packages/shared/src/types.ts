@@ -203,6 +203,7 @@ export interface ConceptCard {
   details?: string; // optional "how it works" / example
   tags?: string[]; // optional learning-topic grouping
   source?: string; // optional reference
+  isFavorite?: boolean; // starred from the recall toolbar
   createdAt: string; // ISO
   schedule: ConceptSchedule;
 }

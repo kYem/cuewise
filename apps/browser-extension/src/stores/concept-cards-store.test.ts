@@ -155,6 +155,25 @@ describe('Concept Cards Store', () => {
     });
   });
 
+  describe('toggleFavorite', () => {
+    it('flips the favorite flag and persists', async () => {
+      const card = conceptCardFactory.build({ id: '1', isFavorite: false });
+      useConceptCardsStore.setState({ cards: [card] });
+
+      const ok = await useConceptCardsStore.getState().toggleFavorite('1');
+
+      expect(ok).toBe(true);
+      expect(useConceptCardsStore.getState().cards[0].isFavorite).toBe(true);
+      expect(storage.setConceptCards).toHaveBeenCalled();
+    });
+
+    it('returns false for an unknown id', async () => {
+      const ok = await useConceptCardsStore.getState().toggleFavorite('missing');
+
+      expect(ok).toBe(false);
+    });
+  });
+
   describe('getDueCards', () => {
     it('returns only cards due on or before today', async () => {
       const past = conceptCardFactory.build({

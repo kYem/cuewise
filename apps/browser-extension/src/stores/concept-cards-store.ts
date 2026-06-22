@@ -21,7 +21,9 @@ const REVIEW_ERROR_MESSAGE = 'Failed to save review. Please try again.';
 // Optional content fields, derived from ConceptCard so the two stay in lockstep.
 type ConceptCardExtras = Pick<ConceptCard, 'details' | 'tags' | 'source'>;
 
-type ConceptCardUpdates = Partial<Pick<ConceptCard, 'term' | 'definition'> & ConceptCardExtras>;
+type ConceptCardUpdates = Partial<
+  Pick<ConceptCard, 'term' | 'definition' | 'isFavorite'> & ConceptCardExtras
+>;
 
 interface ConceptCardsStore {
   cards: ConceptCard[];
@@ -34,6 +36,7 @@ interface ConceptCardsStore {
   updateCard: (id: string, updates: ConceptCardUpdates) => Promise<boolean>;
   deleteCard: (id: string) => Promise<boolean>;
   reviewCard: (id: string, grade: ConceptGrade) => Promise<boolean>;
+  toggleFavorite: (id: string) => Promise<boolean>;
 
   // Selectors
   getDueCards: () => ConceptCard[];
@@ -63,6 +66,9 @@ function applyCardUpdates(card: ConceptCard, updates: ConceptCardUpdates): Conce
   }
   if (updates.source !== undefined) {
     next.source = updates.source.trim() || undefined;
+  }
+  if (updates.isFavorite !== undefined) {
+    next.isFavorite = updates.isFavorite;
   }
   return next;
 }
@@ -185,6 +191,16 @@ export const useConceptCardsStore = create<ConceptCardsStore>((set, get) => ({
       logger.error('Error reviewing concept card', error);
       return reportError(set, REVIEW_ERROR_MESSAGE);
     }
+  },
+
+  // A favorite toggle is just an update of the isFavorite field — route through
+  // updateCard so the persist-or-rollback path lives in one place.
+  toggleFavorite: async (id: string) => {
+    const existing = get().cards.find((card) => card.id === id);
+    if (!existing) {
+      return false;
+    }
+    return get().updateCard(id, { isFavorite: !existing.isFavorite });
   },
 
   getDueCards: () => getDueConceptCards(get().cards, new Date()),
