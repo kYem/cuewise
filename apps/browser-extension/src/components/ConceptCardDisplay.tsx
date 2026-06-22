@@ -6,15 +6,17 @@ import {
   conceptIntervalLabel,
   projectConceptInterval,
 } from '@cuewise/shared';
+import { cn } from '@cuewise/ui';
 import { BookOpen, Brain, ChevronRight, Eye, Plus, Repeat } from 'lucide-react';
 import type React from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
-// Grade accent colors, all theme tokens: error (red), success (green), brand violet.
-const GRADE_COLOR: Record<ConceptGrade, string> = {
-  again: 'var(--color-error)',
-  good: 'var(--color-success)',
-  easy: 'var(--color-primary-600)',
+// Per-grade accent (theme tokens: error / success / brand violet) — a soft
+// tinted border + faint hover fill, kept light to suit the calm glass surface.
+const GRADE_ACCENT: Record<ConceptGrade, string> = {
+  again: 'border-error/50 hover:bg-error/10',
+  good: 'border-success/50 hover:bg-success/10',
+  easy: 'border-primary-600/50 hover:bg-primary-600/10',
 };
 
 interface ConceptCardDisplayProps {
@@ -39,6 +41,36 @@ export const ConceptCardDisplay: React.FC<ConceptCardDisplayProps> = ({
   const [revealed, setRevealed] = useState(!activeRecall);
 
   const topic = card.tags?.[0];
+
+  // Anki-style 1/2/3 grading, live only once the answer is revealed. Ignores
+  // modifier combos and keystrokes aimed at a text field.
+  useEffect(() => {
+    if (!revealed) {
+      return;
+    }
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) {
+        return;
+      }
+      const target = e.target as HTMLElement | null;
+      if (
+        target?.tagName === 'INPUT' ||
+        target?.tagName === 'TEXTAREA' ||
+        target?.tagName === 'SELECT' ||
+        target?.isContentEditable
+      ) {
+        return;
+      }
+      const index = ['1', '2', '3'].indexOf(e.key);
+      if (index === -1 || index >= CONCEPT_GRADES.length) {
+        return;
+      }
+      e.preventDefault();
+      onGrade(CONCEPT_GRADES[index].id);
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [revealed, onGrade]);
 
   return (
     <div className="w-full max-w-2xl mx-auto text-center text-primary">
@@ -111,11 +143,11 @@ export const ConceptCardDisplay: React.FC<ConceptCardDisplayProps> = ({
             </div>
           )}
 
-          {/* the grading moment */}
-          <div className="mt-6">
-            <div className="mb-3 text-xs text-secondary">How well did you recall it?</div>
-            <div className="flex items-stretch justify-center gap-2.5">
-              {CONCEPT_GRADES.map((grade) => {
+          {/* the grading moment — one compact row: prompt, then inline pills */}
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+            <span className="text-xs text-secondary">How well did you recall it?</span>
+            <div className="flex flex-wrap items-center gap-2">
+              {CONCEPT_GRADES.map((grade, i) => {
                 // Cap the preview at the same ceiling reviewConceptCard applies.
                 const nextInterval = Math.min(
                   projectConceptInterval(card.schedule, grade.id),
@@ -125,13 +157,15 @@ export const ConceptCardDisplay: React.FC<ConceptCardDisplayProps> = ({
                   <button
                     key={grade.id}
                     type="button"
-                    title={grade.hint}
+                    title={`${grade.hint} (press ${i + 1})`}
                     onClick={() => onGrade(grade.id)}
-                    style={{ borderColor: GRADE_COLOR[grade.id] }}
-                    className="flex max-w-[150px] flex-1 flex-col items-center gap-0.5 rounded-lg border bg-surface/60 px-2 py-2.5 text-primary backdrop-blur-sm transition-all hover:-translate-y-0.5 hover:bg-surface-variant"
+                    className={cn(
+                      'inline-flex items-center gap-1.5 rounded-full border bg-surface/60 px-3 py-1 backdrop-blur-sm transition-all hover:-translate-y-0.5',
+                      GRADE_ACCENT[grade.id]
+                    )}
                   >
-                    <span className="text-[15px] font-bold">{grade.label}</span>
-                    <span className="text-[11px] tabular-nums text-secondary">
+                    <span className="text-[13px] font-semibold text-primary">{grade.label}</span>
+                    <span className="text-[11px] tabular-nums text-tertiary">
                       {conceptIntervalLabel(nextInterval)}
                     </span>
                   </button>

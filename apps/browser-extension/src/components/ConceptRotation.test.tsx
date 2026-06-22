@@ -17,15 +17,16 @@ const dueCard = conceptCardFactory.build({
 interface SetupOptions {
   enabled?: boolean;
   framing?: 'ambient' | 'queue';
+  cadence?: 'every' | 'third' | 'ten' | 'off';
   cards?: ReturnType<typeof conceptCardFactory.build>[];
 }
 
-function setup({ enabled = true, framing = 'queue', cards = [] }: SetupOptions) {
+function setup({ enabled = true, framing = 'queue', cadence = 'every', cards = [] }: SetupOptions) {
   vi.mocked(useSettingsStore).mockImplementation(
     createSelectorMock({
       settings: {
         conceptCardsEnabled: enabled,
-        conceptCadence: 'every',
+        conceptCadence: cadence,
         conceptFraming: framing,
         conceptActiveRecall: true,
       },
@@ -89,6 +90,40 @@ describe('ConceptRotation', () => {
 
     expect(screen.getByText('QUOTE')).toBeInTheDocument();
     expect(screen.queryByText('Saga pattern')).not.toBeInTheDocument();
+  });
+
+  it('surfaces a concept added after a tab decided not to show one (no refresh)', () => {
+    // ambient + 'off' => the tab initially surfaces no concept.
+    setup({ framing: 'ambient', cadence: 'off', cards: [dueCard] });
+    const { rerender } = render(<ConceptRotation fallback={<div>QUOTE</div>} />);
+    expect(screen.getByText('QUOTE')).toBeInTheDocument();
+
+    // Adding a due card grows the deck past the decision baseline, so it surfaces
+    // without a refresh.
+    const added = conceptCardFactory.build({
+      term: 'Just added',
+      schedule: { dueDate: '2020-01-01', interval: 0, easeFactor: 2.5, repetitions: 0, lapses: 0 },
+    });
+    setup({ framing: 'ambient', cadence: 'off', cards: [dueCard, added] });
+    rerender(<ConceptRotation fallback={<div>QUOTE</div>} />);
+
+    expect(screen.queryByText('QUOTE')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /reveal answer/i })).toBeInTheDocument();
+  });
+
+  it('keeps the queue count in sync when a card is added', () => {
+    setup({ framing: 'queue', cards: [dueCard] });
+    const { rerender } = render(<ConceptRotation fallback={<div>QUOTE</div>} />);
+    expect(screen.getByText(/Card 1 of 1/)).toBeInTheDocument();
+
+    const added = conceptCardFactory.build({
+      term: 'Just added',
+      schedule: { dueDate: '2020-01-01', interval: 0, easeFactor: 2.5, repetitions: 0, lapses: 0 },
+    });
+    setup({ framing: 'queue', cards: [dueCard, added] });
+    rerender(<ConceptRotation fallback={<div>QUOTE</div>} />);
+
+    expect(screen.getByText(/Card 1 of 2/)).toBeInTheDocument();
   });
 
   it('clears the queue once the only due card is graded', async () => {

@@ -38,6 +38,29 @@ describe('ConceptCardDisplay', () => {
     expect(onGrade).toHaveBeenCalledWith('good');
   });
 
+  it('grades with the 1/2/3 keys once the answer is revealed', () => {
+    const onGrade = vi.fn();
+    render(<ConceptCardDisplay card={card} activeRecall={false} onGrade={onGrade} />);
+
+    fireEvent.keyDown(document.body, { key: '1' });
+    expect(onGrade).toHaveBeenCalledWith('again');
+
+    fireEvent.keyDown(document.body, { key: '2' });
+    expect(onGrade).toHaveBeenCalledWith('good');
+
+    fireEvent.keyDown(document.body, { key: '3' });
+    expect(onGrade).toHaveBeenCalledWith('easy');
+  });
+
+  it('ignores the number keys until the answer is revealed', () => {
+    const onGrade = vi.fn();
+    render(<ConceptCardDisplay card={card} activeRecall onGrade={onGrade} />);
+
+    fireEvent.keyDown(document.body, { key: '2' });
+
+    expect(onGrade).not.toHaveBeenCalled();
+  });
+
   it('shows the definition upfront when active recall is off', () => {
     render(<ConceptCardDisplay card={card} activeRecall={false} onGrade={vi.fn()} />);
 
