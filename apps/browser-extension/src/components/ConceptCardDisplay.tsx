@@ -20,18 +20,16 @@ const GRADE_ACCENT: Record<ConceptGrade, string> = {
   easy: 'border-primary-600/50 hover:bg-primary-600/10',
 };
 
-const noop = () => {};
-
 interface ConceptCardDisplayProps {
   card: ConceptCard;
   activeRecall: boolean;
   onGrade: (grade: ConceptGrade) => void;
-  onPrev?: () => void;
-  onNext?: () => void;
-  isFavorite?: boolean;
-  onToggleFavorite?: () => void;
+  onPrev: () => void;
+  onNext: () => void;
+  isFavorite: boolean;
+  onToggleFavorite: () => void;
   /** Cards due now, for the toolbar's filter badge. */
-  dueCount?: number;
+  dueCount: number;
   onAdd?: () => void;
   queueLabel?: string;
 }
@@ -40,11 +38,11 @@ export const ConceptCardDisplay: React.FC<ConceptCardDisplayProps> = ({
   card,
   activeRecall,
   onGrade,
-  onPrev = noop,
-  onNext = noop,
-  isFavorite = false,
-  onToggleFavorite = noop,
-  dueCount = 0,
+  onPrev,
+  onNext,
+  isFavorite,
+  onToggleFavorite,
+  dueCount,
   onAdd,
   queueLabel,
 }) => {
