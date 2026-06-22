@@ -283,6 +283,7 @@ export function ComposedReminderPanel({
   onPauseToggle,
   onAdd,
   onManage,
+  pinToggle,
   viewSwitcher,
 }: ReminderPanelProps) {
   // Force a re-render each second so classification and countdowns stay fresh.
@@ -334,6 +335,7 @@ export function ComposedReminderPanel({
               tone: null,
             }
           }
+          pinToggle={pinToggle}
           viewSwitcher={viewSwitcher}
         />
       </div>

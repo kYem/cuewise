@@ -233,6 +233,8 @@ export type ConceptGrade = 'again' | 'good' | 'easy';
 export type ConceptCadence = 'every' | 'third' | 'ten' | 'off';
 // Calm occasional nudge vs an explicit "N due today" review pile
 export type ConceptFraming = 'ambient' | 'queue';
+// A card's difficulty bucket for the deck UI (derived by getConceptDifficulty)
+export type ConceptDifficulty = 'new' | 'struggling' | 'solid' | 'strong';
 
 // Google Calendar (read-only) — shown beside the Pomodoro timer.
 // Discriminated on `allDay` so the two time representations can't be confused:
@@ -329,6 +331,7 @@ export interface Settings {
   celebrationsEnabled: boolean; // Play a Lottie burst on pomodoro/goal completion (default true)
   // Reminders
   reminderPanelLayout: ReminderPanelLayout; // Reminders panel layout (default 'composed')
+  reminderPanelPinned: boolean; // Panel stays open: no click-away collapse; auto-expands once on load (default false)
   // Store review prompt
   reviewPromptDismissed: boolean; // Never surface the review prompt again (default false)
   reviewPromptCount: number; // Times the review prompt has been shown (default 0)

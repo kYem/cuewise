@@ -55,6 +55,30 @@ describe('QuickLinksWidget', () => {
     expect(screen.getByRole('button', { name: 'More quick links' })).toBeInTheDocument();
   });
 
+  it('opens link tiles in a new tab', () => {
+    mockStore({ quickLinks: [{ id: '1', title: 'GitHub', url: 'https://github.com/' }] });
+
+    render(<QuickLinksWidget />);
+
+    const tile = screen.getByRole('link', { name: 'GitHub' });
+    expect(tile).toHaveAttribute('target', '_blank');
+    expect(tile).toHaveAttribute('rel', 'noopener noreferrer');
+  });
+
+  it('opens manager-list links in a new tab', () => {
+    mockStore({ quickLinks: [{ id: '1', title: 'GitHub', url: 'https://github.com/' }] });
+
+    render(<QuickLinksWidget />);
+    fireEvent.click(screen.getByRole('button', { name: 'More quick links' }));
+
+    // Both the inline tile and the dropdown row share the link's accessible name.
+    const links = screen.getAllByRole('link', { name: 'GitHub' });
+    for (const link of links) {
+      expect(link).toHaveAttribute('target', '_blank');
+      expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+    }
+  });
+
   it('submits a bare domain through the add form to addQuickLink', async () => {
     const state = mockStore({ quickLinks: [] });
 

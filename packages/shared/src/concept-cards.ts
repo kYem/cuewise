@@ -7,7 +7,13 @@ import {
   CONCEPT_NUDGE_GAP_DAYS,
   CONCEPT_NUDGE_MAX_SHOWS,
 } from './constants';
-import type { ConceptCard, ConceptGrade, ConceptSchedule, ConceptStats } from './types';
+import type {
+  ConceptCard,
+  ConceptDifficulty,
+  ConceptGrade,
+  ConceptSchedule,
+  ConceptStats,
+} from './types';
 import type { NudgeShowState } from './utils';
 
 /**
@@ -242,4 +248,22 @@ export function getConceptStats(cards: ConceptCard[], today: Date): ConceptStats
     needsAttention,
     dueForecast,
   };
+}
+
+/**
+ * A card's difficulty from its SM-2 ease factor, for the deck UI. A
+ * never-reviewed card is 'new' (no signal yet); thresholds are tunable.
+ */
+export function getConceptDifficulty(card: ConceptCard): ConceptDifficulty {
+  if (!card.schedule.lastReviewedAt) {
+    return 'new';
+  }
+  const ease = card.schedule.easeFactor;
+  if (ease < 2.1) {
+    return 'struggling';
+  }
+  if (ease < 2.5) {
+    return 'solid';
+  }
+  return 'strong';
 }

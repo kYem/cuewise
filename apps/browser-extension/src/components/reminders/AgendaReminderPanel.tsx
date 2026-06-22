@@ -196,6 +196,7 @@ export function AgendaReminderPanel({
   onPauseToggle,
   onAdd,
   onManage,
+  pinToggle,
   viewSwitcher,
 }: ReminderPanelProps) {
   // Force a re-render each second so classification and countdowns stay fresh.
@@ -244,6 +245,7 @@ export function AgendaReminderPanel({
           count={reminders.length}
           hasUrgent={hasUrgent}
           subNote={subNote}
+          pinToggle={pinToggle}
           viewSwitcher={viewSwitcher}
         />
       </div>

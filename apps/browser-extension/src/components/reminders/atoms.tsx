@@ -3,7 +3,6 @@ import {
   isUpcomingRecurringOccurrence,
   REMINDER_CATEGORY_META,
   type Reminder,
-  type ReminderPanelLayout,
 } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
 import {
@@ -15,6 +14,7 @@ import {
   Check,
   LayoutList,
   Pause,
+  Pin,
   Play,
   Repeat,
   SkipForward,
@@ -26,6 +26,7 @@ import type { ReminderState } from '../../utils/reminder-classify';
 import { formatCountdown, formatDueDate, formatTimeAgo } from '../../utils/reminder-date-utils';
 import { EmptyState } from '../EmptyState';
 import { REMINDER_CATEGORY_ICON, REMINDER_STATE_STYLES } from './reminder-state-styles';
+import type { PanelPinToggle, PanelViewSwitcher } from './types';
 
 /** States that warrant the loud accent treatment (and a live countdown). */
 function isUrgentState(state: ReminderState): boolean {
@@ -182,18 +183,13 @@ export function ReminderSnoozeRow({ onSnooze, state = 'soon' }: ReminderSnoozeRo
   );
 }
 
-interface LayoutSwitchProps {
-  layout: ReminderPanelLayout;
-  onLayoutChange: (layout: ReminderPanelLayout) => void;
-}
-
 /** Compact 2-button segmented pill to flip the panel layout in place. */
-function LayoutSwitch({ layout, onLayoutChange }: LayoutSwitchProps) {
+function LayoutSwitch({ layout, onChange }: PanelViewSwitcher) {
   return (
     <div className="flex-none inline-flex items-center gap-0.5 rounded-full border border-border bg-surface-variant p-0.5">
       <button
         type="button"
-        onClick={() => onLayoutChange('composed')}
+        onClick={() => onChange('composed')}
         aria-label="Composed view"
         title="Composed view"
         className={cn(
@@ -207,7 +203,7 @@ function LayoutSwitch({ layout, onLayoutChange }: LayoutSwitchProps) {
       </button>
       <button
         type="button"
-        onClick={() => onLayoutChange('agenda')}
+        onClick={() => onChange('agenda')}
         aria-label="Agenda view"
         title="Agenda view"
         className={cn(
@@ -223,18 +219,42 @@ function LayoutSwitch({ layout, onLayoutChange }: LayoutSwitchProps) {
   );
 }
 
+/** Pin button: toggles the keep-open (no click-away collapse) state for the panel. */
+function PinToggle({ pinned, onChange }: PanelPinToggle) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!pinned)}
+      aria-pressed={pinned}
+      aria-label={pinned ? 'Unpin reminders panel' : 'Keep reminders open'}
+      title={pinned ? 'Unpin — closes on click away' : 'Keep open'}
+      className={cn(
+        'flex-none inline-flex items-center justify-center w-7 h-7 rounded-full border transition-colors',
+        'focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500',
+        pinned
+          ? 'bg-primary-600/10 border-primary-600/40 text-primary-600'
+          : 'border-border bg-surface-variant text-tertiary hover:text-primary'
+      )}
+    >
+      <Pin className="w-3.5 h-3.5" />
+    </button>
+  );
+}
+
 interface ReminderPanelHeaderProps {
   count: number;
   hasUrgent: boolean;
   subNote?: { text: string; tone: ReminderState | null };
-  viewSwitcher?: { layout: ReminderPanelLayout; onChange: (layout: ReminderPanelLayout) => void };
+  pinToggle?: PanelPinToggle;
+  viewSwitcher?: PanelViewSwitcher;
 }
 
-/** Panel header: bell tile (red when urgent), title + count, optional sub-note and layout switcher. */
+/** Panel header: bell tile (red when urgent), title + count, optional sub-note, pin toggle, and layout switcher. */
 export function ReminderPanelHeader({
   count,
   hasUrgent,
   subNote,
+  pinToggle,
   viewSwitcher,
 }: ReminderPanelHeaderProps) {
   const noteTone = subNote?.tone ? REMINDER_STATE_STYLES[subNote.tone].text : 'text-secondary';
@@ -260,8 +280,11 @@ export function ReminderPanelHeader({
           {subNote && <div className={cn('text-xs mt-0.5', noteTone)}>{subNote.text}</div>}
         </div>
       </div>
-      {viewSwitcher && (
-        <LayoutSwitch layout={viewSwitcher.layout} onLayoutChange={viewSwitcher.onChange} />
+      {(pinToggle || viewSwitcher) && (
+        <div className="flex-none inline-flex items-center gap-1.5">
+          {pinToggle && <PinToggle {...pinToggle} />}
+          {viewSwitcher && <LayoutSwitch {...viewSwitcher} />}
+        </div>
       )}
     </div>
   );

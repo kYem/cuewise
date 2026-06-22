@@ -37,6 +37,7 @@ export const ReminderWidget: React.FC = () => {
 
   const showThemeSwitcher = useSettingsStore((state) => state.settings.showThemeSwitcher);
   const reminderPanelLayout = useSettingsStore((state) => state.settings.reminderPanelLayout);
+  const reminderPanelPinned = useSettingsStore((state) => state.settings.reminderPanelPinned);
   const updateSettings = useSettingsStore((state) => state.updateSettings);
 
   const [isExpanded, setIsExpanded] = useState(false);
@@ -45,6 +46,7 @@ export const ReminderWidget: React.FC = () => {
   const [showAllModal, setShowAllModal] = useState(false);
 
   const widgetRef = useRef<HTMLDivElement>(null);
+  const didAutoExpandRef = useRef(false);
 
   // Initialize on mount, then catch up any reminder whose alarm never fired —
   // a missed-alarm safety net (browser closed at the due time, or a dropped
@@ -66,6 +68,18 @@ export const ReminderWidget: React.FC = () => {
     return () => clearInterval(interval);
   }, [fireDueReminders]);
 
+  // Auto-expand a pinned panel once per load; the guard trips only after the
+  // stored `true` hydrates, and a later manual collapse sticks (effect won't re-fire).
+  useEffect(() => {
+    if (didAutoExpandRef.current) {
+      return;
+    }
+    if (reminderPanelPinned) {
+      didAutoExpandRef.current = true;
+      setIsExpanded(true);
+    }
+  }, [reminderPanelPinned]);
+
   // Collapse on outside click — but not while a reminder modal (add / edit /
   // manage) is open, so opening the add form keeps the alerts card in place.
   useEffect(() => {
@@ -76,14 +90,14 @@ export const ReminderWidget: React.FC = () => {
       }
     };
 
-    if (isExpanded && !anyModalOpen) {
+    if (isExpanded && !anyModalOpen && !reminderPanelPinned) {
       document.addEventListener('mousedown', handleClickOutside);
     }
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [isExpanded, isAddModalOpen, editingReminderId, showAllModal]);
+  }, [isExpanded, isAddModalOpen, editingReminderId, showAllModal, reminderPanelPinned]);
 
   // Active reminders drive both the count badge and the chosen panel.
   const allActiveReminders = [...overdueReminders, ...upcomingReminders];
@@ -98,6 +112,10 @@ export const ReminderWidget: React.FC = () => {
     onPauseToggle: setReminderPaused,
     onAdd: () => setIsAddModalOpen(true),
     onManage: () => setShowAllModal(true),
+    pinToggle: {
+      pinned: reminderPanelPinned,
+      onChange: (next) => updateSettings({ reminderPanelPinned: next }),
+    },
     viewSwitcher: {
       layout: reminderPanelLayout,
       onChange: (next) => updateSettings({ reminderPanelLayout: next }),

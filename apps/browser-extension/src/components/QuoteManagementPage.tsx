@@ -1,6 +1,7 @@
 import {
   CATEGORY_COLORS,
   logger,
+  matchesSearchQuery,
   QUOTE_CATEGORIES,
   type Quote,
   type QuoteCategory,
@@ -93,13 +94,8 @@ export const QuoteManagementPage: React.FC = () => {
 
     // Apply search query
     if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      result = result.filter(
-        (q) =>
-          q.text.toLowerCase().includes(query) ||
-          q.author.toLowerCase().includes(query) ||
-          q.source?.toLowerCase().includes(query) ||
-          q.notes?.toLowerCase().includes(query)
+      result = result.filter((q) =>
+        matchesSearchQuery([q.text, q.author, q.source, q.notes], searchQuery)
       );
     }
 

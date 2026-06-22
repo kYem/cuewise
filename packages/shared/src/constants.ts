@@ -80,6 +80,7 @@ export const DEFAULT_SETTINGS: Settings = {
   celebrationsEnabled: true,
   // Reminders
   reminderPanelLayout: 'composed',
+  reminderPanelPinned: false,
   // Focus Position
   focusPosition: 'center', // Center goals section by default
   // Quote Filter Persistence

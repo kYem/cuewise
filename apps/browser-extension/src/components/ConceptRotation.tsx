@@ -16,7 +16,9 @@ const CADENCE_PERIOD: Record<'third' | 'ten', number> = { third: 3, ten: 10 };
 
 interface SurfacingDecision {
   show: boolean;
-  total: number;
+  // Card ids in the deck when this tab's surfacing was decided. A due card whose
+  // id isn't here was added during the tab and surfaces without a refresh.
+  knownIds: string[];
 }
 
 // Whether this tab opens with a concept at all. 'queue' always surfaces the due
@@ -86,14 +88,19 @@ export const ConceptRotation: React.FC<ConceptRotationProps> = ({ fallback, onAd
     if (!enabled || isLoading || decision !== null || due.length === 0) {
       return;
     }
-    setDecision({ show: cadenceAllows(framing, cadence), total: due.length });
+    setDecision({ show: cadenceAllows(framing, cadence), knownIds: due.map((card) => card.id) });
   }, [enabled, isLoading, decision, due.length, framing, cadence]);
 
   if (!enabled || isLoading) {
     return <>{fallback}</>;
   }
 
-  const current = decision?.show ? due[0] : undefined;
+  // A due card whose id wasn't in the deck at decision time was added during this
+  // tab — surface it right away (no refresh), even if the cadence gate kept this
+  // tab on quotes. Show that new card rather than a pre-existing one it suppressed.
+  const newCards =
+    decision !== null ? due.filter((card) => !decision.knownIds.includes(card.id)) : [];
+  const current = decision?.show ? due[0] : newCards[0];
   if (!current) {
     return <>{fallback}</>;
   }
@@ -127,7 +134,7 @@ export const ConceptRotation: React.FC<ConceptRotationProps> = ({ fallback, onAd
     }
   };
 
-  const total = decision?.total ?? due.length;
+  const total = due.length + handledIds.length;
   const queueLabel =
     framing === 'queue' ? `Card ${Math.min(handledIds.length + 1, total)} of ${total}` : undefined;
 
