@@ -54,7 +54,7 @@ jobs:
             tuf-repo-cdn.sigstore.dev:443
 
       - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
 
@@ -135,7 +135,7 @@ jobs:
 
       # Checkout is needed only for the CHANGELOG used as the release body.
       - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           sparse-checkout: apps/browser-extension/CHANGELOG.md
           sparse-checkout-cone-mode: false
@@ -187,7 +187,7 @@ jobs:
 
       - name: Create GitHub Release
         if: ${{ steps.check_release.outputs.exists == 'false' }}
-        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3
+        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b # v3
         with:
           tag_name: v${{ needs.build.outputs.version }}
           name: Cuewise v${{ needs.build.outputs.version }}
@@ -223,7 +223,7 @@ jobs:
       # Only the first-party publish script is needed — no install, no tsx, so no
       # dependency code ever runs in the job that holds the secrets.
       - name: Checkout publish script
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           sparse-checkout: scripts/publish-chrome.mts
           sparse-checkout-cone-mode: false
