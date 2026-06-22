@@ -6,15 +6,17 @@ import {
   conceptIntervalLabel,
   projectConceptInterval,
 } from '@cuewise/shared';
+import { cn } from '@cuewise/ui';
 import { BookOpen, Brain, ChevronRight, Eye, Plus, Repeat } from 'lucide-react';
 import type React from 'react';
 import { useState } from 'react';
 
-// Grade accent colors, all theme tokens: error (red), success (green), brand violet.
-const GRADE_COLOR: Record<ConceptGrade, string> = {
-  again: 'var(--color-error)',
-  good: 'var(--color-success)',
-  easy: 'var(--color-primary-600)',
+// Per-grade accent (theme tokens: error / success / brand violet) — a soft
+// tinted border + faint hover fill, kept light to suit the calm glass surface.
+const GRADE_ACCENT: Record<ConceptGrade, string> = {
+  again: 'border-error/50 hover:bg-error/10',
+  good: 'border-success/50 hover:bg-success/10',
+  easy: 'border-primary-600/50 hover:bg-primary-600/10',
 };
 
 interface ConceptCardDisplayProps {
@@ -127,10 +129,12 @@ export const ConceptCardDisplay: React.FC<ConceptCardDisplayProps> = ({
                     type="button"
                     title={grade.hint}
                     onClick={() => onGrade(grade.id)}
-                    style={{ borderColor: GRADE_COLOR[grade.id] }}
-                    className="flex max-w-[150px] flex-1 flex-col items-center gap-0.5 rounded-lg border bg-surface/60 px-2 py-2.5 text-primary backdrop-blur-sm transition-all hover:-translate-y-0.5 hover:bg-surface-variant"
+                    className={cn(
+                      'flex max-w-[130px] flex-1 flex-col items-center gap-0.5 rounded-lg border bg-surface/60 px-2 py-2 text-primary backdrop-blur-sm transition-all hover:-translate-y-0.5',
+                      GRADE_ACCENT[grade.id]
+                    )}
                   >
-                    <span className="text-[15px] font-bold">{grade.label}</span>
+                    <span className="text-sm font-bold">{grade.label}</span>
                     <span className="text-[11px] tabular-nums text-secondary">
                       {conceptIntervalLabel(nextInterval)}
                     </span>
