@@ -1,5 +1,6 @@
 import {
   type ConceptCadence,
+  type ConceptCard,
   type ConceptFraming,
   type ConceptGrade,
   getDueConceptCards,
@@ -14,7 +15,7 @@ import { ConceptCardDisplay } from './ConceptCardDisplay';
 // lookup, so adding a cadence forces an explicit period here (compile error otherwise).
 const CADENCE_PERIOD: Record<'third' | 'ten', number> = { third: 3, ten: 10 };
 
-interface SurfacingDecision {
+export interface SurfacingDecision {
   show: boolean;
   // Card ids in the deck when this tab's surfacing was decided. A due card whose
   // id isn't here was added during the tab and surfaces without a refresh.
@@ -34,6 +35,29 @@ function cadenceAllows(framing: ConceptFraming, cadence: ConceptCadence): boolea
     return true;
   }
   return Math.random() < 1 / CADENCE_PERIOD[cadence];
+}
+
+/**
+ * The due card this tab shows and its browse position. When surfacing is on the
+ * user browses the whole due pile; when off, only cards added during the tab
+ * (ids not in the decision) surface — so a concept you just added appears even
+ * if the cadence gate kept this tab on quotes. `current` is undefined to fall
+ * back to quotes; `index` is a free-running counter wrapped into the deck.
+ */
+export function selectSurfacedCard(
+  due: ConceptCard[],
+  decision: SurfacingDecision | null,
+  index: number
+): { current: ConceptCard | undefined; position: number } {
+  if (decision === null) {
+    return { current: undefined, position: 0 };
+  }
+  const deck = decision.show ? due : due.filter((card) => !decision.knownIds.includes(card.id));
+  if (deck.length === 0) {
+    return { current: undefined, position: 0 };
+  }
+  const position = ((index % deck.length) + deck.length) % deck.length;
+  return { current: deck[position], position };
 }
 
 interface ConceptRotationProps {
@@ -100,19 +124,7 @@ export const ConceptRotation: React.FC<ConceptRotationProps> = ({ fallback, onAd
     return <>{fallback}</>;
   }
 
-  // A due card whose id wasn't in the deck at decision time was added during this
-  // tab — surface it right away (no refresh), even if the cadence gate kept this
-  // tab on quotes. Show that new card rather than a pre-existing one it suppressed.
-  const newCards =
-    decision !== null ? due.filter((card) => !decision.knownIds.includes(card.id)) : [];
-  // The deck the toolbar's prev/next browse: the full due pile when surfacing is
-  // on, otherwise just the freshly-added card(s).
-  const browseDeck = decision?.show ? due : newCards;
-  const position =
-    browseDeck.length > 0
-      ? ((index % browseDeck.length) + browseDeck.length) % browseDeck.length
-      : 0;
-  const current = browseDeck.length > 0 ? browseDeck[position] : undefined;
+  const { current, position } = selectSurfacedCard(due, decision, index);
   if (!current) {
     return <>{fallback}</>;
   }

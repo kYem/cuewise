@@ -1,3 +1,4 @@
+import { type ConceptSchedule, getTodayDateString } from '@cuewise/shared';
 import { Brain, CalendarClock, Eye, RotateCcw } from 'lucide-react';
 import type React from 'react';
 import { useState } from 'react';
@@ -10,7 +11,7 @@ interface ConceptFormPreviewProps {
   tags: string[];
   mode: 'add' | 'edit';
   /** Present in edit mode: the card's current review schedule. */
-  schedule?: { repetitions: number; interval: number; due: boolean };
+  schedule?: ConceptSchedule;
 }
 
 /** Live preview of how the card will surface in the rotation (term → reveal). */
@@ -23,6 +24,7 @@ export const ConceptFormPreview: React.FC<ConceptFormPreviewProps> = ({
   schedule,
 }) => {
   const [revealed, setRevealed] = useState(false);
+  const due = schedule ? schedule.dueDate <= getTodayDateString() : false;
 
   return (
     <div className="flex flex-col gap-3.5">
@@ -106,8 +108,8 @@ export const ConceptFormPreview: React.FC<ConceptFormPreviewProps> = ({
             </span>
             <span className="flex justify-between">
               <span>Next review</span>
-              <span className={schedule.due ? 'text-success' : 'text-primary'}>
-                {schedule.due ? 'Due today' : `in ${schedule.interval}d`}
+              <span className={due ? 'text-success' : 'text-primary'}>
+                {due ? 'Due today' : `in ${schedule.interval}d`}
               </span>
             </span>
           </div>

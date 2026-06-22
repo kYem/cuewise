@@ -1,10 +1,4 @@
-import {
-  addTag,
-  type ConceptCard,
-  getTodayDateString,
-  logger,
-  uniqueSorted,
-} from '@cuewise/shared';
+import { addTag, type ConceptCard, logger, uniqueSorted } from '@cuewise/shared';
 import { Autocomplete, Input, Label, Textarea } from '@cuewise/ui';
 import { Trash2 } from 'lucide-react';
 import type React from 'react';
@@ -44,13 +38,6 @@ export const ConceptForm: React.FC<ConceptFormProps> = ({ card, onSuccess, onCan
 
   const isEdit = card !== undefined;
   const canSave = term.trim().length > 0 && definition.trim().length > 0;
-  const schedule = card
-    ? {
-        repetitions: card.schedule.repetitions,
-        interval: card.schedule.interval,
-        due: card.schedule.dueDate <= getTodayDateString(),
-      }
-    : undefined;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -177,7 +164,7 @@ export const ConceptForm: React.FC<ConceptFormProps> = ({ card, onSuccess, onCan
           category={tags[0]}
           tags={tags}
           mode={isEdit ? 'edit' : 'add'}
-          schedule={schedule}
+          schedule={card?.schedule}
         />
       </div>
 

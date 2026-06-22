@@ -4,7 +4,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useConceptCardsStore } from '../stores/concept-cards-store';
 import { useSettingsStore } from '../stores/settings-store';
-import { ConceptRotation } from './ConceptRotation';
+import { ConceptRotation, selectSurfacedCard } from './ConceptRotation';
 
 vi.mock('../stores/settings-store', () => ({ useSettingsStore: vi.fn() }));
 vi.mock('../stores/concept-cards-store', () => ({ useConceptCardsStore: vi.fn() }));
@@ -159,5 +159,30 @@ describe('ConceptRotation', () => {
     });
 
     expect(screen.getByText('QUOTE')).toBeInTheDocument();
+  });
+});
+
+describe('selectSurfacedCard', () => {
+  const a = conceptCardFactory.build({ id: 'a' });
+  const b = conceptCardFactory.build({ id: 'b' });
+  const c = conceptCardFactory.build({ id: 'c' });
+
+  it('returns no card before a decision is made', () => {
+    expect(selectSurfacedCard([a, b], null, 0).current).toBeUndefined();
+  });
+
+  it('browses the whole due pile when surfacing is on, wrapping the index', () => {
+    const decision = { show: true, knownIds: ['a', 'b'] };
+    expect(selectSurfacedCard([a, b], decision, 0)).toEqual({ current: a, position: 0 });
+    expect(selectSurfacedCard([a, b], decision, 1)).toEqual({ current: b, position: 1 });
+    expect(selectSurfacedCard([a, b], decision, 2)).toEqual({ current: a, position: 0 });
+    expect(selectSurfacedCard([a, b], decision, -1)).toEqual({ current: b, position: 1 });
+  });
+
+  it('surfaces only cards added since the decision when surfacing is off', () => {
+    // a and b were known at decision time; c was added during the tab.
+    const decision = { show: false, knownIds: ['a', 'b'] };
+    expect(selectSurfacedCard([a, b, c], decision, 0)).toEqual({ current: c, position: 0 });
+    expect(selectSurfacedCard([a, b], decision, 0).current).toBeUndefined();
   });
 });
