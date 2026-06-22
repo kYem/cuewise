@@ -34,6 +34,7 @@ interface ConceptCardsStore {
   updateCard: (id: string, updates: ConceptCardUpdates) => Promise<boolean>;
   deleteCard: (id: string) => Promise<boolean>;
   reviewCard: (id: string, grade: ConceptGrade) => Promise<boolean>;
+  toggleFavorite: (id: string) => Promise<boolean>;
 
   // Selectors
   getDueCards: () => ConceptCard[];
@@ -184,6 +185,30 @@ export const useConceptCardsStore = create<ConceptCardsStore>((set, get) => ({
     } catch (error) {
       logger.error('Error reviewing concept card', error);
       return reportError(set, REVIEW_ERROR_MESSAGE);
+    }
+  },
+
+  toggleFavorite: async (id: string) => {
+    const { cards } = get();
+    const existing = cards.find((card) => card.id === id);
+    if (!existing) {
+      return false;
+    }
+
+    try {
+      const updatedCards = cards.map((card) =>
+        card.id === id ? { ...card, isFavorite: !card.isFavorite } : card
+      );
+      const result = await saveConceptCards(updatedCards);
+      if (result?.success === false) {
+        return reportError(set, SAVE_ERROR_MESSAGE);
+      }
+
+      set({ cards: updatedCards, error: null });
+      return true;
+    } catch (error) {
+      logger.error('Error toggling concept favorite', error);
+      return reportError(set, SAVE_ERROR_MESSAGE);
     }
   },
 

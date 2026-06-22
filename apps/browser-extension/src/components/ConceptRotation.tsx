@@ -47,8 +47,9 @@ interface ConceptRotationProps {
  * Blends due concept cards into the quote slot. Decides once per tab (in an
  * effect, so render stays pure) whether to surface concepts: ambient framing
  * yields back to quotes after one card, while queue framing clears the due pile
- * front-to-back. A handled (graded or skipped) card leaves the deck for the
- * rest of the tab, so a lapsing "Again" card never loops back immediately.
+ * front-to-back. A graded card leaves the deck for the rest of the tab (so a
+ * lapsing "Again" card never loops back immediately); the toolbar's prev/next
+ * browse what remains.
  */
 export const ConceptRotation: React.FC<ConceptRotationProps> = ({ fallback, onAdd }) => {
   const enabled = useSettingsStore((state) => state.settings.conceptCardsEnabled);
@@ -60,10 +61,13 @@ export const ConceptRotation: React.FC<ConceptRotationProps> = ({ fallback, onAd
   const isLoading = useConceptCardsStore((state) => state.isLoading);
   const initialize = useConceptCardsStore((state) => state.initialize);
   const reviewCard = useConceptCardsStore((state) => state.reviewCard);
+  const toggleFavorite = useConceptCardsStore((state) => state.toggleFavorite);
 
   const [handledIds, setHandledIds] = useState<string[]>([]);
   const [decision, setDecision] = useState<SurfacingDecision | null>(null);
   const [grading, setGrading] = useState(false);
+  // Browse position for the toolbar's prev/next within the surfaced deck.
+  const [index, setIndex] = useState(0);
 
   useEffect(() => {
     initialize();
@@ -74,6 +78,7 @@ export const ConceptRotation: React.FC<ConceptRotationProps> = ({ fallback, onAd
   useEffect(() => {
     setDecision(null);
     setHandledIds([]);
+    setIndex(0);
   }, [framing, cadence, enabled]);
 
   const due = useMemo(() => {
@@ -100,7 +105,14 @@ export const ConceptRotation: React.FC<ConceptRotationProps> = ({ fallback, onAd
   // tab on quotes. Show that new card rather than a pre-existing one it suppressed.
   const newCards =
     decision !== null ? due.filter((card) => !decision.knownIds.includes(card.id)) : [];
-  const current = decision?.show ? due[0] : newCards[0];
+  // The deck the toolbar's prev/next browse: the full due pile when surfacing is
+  // on, otherwise just the freshly-added card(s).
+  const browseDeck = decision?.show ? due : newCards;
+  const position =
+    browseDeck.length > 0
+      ? ((index % browseDeck.length) + browseDeck.length) % browseDeck.length
+      : 0;
+  const current = browseDeck.length > 0 ? browseDeck[position] : undefined;
   if (!current) {
     return <>{fallback}</>;
   }
@@ -108,6 +120,9 @@ export const ConceptRotation: React.FC<ConceptRotationProps> = ({ fallback, onAd
   const yieldToQuotes = () => {
     setDecision((prev) => (prev ? { ...prev, show: false } : prev));
   };
+
+  const goNext = () => setIndex((i) => i + 1);
+  const goPrev = () => setIndex((i) => i - 1);
 
   const handleGrade = async (grade: ConceptGrade) => {
     if (grading) {
@@ -127,16 +142,7 @@ export const ConceptRotation: React.FC<ConceptRotationProps> = ({ fallback, onAd
     }
   };
 
-  const handleSkip = () => {
-    setHandledIds((ids) => [...ids, current.id]);
-    if (framing === 'ambient') {
-      yieldToQuotes();
-    }
-  };
-
-  const total = due.length + handledIds.length;
-  const queueLabel =
-    framing === 'queue' ? `Card ${Math.min(handledIds.length + 1, total)} of ${total}` : undefined;
+  const queueLabel = framing === 'queue' ? `Card ${position + 1} of ${due.length}` : undefined;
 
   return (
     <ConceptCardDisplay
@@ -144,7 +150,11 @@ export const ConceptRotation: React.FC<ConceptRotationProps> = ({ fallback, onAd
       card={current}
       activeRecall={activeRecall}
       onGrade={handleGrade}
-      onSkip={handleSkip}
+      onPrev={goPrev}
+      onNext={goNext}
+      isFavorite={current.isFavorite ?? false}
+      onToggleFavorite={() => toggleFavorite(current.id)}
+      dueCount={due.length}
       onAdd={onAdd}
       queueLabel={queueLabel}
     />

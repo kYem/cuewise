@@ -126,6 +126,29 @@ describe('ConceptRotation', () => {
     expect(screen.getByText(/Card 1 of 2/)).toBeInTheDocument();
   });
 
+  it('browses to the next due card with the toolbar', () => {
+    const cardA = conceptCardFactory.build({
+      id: 'a',
+      term: 'Card A',
+      schedule: { dueDate: '2020-01-01', interval: 0, easeFactor: 2.5, repetitions: 0, lapses: 0 },
+    });
+    const cardB = conceptCardFactory.build({
+      id: 'b',
+      term: 'Card B',
+      schedule: { dueDate: '2020-01-02', interval: 0, easeFactor: 2.5, repetitions: 0, lapses: 0 },
+    });
+    setup({ framing: 'queue', cards: [cardA, cardB] });
+
+    render(<ConceptRotation fallback={<div>QUOTE</div>} />);
+    expect(screen.getByText('Card A')).toBeInTheDocument();
+    expect(screen.getByText(/Card 1 of 2/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+
+    expect(screen.getByText('Card B')).toBeInTheDocument();
+    expect(screen.getByText(/Card 2 of 2/)).toBeInTheDocument();
+  });
+
   it('clears the queue once the only due card is graded', async () => {
     setup({ framing: 'queue', cards: [dueCard] });
 
