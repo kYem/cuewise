@@ -505,6 +505,19 @@ html.dark[data-theme="rose"] {
 
     /* No gradient - transparent for image backgrounds */
     --gradient-background: transparent;
+
+    /* Glass realism controls (design-system additions) */
+    --glass-text-shadow: 0 2px 8px rgba(0, 0, 0, 0.45), 0 1px 2px rgba(0, 0, 0, 0.35);
+    --glass-saturate: saturate(1.6);
+    --glass-edge: inset 0 1px 0 0 rgba(255, 255, 255, 0.3);
+    --glass-drop: 0 10px 30px -12px rgba(0, 0, 0, 0.4);
+    --glass-scrim: linear-gradient(
+      180deg,
+      rgba(0, 0, 0, 0.35) 0%,
+      rgba(0, 0, 0, 0.05) 22%,
+      rgba(0, 0, 0, 0.05) 70%,
+      rgba(0, 0, 0, 0.4) 100%
+    );
   }
 
   /* Glass theme - dark body background as fallback */
@@ -1054,5 +1067,34 @@ html.dark[data-theme="rose"] {
   body {
     /* biome-ignore lint/complexity/noImportantStyles: required for reduced-motion a11y */
     transition: none !important;
+  }
+}
+
+/* ============================================================
+   Glass realism — saturation, specular edge, depth, legibility.
+   Unlayered on purpose: the box-shadow must win over Tailwind's
+   shadow-* utilities (a later @layer) without !important. Scoped to
+   [data-theme="glass"], so it is inert in every other theme.
+   ============================================================ */
+[data-theme="glass"] [class*="backdrop-blur"] {
+  /* Amplify the photo's colour through the frost (real glass saturates rather
+     than graying out); composes with the element's own backdrop-blur. */
+  --tw-backdrop-saturate: var(--glass-saturate);
+  /* Light on the top edge + a soft drop so frosted cards read as floating glass. */
+  box-shadow: var(--glass-edge), var(--glass-drop);
+}
+
+/* White text stays legible over any photo. */
+[data-theme="glass"] :is(.text-primary, .font-display, h1, h2, h3) {
+  text-shadow: var(--glass-text-shadow);
+}
+
+/* A11y: honour reduced-transparency by dropping the blur + see-through,
+   keeping a solid dark surface and readable text. */
+@media (prefers-reduced-transparency: reduce) {
+  [data-theme="glass"] [class*="backdrop-blur"] {
+    backdrop-filter: none;
+    background-color: rgba(15, 23, 42, 0.9);
+    box-shadow: var(--glass-drop);
   }
 }
