@@ -41,7 +41,7 @@ Prefer the semantic token utilities below over Tailwind's built-in palette so th
 
 ## Components
 
-Primitives: `Button` (variant `primary`/`secondary`/`outline`/`ghost`, size `sm`/`md`/`lg`), `Badge` (variant `default`/`primary`/`secondary`/`success`/`warning`/`danger`), `Input`, `Textarea` (`showCount`+`maxLength`), `Label` (`required`). Composition: `Card` + `CardHeader`/`CardTitle`/`CardContent`. Controlled inputs: `Select` (`value`/`onChange`/`options`), `Autocomplete` (`suggestions`). Overlay: `Popover` + `PopoverTrigger`/`PopoverContent`. Feedback: `ToastContainer` (`toasts`/`onClose`). Charts: `ChartContainer` (recharts wrapper) + `ChartTooltip`/`ChartTooltipContent`/`ChartLegend`/`ChartLegendContent`. Utility: `cn(...)` for conditional class merging.
+Primitives: `Button` (variant `primary`/`secondary`/`outline`/`ghost`, size `sm`/`md`/`lg`), `Badge` (variant `default`/`primary`/`secondary`/`success`/`warning`/`danger`), `Input`, `Textarea` (`showCount`+`maxLength`), `Label` (`required`). Composition: `Card` + `CardHeader`/`CardTitle`/`CardContent`. Controlled inputs: `Select` (`value`/`onChange`/`options`), `Autocomplete` (`suggestions`). Overlay: `Popover` + `PopoverTrigger`/`PopoverContent`; `Tooltip` (`label`/`children`/`side`/`delayDuration` — self-contained, wraps its own provider). Feedback: `ToastContainer` (`toasts`/`onClose`). Charts: `ChartContainer` (recharts wrapper) + `ChartTooltip`/`ChartTooltipContent`/`ChartLegend`/`ChartLegendContent`. Utility: `cn(...)` for conditional class merging.
 
 ## Idiomatic example
 
