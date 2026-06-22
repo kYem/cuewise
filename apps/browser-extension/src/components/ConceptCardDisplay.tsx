@@ -143,10 +143,10 @@ export const ConceptCardDisplay: React.FC<ConceptCardDisplayProps> = ({
             </div>
           )}
 
-          {/* the grading moment */}
-          <div className="mt-6">
-            <div className="mb-3 text-xs text-secondary">How well did you recall it?</div>
-            <div className="flex items-stretch justify-center gap-2.5">
+          {/* the grading moment — one compact row: prompt, then inline pills */}
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+            <span className="text-xs text-secondary">How well did you recall it?</span>
+            <div className="flex flex-wrap items-center gap-2">
               {CONCEPT_GRADES.map((grade, i) => {
                 // Cap the preview at the same ceiling reviewConceptCard applies.
                 const nextInterval = Math.min(
@@ -160,15 +160,12 @@ export const ConceptCardDisplay: React.FC<ConceptCardDisplayProps> = ({
                     title={`${grade.hint} (press ${i + 1})`}
                     onClick={() => onGrade(grade.id)}
                     className={cn(
-                      'relative flex max-w-[120px] flex-1 flex-col items-center gap-0 rounded-lg border bg-surface/60 px-2 py-1.5 text-primary backdrop-blur-sm transition-all hover:-translate-y-0.5',
+                      'inline-flex items-center gap-1.5 rounded-full border bg-surface/60 px-3 py-1 backdrop-blur-sm transition-all hover:-translate-y-0.5',
                       GRADE_ACCENT[grade.id]
                     )}
                   >
-                    <kbd className="absolute right-1 top-1 rounded bg-surface-variant/70 px-1 text-[9px] font-semibold leading-tight text-tertiary">
-                      {i + 1}
-                    </kbd>
-                    <span className="text-[13px] font-bold leading-tight">{grade.label}</span>
-                    <span className="text-[10px] tabular-nums text-secondary">
+                    <span className="text-[13px] font-semibold text-primary">{grade.label}</span>
+                    <span className="text-[11px] tabular-nums text-tertiary">
                       {conceptIntervalLabel(nextInterval)}
                     </span>
                   </button>

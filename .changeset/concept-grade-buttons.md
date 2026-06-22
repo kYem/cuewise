@@ -2,4 +2,4 @@
 '@cuewise/browser-extension': patch
 ---
 
-Refine the concept recall grade buttons (Again/Good/Easy): soft tinted borders and a smaller footprint so they sit calmly on the card, plus Anki-style 1/2/3 keyboard shortcuts (shown on each button) to grade without reaching for the mouse.
+Refine the concept recall grade buttons into compact inline pills (label + interval on one line) with soft tinted borders, sitting in a single row with the prompt — plus Anki-style 1/2/3 keyboard shortcuts to grade without reaching for the mouse.
