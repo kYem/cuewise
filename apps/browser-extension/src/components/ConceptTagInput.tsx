@@ -2,7 +2,7 @@ import { addTag } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
 import { Plus, X } from 'lucide-react';
 import type React from 'react';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 
 interface ConceptTagInputProps {
   tags: string[];
@@ -25,7 +25,6 @@ export const ConceptTagInput: React.FC<ConceptTagInputProps> = ({
   onDraftChange,
 }) => {
   const [draft, setDraftState] = useState('');
-  const inputRef = useRef<HTMLInputElement>(null);
 
   const setDraft = (value: string) => {
     setDraftState(value);
@@ -80,7 +79,6 @@ export const ConceptTagInput: React.FC<ConceptTagInputProps> = ({
         ))}
         <input
           id="concept-tags"
-          ref={inputRef}
           type="text"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
