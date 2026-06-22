@@ -14,31 +14,62 @@ import type React from 'react';
 interface DockBtnProps {
   icon: LucideIcon;
   title: string;
-  onClick: () => void;
+  /** When omitted, renders a non-interactive display (e.g. the due-count badge). */
+  onClick?: () => void;
   active?: boolean;
+  badge?: number;
   /** Tailwind size class, e.g. 'h-9 w-9'. Defaults to the standard 40px. */
   sizeClass?: string;
 }
 
 // Ghosted icon button: icon-only, no fill until hover (active = brand-error fill).
-const DockBtn: React.FC<DockBtnProps> = ({ icon: Icon, title, onClick, active, sizeClass }) => (
-  <button
-    type="button"
-    onClick={onClick}
-    title={title}
-    aria-label={title}
-    aria-pressed={active}
-    className={cn(
-      'inline-flex flex-none items-center justify-center rounded-full transition-colors',
-      sizeClass ?? 'h-10 w-10',
-      active
-        ? 'bg-error/90 text-white'
-        : 'text-white/70 hover:bg-white/15 hover:text-white focus-visible:bg-white/15'
-    )}
-  >
-    <Icon className="h-[18px] w-[18px]" />
-  </button>
-);
+// Without onClick it's a non-interactive display (the due-count badge).
+const DockBtn: React.FC<DockBtnProps> = ({
+  icon: Icon,
+  title,
+  onClick,
+  active,
+  badge,
+  sizeClass,
+}) => {
+  const interactiveClass = active
+    ? 'bg-error/90 text-white'
+    : 'text-white/70 hover:bg-white/15 hover:text-white focus-visible:bg-white/15';
+  const className = cn(
+    'relative inline-flex flex-none items-center justify-center rounded-full transition-colors',
+    sizeClass ?? 'h-10 w-10',
+    onClick ? interactiveClass : 'text-white/55'
+  );
+  const inner = (
+    <>
+      <Icon className="h-[18px] w-[18px]" />
+      {badge !== undefined && badge > 0 && (
+        <span className="absolute -right-0.5 top-px inline-flex h-[15px] min-w-[15px] items-center justify-center rounded-full border border-white/25 bg-black/60 px-1 text-[9px] font-bold leading-none text-white tabular-nums">
+          {badge}
+        </span>
+      )}
+    </>
+  );
+  if (onClick === undefined) {
+    return (
+      <span title={title} className={className}>
+        {inner}
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      aria-label={title}
+      aria-pressed={active}
+      className={className}
+    >
+      {inner}
+    </button>
+  );
+};
 
 // The prominent ring button — the item's main action (reveal / next).
 const RingBtn: React.FC<Pick<DockBtnProps, 'icon' | 'title' | 'onClick'>> = ({
@@ -105,17 +136,7 @@ export const ConceptToolbar: React.FC<ConceptToolbarProps> = ({
         active={isFavorite}
       />
       {/* Filter is badge-only for now (the funnel menu is deferred). */}
-      <span
-        title={`${dueCount} due`}
-        className="relative inline-flex h-10 w-10 flex-none items-center justify-center rounded-full text-white/55"
-      >
-        <Filter className="h-[18px] w-[18px]" />
-        {dueCount > 0 && (
-          <span className="absolute -right-0.5 top-px inline-flex h-[15px] min-w-[15px] items-center justify-center rounded-full border border-white/25 bg-black/60 px-1 text-[9px] font-bold leading-none text-white tabular-nums">
-            {dueCount}
-          </span>
-        )}
-      </span>
+      <DockBtn icon={Filter} title={`${dueCount} due`} badge={dueCount} />
       {onAdd && <DockBtn icon={Plus} title="Add concept" onClick={onAdd} />}
     </div>
   </div>

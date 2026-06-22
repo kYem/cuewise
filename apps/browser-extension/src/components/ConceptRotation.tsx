@@ -142,6 +142,8 @@ export const ConceptRotation: React.FC<ConceptRotationProps> = ({ fallback, onAd
     }
   };
 
+  // Queue framing always sets decision.show, so browseDeck === due and `position`
+  // indexes into `due` — the label's denominator matches the card on screen.
   const queueLabel = framing === 'queue' ? `Card ${position + 1} of ${due.length}` : undefined;
 
   return (
