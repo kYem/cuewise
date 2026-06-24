@@ -59,3 +59,8 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      # Exercise the store-zip packaging here too — it only ran in the release
+      # workflow before, so a break (e.g. an ESM dep bump) slipped past PR CI.
+      - name: Package store zip
+        run: pnpm --filter @cuewise/browser-extension package

@@ -4,7 +4,7 @@ import { createWriteStream, mkdirSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import archiver from 'archiver';
+import { ZipArchive } from 'archiver';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = join(__dirname, '..');
@@ -26,7 +26,9 @@ async function packageExtension() {
 
     // Create write stream for the zip file
     const output = createWriteStream(outputPath);
-    const archive = archiver('zip', {
+    // archiver v8 is ESM: use the format-specific ZipArchive class (the base
+    // Archiver needs a format module wired in; the subclass already has it).
+    const archive = new ZipArchive({
       zlib: { level: 9 }, // Maximum compression
     });
 
