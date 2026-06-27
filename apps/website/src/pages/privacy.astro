@@ -20,7 +20,7 @@ import { SITE } from '../lib/site';
         </div>
         <h1>Privacy Policy</h1>
         <p class="hero-sub">At Cuewise, your privacy is our priority. This policy explains how we handle your data.</p>
-        <p class="last-updated">Last Updated: June 16, 2026</p>
+        <p class="last-updated">Last Updated: June 26, 2026</p>
       </div>
     </section>
 
@@ -103,26 +103,37 @@ import { SITE } from '../lib/site';
             </svg>
             Google Calendar Integration (Optional)
           </h2>
-          <p>Cuewise offers an <strong>optional, opt-in</strong> Google Calendar connection so you can see today's schedule beside your timer. It is off by default and only activates when you click <strong>"Connect Google Calendar."</strong></p>
+          <p>Cuewise offers an <strong>optional, opt-in</strong> Google Calendar connection so you can see today's schedule beside your timer. It is off by default and only activates when you click <strong>"Connect Google Calendar"</strong> and grant access through Google's own consent screen.</p>
           <div>
-            <h3>What we access:</h3>
+            <h3>Google user data we access:</h3>
             <ul>
-              <li>Read-only access to your <strong>primary</strong> Google Calendar (the <code>calendar.readonly</code> scope)</li>
-              <li>Only events for the <strong>current day</strong> are fetched, to show an "Up next" agenda</li>
+              <li><strong>Read-only</strong> access to your <strong>primary</strong> Google Calendar, and nothing else, via the single <code>https://www.googleapis.com/auth/calendar.readonly</code> scope.</li>
+              <li>Only events for the <strong>current day</strong> are requested. For each event we read its title, start and end time, color, status, your own attendance response, and a link back to the event in Google Calendar.</li>
+              <li>We do <strong>not</strong> access your Google profile, email address, contacts, other calendars, or any past or future days beyond today.</li>
             </ul>
           </div>
           <div>
-            <h3>How it is handled:</h3>
+            <h3>How we use this data (Data Usage):</h3>
             <ul>
-              <li><strong>Client-side only:</strong> the extension requests this data directly from Google in your browser. It never passes through, and is never stored on, any Cuewise server.</li>
-              <li><strong>Local cache:</strong> fetched events are stored only in your browser for the current day and are removed when you disconnect.</li>
-              <li><strong>Read-only:</strong> Cuewise never creates, edits, or deletes calendar events.</li>
-              <li><strong>Revocable:</strong> disconnecting revokes the access token and removes the permission. You can also revoke access anytime at <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer">myaccount.google.com/permissions</a>.</li>
+              <li><strong>Sole purpose:</strong> to display your remaining events for today as an "Up next" agenda alongside your focus timer. The data is used for no other purpose.</li>
+              <li><strong>Processed in your browser:</strong> events are fetched, filtered (cancelled and declined events are hidden), and rendered entirely on your device. No human at Cuewise ever sees your calendar data.</li>
+              <li><strong>No secondary use:</strong> your Google Calendar data is never used for advertising, profiling, training models, analytics, or any feature other than the agenda display described above.</li>
+            </ul>
+          </div>
+          <div>
+            <h3>How we store and protect this data (Data Storage &amp; Protection):</h3>
+            <ul>
+              <li><strong>No Cuewise servers:</strong> the extension requests calendar data directly from Google's API in your browser. It never passes through, and is never stored on, any Cuewise or third-party server.</li>
+              <li><strong>Encrypted transport:</strong> all requests to Google are made over HTTPS (TLS), so the data is encrypted in transit.</li>
+              <li><strong>Secure token handling:</strong> the OAuth access token is issued and stored by your browser's built-in Chrome Identity service, not by Cuewise. Cuewise never receives, stores, or has access to your Google password.</li>
+              <li><strong>Sandboxed local storage:</strong> the fetched events are cached only in your browser's extension storage, which is sandboxed to your device and isolated from other sites and extensions.</li>
+              <li><strong>Minimal retention:</strong> only the current day's events are kept; they are refreshed each day and are deleted immediately when you disconnect the calendar or uninstall the extension.</li>
+              <li><strong>Read-only and revocable:</strong> Cuewise never creates, edits, or deletes calendar events. Disconnecting revokes the access token and removes the permission, and you can revoke access at any time at <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer">myaccount.google.com/permissions</a>.</li>
             </ul>
           </div>
           <div>
             <h3>Limited Use:</h3>
-            <p>Cuewise's use and transfer of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener noreferrer">Google API Services User Data Policy</a>, including the Limited Use requirements. Google Calendar data is never used for advertising, never sold, and never transferred to others — because access is entirely client-side, it is not transferred to us at all.</p>
+            <p>Cuewise's use and transfer of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener noreferrer">Google API Services User Data Policy</a>, including the Limited Use requirements. Google Calendar data is never sold, never used for advertising, and never transferred to others — because access is entirely client-side, it is not transferred to us at all.</p>
           </div>
         </div>
 
