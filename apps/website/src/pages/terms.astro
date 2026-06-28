@@ -1,0 +1,185 @@
+---
+import Base from '../layouts/Base.astro';
+import { SITE } from '../lib/site';
+---
+
+<Base
+  title="Terms of Service - Cuewise"
+  description="Cuewise Terms of Service — the simple terms for using our free, privacy-first new tab browser extension."
+>
+  <main>
+
+    <!-- 1. Page Hero -->
+    <section class="page-hero">
+      <div class="wrap">
+        <div class="eyebrow">
+          <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/>
+          </svg>
+          The Fine Print, Kept Simple
+        </div>
+        <h1>Terms of Service</h1>
+        <p class="hero-sub">Cuewise is a free, privacy-first browser extension. These terms explain the basics of using it — no surprises.</p>
+        <p class="last-updated">Last Updated: June 28, 2026</p>
+      </div>
+    </section>
+
+    <!-- 2. Terms Cards -->
+    <section class="section-pad">
+      <div class="wrap">
+
+        <!-- Card 1: Agreement -->
+        <div class="content-card glass reveal">
+          <h2>
+            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+            Agreement to These Terms
+          </h2>
+          <p>By installing or using the Cuewise browser extension (the "Service"), you agree to these Terms of Service. If you do not agree, please do not install or use the extension.</p>
+          <p>These terms apply to everyone who uses Cuewise. Because Cuewise is free and stores your data locally, the terms are intentionally short.</p>
+        </div>
+
+        <!-- Card 2: The Service -->
+        <div class="content-card glass reveal">
+          <h2>
+            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
+            </svg>
+            What Cuewise Is
+          </h2>
+          <p>Cuewise replaces your browser's new tab page with a calm, motivational dashboard — daily quotes, goals, reminders, a Pomodoro timer, focus mode, and productivity insights.</p>
+          <p>The extension is provided <strong>free of charge</strong>. Your productivity data is stored locally on your own device; see our <a href="/privacy/">Privacy Policy</a> for the full details on how data is handled.</p>
+        </div>
+
+        <!-- Card 3: Acceptable Use -->
+        <div class="content-card glass reveal">
+          <h2>
+            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+            Acceptable Use
+          </h2>
+          <p>You agree to use Cuewise only for lawful, personal purposes. You agree not to:</p>
+          <ul>
+            <li>Misuse, disrupt, or attempt to gain unauthorized access to the Service or its infrastructure</li>
+            <li>Reverse engineer the Service except where permitted by its open-source license or applicable law</li>
+            <li>Use the Service to violate any law or the rights of others</li>
+          </ul>
+        </div>
+
+        <!-- Card 4: Optional Integrations -->
+        <div class="content-card glass reveal">
+          <h2>
+            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/>
+            </svg>
+            Optional Integrations & Third-Party Services
+          </h2>
+          <p>Some features are optional and only activate if you choose to enable them. When you use them, the relevant third party's own terms and policies also apply:</p>
+          <ul>
+            <li><strong>Google Calendar (optional):</strong> if you connect it, Cuewise reads your calendar directly from Google using read-only access. This use follows the <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener noreferrer">Google API Services User Data Policy</a>. See the <a href="/privacy/">Privacy Policy</a> for details.</li>
+            <li><strong>Newsletter (optional):</strong> if you subscribe, your email is handled as described in the Privacy Policy.</li>
+            <li><strong>Background images & media:</strong> focus-mode imagery and embedded media are served by third parties (e.g. Unsplash, YouTube) under their respective terms.</li>
+          </ul>
+        </div>
+
+        <!-- Card 5: Intellectual Property -->
+        <div class="content-card glass reveal">
+          <h2>
+            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2l2.4 7.4H22l-6 4.6 2.3 7.4L12 17l-6.3 4.4L8 14 2 9.4h7.6z"/>
+            </svg>
+            Intellectual Property
+          </h2>
+          <p>The Cuewise name, logo, and branding belong to us. The content you create within the extension — your goals, notes, custom quotes, and settings — belongs to you.</p>
+          <p>Cuewise's source code is published on <a href={SITE.githubUrl} target="_blank" rel="noopener noreferrer">GitHub</a> and is governed by the license stated in that repository.</p>
+        </div>
+
+        <!-- Card 6: Disclaimer -->
+        <div class="content-card glass reveal">
+          <h2>
+            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/>
+            </svg>
+            Disclaimer & Limitation of Liability
+          </h2>
+          <p>Cuewise is provided <strong>"as is"</strong> and <strong>"as available"</strong>, without warranties of any kind, whether express or implied. We do not guarantee the Service will be uninterrupted, error-free, or that it will meet your specific needs.</p>
+          <p>To the fullest extent permitted by law, we are not liable for any indirect, incidental, or consequential damages, or for any loss of data, arising from your use of (or inability to use) the Service. Because your data is stored locally, we recommend exporting any data you wish to keep.</p>
+        </div>
+
+        <!-- Card 7: Changes -->
+        <div class="content-card glass reveal">
+          <h2>
+            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+            </svg>
+            Changes to the Service & Terms
+          </h2>
+          <p>We may update, change, or discontinue features of the Service at any time. We may also update these Terms from time to time. When we do, we will update the "Last Updated" date at the top of this page. Continued use of Cuewise after changes means you accept the updated terms.</p>
+        </div>
+
+        <!-- Card 8: Governing Law -->
+        <div class="content-card glass reveal">
+          <h2>
+            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3v18"/><path d="M5 7h14"/><path d="m5 7-2 6a4 4 0 0 0 8 0z"/><path d="m19 7-2 6a4 4 0 0 0 8 0z"/><path d="M7 21h10"/>
+            </svg>
+            Governing Law
+          </h2>
+          <p>These Terms are governed by and construed in accordance with the laws of England and Wales, and any disputes will be subject to the exclusive jurisdiction of its courts.</p>
+        </div>
+
+        <!-- Card 9: Contact -->
+        <div class="content-card glass reveal">
+          <h2>
+            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+            </svg>
+            Contact Us
+          </h2>
+          <p>Questions about these terms? Reach out:</p>
+          <ul>
+            <li><strong>Email:</strong> <a href={`mailto:${SITE.supportEmail}`}>{SITE.supportEmail}</a></li>
+            <li><strong>GitHub:</strong> <a href={SITE.githubIssuesUrl} target="_blank" rel="noopener noreferrer">Open an issue</a></li>
+            <li><strong>Support:</strong> <a href="/support/">Visit our support page</a></li>
+          </ul>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- 3. Bottom CTA -->
+    <section class="section-pad" style="padding-top:0;">
+      <div class="wrap">
+        <div class="final glass reveal">
+          <div class="final-inner">
+            <h2>Ready to Start Your Journey?</h2>
+            <p>Experience mindful productivity with complete privacy</p>
+            <div class="hero-cta">
+              <a class="btn btn-ghost btn-lg" href="/">
+                <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+                Back to Home
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</Base>
+
+<style>
+  .content-card h2 svg {
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0;
+  }
+
+  .last-updated {
+    margin-top: 12px;
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.55);
+  }
+</style>
