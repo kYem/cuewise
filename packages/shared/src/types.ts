@@ -294,6 +294,7 @@ export interface Settings {
   syncEnabled: boolean; // Enable Chrome sync for cross-device synchronization (default false)
   // Customization
   colorTheme: ColorTheme;
+  glassEnhanced: boolean; // Opt-in richer Glass surfaces: saturation, lit edges, legibility scrim (default false)
   layoutDensity: LayoutDensity;
   showThemeSwitcher: boolean; // Show live theme switcher sidebar
   showClock: boolean; // Show clock and date on home page (default false)

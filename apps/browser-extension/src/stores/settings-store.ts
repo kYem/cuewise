@@ -52,6 +52,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       // Apply all customization on initialization
       applyTheme(settings.theme);
       applyColorTheme(settings.colorTheme);
+      applyGlassEnhanced(settings.glassEnhanced);
       applyLayoutDensity(settings.layoutDensity);
       applyLogLevel(settings.logLevel);
     } catch (error) {
@@ -231,6 +232,9 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       if (partialSettings.colorTheme) {
         applyColorTheme(partialSettings.colorTheme);
       }
+      if (partialSettings.glassEnhanced !== undefined) {
+        applyGlassEnhanced(partialSettings.glassEnhanced);
+      }
       if (partialSettings.layoutDensity) {
         applyLayoutDensity(partialSettings.layoutDensity);
       }
@@ -251,6 +255,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       set({ settings: DEFAULT_SETTINGS });
       applyTheme(DEFAULT_SETTINGS.theme);
       applyColorTheme(DEFAULT_SETTINGS.colorTheme);
+      applyGlassEnhanced(DEFAULT_SETTINGS.glassEnhanced);
       applyLayoutDensity(DEFAULT_SETTINGS.layoutDensity);
       applyLogLevel(DEFAULT_SETTINGS.logLevel);
     } catch (error) {
@@ -289,6 +294,13 @@ function applyTheme(theme: Settings['theme']) {
  */
 function applyColorTheme(colorTheme: ColorTheme) {
   document.documentElement.setAttribute('data-theme', colorTheme);
+}
+
+/**
+ * Toggle the opt-in Glass enhancement. The CSS keys off `[data-theme="glass"].glass-enhanced`.
+ */
+function applyGlassEnhanced(enabled: boolean) {
+  document.documentElement.classList.toggle('glass-enhanced', enabled);
 }
 
 /**

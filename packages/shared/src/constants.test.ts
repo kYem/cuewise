@@ -13,4 +13,8 @@ describe('DEFAULT_SETTINGS', () => {
   it('leaves the reminders panel unpinned by default', () => {
     expect(DEFAULT_SETTINGS.reminderPanelPinned).toBe(false);
   });
+
+  it('keeps the Glass enhancement opt-in (off by default)', () => {
+    expect(DEFAULT_SETTINGS.glassEnhanced).toBe(false);
+  });
 });
