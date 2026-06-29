@@ -153,6 +153,13 @@ function App() {
             }}
           />
 
+          {settings.glassEnhanced && (
+            <div
+              className="fixed inset-0 pointer-events-none"
+              style={{ background: 'var(--glass-scrim)' }}
+            />
+          )}
+
           {/* Dark overlay for better readability on content-heavy pages (not home/pomodoro) */}
           {(currentPage === 'goals' ||
             currentPage === 'quotes' ||

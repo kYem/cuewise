@@ -505,6 +505,21 @@ html.dark[data-theme="rose"] {
 
     /* No gradient - transparent for image backgrounds */
     --gradient-background: transparent;
+
+    /* Glass realism controls (design-system additions) */
+    --glass-text-shadow: 0 2px 8px rgba(0, 0, 0, 0.45), 0 1px 2px rgba(0, 0, 0, 0.35);
+    --glass-saturate: saturate(1.6);
+    --glass-edge: inset 0 1px 0 0 rgba(255, 255, 255, 0.3);
+    --glass-drop: 0 10px 30px -12px rgba(0, 0, 0, 0.4);
+    /* Edge-only vignette: darken just behind the top/bottom nav, leave the
+       middle of the photo fully clear so the background isn't globally dimmed. */
+    --glass-scrim: linear-gradient(
+      180deg,
+      rgba(0, 0, 0, 0.2) 0%,
+      rgba(0, 0, 0, 0) 14%,
+      rgba(0, 0, 0, 0) 84%,
+      rgba(0, 0, 0, 0.24) 100%
+    );
   }
 
   /* Glass theme - dark body background as fallback */
@@ -1054,5 +1069,35 @@ html.dark[data-theme="rose"] {
   body {
     /* biome-ignore lint/complexity/noImportantStyles: required for reduced-motion a11y */
     transition: none !important;
+  }
+}
+
+/* ============================================================
+   Glass realism — saturation, specular edge, depth, legibility.
+   Opt-in: applies only when the `glass-enhanced` class is on <html>
+   (the glassEnhanced setting), so the default Glass theme is unchanged.
+   Unlayered on purpose: the box-shadow must win over Tailwind's
+   shadow-* utilities (a later @layer) without !important.
+   ============================================================ */
+[data-theme="glass"].glass-enhanced [class*="backdrop-blur"] {
+  /* Amplify the photo's colour through the frost (real glass saturates rather
+     than graying out); composes with the element's own backdrop-blur. */
+  --tw-backdrop-saturate: var(--glass-saturate);
+  /* Light on the top edge + a soft drop so frosted cards read as floating glass. */
+  box-shadow: var(--glass-edge), var(--glass-drop);
+}
+
+/* White text stays legible over any photo. */
+[data-theme="glass"].glass-enhanced :is(.text-primary, .font-display, h1, h2, h3) {
+  text-shadow: var(--glass-text-shadow);
+}
+
+/* A11y: honour reduced-transparency by dropping the blur + see-through,
+   keeping a solid dark surface and readable text. */
+@media (prefers-reduced-transparency: reduce) {
+  [data-theme="glass"].glass-enhanced [class*="backdrop-blur"] {
+    backdrop-filter: none;
+    background-color: rgba(15, 23, 42, 0.9);
+    box-shadow: var(--glass-drop);
   }
 }

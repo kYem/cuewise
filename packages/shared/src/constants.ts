@@ -53,6 +53,7 @@ export const DEFAULT_SETTINGS: Settings = {
   timeFormat: '12h',
   syncEnabled: false, // Disabled by default for privacy
   colorTheme: 'glass',
+  glassEnhanced: false,
   layoutDensity: 'comfortable',
   showThemeSwitcher: false,
   showClock: false, // Clock hidden by default for simpler UI

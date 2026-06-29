@@ -145,6 +145,36 @@ export const ThemeSwitcher: React.FC<ThemeSwitcherProps> = ({ isVisible }) => {
           </div>
         </section>
 
+        {settings.colorTheme === 'glass' && (
+          <section>
+            <h3 className="text-sm font-semibold text-primary mb-3">Glass</h3>
+            <button
+              type="button"
+              onClick={() => updateSettings({ glassEnhanced: !settings.glassEnhanced })}
+              aria-pressed={settings.glassEnhanced}
+              className="w-full flex items-center justify-between gap-3 p-3 rounded-lg bg-surface-variant hover:bg-border transition-colors text-left"
+            >
+              <span className="min-w-0">
+                <span className="block text-sm font-medium text-primary">Enhanced glass</span>
+                <span className="block text-xs text-secondary">
+                  Saturation, lit edges & legibility scrim
+                </span>
+              </span>
+              <span
+                className={`relative inline-flex h-6 w-11 flex-none items-center rounded-full transition-colors ${
+                  settings.glassEnhanced ? 'bg-primary-600' : 'bg-border'
+                }`}
+              >
+                <span
+                  className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                    settings.glassEnhanced ? 'translate-x-5' : 'translate-x-0.5'
+                  }`}
+                />
+              </span>
+            </button>
+          </section>
+        )}
+
         {/* Density */}
         <section>
           <h3 className="text-sm font-semibold text-primary mb-3">Density</h3>
