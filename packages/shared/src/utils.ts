@@ -1,4 +1,5 @@
 import {
+  addDays,
   eachDayOfInterval,
   eachWeekOfInterval,
   endOfWeek,
@@ -117,20 +118,23 @@ export function quickLinkMonogram(link: QuickLink): string {
   return firstChar ? firstChar.toUpperCase() : '?';
 }
 
+/** Format a Date as a local (not UTC) YYYY-MM-DD string. */
+export function formatDateString(date: Date): string {
+  return format(date, 'yyyy-MM-dd');
+}
+
 /**
  * Get today's date in YYYY-MM-DD format
  */
 export function getTodayDateString(): string {
-  return format(new Date(), 'yyyy-MM-dd');
+  return formatDateString(new Date());
 }
 
 /**
  * Get tomorrow's date in YYYY-MM-DD format
  */
 export function getNextDayDateString(): string {
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  return format(tomorrow, 'yyyy-MM-dd');
+  return getDateStringDaysFromNow(1);
 }
 
 /**
@@ -144,7 +148,14 @@ export function getYesterdayDateString(): string {
  * Get the date N days before today in YYYY-MM-DD format (local time)
  */
 export function getDateStringDaysAgo(days: number): string {
-  return format(subDays(new Date(), days), 'yyyy-MM-dd');
+  return formatDateString(subDays(new Date(), days));
+}
+
+/**
+ * Get the date N days after today in YYYY-MM-DD format (local time)
+ */
+export function getDateStringDaysFromNow(days: number): string {
+  return formatDateString(addDays(new Date(), days));
 }
 
 /**

@@ -3,6 +3,7 @@ import {
   clampIntervalMinutes,
   DEFAULT_REMINDER_INTERVAL_MINUTES,
   formatCompactInterval,
+  formatDateString,
   intervalDueDateFromNow,
   logger,
   type Reminder,
@@ -64,10 +65,6 @@ function presetDate(kind: PresetKind): Date {
     d.setHours(9, 0, 0, 0);
   }
   return d;
-}
-
-function toDateString(d: Date): string {
-  return `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`;
 }
 
 function toTimeString(d: Date): string {
@@ -132,7 +129,7 @@ export const ReminderFormBody: React.FC<ReminderFormBodyProps> = ({
   const initialDate = initial ? new Date(initial.dueDate) : null;
 
   const [text, setText] = useState(initial?.text ?? '');
-  const [date, setDate] = useState(initialDate ? toDateString(initialDate) : '');
+  const [date, setDate] = useState(initialDate ? formatDateString(initialDate) : '');
   const [time, setTime] = useState(initialDate ? toTimeString(initialDate) : '');
   const [isRecurring, setIsRecurring] = useState(initial?.recurring != null);
   const [recurringFrequency, setRecurringFrequency] = useState<ReminderFrequency>(
@@ -150,7 +147,7 @@ export const ReminderFormBody: React.FC<ReminderFormBodyProps> = ({
   // Mirror a preset Date into the date + time input strings.
   const applyPreset = (kind: PresetKind) => {
     const d = presetDate(kind);
-    setDate(toDateString(d));
+    setDate(formatDateString(d));
     setTime(toTimeString(d));
   };
 
