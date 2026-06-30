@@ -36,7 +36,7 @@ import { useToastStore } from './toast-store';
 /**
  * Merge incoming items into existing by id. When skipDuplicates, drop incoming ids that
  * already exist; otherwise incoming overwrites same-id existing items. importedCount is the
- * number actually added (0 when every incoming item was a skipped duplicate).
+ * number written: only the new items in skip mode, all incoming (overwrites included) otherwise.
  */
 function mergeImport<T extends { id: string }>(
   existing: T[],
