@@ -37,4 +37,13 @@ describe('PomodoroMiniSettings', () => {
       pomodoroLongBreakInterval: 2,
     });
   });
+
+  it('steps a single field via its stepper', () => {
+    const onApply = vi.fn();
+    render(<PomodoroMiniSettings settings={settings} onApply={onApply} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Focus duration' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Increase Focus duration' }));
+    // 25 → 30 (coarse 5-min step once focus is past 20)
+    expect(onApply).toHaveBeenCalledWith({ pomodoroWorkDuration: 30 });
+  });
 });

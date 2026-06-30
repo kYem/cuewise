@@ -1,10 +1,10 @@
 import type { Settings } from '@cuewise/shared';
-import { Popover, PopoverAnchor, PopoverContent } from '@cuewise/ui';
+import { cn, Popover, PopoverAnchor, PopoverContent } from '@cuewise/ui';
 import { Bed, Coffee, type LucideIcon, Repeat, Timer } from 'lucide-react';
 import type React from 'react';
 import { useState } from 'react';
-import { EditableValue } from './EditableValue';
 import { PresetGrid } from './settings/PresetGrid';
+import { Stepper } from './settings/SettingControls';
 
 type FieldKey = 'work' | 'break' | 'long' | 'interval';
 
@@ -18,9 +18,12 @@ interface RhythmField {
     | 'pomodoroBreakDuration'
     | 'pomodoroLongBreakDuration'
     | 'pomodoroLongBreakInterval';
+  min: number;
+  max: number;
+  step: number;
   unit: string;
+  /** Compact glance suffix on the trigger row ("25m" vs "4"). */
   suffix: string;
-  presets: number[];
 }
 
 const FIELDS: RhythmField[] = [
@@ -30,9 +33,11 @@ const FIELDS: RhythmField[] = [
     label: 'Focus',
     icon: Timer,
     setting: 'pomodoroWorkDuration',
-    unit: 'minutes',
+    min: 1,
+    max: 60,
+    step: 5,
+    unit: 'min',
     suffix: 'm',
-    presets: [15, 20, 25, 30, 45, 60],
   },
   {
     key: 'break',
@@ -40,9 +45,11 @@ const FIELDS: RhythmField[] = [
     label: 'Break',
     icon: Coffee,
     setting: 'pomodoroBreakDuration',
-    unit: 'minutes',
+    min: 1,
+    max: 30,
+    step: 1,
+    unit: 'min',
     suffix: 'm',
-    presets: [3, 5, 10, 15],
   },
   {
     key: 'long',
@@ -50,9 +57,11 @@ const FIELDS: RhythmField[] = [
     label: 'Long break',
     icon: Bed,
     setting: 'pomodoroLongBreakDuration',
-    unit: 'minutes',
+    min: 10,
+    max: 60,
+    step: 5,
+    unit: 'min',
     suffix: 'm',
-    presets: [15, 20, 25, 30],
   },
   {
     key: 'interval',
@@ -60,9 +69,11 @@ const FIELDS: RhythmField[] = [
     label: 'Interval',
     icon: Repeat,
     setting: 'pomodoroLongBreakInterval',
-    unit: 'sessions',
+    min: 2,
+    max: 10,
+    step: 1,
+    unit: '',
     suffix: '',
-    presets: [2, 3, 4, 5, 6, 8],
   },
 ];
 
@@ -71,7 +82,7 @@ interface PomodoroMiniSettingsProps {
   onApply: (patch: Partial<Settings>) => void | Promise<void>;
 }
 
-/** Tap any timer value to open a shared popover with rhythm presets + per-field editing. */
+/** Tap any timer value to open a shared popover with rhythm presets + per-field steppers. */
 export const PomodoroMiniSettings: React.FC<PomodoroMiniSettingsProps> = ({
   settings,
   onApply,
@@ -110,31 +121,37 @@ export const PomodoroMiniSettings: React.FC<PomodoroMiniSettingsProps> = ({
           })}
         </div>
       </PopoverAnchor>
-      <PopoverContent align="center" className="w-[280px] space-y-3 p-3">
-        <PresetGrid s={settings} onApply={onApply} className="grid grid-cols-2 gap-2" />
-        <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+      <PopoverContent
+        align="center"
+        className="w-[264px] space-y-2.5 border-border bg-surface-elevated p-2.5 shadow-2xl backdrop-blur-xl"
+      >
+        <PresetGrid s={settings} onApply={onApply} className="grid grid-cols-2 gap-1.5" compact />
+        <div className="space-y-0.5">
           {FIELDS.map((f) => {
             const Icon = f.icon;
             const value = settings[f.setting];
+            // Mirror Settings: coarse 5-min steps for focus once past 20, fine below.
+            const step = f.key === 'work' && value < 20 ? 1 : f.step;
             return (
               <div
                 key={f.key}
-                className={
-                  focused === f.key
-                    ? 'flex items-center justify-between rounded-md bg-primary-50 px-2 py-1'
-                    : 'flex items-center justify-between px-2 py-1'
-                }
+                className={cn(
+                  'flex items-center justify-between rounded-md px-1 py-0.5',
+                  focused === f.key && 'bg-primary-50'
+                )}
               >
                 <span className="inline-flex items-center gap-1.5 text-xs text-secondary">
                   <Icon className="h-3.5 w-3.5" />
                   {f.label}
                 </span>
-                <EditableValue
+                <Stepper
+                  label={f.title}
                   value={value}
+                  min={f.min}
+                  max={f.max}
+                  step={step}
                   unit={f.unit}
                   compact
-                  suffix={f.suffix}
-                  presets={f.presets}
                   onChange={(next) => onApply({ [f.setting]: next })}
                 />
               </div>
