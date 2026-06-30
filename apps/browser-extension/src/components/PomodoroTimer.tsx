@@ -1,21 +1,17 @@
-import { formatTimeRemaining, type LayoutDensity } from '@cuewise/shared';
+import { formatTimeRemaining, type LayoutDensity, type Settings } from '@cuewise/shared';
 import {
-  Bed,
   Check,
   ChevronDown,
-  Coffee,
   Maximize2,
   Music,
   Pause,
   Play,
-  Repeat,
   RotateCcw,
   SkipForward,
-  Timer,
   X,
 } from 'lucide-react';
 import type React from 'react';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { usePomodoroLeader } from '../hooks/usePomodoroLeader';
 import { useSoundsLeader } from '../hooks/useSoundsLeader';
@@ -25,7 +21,7 @@ import { usePomodoroStorageSync, usePomodoroStore } from '../stores/pomodoro-sto
 import { useSettingsStore } from '../stores/settings-store';
 import { useSoundsStore } from '../stores/sounds-store';
 import { getSessionStyles } from '../utils/pomodoro-styles';
-import { EditableValue } from './EditableValue';
+import { PomodoroMiniSettings } from './PomodoroMiniSettings';
 
 // Per-density card + ring sizing. Geometry invariant per entry: center = viewBox / 2, radius < center.
 const TIMER_SIZES: Record<
@@ -80,9 +76,6 @@ export const PomodoroTimer: React.FC = () => {
     sessionType,
     timeRemaining,
     totalTime,
-    workDuration,
-    breakDuration,
-    longBreakDuration,
     consecutiveWorkSessions,
     longBreakInterval,
     selectedGoalId,
@@ -92,9 +85,6 @@ export const PomodoroTimer: React.FC = () => {
       sessionType: state.sessionType,
       timeRemaining: state.timeRemaining,
       totalTime: state.totalTime,
-      workDuration: state.workDuration,
-      breakDuration: state.breakDuration,
-      longBreakDuration: state.longBreakDuration,
       consecutiveWorkSessions: state.consecutiveWorkSessions,
       longBreakInterval: state.longBreakInterval,
       selectedGoalId: state.selectedGoalId,
@@ -118,6 +108,16 @@ export const PomodoroTimer: React.FC = () => {
   // Settings state and actions
   const settings = useSettingsStore(useShallow((state) => state.settings));
   const updateSettings = useSettingsStore((state) => state.updateSettings);
+
+  // One path for both preset taps and per-field edits: persist, then resync the
+  // running timer (mirrors the previous inline editors' write + reloadSettings).
+  const handleApplyTimerSettings = useCallback(
+    async (patch: Partial<Settings>) => {
+      await updateSettings({ ...settings, ...patch });
+      await reloadSettings();
+    },
+    [settings, updateSettings, reloadSettings]
+  );
 
   // Sounds state - use useShallow for multiple values
   const { activeSource, isPlaying: isSoundsPlaying } = useSoundsStore(
@@ -503,69 +503,9 @@ export const PomodoroTimer: React.FC = () => {
           )}
         </div>
 
-        {/* Settings - compact icon row: ⏱25m ☕5m 🛏15m ↻4 (each value click-to-edit) */}
+        {/* Timer rhythm: tap any value to open the shared mini-settings popover. */}
         <div className="mt-density-md">
-          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-xs text-white/60">
-            <span className="inline-flex items-center gap-1.5" title="Focus duration">
-              <Timer className="w-3.5 h-3.5" />
-              <EditableValue
-                value={workDuration}
-                unit="minutes"
-                compact
-                suffix="m"
-                tone="onGlass"
-                presets={[15, 20, 25, 30, 45, 60]}
-                onChange={async (value) => {
-                  await updateSettings({ ...settings, pomodoroWorkDuration: value });
-                  await reloadSettings();
-                }}
-              />
-            </span>
-            <span className="inline-flex items-center gap-1.5" title="Break length">
-              <Coffee className="w-3.5 h-3.5" />
-              <EditableValue
-                value={breakDuration}
-                unit="minutes"
-                compact
-                suffix="m"
-                tone="onGlass"
-                presets={[3, 5, 10, 15]}
-                onChange={async (value) => {
-                  await updateSettings({ ...settings, pomodoroBreakDuration: value });
-                  await reloadSettings();
-                }}
-              />
-            </span>
-            <span className="inline-flex items-center gap-1.5" title="Long break length">
-              <Bed className="w-3.5 h-3.5" />
-              <EditableValue
-                value={longBreakDuration}
-                unit="minutes"
-                compact
-                suffix="m"
-                tone="onGlass"
-                presets={[15, 20, 25, 30]}
-                onChange={async (value) => {
-                  await updateSettings({ ...settings, pomodoroLongBreakDuration: value });
-                  await reloadSettings();
-                }}
-              />
-            </span>
-            <span className="inline-flex items-center gap-1.5" title="Long break interval">
-              <Repeat className="w-3.5 h-3.5" />
-              <EditableValue
-                value={longBreakInterval}
-                unit="sessions"
-                compact
-                tone="onGlass"
-                presets={[2, 3, 4, 5, 6, 8]}
-                onChange={async (value) => {
-                  await updateSettings({ ...settings, pomodoroLongBreakInterval: value });
-                  await reloadSettings();
-                }}
-              />
-            </span>
-          </div>
+          <PomodoroMiniSettings settings={settings} onApply={handleApplyTimerSettings} />
           {activeSource !== 'none' && isSoundsPlaying && isWork && (
             <p className="mt-2 flex items-center justify-center gap-1.5 text-xs text-white/60">
               <Music className="w-3 h-3" />
