@@ -34,9 +34,8 @@ import { readFileAsText } from '../utils/file-utils';
 import { useToastStore } from './toast-store';
 
 /**
- * Merge incoming items into existing by id. When skipDuplicates, drop incoming ids that
- * already exist; otherwise incoming overwrites same-id existing items. importedCount is the
- * number written: only the new items in skip mode, all incoming (overwrites included) otherwise.
+ * Merge incoming into existing by id (skipDuplicates drops existing ids, else overwrites them).
+ * importedCount = items written: new ones in skip mode, all incoming (incl. overwrites) otherwise.
  */
 function mergeImport<T extends { id: string }>(
   existing: T[],
@@ -44,11 +43,12 @@ function mergeImport<T extends { id: string }>(
   skipDuplicates: boolean
 ): { merged: T[]; importedCount: number; skippedCount: number } {
   const existingIds = new Set(existing.map((item) => item.id));
+  const incomingIds = new Set(incoming.map((item) => item.id));
   const toImport = skipDuplicates ? incoming.filter((item) => !existingIds.has(item.id)) : incoming;
 
   const merged = skipDuplicates
     ? [...existing, ...toImport]
-    : [...existing.filter((e) => !incoming.some((i) => i.id === e.id)), ...incoming];
+    : [...existing.filter((e) => !incomingIds.has(e.id)), ...incoming];
 
   return {
     merged,

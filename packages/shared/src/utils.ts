@@ -137,9 +137,7 @@ export function getNextDayDateString(): string {
  * Get yesterday's date in YYYY-MM-DD format
  */
 export function getYesterdayDateString(): string {
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  return format(yesterday, 'yyyy-MM-dd');
+  return getDateStringDaysAgo(1);
 }
 
 /**
