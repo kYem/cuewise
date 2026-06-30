@@ -66,7 +66,9 @@ class ConsoleLogger implements Logger {
   }
 
   private shouldLog(level: LogLevel): boolean {
-    if (!this.config.enabled) return false;
+    if (!this.config.enabled) {
+      return false;
+    }
     return this.levelPriority[level] >= this.levelPriority[this.config.minLevel];
   }
 
@@ -88,7 +90,9 @@ class ConsoleLogger implements Logger {
   }
 
   debug(message: string, context?: LogContext): void {
-    if (!this.shouldLog(LogLevel.DEBUG)) return;
+    if (!this.shouldLog(LogLevel.DEBUG)) {
+      return;
+    }
 
     const formatted = this.formatMessage(LogLevel.DEBUG, message);
     if (context) {
@@ -99,7 +103,9 @@ class ConsoleLogger implements Logger {
   }
 
   info(message: string, context?: LogContext): void {
-    if (!this.shouldLog(LogLevel.INFO)) return;
+    if (!this.shouldLog(LogLevel.INFO)) {
+      return;
+    }
 
     const formatted = this.formatMessage(LogLevel.INFO, message);
     if (context) {
@@ -110,7 +116,9 @@ class ConsoleLogger implements Logger {
   }
 
   warn(message: string, context?: LogContext): void {
-    if (!this.shouldLog(LogLevel.WARN)) return;
+    if (!this.shouldLog(LogLevel.WARN)) {
+      return;
+    }
 
     const formatted = this.formatMessage(LogLevel.WARN, message);
     if (context) {
@@ -121,7 +129,9 @@ class ConsoleLogger implements Logger {
   }
 
   error(message: string, error?: Error | unknown, context?: LogContext): void {
-    if (!this.shouldLog(LogLevel.ERROR)) return;
+    if (!this.shouldLog(LogLevel.ERROR)) {
+      return;
+    }
 
     const formatted = this.formatMessage(LogLevel.ERROR, message);
 

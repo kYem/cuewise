@@ -53,7 +53,9 @@ export const ThemeSwitcher: React.FC<ThemeSwitcherProps> = ({ isVisible }) => {
     { value: 'spacious', label: 'Spacious', icon: Expand },
   ];
 
-  if (!isVisible) return null;
+  if (!isVisible) {
+    return null;
+  }
 
   return (
     <div className="w-80 flex-shrink-0 bg-surface/95 backdrop-blur-sm border-l border-border overflow-y-auto">

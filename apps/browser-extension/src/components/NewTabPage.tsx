@@ -239,6 +239,101 @@ export const NewTabPage: React.FC = () => {
   const greeting = getGreeting(currentTime);
   const longDate = formatLongDate(currentTime);
 
+  const renderNavControls = (menuRef: React.RefObject<HTMLDivElement>) => (
+    <>
+      {pomodoroStatus !== 'idle' ? (
+        <ActivePomodoroWidget />
+      ) : (
+        <button
+          type="button"
+          onClick={handleOpenPomodoro}
+          onMouseEnter={preloadPomodoroImage}
+          className="group relative flex items-center gap-2 px-4 py-2.5 bg-surface/80 backdrop-blur-sm text-primary rounded-full shadow-md hover:shadow-lg hover:scale-105 transition-all"
+          title="Start Pomodoro Timer"
+        >
+          <Timer className="w-5 h-5 text-primary-600" />
+          <span className="hidden sm:inline text-sm font-medium text-primary">Pomodoro</span>
+        </button>
+      )}
+
+      <div className="relative" ref={menuRef}>
+        <button
+          type="button"
+          onClick={() => setIsMenuOpen(!isMenuOpen)}
+          aria-expanded={isMenuOpen}
+          aria-haspopup="menu"
+          className="p-2.5 bg-surface/80 backdrop-blur-sm text-primary rounded-full shadow-md hover:shadow-lg hover:scale-110 transition-all"
+          title="Menu"
+        >
+          <Settings className="w-5 h-5" />
+        </button>
+
+        {isMenuOpen && (
+          <div
+            role="menu"
+            className="absolute right-0 mt-2 w-48 bg-surface-elevated rounded-lg shadow-xl border border-border overflow-hidden"
+          >
+            <button
+              type="button"
+              role="menuitem"
+              onClick={handleOpenGoals}
+              className="w-full flex items-center gap-3 px-4 py-3 text-primary hover:bg-surface-variant transition-colors"
+            >
+              <Flag className="w-5 h-5 text-primary-600" />
+              <span className="text-sm font-medium">Goals</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={handleOpenQuoteManagement}
+              className="w-full flex items-center gap-3 px-4 py-3 text-primary hover:bg-surface-variant transition-colors border-t border-divider"
+            >
+              <BookMarked className="w-5 h-5 text-primary-600" />
+              <span className="text-sm font-medium">Manage Quotes</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={handleOpenConcepts}
+              className="w-full flex items-center gap-3 px-4 py-3 text-primary hover:bg-surface-variant transition-colors border-t border-divider"
+            >
+              <Brain className="w-5 h-5 text-primary-600" />
+              <span className="text-sm font-medium">Concepts</span>
+              <ConceptDueBadge count={conceptDueCount} />
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={handleOpenInsights}
+              className="w-full flex items-center gap-3 px-4 py-3 text-primary hover:bg-surface-variant transition-colors border-t border-divider"
+            >
+              <BarChart3 className="w-5 h-5 text-primary-600" />
+              <span className="text-sm font-medium">View Insights</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={handleToggleThemeSwitcher}
+              className="w-full flex items-center gap-3 px-4 py-3 text-primary hover:bg-surface-variant transition-colors border-t border-divider"
+            >
+              <PanelRight className="w-5 h-5 text-primary-600" />
+              <span className="text-sm font-medium">Theme Switcher</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={handleOpenSettings}
+              className="w-full flex items-center gap-3 px-4 py-3 text-primary hover:bg-surface-variant transition-colors border-t border-divider"
+            >
+              <Settings className="w-5 h-5 text-primary-600" />
+              <span className="text-sm font-medium">Settings</span>
+            </button>
+          </div>
+        )}
+      </div>
+    </>
+  );
+
   return (
     <div className="min-h-screen w-full overflow-y-auto relative">
       {/* Sticky Header - Only visible when scrolled */}
@@ -276,101 +371,7 @@ export const NewTabPage: React.FC = () => {
 
             {/* Right: Navigation */}
             <nav aria-label="Main navigation" className="flex items-center gap-density-sm">
-              {/* Pomodoro Button or Active Session Widget */}
-              {pomodoroStatus !== 'idle' ? (
-                <ActivePomodoroWidget />
-              ) : (
-                <button
-                  type="button"
-                  onClick={handleOpenPomodoro}
-                  onMouseEnter={preloadPomodoroImage}
-                  className="group relative flex items-center gap-2 px-4 py-2.5 bg-surface/80 backdrop-blur-sm text-primary rounded-full shadow-md hover:shadow-lg hover:scale-105 transition-all"
-                  title="Start Pomodoro Timer"
-                >
-                  <Timer className="w-5 h-5 text-primary-600" />
-                  <span className="hidden sm:inline text-sm font-medium text-primary">
-                    Pomodoro
-                  </span>
-                </button>
-              )}
-
-              {/* Menu Dropdown */}
-              <div className="relative" ref={stickyMenuRef}>
-                <button
-                  type="button"
-                  onClick={() => setIsMenuOpen(!isMenuOpen)}
-                  aria-expanded={isMenuOpen}
-                  aria-haspopup="menu"
-                  className="p-2.5 bg-surface/80 backdrop-blur-sm text-primary rounded-full shadow-md hover:shadow-lg hover:scale-110 transition-all"
-                  title="Menu"
-                >
-                  <Settings className="w-5 h-5" />
-                </button>
-
-                {/* Dropdown Menu */}
-                {isMenuOpen && (
-                  <div
-                    role="menu"
-                    className="absolute right-0 mt-2 w-48 bg-surface-elevated rounded-lg shadow-xl border border-border overflow-hidden"
-                  >
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={handleOpenGoals}
-                      className="w-full flex items-center gap-3 px-4 py-3 text-primary hover:bg-surface-variant transition-colors"
-                    >
-                      <Flag className="w-5 h-5 text-primary-600" />
-                      <span className="text-sm font-medium">Goals</span>
-                    </button>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={handleOpenQuoteManagement}
-                      className="w-full flex items-center gap-3 px-4 py-3 text-primary hover:bg-surface-variant transition-colors border-t border-divider"
-                    >
-                      <BookMarked className="w-5 h-5 text-primary-600" />
-                      <span className="text-sm font-medium">Manage Quotes</span>
-                    </button>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={handleOpenConcepts}
-                      className="w-full flex items-center gap-3 px-4 py-3 text-primary hover:bg-surface-variant transition-colors border-t border-divider"
-                    >
-                      <Brain className="w-5 h-5 text-primary-600" />
-                      <span className="text-sm font-medium">Concepts</span>
-                      <ConceptDueBadge count={conceptDueCount} />
-                    </button>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={handleOpenInsights}
-                      className="w-full flex items-center gap-3 px-4 py-3 text-primary hover:bg-surface-variant transition-colors border-t border-divider"
-                    >
-                      <BarChart3 className="w-5 h-5 text-primary-600" />
-                      <span className="text-sm font-medium">View Insights</span>
-                    </button>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={handleToggleThemeSwitcher}
-                      className="w-full flex items-center gap-3 px-4 py-3 text-primary hover:bg-surface-variant transition-colors border-t border-divider"
-                    >
-                      <PanelRight className="w-5 h-5 text-primary-600" />
-                      <span className="text-sm font-medium">Theme Switcher</span>
-                    </button>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={handleOpenSettings}
-                      className="w-full flex items-center gap-3 px-4 py-3 text-primary hover:bg-surface-variant transition-colors border-t border-divider"
-                    >
-                      <Settings className="w-5 h-5 text-primary-600" />
-                      <span className="text-sm font-medium">Settings</span>
-                    </button>
-                  </div>
-                )}
-              </div>
+              {renderNavControls(stickyMenuRef)}
             </nav>
           </div>
         </div>
@@ -402,99 +403,7 @@ export const NewTabPage: React.FC = () => {
             showStickyHeader ? 'opacity-0 pointer-events-none' : 'opacity-100'
           }`}
         >
-          {/* Pomodoro Button or Active Session Widget */}
-          {pomodoroStatus !== 'idle' ? (
-            <ActivePomodoroWidget />
-          ) : (
-            <button
-              type="button"
-              onClick={handleOpenPomodoro}
-              onMouseEnter={preloadPomodoroImage}
-              className="group relative flex items-center gap-2 px-4 py-2.5 bg-surface/80 backdrop-blur-sm text-primary rounded-full shadow-md hover:shadow-lg hover:scale-105 transition-all"
-              title="Start Pomodoro Timer"
-            >
-              <Timer className="w-5 h-5 text-primary-600" />
-              <span className="hidden sm:inline text-sm font-medium text-primary">Pomodoro</span>
-            </button>
-          )}
-
-          {/* Menu Dropdown */}
-          <div className="relative" ref={floatingMenuRef}>
-            <button
-              type="button"
-              onClick={() => setIsMenuOpen(!isMenuOpen)}
-              aria-expanded={isMenuOpen}
-              aria-haspopup="menu"
-              className="p-2.5 bg-surface/80 backdrop-blur-sm text-primary rounded-full shadow-md hover:shadow-lg hover:scale-110 transition-all"
-              title="Menu"
-            >
-              <Settings className="w-5 h-5" />
-            </button>
-
-            {/* Dropdown Menu */}
-            {isMenuOpen && (
-              <div
-                role="menu"
-                className="absolute right-0 mt-2 w-48 bg-surface-elevated rounded-lg shadow-xl border border-border overflow-hidden"
-              >
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={handleOpenGoals}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-primary hover:bg-surface-variant transition-colors"
-                >
-                  <Flag className="w-5 h-5 text-primary-600" />
-                  <span className="text-sm font-medium">Goals</span>
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={handleOpenQuoteManagement}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-primary hover:bg-surface-variant transition-colors border-t border-divider"
-                >
-                  <BookMarked className="w-5 h-5 text-primary-600" />
-                  <span className="text-sm font-medium">Manage Quotes</span>
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={handleOpenConcepts}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-primary hover:bg-surface-variant transition-colors border-t border-divider"
-                >
-                  <Brain className="w-5 h-5 text-primary-600" />
-                  <span className="text-sm font-medium">Concepts</span>
-                  <ConceptDueBadge count={conceptDueCount} />
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={handleOpenInsights}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-primary hover:bg-surface-variant transition-colors border-t border-divider"
-                >
-                  <BarChart3 className="w-5 h-5 text-primary-600" />
-                  <span className="text-sm font-medium">View Insights</span>
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={handleToggleThemeSwitcher}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-primary hover:bg-surface-variant transition-colors border-t border-divider"
-                >
-                  <PanelRight className="w-5 h-5 text-primary-600" />
-                  <span className="text-sm font-medium">Theme Switcher</span>
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={handleOpenSettings}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-primary hover:bg-surface-variant transition-colors border-t border-divider"
-                >
-                  <Settings className="w-5 h-5 text-primary-600" />
-                  <span className="text-sm font-medium">Settings</span>
-                </button>
-              </div>
-            )}
-          </div>
+          {renderNavControls(floatingMenuRef)}
         </nav>
 
         {/* Sentinel element for sticky header detection */}

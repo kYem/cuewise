@@ -36,10 +36,6 @@ function clockLabel(dueDate: string, timeFormat: '12h' | '24h'): string {
   return formatReminderClock(dueDate, timeFormat);
 }
 
-function clockOnly(dueDate: string, timeFormat: '12h' | '24h'): string {
-  return formatReminderClock(dueDate, timeFormat);
-}
-
 interface HabitPillProps {
   reminder: Reminder;
   state: ReminderState;
@@ -250,7 +246,7 @@ function SchedRow({ reminder, state, first, timeFormat, onToggle, onPauseToggle 
             {dayLabel(reminder.dueDate)}
           </span>
           <span className="block text-xs tabular-nums text-secondary">
-            {clockOnly(reminder.dueDate, timeFormat)}
+            {formatReminderClock(reminder.dueDate, timeFormat)}
           </span>
         </span>
       )}

@@ -34,7 +34,9 @@ export class AsyncStorageAdapter implements StorageAdapter {
   }
 
   async get<T>(key: string): Promise<T | null> {
-    if (!this.AsyncStorage) return null;
+    if (!this.AsyncStorage) {
+      return null;
+    }
 
     try {
       const item = await this.AsyncStorage.getItem(key);
@@ -46,7 +48,9 @@ export class AsyncStorageAdapter implements StorageAdapter {
   }
 
   async set<T>(key: string, value: T): Promise<boolean> {
-    if (!this.AsyncStorage) return false;
+    if (!this.AsyncStorage) {
+      return false;
+    }
 
     try {
       await this.AsyncStorage.setItem(key, JSON.stringify(value));
@@ -58,7 +62,9 @@ export class AsyncStorageAdapter implements StorageAdapter {
   }
 
   async remove(key: string): Promise<boolean> {
-    if (!this.AsyncStorage) return false;
+    if (!this.AsyncStorage) {
+      return false;
+    }
 
     try {
       await this.AsyncStorage.removeItem(key);
@@ -70,7 +76,9 @@ export class AsyncStorageAdapter implements StorageAdapter {
   }
 
   async clear(): Promise<boolean> {
-    if (!this.AsyncStorage) return false;
+    if (!this.AsyncStorage) {
+      return false;
+    }
 
     try {
       await this.AsyncStorage.clear();

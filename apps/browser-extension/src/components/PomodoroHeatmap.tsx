@@ -52,9 +52,15 @@ export const PomodoroHeatmap: React.FC<PomodoroHeatmapProps> = ({ data }) => {
 
   // Format hour for display (12h format)
   const formatHour = (hour: number): string => {
-    if (hour === 0) return '12am';
-    if (hour < 12) return `${hour}am`;
-    if (hour === 12) return '12pm';
+    if (hour === 0) {
+      return '12am';
+    }
+    if (hour < 12) {
+      return `${hour}am`;
+    }
+    if (hour === 12) {
+      return '12pm';
+    }
     return `${hour - 12}pm`;
   };
 

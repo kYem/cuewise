@@ -40,7 +40,9 @@ export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, size = '2x
     };
   }, [isOpen, onClose]);
 
-  if (!isOpen) return null;
+  if (!isOpen) {
+    return null;
+  }
 
   // Compact sizes get a trimmer header + body padding to match their narrower frame.
   const isCompact = size === 'md' || size === 'lg';

@@ -24,7 +24,9 @@ export class AmbientSoundPlayer {
    * Generate white noise buffer
    */
   private createNoiseBuffer(type: 'white' | 'brown' = 'white'): AudioBuffer {
-    if (!this.audioContext) throw new Error('Audio context not initialized');
+    if (!this.audioContext) {
+      throw new Error('Audio context not initialized');
+    }
 
     const bufferSize = this.audioContext.sampleRate * 2; // 2 seconds
     const buffer = this.audioContext.createBuffer(1, bufferSize, this.audioContext.sampleRate);
@@ -53,7 +55,9 @@ export class AmbientSoundPlayer {
    * Create rain sound using filtered noise
    */
   private createRainSound() {
-    if (!this.audioContext || !this.gainNode) return;
+    if (!this.audioContext || !this.gainNode) {
+      return;
+    }
 
     // Use white noise filtered to sound like rain
     const noiseBuffer = this.createNoiseBuffer('white');
@@ -78,7 +82,9 @@ export class AmbientSoundPlayer {
    * Create ocean waves sound
    */
   private createOceanSound() {
-    if (!this.audioContext || !this.gainNode) return;
+    if (!this.audioContext || !this.gainNode) {
+      return;
+    }
 
     // Low frequency oscillation for wave movement
     const lfo = this.audioContext.createOscillator();
@@ -117,7 +123,9 @@ export class AmbientSoundPlayer {
    * Create forest sound (birds and wind)
    */
   private createForestSound() {
-    if (!this.audioContext || !this.gainNode) return;
+    if (!this.audioContext || !this.gainNode) {
+      return;
+    }
 
     // Wind sound - filtered white noise
     const noiseBuffer = this.createNoiseBuffer('white');
@@ -167,7 +175,9 @@ export class AmbientSoundPlayer {
    * Create cafe ambience
    */
   private createCafeSound() {
-    if (!this.audioContext || !this.gainNode) return;
+    if (!this.audioContext || !this.gainNode) {
+      return;
+    }
 
     // Background chatter - brown noise
     const noiseBuffer = this.createNoiseBuffer('brown');
@@ -191,7 +201,9 @@ export class AmbientSoundPlayer {
    * Create white noise
    */
   private createWhiteNoise() {
-    if (!this.audioContext || !this.gainNode) return;
+    if (!this.audioContext || !this.gainNode) {
+      return;
+    }
 
     const noiseBuffer = this.createNoiseBuffer('white');
     const noise = this.audioContext.createBufferSource();
@@ -208,7 +220,9 @@ export class AmbientSoundPlayer {
    * Create brown noise
    */
   private createBrownNoise() {
-    if (!this.audioContext || !this.gainNode) return;
+    if (!this.audioContext || !this.gainNode) {
+      return;
+    }
 
     const noiseBuffer = this.createNoiseBuffer('brown');
     const noise = this.audioContext.createBufferSource();
@@ -225,7 +239,9 @@ export class AmbientSoundPlayer {
    * Play ambient sound
    */
   play(soundType: AmbientSoundType, volume: number = 50) {
-    if (soundType === 'none' || this.isPlaying) return;
+    if (soundType === 'none' || this.isPlaying) {
+      return;
+    }
 
     this.initAudioContext();
     this.currentSound = soundType;
@@ -263,7 +279,9 @@ export class AmbientSoundPlayer {
    * Stop playing ambient sound
    */
   stop() {
-    if (!this.isPlaying) return;
+    if (!this.isPlaying) {
+      return;
+    }
 
     // Fade out
     if (this.gainNode && this.audioContext) {

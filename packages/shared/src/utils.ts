@@ -39,7 +39,6 @@ import type {
   Quote,
   QuoteCategory,
   Reminder,
-  ReminderCategory,
   ReminderFrequency,
   Subtask,
   WeeklyTrend,
@@ -144,6 +143,13 @@ export function getYesterdayDateString(): string {
 }
 
 /**
+ * Get the date N days before today in YYYY-MM-DD format (local time)
+ */
+export function getDateStringDaysAgo(days: number): string {
+  return format(subDays(new Date(), days), 'yyyy-MM-dd');
+}
+
+/**
  * Check if current time is past the specified goal transfer hour
  * @param transferHour - Hour in 24-hour format (0-23)
  * @returns true if current time is past the transfer hour
@@ -210,9 +216,15 @@ export function getRelativeDateLabel(dateString: string): string {
   const yesterday = getYesterdayDateString();
   const tomorrow = getNextDayDateString();
 
-  if (dateString === today) return 'Today';
-  if (dateString === yesterday) return 'Yesterday';
-  if (dateString === tomorrow) return 'Tomorrow';
+  if (dateString === today) {
+    return 'Today';
+  }
+  if (dateString === yesterday) {
+    return 'Yesterday';
+  }
+  if (dateString === tomorrow) {
+    return 'Tomorrow';
+  }
 
   return formatDate(dateString);
 }
@@ -280,13 +292,6 @@ export function isTask(goal: Goal): boolean {
  */
 export function isObjective(goal: Goal): boolean {
   return getGoalType(goal) === 'objective';
-}
-
-/**
- * Get all tasks from a list of goals
- */
-export function getTasks(goals: Goal[]): Goal[] {
-  return goals.filter(isTask);
 }
 
 /**
@@ -652,10 +657,14 @@ export function getRandomQuote(
     visibleQuotes = visibleQuotes.filter((q) => !q.isCustom || (q.isFavorite && showFavorites));
   }
 
-  if (visibleQuotes.length === 0) return null;
+  if (visibleQuotes.length === 0) {
+    return null;
+  }
 
   // If only one visible quote, return it (no choice)
-  if (visibleQuotes.length === 1) return visibleQuotes[0];
+  if (visibleQuotes.length === 1) {
+    return visibleQuotes[0];
+  }
 
   // If current quote ID provided, exclude it from selection
   if (currentQuoteId) {
@@ -674,7 +683,9 @@ export function getRandomQuote(
  * @returns Object with current and longest streak counts
  */
 export function calculateStreak(dates: string[]): { current: number; longest: number } {
-  if (dates.length === 0) return { current: 0, longest: 0 };
+  if (dates.length === 0) {
+    return { current: 0, longest: 0 };
+  }
 
   // Streak is anchored to today; drop future-dated entries (e.g. a completed
   // objective with a future due date) so they can't collapse the current streak.
@@ -708,20 +719,6 @@ export function calculateStreak(dates: string[]): { current: number; longest: nu
     current,
     longest: Math.max(longest, tempStreak),
   };
-}
-
-/**
- * Get current timestamp as ISO string
- */
-export function getCurrentISOTimestamp(): string {
-  return new Date().toISOString();
-}
-
-/**
- * Get ISO timestamp from a Date object
- */
-export function getISOTimestamp(date: Date): string {
-  return date.toISOString();
 }
 
 /**
@@ -789,8 +786,12 @@ export function formatHourMinute(hour: number, minute = 0): string {
  */
 export function getGreeting(date: Date): string {
   const hours = date.getHours();
-  if (hours < 12) return 'Good Morning';
-  if (hours < 18) return 'Good Afternoon';
+  if (hours < 12) {
+    return 'Good Morning';
+  }
+  if (hours < 18) {
+    return 'Good Afternoon';
+  }
   return 'Good Evening';
 }
 
@@ -839,28 +840,36 @@ export function calculateInsights(
 
   // Goals completed today
   const goalsCompletedToday = goals.filter((goal) => {
-    if (!goal.completed) return false;
+    if (!goal.completed) {
+      return false;
+    }
     const goalDate = parseISO(goal.date);
     return isSameDay(goalDate, today);
   }).length;
 
   // Goals completed this week
   const goalsCompletedThisWeek = goals.filter((goal) => {
-    if (!goal.completed) return false;
+    if (!goal.completed) {
+      return false;
+    }
     const goalDate = parseISO(goal.date);
     return isAfter(goalDate, weekStart) || isSameDay(goalDate, weekStart);
   }).length;
 
   // Goals completed this month
   const goalsCompletedThisMonth = goals.filter((goal) => {
-    if (!goal.completed) return false;
+    if (!goal.completed) {
+      return false;
+    }
     const goalDate = parseISO(goal.date);
     return isAfter(goalDate, monthStart) || isSameDay(goalDate, monthStart);
   }).length;
 
   // Pomodoros completed today
   const pomodorosCompletedToday = pomodoroSessions.filter((session) => {
-    if (session.interrupted || session.type !== 'work') return false;
+    if (session.interrupted || session.type !== 'work') {
+      return false;
+    }
     const sessionDate = parseISO(session.completedAt || session.startedAt);
     return isSameDay(sessionDate, today);
   }).length;
@@ -938,12 +947,16 @@ export function getMostViewedCategory(
 ): { category: QuoteCategory; count: number } | null {
   const entries = Object.entries(categoryViewCounts) as [QuoteCategory, number][];
 
-  if (entries.length === 0) return null;
+  if (entries.length === 0) {
+    return null;
+  }
 
   const sorted = entries.sort((a, b) => b[1] - a[1]);
   const [category, count] = sorted[0];
 
-  if (count === 0) return null;
+  if (count === 0) {
+    return null;
+  }
 
   return { category, count };
 }
@@ -957,7 +970,9 @@ export function calculateFocusTime(
 ): number {
   return sessions
     .filter((session) => {
-      if (session.interrupted || session.type !== 'work') return false;
+      if (session.interrupted || session.type !== 'work') {
+        return false;
+      }
       return filterFn ? filterFn(session) : true;
     })
     .reduce((total, session) => total + session.duration, 0);
@@ -992,8 +1007,12 @@ export function formatFocusTime(minutes: number): string {
   const hours = Math.floor(minutes / 60);
   const mins = minutes % 60;
 
-  if (hours === 0) return `${mins}m`;
-  if (mins === 0) return `${hours}h`;
+  if (hours === 0) {
+    return `${mins}m`;
+  }
+  if (mins === 0) {
+    return `${hours}h`;
+  }
   return `${hours}h ${mins}m`;
 }
 
@@ -1016,13 +1035,17 @@ export function calculateDailyTrends(
 
     // Goals completed on this day
     const goalsCompleted = goals.filter((goal) => {
-      if (!goal.completed) return false;
+      if (!goal.completed) {
+        return false;
+      }
       return goal.date === dateStr;
     }).length;
 
     // Pomodoros completed on this day
     const dayPomodoros = pomodoroSessions.filter((session) => {
-      if (session.interrupted || session.type !== 'work') return false;
+      if (session.interrupted || session.type !== 'work') {
+        return false;
+      }
       const sessionDate = parseISO(session.completedAt || session.startedAt);
       return isSameDay(sessionDate, date);
     });
@@ -1059,7 +1082,9 @@ export function calculateWeeklyTrends(
 
     // Goals completed in this week
     const goalsCompleted = goals.filter((goal) => {
-      if (!goal.completed) return false;
+      if (!goal.completed) {
+        return false;
+      }
       const goalDate = parseISO(goal.date);
       return (
         (isAfter(goalDate, weekStart) || isSameDay(goalDate, weekStart)) &&
@@ -1069,7 +1094,9 @@ export function calculateWeeklyTrends(
 
     // Pomodoros completed in this week
     const weekPomodoros = pomodoroSessions.filter((session) => {
-      if (session.interrupted || session.type !== 'work') return false;
+      if (session.interrupted || session.type !== 'work') {
+        return false;
+      }
       const sessionDate = parseISO(session.completedAt || session.startedAt);
       return (
         (isAfter(sessionDate, weekStart) || isSameDay(sessionDate, weekStart)) &&
@@ -1108,7 +1135,9 @@ export function calculateMonthlyTrends(
 
     // Goals completed in this month
     const goalsCompleted = goals.filter((goal) => {
-      if (!goal.completed) return false;
+      if (!goal.completed) {
+        return false;
+      }
       const goalDate = parseISO(goal.date);
       return (
         (isAfter(goalDate, monthStart) || isSameDay(goalDate, monthStart)) &&
@@ -1118,7 +1147,9 @@ export function calculateMonthlyTrends(
 
     // Pomodoros completed in this month
     const monthPomodoros = pomodoroSessions.filter((session) => {
-      if (session.interrupted || session.type !== 'work') return false;
+      if (session.interrupted || session.type !== 'work') {
+        return false;
+      }
       const sessionDate = parseISO(session.completedAt || session.startedAt);
       return (
         (isAfter(sessionDate, monthStart) || isSameDay(sessionDate, monthStart)) &&
@@ -1629,148 +1660,6 @@ export function compareVersions(v1: string, v2: string): number {
   }
 
   return 0;
-}
-
-// ============================================================================
-// Context-aware reminder suggestions
-// ============================================================================
-
-/**
- * Suggested time result with metadata
- */
-export interface SuggestedTime {
-  hour: number;
-  minute: number;
-  formatted: string; // "10:00 AM"
-  confidence: 'high' | 'medium' | 'low';
-  basedOn: number; // Number of completions used to determine suggestion
-}
-
-/**
- * Analyze reminder completion patterns and suggest optimal time for a new reminder.
- *
- * @param reminders - Array of all reminders (will filter to completed ones with completedAt)
- * @param category - Optional category to filter by for more relevant suggestions
- * @param minCompletions - Minimum completions needed for a suggestion (default: 3)
- * @returns SuggestedTime or null if not enough data
- *
- * @example
- * const suggestion = suggestOptimalTime(reminders, 'health');
- * // Returns: { hour: 10, minute: 0, formatted: "10:00 AM", confidence: "high", basedOn: 15 }
- */
-export function suggestOptimalTime(
-  reminders: Reminder[],
-  category?: ReminderCategory,
-  minCompletions = 3
-): SuggestedTime | null {
-  // Filter to completed reminders with completion timestamps
-  let relevantReminders = reminders.filter((r) => r.completed && r.completedAt);
-
-  // Filter by category if specified
-  if (category) {
-    relevantReminders = relevantReminders.filter((r) => r.category === category);
-  }
-
-  // Not enough data
-  if (relevantReminders.length < minCompletions) {
-    return null;
-  }
-
-  // Count completions by hour
-  const hourCounts: Record<number, number> = {};
-
-  for (const reminder of relevantReminders) {
-    if (reminder.completedAt) {
-      const completedDate = parseISO(reminder.completedAt);
-      const hour = getHours(completedDate);
-      if (!hourCounts[hour]) {
-        hourCounts[hour] = 0;
-      }
-      hourCounts[hour] = hourCounts[hour] + 1;
-    }
-  }
-
-  // Find the most common hour
-  const sortedHours = Object.entries(hourCounts)
-    .map(([hour, count]) => ({ hour: Number(hour), count }))
-    .sort((a, b) => b.count - a.count);
-
-  if (sortedHours.length === 0) {
-    return null;
-  }
-
-  const topHour = sortedHours[0];
-  const totalCompletions = relevantReminders.length;
-
-  // Determine confidence based on how concentrated completions are
-  const topHourPercentage = topHour.count / totalCompletions;
-  let confidence: 'high' | 'medium' | 'low';
-
-  if (topHourPercentage >= 0.4 && totalCompletions >= 10) {
-    confidence = 'high';
-  } else if (topHourPercentage >= 0.25 || totalCompletions >= 5) {
-    confidence = 'medium';
-  } else {
-    confidence = 'low';
-  }
-
-  return {
-    hour: topHour.hour,
-    minute: 0, // Round to the hour for simplicity
-    formatted: formatHourMinute(topHour.hour, 0),
-    confidence,
-    basedOn: totalCompletions,
-  };
-}
-
-/**
- * Get multiple time suggestions across different parts of the day.
- * Useful for showing "Morning: 9 AM, Afternoon: 2 PM, Evening: 7 PM" options.
- *
- * @param reminders - Array of all reminders
- * @param category - Optional category to filter by
- * @returns Object with morning, afternoon, evening suggestions (or null if no data)
- */
-export function suggestTimesByDayPart(
-  reminders: Reminder[],
-  category?: ReminderCategory
-): {
-  morning: SuggestedTime | null;
-  afternoon: SuggestedTime | null;
-  evening: SuggestedTime | null;
-} {
-  // Filter to completed reminders with timestamps
-  let relevantReminders = reminders.filter((r) => r.completed && r.completedAt);
-
-  if (category) {
-    relevantReminders = relevantReminders.filter((r) => r.category === category);
-  }
-
-  // Group by day part
-  const morningReminders = relevantReminders.filter((r) => {
-    if (!r.completedAt) return false;
-    const hour = getHours(parseISO(r.completedAt));
-    return hour >= 5 && hour < 12; // 5 AM - 11:59 AM
-  });
-
-  const afternoonReminders = relevantReminders.filter((r) => {
-    if (!r.completedAt) return false;
-    const hour = getHours(parseISO(r.completedAt));
-    return hour >= 12 && hour < 17; // 12 PM - 4:59 PM
-  });
-
-  const eveningReminders = relevantReminders.filter((r) => {
-    if (!r.completedAt) return false;
-    const hour = getHours(parseISO(r.completedAt));
-    return hour >= 17 || hour < 5; // 5 PM - 4:59 AM
-  });
-
-  // Create temporary arrays with category preserved for the suggestion function
-  const morning = suggestOptimalTime(morningReminders, undefined, 2);
-  const afternoon = suggestOptimalTime(afternoonReminders, undefined, 2);
-  const evening = suggestOptimalTime(eveningReminders, undefined, 2);
-
-  return { morning, afternoon, evening };
 }
 
 /**
