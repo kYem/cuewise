@@ -111,7 +111,7 @@ export const PomodoroMiniSettings: React.FC<PomodoroMiniSettingsProps> = ({
         </div>
       </PopoverAnchor>
       <PopoverContent align="center" className="w-[280px] space-y-3 p-3">
-        <PresetGrid s={settings} onApply={onApply} />
+        <PresetGrid s={settings} onApply={onApply} className="grid grid-cols-2 gap-2" />
         <div className="grid grid-cols-2 gap-x-3 gap-y-2">
           {FIELDS.map((f) => {
             const Icon = f.icon;

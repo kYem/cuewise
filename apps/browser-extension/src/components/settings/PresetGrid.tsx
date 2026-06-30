@@ -12,15 +12,17 @@ function rhythm(work: number, short: number, long: number): string {
 interface PresetGridProps {
   s: Settings;
   onApply: (patch: Partial<Settings>) => void;
+  /** Override the grid layout — e.g. a 2-up grid inside the narrow timer popover. */
+  className?: string;
 }
 
 /** Recipe cards that apply a full timer rhythm; flips to "Custom" once fine-tuned. */
-export const PresetGrid: React.FC<PresetGridProps> = ({ s, onApply }) => {
+export const PresetGrid: React.FC<PresetGridProps> = ({ s, onApply, className }) => {
   const activePreset = TIMER_PRESETS.find((p) => matchesPreset(s, p));
   const isCustom = !activePreset;
 
   return (
-    <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+    <div className={className ?? 'grid grid-cols-2 gap-2.5 sm:grid-cols-4'}>
       {TIMER_PRESETS.map((p) => {
         const active = activePreset?.id === p.id;
         return (
