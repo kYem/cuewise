@@ -1,4 +1,10 @@
-import { formatDate, type Goal, getNextDayDateString, getTodayDateString } from '@cuewise/shared';
+import {
+  formatDate,
+  type Goal,
+  getDateStringDaysFromNow,
+  getNextDayDateString,
+  getTodayDateString,
+} from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
 import { CalendarDays } from 'lucide-react';
 import type React from 'react';
@@ -24,25 +30,11 @@ const chipClass = (active: boolean): string =>
       : 'border-border bg-surface text-secondary hover:bg-surface-variant hover:text-primary'
   );
 
-// A local "YYYY-MM-DD" (not UTC) so quick-pick dates don't drift across midnight.
-function toDateString(date: Date): string {
-  const year = date.getFullYear();
-  const month = (date.getMonth() + 1).toString().padStart(2, '0');
-  const day = date.getDate().toString().padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-function addDaysString(days: number): string {
-  const date = new Date();
-  date.setDate(date.getDate() + days);
-  return toDateString(date);
-}
-
 const DUE_PRESETS: { label: string; value: () => string }[] = [
   { label: 'Today', value: getTodayDateString },
   { label: 'Tomorrow', value: getNextDayDateString },
-  { label: 'Next week', value: () => addDaysString(7) },
-  { label: 'In 2 weeks', value: () => addDaysString(14) },
+  { label: 'Next week', value: () => getDateStringDaysFromNow(7) },
+  { label: 'In 2 weeks', value: () => getDateStringDaysFromNow(14) },
 ];
 
 // Relative descriptor for the preview: "today" / "tomorrow" / "in 9 days" / "in 2 weeks" / "overdue".
@@ -73,7 +65,7 @@ export const GoalForm: React.FC<GoalFormProps> = ({ goal, onCancel, onSuccess })
   const [title, setTitle] = useState(goal?.text ?? '');
   const [description, setDescription] = useState(goal?.description ?? '');
   // Default new goals to two weeks out.
-  const [dueDate, setDueDate] = useState(() => goal?.date ?? addDaysString(14));
+  const [dueDate, setDueDate] = useState(() => goal?.date ?? getDateStringDaysFromNow(14));
   const [isSubmitting, setIsSubmitting] = useState(false);
   const titleInputRef = useRef<HTMLInputElement>(null);
 
