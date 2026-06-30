@@ -24,6 +24,51 @@ import { create } from 'zustand';
 import { SEED_QUOTES } from '../data/seed-quotes';
 import { useToastStore } from './toast-store';
 
+/** Seed quotes not present in the given list, keyed by id. */
+function getMissingSeedQuotes(quotes: Quote[]): Quote[] {
+  const existingIds = new Set(quotes.map((q) => q.id));
+  return SEED_QUOTES.filter((sq) => !existingIds.has(sq.id));
+}
+
+/**
+ * Step one entry through quote history. 'back' moves toward older quotes, 'forward' toward
+ * newer ones. Hidden/deleted quotes are skipped by recursing in the same direction.
+ */
+async function navigateHistory(
+  get: () => QuoteStore,
+  set: (partial: Partial<QuoteStore>) => void,
+  direction: 'back' | 'forward'
+): Promise<void> {
+  const isBack = direction === 'back';
+  try {
+    const { quotes, quoteHistory, historyIndex } = get();
+
+    // Already at the end of history in this direction
+    if (isBack ? historyIndex >= quoteHistory.length - 1 : historyIndex <= 0) {
+      return;
+    }
+
+    const newIndex = isBack ? historyIndex + 1 : historyIndex - 1;
+    const quoteId = quoteHistory[newIndex];
+    const quote = quotes.find((q) => q.id === quoteId);
+
+    if (quote && !quote.isHidden) {
+      await setCurrentQuote(quote);
+      set({ currentQuote: quote, historyIndex: newIndex });
+      await get().incrementViewCount(quote.id);
+    } else {
+      // Quote was deleted or hidden, skip it
+      set({ historyIndex: newIndex });
+      await navigateHistory(get, set, direction);
+    }
+  } catch (error) {
+    logger.error(`Error going ${direction} in history`, error);
+    const errorMessage = `Failed to navigate ${direction}. Please try again.`;
+    set({ error: errorMessage });
+    useToastStore.getState().error(errorMessage);
+  }
+}
+
 interface QuoteStore {
   quotes: Quote[];
   currentQuote: Quote | null;
@@ -256,63 +301,11 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
   },
 
   goBack: async () => {
-    try {
-      const { quotes, quoteHistory, historyIndex } = get();
-
-      // Check if we can go back
-      if (historyIndex >= quoteHistory.length - 1) {
-        return;
-      }
-
-      const newIndex = historyIndex + 1;
-      const quoteId = quoteHistory[newIndex];
-      const quote = quotes.find((q) => q.id === quoteId);
-
-      if (quote && !quote.isHidden) {
-        await setCurrentQuote(quote);
-        set({ currentQuote: quote, historyIndex: newIndex });
-        await get().incrementViewCount(quote.id);
-      } else {
-        // Quote was deleted or hidden, skip it
-        set({ historyIndex: newIndex });
-        await get().goBack();
-      }
-    } catch (error) {
-      logger.error('Error going back in history', error);
-      const errorMessage = 'Failed to navigate back. Please try again.';
-      set({ error: errorMessage });
-      useToastStore.getState().error(errorMessage);
-    }
+    await navigateHistory(get, set, 'back');
   },
 
   goForward: async () => {
-    try {
-      const { quotes, quoteHistory, historyIndex } = get();
-
-      // Check if we can go forward
-      if (historyIndex <= 0) {
-        return;
-      }
-
-      const newIndex = historyIndex - 1;
-      const quoteId = quoteHistory[newIndex];
-      const quote = quotes.find((q) => q.id === quoteId);
-
-      if (quote && !quote.isHidden) {
-        await setCurrentQuote(quote);
-        set({ currentQuote: quote, historyIndex: newIndex });
-        await get().incrementViewCount(quote.id);
-      } else {
-        // Quote was deleted or hidden, skip it
-        set({ historyIndex: newIndex });
-        await get().goForward();
-      }
-    } catch (error) {
-      logger.error('Error going forward in history', error);
-      const errorMessage = 'Failed to navigate forward. Please try again.';
-      set({ error: errorMessage });
-      useToastStore.getState().error(errorMessage);
-    }
+    await navigateHistory(get, set, 'forward');
   },
 
   canGoBack: () => {
@@ -603,10 +596,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
   restoreMissingQuotes: async () => {
     try {
       const { quotes } = get();
-      const existingIds = new Set(quotes.map((q) => q.id));
-
-      // Find seed quotes that are missing from current quotes
-      const missingQuotes = SEED_QUOTES.filter((sq) => !existingIds.has(sq.id));
+      const missingQuotes = getMissingSeedQuotes(quotes);
 
       if (missingQuotes.length === 0) {
         useToastStore.getState().info('All default quotes are already present');
@@ -666,9 +656,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
   },
 
   getMissingSeedQuoteCount: () => {
-    const { quotes } = get();
-    const existingIds = new Set(quotes.map((q) => q.id));
-    return SEED_QUOTES.filter((sq) => !existingIds.has(sq.id)).length;
+    return getMissingSeedQuotes(get().quotes).length;
   },
 
   // Collection operations

@@ -33,6 +33,30 @@ import { create } from 'zustand';
 import { readFileAsText } from '../utils/file-utils';
 import { useToastStore } from './toast-store';
 
+/**
+ * Merge incoming into existing by id (skipDuplicates drops existing ids, else overwrites them).
+ * importedCount = items written: new ones in skip mode, all incoming (incl. overwrites) otherwise.
+ */
+function mergeImport<T extends { id: string }>(
+  existing: T[],
+  incoming: T[],
+  skipDuplicates: boolean
+): { merged: T[]; importedCount: number; skippedCount: number } {
+  const existingIds = new Set(existing.map((item) => item.id));
+  const incomingIds = new Set(incoming.map((item) => item.id));
+  const toImport = skipDuplicates ? incoming.filter((item) => !existingIds.has(item.id)) : incoming;
+
+  const merged = skipDuplicates
+    ? [...existing, ...toImport]
+    : [...existing.filter((e) => !incomingIds.has(e.id)), ...incoming];
+
+  return {
+    merged,
+    importedCount: toImport.length,
+    skippedCount: incoming.length - toImport.length,
+  };
+}
+
 interface InsightsStore {
   insights: InsightsData | null;
   analytics: AdvancedAnalytics | null;
@@ -282,80 +306,47 @@ export const useInsightsStore = create<InsightsStore>((set, get) => ({
       // Import goals
       if (options.importGoals === true && data.goals.length > 0) {
         const existingGoals = await getGoals();
-        const existingIds = new Set(existingGoals.map((g) => g.id));
-
-        const goalsToImport =
+        const { merged, importedCount, skippedCount } = mergeImport(
+          existingGoals,
+          data.goals,
           options.skipDuplicates === true
-            ? data.goals.filter((g) => !existingIds.has(g.id))
-            : data.goals;
-
-        result.skipped.goals = data.goals.length - goalsToImport.length;
-        result.imported.goals = goalsToImport.length;
-
-        if (goalsToImport.length > 0) {
-          const mergedGoals =
-            options.skipDuplicates === true
-              ? [...existingGoals, ...goalsToImport]
-              : [
-                  ...existingGoals.filter((g) => !data.goals.some((ig) => ig.id === g.id)),
-                  ...data.goals,
-                ];
-          await setGoals(mergedGoals);
+        );
+        result.imported.goals = importedCount;
+        result.skipped.goals = skippedCount;
+        if (importedCount > 0) {
+          await setGoals(merged);
         }
       }
 
       // Import quotes (mark as custom to distinguish from seed quotes)
       if (options.importQuotes === true && data.quotes.length > 0) {
         const existingQuotes = await getQuotes();
-        const existingIds = new Set(existingQuotes.map((q) => q.id));
-
         // Mark all imported quotes as custom to ensure they are included in future exports
         const quotesToProcess = data.quotes.map((q) => ({ ...q, isCustom: true }));
-
-        const quotesToImport =
+        const { merged, importedCount, skippedCount } = mergeImport(
+          existingQuotes,
+          quotesToProcess,
           options.skipDuplicates === true
-            ? quotesToProcess.filter((q) => !existingIds.has(q.id))
-            : quotesToProcess;
-
-        result.skipped.quotes = data.quotes.length - quotesToImport.length;
-        result.imported.quotes = quotesToImport.length;
-
-        if (quotesToImport.length > 0) {
-          const mergedQuotes =
-            options.skipDuplicates === true
-              ? [...existingQuotes, ...quotesToImport]
-              : [
-                  ...existingQuotes.filter((q) => !data.quotes.some((iq) => iq.id === q.id)),
-                  ...quotesToImport,
-                ];
-          await setQuotes(mergedQuotes);
+        );
+        result.imported.quotes = importedCount;
+        result.skipped.quotes = skippedCount;
+        if (importedCount > 0) {
+          await setQuotes(merged);
         }
       }
 
       // Import pomodoro sessions
       if (options.importPomodoroSessions === true && data.pomodoroSessions.length > 0) {
         const existingSessions = await getPomodoroSessions();
-        const existingIds = new Set(existingSessions.map((s) => s.id));
-
-        const sessionsToImport =
+        const { merged, importedCount, skippedCount } = mergeImport(
+          existingSessions,
+          data.pomodoroSessions,
           options.skipDuplicates === true
-            ? data.pomodoroSessions.filter((s) => !existingIds.has(s.id))
-            : data.pomodoroSessions;
-
-        result.skipped.pomodoroSessions = data.pomodoroSessions.length - sessionsToImport.length;
-        result.imported.pomodoroSessions = sessionsToImport.length;
-
-        if (sessionsToImport.length > 0) {
-          const mergedSessions =
-            options.skipDuplicates === true
-              ? [...existingSessions, ...sessionsToImport]
-              : [
-                  ...existingSessions.filter(
-                    (s) => !data.pomodoroSessions.some((is) => is.id === s.id)
-                  ),
-                  ...sessionsToImport,
-                ];
-          await setPomodoroSessions(mergedSessions);
+        );
+        result.imported.pomodoroSessions = importedCount;
+        result.skipped.pomodoroSessions = skippedCount;
+        if (importedCount > 0) {
+          await setPomodoroSessions(merged);
         }
       }
 

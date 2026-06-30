@@ -26,6 +26,22 @@ const logger = createLogger({
 type TimerStatus = 'idle' | 'running' | 'paused';
 type SessionType = 'work' | 'break' | 'longBreak';
 
+/** Resolve the configured duration (minutes) for a session type. */
+function durationForSession(
+  sessionType: SessionType,
+  workDuration: number,
+  breakDuration: number,
+  longBreakDuration: number
+): number {
+  if (sessionType === 'break') {
+    return breakDuration;
+  }
+  if (sessionType === 'longBreak') {
+    return longBreakDuration;
+  }
+  return workDuration;
+}
+
 interface PomodoroStore {
   // State
   status: TimerStatus;
@@ -219,13 +235,12 @@ export const usePomodoroStore = create<PomodoroStore>()(
 
           // Only update durations if timer is idle
           if (status === 'idle') {
-            let duration = workDuration;
-            if (sessionType === 'break') {
-              duration = breakDuration;
-            }
-            if (sessionType === 'longBreak') {
-              duration = longBreakDuration;
-            }
+            const duration = durationForSession(
+              sessionType,
+              workDuration,
+              breakDuration,
+              longBreakDuration
+            );
 
             set({
               workDuration,
@@ -266,13 +281,12 @@ export const usePomodoroStore = create<PomodoroStore>()(
 
       start: () => {
         const { sessionType, workDuration, breakDuration, longBreakDuration, startSound } = get();
-        let duration = workDuration;
-        if (sessionType === 'break') {
-          duration = breakDuration;
-        }
-        if (sessionType === 'longBreak') {
-          duration = longBreakDuration;
-        }
+        const duration = durationForSession(
+          sessionType,
+          workDuration,
+          breakDuration,
+          longBreakDuration
+        );
 
         const currentSessionId = generateId();
 
@@ -307,9 +321,12 @@ export const usePomodoroStore = create<PomodoroStore>()(
 
       reset: () => {
         const { sessionType, workDuration, breakDuration, longBreakDuration } = get();
-        let duration = workDuration;
-        if (sessionType === 'break') duration = breakDuration;
-        if (sessionType === 'longBreak') duration = longBreakDuration;
+        const duration = durationForSession(
+          sessionType,
+          workDuration,
+          breakDuration,
+          longBreakDuration
+        );
 
         set({
           status: 'idle',
@@ -339,7 +356,9 @@ export const usePomodoroStore = create<PomodoroStore>()(
       tick: () => {
         const { status, timeRemaining } = get();
 
-        if (status !== 'running') return;
+        if (status !== 'running') {
+          return;
+        }
 
         if (timeRemaining > 0) {
           set({
@@ -369,7 +388,9 @@ export const usePomodoroStore = create<PomodoroStore>()(
           completionSound,
         } = get();
 
-        if (!currentSessionId) return;
+        if (!currentSessionId) {
+          return;
+        }
 
         try {
           // Get settings to check auto-start preference
@@ -584,11 +605,15 @@ export function usePomodoroStorageSync() {
       areaName: string
     ) => {
       // Only react to local storage changes
-      if (areaName !== 'local') return;
+      if (areaName !== 'local') {
+        return;
+      }
 
       // Check if pomodoroState changed
       const pomodoroStateChange = changes.pomodoroState;
-      if (!pomodoroStateChange) return;
+      if (!pomodoroStateChange) {
+        return;
+      }
 
       // Trigger rehydration to sync with other tabs
       // This will update the Zustand store with the latest storage value

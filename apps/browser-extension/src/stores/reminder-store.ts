@@ -106,6 +106,16 @@ function categorizeReminders(reminders: Reminder[]) {
   return { upcoming, overdue };
 }
 
+/** Recategorize reminders into upcoming/overdue and commit them (plus any extra state). */
+function commitReminders(
+  set: (partial: Partial<ReminderStore>) => void,
+  reminders: Reminder[],
+  extra?: Partial<ReminderStore>
+): void {
+  const { upcoming, overdue } = categorizeReminders(reminders);
+  set({ reminders, upcomingReminders: upcoming, overdueReminders: overdue, ...extra });
+}
+
 export const useReminderStore = create<ReminderStore>((set, get) => ({
   reminders: [],
   upcomingReminders: [],
@@ -164,14 +174,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
         }
       }
 
-      const { upcoming, overdue } = categorizeReminders(reminders);
-
-      set({
-        reminders,
-        upcomingReminders: upcoming,
-        overdueReminders: overdue,
-        isLoading: false,
-      });
+      commitReminders(set, reminders, { isLoading: false });
     } catch (error) {
       logger.error('Error initializing reminder store', error);
       const errorMessage = 'Failed to load reminders. Please refresh the page.';
@@ -211,12 +214,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
         return false;
       }
 
-      const { upcoming, overdue } = categorizeReminders(updatedReminders);
-      set({
-        reminders: updatedReminders,
-        upcomingReminders: upcoming,
-        overdueReminders: overdue,
-      });
+      commitReminders(set, updatedReminders);
 
       // Schedule alarm for this reminder
       await armReminderAlarm(newReminder.id, dueDate.getTime());
@@ -272,12 +270,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
           return;
         }
 
-        const { upcoming, overdue } = categorizeReminders(updatedReminders);
-        set({
-          reminders: updatedReminders,
-          upcomingReminders: upcoming,
-          overdueReminders: overdue,
-        });
+        commitReminders(set, updatedReminders);
 
         // Only (re)arm an alarm when the reminder is active; a paused one must not fire.
         await clearReminderAlarm(reminderId);
@@ -309,12 +302,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
         return;
       }
 
-      const { upcoming, overdue } = categorizeReminders(updatedReminders);
-      set({
-        reminders: updatedReminders,
-        upcomingReminders: upcoming,
-        overdueReminders: overdue,
-      });
+      commitReminders(set, updatedReminders);
 
       // Cancel alarm if completed
       if (isCompleting) {
@@ -348,12 +336,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
         return;
       }
 
-      const { upcoming, overdue } = categorizeReminders(updatedReminders);
-      set({
-        reminders: updatedReminders,
-        upcomingReminders: upcoming,
-        overdueReminders: overdue,
-      });
+      commitReminders(set, updatedReminders);
 
       // Cancel alarm
       await clearReminderAlarm(reminderId);
@@ -390,12 +373,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
         return false;
       }
 
-      const { upcoming, overdue } = categorizeReminders(updatedReminders);
-      set({
-        reminders: updatedReminders,
-        upcomingReminders: upcoming,
-        overdueReminders: overdue,
-      });
+      commitReminders(set, updatedReminders);
 
       // Update alarm if dueDate changed
       if (updates.dueDate) {
@@ -445,12 +423,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
         return;
       }
 
-      const { upcoming, overdue } = categorizeReminders(updatedReminders);
-      set({
-        reminders: updatedReminders,
-        upcomingReminders: upcoming,
-        overdueReminders: overdue,
-      });
+      commitReminders(set, updatedReminders);
 
       // Update alarm
       await clearReminderAlarm(reminderId);
@@ -488,8 +461,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
         return;
       }
 
-      const { upcoming, overdue } = categorizeReminders(updated);
-      set({ reminders: updated, upcomingReminders: upcoming, overdueReminders: overdue });
+      commitReminders(set, updated);
 
       if (paused) {
         await clearReminderAlarm(reminderId);
@@ -553,8 +525,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
         return;
       }
 
-      const { upcoming, overdue } = categorizeReminders(updated);
-      set({ reminders: updated, upcomingReminders: upcoming, overdueReminders: overdue });
+      commitReminders(set, updated);
 
       for (const r of dueNow) {
         useToastStore.getState().warning(`Reminder: ${r.text}`);
@@ -566,7 +537,6 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
 
   refreshLists: () => {
     const { reminders } = get();
-    const { upcoming, overdue } = categorizeReminders(reminders);
-    set({ upcomingReminders: upcoming, overdueReminders: overdue });
+    commitReminders(set, reminders);
   },
 }));

@@ -1,4 +1,4 @@
-import { getObjectives, getTodayDateString, isTask } from '@cuewise/shared';
+import { getDateStringDaysAgo, getObjectives, getTodayDateString, isTask } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
 import { Calendar, CheckCircle2, Circle, Flag, ListTodo, Target, TrendingUp } from 'lucide-react';
 import type React from 'react';
@@ -38,16 +38,12 @@ export const GoalsPage: React.FC = () => {
     const todayCompleted = todayGoals.filter((g) => g.completed).length;
 
     // Last 7 days
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    const sevenDaysAgoStr = sevenDaysAgo.toISOString().split('T')[0];
+    const sevenDaysAgoStr = getDateStringDaysAgo(7);
     const weekGoals = tasks.filter((g) => g.date >= sevenDaysAgoStr);
     const weekCompleted = weekGoals.filter((g) => g.completed).length;
 
     // Last 30 days
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const thirtyDaysAgoStr = thirtyDaysAgo.toISOString().split('T')[0];
+    const thirtyDaysAgoStr = getDateStringDaysAgo(30);
     const monthGoals = tasks.filter((g) => g.date >= thirtyDaysAgoStr);
     const monthCompleted = monthGoals.filter((g) => g.completed).length;
 

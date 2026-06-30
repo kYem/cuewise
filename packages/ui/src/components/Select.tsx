@@ -56,7 +56,9 @@ export function Select<T extends string = string>({
 
   // Keyboard navigation
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      return;
+    }
 
     const handleKeyDown = (event: KeyboardEvent) => {
       switch (event.key) {

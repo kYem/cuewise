@@ -120,6 +120,22 @@ function extractYouTubeInfo(url: string): ExtractedYouTubeInfo | null {
   }
 }
 
+/** Wire the YouTube player callbacks for the leader tab (ready state + progress persistence). */
+function initYoutubeLeader(set: (partial: Partial<SoundsStore>) => void): void {
+  youtubePlayer.initialize();
+
+  youtubePlayer.onStateChange((state) => {
+    set({ isYoutubeReady: state.isReady });
+  });
+
+  youtubePlayer.onTimeUpdate(async (videoId, time) => {
+    const playlistId = youtubePlayer.getCurrentPlaylistId();
+    if (playlistId) {
+      await updateVideoProgress(playlistId, videoId, time);
+    }
+  });
+}
+
 export const useSoundsStore = create<SoundsStore>()(
   persist(
     (set, get) => ({
@@ -146,20 +162,7 @@ export const useSoundsStore = create<SoundsStore>()(
         try {
           // Only initialize YouTube player if we're the leader
           if (isLeader) {
-            youtubePlayer.initialize();
-
-            // Subscribe to player state changes
-            youtubePlayer.onStateChange((state) => {
-              set({ isYoutubeReady: state.isReady });
-            });
-
-            // Subscribe to time updates for timestamp memory
-            youtubePlayer.onTimeUpdate(async (videoId, time) => {
-              const playlistId = youtubePlayer.getCurrentPlaylistId();
-              if (playlistId) {
-                await updateVideoProgress(playlistId, videoId, time);
-              }
-            });
+            initYoutubeLeader(set);
           }
 
           // Load custom playlists from storage
@@ -188,18 +191,7 @@ export const useSoundsStore = create<SoundsStore>()(
         set({ isLeader });
 
         if (isLeader && !wasLeader) {
-          youtubePlayer.initialize();
-
-          youtubePlayer.onStateChange((state) => {
-            set({ isYoutubeReady: state.isReady });
-          });
-
-          youtubePlayer.onTimeUpdate(async (videoId, time) => {
-            const playlistId = youtubePlayer.getCurrentPlaylistId();
-            if (playlistId) {
-              await updateVideoProgress(playlistId, videoId, time);
-            }
-          });
+          initYoutubeLeader(set);
 
           // Resume playback if YouTube was active
           const { activeSource, isPlaying, selectedPlaylistId, playlists, youtubeVolume } = get();

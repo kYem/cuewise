@@ -32,6 +32,28 @@ interface CSVImportModalProps {
 type CollectionMode = 'none' | 'new' | 'existing';
 type InputMode = 'file' | 'paste';
 
+/** Suggest a collection name when a single source dominates the parsed quotes (>= half). */
+function suggestCollectionName(result: CSVParseResult): string | null {
+  const sources = result.valid
+    .map((q) => q.source)
+    .filter((s): s is string => !!s && s.trim() !== '');
+  if (sources.length === 0) {
+    return null;
+  }
+  const sourceCounts = sources.reduce(
+    (acc, s) => {
+      acc[s] = (acc[s] || 0) + 1;
+      return acc;
+    },
+    {} as Record<string, number>
+  );
+  const mostCommon = Object.entries(sourceCounts).sort((a, b) => b[1] - a[1])[0];
+  if (mostCommon && mostCommon[1] >= result.valid.length / 2) {
+    return mostCommon[0];
+  }
+  return null;
+}
+
 export const CSVImportModal: React.FC<CSVImportModalProps> = ({ onClose }) => {
   const { collections, createCollection, bulkAddQuotes } = useQuoteStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -79,25 +101,9 @@ export const CSVImportModal: React.FC<CSVImportModalProps> = ({ onClose }) => {
       const result = parseQuotesCSV(text);
       setParseResult(result);
 
-      // If a source is common among quotes, suggest it as collection name
-      if (result.valid.length > 0) {
-        const sources = result.valid
-          .map((q) => q.source)
-          .filter((s): s is string => !!s && s.trim() !== '');
-        if (sources.length > 0) {
-          // Find most common source
-          const sourceCounts = sources.reduce(
-            (acc, s) => {
-              acc[s] = (acc[s] || 0) + 1;
-              return acc;
-            },
-            {} as Record<string, number>
-          );
-          const mostCommon = Object.entries(sourceCounts).sort((a, b) => b[1] - a[1])[0];
-          if (mostCommon && mostCommon[1] >= result.valid.length / 2) {
-            setNewCollectionName(mostCommon[0]);
-          }
-        }
+      const suggestedName = suggestCollectionName(result);
+      if (suggestedName) {
+        setNewCollectionName(suggestedName);
       }
     } catch {
       setFileError('Failed to read file');
@@ -151,24 +157,9 @@ export const CSVImportModal: React.FC<CSVImportModalProps> = ({ onClose }) => {
       const result = parseQuotesCSV(pastedText);
       setParseResult(result);
 
-      // If a source is common among quotes, suggest it as collection name
-      if (result.valid.length > 0) {
-        const sources = result.valid
-          .map((q) => q.source)
-          .filter((s): s is string => !!s && s.trim() !== '');
-        if (sources.length > 0) {
-          const sourceCounts = sources.reduce(
-            (acc, s) => {
-              acc[s] = (acc[s] || 0) + 1;
-              return acc;
-            },
-            {} as Record<string, number>
-          );
-          const mostCommon = Object.entries(sourceCounts).sort((a, b) => b[1] - a[1])[0];
-          if (mostCommon && mostCommon[1] >= result.valid.length / 2) {
-            setNewCollectionName(mostCommon[0]);
-          }
-        }
+      const suggestedName = suggestCollectionName(result);
+      if (suggestedName) {
+        setNewCollectionName(suggestedName);
       }
     } catch {
       setFileError('Failed to parse CSV text');

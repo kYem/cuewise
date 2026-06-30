@@ -9,6 +9,7 @@ import {
   DEFAULT_SETTINGS,
   type FocusImageCategory,
   type Goal,
+  getTodayDateString,
   logger,
   type PlaylistProgress,
   type PomodoroSession,
@@ -479,27 +480,6 @@ export async function updateVideoProgress(
   }
 }
 
-/**
- * Get saved timestamp for a specific video in a playlist
- * Returns 0 if no progress saved
- */
-export async function getVideoTimestamp(playlistId: string, videoId: string): Promise<number> {
-  try {
-    const allProgress = await getYoutubeProgress();
-    const playlistProgress = allProgress.find((p) => p.playlistId === playlistId);
-
-    if (!playlistProgress) {
-      return 0;
-    }
-
-    const videoProgress = playlistProgress.videoProgress.find((v) => v.videoId === videoId);
-    return videoProgress?.timestamp ?? 0;
-  } catch (error) {
-    logger.error('Error getting video timestamp', error);
-    return 0;
-  }
-}
-
 export interface PlaylistResumeInfo {
   videoId: string;
   timestamp: number;
@@ -536,14 +516,6 @@ export async function getCurrentVideoForPlaylist(
 
 // Daily Background (persisted to change only once per day)
 // Note: Daily background is stored in local storage only (not synced)
-
-/**
- * Get today's date in YYYY-MM-DD format
- */
-function getTodayDateString(): string {
-  const today = new Date();
-  return today.toISOString().split('T')[0];
-}
 
 /**
  * Get the daily background image data
