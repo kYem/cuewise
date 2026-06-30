@@ -2,35 +2,11 @@ import type { Settings } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
 import { Check } from 'lucide-react';
 import type React from 'react';
-
-interface TimerPreset {
-  id: string;
-  name: string;
-  work: number;
-  short: number;
-  long: number;
-  after: number;
-}
-
-/** Session rhythm recipes (work · short break · long break, in minutes). */
-const TIMER_PRESETS: TimerPreset[] = [
-  { id: 'classic', name: 'Classic', work: 25, short: 5, long: 15, after: 4 },
-  { id: 'deep', name: 'Deep work', work: 50, short: 10, long: 25, after: 2 },
-  { id: 'sprint', name: 'Quick sprint', work: 15, short: 3, long: 12, after: 4 },
-];
+import { matchesPreset, TIMER_PRESETS } from './timer-presets';
 
 /** Human-readable "work · short · long" summary for a rhythm. */
 function rhythm(work: number, short: number, long: number): string {
   return `${work} · ${short} · ${long}`;
-}
-
-function matchesPreset(s: Settings, p: TimerPreset): boolean {
-  return (
-    s.pomodoroWorkDuration === p.work &&
-    s.pomodoroBreakDuration === p.short &&
-    s.pomodoroLongBreakDuration === p.long &&
-    s.pomodoroLongBreakInterval === p.after
-  );
 }
 
 interface PresetGridProps {
