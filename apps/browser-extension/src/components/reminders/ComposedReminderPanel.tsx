@@ -102,7 +102,7 @@ function HabitPill({ reminder, state, onToggle, onPauseToggle }: HabitPillProps)
       aria-label={paused ? `Resume ${reminder.text}` : `Mark ${reminder.text} done`}
       title={paused ? 'Paused — tap to resume' : 'Tap to mark done'}
       className={cn(
-        'inline-flex items-center gap-2 pl-2.5 pr-3 py-1.5 rounded-full border transition-all',
+        'inline-flex max-w-full items-center gap-2 pl-2.5 pr-3 py-1.5 rounded-2xl border transition-all',
         'focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-1',
         nudging && 'habit-glow-pulse',
         justAcked && 'scale-105',
@@ -121,8 +121,8 @@ function HabitPill({ reminder, state, onToggle, onPauseToggle }: HabitPillProps)
           <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: categoryColor }} />
         )}
       </span>
-      <span className="text-sm font-medium whitespace-nowrap">{reminder.text}</span>
-      <span className="text-xs text-tertiary">{paused ? 'paused' : cadence}</span>
+      <span className="min-w-0 break-words text-left text-sm font-medium">{reminder.text}</span>
+      <span className="flex-none text-xs text-tertiary">{paused ? 'paused' : cadence}</span>
     </button>
   );
 }
