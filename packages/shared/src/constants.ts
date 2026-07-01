@@ -122,6 +122,15 @@ export const CONCEPT_NUDGE_AFTER_QUOTE_VIEWS = 100;
 export const CONCEPT_NUDGE_MAX_SHOWS = 2;
 export const CONCEPT_NUDGE_GAP_DAYS = 3;
 
+/** Valid persisted ranges for the pomodoro rhythm settings. Enforced at the
+ * write boundary by clampPomodoroDurations() and mirrored by the UI steppers. */
+export const POMODORO_DURATION_BOUNDS = {
+  pomodoroWorkDuration: { min: 1, max: 60 },
+  pomodoroBreakDuration: { min: 1, max: 30 },
+  pomodoroLongBreakDuration: { min: 10, max: 60 },
+  pomodoroLongBreakInterval: { min: 2, max: 10 },
+} as const;
+
 // Category colors (for UI)
 export const CATEGORY_COLORS: Record<QuoteCategory, string> = {
   inspiration: '#8B5CF6', // purple

@@ -18,6 +18,7 @@ import {
 } from 'date-fns';
 import {
   DEFAULT_REMINDER_INTERVAL_MINUTES,
+  POMODORO_DURATION_BOUNDS,
   REMINDER_INTERVAL_MAX,
   REMINDER_INTERVAL_MIN,
   REMINDER_SNOOZE_MINUTES,
@@ -40,6 +41,7 @@ import type {
   QuoteCategory,
   Reminder,
   ReminderFrequency,
+  Settings,
   Subtask,
   WeeklyTrend,
 } from './types';
@@ -1676,6 +1678,48 @@ export function clampIntervalMinutes(value: number): number {
     return REMINDER_INTERVAL_MAX; // catches +Infinity and over-max values
   }
   return floored;
+}
+
+/**
+ * Clamp any pomodoro rhythm fields present in a settings patch to their valid
+ * bounds (POMODORO_DURATION_BOUNDS), so no caller — a preset, an import, or a
+ * direct write — can persist an out-of-range duration. The UI steppers clamp on
+ * click; this is the write-boundary backstop.
+ */
+export function clampPomodoroDurations(patch: Partial<Settings>): Partial<Settings> {
+  const clamp = (value: number, min: number, max: number): number =>
+    Math.min(max, Math.max(min, Math.round(value)));
+  const out: Partial<Settings> = { ...patch };
+  const b = POMODORO_DURATION_BOUNDS;
+  if (typeof out.pomodoroWorkDuration === 'number') {
+    out.pomodoroWorkDuration = clamp(
+      out.pomodoroWorkDuration,
+      b.pomodoroWorkDuration.min,
+      b.pomodoroWorkDuration.max
+    );
+  }
+  if (typeof out.pomodoroBreakDuration === 'number') {
+    out.pomodoroBreakDuration = clamp(
+      out.pomodoroBreakDuration,
+      b.pomodoroBreakDuration.min,
+      b.pomodoroBreakDuration.max
+    );
+  }
+  if (typeof out.pomodoroLongBreakDuration === 'number') {
+    out.pomodoroLongBreakDuration = clamp(
+      out.pomodoroLongBreakDuration,
+      b.pomodoroLongBreakDuration.min,
+      b.pomodoroLongBreakDuration.max
+    );
+  }
+  if (typeof out.pomodoroLongBreakInterval === 'number') {
+    out.pomodoroLongBreakInterval = clamp(
+      out.pomodoroLongBreakInterval,
+      b.pomodoroLongBreakInterval.min,
+      b.pomodoroLongBreakInterval.max
+    );
+  }
+  return out;
 }
 
 /** Ultra-compact interval label: "30m", "1h", "1h 30m". */

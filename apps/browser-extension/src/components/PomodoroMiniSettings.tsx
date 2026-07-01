@@ -1,4 +1,4 @@
-import type { Settings } from '@cuewise/shared';
+import { POMODORO_DURATION_BOUNDS, type Settings } from '@cuewise/shared';
 import { cn, Popover, PopoverAnchor, PopoverContent } from '@cuewise/ui';
 import { Bed, Coffee, type LucideIcon, Repeat, Timer } from 'lucide-react';
 import type React from 'react';
@@ -14,14 +14,13 @@ interface RhythmField {
   label: string;
   icon: LucideIcon;
   // One of the four number-valued rhythm keys; its number-ness is enforced by the
-  // `settings[setting]` → Stepper `value` read below, not by the onApply write.
+  // `settings[setting]` → Stepper `value` read below, not by the onApply write. Its
+  // [min,max] bounds come from POMODORO_DURATION_BOUNDS (single source with the store).
   setting:
     | 'pomodoroWorkDuration'
     | 'pomodoroBreakDuration'
     | 'pomodoroLongBreakDuration'
     | 'pomodoroLongBreakInterval';
-  min: number;
-  max: number;
   step: number;
   unit: string;
   /** Compact glance suffix on the trigger row ("25m" vs "4"). */
@@ -35,8 +34,6 @@ const FIELDS: readonly RhythmField[] = [
     label: 'Focus',
     icon: Timer,
     setting: 'pomodoroWorkDuration',
-    min: 1,
-    max: 60,
     step: 5,
     unit: 'min',
     suffix: 'm',
@@ -47,8 +44,6 @@ const FIELDS: readonly RhythmField[] = [
     label: 'Break',
     icon: Coffee,
     setting: 'pomodoroBreakDuration',
-    min: 1,
-    max: 30,
     step: 1,
     unit: 'min',
     suffix: 'm',
@@ -59,8 +54,6 @@ const FIELDS: readonly RhythmField[] = [
     label: 'Long break',
     icon: Bed,
     setting: 'pomodoroLongBreakDuration',
-    min: 10,
-    max: 60,
     step: 5,
     unit: 'min',
     suffix: 'm',
@@ -71,8 +64,6 @@ const FIELDS: readonly RhythmField[] = [
     label: 'Interval',
     icon: Repeat,
     setting: 'pomodoroLongBreakInterval',
-    min: 2,
-    max: 10,
     step: 1,
     unit: '',
     suffix: '',
@@ -151,8 +142,8 @@ export const PomodoroMiniSettings: React.FC<PomodoroMiniSettingsProps> = ({
                 <Stepper
                   label={f.title}
                   value={value}
-                  min={f.min}
-                  max={f.max}
+                  min={POMODORO_DURATION_BOUNDS[f.setting].min}
+                  max={POMODORO_DURATION_BOUNDS[f.setting].max}
                   step={step}
                   unit={f.unit}
                   compact

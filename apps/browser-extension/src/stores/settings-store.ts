@@ -1,5 +1,6 @@
 import {
   type ColorTheme,
+  clampPomodoroDurations,
   configureLogger,
   DEFAULT_SETTINGS,
   type LayoutDensity,
@@ -187,7 +188,9 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
 
   updateSettings: async (partialSettings: Partial<Settings>) => {
     const { settings } = get();
-    const updatedSettings = { ...settings, ...partialSettings };
+    // Clamp pomodoro durations at the write boundary so no caller (preset,
+    // import, direct write) can persist an out-of-range value.
+    const updatedSettings = { ...settings, ...clampPomodoroDurations(partialSettings) };
 
     try {
       // Check if syncEnabled changed

@@ -6,6 +6,7 @@ import {
   formatHourMinute,
   NOTIFICATION_SOUNDS,
   type NotificationSoundType,
+  POMODORO_DURATION_BOUNDS,
   type PomodoroCompanion,
   type QuoteDisplayMode,
   type ReminderPanelLayout,
@@ -154,8 +155,8 @@ function TimerSection({ s, set, filter }: SettingsSectionProps) {
         <Stepper
           label="work duration"
           value={s.pomodoroWorkDuration}
-          min={1}
-          max={60}
+          min={POMODORO_DURATION_BOUNDS.pomodoroWorkDuration.min}
+          max={POMODORO_DURATION_BOUNDS.pomodoroWorkDuration.max}
           step={s.pomodoroWorkDuration >= 20 ? 5 : 1}
           unit="min"
           onChange={(v) => set({ pomodoroWorkDuration: v })}
@@ -165,8 +166,8 @@ function TimerSection({ s, set, filter }: SettingsSectionProps) {
         <Stepper
           label="short break"
           value={s.pomodoroBreakDuration}
-          min={1}
-          max={30}
+          min={POMODORO_DURATION_BOUNDS.pomodoroBreakDuration.min}
+          max={POMODORO_DURATION_BOUNDS.pomodoroBreakDuration.max}
           unit="min"
           onChange={(v) => set({ pomodoroBreakDuration: v })}
         />
@@ -175,8 +176,8 @@ function TimerSection({ s, set, filter }: SettingsSectionProps) {
         <Stepper
           label="long break"
           value={s.pomodoroLongBreakDuration}
-          min={10}
-          max={60}
+          min={POMODORO_DURATION_BOUNDS.pomodoroLongBreakDuration.min}
+          max={POMODORO_DURATION_BOUNDS.pomodoroLongBreakDuration.max}
           step={5}
           unit="min"
           onChange={(v) => set({ pomodoroLongBreakDuration: v })}
@@ -191,8 +192,8 @@ function TimerSection({ s, set, filter }: SettingsSectionProps) {
         <Stepper
           label="long break after"
           value={s.pomodoroLongBreakInterval}
-          min={2}
-          max={10}
+          min={POMODORO_DURATION_BOUNDS.pomodoroLongBreakInterval.min}
+          max={POMODORO_DURATION_BOUNDS.pomodoroLongBreakInterval.max}
           unit="sessions"
           onChange={(v) => set({ pomodoroLongBreakInterval: v })}
         />
