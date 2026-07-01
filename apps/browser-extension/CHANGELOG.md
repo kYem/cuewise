@@ -1,5 +1,33 @@
 # @cuewise/browser-extension
 
+## 1.15.0
+
+### Minor Changes
+
+- d08c969: feat(glass): opt-in "Enhanced glass" for richer frosted surfaces
+
+  The Glass theme gains an opt-in enhancement (new `glassEnhanced` setting, default
+  off) that makes the frosted surfaces feel more like real glass:
+  - saturation so the background photo's colour shows through the frost instead of
+    graying out
+  - a lit top edge + soft drop shadow so cards read as floating glass
+  - a text-shadow plus an edge-only top/bottom scrim for legibility over bright
+    photos, without dimming the middle of the photo
+  - honours `prefers-reduced-transparency`
+
+  Toggle it in the Theme Switcher's **Glass** section (shown only while the Glass
+  theme is active). The default Glass look is unchanged.
+
+- 267717b: feat(pomodoro): tap any timer value to open a compact mini-settings popover with one-tap rhythm presets (Classic, Deep work 50/10, Quick sprint) and inline duration editing — no trip to Settings. Pomodoro durations are now clamped to valid ranges whenever settings are saved (shared `POMODORO_DURATION_BOUNDS` + `clampPomodoroDurations`).
+
+### Patch Changes
+
+- Updated dependencies [d08c969]
+- Updated dependencies [267717b]
+  - @cuewise/shared@1.15.0
+  - @cuewise/storage@1.15.0
+  - @cuewise/ui@1.15.0
+
 ## 1.14.0
 
 ### Minor Changes
