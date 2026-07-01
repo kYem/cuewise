@@ -16,6 +16,9 @@ describe('PomodoroMiniSettings', () => {
     render(<PomodoroMiniSettings settings={settings} onApply={vi.fn()} />);
     expect(screen.getByRole('button', { name: 'Focus duration' })).toHaveTextContent('25m');
     expect(screen.getByRole('button', { name: 'Break length' })).toHaveTextContent('5m');
+    expect(screen.getByRole('button', { name: 'Long break length' })).toHaveTextContent('15m');
+    // interval has no suffix — renders a bare count, not "4m"
+    expect(screen.getByRole('button', { name: 'Long break interval' })).toHaveTextContent('4');
   });
 
   it('opens the mini-settings popover when a value is tapped', () => {
@@ -59,5 +62,17 @@ describe('PomodoroMiniSettings', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Increase Focus duration' }));
     // 15 → 16 (fine 1-min step below 20)
     expect(onApply).toHaveBeenCalledWith({ pomodoroWorkDuration: 16 });
+  });
+
+  it('maps the long-break and interval fields to the right key and step', () => {
+    const onApply = vi.fn();
+    render(<PomodoroMiniSettings settings={settings} onApply={onApply} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Long break length' }));
+    // long break steps by 5: 15 → 20, on pomodoroLongBreakDuration
+    fireEvent.click(screen.getByRole('button', { name: 'Increase Long break length' }));
+    expect(onApply).toHaveBeenCalledWith({ pomodoroLongBreakDuration: 20 });
+    // interval steps by 1: 4 → 5, on pomodoroLongBreakInterval
+    fireEvent.click(screen.getByRole('button', { name: 'Increase Long break interval' }));
+    expect(onApply).toHaveBeenCalledWith({ pomodoroLongBreakInterval: 5 });
   });
 });

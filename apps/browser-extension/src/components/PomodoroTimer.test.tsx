@@ -35,6 +35,8 @@ interface MockOptions {
 
 function mockStores(options: MockOptions = {}) {
   const setSelectedGoal = options.setSelectedGoal ?? vi.fn();
+  const reloadSettings = vi.fn();
+  const updateSettings = vi.fn();
   const pomodoroState = {
     status: options.status ?? 'idle',
     sessionType: options.sessionType ?? 'work',
@@ -53,7 +55,7 @@ function mockStores(options: MockOptions = {}) {
     reset: vi.fn(),
     skip: vi.fn(),
     setSelectedGoal,
-    reloadSettings: vi.fn(),
+    reloadSettings,
   };
   const goalState = { todayTasks: options.todayTasks ?? [], initialize: vi.fn() };
   const soundsState = {
@@ -70,11 +72,11 @@ function mockStores(options: MockOptions = {}) {
   vi.mocked(useGoalStore).mockImplementation(createSelectorMock(goalState));
   // focusModeEnabled: false keeps the focus button (and its store call) out of the tree.
   vi.mocked(useSettingsStore).mockImplementation(
-    createSettingsStoreMock({ focusModeEnabled: false })
+    createSettingsStoreMock({ focusModeEnabled: false, updateSettings })
   );
   vi.mocked(useSoundsStore).mockImplementation(createSelectorMock(soundsState));
 
-  return { setSelectedGoal };
+  return { setSelectedGoal, reloadSettings, updateSettings };
 }
 
 describe('PomodoroTimer - goal picker', () => {
@@ -174,5 +176,33 @@ describe('PomodoroTimer - goal picker', () => {
     expect(screen.getByText('Short Break')).toBeInTheDocument();
     expect(screen.queryByTitle('Select a goal')).not.toBeInTheDocument();
     expect(screen.queryByTitle('Change goal')).not.toBeInTheDocument();
+  });
+});
+
+describe('PomodoroTimer - mini-settings wiring', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('applying a preset persists the full patch, then resyncs the timer', async () => {
+    const user = userEvent.setup();
+    const { updateSettings, reloadSettings } = mockStores();
+
+    render(<PomodoroTimer />);
+
+    // Open the mini-settings popover from a timer value, then tap a rhythm preset.
+    await user.click(screen.getByRole('button', { name: 'Focus duration' }));
+    await user.click(screen.getByRole('button', { name: /deep work/i }));
+
+    // handleApplyTimerSettings must persist the exact patch, then reloadSettings.
+    expect(updateSettings).toHaveBeenCalledWith({
+      pomodoroWorkDuration: 50,
+      pomodoroBreakDuration: 10,
+      pomodoroLongBreakDuration: 25,
+      pomodoroLongBreakInterval: 2,
+    });
+    await waitFor(() => {
+      expect(reloadSettings).toHaveBeenCalled();
+    });
   });
 });
