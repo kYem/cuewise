@@ -17,7 +17,8 @@ interface RhythmField {
   // The Settings key this field edits — also its bounds key. Number-valued; the
   // `settings[setting]` → Stepper `value` read below is what enforces that.
   setting: keyof typeof POMODORO_DURATION_BOUNDS;
-  step: number;
+  /** Static stepper increment; omitted for 'work', whose step is computed by pomodoroWorkStep(). */
+  step?: number;
   unit: string;
   /** Compact glance suffix on the trigger row ("25m" vs "4"). */
   suffix: string;
@@ -30,7 +31,6 @@ const FIELDS: readonly RhythmField[] = [
     label: 'Focus',
     icon: Timer,
     setting: 'pomodoroWorkDuration',
-    step: 5,
     unit: 'min',
     suffix: 'm',
   },
@@ -119,9 +119,11 @@ export const PomodoroMiniSettings: React.FC<PomodoroMiniSettingsProps> = ({
       <PopoverContent
         align="center"
         className="w-[264px] space-y-2.5 border-border bg-surface-elevated p-2.5 shadow-2xl backdrop-blur-xl"
-        onPointerDownOutside={(event) => {
-          // Tapping another value button (in the anchor row) shouldn't dismiss-then-
-          // reopen the popover — keep it open and just switch the focused field.
+        onInteractOutside={(event) => {
+          // Radix dismisses on BOTH pointer-down-outside and focus-outside, and
+          // tapping another value button (in the anchor row) fires both. Guard the
+          // whole interaction so switching fields keeps the popover open (guarding
+          // only pointer-down leaves the focus path to still close→reopen it).
           const target = event.detail.originalEvent.target;
           if (target instanceof Node && anchorRef.current?.contains(target)) {
             event.preventDefault();
@@ -133,7 +135,7 @@ export const PomodoroMiniSettings: React.FC<PomodoroMiniSettingsProps> = ({
           {FIELDS.map((f) => {
             const Icon = f.icon;
             const value = settings[f.setting];
-            const step = f.key === 'work' ? pomodoroWorkStep(value) : f.step;
+            const step = f.key === 'work' ? pomodoroWorkStep(value) : (f.step ?? 1);
             return (
               <div
                 key={f.key}
