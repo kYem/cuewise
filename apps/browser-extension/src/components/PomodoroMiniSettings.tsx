@@ -13,6 +13,8 @@ interface RhythmField {
   title: string;
   label: string;
   icon: LucideIcon;
+  // One of the four number-valued rhythm keys; its number-ness is enforced by the
+  // `settings[setting]` → Stepper `value` read below, not by the onApply write.
   setting:
     | 'pomodoroWorkDuration'
     | 'pomodoroBreakDuration'
@@ -26,7 +28,7 @@ interface RhythmField {
   suffix: string;
 }
 
-const FIELDS: RhythmField[] = [
+const FIELDS: readonly RhythmField[] = [
   {
     key: 'work',
     title: 'Focus duration',
@@ -108,6 +110,8 @@ export const PomodoroMiniSettings: React.FC<PomodoroMiniSettingsProps> = ({
                 type="button"
                 title={f.title}
                 aria-label={f.title}
+                aria-haspopup="dialog"
+                aria-expanded={open}
                 onClick={() => openField(f.key)}
                 className="inline-flex items-center gap-1.5 transition-colors hover:text-white/90"
               >
@@ -130,7 +134,7 @@ export const PomodoroMiniSettings: React.FC<PomodoroMiniSettingsProps> = ({
           {FIELDS.map((f) => {
             const Icon = f.icon;
             const value = settings[f.setting];
-            // Mirror Settings: coarse 5-min steps for focus once past 20, fine below.
+            // Mirror Settings: focus steps by 5 from 20 up, by 1 below.
             const step = f.key === 'work' && value < 20 ? 1 : f.step;
             return (
               <div

@@ -2,7 +2,7 @@ import type { Settings } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
 import { Check } from 'lucide-react';
 import type React from 'react';
-import { matchesPreset, TIMER_PRESETS } from './timer-presets';
+import { applyPreset, matchesPreset, TIMER_PRESETS } from './timer-presets';
 
 /** Human-readable "work · short · long" summary for a rhythm. */
 function rhythm(work: number, short: number, long: number): string {
@@ -48,14 +48,7 @@ export const PresetGrid: React.FC<PresetGridProps> = ({
           <button
             key={p.id}
             type="button"
-            onClick={() =>
-              onApply({
-                pomodoroWorkDuration: p.work,
-                pomodoroBreakDuration: p.short,
-                pomodoroLongBreakDuration: p.long,
-                pomodoroLongBreakInterval: p.after,
-              })
-            }
+            onClick={() => onApply(applyPreset(p))}
             className={cn(
               cardBase,
               active

@@ -43,7 +43,21 @@ describe('PomodoroMiniSettings', () => {
     render(<PomodoroMiniSettings settings={settings} onApply={onApply} />);
     fireEvent.click(screen.getByRole('button', { name: 'Focus duration' }));
     fireEvent.click(screen.getByRole('button', { name: 'Increase Focus duration' }));
-    // 25 → 30 (coarse 5-min step once focus is past 20)
+    // 25 → 30 (coarse 5-min step from 20 up)
     expect(onApply).toHaveBeenCalledWith({ pomodoroWorkDuration: 30 });
+  });
+
+  it('steps focus by 1 below 20 minutes', () => {
+    const onApply = vi.fn();
+    render(
+      <PomodoroMiniSettings
+        settings={{ ...settings, pomodoroWorkDuration: 15 }}
+        onApply={onApply}
+      />
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Focus duration' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Increase Focus duration' }));
+    // 15 → 16 (fine 1-min step below 20)
+    expect(onApply).toHaveBeenCalledWith({ pomodoroWorkDuration: 16 });
   });
 });

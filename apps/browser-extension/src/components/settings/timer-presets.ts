@@ -10,7 +10,7 @@ export interface TimerPreset {
 }
 
 /** Session rhythm recipes (work · short break · long break, in minutes). */
-export const TIMER_PRESETS: TimerPreset[] = [
+export const TIMER_PRESETS: readonly TimerPreset[] = [
   { id: 'classic', name: 'Classic', work: 25, short: 5, long: 15, after: 4 },
   { id: 'deep', name: 'Deep work', work: 50, short: 10, long: 25, after: 2 },
   { id: 'sprint', name: 'Quick sprint', work: 15, short: 3, long: 12, after: 4 },
@@ -23,4 +23,15 @@ export function matchesPreset(s: Settings, p: TimerPreset): boolean {
     s.pomodoroLongBreakDuration === p.long &&
     s.pomodoroLongBreakInterval === p.after
   );
+}
+
+/** The Settings patch that applies a preset's rhythm. Kept beside matchesPreset
+ * so the read (match) and write (apply) mappings can't drift apart. */
+export function applyPreset(p: TimerPreset): Partial<Settings> {
+  return {
+    pomodoroWorkDuration: p.work,
+    pomodoroBreakDuration: p.short,
+    pomodoroLongBreakDuration: p.long,
+    pomodoroLongBreakInterval: p.after,
+  };
 }

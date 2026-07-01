@@ -109,14 +109,15 @@ export const PomodoroTimer: React.FC = () => {
   const settings = useSettingsStore(useShallow((state) => state.settings));
   const updateSettings = useSettingsStore((state) => state.updateSettings);
 
-  // One path for both preset taps and per-field edits: persist, then resync the
-  // running timer (mirrors the previous inline editors' write + reloadSettings).
+  // Single write path for preset taps and per-field edits: persist the patch
+  // (updateSettings merges it), then reloadSettings so the running timer picks
+  // up the new durations.
   const handleApplyTimerSettings = useCallback(
     async (patch: Partial<Settings>) => {
-      await updateSettings({ ...settings, ...patch });
+      await updateSettings(patch);
       await reloadSettings();
     },
-    [settings, updateSettings, reloadSettings]
+    [updateSettings, reloadSettings]
   );
 
   // Sounds state - use useShallow for multiple values

@@ -1,6 +1,6 @@
 import { DEFAULT_SETTINGS } from '@cuewise/shared';
 import { describe, expect, it } from 'vitest';
-import { matchesPreset, TIMER_PRESETS } from './timer-presets';
+import { applyPreset, matchesPreset, TIMER_PRESETS } from './timer-presets';
 
 describe('timer-presets', () => {
   it('includes a Deep work rhythm of 50/10/25 after 2', () => {
@@ -36,5 +36,36 @@ describe('timer-presets', () => {
       pomodoroLongBreakInterval: 2,
     };
     expect(matchesPreset(s, deep)).toBe(false);
+  });
+
+  it('matchesPreset is false when any single field differs', () => {
+    const deep = TIMER_PRESETS.find((p) => p.id === 'deep');
+    if (!deep) {
+      throw new Error('deep preset missing');
+    }
+    const match = {
+      ...DEFAULT_SETTINGS,
+      pomodoroWorkDuration: 50,
+      pomodoroBreakDuration: 10,
+      pomodoroLongBreakDuration: 25,
+      pomodoroLongBreakInterval: 2,
+    };
+    expect(matchesPreset({ ...match, pomodoroWorkDuration: 45 }, deep)).toBe(false);
+    expect(matchesPreset({ ...match, pomodoroBreakDuration: 5 }, deep)).toBe(false);
+    expect(matchesPreset({ ...match, pomodoroLongBreakDuration: 20 }, deep)).toBe(false);
+    expect(matchesPreset({ ...match, pomodoroLongBreakInterval: 4 }, deep)).toBe(false);
+  });
+
+  it('applyPreset maps a rhythm to the four Settings keys', () => {
+    const deep = TIMER_PRESETS.find((p) => p.id === 'deep');
+    if (!deep) {
+      throw new Error('deep preset missing');
+    }
+    expect(applyPreset(deep)).toEqual({
+      pomodoroWorkDuration: 50,
+      pomodoroBreakDuration: 10,
+      pomodoroLongBreakDuration: 25,
+      pomodoroLongBreakInterval: 2,
+    });
   });
 });
