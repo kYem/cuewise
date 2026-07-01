@@ -1,5 +1,6 @@
 import {
   type ColorTheme,
+  clampPomodoroDurations,
   configureLogger,
   DEFAULT_SETTINGS,
   type LayoutDensity,
@@ -19,8 +20,6 @@ interface SettingsStore {
 
   // Actions
   initialize: () => Promise<void>;
-  updatePomodoroWorkDuration: (duration: number) => Promise<void>;
-  updatePomodoroBreakDuration: (duration: number) => Promise<void>;
   updateTheme: (theme: Settings['theme']) => Promise<void>;
   updateNotifications: (enabled: boolean) => Promise<void>;
   updateQuoteChangeInterval: (interval: Settings['quoteChangeInterval']) => Promise<void>;
@@ -59,36 +58,6 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       logger.error('Error initializing settings store', error);
       const errorMessage = 'Failed to load settings. Please refresh the page.';
       set({ error: errorMessage, isLoading: false });
-      useToastStore.getState().error(errorMessage);
-    }
-  },
-
-  updatePomodoroWorkDuration: async (duration: number) => {
-    const { settings } = get();
-    const updatedSettings = { ...settings, pomodoroWorkDuration: duration };
-
-    try {
-      await setSettings(updatedSettings);
-      set({ settings: updatedSettings });
-    } catch (error) {
-      logger.error('Error updating work duration', error);
-      const errorMessage = 'Failed to update work duration. Please try again.';
-      set({ error: errorMessage });
-      useToastStore.getState().error(errorMessage);
-    }
-  },
-
-  updatePomodoroBreakDuration: async (duration: number) => {
-    const { settings } = get();
-    const updatedSettings = { ...settings, pomodoroBreakDuration: duration };
-
-    try {
-      await setSettings(updatedSettings);
-      set({ settings: updatedSettings });
-    } catch (error) {
-      logger.error('Error updating break duration', error);
-      const errorMessage = 'Failed to update break duration. Please try again.';
-      set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
     }
   },
@@ -187,9 +156,13 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
 
   updateSettings: async (partialSettings: Partial<Settings>) => {
     const { settings } = get();
-    const updatedSettings = { ...settings, ...partialSettings };
 
     try {
+      // Clamp pomodoro durations here — the settings write path the UI uses — so
+      // presets/steppers (and a future settings import) can't persist an out-of-range
+      // value. Inside the try so a future throwing clamp is caught here.
+      const updatedSettings = { ...settings, ...clampPomodoroDurations(partialSettings) };
+
       // Check if syncEnabled changed
       const syncChanged =
         partialSettings.syncEnabled !== undefined &&

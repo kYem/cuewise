@@ -94,6 +94,8 @@ interface StepperProps {
   unit?: string;
   label: string;
   onChange: (value: number) => void;
+  /** Tighter footprint for compact surfaces like the timer popover. */
+  compact?: boolean;
 }
 
 /** Compact -/+ numeric stepper used for timer durations. */
@@ -105,10 +107,14 @@ export const Stepper: React.FC<StepperProps> = ({
   unit,
   label,
   onChange,
+  compact = false,
 }) => {
   const clamp = (next: number) => Math.min(max, Math.max(min, next));
-  const btn =
-    'flex h-7 w-7 items-center justify-center rounded-full text-primary transition-colors hover:bg-border disabled:opacity-40 disabled:hover:bg-transparent';
+  const btn = cn(
+    'flex items-center justify-center rounded-full text-primary transition-colors hover:bg-border disabled:opacity-40 disabled:hover:bg-transparent',
+    compact ? 'h-6 w-6' : 'h-7 w-7'
+  );
+  const icon = compact ? 'h-3 w-3' : 'h-3.5 w-3.5';
 
   return (
     <div className="inline-flex items-center rounded-full border border-border bg-surface-variant p-[3px]">
@@ -119,9 +125,14 @@ export const Stepper: React.FC<StepperProps> = ({
         disabled={value <= min}
         onClick={() => onChange(clamp(value - step))}
       >
-        <Minus className="h-3.5 w-3.5" />
+        <Minus className={icon} />
       </button>
-      <span className="min-w-[88px] px-1 text-center text-sm font-semibold text-primary">
+      <span
+        className={cn(
+          'px-1 text-center font-semibold text-primary',
+          compact ? 'min-w-[44px] text-xs' : 'min-w-[88px] text-sm'
+        )}
+      >
         {value}
         {unit && <span className="ml-1 text-xs font-normal text-tertiary">{unit}</span>}
       </span>
@@ -132,7 +143,7 @@ export const Stepper: React.FC<StepperProps> = ({
         disabled={value >= max}
         onClick={() => onChange(clamp(value + step))}
       >
-        <Plus className="h-3.5 w-3.5" />
+        <Plus className={icon} />
       </button>
     </div>
   );
