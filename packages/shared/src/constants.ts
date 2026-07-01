@@ -122,14 +122,24 @@ export const CONCEPT_NUDGE_AFTER_QUOTE_VIEWS = 100;
 export const CONCEPT_NUDGE_MAX_SHOWS = 2;
 export const CONCEPT_NUDGE_GAP_DAYS = 3;
 
-/** Valid persisted ranges for the pomodoro rhythm settings. Enforced at the
- * write boundary by clampPomodoroDurations() and mirrored by the UI steppers. */
+/** The four number-valued pomodoro rhythm keys — the bounded, clampable durations. */
+export type NumericPomodoroKey = Extract<
+  keyof Settings,
+  | 'pomodoroWorkDuration'
+  | 'pomodoroBreakDuration'
+  | 'pomodoroLongBreakDuration'
+  | 'pomodoroLongBreakInterval'
+>;
+
+/** Valid persisted ranges for the pomodoro rhythm settings. `satisfies` proves the
+ * keys are real Settings keys; clampPomodoroDurations() enforces them at the write
+ * boundary and the UI steppers mirror them. */
 export const POMODORO_DURATION_BOUNDS = {
   pomodoroWorkDuration: { min: 1, max: 60 },
   pomodoroBreakDuration: { min: 1, max: 30 },
   pomodoroLongBreakDuration: { min: 10, max: 60 },
   pomodoroLongBreakInterval: { min: 2, max: 10 },
-} as const;
+} as const satisfies Record<NumericPomodoroKey, { min: number; max: number }>;
 
 // Category colors (for UI)
 export const CATEGORY_COLORS: Record<QuoteCategory, string> = {

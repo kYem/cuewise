@@ -90,4 +90,18 @@ describe('timer-presets', () => {
     expect(pomodoroWorkStep(20)).toBe(5);
     expect(pomodoroWorkStep(25)).toBe(5);
   });
+
+  it('every bounds entry has min <= max', () => {
+    for (const { min, max } of Object.values(POMODORO_DURATION_BOUNDS)) {
+      expect(min).toBeLessThanOrEqual(max);
+    }
+  });
+
+  it('every preset round-trips: applying it then matching it returns true', () => {
+    // Guards the short-name (work/short/long/after) → Settings-key mapping: applyPreset
+    // (write) and matchesPreset (read) must agree, or a preset applies but shows Custom.
+    for (const p of TIMER_PRESETS) {
+      expect(matchesPreset({ ...DEFAULT_SETTINGS, ...applyPreset(p) }, p)).toBe(true);
+    }
+  });
 });

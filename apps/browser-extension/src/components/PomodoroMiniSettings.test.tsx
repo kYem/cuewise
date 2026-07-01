@@ -75,4 +75,28 @@ describe('PomodoroMiniSettings', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Increase Long break interval' }));
     expect(onApply).toHaveBeenCalledWith({ pomodoroLongBreakInterval: 5 });
   });
+
+  it('marks only the tapped field as expanded', () => {
+    render(<PomodoroMiniSettings settings={settings} onApply={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Break length' }));
+    expect(screen.getByRole('button', { name: 'Break length' })).toHaveAttribute(
+      'aria-expanded',
+      'true'
+    );
+    expect(screen.getByRole('button', { name: 'Focus duration' })).toHaveAttribute(
+      'aria-expanded',
+      'false'
+    );
+  });
+
+  it('disables a stepper at its bound', () => {
+    render(
+      <PomodoroMiniSettings
+        settings={{ ...settings, pomodoroWorkDuration: 60 }}
+        onApply={vi.fn()}
+      />
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Focus duration' }));
+    expect(screen.getByRole('button', { name: 'Increase Focus duration' })).toBeDisabled();
+  });
 });

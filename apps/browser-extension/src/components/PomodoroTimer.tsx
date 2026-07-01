@@ -110,8 +110,9 @@ export const PomodoroTimer: React.FC = () => {
   const updateSettings = useSettingsStore((state) => state.updateSettings);
 
   // Single write path for preset taps and per-field edits: persist the patch
-  // (updateSettings merges it), then reloadSettings so the running timer picks
-  // up the new durations.
+  // (updateSettings merges it), then reloadSettings so the running timer picks up the
+  // new durations. Called fire-and-forget from the popover — safe only because both
+  // callees catch + toast internally and never reject.
   const handleApplyTimerSettings = useCallback(
     async (patch: Partial<Settings>) => {
       await updateSettings(patch);

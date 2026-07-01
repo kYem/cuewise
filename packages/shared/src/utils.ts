@@ -23,6 +23,7 @@ import {
   REMINDER_INTERVAL_MIN,
   REMINDER_SNOOZE_MINUTES,
 } from './constants';
+import { logger } from './logger';
 import type {
   AdvancedAnalytics,
   DailyDataPoint,
@@ -1682,16 +1683,18 @@ export function clampIntervalMinutes(value: number): number {
 
 /**
  * Clamp any pomodoro rhythm fields present in a settings patch to their valid
- * bounds (POMODORO_DURATION_BOUNDS), so no caller — a preset, an import, or a
- * direct write — can persist an out-of-range duration. The UI steppers clamp on
- * click; this is the write-boundary backstop.
+ * bounds (POMODORO_DURATION_BOUNDS). Applied by updateSettings, so anything writing
+ * durations through the settings store — presets, steppers, a future settings
+ * import — can't persist an out-of-range value. The UI steppers also clamp on click;
+ * this is the store-side backstop.
  */
 export function clampPomodoroDurations(patch: Partial<Settings>): Partial<Settings> {
   const clamp = (value: number, min: number, max: number): number => {
     const rounded = Math.round(value);
-    // NaN passes `typeof === 'number'` and propagates through Math.min/max, so a
-    // corrupt payload would otherwise persist NaN; fall back to the lower bound.
     if (Number.isNaN(rounded)) {
+      // NaN isn't out-of-range, it's a corruption signal (bad import / storage read);
+      // heal it to the lower bound but leave a breadcrumb rather than silently reset.
+      logger.warn('clampPomodoroDurations: coercing a NaN duration to its minimum', { min });
       return min;
     }
     return Math.min(max, Math.max(min, rounded));

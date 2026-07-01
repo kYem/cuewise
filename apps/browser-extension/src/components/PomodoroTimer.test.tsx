@@ -204,5 +204,9 @@ describe('PomodoroTimer - mini-settings wiring', () => {
     await waitFor(() => {
       expect(reloadSettings).toHaveBeenCalled();
     });
+    // reloadSettings must run after updateSettings — else the timer resyncs stale settings
+    expect(updateSettings.mock.invocationCallOrder[0]).toBeLessThan(
+      reloadSettings.mock.invocationCallOrder[0]
+    );
   });
 });

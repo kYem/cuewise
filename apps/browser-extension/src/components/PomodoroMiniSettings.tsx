@@ -1,4 +1,4 @@
-import { POMODORO_DURATION_BOUNDS, type Settings } from '@cuewise/shared';
+import { type NumericPomodoroKey, POMODORO_DURATION_BOUNDS, type Settings } from '@cuewise/shared';
 import { cn, Popover, PopoverAnchor, PopoverContent } from '@cuewise/ui';
 import { Bed, Coffee, type LucideIcon, Repeat, Timer } from 'lucide-react';
 import type React from 'react';
@@ -14,9 +14,8 @@ interface RhythmField {
   title: string;
   label: string;
   icon: LucideIcon;
-  // The Settings key this field edits — also its bounds key. Number-valued; the
-  // `settings[setting]` → Stepper `value` read below is what enforces that.
-  setting: keyof typeof POMODORO_DURATION_BOUNDS;
+  /** The Settings key this field edits — also its POMODORO_DURATION_BOUNDS key. */
+  setting: NumericPomodoroKey;
   /** Static stepper increment; omitted for 'work', whose step is computed by pomodoroWorkStep(). */
   step?: number;
   unit: string;

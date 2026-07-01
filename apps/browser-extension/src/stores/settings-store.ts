@@ -156,11 +156,13 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
 
   updateSettings: async (partialSettings: Partial<Settings>) => {
     const { settings } = get();
-    // Clamp pomodoro durations at the write boundary so no caller (preset,
-    // import, direct write) can persist an out-of-range value.
-    const updatedSettings = { ...settings, ...clampPomodoroDurations(partialSettings) };
 
     try {
+      // Clamp pomodoro durations here — the settings write path the UI uses — so
+      // presets/steppers (and a future settings import) can't persist an out-of-range
+      // value. Inside the try so a future throwing clamp is caught here.
+      const updatedSettings = { ...settings, ...clampPomodoroDurations(partialSettings) };
+
       // Check if syncEnabled changed
       const syncChanged =
         partialSettings.syncEnabled !== undefined &&
