@@ -1687,8 +1687,15 @@ export function clampIntervalMinutes(value: number): number {
  * click; this is the write-boundary backstop.
  */
 export function clampPomodoroDurations(patch: Partial<Settings>): Partial<Settings> {
-  const clamp = (value: number, min: number, max: number): number =>
-    Math.min(max, Math.max(min, Math.round(value)));
+  const clamp = (value: number, min: number, max: number): number => {
+    const rounded = Math.round(value);
+    // NaN passes `typeof === 'number'` and propagates through Math.min/max, so a
+    // corrupt payload would otherwise persist NaN; fall back to the lower bound.
+    if (Number.isNaN(rounded)) {
+      return min;
+    }
+    return Math.min(max, Math.max(min, rounded));
+  };
   const out: Partial<Settings> = { ...patch };
   const b = POMODORO_DURATION_BOUNDS;
   if (typeof out.pomodoroWorkDuration === 'number') {

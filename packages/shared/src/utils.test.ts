@@ -30,6 +30,12 @@ describe('clampPomodoroDurations', () => {
   it('passes non-pomodoro keys through untouched', () => {
     expect(clampPomodoroDurations({ colorTheme: 'forest' })).toEqual({ colorTheme: 'forest' });
   });
+
+  it('coerces NaN to the lower bound instead of persisting it', () => {
+    expect(clampPomodoroDurations({ pomodoroWorkDuration: Number.NaN })).toEqual({
+      pomodoroWorkDuration: 1,
+    });
+  });
 });
 
 describe('uniqueSorted', () => {

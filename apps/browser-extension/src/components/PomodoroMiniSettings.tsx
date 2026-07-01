@@ -2,9 +2,10 @@ import { POMODORO_DURATION_BOUNDS, type Settings } from '@cuewise/shared';
 import { cn, Popover, PopoverAnchor, PopoverContent } from '@cuewise/ui';
 import { Bed, Coffee, type LucideIcon, Repeat, Timer } from 'lucide-react';
 import type React from 'react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { PresetGrid } from './settings/PresetGrid';
 import { Stepper } from './settings/SettingControls';
+import { pomodoroWorkStep } from './settings/timer-presets';
 
 type FieldKey = 'work' | 'break' | 'long' | 'interval';
 
@@ -13,14 +14,9 @@ interface RhythmField {
   title: string;
   label: string;
   icon: LucideIcon;
-  // One of the four number-valued rhythm keys; its number-ness is enforced by the
-  // `settings[setting]` → Stepper `value` read below, not by the onApply write. Its
-  // [min,max] bounds come from POMODORO_DURATION_BOUNDS (single source with the store).
-  setting:
-    | 'pomodoroWorkDuration'
-    | 'pomodoroBreakDuration'
-    | 'pomodoroLongBreakDuration'
-    | 'pomodoroLongBreakInterval';
+  // The Settings key this field edits — also its bounds key. Number-valued; the
+  // `settings[setting]` → Stepper `value` read below is what enforces that.
+  setting: keyof typeof POMODORO_DURATION_BOUNDS;
   step: number;
   unit: string;
   /** Compact glance suffix on the trigger row ("25m" vs "4"). */
@@ -82,6 +78,7 @@ export const PomodoroMiniSettings: React.FC<PomodoroMiniSettingsProps> = ({
 }) => {
   const [open, setOpen] = useState(false);
   const [focused, setFocused] = useState<FieldKey | null>(null);
+  const anchorRef = useRef<HTMLDivElement>(null);
 
   const openField = (key: FieldKey) => {
     setFocused(key);
@@ -91,7 +88,10 @@ export const PomodoroMiniSettings: React.FC<PomodoroMiniSettingsProps> = ({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverAnchor asChild>
-        <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-xs text-white/60">
+        <div
+          ref={anchorRef}
+          className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-xs text-white/60"
+        >
           {FIELDS.map((f) => {
             const Icon = f.icon;
             const value = settings[f.setting];
@@ -102,7 +102,7 @@ export const PomodoroMiniSettings: React.FC<PomodoroMiniSettingsProps> = ({
                 title={f.title}
                 aria-label={f.title}
                 aria-haspopup="dialog"
-                aria-expanded={open}
+                aria-expanded={open && focused === f.key}
                 onClick={() => openField(f.key)}
                 className="inline-flex items-center gap-1.5 transition-colors hover:text-white/90"
               >
@@ -119,14 +119,21 @@ export const PomodoroMiniSettings: React.FC<PomodoroMiniSettingsProps> = ({
       <PopoverContent
         align="center"
         className="w-[264px] space-y-2.5 border-border bg-surface-elevated p-2.5 shadow-2xl backdrop-blur-xl"
+        onPointerDownOutside={(event) => {
+          // Tapping another value button (in the anchor row) shouldn't dismiss-then-
+          // reopen the popover — keep it open and just switch the focused field.
+          const target = event.detail.originalEvent.target;
+          if (target instanceof Node && anchorRef.current?.contains(target)) {
+            event.preventDefault();
+          }
+        }}
       >
         <PresetGrid s={settings} onApply={onApply} className="grid grid-cols-2 gap-1.5" compact />
         <div className="space-y-0.5">
           {FIELDS.map((f) => {
             const Icon = f.icon;
             const value = settings[f.setting];
-            // Mirror Settings: focus steps by 5 from 20 up, by 1 below.
-            const step = f.key === 'work' && value < 20 ? 1 : f.step;
+            const step = f.key === 'work' ? pomodoroWorkStep(value) : f.step;
             return (
               <div
                 key={f.key}

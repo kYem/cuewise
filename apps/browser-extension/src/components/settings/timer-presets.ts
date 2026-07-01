@@ -35,3 +35,9 @@ export function applyPreset(p: TimerPreset): Partial<Settings> {
     pomodoroLongBreakInterval: p.after,
   };
 }
+
+/** Focus-duration step: coarse (5) from 20 minutes up, fine (1) below. Shared by
+ * the Settings page and the timer popover so they can't step focus differently. */
+export function pomodoroWorkStep(workDuration: number): number {
+  return workDuration >= 20 ? 5 : 1;
+}

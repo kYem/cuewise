@@ -45,6 +45,7 @@ import { quoteIntervalToSeconds } from './settings-interval';
 import { settingsMatch } from './settings-match';
 import type { SettingsSectionProps } from './settings-types';
 import { ThumbPicker } from './ThumbPicker';
+import { pomodoroWorkStep } from './timer-presets';
 
 const SOUND_OPTIONS = Object.entries(NOTIFICATION_SOUNDS).map(([value, label]) => ({
   value,
@@ -157,7 +158,7 @@ function TimerSection({ s, set, filter }: SettingsSectionProps) {
           value={s.pomodoroWorkDuration}
           min={POMODORO_DURATION_BOUNDS.pomodoroWorkDuration.min}
           max={POMODORO_DURATION_BOUNDS.pomodoroWorkDuration.max}
-          step={s.pomodoroWorkDuration >= 20 ? 5 : 1}
+          step={pomodoroWorkStep(s.pomodoroWorkDuration)}
           unit="min"
           onChange={(v) => set({ pomodoroWorkDuration: v })}
         />
