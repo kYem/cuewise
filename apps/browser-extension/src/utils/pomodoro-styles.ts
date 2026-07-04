@@ -3,6 +3,17 @@ import type { ComponentType } from 'react';
 
 export type SessionType = 'work' | 'break' | 'longBreak';
 
+const SESSION_LABELS: Record<SessionType, string> = {
+  work: 'Work',
+  break: 'Break',
+  longBreak: 'Long Break',
+};
+
+/** Compact session label ('Work'/'Break'/'Long Break'), distinct from getSessionStyles().label. */
+export function getSessionLabel(sessionType: SessionType): string {
+  return SESSION_LABELS[sessionType];
+}
+
 export interface SessionStyles {
   color: string;
   bgColor: string;
