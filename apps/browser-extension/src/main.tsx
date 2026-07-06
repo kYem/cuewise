@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import { PomodoroPipProvider } from './components/PomodoroPipProvider';
 import './index.css';
 import { initializeLogger } from './lib/logger-config';
 
@@ -14,6 +15,8 @@ if (!rootElement) {
 
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
-    <App />
+    <PomodoroPipProvider>
+      <App />
+    </PomodoroPipProvider>
   </React.StrictMode>
 );

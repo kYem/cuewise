@@ -20,8 +20,9 @@ import { useGoalStore } from '../stores/goal-store';
 import { usePomodoroStorageSync, usePomodoroStore } from '../stores/pomodoro-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { useSoundsStore } from '../stores/sounds-store';
-import { getSessionStyles } from '../utils/pomodoro-styles';
+import { getSessionLabel, getSessionStyles } from '../utils/pomodoro-styles';
 import { PomodoroMiniSettings } from './PomodoroMiniSettings';
+import { PomodoroPipButton } from './PomodoroPipButton';
 
 // Per-density card + ring sizing. Geometry invariant per entry: center = viewBox / 2, radius < center.
 const TIMER_SIZES: Record<
@@ -403,9 +404,7 @@ export const PomodoroTimer: React.FC = () => {
               <div
                 className={`mt-2 ${timerSize.labelSize} font-medium uppercase tracking-wider ${color}`}
               >
-                {sessionType === 'work' && 'Work'}
-                {sessionType === 'break' && 'Break'}
-                {sessionType === 'longBreak' && 'Long Break'}
+                {getSessionLabel(sessionType)}
               </div>
             </div>
           </div>
@@ -491,6 +490,14 @@ export const PomodoroTimer: React.FC = () => {
           >
             <SkipForward className="w-4 h-4" />
           </button>
+
+          {/* Pop-out Button — floating always-on-top timer (Document PiP) */}
+          {status !== 'idle' && (
+            <PomodoroPipButton
+              className="p-2.5 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-colors shadow-md hover:shadow-lg"
+              iconClassName="w-4 h-4"
+            />
+          )}
 
           {/* Focus Mode Button */}
           {settings.focusModeEnabled && (
