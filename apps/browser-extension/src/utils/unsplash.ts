@@ -16,7 +16,6 @@ const CURATED_IMAGE_IDS: Record<FocusImageCategory, string[]> = {
     'photo-1433086966358-54859d0ed716', // Waterfall
     'photo-1501854140801-50d01698950b', // Aerial forest
     'photo-1441974231531-c6227db76b6e', // Sunlit forest
-    'photo-1518173946687-a4c036bc6c9f', // Aurora borealis
     'photo-1475924156734-496f6cac6ec1', // Mountain reflection
     'photo-1465056836041-7f43ac27dcb5', // Valley vista
   ],
