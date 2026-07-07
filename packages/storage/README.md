@@ -1,60 +1,41 @@
 # @cuewise/storage
 
-Platform-agnostic storage package with adapters for multiple platforms.
+Storage for Cuewise, built on the platform **KeyValueStore** seam. The
+`ChromeKeyValueStore` adapter self-registers as the default backend on import, so
+the browser extension needs no setup; a future Tauri/RN app swaps in its own
+adapter via `configurePlatform` from `@cuewise/shared`.
 
-## Adapters
+## Typed helpers (use these)
 
-### Chrome Storage Adapter (Browser Extensions)
-```typescript
-import { ChromeStorageAdapter, StorageManager } from '@cuewise/storage';
-
-const storage = new StorageManager(new ChromeStorageAdapter('local'));
-```
-
-### Local Storage Adapter (Web Apps)
-```typescript
-import { LocalStorageAdapter, StorageManager } from '@cuewise/storage';
-
-const storage = new StorageManager(new LocalStorageAdapter());
-```
-
-### AsyncStorage Adapter (React Native)
-```typescript
-import { AsyncStorageAdapter, StorageManager } from '@cuewise/storage';
-
-const storage = new StorageManager(new AsyncStorageAdapter());
-```
-
-## Usage
-
-All adapters implement the same interface:
+Feature code uses the typed helpers, not the store directly:
 
 ```typescript
-// Get data
-const quotes = await storage.get<Quote[]>('quotes');
+import { getReminders, setReminders } from '@cuewise/storage';
 
-// Set data
-await storage.set('quotes', quotesArray);
-
-// Remove data
-await storage.remove('quotes');
-
-// Clear all data
-await storage.clear();
-
-// Listen to changes (if supported by adapter)
-storage.onChange((changes) => {
-  console.log('Storage changed:', changes);
-});
+const reminders = await getReminders();
+const result = await setReminders(updated); // StorageResult: { success, error? }
 ```
 
-## Typed Helpers
+## The KeyValueStore seam
 
-For convenience, the package also exports typed helpers that work with any adapter:
+The port lives in `@cuewise/shared` (area-aware, returns a typed `StorageResult`):
 
 ```typescript
-import { getQuotes, setQuotes, getGoals, setGoals } from '@cuewise/storage';
-
-// These still work for backward compatibility but use the Chrome adapter by default
-const quotes = await getQuotes();
+interface KeyValueStore {
+  get<T>(key: string, area: StorageArea): Promise<T | null>;
+  set<T>(key: string, value: T, area: StorageArea): Promise<StorageResult>;
+  remove(key: string, area: StorageArea): Promise<boolean>;
+  getUsage(area: StorageArea): Promise<StorageUsage>;
+}
 ```
+
+- `ChromeKeyValueStore` (this package) wraps `chrome.storage.local`/`sync` with a
+  `localStorage` dev fallback, and self-registers as the default on import.
+- Override on another platform:
+  `configurePlatform({ storage: new TauriKeyValueStore() })` after importing
+  `@cuewise/storage`.
+
+## Low-level access
+
+`getFromStorage` / `setInStorage` / `removeFromStorage` are thin delegators over
+`getStorage()`, for the rare cases the typed helpers don't cover.

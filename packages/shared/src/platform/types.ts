@@ -1,6 +1,8 @@
 /**
- * Platform seams for scheduling wake-ups and delivering OS notifications.
- * Interfaces only — implementations live per-app (Chrome extension, Tauri).
+ * Platform seams for scheduling wake-ups, delivering OS notifications, and
+ * persisting data. Interfaces only — implementations live at the app edge
+ * (`Chrome*` in the extension) or in a shared package (`ChromeKeyValueStore` in
+ * @cuewise/storage); a future Tauri/RN app supplies its own.
  */
 
 /** Arm/cancel a one-shot wake at a future time, keyed by a caller-owned id. */

@@ -57,7 +57,8 @@ interface Scheduler { scheduleAt(id, when): Promise<void>; cancel(id): Promise<v
 interface Notifier { notify(opts): Promise<void>; clear(id): Promise<void>; onClick?/onAction?(...) }
 interface KeyValueStore { get(key, area); set(key, value, area); remove(key, area); getUsage(area); }
 
-// One container, set once per entry point (page, service worker, future Tauri/RN app):
+// One container, configured at startup — merges, so storage self-registers on import
+// and the app adds scheduler/notifier (page, service worker, future Tauri/RN app):
 configurePlatform({ scheduler, notifier, storage });
 // Portable code resolves via getScheduler() / getNotifier() / getStorage()
 ```

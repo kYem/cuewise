@@ -10,8 +10,9 @@ function iconUrl(): string {
 }
 
 /**
- * Notifier backed by chrome.notifications, falling back to the web Notification
- * API in contexts where chrome.notifications is unavailable (e.g. dev/web).
+ * Notifier backed by chrome.notifications. `notify`/`clear` fall back to (or
+ * no-op against) the web Notification API where chrome.notifications is absent
+ * (dev/web); `onClick`/`onAction` assume a service-worker context.
  */
 export class ChromeNotifier implements Notifier {
   async notify(opts: NotifyOptions): Promise<void> {

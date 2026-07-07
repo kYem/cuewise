@@ -44,6 +44,34 @@ describe('ChromeKeyValueStore with chrome.storage available', () => {
     expect(result.error?.area).toBe('sync');
   });
 
+  it('maps a sync per-item quota rejection to per_item_quota_exceeded', async () => {
+    const sync = global.chrome.storage.sync as unknown as MockChromeStorage;
+    sync.set.mockRejectedValueOnce(new Error('kQuotaBytesPerItem quota exceeded'));
+
+    const result = await store.set('big', 'data', 'sync');
+
+    expect(result.error?.type).toBe('per_item_quota_exceeded');
+  });
+
+  it('maps a local quota rejection to quota_exceeded for the local area', async () => {
+    const local = global.chrome.storage.local as unknown as MockChromeStorage;
+    local.set.mockRejectedValueOnce(new Error('QUOTA_BYTES quota exceeded'));
+
+    const result = await store.set('big', 'data', 'local');
+
+    expect(result.error?.type).toBe('quota_exceeded');
+    expect(result.error?.area).toBe('local');
+  });
+
+  it('maps a non-quota rejection to an unknown StorageError', async () => {
+    const local = global.chrome.storage.local as unknown as MockChromeStorage;
+    local.set.mockRejectedValueOnce(new Error('serialization failed'));
+
+    const result = await store.set('k', 'v', 'local');
+
+    expect(result.error?.type).toBe('unknown');
+  });
+
   it('getUsage returns chrome bytes in use and the local quota', async () => {
     (global.chrome.storage.local as unknown as { getBytesInUse: unknown }).getBytesInUse = (
       _keys: unknown,
@@ -53,6 +81,18 @@ describe('ChromeKeyValueStore with chrome.storage available', () => {
     await expect(store.getUsage('local')).resolves.toEqual({
       bytesInUse: 2048,
       quota: 10485760,
+    });
+  });
+
+  it('getUsage returns the 100KB sync quota for the sync area', async () => {
+    (global.chrome.storage.sync as unknown as { getBytesInUse: unknown }).getBytesInUse = (
+      _keys: unknown,
+      cb: (bytes: number) => void
+    ) => cb(512);
+
+    await expect(store.getUsage('sync')).resolves.toEqual({
+      bytesInUse: 512,
+      quota: 102400,
     });
   });
 });

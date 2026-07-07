@@ -504,7 +504,7 @@ export const usePomodoroStore = create<PomodoroStore>()(
           // Play completion sound
           playCompletionSound(completionSound as NotificationSoundType);
 
-          // Show notification via the platform notifier (native on desktop).
+          // Notify via the platform seam (a future desktop build delivers this natively).
           let message = 'Session complete!';
           if (sessionType === 'work') {
             const newCount = consecutiveWorkSessions + 1;
@@ -517,11 +517,13 @@ export const usePomodoroStore = create<PomodoroStore>()(
           } else {
             message = 'Break complete! Ready to focus?';
           }
-          void getNotifier().notify({
-            id: 'pomodoro-complete',
-            title: 'Pomodoro Timer',
-            body: message,
-          });
+          // Fire-and-forget: a notification failure must not fail the saved session,
+          // but is logged rather than swallowed as an unhandled rejection.
+          getNotifier()
+            .notify({ id: 'pomodoro-complete', title: 'Pomodoro Timer', body: message })
+            .catch((error) => {
+              logger.error('Failed to show pomodoro completion notification', error);
+            });
         } catch (error) {
           logger.error('Error completing pomodoro session', error);
           const errorMessage = 'Failed to save session. Please try again.';

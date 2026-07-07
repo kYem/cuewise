@@ -91,21 +91,25 @@ async function scheduleRecurringReminder(reminder: Reminder) {
 
 // Notification click → focus (or open) the extension's new-tab page.
 notifier.onClick(async (notificationId) => {
-  if (!notificationId.startsWith('reminder-')) {
-    return;
-  }
+  try {
+    if (!notificationId.startsWith('reminder-')) {
+      return;
+    }
 
-  await notifier.clear(notificationId);
+    await notifier.clear(notificationId);
 
-  const tabs = await chrome.tabs.query({ url: chrome.runtime.getURL('index.html') });
+    const tabs = await chrome.tabs.query({ url: chrome.runtime.getURL('index.html') });
 
-  if (tabs.length > 0 && tabs[0].id) {
-    // Focus existing tab
-    await chrome.tabs.update(tabs[0].id, { active: true });
-    await chrome.windows.update(tabs[0].windowId || 0, { focused: true });
-  } else {
-    // Create new tab
-    await chrome.tabs.create({ url: chrome.runtime.getURL('index.html') });
+    if (tabs.length > 0 && tabs[0].id) {
+      // Focus existing tab
+      await chrome.tabs.update(tabs[0].id, { active: true });
+      await chrome.windows.update(tabs[0].windowId || 0, { focused: true });
+    } else {
+      // Create new tab
+      await chrome.tabs.create({ url: chrome.runtime.getURL('index.html') });
+    }
+  } catch (error) {
+    logger.error('Error handling reminder notification click', error);
   }
 });
 

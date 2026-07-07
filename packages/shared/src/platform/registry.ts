@@ -1,9 +1,10 @@
 import type { KeyValueStore, Notifier, Scheduler } from './types';
 
 /**
- * Set-once-at-bootstrap container for the active platform implementations. Each
- * JS entry point (extension page, service worker, Tauri app) calls
- * `configurePlatform` at startup; portable code resolves via the getters.
+ * Bootstrap container for the active platform implementations. `configurePlatform`
+ * merges — each call overrides only the impls it supplies — so it may run more than
+ * once per entry point (e.g. @cuewise/storage self-registers its adapter on import;
+ * the app then adds scheduler/notifier). Portable code resolves via the getters.
  */
 let scheduler: Scheduler | null = null;
 let notifier: Notifier | null = null;
