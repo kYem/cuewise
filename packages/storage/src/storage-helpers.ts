@@ -9,6 +9,7 @@ import {
   DEFAULT_SETTINGS,
   type FocusImageCategory,
   type Goal,
+  getStorage,
   getTodayDateString,
   logger,
   type PlaylistProgress,
@@ -276,50 +277,13 @@ export interface StorageUsageInfo {
  */
 export async function getStorageUsage(): Promise<StorageUsageInfo> {
   try {
-    // Check if chrome.storage is available (extension context)
-    if (typeof chrome === 'undefined' || !chrome.storage) {
-      // Dev mode: estimate localStorage usage
-      let bytesInUse = 0;
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key) {
-          const value = localStorage.getItem(key);
-          bytesInUse += key.length + (value?.length || 0);
-        }
-      }
-      // localStorage quota is typically 5-10MB
-      const QUOTA_BYTES = 5242880; // 5MB in bytes
-      const percentageUsed = (bytesInUse / QUOTA_BYTES) * 100;
-
-      return {
-        bytesInUse,
-        quota: QUOTA_BYTES,
-        percentageUsed,
-        isWarning: percentageUsed > 75,
-        isCritical: percentageUsed > 90,
-      };
-    }
-
-    // Determine which storage area to check based on user settings
     const area = await getStorageArea();
-    const isSync = area === 'sync';
-
-    // Chrome storage quotas differ by storage type
-    const QUOTA_BYTES = isSync ? 102400 : 10485760; // 100KB for sync, 10MB for local
-
-    // Get bytes in use from Chrome storage
-    const storage = isSync ? chrome.storage.sync : chrome.storage.local;
-    const bytesInUse = await new Promise<number>((resolve) => {
-      storage.getBytesInUse(null, (bytes) => {
-        resolve(bytes);
-      });
-    });
-
-    const percentageUsed = (bytesInUse / QUOTA_BYTES) * 100;
+    const { bytesInUse, quota } = await getStorage().getUsage(area);
+    const percentageUsed = (bytesInUse / quota) * 100;
 
     return {
       bytesInUse,
-      quota: QUOTA_BYTES,
+      quota,
       percentageUsed,
       isWarning: percentageUsed > 75,
       isCritical: percentageUsed > 90,

@@ -1,19 +1,27 @@
-import type { Notifier, Scheduler } from './types';
+import type { KeyValueStore, Notifier, Scheduler } from './types';
 
 /**
- * Set-once-at-bootstrap holder for the active platform implementations. Each JS
- * entry point (extension page, service worker, Tauri app) calls
+ * Set-once-at-bootstrap container for the active platform implementations. Each
+ * JS entry point (extension page, service worker, Tauri app) calls
  * `configurePlatform` at startup; portable code resolves via the getters.
  */
 let scheduler: Scheduler | null = null;
 let notifier: Notifier | null = null;
+let storage: KeyValueStore | null = null;
 
-export function configurePlatform(impls: { scheduler?: Scheduler; notifier?: Notifier }): void {
+export function configurePlatform(impls: {
+  scheduler?: Scheduler;
+  notifier?: Notifier;
+  storage?: KeyValueStore;
+}): void {
   if (impls.scheduler !== undefined) {
     scheduler = impls.scheduler;
   }
   if (impls.notifier !== undefined) {
     notifier = impls.notifier;
+  }
+  if (impls.storage !== undefined) {
+    storage = impls.storage;
   }
 }
 
@@ -31,8 +39,16 @@ export function getNotifier(): Notifier {
   return notifier;
 }
 
+export function getStorage(): KeyValueStore {
+  if (storage === null) {
+    throw new Error('Storage not configured. Call configurePlatform() at startup.');
+  }
+  return storage;
+}
+
 /** Clear the active implementations. Used at re-init and in tests. */
 export function resetPlatform(): void {
   scheduler = null;
   notifier = null;
+  storage = null;
 }

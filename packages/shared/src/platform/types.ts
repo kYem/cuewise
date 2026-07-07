@@ -31,3 +31,36 @@ export interface Notifier {
   onClick?(handler: (id: string) => void | Promise<void>): () => void;
   onAction?(handler: (id: string, actionIndex: number) => void | Promise<void>): () => void;
 }
+
+// Storage port. Area is Chrome-shaped ('local' | 'sync'); non-Chrome adapters
+// map both onto one backend. Types live here (not @cuewise/storage) so the
+// unified registry can reference them without a circular dependency.
+export type StorageArea = 'local' | 'sync';
+
+export interface StorageResult {
+  success: boolean;
+  error?: StorageError;
+}
+
+export type StorageErrorType = 'quota_exceeded' | 'per_item_quota_exceeded' | 'unknown';
+
+export interface StorageError {
+  type: StorageErrorType;
+  message: string;
+  key: string;
+  area: StorageArea;
+}
+
+/** Bytes used and the platform quota for an area. Thresholds are computed by callers. */
+export interface StorageUsage {
+  bytesInUse: number;
+  quota: number;
+}
+
+/** Area-aware key/value persistence, returning a detailed StorageResult on writes. */
+export interface KeyValueStore {
+  get<T>(key: string, area: StorageArea): Promise<T | null>;
+  set<T>(key: string, value: T, area: StorageArea): Promise<StorageResult>;
+  remove(key: string, area: StorageArea): Promise<boolean>;
+  getUsage(area: StorageArea): Promise<StorageUsage>;
+}
