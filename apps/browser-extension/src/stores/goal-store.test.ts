@@ -1,4 +1,4 @@
-import { getTodayDateString } from '@cuewise/shared';
+import { getTodayDateString, storageFailure } from '@cuewise/shared';
 import * as storage from '@cuewise/storage';
 import {
   completedGoalFactory,
@@ -883,10 +883,7 @@ describe('toggleTask does not celebrate (confetti removed)', () => {
 
 describe('toggleTask persistence', () => {
   it('reports failure and does not optimistically complete when the save fails', async () => {
-    vi.mocked(storage.setGoals).mockResolvedValue({
-      success: false,
-      error: { type: 'unknown', message: 'write failed' },
-    });
+    vi.mocked(storage.setGoals).mockResolvedValue(storageFailure('write failed'));
     const task = goalFactory.build({ date: getTodayDateString(), completed: false });
     useGoalStore.setState({ goals: [task], todayTasks: [task] });
 

@@ -48,10 +48,7 @@ export class ChromeKeyValueStore implements KeyValueStore {
   }
 
   async getUsage(area: StorageArea): Promise<StorageUsage> {
-    // A failed count can resolve undefined; keep it finite so the downstream
-    // percentage never becomes NaN.
-    const bytes = await areaStore(area).getBytesInUse(null);
-    const bytesInUse = Number.isFinite(bytes) ? bytes : 0;
+    const bytesInUse = await areaStore(area).getBytesInUse(null);
     return { bytesInUse, quota: area === 'sync' ? SYNC_QUOTA_BYTES : LOCAL_QUOTA_BYTES };
   }
 }
