@@ -1,5 +1,6 @@
 import {
   generateId,
+  getScheduler,
   isUpcomingRecurringOccurrence,
   logger,
   nextReminderDueDate,
@@ -40,22 +41,16 @@ interface ReminderStore {
 // Alarm scheduling is best-effort: the reminder is already saved, so a failure
 // (e.g. Chrome's alarm rate limit) must not revert it — log, and warn distinctly.
 async function clearReminderAlarm(reminderId: string): Promise<void> {
-  if (!chrome?.alarms) {
-    return;
-  }
   try {
-    await chrome.alarms.clear(`reminder-${reminderId}`);
+    await getScheduler().cancel(`reminder-${reminderId}`);
   } catch (error) {
     logger.error(`Failed to clear alarm for reminder ${reminderId}`, error);
   }
 }
 
 async function armReminderAlarm(reminderId: string, whenMs: number): Promise<void> {
-  if (!chrome?.alarms) {
-    return;
-  }
   try {
-    await chrome.alarms.create(`reminder-${reminderId}`, { when: whenMs });
+    await getScheduler().scheduleAt(`reminder-${reminderId}`, new Date(whenMs));
   } catch (error) {
     logger.error(`Failed to schedule alarm for reminder ${reminderId}`, error);
     useToastStore.getState().warning("Reminder saved, but we couldn't schedule its alert.");

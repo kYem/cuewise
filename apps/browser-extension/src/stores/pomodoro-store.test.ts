@@ -1,3 +1,4 @@
+import { configurePlatform } from '@cuewise/shared';
 import * as storage from '@cuewise/storage';
 import { defaultSettings } from '@cuewise/test-utils/fixtures';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -39,13 +40,11 @@ vi.mock('./celebration-store', () => ({
   },
 }));
 
-// Mock Notification API
-const mockNotification = vi.fn();
-globalThis.Notification = mockNotification as unknown as typeof Notification;
-Object.defineProperty(globalThis.Notification, 'permission', {
-  writable: true,
-  value: 'granted',
-});
+// The Notifier is injected; assert against it instead of the global Notification.
+const fakeNotifier = {
+  notify: vi.fn(() => Promise.resolve()),
+  clear: vi.fn(() => Promise.resolve()),
+};
 
 // Test utilities
 const setupWorkSession = (overrides = {}) => {
@@ -123,6 +122,23 @@ describe('Pomodoro Store - Auto-Start Breaks', () => {
     vi.mocked(storage.getPomodoroSessions).mockResolvedValue([]);
     vi.mocked(storage.setPomodoroSessions).mockResolvedValue({ success: true });
     vi.mocked(storage.getSettings).mockResolvedValue(defaultSettings);
+
+    configurePlatform({ notifier: fakeNotifier });
+  });
+
+  describe('completeSession notification', () => {
+    it('notifies via the platform notifier when a work session completes', async () => {
+      setupWorkSession();
+
+      await usePomodoroStore.getState().completeSession();
+
+      expect(fakeNotifier.notify).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Pomodoro Timer',
+          body: expect.stringContaining('complete'),
+        })
+      );
+    });
   });
 
   describe('completeSession with auto-start enabled', () => {

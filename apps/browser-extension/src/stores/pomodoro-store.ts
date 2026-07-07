@@ -1,6 +1,7 @@
 import {
   createLogger,
   generateId,
+  getNotifier,
   LogLevel,
   minutesToSeconds,
   type NotificationSoundType,
@@ -503,22 +504,24 @@ export const usePomodoroStore = create<PomodoroStore>()(
           // Play completion sound
           playCompletionSound(completionSound as NotificationSoundType);
 
-          // Show notification
-          if ('Notification' in window && Notification.permission === 'granted') {
-            let message = 'Session complete!';
-            if (sessionType === 'work') {
-              const newCount = consecutiveWorkSessions + 1;
-              message =
-                newCount >= longBreakInterval
-                  ? 'Work session complete! Time for a long break.'
-                  : 'Work session complete! Time for a break.';
-            } else if (sessionType === 'longBreak') {
-              message = 'Long break complete! Ready to focus?';
-            } else {
-              message = 'Break complete! Ready to focus?';
-            }
-            new Notification('Pomodoro Timer', { body: message });
+          // Show notification via the platform notifier (native on desktop).
+          let message = 'Session complete!';
+          if (sessionType === 'work') {
+            const newCount = consecutiveWorkSessions + 1;
+            message =
+              newCount >= longBreakInterval
+                ? 'Work session complete! Time for a long break.'
+                : 'Work session complete! Time for a break.';
+          } else if (sessionType === 'longBreak') {
+            message = 'Long break complete! Ready to focus?';
+          } else {
+            message = 'Break complete! Ready to focus?';
           }
+          void getNotifier().notify({
+            id: 'pomodoro-complete',
+            title: 'Pomodoro Timer',
+            body: message,
+          });
         } catch (error) {
           logger.error('Error completing pomodoro session', error);
           const errorMessage = 'Failed to save session. Please try again.';

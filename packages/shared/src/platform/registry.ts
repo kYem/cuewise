@@ -1,0 +1,38 @@
+import type { Notifier, Scheduler } from './types';
+
+/**
+ * Set-once-at-bootstrap holder for the active platform implementations. Each JS
+ * entry point (extension page, service worker, Tauri app) calls
+ * `configurePlatform` at startup; portable code resolves via the getters.
+ */
+let scheduler: Scheduler | null = null;
+let notifier: Notifier | null = null;
+
+export function configurePlatform(impls: { scheduler?: Scheduler; notifier?: Notifier }): void {
+  if (impls.scheduler !== undefined) {
+    scheduler = impls.scheduler;
+  }
+  if (impls.notifier !== undefined) {
+    notifier = impls.notifier;
+  }
+}
+
+export function getScheduler(): Scheduler {
+  if (scheduler === null) {
+    throw new Error('Scheduler not configured. Call configurePlatform() at startup.');
+  }
+  return scheduler;
+}
+
+export function getNotifier(): Notifier {
+  if (notifier === null) {
+    throw new Error('Notifier not configured. Call configurePlatform() at startup.');
+  }
+  return notifier;
+}
+
+/** Clear the active implementations. Used at re-init and in tests. */
+export function resetPlatform(): void {
+  scheduler = null;
+  notifier = null;
+}

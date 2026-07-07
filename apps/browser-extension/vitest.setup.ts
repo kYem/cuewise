@@ -1,3 +1,4 @@
+import { configurePlatform } from '@cuewise/shared';
 import type { MockChromeStorage } from '@cuewise/test-utils/mocks';
 import { createChromeStorageMock } from '@cuewise/test-utils/mocks';
 import { cleanup } from '@testing-library/react';
@@ -40,6 +41,13 @@ beforeEach(() => {
       sync: mockStorage,
     },
   } as ChromeMock & typeof chrome;
+
+  // Default no-op platform so stores never throw on getScheduler()/getNotifier();
+  // individual store tests override with spies via configurePlatform().
+  configurePlatform({
+    scheduler: { scheduleAt: async () => {}, cancel: async () => {} },
+    notifier: { notify: async () => {}, clear: async () => {} },
+  });
 });
 
 // Cleanup React Testing Library after each test
