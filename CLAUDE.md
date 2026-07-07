@@ -47,37 +47,33 @@ apps/
   mobile/            - Future React Native app
 ```
 
-### 2. Storage Adapter Pattern
+### 2. Platform Seams (Ports & Adapters)
 
-**Critical Pattern**: All storage access uses platform-agnostic adapters.
+**Critical Pattern**: Platform-specific capabilities — scheduling wake-ups, delivering OS notifications, and persisting data — are accessed through platform-agnostic **ports** (interfaces) in `@cuewise/shared/platform`. Each app provides **adapters** and registers them once at startup through a single DI container.
 
 ```typescript
-// Shared interface for all platforms
-interface StorageAdapter {
-  get<T>(key: string): Promise<T | null>;
-  set<T>(key: string, value: T): Promise<boolean>;
-  remove(key: string): Promise<boolean>;
-  clear(): Promise<boolean>;
-}
+// Ports (interfaces) — packages/shared/src/platform/
+interface Scheduler { scheduleAt(id, when): Promise<void>; cancel(id): Promise<void>; onFire?(...) }
+interface Notifier { notify(opts): Promise<void>; clear(id): Promise<void>; onClick?/onAction?(...) }
+interface KeyValueStore { get(key, area); set(key, value, area); remove(key, area); getUsage(area); }
 
-// Platform-specific implementations:
-- ChromeStorageAdapter   → chrome.storage API (browser extension)
-- LocalStorageAdapter    → localStorage (web app)
-- AsyncStorageAdapter    → AsyncStorage (React Native)
+// One container, set once per entry point (page, service worker, future Tauri/RN app):
+configurePlatform({ scheduler, notifier, storage });
+// Portable code resolves via getScheduler() / getNotifier() / getStorage()
 ```
 
-**Usage Pattern**:
+Adapters:
+- Browser extension: `ChromeScheduler` / `ChromeNotifier` (`apps/browser-extension/src/platform/`), `ChromeKeyValueStore` (`@cuewise/storage`, self-registers as the default backend).
+- Future Tauri (macOS) / React Native: supply `Tauri*` / `Native*` adapters and call `configurePlatform` — no store or helper code changes.
+
+**Storage usage**: go through the typed helpers, not the port directly.
 ```typescript
-// Browser extension
-import { ChromeStorageAdapter, StorageManager } from '@cuewise/storage';
-const storage = new StorageManager(new ChromeStorageAdapter('local'));
-
-// All platforms use the same API
-await storage.set('quotes', quotesArray);
-const quotes = await storage.get<Quote[]>('quotes');
+import { getReminders, setReminders } from '@cuewise/storage';
+await setReminders(remindersArray);
+const reminders = await getReminders();
 ```
 
-**Location**: `packages/storage/src/`
+**Location**: ports + registry in `packages/shared/src/platform/`; storage adapter + typed helpers in `packages/storage/src/`.
 
 ### 3. Pure Business Logic in Shared Package
 
@@ -130,16 +126,13 @@ cuewise/
 │   │       ├── utils.ts              # Pure utility functions
 │   │       ├── csv-utils.ts          # CSV parsing for bulk import
 │   │       ├── logger.ts             # Configurable logger
+│   │       ├── platform/             # Platform ports + DI registry (Scheduler, Notifier, KeyValueStore)
 │   │       └── index.ts
 │   │
 │   ├── storage/
 │   │   └── src/
-│   │       ├── storage-interface.ts
-│   │       ├── adapters/
-│   │       │   ├── chrome-storage-adapter.ts
-│   │       │   ├── local-storage-adapter.ts
-│   │       │   └── async-storage-adapter.ts
-│   │       ├── chrome-storage.ts     # Chrome storage API wrapper
+│   │       ├── chrome-key-value-store.ts  # ChromeKeyValueStore adapter (KeyValueStore port)
+│   │       ├── chrome-storage.ts     # Low-level delegators over the platform seam
 │   │       ├── storage-helpers.ts    # Typed helper functions
 │   │       └── index.ts
 │   │
