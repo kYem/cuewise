@@ -78,7 +78,9 @@ export class ChromeKeyValueStore implements KeyValueStore {
     const storage = area === 'sync' ? chrome.storage.sync : chrome.storage.local;
     const bytesInUse = await new Promise<number>((resolve) => {
       storage.getBytesInUse(null, (bytes) => {
-        resolve(bytes);
+        // A failed/errored count can pass undefined; keep it finite so the
+        // percentage downstream never becomes NaN.
+        resolve(Number.isFinite(bytes) ? bytes : 0);
       });
     });
     return { bytesInUse, quota: area === 'sync' ? SYNC_QUOTA_BYTES : LOCAL_QUOTA_BYTES };
@@ -92,7 +94,10 @@ export class ChromeKeyValueStore implements KeyValueStore {
 function toStorageError(error: unknown, key: string, area: StorageArea): StorageError {
   const errorMessage = error instanceof Error ? error.message : String(error);
   const isQuotaError = errorMessage.includes('quota') || errorMessage.includes('QUOTA_BYTES');
-  const isPerItemQuota = errorMessage.includes('kQuotaBytesPerItem');
+  // Chrome emits 'QUOTA_BYTES_PER_ITEM quota exceeded' at runtime; keep the
+  // internal symbol name as a defensive fallback.
+  const isPerItemQuota =
+    errorMessage.includes('QUOTA_BYTES_PER_ITEM') || errorMessage.includes('kQuotaBytesPerItem');
 
   if (isQuotaError && area === 'sync') {
     const errorType: StorageErrorType = isPerItemQuota

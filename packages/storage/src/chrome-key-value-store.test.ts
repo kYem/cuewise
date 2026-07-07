@@ -47,7 +47,7 @@ describe('ChromeKeyValueStore with chrome.storage available', () => {
 
   it('maps a sync per-item quota rejection to per_item_quota_exceeded', async () => {
     const sync = global.chrome.storage.sync as unknown as MockChromeStorage;
-    sync.set.mockRejectedValueOnce(new Error('kQuotaBytesPerItem quota exceeded'));
+    sync.set.mockRejectedValueOnce(new Error('QUOTA_BYTES_PER_ITEM quota exceeded'));
 
     const result = await store.set('big', 'data', 'sync');
 

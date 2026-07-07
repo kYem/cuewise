@@ -4,24 +4,24 @@
  */
 
 import {
-  configurePlatform,
   logger,
   nextReminderDueDate,
   type Reminder,
+  reminderAlarmId,
+  reminderIdFromAlarm,
   resolveReminderNotificationAction,
 } from '@cuewise/shared';
 import { getReminders, setReminders } from '@cuewise/storage';
-import { ChromeNotifier, ChromeScheduler } from './platform';
+import { configureChromePlatform } from './platform';
 
-const scheduler = new ChromeScheduler();
-const notifier = new ChromeNotifier();
-configurePlatform({ scheduler, notifier });
+const { scheduler, notifier } = configureChromePlatform();
 
 // Fire a reminder's notification when its scheduled time arrives.
 scheduler.onFire((alarmId) => {
   logger.info('Alarm triggered', { alarmName: alarmId });
-  if (alarmId.startsWith('reminder-')) {
-    return handleReminderAlarm(alarmId.replace('reminder-', ''));
+  const reminderId = reminderIdFromAlarm(alarmId);
+  if (reminderId !== null) {
+    return handleReminderAlarm(reminderId);
   }
 });
 
@@ -46,7 +46,7 @@ async function handleReminderAlarm(reminderId: string) {
     }
 
     await notifier.notify({
-      id: `reminder-${reminderId}`,
+      id: reminderAlarmId(reminderId),
       title: '🔔 Reminder',
       body: reminder.text,
       actions: ['Done', 'Snooze 5 min'],
@@ -86,13 +86,13 @@ async function scheduleRecurringReminder(reminder: Reminder) {
   );
   await setReminders(updatedReminders);
 
-  await scheduler.scheduleAt(`reminder-${reminder.id}`, nextDueDate);
+  await scheduler.scheduleAt(reminderAlarmId(reminder.id), nextDueDate);
 }
 
 // Notification click → focus (or open) the extension's new-tab page.
 notifier.onClick(async (notificationId) => {
   try {
-    if (!notificationId.startsWith('reminder-')) {
+    if (reminderIdFromAlarm(notificationId) === null) {
       return;
     }
 
@@ -116,10 +116,10 @@ notifier.onClick(async (notificationId) => {
 // Notification action buttons (Done / Snooze 5 min).
 notifier.onAction(async (notificationId, buttonIndex) => {
   try {
-    if (!notificationId.startsWith('reminder-')) {
+    const reminderId = reminderIdFromAlarm(notificationId);
+    if (reminderId === null) {
       return;
     }
-    const reminderId = notificationId.replace('reminder-', '');
     const reminders = await getReminders();
     const reminder = reminders.find((r) => r.id === reminderId);
     const action = resolveReminderNotificationAction(reminder, buttonIndex, new Date());
@@ -134,7 +134,7 @@ notifier.onAction(async (notificationId, buttonIndex) => {
           : r
       );
       await setReminders(updated);
-      await scheduler.scheduleAt(`reminder-${reminderId}`, new Date(action.dueDate));
+      await scheduler.scheduleAt(reminderAlarmId(reminderId), new Date(action.dueDate));
     }
 
     await notifier.clear(notificationId);

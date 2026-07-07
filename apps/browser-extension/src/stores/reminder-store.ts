@@ -7,6 +7,7 @@ import {
   type Reminder,
   type ReminderCategory,
   type ReminderRecurrence,
+  reminderAlarmId,
   skipReminderOccurrence,
 } from '@cuewise/shared';
 import { getReminders, setReminders } from '@cuewise/storage';
@@ -42,7 +43,7 @@ interface ReminderStore {
 // (e.g. Chrome's alarm rate limit) must not revert it — log, and warn distinctly.
 async function clearReminderAlarm(reminderId: string): Promise<void> {
   try {
-    await getScheduler().cancel(`reminder-${reminderId}`);
+    await getScheduler().cancel(reminderAlarmId(reminderId));
   } catch (error) {
     logger.error(`Failed to clear alarm for reminder ${reminderId}`, error);
   }
@@ -50,7 +51,7 @@ async function clearReminderAlarm(reminderId: string): Promise<void> {
 
 async function armReminderAlarm(reminderId: string, whenMs: number): Promise<void> {
   try {
-    await getScheduler().scheduleAt(`reminder-${reminderId}`, new Date(whenMs));
+    await getScheduler().scheduleAt(reminderAlarmId(reminderId), new Date(whenMs));
   } catch (error) {
     logger.error(`Failed to schedule alarm for reminder ${reminderId}`, error);
     useToastStore.getState().warning("Reminder saved, but we couldn't schedule its alert.");

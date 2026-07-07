@@ -414,7 +414,7 @@ export const usePomodoroStore = create<PomodoroStore>()(
           const saveResult = await setPomodoroSessions(updatedSessions);
 
           // Show toast if storage failed (quota exceeded, etc.)
-          if (!saveResult.success && saveResult.error) {
+          if (!saveResult.success) {
             if (
               saveResult.error.type === 'per_item_quota_exceeded' ||
               saveResult.error.type === 'quota_exceeded'
@@ -517,13 +517,17 @@ export const usePomodoroStore = create<PomodoroStore>()(
           } else {
             message = 'Break complete! Ready to focus?';
           }
-          // Fire-and-forget: a notification failure must not fail the saved session,
-          // but is logged rather than swallowed as an unhandled rejection.
-          getNotifier()
-            .notify({ id: 'pomodoro-complete', title: 'Pomodoro Timer', body: message })
-            .catch((error) => {
-              logger.error('Failed to show pomodoro completion notification', error);
-            });
+          // Fire-and-forget: a notification failure — async rejection OR a
+          // synchronous getNotifier() throw — must not fail the already-saved session.
+          try {
+            getNotifier()
+              .notify({ id: 'pomodoro-complete', title: 'Pomodoro Timer', body: message })
+              .catch((error) => {
+                logger.error('Failed to show pomodoro completion notification', error);
+              });
+          } catch (error) {
+            logger.error('Failed to show pomodoro completion notification', error);
+          }
         } catch (error) {
           logger.error('Error completing pomodoro session', error);
           const errorMessage = 'Failed to save session. Please try again.';

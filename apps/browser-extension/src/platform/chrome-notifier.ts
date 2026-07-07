@@ -47,6 +47,9 @@ export class ChromeNotifier implements NotifierHost {
   }
 
   onClick(handler: (id: string) => void | Promise<void>): () => void {
+    if (!chrome?.notifications) {
+      return () => {};
+    }
     const listener = (id: string) => {
       void handler(id);
     };
@@ -57,6 +60,9 @@ export class ChromeNotifier implements NotifierHost {
   }
 
   onAction(handler: (id: string, actionIndex: number) => void | Promise<void>): () => void {
+    if (!chrome?.notifications) {
+      return () => {};
+    }
     const listener = (id: string, buttonIndex: number) => {
       void handler(id, buttonIndex);
     };

@@ -20,6 +20,9 @@ export class ChromeScheduler implements SchedulerHost {
   }
 
   onFire(handler: (id: string) => void | Promise<void>): () => void {
+    if (!chrome?.alarms) {
+      return () => {};
+    }
     const listener = (alarm: chrome.alarms.Alarm) => {
       void handler(alarm.name);
     };

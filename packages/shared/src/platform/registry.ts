@@ -47,7 +47,7 @@ export function getStorage(): KeyValueStore {
   return storage;
 }
 
-/** Clear the active implementations. Used at re-init and in tests. */
+/** Clear the active implementations. For test isolation. */
 export function resetPlatform(): void {
   scheduler = null;
   notifier = null;

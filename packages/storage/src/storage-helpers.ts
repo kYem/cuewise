@@ -20,6 +20,7 @@ import {
   type Reminder,
   type Settings,
   STORAGE_KEYS,
+  storageFailure,
   type YoutubePlaylist,
 } from '@cuewise/shared';
 import {
@@ -138,7 +139,7 @@ export async function setQuotes(quotes: Quote[]): Promise<StorageResult> {
     return customResult;
   } catch (error) {
     logger.error('Error setting quotes', error);
-    return { success: false, error: { type: 'unknown', message: 'Error setting quotes' } };
+    return storageFailure('Error setting quotes');
   }
 }
 
@@ -372,10 +373,7 @@ export async function migrateStorageData(
     return { success: true };
   } catch (error) {
     logger.error(`Error migrating data from ${fromArea} to ${toArea}`, error);
-    return {
-      success: false,
-      error: { type: 'unknown', message: `Error migrating data from ${fromArea} to ${toArea}` },
-    };
+    return storageFailure(`Error migrating data from ${fromArea} to ${toArea}`);
   }
 }
 
@@ -446,7 +444,7 @@ export async function updateVideoProgress(
     return setInStorage(STORAGE_KEYS.YOUTUBE_PROGRESS, cleanedProgress, 'local');
   } catch (error) {
     logger.error('Error updating video progress', error);
-    return { success: false, error: { type: 'unknown', message: 'Error updating video progress' } };
+    return storageFailure('Error updating video progress');
   }
 }
 
@@ -535,9 +533,6 @@ export async function setDailyBackground(
     return setInStorage(STORAGE_KEYS.DAILY_BACKGROUND, background, 'local');
   } catch (error) {
     logger.error('Error setting daily background', error);
-    return {
-      success: false,
-      error: { type: 'unknown', message: 'Error setting daily background' },
-    };
+    return storageFailure('Error setting daily background');
   }
 }
