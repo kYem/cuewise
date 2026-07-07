@@ -1,14 +1,18 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WebNotifier } from './web-notifier';
 
 function stubNotification(permission: NotificationPermission) {
   const mock = vi.fn();
   (mock as unknown as { permission: NotificationPermission }).permission = permission;
-  globalThis.Notification = mock as unknown as typeof Notification;
+  vi.stubGlobal('Notification', mock);
   return mock;
 }
 
 describe('WebNotifier', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it('delivers via the web Notification API when permission is granted', async () => {
     const notification = stubNotification('granted');
 

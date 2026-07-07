@@ -10,14 +10,18 @@ interface ChromeMock {
   };
 }
 
+function installChromeMock(): void {
+  const mockStorage = createChromeStorageMock();
+  global.chrome = {
+    storage: { local: mockStorage, sync: mockStorage },
+  } as ChromeMock & typeof chrome;
+}
+
+// chrome must exist at import time so the storage backend self-registers as
+// ChromeKeyValueStore (mirroring the real extension), not the dev fallback.
+installChromeMock();
+
 // Mock Chrome storage API globally
 beforeEach(() => {
-  const mockStorage = createChromeStorageMock();
-
-  global.chrome = {
-    storage: {
-      local: mockStorage,
-      sync: mockStorage,
-    },
-  } as ChromeMock & typeof chrome;
+  installChromeMock();
 });
