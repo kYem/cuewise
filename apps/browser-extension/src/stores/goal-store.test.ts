@@ -883,7 +883,10 @@ describe('toggleTask does not celebrate (confetti removed)', () => {
 
 describe('toggleTask persistence', () => {
   it('reports failure and does not optimistically complete when the save fails', async () => {
-    vi.mocked(storage.setGoals).mockResolvedValue({ success: false });
+    vi.mocked(storage.setGoals).mockResolvedValue({
+      success: false,
+      error: { type: 'unknown', message: 'write failed' },
+    });
     const task = goalFactory.build({ date: getTodayDateString(), completed: false });
     useGoalStore.setState({ goals: [task], todayTasks: [task] });
 

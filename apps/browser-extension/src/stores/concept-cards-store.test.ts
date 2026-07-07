@@ -69,7 +69,10 @@ describe('Concept Cards Store', () => {
     });
 
     it('honors a failed persist result', async () => {
-      vi.mocked(storage.setConceptCards).mockResolvedValue({ success: false });
+      vi.mocked(storage.setConceptCards).mockResolvedValue({
+        success: false,
+        error: { type: 'unknown', message: 'write failed' },
+      });
 
       const ok = await useConceptCardsStore.getState().addCard('Term', 'Definition');
 

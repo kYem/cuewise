@@ -1,4 +1,4 @@
-import type { Notifier, NotifyOptions } from '@cuewise/shared';
+import type { NotifierHost, NotifyOptions } from '@cuewise/shared';
 
 const ICON_PATH = 'icons/icon-128.png';
 
@@ -14,7 +14,7 @@ function iconUrl(): string {
  * no-op against) the web Notification API where chrome.notifications is absent
  * (dev/web); `onClick`/`onAction` assume a service-worker context.
  */
-export class ChromeNotifier implements Notifier {
+export class ChromeNotifier implements NotifierHost {
   async notify(opts: NotifyOptions): Promise<void> {
     if (chrome?.notifications) {
       const options: chrome.notifications.NotificationCreateOptions = {

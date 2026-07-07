@@ -98,7 +98,10 @@ describe('Quick Links Store', () => {
     });
 
     it('honors a failed persist result and does not update state', async () => {
-      vi.mocked(storage.setQuickLinks).mockResolvedValue({ success: false });
+      vi.mocked(storage.setQuickLinks).mockResolvedValue({
+        success: false,
+        error: { type: 'unknown', message: 'write failed' },
+      });
 
       const ok = await useQuickLinksStore.getState().addQuickLink('GitHub', 'github.com');
 

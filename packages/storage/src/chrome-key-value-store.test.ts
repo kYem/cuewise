@@ -39,9 +39,10 @@ describe('ChromeKeyValueStore with chrome.storage available', () => {
 
     const result = await store.set('big', 'data', 'sync');
 
-    expect(result.success).toBe(false);
-    expect(result.error?.type).toBe('quota_exceeded');
-    expect(result.error?.area).toBe('sync');
+    expect(result).toMatchObject({
+      success: false,
+      error: { type: 'quota_exceeded', area: 'sync' },
+    });
   });
 
   it('maps a sync per-item quota rejection to per_item_quota_exceeded', async () => {
@@ -50,7 +51,7 @@ describe('ChromeKeyValueStore with chrome.storage available', () => {
 
     const result = await store.set('big', 'data', 'sync');
 
-    expect(result.error?.type).toBe('per_item_quota_exceeded');
+    expect(result).toMatchObject({ success: false, error: { type: 'per_item_quota_exceeded' } });
   });
 
   it('maps a local quota rejection to quota_exceeded for the local area', async () => {
@@ -59,8 +60,10 @@ describe('ChromeKeyValueStore with chrome.storage available', () => {
 
     const result = await store.set('big', 'data', 'local');
 
-    expect(result.error?.type).toBe('quota_exceeded');
-    expect(result.error?.area).toBe('local');
+    expect(result).toMatchObject({
+      success: false,
+      error: { type: 'quota_exceeded', area: 'local' },
+    });
   });
 
   it('maps a non-quota rejection to an unknown StorageError', async () => {
@@ -69,7 +72,7 @@ describe('ChromeKeyValueStore with chrome.storage available', () => {
 
     const result = await store.set('k', 'v', 'local');
 
-    expect(result.error?.type).toBe('unknown');
+    expect(result).toMatchObject({ success: false, error: { type: 'unknown' } });
   });
 
   it('getUsage returns chrome bytes in use and the local quota', async () => {

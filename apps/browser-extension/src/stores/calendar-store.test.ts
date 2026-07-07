@@ -1,4 +1,4 @@
-import type { CalendarEvent } from '@cuewise/shared';
+import type { CalendarEvent, StorageResult } from '@cuewise/shared';
 import * as storage from '@cuewise/storage';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as gcal from '../utils/google-calendar';
@@ -124,7 +124,10 @@ describe('connect', () => {
 
   it('warns and flags a degraded state but stays connected when persisting fails', async () => {
     isAvailableMock.mockReturnValue(true);
-    setCalendarStateMock.mockResolvedValue({ success: false });
+    setCalendarStateMock.mockResolvedValue({
+      success: false,
+      error: { type: 'unknown', message: 'write failed' },
+    });
 
     await useCalendarStore.getState().connect();
 
@@ -234,9 +237,9 @@ describe('refresh', () => {
   it('holds the in-flight guard through the persist, blocking a concurrent refresh', async () => {
     isAvailableMock.mockReturnValue(true);
     useCalendarStore.setState({ connected: true });
-    let resolvePersist: (value: { success: boolean }) => void = () => {};
+    let resolvePersist: (value: StorageResult) => void = () => {};
     setCalendarStateMock.mockReturnValue(
-      new Promise<{ success: boolean }>((resolve) => {
+      new Promise<StorageResult>((resolve) => {
         resolvePersist = resolve;
       })
     );
@@ -430,7 +433,10 @@ describe('disconnect', () => {
 
   it('clears state and surfaces an error when persistence fails', async () => {
     isAvailableMock.mockReturnValue(true);
-    setCalendarStateMock.mockResolvedValue({ success: false });
+    setCalendarStateMock.mockResolvedValue({
+      success: false,
+      error: { type: 'unknown', message: 'write failed' },
+    });
     useCalendarStore.setState({ connected: true, events: [liveEvent] });
 
     await useCalendarStore.getState().disconnect();

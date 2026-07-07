@@ -138,7 +138,7 @@ export async function setQuotes(quotes: Quote[]): Promise<StorageResult> {
     return customResult;
   } catch (error) {
     logger.error('Error setting quotes', error);
-    return { success: false };
+    return { success: false, error: { type: 'unknown', message: 'Error setting quotes' } };
   }
 }
 
@@ -279,7 +279,10 @@ export async function getStorageUsage(): Promise<StorageUsageInfo> {
   try {
     const area = await getStorageArea();
     const { bytesInUse, quota } = await getStorage().getUsage(area);
-    const percentageUsed = (bytesInUse / quota) * 100;
+    let percentageUsed = 0;
+    if (quota > 0) {
+      percentageUsed = (bytesInUse / quota) * 100;
+    }
 
     return {
       bytesInUse,
@@ -369,7 +372,10 @@ export async function migrateStorageData(
     return { success: true };
   } catch (error) {
     logger.error(`Error migrating data from ${fromArea} to ${toArea}`, error);
-    return { success: false };
+    return {
+      success: false,
+      error: { type: 'unknown', message: `Error migrating data from ${fromArea} to ${toArea}` },
+    };
   }
 }
 
@@ -440,7 +446,7 @@ export async function updateVideoProgress(
     return setInStorage(STORAGE_KEYS.YOUTUBE_PROGRESS, cleanedProgress, 'local');
   } catch (error) {
     logger.error('Error updating video progress', error);
-    return { success: false };
+    return { success: false, error: { type: 'unknown', message: 'Error updating video progress' } };
   }
 }
 
@@ -529,6 +535,9 @@ export async function setDailyBackground(
     return setInStorage(STORAGE_KEYS.DAILY_BACKGROUND, background, 'local');
   } catch (error) {
     logger.error('Error setting daily background', error);
-    return { success: false };
+    return {
+      success: false,
+      error: { type: 'unknown', message: 'Error setting daily background' },
+    };
   }
 }

@@ -1,10 +1,10 @@
-import type { Scheduler } from '@cuewise/shared';
+import type { SchedulerHost } from '@cuewise/shared';
 
 /**
  * Scheduler backed by chrome.alarms. Prefix-agnostic — callers own the alarm id
  * (e.g. `reminder-<id>`), so the same wrapper serves any feature.
  */
-export class ChromeScheduler implements Scheduler {
+export class ChromeScheduler implements SchedulerHost {
   async scheduleAt(id: string, when: Date): Promise<void> {
     if (!chrome?.alarms) {
       return;
