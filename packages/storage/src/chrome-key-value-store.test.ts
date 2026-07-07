@@ -76,10 +76,9 @@ describe('ChromeKeyValueStore with chrome.storage available', () => {
   });
 
   it('getUsage returns chrome bytes in use and the local quota', async () => {
-    (global.chrome.storage.local as unknown as { getBytesInUse: unknown }).getBytesInUse = (
-      _keys: unknown,
-      cb: (bytes: number) => void
-    ) => cb(2048);
+    (
+      global.chrome.storage.local as unknown as { getBytesInUse: () => Promise<number> }
+    ).getBytesInUse = () => Promise.resolve(2048);
 
     await expect(store.getUsage('local')).resolves.toEqual({
       bytesInUse: 2048,
@@ -88,10 +87,9 @@ describe('ChromeKeyValueStore with chrome.storage available', () => {
   });
 
   it('getUsage returns the 100KB sync quota for the sync area', async () => {
-    (global.chrome.storage.sync as unknown as { getBytesInUse: unknown }).getBytesInUse = (
-      _keys: unknown,
-      cb: (bytes: number) => void
-    ) => cb(512);
+    (
+      global.chrome.storage.sync as unknown as { getBytesInUse: () => Promise<number> }
+    ).getBytesInUse = () => Promise.resolve(512);
 
     await expect(store.getUsage('sync')).resolves.toEqual({
       bytesInUse: 512,

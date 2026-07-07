@@ -12,12 +12,15 @@ import {
 const SYNC_QUOTA_BYTES = 102400; // 100KB
 const LOCAL_QUOTA_BYTES = 10485760; // 10MB
 
+function areaStore(area: StorageArea): chrome.storage.StorageArea {
+  return area === 'sync' ? chrome.storage.sync : chrome.storage.local;
+}
+
 /** KeyValueStore backed by chrome.storage.local/sync (selected only where it exists). */
 export class ChromeKeyValueStore implements KeyValueStore {
   async get<T>(key: string, area: StorageArea): Promise<T | null> {
     try {
-      const storage = area === 'local' ? chrome.storage.local : chrome.storage.sync;
-      const result = await storage.get(key);
+      const result = await areaStore(area).get(key);
       return (result[key] as T) ?? null;
     } catch (error) {
       logger.error(`Error getting ${key} from storage`, error);
@@ -27,8 +30,7 @@ export class ChromeKeyValueStore implements KeyValueStore {
 
   async set<T>(key: string, value: T, area: StorageArea): Promise<StorageResult> {
     try {
-      const storage = area === 'local' ? chrome.storage.local : chrome.storage.sync;
-      await storage.set({ [key]: value });
+      await areaStore(area).set({ [key]: value });
       return { success: true };
     } catch (error) {
       return { success: false, error: toStorageError(error, key, area) };
@@ -37,8 +39,7 @@ export class ChromeKeyValueStore implements KeyValueStore {
 
   async remove(key: string, area: StorageArea): Promise<boolean> {
     try {
-      const storage = area === 'local' ? chrome.storage.local : chrome.storage.sync;
-      await storage.remove(key);
+      await areaStore(area).remove(key);
       return true;
     } catch (error) {
       logger.error(`Error removing ${key} from storage`, error);
@@ -47,14 +48,10 @@ export class ChromeKeyValueStore implements KeyValueStore {
   }
 
   async getUsage(area: StorageArea): Promise<StorageUsage> {
-    const storage = area === 'sync' ? chrome.storage.sync : chrome.storage.local;
-    const bytesInUse = await new Promise<number>((resolve) => {
-      storage.getBytesInUse(null, (bytes) => {
-        // A failed/errored count can pass undefined; keep it finite so the
-        // percentage downstream never becomes NaN.
-        resolve(Number.isFinite(bytes) ? bytes : 0);
-      });
-    });
+    // A failed count can resolve undefined; keep it finite so the downstream
+    // percentage never becomes NaN.
+    const bytes = await areaStore(area).getBytesInUse(null);
+    const bytesInUse = Number.isFinite(bytes) ? bytes : 0;
     return { bytesInUse, quota: area === 'sync' ? SYNC_QUOTA_BYTES : LOCAL_QUOTA_BYTES };
   }
 }
