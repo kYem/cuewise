@@ -6,25 +6,16 @@ import type { SchedulerHost } from '@cuewise/shared';
  */
 export class ChromeScheduler implements SchedulerHost {
   async scheduleAt(id: string, when: Date): Promise<void> {
-    if (!chrome?.alarms) {
-      return;
-    }
     await chrome.alarms.create(id, { when: when.getTime() });
   }
 
   async cancel(id: string): Promise<void> {
-    if (!chrome?.alarms) {
-      return;
-    }
     await chrome.alarms.clear(id);
   }
 
   onFire(handler: (id: string) => void | Promise<void>): () => void {
-    if (!chrome?.alarms) {
-      return () => {};
-    }
     const listener = (alarm: chrome.alarms.Alarm) => {
-      void handler(alarm.name);
+      handler(alarm.name);
     };
     chrome.alarms.onAlarm.addListener(listener);
     return () => {

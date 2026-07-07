@@ -1,21 +1,22 @@
-import { configurePlatform } from '@cuewise/shared';
+import { configurePlatform, type NotifierHost, type SchedulerHost } from '@cuewise/shared';
 import { ChromeNotifier } from './chrome-notifier';
 import { ChromeScheduler } from './chrome-scheduler';
+import { NoopScheduler } from './noop-scheduler';
+import { WebNotifier } from './web-notifier';
 
 export { ChromeNotifier } from './chrome-notifier';
 export { ChromeScheduler } from './chrome-scheduler';
+export { NoopScheduler } from './noop-scheduler';
+export { WebNotifier } from './web-notifier';
 
 /**
- * Bind the Chrome scheduler/notifier and return them, so a resident context (the
- * service worker) can subscribe on the same instances it registered. Call once
- * per JS entry point.
+ * Detect platform capabilities once and bind the matching adapters — Chrome in
+ * the extension, dev fallbacks under the vite dev server. Returns the instances
+ * so a resident context (the service worker) can subscribe on them.
  */
-export function configureChromePlatform(): {
-  scheduler: ChromeScheduler;
-  notifier: ChromeNotifier;
-} {
-  const scheduler = new ChromeScheduler();
-  const notifier = new ChromeNotifier();
+export function configureChromePlatform(): { scheduler: SchedulerHost; notifier: NotifierHost } {
+  const scheduler: SchedulerHost = chrome?.alarms ? new ChromeScheduler() : new NoopScheduler();
+  const notifier: NotifierHost = chrome?.notifications ? new ChromeNotifier() : new WebNotifier();
   configurePlatform({ scheduler, notifier });
   return { scheduler, notifier };
 }

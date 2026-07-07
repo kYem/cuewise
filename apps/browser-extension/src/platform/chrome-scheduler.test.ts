@@ -48,12 +48,4 @@ describe('ChromeScheduler', () => {
     unsubscribe();
     expect(alarms.onAlarm.removeListener).toHaveBeenCalledWith(listener);
   });
-
-  it('is a no-op when chrome.alarms is unavailable', async () => {
-    (chrome as unknown as { alarms?: typeof alarms }).alarms = undefined;
-
-    await expect(
-      new ChromeScheduler().scheduleAt('reminder-1', new Date())
-    ).resolves.toBeUndefined();
-  });
 });

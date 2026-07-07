@@ -1,5 +1,5 @@
 import type { MockChromeStorage } from '@cuewise/test-utils/mocks';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { ChromeKeyValueStore } from './chrome-key-value-store';
 
 const store = new ChromeKeyValueStore();
@@ -97,29 +97,5 @@ describe('ChromeKeyValueStore with chrome.storage available', () => {
       bytesInUse: 512,
       quota: 102400,
     });
-  });
-});
-
-describe('ChromeKeyValueStore without chrome.storage (dev fallback)', () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  it('get falls back to localStorage', async () => {
-    vi.stubGlobal('chrome', undefined);
-    localStorage.setItem('token', JSON.stringify('abc'));
-
-    await expect(store.get<string>('token', 'local')).resolves.toBe('abc');
-  });
-
-  it('getUsage estimates localStorage size against a 5MB quota', async () => {
-    vi.stubGlobal('chrome', undefined);
-    localStorage.clear();
-    localStorage.setItem('k', 'v');
-
-    const usage = await store.getUsage('local');
-
-    expect(usage.bytesInUse).toBe(2); // 'k'.length + 'v'.length
-    expect(usage.quota).toBe(5242880);
   });
 });

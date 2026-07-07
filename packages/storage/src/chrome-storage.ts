@@ -1,20 +1,26 @@
 /**
  * Storage helpers — thin delegators over the platform KeyValueStore.
  *
- * The Chrome adapter self-registers as the default backend on load, so importing
- * @cuewise/storage needs no bootstrap and behaves as before. A Tauri app calls
+ * A capability-detected backend self-registers on load (chrome.storage in the
+ * extension, localStorage under the vite dev server), so importing
+ * @cuewise/storage needs no bootstrap. A Tauri app calls
  * `configurePlatform({ storage: new TauriKeyValueStore() })` after imports to
  * override it.
  */
 
-import type { StorageArea, StorageResult } from '@cuewise/shared';
+import type { KeyValueStore, StorageArea, StorageResult } from '@cuewise/shared';
 import { configurePlatform, getStorage } from '@cuewise/shared';
 import { ChromeKeyValueStore } from './chrome-key-value-store';
+import { LocalStorageKeyValueStore } from './local-storage-key-value-store';
 
 // Re-export storage types for existing importers of './chrome-storage'.
 export type { StorageArea, StorageError, StorageErrorType, StorageResult } from '@cuewise/shared';
 
-configurePlatform({ storage: new ChromeKeyValueStore() });
+const defaultStore: KeyValueStore =
+  typeof chrome !== 'undefined' && chrome.storage
+    ? new ChromeKeyValueStore()
+    : new LocalStorageKeyValueStore();
+configurePlatform({ storage: defaultStore });
 
 export async function getFromStorage<T>(
   key: string,

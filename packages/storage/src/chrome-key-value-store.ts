@@ -11,22 +11,14 @@ import {
 // Chrome storage quotas
 const SYNC_QUOTA_BYTES = 102400; // 100KB
 const LOCAL_QUOTA_BYTES = 10485760; // 10MB
-const LOCALSTORAGE_QUOTA_BYTES = 5242880; // 5MB (dev fallback estimate)
 
-/**
- * KeyValueStore backed by chrome.storage.local/sync, falling back to
- * localStorage in dev/web contexts where chrome.storage is unavailable.
- */
+/** KeyValueStore backed by chrome.storage.local/sync (selected only where it exists). */
 export class ChromeKeyValueStore implements KeyValueStore {
   async get<T>(key: string, area: StorageArea): Promise<T | null> {
     try {
-      if (typeof chrome !== 'undefined' && chrome.storage) {
-        const storage = area === 'local' ? chrome.storage.local : chrome.storage.sync;
-        const result = await storage.get(key);
-        return (result[key] as T) ?? null;
-      }
-      const item = localStorage.getItem(key);
-      return item ? JSON.parse(item) : null;
+      const storage = area === 'local' ? chrome.storage.local : chrome.storage.sync;
+      const result = await storage.get(key);
+      return (result[key] as T) ?? null;
     } catch (error) {
       logger.error(`Error getting ${key} from storage`, error);
       return null;
@@ -35,12 +27,8 @@ export class ChromeKeyValueStore implements KeyValueStore {
 
   async set<T>(key: string, value: T, area: StorageArea): Promise<StorageResult> {
     try {
-      if (typeof chrome !== 'undefined' && chrome.storage) {
-        const storage = area === 'local' ? chrome.storage.local : chrome.storage.sync;
-        await storage.set({ [key]: value });
-        return { success: true };
-      }
-      localStorage.setItem(key, JSON.stringify(value));
+      const storage = area === 'local' ? chrome.storage.local : chrome.storage.sync;
+      await storage.set({ [key]: value });
       return { success: true };
     } catch (error) {
       return { success: false, error: toStorageError(error, key, area) };
@@ -49,12 +37,8 @@ export class ChromeKeyValueStore implements KeyValueStore {
 
   async remove(key: string, area: StorageArea): Promise<boolean> {
     try {
-      if (typeof chrome !== 'undefined' && chrome.storage) {
-        const storage = area === 'local' ? chrome.storage.local : chrome.storage.sync;
-        await storage.remove(key);
-        return true;
-      }
-      localStorage.removeItem(key);
+      const storage = area === 'local' ? chrome.storage.local : chrome.storage.sync;
+      await storage.remove(key);
       return true;
     } catch (error) {
       logger.error(`Error removing ${key} from storage`, error);
@@ -63,18 +47,6 @@ export class ChromeKeyValueStore implements KeyValueStore {
   }
 
   async getUsage(area: StorageArea): Promise<StorageUsage> {
-    if (typeof chrome === 'undefined' || !chrome.storage) {
-      let bytesInUse = 0;
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key) {
-          const value = localStorage.getItem(key);
-          bytesInUse += key.length + (value?.length || 0);
-        }
-      }
-      return { bytesInUse, quota: LOCALSTORAGE_QUOTA_BYTES };
-    }
-
     const storage = area === 'sync' ? chrome.storage.sync : chrome.storage.local;
     const bytesInUse = await new Promise<number>((resolve) => {
       storage.getBytesInUse(null, (bytes) => {

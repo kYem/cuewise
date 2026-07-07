@@ -82,15 +82,4 @@ describe('ChromeNotifier', () => {
 
     expect(handler).toHaveBeenCalledWith('reminder-9', 1);
   });
-
-  it('falls back to the web Notification API when chrome.notifications is unavailable', async () => {
-    (chrome as unknown as { notifications?: typeof notifications }).notifications = undefined;
-    const NotificationMock = vi.fn();
-    (NotificationMock as unknown as { permission: string }).permission = 'granted';
-    globalThis.Notification = NotificationMock as unknown as typeof Notification;
-
-    await new ChromeNotifier().notify({ id: 'pomodoro', title: 'Pomodoro Timer', body: 'Done!' });
-
-    expect(NotificationMock).toHaveBeenCalledWith('Pomodoro Timer', { body: 'Done!' });
-  });
 });
