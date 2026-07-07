@@ -139,6 +139,16 @@ describe('Pomodoro Store - Auto-Start Breaks', () => {
         })
       );
     });
+
+    it('still saves the session when the notification fails', async () => {
+      fakeNotifier.notify.mockRejectedValueOnce(new Error('notify failed'));
+      setupWorkSession();
+
+      await expect(usePomodoroStore.getState().completeSession()).resolves.toBeUndefined();
+
+      expect(storage.setPomodoroSessions).toHaveBeenCalled();
+      expect(toastError).not.toHaveBeenCalled();
+    });
   });
 
   describe('completeSession with auto-start enabled', () => {

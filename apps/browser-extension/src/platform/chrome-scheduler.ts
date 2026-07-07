@@ -1,4 +1,4 @@
-import type { SchedulerHost } from '@cuewise/shared';
+import { logger, type SchedulerHost } from '@cuewise/shared';
 
 /**
  * Scheduler backed by chrome.alarms. Prefix-agnostic — callers own the alarm id
@@ -15,7 +15,9 @@ export class ChromeScheduler implements SchedulerHost {
 
   onFire(handler: (id: string) => void | Promise<void>): () => void {
     const listener = (alarm: chrome.alarms.Alarm) => {
-      handler(alarm.name);
+      Promise.resolve(handler(alarm.name)).catch((error) => {
+        logger.error('Scheduler onFire handler failed', error);
+      });
     };
     chrome.alarms.onAlarm.addListener(listener);
     return () => {

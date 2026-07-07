@@ -1,9 +1,9 @@
 # @cuewise/storage
 
-Storage for Cuewise, built on the platform **KeyValueStore** seam. The
-`ChromeKeyValueStore` adapter self-registers as the default backend on import, so
-the browser extension needs no setup; a future Tauri/RN app swaps in its own
-adapter via `configurePlatform` from `@cuewise/shared`.
+Storage for Cuewise, built on the platform **KeyValueStore** seam. On import the
+package detects the environment and self-registers a default backend, so the
+browser extension needs no setup; a future Tauri/RN app swaps in its own adapter
+via `configurePlatform` from `@cuewise/shared`.
 
 ## Typed helpers (use these)
 
@@ -29,8 +29,10 @@ interface KeyValueStore {
 }
 ```
 
-- `ChromeKeyValueStore` (this package) wraps `chrome.storage.local`/`sync` with a
-  `localStorage` dev fallback, and self-registers as the default on import.
+- `ChromeKeyValueStore` wraps `chrome.storage.local`/`sync` (browser extension).
+- `LocalStorageKeyValueStore` is the dev/web fallback (localStorage).
+- On import the package detects `chrome.storage` and registers whichever applies
+  as the default backend.
 - Override on another platform:
   `configurePlatform({ storage: new TauriKeyValueStore() })` after importing
   `@cuewise/storage`.

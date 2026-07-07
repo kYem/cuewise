@@ -271,10 +271,9 @@ export interface StorageUsageInfo {
 }
 
 /**
- * Get storage usage information
- * Uses chrome.storage.sync or chrome.storage.local based on user settings
- * - Chrome.storage.sync quota: 100KB (102400 bytes), max 512 items, 8KB per item
- * - Chrome.storage.local quota: 10MB (10485760 bytes)
+ * Storage usage (bytes + quota) from the active KeyValueStore backend for the
+ * user's area, plus warning/critical thresholds. In the extension that's
+ * chrome.storage (100KB sync / 10MB local); in dev it's the localStorage estimate.
  */
 export async function getStorageUsage(): Promise<StorageUsageInfo> {
   try {

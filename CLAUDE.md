@@ -53,8 +53,12 @@ apps/
 
 ```typescript
 // Ports (interfaces) — packages/shared/src/platform/
-interface Scheduler { scheduleAt(id, when): Promise<void>; cancel(id): Promise<void>; onFire?(...) }
-interface Notifier { notify(opts): Promise<void>; clear(id): Promise<void>; onClick?/onAction?(...) }
+// Command interfaces (page/stores depend on these); subscription lives on the
+// Host variants so a command-only context can't accidentally subscribe.
+interface Scheduler { scheduleAt(id, when): Promise<void>; cancel(id): Promise<void>; }
+interface SchedulerHost extends Scheduler { onFire(handler): () => void; }
+interface Notifier { notify(opts): Promise<void>; clear(id): Promise<void>; }
+interface NotifierHost extends Notifier { onClick(handler): () => void; onAction(handler): () => void; }
 interface KeyValueStore { get(key, area); set(key, value, area); remove(key, area); getUsage(area); }
 
 // One container, configured at startup — merges, so storage self-registers on import

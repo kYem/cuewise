@@ -1,4 +1,4 @@
-import type { NotifierHost, NotifyOptions } from '@cuewise/shared';
+import { logger, type NotifierHost, type NotifyOptions } from '@cuewise/shared';
 
 const ICON_PATH = 'icons/icon-128.png';
 
@@ -27,7 +27,9 @@ export class ChromeNotifier implements NotifierHost {
 
   onClick(handler: (id: string) => void | Promise<void>): () => void {
     const listener = (id: string) => {
-      handler(id);
+      Promise.resolve(handler(id)).catch((error) => {
+        logger.error('Notifier onClick handler failed', error);
+      });
     };
     chrome.notifications.onClicked.addListener(listener);
     return () => {
@@ -37,7 +39,9 @@ export class ChromeNotifier implements NotifierHost {
 
   onAction(handler: (id: string, actionIndex: number) => void | Promise<void>): () => void {
     const listener = (id: string, buttonIndex: number) => {
-      handler(id, buttonIndex);
+      Promise.resolve(handler(id, buttonIndex)).catch((error) => {
+        logger.error('Notifier onAction handler failed', error);
+      });
     };
     chrome.notifications.onButtonClicked.addListener(listener);
     return () => {
