@@ -47,30 +47,25 @@ import { Quote, QuoteCategory, getRandomQuote } from '@cuewise/shared';
 ### `packages/storage` - Multi-Platform Storage
 
 **What it contains:**
-- Platform-agnostic `StorageAdapter` interface
-- Three concrete implementations:
-  - `ChromeStorageAdapter` - For browser extensions (chrome.storage API)
-  - `LocalStorageAdapter` - For web apps (localStorage)
-  - `AsyncStorageAdapter` - For React Native (AsyncStorage)
+- The `KeyValueStore` port (defined in `@cuewise/shared/platform`) and its adapters:
+  - `ChromeKeyValueStore` - browser extension (chrome.storage.local/sync)
+  - `LocalStorageKeyValueStore` - dev/web (localStorage)
+  - A future React Native app supplies its own (e.g. AsyncStorage-backed)
+- Typed helpers (`getReminders`, `setGoals`, …) that feature code uses
 
-**How it works:**
+**How it works:** feature code uses the typed helpers; the backend is selected once at bootstrap (see the platform seam below), not constructed per call:
 ```typescript
-// Browser Extension
-import { ChromeStorageAdapter, StorageManager } from '@cuewise/storage';
-const storage = new StorageManager(new ChromeStorageAdapter('local'));
+import { getQuotes, setQuotes } from '@cuewise/storage';
 
-// Web App
-import { LocalStorageAdapter, StorageManager } from '@cuewise/storage';
-const storage = new StorageManager(new LocalStorageAdapter());
+await setQuotes(quotesArray); // returns a StorageResult { success, error? }
+const quotes = await getQuotes();
+```
 
-// React Native App
-import { AsyncStorageAdapter, StorageManager } from '@cuewise/storage';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-const storage = new StorageManager(new AsyncStorageAdapter(AsyncStorage));
-
-// All use the same API!
-await storage.set('quotes', quotesArray);
-const quotes = await storage.get<Quote[]>('quotes');
+A capability-detected backend self-registers on import (chrome.storage in the
+extension, localStorage under the dev server). Another platform overrides it:
+```typescript
+import { configurePlatform } from '@cuewise/shared';
+configurePlatform({ storage: new TauriKeyValueStore() });
 ```
 
 **Typed helpers:**
@@ -124,12 +119,12 @@ export const Button = () => { /* Native version */ };
 - Next.js 14+ (App Router)
 - React 18+
 - Tailwind CSS (same as extension)
-- `LocalStorageAdapter` for persistence
+- `LocalStorageKeyValueStore` for persistence
 - Optional: Backend API for cloud sync
 
 **Shared code:**
 - ✅ `packages/shared` - All business logic
-- ✅ `packages/storage` - Use `LocalStorageAdapter`
+- ✅ `packages/storage` - Register `LocalStorageKeyValueStore` via `configurePlatform`
 - ✅ `packages/ui` - Reuse all components
 
 ### `apps/mobile` - React Native Application
@@ -142,12 +137,12 @@ export const Button = () => { /* Native version */ };
 **Stack:**
 - React Native (Expo recommended)
 - React Navigation
-- `AsyncStorageAdapter` for persistence
-- Push notifications (expo-notifications)
+- An AsyncStorage-backed `KeyValueStore` adapter for persistence
+- Push notifications (expo-notifications) via a `Notifier` adapter
 
 **Shared code:**
-- ✅ `packages/shared` - All business logic
-- ✅ `packages/storage` - Use `AsyncStorageAdapter`
+- ✅ `packages/shared` - All business logic + platform ports
+- ✅ `packages/storage` - Register a native `KeyValueStore` via `configurePlatform`
 - ⚠️ `packages/ui` - May need native-specific components
 
 ## Code Sharing Strategy
@@ -209,12 +204,13 @@ export const Button = () => { /* Native version */ };
    }
    ```
 
-3. **Initialize storage with web adapter**
+3. **Bind the web platform adapters at bootstrap**
    ```typescript
-   // apps/web/lib/storage.ts
-   import { LocalStorageAdapter, StorageManager } from '@cuewise/storage';
+   // apps/web/lib/platform.ts
+   import { configurePlatform } from '@cuewise/shared';
+   import { LocalStorageKeyValueStore } from '@cuewise/storage';
 
-   export const storage = new StorageManager(new LocalStorageAdapter());
+   configurePlatform({ storage: new LocalStorageKeyValueStore() /* + scheduler, notifier */ });
    ```
 
 4. **Reuse business logic**
@@ -238,9 +234,9 @@ export const Button = () => { /* Native version */ };
 - ❌ Don't import React or UI libraries
 - ✅ Only pure TypeScript logic and types
 
-### 2. Use Adapters for Platform-Specific Code
-- ❌ Don't use `chrome.storage` directly in business logic
-- ✅ Use `StorageAdapter` interface with platform-specific implementations
+### 2. Use Ports for Platform-Specific Code
+- ❌ Don't use `chrome.storage` / `chrome.alarms` / `chrome.notifications` directly in business logic
+- ✅ Depend on the platform ports (`KeyValueStore`, `Scheduler`, `Notifier`) and bind adapters via `configurePlatform`
 
 ### 3. Test Shared Code Once
 - Write tests for `packages/shared` that run on all platforms
@@ -260,26 +256,28 @@ export function getRandomQuote(quotes: Quote[]): Quote | null
 To sync data across platforms:
 
 1. **Add backend API** (e.g., `apps/api` with tRPC or REST)
-2. **Create CloudStorageAdapter** in `packages/storage`
+2. **Create a CloudKeyValueStore** implementing the `KeyValueStore` port
 3. **Implement sync logic** in `packages/shared`
-4. **Update all apps** to use cloud adapter with offline fallback
+4. **Bind the cloud store** via `configurePlatform`, with a local store as offline fallback
 
 ```typescript
-// Future: packages/storage/src/adapters/cloud-storage-adapter.ts
-export class CloudStorageAdapter implements StorageAdapter {
+// Future: packages/storage/src/cloud-key-value-store.ts
+import type { KeyValueStore, StorageArea } from '@cuewise/shared';
+
+export class CloudKeyValueStore implements KeyValueStore {
   constructor(
     private apiClient: ApiClient,
-    private localAdapter: StorageAdapter // Offline fallback
+    private fallback: KeyValueStore // Offline fallback
   ) {}
 
-  async get<T>(key: string): Promise<T | null> {
+  async get<T>(key: string, area: StorageArea): Promise<T | null> {
     try {
       return await this.apiClient.get(key);
     } catch {
-      // Offline fallback
-      return this.localAdapter.get(key);
+      return this.fallback.get<T>(key, area);
     }
   }
+  // set / remove / getUsage …
 }
 ```
 
