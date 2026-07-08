@@ -1,6 +1,7 @@
 import {
   createLogger,
   generateId,
+  getNotifier,
   LogLevel,
   minutesToSeconds,
   type NotificationSoundType,
@@ -413,7 +414,7 @@ export const usePomodoroStore = create<PomodoroStore>()(
           const saveResult = await setPomodoroSessions(updatedSessions);
 
           // Show toast if storage failed (quota exceeded, etc.)
-          if (!saveResult.success && saveResult.error) {
+          if (!saveResult.success) {
             if (
               saveResult.error.type === 'per_item_quota_exceeded' ||
               saveResult.error.type === 'quota_exceeded'
@@ -503,21 +504,29 @@ export const usePomodoroStore = create<PomodoroStore>()(
           // Play completion sound
           playCompletionSound(completionSound as NotificationSoundType);
 
-          // Show notification
-          if ('Notification' in window && Notification.permission === 'granted') {
-            let message = 'Session complete!';
-            if (sessionType === 'work') {
-              const newCount = consecutiveWorkSessions + 1;
-              message =
-                newCount >= longBreakInterval
-                  ? 'Work session complete! Time for a long break.'
-                  : 'Work session complete! Time for a break.';
-            } else if (sessionType === 'longBreak') {
-              message = 'Long break complete! Ready to focus?';
-            } else {
-              message = 'Break complete! Ready to focus?';
-            }
-            new Notification('Pomodoro Timer', { body: message });
+          // Notify via the platform seam (a future desktop build delivers this natively).
+          let message = 'Session complete!';
+          if (sessionType === 'work') {
+            const newCount = consecutiveWorkSessions + 1;
+            message =
+              newCount >= longBreakInterval
+                ? 'Work session complete! Time for a long break.'
+                : 'Work session complete! Time for a break.';
+          } else if (sessionType === 'longBreak') {
+            message = 'Long break complete! Ready to focus?';
+          } else {
+            message = 'Break complete! Ready to focus?';
+          }
+          // Fire-and-forget: a notification failure — async rejection OR a
+          // synchronous getNotifier() throw — must not fail the already-saved session.
+          try {
+            getNotifier()
+              .notify({ id: 'pomodoro-complete', title: 'Pomodoro Timer', body: message })
+              .catch((error) => {
+                logger.error('Failed to show pomodoro completion notification', error);
+              });
+          } catch (error) {
+            logger.error('Failed to show pomodoro completion notification', error);
           }
         } catch (error) {
           logger.error('Error completing pomodoro session', error);

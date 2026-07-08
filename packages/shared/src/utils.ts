@@ -1772,6 +1772,23 @@ function advanceCalendarDate(date: Date, frequency: ReminderFrequency | undefine
   }
 }
 
+// Namespaces a reminder's scheduler/notification id so the background worker can
+// tell reminder alarms apart from any other scheduled wake.
+const REMINDER_ALARM_PREFIX = 'reminder-';
+
+/** The scheduler/notification id for a reminder's alarm. */
+export function reminderAlarmId(reminderId: string): string {
+  return `${REMINDER_ALARM_PREFIX}${reminderId}`;
+}
+
+/** The reminder id behind an alarm id, or null when it is not a reminder alarm. */
+export function reminderIdFromAlarm(alarmId: string): string | null {
+  if (!alarmId.startsWith(REMINDER_ALARM_PREFIX)) {
+    return null;
+  }
+  return alarmId.slice(REMINDER_ALARM_PREFIX.length);
+}
+
 /**
  * Next due date strictly after `now` for a recurring reminder.
  * 'interval' anchors to fire-time (now + intervalMinutes); the calendar

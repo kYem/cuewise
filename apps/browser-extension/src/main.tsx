@@ -4,9 +4,13 @@ import App from './App';
 import { PomodoroPipProvider } from './components/PomodoroPipProvider';
 import './index.css';
 import { initializeLogger } from './lib/logger-config';
+import { configureChromePlatform } from './platform';
 
 // Initialize logger configuration based on environment
 initializeLogger();
+
+// Bind the Chrome scheduler/notifier so the stores can arm alarms and notify.
+configureChromePlatform();
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {

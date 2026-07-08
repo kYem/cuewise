@@ -1,4 +1,4 @@
-import { QUICK_LINKS_MAX, type QuickLink } from '@cuewise/shared';
+import { QUICK_LINKS_MAX, type QuickLink, storageFailure } from '@cuewise/shared';
 import * as storage from '@cuewise/storage';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useQuickLinksStore } from './quick-links-store';
@@ -98,7 +98,7 @@ describe('Quick Links Store', () => {
     });
 
     it('honors a failed persist result and does not update state', async () => {
-      vi.mocked(storage.setQuickLinks).mockResolvedValue({ success: false });
+      vi.mocked(storage.setQuickLinks).mockResolvedValue(storageFailure('write failed'));
 
       const ok = await useQuickLinksStore.getState().addQuickLink('GitHub', 'github.com');
 

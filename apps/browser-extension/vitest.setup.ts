@@ -1,5 +1,5 @@
-import type { MockChromeStorage } from '@cuewise/test-utils/mocks';
-import { createChromeStorageMock } from '@cuewise/test-utils/mocks';
+import { configurePlatform } from '@cuewise/shared';
+import { installChromeStorageMock } from '@cuewise/test-utils/mocks';
 import { cleanup } from '@testing-library/react';
 import { afterEach, beforeEach, vi } from 'vitest';
 import '@testing-library/jest-dom';
@@ -22,24 +22,20 @@ vi.mock('lottie-web/build/player/lottie_light', () => ({
 // Mock scrollIntoView which is not implemented in JSDOM
 Element.prototype.scrollIntoView = () => {};
 
-// Minimal Chrome API interface for tests
-interface ChromeMock {
-  storage: {
-    local: MockChromeStorage;
-    sync: MockChromeStorage;
-  };
-}
+// chrome must exist at import time too, so @cuewise/storage self-registers the
+// ChromeKeyValueStore backend (mirroring the real extension) rather than the
+// localStorage dev fallback.
+installChromeStorageMock();
 
-// Mock Chrome storage API globally
 beforeEach(() => {
-  const mockStorage = createChromeStorageMock();
+  installChromeStorageMock();
 
-  global.chrome = {
-    storage: {
-      local: mockStorage,
-      sync: mockStorage,
-    },
-  } as ChromeMock & typeof chrome;
+  // Default no-op platform so stores never throw on getScheduler()/getNotifier();
+  // individual store tests override with spies via configurePlatform().
+  configurePlatform({
+    scheduler: { scheduleAt: async () => {}, cancel: async () => {} },
+    notifier: { notify: async () => {}, clear: async () => {} },
+  });
 });
 
 // Cleanup React Testing Library after each test

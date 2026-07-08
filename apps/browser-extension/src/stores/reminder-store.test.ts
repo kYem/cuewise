@@ -1,3 +1,4 @@
+import { configurePlatform } from '@cuewise/shared';
 import * as storage from '@cuewise/storage';
 import { recurringReminderFactory, reminderFactory } from '@cuewise/test-utils/factories';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -26,17 +27,17 @@ vi.mock('./toast-store', () => ({
 const getRemindersMock = vi.mocked(storage.getReminders);
 const setRemindersMock = vi.mocked(storage.setReminders);
 
-// chrome.storage is mocked globally in vitest.setup.ts; alarms are not, so add them here.
-const alarmsMock = {
-  create: vi.fn(() => Promise.resolve()),
-  clear: vi.fn(() => Promise.resolve(true)),
+// The Scheduler is injected; assert against it instead of poking chrome.alarms.
+const fakeScheduler = {
+  scheduleAt: vi.fn(() => Promise.resolve()),
+  cancel: vi.fn(() => Promise.resolve()),
 };
 
 beforeEach(() => {
   vi.clearAllMocks();
   getRemindersMock.mockResolvedValue([]);
   setRemindersMock.mockResolvedValue({ success: true });
-  (chrome as unknown as { alarms: typeof alarmsMock }).alarms = alarmsMock;
+  configurePlatform({ scheduler: fakeScheduler });
   useReminderStore.setState({
     reminders: [],
     upcomingReminders: [],
@@ -58,7 +59,7 @@ describe('setReminderPaused', () => {
     await useReminderStore.getState().setReminderPaused(id, true);
 
     expect(useReminderStore.getState().reminders[0].paused).toBe(true);
-    expect(alarmsMock.clear).toHaveBeenCalledWith(`reminder-${id}`);
+    expect(fakeScheduler.cancel).toHaveBeenCalledWith(`reminder-${id}`);
   });
 
   it('unpauses the reminder and recreates the alarm when resuming', async () => {
@@ -69,7 +70,7 @@ describe('setReminderPaused', () => {
     });
     const id = useReminderStore.getState().reminders[0].id;
     await useReminderStore.getState().setReminderPaused(id, true);
-    alarmsMock.create.mockClear();
+    fakeScheduler.scheduleAt.mockClear();
 
     const beforeResume = Date.now();
     await useReminderStore.getState().setReminderPaused(id, false);
@@ -78,7 +79,7 @@ describe('setReminderPaused', () => {
     expect(resumed.paused).toBe(false);
     // Resume advances dueDate to the next occurrence (now + interval), not a stale past time.
     expect(new Date(resumed.dueDate).getTime()).toBeGreaterThan(beforeResume);
-    expect(alarmsMock.create).toHaveBeenCalledWith(`reminder-${id}`, expect.any(Object));
+    expect(fakeScheduler.scheduleAt).toHaveBeenCalledWith(`reminder-${id}`, expect.any(Date));
   });
 });
 
@@ -102,7 +103,7 @@ describe('toggleReminder on a paused recurring reminder', () => {
     expect(updated.paused).toBe(true);
     // Advanced to the next occurrence (now + interval), no longer in the past.
     expect(new Date(updated.dueDate).getTime()).toBeGreaterThan(before);
-    expect(alarmsMock.create).not.toHaveBeenCalled();
+    expect(fakeScheduler.scheduleAt).not.toHaveBeenCalled();
   });
 });
 
@@ -124,10 +125,11 @@ describe('toggleReminder on a future recurring reminder', () => {
     expect(new Date(updated.dueDate).getTime()).toBe(dueTime + 30 * 60_000);
     expect(updated.completed).toBe(false);
     // The alarm is re-armed at the skipped occurrence (clear then create).
-    expect(alarmsMock.clear).toHaveBeenCalledWith('reminder-future-interval');
-    expect(alarmsMock.create).toHaveBeenCalledWith('reminder-future-interval', {
-      when: dueTime + 30 * 60_000,
-    });
+    expect(fakeScheduler.cancel).toHaveBeenCalledWith('reminder-future-interval');
+    expect(fakeScheduler.scheduleAt).toHaveBeenCalledWith(
+      'reminder-future-interval',
+      new Date(dueTime + 30 * 60_000)
+    );
   });
 
   it('advances a future daily occurrence one day keeping the clock time', async () => {
@@ -208,7 +210,7 @@ describe('updateReminder dropping recurrence', () => {
     const updated = useReminderStore.getState().reminders[0];
     expect(updated.recurring).toBeUndefined();
     expect(updated.paused).toBeFalsy();
-    expect(alarmsMock.create).toHaveBeenCalledWith('reminder-r-edit', expect.any(Object));
+    expect(fakeScheduler.scheduleAt).toHaveBeenCalledWith('reminder-r-edit', expect.any(Date));
   });
 });
 
@@ -230,7 +232,10 @@ describe('initialize with a paused reminder', () => {
     expect(reminder.paused).toBe(true);
     // Frozen: a paused reminder must not auto-advance on init.
     expect(reminder.dueDate).toBe(pastDueDate);
-    expect(alarmsMock.create).not.toHaveBeenCalledWith('reminder-paused-init', expect.any(Object));
+    expect(fakeScheduler.scheduleAt).not.toHaveBeenCalledWith(
+      'reminder-paused-init',
+      expect.any(Date)
+    );
   });
 });
 
@@ -318,7 +323,10 @@ describe('addReminder with an interval recurrence', () => {
     });
 
     const id = useReminderStore.getState().reminders[0].id;
-    expect(alarmsMock.create).toHaveBeenCalledWith(`reminder-${id}`, { when: dueDate.getTime() });
+    expect(fakeScheduler.scheduleAt).toHaveBeenCalledWith(
+      `reminder-${id}`,
+      new Date(dueDate.getTime())
+    );
   });
 });
 
@@ -341,7 +349,7 @@ describe('snoozeReminder', () => {
     expect(newDue).toBeGreaterThanOrEqual(before + 5 * 60_000);
     expect(newDue).toBeLessThanOrEqual(Date.now() + 5 * 60_000 + 1000);
     expect(updated.notified).toBe(false);
-    expect(alarmsMock.create).toHaveBeenCalledWith('reminder-snooze-1', { when: newDue });
+    expect(fakeScheduler.scheduleAt).toHaveBeenCalledWith('reminder-snooze-1', new Date(newDue));
   });
 });
 
@@ -366,8 +374,11 @@ describe('toggleReminder on an active overdue recurring reminder', () => {
     expect(newDue).toBeGreaterThanOrEqual(before + 30 * 60_000);
     expect(newDue).toBeLessThanOrEqual(after + 30 * 60_000);
     expect(updated.completed).toBe(false);
-    expect(alarmsMock.clear).toHaveBeenCalledWith('reminder-overdue-interval');
-    expect(alarmsMock.create).toHaveBeenCalledWith('reminder-overdue-interval', { when: newDue });
+    expect(fakeScheduler.cancel).toHaveBeenCalledWith('reminder-overdue-interval');
+    expect(fakeScheduler.scheduleAt).toHaveBeenCalledWith(
+      'reminder-overdue-interval',
+      new Date(newDue)
+    );
   });
 });
 
@@ -385,7 +396,7 @@ describe('toggleReminder on a non-recurring reminder', () => {
     const completed = useReminderStore.getState().reminders[0];
     expect(completed.completed).toBe(true);
     expect(typeof completed.completedAt).toBe('string');
-    expect(alarmsMock.clear).toHaveBeenCalledWith('reminder-one-off');
+    expect(fakeScheduler.cancel).toHaveBeenCalledWith('reminder-one-off');
 
     await useReminderStore.getState().toggleReminder('one-off');
 
@@ -426,7 +437,7 @@ describe('write failures', () => {
     expect(after.dueDate).toBe(originalDueDate);
     expect(toastError).toHaveBeenCalled();
     expect(toastSuccess).not.toHaveBeenCalled();
-    expect(alarmsMock.create).not.toHaveBeenCalled();
+    expect(fakeScheduler.scheduleAt).not.toHaveBeenCalled();
   });
 
   it('addReminder returns false and shows an error toast on a failed write', async () => {
@@ -450,7 +461,7 @@ describe('alarm scheduling failures', () => {
       notified: true,
     });
     useReminderStore.setState({ reminders: [overdue] });
-    alarmsMock.create.mockRejectedValueOnce(new Error('MAX_SUSTAINED_ALARMS'));
+    fakeScheduler.scheduleAt.mockRejectedValueOnce(new Error('MAX_SUSTAINED_ALARMS'));
 
     const before = Date.now();
     await useReminderStore.getState().snoozeReminder('arm-fail', 5);
@@ -467,7 +478,7 @@ describe('alarm scheduling failures', () => {
   });
 
   it('keeps the added reminder and warns distinctly when arming the alarm throws', async () => {
-    alarmsMock.create.mockRejectedValueOnce(new Error('MAX_SUSTAINED_ALARMS'));
+    fakeScheduler.scheduleAt.mockRejectedValueOnce(new Error('MAX_SUSTAINED_ALARMS'));
 
     const result = await useReminderStore
       .getState()
@@ -489,7 +500,7 @@ describe('alarm scheduling failures', () => {
       dueDate: new Date(Date.now() + 60 * 60_000).toISOString(),
     });
     useReminderStore.setState({ reminders: [reminder] });
-    alarmsMock.clear.mockRejectedValueOnce(new Error('alarm gone'));
+    fakeScheduler.cancel.mockRejectedValueOnce(new Error('alarm gone'));
 
     await useReminderStore.getState().deleteReminder('clear-fail');
 

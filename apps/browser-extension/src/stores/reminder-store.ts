@@ -1,11 +1,13 @@
 import {
   generateId,
+  getScheduler,
   isUpcomingRecurringOccurrence,
   logger,
   nextReminderDueDate,
   type Reminder,
   type ReminderCategory,
   type ReminderRecurrence,
+  reminderAlarmId,
   skipReminderOccurrence,
 } from '@cuewise/shared';
 import { getReminders, setReminders } from '@cuewise/storage';
@@ -40,22 +42,16 @@ interface ReminderStore {
 // Alarm scheduling is best-effort: the reminder is already saved, so a failure
 // (e.g. Chrome's alarm rate limit) must not revert it — log, and warn distinctly.
 async function clearReminderAlarm(reminderId: string): Promise<void> {
-  if (!chrome?.alarms) {
-    return;
-  }
   try {
-    await chrome.alarms.clear(`reminder-${reminderId}`);
+    await getScheduler().cancel(reminderAlarmId(reminderId));
   } catch (error) {
     logger.error(`Failed to clear alarm for reminder ${reminderId}`, error);
   }
 }
 
 async function armReminderAlarm(reminderId: string, whenMs: number): Promise<void> {
-  if (!chrome?.alarms) {
-    return;
-  }
   try {
-    await chrome.alarms.create(`reminder-${reminderId}`, { when: whenMs });
+    await getScheduler().scheduleAt(reminderAlarmId(reminderId), new Date(whenMs));
   } catch (error) {
     logger.error(`Failed to schedule alarm for reminder ${reminderId}`, error);
     useToastStore.getState().warning("Reminder saved, but we couldn't schedule its alert.");

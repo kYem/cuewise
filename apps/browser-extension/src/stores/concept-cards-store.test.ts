@@ -1,3 +1,4 @@
+import { storageFailure } from '@cuewise/shared';
 import * as storage from '@cuewise/storage';
 import { conceptCardFactory } from '@cuewise/test-utils/factories';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -69,7 +70,7 @@ describe('Concept Cards Store', () => {
     });
 
     it('honors a failed persist result', async () => {
-      vi.mocked(storage.setConceptCards).mockResolvedValue({ success: false });
+      vi.mocked(storage.setConceptCards).mockResolvedValue(storageFailure('write failed'));
 
       const ok = await useConceptCardsStore.getState().addCard('Term', 'Definition');
 

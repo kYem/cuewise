@@ -180,13 +180,11 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
           let errorMessage = 'Failed to migrate data. Please try again.';
 
           // Provide specific error message for quota errors
-          if (migrateResult.error) {
-            if (migrateResult.error.type === 'per_item_quota_exceeded') {
-              errorMessage = `Cannot enable sync: "${migrateResult.error.key}" exceeds the 8KB per-item limit. Try clearing old data first.`;
-            } else if (migrateResult.error.type === 'quota_exceeded') {
-              errorMessage =
-                'Cannot enable sync: Your data exceeds the 100KB sync storage limit. Try clearing old data first.';
-            }
+          if (migrateResult.error.type === 'per_item_quota_exceeded') {
+            errorMessage = `Cannot enable sync: "${migrateResult.error.key}" exceeds the 8KB per-item limit. Try clearing old data first.`;
+          } else if (migrateResult.error.type === 'quota_exceeded') {
+            errorMessage =
+              'Cannot enable sync: Your data exceeds the 100KB sync storage limit. Try clearing old data first.';
           }
 
           set({ error: errorMessage });
