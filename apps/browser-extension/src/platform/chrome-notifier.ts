@@ -26,10 +26,12 @@ export class ChromeNotifier implements NotifierHost {
   }
 
   onClick(handler: (id: string) => void | Promise<void>): () => void {
-    const listener = (id: string) => {
-      Promise.resolve(handler(id)).catch((error) => {
+    const listener = async (id: string) => {
+      try {
+        await handler(id);
+      } catch (error) {
         logger.error('Notifier onClick handler failed', error);
-      });
+      }
     };
     chrome.notifications.onClicked.addListener(listener);
     return () => {
@@ -38,10 +40,12 @@ export class ChromeNotifier implements NotifierHost {
   }
 
   onAction(handler: (id: string, actionIndex: number) => void | Promise<void>): () => void {
-    const listener = (id: string, buttonIndex: number) => {
-      Promise.resolve(handler(id, buttonIndex)).catch((error) => {
+    const listener = async (id: string, buttonIndex: number) => {
+      try {
+        await handler(id, buttonIndex);
+      } catch (error) {
         logger.error('Notifier onAction handler failed', error);
-      });
+      }
     };
     chrome.notifications.onButtonClicked.addListener(listener);
     return () => {

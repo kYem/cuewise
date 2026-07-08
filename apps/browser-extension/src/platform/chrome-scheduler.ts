@@ -14,10 +14,12 @@ export class ChromeScheduler implements SchedulerHost {
   }
 
   onFire(handler: (id: string) => void | Promise<void>): () => void {
-    const listener = (alarm: chrome.alarms.Alarm) => {
-      Promise.resolve(handler(alarm.name)).catch((error) => {
+    const listener = async (alarm: chrome.alarms.Alarm) => {
+      try {
+        await handler(alarm.name);
+      } catch (error) {
         logger.error('Scheduler onFire handler failed', error);
-      });
+      }
     };
     chrome.alarms.onAlarm.addListener(listener);
     return () => {

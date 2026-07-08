@@ -1,3 +1,4 @@
+import { logger } from '@cuewise/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChromeScheduler } from './chrome-scheduler';
 
@@ -47,5 +48,20 @@ describe('ChromeScheduler', () => {
 
     unsubscribe();
     expect(alarms.onAlarm.removeListener).toHaveBeenCalledWith(listener);
+  });
+
+  it('catches and logs a synchronously-throwing handler instead of leaking it', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    new ChromeScheduler().onFire(() => {
+      throw new Error('handler boom');
+    });
+    const listener = alarms.onAlarm.addListener.mock.calls[0][0] as (a: {
+      name: string;
+    }) => Promise<void>;
+
+    await listener({ name: 'reminder-1' });
+
+    expect(errorSpy).toHaveBeenCalledWith('Scheduler onFire handler failed', expect.any(Error));
+    errorSpy.mockRestore();
   });
 });
