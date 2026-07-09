@@ -1,5 +1,11 @@
 @import "tailwindcss";
 
+/* Utility classes live in this package's src + @cuewise/ui. Tailwind 4 auto-scans
+   only from this CSS file's own tree, so point it at both explicitly (paths are
+   relative to this file), and it works for every app that imports these styles. */
+@source ".";
+@source "../../ui/src";
+
 /* Override dark mode to use .dark class selector instead of prefers-color-scheme media query */
 @variant dark (&:where(.dark, .dark *));
 

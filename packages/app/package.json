@@ -1,21 +1,20 @@
 {
-  "name": "@cuewise/browser-extension",
+  "name": "@cuewise/app",
   "version": "1.15.0",
   "private": true,
   "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./styles.css": "./src/index.css"
+  },
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "build:store": "pnpm build && pnpm package",
-    "package": "node scripts/build-store-zip.js",
-    "preview": "vite preview",
     "type-check": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:watch": "vitest"
   },
   "dependencies": {
-    "@cuewise/app": "workspace:*",
     "@cuewise/shared": "workspace:*",
     "@cuewise/storage": "workspace:*",
     "@cuewise/ui": "workspace:*",
@@ -33,7 +32,6 @@
     "zustand": "catalog:"
   },
   "devDependencies": {
-    "@crxjs/vite-plugin": "catalog:",
     "@cuewise/test-utils": "workspace:*",
     "@tailwindcss/postcss": "catalog:",
     "@testing-library/jest-dom": "catalog:",
@@ -43,8 +41,6 @@
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "catalog:",
-    "@vitest/ui": "catalog:",
-    "archiver": "^8.0.0",
     "autoprefixer": "catalog:",
     "jsdom": "catalog:",
     "postcss": "catalog:",
