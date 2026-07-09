@@ -1,5 +1,6 @@
 import {
   generateId,
+  getNotifier,
   getScheduler,
   isUpcomingRecurringOccurrence,
   logger,
@@ -525,6 +526,20 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
 
       for (const r of dueNow) {
         useToastStore.getState().warning(`Reminder: ${r.text}`);
+        // With no background worker to raise the OS notification (web / a native
+        // app whose scheduler doesn't deliver in the background), deliver it here
+        // via the seam. Where a resident host owns delivery, it notifies instead.
+        if (!getScheduler().deliversInBackground) {
+          getNotifier()
+            .notify({
+              id: reminderAlarmId(r.id),
+              title: '🔔 Reminder',
+              body: r.text,
+              actions: ['Done', 'Snooze 5 min'],
+              requireInteraction: true,
+            })
+            .catch((error) => logger.error('Failed to deliver reminder notification', error));
+        }
       }
     } catch (error) {
       logger.error('Error firing due reminders', error);
