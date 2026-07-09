@@ -1,0 +1,39 @@
+{
+  "name": "@cuewise/macos",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tauri dev",
+    "dev:vite": "vite",
+    "bundle": "tauri build",
+    "build:vite": "vite build",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "type-check": "tsc --noEmit",
+    "e2e": "playwright test"
+  },
+  "dependencies": {
+    "@cuewise/shared": "workspace:*",
+    "@cuewise/storage": "workspace:*",
+    "@cuewise/ui": "workspace:*",
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-notification": "^2",
+    "react": "catalog:",
+    "react-dom": "catalog:"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1",
+    "@tailwindcss/postcss": "catalog:",
+    "@tauri-apps/cli": "^2",
+    "@types/chrome": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "autoprefixer": "catalog:",
+    "postcss": "catalog:",
+    "tailwindcss": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:"
+  }
+}

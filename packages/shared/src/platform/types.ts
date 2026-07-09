@@ -7,6 +7,13 @@
 
 /** Command surface: arm/cancel a one-shot wake at a future time, keyed by a caller-owned id. */
 export interface Scheduler {
+  /**
+   * Whether scheduled wakes are delivered by a resident background context
+   * (extension service worker, native app loop) rather than requiring the page to
+   * poll. Lets UI choose "trust the scheduler" vs. an in-page fallback without
+   * sniffing platform globals like `chrome.alarms`.
+   */
+  readonly deliversInBackground: boolean;
   scheduleAt(id: string, when: Date): Promise<void>;
   cancel(id: string): Promise<void>;
 }
