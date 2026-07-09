@@ -1,4 +1,4 @@
-import { logger, type Notifier, type NotifyOptions, type Scheduler } from '@cuewise/shared';
+import type { Notifier, NotifyOptions, Scheduler } from '@cuewise/shared';
 
 /**
  * Platform seams for the Tauri build. Storage is `LocalStorageKeyValueStore`
@@ -9,16 +9,14 @@ import { logger, type Notifier, type NotifyOptions, type Scheduler } from '@cuew
 /** Web Notification API notifier — works inside the Tauri WKWebView. */
 export class WebNotifier implements Notifier {
   async notify(opts: NotifyOptions): Promise<void> {
-    if (typeof Notification === 'undefined') {
-      logger.warn('Notifications unavailable in this context');
+    // Only deliver when permission is already granted. Requesting it must come
+    // from a user gesture (WebKit errors otherwise), so that belongs in a
+    // settings action — and real OS notifications move to the Tauri notification
+    // plugin later. Until then this placeholder no-ops rather than nag.
+    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') {
       return;
     }
-    if (Notification.permission === 'default') {
-      await Notification.requestPermission();
-    }
-    if (Notification.permission === 'granted') {
-      new Notification(opts.title, { body: opts.body, tag: opts.id });
-    }
+    new Notification(opts.title, { body: opts.body, tag: opts.id });
   }
 
   async clear(_id: string): Promise<void> {

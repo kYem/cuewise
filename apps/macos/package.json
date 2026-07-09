@@ -10,7 +10,8 @@
     "build:vite": "vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "e2e": "playwright test"
   },
   "dependencies": {
     "@cuewise/shared": "workspace:*",
@@ -21,6 +22,7 @@
     "react-dom": "catalog:"
   },
   "devDependencies": {
+    "@playwright/test": "^1",
     "@tailwindcss/postcss": "catalog:",
     "@tauri-apps/cli": "^2",
     "@types/chrome": "catalog:",

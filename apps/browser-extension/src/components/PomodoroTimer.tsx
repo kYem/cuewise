@@ -220,13 +220,6 @@ export const PomodoroTimer: React.FC = () => {
     stopSounds,
   ]);
 
-  // Request notification permission on mount
-  useEffect(() => {
-    if ('Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission();
-    }
-  }, []);
-
   const progress = totalTime > 0 ? ((totalTime - timeRemaining) / totalTime) * 100 : 0;
 
   const isWork = sessionType === 'work';
