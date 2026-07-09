@@ -1,7 +1,7 @@
 use tauri::{
     menu::{MenuBuilder, MenuItem},
     tray::TrayIconBuilder,
-    AppHandle, Manager,
+    AppHandle, Manager, RunEvent, WindowEvent,
 };
 
 /// Show + focus the main window, optionally routing the hash-routed UI to a page.
@@ -15,9 +15,10 @@ fn reveal(app: &AppHandle, hash: Option<&str>) {
     }
 }
 
-/// Build and run the Cuewise desktop app: a main window plus a menu-bar tray with
-/// quick actions (open, focus session, insights, quit). The tray is the always-on
-/// entry point; the glanceable posture/status widget hangs off it later (ENG-36).
+/// Build and run the Cuewise desktop app. It stays resident like a menu-bar
+/// companion: the window's close button hides to the tray (so nudges keep
+/// firing), the tray offers quick actions, and re-opening from the Dock reveals
+/// the window again. Actually quitting is "Quit Cuewise" in the tray or Cmd-Q.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -51,6 +52,20 @@ pub fn run() {
 
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running Cuewise");
+        .on_window_event(|window, event| {
+            // Hide to the tray instead of quitting so the app stays resident and
+            // keeps firing nudges. Tray "Quit Cuewise" / Cmd-Q still exit.
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                let _ = window.hide();
+                api.prevent_close();
+            }
+        })
+        .build(tauri::generate_context!())
+        .expect("error while building Cuewise")
+        .run(|app, event| {
+            // Re-opening from the Dock reveals the hidden window.
+            if let RunEvent::Reopen { .. } = event {
+                reveal(app, None);
+            }
+        });
 }
