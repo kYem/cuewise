@@ -1,10 +1,9 @@
+import { App, PomodoroPipProvider } from '@cuewise/app';
+import '@cuewise/app/styles.css';
 import { configurePlatform } from '@cuewise/shared';
 import { LocalStorageKeyValueStore } from '@cuewise/storage';
-import App from '@ext/App';
-import { PomodoroPipProvider } from '@ext/components/PomodoroPipProvider';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import './index.css';
 import { NoopScheduler, TauriNotifier, WebNotifier } from './platform';
 
 // Bind the platform seams for the Tauri webview so the reused extension stores

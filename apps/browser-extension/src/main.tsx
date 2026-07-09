@@ -1,8 +1,7 @@
+import { App, PomodoroPipProvider } from '@cuewise/app';
+import '@cuewise/app/styles.css';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import App from './App';
-import { PomodoroPipProvider } from './components/PomodoroPipProvider';
-import './index.css';
 import { initializeLogger } from './lib/logger-config';
 import { configureChromePlatform } from './platform';
 
