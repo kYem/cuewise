@@ -25,7 +25,7 @@ pnpm --filter @cuewise/macos dev  # tauri dev: builds Rust, starts Vite, opens t
 ```
 
 The first `cargo` build pulls the Tauri crates and takes a few minutes. Build a
-distributable bundle with `pnpm --filter @cuewise/macos build`.
+distributable bundle with `pnpm --filter @cuewise/macos bundle`.
 
 ## Status → next
 
