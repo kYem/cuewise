@@ -5,14 +5,18 @@ import { PomodoroPipProvider } from '@ext/components/PomodoroPipProvider';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
-import { NoopScheduler, WebNotifier } from './platform';
+import { NoopScheduler, TauriNotifier, WebNotifier } from './platform';
 
 // Bind the platform seams for the Tauri webview so the reused extension stores
 // and helpers work unchanged: localStorage-backed storage, web notifications,
 // and a no-op scheduler until the Rust core takes over background wakes.
+// Native OS notifications inside the Tauri window; a no-op web fallback in the
+// browser / e2e context where the Tauri IPC isn't present.
+const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+
 configurePlatform({
   storage: new LocalStorageKeyValueStore(),
-  notifier: new WebNotifier(),
+  notifier: inTauri ? new TauriNotifier() : new WebNotifier(),
   scheduler: new NoopScheduler(),
 });
 

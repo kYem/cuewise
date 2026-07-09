@@ -10,6 +10,7 @@ use tauri::{
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             let show = MenuItem::with_id(app, "show", "Open Cuewise", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit Cuewise", true, None::<&str>)?;

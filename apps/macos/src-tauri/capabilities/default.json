@@ -2,5 +2,5 @@
   "identifier": "default",
   "description": "Core capabilities for the main Cuewise window.",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "notification:default"]
 }

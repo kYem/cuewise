@@ -1,4 +1,9 @@
 import type { Notifier, NotifyOptions, Scheduler } from '@cuewise/shared';
+import {
+  isPermissionGranted,
+  requestPermission,
+  sendNotification,
+} from '@tauri-apps/plugin-notification';
 
 /**
  * Platform seams for the Tauri build. Storage is `LocalStorageKeyValueStore`
@@ -21,6 +26,28 @@ export class WebNotifier implements Notifier {
 
   async clear(_id: string): Promise<void> {
     // Web notifications auto-dismiss; nothing to clear.
+  }
+}
+
+/**
+ * Native OS notifications via the Tauri notification plugin — these fire even
+ * when the window is hidden, which the extension's tab-scoped web notifications
+ * cannot. Permission is requested lazily on first use (a native prompt, not the
+ * gesture-restricted web API).
+ */
+export class TauriNotifier implements Notifier {
+  async notify(opts: NotifyOptions): Promise<void> {
+    let granted = await isPermissionGranted();
+    if (!granted) {
+      granted = (await requestPermission()) === 'granted';
+    }
+    if (granted) {
+      sendNotification({ title: opts.title, body: opts.body });
+    }
+  }
+
+  async clear(_id: string): Promise<void> {
+    // The plugin exposes no programmatic clear for delivered notifications.
   }
 }
 
