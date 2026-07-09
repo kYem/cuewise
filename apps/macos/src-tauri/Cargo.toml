@@ -17,6 +17,8 @@ tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-notification = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# Timer for native wake scheduling; runs on Tauri's async runtime.
+tokio = { version = "1", features = ["time"] }
 
 [profile.release]
 codegen-units = 1

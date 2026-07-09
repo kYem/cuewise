@@ -30,6 +30,7 @@ const setRemindersMock = vi.mocked(storage.setReminders);
 // The Scheduler is injected; assert against it instead of poking chrome.alarms.
 const fakeScheduler = {
   deliversInBackground: false,
+  persistsAcrossRestarts: false,
   scheduleAt: vi.fn(() => Promise.resolve()),
   cancel: vi.fn(() => Promise.resolve()),
 };

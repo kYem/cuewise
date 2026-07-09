@@ -6,6 +6,8 @@ import { logger, type SchedulerHost } from '@cuewise/shared';
  */
 export class ChromeScheduler implements SchedulerHost {
   readonly deliversInBackground = true;
+  // chrome.alarms persist across browser/service-worker restarts, so no re-arm needed.
+  readonly persistsAcrossRestarts = true;
 
   async scheduleAt(id: string, when: Date): Promise<void> {
     await chrome.alarms.create(id, { when: when.getTime() });
