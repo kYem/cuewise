@@ -1,6 +1,7 @@
 import path from 'node:path';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
+import pkg from './package.json';
 
 const extensionSrc = path.resolve(__dirname, '../browser-extension/src');
 
@@ -9,6 +10,11 @@ const extensionSrc = path.resolve(__dirname, '../browser-extension/src');
 export default defineConfig({
   plugins: [react()],
   clearScreen: false,
+  // Compile-time constants the reused extension UI expects (mirrors its vite config).
+  define: {
+    __APP_NAME__: JSON.stringify('Cuewise'),
+    __APP_VERSION__: JSON.stringify(pkg.version),
+  },
   resolve: {
     alias: {
       // Bridge: reuse the extension's UI source directly (via the `@ext` alias)
