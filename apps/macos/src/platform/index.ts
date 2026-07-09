@@ -32,6 +32,8 @@ export class WebNotifier implements Notifier {
  * whose timers throttle in the background. Wired up in a later increment.
  */
 export class NoopScheduler implements Scheduler {
+  readonly deliversInBackground = false;
+
   async scheduleAt(_id: string, _when: Date): Promise<void> {}
   async cancel(_id: string): Promise<void> {}
 }

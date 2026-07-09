@@ -1,14 +1,15 @@
 import { configurePlatform } from '@cuewise/shared';
 import { LocalStorageKeyValueStore } from '@cuewise/storage';
+import App from '@ext/App';
+import { PomodoroPipProvider } from '@ext/components/PomodoroPipProvider';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import App from './App';
 import './index.css';
 import { NoopScheduler, WebNotifier } from './platform';
 
-// Bind the platform seams for the Tauri webview so shared stores/helpers work
-// unchanged: localStorage-backed storage, web notifications, a no-op scheduler
-// until the Rust core takes over background wakes.
+// Bind the platform seams for the Tauri webview so the reused extension stores
+// and helpers work unchanged: localStorage-backed storage, web notifications,
+// and a no-op scheduler until the Rust core takes over background wakes.
 configurePlatform({
   storage: new LocalStorageKeyValueStore(),
   notifier: new WebNotifier(),
@@ -22,6 +23,8 @@ if (!rootElement) {
 
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
-    <App />
+    <PomodoroPipProvider>
+      <App />
+    </PomodoroPipProvider>
   </React.StrictMode>
 );

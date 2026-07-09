@@ -1,3 +1,4 @@
+import { getScheduler } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
 import { AlertCircle, Bell } from 'lucide-react';
 import type React from 'react';
@@ -55,11 +56,12 @@ export const ReminderWidget: React.FC = () => {
     initialize().then(() => fireDueReminders());
   }, [initialize, fireDueReminders]);
 
-  // No native alarm scheduler (dev server / web) → keep firing due reminders
-  // in-page. The packed extension fires via the background worker + the on-mount
-  // catch-up above, so the ongoing poll is skipped there.
+  // A background scheduler (extension worker, native host) fires due reminders on
+  // its own. Only when nothing delivers wakes in the background (dev server, web,
+  // Tauri until the Rust host lands) do we poll in-page as a fallback — asked of
+  // the platform seam, never by sniffing globals like `chrome.alarms`.
   useEffect(() => {
-    if (chrome?.alarms) {
+    if (getScheduler().deliversInBackground) {
       return;
     }
     const interval = setInterval(() => {

@@ -1,5 +1,11 @@
 @import "tailwindcss";
 
+/* This app reuses the extension's UI (via the `@ext` Vite alias) and the shared
+   UI kit, whose class names live outside apps/macos. Tailwind 4 auto-scans only
+   this app's own src, so point it at those sources or their utilities go missing. */
+@source "../../browser-extension/src";
+@source "../../../packages/ui/src";
+
 /* Override dark mode to use .dark class selector instead of prefers-color-scheme media query */
 @variant dark (&:where(.dark, .dark *));
 

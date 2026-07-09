@@ -5,6 +5,8 @@ import { logger, type SchedulerHost } from '@cuewise/shared';
  * (e.g. `reminder-<id>`), so the same wrapper serves any feature.
  */
 export class ChromeScheduler implements SchedulerHost {
+  readonly deliversInBackground = true;
+
   async scheduleAt(id: string, when: Date): Promise<void> {
     await chrome.alarms.create(id, { when: when.getTime() });
   }
