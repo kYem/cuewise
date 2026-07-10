@@ -4,6 +4,7 @@ import {
   type FocusImageCategory,
   type FocusPosition,
   formatHourMinute,
+  getStorage,
   NOTIFICATION_SOUNDS,
   type NotificationSoundType,
   POMODORO_DURATION_BOUNDS,
@@ -724,24 +725,30 @@ function AdvancedSection({ s, set, filter, onReset }: SettingsSectionProps) {
     }
   };
 
+  // Chrome sync rides on chrome.storage.sync; local-only backends (the macOS app,
+  // dev/web) have no sync area, so hide the toggle rather than show an inert one.
+  const syncSupported = getStorage().supportsSync;
+
   return (
     <div>
-      <SettingRow
-        label="Chrome sync"
-        filter={filter}
-        help="Sync custom quotes, goals, and reminders across browsers where you're signed in. Built-in quotes stay local; sync is limited to 100KB total and 8KB per item."
-        keywords="chrome sync cloud cross device storage"
-      >
-        <Switch
+      {syncSupported && (
+        <SettingRow
           label="Chrome sync"
-          checked={s.syncEnabled}
-          onChange={(v) => set({ syncEnabled: v })}
-        />
-      </SettingRow>
+          filter={filter}
+          help="Sync custom quotes, goals, and reminders across browsers where you're signed in. Built-in quotes stay local; sync is limited to 100KB total and 8KB per item."
+          keywords="chrome sync cloud cross device storage"
+        >
+          <Switch
+            label="Chrome sync"
+            checked={s.syncEnabled}
+            onChange={(v) => set({ syncEnabled: v })}
+          />
+        </SettingRow>
+      )}
       <SettingRow
         label="Console logs"
         filter={filter}
-        help="What appears in the browser console. Higher levels include all lower ones."
+        help="What appears in the developer console. Higher levels include all lower ones."
         keywords="debug log level developer verbose"
       >
         <SelectControl

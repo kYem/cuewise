@@ -86,6 +86,12 @@ export interface StorageUsage {
 
 /** Area-aware key/value persistence, returning a detailed StorageResult on writes. */
 export interface KeyValueStore {
+  /**
+   * Whether this backend has a real cross-device sync area (chrome.storage.sync).
+   * Local-only backends (a native app, dev/web) map both areas onto one store, so
+   * sync-only UI feature-detects off this instead of assuming Chrome.
+   */
+  readonly supportsSync: boolean;
   get<T>(key: string, area: StorageArea): Promise<T | null>;
   set<T>(key: string, value: T, area: StorageArea): Promise<StorageResult>;
   remove(key: string, area: StorageArea): Promise<boolean>;

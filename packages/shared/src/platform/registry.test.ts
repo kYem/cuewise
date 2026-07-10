@@ -19,6 +19,7 @@ const fakeNotifier: Notifier = {
   clear: async () => {},
 };
 const fakeStorage: KeyValueStore = {
+  supportsSync: false,
   get: async () => null,
   set: async () => ({ success: true }),
   remove: async () => true,
