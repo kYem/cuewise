@@ -1002,6 +1002,20 @@ export function calculateFocusTimeToday(sessions: PomodoroSession[]): number {
 }
 
 /**
+ * Count completed focus (work) sessions for today.
+ */
+export function countFocusSessionsToday(sessions: PomodoroSession[]): number {
+  const today = startOfDay(new Date());
+  return sessions.filter((session) => {
+    if (session.interrupted || session.type !== 'work') {
+      return false;
+    }
+    const sessionDate = parseISO(session.completedAt || session.startedAt);
+    return isSameDay(sessionDate, today);
+  }).length;
+}
+
+/**
  * Calculate focus time for this week (in minutes)
  */
 export function calculateFocusTimeThisWeek(sessions: PomodoroSession[]): number {

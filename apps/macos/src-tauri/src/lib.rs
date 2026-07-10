@@ -1,9 +1,10 @@
 mod scheduler;
+mod tray;
 
 use tauri::{
     menu::{MenuBuilder, MenuItem},
     tray::TrayIconBuilder,
-    AppHandle, Manager, RunEvent, WindowEvent,
+    AppHandle, Emitter, Manager, RunEvent, WindowEvent,
 };
 
 /// Show + focus the main window, optionally routing the hash-routed UI to a page.
@@ -28,31 +29,35 @@ pub fn run() {
         .manage(scheduler::SchedulerState::default())
         .invoke_handler(tauri::generate_handler![
             scheduler::schedule_wake,
-            scheduler::cancel_wake
+            scheduler::cancel_wake,
+            tray::set_tray_title,
+            tray::set_tray_menu
         ])
         .setup(|app| {
+            // Initial menu; the webview replaces it with live status (and the
+            // Pomodoro actions) via `set_tray_menu` once it loads.
             let open = MenuItem::with_id(app, "show", "Open Cuewise", true, None::<&str>)?;
-            let focus =
-                MenuItem::with_id(app, "focus", "Start a Focus Session", true, None::<&str>)?;
             let insights = MenuItem::with_id(app, "insights", "View Insights", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit Cuewise", true, None::<&str>)?;
             let menu = MenuBuilder::new(app)
                 .item(&open)
-                .item(&focus)
                 .item(&insights)
                 .separator()
                 .item(&quit)
                 .build()?;
 
-            let _tray = TrayIconBuilder::new()
+            let _tray = TrayIconBuilder::with_id(tray::TRAY_ID)
                 .icon(app.default_window_icon().unwrap().clone())
                 .tooltip("Cuewise")
                 .menu(&menu)
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "show" => reveal(app, None),
-                    "focus" => reveal(app, Some("pomodoro")),
                     "insights" => reveal(app, Some("insights")),
                     "quit" => app.exit(0),
+                    // Pomodoro controls live in the webview store; relay the click.
+                    "pause" | "resume" | "start" => {
+                        let _ = app.emit("tray://action", event.id.as_ref().to_string());
+                    }
                     _ => {}
                 })
                 .build(app)?;

@@ -6,6 +6,7 @@ import { LocalStorageKeyValueStore } from '@cuewise/storage';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { NoopScheduler, TauriNotifier, TauriScheduler, WebNotifier } from './platform';
+import { TrayStatusBridge } from './tray/TrayStatusBridge';
 
 // Bind the platform seams for the Tauri webview so the reused extension stores
 // and helpers work unchanged: localStorage-backed storage, native OS
@@ -35,6 +36,7 @@ if (!rootElement) {
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
     <PomodoroPipProvider>
+      {inTauri ? <TrayStatusBridge /> : null}
       <App />
     </PomodoroPipProvider>
   </React.StrictMode>

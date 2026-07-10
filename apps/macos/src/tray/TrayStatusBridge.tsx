@@ -1,0 +1,147 @@
+import {
+  getSessionLabel,
+  type SessionType,
+  usePomodoroStore,
+  useReminderStore,
+} from '@cuewise/app';
+import {
+  calculateFocusTimeToday,
+  countFocusSessionsToday,
+  formatTimeRemaining,
+  logger,
+} from '@cuewise/shared';
+import { getPomodoroSessions } from '@cuewise/storage';
+import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
+import { useEffect } from 'react';
+
+/**
+ * Projects the (single-webview) Pomodoro + reminder state onto the native
+ * menu-bar tray: the live timer as the tray title, and a rebuilt menu with status
+ * lines + controls. Pomodoro menu clicks come back as `tray://action` events and
+ * are dispatched into the store. macOS-only — mounted from main.tsx under Tauri.
+ */
+
+type TrayAction = { id: string; label: string };
+
+const SESSION_EMOJI: Record<SessionType, string> = {
+  work: '🍅',
+  break: '☕',
+  longBreak: '🌙',
+};
+
+function formatFocusMinutes(minutes: number): string {
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  if (hours > 0) {
+    return `${hours}h ${mins}m`;
+  }
+  return `${mins}m`;
+}
+
+function formatDueIn(dueDate: Date): string {
+  const minutes = Math.round((dueDate.getTime() - Date.now()) / 60000);
+  if (minutes <= 0) {
+    return 'now';
+  }
+  if (minutes < 60) {
+    return `in ${minutes} min`;
+  }
+  return `in ${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+}
+
+export function TrayStatusBridge(): null {
+  const status = usePomodoroStore((state) => state.status);
+  const sessionType = usePomodoroStore((state) => state.sessionType);
+  const timeRemaining = usePomodoroStore((state) => state.timeRemaining);
+  const nextReminder = useReminderStore((state) =>
+    state.upcomingReminders.find((reminder) => reminder.paused !== true)
+  );
+
+  // Relay Pomodoro control clicks from the native tray menu into the store.
+  useEffect(() => {
+    const unlisten = listen<string>('tray://action', (event) => {
+      const store = usePomodoroStore.getState();
+      switch (event.payload) {
+        case 'pause':
+          store.pause();
+          break;
+        case 'resume':
+          store.resume();
+          break;
+        case 'start':
+          store.start();
+          break;
+        default:
+          break;
+      }
+    });
+    return () => {
+      unlisten
+        .then((remove) => remove())
+        .catch((error) => logger.error('Failed to remove tray action listener', error));
+    };
+  }, []);
+
+  // Push the live timer into the menu-bar title on every tick.
+  useEffect(() => {
+    let title: string | null = null;
+    if (status !== 'idle') {
+      const icon = status === 'paused' ? '⏸' : SESSION_EMOJI[sessionType];
+      title = `${icon} ${formatTimeRemaining(timeRemaining)}`;
+    }
+    invoke('set_tray_title', { title }).catch((error) =>
+      logger.error('Failed to set tray title', error)
+    );
+  }, [status, sessionType, timeRemaining]);
+
+  // Rebuild the menu only on discrete changes (session / pause state / next
+  // reminder minute), not every tick — the countdown lives in the title.
+  const reminderKey = nextReminder
+    ? `${nextReminder.id}:${Math.round((new Date(nextReminder.dueDate).getTime() - Date.now()) / 60000)}`
+    : 'none';
+  useEffect(() => {
+    let cancelled = false;
+    const build = async () => {
+      const sessions = await getPomodoroSessions();
+      if (cancelled) {
+        return;
+      }
+      const stats = `Today · 🍅 ${countFocusSessionsToday(sessions)} · ${formatFocusMinutes(
+        calculateFocusTimeToday(sessions)
+      )}`;
+
+      let info: string[];
+      let actions: TrayAction[];
+      if (status === 'idle' && sessionType === 'work') {
+        // Ready to start a focus session (fresh, or after a completed break).
+        const line = nextReminder
+          ? `🔔 ${nextReminder.text} · ${formatDueIn(new Date(nextReminder.dueDate))}`
+          : 'No timer running';
+        info = [line, stats];
+        actions = [{ id: 'start', label: 'Start focus' }];
+      } else if (status === 'idle') {
+        // A break is queued (after a completed or skipped work session) but not
+        // yet started — surface it so it doesn't read like the timer just stopped.
+        const label = getSessionLabel(sessionType);
+        info = [`${SESSION_EMOJI[sessionType]} ${label} ready`, stats];
+        actions = [{ id: 'start', label: `Start ${label.toLowerCase()}` }];
+      } else {
+        const paused = status === 'paused';
+        const label = `${SESSION_EMOJI[sessionType]} ${getSessionLabel(sessionType)}${
+          paused ? ' (paused)' : ''
+        }`;
+        info = [label, stats];
+        actions = paused ? [{ id: 'resume', label: 'Resume' }] : [{ id: 'pause', label: 'Pause' }];
+      }
+
+      await invoke('set_tray_menu', { info, actions });
+    };
+    build().catch((error) => logger.error('Failed to build tray menu', error));
+    return () => {
+      cancelled = true;
+    };
+  }, [status, sessionType, reminderKey, nextReminder]);
+
+  return null;
+}

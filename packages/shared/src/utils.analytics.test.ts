@@ -12,12 +12,20 @@ import {
   calculateMonthlyTrends,
   calculatePomodoroHeatmap,
   calculateWeeklyTrends,
+  countFocusSessionsToday,
   exportDailyTrendsCSV,
   exportGoalsCSV,
   exportMonthlyTrendsCSV,
   exportPomodoroSessionsCSV,
   exportWeeklyTrendsCSV,
 } from './utils';
+
+describe('countFocusSessionsToday', () => {
+  it("counts only today's non-interrupted work sessions", () => {
+    // Fixture: 3 completed work sessions today, plus yesterday / interrupted / break sessions.
+    expect(countFocusSessionsToday(createTestPomodoroSessions())).toBe(3);
+  });
+});
 
 describe('Analytics Utilities', () => {
   describe('calculateDailyTrends', () => {
