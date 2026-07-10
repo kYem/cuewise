@@ -9,6 +9,7 @@
  */
 
 import { logger } from '@cuewise/shared';
+import { useToastStore } from '../stores/toast-store';
 
 /**
  * Playlist metadata returned from YouTube
@@ -101,6 +102,32 @@ interface PlayerState {
   volume: number;
 }
 
+// YouTube onError codes meaning "this specific video can't be embedded" — removed
+// (100), private/not found, or embedding disabled by its owner (101 & 150). In a
+// playlist we skip past them; on their own they're just unavailable.
+const RECOVERABLE_ERROR_CODES = new Set([100, 101, 150]);
+// Stop auto-skipping after this many failures in a row so an entirely unplayable
+// playlist doesn't churn forever.
+const MAX_CONSECUTIVE_SKIPS = 5;
+
+export type PlayerErrorAction = 'skip' | 'give-up' | 'notify';
+
+/**
+ * Decide how to handle a YouTube onError: skip a per-video failure within a
+ * playlist, give up once too many fail in a row, or just notify otherwise.
+ * `priorErrors` is the count of consecutive failures before this one.
+ */
+export function decidePlayerErrorAction(
+  errorCode: number,
+  hasPlaylist: boolean,
+  priorErrors: number
+): PlayerErrorAction {
+  if (hasPlaylist && RECOVERABLE_ERROR_CODES.has(errorCode)) {
+    return priorErrors + 1 <= MAX_CONSECUTIVE_SKIPS ? 'skip' : 'give-up';
+  }
+  return 'notify';
+}
+
 class YouTubePlayerService {
   private iframe: HTMLIFrameElement | null = null;
   private container: HTMLDivElement | null = null;
@@ -118,6 +145,7 @@ class YouTubePlayerService {
   private timeTrackingInterval: ReturnType<typeof setInterval> | null = null;
   private onTimeUpdateCallbacks: Array<(videoId: string, time: number) => void> = [];
   private lastTimeUpdateNotification = 0; // Timestamp of last callback notification
+  private consecutiveErrors = 0; // consecutive playback errors, for bounded auto-skip
 
   /**
    * Initialize the YouTube player by creating a hidden iframe
@@ -295,7 +323,7 @@ class YouTubePlayerService {
       } else if (data.event === 'onReady') {
         logger.info('YouTube player ready event received');
       } else if (data.event === 'onError') {
-        logger.error('YouTube player error', { errorCode: data.info });
+        this.handlePlayerError(data.info);
       } else if (data.event === 'infoDelivery') {
         // Handle periodic infoDelivery messages from YouTube
         // These contain currentTime, duration, videoData, etc.
@@ -314,6 +342,38 @@ class YouTubePlayerService {
       }
     } catch {
       // Not a JSON message, ignore
+    }
+  }
+
+  /**
+   * Recover from YouTube playback errors instead of stalling silently. A per-video
+   * failure (removed / private / embedding disabled) skips to the next track in a
+   * playlist — bounded so an entirely unplayable playlist doesn't churn forever —
+   * and other errors surface a toast so the stall is at least visible.
+   */
+  private handlePlayerError(errorCode: number): void {
+    logger.error('YouTube player error', { errorCode });
+
+    const action = decidePlayerErrorAction(
+      errorCode,
+      this.state.currentPlaylistId !== null,
+      this.consecutiveErrors
+    );
+
+    if (action === 'skip') {
+      this.consecutiveErrors += 1;
+      logger.warn('Skipping unplayable YouTube track', {
+        errorCode,
+        attempt: this.consecutiveErrors,
+      });
+      this.nextVideo();
+    } else if (action === 'give-up') {
+      useToastStore
+        .getState()
+        .error("Couldn't play this playlist — its tracks aren't available for embedded playback.");
+      this.consecutiveErrors = 0;
+    } else {
+      useToastStore.getState().warning('This track is unavailable to play.');
     }
   }
 
@@ -370,6 +430,7 @@ class YouTubePlayerService {
       case PLAYER_STATE.PLAYING:
         this.state.isPlaying = true;
         this.state.isPaused = false;
+        this.consecutiveErrors = 0; // a track played, so the failure run is over
         break;
       case PLAYER_STATE.PAUSED:
         this.state.isPlaying = false;
