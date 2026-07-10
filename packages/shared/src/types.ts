@@ -126,6 +126,22 @@ export interface PomodoroSession {
   goalId?: string; // Optional goal this session is associated with
 }
 
+// Posture tracking (macOS): a derived reading from the on-device posture sidecar.
+// This is the integration contract — it mirrors PostureKit's `PostureSample` Swift
+// struct verbatim. Never an image; only numbers. Optional metrics are absent when
+// no face is detected (the Swift encoder omits nil keys).
+export type PostureStatus = 'good' | 'mild' | 'poor' | 'absent';
+
+export interface PostureSample {
+  id: string;
+  timestamp: string; // ISO-8601
+  status: PostureStatus;
+  present: boolean; // Was a face detected this tick?
+  screenDistanceRatio?: number; // Face height / frame height; larger = closer
+  neckDeviation?: number; // Signed deviation of the tech-neck metric from baseline (0 = baseline)
+  headTiltDegrees?: number; // Head roll; chronic lean
+}
+
 // Customization types
 export type ColorTheme = 'purple' | 'forest' | 'rose' | 'glass';
 export type LayoutDensity = 'compact' | 'comfortable' | 'spacious';

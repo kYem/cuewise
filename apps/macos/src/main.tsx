@@ -6,6 +6,7 @@ import { LocalStorageKeyValueStore } from '@cuewise/storage';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { NoopScheduler, TauriNotifier, TauriScheduler, WebNotifier } from './platform';
+import { PosturePanel } from './posture/PosturePanel';
 import { TrayStatusBridge } from './tray/TrayStatusBridge';
 
 // Bind the platform seams for the Tauri webview so the reused extension stores
@@ -37,6 +38,7 @@ ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
     <PomodoroPipProvider>
       {inTauri ? <TrayStatusBridge /> : null}
+      {inTauri ? <PosturePanel /> : null}
       <App />
     </PomodoroPipProvider>
   </React.StrictMode>
