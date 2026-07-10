@@ -7,7 +7,8 @@ import Vision
 /// sidecar) would embed `PostureKit` and feed it observations; the spike's
 /// executable is just one throwaway consumer.
 public final class PostureAnalyzer {
-  // Deviation thresholds for the coarse status rollup (tunable POC guesses).
+  // Deviation thresholds for the coarse status rollup. Heuristic — tuned so a
+  // moderate lean-in reaches "poor" (which drives nudges); refine with field data.
   private let mildThreshold: Double
   private let poorThreshold: Double
   private let autoCalibrateAfter: Int
@@ -20,7 +21,7 @@ public final class PostureAnalyzer {
   private var presentSampleCount = 0
   private var idCounter = 0
 
-  public init(mildThreshold: Double = 0.04, poorThreshold: Double = 0.09, autoCalibrateAfter: Int = 5) {
+  public init(mildThreshold: Double = 0.03, poorThreshold: Double = 0.06, autoCalibrateAfter: Int = 5) {
     self.mildThreshold = mildThreshold
     self.poorThreshold = poorThreshold
     self.autoCalibrateAfter = autoCalibrateAfter

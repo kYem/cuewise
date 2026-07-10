@@ -8,7 +8,13 @@ import {
 import type { PostureStatus } from '@cuewise/shared';
 import { Button, cn } from '@cuewise/ui';
 import { PersonStanding } from 'lucide-react';
-import { calibratePosture, startPosture, stopPosture, usePosture } from './posture-controller';
+import {
+  calibratePosture,
+  setPostureNudges,
+  startPosture,
+  stopPosture,
+  usePosture,
+} from './posture-controller';
 
 const STATUS_META: Record<PostureStatus, { label: string; dot: string }> = {
   good: { label: 'Good posture', dot: 'bg-emerald-500' },
@@ -25,7 +31,7 @@ function fmt(value: number | undefined, digits = 2): string {
 }
 
 function PostureSection({ filter }: SettingsSectionProps) {
-  const { tracking, sample, error } = usePosture();
+  const { tracking, nudgesEnabled, sample, error } = usePosture();
   const meta = sample ? STATUS_META[sample.status] : null;
 
   return (
@@ -49,6 +55,15 @@ function PostureSection({ filter }: SettingsSectionProps) {
           checked={tracking}
           onChange={(next) => (next ? startPosture() : stopPosture())}
         />
+      </SettingRow>
+
+      <SettingRow
+        label="Remind me to fix my posture"
+        help="A gentle notification when you've been leaning in for a while."
+        keywords="posture nudge remind notification slouch reminder"
+        filter={filter}
+      >
+        <Switch label="Posture reminders" checked={nudgesEnabled} onChange={setPostureNudges} />
       </SettingRow>
 
       {tracking ? (
