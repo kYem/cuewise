@@ -1,4 +1,5 @@
 import type { Hono } from 'hono';
+import type { AuthVars } from '../auth-middleware';
 import { sha256Base64Url } from '../crypto-utils';
 import type { Env } from '../env';
 import type { AppDepsResolved } from '../index';
@@ -33,7 +34,10 @@ function parseTokenRequest(body: unknown): TokenRequest | ValidationIssue[] {
   return b as unknown as TokenRequest;
 }
 
-export function registerAuthRoutes(app: Hono<{ Bindings: Env }>, deps: AppDepsResolved): void {
+export function registerAuthRoutes(
+  app: Hono<{ Bindings: Env } & AuthVars>,
+  deps: AppDepsResolved
+): void {
   app.post('/v1/auth/token', async (c) => {
     let raw: unknown;
     try {

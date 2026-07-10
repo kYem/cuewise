@@ -1,4 +1,5 @@
 import type { Hono } from 'hono';
+import type { AuthVars } from '../auth-middleware';
 import type { Env } from '../env';
 import type { AppDepsResolved } from '../index';
 import { problem, type ValidationIssue } from '../problems';
@@ -30,7 +31,10 @@ function isAllowedReturnUri(uri: string, env: Env): boolean {
   return env.ALLOWED_RETURN_URIS.split(',').some((allowed) => uri === allowed.trim());
 }
 
-export function registerAppleRoutes(app: Hono<{ Bindings: Env }>, deps: AppDepsResolved): void {
+export function registerAppleRoutes(
+  app: Hono<{ Bindings: Env } & AuthVars>,
+  deps: AppDepsResolved
+): void {
   app.get('/v1/auth/apple/start', (c) => {
     const returnUri = c.req.query('return_uri') ?? '';
     const codeChallenge = c.req.query('code_challenge') ?? '';

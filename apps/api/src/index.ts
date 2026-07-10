@@ -1,11 +1,12 @@
 import { logger } from '@cuewise/shared';
 import { Hono } from 'hono';
-import { requireSession } from './auth-middleware';
+import { type AuthVars, requireSession } from './auth-middleware';
 import { D1SyncStore } from './d1-store';
 import type { Env } from './env';
 import { problem } from './problems';
 import { registerAppleRoutes } from './routes/apple';
 import { registerAuthRoutes } from './routes/auth';
+import { registerChangesRoutes } from './routes/changes';
 import type { SyncStore } from './store';
 import { type IdTokenVerifier, verifyAppleIdToken, verifyGoogleIdToken } from './verifiers';
 
@@ -21,13 +22,13 @@ export type AppDepsResolved = {
   appleVerifier: IdTokenVerifier;
 };
 
-export function createApp(deps: AppDeps = {}): Hono<{ Bindings: Env }> {
+export function createApp(deps: AppDeps = {}): Hono<{ Bindings: Env } & AuthVars> {
   const resolved: AppDepsResolved = {
     storeFactory: deps.storeFactory ?? ((db) => new D1SyncStore(db)),
     googleVerifier: deps.googleVerifier ?? verifyGoogleIdToken,
     appleVerifier: deps.appleVerifier ?? verifyAppleIdToken,
   };
-  const app = new Hono<{ Bindings: Env }>();
+  const app = new Hono<{ Bindings: Env } & AuthVars>();
 
   app.get('/v1/health', (c) => {
     return c.json({ status: 'ok' });
@@ -42,8 +43,7 @@ export function createApp(deps: AppDeps = {}): Hono<{ Bindings: Env }> {
 
   registerAuthRoutes(app, resolved);
   registerAppleRoutes(app, resolved);
-
-  app.get('/v1/changes', (c) => c.json({ ok: true }));
+  registerChangesRoutes(app, resolved);
 
   app.notFound(() => {
     return problem('not_found');
