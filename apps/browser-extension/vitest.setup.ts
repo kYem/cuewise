@@ -33,7 +33,12 @@ beforeEach(() => {
   // Default no-op platform so stores never throw on getScheduler()/getNotifier();
   // individual store tests override with spies via configurePlatform().
   configurePlatform({
-    scheduler: { deliversInBackground: false, scheduleAt: async () => {}, cancel: async () => {} },
+    scheduler: {
+      deliversInBackground: false,
+      persistsAcrossRestarts: false,
+      scheduleAt: async () => {},
+      cancel: async () => {},
+    },
     notifier: { notify: async () => {}, clear: async () => {} },
   });
 });

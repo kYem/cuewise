@@ -52,10 +52,15 @@ beforeAll(async () => {
   fireClick = chromeMock.notifications.onClicked.addListener.mock.calls[0][0] as ClickListener;
 });
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.clearAllMocks();
   // The shared vitest setup resets global.chrome each test — re-assert our mock.
   global.chrome = chromeMock as unknown as typeof chrome;
+  // It also clobbers the platform registry with no-op adapters; the shared fire
+  // handler resolves the notifier/scheduler through that registry, so re-bind the
+  // Chrome adapters here just as the service-worker module does on load.
+  const { configureChromePlatform } = await import('./platform');
+  configureChromePlatform();
   setRemindersMock.mockResolvedValue({ success: true });
 });
 

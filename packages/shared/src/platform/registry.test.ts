@@ -10,6 +10,7 @@ import type { KeyValueStore, Notifier, Scheduler } from './types';
 
 const fakeScheduler: Scheduler = {
   deliversInBackground: false,
+  persistsAcrossRestarts: false,
   scheduleAt: async () => {},
   cancel: async () => {},
 };

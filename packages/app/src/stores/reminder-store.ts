@@ -172,6 +172,22 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       }
 
       commitReminders(set, reminders, { isLoading: false });
+
+      // Rust-backed schedulers lose their armed wakes on restart (unlike
+      // chrome.alarms), so re-arm every active reminder from storage. Overdue
+      // one-offs fire on arm; skip ones already delivered so they don't re-notify.
+      const scheduler = getScheduler();
+      if (scheduler.deliversInBackground && !scheduler.persistsAcrossRestarts) {
+        for (const reminder of reminders) {
+          if (reminder.completed || reminder.paused) {
+            continue;
+          }
+          if (!reminder.recurring && reminder.notified) {
+            continue;
+          }
+          await armReminderAlarm(reminder.id, new Date(reminder.dueDate).getTime());
+        }
+      }
     } catch (error) {
       logger.error('Error initializing reminder store', error);
       const errorMessage = 'Failed to load reminders. Please refresh the page.';
