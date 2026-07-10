@@ -25,9 +25,15 @@ import { QuoteDisplay } from './QuoteDisplay';
 import { ReminderWidget } from './ReminderWidget';
 import { ReviewPromptModal } from './ReviewPromptModal';
 import { SettingsModal } from './SettingsModal';
+import type { SettingsSection } from './settings/SettingsSections';
 import { WelcomeModal } from './WelcomeModal';
 
-export const NewTabPage: React.FC = () => {
+interface NewTabPageProps {
+  /** Platform-specific settings sections injected by the host (macOS Posture). */
+  extraSections?: SettingsSection[];
+}
+
+export const NewTabPage: React.FC<NewTabPageProps> = ({ extraSections }) => {
   const initializeQuotes = useQuoteStore((state) => state.initialize);
   const refreshQuote = useQuoteStore((state) => state.refreshQuote);
   const initializeSettings = useSettingsStore((state) => state.initialize);
@@ -476,7 +482,11 @@ export const NewTabPage: React.FC = () => {
       <ReminderWidget />
 
       {/* Settings Modal */}
-      <SettingsModal isOpen={isSettingsModalOpen} onClose={() => setIsSettingsModalOpen(false)} />
+      <SettingsModal
+        isOpen={isSettingsModalOpen}
+        onClose={() => setIsSettingsModalOpen(false)}
+        extraSections={extraSections}
+      />
 
       {/* Add Concept Modal */}
       <Modal
