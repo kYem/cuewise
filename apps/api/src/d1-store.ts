@@ -118,15 +118,70 @@ export class D1SyncStore implements SyncStore {
     };
   }
 
-  async applyChanges(_userId: string, _changes: PushRecord[]): Promise<number> {
-    throw new Error('not implemented');
+  async applyChanges(userId: string, changes: PushRecord[]): Promise<number> {
+    const ts = this.now();
+    const stmts: D1PreparedStatement[] = [];
+    for (const change of changes) {
+      stmts.push(
+        this.db.prepare('UPDATE users SET last_seq = last_seq + 1 WHERE id = ?').bind(userId)
+      );
+      stmts.push(
+        this.db
+          .prepare(
+            `INSERT INTO records (user_id, collection, entity_id, seq, ciphertext, deleted, client_updated_at, server_received_at)
+             VALUES (?, ?, ?, (SELECT last_seq FROM users WHERE id = ?), ?, ?, ?, ?)
+             ON CONFLICT (user_id, collection, entity_id) DO UPDATE SET
+               seq = excluded.seq, ciphertext = excluded.ciphertext, deleted = excluded.deleted,
+               client_updated_at = excluded.client_updated_at, server_received_at = excluded.server_received_at`
+          )
+          .bind(
+            userId,
+            change.collection,
+            change.entityId,
+            userId,
+            change.ciphertext,
+            change.deleted ? 1 : 0,
+            change.clientUpdatedAt,
+            ts
+          )
+      );
+    }
+    stmts.push(this.db.prepare('SELECT last_seq FROM users WHERE id = ?').bind(userId));
+    const results = await this.db.batch<{ last_seq: number }>(stmts);
+    const tail = results[results.length - 1];
+    if (tail === undefined || tail.results[0] === undefined) {
+      throw new Error('applyChanges: missing cursor result');
+    }
+    return tail.results[0].last_seq;
   }
 
   async listChanges(
-    _userId: string,
-    _since: number
+    userId: string,
+    since: number
   ): Promise<{ records: SyncRecord[]; cursor: number }> {
-    throw new Error('not implemented');
+    const { results } = await this.db
+      .prepare(
+        'SELECT collection, entity_id, seq, ciphertext, deleted, client_updated_at FROM records WHERE user_id = ? AND seq > ? ORDER BY seq ASC'
+      )
+      .bind(userId, since)
+      .all<{
+        collection: string;
+        entity_id: string;
+        seq: number;
+        ciphertext: string;
+        deleted: number;
+        client_updated_at: number;
+      }>();
+    const records = results.map((r) => ({
+      collection: r.collection,
+      entityId: r.entity_id,
+      seq: r.seq,
+      ciphertext: r.ciphertext,
+      deleted: r.deleted === 1,
+      clientUpdatedAt: r.client_updated_at,
+    }));
+    const last = records[records.length - 1];
+    return { records, cursor: last === undefined ? since : last.seq };
   }
 
   async exportUser(_userId: string): Promise<{ records: SyncRecord[] }> {
