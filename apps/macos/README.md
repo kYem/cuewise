@@ -27,12 +27,27 @@ pnpm --filter @cuewise/macos dev  # tauri dev: builds Rust, starts Vite, opens t
 The first `cargo` build pulls the Tauri crates and takes a few minutes. Build a
 distributable bundle with `pnpm --filter @cuewise/macos bundle`.
 
+### Posture sidecar (macOS-only, opt-in)
+
+On-device posture tracking runs as a Swift sidecar (`posture-sidecar/`, reusing
+`PostureKit`'s Vision analysis) that streams `PostureSample` JSON over stdio. Build
+it before `dev` / `bundle` so Tauri can resolve the externalBin — otherwise the
+spawn fails with "No such file or directory":
+
+```bash
+pnpm --filter @cuewise/macos build:sidecar  # swift build + copy into src-tauri/binaries/
+```
+
+Frames are analyzed in memory only — no image is ever stored or sent.
+
 ## Status → next
 
 - [x] Shell scaffold: window + tray, platform seams wired, on-brand landing.
-- [ ] Mount the real extension surfaces — new tab / Pomodoro / Insights (ENG-35).
-- [ ] Tray webview popover for the posture/status widget (ENG-36).
-- [ ] Swift/Vision posture sidecar over IPC (ENG-37).
+- [x] Mount the real extension surfaces — new tab / Pomodoro / Insights (ENG-35).
+- [x] Native background scheduler — reminders fire while hidden (ENG-40).
+- [x] Menu-bar tray status: live Pomodoro timer + controls (ENG-36).
+- [x] Swift/Vision posture sidecar over IPC — reused analysis, live stream (ENG-37).
+- [ ] Real posture UI in a Settings section (design-system components).
 
 ## Notes
 

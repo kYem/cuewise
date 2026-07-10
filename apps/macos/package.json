@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "tauri dev",
     "dev:vite": "vite",
+    "build:sidecar": "bash scripts/build-sidecar.sh",
     "bundle": "tauri build",
     "build:vite": "vite build",
     "preview": "vite preview",

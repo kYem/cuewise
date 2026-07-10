@@ -1,3 +1,4 @@
+mod posture;
 mod scheduler;
 mod tray;
 
@@ -26,12 +27,17 @@ fn reveal(app: &AppHandle, hash: Option<&str>) {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_shell::init())
         .manage(scheduler::SchedulerState::default())
+        .manage(posture::PostureState::default())
         .invoke_handler(tauri::generate_handler![
             scheduler::schedule_wake,
             scheduler::cancel_wake,
             tray::set_tray_title,
-            tray::set_tray_menu
+            tray::set_tray_menu,
+            posture::start_posture,
+            posture::stop_posture,
+            posture::calibrate_posture
         ])
         .setup(|app| {
             // Initial menu; the webview replaces it with live status (and the
