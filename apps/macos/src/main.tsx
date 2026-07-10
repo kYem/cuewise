@@ -7,6 +7,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { AppWrapper } from './AppWrapper';
 import { NoopScheduler, TauriNotifier, TauriScheduler, WebNotifier } from './platform';
+import { initPosture } from './posture/posture-controller';
 import { TrayStatusBridge } from './tray/TrayStatusBridge';
 
 // Wire the platform adapters for the Tauri webview so the reused extension stores
@@ -28,6 +29,11 @@ configurePlatform({
 // we deliver the reminder here (the webview stays alive behind the tray). This
 // mirrors the extension's service worker. No-op under NoopScheduler.
 scheduler.onFire(handleReminderFire);
+
+// Restore posture tracking if it was left on last session (macOS-only, opt-in).
+if (inTauri) {
+  initPosture();
+}
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
