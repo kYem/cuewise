@@ -1,6 +1,7 @@
 import { env } from 'cloudflare:test';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { createApp } from '../index';
+import { D1SyncStore } from '../d1-store';
+import app, { createApp } from '../index';
 import { createTestIdp, type TestIdp } from './__fixtures__/jwks.fixtures';
 
 const GOOGLE_ISS = 'https://accounts.google.com';
@@ -56,15 +57,64 @@ describe('POST /v1/auth/token (google)', () => {
   });
 
   it('honors the dev provider only when DEV_FAKE_AUTH=1', async () => {
-    const app = appWithIdp();
+    const appInstance = appWithIdp();
     const req = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ provider: 'dev', credential: 'dev-user-1', deviceName: 'e2e' }),
     };
-    const off = await app.request('/v1/auth/token', req, testEnv());
+    const off = await appInstance.request('/v1/auth/token', req, testEnv());
     expect(off.status).toBe(400);
-    const on = await app.request('/v1/auth/token', req, { ...testEnv(), DEV_FAKE_AUTH: '1' });
+    const on = await appInstance.request('/v1/auth/token', req, {
+      ...testEnv(),
+      DEV_FAKE_AUTH: '1',
+    });
     expect(on.status).toBe(200);
+  });
+});
+
+describe('POST /v1/auth/logout', () => {
+  it('returns 401 unauthorized when no Authorization header is provided', async () => {
+    const res = await app.request('/v1/auth/logout', { method: 'POST' }, testEnv());
+    expect(res.status).toBe(401);
+    const body = await res.json<{ code: string }>();
+    expect(body.code).toBe('unauthorized');
+  });
+
+  it('returns 401 invalid_token when Authorization header contains an invalid token', async () => {
+    const res = await app.request(
+      '/v1/auth/logout',
+      { method: 'POST', headers: { Authorization: 'Bearer garbage' } },
+      testEnv()
+    );
+    expect(res.status).toBe(401);
+    const body = await res.json<{ code: string }>();
+    expect(body.code).toBe('invalid_token');
+  });
+
+  it('revokes the session and prevents reuse of the token', async () => {
+    const store = new D1SyncStore(env.DB);
+    const userId = await store.findOrCreateUser({
+      provider: 'dev',
+      providerSub: 'test-user-logout',
+      email: 'logout@test.com',
+    });
+    const token = await store.createSession(userId, 'test-device');
+
+    const logoutRes = await app.request(
+      '/v1/auth/logout',
+      { method: 'POST', headers: { Authorization: `Bearer ${token}` } },
+      testEnv()
+    );
+    expect(logoutRes.status).toBe(204);
+
+    const changesRes = await app.request(
+      '/v1/changes?since=0',
+      { method: 'GET', headers: { Authorization: `Bearer ${token}` } },
+      testEnv()
+    );
+    expect(changesRes.status).toBe(401);
+    const body = await changesRes.json<{ code: string }>();
+    expect(body.code).toBe('invalid_token');
   });
 });

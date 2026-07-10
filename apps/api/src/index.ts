@@ -22,14 +22,14 @@ export function createApp(deps: AppDeps = {}): Hono<{ Bindings: Env }> {
     return c.json({ status: 'ok' });
   });
 
-  registerAuthRoutes(app, { storeFactory, googleVerifier });
-
   const auth = requireSession((env) => storeFactory(env.DB));
   app.use('/v1/changes', auth);
   app.use('/v1/changes/*', auth);
   app.use('/v1/export', auth);
   app.use('/v1/account', auth);
   app.use('/v1/auth/logout', auth);
+
+  registerAuthRoutes(app, { storeFactory, googleVerifier });
 
   app.get('/v1/changes', (c) => c.json({ ok: true }));
 
