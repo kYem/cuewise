@@ -4,19 +4,25 @@ import { requireSession } from './auth-middleware';
 import { D1SyncStore } from './d1-store';
 import type { Env } from './env';
 import { problem } from './problems';
+import { registerAuthRoutes } from './routes/auth';
 import type { SyncStore } from './store';
+import { type IdTokenVerifier, verifyGoogleIdToken } from './verifiers';
 
 export type AppDeps = {
   storeFactory?: (db: D1Database) => SyncStore;
+  googleVerifier?: IdTokenVerifier;
 };
 
 export function createApp(deps: AppDeps = {}): Hono<{ Bindings: Env }> {
   const storeFactory = deps.storeFactory ?? ((db) => new D1SyncStore(db));
+  const googleVerifier = deps.googleVerifier ?? verifyGoogleIdToken;
   const app = new Hono<{ Bindings: Env }>();
 
   app.get('/v1/health', (c) => {
     return c.json({ status: 'ok' });
   });
+
+  registerAuthRoutes(app, { storeFactory, googleVerifier });
 
   const auth = requireSession((env) => storeFactory(env.DB));
   app.use('/v1/changes', auth);
