@@ -1,12 +1,12 @@
-import { App, PomodoroPipProvider } from '@cuewise/app';
+import { PomodoroPipProvider } from '@cuewise/app';
 import { handleReminderFire } from '@cuewise/app/reminder-notifications';
 import '@cuewise/app/styles.css';
 import { configurePlatform } from '@cuewise/shared';
 import { LocalStorageKeyValueStore } from '@cuewise/storage';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { AppWrapper } from './AppWrapper';
 import { NoopScheduler, TauriNotifier, TauriScheduler, WebNotifier } from './platform';
-import { PosturePanel } from './posture/PosturePanel';
 import { TrayStatusBridge } from './tray/TrayStatusBridge';
 
 // Wire the platform adapters for the Tauri webview so the reused extension stores
@@ -38,8 +38,7 @@ ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
     <PomodoroPipProvider>
       {inTauri ? <TrayStatusBridge /> : null}
-      {inTauri ? <PosturePanel /> : null}
-      <App />
+      <AppWrapper />
     </PomodoroPipProvider>
   </React.StrictMode>
 );

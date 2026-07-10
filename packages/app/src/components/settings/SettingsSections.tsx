@@ -781,7 +781,15 @@ function AdvancedSection({ s, set, filter, onReset }: SettingsSectionProps) {
 }
 
 /** Section identifiers, also the routing keys for the sidebar nav. */
-export const SECTION_IDS = ['timer', 'sound', 'focus', 'home', 'goals', 'advanced'] as const;
+export const SECTION_IDS = [
+  'timer',
+  'sound',
+  'focus',
+  'home',
+  'goals',
+  'advanced',
+  'posture',
+] as const;
 export type SectionId = (typeof SECTION_IDS)[number];
 
 export interface SettingsSection {

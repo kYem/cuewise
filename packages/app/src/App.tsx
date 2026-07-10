@@ -9,6 +9,7 @@ import { InsightsPage } from './components/InsightsPage';
 import { NewTabPage } from './components/NewTabPage';
 import { PomodoroPage } from './components/PomodoroPage';
 import { QuoteManagementPage } from './components/QuoteManagementPage';
+import type { SettingsSection } from './components/settings/SettingsSections';
 import { ThemeSwitcher } from './components/ThemeSwitcher';
 import { useSettingsStore } from './stores/settings-store';
 import { useToastStore } from './stores/toast-store';
@@ -17,7 +18,12 @@ import { loadImageWithFallback } from './utils/unsplash';
 
 type Page = 'home' | 'pomodoro' | 'insights' | 'quotes' | 'goals' | 'concepts';
 
-function App() {
+interface AppProps {
+  /** Platform-specific settings sections injected by the host (macOS Posture). */
+  extraSections?: SettingsSection[];
+}
+
+function App({ extraSections }: AppProps = {}) {
   const [currentPage, setCurrentPage] = useState<Page>('home');
   const { toasts, removeToast } = useToastStore();
   const { settings } = useSettingsStore();
@@ -198,7 +204,7 @@ function App() {
           {currentPage === 'quotes' && <QuoteManagementPage />}
           {currentPage === 'goals' && <GoalsPage />}
           {currentPage === 'concepts' && <ConceptsPage />}
-          {currentPage === 'home' && <NewTabPage />}
+          {currentPage === 'home' && <NewTabPage extraSections={extraSections} />}
         </main>
 
         {/* Live Theme Switcher (pushes content to the left when visible) */}

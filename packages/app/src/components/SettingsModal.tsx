@@ -7,13 +7,19 @@ import { createPortal } from 'react-dom';
 import { usePomodoroStore } from '../stores/pomodoro-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { useSoundsStore } from '../stores/sounds-store';
-import { SETTINGS_SECTIONS, type SectionId } from './settings/SettingsSections';
+import {
+  SETTINGS_SECTIONS,
+  type SectionId,
+  type SettingsSection,
+} from './settings/SettingsSections';
 import { planSettingsSideEffects } from './settings/settings-apply';
 import { settingsMatch } from './settings/settings-match';
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
+  /** Platform-specific sections injected by the host (e.g. the macOS "Posture" section). */
+  extraSections?: SettingsSection[];
 }
 
 function SettingsSearch({ value, onChange }: { value: string; onChange: (value: string) => void }) {
@@ -68,7 +74,7 @@ function SavedIndicator({ tick }: { tick: number }) {
   );
 }
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
+export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, extraSections }) => {
   const { settings, updateSettings, resetToDefaults } = useSettingsStore();
   const reloadPomodoroSettings = usePomodoroStore((state) => state.reloadSettings);
   const openSoundsPanel = useSoundsStore((state) => state.openPanel);
@@ -146,10 +152,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   }
 
   const searching = query.trim().length > 0;
-  const matched = SETTINGS_SECTIONS.filter((sec) => settingsMatch(query, sec.label, sec.terms));
-  const activeSection = SETTINGS_SECTIONS.find((sec) => sec.id === active) ?? SETTINGS_SECTIONS[0];
+  const allSections = extraSections?.length
+    ? [...SETTINGS_SECTIONS, ...extraSections]
+    : SETTINGS_SECTIONS;
+  const matched = allSections.filter((sec) => settingsMatch(query, sec.label, sec.terms));
+  const activeSection = allSections.find((sec) => sec.id === active) ?? allSections[0];
 
-  const renderSection = (sec: (typeof SETTINGS_SECTIONS)[number], filter: string) => {
+  const renderSection = (sec: SettingsSection, filter: string) => {
     const Section = sec.component;
     return (
       <Section
@@ -201,7 +210,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
           <aside className="flex w-[210px] flex-none flex-col gap-3 border-r border-divider p-3">
             <SettingsSearch value={query} onChange={setQuery} />
             <nav aria-label="Settings sections" className="flex flex-col gap-0.5">
-              {SETTINGS_SECTIONS.map((sec) => {
+              {allSections.map((sec) => {
                 const isActive = !searching && active === sec.id;
                 return (
                   <button
