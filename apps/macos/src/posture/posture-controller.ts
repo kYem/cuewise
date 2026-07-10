@@ -1,4 +1,4 @@
-import { logger, type PostureSample } from '@cuewise/shared';
+import { getNotifier, logger, type PostureSample, type PostureStatus } from '@cuewise/shared';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { useSyncExternalStore } from 'react';
@@ -10,13 +10,48 @@ import { useSyncExternalStore } from 'react';
 
 export interface PostureState {
   tracking: boolean;
+  nudgesEnabled: boolean;
   sample: PostureSample | null;
+  // Debounced status for the menu-bar tray — changes only once a status holds, so
+  // the tray doesn't flicker on frame-to-frame jitter (Settings uses live `sample`).
+  steadyStatus: PostureStatus | null;
   error: string | null;
 }
 
-let state: PostureState = { tracking: false, sample: null, error: null };
+let state: PostureState = {
+  tracking: false,
+  nudgesEnabled: true,
+  sample: null,
+  steadyStatus: null,
+  error: null,
+};
 const subscribers = new Set<() => void>();
 let unlisteners: UnlistenFn[] = [];
+
+// Nudge on sustained poor posture, then cool down so we don't nag.
+const NUDGE_AFTER_POOR_SAMPLES = 15; // ~30s at the sidecar's 2s cadence
+const NUDGE_COOLDOWN_MS = 5 * 60 * 1000;
+let poorStreak = 0;
+let lastNudgeAt = 0;
+
+// Debounce the tray status: adopt a new status only after it holds for a few
+// samples, so a dropped face-detection frame or threshold jitter doesn't flip the
+// menu bar. Alternating statuses never hold, so the tray stays put.
+const STEADY_SAMPLES = 3; // ~6s at the sidecar's 2s cadence
+let pendingStatus: PostureStatus | null = null;
+let pendingCount = 0;
+
+// Persist the opt-in preferences (macOS-local) so the toggles stick across launches.
+const ENABLED_KEY = 'cuewise.posture.enabled';
+const NUDGES_KEY = 'cuewise.posture.nudges';
+
+function persist(key: string, value: boolean): void {
+  try {
+    localStorage.setItem(key, value ? '1' : '0');
+  } catch (error) {
+    logger.error('Failed to persist posture preference', error);
+  }
+}
 
 function setState(patch: Partial<PostureState>): void {
   state = { ...state, ...patch };
@@ -35,16 +70,22 @@ function detachListeners(): void {
 async function attachListeners(): Promise<void> {
   const onSample = await listen<string>('posture://sample', (event) => {
     try {
-      setState({ sample: JSON.parse(event.payload) as PostureSample });
+      const sample = JSON.parse(event.payload) as PostureSample;
+      setState({ sample });
+      maybeNudge(sample);
+      updateSteadyStatus(sample.status);
     } catch (error) {
       logger.error('Failed to parse posture sample', error);
     }
   });
   const onStopped = await listen('posture://stopped', () => {
     detachListeners();
+    pendingStatus = null;
+    pendingCount = 0;
     setState({
       tracking: false,
       sample: null,
+      steadyStatus: null,
       error: 'Posture tracking stopped — camera unavailable or permission denied.',
     });
   });
@@ -52,6 +93,7 @@ async function attachListeners(): Promise<void> {
 }
 
 export function startPosture(): void {
+  persist(ENABLED_KEY, true);
   if (state.tracking) {
     return;
   }
@@ -66,13 +108,81 @@ export function startPosture(): void {
 }
 
 export function stopPosture(): void {
+  persist(ENABLED_KEY, false);
   invoke('stop_posture').catch((error) => logger.error('Failed to stop posture tracking', error));
   detachListeners();
-  setState({ tracking: false, sample: null });
+  poorStreak = 0;
+  pendingStatus = null;
+  pendingCount = 0;
+  setState({ tracking: false, sample: null, steadyStatus: null });
+}
+
+// Adopt a status for the tray only once it has held for STEADY_SAMPLES in a row.
+function updateSteadyStatus(status: PostureStatus): void {
+  if (status === state.steadyStatus) {
+    pendingStatus = null;
+    pendingCount = 0;
+    return;
+  }
+  if (status === pendingStatus) {
+    pendingCount += 1;
+  } else {
+    pendingStatus = status;
+    pendingCount = 1;
+  }
+  if (pendingCount >= STEADY_SAMPLES) {
+    pendingStatus = null;
+    pendingCount = 0;
+    setState({ steadyStatus: status });
+  }
+}
+
+/** Restore persisted preferences and auto-resume tracking if it was left on. */
+export function initPosture(): void {
+  try {
+    const nudges = localStorage.getItem(NUDGES_KEY);
+    if (nudges !== null) {
+      setState({ nudgesEnabled: nudges === '1' });
+    }
+    if (localStorage.getItem(ENABLED_KEY) === '1') {
+      startPosture();
+    }
+  } catch (error) {
+    logger.error('Failed to restore posture preferences', error);
+  }
 }
 
 export function calibratePosture(): void {
   invoke('calibrate_posture').catch((error) => logger.error('Failed to calibrate posture', error));
+}
+
+/** Toggle the "remind me when I slouch" nudges. */
+export function setPostureNudges(enabled: boolean): void {
+  persist(NUDGES_KEY, enabled);
+  poorStreak = 0;
+  setState({ nudgesEnabled: enabled });
+}
+
+// Fire a gentle nudge once poor posture has persisted, then hold off for a while.
+function maybeNudge(sample: PostureSample): void {
+  if (!state.nudgesEnabled || sample.status !== 'poor') {
+    poorStreak = 0;
+    return;
+  }
+  poorStreak += 1;
+  const now = Date.now();
+  if (poorStreak < NUDGE_AFTER_POOR_SAMPLES || now - lastNudgeAt < NUDGE_COOLDOWN_MS) {
+    return;
+  }
+  lastNudgeAt = now;
+  poorStreak = 0;
+  getNotifier()
+    .notify({
+      id: 'posture-nudge',
+      title: '🧍 Posture check',
+      body: "You've been leaning in for a while — sit back and reset.",
+    })
+    .catch((error) => logger.error('Failed to deliver posture nudge', error));
 }
 
 function subscribe(callback: () => void): () => void {

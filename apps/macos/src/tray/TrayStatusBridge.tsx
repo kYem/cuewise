@@ -9,11 +9,13 @@ import {
   countFocusSessionsToday,
   formatTimeRemaining,
   logger,
+  type PostureStatus,
 } from '@cuewise/shared';
 import { getPomodoroSessions } from '@cuewise/storage';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { useEffect } from 'react';
+import { usePosture } from '../posture/posture-controller';
 
 /**
  * Projects the (single-webview) Pomodoro + reminder state onto the native
@@ -28,6 +30,15 @@ const SESSION_EMOJI: Record<SessionType, string> = {
   work: '🍅',
   break: '☕',
   longBreak: '🌙',
+};
+
+// A dot for the menu-bar title (a label there is noise); the label goes in the
+// expanded menu instead.
+const POSTURE_META: Record<PostureStatus, { dot: string; label: string }> = {
+  good: { dot: '🟢', label: 'Good posture' },
+  mild: { dot: '🟡', label: 'Ease up' },
+  poor: { dot: '🔴', label: 'Sit back' },
+  absent: { dot: '⚪', label: 'No face detected' },
 };
 
 function formatFocusMinutes(minutes: number): string {
@@ -57,6 +68,12 @@ export function TrayStatusBridge(): null {
   const nextReminder = useReminderStore((state) =>
     state.upcomingReminders.find((reminder) => reminder.paused !== true)
   );
+  const posture = usePosture();
+  const postureStatus = posture.tracking ? posture.steadyStatus : null;
+  const postureDot = postureStatus ? POSTURE_META[postureStatus].dot : null;
+  const postureLine = postureStatus
+    ? `${POSTURE_META[postureStatus].dot} ${POSTURE_META[postureStatus].label}`
+    : null;
 
   // Relay Pomodoro control clicks from the native tray menu into the store.
   useEffect(() => {
@@ -83,17 +100,22 @@ export function TrayStatusBridge(): null {
     };
   }, []);
 
-  // Push the live timer into the menu-bar title on every tick.
+  // Push the live timer + posture dot into the menu-bar title. Posture stays
+  // glanceable there even when no Pomodoro is running.
   useEffect(() => {
-    let title: string | null = null;
+    const parts: string[] = [];
+    if (postureDot) {
+      parts.push(postureDot);
+    }
     if (status !== 'idle') {
       const icon = status === 'paused' ? '⏸' : SESSION_EMOJI[sessionType];
-      title = `${icon} ${formatTimeRemaining(timeRemaining)}`;
+      parts.push(`${icon} ${formatTimeRemaining(timeRemaining)}`);
     }
+    const title = parts.length > 0 ? parts.join('  ') : null;
     invoke('set_tray_title', { title }).catch((error) =>
       logger.error('Failed to set tray title', error)
     );
-  }, [status, sessionType, timeRemaining]);
+  }, [status, sessionType, timeRemaining, postureDot]);
 
   // Rebuild the menu only on discrete changes (session / pause state / next
   // reminder minute), not every tick — the countdown lives in the title.
@@ -135,13 +157,16 @@ export function TrayStatusBridge(): null {
         actions = paused ? [{ id: 'resume', label: 'Resume' }] : [{ id: 'pause', label: 'Pause' }];
       }
 
+      if (postureLine) {
+        info = [postureLine, ...info];
+      }
       await invoke('set_tray_menu', { info, actions });
     };
     build().catch((error) => logger.error('Failed to build tray menu', error));
     return () => {
       cancelled = true;
     };
-  }, [status, sessionType, reminderKey, nextReminder]);
+  }, [status, sessionType, reminderKey, nextReminder, postureLine]);
 
   return null;
 }
