@@ -32,8 +32,10 @@ export interface SyncStore {
   createSession(userId: string, deviceName: string): Promise<string>;
   lookupSession(rawToken: string): Promise<Session | null>;
   revokeSession(rawToken: string): Promise<void>;
-  mintAuthCode(payload: AuthCodePayload): Promise<string>;
-  consumeAuthCode(rawCode: string): Promise<AuthCodePayload | null>;
+  mintAuthCode(payload: AuthCodePayload, codeChallenge: string): Promise<string>;
+  consumeAuthCode(
+    rawCode: string
+  ): Promise<{ payload: AuthCodePayload; codeChallenge: string } | null>;
   applyChanges(userId: string, changes: PushRecord[]): Promise<number>;
   listChanges(userId: string, since: number): Promise<{ records: SyncRecord[]; cursor: number }>;
   exportUser(userId: string): Promise<{ records: SyncRecord[] }>;

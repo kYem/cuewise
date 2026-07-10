@@ -1,13 +1,19 @@
 import { env } from 'cloudflare:test';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { sha256Base64Url } from '../crypto-utils';
 import { createApp } from '../index';
 import { createTestIdp, type TestIdp } from './__fixtures__/jwks.fixtures';
 
 const APPLE_ISS = 'https://appleid.apple.com';
+// Fixed 43-char base64url verifier; no randomness needed for PKCE binding tests.
+const CODE_VERIFIER = 'a'.repeat(43);
+const WRONG_CODE_VERIFIER = 'b'.repeat(43);
 let idp: TestIdp;
+let CODE_CHALLENGE: string;
 
 beforeAll(async () => {
   idp = await createTestIdp();
+  CODE_CHALLENGE = await sha256Base64Url(CODE_VERIFIER);
 });
 
 function testEnv(): typeof env {
@@ -32,9 +38,13 @@ function requireHeader(res: Response, name: string): string {
   return value;
 }
 
-async function getStart(returnUri: string) {
+async function getStart(returnUri: string, codeChallenge: string | null = CODE_CHALLENGE) {
+  const params = new URLSearchParams({ return_uri: returnUri });
+  if (codeChallenge !== null) {
+    params.set('code_challenge', codeChallenge);
+  }
   return appWithIdp().request(
-    `/v1/auth/apple/start?return_uri=${encodeURIComponent(returnUri)}`,
+    `/v1/auth/apple/start?${params.toString()}`,
     { method: 'GET' },
     testEnv()
   );
@@ -62,16 +72,32 @@ async function postCallback(idToken: string, state: string) {
   );
 }
 
-async function exchangeCode(code: string) {
+async function exchangeCode(code: string, codeVerifier?: string) {
+  const body: Record<string, unknown> = { provider: 'apple', credential: code, deviceName: 'Mac' };
+  if (codeVerifier !== undefined) {
+    body.codeVerifier = codeVerifier;
+  }
   return appWithIdp().request(
     '/v1/auth/token',
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ provider: 'apple', credential: code, deviceName: 'Mac' }),
+      body: JSON.stringify(body),
     },
     testEnv()
   );
+}
+
+async function mintCode(sub: string): Promise<string> {
+  const state = await fetchStartState('cuewise://auth');
+  const idToken = await idp.sign({ iss: APPLE_ISS, aud: 'apple-client', sub });
+  const callbackRes = await postCallback(idToken, state);
+  const location = requireHeader(callbackRes, 'Location');
+  const code = new URL(location).searchParams.get('code');
+  if (code === null) {
+    throw new Error('Expected a code query param on the /v1/auth/apple/callback redirect');
+  }
+  return code;
 }
 
 describe('GET /v1/auth/apple/start', () => {
@@ -92,7 +118,10 @@ describe('GET /v1/auth/apple/start', () => {
     if (state === null) {
       throw new Error('Expected a state query param on the /v1/auth/apple/start redirect');
     }
-    expect(decodeState(state)).toEqual({ returnUri: 'cuewise://auth' });
+    expect(decodeState(state)).toEqual({
+      returnUri: 'cuewise://auth',
+      codeChallenge: CODE_CHALLENGE,
+    });
   });
 
   it('rejects a return_uri that is not allowlisted', async () => {
@@ -108,33 +137,36 @@ describe('GET /v1/auth/apple/start', () => {
     const body = await res.json<{ code: string }>();
     expect(body.code).toBe('invalid_request');
   });
+
+  it('rejects a missing code_challenge', async () => {
+    const res = await getStart('cuewise://auth', null);
+    expect(res.status).toBe(400);
+    const body = await res.json<{ code: string; errors: { pointer?: string }[] }>();
+    expect(body.code).toBe('invalid_request');
+    expect(body.errors.some((e) => e.pointer === '/code_challenge')).toBe(true);
+  });
+
+  it('reports both return_uri and code_challenge issues when both are bad', async () => {
+    const res = await getStart('https://evil.example', 'too-short');
+    expect(res.status).toBe(400);
+    const body = await res.json<{ code: string; errors: { pointer?: string }[] }>();
+    expect(body.code).toBe('invalid_request');
+    const pointers = body.errors.map((e) => e.pointer);
+    expect(pointers).toContain('/return_uri');
+    expect(pointers).toContain('/code_challenge');
+  });
 });
 
 describe('POST /v1/auth/apple/callback', () => {
   it('mints a one-time code that exchanges for a session token exactly once', async () => {
-    const state = await fetchStartState('cuewise://auth');
-    const idToken = await idp.sign({
-      iss: APPLE_ISS,
-      aud: 'apple-client',
-      sub: 'apple-sub-1',
-      email: 'a@b.c',
-    });
+    const code = await mintCode('apple-sub-1');
 
-    const callbackRes = await postCallback(idToken, state);
-    expect(callbackRes.status).toBe(302);
-    const location = requireHeader(callbackRes, 'Location');
-    expect(location.startsWith('cuewise://auth?')).toBe(true);
-    const code = new URL(location).searchParams.get('code');
-    if (code === null) {
-      throw new Error('Expected a code query param on the /v1/auth/apple/callback redirect');
-    }
-
-    const firstExchange = await exchangeCode(code);
+    const firstExchange = await exchangeCode(code, CODE_VERIFIER);
     expect(firstExchange.status).toBe(200);
     const tokenBody = await firstExchange.json<{ token: string }>();
     expect(tokenBody.token.length).toBeGreaterThan(20);
 
-    const secondExchange = await exchangeCode(code);
+    const secondExchange = await exchangeCode(code, CODE_VERIFIER);
     expect(secondExchange.status).toBe(401);
     const secondBody = await secondExchange.json<{ code: string }>();
     expect(secondBody.code).toBe('invalid_token');
@@ -159,5 +191,31 @@ describe('POST /v1/auth/apple/callback', () => {
     const body = await res.json<{ code: string }>();
     expect(body.code).toBe('invalid_request');
     expect(res.headers.get('Location')).toBeNull();
+  });
+});
+
+describe('POST /v1/auth/token PKCE binding (apple)', () => {
+  it('rejects a wrong codeVerifier and burns the code so a retry also fails', async () => {
+    const code = await mintCode('apple-sub-4');
+
+    const wrongExchange = await exchangeCode(code, WRONG_CODE_VERIFIER);
+    expect(wrongExchange.status).toBe(401);
+    const wrongBody = await wrongExchange.json<{ code: string }>();
+    expect(wrongBody.code).toBe('invalid_token');
+
+    const retryExchange = await exchangeCode(code, CODE_VERIFIER);
+    expect(retryExchange.status).toBe(401);
+    const retryBody = await retryExchange.json<{ code: string }>();
+    expect(retryBody.code).toBe('invalid_token');
+  });
+
+  it('rejects an apple exchange missing codeVerifier', async () => {
+    const code = await mintCode('apple-sub-5');
+
+    const res = await exchangeCode(code);
+    expect(res.status).toBe(400);
+    const body = await res.json<{ code: string; errors: { pointer?: string }[] }>();
+    expect(body.code).toBe('invalid_request');
+    expect(body.errors.some((e) => e.pointer === '/codeVerifier')).toBe(true);
   });
 });

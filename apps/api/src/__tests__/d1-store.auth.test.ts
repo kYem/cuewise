@@ -57,19 +57,31 @@ describe('D1SyncStore auth', () => {
 
   it('auth codes are single-use and expire after 60s', async () => {
     const { store, tick } = storeAt(1_000);
-    const code = await store.mintAuthCode({
-      provider: 'apple',
-      providerSub: 'as1',
-      email: 'x@y.z',
-    });
+    const code = await store.mintAuthCode(
+      {
+        provider: 'apple',
+        providerSub: 'as1',
+        email: 'x@y.z',
+      },
+      'challenge-1'
+    );
     expect(await store.consumeAuthCode(code)).toEqual({
-      provider: 'apple',
-      providerSub: 'as1',
-      email: 'x@y.z',
+      payload: { provider: 'apple', providerSub: 'as1', email: 'x@y.z' },
+      codeChallenge: 'challenge-1',
     });
     expect(await store.consumeAuthCode(code)).toBeNull();
-    const stale = await store.mintAuthCode({ provider: 'apple', providerSub: 'as2' });
+    const stale = await store.mintAuthCode(
+      { provider: 'apple', providerSub: 'as2' },
+      'challenge-2'
+    );
     tick(61_000);
     expect(await store.consumeAuthCode(stale)).toBeNull();
+  });
+
+  it('treats a legacy row with no stored code_challenge as unredeemable', async () => {
+    const { store } = storeAt(1_000);
+    const code = await store.mintAuthCode({ provider: 'apple', providerSub: 'as3' }, 'irrelevant');
+    await env.DB.prepare('UPDATE auth_codes SET code_challenge = NULL').run();
+    expect(await store.consumeAuthCode(code)).toBeNull();
   });
 });

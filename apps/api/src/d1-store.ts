@@ -78,28 +78,44 @@ export class D1SyncStore implements SyncStore {
       .run();
   }
 
-  async mintAuthCode(payload: AuthCodePayload): Promise<string> {
+  async mintAuthCode(payload: AuthCodePayload, codeChallenge: string): Promise<string> {
     const code = randomToken();
     await this.db
-      .prepare('INSERT INTO auth_codes (code_hash, payload, expires_at) VALUES (?, ?, ?)')
-      .bind(await sha256Hex(code), JSON.stringify(payload), this.now() + AUTH_CODE_TTL_MS)
+      .prepare(
+        'INSERT INTO auth_codes (code_hash, payload, expires_at, code_challenge) VALUES (?, ?, ?, ?)'
+      )
+      .bind(
+        await sha256Hex(code),
+        JSON.stringify(payload),
+        this.now() + AUTH_CODE_TTL_MS,
+        codeChallenge
+      )
       .run();
     return code;
   }
 
-  async consumeAuthCode(rawCode: string): Promise<AuthCodePayload | null> {
+  async consumeAuthCode(
+    rawCode: string
+  ): Promise<{ payload: AuthCodePayload; codeChallenge: string } | null> {
     const codeHash = await sha256Hex(rawCode);
     const ts = this.now();
     const row = await this.db
       .prepare(
-        'UPDATE auth_codes SET used_at = ? WHERE code_hash = ? AND used_at IS NULL AND expires_at > ? RETURNING payload'
+        'UPDATE auth_codes SET used_at = ? WHERE code_hash = ? AND used_at IS NULL AND expires_at > ? RETURNING payload, code_challenge'
       )
       .bind(ts, codeHash, ts)
-      .first<{ payload: string }>();
+      .first<{ payload: string; code_challenge: string | null }>();
     if (row === null) {
       return null;
     }
-    return JSON.parse(row.payload) as AuthCodePayload;
+    // Legacy rows minted before PKCE binding have no challenge and can never be redeemed.
+    if (row.code_challenge === null) {
+      return null;
+    }
+    return {
+      payload: JSON.parse(row.payload) as AuthCodePayload,
+      codeChallenge: row.code_challenge,
+    };
   }
 
   async applyChanges(_userId: string, _changes: PushRecord[]): Promise<number> {

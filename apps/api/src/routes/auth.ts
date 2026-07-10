@@ -1,4 +1,5 @@
 import type { Hono } from 'hono';
+import { sha256Base64Url } from '../crypto-utils';
 import type { Env } from '../env';
 import type { AppDepsResolved } from '../index';
 import { problem, type ValidationIssue } from '../problems';
@@ -8,6 +9,7 @@ interface TokenRequest {
   provider: 'google' | 'apple' | 'dev';
   credential: string;
   deviceName: string;
+  codeVerifier?: string;
 }
 
 function parseTokenRequest(body: unknown): TokenRequest | ValidationIssue[] {
@@ -21,6 +23,9 @@ function parseTokenRequest(body: unknown): TokenRequest | ValidationIssue[] {
   }
   if (typeof b.deviceName !== 'string' || b.deviceName === '') {
     issues.push({ pointer: '/deviceName', detail: 'required non-empty string' });
+  }
+  if (b.provider === 'apple' && (typeof b.codeVerifier !== 'string' || b.codeVerifier === '')) {
+    issues.push({ pointer: '/codeVerifier', detail: 'required non-empty string for apple' });
   }
   if (issues.length > 0) {
     return issues;
@@ -55,11 +60,21 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>, deps: AppDepsRe
       }
       identity = { provider: 'dev', providerSub: parsed.credential };
     } else {
-      const payload = await store.consumeAuthCode(parsed.credential);
-      if (payload === null) {
+      const consumed = await store.consumeAuthCode(parsed.credential);
+      if (consumed === null || typeof parsed.codeVerifier !== 'string') {
         return problem('invalid_token');
       }
-      identity = { provider: 'apple', providerSub: payload.providerSub, email: payload.email };
+      // The code is already burned here; a verifier mismatch fails closed rather than
+      // leaving the code redeemable for a retry.
+      const computedChallenge = await sha256Base64Url(parsed.codeVerifier);
+      if (computedChallenge !== consumed.codeChallenge) {
+        return problem('invalid_token');
+      }
+      identity = {
+        provider: 'apple',
+        providerSub: consumed.payload.providerSub,
+        email: consumed.payload.email,
+      };
     }
     const userId = await store.findOrCreateUser(identity);
     const token = await store.createSession(userId, parsed.deviceName);
