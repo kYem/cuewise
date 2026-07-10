@@ -12,7 +12,7 @@ vi.mock('@cuewise/storage', () => ({
 const getRemindersMock = vi.mocked(storage.getReminders);
 const setRemindersMock = vi.mocked(storage.setReminders);
 
-// Spy notifier/scheduler injected via the platform seam — assert against these
+// Spy notifier/scheduler injected via the platform ports — assert against these
 // instead of any concrete adapter.
 const notify = vi.fn(() => Promise.resolve());
 const scheduleAt = vi.fn(() => Promise.resolve());
