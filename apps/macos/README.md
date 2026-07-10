@@ -10,10 +10,11 @@ live in Linear: ENG-35 / ENG-41.)
 
 - **Shell:** Tauri 2 (`src-tauri/`, Rust) — main window + menu-bar tray.
 - **Frontend:** Vite + React + Tailwind (`src/`), reusing the shared packages.
-- **Platform ports:** `configurePlatform()` (from the #162 refactor) wires storage
-  (`LocalStorageKeyValueStore` — the WKWebView has `localStorage`), a web notifier,
-  and a placeholder scheduler. Real background scheduling moves to the Rust core
-  later so wakes fire while the window is hidden (ENG-40).
+- **Platform adapters:** `configurePlatform()` (from the #162 refactor) wires the
+  adapters — storage
+  (`LocalStorageKeyValueStore` — the WKWebView has `localStorage`), a native Tauri
+  notifier, and a Rust-backed scheduler that fires wakes while the window is hidden
+  (ENG-40).
 
 ## Run
 

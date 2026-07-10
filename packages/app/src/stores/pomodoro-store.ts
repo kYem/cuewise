@@ -504,7 +504,7 @@ export const usePomodoroStore = create<PomodoroStore>()(
           // Play completion sound
           playCompletionSound(completionSound as NotificationSoundType);
 
-          // Notify via the platform port (a future desktop build delivers this natively).
+          // Notify via the platform port (the desktop build delivers this natively).
           let message = 'Session complete!';
           if (sessionType === 'work') {
             const newCount = consecutiveWorkSessions + 1;

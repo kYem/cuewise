@@ -1,7 +1,7 @@
 // @cuewise/storage public API — explicit named exports (no wildcard barrels),
 // so the surface is reviewable and can't leak internals or collide.
 
-// KeyValueStore adapters (platform port)
+// KeyValueStore adapters (implement the platform port)
 export { ChromeKeyValueStore } from './chrome-key-value-store';
 export type { StorageArea, StorageError, StorageErrorType, StorageResult } from './chrome-storage';
 // Low-level storage delegators over the platform port

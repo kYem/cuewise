@@ -11,12 +11,11 @@
 export interface Scheduler {
   /**
    * Whether a resident background context (extension service worker, native app
-   * loop) delivers scheduled wakes, vs. the page having to poll. Callers
-   * feature-detect this capability by asking the port — never by sniffing platform
-   * globals like `chrome.alarms` to guess. Feature detection over sniffing is the
-   * oldest rule in front-end (MDN calls sniffing "a terrible practice that should
-   * be discouraged at all costs"), and it holds at this native-platform boundary too.
-   * https://developer.mozilla.org/en-US/docs/Learn_web_development/Extensions/Testing/Feature_detection
+   * loop) delivers scheduled wakes, vs. the page having to poll. Callers read this
+   * declared capability off the port rather than inferring it from an incidental
+   * global like `chrome.alarms` — whose presence doesn't tell you whether this
+   * deployment actually delivers in the background (a page context has it too; a
+   * native host may deliver without it).
    */
   readonly deliversInBackground: boolean;
   /**
