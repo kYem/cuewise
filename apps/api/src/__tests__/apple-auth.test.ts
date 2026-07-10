@@ -87,6 +87,7 @@ describe('GET /v1/auth/apple/start', () => {
     expect(url.searchParams.get('redirect_uri')).toBe(
       `${env.PUBLIC_BASE_URL}/v1/auth/apple/callback`
     );
+    expect(url.searchParams.get('scope')).toBe('name email');
     const state = url.searchParams.get('state');
     if (state === null) {
       throw new Error('Expected a state query param on the /v1/auth/apple/start redirect');
@@ -96,6 +97,13 @@ describe('GET /v1/auth/apple/start', () => {
 
   it('rejects a return_uri that is not allowlisted', async () => {
     const res = await getStart('https://evil.example');
+    expect(res.status).toBe(400);
+    const body = await res.json<{ code: string }>();
+    expect(body.code).toBe('invalid_request');
+  });
+
+  it('rejects a return_uri that only shares a prefix with an allowlisted entry', async () => {
+    const res = await getStart('cuewise://auth.evil.example');
     expect(res.status).toBe(400);
     const body = await res.json<{ code: string }>();
     expect(body.code).toBe('invalid_request');
@@ -140,6 +148,16 @@ describe('POST /v1/auth/apple/callback', () => {
     expect(res.status).toBe(401);
     const body = await res.json<{ code: string }>();
     expect(body.code).toBe('invalid_token');
+    expect(res.headers.get('Location')).toBeNull();
+  });
+
+  it('rejects malformed state without a 500', async () => {
+    const idToken = await idp.sign({ iss: APPLE_ISS, aud: 'apple-client', sub: 'apple-sub-3' });
+
+    const res = await postCallback(idToken, '!!!not-base64url!!!');
+    expect(res.status).toBe(400);
+    const body = await res.json<{ code: string }>();
+    expect(body.code).toBe('invalid_request');
     expect(res.headers.get('Location')).toBeNull();
   });
 });

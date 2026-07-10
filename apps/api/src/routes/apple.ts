@@ -11,19 +11,23 @@ function encodeState(returnUri: string): string {
 }
 
 function decodeState(state: string): { returnUri: string } | null {
-  const parsed: unknown = JSON.parse(atob(state.replace(/-/g, '+').replace(/_/g, '/')));
-  if (
-    parsed !== null &&
-    typeof parsed === 'object' &&
-    typeof (parsed as { returnUri?: unknown }).returnUri === 'string'
-  ) {
-    return parsed as { returnUri: string };
+  try {
+    const parsed: unknown = JSON.parse(atob(state.replace(/-/g, '+').replace(/_/g, '/')));
+    if (
+      parsed !== null &&
+      typeof parsed === 'object' &&
+      typeof (parsed as { returnUri?: unknown }).returnUri === 'string'
+    ) {
+      return parsed as { returnUri: string };
+    }
+    return null;
+  } catch {
+    return null;
   }
-  return null;
 }
 
 function isAllowedReturnUri(uri: string, env: Env): boolean {
-  return env.ALLOWED_RETURN_URIS.split(',').some((prefix) => uri.startsWith(prefix));
+  return env.ALLOWED_RETURN_URIS.split(',').some((allowed) => uri === allowed.trim());
 }
 
 export function registerAppleRoutes(app: Hono<{ Bindings: Env }>, deps: AppDepsResolved): void {
