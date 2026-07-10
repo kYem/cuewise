@@ -9,7 +9,7 @@ import { NoopScheduler, TauriNotifier, TauriScheduler, WebNotifier } from './pla
 import { PosturePanel } from './posture/PosturePanel';
 import { TrayStatusBridge } from './tray/TrayStatusBridge';
 
-// Bind the platform seams for the Tauri webview so the reused extension stores
+// Wire the platform adapters for the Tauri webview so the reused extension stores
 // and helpers work unchanged: localStorage-backed storage, native OS
 // notifications, and the Rust-backed scheduler that fires wakes while hidden.
 // Outside Tauri (browser / e2e) fall back to web notifications and a no-op

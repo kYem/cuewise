@@ -544,7 +544,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
         useToastStore.getState().warning(`Reminder: ${r.text}`);
         // With no background worker to raise the OS notification (web / a native
         // app whose scheduler doesn't deliver in the background), deliver it here
-        // via the seam. Where a resident host owns delivery, it notifies instead.
+        // via the port. Where a resident host owns delivery, it notifies instead.
         if (!getScheduler().deliversInBackground) {
           getNotifier()
             .notify({

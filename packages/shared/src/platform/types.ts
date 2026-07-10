@@ -1,17 +1,22 @@
 /**
- * Platform seams for scheduling wake-ups, delivering OS notifications, and
- * persisting data. Interfaces only — implementations live at the app edge
- * (`Chrome*` in the extension) or in a shared package (`ChromeKeyValueStore` in
- * @cuewise/storage); a future Tauri/RN app supplies its own.
+ * Platform ports for scheduling wake-ups, delivering OS notifications, and
+ * persisting data — the driven (secondary) ports of a ports-and-adapters setup:
+ * portable code drives them out to platform infrastructure. Interfaces only;
+ * adapters live at the app edge (`Chrome*` in the extension) or in a shared
+ * package (`ChromeKeyValueStore` in @cuewise/storage), and a future Tauri/RN app
+ * supplies its own.
  */
 
 /** Command surface: arm/cancel a one-shot wake at a future time, keyed by a caller-owned id. */
 export interface Scheduler {
   /**
-   * Whether scheduled wakes are delivered by a resident background context
-   * (extension service worker, native app loop) rather than requiring the page to
-   * poll. Lets UI choose "trust the scheduler" vs. an in-page fallback without
-   * sniffing platform globals like `chrome.alarms`.
+   * Whether a resident background context (extension service worker, native app
+   * loop) delivers scheduled wakes, vs. the page having to poll. Callers
+   * feature-detect this capability by asking the port — never by sniffing platform
+   * globals like `chrome.alarms` to guess. Feature detection over sniffing is the
+   * oldest rule in front-end (MDN calls sniffing "a terrible practice that should
+   * be discouraged at all costs"), and it holds at this native-platform boundary too.
+   * https://developer.mozilla.org/en-US/docs/Learn_web_development/Extensions/Testing/Feature_detection
    */
   readonly deliversInBackground: boolean;
   /**

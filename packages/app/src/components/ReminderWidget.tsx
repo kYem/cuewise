@@ -57,9 +57,10 @@ export const ReminderWidget: React.FC = () => {
   }, [initialize, fireDueReminders]);
 
   // A background scheduler (extension worker, native host) fires due reminders on
-  // its own. Only when nothing delivers wakes in the background (dev server, web,
-  // Tauri until the Rust host lands) do we poll in-page as a fallback — asked of
-  // the platform seam, never by sniffing globals like `chrome.alarms`.
+  // its own. Only when nothing delivers wakes in the background (dev server, web)
+  // do we poll in-page as a fallback — feature-detected by asking the port
+  // (`deliversInBackground`), never by sniffing globals like `chrome.alarms`
+  // (MDN calls sniffing "a terrible practice … discouraged at all costs").
   useEffect(() => {
     if (getScheduler().deliversInBackground) {
       return;

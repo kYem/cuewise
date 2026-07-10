@@ -8,7 +8,7 @@ import {
 } from '@tauri-apps/plugin-notification';
 
 /**
- * Platform seams for the Tauri build. Storage is `LocalStorageKeyValueStore`
+ * Platform adapters for the Tauri build. Storage is `LocalStorageKeyValueStore`
  * (wired in main.tsx — the WKWebView has localStorage), notifications go through
  * the Tauri plugin, and scheduling delegates to the Rust core so wakes fire while
  * the window is hidden.

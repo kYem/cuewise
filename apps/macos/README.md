@@ -10,7 +10,7 @@ live in Linear: ENG-35 / ENG-41.)
 
 - **Shell:** Tauri 2 (`src-tauri/`, Rust) — main window + menu-bar tray.
 - **Frontend:** Vite + React + Tailwind (`src/`), reusing the shared packages.
-- **Platform seams:** `configurePlatform()` (from the #162 refactor) wires storage
+- **Platform ports:** `configurePlatform()` (from the #162 refactor) wires storage
   (`LocalStorageKeyValueStore` — the WKWebView has `localStorage`), a web notifier,
   and a placeholder scheduler. Real background scheduling moves to the Rust core
   later so wakes fire while the window is hidden (ENG-40).
@@ -42,7 +42,7 @@ Frames are analyzed in memory only — no image is ever stored or sent.
 
 ## Status → next
 
-- [x] Shell scaffold: window + tray, platform seams wired, on-brand landing.
+- [x] Shell scaffold: window + tray, platform ports wired, on-brand landing.
 - [x] Mount the real extension surfaces — new tab / Pomodoro / Insights (ENG-35).
 - [x] Native background scheduler — reminders fire while hidden (ENG-40).
 - [x] Menu-bar tray status: live Pomodoro timer + controls (ENG-36).
