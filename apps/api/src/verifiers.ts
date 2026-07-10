@@ -23,3 +23,19 @@ export const verifyGoogleIdToken: IdTokenVerifier = async (idToken, env) => {
     email: typeof payload.email === 'string' ? payload.email : undefined,
   };
 };
+
+const appleJwks = createRemoteJWKSet(new URL('https://appleid.apple.com/auth/keys'));
+
+export const verifyAppleIdToken: IdTokenVerifier = async (idToken, env) => {
+  const { payload } = await jwtVerify(idToken, appleJwks, {
+    issuer: 'https://appleid.apple.com',
+    audience: env.APPLE_CLIENT_ID,
+  });
+  if (typeof payload.sub !== 'string') {
+    throw new Error('Apple ID token missing sub');
+  }
+  return {
+    providerSub: payload.sub,
+    email: typeof payload.email === 'string' ? payload.email : undefined,
+  };
+};

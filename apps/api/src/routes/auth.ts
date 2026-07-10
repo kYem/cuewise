@@ -1,13 +1,8 @@
 import type { Hono } from 'hono';
 import type { Env } from '../env';
+import type { AppDepsResolved } from '../index';
 import { problem, type ValidationIssue } from '../problems';
-import type { Identity, SyncStore } from '../store';
-import type { IdTokenVerifier } from '../verifiers';
-
-interface AuthDeps {
-  storeFactory: (db: D1Database) => SyncStore;
-  googleVerifier: IdTokenVerifier;
-}
+import type { Identity } from '../store';
 
 interface TokenRequest {
   provider: 'google' | 'apple' | 'dev';
@@ -33,7 +28,7 @@ function parseTokenRequest(body: unknown): TokenRequest | ValidationIssue[] {
   return b as unknown as TokenRequest;
 }
 
-export function registerAuthRoutes(app: Hono<{ Bindings: Env }>, deps: AuthDeps): void {
+export function registerAuthRoutes(app: Hono<{ Bindings: Env }>, deps: AppDepsResolved): void {
   app.post('/v1/auth/token', async (c) => {
     let raw: unknown;
     try {
@@ -60,8 +55,11 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>, deps: AuthDeps)
       }
       identity = { provider: 'dev', providerSub: parsed.credential };
     } else {
-      // Task 7 replaces this branch with consumeAuthCode(parsed.credential).
-      return problem('invalid_token');
+      const payload = await store.consumeAuthCode(parsed.credential);
+      if (payload === null) {
+        return problem('invalid_token');
+      }
+      identity = { provider: 'apple', providerSub: payload.providerSub, email: payload.email };
     }
     const userId = await store.findOrCreateUser(identity);
     const token = await store.createSession(userId, parsed.deviceName);

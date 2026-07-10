@@ -4,7 +4,11 @@ import type { IdTokenVerifier, VerifiedIdentity } from '../../verifiers';
 
 export interface TestIdp {
   sign(claims: { iss: string; aud: string; sub: string; email?: string }): Promise<string>;
-  verifier(expected: { issuer: string }): IdTokenVerifier;
+  verifier(expected: {
+    issuer: string;
+    // Defaults to GOOGLE_CLIENT_IDS; pass to verify against a different audience (e.g. Apple).
+    audience?: (env: Env) => string | string[];
+  }): IdTokenVerifier;
 }
 
 export async function createTestIdp(): Promise<TestIdp> {
@@ -22,10 +26,11 @@ export async function createTestIdp(): Promise<TestIdp> {
         .sign(privateKey);
     },
     verifier(expected) {
+      const resolveAudience = expected.audience ?? ((env: Env) => env.GOOGLE_CLIENT_IDS.split(','));
       return async (idToken: string, env: Env): Promise<VerifiedIdentity> => {
         const { payload } = await jwtVerify(idToken, jwks, {
           issuer: expected.issuer,
-          audience: env.GOOGLE_CLIENT_IDS.split(','),
+          audience: resolveAudience(env),
         });
         if (typeof payload.sub !== 'string') {
           throw new Error('missing sub');
