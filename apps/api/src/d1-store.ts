@@ -92,17 +92,13 @@ export class D1SyncStore implements SyncStore {
     const ts = this.now();
     const row = await this.db
       .prepare(
-        'SELECT payload FROM auth_codes WHERE code_hash = ? AND used_at IS NULL AND expires_at > ?'
+        'UPDATE auth_codes SET used_at = ? WHERE code_hash = ? AND used_at IS NULL AND expires_at > ? RETURNING payload'
       )
-      .bind(codeHash, ts)
+      .bind(ts, codeHash, ts)
       .first<{ payload: string }>();
     if (row === null) {
       return null;
     }
-    await this.db
-      .prepare('UPDATE auth_codes SET used_at = ? WHERE code_hash = ?')
-      .bind(ts, codeHash)
-      .run();
     return JSON.parse(row.payload) as AuthCodePayload;
   }
 
