@@ -51,8 +51,8 @@ catalog:
   date-fns: ^4.4.0
   fishery: ^2.4.0
   hono: ^4.7.0
-  jsdom: ^29.1.1
   jose: ^6.0.10
+  jsdom: ^29.1.1
   lucide-react: ^0.553.0
   postcss: ^8.5.15
   react: ^18.3.1
