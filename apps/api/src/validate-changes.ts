@@ -3,6 +3,8 @@ import type { PushRecord } from './store';
 
 export const MAX_BATCH_SIZE = 100;
 export const MAX_CIPHERTEXT_BYTES = 65536;
+export const MAX_COLLECTION_LENGTH = 64;
+export const MAX_ENTITY_ID_LENGTH = 128;
 
 type PushBodyProblem = {
   problemCode: 'invalid_request' | 'batch_too_large' | 'invalid_record';
@@ -19,12 +21,24 @@ function validateRecord(raw: unknown, index: number, issues: ValidationIssue[]):
       pointer: `/records/${index}/collection`,
       detail: 'required non-empty string',
     });
+  } else if (r.collection.length > MAX_COLLECTION_LENGTH) {
+    issues.push({
+      index,
+      pointer: `/records/${index}/collection`,
+      detail: `must not exceed ${MAX_COLLECTION_LENGTH} characters`,
+    });
   }
   if (typeof r.entityId !== 'string' || r.entityId === '') {
     issues.push({
       index,
       pointer: `/records/${index}/entityId`,
       detail: 'required non-empty string',
+    });
+  } else if (r.entityId.length > MAX_ENTITY_ID_LENGTH) {
+    issues.push({
+      index,
+      pointer: `/records/${index}/entityId`,
+      detail: `must not exceed ${MAX_ENTITY_ID_LENGTH} characters`,
     });
   }
   if (typeof r.ciphertext !== 'string') {

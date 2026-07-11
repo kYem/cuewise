@@ -6,7 +6,8 @@ import type { AppDepsResolved } from '../index';
 import { problem, type ValidationIssue } from '../problems';
 import { isTokenFault } from '../verifiers';
 
-const CODE_CHALLENGE_RE = /^[A-Za-z0-9_-]{43,128}$/;
+// S256 PKCE challenges are always exactly 43 base64url characters (a 32-byte SHA-256 digest).
+const CODE_CHALLENGE_RE = /^[A-Za-z0-9_-]{43}$/;
 
 function encodeState(state: { returnUri: string; codeChallenge: string }): string {
   return btoa(JSON.stringify(state)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -47,7 +48,7 @@ export function registerAppleRoutes(
     if (!CODE_CHALLENGE_RE.test(codeChallenge)) {
       issues.push({
         pointer: '/code_challenge',
-        detail: 'code_challenge must be 43-128 base64url characters.',
+        detail: 'code_challenge must be exactly 43 base64url characters.',
       });
     }
     if (issues.length > 0) {

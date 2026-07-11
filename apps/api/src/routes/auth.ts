@@ -8,6 +8,8 @@ import { problem, type ValidationIssue } from '../problems';
 import type { Identity } from '../store';
 import { isTokenFault } from '../verifiers';
 
+const MAX_DEVICE_NAME_LENGTH = 100;
+
 interface TokenRequest {
   provider: 'google' | 'apple' | 'dev';
   credential: string;
@@ -26,6 +28,11 @@ function parseTokenRequest(body: unknown): TokenRequest | ValidationIssue[] {
   }
   if (typeof b.deviceName !== 'string' || b.deviceName === '') {
     issues.push({ pointer: '/deviceName', detail: 'required non-empty string' });
+  } else if (b.deviceName.length > MAX_DEVICE_NAME_LENGTH) {
+    issues.push({
+      pointer: '/deviceName',
+      detail: `must not exceed ${MAX_DEVICE_NAME_LENGTH} characters`,
+    });
   }
   if (b.provider === 'apple' && (typeof b.codeVerifier !== 'string' || b.codeVerifier === '')) {
     issues.push({ pointer: '/codeVerifier', detail: 'required non-empty string for apple' });

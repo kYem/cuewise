@@ -16,7 +16,15 @@ export function registerChangesRoutes(
     if (!/^\d+$/.test(raw)) {
       return problem('invalid_cursor');
     }
+    // Bound the digit count before parsing so an absurdly long numeral can't be used
+    // to probe parser behavior, then reject anything past Number's safe integer range.
+    if (raw.length > 15) {
+      return problem('invalid_cursor');
+    }
     const since = Number.parseInt(raw, 10);
+    if (!Number.isSafeInteger(since)) {
+      return problem('invalid_cursor');
+    }
     const store = deps.storeFactory(c.env.DB);
     const { records, cursor } = await store.listChanges(c.get('userId'), since);
     return c.json({ records, cursor });
