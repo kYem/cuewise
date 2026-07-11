@@ -11,6 +11,7 @@ export interface TestIdp {
     email?: string;
     // Omit to mimic a token with no email_verified claim at all.
     emailVerified?: boolean | string;
+    nonce?: string;
   }): Promise<string>;
   verifier(expected: {
     issuer: string;
@@ -24,7 +25,11 @@ export async function createTestIdp(): Promise<TestIdp> {
   const jwks = createLocalJWKSet({ keys: [{ ...(await exportJWK(publicKey)), alg: 'RS256' }] });
   return {
     async sign(claims) {
-      return new SignJWT({ email: claims.email, email_verified: claims.emailVerified })
+      return new SignJWT({
+        email: claims.email,
+        email_verified: claims.emailVerified,
+        nonce: claims.nonce,
+      })
         .setProtectedHeader({ alg: 'RS256' })
         .setIssuer(claims.iss)
         .setAudience(claims.aud)
@@ -49,6 +54,7 @@ export async function createTestIdp(): Promise<TestIdp> {
             typeof payload.email === 'string' && isEmailVerified(payload)
               ? payload.email
               : undefined,
+          nonce: typeof payload.nonce === 'string' ? payload.nonce : undefined,
         };
       };
     },

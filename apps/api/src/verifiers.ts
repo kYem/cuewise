@@ -6,6 +6,8 @@ import { problem } from './problem-details';
 export interface VerifiedIdentity {
   providerSub: string;
   email?: string;
+  // Only Apple's flow sets/checks this; Google's OAuth flow doesn't send a nonce.
+  nonce?: string;
 }
 
 export type IdTokenVerifier = (idToken: string, env: Env) => Promise<VerifiedIdentity>;
@@ -57,6 +59,7 @@ function createIdTokenVerifier(config: IdTokenVerifierConfig): IdTokenVerifier {
       providerSub: payload.sub,
       email:
         typeof payload.email === 'string' && isEmailVerified(payload) ? payload.email : undefined,
+      nonce: typeof payload.nonce === 'string' ? payload.nonce : undefined,
     };
   };
 }

@@ -27,7 +27,13 @@ function appWithIdp() {
   });
 }
 
-function decodeState(state: string): unknown {
+interface DecodedAppleState {
+  returnUri: string;
+  codeChallenge: string;
+  nonce: string;
+}
+
+function decodeState(state: string): DecodedAppleState {
   return JSON.parse(atob(state.replace(/-/g, '+').replace(/_/g, '/')));
 }
 
@@ -93,7 +99,12 @@ async function exchangeCode(code: string, codeVerifier?: string) {
 async function mintCode(sub: string): Promise<string> {
   const returnUri = 'cuewise://auth';
   const state = await fetchStartState(returnUri);
-  const idToken = await idp.sign({ iss: APPLE_ISS, aud: 'apple-client', sub });
+  const idToken = await idp.sign({
+    iss: APPLE_ISS,
+    aud: 'apple-client',
+    sub,
+    nonce: decodeState(state).nonce,
+  });
   const callbackRes = await postCallback(idToken, state);
   const location = requireHeader(callbackRes, 'Location');
   const code = new URL(location).searchParams.get('code');
@@ -117,6 +128,10 @@ describe('GET /v1/auth/apple/start', () => {
       `${env.PUBLIC_BASE_URL}/v1/auth/apple/callback`
     );
     expect(url.searchParams.get('scope')).toBe('email');
+    const nonce = url.searchParams.get('nonce');
+    if (nonce === null) {
+      throw new Error('Expected a nonce query param on the /v1/auth/apple/start redirect');
+    }
     const state = url.searchParams.get('state');
     if (state === null) {
       throw new Error('Expected a state query param on the /v1/auth/apple/start redirect');
@@ -124,6 +139,7 @@ describe('GET /v1/auth/apple/start', () => {
     expect(decodeState(state)).toEqual({
       returnUri: 'cuewise://auth',
       codeChallenge: CODE_CHALLENGE,
+      nonce,
     });
   });
 
@@ -172,7 +188,12 @@ describe('POST /v1/auth/apple/callback', () => {
   it('redirects to returnUri with a code param on a successful verification', async () => {
     const returnUri = 'cuewise://auth';
     const state = await fetchStartState(returnUri);
-    const idToken = await idp.sign({ iss: APPLE_ISS, aud: 'apple-client', sub: 'apple-sub-shape' });
+    const idToken = await idp.sign({
+      iss: APPLE_ISS,
+      aud: 'apple-client',
+      sub: 'apple-sub-shape',
+      nonce: decodeState(state).nonce,
+    });
 
     const res = await postCallback(idToken, state);
 
@@ -180,6 +201,22 @@ describe('POST /v1/auth/apple/callback', () => {
     const location = requireHeader(res, 'Location');
     expect(location.startsWith(`${returnUri}?`)).toBe(true);
     expect(new URL(location).searchParams.get('code')).not.toBeNull();
+  });
+
+  it('rejects an ID token whose nonce does not match the state nonce', async () => {
+    const state = await fetchStartState('cuewise://auth');
+    const idToken = await idp.sign({
+      iss: APPLE_ISS,
+      aud: 'apple-client',
+      sub: 'apple-sub-nonce-mismatch',
+      nonce: 'a-different-nonce-entirely',
+    });
+
+    const res = await postCallback(idToken, state);
+    expect(res.status).toBe(401);
+    const body = await res.json<{ code: string }>();
+    expect(body.code).toBe('invalid_token');
+    expect(res.headers.get('Location')).toBeNull();
   });
 
   it('mints a one-time code that exchanges for a session token exactly once', async () => {

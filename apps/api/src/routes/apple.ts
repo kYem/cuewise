@@ -1,6 +1,6 @@
 import type { Hono } from 'hono';
 import type { AuthVars } from '../auth-middleware';
-import { base64UrlDecodeString, base64UrlEncodeString } from '../crypto-utils';
+import { base64UrlDecodeString, base64UrlEncodeString, randomToken } from '../crypto-utils';
 import type { Env } from '../env';
 import type { AppDepsResolved } from '../index';
 import { problem, type ValidationIssue } from '../problem-details';
@@ -9,21 +9,28 @@ import { verifyOrProblem } from '../verifiers';
 // S256 PKCE challenges are always exactly 43 base64url characters (a 32-byte SHA-256 digest).
 const CODE_CHALLENGE_RE = /^[A-Za-z0-9_-]{43}$/;
 
-function encodeState(state: { returnUri: string; codeChallenge: string }): string {
+interface AppleState {
+  returnUri: string;
+  codeChallenge: string;
+  nonce: string;
+}
+
+function encodeState(state: AppleState): string {
   const json = JSON.stringify(state);
   return base64UrlEncodeString(json);
 }
 
-function decodeState(state: string): { returnUri: string; codeChallenge: string } | null {
+function decodeState(state: string): AppleState | null {
   try {
     const parsed: unknown = JSON.parse(base64UrlDecodeString(state));
     if (
       parsed !== null &&
       typeof parsed === 'object' &&
       typeof (parsed as { returnUri?: unknown }).returnUri === 'string' &&
-      typeof (parsed as { codeChallenge?: unknown }).codeChallenge === 'string'
+      typeof (parsed as { codeChallenge?: unknown }).codeChallenge === 'string' &&
+      typeof (parsed as { nonce?: unknown }).nonce === 'string'
     ) {
-      return parsed as { returnUri: string; codeChallenge: string };
+      return parsed as AppleState;
     }
     return null;
   } catch {
@@ -55,13 +62,15 @@ export function registerAppleRoutes(
     if (issues.length > 0) {
       return problem('invalid_request', { errors: issues });
     }
+    const nonce = randomToken();
     const url = new URL('https://appleid.apple.com/auth/authorize');
     url.searchParams.set('client_id', c.env.APPLE_CLIENT_ID);
     url.searchParams.set('redirect_uri', `${c.env.PUBLIC_BASE_URL}/v1/auth/apple/callback`);
     url.searchParams.set('response_type', 'code id_token');
     url.searchParams.set('response_mode', 'form_post');
     url.searchParams.set('scope', 'email');
-    url.searchParams.set('state', encodeState({ returnUri, codeChallenge }));
+    url.searchParams.set('nonce', nonce);
+    url.searchParams.set('state', encodeState({ returnUri, codeChallenge, nonce }));
     return c.redirect(url.toString(), 302);
   });
 
@@ -79,6 +88,10 @@ export function registerAppleRoutes(
     const verified = await verifyOrProblem(deps.appleVerifier, idToken, c.env, 'Apple');
     if (verified instanceof Response) {
       return verified;
+    }
+    // Proves this ID token was issued for THIS authorization request, not replayed from another.
+    if (verified.nonce === undefined || verified.nonce !== decoded.nonce) {
+      return problem('invalid_token');
     }
     const code = await deps.storeFactory(c.env.DB).mintAuthCode(
       {
