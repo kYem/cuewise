@@ -1,3 +1,4 @@
+import { logger } from '@cuewise/shared';
 import type { MiddlewareHandler } from 'hono';
 import type { AuthVars } from './auth-middleware';
 import type { Env } from './env';
@@ -20,11 +21,14 @@ export function ipRateLimit(
   // Isolate-local defense-in-depth; production also fronts these routes with WAF rules.
   let windowStart = now();
   let hits = new Map<string, number>();
+  // Scoped to the current window so a flood only warns once, not once per dropped request.
+  let trackedIpCapLogged = false;
   return async (c, next) => {
     const ip = c.req.header('CF-Connecting-IP');
     // Cloudflare's edge always sets this header; its absence means a non-edge invocation
     // path where per-IP limiting is meaningless, so skip rather than share one 'unknown' bucket.
     if (ip === undefined) {
+      logger.warn('ipRateLimit: CF-Connecting-IP header missing; IP rate limiting skipped');
       await next();
       return;
     }
@@ -32,11 +36,18 @@ export function ipRateLimit(
     if (t >= windowStart + opts.windowMs) {
       windowStart = t;
       hits = new Map();
+      trackedIpCapLogged = false;
     }
     const existingCount = hits.get(ip);
     if (existingCount === undefined && hits.size >= maxTrackedIps) {
       // Bounded memory without evicting anyone: a flood of fresh IPs can only dodge
       // tracking for itself, never evict or reset another client's counter.
+      if (!trackedIpCapLogged) {
+        trackedIpCapLogged = true;
+        logger.warn('ipRateLimit: tracked-IP cap reached; new IPs are unthrottled this window', {
+          maxTrackedIps,
+        });
+      }
       await next();
       return;
     }

@@ -1,3 +1,5 @@
+import { logger } from '@cuewise/shared';
+
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
@@ -75,6 +77,8 @@ export async function verifyState(state: string, key: string): Promise<unknown |
       encoder.encode(body)
     );
     if (!valid) {
+      // A forged/tampered state is the exact attack this HMAC exists to stop; it must be visible.
+      logger.warn('verifyState: HMAC signature verification failed');
       return null;
     }
     return JSON.parse(base64UrlDecodeString(body));

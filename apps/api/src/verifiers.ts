@@ -101,10 +101,16 @@ export async function verifyOrProblem(
     // Only known token-fault classes are treated as a bad token; anything else
     // (e.g. JWKS outage) is an upstream failure — 500 so the client's retry loop engages.
     if (isTokenFault(err)) {
+      // These three are genuine probing signals worth a metadata-only warn; JWTExpired/
+      // JWTClaimValidationFailed are routine noise (clock skew, stale clients) and stay quiet.
       if (err instanceof errors.JWKSNoMatchingKey) {
         // Providers pre-publish rotated keys and jose refetches on a kid miss outside its 30s
         // cooldown, so an unmatched kid is overwhelmingly a bogus token, not a rotation race.
         logger.warn(`${providerLabel} ID token had no matching JWKS key`, { code: err.code });
+      } else if (err instanceof errors.JWSSignatureVerificationFailed) {
+        logger.warn(`${providerLabel} ID token had an invalid signature`, { code: err.code });
+      } else if (err instanceof errors.JOSEAlgNotAllowed) {
+        logger.warn(`${providerLabel} ID token used a disallowed algorithm`, { code: err.code });
       }
       return problem('invalid_token');
     }
