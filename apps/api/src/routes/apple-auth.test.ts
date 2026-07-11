@@ -424,6 +424,31 @@ describe('POST /v1/auth/token PKCE binding (apple)', () => {
     expect(body.code).toBe('invalid_request');
     expect(body.errors.some((e) => e.pointer === '/codeVerifier')).toBe(true);
   });
+
+  it('rejects an over-long codeVerifier without burning the code', async () => {
+    const code = await mintCode('apple-sub-6');
+
+    const overLong = await exchangeCode(code, 'a'.repeat(129));
+    expect(overLong.status).toBe(400);
+    const overLongBody = await overLong.json<{ code: string; errors: { pointer?: string }[] }>();
+    expect(overLongBody.code).toBe('invalid_request');
+    expect(overLongBody.errors.some((e) => e.pointer === '/codeVerifier')).toBe(true);
+
+    // Proves parseTokenRequest rejected it before consumeAuthCode ran: the code is still live.
+    const retryExchange = await exchangeCode(code, CODE_VERIFIER);
+    expect(retryExchange.status).toBe(200);
+  });
+
+  it('rejects an under-length codeVerifier as invalid_request', async () => {
+    const code = await mintCode('apple-sub-7');
+
+    const res = await exchangeCode(code, 'a'.repeat(42));
+
+    expect(res.status).toBe(400);
+    const body = await res.json<{ code: string; errors: { pointer?: string }[] }>();
+    expect(body.code).toBe('invalid_request');
+    expect(body.errors.some((e) => e.pointer === '/codeVerifier')).toBe(true);
+  });
 });
 
 describe('POST /v1/auth/token (apple) email verification', () => {

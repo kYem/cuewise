@@ -12,6 +12,9 @@ import { verifyOrProblem } from '../verifiers';
 const MAX_DEVICE_NAME_LENGTH = 100;
 // Real ID tokens run 1-2 KB and Apple's one-time code is 43 chars; this just caps abuse.
 const MAX_CREDENTIAL_LENGTH = 8192;
+// RFC 7636: a PKCE code_verifier is 43-128 characters.
+const MIN_CODE_VERIFIER_LENGTH = 43;
+const MAX_CODE_VERIFIER_LENGTH = 128;
 
 function parseTokenRequest(body: unknown): ExchangeTokenRequest | ValidationIssue[] {
   const issues: ValidationIssue[] = [];
@@ -21,8 +24,19 @@ function parseTokenRequest(body: unknown): ExchangeTokenRequest | ValidationIssu
   }
   requireNonEmptyString(b.credential, '/credential', issues, MAX_CREDENTIAL_LENGTH);
   requireNonEmptyString(b.deviceName, '/deviceName', issues, MAX_DEVICE_NAME_LENGTH);
-  if (b.provider === 'apple' && (typeof b.codeVerifier !== 'string' || b.codeVerifier === '')) {
-    issues.push({ pointer: '/codeVerifier', detail: 'required non-empty string for apple' });
+  if (b.provider === 'apple') {
+    // Bounded before consumeAuthCode ever runs, so a malformed verifier can't burn the code.
+    requireNonEmptyString(b.codeVerifier, '/codeVerifier', issues, MAX_CODE_VERIFIER_LENGTH);
+    if (
+      typeof b.codeVerifier === 'string' &&
+      b.codeVerifier !== '' &&
+      b.codeVerifier.length < MIN_CODE_VERIFIER_LENGTH
+    ) {
+      issues.push({
+        pointer: '/codeVerifier',
+        detail: `must be at least ${MIN_CODE_VERIFIER_LENGTH} characters`,
+      });
+    }
   }
   if (issues.length > 0) {
     return issues;
