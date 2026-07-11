@@ -1,6 +1,6 @@
 import { env } from 'cloudflare:test';
 import { Hono } from 'hono';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { spyOnLoggerWarn } from './__fixtures__/logger.fixtures';
 import type { AuthVars } from './auth-middleware';
 import type { Env } from './env';
@@ -180,10 +180,6 @@ describe('ipRateLimit generation-based window', () => {
 });
 
 describe('ipRateLimit missing-IP warn dedupe', () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
   it('warns once per window for repeated requests missing CF-Connecting-IP, then again after the window rolls', async () => {
     let current = 1_000;
     const app = appWithLimiter({ limit: 30, windowMs: 1_000, now: () => current });

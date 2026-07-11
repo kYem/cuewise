@@ -1,6 +1,6 @@
 import { env } from 'cloudflare:test';
 import { errors } from 'jose';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { spyOnLoggerWarn } from './__fixtures__/logger.fixtures';
 import { isTokenFault, parseClientIds, TokenVerificationError, verifyOrProblem } from './verifiers';
 
@@ -49,10 +49,6 @@ describe('isTokenFault', () => {
 });
 
 describe('verifyOrProblem token-fault logging', () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
   function throwingVerifier(err: unknown) {
     return async () => {
       throw err;
