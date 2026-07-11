@@ -1,9 +1,9 @@
 import { env } from 'cloudflare:test';
 import { errors } from 'jose';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { createTestIdp, type TestIdp } from '../__fixtures__/jwks.fixtures';
 import { D1SyncStore } from '../d1-store';
 import app, { createApp } from '../index';
-import { createTestIdp, type TestIdp } from './__fixtures__/jwks.fixtures';
 
 const GOOGLE_ISS = 'https://accounts.google.com';
 let idp: TestIdp;

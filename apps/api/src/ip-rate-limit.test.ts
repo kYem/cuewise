@@ -1,9 +1,9 @@
 import { env } from 'cloudflare:test';
 import type { Hono } from 'hono';
 import { describe, expect, it } from 'vitest';
-import type { AuthVars } from '../auth-middleware';
-import type { Env } from '../env';
-import { createApp } from '../index';
+import type { AuthVars } from './auth-middleware';
+import type { Env } from './env';
+import { createApp } from './index';
 
 type App = Hono<{ Bindings: Env } & AuthVars>;
 

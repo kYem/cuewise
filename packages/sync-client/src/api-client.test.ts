@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ApiClient } from '../api-client';
-import type { PushRecord } from '../types';
 import { problemResponse, stubFetch } from './__fixtures__/fetch.fixtures';
+import { ApiClient } from './api-client';
+import type { PushRecord } from './types';
 
 const BASE_URL = 'https://api.cuewise.app';
 const TOKEN = 'session-token-123';

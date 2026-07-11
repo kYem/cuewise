@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
-import { SESSION_TTL_MS } from '../d1-store';
 import { clockedStore } from './__fixtures__/api-test-helpers.fixtures';
+import { SESSION_TTL_MS } from './d1-store';
 
 describe('D1SyncStore auth', () => {
   it('findOrCreateUser returns the same user for the same identity', async () => {

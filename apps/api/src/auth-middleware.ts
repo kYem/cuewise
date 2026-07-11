@@ -1,6 +1,6 @@
 import type { MiddlewareHandler } from 'hono';
 import type { Env } from './env';
-import { problem } from './problems';
+import { problem } from './problem-details';
 import type { SyncStore } from './store';
 
 export type AuthVars = { Variables: { userId: string; tokenHash: string } };

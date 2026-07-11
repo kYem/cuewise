@@ -4,7 +4,7 @@ import { type AuthVars, requireSession } from './auth-middleware';
 import { D1SyncStore } from './d1-store';
 import type { Env } from './env';
 import { ipRateLimit } from './ip-rate-limit';
-import { problem } from './problems';
+import { problem } from './problem-details';
 import { rateLimit } from './rate-limit';
 import { registerAccountRoutes } from './routes/account';
 import { registerAppleRoutes } from './routes/apple';

@@ -1,7 +1,7 @@
 import { createLocalJWKSet, exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
-import type { Env } from '../../env';
-import type { IdTokenVerifier, VerifiedIdentity } from '../../verifiers';
-import { isEmailVerified, TokenVerificationError } from '../../verifiers';
+import type { Env } from '../env';
+import type { IdTokenVerifier, VerifiedIdentity } from '../verifiers';
+import { isEmailVerified, TokenVerificationError } from '../verifiers';
 
 export interface TestIdp {
   sign(claims: {

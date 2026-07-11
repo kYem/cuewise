@@ -4,7 +4,7 @@ import { sha256Base64Url } from '../crypto-utils';
 import type { Env } from '../env';
 import { parseJsonBody } from '../http';
 import type { AppDepsResolved } from '../index';
-import { problem, requireNonEmptyString, type ValidationIssue } from '../problems';
+import { problem, requireNonEmptyString, type ValidationIssue } from '../problem-details';
 import type { Identity } from '../store';
 import { verifyOrProblem } from '../verifiers';
 

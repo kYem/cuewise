@@ -1,13 +1,13 @@
 import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
-import { D1SyncStore } from '../d1-store';
-import app from '../index';
 import {
   getChanges,
   postChanges,
   record,
   signedInToken,
-} from './__fixtures__/api-test-helpers.fixtures';
+} from '../__fixtures__/api-test-helpers.fixtures';
+import { D1SyncStore } from '../d1-store';
+import app from '../index';
 
 async function getExport(token: string) {
   return app.request('/v1/export', { headers: { Authorization: `Bearer ${token}` } }, env);

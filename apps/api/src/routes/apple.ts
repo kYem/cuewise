@@ -3,7 +3,7 @@ import type { AuthVars } from '../auth-middleware';
 import { base64UrlDecodeString, base64UrlEncodeString } from '../crypto-utils';
 import type { Env } from '../env';
 import type { AppDepsResolved } from '../index';
-import { problem, type ValidationIssue } from '../problems';
+import { problem, type ValidationIssue } from '../problem-details';
 import { verifyOrProblem } from '../verifiers';
 
 // S256 PKCE challenges are always exactly 43 base64url characters (a 32-byte SHA-256 digest).

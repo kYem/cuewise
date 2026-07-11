@@ -1,4 +1,4 @@
-import { requireNonEmptyString, type ValidationIssue } from './problems';
+import { requireNonEmptyString, type ValidationIssue } from './problem-details';
 import type { PushRecord } from './store';
 
 export const MAX_BATCH_SIZE = 100;

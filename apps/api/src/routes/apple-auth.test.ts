@@ -1,9 +1,9 @@
 import { env } from 'cloudflare:test';
 import { errors } from 'jose';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { createTestIdp, type TestIdp } from '../__fixtures__/jwks.fixtures';
 import { sha256Base64Url } from '../crypto-utils';
 import { createApp } from '../index';
-import { createTestIdp, type TestIdp } from './__fixtures__/jwks.fixtures';
 
 const APPLE_ISS = 'https://appleid.apple.com';
 // Fixed 43-char base64url verifier; no randomness needed for PKCE binding tests.

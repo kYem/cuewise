@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { SessionManager, SYNC_SESSION_KEY } from '../session-manager';
-import { armSyncPull, SYNC_PULL_WAKE_ID } from '../sync-schedule';
 import {
   createInMemoryKeyValueStore,
   createRecordingScheduler,
 } from './__fixtures__/ports.fixtures';
+import { SessionManager, SYNC_SESSION_KEY } from './session-manager';
+import { armSyncPull, SYNC_PULL_WAKE_ID } from './sync-schedule';
 
 describe('SessionManager', () => {
   it('round-trips a token through saveToken and getToken', async () => {

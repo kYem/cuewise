@@ -1,7 +1,7 @@
 import type { MiddlewareHandler } from 'hono';
 import type { AuthVars } from './auth-middleware';
 import type { Env } from './env';
-import { problem } from './problems';
+import { problem } from './problem-details';
 import type { SyncStore } from './store';
 
 export function rateLimit(

@@ -1,9 +1,9 @@
 import { env } from 'cloudflare:test';
 import type { Hono } from 'hono';
-import type { AuthVars } from '../../auth-middleware';
-import { D1SyncStore } from '../../d1-store';
-import type { Env } from '../../env';
-import type { PushRecord } from '../../store';
+import type { AuthVars } from '../auth-middleware';
+import { D1SyncStore } from '../d1-store';
+import type { Env } from '../env';
+import type { PushRecord } from '../store';
 
 type App = Hono<{ Bindings: Env } & AuthVars>;
 

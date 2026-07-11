@@ -1,7 +1,7 @@
 import { logger } from '@cuewise/shared';
 import { createRemoteJWKSet, errors, type JWTPayload, jwtVerify } from 'jose';
 import type { Env } from './env';
-import { problem } from './problems';
+import { problem } from './problem-details';
 
 export interface VerifiedIdentity {
   providerSub: string;

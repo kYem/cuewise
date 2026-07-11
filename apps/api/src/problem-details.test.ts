@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
-import app from '../index';
-import { problem } from '../problems';
+import app from './index';
+import { problem } from './problem-details';
 
 describe('problem()', () => {
   it('builds an RFC 9457 body with extensions and Retry-After header', async () => {

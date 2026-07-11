@@ -1,4 +1,4 @@
-import type { ProblemBody } from '../../types';
+import type { ProblemBody } from '../types';
 
 export interface StubResponseSpec {
   status: number;

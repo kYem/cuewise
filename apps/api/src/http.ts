@@ -1,4 +1,4 @@
-import { problem } from './problems';
+import { problem } from './problem-details';
 
 interface JsonRequestContext {
   req: { json: () => Promise<unknown> };

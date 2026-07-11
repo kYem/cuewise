@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import app from '../index';
-import { MAX_COLLECTION_LENGTH } from '../validate-changes';
 import {
   getChanges,
   postChanges,
   record,
   signedInToken,
-} from './__fixtures__/api-test-helpers.fixtures';
+} from '../__fixtures__/api-test-helpers.fixtures';
+import app from '../index';
+import { MAX_COLLECTION_LENGTH } from '../validate-changes';
 
 describe('POST /v1/changes then GET /v1/changes', () => {
   it('pushes two records and returns cursor 2', async () => {

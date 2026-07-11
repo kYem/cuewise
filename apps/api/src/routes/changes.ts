@@ -3,7 +3,7 @@ import type { AuthVars } from '../auth-middleware';
 import type { Env } from '../env';
 import { parseJsonBody } from '../http';
 import type { AppDepsResolved } from '../index';
-import { problem } from '../problems';
+import { problem } from '../problem-details';
 import { validatePushBody } from '../validate-changes';
 
 export function registerChangesRoutes(

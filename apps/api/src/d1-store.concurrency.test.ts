@@ -1,8 +1,8 @@
 import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
-import { sha256Hex } from '../crypto-utils';
-import { D1SyncStore } from '../d1-store';
 import { record } from './__fixtures__/api-test-helpers.fixtures';
+import { sha256Hex } from './crypto-utils';
+import { D1SyncStore } from './d1-store';
 
 describe('D1SyncStore concurrency', () => {
   it('two concurrent applyChanges batches for one user yield 20 records with seqs 1..20, no dup/gaps', async () => {

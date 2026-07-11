@@ -1,9 +1,9 @@
 import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
-import { sha256Hex } from '../crypto-utils';
-import { D1SyncStore } from '../d1-store';
-import { createApp } from '../index';
 import { clockedStore, getChanges, signedInToken } from './__fixtures__/api-test-helpers.fixtures';
+import { sha256Hex } from './crypto-utils';
+import { D1SyncStore } from './d1-store';
+import { createApp } from './index';
 
 describe('rate limiting on /v1/changes', () => {
   it('allows up to 60 requests per window then blocks the 61st with 429 and Retry-After', async () => {
