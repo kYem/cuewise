@@ -8,6 +8,7 @@
     "type-check": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "e2e": "node scripts/e2e-roundtrip.mjs",
     "clean": "rm -rf dist .wrangler"
   },
   "dependencies": {
