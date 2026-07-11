@@ -10,9 +10,9 @@ export {
   Switch,
 } from './SettingControls';
 export {
+  type BuiltInSectionId,
   SECTION_IDS,
   SETTINGS_SECTIONS,
-  type SectionId,
   type SettingsSection,
 } from './SettingsSections';
 export {

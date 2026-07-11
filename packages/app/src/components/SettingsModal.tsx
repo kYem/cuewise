@@ -7,11 +7,7 @@ import { createPortal } from 'react-dom';
 import { usePomodoroStore } from '../stores/pomodoro-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { useSoundsStore } from '../stores/sounds-store';
-import {
-  SETTINGS_SECTIONS,
-  type SectionId,
-  type SettingsSection,
-} from './settings/SettingsSections';
+import { SETTINGS_SECTIONS, type SettingsSection } from './settings/SettingsSections';
 import { planSettingsSideEffects } from './settings/settings-apply';
 import { settingsMatch } from './settings/settings-match';
 
@@ -79,7 +75,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, e
   const reloadPomodoroSettings = usePomodoroStore((state) => state.reloadSettings);
   const openSoundsPanel = useSoundsStore((state) => state.openPanel);
 
-  const [active, setActive] = useState<SectionId>('timer');
+  const [active, setActive] = useState<string>('timer');
   const [query, setQuery] = useState('');
   const [savedTick, setSavedTick] = useState(0);
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -171,7 +167,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, e
     );
   };
 
-  const jumpToSection = (id: SectionId) => {
+  const jumpToSection = (id: string) => {
     setQuery('');
     setActive(id);
   };

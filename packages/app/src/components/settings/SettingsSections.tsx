@@ -788,19 +788,16 @@ function AdvancedSection({ s, set, filter, onReset }: SettingsSectionProps) {
 }
 
 /** Section identifiers, also the routing keys for the sidebar nav. */
-export const SECTION_IDS = [
-  'timer',
-  'sound',
-  'focus',
-  'home',
-  'goals',
-  'advanced',
-  'posture',
-] as const;
-export type SectionId = (typeof SECTION_IDS)[number];
+export const SECTION_IDS = ['timer', 'sound', 'focus', 'home', 'goals', 'advanced'] as const;
+/** The built-in sections' nav keys. Host-injected sections may use any string id. */
+export type BuiltInSectionId = (typeof SECTION_IDS)[number];
 
 export interface SettingsSection {
-  id: SectionId;
+  // Open union: the built-in literals stay as autocomplete suggestions, but any host id
+  // (e.g. macOS "posture") is accepted too — `& {}` just stops the union collapsing to
+  // plain `string`. Typos aren't caught here (every string is valid); that's enforced on
+  // SETTINGS_SECTIONS below, whose element id must be a BuiltInSectionId.
+  id: BuiltInSectionId | (string & {});
   label: string;
   icon: LucideIcon;
   component: React.FC<SettingsSectionProps>;
@@ -808,7 +805,9 @@ export interface SettingsSection {
   terms: string;
 }
 
-export const SETTINGS_SECTIONS: SettingsSection[] = [
+// Built-in sections: the tighter `id: BuiltInSectionId` element type makes a mistyped
+// id a compile error here (the open SettingsSection.id can't catch that by design).
+export const SETTINGS_SECTIONS: (SettingsSection & { id: BuiltInSectionId })[] = [
   {
     id: 'timer',
     label: 'Timer',
