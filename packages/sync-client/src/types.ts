@@ -1,6 +1,6 @@
-import type { PushRecord, SyncRecord } from '@cuewise/shared';
+import type { ExchangeTokenRequest, PushRecord, SyncRecord } from '@cuewise/shared';
 
-export type { PushRecord, SyncRecord };
+export type { ExchangeTokenRequest, PushRecord, SyncRecord };
 
 export interface ProblemBody {
   type: string;

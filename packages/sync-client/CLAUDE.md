@@ -35,7 +35,7 @@ Wraps one `KeyValueStore` key, `SYNC_SESSION_KEY`, always in the **`'local'`** s
 
 ## Wire Types (`types.ts`)
 
-`PushRecord`/`SyncRecord` are **re-exported, not redeclared**, from `@cuewise/shared` (`packages/shared/src/types.ts`) — the single source of truth also used by the server's `SyncStore` interface (`apps/api/src/store.ts`). Don't add a second definition here. `ProblemBody` mirrors the server's RFC 9457 shape and lives only in this package, since the server doesn't publish a shared client type for it.
+`PushRecord`/`SyncRecord`/`ExchangeTokenRequest` are **re-exported, not redeclared**, from `@cuewise/shared` (`packages/shared/src/types.ts`) — the single source of truth also used by the server's `SyncStore` interface (`apps/api/src/store.ts`) and `parseTokenRequest` (`apps/api/src/routes/auth.ts`). Don't add a second definition here. `ExchangeTokenRequest` is a discriminated union on `provider` so `codeVerifier` is only required (and only typed) on the `'apple'` arm; the server still re-validates it at runtime since the wire is never trusted. `ProblemBody` mirrors the server's RFC 9457 shape and lives only in this package, since the server doesn't publish a shared client type for it.
 
 ## What's NOT Here
 

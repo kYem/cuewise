@@ -119,7 +119,12 @@ describe('ApiClient', () => {
     const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
 
     await expect(
-      client.exchangeToken({ provider: 'apple', credential: 'apple-code', deviceName: 'd' })
+      client.exchangeToken({
+        provider: 'apple',
+        credential: 'apple-code',
+        deviceName: 'd',
+        codeVerifier: 'verifier',
+      })
     ).rejects.toMatchObject({ code: 'internal' });
     expect(calls).toHaveLength(1);
   });
@@ -129,7 +134,12 @@ describe('ApiClient', () => {
     const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
 
     await expect(
-      client.exchangeToken({ provider: 'apple', credential: 'apple-code', deviceName: 'd' })
+      client.exchangeToken({
+        provider: 'apple',
+        credential: 'apple-code',
+        deviceName: 'd',
+        codeVerifier: 'verifier',
+      })
     ).rejects.toMatchObject({ code: 'network_error' });
     expect(calls).toHaveLength(1);
   });

@@ -549,3 +549,8 @@ export interface PushRecord {
 export interface SyncRecord extends PushRecord {
   seq: number;
 }
+
+/** codeVerifier is required for apple (PKCE); google/dev exchanges don't use it. */
+export type ExchangeTokenRequest =
+  | { provider: 'google' | 'dev'; credential: string; deviceName: string }
+  | { provider: 'apple'; credential: string; deviceName: string; codeVerifier: string };

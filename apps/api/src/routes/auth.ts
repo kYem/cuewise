@@ -1,3 +1,4 @@
+import type { ExchangeTokenRequest } from '@cuewise/shared';
 import type { Hono } from 'hono';
 import type { AuthVars } from '../auth-middleware';
 import { sha256Base64Url } from '../crypto-utils';
@@ -12,14 +13,7 @@ const MAX_DEVICE_NAME_LENGTH = 100;
 // Real ID tokens run 1-2 KB and Apple's one-time code is 43 chars; this just caps abuse.
 const MAX_CREDENTIAL_LENGTH = 8192;
 
-interface TokenRequest {
-  provider: 'google' | 'apple' | 'dev';
-  credential: string;
-  deviceName: string;
-  codeVerifier?: string;
-}
-
-function parseTokenRequest(body: unknown): TokenRequest | ValidationIssue[] {
+function parseTokenRequest(body: unknown): ExchangeTokenRequest | ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   const b = (body ?? {}) as Record<string, unknown>;
   if (b.provider !== 'google' && b.provider !== 'apple' && b.provider !== 'dev') {
@@ -33,7 +27,7 @@ function parseTokenRequest(body: unknown): TokenRequest | ValidationIssue[] {
   if (issues.length > 0) {
     return issues;
   }
-  return b as unknown as TokenRequest;
+  return b as unknown as ExchangeTokenRequest;
 }
 
 export function registerAuthRoutes(
@@ -67,8 +61,10 @@ export function registerAuthRoutes(
         return problem('invalid_request', { detail: 'Unknown provider.' });
       }
       identity = { provider: 'dev', providerSub: parsed.credential };
-    } else {
+    } else if (parsed.provider === 'apple') {
       const consumed = await store.consumeAuthCode(parsed.credential);
+      // codeVerifier is required by the ExchangeTokenRequest type on this arm, but the wire
+      // is never trusted — parseTokenRequest already re-validated it at runtime above.
       if (consumed === null || typeof parsed.codeVerifier !== 'string') {
         return problem('invalid_token');
       }
@@ -83,6 +79,9 @@ export function registerAuthRoutes(
         providerSub: consumed.payload.providerSub,
         email: consumed.payload.email,
       };
+    } else {
+      // Unreachable: parseTokenRequest already rejects any provider outside this set.
+      return problem('invalid_request', { detail: 'Unknown provider.' });
     }
     const userId = await store.findOrCreateUser(identity);
     const token = await store.createSession(userId, parsed.deviceName);

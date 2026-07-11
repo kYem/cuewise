@@ -1,5 +1,5 @@
 import { ApiError } from './api-error';
-import type { PushRecord, SyncRecord } from './types';
+import type { ExchangeTokenRequest, PushRecord, SyncRecord } from './types';
 
 const MAX_RETRIES = 3;
 
@@ -10,13 +10,7 @@ export interface ApiClientOptions {
   sleep?: (ms: number) => Promise<void>;
 }
 
-export interface ExchangeTokenRequest {
-  provider: 'google' | 'apple' | 'dev';
-  credential: string;
-  deviceName: string;
-  // Required by the server when provider === 'apple' (PKCE); no client-side PKCE logic here.
-  codeVerifier?: string;
-}
+export type { ExchangeTokenRequest };
 
 function defaultSleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
