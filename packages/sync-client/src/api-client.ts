@@ -1,0 +1,108 @@
+import { ApiError } from './api-error';
+import type { PushRecord, SyncRecord } from './types';
+
+const MAX_RETRIES = 3;
+
+export interface ApiClientOptions {
+  baseUrl: string;
+  getToken: () => Promise<string | null>;
+  fetchFn?: typeof fetch;
+  sleep?: (ms: number) => Promise<void>;
+}
+
+export interface ExchangeTokenRequest {
+  provider: 'google' | 'apple' | 'dev';
+  credential: string;
+  deviceName: string;
+  // Required by the server when provider === 'apple' (PKCE); no client-side PKCE logic here.
+  codeVerifier?: string;
+}
+
+function defaultSleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export class ApiClient {
+  private readonly opts: ApiClientOptions;
+  private readonly fetchFn: typeof fetch;
+  private readonly sleep: (ms: number) => Promise<void>;
+
+  constructor(opts: ApiClientOptions) {
+    this.opts = opts;
+    this.fetchFn = opts.fetchFn ?? fetch;
+    this.sleep = opts.sleep ?? defaultSleep;
+  }
+
+  async exchangeToken(req: ExchangeTokenRequest): Promise<{ token: string }> {
+    const res = await this.request(
+      '/v1/auth/token',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(req),
+      },
+      { auth: false }
+    );
+    return (await res.json()) as { token: string };
+  }
+
+  async getChanges(since: number): Promise<{ records: SyncRecord[]; cursor: number }> {
+    const res = await this.request(`/v1/changes?since=${since}`, { method: 'GET' }, { auth: true });
+    return (await res.json()) as { records: SyncRecord[]; cursor: number };
+  }
+
+  async pushChanges(records: PushRecord[]): Promise<{ cursor: number }> {
+    const res = await this.request(
+      '/v1/changes',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ records }),
+      },
+      { auth: true }
+    );
+    return (await res.json()) as { cursor: number };
+  }
+
+  async logout(): Promise<void> {
+    await this.request('/v1/auth/logout', { method: 'POST' }, { auth: true });
+  }
+
+  async exportData(): Promise<{ records: SyncRecord[] }> {
+    const res = await this.request('/v1/export', { method: 'GET' }, { auth: true });
+    return (await res.json()) as { records: SyncRecord[] };
+  }
+
+  async deleteAccount(): Promise<void> {
+    await this.request('/v1/account', { method: 'DELETE' }, { auth: true });
+  }
+
+  private async request(
+    path: string,
+    init: RequestInit,
+    opts: { auth: boolean }
+  ): Promise<Response> {
+    const headers = new Headers(init.headers);
+    if (opts.auth) {
+      const token = await this.opts.getToken();
+      if (token !== null) {
+        headers.set('Authorization', `Bearer ${token}`);
+      }
+    }
+    let lastError: ApiError | null = null;
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt += 1) {
+      const res = await this.fetchFn(`${this.opts.baseUrl}${path}`, { ...init, headers });
+      if (res.ok) {
+        return res;
+      }
+      lastError = await ApiError.fromResponse(res);
+      if (!lastError.retryable || attempt === MAX_RETRIES) {
+        throw lastError;
+      }
+      const delayMs =
+        lastError.retryAfter !== undefined ? lastError.retryAfter * 1000 : 2 ** attempt * 500;
+      await this.sleep(delayMs);
+    }
+    throw lastError ?? new ApiError('internal', 0);
+  }
+}
