@@ -70,10 +70,11 @@ export function TrayStatusBridge(): null {
   );
   const posture = usePosture();
   const postureStatus = posture.tracking ? posture.steadyStatus : null;
-  const postureDot = postureStatus ? POSTURE_META[postureStatus].dot : null;
-  const postureLine = postureStatus
-    ? `${POSTURE_META[postureStatus].dot} ${POSTURE_META[postureStatus].label}`
-    : null;
+  // Look up once and stay defensive: an unknown status must not throw in this
+  // always-mounted component (the controller already rejects them, this is a backstop).
+  const postureMeta = postureStatus ? POSTURE_META[postureStatus] : null;
+  const postureDot = postureMeta ? postureMeta.dot : null;
+  const postureLine = postureMeta ? `${postureMeta.dot} ${postureMeta.label}` : null;
 
   // Relay Pomodoro control clicks from the native tray menu into the store.
   useEffect(() => {

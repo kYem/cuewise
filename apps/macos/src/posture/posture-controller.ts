@@ -35,15 +35,19 @@ let unlisteners: UnlistenFn[] = [];
 let starting = false;
 // Consecutive unreadable sidecar frames; escalates to a visible error at 5.
 let parseFailures = 0;
+// The status values this build understands; anything else is a bad frame (protocol
+// drift), not a valid sample — reject it so it can't reach an unguarded consumer.
+const KNOWN_STATUSES: readonly PostureStatus[] = ['good', 'mild', 'poor', 'absent'];
 
 // Nudge on sustained poor posture, then cool down so we don't nag.
 const NUDGE_AFTER_POOR_SAMPLES = 15; // ~30s at the sidecar's 2s cadence
 const NUDGE_COOLDOWN_MS = 5 * 60 * 1000;
 let poorStreak = 0;
 let lastNudgeAt = 0;
-// Warn once if nudge delivery fails (e.g. notifications denied) so the feature
-// isn't silently dead — without storming a toast on every ~30s retry.
+// Warn the user once per tracking session when a failure would otherwise be silent,
+// without storming a toast on every retry. Both reset in resetDerivation.
 let warnedNudgeUndeliverable = false;
+let warnedUnreadable = false;
 
 // Debounce the tray status: adopt a new status only after it holds for a few
 // samples, so a dropped face-detection frame or threshold jitter doesn't flip the
@@ -85,14 +89,24 @@ function resetDerivation(): void {
   pendingStatus = null;
   pendingCount = 0;
   parseFailures = 0;
+  // Per-session warn latches reset with the session, so a deliberate restart can
+  // warn again if the problem persists.
+  warnedNudgeUndeliverable = false;
+  warnedUnreadable = false;
 }
 
-// Count consecutive unreadable frames; escalate to a visible error at 5 so a
-// protocol drift doesn't sit silently on "Starting…".
+// Count consecutive unreadable frames; escalate to a visible error at 5 so a protocol
+// drift doesn't sit silently on "Starting…". Toast once too — Settings may be closed,
+// where the panel error never renders — matching the unexpected-stop path.
 function noteBadFrame(): void {
   parseFailures += 1;
   if (parseFailures >= 5) {
-    setState({ error: 'Posture readings could not be read.' });
+    const message = 'Posture readings could not be read.';
+    setState({ error: message });
+    if (!warnedUnreadable) {
+      warnedUnreadable = true;
+      useToastStore.getState().error(message);
+    }
   }
 }
 
@@ -108,14 +122,22 @@ async function attachListeners(): Promise<void> {
       noteBadFrame();
       return;
     }
-    if (sample === null || typeof sample !== 'object' || !('status' in sample)) {
-      // Valid JSON but not a sample (e.g. a bare `null` line) — a bad frame, not a crash.
+    if (
+      sample === null ||
+      typeof sample !== 'object' ||
+      !('status' in sample) ||
+      !KNOWN_STATUSES.includes(sample.status)
+    ) {
+      // Not a sample we understand: a bare `null`/primitive line, or an unknown status
+      // from a newer sidecar. Reject as a bad frame — never let it reach the tray, whose
+      // POSTURE_META lookup would throw on an unknown key.
       logger.error('Posture sample had an unexpected shape', event.payload);
       noteBadFrame();
       return;
     }
     parseFailures = 0;
-    // A readable frame means we've recovered — drop any stale "unreadable" error.
+    // A readable frame means we've recovered — drop any stale error (only the
+    // unreadable-frames error can coexist with live samples).
     if (state.error !== null) {
       setState({ sample, error: null });
     } else {
@@ -146,10 +168,20 @@ export function startPosture(): void {
   starting = true;
   persist(ENABLED_KEY, true);
   setState({ error: null });
-  invoke('start_posture')
-    .then(() => attachListeners())
-    .then(() => setState({ tracking: true }))
+  // Attach listeners BEFORE spawning: the sidecar can fail its camera check and emit
+  // posture://stopped within tens of ms, and Tauri won't buffer that for a listener
+  // registered afterward — so attach-after-invoke would silently drop the failure.
+  attachListeners()
+    .then(() => invoke('start_posture'))
+    .then(() => {
+      // The sidecar may have already died and run onStopped (which detaches). Only flip
+      // tracking on if the listeners are still live, so we don't clobber that stop.
+      if (unlisteners.length > 0) {
+        setState({ tracking: true });
+      }
+    })
     .catch((error) => {
+      detachListeners();
       logger.error('Failed to start posture tracking', error);
       // Nothing renders the panel error when Settings is closed (e.g. auto-resume
       // at launch), so surface it and clear the pref rather than retry every boot.
@@ -241,7 +273,9 @@ function maybeNudge(sample: PostureSample): void {
       lastNudgeAt = 0; // delivery failed — don't spend the cooldown on a missed nudge
       if (!warnedNudgeUndeliverable) {
         warnedNudgeUndeliverable = true;
-        useToastStore.getState().warning('Enable notifications to get posture reminders.');
+        useToastStore
+          .getState()
+          .warning("Couldn't deliver a posture reminder — check notification permissions.");
       }
     });
 }

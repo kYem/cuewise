@@ -793,9 +793,10 @@ export const SECTION_IDS = ['timer', 'sound', 'focus', 'home', 'goals', 'advance
 export type BuiltInSectionId = (typeof SECTION_IDS)[number];
 
 export interface SettingsSection {
-  // Built-in ids keep autocomplete and typo-checking; the `& {}` keeps the field
-  // open so a platform host (e.g. macOS "posture") can inject a section without
-  // teaching this shared package about a platform-only id.
+  // Open union: the built-in literals stay as autocomplete suggestions, but any host id
+  // (e.g. macOS "posture") is accepted too — `& {}` just stops the union collapsing to
+  // plain `string`. Typos aren't caught here (every string is valid); that's enforced on
+  // SETTINGS_SECTIONS below, whose element id must be a BuiltInSectionId.
   id: BuiltInSectionId | (string & {});
   label: string;
   icon: LucideIcon;
@@ -804,7 +805,9 @@ export interface SettingsSection {
   terms: string;
 }
 
-export const SETTINGS_SECTIONS: SettingsSection[] = [
+// Built-in sections: the tighter `id: BuiltInSectionId` element type makes a mistyped
+// id a compile error here (the open SettingsSection.id can't catch that by design).
+export const SETTINGS_SECTIONS: (SettingsSection & { id: BuiltInSectionId })[] = [
   {
     id: 'timer',
     label: 'Timer',
