@@ -17,5 +17,10 @@
     "APPLE_CLIENT_ID": "",
     "PUBLIC_BASE_URL": "http://localhost:8787",
     "ALLOWED_RETURN_URIS": "cuewise://auth"
-  }
+  },
+  // Hand-authored config skips the dashboard default; without this, logger.error/warn never
+  // reach Workers Logs in production.
+  "observability": { "enabled": true },
+  // Recommended for Workers that make several round trips to D1 plus outbound JWKS fetches.
+  "placement": { "mode": "smart" }
 }

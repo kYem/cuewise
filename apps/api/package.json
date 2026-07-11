@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
+    "cf-typegen": "wrangler types",
     "type-check": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
