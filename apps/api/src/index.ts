@@ -4,6 +4,7 @@ import { type AuthVars, requireSession } from './auth-middleware';
 import { D1SyncStore } from './d1-store';
 import type { Env } from './env';
 import { problem } from './problems';
+import { registerAccountRoutes } from './routes/account';
 import { registerAppleRoutes } from './routes/apple';
 import { registerAuthRoutes } from './routes/auth';
 import { registerChangesRoutes } from './routes/changes';
@@ -44,6 +45,7 @@ export function createApp(deps: AppDeps = {}): Hono<{ Bindings: Env } & AuthVars
   registerAuthRoutes(app, resolved);
   registerAppleRoutes(app, resolved);
   registerChangesRoutes(app, resolved);
+  registerAccountRoutes(app, resolved);
 
   app.notFound(() => {
     return problem('not_found');

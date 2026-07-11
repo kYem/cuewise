@@ -184,12 +184,18 @@ export class D1SyncStore implements SyncStore {
     return { records, cursor: last === undefined ? since : last.seq };
   }
 
-  async exportUser(_userId: string): Promise<{ records: SyncRecord[] }> {
-    throw new Error('not implemented');
+  async exportUser(userId: string): Promise<{ records: SyncRecord[] }> {
+    const { records } = await this.listChanges(userId, 0);
+    return { records };
   }
 
-  async deleteUser(_userId: string): Promise<void> {
-    throw new Error('not implemented');
+  async deleteUser(userId: string): Promise<void> {
+    await this.db.batch([
+      this.db.prepare('DELETE FROM records WHERE user_id = ?').bind(userId),
+      this.db.prepare('DELETE FROM tokens WHERE user_id = ?').bind(userId),
+      this.db.prepare('DELETE FROM identities WHERE user_id = ?').bind(userId),
+      this.db.prepare('DELETE FROM users WHERE id = ?').bind(userId),
+    ]);
   }
 
   async bumpRateWindow(_tokenHash: string, _windowMs: number): Promise<number> {
