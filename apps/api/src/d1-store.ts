@@ -152,16 +152,20 @@ export class D1SyncStore implements SyncStore {
 
   async applyChanges(userId: string, changes: PushRecord[]): Promise<number> {
     const ts = this.now();
+    const n = changes.length;
     const stmts: D1PreparedStatement[] = [];
-    for (const change of changes) {
+    // Reserve all N seqs in one write; guarded so a no-op push (n=0) issues no write at all.
+    if (n > 0) {
       stmts.push(
-        this.db.prepare('UPDATE users SET last_seq = last_seq + 1 WHERE id = ?').bind(userId)
+        this.db.prepare('UPDATE users SET last_seq = last_seq + ? WHERE id = ?').bind(n, userId)
       );
+    }
+    changes.forEach((change, i) => {
       stmts.push(
         this.db
           .prepare(
             `INSERT INTO records (user_id, collection, entity_id, seq, ciphertext, deleted, client_updated_at, server_received_at)
-             VALUES (?, ?, ?, (SELECT last_seq FROM users WHERE id = ?), ?, ?, ?, ?)
+             VALUES (?, ?, ?, (SELECT last_seq FROM users WHERE id = ?) - ?, ?, ?, ?, ?)
              ON CONFLICT (user_id, collection, entity_id) DO UPDATE SET
                seq = excluded.seq, ciphertext = excluded.ciphertext, deleted = excluded.deleted,
                client_updated_at = excluded.client_updated_at, server_received_at = excluded.server_received_at`
@@ -171,16 +175,17 @@ export class D1SyncStore implements SyncStore {
             change.collection,
             change.entityId,
             userId,
+            n - 1 - i,
             change.ciphertext,
             change.deleted ? 1 : 0,
             change.clientUpdatedAt,
             ts
           )
       );
-    }
+    });
     stmts.push(this.db.prepare('SELECT last_seq FROM users WHERE id = ?').bind(userId));
-    // Must stay a single db.batch: each INSERT's subquery relies on its immediately-
-    // preceding UPDATE for the next seq; splitting this reintroduces a multi-device race.
+    // Must stay a single db.batch: every INSERT reads the post-UPDATE last_seq set by the
+    // leading UPDATE in this same batch; splitting this reintroduces a multi-device race.
     const results = await this.db.batch<{ last_seq: number }>(stmts);
     const tail = results[results.length - 1];
     if (tail === undefined || tail.results[0] === undefined) {

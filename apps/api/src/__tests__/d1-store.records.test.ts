@@ -88,4 +88,19 @@ describe('D1SyncStore records', () => {
     const { records } = await store.listChanges(userId, 0);
     expect(records.map((r) => r.seq)).toEqual([1, 2, 3]);
   });
+
+  it('applyChanges with an empty array returns the current cursor and writes nothing', async () => {
+    const store = new D1SyncStore(env.DB);
+    const userId = await newUser(store, 'u1');
+    await store.applyChanges(userId, [record({ entityId: 'a' })]);
+    const cursor = await store.applyChanges(userId, []);
+    expect(cursor).toBe(1);
+    const countRow = await env.DB.prepare('SELECT COUNT(*) as count FROM records WHERE user_id = ?')
+      .bind(userId)
+      .first<{ count: number }>();
+    if (countRow === null) {
+      throw new Error('expected a count row');
+    }
+    expect(countRow.count).toBe(1);
+  });
 });
