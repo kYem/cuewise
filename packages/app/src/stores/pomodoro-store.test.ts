@@ -391,3 +391,101 @@ describe('completeSession celebration trigger', () => {
     expect(celebrateMock).not.toHaveBeenCalled();
   });
 });
+
+describe('Pomodoro Store - tick wall-clock reconciliation (#159)', () => {
+  beforeEach(() => {
+    usePomodoroStore.setState({
+      status: 'idle',
+      sessionType: 'work',
+      timeRemaining: 0,
+      totalTime: 0,
+      sessions: [],
+      currentSessionId: null,
+      isLoading: false,
+      error: null,
+      consecutiveWorkSessions: 0,
+      selectedGoalId: null,
+      lastTickTime: null,
+      workDuration: 25,
+      breakDuration: 5,
+      longBreakDuration: 15,
+      longBreakInterval: 4,
+      ambientSound: 'none',
+      ambientVolume: 50,
+    });
+    vi.clearAllMocks();
+    vi.mocked(storage.getPomodoroSessions).mockResolvedValue([]);
+    vi.mocked(storage.setPomodoroSessions).mockResolvedValue({ success: true });
+    vi.mocked(storage.getSettings).mockResolvedValue(defaultSettings);
+    configurePlatform({ notifier: fakeNotifier });
+  });
+
+  it('decrements by one second on a normal ~1s tick', () => {
+    usePomodoroStore.setState({
+      status: 'running',
+      currentSessionId: 'sess-1',
+      timeRemaining: 100,
+      lastTickTime: Date.now() - 1000,
+    });
+
+    usePomodoroStore.getState().tick();
+
+    expect(usePomodoroStore.getState().timeRemaining).toBe(99);
+  });
+
+  it('catches up by the real elapsed time when the tab was throttled (drift fix)', () => {
+    // A backgrounded tab throttles setInterval, so tick() fires late. It must
+    // decrement by the seconds that actually elapsed, not a flat -1.
+    usePomodoroStore.setState({
+      status: 'running',
+      currentSessionId: 'sess-1',
+      timeRemaining: 100,
+      lastTickTime: Date.now() - 5000, // five real seconds since the last tick
+    });
+
+    usePomodoroStore.getState().tick();
+
+    expect(usePomodoroStore.getState().timeRemaining).toBe(95);
+  });
+
+  it('is a no-op when less than a second has elapsed', () => {
+    usePomodoroStore.setState({
+      status: 'running',
+      currentSessionId: 'sess-1',
+      timeRemaining: 100,
+      lastTickTime: Date.now() - 400,
+    });
+
+    usePomodoroStore.getState().tick();
+
+    expect(usePomodoroStore.getState().timeRemaining).toBe(100);
+  });
+
+  it('does nothing when the timer is not running', () => {
+    usePomodoroStore.setState({
+      status: 'paused',
+      timeRemaining: 100,
+      lastTickTime: Date.now() - 5000,
+    });
+
+    usePomodoroStore.getState().tick();
+
+    expect(usePomodoroStore.getState().timeRemaining).toBe(100);
+  });
+
+  it('completes the session (never negative) when elapsed meets or exceeds what remains', async () => {
+    usePomodoroStore.setState({
+      status: 'running',
+      sessionType: 'work',
+      currentSessionId: 'sess-1',
+      timeRemaining: 3,
+      totalTime: 25 * 60,
+      lastTickTime: Date.now() - 5000, // more elapsed than remains
+    });
+
+    usePomodoroStore.getState().tick();
+    await vi.waitFor(() => expect(storage.setPomodoroSessions).toHaveBeenCalled());
+
+    expect(usePomodoroStore.getState().timeRemaining).toBeGreaterThanOrEqual(0);
+  });
+});
