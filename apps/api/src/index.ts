@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import { type AuthVars, requireSession } from './auth-middleware';
 import { D1SyncStore } from './d1-store';
 import type { Env } from './env';
+import { ipRateLimit } from './ip-rate-limit';
 import { problem } from './problems';
 import { rateLimit } from './rate-limit';
 import { registerAccountRoutes } from './routes/account';
@@ -46,10 +47,19 @@ export function createApp(deps: AppDeps = {}): Hono<{ Bindings: Env } & AuthVars
   app.use('/v1/account', auth);
   app.use('/v1/auth/logout', auth);
 
-  app.use(
-    '/v1/changes/*',
-    rateLimit((env) => resolved.storeFactory(env.DB), { limit: 60, windowMs: 60_000 })
-  );
+  const perTokenRateLimit = rateLimit((env) => resolved.storeFactory(env.DB), {
+    limit: 60,
+    windowMs: 60_000,
+  });
+  app.use('/v1/changes/*', perTokenRateLimit);
+  app.use('/v1/export', perTokenRateLimit);
+  app.use('/v1/account', perTokenRateLimit);
+
+  // Unauthenticated, so only an IP-keyed limiter applies here.
+  const authSurfaceRateLimit = ipRateLimit();
+  app.use('/v1/auth/token', authSurfaceRateLimit);
+  app.use('/v1/auth/apple/start', authSurfaceRateLimit);
+  app.use('/v1/auth/apple/callback', authSurfaceRateLimit);
 
   registerAuthRoutes(app, resolved);
   registerAppleRoutes(app, resolved);

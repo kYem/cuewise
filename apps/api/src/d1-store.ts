@@ -26,9 +26,24 @@ export class D1SyncStore implements SyncStore {
   }
 
   async findOrCreateUser(identity: Identity): Promise<string> {
-    const existing = await this.selectIdentityUserId(identity);
+    const existing = await this.db
+      .prepare('SELECT user_id, email FROM identities WHERE provider = ? AND provider_sub = ?')
+      .bind(identity.provider, identity.providerSub)
+      .first<{ user_id: string; email: string | null }>();
     if (existing !== null) {
-      return existing;
+      // Callers only ever pass a verified email; refresh both rows so a changed
+      // or newly-verified address on a later sign-in doesn't stay stale forever.
+      if (identity.email !== undefined && identity.email !== existing.email) {
+        await this.db.batch([
+          this.db
+            .prepare('UPDATE identities SET email = ? WHERE provider = ? AND provider_sub = ?')
+            .bind(identity.email, identity.provider, identity.providerSub),
+          this.db
+            .prepare('UPDATE users SET email = ? WHERE id = ?')
+            .bind(identity.email, existing.user_id),
+        ]);
+      }
+      return existing.user_id;
     }
     const userId = crypto.randomUUID();
     const ts = this.now();
@@ -222,7 +237,7 @@ export class D1SyncStore implements SyncStore {
   async bumpRateWindow(
     tokenHash: string,
     windowMs: number
-  ): Promise<{ count: number; windowStart: number }> {
+  ): Promise<{ count: number; resetInMs: number } | null> {
     const ts = this.now();
     const row = await this.db
       .prepare(
@@ -236,8 +251,12 @@ export class D1SyncStore implements SyncStore {
       .bind(ts, windowMs, ts, ts, windowMs, tokenHash)
       .first<{ window_start: number; window_count: number }>();
     if (row === null) {
-      throw new Error('bumpRateWindow: unknown token');
+      // The token was revoked/deleted between session lookup and this call.
+      return null;
     }
-    return { count: row.window_count, windowStart: row.window_start };
+    return {
+      count: row.window_count,
+      resetInMs: Math.max(0, row.window_start + windowMs - ts),
+    };
   }
 }
