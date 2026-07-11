@@ -2,9 +2,8 @@
   "name": "cuewise-api",
   "main": "src/index.ts",
   "compatibility_date": "2026-06-01",
-  // database_id is a local placeholder; the first real deploy runs
-  // `wrangler d1 create cuewise-sync` and pastes the returned id here.
-  // Local dev and tests never contact Cloudflare.
+  // database_id is a placeholder until the first deploy runs `wrangler d1 create
+  // cuewise-sync` and pastes the real id here; local dev/tests never touch Cloudflare.
   "d1_databases": [
     {
       "binding": "DB",

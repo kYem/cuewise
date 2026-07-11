@@ -1,21 +1,11 @@
 import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
-import { D1SyncStore, SESSION_TTL_MS } from '../d1-store';
-
-function storeAt(now: number): { store: D1SyncStore; tick: (ms: number) => void } {
-  let current = now;
-  const store = new D1SyncStore(env.DB, () => current);
-  return {
-    store,
-    tick: (ms) => {
-      current += ms;
-    },
-  };
-}
+import { SESSION_TTL_MS } from '../d1-store';
+import { clockedStore } from './__fixtures__/api-test-helpers.fixtures';
 
 describe('D1SyncStore auth', () => {
   it('findOrCreateUser returns the same user for the same identity', async () => {
-    const { store } = storeAt(1_000);
+    const { store } = clockedStore(1_000);
     const a = await store.findOrCreateUser({
       provider: 'google',
       providerSub: 's1',
@@ -26,14 +16,14 @@ describe('D1SyncStore auth', () => {
   });
 
   it('different providers with the same sub are different users', async () => {
-    const { store } = storeAt(1_000);
+    const { store } = clockedStore(1_000);
     const a = await store.findOrCreateUser({ provider: 'google', providerSub: 'same' });
     const b = await store.findOrCreateUser({ provider: 'apple', providerSub: 'same' });
     expect(b).not.toBe(a);
   });
 
   it('createSession/lookupSession round-trips and stores only a hash', async () => {
-    const { store } = storeAt(1_000);
+    const { store } = clockedStore(1_000);
     const userId = await store.findOrCreateUser({ provider: 'google', providerSub: 's1' });
     const token = await store.createSession(userId, 'Chrome on macOS');
     const session = await store.lookupSession(token);
@@ -45,7 +35,7 @@ describe('D1SyncStore auth', () => {
   });
 
   it('lookupSession rejects expired and revoked tokens', async () => {
-    const { store, tick } = storeAt(1_000);
+    const { store, tick } = clockedStore(1_000);
     const userId = await store.findOrCreateUser({ provider: 'google', providerSub: 's1' });
     const expired = await store.createSession(userId, 'd1');
     tick(91 * 24 * 60 * 60 * 1000);
@@ -56,7 +46,7 @@ describe('D1SyncStore auth', () => {
   });
 
   it('auth codes are single-use and expire after 60s', async () => {
-    const { store, tick } = storeAt(1_000);
+    const { store, tick } = clockedStore(1_000);
     const code = await store.mintAuthCode(
       {
         provider: 'apple',
@@ -79,14 +69,14 @@ describe('D1SyncStore auth', () => {
   });
 
   it('treats a legacy row with no stored code_challenge as unredeemable', async () => {
-    const { store } = storeAt(1_000);
+    const { store } = clockedStore(1_000);
     const code = await store.mintAuthCode({ provider: 'apple', providerSub: 'as3' }, 'irrelevant');
     await env.DB.prepare('UPDATE auth_codes SET code_challenge = NULL').run();
     expect(await store.consumeAuthCode(code)).toBeNull();
   });
 
   it('rejects a session lookup exactly at its expiry boundary (expires_at > ? is strict)', async () => {
-    const { store, tick } = storeAt(1_000);
+    const { store, tick } = clockedStore(1_000);
     const userId = await store.findOrCreateUser({ provider: 'google', providerSub: 's-boundary' });
     const token = await store.createSession(userId, 'boundary-device');
     tick(SESSION_TTL_MS);
@@ -94,7 +84,7 @@ describe('D1SyncStore auth', () => {
   });
 
   it('slides expiry forward on lookup, extending the session past its original TTL', async () => {
-    const { store, tick } = storeAt(1_000);
+    const { store, tick } = clockedStore(1_000);
     const userId = await store.findOrCreateUser({ provider: 'google', providerSub: 's-sliding' });
     const token = await store.createSession(userId, 'sliding-device');
 
@@ -111,7 +101,7 @@ describe('D1SyncStore auth', () => {
   });
 
   it('mintAuthCode purges expired rows so PII does not outlive the code TTL', async () => {
-    const { store, tick } = storeAt(1_000);
+    const { store, tick } = clockedStore(1_000);
     await store.mintAuthCode({ provider: 'apple', providerSub: 'purge1', email: 'p1@e.c' }, 'c1');
     tick(61_000);
     await store.mintAuthCode({ provider: 'apple', providerSub: 'purge2', email: 'p2@e.c' }, 'c2');
@@ -125,7 +115,7 @@ describe('D1SyncStore auth', () => {
   });
 
   it('refreshes identities.email and users.email when a later sign-in has a new email', async () => {
-    const { store } = storeAt(1_000);
+    const { store } = clockedStore(1_000);
     const identity = {
       provider: 'google' as const,
       providerSub: 'refresh-sub',

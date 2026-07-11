@@ -27,6 +27,18 @@ export function record(overrides: Partial<PushRecord> = {}): PushRecord {
   };
 }
 
+/** A D1SyncStore whose clock is driven by `tick` instead of wall time, for TTL/window tests. */
+export function clockedStore(now: number): { store: D1SyncStore; tick: (ms: number) => void } {
+  let current = now;
+  const store = new D1SyncStore(env.DB, () => current);
+  return {
+    store,
+    tick: (ms) => {
+      current += ms;
+    },
+  };
+}
+
 export async function getChanges(app: App, token: string, since = '0'): Promise<Response> {
   return app.request(
     `/v1/changes?since=${since}`,

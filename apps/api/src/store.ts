@@ -1,3 +1,7 @@
+import type { PushRecord, SyncRecord } from '@cuewise/shared';
+
+export type { PushRecord, SyncRecord };
+
 export interface Identity {
   provider: 'google' | 'apple' | 'dev';
   providerSub: string;
@@ -13,19 +17,6 @@ export interface AuthCodePayload {
   provider: 'apple';
   providerSub: string;
   email?: string;
-}
-
-// Mirrors PushRecord in packages/sync-client/src/types.ts — keep both in sync when this shape changes.
-export interface PushRecord {
-  collection: string;
-  entityId: string;
-  ciphertext: string;
-  clientUpdatedAt: number;
-  deleted: boolean;
-}
-
-export interface SyncRecord extends PushRecord {
-  seq: number;
 }
 
 export interface SyncStore {

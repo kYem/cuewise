@@ -1,15 +1,6 @@
-// Mirrors PushRecord in apps/api/src/store.ts — keep both in sync when this shape changes.
-export interface PushRecord {
-  collection: string;
-  entityId: string;
-  ciphertext: string;
-  clientUpdatedAt: number;
-  deleted: boolean;
-}
+import type { PushRecord, SyncRecord } from '@cuewise/shared';
 
-export interface SyncRecord extends PushRecord {
-  seq: number;
-}
+export type { PushRecord, SyncRecord };
 
 export interface ProblemBody {
   type: string;

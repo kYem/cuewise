@@ -19,11 +19,7 @@ export type AppDeps = {
   appleVerifier?: IdTokenVerifier;
 };
 
-export type AppDepsResolved = {
-  storeFactory: (db: D1Database) => SyncStore;
-  googleVerifier: IdTokenVerifier;
-  appleVerifier: IdTokenVerifier;
-};
+export type AppDepsResolved = Required<AppDeps>;
 
 export function createApp(deps: AppDeps = {}): Hono<{ Bindings: Env } & AuthVars> {
   const resolved: AppDepsResolved = {

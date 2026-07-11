@@ -3,18 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { sha256Hex } from '../crypto-utils';
 import { D1SyncStore } from '../d1-store';
 import { createApp } from '../index';
-import { getChanges, signedInToken } from './__fixtures__/api-test-helpers.fixtures';
-
-function clockedStore(now: number): { store: D1SyncStore; tick: (ms: number) => void } {
-  let current = now;
-  const store = new D1SyncStore(env.DB, () => current);
-  return {
-    store,
-    tick: (ms) => {
-      current += ms;
-    },
-  };
-}
+import { clockedStore, getChanges, signedInToken } from './__fixtures__/api-test-helpers.fixtures';
 
 describe('rate limiting on /v1/changes', () => {
   it('allows up to 60 requests per window then blocks the 61st with 429 and Retry-After', async () => {

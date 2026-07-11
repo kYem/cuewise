@@ -1,18 +1,7 @@
 import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
 import { D1SyncStore } from '../d1-store';
-import type { PushRecord } from '../store';
-
-function record(overrides: Partial<PushRecord> = {}): PushRecord {
-  return {
-    collection: 'quotes',
-    entityId: 'entity-1',
-    ciphertext: 'cipher-1',
-    clientUpdatedAt: 1_000,
-    deleted: false,
-    ...overrides,
-  };
-}
+import { record } from './__fixtures__/api-test-helpers.fixtures';
 
 async function newUser(store: D1SyncStore, providerSub: string): Promise<string> {
   return store.findOrCreateUser({ provider: 'dev', providerSub });
