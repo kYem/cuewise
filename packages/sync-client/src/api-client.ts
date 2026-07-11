@@ -33,8 +33,8 @@ export class ApiClient {
     this.sleep = opts.sleep ?? defaultSleep;
   }
 
-  // The server burns Apple's one-time PKCE code before building the response, so retrying
-  // after a lost response or a post-burn 5xx would present an already-spent code and 401 forever.
+  // Only Apple's credential is a one-time server-burned code; retrying after a lost response
+  // or a post-burn 5xx would replay it. Google/dev exchanges are idempotent and keep retrying.
   async exchangeToken(req: ExchangeTokenRequest): Promise<{ token: string }> {
     const res = await this.request(
       '/v1/auth/token',
@@ -43,7 +43,7 @@ export class ApiClient {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(req),
       },
-      { auth: false, retry: false }
+      { auth: false, retry: req.provider !== 'apple' }
     );
     return this.parseSuccessBody<{ token: string }>(res);
   }

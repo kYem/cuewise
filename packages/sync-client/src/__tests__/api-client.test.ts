@@ -114,24 +114,47 @@ describe('ApiClient', () => {
     expect(headers.has('Authorization')).toBe(false);
   });
 
-  it('exchangeToken against a 500 rejects with code internal after exactly one attempt', async () => {
+  it('exchangeToken for apple against a 500 rejects with code internal after exactly one attempt', async () => {
     const { fetchFn, calls } = stubFetch([problemResponse('internal', 500)]);
     const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
 
     await expect(
-      client.exchangeToken({ provider: 'google', credential: 'google-credential', deviceName: 'd' })
+      client.exchangeToken({ provider: 'apple', credential: 'apple-code', deviceName: 'd' })
     ).rejects.toMatchObject({ code: 'internal' });
     expect(calls).toHaveLength(1);
   });
 
-  it('exchangeToken against a rejecting fetch rejects with network_error after exactly one attempt', async () => {
+  it('exchangeToken for apple against a rejecting fetch rejects with network_error after exactly one attempt', async () => {
     const { fetchFn, calls } = stubFetch([{ reject: true }]);
     const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
 
     await expect(
-      client.exchangeToken({ provider: 'google', credential: 'google-credential', deviceName: 'd' })
+      client.exchangeToken({ provider: 'apple', credential: 'apple-code', deviceName: 'd' })
     ).rejects.toMatchObject({ code: 'network_error' });
     expect(calls).toHaveLength(1);
+  });
+
+  it('exchangeToken for google retries a 500 and resolves after the retry (2 calls)', async () => {
+    const { fetchFn, calls } = stubFetch([
+      problemResponse('internal', 500),
+      { status: 200, body: { token: 'new-session-token' } },
+    ]);
+    const sleep = vi.fn().mockResolvedValue(undefined);
+    const client = new ApiClient({
+      baseUrl: BASE_URL,
+      getToken: async () => TOKEN,
+      fetchFn,
+      sleep,
+    });
+
+    const result = await client.exchangeToken({
+      provider: 'google',
+      credential: 'google-credential',
+      deviceName: 'd',
+    });
+
+    expect(result).toEqual({ token: 'new-session-token' });
+    expect(calls).toHaveLength(2);
   });
 
   it('retries through two network-level rejections and resolves on the third attempt', async () => {
