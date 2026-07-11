@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { spyOnLoggerError, spyOnLoggerWarn } from './__fixtures__/logger.fixtures';
 import {
   base64UrlDecodeString,
@@ -21,10 +21,6 @@ describe('base64UrlEncodeString / base64UrlDecodeString', () => {
 
 describe('signState / verifyState', () => {
   const KEY = 'unit-test-signing-key';
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
 
   /** Replaces the last character with a different, still-valid base64url character. */
   function flipLastChar(value: string): string {
@@ -91,14 +87,36 @@ describe('signState / verifyState', () => {
     expect(warnSpy).not.toHaveBeenCalled();
   });
 
-  it('signs and verifies successfully with a second key after the cache holds a different one', async () => {
+  it('pins each state to the key that signed it, even after the cache moves on', async () => {
     const payloadA = { nonce: 'n-cache-a' };
     const stateA = await signState(payloadA, KEY);
-    expect(await verifyState(stateA, KEY)).toEqual(payloadA);
 
     const otherKey = 'a-second-signing-key';
     const payloadB = { nonce: 'n-cache-b' };
     const stateB = await signState(payloadB, otherKey);
+
+    // Each state must verify under its OWN key...
+    expect(await verifyState(stateA, KEY)).toEqual(payloadA);
     expect(await verifyState(stateB, otherKey)).toEqual(payloadB);
+    // ...and cross-verifying with the other key must fail. A cache that serves a stale
+    // key would make signing/verifying self-consistently wrong and this would pass anyway.
+    expect(await verifyState(stateA, otherKey)).toBeNull();
+  });
+
+  it('retries the HMAC import after a transient failure instead of caching the rejection', async () => {
+    const errorSpy = spyOnLoggerError();
+    const retryKey = 'retry-after-transient-import-failure';
+    vi.spyOn(crypto.subtle, 'importKey').mockRejectedValueOnce(
+      new Error('transient WebCrypto fault')
+    );
+
+    // Any dot-shaped string reaches importHmacKey; the body/signature don't need to be real yet.
+    const firstAttempt = await verifyState('irrelevant-body.irrelevant-signature', retryKey);
+    expect(firstAttempt).toBeNull();
+    expect(errorSpy).toHaveBeenCalledWith('verifyState: HMAC key import failed', expect.any(Error));
+
+    const payload = { nonce: 'n-retry' };
+    const secondState = await signState(payload, retryKey);
+    expect(await verifyState(secondState, retryKey)).toEqual(payload);
   });
 });

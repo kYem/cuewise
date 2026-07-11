@@ -49,15 +49,25 @@ function importHmacKey(key: string): Promise<CryptoKey> {
   if (cachedKey !== null && cachedKey.raw === key) {
     return cachedKey.key;
   }
-  const cryptoKey = crypto.subtle.importKey(
-    'raw',
-    encoder.encode(key),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign', 'verify']
-  );
-  cachedKey = { raw: key, key: cryptoKey };
-  return cryptoKey;
+  const entry = {
+    raw: key,
+    key: crypto.subtle.importKey(
+      'raw',
+      encoder.encode(key),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign', 'verify']
+    ),
+  };
+  cachedKey = entry;
+  // Never cache a rejection: a transient import failure must not permanently poison this
+  // slot for the isolate's lifetime. Only clear it if a newer entry hasn't already replaced it.
+  entry.key.catch(() => {
+    if (cachedKey === entry) {
+      cachedKey = null;
+    }
+  });
+  return entry.key;
 }
 
 /** Signs `payload` so `verifyState` can detect any tampering with the body or signature. */
