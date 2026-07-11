@@ -11,10 +11,13 @@ export function registerChangesRoutes(
 ): void {
   app.get('/v1/changes', async (c) => {
     const raw = c.req.query('since') ?? '';
-    const since = Number.parseInt(raw, 10);
-    if (Number.isNaN(since) || since < 0) {
+    // Number.parseInt tolerates trailing junk ("123abc") and scientific notation
+    // ("1e5"); require plain digits so a malformed cursor 400s instead of silently
+    // returning the wrong window.
+    if (!/^\d+$/.test(raw)) {
       return problem('invalid_cursor');
     }
+    const since = Number.parseInt(raw, 10);
     const store = deps.storeFactory(c.env.DB);
     const { records, cursor } = await store.listChanges(c.get('userId'), since);
     return c.json({ records, cursor });

@@ -2,7 +2,6 @@ const PROBLEM_DEFS = {
   unauthorized: { status: 401, title: 'Authentication required' },
   invalid_token: { status: 401, title: 'Invalid or expired credential' },
   rate_limited: { status: 429, title: 'Too many requests' },
-  payload_too_large: { status: 422, title: 'Record too large' },
   batch_too_large: { status: 422, title: 'Batch too large' },
   invalid_record: { status: 422, title: 'Batch rejected' },
   invalid_cursor: { status: 400, title: 'Invalid cursor' },

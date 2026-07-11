@@ -44,6 +44,9 @@ if (push.status !== 200) {
 const pull = await fetch(`${BASE}/v1/changes?since=0`, {
   headers: { Authorization: `Bearer ${deviceB}` },
 });
+if (pull.status !== 200) {
+  await fail(`pull returned ${pull.status}: ${await pull.text()}`);
+}
 const { records } = await pull.json();
 const found = records.find((r) => r.entityId === 'g-e2e-1');
 if (found === undefined) {

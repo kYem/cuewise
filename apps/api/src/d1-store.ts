@@ -80,17 +80,18 @@ export class D1SyncStore implements SyncStore {
 
   async mintAuthCode(payload: AuthCodePayload, codeChallenge: string): Promise<string> {
     const code = randomToken();
-    await this.db
-      .prepare(
-        'INSERT INTO auth_codes (code_hash, payload, expires_at, code_challenge) VALUES (?, ?, ?, ?)'
-      )
-      .bind(
-        await sha256Hex(code),
-        JSON.stringify(payload),
-        this.now() + AUTH_CODE_TTL_MS,
-        codeChallenge
-      )
-      .run();
+    const codeHash = await sha256Hex(code);
+    const ts = this.now();
+    // Sweep expired codes on every mint so PII in payload never outlives the 60s TTL,
+    // even for rows nobody ever redeemed.
+    await this.db.batch([
+      this.db.prepare('DELETE FROM auth_codes WHERE expires_at <= ?').bind(ts),
+      this.db
+        .prepare(
+          'INSERT INTO auth_codes (code_hash, payload, expires_at, code_challenge) VALUES (?, ?, ?, ?)'
+        )
+        .bind(codeHash, JSON.stringify(payload), ts + AUTH_CODE_TTL_MS, codeChallenge),
+    ]);
     return code;
   }
 

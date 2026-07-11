@@ -37,7 +37,8 @@ export function createApp(deps: AppDeps = {}): Hono<{ Bindings: Env } & AuthVars
   });
 
   const auth = requireSession((env) => resolved.storeFactory(env.DB));
-  app.use('/v1/changes', auth);
+  // Hono's `/*` wildcard already matches the bare prefix — see the rate-limit
+  // registration below, which relies on the same behavior.
   app.use('/v1/changes/*', auth);
   app.use('/v1/export', auth);
   app.use('/v1/account', auth);
