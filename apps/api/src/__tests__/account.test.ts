@@ -2,46 +2,12 @@ import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
 import { D1SyncStore } from '../d1-store';
 import app from '../index';
-import type { PushRecord } from '../store';
-
-async function signedInToken(): Promise<{ token: string; userId: string; providerSub: string }> {
-  const providerSub = `u-${crypto.randomUUID()}`;
-  const store = new D1SyncStore(env.DB);
-  const userId = await store.findOrCreateUser({ provider: 'dev', providerSub });
-  const token = await store.createSession(userId, 'test-device');
-  return { token, userId, providerSub };
-}
-
-function record(overrides: Partial<PushRecord> = {}): PushRecord {
-  return {
-    collection: 'quotes',
-    entityId: 'entity-1',
-    ciphertext: 'cipher-1',
-    clientUpdatedAt: 1_000,
-    deleted: false,
-    ...overrides,
-  };
-}
-
-async function getChanges(token: string, since: string) {
-  return app.request(
-    `/v1/changes?since=${since}`,
-    { headers: { Authorization: `Bearer ${token}` } },
-    env
-  );
-}
-
-async function postChanges(token: string, body: unknown) {
-  return app.request(
-    '/v1/changes',
-    {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: typeof body === 'string' ? body : JSON.stringify(body),
-    },
-    env
-  );
-}
+import {
+  getChanges,
+  postChanges,
+  record,
+  signedInToken,
+} from './__fixtures__/api-test-helpers.fixtures';
 
 async function getExport(token: string) {
   return app.request('/v1/export', { headers: { Authorization: `Bearer ${token}` } }, env);
@@ -58,7 +24,7 @@ async function deleteAccount(token: string) {
 describe('GET /v1/export', () => {
   it('returns pushed records, including tombstones', async () => {
     const { token } = await signedInToken();
-    await postChanges(token, {
+    await postChanges(app, token, {
       records: [record({ entityId: 'a' }), record({ entityId: 'b', deleted: true })],
     });
     const res = await getExport(token);
@@ -76,12 +42,12 @@ describe('GET /v1/export', () => {
 describe('DELETE /v1/account', () => {
   it('revokes the token and wipes user data; re-signing in starts with a fresh account', async () => {
     const { token, userId, providerSub } = await signedInToken();
-    await postChanges(token, { records: [record({ entityId: 'a' })] });
+    await postChanges(app, token, { records: [record({ entityId: 'a' })] });
 
     const del = await deleteAccount(token);
     expect(del.status).toBe(204);
 
-    const afterDelete = await getChanges(token, '0');
+    const afterDelete = await getChanges(app, token, '0');
     expect(afterDelete.status).toBe(401);
     const problemBody = await afterDelete.json<{ code: string }>();
     expect(problemBody.code).toBe('invalid_token');
@@ -91,7 +57,7 @@ describe('DELETE /v1/account', () => {
     expect(newUserId).not.toBe(userId);
     const newToken = await store.createSession(newUserId, 'test-device-2');
 
-    const res = await getChanges(newToken, '0');
+    const res = await getChanges(app, newToken, '0');
     expect(res.status).toBe(200);
     const freshBody = await res.json<{ records: unknown[]; cursor: number }>();
     expect(freshBody.records).toEqual([]);

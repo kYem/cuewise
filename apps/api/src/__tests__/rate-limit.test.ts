@@ -2,6 +2,7 @@ import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
 import { D1SyncStore } from '../d1-store';
 import { createApp } from '../index';
+import { getChanges, signedInToken } from './__fixtures__/api-test-helpers.fixtures';
 
 function clockedStore(now: number): { store: D1SyncStore; tick: (ms: number) => void } {
   let current = now;
@@ -14,20 +15,11 @@ function clockedStore(now: number): { store: D1SyncStore; tick: (ms: number) => 
   };
 }
 
-async function signedInToken(store: D1SyncStore, providerSub: string): Promise<string> {
-  const userId = await store.findOrCreateUser({ provider: 'dev', providerSub });
-  return store.createSession(userId, 'test-device');
-}
-
-async function getChanges(app: ReturnType<typeof createApp>, token: string): Promise<Response> {
-  return app.request('/v1/changes?since=0', { headers: { Authorization: `Bearer ${token}` } }, env);
-}
-
 describe('rate limiting on /v1/changes', () => {
   it('allows up to 60 requests per window then blocks the 61st with 429 and Retry-After', async () => {
     const { store } = clockedStore(1_000);
     const app = createApp({ storeFactory: () => store });
-    const token = await signedInToken(store, 'rl-burst');
+    const { token } = await signedInToken(store);
 
     let last: Response | undefined;
     for (let i = 1; i <= 60; i++) {
@@ -54,7 +46,7 @@ describe('rate limiting on /v1/changes', () => {
   it('admits requests again once the injected clock advances past the window', async () => {
     const { store, tick } = clockedStore(1_000);
     const app = createApp({ storeFactory: () => store });
-    const token = await signedInToken(store, 'rl-window-reset');
+    const { token } = await signedInToken(store);
 
     for (let i = 1; i <= 60; i++) {
       await getChanges(app, token);

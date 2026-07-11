@@ -1,54 +1,16 @@
-import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
-import { D1SyncStore } from '../d1-store';
 import app from '../index';
-import type { PushRecord } from '../store';
-
-async function signedInToken(): Promise<{ token: string; userId: string }> {
-  const store = new D1SyncStore(env.DB);
-  const userId = await store.findOrCreateUser({
-    provider: 'dev',
-    providerSub: `u-${crypto.randomUUID()}`,
-  });
-  const token = await store.createSession(userId, 'test-device');
-  return { token, userId };
-}
-
-function record(overrides: Partial<PushRecord> = {}): PushRecord {
-  return {
-    collection: 'quotes',
-    entityId: 'entity-1',
-    ciphertext: 'cipher-1',
-    clientUpdatedAt: 1_000,
-    deleted: false,
-    ...overrides,
-  };
-}
-
-async function getChanges(token: string, since: string) {
-  return app.request(
-    `/v1/changes?since=${since}`,
-    { headers: { Authorization: `Bearer ${token}` } },
-    env
-  );
-}
-
-async function postChanges(token: string, body: unknown) {
-  return app.request(
-    '/v1/changes',
-    {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: typeof body === 'string' ? body : JSON.stringify(body),
-    },
-    env
-  );
-}
+import {
+  getChanges,
+  postChanges,
+  record,
+  signedInToken,
+} from './__fixtures__/api-test-helpers.fixtures';
 
 describe('POST /v1/changes then GET /v1/changes', () => {
   it('pushes two records and returns cursor 2', async () => {
     const { token } = await signedInToken();
-    const res = await postChanges(token, {
+    const res = await postChanges(app, token, {
       records: [record({ entityId: 'a' }), record({ entityId: 'b' })],
     });
     expect(res.status).toBe(200);
@@ -58,13 +20,13 @@ describe('POST /v1/changes then GET /v1/changes', () => {
 
   it('GET since=0 returns both pushed records with round-tripped fields', async () => {
     const { token } = await signedInToken();
-    await postChanges(token, {
+    await postChanges(app, token, {
       records: [
         record({ entityId: 'a', ciphertext: 'cipher-a' }),
         record({ entityId: 'b', ciphertext: 'cipher-b' }),
       ],
     });
-    const res = await getChanges(token, '0');
+    const res = await getChanges(app, token, '0');
     expect(res.status).toBe(200);
     const body = await res.json<{
       records: Array<{ entityId: string; ciphertext: string }>;
@@ -77,8 +39,10 @@ describe('POST /v1/changes then GET /v1/changes', () => {
 
   it('GET since=2 returns no records and cursor unchanged at 2', async () => {
     const { token } = await signedInToken();
-    await postChanges(token, { records: [record({ entityId: 'a' }), record({ entityId: 'b' })] });
-    const res = await getChanges(token, '2');
+    await postChanges(app, token, {
+      records: [record({ entityId: 'a' }), record({ entityId: 'b' })],
+    });
+    const res = await getChanges(app, token, '2');
     expect(res.status).toBe(200);
     const body = await res.json<{ records: unknown[]; cursor: number }>();
     expect(body.records).toEqual([]);
@@ -89,7 +53,7 @@ describe('POST /v1/changes then GET /v1/changes', () => {
 describe('GET /v1/changes cursor validation', () => {
   it('rejects a non-numeric since with 400 invalid_cursor', async () => {
     const { token } = await signedInToken();
-    const res = await getChanges(token, 'abc');
+    const res = await getChanges(app, token, 'abc');
     expect(res.status).toBe(400);
     const body = await res.json<{ code: string }>();
     expect(body.code).toBe('invalid_cursor');
@@ -97,7 +61,23 @@ describe('GET /v1/changes cursor validation', () => {
 
   it('rejects a negative since with 400 invalid_cursor', async () => {
     const { token } = await signedInToken();
-    const res = await getChanges(token, '-1');
+    const res = await getChanges(app, token, '-1');
+    expect(res.status).toBe(400);
+    const body = await res.json<{ code: string }>();
+    expect(body.code).toBe('invalid_cursor');
+  });
+
+  it('rejects scientific notation since=1e5 with 400 invalid_cursor', async () => {
+    const { token } = await signedInToken();
+    const res = await getChanges(app, token, '1e5');
+    expect(res.status).toBe(400);
+    const body = await res.json<{ code: string }>();
+    expect(body.code).toBe('invalid_cursor');
+  });
+
+  it('rejects a since with trailing junk (123abc) with 400 invalid_cursor', async () => {
+    const { token } = await signedInToken();
+    const res = await getChanges(app, token, '123abc');
     expect(res.status).toBe(400);
     const body = await res.json<{ code: string }>();
     expect(body.code).toBe('invalid_cursor');
@@ -108,7 +88,7 @@ describe('POST /v1/changes batch cap', () => {
   it('rejects a batch of 101 records with 422 batch_too_large', async () => {
     const { token } = await signedInToken();
     const records = Array.from({ length: 101 }, (_, i) => record({ entityId: `entity-${i}` }));
-    const res = await postChanges(token, { records });
+    const res = await postChanges(app, token, { records });
     expect(res.status).toBe(422);
     const body = await res.json<{ code: string }>();
     expect(body.code).toBe('batch_too_large');
@@ -121,7 +101,7 @@ describe('POST /v1/changes record validation', () => {
     const invalidRecord = record();
     const missingEntityId = { ...invalidRecord, entityId: undefined };
     const oversizedCiphertext = record({ ciphertext: 'x'.repeat(65537) });
-    const res = await postChanges(token, { records: [missingEntityId, oversizedCiphertext] });
+    const res = await postChanges(app, token, { records: [missingEntityId, oversizedCiphertext] });
     expect(res.status).toBe(422);
     const body = await res.json<{
       code: string;
@@ -137,7 +117,7 @@ describe('POST /v1/changes record validation', () => {
 
   it('rejects unparseable JSON body with 400 invalid_request', async () => {
     const { token } = await signedInToken();
-    const res = await postChanges(token, '{not json');
+    const res = await postChanges(app, token, '{not json');
     expect(res.status).toBe(400);
     const body = await res.json<{ code: string }>();
     expect(body.code).toBe('invalid_request');
@@ -148,13 +128,13 @@ describe('POST /v1/changes idempotent retry', () => {
   it('re-pushing an identical batch succeeds and GET returns the entity once at the latest seq', async () => {
     const { token } = await signedInToken();
     const batch = { records: [record({ entityId: 'a', ciphertext: 'cipher-a' })] };
-    const first = await postChanges(token, batch);
+    const first = await postChanges(app, token, batch);
     expect(first.status).toBe(200);
-    const second = await postChanges(token, batch);
+    const second = await postChanges(app, token, batch);
     expect(second.status).toBe(200);
     const secondBody = await second.json<{ cursor: number }>();
     expect(secondBody.cursor).toBe(2);
-    const res = await getChanges(token, '0');
+    const res = await getChanges(app, token, '0');
     const body = await res.json<{ records: Array<{ entityId: string; ciphertext: string }> }>();
     expect(body.records).toHaveLength(1);
     expect(body.records[0]?.entityId).toBe('a');

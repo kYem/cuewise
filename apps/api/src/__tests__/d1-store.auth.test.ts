@@ -84,4 +84,18 @@ describe('D1SyncStore auth', () => {
     await env.DB.prepare('UPDATE auth_codes SET code_challenge = NULL').run();
     expect(await store.consumeAuthCode(code)).toBeNull();
   });
+
+  it('mintAuthCode purges expired rows so PII does not outlive the code TTL', async () => {
+    const { store, tick } = storeAt(1_000);
+    await store.mintAuthCode({ provider: 'apple', providerSub: 'purge1', email: 'p1@e.c' }, 'c1');
+    tick(61_000);
+    await store.mintAuthCode({ provider: 'apple', providerSub: 'purge2', email: 'p2@e.c' }, 'c2');
+    const row = await env.DB.prepare('SELECT COUNT(*) as count FROM auth_codes').first<{
+      count: number;
+    }>();
+    if (row === null) {
+      throw new Error('expected a count row');
+    }
+    expect(row.count).toBe(1);
+  });
 });
