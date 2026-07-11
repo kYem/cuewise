@@ -27,6 +27,22 @@ async function postToken(app: App, ip: string): Promise<Response> {
   );
 }
 
+async function postTokenWithoutIpHeader(app: App): Promise<Response> {
+  return app.request(
+    '/v1/auth/token',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        provider: 'dev',
+        credential: 'ip-rate-limit-test-user-no-ip',
+        deviceName: 'ip-rate-limit-test',
+      }),
+    },
+    testEnv()
+  );
+}
+
 describe('IP rate limiting on the auth surface', () => {
   it('blocks the 31st POST /v1/auth/token from one IP with 429 and Retry-After', async () => {
     const app = createApp();
@@ -60,5 +76,14 @@ describe('IP rate limiting on the auth surface', () => {
 
     const res = await postToken(app, otherIp);
     expect(res.status).toBe(200);
+  });
+
+  it('does not rate limit requests missing CF-Connecting-IP (31 consecutive requests all succeed)', async () => {
+    const app = createApp();
+
+    for (let i = 1; i <= 31; i++) {
+      const res = await postTokenWithoutIpHeader(app);
+      expect(res.status).toBe(200);
+    }
   });
 });

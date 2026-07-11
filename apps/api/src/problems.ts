@@ -18,6 +18,8 @@ export interface ValidationIssue {
   detail: string;
 }
 
+const encoder = new TextEncoder();
+
 /** Pushes a required-non-empty-string (and optional max-length) violation onto `issues`. */
 export function requireNonEmptyString(
   value: unknown,
@@ -31,8 +33,10 @@ export function requireNonEmptyString(
     issues.push({ ...base, detail: 'required non-empty string' });
     return;
   }
-  if (maxLength !== undefined && value.length > maxLength) {
-    issues.push({ ...base, detail: `must not exceed ${maxLength} characters` });
+  // Byte length, not value.length (UTF-16 code units) — matches the ciphertext cap so a
+  // multi-byte-heavy string can't pass a check sized for its serialized/storage cost.
+  if (maxLength !== undefined && encoder.encode(value).length > maxLength) {
+    issues.push({ ...base, detail: `must not exceed ${maxLength} bytes` });
   }
 }
 

@@ -1,6 +1,6 @@
 import type { Hono } from 'hono';
 import type { AuthVars } from '../auth-middleware';
-import { base64UrlDecode, base64UrlEncode } from '../crypto-utils';
+import { base64UrlDecodeString, base64UrlEncodeString } from '../crypto-utils';
 import type { Env } from '../env';
 import type { AppDepsResolved } from '../index';
 import { problem, type ValidationIssue } from '../problems';
@@ -11,12 +11,12 @@ const CODE_CHALLENGE_RE = /^[A-Za-z0-9_-]{43}$/;
 
 function encodeState(state: { returnUri: string; codeChallenge: string }): string {
   const json = JSON.stringify(state);
-  return base64UrlEncode(Uint8Array.from(json, (ch) => ch.charCodeAt(0)));
+  return base64UrlEncodeString(json);
 }
 
 function decodeState(state: string): { returnUri: string; codeChallenge: string } | null {
   try {
-    const parsed: unknown = JSON.parse(base64UrlDecode(state));
+    const parsed: unknown = JSON.parse(base64UrlDecodeString(state));
     if (
       parsed !== null &&
       typeof parsed === 'object' &&

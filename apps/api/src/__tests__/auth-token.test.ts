@@ -129,6 +129,18 @@ describe('POST /v1/auth/token (google)', () => {
     expect(body.errors.some((e) => e.pointer === '/deviceName')).toBe(true);
   });
 
+  it('rejects an over-length credential as invalid_request', async () => {
+    const res = await postToken({
+      provider: 'google',
+      credential: 'x'.repeat(8193),
+      deviceName: 'Chrome',
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json<{ code: string; errors: { pointer?: string }[] }>();
+    expect(body.code).toBe('invalid_request');
+    expect(body.errors.some((e) => e.pointer === '/credential')).toBe(true);
+  });
+
   it('honors the dev provider only when DEV_FAKE_AUTH=1', async () => {
     const appInstance = appWithIdp();
     const req = {

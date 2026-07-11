@@ -89,14 +89,13 @@ async function exchangeCode(code: string, codeVerifier?: string) {
   );
 }
 
+/** Arranges a fresh code via the real start+callback flow; throws on unexpected arrange-time failure. */
 async function mintCode(sub: string): Promise<string> {
   const returnUri = 'cuewise://auth';
   const state = await fetchStartState(returnUri);
   const idToken = await idp.sign({ iss: APPLE_ISS, aud: 'apple-client', sub });
   const callbackRes = await postCallback(idToken, state);
-  expect(callbackRes.status).toBe(302);
   const location = requireHeader(callbackRes, 'Location');
-  expect(location.startsWith(`${returnUri}?`)).toBe(true);
   const code = new URL(location).searchParams.get('code');
   if (code === null) {
     throw new Error('Expected a code query param on the /v1/auth/apple/callback redirect');
@@ -170,6 +169,19 @@ describe('GET /v1/auth/apple/start', () => {
 });
 
 describe('POST /v1/auth/apple/callback', () => {
+  it('redirects to returnUri with a code param on a successful verification', async () => {
+    const returnUri = 'cuewise://auth';
+    const state = await fetchStartState(returnUri);
+    const idToken = await idp.sign({ iss: APPLE_ISS, aud: 'apple-client', sub: 'apple-sub-shape' });
+
+    const res = await postCallback(idToken, state);
+
+    expect(res.status).toBe(302);
+    const location = requireHeader(res, 'Location');
+    expect(location.startsWith(`${returnUri}?`)).toBe(true);
+    expect(new URL(location).searchParams.get('code')).not.toBeNull();
+  });
+
   it('mints a one-time code that exchanges for a session token exactly once', async () => {
     const code = await mintCode('apple-sub-1');
 

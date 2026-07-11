@@ -9,6 +9,8 @@ import type { Identity } from '../store';
 import { verifyOrProblem } from '../verifiers';
 
 const MAX_DEVICE_NAME_LENGTH = 100;
+// Real ID tokens run 1-2 KB and Apple's one-time code is 43 chars; this just caps abuse.
+const MAX_CREDENTIAL_LENGTH = 8192;
 
 interface TokenRequest {
   provider: 'google' | 'apple' | 'dev';
@@ -23,7 +25,7 @@ function parseTokenRequest(body: unknown): TokenRequest | ValidationIssue[] {
   if (b.provider !== 'google' && b.provider !== 'apple' && b.provider !== 'dev') {
     issues.push({ pointer: '/provider', detail: "must be 'google', 'apple', or 'dev'" });
   }
-  requireNonEmptyString(b.credential, '/credential', issues);
+  requireNonEmptyString(b.credential, '/credential', issues, MAX_CREDENTIAL_LENGTH);
   requireNonEmptyString(b.deviceName, '/deviceName', issues, MAX_DEVICE_NAME_LENGTH);
   if (b.provider === 'apple' && (typeof b.codeVerifier !== 'string' || b.codeVerifier === '')) {
     issues.push({ pointer: '/codeVerifier', detail: 'required non-empty string for apple' });

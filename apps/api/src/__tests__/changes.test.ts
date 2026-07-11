@@ -156,6 +156,16 @@ describe('POST /v1/changes record validation', () => {
     expect(body.errors.some((e) => e.pointer === '/records/0/collection')).toBe(true);
   });
 
+  it('rejects an emoji-heavy entityId over the byte cap (128 UTF-16 units, 256 UTF-8 bytes)', async () => {
+    const { token } = await signedInToken();
+    const emojiEntityId = '😀'.repeat(64);
+    const res = await postChanges(app, token, { records: [record({ entityId: emojiEntityId })] });
+    expect(res.status).toBe(422);
+    const body = await res.json<{ code: string; errors: Array<{ pointer: string }> }>();
+    expect(body.code).toBe('invalid_record');
+    expect(body.errors.some((e) => e.pointer === '/records/0/entityId')).toBe(true);
+  });
+
   it('rejects unparseable JSON body with 400 invalid_request', async () => {
     const { token } = await signedInToken();
     const res = await postChanges(app, token, '{not json');

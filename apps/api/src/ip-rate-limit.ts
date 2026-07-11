@@ -10,8 +10,15 @@ export function ipRateLimit(
 ): MiddlewareHandler<{ Bindings: Env } & AuthVars> {
   // Isolate-local defense-in-depth; production also fronts these routes with WAF rules.
   const hits = new Map<string, { windowStart: number; count: number }>();
+  let lastPruneAt = 0;
   return async (c, next) => {
-    const ip = c.req.header('CF-Connecting-IP') ?? 'unknown';
+    const ip = c.req.header('CF-Connecting-IP');
+    // Cloudflare's edge always sets this header; its absence means a non-edge invocation
+    // path where per-IP limiting is meaningless, so skip rather than share one 'unknown' bucket.
+    if (ip === undefined) {
+      await next();
+      return;
+    }
     const now = Date.now();
     const existing = hits.get(ip);
     const entry =
@@ -19,11 +26,17 @@ export function ipRateLimit(
         ? { windowStart: now, count: 1 }
         : { windowStart: existing.windowStart, count: existing.count + 1 };
     hits.set(ip, entry);
-    if (hits.size > PRUNE_THRESHOLD) {
+    if (hits.size > PRUNE_THRESHOLD && now - lastPruneAt > opts.windowMs) {
+      lastPruneAt = now;
       for (const [key, value] of hits) {
         if (now - value.windowStart > opts.windowMs) {
           hits.delete(key);
         }
+      }
+      // Sweeping once couldn't keep the map bounded under this IP cardinality; drop
+      // everything rather than let it grow unbounded — bounded memory beats perfect accounting.
+      if (hits.size > PRUNE_THRESHOLD) {
+        hits.clear();
       }
     }
     if (entry.count > opts.limit) {

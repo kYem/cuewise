@@ -1,4 +1,5 @@
 const encoder = new TextEncoder();
+const decoder = new TextDecoder();
 
 export function base64UrlEncode(bytes: Uint8Array): string {
   return btoa(String.fromCharCode(...bytes))
@@ -9,6 +10,17 @@ export function base64UrlEncode(bytes: Uint8Array): string {
 
 export function base64UrlDecode(value: string): string {
   return atob(value.replace(/-/g, '+').replace(/_/g, '/'));
+}
+
+/** UTF-8 safe string variant: charCodeAt-based encoding silently truncates code points > 255. */
+export function base64UrlEncodeString(value: string): string {
+  return base64UrlEncode(encoder.encode(value));
+}
+
+export function base64UrlDecodeString(value: string): string {
+  const binary = base64UrlDecode(value);
+  const bytes = Uint8Array.from(binary, (ch) => ch.charCodeAt(0));
+  return decoder.decode(bytes);
 }
 
 export function randomToken(): string {
