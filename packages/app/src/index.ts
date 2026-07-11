@@ -13,12 +13,13 @@ export {
   SettingSubgroup,
   Switch,
 } from './components/settings/SettingControls';
-export type { SectionId, SettingsSection } from './components/settings/SettingsSections';
+export type { BuiltInSectionId, SettingsSection } from './components/settings/SettingsSections';
 export type { SettingsSectionProps } from './components/settings/settings-types';
 
 // Store + selector surface for platform hosts that project state outside the app
 // tree (e.g. the macOS menu-bar tray).
 export { usePomodoroStore } from './stores/pomodoro-store';
 export { useReminderStore } from './stores/reminder-store';
+export { useToastStore } from './stores/toast-store';
 export type { SessionType } from './utils/pomodoro-styles';
 export { getSessionLabel } from './utils/pomodoro-styles';

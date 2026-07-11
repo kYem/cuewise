@@ -118,7 +118,8 @@ export function TrayStatusBridge(): null {
   }, [status, sessionType, timeRemaining, postureDot]);
 
   // Rebuild the menu only on discrete changes (session / pause state / next
-  // reminder minute), not every tick — the countdown lives in the title.
+  // reminder minute / posture status), not every tick — the countdown lives in
+  // the title.
   const reminderKey = nextReminder
     ? `${nextReminder.id}:${Math.round((new Date(nextReminder.dueDate).getTime() - Date.now()) / 60000)}`
     : 'none';

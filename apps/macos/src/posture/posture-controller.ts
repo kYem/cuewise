@@ -1,3 +1,4 @@
+import { useToastStore } from '@cuewise/app';
 import { getNotifier, logger, type PostureSample, type PostureStatus } from '@cuewise/shared';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
@@ -27,6 +28,10 @@ let state: PostureState = {
 };
 const subscribers = new Set<() => void>();
 let unlisteners: UnlistenFn[] = [];
+// True while a start_posture spawn is in flight, so a rapid re-toggle can't
+// double-attach listeners (a leak) and double-count every sample.
+let starting = false;
+let parseFailures = 0;
 
 // Nudge on sustained poor posture, then cool down so we don't nag.
 const NUDGE_AFTER_POOR_SAMPLES = 15; // ~30s at the sidecar's 2s cadence
@@ -67,21 +72,38 @@ function detachListeners(): void {
   unlisteners = [];
 }
 
+// Zero the per-session derivation counters so a new session starts clean. Both
+// stop paths must call this, or a stale poorStreak can nudge early after resume.
+function resetDerivation(): void {
+  poorStreak = 0;
+  pendingStatus = null;
+  pendingCount = 0;
+  parseFailures = 0;
+}
+
 async function attachListeners(): Promise<void> {
+  detachListeners(); // guard against a double-attach orphaning the previous pair
   const onSample = await listen<string>('posture://sample', (event) => {
+    let sample: PostureSample;
     try {
-      const sample = JSON.parse(event.payload) as PostureSample;
-      setState({ sample });
-      maybeNudge(sample);
-      updateSteadyStatus(sample.status);
+      sample = JSON.parse(event.payload) as PostureSample;
     } catch (error) {
+      // Only the parse is fragile; a downstream throw must not read as "bad frame".
       logger.error('Failed to parse posture sample', error);
+      parseFailures += 1;
+      if (parseFailures >= 5) {
+        setState({ error: 'Posture readings could not be read.' });
+      }
+      return;
     }
+    parseFailures = 0;
+    setState({ sample });
+    maybeNudge(sample);
+    updateSteadyStatus(sample.status);
   });
   const onStopped = await listen('posture://stopped', () => {
     detachListeners();
-    pendingStatus = null;
-    pendingCount = 0;
+    resetDerivation();
     setState({
       tracking: false,
       sample: null,
@@ -93,17 +115,28 @@ async function attachListeners(): Promise<void> {
 }
 
 export function startPosture(): void {
-  persist(ENABLED_KEY, true);
-  if (state.tracking) {
+  // `tracking` only flips true once the async spawn resolves, so guard the
+  // in-flight window too or a second toggle double-attaches and double-counts.
+  if (state.tracking || starting) {
     return;
   }
+  starting = true;
+  persist(ENABLED_KEY, true);
   setState({ error: null });
   invoke('start_posture')
     .then(() => attachListeners())
     .then(() => setState({ tracking: true }))
     .catch((error) => {
       logger.error('Failed to start posture tracking', error);
-      setState({ error: 'Could not start posture tracking.' });
+      // Nothing renders the panel error when Settings is closed (e.g. auto-resume
+      // at launch), so surface it and clear the pref rather than retry every boot.
+      persist(ENABLED_KEY, false);
+      const message = 'Could not start posture tracking — check camera access.';
+      setState({ error: message });
+      useToastStore.getState().error(message);
+    })
+    .finally(() => {
+      starting = false;
     });
 }
 
@@ -111,9 +144,7 @@ export function stopPosture(): void {
   persist(ENABLED_KEY, false);
   invoke('stop_posture').catch((error) => logger.error('Failed to stop posture tracking', error));
   detachListeners();
-  poorStreak = 0;
-  pendingStatus = null;
-  pendingCount = 0;
+  resetDerivation();
   setState({ tracking: false, sample: null, steadyStatus: null });
 }
 
@@ -182,7 +213,10 @@ function maybeNudge(sample: PostureSample): void {
       title: '🧍 Posture check',
       body: "You've been leaning in for a while — sit back and reset.",
     })
-    .catch((error) => logger.error('Failed to deliver posture nudge', error));
+    .catch((error) => {
+      logger.error('Failed to deliver posture nudge', error);
+      lastNudgeAt = 0; // delivery failed — don't spend the cooldown on a missed nudge
+    });
 }
 
 function subscribe(callback: () => void): () => void {
