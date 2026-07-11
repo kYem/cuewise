@@ -70,6 +70,26 @@ describe('POST /v1/auth/token (google)', () => {
     expect(body.code).toBe('internal');
   });
 
+  it('returns 500 internal (not invalid_token) when the JWKS endpoint returns a non-200 response', async () => {
+    const appInstance = createApp({
+      googleVerifier: async () => {
+        throw new errors.JOSEError('Expected 200 OK from the JSON Web Key Set HTTP response');
+      },
+    });
+    const res = await appInstance.request(
+      '/v1/auth/token',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider: 'google', credential: 'whatever', deviceName: 'Chrome' }),
+      },
+      testEnv()
+    );
+    expect(res.status).toBe(500);
+    const body = await res.json<{ code: string }>();
+    expect(body.code).toBe('internal');
+  });
+
   it('rejects a malformed body as invalid_request', async () => {
     const res = await postToken({ provider: 'google' });
     expect(res.status).toBe(400);

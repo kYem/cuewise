@@ -1,4 +1,4 @@
-import { createRemoteJWKSet, jwtVerify } from 'jose';
+import { createRemoteJWKSet, errors, jwtVerify } from 'jose';
 import type { Env } from './env';
 
 export interface VerifiedIdentity {
@@ -10,6 +10,25 @@ export type IdTokenVerifier = (idToken: string, env: Env) => Promise<VerifiedIde
 
 /** A verified-but-rejected token (e.g. missing claim); distinct from an upstream/network failure. */
 export class TokenVerificationError extends Error {}
+
+const TOKEN_FAULT_CLASSES = [
+  errors.JWTExpired,
+  errors.JWTClaimValidationFailed,
+  errors.JWTInvalid,
+  errors.JWSInvalid,
+  errors.JWSSignatureVerificationFailed,
+  errors.JOSEAlgNotAllowed,
+  errors.JOSENotSupported,
+  errors.JWKSNoMatchingKey,
+] as const;
+
+/** True when the failure proves the presented token is bad; anything else is an upstream outage. */
+export function isTokenFault(err: unknown): boolean {
+  if (err instanceof TokenVerificationError) {
+    return true;
+  }
+  return TOKEN_FAULT_CLASSES.some((cls) => err instanceof cls);
+}
 
 const googleJwks = createRemoteJWKSet(new URL('https://www.googleapis.com/oauth2/v3/certs'));
 

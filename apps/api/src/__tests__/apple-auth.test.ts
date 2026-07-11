@@ -215,6 +215,28 @@ describe('POST /v1/auth/apple/callback', () => {
     const body = await res.json<{ code: string }>();
     expect(body.code).toBe('internal');
   });
+
+  it('returns 500 internal (not invalid_token) when the JWKS endpoint returns a non-200 response', async () => {
+    const state = await fetchStartState('cuewise://auth');
+    const appWithBadJwksResponse = createApp({
+      appleVerifier: async () => {
+        throw new errors.JOSEError('Expected 200 OK from the JSON Web Key Set HTTP response');
+      },
+    });
+
+    const res = await appWithBadJwksResponse.request(
+      '/v1/auth/apple/callback',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ id_token: 'whatever', state }).toString(),
+      },
+      testEnv()
+    );
+    expect(res.status).toBe(500);
+    const body = await res.json<{ code: string }>();
+    expect(body.code).toBe('internal');
+  });
 });
 
 describe('POST /v1/auth/token PKCE binding (apple)', () => {

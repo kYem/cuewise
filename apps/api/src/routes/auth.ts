@@ -1,13 +1,12 @@
 import { logger } from '@cuewise/shared';
 import type { Hono } from 'hono';
-import { errors } from 'jose';
 import type { AuthVars } from '../auth-middleware';
 import { sha256Base64Url } from '../crypto-utils';
 import type { Env } from '../env';
 import type { AppDepsResolved } from '../index';
 import { problem, type ValidationIssue } from '../problems';
 import type { Identity } from '../store';
-import { TokenVerificationError } from '../verifiers';
+import { isTokenFault } from '../verifiers';
 
 interface TokenRequest {
   provider: 'google' | 'apple' | 'dev';
@@ -59,12 +58,9 @@ export function registerAuthRoutes(
         const verified = await deps.googleVerifier(parsed.credential, c.env);
         identity = { provider: 'google', providerSub: verified.providerSub, email: verified.email };
       } catch (err) {
-        // JWKSTimeout (and anything else unrecognized) is an upstream outage, not a bad
-        // token — 500 so the client's retry loop engages instead of treating it as final.
-        const isBadToken =
-          err instanceof TokenVerificationError ||
-          (err instanceof errors.JOSEError && !(err instanceof errors.JWKSTimeout));
-        if (isBadToken) {
+        // Only known token-fault classes are treated as a bad token; anything else
+        // (e.g. JWKS outage) is an upstream failure — 500 so the client's retry loop engages.
+        if (isTokenFault(err)) {
           return problem('invalid_token');
         }
         logger.error('Google ID token verification failed upstream', err);

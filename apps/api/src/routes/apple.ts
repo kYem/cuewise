@@ -1,11 +1,10 @@
 import { logger } from '@cuewise/shared';
 import type { Hono } from 'hono';
-import { errors } from 'jose';
 import type { AuthVars } from '../auth-middleware';
 import type { Env } from '../env';
 import type { AppDepsResolved } from '../index';
 import { problem, type ValidationIssue } from '../problems';
-import { TokenVerificationError } from '../verifiers';
+import { isTokenFault } from '../verifiers';
 
 const CODE_CHALLENGE_RE = /^[A-Za-z0-9_-]{43,128}$/;
 
@@ -79,12 +78,9 @@ export function registerAppleRoutes(
     try {
       identity = await deps.appleVerifier(idToken, c.env);
     } catch (err) {
-      // JWKSTimeout (and anything else unrecognized) is an upstream outage, not a bad
-      // token — 500 so the client's retry loop engages instead of treating it as final.
-      const isBadToken =
-        err instanceof TokenVerificationError ||
-        (err instanceof errors.JOSEError && !(err instanceof errors.JWKSTimeout));
-      if (isBadToken) {
+      // Only known token-fault classes are treated as a bad token; anything else
+      // (e.g. JWKS outage) is an upstream failure — 500 so the client's retry loop engages.
+      if (isTokenFault(err)) {
         return problem('invalid_token');
       }
       logger.error('Apple ID token verification failed upstream', err);
