@@ -23,7 +23,7 @@ HTTP request
 
 This mirrors the repo's ports/adapters pattern (`packages/shared/src/platform/`): `SyncStore` is the port, `D1SyncStore` is the one adapter today. A future non-D1 backend only needs a new adapter — routes and validation stay unaware D1 exists.
 
-Auth is a second port. `requireSession()` (`auth-middleware.ts`) resolves `Authorization: Bearer <token>` → `{userId, tokenHash}` and sets them as Hono context vars. The `changes`/`account` route handlers only ever read `c.get('userId')` — they never call a session/token method on `SyncStore` themselves. So a future swap to Better Auth or a hosted IdP touches only the auth surface (`auth-middleware.ts`, `routes/auth.ts`, `routes/apple.ts`, `verifiers.ts`); the sync handlers don't change.
+Auth is a second isolation boundary — not a port like `SyncStore` (no interface, no adapter, no DI registration). `requireSession()` (`auth-middleware.ts`) is a concrete middleware factory that resolves `Authorization: Bearer <token>` → `{userId, tokenHash}` and sets them as Hono context vars. The `changes`/`account` route handlers only ever read `c.get('userId')` — they never call a session/token method on `SyncStore` themselves. So a future swap to Better Auth or a hosted IdP touches only the auth surface (`auth-middleware.ts`, `routes/auth.ts`, `routes/apple.ts`, `verifiers.ts`); the sync handlers don't change.
 
 ## Data Model
 
@@ -82,7 +82,7 @@ Apple only redirects to registered **https** URLs, so the Worker sits in the mid
 4. Server verifies `state`'s HMAC (`verifyState`), verifies the Apple ID token via JWKS, and checks the token's `nonce` claim matches the one embedded in `state` — proof this ID token was minted for a flow *this server* started.
 5. Server calls `mintAuthCode({provider:'apple', providerSub, email}, codeChallenge)` — a one-time code (60s TTL, hash-only storage) bound to the `codeChallenge` from `state` — and 302s to the client's `returnUri` with `?code=...`. No session token ever rides a URL.
 6. Client calls `POST /v1/auth/token` with `{provider:'apple', credential: <code>, codeVerifier: <original verifier>, deviceName}`.
-7. Server's `consumeAuthCode` burns the code atomically (`UPDATE ... SET used_at = ... WHERE used_at IS NULL ... RETURNING`) in the same statement that reads it — no reuse window. *Then* it checks `SHA256Base64Url(codeVerifier) === codeChallenge`. **A mismatch fails closed**: the code is already burned by the time the mismatch is detected, so a wrong verifier permanently kills that code rather than leaving it retryable.
+7. `parseTokenRequest` (`routes/auth.ts`) first rejects any `codeVerifier` outside RFC 7636's 43-128 byte range with a 400, before the code is ever looked up — a malformed length alone can't burn it. Only past that guard does the server's `consumeAuthCode` burn the code atomically (`UPDATE ... SET used_at = ... WHERE used_at IS NULL ... RETURNING`) in the same statement that reads it — no reuse window. *Then* it checks `SHA256Base64Url(codeVerifier) === codeChallenge`. **A mismatch fails closed**: the code is already burned by the time the mismatch is detected, so a wrong verifier permanently kills that code rather than leaving it retryable.
 
 **Client-side contract** — anyone wiring a new client to this flow must:
 - Generate `code_verifier` on-device and never let it leave the device until the final `/v1/auth/token` call. Send only `code_challenge` (the S256 hash) to `/start`.

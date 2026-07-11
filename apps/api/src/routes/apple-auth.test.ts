@@ -64,8 +64,11 @@ async function getStart(returnUri: string, codeChallenge: string | null = CODE_C
   );
 }
 
-async function fetchStartState(returnUri: string): Promise<string> {
-  const res = await getStart(returnUri);
+async function fetchStartState(
+  returnUri: string,
+  codeChallenge: string = CODE_CHALLENGE
+): Promise<string> {
+  const res = await getStart(returnUri, codeChallenge);
   const location = requireHeader(res, 'Location');
   const state = new URL(location).searchParams.get('state');
   if (state === null) {
@@ -103,9 +106,9 @@ async function exchangeCode(code: string, codeVerifier?: string) {
 }
 
 /** Arranges a fresh code via the real start+callback flow; throws on unexpected arrange-time failure. */
-async function mintCode(sub: string): Promise<string> {
+async function mintCode(sub: string, codeChallenge?: string): Promise<string> {
   const returnUri = 'cuewise://auth';
-  const state = await fetchStartState(returnUri);
+  const state = await fetchStartState(returnUri, codeChallenge);
   const idToken = await idp.sign({
     iss: APPLE_ISS,
     aud: 'apple-client',
@@ -415,7 +418,7 @@ describe('POST /v1/auth/token PKCE binding (apple)', () => {
     expect(retryBody.code).toBe('invalid_token');
   });
 
-  it('rejects an apple exchange missing codeVerifier', async () => {
+  it('rejects an apple exchange missing codeVerifier, without burning the code', async () => {
     const code = await mintCode('apple-sub-5');
 
     const res = await exchangeCode(code);
@@ -423,6 +426,10 @@ describe('POST /v1/auth/token PKCE binding (apple)', () => {
     const body = await res.json<{ code: string; errors: { pointer?: string }[] }>();
     expect(body.code).toBe('invalid_request');
     expect(body.errors.some((e) => e.pointer === '/codeVerifier')).toBe(true);
+
+    // Proves parseTokenRequest rejected it before consumeAuthCode ran: the code is still live.
+    const retryExchange = await exchangeCode(code, CODE_VERIFIER);
+    expect(retryExchange.status).toBe(200);
   });
 
   it('rejects an over-long codeVerifier without burning the code', async () => {
@@ -439,7 +446,7 @@ describe('POST /v1/auth/token PKCE binding (apple)', () => {
     expect(retryExchange.status).toBe(200);
   });
 
-  it('rejects an under-length codeVerifier as invalid_request', async () => {
+  it('rejects an under-length codeVerifier as invalid_request, without burning the code', async () => {
     const code = await mintCode('apple-sub-7');
 
     const res = await exchangeCode(code, 'a'.repeat(42));
@@ -448,6 +455,20 @@ describe('POST /v1/auth/token PKCE binding (apple)', () => {
     const body = await res.json<{ code: string; errors: { pointer?: string }[] }>();
     expect(body.code).toBe('invalid_request');
     expect(body.errors.some((e) => e.pointer === '/codeVerifier')).toBe(true);
+
+    // Proves parseTokenRequest rejected it before consumeAuthCode ran: the code is still live.
+    const retryExchange = await exchangeCode(code, CODE_VERIFIER);
+    expect(retryExchange.status).toBe(200);
+  });
+
+  it('accepts a codeVerifier at the 128-char RFC 7636 upper bound', async () => {
+    const longVerifier = 'a'.repeat(128);
+    const longChallenge = await sha256Base64Url(longVerifier);
+    const code = await mintCode('apple-sub-8', longChallenge);
+
+    const res = await exchangeCode(code, longVerifier);
+
+    expect(res.status).toBe(200);
   });
 });
 

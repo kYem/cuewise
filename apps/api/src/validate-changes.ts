@@ -15,20 +15,14 @@ const encoder = new TextEncoder();
 
 function validateRecord(raw: unknown, index: number, issues: ValidationIssue[]): void {
   const r = (raw ?? {}) as Record<string, unknown>;
-  requireNonEmptyString(
-    r.collection,
-    `/records/${index}/collection`,
-    issues,
-    MAX_COLLECTION_LENGTH,
-    index
-  );
-  requireNonEmptyString(
-    r.entityId,
-    `/records/${index}/entityId`,
-    issues,
-    MAX_ENTITY_ID_LENGTH,
-    index
-  );
+  requireNonEmptyString(r.collection, `/records/${index}/collection`, issues, {
+    maxLength: MAX_COLLECTION_LENGTH,
+    index,
+  });
+  requireNonEmptyString(r.entityId, `/records/${index}/entityId`, issues, {
+    maxLength: MAX_ENTITY_ID_LENGTH,
+    index,
+  });
   if (typeof r.ciphertext !== 'string') {
     issues.push({ index, pointer: `/records/${index}/ciphertext`, detail: 'required string' });
   } else if (encoder.encode(r.ciphertext).length > MAX_CIPHERTEXT_BYTES) {

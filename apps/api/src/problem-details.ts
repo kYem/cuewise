@@ -20,23 +20,33 @@ export interface ValidationIssue {
 
 const encoder = new TextEncoder();
 
-/** Pushes a required-non-empty-string (and optional max-length) violation onto `issues`. */
+export interface StringLengthBounds {
+  maxLength?: number;
+  minLength?: number;
+  index?: number;
+}
+
+/** Pushes a required-non-empty-string (and optional min/max byte-length) violation onto `issues`. */
 export function requireNonEmptyString(
   value: unknown,
   pointer: string,
   issues: ValidationIssue[],
-  maxLength?: number,
-  index?: number
+  bounds: StringLengthBounds = {}
 ): void {
+  const { maxLength, minLength, index } = bounds;
   const base = index === undefined ? { pointer } : { index, pointer };
   if (typeof value !== 'string' || value === '') {
     issues.push({ ...base, detail: 'required non-empty string' });
     return;
   }
-  // Byte length, not value.length (UTF-16 code units) — matches the ciphertext cap so a
-  // multi-byte-heavy string can't pass a check sized for its serialized/storage cost.
-  if (maxLength !== undefined && encoder.encode(value).length > maxLength) {
+  // Byte length, not value.length (UTF-16 code units), for both bounds — a single metric so
+  // a multi-byte-heavy string can't pass a check sized for its serialized/storage cost.
+  const byteLength = encoder.encode(value).length;
+  if (maxLength !== undefined && byteLength > maxLength) {
     issues.push({ ...base, detail: `must not exceed ${maxLength} bytes` });
+  }
+  if (minLength !== undefined && byteLength < minLength) {
+    issues.push({ ...base, detail: `must be at least ${minLength} bytes` });
   }
 }
 

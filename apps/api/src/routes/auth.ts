@@ -22,21 +22,16 @@ function parseTokenRequest(body: unknown): ExchangeTokenRequest | ValidationIssu
   if (b.provider !== 'google' && b.provider !== 'apple' && b.provider !== 'dev') {
     issues.push({ pointer: '/provider', detail: "must be 'google', 'apple', or 'dev'" });
   }
-  requireNonEmptyString(b.credential, '/credential', issues, MAX_CREDENTIAL_LENGTH);
-  requireNonEmptyString(b.deviceName, '/deviceName', issues, MAX_DEVICE_NAME_LENGTH);
+  requireNonEmptyString(b.credential, '/credential', issues, { maxLength: MAX_CREDENTIAL_LENGTH });
+  requireNonEmptyString(b.deviceName, '/deviceName', issues, {
+    maxLength: MAX_DEVICE_NAME_LENGTH,
+  });
   if (b.provider === 'apple') {
     // Bounded before consumeAuthCode ever runs, so a malformed verifier can't burn the code.
-    requireNonEmptyString(b.codeVerifier, '/codeVerifier', issues, MAX_CODE_VERIFIER_LENGTH);
-    if (
-      typeof b.codeVerifier === 'string' &&
-      b.codeVerifier !== '' &&
-      b.codeVerifier.length < MIN_CODE_VERIFIER_LENGTH
-    ) {
-      issues.push({
-        pointer: '/codeVerifier',
-        detail: `must be at least ${MIN_CODE_VERIFIER_LENGTH} characters`,
-      });
-    }
+    requireNonEmptyString(b.codeVerifier, '/codeVerifier', issues, {
+      minLength: MIN_CODE_VERIFIER_LENGTH,
+      maxLength: MAX_CODE_VERIFIER_LENGTH,
+    });
   }
   if (issues.length > 0) {
     return issues;

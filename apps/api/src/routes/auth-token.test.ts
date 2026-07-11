@@ -42,6 +42,16 @@ describe('POST /v1/auth/token (google)', () => {
     expect(body.token.length).toBeGreaterThan(20);
   });
 
+  it('exchanges a token whose audience is the space-prefixed second GOOGLE_CLIENT_IDS entry', async () => {
+    // testEnv()'s GOOGLE_CLIENT_IDS is 'test-client, other-client' — this pins that
+    // parseClientIds trims the leading space rather than leaving it stuck to 'other-client'.
+    const idToken = await idp.sign({ iss: GOOGLE_ISS, aud: 'other-client', sub: 'g-sub-2' });
+    const res = await postToken({ provider: 'google', credential: idToken, deviceName: 'Chrome' });
+    expect(res.status).toBe(200);
+    const body = await res.json<{ token: string }>();
+    expect(body.token.length).toBeGreaterThan(20);
+  });
+
   it('rejects a token with a wrong audience as invalid_token', async () => {
     const idToken = await idp.sign({ iss: GOOGLE_ISS, aud: 'evil-client', sub: 'g-sub-1' });
     const res = await postToken({ provider: 'google', credential: idToken, deviceName: 'Chrome' });
