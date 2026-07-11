@@ -8,6 +8,12 @@ packages:
 # registry, so no exclude is needed (a scope-wildcard exclude would also let a
 # malicious public @cuewise/* publish bypass the cooldown).
 minimumReleaseAge: 20160
+# TypeScript is a high-profile, heavily-scrutinized Microsoft package; exempt it from
+# the cooldown so we can adopt a fresh major without waiting. TS 7 (the native compiler)
+# also ships per-platform binaries under @typescript/*, which need the same exemption.
+minimumReleaseAgeExclude:
+  - typescript
+  - '@typescript/*'
 
 # Force patched versions of transitive deps flagged by Dependabot. Major-scoped
 # so unrelated majors are untouched. All targets are >14 days old, so they clear
@@ -62,8 +68,14 @@ catalog:
   tailwind-merge: ^3.6.0
   tailwindcss: ^4.1.18
   turbo: ^2.6.1
-  typescript: ^6.0.3
+  typescript: ^7.0.2
   vite: ^6.4.3
   vitest: 3.2.6
   wrangler: ^4.20.0
   zustand: 5.0.14
+
+catalogs:
+  # Astro's check tooling (@astrojs/check) peer-caps at TS 6, so the standalone website
+  # stays on 6 here until it supports TS 7; everything else uses the default catalog (7.x).
+  astro-ts6:
+    typescript: ^6.0.3

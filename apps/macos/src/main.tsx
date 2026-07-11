@@ -1,13 +1,16 @@
-import { App, PomodoroPipProvider } from '@cuewise/app';
+import { PomodoroPipProvider } from '@cuewise/app';
 import { handleReminderFire } from '@cuewise/app/reminder-notifications';
 import '@cuewise/app/styles.css';
 import { configurePlatform } from '@cuewise/shared';
 import { LocalStorageKeyValueStore } from '@cuewise/storage';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { AppWrapper } from './AppWrapper';
 import { NoopScheduler, TauriNotifier, TauriScheduler, WebNotifier } from './platform';
+import { initPosture } from './posture/posture-controller';
+import { TrayStatusBridge } from './tray/TrayStatusBridge';
 
-// Bind the platform seams for the Tauri webview so the reused extension stores
+// Wire the platform adapters for the Tauri webview so the reused extension stores
 // and helpers work unchanged: localStorage-backed storage, native OS
 // notifications, and the Rust-backed scheduler that fires wakes while hidden.
 // Outside Tauri (browser / e2e) fall back to web notifications and a no-op
@@ -27,6 +30,11 @@ configurePlatform({
 // mirrors the extension's service worker. No-op under NoopScheduler.
 scheduler.onFire(handleReminderFire);
 
+// Restore posture tracking if it was left on last session (macOS-only, opt-in).
+if (inTauri) {
+  initPosture();
+}
+
 const rootElement = document.getElementById('root');
 if (!rootElement) {
   throw new Error('Root element not found');
@@ -35,7 +43,8 @@ if (!rootElement) {
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
     <PomodoroPipProvider>
-      <App />
+      {inTauri ? <TrayStatusBridge /> : null}
+      <AppWrapper />
     </PomodoroPipProvider>
   </React.StrictMode>
 );

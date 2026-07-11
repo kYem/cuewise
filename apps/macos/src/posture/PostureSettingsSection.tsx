@@ -1,0 +1,101 @@
+import {
+  SettingDivider,
+  SettingRow,
+  type SettingsSection,
+  type SettingsSectionProps,
+  Switch,
+} from '@cuewise/app';
+import type { PostureStatus } from '@cuewise/shared';
+import { Button, cn } from '@cuewise/ui';
+import { PersonStanding } from 'lucide-react';
+import {
+  calibratePosture,
+  setPostureNudges,
+  startPosture,
+  stopPosture,
+  usePosture,
+} from './posture-controller';
+
+const STATUS_META: Record<PostureStatus, { label: string; dot: string }> = {
+  good: { label: 'Good posture', dot: 'bg-emerald-500' },
+  mild: { label: 'Ease up', dot: 'bg-amber-500' },
+  poor: { label: 'Sit back', dot: 'bg-rose-500' },
+  absent: { label: 'No face in frame', dot: 'bg-tertiary' },
+};
+
+function fmt(value: number | undefined, digits = 2): string {
+  if (value === undefined) {
+    return '—';
+  }
+  return value.toFixed(digits);
+}
+
+function PostureSection({ filter }: SettingsSectionProps) {
+  const { tracking, nudgesEnabled, sample, error } = usePosture();
+  const meta = sample ? STATUS_META[sample.status] : null;
+
+  return (
+    <div>
+      <span className="mb-3 inline-flex items-center rounded-full bg-surface-variant px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-secondary">
+        Beta · on-device
+      </span>
+      <p className="mb-4 max-w-[440px] text-xs leading-relaxed text-tertiary">
+        Cuewise checks your posture on-device using the camera. Frames are analyzed in memory — no
+        image is ever stored or sent.
+      </p>
+
+      <SettingRow
+        label="Posture tracking"
+        help="Turn on the camera for gentle, on-device posture readings while you work."
+        keywords="posture camera calibrate neck slouch tracking beta wellbeing"
+        filter={filter}
+      >
+        <Switch
+          label="Posture tracking"
+          checked={tracking}
+          onChange={(next) => (next ? startPosture() : stopPosture())}
+        />
+      </SettingRow>
+
+      <SettingRow
+        label="Remind me to fix my posture"
+        help="A gentle notification when you've been leaning in for a while."
+        keywords="posture nudge remind notification slouch reminder"
+        filter={filter}
+      >
+        <Switch label="Posture reminders" checked={nudgesEnabled} onChange={setPostureNudges} />
+      </SettingRow>
+
+      {tracking ? (
+        <>
+          <SettingDivider />
+          <div className="flex items-center justify-between gap-4 py-3">
+            <div className="flex items-center gap-2.5">
+              <span className={cn('h-2.5 w-2.5 rounded-full', meta?.dot ?? 'bg-tertiary')} />
+              <span className="text-sm font-medium text-primary">{meta?.label ?? 'Starting…'}</span>
+            </div>
+            <span className="text-xs tabular-nums text-tertiary">
+              neckΔ {fmt(sample?.neckDeviation, 3)} · dist {fmt(sample?.screenDistanceRatio)}
+            </span>
+          </div>
+          <Button variant="secondary" size="sm" onClick={calibratePosture}>
+            Calibrate to my posture
+          </Button>
+          <p className="mt-2 text-xs leading-snug text-tertiary">
+            Sit how you'd like to sit, then calibrate to set that as your baseline.
+          </p>
+        </>
+      ) : null}
+
+      {error ? <p className="mt-3 text-xs text-error">{error}</p> : null}
+    </div>
+  );
+}
+
+export const PostureSettingsSection: SettingsSection = {
+  id: 'posture',
+  label: 'Posture',
+  icon: PersonStanding,
+  component: PostureSection,
+  terms: 'posture camera tracking calibrate neck slouch on-device beta wellbeing health',
+};

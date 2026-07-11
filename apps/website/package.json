@@ -20,7 +20,7 @@
   "devDependencies": {
     "@astrojs/check": "catalog:",
     "sharp": "catalog:",
-    "typescript": "catalog:",
+    "typescript": "catalog:astro-ts6",
     "vitest": "catalog:"
   }
 }

@@ -1,17 +1,21 @@
 /**
- * Platform seams for scheduling wake-ups, delivering OS notifications, and
- * persisting data. Interfaces only — implementations live at the app edge
- * (`Chrome*` in the extension) or in a shared package (`ChromeKeyValueStore` in
- * @cuewise/storage); a future Tauri/RN app supplies its own.
+ * Platform ports for scheduling wake-ups, delivering OS notifications, and
+ * persisting data — the driven (secondary) ports of a ports-and-adapters setup:
+ * portable code drives them out to platform infrastructure. Interfaces only;
+ * adapters live at the app edge (`Chrome*` in the extension) or in a shared
+ * package (`ChromeKeyValueStore` in @cuewise/storage), and a future Tauri/RN app
+ * supplies its own.
  */
 
 /** Command surface: arm/cancel a one-shot wake at a future time, keyed by a caller-owned id. */
 export interface Scheduler {
   /**
-   * Whether scheduled wakes are delivered by a resident background context
-   * (extension service worker, native app loop) rather than requiring the page to
-   * poll. Lets UI choose "trust the scheduler" vs. an in-page fallback without
-   * sniffing platform globals like `chrome.alarms`.
+   * Whether a resident background context (extension service worker, native app
+   * loop) delivers scheduled wakes, vs. the page having to poll. Callers read this
+   * declared capability off the port rather than inferring it from an incidental
+   * global like `chrome.alarms` — whose presence doesn't tell you whether this
+   * deployment actually delivers in the background (a page context has it too; a
+   * native host may deliver without it).
    */
   readonly deliversInBackground: boolean;
   /**
@@ -82,6 +86,12 @@ export interface StorageUsage {
 
 /** Area-aware key/value persistence, returning a detailed StorageResult on writes. */
 export interface KeyValueStore {
+  /**
+   * Whether this backend has a real cross-device sync area (chrome.storage.sync).
+   * Local-only backends (a native app, dev/web) map both areas onto one store, so
+   * sync-only UI feature-detects off this instead of assuming Chrome.
+   */
+  readonly supportsSync: boolean;
   get<T>(key: string, area: StorageArea): Promise<T | null>;
   set<T>(key: string, value: T, area: StorageArea): Promise<StorageResult>;
   remove(key: string, area: StorageArea): Promise<boolean>;

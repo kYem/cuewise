@@ -5,6 +5,7 @@ import { getStorageUsage } from './storage-helpers';
 // Fake store: no settings stored (→ syncEnabled false → 'local' area), fixed usage.
 function fakeStore(usage: StorageUsage): KeyValueStore {
   return {
+    supportsSync: true,
     get: async () => null,
     set: async () => ({ success: true }),
     remove: async () => true,

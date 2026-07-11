@@ -1,6 +1,6 @@
 /**
  * Background service worker: schedules reminder wake-ups and delivers their
- * notifications through the platform Scheduler/Notifier seams.
+ * notifications through the platform Scheduler/Notifier ports.
  */
 
 import { handleReminderFire } from '@cuewise/app/reminder-notifications';

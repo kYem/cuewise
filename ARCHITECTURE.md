@@ -53,7 +53,7 @@ import { Quote, QuoteCategory, getRandomQuote } from '@cuewise/shared';
   - A future React Native app supplies its own (e.g. AsyncStorage-backed)
 - Typed helpers (`getReminders`, `setGoals`, …) that feature code uses
 
-**How it works:** feature code uses the typed helpers; the backend is selected once at bootstrap (see the platform seam below), not constructed per call:
+**How it works:** feature code uses the typed helpers; the backend is selected once at bootstrap (see the platform ports below), not constructed per call:
 ```typescript
 import { getQuotes, setQuotes } from '@cuewise/storage';
 

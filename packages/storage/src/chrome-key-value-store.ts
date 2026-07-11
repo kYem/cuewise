@@ -18,6 +18,8 @@ function areaStore(area: StorageArea): chrome.storage.StorageArea {
 
 /** KeyValueStore backed by chrome.storage.local/sync (selected only where it exists). */
 export class ChromeKeyValueStore implements KeyValueStore {
+  readonly supportsSync = true;
+
   async get<T>(key: string, area: StorageArea): Promise<T | null> {
     try {
       const result = await areaStore(area).get(key);

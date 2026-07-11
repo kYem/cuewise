@@ -14,6 +14,9 @@ const LOCALSTORAGE_QUOTA_BYTES = 5242880; // 5MB (dev fallback estimate)
  * backend, so the area argument is ignored.
  */
 export class LocalStorageKeyValueStore implements KeyValueStore {
+  // Single localStorage backend, no separate sync area — so sync-only UI hides.
+  readonly supportsSync = false;
+
   async get<T>(key: string, _area: StorageArea): Promise<T | null> {
     try {
       const item = localStorage.getItem(key);

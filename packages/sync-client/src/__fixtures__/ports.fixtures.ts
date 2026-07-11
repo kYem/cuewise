@@ -2,12 +2,13 @@ import type { KeyValueStore, Scheduler, StorageArea, StorageUsage } from '@cuewi
 
 /** Map-backed KeyValueStore for tests; `set` succeeds unless `failWrites` is set. */
 export function createInMemoryKeyValueStore(
-  opts: { failWrites?: boolean } = {}
+  opts: { failWrites?: boolean; supportsSync?: boolean } = {}
 ): KeyValueStore & { data: Map<string, unknown> } {
   const data = new Map<string, unknown>();
 
   return {
     data,
+    supportsSync: opts.supportsSync ?? false,
     async get<T>(key: string, area: StorageArea): Promise<T | null> {
       const value = data.get(`${area}:${key}`);
       if (value === undefined) {

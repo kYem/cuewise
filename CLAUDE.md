@@ -47,7 +47,7 @@ apps/
   mobile/            - Future React Native app
 ```
 
-### 2. Platform Seams (Ports & Adapters)
+### 2. Ports & Adapters
 
 **Critical Pattern**: Platform-specific capabilities — scheduling wake-ups, delivering OS notifications, and persisting data — are accessed through platform-agnostic **ports** (interfaces) in `@cuewise/shared/platform`. Each app provides **adapters** and registers them once at startup through a single DI container.
 
@@ -141,7 +141,7 @@ cuewise/
 │   ├── storage/
 │   │   └── src/
 │   │       ├── chrome-key-value-store.ts  # ChromeKeyValueStore adapter (KeyValueStore port)
-│   │       ├── chrome-storage.ts     # Low-level delegators over the platform seam
+│   │       ├── chrome-storage.ts     # Low-level delegators over the platform port
 │   │       ├── storage-helpers.ts    # Typed helper functions
 │   │       └── index.ts
 │   │

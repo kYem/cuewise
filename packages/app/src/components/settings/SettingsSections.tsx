@@ -4,6 +4,7 @@ import {
   type FocusImageCategory,
   type FocusPosition,
   formatHourMinute,
+  getStorage,
   NOTIFICATION_SOUNDS,
   type NotificationSoundType,
   POMODORO_DURATION_BOUNDS,
@@ -724,24 +725,30 @@ function AdvancedSection({ s, set, filter, onReset }: SettingsSectionProps) {
     }
   };
 
+  // Chrome sync rides on chrome.storage.sync; local-only backends (the macOS app,
+  // dev/web) have no sync area, so hide the toggle rather than show an inert one.
+  const syncSupported = getStorage().supportsSync;
+
   return (
     <div>
-      <SettingRow
-        label="Chrome sync"
-        filter={filter}
-        help="Sync custom quotes, goals, and reminders across browsers where you're signed in. Built-in quotes stay local; sync is limited to 100KB total and 8KB per item."
-        keywords="chrome sync cloud cross device storage"
-      >
-        <Switch
+      {syncSupported && (
+        <SettingRow
           label="Chrome sync"
-          checked={s.syncEnabled}
-          onChange={(v) => set({ syncEnabled: v })}
-        />
-      </SettingRow>
+          filter={filter}
+          help="Sync custom quotes, goals, and reminders across browsers where you're signed in. Built-in quotes stay local; sync is limited to 100KB total and 8KB per item."
+          keywords="chrome sync cloud cross device storage"
+        >
+          <Switch
+            label="Chrome sync"
+            checked={s.syncEnabled}
+            onChange={(v) => set({ syncEnabled: v })}
+          />
+        </SettingRow>
+      )}
       <SettingRow
         label="Console logs"
         filter={filter}
-        help="What appears in the browser console. Higher levels include all lower ones."
+        help="What appears in the developer console. Higher levels include all lower ones."
         keywords="debug log level developer verbose"
       >
         <SelectControl
@@ -782,10 +789,15 @@ function AdvancedSection({ s, set, filter, onReset }: SettingsSectionProps) {
 
 /** Section identifiers, also the routing keys for the sidebar nav. */
 export const SECTION_IDS = ['timer', 'sound', 'focus', 'home', 'goals', 'advanced'] as const;
-export type SectionId = (typeof SECTION_IDS)[number];
+/** The built-in sections' nav keys. Host-injected sections may use any string id. */
+export type BuiltInSectionId = (typeof SECTION_IDS)[number];
 
 export interface SettingsSection {
-  id: SectionId;
+  // Open union: the built-in literals stay as autocomplete suggestions, but any host id
+  // (e.g. macOS "posture") is accepted too — `& {}` just stops the union collapsing to
+  // plain `string`. Typos aren't caught here (every string is valid); that's enforced on
+  // SETTINGS_SECTIONS below, whose element id must be a BuiltInSectionId.
+  id: BuiltInSectionId | (string & {});
   label: string;
   icon: LucideIcon;
   component: React.FC<SettingsSectionProps>;
@@ -793,7 +805,9 @@ export interface SettingsSection {
   terms: string;
 }
 
-export const SETTINGS_SECTIONS: SettingsSection[] = [
+// Built-in sections: the tighter `id: BuiltInSectionId` element type makes a mistyped
+// id a compile error here (the open SettingsSection.id can't catch that by design).
+export const SETTINGS_SECTIONS: (SettingsSection & { id: BuiltInSectionId })[] = [
   {
     id: 'timer',
     label: 'Timer',
