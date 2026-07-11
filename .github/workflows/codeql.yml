@@ -43,11 +43,38 @@ jobs:
             echo "native=false" >> "$GITHUB_OUTPUT"
           fi
 
-  analyze:
+  # Buildless languages — cheap, run on every PR.
+  analyze-buildless:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [javascript-typescript, actions]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@02c5e83432fe5497fd85b873b6c9f16a8578e1d9 # v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+      - name: Analyze
+        uses: github/codeql-action/analyze@02c5e83432fe5497fd85b873b6c9f16a8578e1d9 # v3
+        with:
+          category: /language:${{ matrix.language }}
+
+  # Compiled languages — only when apps/macos changed on a PR; always on push/schedule.
+  # The gate references only `needs`/`github` (both valid in a job-level `if:` — `matrix`
+  # is NOT), so the two languages are grouped here rather than gated per matrix entry.
+  analyze-native:
     name: Analyze (${{ matrix.language }})
     needs: changes
-    # Native languages only when apps/macos changed on a PR; always on push/schedule.
-    if: ${{ !matrix.native || github.event_name != 'pull_request' || needs.changes.outputs.native == 'true' }}
+    if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.native == 'true' }}
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
@@ -57,30 +84,18 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - language: javascript-typescript
-            build-mode: none
-            runner: ubuntu-latest
-          - language: actions
-            build-mode: none
-            runner: ubuntu-latest
           - language: rust
-            build-mode: autobuild
             runner: ubuntu-latest
-            native: true
           - language: swift
-            build-mode: autobuild
             runner: macos-latest
-            native: true
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-
       - name: Initialize CodeQL
         uses: github/codeql-action/init@02c5e83432fe5497fd85b873b6c9f16a8578e1d9 # v3
         with:
           languages: ${{ matrix.language }}
-          build-mode: ${{ matrix.build-mode }}
-
+          build-mode: autobuild
       - name: Analyze
         uses: github/codeql-action/analyze@02c5e83432fe5497fd85b873b6c9f16a8578e1d9 # v3
         with:
