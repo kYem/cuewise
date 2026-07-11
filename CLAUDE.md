@@ -573,7 +573,7 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md) for adding web (Next.js) and mobile (Re
 | `packages/shared/src/logger.ts` | Configurable logger | Changing log behavior |
 | `packages/storage/src/storage-helpers.ts` | Typed storage helpers | Adding new storage operations |
 | `packages/test-utils/src/` | Factories, mocks, fixtures | Adding test infrastructure |
-| `apps/api/src/store.ts` | `SyncStore` port (routes → store → D1 adapter seam) | Adding a new sync-backend operation |
+| `apps/api/src/store.ts` | `SyncStore` port (routes → store → D1 adapter) | Adding a new sync-backend operation |
 | `packages/sync-client/src/api-client.ts` | Typed sync API client (`ApiClient`) | Adding/changing a sync endpoint call |
 | `apps/browser-extension/src/stores/` | 9 Zustand stores | Adding features with state |
 | `apps/browser-extension/src/components/` | ~60 React components | Adding new UI elements |

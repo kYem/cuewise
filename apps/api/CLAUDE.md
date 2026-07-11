@@ -23,7 +23,7 @@ HTTP request
 
 This mirrors the repo's ports/adapters pattern (`packages/shared/src/platform/`): `SyncStore` is the port, `D1SyncStore` is the one adapter today. A future non-D1 backend only needs a new adapter — routes and validation stay unaware D1 exists.
 
-Auth is a second seam. `requireSession()` (`auth-middleware.ts`) resolves `Authorization: Bearer <token>` → `{userId, tokenHash}` and sets them as Hono context vars. The `changes`/`account` route handlers only ever read `c.get('userId')` — they never call a session/token method on `SyncStore` themselves. So a future swap to Better Auth or a hosted IdP touches only the auth surface (`auth-middleware.ts`, `routes/auth.ts`, `routes/apple.ts`, `verifiers.ts`); the sync handlers don't change.
+Auth is a second port. `requireSession()` (`auth-middleware.ts`) resolves `Authorization: Bearer <token>` → `{userId, tokenHash}` and sets them as Hono context vars. The `changes`/`account` route handlers only ever read `c.get('userId')` — they never call a session/token method on `SyncStore` themselves. So a future swap to Better Auth or a hosted IdP touches only the auth surface (`auth-middleware.ts`, `routes/auth.ts`, `routes/apple.ts`, `verifiers.ts`); the sync handlers don't change.
 
 ## Data Model
 

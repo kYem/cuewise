@@ -4,7 +4,7 @@ AI-assistant guide for `@cuewise/sync-client`. Read the root [`CLAUDE.md`](../..
 
 ## What This Is
 
-A **platform-agnostic** client for the ENG-43 cloud-sync API (`apps/api`) — no `chrome.*`, no DOM, no Tauri imports. It consumes only the `KeyValueStore` and `Scheduler` ports from `@cuewise/shared/platform`, the same seams the rest of the codebase uses (see root `CLAUDE.md` → Platform Seams). That's what lets the browser extension, the Tauri macOS app, and future web/mobile apps all share this one implementation instead of three.
+A **platform-agnostic** client for the ENG-43 cloud-sync API (`apps/api`) — no `chrome.*`, no DOM, no Tauri imports. It consumes only the `KeyValueStore` and `Scheduler` ports from `@cuewise/shared/platform`, the same ports the rest of the codebase uses (see root `CLAUDE.md` → Ports & Adapters). That's what lets the browser extension, the Tauri macOS app, and future web/mobile apps all share this one implementation instead of three.
 
 ## `ApiClient` (`api-client.ts`)
 
