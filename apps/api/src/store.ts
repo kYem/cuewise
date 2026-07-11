@@ -1,5 +1,5 @@
 export interface Identity {
-  provider: string;
+  provider: 'google' | 'apple' | 'dev';
   providerSub: string;
   email?: string;
 }
@@ -15,6 +15,7 @@ export interface AuthCodePayload {
   email?: string;
 }
 
+// Mirrors PushRecord in packages/sync-client/src/types.ts — keep both in sync when this shape changes.
 export interface PushRecord {
   collection: string;
   entityId: string;

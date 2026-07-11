@@ -11,9 +11,8 @@ export function registerChangesRoutes(
 ): void {
   app.get('/v1/changes', async (c) => {
     const raw = c.req.query('since') ?? '';
-    // Number.parseInt tolerates trailing junk ("123abc") and scientific notation
-    // ("1e5"); require plain digits so a malformed cursor 400s instead of silently
-    // returning the wrong window.
+    // Number.parseInt tolerates trailing junk ("123abc") and scientific notation ("1e5");
+    // require plain digits so a malformed cursor 400s instead of silently returning the wrong window.
     if (!/^\d+$/.test(raw)) {
       return problem('invalid_cursor');
     }

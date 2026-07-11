@@ -1,8 +1,11 @@
+import { logger } from '@cuewise/shared';
 import type { Hono } from 'hono';
+import { errors } from 'jose';
 import type { AuthVars } from '../auth-middleware';
 import type { Env } from '../env';
 import type { AppDepsResolved } from '../index';
 import { problem, type ValidationIssue } from '../problems';
+import { TokenVerificationError } from '../verifiers';
 
 const CODE_CHALLENGE_RE = /^[A-Za-z0-9_-]{43,128}$/;
 
@@ -56,7 +59,7 @@ export function registerAppleRoutes(
     url.searchParams.set('redirect_uri', `${c.env.PUBLIC_BASE_URL}/v1/auth/apple/callback`);
     url.searchParams.set('response_type', 'code id_token');
     url.searchParams.set('response_mode', 'form_post');
-    url.searchParams.set('scope', 'name email');
+    url.searchParams.set('scope', 'email');
     url.searchParams.set('state', encodeState({ returnUri, codeChallenge }));
     return c.redirect(url.toString(), 302);
   });
@@ -75,8 +78,17 @@ export function registerAppleRoutes(
     let identity: { providerSub: string; email?: string };
     try {
       identity = await deps.appleVerifier(idToken, c.env);
-    } catch {
-      return problem('invalid_token');
+    } catch (err) {
+      // JWKSTimeout (and anything else unrecognized) is an upstream outage, not a bad
+      // token — 500 so the client's retry loop engages instead of treating it as final.
+      const isBadToken =
+        err instanceof TokenVerificationError ||
+        (err instanceof errors.JOSEError && !(err instanceof errors.JWKSTimeout));
+      if (isBadToken) {
+        return problem('invalid_token');
+      }
+      logger.error('Apple ID token verification failed upstream', err);
+      return problem('internal');
     }
     const code = await deps.storeFactory(c.env.DB).mintAuthCode(
       {

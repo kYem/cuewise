@@ -36,6 +36,8 @@ export function createApp(deps: AppDeps = {}): Hono<{ Bindings: Env } & AuthVars
     return c.json({ status: 'ok' });
   });
 
+  // Middleware must be registered before the route modules below — Hono silently
+  // skips middleware registered after a matching route.
   const auth = requireSession((env) => resolved.storeFactory(env.DB));
   // Hono's `/*` wildcard already matches the bare prefix — see the rate-limit
   // registration below, which relies on the same behavior.
@@ -44,8 +46,6 @@ export function createApp(deps: AppDeps = {}): Hono<{ Bindings: Env } & AuthVars
   app.use('/v1/account', auth);
   app.use('/v1/auth/logout', auth);
 
-  // Hono's `/*` wildcard already matches the bare prefix, so a single registration
-  // covers both '/v1/changes' and '/v1/changes/*' — registering both would double-count.
   app.use(
     '/v1/changes/*',
     rateLimit((env) => resolved.storeFactory(env.DB), { limit: 60, windowMs: 60_000 })

@@ -17,26 +17,41 @@ export class D1SyncStore implements SyncStore {
     private now: () => number = Date.now
   ) {}
 
-  async findOrCreateUser(identity: Identity): Promise<string> {
-    const existing = await this.db
+  private async selectIdentityUserId(identity: Identity): Promise<string | null> {
+    const row = await this.db
       .prepare('SELECT user_id FROM identities WHERE provider = ? AND provider_sub = ?')
       .bind(identity.provider, identity.providerSub)
       .first<{ user_id: string }>();
+    return row === null ? null : row.user_id;
+  }
+
+  async findOrCreateUser(identity: Identity): Promise<string> {
+    const existing = await this.selectIdentityUserId(identity);
     if (existing !== null) {
-      return existing.user_id;
+      return existing;
     }
     const userId = crypto.randomUUID();
     const ts = this.now();
-    await this.db.batch([
-      this.db
-        .prepare('INSERT INTO users (id, email, last_seq, created_at) VALUES (?, ?, 0, ?)')
-        .bind(userId, identity.email ?? null, ts),
-      this.db
-        .prepare(
-          'INSERT INTO identities (provider, provider_sub, user_id, email, created_at) VALUES (?, ?, ?, ?, ?)'
-        )
-        .bind(identity.provider, identity.providerSub, userId, identity.email ?? null, ts),
-    ]);
+    try {
+      await this.db.batch([
+        this.db
+          .prepare('INSERT INTO users (id, email, last_seq, created_at) VALUES (?, ?, 0, ?)')
+          .bind(userId, identity.email ?? null, ts),
+        this.db
+          .prepare(
+            'INSERT INTO identities (provider, provider_sub, user_id, email, created_at) VALUES (?, ?, ?, ?, ?)'
+          )
+          .bind(identity.provider, identity.providerSub, userId, identity.email ?? null, ts),
+      ]);
+    } catch (err) {
+      // db.batch is transactional, so a losing concurrent insert leaves no orphan users
+      // row — re-select and return the winner's user_id instead of surfacing a 500.
+      const raced = await this.selectIdentityUserId(identity);
+      if (raced !== null) {
+        return raced;
+      }
+      throw err;
+    }
     return userId;
   }
 
@@ -82,8 +97,8 @@ export class D1SyncStore implements SyncStore {
     const code = randomToken();
     const codeHash = await sha256Hex(code);
     const ts = this.now();
-    // Sweep expired codes on every mint so PII in payload never outlives the 60s TTL,
-    // even for rows nobody ever redeemed.
+    // Best-effort PII sweep: expired codes are purged on the next mint call, not by a
+    // timer, so an unredeemed row can outlive its 60s TTL until someone else authenticates.
     await this.db.batch([
       this.db.prepare('DELETE FROM auth_codes WHERE expires_at <= ?').bind(ts),
       this.db
@@ -109,7 +124,8 @@ export class D1SyncStore implements SyncStore {
     if (row === null) {
       return null;
     }
-    // Legacy rows minted before PKCE binding have no challenge and can never be redeemed.
+    // mintAuthCode always writes a code_challenge; a row with none is only reachable via
+    // a manual DB edit, so reject it fail-closed rather than treating null as "no PKCE".
     if (row.code_challenge === null) {
       return null;
     }
@@ -148,6 +164,8 @@ export class D1SyncStore implements SyncStore {
       );
     }
     stmts.push(this.db.prepare('SELECT last_seq FROM users WHERE id = ?').bind(userId));
+    // Must stay a single db.batch: each INSERT's subquery relies on its immediately-
+    // preceding UPDATE for the next seq; splitting this reintroduces a multi-device race.
     const results = await this.db.batch<{ last_seq: number }>(stmts);
     const tail = results[results.length - 1];
     if (tail === undefined || tail.results[0] === undefined) {
