@@ -2,7 +2,7 @@ import { env } from 'cloudflare:test';
 import { errors } from 'jose';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { createTestIdp, type TestIdp } from '../__fixtures__/jwks.fixtures';
-import { sha256Base64Url } from '../crypto-utils';
+import { base64UrlEncodeString, sha256Base64Url, signState } from '../crypto-utils';
 import { createApp } from '../index';
 
 const APPLE_ISS = 'https://appleid.apple.com';
@@ -18,7 +18,12 @@ beforeAll(async () => {
 });
 
 function testEnv(): typeof env {
-  return { ...env, APPLE_CLIENT_ID: 'apple-client', ALLOWED_RETURN_URIS: 'cuewise://auth' };
+  return {
+    ...env,
+    APPLE_CLIENT_ID: 'apple-client',
+    ALLOWED_RETURN_URIS: 'cuewise://auth',
+    STATE_SIGNING_KEY: 'apple-test-signing-key',
+  };
 }
 
 function appWithIdp() {
@@ -33,8 +38,10 @@ interface DecodedAppleState {
   nonce: string;
 }
 
+/** Reads the plaintext payload of a `signState` output; does not verify the signature. */
 function decodeState(state: string): DecodedAppleState {
-  return JSON.parse(atob(state.replace(/-/g, '+').replace(/_/g, '/')));
+  const body = state.slice(0, state.lastIndexOf('.'));
+  return JSON.parse(atob(body.replace(/-/g, '+').replace(/_/g, '/')));
 }
 
 function requireHeader(res: Response, name: string): string {
@@ -254,6 +261,53 @@ describe('POST /v1/auth/apple/callback', () => {
     expect(res.headers.get('Location')).toBeNull();
   });
 
+  it('rejects a forged unsigned state even with a genuine id token', async () => {
+    // Simulates an attacker who captured a genuine, still-valid id_token and read its
+    // plaintext `nonce` claim, then crafted their own state around it — never calling /start.
+    const capturedNonce = 'nonce-from-a-captured-id-token';
+    const idToken = await idp.sign({
+      iss: APPLE_ISS,
+      aud: 'apple-client',
+      sub: 'apple-sub-attacker-target',
+      nonce: capturedNonce,
+    });
+    const forgedState = base64UrlEncodeString(
+      JSON.stringify({
+        returnUri: 'cuewise://auth',
+        codeChallenge: CODE_CHALLENGE,
+        nonce: capturedNonce,
+      })
+    );
+
+    const res = await postCallback(idToken, forgedState);
+
+    expect(res.status).toBe(400);
+    const body = await res.json<{ code: string }>();
+    expect(body.code).toBe('invalid_request');
+    expect(res.headers.get('Location')).toBeNull();
+  });
+
+  it('rejects a state signed with the wrong key', async () => {
+    const nonce = 'nonce-for-wrong-key-test';
+    const idToken = await idp.sign({
+      iss: APPLE_ISS,
+      aud: 'apple-client',
+      sub: 'apple-sub-wrong-key',
+      nonce,
+    });
+    const state = await signState(
+      { returnUri: 'cuewise://auth', codeChallenge: CODE_CHALLENGE, nonce },
+      'a-completely-different-signing-key'
+    );
+
+    const res = await postCallback(idToken, state);
+
+    expect(res.status).toBe(400);
+    const body = await res.json<{ code: string }>();
+    expect(body.code).toBe('invalid_request');
+    expect(res.headers.get('Location')).toBeNull();
+  });
+
   it('returns 500 internal (not invalid_token) when the Apple JWKS fetch times out', async () => {
     const state = await fetchStartState('cuewise://auth');
     const appWithTimeoutVerifier = createApp({
@@ -344,5 +398,40 @@ describe('POST /v1/auth/token PKCE binding (apple)', () => {
     const body = await res.json<{ code: string; errors: { pointer?: string }[] }>();
     expect(body.code).toBe('invalid_request');
     expect(body.errors.some((e) => e.pointer === '/codeVerifier')).toBe(true);
+  });
+});
+
+describe('apple auth fails closed when STATE_SIGNING_KEY is unset', () => {
+  it('returns 500 internal from GET /v1/auth/apple/start', async () => {
+    const params = new URLSearchParams({
+      return_uri: 'cuewise://auth',
+      code_challenge: CODE_CHALLENGE,
+    });
+
+    const res = await appWithIdp().request(
+      `/v1/auth/apple/start?${params.toString()}`,
+      { method: 'GET' },
+      { ...testEnv(), STATE_SIGNING_KEY: '' }
+    );
+
+    expect(res.status).toBe(500);
+    const body = await res.json<{ code: string }>();
+    expect(body.code).toBe('internal');
+  });
+
+  it('returns 500 internal from POST /v1/auth/apple/callback', async () => {
+    const res = await appWithIdp().request(
+      '/v1/auth/apple/callback',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ id_token: 'whatever', state: 'whatever' }).toString(),
+      },
+      { ...testEnv(), STATE_SIGNING_KEY: '' }
+    );
+
+    expect(res.status).toBe(500);
+    const body = await res.json<{ code: string }>();
+    expect(body.code).toBe('internal');
   });
 });

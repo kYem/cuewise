@@ -1,6 +1,7 @@
+import { logger } from '@cuewise/shared';
 import type { Hono } from 'hono';
 import type { AuthVars } from '../auth-middleware';
-import { base64UrlDecodeString, base64UrlEncodeString, randomToken } from '../crypto-utils';
+import { randomToken, signState, verifyState } from '../crypto-utils';
 import type { Env } from '../env';
 import type { AppDepsResolved } from '../index';
 import { problem, type ValidationIssue } from '../problem-details';
@@ -15,38 +16,42 @@ interface AppleState {
   nonce: string;
 }
 
-function encodeState(state: AppleState): string {
-  const json = JSON.stringify(state);
-  return base64UrlEncodeString(json);
-}
-
-function decodeState(state: string): AppleState | null {
-  try {
-    const parsed: unknown = JSON.parse(base64UrlDecodeString(state));
-    if (
-      parsed !== null &&
-      typeof parsed === 'object' &&
-      typeof (parsed as { returnUri?: unknown }).returnUri === 'string' &&
-      typeof (parsed as { codeChallenge?: unknown }).codeChallenge === 'string' &&
-      typeof (parsed as { nonce?: unknown }).nonce === 'string'
-    ) {
-      return parsed as AppleState;
-    }
-    return null;
-  } catch {
-    return null;
+/** Narrows a verified-but-untyped `state` payload; shape only, signature already checked. */
+function toAppleState(parsed: unknown): AppleState | null {
+  if (
+    parsed !== null &&
+    typeof parsed === 'object' &&
+    typeof (parsed as { returnUri?: unknown }).returnUri === 'string' &&
+    typeof (parsed as { codeChallenge?: unknown }).codeChallenge === 'string' &&
+    typeof (parsed as { nonce?: unknown }).nonce === 'string'
+  ) {
+    return parsed as AppleState;
   }
+  return null;
 }
 
 function isAllowedReturnUri(uri: string, env: Env): boolean {
   return env.ALLOWED_RETURN_URIS.split(',').some((allowed) => uri === allowed.trim());
 }
 
+/** Fails closed on a missing signing key; the key itself is never logged. */
+function requireStateSigningKey(env: Env): string | null {
+  if (!env.STATE_SIGNING_KEY) {
+    logger.error('STATE_SIGNING_KEY is not configured');
+    return null;
+  }
+  return env.STATE_SIGNING_KEY;
+}
+
 export function registerAppleRoutes(
   app: Hono<{ Bindings: Env } & AuthVars>,
   deps: AppDepsResolved
 ): void {
-  app.get('/v1/auth/apple/start', (c) => {
+  app.get('/v1/auth/apple/start', async (c) => {
+    const signingKey = requireStateSigningKey(c.env);
+    if (signingKey === null) {
+      return problem('internal');
+    }
     const returnUri = c.req.query('return_uri') ?? '';
     const codeChallenge = c.req.query('code_challenge') ?? '';
     const issues: ValidationIssue[] = [];
@@ -70,18 +75,23 @@ export function registerAppleRoutes(
     url.searchParams.set('response_mode', 'form_post');
     url.searchParams.set('scope', 'email');
     url.searchParams.set('nonce', nonce);
-    url.searchParams.set('state', encodeState({ returnUri, codeChallenge, nonce }));
+    const state = await signState({ returnUri, codeChallenge, nonce }, signingKey);
+    url.searchParams.set('state', state);
     return c.redirect(url.toString(), 302);
   });
 
   app.post('/v1/auth/apple/callback', async (c) => {
+    const signingKey = requireStateSigningKey(c.env);
+    if (signingKey === null) {
+      return problem('internal');
+    }
     const form = await c.req.parseBody();
     const idToken = form.id_token;
     const state = form.state;
     if (typeof idToken !== 'string' || typeof state !== 'string') {
       return problem('invalid_request', { detail: 'id_token and state are required.' });
     }
-    const decoded = decodeState(state);
+    const decoded = toAppleState(await verifyState(state, signingKey));
     if (decoded === null || !isAllowedReturnUri(decoded.returnUri, c.env)) {
       return problem('invalid_request', { detail: 'Bad state.' });
     }
@@ -89,7 +99,8 @@ export function registerAppleRoutes(
     if (verified instanceof Response) {
       return verified;
     }
-    // Proves this ID token was issued for THIS authorization request, not replayed from another.
+    // The state is HMAC-signed, so a matching nonce proves this ID token was minted
+    // for a flow this server started — not forged or replayed from elsewhere.
     if (verified.nonce === undefined || verified.nonce !== decoded.nonce) {
       return problem('invalid_token');
     }

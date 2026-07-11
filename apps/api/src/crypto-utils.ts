@@ -38,3 +38,47 @@ export async function sha256Base64Url(value: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', encoder.encode(value));
   return base64UrlEncode(new Uint8Array(digest));
 }
+
+function importHmacKey(key: string): Promise<CryptoKey> {
+  return crypto.subtle.importKey(
+    'raw',
+    encoder.encode(key),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign', 'verify']
+  );
+}
+
+/** Signs `payload` so `verifyState` can detect any tampering with the body or signature. */
+export async function signState(payload: object, key: string): Promise<string> {
+  const body = base64UrlEncodeString(JSON.stringify(payload));
+  const cryptoKey = await importHmacKey(key);
+  const signature = await crypto.subtle.sign('HMAC', cryptoKey, encoder.encode(body));
+  return `${body}.${base64UrlEncode(new Uint8Array(signature))}`;
+}
+
+/** Verifies a `signState` output with a constant-time comparison; never throws. */
+export async function verifyState(state: string, key: string): Promise<unknown | null> {
+  const separator = state.lastIndexOf('.');
+  if (separator === -1) {
+    return null;
+  }
+  const body = state.slice(0, separator);
+  const signature = state.slice(separator + 1);
+  try {
+    const cryptoKey = await importHmacKey(key);
+    const signatureBytes = Uint8Array.from(base64UrlDecode(signature), (ch) => ch.charCodeAt(0));
+    const valid = await crypto.subtle.verify(
+      'HMAC',
+      cryptoKey,
+      signatureBytes,
+      encoder.encode(body)
+    );
+    if (!valid) {
+      return null;
+    }
+    return JSON.parse(base64UrlDecodeString(body));
+  } catch {
+    return null;
+  }
+}

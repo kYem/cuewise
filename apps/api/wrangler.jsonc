@@ -16,7 +16,10 @@
     "GOOGLE_CLIENT_IDS": "",
     "APPLE_CLIENT_ID": "",
     "PUBLIC_BASE_URL": "http://localhost:8787",
-    "ALLOWED_RETURN_URIS": "cuewise://auth"
+    "ALLOWED_RETURN_URIS": "cuewise://auth",
+    // Local-dev-only placeholder; production must set the real value via
+    // `wrangler secret put STATE_SIGNING_KEY` (never commit a real key here).
+    "STATE_SIGNING_KEY": "local-dev-only-placeholder-state-signing-key"
   },
   // Hand-authored config skips the dashboard default; without this, logger.error/warn never
   // reach Workers Logs in production.
