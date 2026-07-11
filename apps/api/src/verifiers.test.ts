@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:test';
-import { logger } from '@cuewise/shared';
 import { errors } from 'jose';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { spyOnLoggerWarn } from './__fixtures__/logger.fixtures';
 import { isTokenFault, parseClientIds, TokenVerificationError, verifyOrProblem } from './verifiers';
 
 describe('parseClientIds', () => {
@@ -81,7 +81,7 @@ describe('verifyOrProblem token-fault logging', () => {
 
   for (const [name, err] of probingCases) {
     it(`warns on ${name}`, async () => {
-      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+      const warnSpy = spyOnLoggerWarn();
 
       await expectInvalidToken(err);
 
@@ -96,7 +96,7 @@ describe('verifyOrProblem token-fault logging', () => {
 
   for (const [name, err] of routineCases) {
     it(`stays silent on ${name}`, async () => {
-      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+      const warnSpy = spyOnLoggerWarn();
 
       await expectInvalidToken(err);
 

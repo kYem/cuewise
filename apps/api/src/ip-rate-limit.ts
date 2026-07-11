@@ -23,6 +23,7 @@ export function ipRateLimit(
   let hits = new Map<string, number>();
   // Scoped to the current window so a flood only warns once, not once per dropped request.
   let trackedIpCapLogged = false;
+  // Scoped to the current window so sustained missing-header traffic only warns once, not once per request.
   let missingIpLogged = false;
   return async (c, next) => {
     const t = now();

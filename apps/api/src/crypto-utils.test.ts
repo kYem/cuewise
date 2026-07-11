@@ -1,5 +1,5 @@
-import { logger } from '@cuewise/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { spyOnLoggerWarn } from './__fixtures__/logger.fixtures';
 import {
   base64UrlDecodeString,
   base64UrlEncodeString,
@@ -41,7 +41,7 @@ describe('signState / verifyState', () => {
   });
 
   it('rejects a state whose body was tampered with after signing, and warns', async () => {
-    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    const warnSpy = spyOnLoggerWarn();
     const state = await signState({ nonce: 'n-1' }, KEY);
     const [body, sig] = state.split('.');
 
@@ -52,7 +52,7 @@ describe('signState / verifyState', () => {
   });
 
   it('rejects a state verified with the wrong key, and warns', async () => {
-    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    const warnSpy = spyOnLoggerWarn();
     const state = await signState({ nonce: 'n-1' }, KEY);
 
     expect(await verifyState(state, 'a-different-signing-key')).toBeNull();
@@ -60,14 +60,14 @@ describe('signState / verifyState', () => {
   });
 
   it('rejects a state with no signature separator, and warns (the actual forged-state shape)', async () => {
-    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    const warnSpy = spyOnLoggerWarn();
 
     expect(await verifyState('not-a-signed-state', KEY)).toBeNull();
     expect(warnSpy).toHaveBeenCalledWith('verifyState: state is not signed');
   });
 
   it('rejects a state whose signature cannot be base64url-decoded, and warns', async () => {
-    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    const warnSpy = spyOnLoggerWarn();
     const state = await signState({ nonce: 'n-1' }, KEY);
     const [body] = state.split('.');
     const malformed = `${body}.!!!not-base64url!!!`;

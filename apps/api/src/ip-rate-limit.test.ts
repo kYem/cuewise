@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:test';
-import { logger } from '@cuewise/shared';
 import { Hono } from 'hono';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { spyOnLoggerWarn } from './__fixtures__/logger.fixtures';
 import type { AuthVars } from './auth-middleware';
 import type { Env } from './env';
 import { createApp } from './index';
@@ -187,7 +187,7 @@ describe('ipRateLimit missing-IP warn dedupe', () => {
   it('warns once per window for repeated requests missing CF-Connecting-IP, then again after the window rolls', async () => {
     let current = 1_000;
     const app = appWithLimiter({ limit: 30, windowMs: 1_000, now: () => current });
-    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    const warnSpy = spyOnLoggerWarn();
 
     for (let i = 0; i < 5; i++) {
       const res = await probeWithoutIp(app);
