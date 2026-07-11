@@ -417,6 +417,7 @@ describe('apple auth fails closed when STATE_SIGNING_KEY is unset', () => {
     expect(res.status).toBe(500);
     const body = await res.json<{ code: string }>();
     expect(body.code).toBe('internal');
+    expect(res.headers.get('Location')).toBeNull();
   });
 
   it('returns 500 internal from POST /v1/auth/apple/callback', async () => {
@@ -433,5 +434,6 @@ describe('apple auth fails closed when STATE_SIGNING_KEY is unset', () => {
     expect(res.status).toBe(500);
     const body = await res.json<{ code: string }>();
     expect(body.code).toBe('internal');
+    expect(res.headers.get('Location')).toBeNull();
   });
 });

@@ -1,4 +1,4 @@
-// Requires (from apps/api): npx wrangler d1 migrations apply cuewise-sync --local && npx wrangler dev --var DEV_FAKE_AUTH:1
+// Requires (from apps/api): cp .dev.vars.example .dev.vars && npx wrangler d1 migrations apply cuewise-sync --local && npx wrangler dev
 const BASE = process.env.API_URL ?? 'http://localhost:8787';
 
 async function fail(msg) {
