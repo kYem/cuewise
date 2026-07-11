@@ -17,12 +17,9 @@ export function registerChangesRoutes(
     if (!/^\d+$/.test(raw)) {
       return problem('invalid_cursor');
     }
-    // Bound the digit count before parsing so an absurdly long numeral can't be used
-    // to probe parser behavior, then reject anything past Number's safe integer range.
-    if (raw.length > 15) {
-      return problem('invalid_cursor');
-    }
-    const since = Number.parseInt(raw, 10);
+    // isSafeInteger rejects both ends on its own: Number() overflows a huge numeral to
+    // Infinity, and it rounds anything past 2^53 to a value outside the safe-integer range.
+    const since = Number(raw);
     if (!Number.isSafeInteger(since)) {
       return problem('invalid_cursor');
     }

@@ -107,6 +107,12 @@ describe('GET /v1/changes cursor validation', () => {
     const normal = await getChanges(app, token, '42');
     expect(normal.status).toBe(200);
   });
+
+  it('accepts since=Number.MAX_SAFE_INTEGER (16 digits)', async () => {
+    const { token } = await signedInToken();
+    const res = await getChanges(app, token, '9007199254740991');
+    expect(res.status).toBe(200);
+  });
 });
 
 describe('POST /v1/changes batch cap', () => {
