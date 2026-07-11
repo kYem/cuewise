@@ -1,4 +1,5 @@
 import { env } from 'cloudflare:test';
+import { errors } from 'jose';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { D1SyncStore } from '../d1-store';
 import app, { createApp } from '../index';
@@ -47,6 +48,26 @@ describe('POST /v1/auth/token (google)', () => {
     expect(res.status).toBe(401);
     const body = await res.json<{ code: string }>();
     expect(body.code).toBe('invalid_token');
+  });
+
+  it('returns 500 internal (not invalid_token) when the Google JWKS fetch times out', async () => {
+    const appInstance = createApp({
+      googleVerifier: async () => {
+        throw new errors.JWKSTimeout();
+      },
+    });
+    const res = await appInstance.request(
+      '/v1/auth/token',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider: 'google', credential: 'whatever', deviceName: 'Chrome' }),
+      },
+      testEnv()
+    );
+    expect(res.status).toBe(500);
+    const body = await res.json<{ code: string }>();
+    expect(body.code).toBe('internal');
   });
 
   it('rejects a malformed body as invalid_request', async () => {

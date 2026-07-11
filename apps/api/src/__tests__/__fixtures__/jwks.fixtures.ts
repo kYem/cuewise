@@ -1,6 +1,7 @@
 import { createLocalJWKSet, exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
 import type { Env } from '../../env';
 import type { IdTokenVerifier, VerifiedIdentity } from '../../verifiers';
+import { TokenVerificationError } from '../../verifiers';
 
 export interface TestIdp {
   sign(claims: { iss: string; aud: string; sub: string; email?: string }): Promise<string>;
@@ -33,7 +34,7 @@ export async function createTestIdp(): Promise<TestIdp> {
           audience: resolveAudience(env),
         });
         if (typeof payload.sub !== 'string') {
-          throw new Error('missing sub');
+          throw new TokenVerificationError('missing sub');
         }
         return {
           providerSub: payload.sub,

@@ -1,6 +1,6 @@
 import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
-import { D1SyncStore } from '../d1-store';
+import { D1SyncStore, SESSION_TTL_MS } from '../d1-store';
 
 function storeAt(now: number): { store: D1SyncStore; tick: (ms: number) => void } {
   let current = now;
@@ -83,6 +83,31 @@ describe('D1SyncStore auth', () => {
     const code = await store.mintAuthCode({ provider: 'apple', providerSub: 'as3' }, 'irrelevant');
     await env.DB.prepare('UPDATE auth_codes SET code_challenge = NULL').run();
     expect(await store.consumeAuthCode(code)).toBeNull();
+  });
+
+  it('rejects a session lookup exactly at its expiry boundary (expires_at > ? is strict)', async () => {
+    const { store, tick } = storeAt(1_000);
+    const userId = await store.findOrCreateUser({ provider: 'google', providerSub: 's-boundary' });
+    const token = await store.createSession(userId, 'boundary-device');
+    tick(SESSION_TTL_MS);
+    expect(await store.lookupSession(token)).toBeNull();
+  });
+
+  it('slides expiry forward on lookup, extending the session past its original TTL', async () => {
+    const { store, tick } = storeAt(1_000);
+    const userId = await store.findOrCreateUser({ provider: 'google', providerSub: 's-sliding' });
+    const token = await store.createSession(userId, 'sliding-device');
+
+    tick(89 * 24 * 60 * 60 * 1000);
+    expect(await store.lookupSession(token)).not.toBeNull();
+
+    // Would already be past the original 90-day TTL (89 + 89 > 90) if the prior
+    // lookup had not slid expires_at forward.
+    tick(89 * 24 * 60 * 60 * 1000);
+    expect(await store.lookupSession(token)).not.toBeNull();
+
+    tick(91 * 24 * 60 * 60 * 1000);
+    expect(await store.lookupSession(token)).toBeNull();
   });
 
   it('mintAuthCode purges expired rows so PII does not outlive the code TTL', async () => {

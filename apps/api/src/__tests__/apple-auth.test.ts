@@ -1,4 +1,5 @@
 import { env } from 'cloudflare:test';
+import { errors } from 'jose';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { sha256Base64Url } from '../crypto-utils';
 import { createApp } from '../index';
@@ -113,7 +114,7 @@ describe('GET /v1/auth/apple/start', () => {
     expect(url.searchParams.get('redirect_uri')).toBe(
       `${env.PUBLIC_BASE_URL}/v1/auth/apple/callback`
     );
-    expect(url.searchParams.get('scope')).toBe('name email');
+    expect(url.searchParams.get('scope')).toBe('email');
     const state = url.searchParams.get('state');
     if (state === null) {
       throw new Error('Expected a state query param on the /v1/auth/apple/start redirect');
@@ -191,6 +192,28 @@ describe('POST /v1/auth/apple/callback', () => {
     const body = await res.json<{ code: string }>();
     expect(body.code).toBe('invalid_request');
     expect(res.headers.get('Location')).toBeNull();
+  });
+
+  it('returns 500 internal (not invalid_token) when the Apple JWKS fetch times out', async () => {
+    const state = await fetchStartState('cuewise://auth');
+    const appWithTimeoutVerifier = createApp({
+      appleVerifier: async () => {
+        throw new errors.JWKSTimeout();
+      },
+    });
+
+    const res = await appWithTimeoutVerifier.request(
+      '/v1/auth/apple/callback',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ id_token: 'whatever', state }).toString(),
+      },
+      testEnv()
+    );
+    expect(res.status).toBe(500);
+    const body = await res.json<{ code: string }>();
+    expect(body.code).toBe('internal');
   });
 });
 
