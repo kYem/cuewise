@@ -3,9 +3,8 @@ import type { KeyValueStore, StorageResult } from '@cuewise/shared';
 export const SYNC_SESSION_KEY = 'syncSession';
 
 /**
- * Persists the cloud sync session token; always uses the 'local' storage area.
- * The token is a per-device credential — using the 'sync' area would replicate it
- * across the user's browsers, defeating per-device sessions and revocation.
+ * Always the 'local' area — the token is a per-device credential; 'sync' would replicate
+ * it across the user's browsers, defeating per-device sessions and revocation.
  */
 export class SessionManager {
   constructor(private store: KeyValueStore) {}

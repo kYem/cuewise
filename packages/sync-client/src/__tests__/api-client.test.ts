@@ -114,6 +114,26 @@ describe('ApiClient', () => {
     expect(headers.has('Authorization')).toBe(false);
   });
 
+  it('exchangeToken against a 500 rejects with code internal after exactly one attempt', async () => {
+    const { fetchFn, calls } = stubFetch([problemResponse('internal', 500)]);
+    const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
+
+    await expect(
+      client.exchangeToken({ provider: 'google', credential: 'google-credential', deviceName: 'd' })
+    ).rejects.toMatchObject({ code: 'internal' });
+    expect(calls).toHaveLength(1);
+  });
+
+  it('exchangeToken against a rejecting fetch rejects with network_error after exactly one attempt', async () => {
+    const { fetchFn, calls } = stubFetch([{ reject: true }]);
+    const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
+
+    await expect(
+      client.exchangeToken({ provider: 'google', credential: 'google-credential', deviceName: 'd' })
+    ).rejects.toMatchObject({ code: 'network_error' });
+    expect(calls).toHaveLength(1);
+  });
+
   it('retries through two network-level rejections and resolves on the third attempt', async () => {
     const { fetchFn, calls } = stubFetch([
       { reject: true },

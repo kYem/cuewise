@@ -33,6 +33,8 @@ export class ApiClient {
     this.sleep = opts.sleep ?? defaultSleep;
   }
 
+  // The server burns Apple's one-time PKCE code before building the response, so retrying
+  // after a lost response or a post-burn 5xx would present an already-spent code and 401 forever.
   async exchangeToken(req: ExchangeTokenRequest): Promise<{ token: string }> {
     const res = await this.request(
       '/v1/auth/token',
@@ -41,7 +43,7 @@ export class ApiClient {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(req),
       },
-      { auth: false }
+      { auth: false, retry: false }
     );
     return this.parseSuccessBody<{ token: string }>(res);
   }
@@ -80,7 +82,7 @@ export class ApiClient {
   private async request(
     path: string,
     init: RequestInit,
-    opts: { auth: boolean }
+    opts: { auth: boolean; retry?: boolean }
   ): Promise<Response> {
     const headers = new Headers(init.headers);
     if (opts.auth) {
@@ -104,7 +106,7 @@ export class ApiClient {
           detail: cause instanceof Error ? cause.message : undefined,
         });
       }
-      if (!lastError.retryable || attempt === MAX_RETRIES) {
+      if (opts.retry === false || !lastError.retryable || attempt === MAX_RETRIES) {
         throw lastError;
       }
       const delayMs =
