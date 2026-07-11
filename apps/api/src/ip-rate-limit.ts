@@ -23,20 +23,27 @@ export function ipRateLimit(
   let hits = new Map<string, number>();
   // Scoped to the current window so a flood only warns once, not once per dropped request.
   let trackedIpCapLogged = false;
+  let missingIpLogged = false;
   return async (c, next) => {
-    const ip = c.req.header('CF-Connecting-IP');
-    // Cloudflare's edge always sets this header; its absence means a non-edge invocation
-    // path where per-IP limiting is meaningless, so skip rather than share one 'unknown' bucket.
-    if (ip === undefined) {
-      logger.warn('ipRateLimit: CF-Connecting-IP header missing; IP rate limiting skipped');
-      await next();
-      return;
-    }
     const t = now();
     if (t >= windowStart + opts.windowMs) {
       windowStart = t;
       hits = new Map();
       trackedIpCapLogged = false;
+      missingIpLogged = false;
+    }
+    const ip = c.req.header('CF-Connecting-IP');
+    // Cloudflare's edge always sets this header; its absence means a non-edge invocation
+    // path where per-IP limiting is meaningless, so skip rather than share one 'unknown' bucket.
+    if (ip === undefined) {
+      // Sustained traffic missing the header is the failure mode this warn exists to catch;
+      // a per-request log would be the flood, not the signal.
+      if (!missingIpLogged) {
+        missingIpLogged = true;
+        logger.warn('ipRateLimit: CF-Connecting-IP header missing; IP rate limiting skipped');
+      }
+      await next();
+      return;
     }
     const existingCount = hits.get(ip);
     if (existingCount === undefined && hits.size >= maxTrackedIps) {

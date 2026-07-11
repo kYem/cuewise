@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { logger } from '@cuewise/shared';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   base64UrlDecodeString,
   base64UrlEncodeString,
@@ -21,6 +22,10 @@ describe('base64UrlEncodeString / base64UrlDecodeString', () => {
 describe('signState / verifyState', () => {
   const KEY = 'unit-test-signing-key';
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   /** Replaces the last character with a different, still-valid base64url character. */
   function flipLastChar(value: string): string {
     const replacement = value.at(-1) === 'A' ? 'B' : 'A';
@@ -35,22 +40,39 @@ describe('signState / verifyState', () => {
     expect(await verifyState(state, KEY)).toEqual(payload);
   });
 
-  it('rejects a state whose body was tampered with after signing', async () => {
+  it('rejects a state whose body was tampered with after signing, and warns', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
     const state = await signState({ nonce: 'n-1' }, KEY);
     const [body, sig] = state.split('.');
 
     const tampered = `${flipLastChar(body)}.${sig}`;
 
     expect(await verifyState(tampered, KEY)).toBeNull();
+    expect(warnSpy).toHaveBeenCalledWith('verifyState: HMAC signature verification failed');
   });
 
-  it('rejects a state verified with the wrong key', async () => {
+  it('rejects a state verified with the wrong key, and warns', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
     const state = await signState({ nonce: 'n-1' }, KEY);
 
     expect(await verifyState(state, 'a-different-signing-key')).toBeNull();
+    expect(warnSpy).toHaveBeenCalledWith('verifyState: HMAC signature verification failed');
   });
 
-  it('rejects a state with no signature separator', async () => {
+  it('rejects a state with no signature separator, and warns (the actual forged-state shape)', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+
     expect(await verifyState('not-a-signed-state', KEY)).toBeNull();
+    expect(warnSpy).toHaveBeenCalledWith('verifyState: state is not signed');
+  });
+
+  it('rejects a state whose signature cannot be base64url-decoded, and warns', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    const state = await signState({ nonce: 'n-1' }, KEY);
+    const [body] = state.split('.');
+    const malformed = `${body}.!!!not-base64url!!!`;
+
+    expect(await verifyState(malformed, KEY)).toBeNull();
+    expect(warnSpy).toHaveBeenCalledWith('verifyState: state could not be decoded');
   });
 });

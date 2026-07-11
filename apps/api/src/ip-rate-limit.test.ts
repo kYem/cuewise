@@ -1,6 +1,7 @@
 import { env } from 'cloudflare:test';
+import { logger } from '@cuewise/shared';
 import { Hono } from 'hono';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AuthVars } from './auth-middleware';
 import type { Env } from './env';
 import { createApp } from './index';
@@ -74,6 +75,10 @@ function appWithLimiter(opts: IpRateLimitOptions): App {
 
 async function probe(app: App, ip: string): Promise<Response> {
   return app.request('/probe', { headers: { 'CF-Connecting-IP': ip } }, testEnv());
+}
+
+async function probeWithoutIp(app: App): Promise<Response> {
+  return app.request('/probe', {}, testEnv());
 }
 
 describe('IP rate limiting on the auth surface', () => {
@@ -171,5 +176,27 @@ describe('ipRateLimit generation-based window', () => {
 
     const stillBlocked = await probe(app, throttledIp);
     expect(stillBlocked.status).toBe(429);
+  });
+});
+
+describe('ipRateLimit missing-IP warn dedupe', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('warns once per window for repeated requests missing CF-Connecting-IP, then again after the window rolls', async () => {
+    let current = 1_000;
+    const app = appWithLimiter({ limit: 30, windowMs: 1_000, now: () => current });
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+
+    for (let i = 0; i < 5; i++) {
+      const res = await probeWithoutIp(app);
+      expect(res.status).toBe(200);
+    }
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+
+    current += 1_000;
+    await probeWithoutIp(app);
+    expect(warnSpy).toHaveBeenCalledTimes(2);
   });
 });

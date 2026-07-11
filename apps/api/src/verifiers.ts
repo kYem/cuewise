@@ -101,8 +101,8 @@ export async function verifyOrProblem(
     // Only known token-fault classes are treated as a bad token; anything else
     // (e.g. JWKS outage) is an upstream failure — 500 so the client's retry loop engages.
     if (isTokenFault(err)) {
-      // These three are genuine probing signals worth a metadata-only warn; JWTExpired/
-      // JWTClaimValidationFailed are routine noise (clock skew, stale clients) and stay quiet.
+      // Every token fault is a probing signal worth a metadata-only warn, except JWTExpired/
+      // JWTClaimValidationFailed — routine noise from clock skew and stale clients.
       if (err instanceof errors.JWKSNoMatchingKey) {
         // Providers pre-publish rotated keys and jose refetches on a kid miss outside its 30s
         // cooldown, so an unmatched kid is overwhelmingly a bogus token, not a rotation race.
@@ -111,6 +111,16 @@ export async function verifyOrProblem(
         logger.warn(`${providerLabel} ID token had an invalid signature`, { code: err.code });
       } else if (err instanceof errors.JOSEAlgNotAllowed) {
         logger.warn(`${providerLabel} ID token used a disallowed algorithm`, { code: err.code });
+      } else if (err instanceof errors.JOSENotSupported) {
+        logger.warn(`${providerLabel} ID token used an unsupported algorithm`, { code: err.code });
+      } else if (err instanceof errors.JWTInvalid) {
+        logger.warn(`${providerLabel} ID token was structurally malformed`, { code: err.code });
+      } else if (err instanceof errors.JWSInvalid) {
+        logger.warn(`${providerLabel} ID token's signature was structurally malformed`, {
+          code: err.code,
+        });
+      } else if (err instanceof TokenVerificationError) {
+        logger.warn(`${providerLabel} ID token was missing a required claim`);
       }
       return problem('invalid_token');
     }

@@ -1,6 +1,8 @@
+import { env } from 'cloudflare:test';
+import { logger } from '@cuewise/shared';
 import { errors } from 'jose';
-import { describe, expect, it } from 'vitest';
-import { isTokenFault, parseClientIds, TokenVerificationError } from './verifiers';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { isTokenFault, parseClientIds, TokenVerificationError, verifyOrProblem } from './verifiers';
 
 describe('parseClientIds', () => {
   it('splits on comma and trims whitespace around each entry', () => {
@@ -42,6 +44,63 @@ describe('isTokenFault', () => {
   for (const [name, err] of upstreamFailureCases) {
     it(`does not treat ${name} as a token fault`, () => {
       expect(isTokenFault(err)).toBe(false);
+    });
+  }
+});
+
+describe('verifyOrProblem token-fault logging', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function throwingVerifier(err: unknown) {
+    return async () => {
+      throw err;
+    };
+  }
+
+  async function expectInvalidToken(err: unknown): Promise<void> {
+    const res = await verifyOrProblem(throwingVerifier(err), 'whatever', env, 'Google');
+    if (!(res instanceof Response)) {
+      throw new Error('expected verifyOrProblem to return a Response');
+    }
+    expect(res.status).toBe(401);
+  }
+
+  // Every probing-shaped fault (structurally bad token, bad signature, bad key) is worth a
+  // warn; only the two routine ones below (clock skew, stale clients) should stay silent.
+  const probingCases: Array<[string, unknown]> = [
+    ['TokenVerificationError', new TokenVerificationError('missing sub')],
+    ['JWTInvalid', new errors.JWTInvalid('malformed jwt')],
+    ['JWSInvalid', new errors.JWSInvalid('malformed jws')],
+    ['JWSSignatureVerificationFailed', new errors.JWSSignatureVerificationFailed()],
+    ['JOSEAlgNotAllowed', new errors.JOSEAlgNotAllowed('alg not allowed')],
+    ['JOSENotSupported', new errors.JOSENotSupported('alg not supported')],
+    ['JWKSNoMatchingKey', new errors.JWKSNoMatchingKey()],
+  ];
+
+  for (const [name, err] of probingCases) {
+    it(`warns on ${name}`, async () => {
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+
+      await expectInvalidToken(err);
+
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+    });
+  }
+
+  const routineCases: Array<[string, unknown]> = [
+    ['JWTExpired', new errors.JWTExpired('token expired', {})],
+    ['JWTClaimValidationFailed', new errors.JWTClaimValidationFailed('bad claim', {})],
+  ];
+
+  for (const [name, err] of routineCases) {
+    it(`stays silent on ${name}`, async () => {
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+
+      await expectInvalidToken(err);
+
+      expect(warnSpy).not.toHaveBeenCalled();
     });
   }
 });

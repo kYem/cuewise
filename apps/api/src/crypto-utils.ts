@@ -41,14 +41,25 @@ export async function sha256Base64Url(value: string): Promise<string> {
   return base64UrlEncode(new Uint8Array(digest));
 }
 
+const hmacKeyCache = new Map<string, Promise<CryptoKey>>();
+
+// STATE_SIGNING_KEY is effectively constant per isolate; caching avoids re-importing the
+// same HMAC key on every signState/verifyState call (every Apple /start and /callback).
 function importHmacKey(key: string): Promise<CryptoKey> {
-  return crypto.subtle.importKey(
+  const cached = hmacKeyCache.get(key);
+  if (cached !== undefined) {
+    return cached;
+  }
+  const cryptoKey = crypto.subtle.importKey(
     'raw',
     encoder.encode(key),
     { name: 'HMAC', hash: 'SHA-256' },
     false,
     ['sign', 'verify']
   );
+  hmacKeyCache.clear();
+  hmacKeyCache.set(key, cryptoKey);
+  return cryptoKey;
 }
 
 /** Signs `payload` so `verifyState` can detect any tampering with the body or signature. */
@@ -63,6 +74,8 @@ export async function signState(payload: object, key: string): Promise<string> {
 export async function verifyState(state: string, key: string): Promise<unknown | null> {
   const separator = state.lastIndexOf('.');
   if (separator === -1) {
+    // Our own /start always emits a signed state; an unsigned one is necessarily forged.
+    logger.warn('verifyState: state is not signed');
     return null;
   }
   const body = state.slice(0, separator);
@@ -83,6 +96,8 @@ export async function verifyState(state: string, key: string): Promise<unknown |
     }
     return JSON.parse(base64UrlDecodeString(body));
   } catch {
+    // A state we issued always decodes cleanly; anything that throws here wasn't ours.
+    logger.warn('verifyState: state could not be decoded');
     return null;
   }
 }

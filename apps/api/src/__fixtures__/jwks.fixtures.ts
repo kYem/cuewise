@@ -1,7 +1,7 @@
 import { createLocalJWKSet, exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
 import type { Env } from '../env';
 import type { IdTokenVerifier, VerifiedIdentity } from '../verifiers';
-import { isEmailVerified, TokenVerificationError } from '../verifiers';
+import { isEmailVerified, parseClientIds, TokenVerificationError } from '../verifiers';
 
 export interface TestIdp {
   sign(claims: {
@@ -39,7 +39,8 @@ export async function createTestIdp(): Promise<TestIdp> {
         .sign(privateKey);
     },
     verifier(expected) {
-      const resolveAudience = expected.audience ?? ((env: Env) => env.GOOGLE_CLIENT_IDS.split(','));
+      const resolveAudience =
+        expected.audience ?? ((env: Env) => parseClientIds(env.GOOGLE_CLIENT_IDS));
       return async (idToken: string, env: Env): Promise<VerifiedIdentity> => {
         const { payload } = await jwtVerify(idToken, jwks, {
           issuer: expected.issuer,
