@@ -41,14 +41,13 @@ export async function sha256Base64Url(value: string): Promise<string> {
   return base64UrlEncode(new Uint8Array(digest));
 }
 
-const hmacKeyCache = new Map<string, Promise<CryptoKey>>();
+let cachedKey: { raw: string; key: Promise<CryptoKey> } | null = null;
 
 // STATE_SIGNING_KEY is effectively constant per isolate; caching avoids re-importing the
 // same HMAC key on every signState/verifyState call (every Apple /start and /callback).
 function importHmacKey(key: string): Promise<CryptoKey> {
-  const cached = hmacKeyCache.get(key);
-  if (cached !== undefined) {
-    return cached;
+  if (cachedKey !== null && cachedKey.raw === key) {
+    return cachedKey.key;
   }
   const cryptoKey = crypto.subtle.importKey(
     'raw',
@@ -57,8 +56,7 @@ function importHmacKey(key: string): Promise<CryptoKey> {
     false,
     ['sign', 'verify']
   );
-  hmacKeyCache.clear();
-  hmacKeyCache.set(key, cryptoKey);
+  cachedKey = { raw: key, key: cryptoKey };
   return cryptoKey;
 }
 
@@ -80,8 +78,16 @@ export async function verifyState(state: string, key: string): Promise<unknown |
   }
   const body = state.slice(0, separator);
   const signature = state.slice(separator + 1);
+  let cryptoKey: CryptoKey;
   try {
-    const cryptoKey = await importHmacKey(key);
+    cryptoKey = await importHmacKey(key);
+  } catch (err) {
+    // A key-import failure is a server misconfiguration (bad key material, crypto fault),
+    // not attacker input — must be loud, not folded into the decode-failure warn below.
+    logger.error('verifyState: HMAC key import failed', err);
+    return null;
+  }
+  try {
     const signatureBytes = Uint8Array.from(base64UrlDecode(signature), (ch) => ch.charCodeAt(0));
     const valid = await crypto.subtle.verify(
       'HMAC',

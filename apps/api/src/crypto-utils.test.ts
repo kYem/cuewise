@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { spyOnLoggerWarn } from './__fixtures__/logger.fixtures';
+import { spyOnLoggerError, spyOnLoggerWarn } from './__fixtures__/logger.fixtures';
 import {
   base64UrlDecodeString,
   base64UrlEncodeString,
@@ -74,5 +74,31 @@ describe('signState / verifyState', () => {
 
     expect(await verifyState(malformed, KEY)).toBeNull();
     expect(warnSpy).toHaveBeenCalledWith('verifyState: state could not be decoded');
+  });
+
+  it('logs an error (not a warn) and fails closed when the HMAC key import itself throws', async () => {
+    const errorSpy = spyOnLoggerError();
+    const warnSpy = spyOnLoggerWarn();
+    const state = await signState({ nonce: 'n-1' }, KEY);
+    // A fresh, never-cached key forces a real importKey call for this verifyState.
+    const uncachedKey = 'signing-key-that-fails-import';
+    vi.spyOn(crypto.subtle, 'importKey').mockRejectedValueOnce(new Error('bad key material'));
+
+    const result = await verifyState(state, uncachedKey);
+
+    expect(result).toBeNull();
+    expect(errorSpy).toHaveBeenCalledWith('verifyState: HMAC key import failed', expect.any(Error));
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  it('signs and verifies successfully with a second key after the cache holds a different one', async () => {
+    const payloadA = { nonce: 'n-cache-a' };
+    const stateA = await signState(payloadA, KEY);
+    expect(await verifyState(stateA, KEY)).toEqual(payloadA);
+
+    const otherKey = 'a-second-signing-key';
+    const payloadB = { nonce: 'n-cache-b' };
+    const stateB = await signState(payloadB, otherKey);
+    expect(await verifyState(stateB, otherKey)).toEqual(payloadB);
   });
 });
