@@ -21,6 +21,7 @@ const TOKEN_FAULT_CLASSES = [
   errors.JWSSignatureVerificationFailed,
   errors.JOSEAlgNotAllowed,
   errors.JOSENotSupported,
+  errors.JWKSNoMatchingKey,
 ] as const;
 
 /** True when the failure proves the presented token is bad; anything else is an upstream outage. */
@@ -28,8 +29,6 @@ export function isTokenFault(err: unknown): boolean {
   if (err instanceof TokenVerificationError) {
     return true;
   }
-  // JWKSNoMatchingKey is deliberately excluded: jose suppresses JWKS refetch for 30s after a
-  // load, so a token signed with a just-rotated key looks identical to a genuinely bad one.
   return TOKEN_FAULT_CLASSES.some((cls) => err instanceof cls);
 }
 
@@ -62,12 +61,20 @@ function createIdTokenVerifier(config: IdTokenVerifierConfig): IdTokenVerifier {
   };
 }
 
+/** Splits a comma-separated client-id list, trimming whitespace and dropping empty entries. */
+export function parseClientIds(raw: string): string[] {
+  return raw
+    .split(',')
+    .map((id) => id.trim())
+    .filter((id) => id !== '');
+}
+
 const googleJwks = createRemoteJWKSet(new URL('https://www.googleapis.com/oauth2/v3/certs'));
 
 export const verifyGoogleIdToken = createIdTokenVerifier({
   jwks: googleJwks,
   issuer: ['https://accounts.google.com', 'accounts.google.com'],
-  audience: (env) => env.GOOGLE_CLIENT_IDS.split(',').map((id) => id.trim()),
+  audience: (env) => parseClientIds(env.GOOGLE_CLIENT_IDS),
 });
 
 const appleJwks = createRemoteJWKSet(new URL('https://appleid.apple.com/auth/keys'));
@@ -91,6 +98,11 @@ export async function verifyOrProblem(
     // Only known token-fault classes are treated as a bad token; anything else
     // (e.g. JWKS outage) is an upstream failure — 500 so the client's retry loop engages.
     if (isTokenFault(err)) {
+      if (err instanceof errors.JWKSNoMatchingKey) {
+        // Providers pre-publish rotated keys and jose refetches on a kid miss outside its 30s
+        // cooldown, so an unmatched kid is overwhelmingly a bogus token, not a rotation race.
+        logger.warn(`${providerLabel} ID token had no matching JWKS key`, { code: err.code });
+      }
       return problem('invalid_token');
     }
     logger.error(`${providerLabel} ID token verification failed upstream`, err);

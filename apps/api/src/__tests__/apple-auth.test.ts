@@ -249,7 +249,7 @@ describe('POST /v1/auth/apple/callback', () => {
     expect(body.code).toBe('internal');
   });
 
-  it('returns 500 internal (not invalid_token) when no JWKS key matches a rotated key', async () => {
+  it('returns 401 invalid_token (not a 500) when no JWKS key matches an unrotated kid', async () => {
     const state = await fetchStartState('cuewise://auth');
     const appWithNoMatchingKey = createApp({
       appleVerifier: async () => {
@@ -266,9 +266,9 @@ describe('POST /v1/auth/apple/callback', () => {
       },
       testEnv()
     );
-    expect(res.status).toBe(500);
+    expect(res.status).toBe(401);
     const body = await res.json<{ code: string }>();
-    expect(body.code).toBe('internal');
+    expect(body.code).toBe('invalid_token');
   });
 });
 

@@ -13,8 +13,6 @@ beforeAll(async () => {
 });
 
 function testEnv(): typeof env {
-  // Extra whitespace around entries covers GOOGLE_CLIENT_IDS trimming; 'test-client' is
-  // still the first (untrimmed) entry, so this must keep matching it.
   return { ...env, GOOGLE_CLIENT_IDS: 'test-client, other-client' };
 }
 
@@ -92,7 +90,7 @@ describe('POST /v1/auth/token (google)', () => {
     expect(body.code).toBe('internal');
   });
 
-  it('returns 500 internal (not invalid_token) when no JWKS key matches a rotated key', async () => {
+  it('returns 401 invalid_token (not a 500) when no JWKS key matches an unrotated kid', async () => {
     const appInstance = createApp({
       googleVerifier: async () => {
         throw new errors.JWKSNoMatchingKey();
@@ -107,9 +105,9 @@ describe('POST /v1/auth/token (google)', () => {
       },
       testEnv()
     );
-    expect(res.status).toBe(500);
+    expect(res.status).toBe(401);
     const body = await res.json<{ code: string }>();
-    expect(body.code).toBe('internal');
+    expect(body.code).toBe('invalid_token');
   });
 
   it('rejects a malformed body as invalid_request', async () => {
