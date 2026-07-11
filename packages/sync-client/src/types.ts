@@ -1,3 +1,4 @@
+// Mirrors PushRecord in apps/api/src/store.ts — keep both in sync when this shape changes.
 export interface PushRecord {
   collection: string;
   entityId: string;

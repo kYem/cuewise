@@ -2,9 +2,18 @@ import type { ProblemBody } from '../../types';
 
 export interface StubResponseSpec {
   status: number;
-  body: unknown;
+  body?: unknown;
+  /** Bypasses JSON.stringify(body) to produce a genuinely unparseable response body. */
+  rawBody?: string;
   headers?: Record<string, string>;
 }
+
+/** Makes the fetchFn call reject (e.g. offline/DNS) instead of resolving a Response. */
+export interface StubRejectSpec {
+  reject: true;
+}
+
+export type StubQueueEntry = StubResponseSpec | StubRejectSpec;
 
 export interface FetchCall {
   url: string;
@@ -12,7 +21,7 @@ export interface FetchCall {
 }
 
 /** Queues responses in declaration order; each fetchFn call pops the next one. */
-export function stubFetch(responses: StubResponseSpec[]): {
+export function stubFetch(responses: StubQueueEntry[]): {
   fetchFn: typeof fetch;
   calls: FetchCall[];
 } {
@@ -25,11 +34,20 @@ export function stubFetch(responses: StubResponseSpec[]): {
     if (next === undefined) {
       throw new Error('stubFetch: no more responses queued');
     }
+    if ('reject' in next) {
+      throw new TypeError('Failed to fetch');
+    }
     const headers = new Headers(next.headers);
     if (!headers.has('Content-Type')) {
       headers.set('Content-Type', 'application/json');
     }
-    return new Response(next.status === 204 ? null : JSON.stringify(next.body), {
+    const responseBody =
+      next.rawBody !== undefined
+        ? next.rawBody
+        : next.status === 204
+          ? null
+          : JSON.stringify(next.body);
+    return new Response(responseBody, {
       status: next.status,
       headers,
     });

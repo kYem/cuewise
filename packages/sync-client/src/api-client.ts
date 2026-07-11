@@ -43,12 +43,12 @@ export class ApiClient {
       },
       { auth: false }
     );
-    return (await res.json()) as { token: string };
+    return this.parseSuccessBody<{ token: string }>(res);
   }
 
   async getChanges(since: number): Promise<{ records: SyncRecord[]; cursor: number }> {
     const res = await this.request(`/v1/changes?since=${since}`, { method: 'GET' }, { auth: true });
-    return (await res.json()) as { records: SyncRecord[]; cursor: number };
+    return this.parseSuccessBody<{ records: SyncRecord[]; cursor: number }>(res);
   }
 
   async pushChanges(records: PushRecord[]): Promise<{ cursor: number }> {
@@ -61,7 +61,7 @@ export class ApiClient {
       },
       { auth: true }
     );
-    return (await res.json()) as { cursor: number };
+    return this.parseSuccessBody<{ cursor: number }>(res);
   }
 
   async logout(): Promise<void> {
@@ -70,7 +70,7 @@ export class ApiClient {
 
   async exportData(): Promise<{ records: SyncRecord[] }> {
     const res = await this.request('/v1/export', { method: 'GET' }, { auth: true });
-    return (await res.json()) as { records: SyncRecord[] };
+    return this.parseSuccessBody<{ records: SyncRecord[] }>(res);
   }
 
   async deleteAccount(): Promise<void> {
@@ -91,11 +91,19 @@ export class ApiClient {
     }
     let lastError: ApiError | null = null;
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt += 1) {
-      const res = await this.fetchFn(`${this.opts.baseUrl}${path}`, { ...init, headers });
-      if (res.ok) {
-        return res;
+      try {
+        const res = await this.fetchFn(`${this.opts.baseUrl}${path}`, { ...init, headers });
+        if (res.ok) {
+          return res;
+        }
+        lastError = await ApiError.fromResponse(res);
+      } catch (cause) {
+        // Offline/DNS failures reject before a Response exists; fold them into the
+        // same retry/backoff path below as a retryable server error.
+        lastError = new ApiError('network_error', 0, {
+          detail: cause instanceof Error ? cause.message : undefined,
+        });
       }
-      lastError = await ApiError.fromResponse(res);
       if (!lastError.retryable || attempt === MAX_RETRIES) {
         throw lastError;
       }
@@ -104,5 +112,14 @@ export class ApiClient {
       await this.sleep(delayMs);
     }
     throw lastError ?? new ApiError('internal', 0);
+  }
+
+  /** Centralizes success-body JSON parsing so a malformed 2xx body fails predictably. */
+  private async parseSuccessBody<T>(res: Response): Promise<T> {
+    try {
+      return (await res.json()) as T;
+    } catch {
+      throw new ApiError('invalid_response', res.status);
+    }
   }
 }

@@ -38,6 +38,18 @@ describe('SessionManager', () => {
     expect(store.data.get(`local:${SYNC_SESSION_KEY}`)).toBe('session-token-123');
     expect(store.data.has(`sync:${SYNC_SESSION_KEY}`)).toBe(false);
   });
+
+  it('saveToken propagates a failed StorageResult to the caller', async () => {
+    const store = createInMemoryKeyValueStore({ failWrites: true });
+    const manager = new SessionManager(store);
+
+    const result = await manager.saveToken('session-token-123');
+
+    expect(result).toEqual({
+      success: false,
+      error: { type: 'quota_exceeded', message: 'simulated quota failure' },
+    });
+  });
 });
 
 describe('armSyncPull', () => {

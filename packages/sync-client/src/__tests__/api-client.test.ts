@@ -113,4 +113,59 @@ describe('ApiClient', () => {
     const headers = new Headers(calls[0].init.headers);
     expect(headers.has('Authorization')).toBe(false);
   });
+
+  it('retries through two network-level rejections and resolves on the third attempt', async () => {
+    const { fetchFn, calls } = stubFetch([
+      { reject: true },
+      { reject: true },
+      { status: 200, body: { records: [], cursor: 3 } },
+    ]);
+    const sleep = vi.fn().mockResolvedValue(undefined);
+    const client = new ApiClient({
+      baseUrl: BASE_URL,
+      getToken: async () => TOKEN,
+      fetchFn,
+      sleep,
+    });
+
+    const result = await client.getChanges(0);
+
+    expect(result).toEqual({ records: [], cursor: 3 });
+    expect(calls).toHaveLength(3);
+    expect(sleep).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenNthCalledWith(1, 500);
+    expect(sleep).toHaveBeenNthCalledWith(2, 1000);
+  });
+
+  it('rejects with a retryable network_error ApiError after 4 total attempts on persistent rejections', async () => {
+    const { fetchFn, calls } = stubFetch([
+      { reject: true },
+      { reject: true },
+      { reject: true },
+      { reject: true },
+    ]);
+    const sleep = vi.fn().mockResolvedValue(undefined);
+    const client = new ApiClient({
+      baseUrl: BASE_URL,
+      getToken: async () => TOKEN,
+      fetchFn,
+      sleep,
+    });
+
+    await expect(client.getChanges(0)).rejects.toMatchObject({
+      code: 'network_error',
+      retryable: true,
+    });
+    expect(calls).toHaveLength(4);
+  });
+
+  it('rejects with a non-retryable invalid_response ApiError when a 200 body fails to parse', async () => {
+    const { fetchFn } = stubFetch([{ status: 200, rawBody: 'not-json{' }]);
+    const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
+
+    await expect(client.getChanges(0)).rejects.toMatchObject({
+      code: 'invalid_response',
+      retryable: false,
+    });
+  });
 });

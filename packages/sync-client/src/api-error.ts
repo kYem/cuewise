@@ -1,3 +1,4 @@
+import { logger } from '@cuewise/shared';
 import type { ProblemBody } from './types';
 
 export interface ApiErrorOptions {
@@ -18,7 +19,7 @@ export class ApiError extends Error {
     this.name = 'ApiError';
     this.code = code;
     this.status = status;
-    this.retryable = status === 429 || status >= 500;
+    this.retryable = status === 0 || status === 429 || status >= 500;
     this.retryAfter = options.retryAfter;
     this.errors = options.errors;
   }
@@ -29,6 +30,7 @@ export class ApiError extends Error {
     try {
       body = (await res.json()) as Partial<ProblemBody>;
     } catch {
+      logger.warn(`ApiError.fromResponse: failed to parse problem body (status ${res.status})`);
       body = {};
     }
     const code = typeof body.code === 'string' ? body.code : 'internal';

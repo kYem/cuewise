@@ -2,7 +2,11 @@ import type { Scheduler } from '@cuewise/shared';
 
 export const SYNC_PULL_WAKE_ID = 'sync:pull';
 
-/** Arms the next sync-pull wake `delayMinutes` from now. Hosts re-arm on fire. */
+/**
+ * Arms the next sync-pull wake `delayMinutes` from now.
+ * Integration contract for the follow-up host wiring: this does not reschedule
+ * itself, so the host's onFire handler must call armSyncPull again to keep polling.
+ */
 export async function armSyncPull(
   scheduler: Scheduler,
   delayMinutes: number,

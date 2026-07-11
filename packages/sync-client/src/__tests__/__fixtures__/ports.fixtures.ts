@@ -1,7 +1,9 @@
 import type { KeyValueStore, Scheduler, StorageArea, StorageUsage } from '@cuewise/shared';
 
-/** Map-backed KeyValueStore for tests; `set` always succeeds. */
-export function createInMemoryKeyValueStore(): KeyValueStore & { data: Map<string, unknown> } {
+/** Map-backed KeyValueStore for tests; `set` succeeds unless `failWrites` is set. */
+export function createInMemoryKeyValueStore(
+  opts: { failWrites?: boolean } = {}
+): KeyValueStore & { data: Map<string, unknown> } {
   const data = new Map<string, unknown>();
 
   return {
@@ -14,6 +16,12 @@ export function createInMemoryKeyValueStore(): KeyValueStore & { data: Map<strin
       return value as T;
     },
     async set<T>(key: string, value: T, area: StorageArea) {
+      if (opts.failWrites === true) {
+        return {
+          success: false,
+          error: { type: 'quota_exceeded', message: 'simulated quota failure' },
+        } as const;
+      }
       data.set(`${area}:${key}`, value);
       return { success: true } as const;
     },
