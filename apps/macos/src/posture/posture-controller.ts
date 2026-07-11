@@ -33,6 +33,10 @@ let unlisteners: UnlistenFn[] = [];
 // native start_posture before the first settled (the listener leak is handled
 // separately by the detachListeners at the top of attachListeners).
 let starting = false;
+// Set if a stop lands while a start is still spawning: the in-flight start checks it
+// and bails before turning the camera on, honoring an OFF issued during the attach
+// window (when detachListeners can't yet see the not-attached listeners).
+let stopRequestedDuringStart = false;
 // Consecutive unreadable sidecar frames; escalates to a visible error at 5.
 let parseFailures = 0;
 // The status values this build understands; anything else is a bad frame (protocol
@@ -100,13 +104,17 @@ function resetDerivation(): void {
 // where the panel error never renders — matching the unexpected-stop path.
 function noteBadFrame(): void {
   parseFailures += 1;
-  if (parseFailures >= 5) {
-    const message = 'Posture readings could not be read.';
+  if (parseFailures < 5) {
+    return;
+  }
+  const message = 'Posture readings could not be read.';
+  // Only write when it changes — this runs every ~2s while frames stay unreadable.
+  if (state.error !== message) {
     setState({ error: message });
-    if (!warnedUnreadable) {
-      warnedUnreadable = true;
-      useToastStore.getState().error(message);
-    }
+  }
+  if (!warnedUnreadable) {
+    warnedUnreadable = true;
+    useToastStore.getState().error(message);
   }
 }
 
@@ -129,8 +137,8 @@ async function attachListeners(): Promise<void> {
       !KNOWN_STATUSES.includes(sample.status)
     ) {
       // Not a sample we understand: a bare `null`/primitive line, or an unknown status
-      // from a newer sidecar. Reject as a bad frame — never let it reach the tray, whose
-      // POSTURE_META lookup would throw on an unknown key.
+      // from a newer sidecar. Reject as a bad frame — this is the primary gate keeping an
+      // unknown status out of the tray's POSTURE_META lookup (the tray also backstops it).
       logger.error('Posture sample had an unexpected shape', event.payload);
       noteBadFrame();
       return;
@@ -166,17 +174,25 @@ export function startPosture(): void {
     return;
   }
   starting = true;
+  stopRequestedDuringStart = false;
   persist(ENABLED_KEY, true);
   setState({ error: null });
   // Attach listeners BEFORE spawning: the sidecar can fail its camera check and emit
   // posture://stopped within tens of ms, and Tauri won't buffer that for a listener
   // registered afterward — so attach-after-invoke would silently drop the failure.
   attachListeners()
-    .then(() => invoke('start_posture'))
     .then(() => {
-      // The sidecar may have already died and run onStopped (which detaches). Only flip
-      // tracking on if the listeners are still live, so we don't clobber that stop.
-      if (unlisteners.length > 0) {
+      // A stop landed while we were attaching — honor it and never turn the camera on.
+      if (stopRequestedDuringStart) {
+        detachListeners();
+        return;
+      }
+      return invoke('start_posture');
+    })
+    .then(() => {
+      // Don't flip tracking on if a stop raced in, or the sidecar already died and ran
+      // onStopped (which detaches) — either way the session is no longer valid.
+      if (!stopRequestedDuringStart && unlisteners.length > 0) {
         setState({ tracking: true });
       }
     })
@@ -196,6 +212,11 @@ export function startPosture(): void {
 }
 
 export function stopPosture(): void {
+  if (starting) {
+    // A start is still spawning; its detachListeners can't see listeners that aren't
+    // attached yet, so flag the in-flight chain to bail before the camera comes on.
+    stopRequestedDuringStart = true;
+  }
   persist(ENABLED_KEY, false);
   invoke('stop_posture').catch((error) => logger.error('Failed to stop posture tracking', error));
   detachListeners();
