@@ -1,6 +1,7 @@
 import type { Hono } from 'hono';
 import type { AuthVars } from '../auth-middleware';
 import type { Env } from '../env';
+import { parseJsonBody } from '../http';
 import type { AppDepsResolved } from '../index';
 import { problem } from '../problems';
 import { validatePushBody } from '../validate-changes';
@@ -31,11 +32,9 @@ export function registerChangesRoutes(
   });
 
   app.post('/v1/changes', async (c) => {
-    let raw: unknown;
-    try {
-      raw = await c.req.json();
-    } catch {
-      return problem('invalid_request', { detail: 'Body must be JSON.' });
+    const raw = await parseJsonBody(c);
+    if (raw instanceof Response) {
+      return raw;
     }
     const parsed = validatePushBody(raw);
     if ('problemCode' in parsed) {

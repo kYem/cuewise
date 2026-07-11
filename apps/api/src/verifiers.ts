@@ -1,5 +1,7 @@
+import { logger } from '@cuewise/shared';
 import { createRemoteJWKSet, errors, type JWTPayload, jwtVerify } from 'jose';
 import type { Env } from './env';
+import { problem } from './problems';
 
 export interface VerifiedIdentity {
   providerSub: string;
@@ -36,36 +38,62 @@ export function isEmailVerified(payload: JWTPayload): boolean {
   return payload.email_verified === true || payload.email_verified === 'true';
 }
 
+interface IdTokenVerifierConfig {
+  jwks: ReturnType<typeof createRemoteJWKSet>;
+  issuer: string | string[];
+  audience: (env: Env) => string | string[];
+}
+
+/** Builds a provider ID-token verifier: same claim checks, only issuer/audience differ. */
+function createIdTokenVerifier(config: IdTokenVerifierConfig): IdTokenVerifier {
+  return async (idToken, env) => {
+    const { payload } = await jwtVerify(idToken, config.jwks, {
+      issuer: config.issuer,
+      audience: config.audience(env),
+    });
+    if (typeof payload.sub !== 'string') {
+      throw new TokenVerificationError('ID token missing sub');
+    }
+    return {
+      providerSub: payload.sub,
+      email:
+        typeof payload.email === 'string' && isEmailVerified(payload) ? payload.email : undefined,
+    };
+  };
+}
+
 const googleJwks = createRemoteJWKSet(new URL('https://www.googleapis.com/oauth2/v3/certs'));
 
-export const verifyGoogleIdToken: IdTokenVerifier = async (idToken, env) => {
-  const { payload } = await jwtVerify(idToken, googleJwks, {
-    issuer: ['https://accounts.google.com', 'accounts.google.com'],
-    audience: env.GOOGLE_CLIENT_IDS.split(',').map((id) => id.trim()),
-  });
-  if (typeof payload.sub !== 'string') {
-    throw new TokenVerificationError('Google ID token missing sub');
-  }
-  return {
-    providerSub: payload.sub,
-    email:
-      typeof payload.email === 'string' && isEmailVerified(payload) ? payload.email : undefined,
-  };
-};
+export const verifyGoogleIdToken = createIdTokenVerifier({
+  jwks: googleJwks,
+  issuer: ['https://accounts.google.com', 'accounts.google.com'],
+  audience: (env) => env.GOOGLE_CLIENT_IDS.split(',').map((id) => id.trim()),
+});
 
 const appleJwks = createRemoteJWKSet(new URL('https://appleid.apple.com/auth/keys'));
 
-export const verifyAppleIdToken: IdTokenVerifier = async (idToken, env) => {
-  const { payload } = await jwtVerify(idToken, appleJwks, {
-    issuer: 'https://appleid.apple.com',
-    audience: env.APPLE_CLIENT_ID,
-  });
-  if (typeof payload.sub !== 'string') {
-    throw new TokenVerificationError('Apple ID token missing sub');
+export const verifyAppleIdToken = createIdTokenVerifier({
+  jwks: appleJwks,
+  issuer: 'https://appleid.apple.com',
+  audience: (env) => env.APPLE_CLIENT_ID,
+});
+
+/** Runs `verifier`, turning a rejection into a bad-token 401 or an upstream-outage 500. */
+export async function verifyOrProblem(
+  verifier: IdTokenVerifier,
+  credential: string,
+  env: Env,
+  providerLabel: string
+): Promise<VerifiedIdentity | Response> {
+  try {
+    return await verifier(credential, env);
+  } catch (err) {
+    // Only known token-fault classes are treated as a bad token; anything else
+    // (e.g. JWKS outage) is an upstream failure — 500 so the client's retry loop engages.
+    if (isTokenFault(err)) {
+      return problem('invalid_token');
+    }
+    logger.error(`${providerLabel} ID token verification failed upstream`, err);
+    return problem('internal');
   }
-  return {
-    providerSub: payload.sub,
-    email:
-      typeof payload.email === 'string' && isEmailVerified(payload) ? payload.email : undefined,
-  };
-};
+}

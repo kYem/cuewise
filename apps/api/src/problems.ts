@@ -18,6 +18,24 @@ export interface ValidationIssue {
   detail: string;
 }
 
+/** Pushes a required-non-empty-string (and optional max-length) violation onto `issues`. */
+export function requireNonEmptyString(
+  value: unknown,
+  pointer: string,
+  issues: ValidationIssue[],
+  maxLength?: number,
+  index?: number
+): void {
+  const base = index === undefined ? { pointer } : { index, pointer };
+  if (typeof value !== 'string' || value === '') {
+    issues.push({ ...base, detail: 'required non-empty string' });
+    return;
+  }
+  if (maxLength !== undefined && value.length > maxLength) {
+    issues.push({ ...base, detail: `must not exceed ${maxLength} characters` });
+  }
+}
+
 export interface ProblemExtras {
   detail?: string;
   retryAfter?: number;

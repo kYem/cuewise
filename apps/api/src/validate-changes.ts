@@ -1,4 +1,4 @@
-import type { ValidationIssue } from './problems';
+import { requireNonEmptyString, type ValidationIssue } from './problems';
 import type { PushRecord } from './store';
 
 export const MAX_BATCH_SIZE = 100;
@@ -15,32 +15,20 @@ const encoder = new TextEncoder();
 
 function validateRecord(raw: unknown, index: number, issues: ValidationIssue[]): void {
   const r = (raw ?? {}) as Record<string, unknown>;
-  if (typeof r.collection !== 'string' || r.collection === '') {
-    issues.push({
-      index,
-      pointer: `/records/${index}/collection`,
-      detail: 'required non-empty string',
-    });
-  } else if (r.collection.length > MAX_COLLECTION_LENGTH) {
-    issues.push({
-      index,
-      pointer: `/records/${index}/collection`,
-      detail: `must not exceed ${MAX_COLLECTION_LENGTH} characters`,
-    });
-  }
-  if (typeof r.entityId !== 'string' || r.entityId === '') {
-    issues.push({
-      index,
-      pointer: `/records/${index}/entityId`,
-      detail: 'required non-empty string',
-    });
-  } else if (r.entityId.length > MAX_ENTITY_ID_LENGTH) {
-    issues.push({
-      index,
-      pointer: `/records/${index}/entityId`,
-      detail: `must not exceed ${MAX_ENTITY_ID_LENGTH} characters`,
-    });
-  }
+  requireNonEmptyString(
+    r.collection,
+    `/records/${index}/collection`,
+    issues,
+    MAX_COLLECTION_LENGTH,
+    index
+  );
+  requireNonEmptyString(
+    r.entityId,
+    `/records/${index}/entityId`,
+    issues,
+    MAX_ENTITY_ID_LENGTH,
+    index
+  );
   if (typeof r.ciphertext !== 'string') {
     issues.push({ index, pointer: `/records/${index}/ciphertext`, detail: 'required string' });
   } else if (encoder.encode(r.ciphertext).length > MAX_CIPHERTEXT_BYTES) {

@@ -1,12 +1,12 @@
-import { logger } from '@cuewise/shared';
 import type { Hono } from 'hono';
 import type { AuthVars } from '../auth-middleware';
 import { sha256Base64Url } from '../crypto-utils';
 import type { Env } from '../env';
+import { parseJsonBody } from '../http';
 import type { AppDepsResolved } from '../index';
-import { problem, type ValidationIssue } from '../problems';
+import { problem, requireNonEmptyString, type ValidationIssue } from '../problems';
 import type { Identity } from '../store';
-import { isTokenFault } from '../verifiers';
+import { verifyOrProblem } from '../verifiers';
 
 const MAX_DEVICE_NAME_LENGTH = 100;
 
@@ -23,17 +23,8 @@ function parseTokenRequest(body: unknown): TokenRequest | ValidationIssue[] {
   if (b.provider !== 'google' && b.provider !== 'apple' && b.provider !== 'dev') {
     issues.push({ pointer: '/provider', detail: "must be 'google', 'apple', or 'dev'" });
   }
-  if (typeof b.credential !== 'string' || b.credential === '') {
-    issues.push({ pointer: '/credential', detail: 'required non-empty string' });
-  }
-  if (typeof b.deviceName !== 'string' || b.deviceName === '') {
-    issues.push({ pointer: '/deviceName', detail: 'required non-empty string' });
-  } else if (b.deviceName.length > MAX_DEVICE_NAME_LENGTH) {
-    issues.push({
-      pointer: '/deviceName',
-      detail: `must not exceed ${MAX_DEVICE_NAME_LENGTH} characters`,
-    });
-  }
+  requireNonEmptyString(b.credential, '/credential', issues);
+  requireNonEmptyString(b.deviceName, '/deviceName', issues, MAX_DEVICE_NAME_LENGTH);
   if (b.provider === 'apple' && (typeof b.codeVerifier !== 'string' || b.codeVerifier === '')) {
     issues.push({ pointer: '/codeVerifier', detail: 'required non-empty string for apple' });
   }
@@ -48,11 +39,9 @@ export function registerAuthRoutes(
   deps: AppDepsResolved
 ): void {
   app.post('/v1/auth/token', async (c) => {
-    let raw: unknown;
-    try {
-      raw = await c.req.json();
-    } catch {
-      return problem('invalid_request', { detail: 'Body must be JSON.' });
+    const raw = await parseJsonBody(c);
+    if (raw instanceof Response) {
+      return raw;
     }
     const parsed = parseTokenRequest(raw);
     if (Array.isArray(parsed)) {
@@ -61,18 +50,16 @@ export function registerAuthRoutes(
     const store = deps.storeFactory(c.env.DB);
     let identity: Identity;
     if (parsed.provider === 'google') {
-      try {
-        const verified = await deps.googleVerifier(parsed.credential, c.env);
-        identity = { provider: 'google', providerSub: verified.providerSub, email: verified.email };
-      } catch (err) {
-        // Only known token-fault classes are treated as a bad token; anything else
-        // (e.g. JWKS outage) is an upstream failure — 500 so the client's retry loop engages.
-        if (isTokenFault(err)) {
-          return problem('invalid_token');
-        }
-        logger.error('Google ID token verification failed upstream', err);
-        return problem('internal');
+      const verified = await verifyOrProblem(
+        deps.googleVerifier,
+        parsed.credential,
+        c.env,
+        'Google'
+      );
+      if (verified instanceof Response) {
+        return verified;
       }
+      identity = { provider: 'google', providerSub: verified.providerSub, email: verified.email };
     } else if (parsed.provider === 'dev') {
       if (c.env.DEV_FAKE_AUTH !== '1') {
         return problem('invalid_request', { detail: 'Unknown provider.' });

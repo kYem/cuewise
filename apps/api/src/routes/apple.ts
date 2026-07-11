@@ -1,21 +1,22 @@
-import { logger } from '@cuewise/shared';
 import type { Hono } from 'hono';
 import type { AuthVars } from '../auth-middleware';
+import { base64UrlDecode, base64UrlEncode } from '../crypto-utils';
 import type { Env } from '../env';
 import type { AppDepsResolved } from '../index';
 import { problem, type ValidationIssue } from '../problems';
-import { isTokenFault } from '../verifiers';
+import { verifyOrProblem } from '../verifiers';
 
 // S256 PKCE challenges are always exactly 43 base64url characters (a 32-byte SHA-256 digest).
 const CODE_CHALLENGE_RE = /^[A-Za-z0-9_-]{43}$/;
 
 function encodeState(state: { returnUri: string; codeChallenge: string }): string {
-  return btoa(JSON.stringify(state)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const json = JSON.stringify(state);
+  return base64UrlEncode(Uint8Array.from(json, (ch) => ch.charCodeAt(0)));
 }
 
 function decodeState(state: string): { returnUri: string; codeChallenge: string } | null {
   try {
-    const parsed: unknown = JSON.parse(atob(state.replace(/-/g, '+').replace(/_/g, '/')));
+    const parsed: unknown = JSON.parse(base64UrlDecode(state));
     if (
       parsed !== null &&
       typeof parsed === 'object' &&
@@ -75,23 +76,15 @@ export function registerAppleRoutes(
     if (decoded === null || !isAllowedReturnUri(decoded.returnUri, c.env)) {
       return problem('invalid_request', { detail: 'Bad state.' });
     }
-    let identity: { providerSub: string; email?: string };
-    try {
-      identity = await deps.appleVerifier(idToken, c.env);
-    } catch (err) {
-      // Only known token-fault classes are treated as a bad token; anything else
-      // (e.g. JWKS outage) is an upstream failure — 500 so the client's retry loop engages.
-      if (isTokenFault(err)) {
-        return problem('invalid_token');
-      }
-      logger.error('Apple ID token verification failed upstream', err);
-      return problem('internal');
+    const verified = await verifyOrProblem(deps.appleVerifier, idToken, c.env, 'Apple');
+    if (verified instanceof Response) {
+      return verified;
     }
     const code = await deps.storeFactory(c.env.DB).mintAuthCode(
       {
         provider: 'apple',
-        providerSub: identity.providerSub,
-        email: identity.email,
+        providerSub: verified.providerSub,
+        email: verified.email,
       },
       decoded.codeChallenge
     );
