@@ -4,6 +4,7 @@ import { type AuthVars, requireSession } from './auth-middleware';
 import { D1SyncStore } from './d1-store';
 import type { Env } from './env';
 import { problem } from './problems';
+import { rateLimit } from './rate-limit';
 import { registerAccountRoutes } from './routes/account';
 import { registerAppleRoutes } from './routes/apple';
 import { registerAuthRoutes } from './routes/auth';
@@ -41,6 +42,13 @@ export function createApp(deps: AppDeps = {}): Hono<{ Bindings: Env } & AuthVars
   app.use('/v1/export', auth);
   app.use('/v1/account', auth);
   app.use('/v1/auth/logout', auth);
+
+  // Hono's `/*` wildcard already matches the bare prefix, so a single registration
+  // covers both '/v1/changes' and '/v1/changes/*' — registering both would double-count.
+  app.use(
+    '/v1/changes/*',
+    rateLimit((env) => resolved.storeFactory(env.DB), { limit: 60, windowMs: 60_000 })
+  );
 
   registerAuthRoutes(app, resolved);
   registerAppleRoutes(app, resolved);

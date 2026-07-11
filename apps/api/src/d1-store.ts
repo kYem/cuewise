@@ -198,7 +198,27 @@ export class D1SyncStore implements SyncStore {
     ]);
   }
 
-  async bumpRateWindow(_tokenHash: string, _windowMs: number): Promise<number> {
-    throw new Error('not implemented');
+  // Single UPDATE...RETURNING with CASE keeps the reset-or-increment atomic within D1's
+  // implicit per-statement transaction (select-then-update would race under concurrent hits).
+  async bumpRateWindow(
+    tokenHash: string,
+    windowMs: number
+  ): Promise<{ count: number; windowStart: number }> {
+    const ts = this.now();
+    const row = await this.db
+      .prepare(
+        `UPDATE tokens
+         SET
+           window_start = CASE WHEN ? - window_start > ? THEN ? ELSE window_start END,
+           window_count = CASE WHEN ? - window_start > ? THEN 1 ELSE window_count + 1 END
+         WHERE token_hash = ?
+         RETURNING window_start, window_count`
+      )
+      .bind(ts, windowMs, ts, ts, windowMs, tokenHash)
+      .first<{ window_start: number; window_count: number }>();
+    if (row === null) {
+      throw new Error('bumpRateWindow: unknown token');
+    }
+    return { count: row.window_count, windowStart: row.window_start };
   }
 }

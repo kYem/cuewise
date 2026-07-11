@@ -40,5 +40,8 @@ export interface SyncStore {
   listChanges(userId: string, since: number): Promise<{ records: SyncRecord[]; cursor: number }>;
   exportUser(userId: string): Promise<{ records: SyncRecord[] }>;
   deleteUser(userId: string): Promise<void>;
-  bumpRateWindow(tokenHash: string, windowMs: number): Promise<number>;
+  bumpRateWindow(
+    tokenHash: string,
+    windowMs: number
+  ): Promise<{ count: number; windowStart: number }>;
 }
