@@ -28,9 +28,12 @@ let state: PostureState = {
 };
 const subscribers = new Set<() => void>();
 let unlisteners: UnlistenFn[] = [];
-// True while a start_posture spawn is in flight, so a rapid re-toggle can't
-// double-attach listeners (a leak) and double-count every sample.
+// True while a start_posture spawn is in flight. `tracking` only flips true after
+// the async chain resolves, so without this a rapid re-toggle would fire a second
+// native start_posture before the first settled (the listener leak is handled
+// separately by the detachListeners at the top of attachListeners).
 let starting = false;
+// Consecutive unreadable sidecar frames; escalates to a visible error at 5.
 let parseFailures = 0;
 
 // Nudge on sustained poor posture, then cool down so we don't nag.
@@ -38,6 +41,9 @@ const NUDGE_AFTER_POOR_SAMPLES = 15; // ~30s at the sidecar's 2s cadence
 const NUDGE_COOLDOWN_MS = 5 * 60 * 1000;
 let poorStreak = 0;
 let lastNudgeAt = 0;
+// Warn once if nudge delivery fails (e.g. notifications denied) so the feature
+// isn't silently dead — without storming a toast on every ~30s retry.
+let warnedNudgeUndeliverable = false;
 
 // Debounce the tray status: adopt a new status only after it holds for a few
 // samples, so a dropped face-detection frame or threshold jitter doesn't flip the
@@ -81,6 +87,15 @@ function resetDerivation(): void {
   parseFailures = 0;
 }
 
+// Count consecutive unreadable frames; escalate to a visible error at 5 so a
+// protocol drift doesn't sit silently on "Starting…".
+function noteBadFrame(): void {
+  parseFailures += 1;
+  if (parseFailures >= 5) {
+    setState({ error: 'Posture readings could not be read.' });
+  }
+}
+
 async function attachListeners(): Promise<void> {
   detachListeners(); // guard against a double-attach orphaning the previous pair
   const onSample = await listen<string>('posture://sample', (event) => {
@@ -88,28 +103,36 @@ async function attachListeners(): Promise<void> {
     try {
       sample = JSON.parse(event.payload) as PostureSample;
     } catch (error) {
-      // Only the parse is fragile; a downstream throw must not read as "bad frame".
+      // Only the parse is fragile — keep downstream throws out of this catch.
       logger.error('Failed to parse posture sample', error);
-      parseFailures += 1;
-      if (parseFailures >= 5) {
-        setState({ error: 'Posture readings could not be read.' });
-      }
+      noteBadFrame();
+      return;
+    }
+    if (sample === null || typeof sample !== 'object' || !('status' in sample)) {
+      // Valid JSON but not a sample (e.g. a bare `null` line) — a bad frame, not a crash.
+      logger.error('Posture sample had an unexpected shape', event.payload);
+      noteBadFrame();
       return;
     }
     parseFailures = 0;
-    setState({ sample });
+    // A readable frame means we've recovered — drop any stale "unreadable" error.
+    if (state.error !== null) {
+      setState({ sample, error: null });
+    } else {
+      setState({ sample });
+    }
     maybeNudge(sample);
     updateSteadyStatus(sample.status);
   });
   const onStopped = await listen('posture://stopped', () => {
+    // Reached only for an *unexpected* stop (stopPosture detaches first), so surface
+    // the camera/permission failure even with Settings closed. The pref is kept — the
+    // camera may be transiently busy — so tracking can still auto-resume next boot.
     detachListeners();
     resetDerivation();
-    setState({
-      tracking: false,
-      sample: null,
-      steadyStatus: null,
-      error: 'Posture tracking stopped — camera unavailable or permission denied.',
-    });
+    const message = 'Posture tracking stopped — camera unavailable or permission denied.';
+    setState({ tracking: false, sample: null, steadyStatus: null, error: message });
+    useToastStore.getState().error(message);
   });
   unlisteners = [onSample, onStopped];
 }
@@ -216,6 +239,10 @@ function maybeNudge(sample: PostureSample): void {
     .catch((error) => {
       logger.error('Failed to deliver posture nudge', error);
       lastNudgeAt = 0; // delivery failed — don't spend the cooldown on a missed nudge
+      if (!warnedNudgeUndeliverable) {
+        warnedNudgeUndeliverable = true;
+        useToastStore.getState().warning('Enable notifications to get posture reminders.');
+      }
     });
 }
 

@@ -793,9 +793,10 @@ export const SECTION_IDS = ['timer', 'sound', 'focus', 'home', 'goals', 'advance
 export type BuiltInSectionId = (typeof SECTION_IDS)[number];
 
 export interface SettingsSection {
-  // A plain string so a platform host (e.g. macOS "posture") can inject its own
-  // section without teaching this shared package about a platform-only id.
-  id: string;
+  // Built-in ids keep autocomplete and typo-checking; the `& {}` keeps the field
+  // open so a platform host (e.g. macOS "posture") can inject a section without
+  // teaching this shared package about a platform-only id.
+  id: BuiltInSectionId | (string & {});
   label: string;
   icon: LucideIcon;
   component: React.FC<SettingsSectionProps>;
