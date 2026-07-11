@@ -355,19 +355,31 @@ export const usePomodoroStore = create<PomodoroStore>()(
       },
 
       tick: () => {
-        const { status, timeRemaining } = get();
+        const { status, timeRemaining, lastTickTime } = get();
 
         if (status !== 'running') {
           return;
         }
 
-        if (timeRemaining > 0) {
+        // Reconcile against the wall clock: a backgrounded tab throttles setInterval,
+        // so a flat -1 per tick drifts slow. Decrement by the seconds that actually
+        // elapsed (mirrors the initialize recovery path).
+        const now = Date.now();
+        const elapsed = lastTickTime === null ? 1 : Math.floor((now - lastTickTime) / 1000);
+
+        if (elapsed < 1) {
+          return; // less than a second since the last tick — nothing to apply yet
+        }
+
+        if (timeRemaining > elapsed) {
           set({
-            timeRemaining: timeRemaining - 1,
-            lastTickTime: Date.now(), // Track last tick time for resume after tab close
+            timeRemaining: timeRemaining - elapsed,
+            // Advance by the whole seconds consumed (not `now`) so the sub-second
+            // remainder isn't dropped — otherwise rounding accumulates into drift.
+            lastTickTime: lastTickTime === null ? now : lastTickTime + elapsed * 1000,
           });
         } else {
-          // Timer completed
+          // Elapsed time meets or exceeds what's left — the session is done.
           get().completeSession();
         }
       },
