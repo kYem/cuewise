@@ -3,14 +3,23 @@ import type { AuthVars } from './auth-middleware';
 import type { Env } from './env';
 import { problem } from './problem-details';
 
-const PRUNE_THRESHOLD = 10_000;
+const DEFAULT_MAX_TRACKED_IPS = 20_000;
+
+export interface IpRateLimitOptions {
+  limit: number;
+  windowMs: number;
+  maxTrackedIps?: number;
+  now?: () => number;
+}
 
 export function ipRateLimit(
-  opts: { limit: number; windowMs: number } = { limit: 30, windowMs: 60_000 }
+  opts: IpRateLimitOptions = { limit: 30, windowMs: 60_000 }
 ): MiddlewareHandler<{ Bindings: Env } & AuthVars> {
+  const maxTrackedIps = opts.maxTrackedIps ?? DEFAULT_MAX_TRACKED_IPS;
+  const now = opts.now ?? Date.now;
   // Isolate-local defense-in-depth; production also fronts these routes with WAF rules.
-  const hits = new Map<string, { windowStart: number; count: number }>();
-  let lastPruneAt = 0;
+  let windowStart = now();
+  let hits = new Map<string, number>();
   return async (c, next) => {
     const ip = c.req.header('CF-Connecting-IP');
     // Cloudflare's edge always sets this header; its absence means a non-edge invocation
@@ -19,28 +28,22 @@ export function ipRateLimit(
       await next();
       return;
     }
-    const now = Date.now();
-    const existing = hits.get(ip);
-    const entry =
-      existing === undefined || now - existing.windowStart > opts.windowMs
-        ? { windowStart: now, count: 1 }
-        : { windowStart: existing.windowStart, count: existing.count + 1 };
-    hits.set(ip, entry);
-    if (hits.size > PRUNE_THRESHOLD && now - lastPruneAt > opts.windowMs) {
-      lastPruneAt = now;
-      for (const [key, value] of hits) {
-        if (now - value.windowStart > opts.windowMs) {
-          hits.delete(key);
-        }
-      }
-      // Sweeping once couldn't keep the map bounded under this IP cardinality; drop
-      // everything rather than let it grow unbounded — bounded memory beats perfect accounting.
-      if (hits.size > PRUNE_THRESHOLD) {
-        hits.clear();
-      }
+    const t = now();
+    if (t >= windowStart + opts.windowMs) {
+      windowStart = t;
+      hits = new Map();
     }
-    if (entry.count > opts.limit) {
-      const retryAfter = Math.max(1, Math.ceil((entry.windowStart + opts.windowMs - now) / 1000));
+    const existingCount = hits.get(ip);
+    if (existingCount === undefined && hits.size >= maxTrackedIps) {
+      // Bounded memory without evicting anyone: a flood of fresh IPs can only dodge
+      // tracking for itself, never evict or reset another client's counter.
+      await next();
+      return;
+    }
+    const count = (existingCount ?? 0) + 1;
+    hits.set(ip, count);
+    if (count > opts.limit) {
+      const retryAfter = Math.max(1, Math.ceil((windowStart + opts.windowMs - t) / 1000));
       return problem('rate_limited', {
         retryAfter,
         detail: 'Too many requests from this IP; slow down and retry later.',

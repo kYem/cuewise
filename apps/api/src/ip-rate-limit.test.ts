@@ -1,9 +1,10 @@
 import { env } from 'cloudflare:test';
-import type { Hono } from 'hono';
+import { Hono } from 'hono';
 import { describe, expect, it } from 'vitest';
 import type { AuthVars } from './auth-middleware';
 import type { Env } from './env';
 import { createApp } from './index';
+import { type IpRateLimitOptions, ipRateLimit } from './ip-rate-limit';
 
 type App = Hono<{ Bindings: Env } & AuthVars>;
 
@@ -41,6 +42,18 @@ async function postTokenWithoutIpHeader(app: App): Promise<Response> {
     },
     testEnv()
   );
+}
+
+/** A bare app with `ipRateLimit(opts)` as the only middleware, for exercising window/eviction directly. */
+function appWithLimiter(opts: IpRateLimitOptions): App {
+  const app: App = new Hono();
+  app.use('/probe', ipRateLimit(opts));
+  app.get('/probe', (c) => c.text('ok'));
+  return app;
+}
+
+async function probe(app: App, ip: string): Promise<Response> {
+  return app.request('/probe', { headers: { 'CF-Connecting-IP': ip } }, testEnv());
 }
 
 describe('IP rate limiting on the auth surface', () => {
@@ -85,5 +98,39 @@ describe('IP rate limiting on the auth surface', () => {
       const res = await postTokenWithoutIpHeader(app);
       expect(res.status).toBe(200);
     }
+  });
+});
+
+describe('ipRateLimit generation-based window', () => {
+  it('admits a previously-blocked IP again once the injected clock advances past the window', async () => {
+    let current = 1_000;
+    const app = appWithLimiter({ limit: 2, windowMs: 1_000, now: () => current });
+    const ip = '203.0.113.20';
+
+    await probe(app, ip);
+    await probe(app, ip);
+    const blocked = await probe(app, ip);
+    expect(blocked.status).toBe(429);
+
+    current += 1_000;
+    const res = await probe(app, ip);
+    expect(res.status).toBe(200);
+  });
+
+  it('does not let a flood of new IPs reset an already-throttled IP within the same window', async () => {
+    const app = appWithLimiter({ limit: 1, windowMs: 60_000, maxTrackedIps: 3 });
+    const throttledIp = '203.0.113.21';
+
+    await probe(app, throttledIp);
+    const blocked = await probe(app, throttledIp);
+    expect(blocked.status).toBe(429);
+
+    // Flood with more distinct IPs than maxTrackedIps, trying to evict the throttled IP's entry.
+    for (let i = 0; i < 10; i++) {
+      await probe(app, `203.0.113.${100 + i}`);
+    }
+
+    const stillBlocked = await probe(app, throttledIp);
+    expect(stillBlocked.status).toBe(429);
   });
 });
