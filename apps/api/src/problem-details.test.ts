@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
 import app from './index';
-import { problem } from './problem-details';
+import { problem, requireNonEmptyString, type ValidationIssue } from './problem-details';
 
 describe('problem()', () => {
   it('builds an RFC 9457 body with extensions and Retry-After header', async () => {
@@ -17,6 +17,19 @@ describe('problem()', () => {
       detail: 'Slow down.',
       retryAfter: 30,
     });
+  });
+});
+
+describe('requireNonEmptyString', () => {
+  it('measures maxLength in UTF-8 bytes, not UTF-16 characters', () => {
+    const issues: ValidationIssue[] = [];
+    // 10 emoji: 20 UTF-16 code units (surrogate pairs) but 40 UTF-8 bytes — a bound of 30
+    // only trips if the check counts bytes, not `.length`.
+    const emojiValue = '🎉'.repeat(10);
+
+    requireNonEmptyString(emojiValue, '/field', issues, { maxLength: 30 });
+
+    expect(issues).toEqual([{ pointer: '/field', detail: 'must not exceed 30 bytes' }]);
   });
 });
 

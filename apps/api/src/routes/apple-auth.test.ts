@@ -470,6 +470,34 @@ describe('POST /v1/auth/token PKCE binding (apple)', () => {
 
     expect(res.status).toBe(200);
   });
+
+  it('rejects a codeVerifier containing a character outside the RFC 7636 unreserved set', async () => {
+    const code = await mintCode('apple-sub-9');
+
+    const res = await exchangeCode(code, `${'a'.repeat(42)}!`);
+    expect(res.status).toBe(400);
+    const body = await res.json<{ code: string; errors: { pointer?: string }[] }>();
+    expect(body.code).toBe('invalid_request');
+    expect(body.errors.some((e) => e.pointer === '/codeVerifier')).toBe(true);
+
+    // Proves parseTokenRequest rejected it before consumeAuthCode ran: the code is still live.
+    const retryExchange = await exchangeCode(code, CODE_VERIFIER);
+    expect(retryExchange.status).toBe(200);
+  });
+
+  it('rejects a multi-byte codeVerifier without burning the code', async () => {
+    const code = await mintCode('apple-sub-10');
+
+    const res = await exchangeCode(code, `${'a'.repeat(42)}🎉`);
+    expect(res.status).toBe(400);
+    const body = await res.json<{ code: string; errors: { pointer?: string }[] }>();
+    expect(body.code).toBe('invalid_request');
+    expect(body.errors.some((e) => e.pointer === '/codeVerifier')).toBe(true);
+
+    // Proves parseTokenRequest rejected it before consumeAuthCode ran: the code is still live.
+    const retryExchange = await exchangeCode(code, CODE_VERIFIER);
+    expect(retryExchange.status).toBe(200);
+  });
 });
 
 describe('POST /v1/auth/token (apple) email verification', () => {

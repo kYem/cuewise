@@ -21,7 +21,9 @@ export interface ValidationIssue {
 const encoder = new TextEncoder();
 
 export interface StringLengthBounds {
+  /** UTF-8 byte length, not character count. */
   maxLength?: number;
+  /** UTF-8 byte length, not character count. */
   minLength?: number;
   index?: number;
 }

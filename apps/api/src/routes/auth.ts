@@ -12,9 +12,13 @@ import { verifyOrProblem } from '../verifiers';
 const MAX_DEVICE_NAME_LENGTH = 100;
 // Real ID tokens run 1-2 KB and Apple's one-time code is 43 chars; this just caps abuse.
 const MAX_CREDENTIAL_LENGTH = 8192;
-// RFC 7636: a PKCE code_verifier is 43-128 characters.
+// RFC 7636 §4.1: a PKCE code_verifier is 43-128 characters from the unreserved set
+// [A-Za-z0-9-._~]. ASCII-only, so byte length and character length are provably identical.
 const MIN_CODE_VERIFIER_LENGTH = 43;
 const MAX_CODE_VERIFIER_LENGTH = 128;
+const CODE_VERIFIER_RE = new RegExp(
+  `^[A-Za-z0-9._~-]{${MIN_CODE_VERIFIER_LENGTH},${MAX_CODE_VERIFIER_LENGTH}}$`
+);
 
 function parseTokenRequest(body: unknown): ExchangeTokenRequest | ValidationIssue[] {
   const issues: ValidationIssue[] = [];
@@ -27,11 +31,13 @@ function parseTokenRequest(body: unknown): ExchangeTokenRequest | ValidationIssu
     maxLength: MAX_DEVICE_NAME_LENGTH,
   });
   if (b.provider === 'apple') {
-    // Bounded before consumeAuthCode ever runs, so a malformed verifier can't burn the code.
-    requireNonEmptyString(b.codeVerifier, '/codeVerifier', issues, {
-      minLength: MIN_CODE_VERIFIER_LENGTH,
-      maxLength: MAX_CODE_VERIFIER_LENGTH,
-    });
+    // Bounded (length + charset) before consumeAuthCode ever runs, so malformed input can't burn the code.
+    if (typeof b.codeVerifier !== 'string' || !CODE_VERIFIER_RE.test(b.codeVerifier)) {
+      issues.push({
+        pointer: '/codeVerifier',
+        detail: `must be ${MIN_CODE_VERIFIER_LENGTH}-${MAX_CODE_VERIFIER_LENGTH} characters from the unreserved set [A-Za-z0-9-._~]`,
+      });
+    }
   }
   if (issues.length > 0) {
     return issues;
