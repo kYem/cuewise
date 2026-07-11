@@ -90,10 +90,13 @@ async function exchangeCode(code: string, codeVerifier?: string) {
 }
 
 async function mintCode(sub: string): Promise<string> {
-  const state = await fetchStartState('cuewise://auth');
+  const returnUri = 'cuewise://auth';
+  const state = await fetchStartState(returnUri);
   const idToken = await idp.sign({ iss: APPLE_ISS, aud: 'apple-client', sub });
   const callbackRes = await postCallback(idToken, state);
+  expect(callbackRes.status).toBe(302);
   const location = requireHeader(callbackRes, 'Location');
+  expect(location.startsWith(`${returnUri}?`)).toBe(true);
   const code = new URL(location).searchParams.get('code');
   if (code === null) {
     throw new Error('Expected a code query param on the /v1/auth/apple/callback redirect');
@@ -141,6 +144,14 @@ describe('GET /v1/auth/apple/start', () => {
 
   it('rejects a missing code_challenge', async () => {
     const res = await getStart('cuewise://auth', null);
+    expect(res.status).toBe(400);
+    const body = await res.json<{ code: string; errors: { pointer?: string }[] }>();
+    expect(body.code).toBe('invalid_request');
+    expect(body.errors.some((e) => e.pointer === '/code_challenge')).toBe(true);
+  });
+
+  it('rejects a code_challenge one character longer than the S256 length', async () => {
+    const res = await getStart('cuewise://auth', `${CODE_CHALLENGE}A`);
     expect(res.status).toBe(400);
     const body = await res.json<{ code: string; errors: { pointer?: string }[] }>();
     expect(body.code).toBe('invalid_request');
@@ -225,6 +236,28 @@ describe('POST /v1/auth/apple/callback', () => {
     });
 
     const res = await appWithBadJwksResponse.request(
+      '/v1/auth/apple/callback',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ id_token: 'whatever', state }).toString(),
+      },
+      testEnv()
+    );
+    expect(res.status).toBe(500);
+    const body = await res.json<{ code: string }>();
+    expect(body.code).toBe('internal');
+  });
+
+  it('returns 500 internal (not invalid_token) when no JWKS key matches a rotated key', async () => {
+    const state = await fetchStartState('cuewise://auth');
+    const appWithNoMatchingKey = createApp({
+      appleVerifier: async () => {
+        throw new errors.JWKSNoMatchingKey();
+      },
+    });
+
+    const res = await appWithNoMatchingKey.request(
       '/v1/auth/apple/callback',
       {
         method: 'POST',

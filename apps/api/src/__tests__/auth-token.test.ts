@@ -13,7 +13,9 @@ beforeAll(async () => {
 });
 
 function testEnv(): typeof env {
-  return { ...env, GOOGLE_CLIENT_IDS: 'test-client' };
+  // Extra whitespace around entries covers GOOGLE_CLIENT_IDS trimming; 'test-client' is
+  // still the first (untrimmed) entry, so this must keep matching it.
+  return { ...env, GOOGLE_CLIENT_IDS: 'test-client, other-client' };
 }
 
 function appWithIdp() {
@@ -90,11 +92,43 @@ describe('POST /v1/auth/token (google)', () => {
     expect(body.code).toBe('internal');
   });
 
+  it('returns 500 internal (not invalid_token) when no JWKS key matches a rotated key', async () => {
+    const appInstance = createApp({
+      googleVerifier: async () => {
+        throw new errors.JWKSNoMatchingKey();
+      },
+    });
+    const res = await appInstance.request(
+      '/v1/auth/token',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider: 'google', credential: 'whatever', deviceName: 'Chrome' }),
+      },
+      testEnv()
+    );
+    expect(res.status).toBe(500);
+    const body = await res.json<{ code: string }>();
+    expect(body.code).toBe('internal');
+  });
+
   it('rejects a malformed body as invalid_request', async () => {
     const res = await postToken({ provider: 'google' });
     expect(res.status).toBe(400);
     const body = await res.json<{ code: string }>();
     expect(body.code).toBe('invalid_request');
+  });
+
+  it('rejects an over-length deviceName as invalid_request', async () => {
+    const res = await postToken({
+      provider: 'google',
+      credential: 'whatever',
+      deviceName: 'x'.repeat(101),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json<{ code: string; errors: { pointer?: string }[] }>();
+    expect(body.code).toBe('invalid_request');
+    expect(body.errors.some((e) => e.pointer === '/deviceName')).toBe(true);
   });
 
   it('honors the dev provider only when DEV_FAKE_AUTH=1', async () => {
@@ -111,6 +145,28 @@ describe('POST /v1/auth/token (google)', () => {
       DEV_FAKE_AUTH: '1',
     });
     expect(on.status).toBe(200);
+  });
+});
+
+describe('POST /v1/auth/token (google) email verification', () => {
+  it('does not store an email when the token email_verified claim is false', async () => {
+    const idToken = await idp.sign({
+      iss: GOOGLE_ISS,
+      aud: 'test-client',
+      sub: 'g-sub-unverified',
+      email: 'unverified@example.com',
+      emailVerified: false,
+    });
+    const res = await postToken({ provider: 'google', credential: idToken, deviceName: 'Chrome' });
+    expect(res.status).toBe(200);
+
+    const row = await env.DB.prepare('SELECT email FROM identities WHERE provider_sub = ?')
+      .bind('g-sub-unverified')
+      .first<{ email: string | null }>();
+    if (row === null) {
+      throw new Error('expected an identities row for g-sub-unverified');
+    }
+    expect(row.email).toBeNull();
   });
 });
 

@@ -123,4 +123,35 @@ describe('D1SyncStore auth', () => {
     }
     expect(row.count).toBe(1);
   });
+
+  it('refreshes identities.email and users.email when a later sign-in has a new email', async () => {
+    const { store } = storeAt(1_000);
+    const identity = {
+      provider: 'google' as const,
+      providerSub: 'refresh-sub',
+      email: 'old@example.com',
+    };
+    const userId = await store.findOrCreateUser(identity);
+
+    const secondUserId = await store.findOrCreateUser({ ...identity, email: 'new@example.com' });
+    expect(secondUserId).toBe(userId);
+
+    const identityRow = await env.DB.prepare(
+      'SELECT email FROM identities WHERE provider = ? AND provider_sub = ?'
+    )
+      .bind('google', 'refresh-sub')
+      .first<{ email: string | null }>();
+    if (identityRow === null) {
+      throw new Error('expected an identities row for refresh-sub');
+    }
+    expect(identityRow.email).toBe('new@example.com');
+
+    const userRow = await env.DB.prepare('SELECT email FROM users WHERE id = ?')
+      .bind(userId)
+      .first<{ email: string | null }>();
+    if (userRow === null) {
+      throw new Error('expected a users row for refresh-sub');
+    }
+    expect(userRow.email).toBe('new@example.com');
+  });
 });

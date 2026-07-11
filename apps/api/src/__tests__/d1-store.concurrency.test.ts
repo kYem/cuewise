@@ -48,7 +48,12 @@ describe('D1SyncStore concurrency', () => {
       Array.from({ length: 10 }, () => store.bumpRateWindow(tokenHash, 60_000))
     );
 
-    const counts = results.map((r) => r.count);
+    const counts = results.map((r) => {
+      if (r === null) {
+        throw new Error('expected bumpRateWindow to find the freshly created token');
+      }
+      return r.count;
+    });
     expect(counts).toHaveLength(10);
     expect(new Set(counts).size).toBe(10);
     expect(Math.max(...counts)).toBe(10);

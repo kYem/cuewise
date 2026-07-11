@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import app from '../index';
+import { MAX_COLLECTION_LENGTH } from '../validate-changes';
 import {
   getChanges,
   postChanges,
@@ -82,6 +83,30 @@ describe('GET /v1/changes cursor validation', () => {
     const body = await res.json<{ code: string }>();
     expect(body.code).toBe('invalid_cursor');
   });
+
+  it('rejects an absurdly long numeric since with 400 invalid_cursor', async () => {
+    const { token } = await signedInToken();
+    const res = await getChanges(app, token, '3'.repeat(310));
+    expect(res.status).toBe(400);
+    const body = await res.json<{ code: string }>();
+    expect(body.code).toBe('invalid_cursor');
+  });
+
+  it('rejects a since beyond Number.MAX_SAFE_INTEGER (2^53+1) with 400 invalid_cursor', async () => {
+    const { token } = await signedInToken();
+    const res = await getChanges(app, token, '9007199254740993');
+    expect(res.status).toBe(400);
+    const body = await res.json<{ code: string }>();
+    expect(body.code).toBe('invalid_cursor');
+  });
+
+  it('accepts since=0 and a normal cursor', async () => {
+    const { token } = await signedInToken();
+    const zero = await getChanges(app, token, '0');
+    expect(zero.status).toBe(200);
+    const normal = await getChanges(app, token, '42');
+    expect(normal.status).toBe(200);
+  });
 });
 
 describe('POST /v1/changes batch cap', () => {
@@ -113,6 +138,16 @@ describe('POST /v1/changes record validation', () => {
     expect(body.errors[0]?.pointer).toBe('/records/0/entityId');
     expect(body.errors[1]?.index).toBe(1);
     expect(body.errors[1]?.pointer).toBe('/records/1/ciphertext');
+  });
+
+  it('rejects an over-length collection with 422 invalid_record', async () => {
+    const { token } = await signedInToken();
+    const oversizedCollection = record({ collection: 'x'.repeat(MAX_COLLECTION_LENGTH + 1) });
+    const res = await postChanges(app, token, { records: [oversizedCollection] });
+    expect(res.status).toBe(422);
+    const body = await res.json<{ code: string; errors: Array<{ pointer: string }> }>();
+    expect(body.code).toBe('invalid_record');
+    expect(body.errors.some((e) => e.pointer === '/records/0/collection')).toBe(true);
   });
 
   it('rejects unparseable JSON body with 400 invalid_request', async () => {

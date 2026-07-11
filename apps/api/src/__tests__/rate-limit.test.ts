@@ -1,5 +1,6 @@
 import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
+import { sha256Hex } from '../crypto-utils';
 import { D1SyncStore } from '../d1-store';
 import { createApp } from '../index';
 import { getChanges, signedInToken } from './__fixtures__/api-test-helpers.fixtures';
@@ -57,5 +58,38 @@ describe('rate limiting on /v1/changes', () => {
     tick(61_000);
     const res = await getChanges(app, token);
     expect(res.status).toBe(200);
+  });
+
+  it('reports the exact retryAfter derived from the store clock, not wall-clock time', async () => {
+    const { store, tick } = clockedStore(100_000);
+    const app = createApp({ storeFactory: () => store });
+    const { token } = await signedInToken(store);
+
+    for (let i = 1; i <= 60; i++) {
+      await getChanges(app, token);
+    }
+    // Window opened at t=100_000 with a 60s window; blocking 30s later must report 30s left.
+    tick(30_000);
+    const blocked = await getChanges(app, token);
+    expect(blocked.status).toBe(429);
+    expect(blocked.headers.get('Retry-After')).toBe('30');
+    const body = await blocked.json<{ retryAfter: number }>();
+    expect(body.retryAfter).toBe(30);
+  });
+});
+
+describe('bumpRateWindow', () => {
+  it('returns null when the token row no longer exists', async () => {
+    const store = new D1SyncStore(env.DB);
+    const userId = await store.findOrCreateUser({
+      provider: 'dev',
+      providerSub: 'vanished-token',
+    });
+    const token = await store.createSession(userId, 'device');
+    const tokenHash = await sha256Hex(token);
+    await env.DB.prepare('DELETE FROM tokens WHERE token_hash = ?').bind(tokenHash).run();
+
+    const result = await store.bumpRateWindow(tokenHash, 60_000);
+    expect(result).toBeNull();
   });
 });

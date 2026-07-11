@@ -1,10 +1,17 @@
 import { createLocalJWKSet, exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
 import type { Env } from '../../env';
 import type { IdTokenVerifier, VerifiedIdentity } from '../../verifiers';
-import { TokenVerificationError } from '../../verifiers';
+import { isEmailVerified, TokenVerificationError } from '../../verifiers';
 
 export interface TestIdp {
-  sign(claims: { iss: string; aud: string; sub: string; email?: string }): Promise<string>;
+  sign(claims: {
+    iss: string;
+    aud: string;
+    sub: string;
+    email?: string;
+    // Omit to mimic a token with no email_verified claim at all.
+    emailVerified?: boolean | string;
+  }): Promise<string>;
   verifier(expected: {
     issuer: string;
     // Defaults to GOOGLE_CLIENT_IDS; pass to verify against a different audience (e.g. Apple).
@@ -17,7 +24,7 @@ export async function createTestIdp(): Promise<TestIdp> {
   const jwks = createLocalJWKSet({ keys: [{ ...(await exportJWK(publicKey)), alg: 'RS256' }] });
   return {
     async sign(claims) {
-      return new SignJWT({ email: claims.email })
+      return new SignJWT({ email: claims.email, email_verified: claims.emailVerified })
         .setProtectedHeader({ alg: 'RS256' })
         .setIssuer(claims.iss)
         .setAudience(claims.aud)
@@ -38,7 +45,10 @@ export async function createTestIdp(): Promise<TestIdp> {
         }
         return {
           providerSub: payload.sub,
-          email: typeof payload.email === 'string' ? payload.email : undefined,
+          email:
+            typeof payload.email === 'string' && isEmailVerified(payload)
+              ? payload.email
+              : undefined,
         };
       };
     },
