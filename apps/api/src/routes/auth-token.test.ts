@@ -159,6 +159,26 @@ describe('POST /v1/auth/token (google)', () => {
 });
 
 describe('POST /v1/auth/token (google) email verification', () => {
+  it('stores the email when the token email_verified claim is true', async () => {
+    const idToken = await idp.sign({
+      iss: GOOGLE_ISS,
+      aud: 'test-client',
+      sub: 'g-sub-verified',
+      email: 'verified@example.com',
+      emailVerified: true,
+    });
+    const res = await postToken({ provider: 'google', credential: idToken, deviceName: 'Chrome' });
+    expect(res.status).toBe(200);
+
+    const row = await env.DB.prepare('SELECT email FROM identities WHERE provider_sub = ?')
+      .bind('g-sub-verified')
+      .first<{ email: string | null }>();
+    if (row === null) {
+      throw new Error('expected an identities row for g-sub-verified');
+    }
+    expect(row.email).toBe('verified@example.com');
+  });
+
   it('does not store an email when the token email_verified claim is false', async () => {
     const idToken = await idp.sign({
       iss: GOOGLE_ISS,

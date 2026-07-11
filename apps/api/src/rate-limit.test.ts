@@ -82,3 +82,26 @@ describe('bumpRateWindow', () => {
     expect(result).toBeNull();
   });
 });
+
+// requireSession's own lookupSession already 401s a deleted-token row before rateLimit ever
+// runs, so a real deleted row can't isolate rateLimit's null branch. A store stub that keeps
+// lookupSession working but forces bumpRateWindow to null drives that branch directly instead.
+class NullRateWindowStore extends D1SyncStore {
+  async bumpRateWindow(): Promise<{ count: number; resetInMs: number } | null> {
+    return null;
+  }
+}
+
+describe('rateLimit middleware null branch (HTTP-level)', () => {
+  it('returns 401 invalid_token, not a 500, when bumpRateWindow returns null', async () => {
+    const store = new NullRateWindowStore(env.DB);
+    const app = createApp({ storeFactory: () => store });
+    const { token } = await signedInToken(store);
+
+    const res = await getChanges(app, token);
+
+    expect(res.status).toBe(401);
+    const body = await res.json<{ code: string }>();
+    expect(body.code).toBe('invalid_token');
+  });
+});

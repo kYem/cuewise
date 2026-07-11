@@ -121,6 +121,31 @@ async function mintCode(sub: string): Promise<string> {
   return code;
 }
 
+/** Like `mintCode`, but with an email + email_verified claim (Apple sends the latter as a string). */
+async function mintCodeWithEmail(
+  sub: string,
+  email: string,
+  emailVerified: boolean | string
+): Promise<string> {
+  const returnUri = 'cuewise://auth';
+  const state = await fetchStartState(returnUri);
+  const idToken = await idp.sign({
+    iss: APPLE_ISS,
+    aud: 'apple-client',
+    sub,
+    email,
+    emailVerified,
+    nonce: decodeState(state).nonce,
+  });
+  const callbackRes = await postCallback(idToken, state);
+  const location = requireHeader(callbackRes, 'Location');
+  const code = new URL(location).searchParams.get('code');
+  if (code === null) {
+    throw new Error('Expected a code query param on the /v1/auth/apple/callback redirect');
+  }
+  return code;
+}
+
 describe('GET /v1/auth/apple/start', () => {
   it('redirects to Apple authorize with the expected query params and state', async () => {
     const res = await getStart('cuewise://auth');
@@ -398,6 +423,38 @@ describe('POST /v1/auth/token PKCE binding (apple)', () => {
     const body = await res.json<{ code: string; errors: { pointer?: string }[] }>();
     expect(body.code).toBe('invalid_request');
     expect(body.errors.some((e) => e.pointer === '/codeVerifier')).toBe(true);
+  });
+});
+
+describe('POST /v1/auth/token (apple) email verification', () => {
+  it('stores the email when email_verified is the string "true"', async () => {
+    const code = await mintCodeWithEmail('apple-sub-verified', 'verified@example.com', 'true');
+
+    const res = await exchangeCode(code, CODE_VERIFIER);
+    expect(res.status).toBe(200);
+
+    const row = await env.DB.prepare('SELECT email FROM identities WHERE provider_sub = ?')
+      .bind('apple-sub-verified')
+      .first<{ email: string | null }>();
+    if (row === null) {
+      throw new Error('expected an identities row for apple-sub-verified');
+    }
+    expect(row.email).toBe('verified@example.com');
+  });
+
+  it('does not store the email when email_verified is the string "false"', async () => {
+    const code = await mintCodeWithEmail('apple-sub-unverified', 'unverified@example.com', 'false');
+
+    const res = await exchangeCode(code, CODE_VERIFIER);
+    expect(res.status).toBe(200);
+
+    const row = await env.DB.prepare('SELECT email FROM identities WHERE provider_sub = ?')
+      .bind('apple-sub-unverified')
+      .first<{ email: string | null }>();
+    if (row === null) {
+      throw new Error('expected an identities row for apple-sub-unverified');
+    }
+    expect(row.email).toBeNull();
   });
 });
 

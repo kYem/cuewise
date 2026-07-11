@@ -1,20 +1,26 @@
 import { env } from 'cloudflare:test';
+import type { Hono } from 'hono';
 import { describe, expect, it } from 'vitest';
 import {
+  clockedStore,
   getChanges,
   postChanges,
   record,
   signedInToken,
 } from '../__fixtures__/api-test-helpers.fixtures';
+import type { AuthVars } from '../auth-middleware';
 import { D1SyncStore } from '../d1-store';
-import app from '../index';
+import type { Env } from '../env';
+import app, { createApp } from '../index';
 
-async function getExport(token: string) {
-  return app.request('/v1/export', { headers: { Authorization: `Bearer ${token}` } }, env);
+type App = Hono<{ Bindings: Env } & AuthVars>;
+
+async function getExport(token: string, appInstance: App = app) {
+  return appInstance.request('/v1/export', { headers: { Authorization: `Bearer ${token}` } }, env);
 }
 
-async function deleteAccount(token: string) {
-  return app.request(
+async function deleteAccount(token: string, appInstance: App = app) {
+  return appInstance.request(
     '/v1/account',
     { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } },
     env
@@ -63,4 +69,62 @@ describe('DELETE /v1/account', () => {
     expect(freshBody.records).toEqual([]);
     expect(freshBody.cursor).toBe(0);
   });
+});
+
+describe('GET /v1/export auth', () => {
+  it('returns 401 unauthorized with no Authorization header', async () => {
+    const res = await app.request('/v1/export', {}, env);
+    expect(res.status).toBe(401);
+    const body = await res.json<{ code: string }>();
+    expect(body.code).toBe('unauthorized');
+  });
+
+  it('returns 401 invalid_token with a garbage bearer token', async () => {
+    const res = await getExport('garbage');
+    expect(res.status).toBe(401);
+    const body = await res.json<{ code: string }>();
+    expect(body.code).toBe('invalid_token');
+  });
+});
+
+describe('DELETE /v1/account auth', () => {
+  it('returns 401 unauthorized with no Authorization header', async () => {
+    const res = await app.request('/v1/account', { method: 'DELETE' }, env);
+    expect(res.status).toBe(401);
+    const body = await res.json<{ code: string }>();
+    expect(body.code).toBe('unauthorized');
+  });
+
+  it('returns 401 invalid_token with a garbage bearer token', async () => {
+    const res = await deleteAccount('garbage');
+    expect(res.status).toBe(401);
+    const body = await res.json<{ code: string }>();
+    expect(body.code).toBe('invalid_token');
+  });
+});
+
+describe('rate limiting on GET /v1/export', () => {
+  it('blocks the 61st request in a window with 429 and Retry-After', async () => {
+    const { store } = clockedStore(1_000);
+    const rateLimitedApp = createApp({ storeFactory: () => store });
+    const { token } = await signedInToken(store);
+
+    let last: Response | undefined;
+    for (let i = 1; i <= 60; i++) {
+      last = await getExport(token, rateLimitedApp);
+    }
+    if (last === undefined) {
+      throw new Error('expected a response from the loop');
+    }
+    expect(last.status).toBe(200);
+
+    const blocked = await getExport(token, rateLimitedApp);
+    expect(blocked.status).toBe(429);
+    expect(blocked.headers.get('Retry-After')).not.toBeNull();
+    const body = await blocked.json<{ code: string }>();
+    expect(body.code).toBe('rate_limited');
+  });
+
+  // DELETE /v1/account shares this same perTokenRateLimit registration (index.ts); skipped
+  // here since deleting the account mid-loop would revoke the token and confound the count.
 });
