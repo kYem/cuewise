@@ -111,7 +111,9 @@ jobs:
   rust:
     name: Rust (macOS app)
     needs: changes
-    if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.native == 'true' }}
+    # Fail OPEN: if the filter step itself errored, run rather than skip — a
+    # skipped required check satisfies branch protection just like a passing one.
+    if: ${{ github.event_name != 'pull_request' || needs.changes.result == 'failure' || needs.changes.outputs.native == 'true' }}
     runs-on: macos-latest
     permissions:
       contents: read
@@ -168,7 +170,8 @@ jobs:
   e2e:
     name: E2E (macOS app)
     needs: changes
-    if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.macos_app == 'true' }}
+    # Fail OPEN: see the comment on the `rust` job's identical gate above.
+    if: ${{ github.event_name != 'pull_request' || needs.changes.result == 'failure' || needs.changes.outputs.macos_app == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
