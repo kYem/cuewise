@@ -1,6 +1,7 @@
 import { env } from 'cloudflare:test';
 import type { Hono } from 'hono';
 import type { AuthVars } from '../auth-middleware';
+import type { RawSessionToken } from '../crypto-utils';
 import { D1SyncStore } from '../d1-store';
 import type { Env } from '../env';
 import type { PushRecord } from '../store';
@@ -9,7 +10,7 @@ type App = Hono<{ Bindings: Env } & AuthVars>;
 
 export async function signedInToken(
   store: D1SyncStore = new D1SyncStore(env.DB)
-): Promise<{ token: string; userId: string; providerSub: string }> {
+): Promise<{ token: RawSessionToken; userId: string; providerSub: string }> {
   const providerSub = `u-${crypto.randomUUID()}`;
   const userId = await store.findOrCreateUser({ provider: 'dev', providerSub });
   const token = await store.createSession(userId, 'test-device');

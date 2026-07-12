@@ -3,10 +3,30 @@ import { spyOnLoggerError, spyOnLoggerWarn } from './__fixtures__/logger.fixture
 import {
   base64UrlDecodeString,
   base64UrlEncodeString,
+  bearerToken,
   sha256Base64Url,
   signState,
   verifyState,
 } from './crypto-utils';
+
+describe('bearerToken', () => {
+  const cases: Array<[string, string | undefined, string | null]> = [
+    ['an absent header', undefined, null],
+    ['an empty header', '', null],
+    ['a non-Bearer scheme', 'Basic abc123', null],
+    ['a lowercase bearer scheme', 'bearer abc123', null],
+    ['a bare "Bearer" with no trailing space', 'Bearer', null],
+    ['an empty token ("Bearer ")', 'Bearer ', null],
+    ['a whitespace-only token', 'Bearer   ', null],
+    ['a valid token', 'Bearer abc123', 'abc123'],
+  ];
+
+  for (const [name, header, expected] of cases) {
+    it(`returns ${expected === null ? 'null' : `the token`} for ${name}`, () => {
+      expect(bearerToken(header)).toBe(expected);
+    });
+  }
+});
 
 describe('sha256Base64Url', () => {
   it('matches the RFC 7636 Appendix B S256 test vector', async () => {
