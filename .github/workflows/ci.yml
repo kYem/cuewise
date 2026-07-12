@@ -119,6 +119,13 @@ jobs:
       run:
         working-directory: apps/macos/src-tauri
     steps:
+      - name: Harden runner
+        # macOS GitHub-hosted runners only get harden-runner's audit (monitor-only)
+        # mode — no eBPF-based egress blocking exists there, so this can't `block`.
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2
+        with:
+          egress-policy: audit
+
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
@@ -167,11 +174,24 @@ jobs:
       contents: read
     steps:
       - name: Harden runner
-        # Audit only: Playwright's browser download + apt install-deps hit enough
-        # endpoints that a correct allowlist isn't known yet; tighten once traced.
+        # Endpoints traced from real CI run 29178832429. csp.spec.ts/smoke.spec.ts
+        # now stub every off-origin request, so only job infra remains below.
         uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2
         with:
-          egress-policy: audit
+          egress-policy: block
+          disable-sudo: false
+          allowed-endpoints: >
+            github.com:443
+            registry.npmjs.org:443
+            cdn.playwright.dev:443
+            playwright.download.prss.microsoft.com:443
+            packages.microsoft.com:443
+            dl.google.com:443
+            azure.archive.ubuntu.com:80
+            esm.ubuntu.com:443
+            motd.ubuntu.com:443
+            results-receiver.actions.githubusercontent.com:443
+            *.blob.core.windows.net:443
 
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
