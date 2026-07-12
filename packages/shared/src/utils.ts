@@ -50,10 +50,14 @@ import type {
 import { EXPORT_FORMAT_VERSION } from './types';
 
 /**
- * Generate a unique ID
+ * Time-sortable `timestamp-suffix` id. Suffix uses getRandomValues (CSPRNG) —
+ * unlike crypto.randomUUID(), it also works from insecure contexts.
  */
 export function generateId(): string {
-  return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  const suffix = Array.from(crypto.getRandomValues(new Uint8Array(9)), (byte) =>
+    (byte % 36).toString(36)
+  ).join('');
+  return `${Date.now()}-${suffix}`;
 }
 
 /** Dedupe (dropping falsy values) and locale-sort a list of strings. */
