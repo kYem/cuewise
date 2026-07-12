@@ -19,14 +19,25 @@ export const MAX_CHANGES_PAGE_SIZE = 500;
 // abuse hits it; checked conservatively (all pushed rows treated as new).
 export const MAX_RECORDS_PER_USER = 100_000;
 
+export interface D1SyncStoreLimits {
+  maxRecordsPerUser?: number;
+  changesPageSize?: number;
+}
+
 export class D1SyncStore implements SyncStore {
+  private maxRecordsPerUser: number;
+  private changesPageSize: number;
+
+  // Limits are an options object (not positional) so the two same-typed numbers can't be swapped;
+  // overridable so tests exercise the caps without materializing 100k rows / 500-row pages.
   constructor(
     private db: D1Database,
     private now: () => number = Date.now,
-    // Overridable so tests can exercise the caps without materializing 100k rows / 500-row pages.
-    private maxRecordsPerUser: number = MAX_RECORDS_PER_USER,
-    private changesPageSize: number = MAX_CHANGES_PAGE_SIZE
-  ) {}
+    limits: D1SyncStoreLimits = {}
+  ) {
+    this.maxRecordsPerUser = limits.maxRecordsPerUser ?? MAX_RECORDS_PER_USER;
+    this.changesPageSize = limits.changesPageSize ?? MAX_CHANGES_PAGE_SIZE;
+  }
 
   private async selectIdentityUserId(identity: Identity): Promise<string | null> {
     const row = await this.db

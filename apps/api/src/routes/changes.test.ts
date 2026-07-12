@@ -55,7 +55,10 @@ describe('POST /v1/changes then GET /v1/changes', () => {
 describe('POST /v1/changes storage quota', () => {
   it('returns 422 storage_quota_exceeded when a push would exceed the per-user record cap', async () => {
     // Inject a tiny cap (3) so the wiring is exercisable without materializing 100k rows.
-    const cappedApp = createApp({ storeFactory: (db) => new D1SyncStore(db, Date.now, 3, 2) });
+    const cappedApp = createApp({
+      storeFactory: (db) =>
+        new D1SyncStore(db, Date.now, { maxRecordsPerUser: 3, changesPageSize: 2 }),
+    });
     const { token } = await signedInToken();
     const ok = await postChanges(cappedApp, token, {
       records: [record({ entityId: 'a' }), record({ entityId: 'b' })],

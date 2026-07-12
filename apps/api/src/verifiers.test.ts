@@ -1,5 +1,12 @@
 import { env } from 'cloudflare:test';
-import { errors, type JWTVerifyGetKey } from 'jose';
+import {
+  createLocalJWKSet,
+  errors,
+  exportJWK,
+  generateKeyPair,
+  type JWTVerifyGetKey,
+  SignJWT,
+} from 'jose';
 import { describe, expect, it } from 'vitest';
 import { spyOnLoggerError, spyOnLoggerWarn } from './__fixtures__/logger.fixtures';
 import {
@@ -95,6 +102,31 @@ describe('createIdTokenVerifier audience fail-closed', () => {
   });
 });
 
+describe('createIdTokenVerifier algorithm pin', () => {
+  it('rejects a non-RS256 token even when the JWKS holds its matching key', async () => {
+    // The ES256 key IS resolvable here, so only the algorithms:['RS256'] pin can reject it —
+    // isolating the pin from jose's key-type check.
+    const { publicKey, privateKey } = await generateKeyPair('ES256');
+    const jwks = createLocalJWKSet({ keys: [{ ...(await exportJWK(publicKey)), alg: 'ES256' }] });
+    const verifier = createIdTokenVerifier({
+      jwks,
+      issuer: 'https://issuer.example',
+      audience: () => 'client-1',
+      label: 'Test',
+    });
+    const token = await new SignJWT({})
+      .setProtectedHeader({ alg: 'ES256' })
+      .setIssuer('https://issuer.example')
+      .setAudience('client-1')
+      .setSubject('sub-1')
+      .setIssuedAt()
+      .setExpirationTime('5m')
+      .sign(privateKey);
+
+    await expect(verifier(token, env)).rejects.toBeInstanceOf(errors.JOSEAlgNotAllowed);
+  });
+});
+
 describe('verifyOrProblem config-fault handling', () => {
   it('answers 500 internal and logs an error when the verifier throws ConfigError', async () => {
     const errorSpy = spyOnLoggerError();
@@ -153,7 +185,7 @@ describe('verifyOrProblem token-fault logging', () => {
 
   const routineCases: Array<[string, unknown]> = [
     ['JWTExpired', new errors.JWTExpired('token expired', {})],
-    // A claim failure with no specific claim (e.g. nbf clock skew) stays in the routine bucket.
+    // A JWTClaimValidationFailed with no claim tag stays routine; only aud/iss surface a warn.
     [
       'JWTClaimValidationFailed (unspecified claim)',
       new errors.JWTClaimValidationFailed('bad claim', {}),

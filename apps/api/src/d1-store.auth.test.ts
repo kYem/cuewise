@@ -1,6 +1,7 @@
 import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
 import { clockedStore } from './__fixtures__/api-test-helpers.fixtures';
+import { spyOnLoggerError } from './__fixtures__/logger.fixtures';
 import { SESSION_TTL_MS } from './d1-store';
 
 describe('D1SyncStore auth', () => {
@@ -84,11 +85,14 @@ describe('D1SyncStore auth', () => {
     expect(row.count).toBe(0);
   });
 
-  it('treats a legacy row with no stored code_challenge as unredeemable', async () => {
+  it('treats a legacy row with no stored code_challenge as unredeemable, and logs the invariant break', async () => {
+    const errorSpy = spyOnLoggerError();
     const { store } = clockedStore(1_000);
     const code = await store.mintAuthCode({ provider: 'apple', providerSub: 'as3' }, 'irrelevant');
     await env.DB.prepare('UPDATE auth_codes SET code_challenge = NULL').run();
     expect(await store.consumeAuthCode(code)).toBeNull();
+    // Fail-closed AND loud: the error log is the whole point (else Apple sign-in 401s silently).
+    expect(errorSpy).toHaveBeenCalledTimes(1);
   });
 
   it('rejects a session lookup exactly at its expiry boundary (expires_at > ? is strict)', async () => {

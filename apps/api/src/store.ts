@@ -20,7 +20,12 @@ export interface AuthCodePayload {
 }
 
 /** Thrown by `applyChanges` when a push would take the user past their per-user record cap. */
-export class StorageQuotaExceededError extends Error {}
+export class StorageQuotaExceededError extends Error {
+  constructor(message?: string) {
+    super(message);
+    this.name = 'StorageQuotaExceededError';
+  }
+}
 
 export interface SyncStore {
   findOrCreateUser(identity: Identity): Promise<string>;

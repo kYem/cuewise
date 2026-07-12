@@ -8,14 +8,15 @@ export interface ApiErrorOptions {
   cause?: unknown;
 }
 
-/** Reads the numeric (seconds) Retry-After header; ignores the HTTP-date form (the server sends seconds). */
+/** Reads a positive numeric (seconds) Retry-After header; ignores the HTTP-date form and non-positive values. */
 function retryAfterFromHeader(res: Response): number | undefined {
   const header = res.headers.get('Retry-After');
   if (header === null) {
     return undefined;
   }
   const seconds = Number(header);
-  if (!Number.isFinite(seconds)) {
+  // Non-positive (empty → 0, negative) would collapse backoff into a tight retry loop.
+  if (!Number.isFinite(seconds) || seconds <= 0) {
     return undefined;
   }
   return seconds;
@@ -47,6 +48,8 @@ export class ApiError extends Error {
       // `null` throws here and the caller would mis-report it as a retryable network_error.
       if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
         body = parsed as Partial<ProblemBody>;
+      } else {
+        logger.warn(`ApiError.fromResponse: non-object problem body (status ${res.status})`);
       }
     } catch {
       logger.warn(`ApiError.fromResponse: failed to parse problem body (status ${res.status})`);

@@ -1,7 +1,7 @@
 import { problem } from './problem-details';
 
-// ~MAX_BATCH_SIZE x MAX_CIPHERTEXT_BYTES plus overhead. Rejecting on Content-Length stops an
-// oversized body from being buffered into memory (OOMing the isolate) before batch validation.
+// ~MAX_BATCH_SIZE x MAX_CIPHERTEXT_BYTES plus overhead. Best-effort early reject of an honestly
+// declared oversized body; a chunked/under-declared one slips past to the platform body limit.
 export const MAX_REQUEST_BODY_BYTES = 8 * 1024 * 1024;
 
 interface JsonRequestContext {

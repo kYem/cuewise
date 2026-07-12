@@ -10,7 +10,7 @@ async function newUser(store: D1SyncStore, providerSub: string): Promise<string>
 
 /** A store with tiny caps (page size 2, per-user cap 3) so the bounds are exercisable in-test. */
 function cappedStore(): D1SyncStore {
-  return new D1SyncStore(env.DB, Date.now, 3, 2);
+  return new D1SyncStore(env.DB, Date.now, { maxRecordsPerUser: 3, changesPageSize: 2 });
 }
 
 describe('D1SyncStore records', () => {
@@ -109,6 +109,15 @@ describe('D1SyncStore records', () => {
     ]);
     const { records } = await store.exportUser(userId);
     expect(records.map((r) => r.seq)).toEqual([1, 2, 3]);
+  });
+
+  it('accepts a push that lands exactly on the per-user cap', async () => {
+    const store = cappedStore();
+    const userId = await newUser(store, 'u-quota-exact');
+    await store.applyChanges(userId, [record({ entityId: 'a' }), record({ entityId: 'b' })]);
+    // 2 existing + 1 = 3 == cap: must succeed (guard is `> cap`, not `>= cap`).
+    const cursor = await store.applyChanges(userId, [record({ entityId: 'c' })]);
+    expect(cursor).toBe(3);
   });
 
   it('rejects a push that would exceed the per-user record cap with StorageQuotaExceededError', async () => {

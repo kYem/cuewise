@@ -152,9 +152,8 @@ async function mintCodeWithEmail(
 
 describe('POST /v1/auth/apple/callback fails closed on an empty APPLE_CLIENT_ID', () => {
   it('answers 500 rather than accepting a token minted for a different Apple client', async () => {
-    // Signing key provisioned but APPLE_CLIENT_ID left as the committed empty default. An empty
-    // audience would make jose skip the aud check (fail-open); the verifier must reject it (500)
-    // instead of minting a code for a token whose aud is some other relying party.
+    // APPLE_CLIENT_ID left at the empty default: an empty audience makes jose skip the aud check
+    // (fail-open), so the verifier must reject with 500, not mint a code for another client's token.
     const errorSpy = spyOnLoggerError();
     const misconfiguredEnv = { ...testEnv(), APPLE_CLIENT_ID: '' };
     const app = appWithIdp();

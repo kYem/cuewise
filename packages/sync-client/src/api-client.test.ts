@@ -256,6 +256,25 @@ describe('ApiClient', () => {
     expect(sleep).toHaveBeenCalledWith(60_000);
   });
 
+  it('ignores a non-positive Retry-After header and falls back to exponential backoff', async () => {
+    const { fetchFn } = stubFetch([
+      { status: 429, rawBody: 'slow down', headers: { 'Retry-After': '-5' } },
+      { status: 200, body: { records: [], cursor: 1 } },
+    ]);
+    const sleep = vi.fn().mockResolvedValue(undefined);
+    const client = new ApiClient({
+      baseUrl: BASE_URL,
+      getToken: async () => TOKEN,
+      fetchFn,
+      sleep,
+    });
+
+    await client.getChanges(0);
+
+    // -5 must not become setTimeout(-5000)→immediate; it falls back to 2**0 * 500.
+    expect(sleep).toHaveBeenCalledWith(500);
+  });
+
   it('preserves the original thrown error as ApiError.cause on a network failure', async () => {
     const { fetchFn } = stubFetch([{ reject: true }]);
     const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });

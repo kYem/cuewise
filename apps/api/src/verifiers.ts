@@ -16,7 +16,12 @@ export type IdTokenVerifier = (idToken: string, env: Env) => Promise<VerifiedIde
 export class TokenVerificationError extends Error {}
 
 /** A required env var (e.g. an audience client-id) is empty — a server misconfig, not a bad token. */
-export class ConfigError extends Error {}
+export class ConfigError extends Error {
+  constructor(message?: string) {
+    super(message);
+    this.name = 'ConfigError';
+  }
+}
 
 const TOKEN_FAULT_CLASSES = [
   errors.JWTExpired,
