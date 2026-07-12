@@ -3,9 +3,14 @@ import {
   countInvokes,
   createLocalStorageStub,
   ENABLED_KEY,
+  emitPoorFrames,
   emitSampleFrame,
   emitStopped,
+  focusModeStateMock,
   invokeMock,
+  NUDGE_AFTER_POOR_SAMPLES,
+  notifyMock,
+  pomodoroStateMock,
   resetPostureMocks,
   START_FAILED_ERROR,
   STOPPED_ERROR,
@@ -34,6 +39,8 @@ vi.mock('@cuewise/app', async () => {
         warning: fixtures.toastWarningMock,
       }),
     },
+    usePomodoroStore: { getState: () => fixtures.pomodoroStateMock },
+    useFocusModeStore: { getState: () => fixtures.focusModeStateMock },
   };
 });
 
@@ -128,5 +135,86 @@ describe('posture controller lifecycle', () => {
 
     expect(getPostureState().sample).toMatchObject({ status: 'good' });
     expect(getPostureState().error).toBeNull();
+  });
+});
+
+describe('smart pause (focus-session-aware nudging)', () => {
+  let localStorageStub: ReturnType<typeof createLocalStorageStub>;
+  // Each test starts on a fresh clock well past the previous test's nudge, so the
+  // module-level nudge cooldown can never bleed across tests.
+  let clock = Date.now();
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    clock += 10 * 60_000;
+    vi.setSystemTime(clock);
+    resetPostureMocks();
+    localStorageStub = createLocalStorageStub();
+    vi.stubGlobal('localStorage', localStorageStub);
+  });
+
+  afterEach(async () => {
+    stopPosture();
+    await vi.advanceTimersByTimeAsync(0);
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  async function startTrackingFake(): Promise<void> {
+    startPosture();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(getPostureState().tracking).toBe(true);
+  }
+
+  it('nudges after sustained poor posture when no focus session is running', async () => {
+    await startTrackingFake();
+
+    emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES);
+
+    expect(notifyMock).toHaveBeenCalledWith(expect.objectContaining({ id: 'posture-nudge' }));
+  });
+
+  it('never nudges while a work session is running', async () => {
+    pomodoroStateMock.status = 'running';
+    pomodoroStateMock.sessionType = 'work';
+    await startTrackingFake();
+
+    emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES * 3);
+
+    expect(notifyMock).not.toHaveBeenCalled();
+  });
+
+  it('a focus block is neutral — the streak restarts fresh after the session ends', async () => {
+    pomodoroStateMock.status = 'running';
+    pomodoroStateMock.sessionType = 'work';
+    await startTrackingFake();
+    emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES - 1);
+
+    pomodoroStateMock.status = 'idle';
+    emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES - 1);
+    // 28 poor frames total — a carried-over streak would have fired long ago.
+    expect(notifyMock).not.toHaveBeenCalled();
+
+    emitPoorFrames(1);
+    expect(notifyMock).toHaveBeenCalledWith(expect.objectContaining({ id: 'posture-nudge' }));
+  });
+
+  it('still nudges during a break — only focus time is protected', async () => {
+    pomodoroStateMock.status = 'running';
+    pomodoroStateMock.sessionType = 'break';
+    await startTrackingFake();
+
+    emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES);
+
+    expect(notifyMock).toHaveBeenCalledWith(expect.objectContaining({ id: 'posture-nudge' }));
+  });
+
+  it('never nudges while focus mode is active, even with the timer idle', async () => {
+    focusModeStateMock.isActive = true;
+    await startTrackingFake();
+
+    emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES * 3);
+
+    expect(notifyMock).not.toHaveBeenCalled();
   });
 });

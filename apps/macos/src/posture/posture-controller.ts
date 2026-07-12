@@ -1,4 +1,4 @@
-import { useToastStore } from '@cuewise/app';
+import { useFocusModeStore, usePomodoroStore, useToastStore } from '@cuewise/app';
 import { getNotifier, logger, type PostureSample, type PostureStatus } from '@cuewise/shared';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
@@ -311,9 +311,26 @@ export function setPostureNudges(enabled: boolean): void {
   setState({ nudgesEnabled: enabled });
 }
 
+// Smart Pause (ENG-39): a running work session or active focus mode means no
+// interruptions — we own the timer, so no heuristic detection is needed. Breaks
+// and a paused timer don't suppress.
+function isFocusSessionActive(): boolean {
+  const pomodoro = usePomodoroStore.getState();
+  if (pomodoro.status === 'running' && pomodoro.sessionType === 'work') {
+    return true;
+  }
+  return useFocusModeStore.getState().isActive;
+}
+
 // Fire a gentle nudge once poor posture has persisted, then hold off for a while.
 function maybeNudge(sample: PostureSample): void {
   if (!state.nudgesEnabled || sample.status !== 'poor') {
+    poorStreak = 0;
+    return;
+  }
+  if (isFocusSessionActive()) {
+    // Focus time is neutral: reset rather than freeze the streak, so a pre-focus
+    // lean can't fire a stale nudge the moment the session ends.
     poorStreak = 0;
     return;
   }

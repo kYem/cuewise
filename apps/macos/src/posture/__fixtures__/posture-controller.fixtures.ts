@@ -14,6 +14,10 @@ export const toastErrorMock = vi.fn();
 export const toastWarningMock = vi.fn();
 export const notifyMock = vi.fn();
 
+/** Mutable stand-ins for the pomodoro / focus-mode store snapshots (Smart Pause). */
+export const pomodoroStateMock = { status: 'idle', sessionType: 'work' };
+export const focusModeStateMock = { isActive: false };
+
 /** Stand-in for `@tauri-apps/api/event`'s `listen`: captures the handler, returns an unlisten spy. */
 export function listenMock(event: string, handler: EventHandler): Promise<() => void> {
   capturedHandlers.set(event, handler);
@@ -33,6 +37,9 @@ export function resetPostureMocks(): void {
   toastWarningMock.mockReset();
   notifyMock.mockReset();
   notifyMock.mockResolvedValue(undefined);
+  pomodoroStateMock.status = 'idle';
+  pomodoroStateMock.sessionType = 'work';
+  focusModeStateMock.isActive = false;
 }
 
 /** Minimal in-memory localStorage for the node test environment. */
@@ -74,4 +81,13 @@ export function emitStopped(): void {
 
 export function countInvokes(command: string): number {
   return invokeMock.mock.calls.filter(([invoked]) => invoked === command).length;
+}
+
+/** Mirrors the controller's nudge threshold: consecutive poor samples before a nudge. */
+export const NUDGE_AFTER_POOR_SAMPLES = 15;
+
+export function emitPoorFrames(count: number): void {
+  for (let i = 0; i < count; i += 1) {
+    emitSampleFrame(JSON.stringify({ status: 'poor' }));
+  }
 }
