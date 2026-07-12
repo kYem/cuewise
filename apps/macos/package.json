@@ -12,6 +12,8 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "e2e": "playwright test"
   },
   "dependencies": {
@@ -37,6 +39,7 @@
     "postcss": "catalog:",
     "tailwindcss": "catalog:",
     "typescript": "catalog:",
-    "vite": "catalog:"
+    "vite": "catalog:",
+    "vitest": "catalog:"
   }
 }
