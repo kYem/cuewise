@@ -86,6 +86,13 @@ describe('primitives', () => {
     expect(() => b64urlDecode('not!!valid')).toThrow(EnvelopeParseError);
   });
 
+  it('b64urlDecode carries the atob failure as .cause on valid-alphabet, invalid-length input', () => {
+    // 'A' passes the alphabet check but pads to a length atob rejects.
+    expect(() => b64urlDecode('A')).toThrowError(
+      expect.objectContaining({ cause: expect.anything() })
+    );
+  });
+
   it.each([
     32767, 32768, 32769, 65536,
   ])('b64urlEncode round-trips and matches Buffer.from(bytes).toString("base64url") at length %i (CHUNK_SIZE=0x8000 boundary)', (length) => {

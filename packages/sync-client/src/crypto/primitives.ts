@@ -1,5 +1,5 @@
-// Every WebCrypto touch lives here so a runtime without crypto.subtle (pending
-// Tauri probe) can swap in a pure-JS backend by replacing this one file.
+// Every WebCrypto touch lives here as a swappable backend seam. All current targets have
+// crypto.subtle (probed in the bundled Tauri app: tauri://localhost is a secure context).
 import { DecryptError, EnvelopeParseError } from './errors';
 
 const subtle = globalThis.crypto.subtle;

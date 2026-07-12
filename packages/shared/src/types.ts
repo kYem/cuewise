@@ -553,7 +553,7 @@ export interface BulkImportResult {
   errors: string[];
 }
 
-// Cloud sync wire types (ENG-43)
+// Cloud sync + E2E key wire types (ENG-43/ENG-44)
 export interface PushRecord {
   collection: string;
   entityId: string;
