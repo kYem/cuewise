@@ -47,10 +47,10 @@ pub fn start_posture(app: AppHandle, state: State<'_, PostureState>) -> Result<(
     tauri::async_runtime::spawn(async move {
         // The deadline lives in the Rust core, not the webview (same reason as
         // scheduler.rs): hidden-to-tray — this app's resident mode — throttles JS timers.
-        let mut saw_stdout = false;
+        // Absolute since spawn, so stderr chatter can't keep extending it.
+        let mut deadline = Some(tokio::time::Instant::now() + FIRST_FRAME_TIMEOUT);
         loop {
-            let received = match next_sidecar_event(&mut rx, !saw_stdout, FIRST_FRAME_TIMEOUT).await
-            {
+            let received = match next_sidecar_event(&mut rx, deadline).await {
                 Ok(received) => received,
                 Err(_elapsed) => {
                     // Spawned but mute: kill it so the camera turns off, then report a
@@ -68,7 +68,7 @@ pub fn start_posture(app: AppHandle, state: State<'_, PostureState>) -> Result<(
             };
             match event {
                 CommandEvent::Stdout(bytes) => {
-                    saw_stdout = true;
+                    deadline = None; // first sample line proves the pipeline is alive
                     if let Ok(line) = String::from_utf8(bytes) {
                         let trimmed = line.trim();
                         if !trimmed.is_empty() {
@@ -98,16 +98,14 @@ pub fn start_posture(app: AppHandle, state: State<'_, PostureState>) -> Result<(
     Ok(())
 }
 
-/// Next relay event; while `bounded` (no stdout seen yet) the wait is capped so a
-/// spawned-but-mute sidecar can't hold the camera open. Stderr chatter doesn't
-/// lift the bound — only a sample line proves the pipeline is alive.
+/// Next relay event; until the sidecar's first stdout line the wait is bounded by
+/// an absolute deadline, so a spawned-but-mute sidecar can't hold the camera open.
 async fn next_sidecar_event<T>(
     rx: &mut tauri::async_runtime::Receiver<T>,
-    bounded: bool,
-    cap: Duration,
+    deadline: Option<tokio::time::Instant>,
 ) -> Result<Option<T>, tokio::time::error::Elapsed> {
-    if bounded {
-        return tokio::time::timeout(cap, rx.recv()).await;
+    if let Some(deadline) = deadline {
+        return tokio::time::timeout_at(deadline, rx.recv()).await;
     }
     Ok(rx.recv().await)
 }
@@ -156,23 +154,45 @@ pub fn stop_posture(state: State<'_, PostureState>) -> Result<(), Error> {
 mod tests {
     use super::*;
     use tauri::async_runtime::{block_on, channel, spawn};
+    use tokio::time::Instant;
 
     const CAP: Duration = Duration::from_millis(30);
 
     #[test]
     fn bounded_wait_elapses_when_nothing_arrives() {
         let (_tx, mut rx) = channel::<u8>(4);
-        let result = block_on(next_sidecar_event(&mut rx, true, CAP));
-        assert!(result.is_err(), "a mute channel must trip the deadline");
+        block_on(async move {
+            let deadline = Some(Instant::now() + CAP);
+            let result = next_sidecar_event(&mut rx, deadline).await;
+            assert!(result.is_err(), "a mute channel must trip the deadline");
+        });
     }
 
     #[test]
-    fn bounded_wait_delivers_an_event_inside_the_cap() {
+    fn bounded_wait_delivers_an_event_inside_the_deadline() {
         let (tx, mut rx) = channel::<u8>(4);
         block_on(async move {
             tx.send(7).await.expect("send");
-            let result = next_sidecar_event(&mut rx, true, CAP).await;
+            let result = next_sidecar_event(&mut rx, Some(Instant::now() + CAP)).await;
             assert_eq!(result.expect("within deadline"), Some(7));
+        });
+    }
+
+    #[test]
+    fn the_deadline_is_absolute_not_per_event() {
+        let (tx, mut rx) = channel::<u8>(4);
+        block_on(async move {
+            let deadline = Some(Instant::now() + CAP);
+            tx.send(1).await.expect("send");
+            let first = next_sidecar_event(&mut rx, deadline).await;
+            assert_eq!(first.expect("first event within deadline"), Some(1));
+
+            // Reusing the same deadline: stderr-style chatter must not extend it.
+            let second = next_sidecar_event(&mut rx, deadline).await;
+            assert!(
+                second.is_err(),
+                "an event mid-window must not push the deadline out"
+            );
         });
     }
 
@@ -184,7 +204,7 @@ mod tests {
                 tokio::time::sleep(CAP * 3).await;
                 let _ = tx.send(9).await;
             });
-            let result = next_sidecar_event(&mut rx, false, CAP).await;
+            let result = next_sidecar_event(&mut rx, None).await;
             assert_eq!(
                 result.expect("no deadline once a frame was seen"),
                 Some(9),
@@ -196,8 +216,10 @@ mod tests {
     #[test]
     fn closed_channel_ends_the_bounded_wait_cleanly() {
         let (tx, mut rx) = channel::<u8>(4);
-        drop(tx);
-        let result = block_on(next_sidecar_event(&mut rx, true, CAP));
-        assert_eq!(result.expect("closed, not elapsed"), None);
+        block_on(async move {
+            drop(tx);
+            let result = next_sidecar_event(&mut rx, Some(Instant::now() + CAP)).await;
+            assert_eq!(result.expect("closed, not elapsed"), None);
+        });
     }
 }
