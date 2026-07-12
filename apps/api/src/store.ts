@@ -43,6 +43,8 @@ export interface SyncStore {
   listChanges(userId: string, since: number): Promise<{ records: SyncRecord[]; cursor: number }>;
   exportUser(userId: string): Promise<{ records: SyncRecord[] }>;
   deleteUser(userId: string): Promise<void>;
+  // Deletes tombstones older than retentionMs (a maintenance sweep across all users); returns the count.
+  purgeTombstones(retentionMs: number): Promise<number>;
   // Returns null only when the token row was physically deleted mid-request (concurrent account
   // deletion); revocation leaves the row and is already caught upstream by lookupSession.
   bumpRateWindow(

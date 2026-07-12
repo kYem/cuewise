@@ -1,7 +1,10 @@
 {
   "name": "cuewise-api",
-  "main": "src/index.ts",
+  // Deployment entry wraps the Hono app (src/index.ts) with the scheduled tombstone-purge handler.
+  "main": "src/worker.ts",
   "compatibility_date": "2026-06-01",
+  // Daily 03:00 UTC tombstone purge (see worker.ts scheduled()).
+  "triggers": { "crons": ["0 3 * * *"] },
   // database_id is a placeholder until the first deploy runs `wrangler d1 create
   // cuewise-sync` and pastes the real id here; local dev/tests never touch Cloudflare.
   "d1_databases": [
