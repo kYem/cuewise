@@ -3,11 +3,10 @@ import type { AuthVars } from '../auth-middleware';
 import type { Env } from '../env';
 import { parseJsonBody } from '../http';
 import type { AppDepsResolved } from '../index';
-import { problem } from '../problem-details';
+import { problem, requireNonEmptyString, type ValidationIssue } from '../problem-details';
 
 // Client-wrapped key blobs are small; anything bigger is malformed or abusive.
 const MAX_ENVELOPE_BYTES = 1024;
-const encoder = new TextEncoder();
 
 export function registerKeysRoutes(
   app: Hono<{ Bindings: Env } & AuthVars>,
@@ -32,12 +31,11 @@ export function registerKeysRoutes(
       return problem('invalid_key_envelope');
     }
     const envelope = (raw as { envelope?: unknown }).envelope;
-    if (
-      typeof envelope !== 'string' ||
-      envelope.length === 0 ||
-      encoder.encode(envelope).length > MAX_ENVELOPE_BYTES
-    ) {
-      return problem('invalid_key_envelope');
+    const issues: ValidationIssue[] = [];
+    requireNonEmptyString(envelope, '/envelope', issues, { maxLength: MAX_ENVELOPE_BYTES });
+    // The typeof re-check only narrows for TS; requireNonEmptyString owns the actual rule.
+    if (typeof envelope !== 'string' || issues.length > 0) {
+      return problem('invalid_key_envelope', { errors: issues });
     }
     const store = deps.storeFactory(c.env.DB);
     await store.putKeyEnvelope(c.get('userId'), 'recovery', envelope);
