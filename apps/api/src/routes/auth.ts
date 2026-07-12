@@ -2,7 +2,7 @@ import type { ExchangeTokenRequest } from '@cuewise/shared';
 import { logger } from '@cuewise/shared';
 import type { Hono } from 'hono';
 import type { AuthVars } from '../auth-middleware';
-import { sha256Base64Url } from '../crypto-utils';
+import { type RawSessionToken, sha256Base64Url } from '../crypto-utils';
 import type { Env } from '../env';
 import { parseJsonBody } from '../http';
 import type { AppDepsResolved } from '../index';
@@ -152,7 +152,8 @@ export function registerAuthRoutes(
   app.post('/v1/auth/logout', async (c) => {
     const header = c.req.header('Authorization');
     if (header?.startsWith('Bearer ')) {
-      await deps.storeFactory(c.env.DB).revokeSession(header.slice('Bearer '.length));
+      const rawToken = header.slice('Bearer '.length) as RawSessionToken;
+      await deps.storeFactory(c.env.DB).revokeSession(rawToken);
     }
     return c.body(null, 204);
   });

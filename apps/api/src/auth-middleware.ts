@@ -1,9 +1,10 @@
 import type { MiddlewareHandler } from 'hono';
+import type { RawSessionToken, SessionTokenHash } from './crypto-utils';
 import type { Env } from './env';
 import { problem } from './problem-details';
 import type { SyncStore } from './store';
 
-export type AuthVars = { Variables: { userId: string; tokenHash: string } };
+export type AuthVars = { Variables: { userId: string; tokenHash: SessionTokenHash } };
 
 export function requireSession(
   getStore: (env: Env) => SyncStore
@@ -13,7 +14,9 @@ export function requireSession(
     if (header === undefined || !header.startsWith('Bearer ')) {
       return problem('unauthorized', { detail: 'Missing bearer token.' });
     }
-    const session = await getStore(c.env).lookupSession(header.slice('Bearer '.length));
+    // The sole trusted point where a wire string becomes a RawSessionToken.
+    const rawToken = header.slice('Bearer '.length) as RawSessionToken;
+    const session = await getStore(c.env).lookupSession(rawToken);
     if (session === null) {
       return problem('invalid_token');
     }

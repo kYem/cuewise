@@ -36,6 +36,19 @@ export async function sha256Hex(value: string): Promise<string> {
     .join('');
 }
 
+// Branded so the compiler keeps the raw session token (returned once) and its stored SHA-256
+// apart: passing a hash where a raw token belongs (or vice versa) is then a compile error.
+export type RawSessionToken = string & { readonly __brand: 'RawSessionToken' };
+export type SessionTokenHash = string & { readonly __brand: 'SessionTokenHash' };
+
+export function randomSessionToken(): RawSessionToken {
+  return randomToken() as RawSessionToken;
+}
+
+export async function hashSessionToken(raw: RawSessionToken): Promise<SessionTokenHash> {
+  return (await sha256Hex(raw)) as SessionTokenHash;
+}
+
 export async function sha256Base64Url(value: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', encoder.encode(value));
   return base64UrlEncode(new Uint8Array(digest));

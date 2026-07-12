@@ -91,7 +91,7 @@ Apple only redirects to registered **https** URLs, so the Worker sits in the mid
 
 ### Sessions
 
-`createSession` mints 32 random bytes, returns the raw token once, and stores only its SHA-256 (`tokens.token_hash`). Expiry is sliding: every successful `lookupSession` pushes `expires_at` forward another `SESSION_TTL_MS` (90 days) and updates `last_used_at`. `POST /v1/auth/logout` sets `revoked_at`, which `lookupSession` checks going forward.
+`createSession` mints 32 random bytes, returns the raw token once, and stores only its SHA-256 (`tokens.token_hash`). The raw token and its hash are branded types (`RawSessionToken`/`SessionTokenHash` in `crypto-utils.ts`), so passing one where the other belongs — e.g. a hash into `revokeSession` — is a compile error, not a silent no-op. Expiry is sliding: every successful `lookupSession` pushes `expires_at` forward another `SESSION_TTL_MS` (90 days) and updates `last_used_at`. `POST /v1/auth/logout` sets `revoked_at`, which `lookupSession` checks going forward.
 
 There's also a `provider: 'dev'` path, gated by `DEV_FAKE_AUTH === '1'` **and** a localhost `PUBLIC_BASE_URL`, that skips verification entirely and mints a session for whatever `credential` string you pass. Set off-localhost, it's refused and `logger.error`'d rather than honored. **Never enable this in production** — see Gotchas.
 

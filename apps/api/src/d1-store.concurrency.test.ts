@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
 import { record } from './__fixtures__/api-test-helpers.fixtures';
-import { sha256Hex } from './crypto-utils';
+import { hashSessionToken } from './crypto-utils';
 import { D1SyncStore } from './d1-store';
 
 describe('D1SyncStore concurrency', () => {
@@ -42,7 +42,7 @@ describe('D1SyncStore concurrency', () => {
       providerSub: 'concurrency-rate',
     });
     const token = await store.createSession(userId, 'rate-device');
-    const tokenHash = await sha256Hex(token);
+    const tokenHash = await hashSessionToken(token);
 
     const results = await Promise.all(
       Array.from({ length: 10 }, () => store.bumpRateWindow(tokenHash, 60_000))
