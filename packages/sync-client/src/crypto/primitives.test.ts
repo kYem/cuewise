@@ -90,4 +90,16 @@ describe('primitives', () => {
 
     importKeySpy.mockRestore();
   });
+
+  it('evicts a rejected import from the cache: one transient failure does not poison the key', async () => {
+    const importKeySpy = vi
+      .spyOn(globalThis.crypto.subtle, 'importKey')
+      .mockRejectedValueOnce(new Error('transient'));
+    const key = randomBytes(32);
+    const iv = randomBytes(12);
+    await expect(aesGcmSeal(key, iv, utf8('a'), utf8('aad'))).rejects.toThrow('transient');
+    const sealed = await aesGcmSeal(key, iv, utf8('a'), utf8('aad'));
+    await expect(aesGcmOpen(key, iv, sealed, utf8('aad'))).resolves.toEqual(utf8('a'));
+    importKeySpy.mockRestore();
+  });
 });

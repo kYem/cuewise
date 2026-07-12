@@ -58,8 +58,13 @@ async function importAesKey(key: Uint8Array): Promise<CryptoKey> {
     'encrypt',
     'decrypt',
   ]);
-  aesKeyCache.set(key, imported);
-  return imported;
+  // Evict on rejection — a cached rejected promise would poison every later call with this key.
+  const guarded = imported.catch((err) => {
+    aesKeyCache.delete(key);
+    throw err;
+  });
+  aesKeyCache.set(key, guarded);
+  return guarded;
 }
 
 export async function aesGcmSeal(
