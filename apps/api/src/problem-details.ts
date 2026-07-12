@@ -8,6 +8,7 @@ const PROBLEM_DEFS = {
   payload_too_large: { status: 413, title: 'Payload too large' },
   invalid_cursor: { status: 400, title: 'Invalid cursor' },
   invalid_request: { status: 400, title: 'Malformed request' },
+  invalid_key_envelope: { status: 400, title: 'Invalid key envelope' },
   not_found: { status: 404, title: 'Not found' },
   internal: { status: 500, title: 'Internal error' },
 } as const;
