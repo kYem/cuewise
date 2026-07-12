@@ -24,6 +24,9 @@ export interface PostureState {
   // The screen-edge glow IS the nudge (ENG-40): up after sustained poor posture,
   // down once recovery holds.
   glowActive: boolean;
+  // Latest show_glow failed — mirrored to the tray, the only always-visible
+  // surface, since the warn toast renders in the often-hidden webview.
+  glowUndeliverable: boolean;
   nudgesPausedUntil: NudgePause | null;
 }
 
@@ -34,6 +37,7 @@ let state: PostureState = {
   steadyStatus: null,
   error: null,
   glowActive: false,
+  glowUndeliverable: false,
   nudgesPausedUntil: null,
 };
 const subscribers = new Set<() => void>();
@@ -226,7 +230,7 @@ export function startPosture(): void {
   starting = true;
   stopRequestedDuringStart = false;
   persist(ENABLED_KEY, true);
-  setState({ error: null });
+  setState({ error: null, glowUndeliverable: false });
   // Attach listeners BEFORE spawning: the sidecar can fail its camera check and emit
   // posture://stopped within tens of ms, and Tauri won't buffer that for a listener
   // registered afterward — so attach-after-invoke would silently drop the failure.
@@ -374,20 +378,30 @@ function isFocusSessionActive(): boolean {
 
 function showGlow(): void {
   setState({ glowActive: true });
-  invoke('show_glow').catch((error) => {
-    logCommandFailure('Failed to show the posture glow', error);
-    // Roll back so the next sustained streak retries instead of being blocked.
-    setState({ glowActive: false });
-    // Display sleep legitimately has nowhere to glow; anything else warrants a
-    // once-per-session heads-up — an enabled nudge silently never firing is worse.
-    const noMonitors = isCommandError(error) && error.kind === 'no_monitors';
-    if (!noMonitors && !warnedGlowUndeliverable) {
-      warnedGlowUndeliverable = true;
-      useToastStore
-        .getState()
-        .warning("Couldn't show the posture glow — reminders may not appear.");
-    }
-  });
+  invoke('show_glow')
+    .then(() => {
+      if (state.glowUndeliverable) {
+        setState({ glowUndeliverable: false });
+      }
+    })
+    .catch((error) => {
+      logCommandFailure('Failed to show the posture glow', error);
+      // Roll back so the next sustained streak retries instead of being blocked.
+      setState({ glowActive: false });
+      // Display sleep legitimately has nowhere to glow; anything else warrants a
+      // once-per-session heads-up — an enabled nudge silently never firing is worse.
+      const noMonitors = isCommandError(error) && error.kind === 'no_monitors';
+      if (noMonitors) {
+        return;
+      }
+      setState({ glowUndeliverable: true });
+      if (!warnedGlowUndeliverable) {
+        warnedGlowUndeliverable = true;
+        useToastStore
+          .getState()
+          .warning("Couldn't show the posture glow — reminders may not appear.");
+      }
+    });
 }
 
 function hideGlowIfActive(): void {

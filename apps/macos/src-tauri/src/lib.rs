@@ -51,7 +51,7 @@ pub fn run() {
         ])
         .setup(|app| {
             // Initial menu; the webview replaces it with live status (and the
-            // Pomodoro actions) via `set_tray_menu` once it loads.
+            // Pomodoro/posture actions) via `set_tray_menu` once it loads.
             let open = MenuItem::with_id(app, "show", "Open Cuewise", true, None::<&str>)?;
             let insights = MenuItem::with_id(app, "insights", "View Insights", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit Cuewise", true, None::<&str>)?;

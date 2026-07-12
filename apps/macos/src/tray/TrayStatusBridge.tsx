@@ -76,8 +76,9 @@ export function TrayStatusBridge(): null {
   const posture = usePosture();
   const postureStatus = posture.tracking ? posture.steadyStatus : null;
   // Look up once and stay defensive: an unknown status must not throw in this
-  // always-mounted component (the controller already rejects them, this is a backstop).
-  const postureMeta = postureStatus ? POSTURE_META[postureStatus] : null;
+  // always-mounted component (the controller already rejects them, this is a
+  // backstop — `?? null` is what makes it real for an unlisted status).
+  const postureMeta = postureStatus ? (POSTURE_META[postureStatus] ?? null) : null;
   // Posture failure toasts render in the webview, which is often hidden to the tray —
   // mirror the degraded state here, the only always-visible surface.
   let postureDot: string | null = null;
@@ -95,6 +96,11 @@ export function TrayStatusBridge(): null {
   if (postureControlsEnabled && pausedUntil !== null) {
     pausedLine = `💤 Posture nudges paused · ${describePauseEnd(pausedUntil)}`;
   }
+  // Toasts render in the often-hidden webview; the tray is the visible backstop.
+  const glowWarningLine =
+    posture.tracking && posture.glowUndeliverable
+      ? '⚠️ Posture glow unavailable — nudges may not appear'
+      : null;
 
   // Relay Pomodoro/posture control clicks from the native tray menu.
   useEffect(() => {
@@ -197,6 +203,9 @@ export function TrayStatusBridge(): null {
       if (pausedLine) {
         info = [...info, pausedLine];
       }
+      if (glowWarningLine) {
+        info = [...info, glowWarningLine];
+      }
       // Nudge escape hatches must be reachable without opening the app (ENG-40).
       if (postureControlsEnabled) {
         if (pausedUntil !== null) {
@@ -225,6 +234,7 @@ export function TrayStatusBridge(): null {
     pausedLine,
     pausedUntil,
     postureControlsEnabled,
+    glowWarningLine,
   ]);
 
   return null;

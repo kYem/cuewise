@@ -249,6 +249,7 @@ describe('glow nudge lifecycle', () => {
     emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES);
     await flushChain();
     expect(toastWarningMock).not.toHaveBeenCalled();
+    expect(getPostureState().glowUndeliverable).toBe(false);
 
     invokeMock.mockRejectedValueOnce({ kind: 'window', message: 'boom' });
     emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES);
@@ -257,7 +258,23 @@ describe('glow nudge lifecycle', () => {
     emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES);
     await flushChain();
 
+    expect(countInvokes('show_glow')).toBe(3);
     expect(toastWarningMock).toHaveBeenCalledTimes(1);
+    expect(getPostureState().glowUndeliverable).toBe(true);
+  });
+
+  it('a later successful show clears the undeliverable flag', async () => {
+    await startTracking();
+    invokeMock.mockRejectedValueOnce({ kind: 'window', message: 'boom' });
+    emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES);
+    await flushChain();
+    expect(getPostureState().glowUndeliverable).toBe(true);
+
+    emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES);
+    await flushChain();
+
+    expect(getPostureState().glowActive).toBe(true);
+    expect(getPostureState().glowUndeliverable).toBe(false);
   });
 
   it('a rejected hide_glow retries on later recovered frames while tracking', async () => {
