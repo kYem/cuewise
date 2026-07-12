@@ -29,6 +29,10 @@ fn orphan_glow_labels(existing: &[String], monitor_count: usize) -> Vec<String> 
 #[tauri::command]
 pub fn show_glow(app: AppHandle) -> Result<(), Error> {
     let monitors = app.available_monitors()?;
+    if monitors.is_empty() {
+        // Err, not a silent Ok: the webview rolls back and retries a later nudge.
+        return Err(Error::NoMonitors);
+    }
     let existing: Vec<String> = app
         .webview_windows()
         .keys()

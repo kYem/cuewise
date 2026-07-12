@@ -192,6 +192,31 @@ describe('glow nudge lifecycle', () => {
     expect(getPostureState().glowActive).toBe(true);
   });
 
+  it('clears when recovery oscillates across different non-poor statuses', async () => {
+    await startTracking();
+    await glowUp();
+
+    emitSampleFrame(JSON.stringify({ status: 'good' }));
+    emitSampleFrame(JSON.stringify({ status: 'mild' }));
+    emitSampleFrame(JSON.stringify({ status: 'good' }));
+
+    // The debounced tray status never settles here — the clear must not need it.
+    expect(countInvokes('hide_glow')).toBe(1);
+    expect(getPostureState().glowActive).toBe(false);
+  });
+
+  it('starting a work session hides the glow even while frames are non-poor', async () => {
+    await startTracking();
+    await glowUp();
+
+    pomodoroStateMock.status = 'running';
+    pomodoroStateMock.sessionType = 'work';
+    emitSampleFrame(JSON.stringify({ status: 'good' }));
+
+    expect(countInvokes('hide_glow')).toBe(1);
+    expect(getPostureState().glowActive).toBe(false);
+  });
+
   it('self-clears when leaving the frame holds for the debounce window', async () => {
     await startTracking();
     await glowUp();

@@ -61,6 +61,9 @@ const KNOWN_STATUSES = Object.keys({
 // Exported so tests exercise the real threshold instead of mirroring it.
 export const NUDGE_AFTER_POOR_SAMPLES = 15; // ~30s at the sidecar's 2s cadence
 let poorStreak = 0;
+// Consecutive non-poor frames; the glow clears once this holds, so one jitter
+// frame can't drop it (any non-poor status counts — oscillation still clears).
+let nonPoorStreak = 0;
 // Warn the user once per tracking session when a failure would otherwise be silent,
 // without storming a toast on every retry. Reset in resetDerivation.
 let warnedUnreadable = false;
@@ -123,6 +126,7 @@ function detachListeners(): void {
 // teardown path must call this, or a stale poorStreak can nudge early after resume.
 function resetDerivation(): void {
   poorStreak = 0;
+  nonPoorStreak = 0;
   pendingStatus = null;
   pendingCount = 0;
   parseFailures = 0;
@@ -414,26 +418,27 @@ function clearElapsedPause(): void {
   }
 }
 
-// The glow IS the nudge (ENG-40): up after sustained poor posture, down the moment
-// posture recovers — sitting back is the dismissal.
+// The glow IS the nudge (ENG-40): up after sustained poor posture, down once
+// recovery holds — sitting back is the dismissal.
 function updateNudgeGlow(sample: PostureSample): void {
   clearElapsedPause();
+  if (!state.nudgesEnabled || state.nudgesPausedUntil !== null || isFocusSessionActive()) {
+    // Suppression hides immediately, on any frame. It is also streak-neutral:
+    // reset, don't freeze, so a prior lean can't fire a stale glow when it lifts.
+    poorStreak = 0;
+    nonPoorStreak = 0;
+    hideGlowIfActive();
+    return;
+  }
   if (sample.status !== 'poor') {
     poorStreak = 0;
-    // Clear on the debounced status, not the raw frame — a single jitter frame
-    // mid-slouch must not drop the glow (same reason the tray uses steadyStatus).
-    if (state.steadyStatus !== 'poor') {
+    nonPoorStreak += 1;
+    if (nonPoorStreak >= STEADY_SAMPLES) {
       hideGlowIfActive();
     }
     return;
   }
-  if (!state.nudgesEnabled || state.nudgesPausedUntil !== null || isFocusSessionActive()) {
-    // Suppressed time is neutral: reset rather than freeze the streak, so a prior
-    // lean can't fire a stale glow the moment suppression lifts.
-    poorStreak = 0;
-    hideGlowIfActive();
-    return;
-  }
+  nonPoorStreak = 0;
   if (state.glowActive) {
     return;
   }

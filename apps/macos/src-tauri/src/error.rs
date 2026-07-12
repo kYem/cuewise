@@ -18,6 +18,10 @@ pub enum Error {
     /// A Tauri runtime/window operation failed (e.g. managing the glow overlays).
     #[error("window operation failed: {0}")]
     Window(#[from] tauri::Error),
+    /// No displays to show the glow on (display sleep/reconfigure) — the webview
+    /// rolls its state back and retries on a later nudge.
+    #[error("no monitors available")]
+    NoMonitors,
 }
 
 impl Error {
@@ -26,6 +30,7 @@ impl Error {
             Error::Sidecar(_) => "sidecar",
             Error::StatePoisoned => "state_poisoned",
             Error::Window(_) => "window",
+            Error::NoMonitors => "no_monitors",
         }
     }
 }

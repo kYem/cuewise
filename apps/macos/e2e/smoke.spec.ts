@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { assertGlowSurfaceRenders } from './glow-surface';
 import { stubThirdPartyRequests, watchForRealNetworkEscapes } from './network-stub';
 
 // Console noise that is not an app fault.
@@ -48,11 +49,7 @@ test('reused extension UI renders on every surface without errors (WebKit)', asy
   await page.waitForTimeout(300);
   await expect(page.getByText(ERROR_BOUNDARY)).toHaveCount(0);
 
-  // #glow is a document-entry branch, not a client-side route: a hash-only goto is
-  // same-document, so force a real load. Last on purpose — the app document is gone.
-  await page.goto('/#glow');
-  await page.reload();
-  await expect(page.locator('.glow-vignette')).toBeVisible();
+  await assertGlowSurfaceRenders(page);
 
   expect(errors, `Unexpected console/page errors:\n${errors.join('\n')}`).toEqual([]);
   expect(getEscapedRequests(), 'off-origin requests must never reach the real network').toEqual([]);

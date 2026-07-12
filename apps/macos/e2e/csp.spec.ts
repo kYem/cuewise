@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 import { buildCspHeader, startCspServer } from './csp-static-server';
+import { assertGlowSurfaceRenders } from './glow-surface';
 import { stubThirdPartyRequests, watchForRealNetworkEscapes } from './network-stub';
 
 // Verifies the PRODUCTION CSP (tauri.conf.json `app.security.csp`) against the
@@ -143,11 +144,7 @@ test('production build reports zero CSP violations across every surface (WebKit)
   });
 
   await test.step('glow overlay renders CSP-clean', async () => {
-    // #glow is a document-entry branch, not a client-side route: a hash-only goto is
-    // same-document, so force a real load. Last on purpose — the app document is gone.
-    await page.goto(`${BASE_URL}/#glow`);
-    await page.reload();
-    await expect(page.locator('.glow-vignette')).toBeVisible();
+    await assertGlowSurfaceRenders(page, BASE_URL);
   });
 
   const details = violations
