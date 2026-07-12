@@ -4,6 +4,7 @@ import type { Env } from '../env';
 import { parseJsonBody } from '../http';
 import type { AppDepsResolved } from '../index';
 import { problem } from '../problem-details';
+import { StorageQuotaExceededError } from '../store';
 import { validatePushBody } from '../validate-changes';
 
 export function registerChangesRoutes(
@@ -38,7 +39,16 @@ export function registerChangesRoutes(
       return problem(parsed.problemCode, { errors: parsed.issues });
     }
     const store = deps.storeFactory(c.env.DB);
-    const cursor = await store.applyChanges(c.get('userId'), parsed.records);
-    return c.json({ cursor });
+    try {
+      const cursor = await store.applyChanges(c.get('userId'), parsed.records);
+      return c.json({ cursor });
+    } catch (err) {
+      if (err instanceof StorageQuotaExceededError) {
+        return problem('storage_quota_exceeded', {
+          detail: 'This account has reached its storage limit.',
+        });
+      }
+      throw err;
+    }
   });
 }

@@ -1,7 +1,6 @@
-import { createLocalJWKSet, exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
+import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from 'jose';
 import type { Env } from '../env';
-import type { IdTokenVerifier, VerifiedIdentity } from '../verifiers';
-import { isEmailVerified, parseClientIds, TokenVerificationError } from '../verifiers';
+import { createIdTokenVerifier, type IdTokenVerifier, parseClientIds } from '../verifiers';
 
 export interface TestIdp {
   sign(claims: {
@@ -39,25 +38,14 @@ export async function createTestIdp(): Promise<TestIdp> {
         .sign(privateKey);
     },
     verifier(expected) {
-      const resolveAudience =
-        expected.audience ?? ((env: Env) => parseClientIds(env.GOOGLE_CLIENT_IDS));
-      return async (idToken: string, env: Env): Promise<VerifiedIdentity> => {
-        const { payload } = await jwtVerify(idToken, jwks, {
-          issuer: expected.issuer,
-          audience: resolveAudience(env),
-        });
-        if (typeof payload.sub !== 'string') {
-          throw new TokenVerificationError('missing sub');
-        }
-        return {
-          providerSub: payload.sub,
-          email:
-            typeof payload.email === 'string' && isEmailVerified(payload)
-              ? payload.email
-              : undefined,
-          nonce: typeof payload.nonce === 'string' ? payload.nonce : undefined,
-        };
-      };
+      // Build through the production factory over this local JWKS, so route tests exercise the
+      // real verifier (issuer/audience/sub/email/nonce handling) rather than a parallel copy.
+      return createIdTokenVerifier({
+        jwks,
+        issuer: expected.issuer,
+        audience: expected.audience ?? ((env: Env) => parseClientIds(env.GOOGLE_CLIENT_IDS)),
+        label: 'TestIdp',
+      });
     },
   };
 }

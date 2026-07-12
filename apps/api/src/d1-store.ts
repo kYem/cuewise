@@ -1,20 +1,31 @@
+import { logger } from '@cuewise/shared';
 import { randomToken, sha256Hex } from './crypto-utils';
-import type {
-  AuthCodePayload,
-  Identity,
-  PushRecord,
-  Session,
-  SyncRecord,
-  SyncStore,
+import {
+  type AuthCodePayload,
+  type Identity,
+  type PushRecord,
+  type Session,
+  StorageQuotaExceededError,
+  type SyncRecord,
+  type SyncStore,
 } from './store';
 
 export const SESSION_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 export const AUTH_CODE_TTL_MS = 60_000;
+// Caps one pull/export query so a large account can't force the worker to buffer an unbounded
+// result set into memory (OOM) — the caller pages by re-pulling from the returned cursor.
+export const MAX_CHANGES_PAGE_SIZE = 500;
+// Safety rail against one account filling the shared D1. Generous enough that only deliberate
+// abuse hits it; checked conservatively (all pushed rows treated as new).
+export const MAX_RECORDS_PER_USER = 100_000;
 
 export class D1SyncStore implements SyncStore {
   constructor(
     private db: D1Database,
-    private now: () => number = Date.now
+    private now: () => number = Date.now,
+    // Overridable so tests can exercise the caps without materializing 100k rows / 500-row pages.
+    private maxRecordsPerUser: number = MAX_RECORDS_PER_USER,
+    private changesPageSize: number = MAX_CHANGES_PAGE_SIZE
   ) {}
 
   private async selectIdentityUserId(identity: Identity): Promise<string | null> {
@@ -130,18 +141,23 @@ export class D1SyncStore implements SyncStore {
   ): Promise<{ payload: AuthCodePayload; codeChallenge: string } | null> {
     const codeHash = await sha256Hex(rawCode);
     const ts = this.now();
+    // DELETE (not mark-used) so a redeemed code's PII payload is gone at once, not left for the
+    // sweep; the single DELETE ... RETURNING stays atomic, so concurrent redeems yield one row.
     const row = await this.db
       .prepare(
-        'UPDATE auth_codes SET used_at = ? WHERE code_hash = ? AND used_at IS NULL AND expires_at > ? RETURNING payload, code_challenge'
+        'DELETE FROM auth_codes WHERE code_hash = ? AND expires_at > ? RETURNING payload, code_challenge'
       )
-      .bind(ts, codeHash, ts)
+      .bind(codeHash, ts)
       .first<{ payload: string; code_challenge: string | null }>();
     if (row === null) {
       return null;
     }
-    // mintAuthCode always writes a code_challenge; a row with none is only reachable via
-    // a manual DB edit, so reject it fail-closed rather than treating null as "no PKCE".
+    // A null code_challenge is a broken invariant (bad migration/manual edit), not client error:
+    // fail closed AND loud, else every Apple sign-in 401s silently while each attempt burns a code.
     if (row.code_challenge === null) {
+      logger.error(
+        'consumeAuthCode: auth_codes row has a null code_challenge (invariant violation)'
+      );
       return null;
     }
     return {
@@ -153,6 +169,20 @@ export class D1SyncStore implements SyncStore {
   async applyChanges(userId: string, changes: PushRecord[]): Promise<number> {
     const ts = this.now();
     const n = changes.length;
+    if (n > 0) {
+      // Conservative pre-check: treats every pushed record as a potential new row. Racy against a
+      // concurrent push (both can pass near the cap), but the overshoot is bounded by one batch.
+      const countRow = await this.db
+        .prepare('SELECT COUNT(*) AS count FROM records WHERE user_id = ?')
+        .bind(userId)
+        .first<{ count: number }>();
+      const existing = countRow === null ? 0 : countRow.count;
+      if (existing + n > this.maxRecordsPerUser) {
+        throw new StorageQuotaExceededError(
+          `push of ${n} records would exceed the ${this.maxRecordsPerUser}-record per-user cap`
+        );
+      }
+    }
     const stmts: D1PreparedStatement[] = [];
     // Reserve all N seqs in one write; guarded so a no-op push (n=0) issues no write at all.
     if (n > 0) {
@@ -200,9 +230,9 @@ export class D1SyncStore implements SyncStore {
   ): Promise<{ records: SyncRecord[]; cursor: number }> {
     const { results } = await this.db
       .prepare(
-        'SELECT collection, entity_id, seq, ciphertext, deleted, client_updated_at FROM records WHERE user_id = ? AND seq > ? ORDER BY seq ASC'
+        'SELECT collection, entity_id, seq, ciphertext, deleted, client_updated_at FROM records WHERE user_id = ? AND seq > ? ORDER BY seq ASC LIMIT ?'
       )
-      .bind(userId, since)
+      .bind(userId, since, this.changesPageSize)
       .all<{
         collection: string;
         entity_id: string;
@@ -224,7 +254,18 @@ export class D1SyncStore implements SyncStore {
   }
 
   async exportUser(userId: string): Promise<{ records: SyncRecord[] }> {
-    const { records } = await this.listChanges(userId, 0);
+    // Page so each D1 query stays bounded; the full set is still assembled in memory, acceptable
+    // for this rare one-shot. Streaming is the follow-up for huge accounts.
+    const records: SyncRecord[] = [];
+    let since = 0;
+    for (;;) {
+      const page = await this.listChanges(userId, since);
+      records.push(...page.records);
+      if (page.records.length < this.changesPageSize) {
+        break;
+      }
+      since = page.cursor;
+    }
     return { records };
   }
 
@@ -256,7 +297,8 @@ export class D1SyncStore implements SyncStore {
       .bind(ts, windowMs, ts, ts, windowMs, tokenHash)
       .first<{ window_start: number; window_count: number }>();
     if (row === null) {
-      // The token was revoked/deleted between session lookup and this call.
+      // Reachable only if the token row was physically deleted (concurrent account deletion) —
+      // this UPDATE filters on token_hash alone, and revocation leaves the row in place.
       return null;
     }
     return {

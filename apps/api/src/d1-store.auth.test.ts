@@ -68,6 +68,22 @@ describe('D1SyncStore auth', () => {
     expect(await store.consumeAuthCode(stale)).toBeNull();
   });
 
+  it('physically deletes a redeemed code so its payload PII does not linger for the sweep', async () => {
+    const { store } = clockedStore(1_000);
+    const code = await store.mintAuthCode(
+      { provider: 'apple', providerSub: 'as4', email: 'q@r.s' },
+      'c4'
+    );
+    await store.consumeAuthCode(code);
+    const row = await env.DB.prepare('SELECT COUNT(*) as count FROM auth_codes').first<{
+      count: number;
+    }>();
+    if (row === null) {
+      throw new Error('expected a count row');
+    }
+    expect(row.count).toBe(0);
+  });
+
   it('treats a legacy row with no stored code_challenge as unredeemable', async () => {
     const { store } = clockedStore(1_000);
     const code = await store.mintAuthCode({ provider: 'apple', providerSub: 'as3' }, 'irrelevant');

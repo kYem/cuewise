@@ -94,10 +94,11 @@ export class ApiClient {
         }
         lastError = await ApiError.fromResponse(res);
       } catch (cause) {
-        // Offline/DNS failures reject before a Response exists; fold them into the
-        // same retry/backoff path below as a retryable server error.
+        // Offline/DNS rejects have no Response; fold into the retryable path, keeping the original
+        // error as `cause` so a programming bug (e.g. a bad-URL TypeError) stays debuggable.
         lastError = new ApiError('network_error', 0, {
           detail: cause instanceof Error ? cause.message : undefined,
+          cause,
         });
       }
       if (opts.retry === false || !lastError.retryable || attempt === MAX_RETRIES) {

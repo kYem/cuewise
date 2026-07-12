@@ -1,8 +1,20 @@
 import { env } from 'cloudflare:test';
-import { errors } from 'jose';
+import { errors, type JWTVerifyGetKey } from 'jose';
 import { describe, expect, it } from 'vitest';
-import { spyOnLoggerWarn } from './__fixtures__/logger.fixtures';
-import { isTokenFault, parseClientIds, TokenVerificationError, verifyOrProblem } from './verifiers';
+import { spyOnLoggerError, spyOnLoggerWarn } from './__fixtures__/logger.fixtures';
+import {
+  ConfigError,
+  createIdTokenVerifier,
+  isTokenFault,
+  parseClientIds,
+  TokenVerificationError,
+  verifyOrProblem,
+} from './verifiers';
+
+// resolveAudience runs before jwtVerify, so an empty audience throws without ever touching the key.
+const unusedJwks: JWTVerifyGetKey = async () => {
+  throw new Error('jwks should not be consulted when the audience is empty');
+};
 
 describe('parseClientIds', () => {
   it('splits on comma and trims whitespace around each entry', () => {
@@ -48,6 +60,60 @@ describe('isTokenFault', () => {
   }
 });
 
+describe('createIdTokenVerifier audience fail-closed', () => {
+  // The Apple bug this guards: an empty string is falsy, so jose would skip the aud check
+  // entirely (fail-open). The verifier must reject an empty audience before jwtVerify runs.
+  const emptyAudienceCases: Array<[string, () => string | string[]]> = [
+    ['an empty string (Apple shape)', () => ''],
+    ['an empty array (Google shape)', () => []],
+    ['an array of only empty strings', () => ['', '']],
+  ];
+
+  for (const [name, audience] of emptyAudienceCases) {
+    it(`throws ConfigError for ${name}`, async () => {
+      const verifier = createIdTokenVerifier({
+        jwks: unusedJwks,
+        issuer: 'https://issuer.example',
+        audience,
+        label: 'Apple',
+      });
+
+      await expect(verifier('any.id.token', env)).rejects.toBeInstanceOf(ConfigError);
+    });
+  }
+
+  it('does not throw ConfigError when at least one client id is configured', async () => {
+    const verifier = createIdTokenVerifier({
+      jwks: unusedJwks,
+      issuer: 'https://issuer.example',
+      audience: () => ['configured-client'],
+      label: 'Google',
+    });
+
+    // jwtVerify still runs (and rejects via the stub jwks), but not with a ConfigError.
+    await expect(verifier('any.id.token', env)).rejects.not.toBeInstanceOf(ConfigError);
+  });
+});
+
+describe('verifyOrProblem config-fault handling', () => {
+  it('answers 500 internal and logs an error when the verifier throws ConfigError', async () => {
+    const errorSpy = spyOnLoggerError();
+    const verifier = async () => {
+      throw new ConfigError('Apple audience is not configured');
+    };
+
+    const res = await verifyOrProblem(verifier, 'whatever', env, 'Apple');
+
+    if (!(res instanceof Response)) {
+      throw new Error('expected verifyOrProblem to return a Response');
+    }
+    expect(res.status).toBe(500);
+    const body = await res.json<{ code: string }>();
+    expect(body.code).toBe('internal');
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('verifyOrProblem token-fault logging', () => {
   function throwingVerifier(err: unknown) {
     return async () => {
@@ -87,7 +153,11 @@ describe('verifyOrProblem token-fault logging', () => {
 
   const routineCases: Array<[string, unknown]> = [
     ['JWTExpired', new errors.JWTExpired('token expired', {})],
-    ['JWTClaimValidationFailed', new errors.JWTClaimValidationFailed('bad claim', {})],
+    // A claim failure with no specific claim (e.g. nbf clock skew) stays in the routine bucket.
+    [
+      'JWTClaimValidationFailed (unspecified claim)',
+      new errors.JWTClaimValidationFailed('bad claim', {}),
+    ],
   ];
 
   for (const [name, err] of routineCases) {
@@ -97,6 +167,28 @@ describe('verifyOrProblem token-fault logging', () => {
       await expectInvalidToken(err);
 
       expect(warnSpy).not.toHaveBeenCalled();
+    });
+  }
+
+  // An aud/iss mismatch is an integration bug or audience-confusion probe — the two claim
+  // failures that must be visible, unlike the routine nbf/iat clock-skew ones above.
+  const surfacedClaimCases: Array<[string, 'aud' | 'iss']> = [
+    ['aud', 'aud'],
+    ['iss', 'iss'],
+  ];
+
+  for (const [name, claim] of surfacedClaimCases) {
+    it(`warns on a JWTClaimValidationFailed for the ${name} claim`, async () => {
+      const warnSpy = spyOnLoggerWarn();
+      const err = new errors.JWTClaimValidationFailed(
+        `unexpected "${claim}" claim value`,
+        {},
+        claim
+      );
+
+      await expectInvalidToken(err);
+
+      expect(warnSpy).toHaveBeenCalledTimes(1);
     });
   }
 });

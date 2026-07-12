@@ -221,4 +221,52 @@ describe('ApiClient', () => {
       retryable: false,
     });
   });
+
+  it('treats a literal `null` JSON error body as internal (not a retried network_error)', async () => {
+    // A proxy returning the JSON `null` parses fine, so reading `.code` off it used to throw and
+    // get mis-folded into a retryable network_error; it must stay the real non-retryable 400.
+    const { fetchFn, calls } = stubFetch([{ status: 400, body: null }]);
+    const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
+
+    await expect(client.getChanges(0)).rejects.toMatchObject({
+      code: 'internal',
+      status: 400,
+      retryable: false,
+    });
+    expect(calls).toHaveLength(1);
+  });
+
+  it('honors a Retry-After header when a 429 carries a non-JSON body (no retryAfter in body)', async () => {
+    const { fetchFn, calls } = stubFetch([
+      { status: 429, rawBody: 'Too Many Requests', headers: { 'Retry-After': '60' } },
+      { status: 200, body: { records: [], cursor: 7 } },
+    ]);
+    const sleep = vi.fn().mockResolvedValue(undefined);
+    const client = new ApiClient({
+      baseUrl: BASE_URL,
+      getToken: async () => TOKEN,
+      fetchFn,
+      sleep,
+    });
+
+    const result = await client.getChanges(0);
+
+    expect(result).toEqual({ records: [], cursor: 7 });
+    expect(calls).toHaveLength(2);
+    expect(sleep).toHaveBeenCalledWith(60_000);
+  });
+
+  it('preserves the original thrown error as ApiError.cause on a network failure', async () => {
+    const { fetchFn } = stubFetch([{ reject: true }]);
+    const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
+
+    await expect(
+      client.exchangeToken({
+        provider: 'apple',
+        credential: 'apple-code',
+        deviceName: 'd',
+        codeVerifier: 'verifier',
+      })
+    ).rejects.toMatchObject({ code: 'network_error', cause: expect.any(TypeError) });
+  });
 });

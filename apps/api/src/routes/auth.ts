@@ -1,4 +1,5 @@
 import type { ExchangeTokenRequest } from '@cuewise/shared';
+import { logger } from '@cuewise/shared';
 import type { Hono } from 'hono';
 import type { AuthVars } from '../auth-middleware';
 import { sha256Base64Url } from '../crypto-utils';
@@ -8,6 +9,30 @@ import type { AppDepsResolved } from '../index';
 import { problem, requireNonEmptyString, type ValidationIssue } from '../problem-details';
 import type { Identity } from '../store';
 import { verifyOrProblem } from '../verifiers';
+
+/** localhost/loopback hosts, the only places the dev auth bypass may run. */
+function isLocalhostBaseUrl(baseUrl: string): boolean {
+  try {
+    const host = new URL(baseUrl).hostname;
+    return host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]';
+  } catch {
+    return false;
+  }
+}
+
+/** The dev provider is a total auth bypass; honor it only on localhost, and shout if it's set elsewhere. */
+function isDevAuthEnabled(env: Env): boolean {
+  if (env.DEV_FAKE_AUTH !== '1') {
+    return false;
+  }
+  if (!isLocalhostBaseUrl(env.PUBLIC_BASE_URL)) {
+    logger.error(
+      'DEV_FAKE_AUTH is enabled but PUBLIC_BASE_URL is not localhost; refusing the dev auth bypass'
+    );
+    return false;
+  }
+  return true;
+}
 
 const MAX_DEVICE_NAME_LENGTH = 100;
 // Real ID tokens run 1-2 KB and Apple's one-time code is 43 chars; this just caps abuse.
@@ -41,23 +66,28 @@ function codeVerifierIssue(value: unknown): ValidationIssue {
 function parseTokenRequest(body: unknown): ExchangeTokenRequest | ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   const b = (body ?? {}) as Record<string, unknown>;
-  if (b.provider !== 'google' && b.provider !== 'apple' && b.provider !== 'dev') {
+  const { provider, credential, deviceName, codeVerifier } = b;
+  if (provider !== 'google' && provider !== 'apple' && provider !== 'dev') {
     issues.push({ pointer: '/provider', detail: "must be 'google', 'apple', or 'dev'" });
   }
-  requireNonEmptyString(b.credential, '/credential', issues, { maxLength: MAX_CREDENTIAL_LENGTH });
-  requireNonEmptyString(b.deviceName, '/deviceName', issues, {
-    maxLength: MAX_DEVICE_NAME_LENGTH,
-  });
-  if (b.provider === 'apple') {
+  requireNonEmptyString(credential, '/credential', issues, { maxLength: MAX_CREDENTIAL_LENGTH });
+  requireNonEmptyString(deviceName, '/deviceName', issues, { maxLength: MAX_DEVICE_NAME_LENGTH });
+  if (provider === 'apple') {
     // Bounded (length + charset) before consumeAuthCode ever runs, so malformed input can't burn the code.
-    if (typeof b.codeVerifier !== 'string' || !CODE_VERIFIER_RE.test(b.codeVerifier)) {
-      issues.push(codeVerifierIssue(b.codeVerifier));
+    if (typeof codeVerifier !== 'string' || !CODE_VERIFIER_RE.test(codeVerifier)) {
+      issues.push(codeVerifierIssue(codeVerifier));
     }
   }
   if (issues.length > 0) {
     return issues;
   }
-  return b as unknown as ExchangeTokenRequest;
+  // Construct each arm from validated locals instead of casting `b` — adding a union field then
+  // breaks compilation here rather than silently smuggling an unchecked value downstream.
+  const base = { credential: credential as string, deviceName: deviceName as string };
+  if (provider === 'apple') {
+    return { provider, ...base, codeVerifier: codeVerifier as string };
+  }
+  return { provider: provider as 'google' | 'dev', ...base };
 }
 
 export function registerAuthRoutes(
@@ -87,21 +117,22 @@ export function registerAuthRoutes(
       }
       identity = { provider: 'google', providerSub: verified.providerSub, email: verified.email };
     } else if (parsed.provider === 'dev') {
-      if (c.env.DEV_FAKE_AUTH !== '1') {
+      if (!isDevAuthEnabled(c.env)) {
         return problem('invalid_request', { detail: 'Unknown provider.' });
       }
       identity = { provider: 'dev', providerSub: parsed.credential };
     } else if (parsed.provider === 'apple') {
       const consumed = await store.consumeAuthCode(parsed.credential);
-      // codeVerifier is required by the ExchangeTokenRequest type on this arm, but the wire
-      // is never trusted — parseTokenRequest already re-validated it at runtime above.
-      if (consumed === null || typeof parsed.codeVerifier !== 'string') {
+      if (consumed === null) {
         return problem('invalid_token');
       }
       // The code is already burned here; a verifier mismatch fails closed rather than
       // leaving the code redeemable for a retry.
       const computedChallenge = await sha256Base64Url(parsed.codeVerifier);
       if (computedChallenge !== consumed.codeChallenge) {
+        // A redeemed code with the wrong verifier is the exact attack PKCE exists to stop; the
+        // code is already burned, so this is the only record it ever happened. Metadata only.
+        logger.warn('Apple auth-code exchange failed PKCE verifier check');
         return problem('invalid_token');
       }
       identity = {

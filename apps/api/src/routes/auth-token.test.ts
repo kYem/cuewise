@@ -2,6 +2,7 @@ import { env } from 'cloudflare:test';
 import { errors } from 'jose';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { createTestIdp, type TestIdp } from '../__fixtures__/jwks.fixtures';
+import { spyOnLoggerError } from '../__fixtures__/logger.fixtures';
 import { D1SyncStore } from '../d1-store';
 import app, { createApp } from '../index';
 
@@ -58,6 +59,38 @@ describe('POST /v1/auth/token (google)', () => {
     expect(res.status).toBe(401);
     const body = await res.json<{ code: string }>();
     expect(body.code).toBe('invalid_token');
+  });
+
+  it('rejects a token with the wrong issuer as invalid_token', async () => {
+    const idToken = await idp.sign({
+      iss: 'https://accounts.evil.example',
+      aud: 'test-client',
+      sub: 'g-sub-1',
+    });
+    const res = await postToken({ provider: 'google', credential: idToken, deviceName: 'Chrome' });
+    expect(res.status).toBe(401);
+    const body = await res.json<{ code: string }>();
+    expect(body.code).toBe('invalid_token');
+  });
+
+  it('returns 500 internal (not invalid_token) when GOOGLE_CLIENT_IDS is unconfigured', async () => {
+    // Empty GOOGLE_CLIENT_IDS is a server misconfig, not a bad client token — it must fail closed
+    // and loud (500 + logged), not silently 401 every real sign-in with an empty server log.
+    const errorSpy = spyOnLoggerError();
+    const idToken = await idp.sign({ iss: GOOGLE_ISS, aud: 'test-client', sub: 'g-sub-1' });
+    const res = await appWithIdp().request(
+      '/v1/auth/token',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider: 'google', credential: idToken, deviceName: 'Chrome' }),
+      },
+      { ...env, GOOGLE_CLIENT_IDS: '' }
+    );
+    expect(res.status).toBe(500);
+    const body = await res.json<{ code: string }>();
+    expect(body.code).toBe('internal');
+    expect(errorSpy).toHaveBeenCalledTimes(1);
   });
 
   it('returns 500 internal (not invalid_token) when the Google JWKS fetch times out', async () => {
@@ -165,6 +198,25 @@ describe('POST /v1/auth/token (google)', () => {
       DEV_FAKE_AUTH: '1',
     });
     expect(on.status).toBe(200);
+  });
+
+  it('refuses dev auth (and logs an error) when DEV_FAKE_AUTH=1 but PUBLIC_BASE_URL is not localhost', async () => {
+    // A prod deploy that trips this flag would be a total auth bypass — the localhost gate must
+    // refuse it and shout, not silently mint sessions.
+    const errorSpy = spyOnLoggerError();
+    const res = await appWithIdp().request(
+      '/v1/auth/token',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider: 'dev', credential: 'dev-user-1', deviceName: 'e2e' }),
+      },
+      { ...testEnv(), DEV_FAKE_AUTH: '1', PUBLIC_BASE_URL: 'https://api.cuewise.app' }
+    );
+    expect(res.status).toBe(400);
+    const body = await res.json<{ code: string }>();
+    expect(body.code).toBe('invalid_request');
+    expect(errorSpy).toHaveBeenCalledTimes(1);
   });
 });
 

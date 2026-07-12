@@ -2,9 +2,15 @@ import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
 import { record } from './__fixtures__/api-test-helpers.fixtures';
 import { D1SyncStore } from './d1-store';
+import { StorageQuotaExceededError } from './store';
 
 async function newUser(store: D1SyncStore, providerSub: string): Promise<string> {
   return store.findOrCreateUser({ provider: 'dev', providerSub });
+}
+
+/** A store with tiny caps (page size 2, per-user cap 3) so the bounds are exercisable in-test. */
+function cappedStore(): D1SyncStore {
+  return new D1SyncStore(env.DB, Date.now, 3, 2);
 }
 
 describe('D1SyncStore records', () => {
@@ -76,6 +82,50 @@ describe('D1SyncStore records', () => {
     await store.applyChanges(userId, [record({ entityId: 'c' })]);
     const { records } = await store.listChanges(userId, 0);
     expect(records.map((r) => r.seq)).toEqual([1, 2, 3]);
+  });
+
+  it('listChanges caps a page at changesPageSize and the cursor lets the caller pull the rest', async () => {
+    const store = cappedStore();
+    const userId = await newUser(store, 'u-page');
+    await store.applyChanges(userId, [
+      record({ entityId: 'a' }),
+      record({ entityId: 'b' }),
+      record({ entityId: 'c' }),
+    ]);
+    const firstPage = await store.listChanges(userId, 0);
+    expect(firstPage.records.map((r) => r.seq)).toEqual([1, 2]);
+    expect(firstPage.cursor).toBe(2);
+    const secondPage = await store.listChanges(userId, firstPage.cursor);
+    expect(secondPage.records.map((r) => r.seq)).toEqual([3]);
+  });
+
+  it('exportUser pages internally and returns every record past a single page', async () => {
+    const store = cappedStore();
+    const userId = await newUser(store, 'u-export');
+    await store.applyChanges(userId, [
+      record({ entityId: 'a' }),
+      record({ entityId: 'b' }),
+      record({ entityId: 'c' }),
+    ]);
+    const { records } = await store.exportUser(userId);
+    expect(records.map((r) => r.seq)).toEqual([1, 2, 3]);
+  });
+
+  it('rejects a push that would exceed the per-user record cap with StorageQuotaExceededError', async () => {
+    const store = cappedStore();
+    const userId = await newUser(store, 'u-quota');
+    await store.applyChanges(userId, [record({ entityId: 'a' }), record({ entityId: 'b' })]);
+    await expect(
+      store.applyChanges(userId, [record({ entityId: 'c' }), record({ entityId: 'd' })])
+    ).rejects.toBeInstanceOf(StorageQuotaExceededError);
+    // The rejected batch must not have partially written.
+    const countRow = await env.DB.prepare('SELECT COUNT(*) as count FROM records WHERE user_id = ?')
+      .bind(userId)
+      .first<{ count: number }>();
+    if (countRow === null) {
+      throw new Error('expected a count row');
+    }
+    expect(countRow.count).toBe(2);
   });
 
   it('applyChanges with an empty array returns the current cursor and writes nothing', async () => {

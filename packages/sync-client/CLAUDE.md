@@ -17,7 +17,7 @@ A **platform-agnostic** client for the ENG-43 cloud-sync API (`apps/api`) — no
 | `exportData()` | `GET /v1/export` | Yes |
 | `deleteAccount()` | `DELETE /v1/account` | Yes |
 
-**Retry policy**: up to `MAX_RETRIES = 3` retries after the initial attempt — 4 attempts total. Retries on network failure (a rejected `fetch`, e.g. offline/DNS — folded into the same path as a synthetic status-0 error), `429`, and `5xx`. Backoff is `2^attempt * 500ms`, unless the response carried `Retry-After`, which takes priority. Any other 4xx throws immediately, no retry.
+**Retry policy**: up to `MAX_RETRIES = 3` retries after the initial attempt — 4 attempts total. Retries on network failure (a rejected `fetch`, e.g. offline/DNS — folded into the same path as a synthetic status-0 error), `429`, and `5xx`. Backoff is `2^attempt * 500ms`, unless the response carried a `retryAfter` (problem+json body) or a numeric `Retry-After` header, which takes priority. Any other 4xx throws immediately, no retry.
 
 **The Apple exception**: `exchangeToken` passes `retry: false` internally whenever `req.provider === 'apple'`. Apple's `credential` is the one-time code from the server bounce (see `apps/api/CLAUDE.md` → Auth flows) — it's burned the instant the server reads it, so retrying a lost or ambiguous response would replay an already-consumed code and turn a would-be-successful sign-in into a guaranteed 401. Google and dev exchanges are idempotent and keep retrying normally.
 

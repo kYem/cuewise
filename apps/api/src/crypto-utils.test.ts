@@ -3,9 +3,20 @@ import { spyOnLoggerError, spyOnLoggerWarn } from './__fixtures__/logger.fixture
 import {
   base64UrlDecodeString,
   base64UrlEncodeString,
+  sha256Base64Url,
   signState,
   verifyState,
 } from './crypto-utils';
+
+describe('sha256Base64Url', () => {
+  it('matches the RFC 7636 Appendix B S256 test vector', async () => {
+    // Pins the PKCE S256 encoding (base64url, no padding). If this ever regressed to standard
+    // base64 or left padding on, the PKCE self-consistency tests would still pass while every
+    // correct real client became unable to sign in with Apple.
+    const digest = await sha256Base64Url('dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk');
+    expect(digest).toBe('E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM');
+  });
+});
 
 describe('base64UrlEncodeString / base64UrlDecodeString', () => {
   it('round-trips a state payload with a non-ASCII returnUri byte-exactly', () => {

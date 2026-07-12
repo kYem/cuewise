@@ -71,6 +71,48 @@ describe('DELETE /v1/account', () => {
   });
 });
 
+describe('per-user isolation across the full HTTP stack', () => {
+  it('one user never sees another user changes via GET /v1/changes or /v1/export', async () => {
+    const a = await signedInToken();
+    const b = await signedInToken();
+    await postChanges(app, a.token, {
+      records: [record({ entityId: 'a-only', ciphertext: 'a-cipher' })],
+    });
+    await postChanges(app, b.token, {
+      records: [record({ entityId: 'b-only', ciphertext: 'b-cipher' })],
+    });
+
+    const bChanges = await getChanges(app, b.token, '0');
+    const bBody = await bChanges.json<{ records: Array<{ entityId: string }> }>();
+    expect(bBody.records.map((r) => r.entityId)).toEqual(['b-only']);
+
+    const bExport = await getExport(b.token);
+    const bExportBody = await bExport.json<{ records: Array<{ entityId: string }> }>();
+    expect(bExportBody.records.map((r) => r.entityId)).toEqual(['b-only']);
+  });
+
+  it('deleting one account leaves another user data fully intact (deleteUser blast radius)', async () => {
+    const victim = await signedInToken();
+    const survivor = await signedInToken();
+    await postChanges(app, victim.token, { records: [record({ entityId: 'v1' })] });
+    await postChanges(app, survivor.token, {
+      records: [record({ entityId: 's1', ciphertext: 's1-cipher' })],
+    });
+
+    const del = await deleteAccount(victim.token);
+    expect(del.status).toBe(204);
+
+    // The survivor token and every one of their records must be untouched.
+    const survivorChanges = await getChanges(app, survivor.token, '0');
+    expect(survivorChanges.status).toBe(200);
+    const body = await survivorChanges.json<{
+      records: Array<{ entityId: string; ciphertext: string }>;
+    }>();
+    expect(body.records.map((r) => r.entityId)).toEqual(['s1']);
+    expect(body.records[0]?.ciphertext).toBe('s1-cipher');
+  });
+});
+
 describe('GET /v1/export auth', () => {
   it('returns 401 unauthorized with no Authorization header', async () => {
     const res = await app.request('/v1/export', {}, env);

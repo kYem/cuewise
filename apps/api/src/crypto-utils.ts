@@ -83,7 +83,8 @@ export type VerifyStateResult =
   | { ok: true; payload: unknown }
   | { ok: false; reason: 'unsigned' | 'bad_signature' | 'undecodable' | 'key_unavailable' };
 
-/** Verifies a `signState` output with a constant-time comparison; never throws. */
+/** Verifies a `signState` output; never throws. The HMAC compare is constant-time on workerd
+ *  (BoringSSL CRYPTO_memcmp), a runtime property — not a WebCrypto-spec guarantee off-workerd. */
 export async function verifyState(state: string, key: string): Promise<VerifyStateResult> {
   const separator = state.lastIndexOf('.');
   if (separator === -1) {

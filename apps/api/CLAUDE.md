@@ -23,7 +23,7 @@ HTTP request
 
 This mirrors the repo's ports/adapters pattern (`packages/shared/src/platform/`): `SyncStore` is the port, `D1SyncStore` is the one adapter today. A future non-D1 backend only needs a new adapter — routes and validation stay unaware D1 exists.
 
-Auth is two different shapes, not one. Session lookup is plain middleware, not a port: `requireSession()` (`auth-middleware.ts`) is a concrete factory that resolves `Authorization: Bearer <token>` → `{userId, tokenHash}` and sets them as Hono context vars, with no interface/adapter/DI behind it. ID-token verification, by contrast, **is** a port: `IdTokenVerifier` (`verifiers.ts`) is a function-shaped interface, `verifyGoogleIdToken`/`verifyAppleIdToken` are its adapters, and `AppDeps`/`AppDepsResolved` (`index.ts`) is the DI injection point tests use directly (`createApp({ googleVerifier: ... })`), exactly like `storeFactory` for `SyncStore`. Either way, the `changes`/`account` route handlers only ever read `c.get('userId')` — they never call a session/token method on `SyncStore` themselves. So a future swap to Better Auth or a hosted IdP touches only the auth surface (`auth-middleware.ts`, `routes/auth.ts`, `routes/apple.ts`, `verifiers.ts`); the sync handlers don't change.
+Auth has two shapes. **Session lookup** has no dedicated port: `requireSession()` (`auth-middleware.ts`) resolves `Authorization: Bearer <token>` → `{userId, tokenHash}` context vars, but does so through the `SyncStore` port's `lookupSession` (so tests inject store stubs). **ID-token verification** *is* a function-shaped port: `IdTokenVerifier` (`verifiers.ts`), with `verifyGoogleIdToken`/`verifyAppleIdToken` as adapters and `AppDeps` (`index.ts`) as the DI seam tests use (`createApp({ googleVerifier })`), like `storeFactory` for `SyncStore`. The `changes`/`account` handlers only read `c.get('userId')`, never a `SyncStore` session method — so swapping to Better Auth / a hosted IdP touches the auth surface (`auth-middleware.ts`, `routes/auth.ts`, `routes/apple.ts`, `verifiers.ts`) plus `SyncStore`'s session/auth-code methods (`store.ts`, `d1-store.ts`) and their migrations; the sync handlers don't change.
 
 ## Data Model
 
@@ -34,7 +34,7 @@ D1 tables (`migrations/0001_init.sql`, plus two follow-ups):
 | `users` | `id`, `email`, `last_seq`, `created_at` | `last_seq` is the per-user sync cursor — bumped once per push, never per-row. |
 | `identities` | `(provider, provider_sub)` → `user_id`, `email`, `created_at` | Composite PK. One row per linked provider — makes linking Google + Apple to one account additive, no schema change. |
 | `tokens` | `token_hash` (PK), `user_id`, `device_name`, `expires_at`, `revoked_at`, `last_used_at`, `window_start`/`window_count`, `created_at` | The raw session token is never stored, only its SHA-256. Rate-limit counters live on the token's own row, so per-token limiting needs no separate table. |
-| `auth_codes` | `code_hash` (PK), `payload` (JSON), `expires_at`, `used_at`, `code_challenge` | Apple's one-time exchange code (also hash-only). 60s TTL; `code_challenge` binds it to a PKCE verifier (added in `0002_auth_code_challenge.sql`). |
+| `auth_codes` | `code_hash` (PK), `payload` (JSON), `expires_at`, `used_at`, `code_challenge` | Apple's one-time exchange code (also hash-only). 60s TTL; `code_challenge` binds it to a PKCE verifier. `consumeAuthCode` DELETEs the row (single-use + PII gone at once), so `used_at` is now vestigial. |
 | `records` | `(user_id, collection, entity_id)` (PK), `seq`, `ciphertext`, `deleted`, `client_updated_at`, `server_received_at` | See below. |
 
 **`records` is upsert-per-entity, not append-only history.** The primary key is the entity's identity, so pushing an update to an entity `ON CONFLICT ... DO UPDATE`s the same row in place — one row per entity ever synced, storage bounded regardless of edit count. A delete sets `deleted = 1` (tombstone) rather than removing the row, because a physically-deleted row would be invisible to `WHERE seq > ?`, and a device that pulls after the delete would never learn the entity is gone.
@@ -48,7 +48,7 @@ INSERT INTO records (..., seq, ...)
   ON CONFLICT (user_id, collection, entity_id) DO UPDATE SET seq = excluded.seq, ...
 ```
 
-The leading `UPDATE` bumps `last_seq` by the batch size; every `INSERT`'s subquery then re-reads that already-bumped `last_seq` to compute its own slot. **This must stay a single `db.batch()` call.** D1 batches run sequentially inside one implicit transaction, which is the only reason each `INSERT` reliably sees the `UPDATE`'s effect. Split it into separate calls and two devices pushing concurrently can both read the pre-bump `last_seq`, hand out colliding `seq` values, and break the monotonic-cursor invariant every pull relies on.
+The leading `UPDATE` bumps `last_seq` by `n`; each `INSERT`'s subquery re-reads that bumped value for its slot. **This must stay one `db.batch()`** — D1 runs a batch as one sequential transaction, the only reason each `INSERT` sees the `UPDATE`. Split it, and two concurrent pushes both apply their `UPDATE` first, so both `INSERT` sets read the same post-bump `last_seq` and hand out colliding `seq`s, breaking the monotonic cursor. (`d1-store.concurrency.test.ts` guards this.)
 
 ## API Surface
 
@@ -61,7 +61,7 @@ All endpoints are under `/v1`.
 | `GET` | `/v1/auth/apple/start` | Begin the Apple server-bounce flow | No |
 | `POST` | `/v1/auth/apple/callback` | Apple's redirect target; mints a one-time code | No |
 | `POST` | `/v1/auth/logout` | Revoke the presented session token | Yes |
-| `GET` | `/v1/changes?since=<seq>` | Incremental pull (`since=0` = fresh-device bootstrap) | Yes |
+| `GET` | `/v1/changes?since=<seq>` | Incremental pull, ≤500 records/page (`since=0` = fresh-device bootstrap). A full page means pull again from the returned `cursor`. | Yes |
 | `POST` | `/v1/changes` | Atomic batch push, ≤100 records, ≤64 KB ciphertext/record | Yes |
 | `GET` | `/v1/export` | Dump all of the caller's records | Yes |
 | `DELETE` | `/v1/account` | Delete user, identities, tokens, and records | Yes |
@@ -82,7 +82,7 @@ Apple only redirects to registered **https** URLs, so the Worker sits in the mid
 4. Server verifies `state`'s HMAC (`verifyState`), verifies the Apple ID token via JWKS, and checks the token's `nonce` claim matches the one embedded in `state` — proof this ID token was minted for a flow *this server* started.
 5. Server calls `mintAuthCode({provider:'apple', providerSub, email}, codeChallenge)` — a one-time code (60s TTL, hash-only storage) bound to the `codeChallenge` from `state` — and 302s to the client's `returnUri` with `?code=...`. No session token ever rides a URL.
 6. Client calls `POST /v1/auth/token` with `{provider:'apple', credential: <code>, codeVerifier: <original verifier>, deviceName}`.
-7. `parseTokenRequest` (`routes/auth.ts`) first rejects any `codeVerifier` outside RFC 7636 §4.1's 43-128 character range, or containing any character outside the unreserved set `[A-Za-z0-9._~-]`, with a 400, before the code is ever looked up — a malformed verifier alone can't burn it. Only past that guard does the server's `consumeAuthCode` burn the code atomically (`UPDATE ... SET used_at = ... WHERE used_at IS NULL ... RETURNING`) in the same statement that reads it — no reuse window. *Then* it checks `SHA256Base64Url(codeVerifier) === codeChallenge`. **A mismatch fails closed**: the code is already burned by the time the mismatch is detected, so a wrong verifier permanently kills that code rather than leaving it retryable.
+7. `parseTokenRequest` (`routes/auth.ts`) first rejects any `codeVerifier` outside RFC 7636 §4.1's 43-128 character range, or containing any character outside the unreserved set `[A-Za-z0-9._~-]`, with a 400, before the code is ever looked up — a malformed verifier alone can't burn it. Only past that guard does the server's `consumeAuthCode` burn the code atomically (`DELETE ... WHERE expires_at > ? RETURNING`) in the same statement that reads it — no reuse window, and the payload PII is gone at once. *Then* it checks `SHA256Base64Url(codeVerifier) === codeChallenge`. **A mismatch fails closed**: the code is already burned by the time the mismatch is detected, so a wrong verifier permanently kills that code rather than leaving it retryable.
 
 **Client-side contract** — anyone wiring a new client to this flow must:
 - Generate `code_verifier` on-device and never let it leave the device until the final `/v1/auth/token` call. Send only `code_challenge` (the S256 hash) to `/start`.
@@ -93,7 +93,9 @@ Apple only redirects to registered **https** URLs, so the Worker sits in the mid
 
 `createSession` mints 32 random bytes, returns the raw token once, and stores only its SHA-256 (`tokens.token_hash`). Expiry is sliding: every successful `lookupSession` pushes `expires_at` forward another `SESSION_TTL_MS` (90 days) and updates `last_used_at`. `POST /v1/auth/logout` sets `revoked_at`, which `lookupSession` checks going forward.
 
-There's also a `provider: 'dev'` path, gated by `DEV_FAKE_AUTH === '1'`, that skips verification entirely and mints a session for whatever `credential` string you pass. **Never enable this in production** — see Gotchas.
+There's also a `provider: 'dev'` path, gated by `DEV_FAKE_AUTH === '1'` **and** a localhost `PUBLIC_BASE_URL`, that skips verification entirely and mints a session for whatever `credential` string you pass. Set off-localhost, it's refused and `logger.error`'d rather than honored. **Never enable this in production** — see Gotchas.
+
+**Provider config fails closed.** An empty `APPLE_CLIENT_ID`/`GOOGLE_CLIENT_IDS` (the committed defaults) makes the verifier throw before `jwtVerify` → `internal` (500) + logged error, rather than accepting anything (an empty Apple string would make jose skip the `aud` check) or silently 401ing every sign-in. Provision both before serving traffic.
 
 ## Errors
 
@@ -108,10 +110,12 @@ Every error response is `application/problem+json` (RFC 9457), built by `problem
 | `rate_limited` | 429 | Per-token or per-IP limit exceeded |
 | `batch_too_large` | 422 | Push exceeded `MAX_BATCH_SIZE` (100) |
 | `invalid_record` | 422 | One or more records in a push failed validation |
+| `storage_quota_exceeded` | 422 | Push would exceed the per-user record cap (`MAX_RECORDS_PER_USER`) |
+| `payload_too_large` | 413 | Request body `Content-Length` exceeded `MAX_REQUEST_BODY_BYTES` |
 | `invalid_cursor` | 400 | `since` isn't a plain non-negative safe integer |
 | `invalid_request` | 400 | Malformed/unparseable body, or a structurally wrong one |
 | `not_found` | 404 | No route matched |
-| `internal` | 500 | Unhandled exception or upstream (JWKS) outage |
+| `internal` | 500 | Unhandled exception, upstream (JWKS) outage, or a config fault (empty signing key / client-id) |
 
 Body: `type` (`https://cuewise.app/problems/<code-with-dashes>`), `title`, `status`, `code`, optional `detail`, `retryAfter` (mirrored as a `Retry-After` header), `errors[]` (`{index?, pointer?, detail}`).
 
@@ -123,8 +127,8 @@ Body: `type` (`https://cuewise.app/problems/<code-with-dashes>`), `title`, `stat
 
 | Scope | Applies to | Limit | Window |
 |---|---|---|---|
-| Per-token, sliding (`rate-limit.ts`) | `/v1/changes/*`, `/v1/export`, `/v1/account` | 60 req | 60s — counter lives on the token's own D1 row, no extra infra |
-| Per-IP, fixed, isolate-local (`ip-rate-limit.ts`) | `/v1/auth/token`, `/v1/auth/apple/start`, `/v1/auth/apple/callback` | 30 req (default) | 60s — in-memory `Map`, resets on isolate recycle; defense-in-depth, production also fronts these with WAF rules |
+| Per-token, fixed window (`rate-limit.ts`) | `/v1/changes/*`, `/v1/export`, `/v1/account` | 60 req | 60s — counter anchored on the token's own D1 row, no extra infra |
+| Per-IP, fixed window, isolate-local (`ip-rate-limit.ts`) | `/v1/auth/token`, `/v1/auth/apple/start`, `/v1/auth/apple/callback` | 30 req (default) | 60s — in-memory `Map`, resets on isolate recycle; defense-in-depth, production also fronts these with WAF rules |
 
 Both emit `Retry-After`. `/v1/auth/logout` requires a Bearer token but isn't covered by either limiter. The IP limiter is bounded to 20,000 tracked IPs and skips entirely when `CF-Connecting-IP` is absent (a non-edge invocation).
 

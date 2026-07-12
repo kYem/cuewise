@@ -2,6 +2,7 @@ import { env } from 'cloudflare:test';
 import { errors } from 'jose';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { createTestIdp, type TestIdp } from '../__fixtures__/jwks.fixtures';
+import { spyOnLoggerError } from '../__fixtures__/logger.fixtures';
 import { base64UrlEncodeString, sha256Base64Url, signState } from '../crypto-utils';
 import { createApp } from '../index';
 
@@ -149,6 +150,50 @@ async function mintCodeWithEmail(
   return code;
 }
 
+describe('POST /v1/auth/apple/callback fails closed on an empty APPLE_CLIENT_ID', () => {
+  it('answers 500 rather than accepting a token minted for a different Apple client', async () => {
+    // Signing key provisioned but APPLE_CLIENT_ID left as the committed empty default. An empty
+    // audience would make jose skip the aud check (fail-open); the verifier must reject it (500)
+    // instead of minting a code for a token whose aud is some other relying party.
+    const errorSpy = spyOnLoggerError();
+    const misconfiguredEnv = { ...testEnv(), APPLE_CLIENT_ID: '' };
+    const app = appWithIdp();
+    const returnUri = 'cuewise://auth';
+
+    const startRes = await app.request(
+      `/v1/auth/apple/start?${new URLSearchParams({ return_uri: returnUri, code_challenge: CODE_CHALLENGE })}`,
+      { method: 'GET' },
+      misconfiguredEnv
+    );
+    const state = new URL(requireHeader(startRes, 'Location')).searchParams.get('state');
+    if (state === null) {
+      throw new Error('Expected a state query param on the /v1/auth/apple/start redirect');
+    }
+    const idToken = await idp.sign({
+      iss: APPLE_ISS,
+      aud: 'some-other-relying-party',
+      sub: 'victim-sub',
+      nonce: decodeState(state).nonce,
+    });
+
+    const res = await app.request(
+      '/v1/auth/apple/callback',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ id_token: idToken, state }).toString(),
+      },
+      misconfiguredEnv
+    );
+
+    expect(res.status).toBe(500);
+    const body = await res.json<{ code: string }>();
+    expect(body.code).toBe('internal');
+    expect(res.headers.get('Location')).toBeNull();
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('GET /v1/auth/apple/start', () => {
   it('redirects to Apple authorize with the expected query params and state', async () => {
     const res = await getStart('cuewise://auth');
@@ -245,6 +290,23 @@ describe('POST /v1/auth/apple/callback', () => {
       aud: 'apple-client',
       sub: 'apple-sub-nonce-mismatch',
       nonce: 'a-different-nonce-entirely',
+    });
+
+    const res = await postCallback(idToken, state);
+    expect(res.status).toBe(401);
+    const body = await res.json<{ code: string }>();
+    expect(body.code).toBe('invalid_token');
+    expect(res.headers.get('Location')).toBeNull();
+  });
+
+  it('rejects an ID token that carries no nonce claim at all', async () => {
+    // Distinct from a mismatch: guards the `verified.nonce === undefined` half of the check, so a
+    // refactor that made the nonce "optional" (dropping that guard) can't silently pass.
+    const state = await fetchStartState('cuewise://auth');
+    const idToken = await idp.sign({
+      iss: APPLE_ISS,
+      aud: 'apple-client',
+      sub: 'apple-sub-no-nonce',
     });
 
     const res = await postCallback(idToken, state);

@@ -111,6 +111,9 @@ export function registerAppleRoutes(
     // The state is HMAC-signed, so a matching nonce proves this ID token was minted
     // for a flow this server started — not forged or replayed from elsewhere.
     if (verified.nonce === undefined || verified.nonce !== decoded.nonce) {
+      // A validly-signed Apple token with the wrong nonce is a replay into a flow it wasn't
+      // minted for — the exact attack the nonce exists to stop, so it must be visible.
+      logger.warn('Apple callback ID token nonce did not match the state nonce');
       return problem('invalid_token');
     }
     const code = await deps.storeFactory(c.env.DB).mintAuthCode(

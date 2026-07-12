@@ -5,7 +5,8 @@ import {
   record,
   signedInToken,
 } from '../__fixtures__/api-test-helpers.fixtures';
-import app from '../index';
+import { D1SyncStore } from '../d1-store';
+import app, { createApp } from '../index';
 import { MAX_COLLECTION_LENGTH } from '../validate-changes';
 
 describe('POST /v1/changes then GET /v1/changes', () => {
@@ -48,6 +49,25 @@ describe('POST /v1/changes then GET /v1/changes', () => {
     const body = await res.json<{ records: unknown[]; cursor: number }>();
     expect(body.records).toEqual([]);
     expect(body.cursor).toBe(2);
+  });
+});
+
+describe('POST /v1/changes storage quota', () => {
+  it('returns 422 storage_quota_exceeded when a push would exceed the per-user record cap', async () => {
+    // Inject a tiny cap (3) so the wiring is exercisable without materializing 100k rows.
+    const cappedApp = createApp({ storeFactory: (db) => new D1SyncStore(db, Date.now, 3, 2) });
+    const { token } = await signedInToken();
+    const ok = await postChanges(cappedApp, token, {
+      records: [record({ entityId: 'a' }), record({ entityId: 'b' })],
+    });
+    expect(ok.status).toBe(200);
+
+    const res = await postChanges(cappedApp, token, {
+      records: [record({ entityId: 'c' }), record({ entityId: 'd' })],
+    });
+    expect(res.status).toBe(422);
+    const body = await res.json<{ code: string }>();
+    expect(body.code).toBe('storage_quota_exceeded');
   });
 });
 

@@ -4,6 +4,8 @@ const PROBLEM_DEFS = {
   rate_limited: { status: 429, title: 'Too many requests' },
   batch_too_large: { status: 422, title: 'Batch too large' },
   invalid_record: { status: 422, title: 'Batch rejected' },
+  storage_quota_exceeded: { status: 422, title: 'Storage quota exceeded' },
+  payload_too_large: { status: 413, title: 'Payload too large' },
   invalid_cursor: { status: 400, title: 'Invalid cursor' },
   invalid_request: { status: 400, title: 'Malformed request' },
   not_found: { status: 404, title: 'Not found' },

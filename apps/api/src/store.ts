@@ -19,6 +19,9 @@ export interface AuthCodePayload {
   email?: string;
 }
 
+/** Thrown by `applyChanges` when a push would take the user past their per-user record cap. */
+export class StorageQuotaExceededError extends Error {}
+
 export interface SyncStore {
   findOrCreateUser(identity: Identity): Promise<string>;
   createSession(userId: string, deviceName: string): Promise<string>;
@@ -28,12 +31,15 @@ export interface SyncStore {
   consumeAuthCode(
     rawCode: string
   ): Promise<{ payload: AuthCodePayload; codeChallenge: string } | null>;
+  // Throws StorageQuotaExceededError when the push would exceed the per-user record cap.
   applyChanges(userId: string, changes: PushRecord[]): Promise<number>;
+  // Returns at most MAX_CHANGES_PAGE_SIZE records; a full page means the caller should pull
+  // again from the returned cursor. `cursor` is the last returned seq (or `since` when empty).
   listChanges(userId: string, since: number): Promise<{ records: SyncRecord[]; cursor: number }>;
   exportUser(userId: string): Promise<{ records: SyncRecord[] }>;
   deleteUser(userId: string): Promise<void>;
-  // Returns null when the token row no longer exists (e.g. revoked/deleted mid-request)
-  // so callers can 401 instead of treating it as a server error.
+  // Returns null only when the token row was physically deleted mid-request (concurrent account
+  // deletion); revocation leaves the row and is already caught upstream by lookupSession.
   bumpRateWindow(
     tokenHash: string,
     windowMs: number
