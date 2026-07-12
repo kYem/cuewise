@@ -18,6 +18,7 @@ export type { SettingsSectionProps } from './components/settings/settings-types'
 
 // Store + selector surface for platform hosts that project state outside the app
 // tree (e.g. the macOS menu-bar tray).
+export { useFocusModeStore } from './stores/focus-mode-store';
 export { usePomodoroStore } from './stores/pomodoro-store';
 export { useReminderStore } from './stores/reminder-store';
 export { useToastStore } from './stores/toast-store';

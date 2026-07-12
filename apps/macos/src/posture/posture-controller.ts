@@ -1,4 +1,4 @@
-import { useToastStore } from '@cuewise/app';
+import { useFocusModeStore, usePomodoroStore, useToastStore } from '@cuewise/app';
 import { getNotifier, logger, type PostureSample, type PostureStatus } from '@cuewise/shared';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
@@ -52,7 +52,8 @@ const KNOWN_STATUSES = Object.keys({
 } satisfies Record<PostureStatus, 0>) as PostureStatus[];
 
 // Nudge on sustained poor posture, then cool down so we don't nag.
-const NUDGE_AFTER_POOR_SAMPLES = 15; // ~30s at the sidecar's 2s cadence
+// Exported so tests exercise the real threshold instead of mirroring it.
+export const NUDGE_AFTER_POOR_SAMPLES = 15; // ~30s at the sidecar's 2s cadence
 const NUDGE_COOLDOWN_MS = 5 * 60 * 1000;
 let poorStreak = 0;
 let lastNudgeAt = 0;
@@ -311,9 +312,25 @@ export function setPostureNudges(enabled: boolean): void {
   setState({ nudgesEnabled: enabled });
 }
 
+// Smart Pause (ENG-39): suppress nudges during a running work session, or while the
+// immersive focus-mode surface is open (which stays open through breaks by design).
+function isFocusSessionActive(): boolean {
+  const pomodoro = usePomodoroStore.getState();
+  if (pomodoro.status === 'running' && pomodoro.sessionType === 'work') {
+    return true;
+  }
+  return useFocusModeStore.getState().isActive;
+}
+
 // Fire a gentle nudge once poor posture has persisted, then hold off for a while.
 function maybeNudge(sample: PostureSample): void {
   if (!state.nudgesEnabled || sample.status !== 'poor') {
+    poorStreak = 0;
+    return;
+  }
+  if (isFocusSessionActive()) {
+    // Focus time is neutral: reset rather than freeze the streak, so a pre-focus
+    // lean can't fire a stale nudge the moment the session ends.
     poorStreak = 0;
     return;
   }
