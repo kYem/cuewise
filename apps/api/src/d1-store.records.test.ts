@@ -1,6 +1,6 @@
 import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
-import { record } from './__fixtures__/api-test-helpers.fixtures';
+import { clockedStore, record } from './__fixtures__/api-test-helpers.fixtures';
 import { D1SyncStore } from './d1-store';
 import { StorageQuotaExceededError } from './store';
 
@@ -135,6 +135,32 @@ describe('D1SyncStore records', () => {
       throw new Error('expected a count row');
     }
     expect(countRow.count).toBe(2);
+  });
+
+  it('purgeTombstones deletes only tombstones older than the retention window, keeping live rows', async () => {
+    const retention = 100_000;
+    const { store, tick } = clockedStore(1_000);
+    const userId = await store.findOrCreateUser({ provider: 'dev', providerSub: 'u-purge' });
+    // An old tombstone + a live record at t=1000, then a fresh tombstone past the retention window.
+    await store.applyChanges(userId, [
+      record({ entityId: 'old', deleted: true }),
+      record({ entityId: 'keep', deleted: false }),
+    ]);
+    tick(retention + 1);
+    await store.applyChanges(userId, [record({ entityId: 'recent', deleted: true })]);
+
+    const purged = await store.purgeTombstones(retention);
+    expect(purged).toBe(1);
+
+    const { records } = await store.exportUser(userId);
+    expect(records.map((r) => r.entityId).sort()).toEqual(['keep', 'recent']);
+  });
+
+  it('purgeTombstones is a no-op (returns 0) when no tombstone is past the window', async () => {
+    const { store } = clockedStore(1_000);
+    const userId = await store.findOrCreateUser({ provider: 'dev', providerSub: 'u-purge-noop' });
+    await store.applyChanges(userId, [record({ entityId: 'fresh', deleted: true })]);
+    expect(await store.purgeTombstones(100_000)).toBe(0);
   });
 
   it('applyChanges with an empty array returns the current cursor and writes nothing', async () => {

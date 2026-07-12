@@ -18,6 +18,9 @@ export const MAX_CHANGES_PAGE_SIZE = 500;
 // Safety rail against one account filling the shared D1. Generous enough that only deliberate
 // abuse hits it; checked conservatively (all pushed rows treated as new).
 export const MAX_RECORDS_PER_USER = 100_000;
+// Tombstones older than this are safe to reclaim: a device idle longer than the session TTL is
+// logged out and re-bootstraps from since=0, so it never needs the tombstone to learn of a delete.
+export const TOMBSTONE_RETENTION_MS = SESSION_TTL_MS;
 
 export interface D1SyncStoreLimits {
   maxRecordsPerUser?: number;
@@ -287,6 +290,17 @@ export class D1SyncStore implements SyncStore {
       this.db.prepare('DELETE FROM identities WHERE user_id = ?').bind(userId),
       this.db.prepare('DELETE FROM users WHERE id = ?').bind(userId),
     ]);
+  }
+
+  async purgeTombstones(retentionMs: number): Promise<number> {
+    // Reclaims deleted-row space across all users; the partial idx_records_tombstone keeps this
+    // off a full-table scan. server_received_at (not client time) is the trustworthy clock.
+    const cutoff = this.now() - retentionMs;
+    const result = await this.db
+      .prepare('DELETE FROM records WHERE deleted = 1 AND server_received_at < ?')
+      .bind(cutoff)
+      .run();
+    return result.meta.changes ?? 0;
   }
 
   // Single UPDATE...RETURNING with CASE keeps the reset-or-increment atomic within D1's

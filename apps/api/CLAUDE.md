@@ -13,13 +13,15 @@ Stack: Hono (routing) + D1 (`DB` binding) + `jose` (JWT/JWKS verification for Go
 ## Architecture
 
 ```
-HTTP request
+worker entry (src/worker.ts) — fetch + scheduled() tombstone-purge cron
   → Hono app (src/index.ts)
       → app.use(...) middleware — auth, rate limiting (order-sensitive, see Gotchas)
       → route handlers (src/routes/*.ts)
           → SyncStore interface (src/store.ts)
               → D1SyncStore adapter (src/d1-store.ts) → D1 binding (`DB`)
 ```
+
+`wrangler.jsonc` `main` is `src/worker.ts` (the Cloudflare entry: the app's `fetch` plus the cron `scheduled()`); `index.ts` stays the Hono app so tests drive it directly via `app.request`.
 
 This mirrors the repo's ports/adapters pattern (`packages/shared/src/platform/`): `SyncStore` is the port, `D1SyncStore` is the one adapter today. A future non-D1 backend only needs a new adapter — routes and validation stay unaware D1 exists.
 
@@ -37,7 +39,7 @@ D1 tables (`migrations/0001_init.sql`, plus two follow-ups):
 | `auth_codes` | `code_hash` (PK), `payload` (JSON), `expires_at`, `used_at`, `code_challenge` | Apple's one-time exchange code (also hash-only). 60s TTL; `code_challenge` binds it to a PKCE verifier. `consumeAuthCode` DELETEs the row (single-use + PII gone at once), so `used_at` is now vestigial. |
 | `records` | `(user_id, collection, entity_id)` (PK), `seq`, `ciphertext`, `deleted`, `client_updated_at`, `server_received_at` | See below. |
 
-**`records` is upsert-per-entity, not append-only history.** The primary key is the entity's identity, so pushing an update to an entity `ON CONFLICT ... DO UPDATE`s the same row in place — one row per entity ever synced, storage bounded regardless of edit count. A delete sets `deleted = 1` (tombstone) rather than removing the row, because a physically-deleted row would be invisible to `WHERE seq > ?`, and a device that pulls after the delete would never learn the entity is gone.
+**`records` is upsert-per-entity, not append-only history.** The primary key is the entity's identity, so pushing an update to an entity `ON CONFLICT ... DO UPDATE`s the same row in place — one row per entity ever synced, storage bounded regardless of edit count. A delete sets `deleted = 1` (tombstone) rather than removing the row, because a physically-deleted row would be invisible to `WHERE seq > ?`, and a device that pulls after the delete would never learn the entity is gone. A daily cron (`worker.ts` `scheduled()` → `purgeTombstones`) reclaims tombstones older than `TOMBSTONE_RETENTION_MS` (= `SESSION_TTL_MS`, 90 days): a device idle that long is logged out and re-bootstraps from `since=0`, so it never needed the tombstone. (A degenerate client that pushes but never pulls for 90+ days could miss the delete and would need a fresh bootstrap.)
 
 `seq` is a per-user monotonic cursor, not a timestamp: `GET /changes?since=N` returns `WHERE seq > N`. `applyChanges` (`d1-store.ts`) assigns it like this:
 
