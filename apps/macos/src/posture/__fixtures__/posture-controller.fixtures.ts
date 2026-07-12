@@ -11,6 +11,7 @@ export const unlistenSpies: Array<ReturnType<typeof vi.fn>> = [];
 
 export const invokeMock = vi.fn();
 export const toastErrorMock = vi.fn();
+export const toastWarningMock = vi.fn();
 
 /** Mutable stand-ins for the pomodoro / focus-mode store snapshots (Smart Pause). */
 export const pomodoroStateMock = { status: 'idle', sessionType: 'work' };
@@ -32,6 +33,7 @@ export function resetPostureMocks(): void {
   invokeMock.mockReset();
   invokeMock.mockResolvedValue(undefined);
   toastErrorMock.mockReset();
+  toastWarningMock.mockReset();
   pomodoroStateMock.status = 'idle';
   pomodoroStateMock.sessionType = 'work';
   focusModeStateMock.isActive = false;

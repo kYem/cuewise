@@ -23,10 +23,10 @@ import {
 } from '../posture/posture-controller';
 
 /**
- * Projects the (single-webview) Pomodoro + reminder state onto the native
- * menu-bar tray: the live timer as the tray title, and a rebuilt menu with status
- * lines + controls. Pomodoro menu clicks come back as `tray://action` events and
- * are dispatched into the store. macOS-only — mounted from main.tsx under Tauri.
+ * Projects the (single-webview) Pomodoro + reminder + posture state onto the
+ * native menu-bar tray: the live timer as the title, a rebuilt menu with status
+ * lines + controls. Menu clicks come back as `tray://action` events and dispatch
+ * into the Pomodoro store / posture controller. Mounted from main.tsx under Tauri.
  */
 
 type TrayAction = { id: string; label: string };

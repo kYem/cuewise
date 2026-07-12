@@ -82,7 +82,9 @@ pub fn run() {
                     // Everything else is a webview-supplied action id (set_tray_menu
                     // builds those), so relay it — the webview no-ops unknown ids.
                     id => {
-                        let _ = app.emit("tray://action", id.to_string());
+                        if let Err(e) = app.emit("tray://action", id.to_string()) {
+                            eprintln!("failed to relay tray action {id}: {e}");
+                        }
                     }
                 })
                 .build(app)?;

@@ -1,7 +1,6 @@
 //! Menu-bar tray projection. The webview owns all state; it pushes the title (the
-//! live timer text) and a rebuilt menu (status lines + Pomodoro actions) here via
-//! these commands. Pomodoro menu clicks are relayed back to the webview as
-//! `tray://action` events (wired in `lib.rs`) for the store to handle.
+//! live timer text) and a rebuilt menu (status lines + Pomodoro/posture actions)
+//! here. Action clicks relay back as `tray://action` events (wired in `lib.rs`).
 
 use serde::Deserialize;
 use tauri::menu::{MenuBuilder, MenuItem};
@@ -25,8 +24,8 @@ pub fn set_tray_title(app: AppHandle, title: Option<String>) {
     }
 }
 
-/// Rebuild the tray menu: disabled `info` lines, then the enabled `actions`
-/// (Pomodoro controls), then the fixed Open / Insights / Quit items.
+/// Rebuild the tray menu: disabled `info` lines, then the enabled webview-supplied
+/// `actions`, then the fixed Open / Insights / Quit items.
 #[tauri::command]
 pub fn set_tray_menu(
     app: AppHandle,

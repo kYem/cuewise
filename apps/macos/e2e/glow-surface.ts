@@ -6,4 +6,18 @@ export async function assertGlowSurfaceRenders(page: Page, baseUrl = ''): Promis
   await page.goto(`${baseUrl}/#glow`);
   await page.reload();
   await expect(page.locator('.glow-vignette')).toBeVisible();
+
+  // The overlay must be genuinely see-through — a future theme rule painting an
+  // opaque body would turn every nudge into a full-screen sheet, invisibly to CI.
+  const backgrounds = await page.evaluate(() => [
+    getComputedStyle(document.documentElement).backgroundColor,
+    getComputedStyle(document.body).backgroundColor,
+  ]);
+  for (const background of backgrounds) {
+    expect(['rgba(0, 0, 0, 0)', 'transparent']).toContain(background);
+  }
+
+  // And it must NOT boot the app shell (double reminder delivery per monitor) —
+  // the welcome-modal logo is the same app marker smoke.spec relies on.
+  await expect(page.locator('img[alt="Cuewise logo"]')).toHaveCount(0);
 }

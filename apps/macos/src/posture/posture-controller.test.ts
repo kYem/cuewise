@@ -14,6 +14,7 @@ import {
   START_FAILED_ERROR,
   STOPPED_ERROR,
   toastErrorMock,
+  toastWarningMock,
   UNREADABLE_ERROR,
   unlistenSpies,
 } from './__fixtures__/posture-controller.fixtures';
@@ -43,7 +44,7 @@ vi.mock('@cuewise/app', async () => {
   const fixtures = await import('./__fixtures__/posture-controller.fixtures');
   return {
     useToastStore: {
-      getState: () => ({ error: fixtures.toastErrorMock }),
+      getState: () => ({ error: fixtures.toastErrorMock, warning: fixtures.toastWarningMock }),
     },
     usePomodoroStore: { getState: () => fixtures.pomodoroStateMock },
     useFocusModeStore: { getState: () => fixtures.focusModeStateMock },
@@ -55,8 +56,8 @@ vi.mock('@cuewise/shared', () => ({
 }));
 
 let localStorageStub: ReturnType<typeof createLocalStorageStub>;
-// Each test starts on a fresh clock so timestamp-based pause windows can't bleed
-// across tests through module-level state.
+// The clock jump gives each test fresh, distinct timestamps; pause windows are
+// torn down explicitly in afterEach ('until-resume' never expires by clock alone).
 let clock = Date.now();
 
 // One zero-length tick drains the attach-listeners → invoke promise chain.
@@ -242,6 +243,23 @@ describe('glow nudge lifecycle', () => {
     expect(getPostureState().glowActive).toBe(true);
   });
 
+  it('a failed show warns once per session, but never for no_monitors', async () => {
+    await startTracking();
+    invokeMock.mockRejectedValueOnce({ kind: 'no_monitors', message: 'no monitors available' });
+    emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES);
+    await flushChain();
+    expect(toastWarningMock).not.toHaveBeenCalled();
+
+    invokeMock.mockRejectedValueOnce({ kind: 'window', message: 'boom' });
+    emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES);
+    await flushChain();
+    invokeMock.mockRejectedValueOnce({ kind: 'window', message: 'boom' });
+    emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES);
+    await flushChain();
+
+    expect(toastWarningMock).toHaveBeenCalledTimes(1);
+  });
+
   it('a rejected hide_glow retries on later recovered frames while tracking', async () => {
     await startTracking();
     await glowUp();
@@ -403,6 +421,29 @@ describe('snooze and pause', () => {
   it('an expired persisted pause window is discarded on init', async () => {
     localStorageStub.setItem(ENABLED_KEY, '1');
     localStorageStub.setItem(NUDGES_PAUSED_KEY, String(Date.now() - 1));
+
+    initPosture();
+    await flushChain();
+
+    expect(getPostureState().nudgesPausedUntil).toBeNull();
+    expect(localStorageStub.getItem(NUDGES_PAUSED_KEY)).toBeNull();
+  });
+
+  it('a persisted until-resume pause survives a relaunch', async () => {
+    localStorageStub.setItem(ENABLED_KEY, '1');
+    localStorageStub.setItem(NUDGES_PAUSED_KEY, 'until-resume');
+
+    initPosture();
+    await flushChain();
+
+    expect(getPostureState().nudgesPausedUntil).toBe('until-resume');
+    emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES * 2);
+    expect(countInvokes('show_glow')).toBe(0);
+  });
+
+  it('a garbage persisted pause value is discarded on init', async () => {
+    localStorageStub.setItem(ENABLED_KEY, '1');
+    localStorageStub.setItem(NUDGES_PAUSED_KEY, 'not-a-timestamp');
 
     initPosture();
     await flushChain();

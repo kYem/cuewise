@@ -62,7 +62,7 @@ function PostureSection({ filter }: SettingsSectionProps) {
 
       <SettingRow
         label="Remind me to fix my posture"
-        help="A gentle glow around the screen edge when you've been leaning in for a while — it fades once you sit back."
+        help="A gentle glow around the screen edge when you've been leaning in for a while — it clears once you sit back."
         keywords="posture nudge remind glow slouch reminder screen edge"
         filter={filter}
       >

@@ -25,8 +25,8 @@ fn orphan_glow_labels(existing: &[String], monitor_count: usize) -> Vec<String> 
 }
 
 /// Show the glow on every monitor: get-or-create a window per display, position,
-/// show. Per-monitor failures are logged and skipped; topology changes mid-glow
-/// settle on the next show.
+/// show. Partial failure is logged and skipped, but zero windows shown returns the
+/// first error — a silent Ok would strand the webview's glowActive with no retry.
 #[tauri::command]
 pub fn show_glow(app: AppHandle) -> Result<(), Error> {
     let monitors = app.available_monitors()?;
@@ -51,6 +51,8 @@ pub fn show_glow(app: AppHandle) -> Result<(), Error> {
         }
     }
 
+    let mut shown = 0usize;
+    let mut first_error: Option<Error> = None;
     for (index, monitor) in monitors.iter().enumerate() {
         let label = glow_label(index);
         let window = match app.get_webview_window(&label) {
@@ -59,24 +61,37 @@ pub fn show_glow(app: AppHandle) -> Result<(), Error> {
                 Ok(window) => window,
                 Err(e) => {
                     eprintln!("glow: failed to create window {label}: {e}");
+                    first_error.get_or_insert(e);
                     continue;
                 }
             },
         };
         let position = monitor.position();
         let size = monitor.size();
-        let _ = window.set_position(PhysicalPosition::new(position.x, position.y));
-        let _ = window.set_size(PhysicalSize::new(size.width, size.height));
-        if let Err(e) = window.show() {
-            eprintln!("glow: failed to show window {label}: {e}");
+        if let Err(e) = window.set_position(PhysicalPosition::new(position.x, position.y)) {
+            eprintln!("glow: failed to position window {label}: {e}");
+        }
+        if let Err(e) = window.set_size(PhysicalSize::new(size.width, size.height)) {
+            eprintln!("glow: failed to size window {label}: {e}");
+        }
+        match window.show() {
+            Ok(()) => shown += 1,
+            Err(e) => {
+                eprintln!("glow: failed to show window {label}: {e}");
+                first_error.get_or_insert(e.into());
+            }
         }
     }
 
+    if shown == 0 {
+        return Err(first_error.unwrap_or(Error::NoMonitors));
+    }
     Ok(())
 }
 
-/// Hide every glow window (hidden, not destroyed — re-shows stay instant). The
-/// first failure is returned after trying all, so the webview retries later.
+/// Hide every glow window (hidden, not destroyed — re-shows stay instant). A
+/// window that refuses to hide is destroyed instead: a stuck vignette after a
+/// teardown has no frame-driven retry left, so removal is the only safe fallback.
 #[tauri::command]
 pub fn hide_glow(app: AppHandle) -> Result<(), Error> {
     let mut first_error: Option<tauri::Error> = None;
@@ -85,8 +100,11 @@ pub fn hide_glow(app: AppHandle) -> Result<(), Error> {
             continue;
         }
         if let Err(e) = window.hide() {
-            eprintln!("glow: failed to hide window {label}: {e}");
-            first_error.get_or_insert(e);
+            eprintln!("glow: failed to hide window {label}: {e}; destroying it");
+            if let Err(e) = window.destroy() {
+                eprintln!("glow: failed to destroy window {label}: {e}");
+                first_error.get_or_insert(e);
+            }
         }
     }
     match first_error {

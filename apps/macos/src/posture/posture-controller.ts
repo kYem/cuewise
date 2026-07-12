@@ -10,6 +10,9 @@ import { isCommandError } from '../platform/command-error';
 // — after Settings closes. All @tauri-apps usage is macOS-local, here and in the
 // section that renders this.
 
+/** A nudge pause: an epoch-ms deadline, or open-ended until the user resumes. */
+export type NudgePause = number | 'until-resume';
+
 export interface PostureState {
   tracking: boolean;
   nudgesEnabled: boolean;
@@ -21,7 +24,7 @@ export interface PostureState {
   // The screen-edge glow IS the nudge (ENG-40): up after sustained poor posture,
   // down once recovery holds.
   glowActive: boolean;
-  nudgesPausedUntil: number | 'until-resume' | null;
+  nudgesPausedUntil: NudgePause | null;
 }
 
 let state: PostureState = {
@@ -64,6 +67,9 @@ let poorStreak = 0;
 // Consecutive non-poor frames; the glow clears once this holds, so one jitter
 // frame can't drop it (any non-poor status counts — oscillation still clears).
 let nonPoorStreak = 0;
+// Warn once per session when the glow can't be shown — a silently missing nudge
+// is the exact failure the old notification path used to warn about.
+let warnedGlowUndeliverable = false;
 // Warn the user once per tracking session when a failure would otherwise be silent,
 // without storming a toast on every retry. Reset in resetDerivation.
 let warnedUnreadable = false;
@@ -130,9 +136,10 @@ function resetDerivation(): void {
   pendingStatus = null;
   pendingCount = 0;
   parseFailures = 0;
-  // Per-session warn latch resets with the session, so a deliberate restart can
+  // Per-session warn latches reset with the session, so a deliberate restart can
   // warn again if the problem persists.
   warnedUnreadable = false;
+  warnedGlowUndeliverable = false;
 }
 
 // Count consecutive unreadable frames; escalate to a visible error at 5 so a protocol
@@ -371,6 +378,15 @@ function showGlow(): void {
     logCommandFailure('Failed to show the posture glow', error);
     // Roll back so the next sustained streak retries instead of being blocked.
     setState({ glowActive: false });
+    // Display sleep legitimately has nowhere to glow; anything else warrants a
+    // once-per-session heads-up — an enabled nudge silently never firing is worse.
+    const noMonitors = isCommandError(error) && error.kind === 'no_monitors';
+    if (!noMonitors && !warnedGlowUndeliverable) {
+      warnedGlowUndeliverable = true;
+      useToastStore
+        .getState()
+        .warning("Couldn't show the posture glow — reminders may not appear.");
+    }
   });
 }
 
@@ -389,7 +405,7 @@ function hideGlowIfActive(): void {
   });
 }
 
-function writePausedUntil(value: number | 'until-resume' | null): void {
+function writePausedUntil(value: NudgePause | null): void {
   const persisted = value === null ? null : String(value);
   writeLocal(NUDGES_PAUSED_KEY, persisted, 'Failed to persist the nudge pause');
   setState({ nudgesPausedUntil: value });
@@ -449,7 +465,7 @@ function updateNudgeGlow(sample: PostureSample): void {
 }
 
 /** Human copy for a pause's end, shared by the tray menu and Settings. */
-export function describePauseEnd(pausedUntil: number | 'until-resume'): string {
+export function describePauseEnd(pausedUntil: NudgePause): string {
   if (pausedUntil === 'until-resume') {
     return 'until you resume';
   }
