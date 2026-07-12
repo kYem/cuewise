@@ -112,13 +112,15 @@ const MAX_CONSECUTIVE_SKIPS = 5;
 
 export type PlayerErrorAction = 'skip' | 'give-up' | 'notify';
 
-// Exact allowlist for postMessage senders: the cuewise.app proxy page (relaying
-// YouTube's own messages) and youtube-nocookie.com directly. `.includes()` used to
-// match spoofable lookalikes like evil-youtube.com or cuewise.app.attacker.com.
-const ALLOWED_MESSAGE_ORIGINS = new Set([
-  'https://cuewise.app',
-  'https://www.youtube-nocookie.com',
-]);
+// Single source of truth for the player origin — overridable at build time
+// (VITE_PLAYER_ORIGIN) to verify a client's CSP locally; see apps/macos/README.md.
+const PLAYER_ORIGIN = import.meta.env.VITE_PLAYER_ORIGIN || 'https://cuewise.app';
+
+// Exact allowlist for postMessage senders: PLAYER_ORIGIN (relaying YouTube's own
+// messages) and youtube-nocookie.com directly. `.includes()` used to match
+// spoofable lookalikes like evil-youtube.com or cuewise.app.attacker.com — must
+// share PLAYER_ORIGIN with the embed URL below, or a local build rejects its own player.
+const ALLOWED_MESSAGE_ORIGINS = new Set([PLAYER_ORIGIN, 'https://www.youtube-nocookie.com']);
 
 export function isAllowedMessageOrigin(origin: string): boolean {
   return ALLOWED_MESSAGE_ORIGINS.has(origin);
@@ -235,7 +237,7 @@ class YouTubePlayerService {
       params.set('start', Math.floor(startAt).toString());
     }
 
-    const embedUrl = `https://cuewise.app/player?${params.toString()}`;
+    const embedUrl = `${PLAYER_ORIGIN}/player?${params.toString()}`;
 
     // Create iframe
     this.iframe = document.createElement('iframe');

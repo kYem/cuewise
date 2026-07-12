@@ -1,0 +1,9 @@
+{
+  "app": {
+    "security": {
+      "csp": {
+        "frame-src": "'self' https://cuewise.app http://localhost:8788"
+      }
+    }
+  }
+}
