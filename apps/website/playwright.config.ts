@@ -5,6 +5,8 @@ import { defineConfig, devices } from '@playwright/test';
 //   pnpm --filter @cuewise/website e2e
 export default defineConfig({
   testDir: './e2e',
+  // Only Playwright specs; *.test.ts in e2e/ are Vitest (see vitest.config.ts).
+  testMatch: '**/*.spec.ts',
   reporter: 'list',
   timeout: 30_000,
   // Every spec runs its own `astro build` against the shared dist/ dir in

@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
-import { extname, join, normalize } from 'node:path';
+import { extname, resolve, sep } from 'node:path';
 import { applySecurityHeaders } from '../functions/_middleware';
 
 const MIME_TYPES: Record<string, string> = {
@@ -13,6 +13,33 @@ const MIME_TYPES: Record<string, string> = {
   '.json': 'application/json',
   '.ico': 'image/x-icon',
 };
+
+/**
+ * Resolve a request path inside `distDir`, or null if it escapes. Containment is
+ * checked BEFORE any filesystem access, and against `distDir + sep` so a sibling
+ * like `<dist>-evil` can't satisfy a bare prefix match.
+ */
+export function resolveWithinDist(distDir: string, urlPath: string): string | null {
+  const root = resolve(distDir);
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(urlPath);
+  } catch {
+    return null; // malformed percent-encoding
+  }
+
+  const relative = decoded === '/' ? 'index.html' : decoded.replace(/^\/+/, '');
+  const candidate = resolve(root, relative);
+  if (candidate !== root && !candidate.startsWith(root + sep)) {
+    return null;
+  }
+
+  // Cloudflare Pages "clean URLs": /player resolves to /player.html on disk.
+  if (extname(candidate) === '' && !existsSync(candidate)) {
+    return `${candidate}.html`;
+  }
+  return candidate;
+}
 
 /**
  * Serves `dist/` with the REAL middleware headers (via applySecurityHeaders) instead
@@ -27,15 +54,9 @@ export function startSite(
 ): Promise<Server> {
   const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const urlPath = (req.url ?? '/').split('?')[0] ?? '/';
-    const relative = urlPath === '/' ? 'index.html' : urlPath.replace(/^\/+/, '');
-    let filePath = normalize(join(distDir, relative));
+    const filePath = resolveWithinDist(distDir, urlPath);
 
-    if (!existsSync(filePath) && extname(filePath) === '') {
-      // Cloudflare Pages "clean URLs": /player resolves to /player.html on disk.
-      filePath = `${filePath}.html`;
-    }
-
-    if (!filePath.startsWith(distDir) || !existsSync(filePath)) {
+    if (filePath === null || !existsSync(filePath)) {
       res.writeHead(404).end('Not found');
       return;
     }
@@ -65,14 +86,9 @@ export function startSite(
 export function startPlainSite(distDir: string, port: number): Promise<Server> {
   const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const urlPath = (req.url ?? '/').split('?')[0] ?? '/';
-    const relative = urlPath === '/' ? 'index.html' : urlPath.replace(/^\/+/, '');
-    let filePath = normalize(join(distDir, relative));
+    const filePath = resolveWithinDist(distDir, urlPath);
 
-    if (!existsSync(filePath) && extname(filePath) === '') {
-      filePath = `${filePath}.html`;
-    }
-
-    if (!filePath.startsWith(distDir) || !existsSync(filePath)) {
+    if (filePath === null || !existsSync(filePath)) {
       res.writeHead(404).end('Not found');
       return;
     }
