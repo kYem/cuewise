@@ -56,7 +56,8 @@ export function startCspServer(distDir: string, csp: string, port: number): Prom
     res.end(body);
   });
 
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
+    server.on('error', reject); // e.g. EADDRINUSE — otherwise the caller hangs with no reason why
     server.listen(port, () => resolve(server));
   });
 }

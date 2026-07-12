@@ -56,7 +56,7 @@ test('production build reports zero CSP violations across every surface (WebKit)
   page,
 }) => {
   const violations: Violation[] = [];
-  await stubThirdPartyRequests(page);
+  const getStubbedRequests = await stubThirdPartyRequests(page);
   const getEscapedRequests = watchForRealNetworkEscapes(page);
   await page.exposeFunction('__onCspViolation', (violation: Violation) => {
     violations.push(violation);
@@ -88,7 +88,7 @@ test('production build reports zero CSP violations across every surface (WebKit)
 
   await test.step('quick links: adding a link requests a favicon (img-src)', async () => {
     // showQuickLinks defaults to true, so this exercises a default-on surface.
-    // google's favicon endpoint 302s to a *.gstatic.com host, and CSP checks the
+    // google's favicon endpoint 301s to a *.gstatic.com host, and CSP checks the
     // redirect target too — img-src needs both origins, not just google.com.
     await page.getByRole('button', { name: 'Add a quick link' }).click();
     // Scoped to the dropdown menu — GoalInput on the same page has its own
@@ -134,13 +134,11 @@ test('production build reports zero CSP violations across every surface (WebKit)
   await test.step('focus mode requests an Unsplash background', async () => {
     await page.keyboard.press('Escape'); // close the sounds popover
     await page.getByRole('button', { name: 'Enter focus mode' }).click();
-    // Best-effort: BackgroundImage only mounts role="img" once its own preflight
-    // `new Image()` actually loads — the CSP check itself already ran the moment
-    // that `.src` was assigned, regardless of whether the load succeeds in time.
-    await page
-      .getByRole('img', { name: 'Focus mode background' })
-      .waitFor({ timeout: 10_000 })
-      .catch(() => {});
+    // Required, not best-effort: every third-party request in this spec is a local
+    // stub that resolves instantly (see network-stub.ts), so there's no legitimate
+    // timing flake left to tolerate — a timeout here means BackgroundImage's own
+    // `img.src` assignment (and thus the CSP check on it) never actually ran.
+    await page.getByRole('img', { name: 'Focus mode background' }).waitFor({ timeout: 10_000 });
     await page.keyboard.press('Escape'); // exit focus mode
   });
 
@@ -149,6 +147,36 @@ test('production build reports zero CSP violations across every surface (WebKit)
     .join('\n');
   expect(violations, `CSP violations:\n${details}`).toEqual([]);
   expect(getEscapedRequests(), 'off-origin requests must never reach the real network').toEqual([]);
+
+  // Zero violations is trivially true if a step above didn't actually request
+  // anything (e.g. a broken selector silently skipping the interaction) — assert
+  // each surface's real request happened, so a step that drives nothing fails here.
+  const stubbedRequests = getStubbedRequests();
+  const wasRequested = (substring: string) =>
+    stubbedRequests.some((url) => url.includes(substring));
+  expect(
+    wasRequested('images.unsplash.com'),
+    'focus mode must request an Unsplash background'
+  ).toBe(true);
+  expect(
+    wasRequested('cuewise.app/player'),
+    'the sounds panel must load the cuewise.app player iframe'
+  ).toBe(true);
+  expect(
+    wasRequested('youtube.com/oembed'),
+    'adding a custom playlist must hit the YouTube oEmbed endpoint'
+  ).toBe(true);
+  expect(
+    wasRequested('google.com/s2/favicons'),
+    'adding a quick link must request a Google favicon'
+  ).toBe(true);
+  // `img-src https://*.gstatic.com` is NOT exercised here: the real favicon
+  // endpoint 301s there, but WebKit's route interception can't fulfill a
+  // redirect status (confirmed: attempting `route.fulfill({ status: 301 })`
+  // throws "Cannot fulfill with redirect status" on Playwright 1.61 / WebKit),
+  // so this harness can't make the browser issue the follow-up request to
+  // re-check. The allowance stays in tauri.conf.json — production traffic does
+  // hit it — this is a documented gap, not a removed one.
 });
 
 // Note on `app.security.devCsp`: for this project's devUrl-based `tauri dev`
