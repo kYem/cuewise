@@ -68,6 +68,13 @@ const STEADY_SAMPLES = 3; // ~6s at the sidecar's 2s cadence
 let pendingStatus: PostureStatus | null = null;
 let pendingCount = 0;
 
+// Watchdog for a sidecar that spawns fine but never emits a frame (and never dies):
+// without it the panel sits on "Starting…" forever with the camera on. Generous so
+// a slow camera-permission grant isn't cut off mid-prompt.
+const FIRST_FRAME_TIMEOUT_MS = 30_000;
+let firstFrameTimer: ReturnType<typeof setTimeout> | null = null;
+let firstFrameSeen = false;
+
 // Persist the opt-in preferences (macOS-local) so the toggles stick across launches.
 const ENABLED_KEY = 'cuewise.posture.enabled';
 const NUDGES_KEY = 'cuewise.posture.nudges';
@@ -105,9 +112,44 @@ function detachListeners(): void {
   unlisteners = [];
 }
 
+function clearFirstFrameWatchdog(): void {
+  if (firstFrameTimer !== null) {
+    clearTimeout(firstFrameTimer);
+    firstFrameTimer = null;
+  }
+}
+
+// Arm only until the session's first frame — a frame can race ahead of the
+// start_posture resolution, and arming after it would tear down a live session.
+function armFirstFrameWatchdog(): void {
+  if (firstFrameSeen) {
+    return;
+  }
+  clearFirstFrameWatchdog();
+  firstFrameTimer = setTimeout(handleFirstFrameTimeout, FIRST_FRAME_TIMEOUT_MS);
+}
+
+// The sidecar is up but mute. Treat it like a failed start: turn the camera off
+// and clear the pref, so a persistently broken sidecar doesn't run the camera for
+// 30 silent seconds on every boot.
+function handleFirstFrameTimeout(): void {
+  firstFrameTimer = null;
+  invoke('stop_posture').catch((error) => {
+    logCommandFailure('Failed to stop posture tracking', error);
+  });
+  detachListeners();
+  resetDerivation();
+  persist(ENABLED_KEY, false);
+  const message = 'Posture tracking is not producing readings — camera turned off.';
+  setState({ tracking: false, sample: null, steadyStatus: null, error: message });
+  useToastStore.getState().error(message);
+}
+
 // Zero the per-session derivation counters so a new session starts clean. Both
 // stop paths must call this, or a stale poorStreak can nudge early after resume.
 function resetDerivation(): void {
+  clearFirstFrameWatchdog();
+  firstFrameSeen = false;
   poorStreak = 0;
   pendingStatus = null;
   pendingCount = 0;
@@ -140,6 +182,10 @@ function noteBadFrame(): void {
 async function attachListeners(): Promise<void> {
   detachListeners(); // guard against a double-attach orphaning the previous pair
   const onSample = await listen<string>('posture://sample', (event) => {
+    // Any frame — even an unreadable one — proves the sidecar is alive, so the
+    // watchdog stands down (unreadable frames escalate via noteBadFrame instead).
+    firstFrameSeen = true;
+    clearFirstFrameWatchdog();
     let sample: PostureSample;
     try {
       sample = JSON.parse(event.payload) as PostureSample;
@@ -219,6 +265,7 @@ export function startPosture(): void {
       // onStopped (which detaches) — either way the session is no longer valid.
       if (!stopRequestedDuringStart && unlisteners.length > 0) {
         setState({ tracking: true });
+        armFirstFrameWatchdog();
       }
     })
     .catch((error) => {

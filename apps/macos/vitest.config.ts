@@ -5,8 +5,8 @@ export default mergeConfig(
   sharedConfig,
   defineConfig({
     test: {
-      environment: 'node', // Reads/parses tauri.conf.json only, no DOM
-      include: ['src-tauri/**/*.test.ts'],
+      environment: 'node', // No DOM needed; browser globals are stubbed per-test
+      include: ['src-tauri/**/*.test.ts', 'src/**/*.test.ts'],
     },
   })
 );
