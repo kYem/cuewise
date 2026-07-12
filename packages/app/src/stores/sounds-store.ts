@@ -97,14 +97,22 @@ interface ExtractedYouTubeInfo {
   videoId?: string;
 }
 
+const YOUTUBE_HOSTS = new Set(['youtube.com', 'www.youtube.com', 'youtu.be']);
+
+// Exact/suffix match only — `.includes()` also matched spoofed hosts like
+// youtube.com.evil.com or notyoutube.com.
+function isYouTubeHostname(hostname: string): boolean {
+  return YOUTUBE_HOSTS.has(hostname) || hostname.endsWith('.youtube.com');
+}
+
 /**
  * Extract YouTube playlist ID and video ID from various URL formats
  */
-function extractYouTubeInfo(url: string): ExtractedYouTubeInfo | null {
+export function extractYouTubeInfo(url: string): ExtractedYouTubeInfo | null {
   try {
     const urlObj = new URL(url);
 
-    if (!urlObj.hostname.includes('youtube.com') && !urlObj.hostname.includes('youtu.be')) {
+    if (!isYouTubeHostname(urlObj.hostname)) {
       return null;
     }
 
