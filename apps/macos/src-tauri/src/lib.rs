@@ -79,28 +79,24 @@ pub fn run() {
                     "show" => reveal(app, None),
                     "insights" => reveal(app, Some("insights")),
                     "quit" => app.exit(0),
-                    // Pomodoro/posture controls live in the webview; relay the click.
-                    "pause"
-                    | "resume"
-                    | "start"
-                    | "posture-snooze"
-                    | "posture-pause-1h"
-                    | "posture-pause"
-                    | "posture-resume-nudges" => {
-                        let _ = app.emit("tray://action", event.id.as_ref().to_string());
+                    // Everything else is a webview-supplied action id (set_tray_menu
+                    // builds those), so relay it — the webview no-ops unknown ids.
+                    id => {
+                        let _ = app.emit("tray://action", id.to_string());
                     }
-                    _ => {}
                 })
                 .build(app)?;
 
             Ok(())
         })
         .on_window_event(|window, event| {
-            // Hide to the tray instead of quitting so the app stays resident and
-            // keeps firing nudges. Tray "Quit Cuewise" / Cmd-Q still exit.
+            // Hide the MAIN window to the tray instead of quitting, so the app stays
+            // resident. Scoped by label: glow overlays are closed natively (glow.rs).
             if let WindowEvent::CloseRequested { api, .. } = event {
-                let _ = window.hide();
-                api.prevent_close();
+                if window.label() == "main" {
+                    let _ = window.hide();
+                    api.prevent_close();
+                }
             }
         })
         .build(tauri::generate_context!())

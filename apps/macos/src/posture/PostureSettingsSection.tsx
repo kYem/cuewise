@@ -10,6 +10,7 @@ import { Button, cn } from '@cuewise/ui';
 import { PersonStanding } from 'lucide-react';
 import {
   calibratePosture,
+  describePauseEnd,
   pausePostureNudges,
   resumePostureNudges,
   setPostureNudges,
@@ -30,14 +31,6 @@ function fmt(value: number | undefined, digits = 2): string {
     return '—';
   }
   return value.toFixed(digits);
-}
-
-function formatPausedUntil(pausedUntil: number | 'until-resume'): string {
-  if (pausedUntil === 'until-resume') {
-    return 'until you resume';
-  }
-  const at = new Date(pausedUntil).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  return `until ${at}`;
 }
 
 function PostureSection({ filter }: SettingsSectionProps) {
@@ -86,7 +79,7 @@ function PostureSection({ filter }: SettingsSectionProps) {
           {nudgesPausedUntil !== null ? (
             <div className="flex items-center gap-3">
               <span className="text-xs text-tertiary">
-                Paused {formatPausedUntil(nudgesPausedUntil)}
+                Paused {describePauseEnd(nudgesPausedUntil)}
               </span>
               <Button variant="secondary" size="sm" onClick={resumePostureNudges}>
                 Resume

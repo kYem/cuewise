@@ -57,8 +57,7 @@ const KNOWN_STATUSES = Object.keys({
   absent: 0,
 } satisfies Record<PostureStatus, 0>) as PostureStatus[];
 
-// Glow on sustained poor posture; no cooldown — the glow persists until recovery,
-// and a re-trigger after a genuine recovery is correct behavior.
+// Glow threshold; no cooldown — the glow persists until recovery instead.
 // Exported so tests exercise the real threshold instead of mirroring it.
 export const NUDGE_AFTER_POOR_SAMPLES = 15; // ~30s at the sidecar's 2s cadence
 let poorStreak = 0;
@@ -66,10 +65,9 @@ let poorStreak = 0;
 // without storming a toast on every retry. Reset in resetDerivation.
 let warnedUnreadable = false;
 
-// Debounce the tray status: adopt a new status only after it holds for a few
-// samples, so a dropped face-detection frame or threshold jitter doesn't flip the
-// menu bar. Alternating statuses never hold, so the tray stays put.
-const STEADY_SAMPLES = 3; // ~6s at the sidecar's 2s cadence
+// Debounce for the tray status and the glow's clear: adopt a change only once it
+// holds, so frame-to-frame jitter moves neither. Exported for tests.
+export const STEADY_SAMPLES = 3; // ~6s at the sidecar's 2s cadence
 let pendingStatus: PostureStatus | null = null;
 let pendingCount = 0;
 
@@ -89,12 +87,22 @@ function logCommandFailure(context: string, error: unknown): void {
   logger.error(context, error);
 }
 
-function persist(key: string, value: boolean): void {
+// localStorage can throw (private mode, quota); prefs must never take the
+// controller down over it.
+function writeLocal(key: string, value: string | null, context: string): void {
   try {
-    localStorage.setItem(key, value ? '1' : '0');
+    if (value === null) {
+      localStorage.removeItem(key);
+    } else {
+      localStorage.setItem(key, value);
+    }
   } catch (error) {
-    logger.error('Failed to persist posture preference', error);
+    logger.error(context, error);
   }
+}
+
+function persist(key: string, value: boolean): void {
+  writeLocal(key, value ? '1' : '0', 'Failed to persist posture preference');
 }
 
 function setState(patch: Partial<PostureState>): void {
@@ -175,8 +183,9 @@ async function attachListeners(): Promise<void> {
     } else {
       setState({ sample });
     }
-    updateNudgeGlow(sample);
+    // Steady status first: the glow's debounced clear reads it for this frame.
     updateSteadyStatus(sample.status);
+    updateNudgeGlow(sample);
   });
   let onStopped: UnlistenFn;
   try {
@@ -336,6 +345,9 @@ export function setPostureNudges(enabled: boolean): void {
   poorStreak = 0;
   setState({ nudgesEnabled: enabled });
   if (!enabled) {
+    // The master switch resets any pause too — otherwise a pause set before
+    // toggling off silently re-suppresses the glow when reminders come back.
+    writePausedUntil(null);
     hideGlowIfActive();
   }
 }
@@ -353,8 +365,9 @@ function isFocusSessionActive(): boolean {
 function showGlow(): void {
   setState({ glowActive: true });
   invoke('show_glow').catch((error) => {
-    // Log-only: the tray dot still mirrors the underlying posture state.
     logCommandFailure('Failed to show the posture glow', error);
+    // Roll back so the next sustained streak retries instead of being blocked.
+    setState({ glowActive: false });
   });
 }
 
@@ -365,19 +378,17 @@ function hideGlowIfActive(): void {
   setState({ glowActive: false });
   invoke('hide_glow').catch((error) => {
     logCommandFailure('Failed to hide the posture glow', error);
+    // Roll back only while frames still flow (a retry needs a next sample) — after
+    // teardown a stale true would instead wedge the next session's first glow.
+    if (state.tracking) {
+      setState({ glowActive: true });
+    }
   });
 }
 
 function writePausedUntil(value: number | 'until-resume' | null): void {
-  try {
-    if (value === null) {
-      localStorage.removeItem(NUDGES_PAUSED_KEY);
-    } else {
-      localStorage.setItem(NUDGES_PAUSED_KEY, String(value));
-    }
-  } catch (error) {
-    logger.error('Failed to persist the nudge pause', error);
-  }
+  const persisted = value === null ? null : String(value);
+  writeLocal(NUDGES_PAUSED_KEY, persisted, 'Failed to persist the nudge pause');
   setState({ nudgesPausedUntil: value });
 }
 
@@ -394,29 +405,29 @@ export function resumePostureNudges(): void {
   writePausedUntil(null);
 }
 
-// Sample-time check — no timers (hidden webviews throttle them; see scheduler.rs).
-// An elapsed window clears itself on the first frame past its deadline.
-function nudgesPaused(): boolean {
+// Expiry runs at frame time on EVERY status — no timers (hidden webviews throttle
+// them; see scheduler.rs) — so the tray/Settings "paused until" can't go stale.
+function clearElapsedPause(): void {
   const pausedUntil = state.nudgesPausedUntil;
-  if (pausedUntil === null) {
-    return false;
+  if (typeof pausedUntil === 'number' && Date.now() >= pausedUntil) {
+    writePausedUntil(null);
   }
-  if (pausedUntil === 'until-resume' || Date.now() < pausedUntil) {
-    return true;
-  }
-  writePausedUntil(null);
-  return false;
 }
 
 // The glow IS the nudge (ENG-40): up after sustained poor posture, down the moment
 // posture recovers — sitting back is the dismissal.
 function updateNudgeGlow(sample: PostureSample): void {
+  clearElapsedPause();
   if (sample.status !== 'poor') {
     poorStreak = 0;
-    hideGlowIfActive();
+    // Clear on the debounced status, not the raw frame — a single jitter frame
+    // mid-slouch must not drop the glow (same reason the tray uses steadyStatus).
+    if (state.steadyStatus !== 'poor') {
+      hideGlowIfActive();
+    }
     return;
   }
-  if (!state.nudgesEnabled || nudgesPaused() || isFocusSessionActive()) {
+  if (!state.nudgesEnabled || state.nudgesPausedUntil !== null || isFocusSessionActive()) {
     // Suppressed time is neutral: reset rather than freeze the streak, so a prior
     // lean can't fire a stale glow the moment suppression lifts.
     poorStreak = 0;
@@ -431,6 +442,15 @@ function updateNudgeGlow(sample: PostureSample): void {
     poorStreak = 0;
     showGlow();
   }
+}
+
+/** Human copy for a pause's end, shared by the tray menu and Settings. */
+export function describePauseEnd(pausedUntil: number | 'until-resume'): string {
+  if (pausedUntil === 'until-resume') {
+    return 'until you resume';
+  }
+  const at = new Date(pausedUntil).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return `until ${at}`;
 }
 
 function subscribe(callback: () => void): () => void {

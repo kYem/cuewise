@@ -15,7 +15,12 @@ import { getPomodoroSessions } from '@cuewise/storage';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { useEffect } from 'react';
-import { pausePostureNudges, resumePostureNudges, usePosture } from '../posture/posture-controller';
+import {
+  describePauseEnd,
+  pausePostureNudges,
+  resumePostureNudges,
+  usePosture,
+} from '../posture/posture-controller';
 
 /**
  * Projects the (single-webview) Pomodoro + reminder state onto the native
@@ -84,20 +89,12 @@ export function TrayStatusBridge(): null {
     postureDot = postureMeta.dot;
     postureLine = `${postureMeta.dot} ${postureMeta.label}`;
   }
+  const postureControlsEnabled = posture.tracking && posture.nudgesEnabled;
   const pausedUntil = posture.nudgesPausedUntil;
   let pausedLine: string | null = null;
-  if (posture.tracking && pausedUntil !== null) {
-    if (pausedUntil === 'until-resume') {
-      pausedLine = '💤 Posture nudges paused · until resumed';
-    } else {
-      const at = new Date(pausedUntil).toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit',
-      });
-      pausedLine = `💤 Posture nudges paused · until ${at}`;
-    }
+  if (postureControlsEnabled && pausedUntil !== null) {
+    pausedLine = `💤 Posture nudges paused · ${describePauseEnd(pausedUntil)}`;
   }
-  const postureControlsEnabled = posture.tracking && posture.nudgesEnabled;
 
   // Relay Pomodoro/posture control clicks from the native tray menu.
   useEffect(() => {

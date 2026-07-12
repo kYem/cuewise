@@ -15,12 +15,16 @@ const rootElement = document.getElementById('root');
 if (!rootElement) {
   throw new Error('Root element not found');
 }
+const root = ReactDOM.createRoot(rootElement);
 
-// The glow nudge windows (`glow.rs`) load this same bundle at `#glow` and must
-// render ONLY the vignette: no platform wiring, no reminder delivery, no posture
-// auto-resume — duplicating those per glow window would double-fire reminders.
+// The glow windows (`glow.rs`) load this same bundle at `#glow` and must render
+// ONLY the vignette — duplicating the wiring below would double-fire reminders.
 if (window.location.hash === '#glow') {
-  ReactDOM.createRoot(rootElement).render(<GlowOverlay />);
+  // The app stylesheet paints opaque html/body backgrounds; inline styles beat
+  // any stylesheet, keeping the transparent overlay window actually see-through.
+  document.documentElement.style.background = 'transparent';
+  document.body.style.background = 'transparent';
+  root.render(<GlowOverlay />);
 } else {
   // Wire the platform adapters for the Tauri webview so the reused extension
   // stores and helpers work unchanged: localStorage-backed storage, native OS
@@ -47,7 +51,7 @@ if (window.location.hash === '#glow') {
     initPosture();
   }
 
-  ReactDOM.createRoot(rootElement).render(
+  root.render(
     <React.StrictMode>
       <PomodoroPipProvider>
         {inTauri ? <TrayStatusBridge /> : null}

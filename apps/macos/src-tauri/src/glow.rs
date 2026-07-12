@@ -1,9 +1,10 @@
-//! Screen-edge glow nudge overlays. The webview posture controller decides when
-//! the glow shows (`posture-controller.ts`); these commands only manage one
-//! transparent, click-through, always-on-top window per monitor, each rendering
-//! the `#glow` route (a pure-CSS vignette — no stores, no listeners).
+//! Screen-edge glow overlays: one transparent, click-through window per monitor,
+//! each rendering `#glow`. The webview posture controller decides when they show.
 
-use tauri::{AppHandle, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindowBuilder};
+use tauri::{
+    AppHandle, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindow,
+    WebviewWindowBuilder,
+};
 
 use crate::error::Error;
 
@@ -13,28 +14,18 @@ fn glow_label(index: usize) -> String {
     format!("{GLOW_LABEL_PREFIX}{index}")
 }
 
-/// Which glow windows to create and which to close so exactly one exists per
-/// connected monitor. Reconciled on every `show_glow`, which also absorbs
-/// monitors being plugged/unplugged between nudges without display listeners.
-fn plan_glow_windows(existing: &[String], monitor_count: usize) -> (Vec<String>, Vec<String>) {
+/// Labels of glow windows beyond the current monitor count (monitor unplugged).
+fn orphan_glow_labels(existing: &[String], monitor_count: usize) -> Vec<String> {
     let desired: Vec<String> = (0..monitor_count).map(glow_label).collect();
-    let create = desired
-        .iter()
-        .filter(|label| !existing.contains(label))
-        .cloned()
-        .collect();
-    let close = existing
+    existing
         .iter()
         .filter(|label| !desired.contains(label))
         .cloned()
-        .collect();
-    (create, close)
+        .collect()
 }
 
-/// Show the glow on every monitor. Windows are created lazily on the first glow
-/// and hidden (not destroyed) afterwards, so re-shows are cheap. Per-monitor
-/// failures are logged and skipped — a missing glow on one display must not block
-/// the others (the tray dot remains the fallback signal).
+/// Show the glow on every monitor: get-or-create a window per display, position,
+/// show. Per-monitor failures are logged and skipped, never blocking the others.
 #[tauri::command]
 pub fn show_glow(app: AppHandle) -> Result<(), Error> {
     let monitors = app.available_monitors()?;
@@ -44,26 +35,28 @@ pub fn show_glow(app: AppHandle) -> Result<(), Error> {
         .filter(|label| label.starts_with(GLOW_LABEL_PREFIX))
         .cloned()
         .collect();
-    let (create, close) = plan_glow_windows(&existing, monitors.len());
 
-    for label in close {
+    for label in orphan_glow_labels(&existing, monitors.len()) {
         if let Some(window) = app.get_webview_window(&label) {
-            if let Err(e) = window.close() {
-                eprintln!("glow: failed to close orphaned window {label}: {e}");
+            // destroy(), not close(): close is preventable, and a CloseRequested
+            // handler (like main's hide-to-tray) could silently swallow it.
+            if let Err(e) = window.destroy() {
+                eprintln!("glow: failed to destroy orphaned window {label}: {e}");
             }
-        }
-    }
-
-    for label in create {
-        if let Err(e) = build_glow_window(&app, &label) {
-            eprintln!("glow: failed to create window {label}: {e}");
         }
     }
 
     for (index, monitor) in monitors.iter().enumerate() {
         let label = glow_label(index);
-        let Some(window) = app.get_webview_window(&label) else {
-            continue; // creation failed above; already logged
+        let window = match app.get_webview_window(&label) {
+            Some(window) => window,
+            None => match build_glow_window(&app, &label) {
+                Ok(window) => window,
+                Err(e) => {
+                    eprintln!("glow: failed to create window {label}: {e}");
+                    continue;
+                }
+            },
         };
         let position = monitor.position();
         let size = monitor.size();
@@ -77,21 +70,29 @@ pub fn show_glow(app: AppHandle) -> Result<(), Error> {
     Ok(())
 }
 
-/// Hide every glow window. Hiding (not destroying) keeps re-shows instant.
+/// Hide every glow window (hidden, not destroyed — re-shows stay instant). The
+/// first failure is returned after trying all, so the webview retries later.
 #[tauri::command]
-pub fn hide_glow(app: AppHandle) {
+pub fn hide_glow(app: AppHandle) -> Result<(), Error> {
+    let mut first_error: Option<tauri::Error> = None;
     for (label, window) in app.webview_windows() {
-        if label.starts_with(GLOW_LABEL_PREFIX) {
-            if let Err(e) = window.hide() {
-                eprintln!("glow: failed to hide window {label}: {e}");
-            }
+        if !label.starts_with(GLOW_LABEL_PREFIX) {
+            continue;
         }
+        if let Err(e) = window.hide() {
+            eprintln!("glow: failed to hide window {label}: {e}");
+            first_error.get_or_insert(e);
+        }
+    }
+    match first_error {
+        Some(e) => Err(e.into()),
+        None => Ok(()),
     }
 }
 
-// The overlay must never take focus, catch clicks, appear in the Dock/switcher,
-// or stay behind on another Space — it's pure ambient light over everything.
-fn build_glow_window(app: &AppHandle, label: &str) -> Result<(), Error> {
+// Never takes focus, catches clicks, or lingers on one Space. A half-configured
+// window is destroyed rather than left swallowing the display's clicks.
+fn build_glow_window(app: &AppHandle, label: &str) -> Result<WebviewWindow, Error> {
     let window = WebviewWindowBuilder::new(app, label, WebviewUrl::App("index.html#glow".into()))
         .transparent(true) // requires macOSPrivateApi (tauri.conf.json)
         .decorations(false)
@@ -101,9 +102,16 @@ fn build_glow_window(app: &AppHandle, label: &str) -> Result<(), Error> {
         .skip_taskbar(true)
         .visible(false)
         .build()?;
+    if let Err(e) = configure_overlay(&window) {
+        let _ = window.destroy();
+        return Err(e.into());
+    }
+    Ok(window)
+}
+
+fn configure_overlay(window: &WebviewWindow) -> tauri::Result<()> {
     window.set_visible_on_all_workspaces(true)?;
-    window.set_ignore_cursor_events(true)?;
-    Ok(())
+    window.set_ignore_cursor_events(true)
 }
 
 #[cfg(test)]
@@ -115,30 +123,24 @@ mod tests {
     }
 
     #[test]
-    fn creates_one_window_per_monitor_from_nothing() {
-        let (create, close) = plan_glow_windows(&[], 2);
-        assert_eq!(create, labels(&["glow-0", "glow-1"]));
-        assert!(close.is_empty());
+    fn no_orphans_when_nothing_exists() {
+        assert!(orphan_glow_labels(&[], 2).is_empty());
     }
 
     #[test]
-    fn closes_orphans_when_a_monitor_is_unplugged() {
-        let (create, close) = plan_glow_windows(&labels(&["glow-0", "glow-1"]), 1);
-        assert!(create.is_empty());
-        assert_eq!(close, labels(&["glow-1"]));
+    fn flags_the_extra_window_when_a_monitor_is_unplugged() {
+        let orphans = orphan_glow_labels(&labels(&["glow-0", "glow-1"]), 1);
+        assert_eq!(orphans, labels(&["glow-1"]));
     }
 
     #[test]
     fn matching_windows_are_a_no_op() {
-        let (create, close) = plan_glow_windows(&labels(&["glow-0"]), 1);
-        assert!(create.is_empty());
-        assert!(close.is_empty());
+        assert!(orphan_glow_labels(&labels(&["glow-0"]), 1).is_empty());
     }
 
     #[test]
-    fn creates_the_missing_window_when_a_monitor_is_added() {
-        let (create, close) = plan_glow_windows(&labels(&["glow-0"]), 2);
-        assert_eq!(create, labels(&["glow-1"]));
-        assert!(close.is_empty());
+    fn missing_windows_are_not_orphans() {
+        // A newly added monitor means fewer windows than displays — nothing to close.
+        assert!(orphan_glow_labels(&labels(&["glow-0"]), 2).is_empty());
     }
 }

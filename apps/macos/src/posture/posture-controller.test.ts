@@ -23,6 +23,7 @@ import {
   NUDGE_AFTER_POOR_SAMPLES,
   pausePostureNudges,
   resumePostureNudges,
+  STEADY_SAMPLES,
   setPostureNudges,
   startPosture,
   stopPosture,
@@ -42,10 +43,7 @@ vi.mock('@cuewise/app', async () => {
   const fixtures = await import('./__fixtures__/posture-controller.fixtures');
   return {
     useToastStore: {
-      getState: () => ({
-        error: fixtures.toastErrorMock,
-        warning: fixtures.toastWarningMock,
-      }),
+      getState: () => ({ error: fixtures.toastErrorMock }),
     },
     usePomodoroStore: { getState: () => fixtures.pomodoroStateMock },
     useFocusModeStore: { getState: () => fixtures.focusModeStateMock },
@@ -172,23 +170,77 @@ describe('glow nudge lifecycle', () => {
     expect(countInvokes('show_glow')).toBe(1);
   });
 
-  it('self-clears the moment posture recovers', async () => {
+  it('self-clears once recovery has held for the debounce window', async () => {
     await startTracking();
     await glowUp();
 
-    emitSampleFrame(JSON.stringify({ status: 'good' }));
+    for (let i = 0; i < STEADY_SAMPLES; i += 1) {
+      emitSampleFrame(JSON.stringify({ status: 'good' }));
+    }
 
     expect(countInvokes('hide_glow')).toBe(1);
     expect(getPostureState().glowActive).toBe(false);
   });
 
-  it('self-clears when the user leaves the frame', async () => {
+  it('a single jitter frame mid-slouch does not drop the glow', async () => {
     await startTracking();
     await glowUp();
 
-    emitSampleFrame(JSON.stringify({ status: 'absent' }));
+    emitSampleFrame(JSON.stringify({ status: 'good' }));
+
+    expect(countInvokes('hide_glow')).toBe(0);
+    expect(getPostureState().glowActive).toBe(true);
+  });
+
+  it('self-clears when leaving the frame holds for the debounce window', async () => {
+    await startTracking();
+    await glowUp();
+
+    for (let i = 0; i < STEADY_SAMPLES; i += 1) {
+      emitSampleFrame(JSON.stringify({ status: 'absent' }));
+    }
 
     expect(countInvokes('hide_glow')).toBe(1);
+    expect(getPostureState().glowActive).toBe(false);
+  });
+
+  it('a rejected show_glow rolls back so the next sustained streak retries', async () => {
+    await startTracking();
+    invokeMock.mockRejectedValueOnce(new Error('no monitors'));
+
+    emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES);
+    await flushChain();
+    expect(getPostureState().glowActive).toBe(false);
+
+    emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES);
+    expect(countInvokes('show_glow')).toBe(2);
+    expect(getPostureState().glowActive).toBe(true);
+  });
+
+  it('a rejected hide_glow retries on later recovered frames while tracking', async () => {
+    await startTracking();
+    await glowUp();
+    invokeMock.mockRejectedValueOnce(new Error('hide failed'));
+
+    for (let i = 0; i < STEADY_SAMPLES; i += 1) {
+      emitSampleFrame(JSON.stringify({ status: 'good' }));
+    }
+    await flushChain();
+    expect(getPostureState().glowActive).toBe(true); // rolled back — retry armed
+
+    emitSampleFrame(JSON.stringify({ status: 'good' }));
+    expect(countInvokes('hide_glow')).toBe(2);
+  });
+
+  it('a rejected hide_glow during a stop does not wedge the next session', async () => {
+    await startTracking();
+    await glowUp();
+    invokeMock.mockRejectedValueOnce(new Error('hide failed'));
+
+    stopPosture();
+    await flushChain();
+
+    // No rollback after teardown: a stale glowActive would block the next glow.
     expect(getPostureState().glowActive).toBe(false);
   });
 
@@ -212,16 +264,23 @@ describe('glow nudge lifecycle', () => {
     expect(getPostureState().glowActive).toBe(false);
   });
 
-  it('turning reminders off hides an active glow and suppresses future ones', async () => {
+  it('turning reminders off hides an active glow', async () => {
     await startTracking();
     await glowUp();
 
     setPostureNudges(false);
+
     expect(countInvokes('hide_glow')).toBe(1);
     expect(getPostureState().glowActive).toBe(false);
+  });
+
+  it('no glow fires while reminders are off', async () => {
+    await startTracking();
+    setPostureNudges(false);
 
     emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES * 2);
-    expect(countInvokes('show_glow')).toBe(1);
+
+    expect(countInvokes('show_glow')).toBe(0);
   });
 });
 
@@ -250,21 +309,48 @@ describe('snooze and pause', () => {
     expect(localStorageStub.getItem(NUDGES_PAUSED_KEY)).toBeNull();
   });
 
-  it('pause until-resume holds indefinitely and clears on resume', async () => {
+  it('pause until-resume holds indefinitely', async () => {
     await startTracking();
     pausePostureNudges('until-resume');
 
     await vi.advanceTimersByTimeAsync(24 * 60 * 60_000);
     emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES * 2);
+
     expect(countInvokes('show_glow')).toBe(0);
     expect(localStorageStub.getItem(NUDGES_PAUSED_KEY)).toBe('until-resume');
+  });
+
+  it('resume lifts an until-resume pause and re-arms the glow', async () => {
+    await startTracking();
+    pausePostureNudges('until-resume');
 
     resumePostureNudges();
+
     expect(getPostureState().nudgesPausedUntil).toBeNull();
     expect(localStorageStub.getItem(NUDGES_PAUSED_KEY)).toBeNull();
-
     emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES);
     expect(countInvokes('show_glow')).toBe(1);
+  });
+
+  it('an elapsed pause clears even while posture stays good', async () => {
+    await startTracking();
+    pausePostureNudges(10);
+
+    await vi.advanceTimersByTimeAsync(10 * 60_000 + 1);
+    emitSampleFrame(JSON.stringify({ status: 'good' }));
+
+    expect(getPostureState().nudgesPausedUntil).toBeNull();
+    expect(localStorageStub.getItem(NUDGES_PAUSED_KEY)).toBeNull();
+  });
+
+  it('turning reminders off clears an active pause', async () => {
+    await startTracking();
+    pausePostureNudges('until-resume');
+
+    setPostureNudges(false);
+
+    expect(getPostureState().nudgesPausedUntil).toBeNull();
+    expect(localStorageStub.getItem(NUDGES_PAUSED_KEY)).toBeNull();
   });
 
   it('pausing while the glow is up hides it immediately', async () => {
