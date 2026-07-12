@@ -16,6 +16,8 @@ A **platform-agnostic** client for the ENG-43 cloud-sync API (`apps/api`) — no
 | `logout()` | `POST /v1/auth/logout` | Yes |
 | `exportData()` | `GET /v1/export` | Yes |
 | `deleteAccount()` | `DELETE /v1/account` | Yes |
+| `getRecoveryEnvelope()` | `GET /v1/keys/recovery` | Yes |
+| `putRecoveryEnvelope(envelope)` | `PUT /v1/keys/recovery` | Yes |
 
 **Retry policy**: up to `MAX_RETRIES = 3` retries after the initial attempt — 4 attempts total. Retries on network failure (a rejected `fetch`, e.g. offline/DNS — folded into the same path as a synthetic status-0 error), `429`, and `5xx`. Backoff is `2^attempt * 500ms`, unless the response carried a `retryAfter` (problem+json body) or a numeric `Retry-After` header, which takes priority. Any other 4xx throws immediately, no retry.
 
