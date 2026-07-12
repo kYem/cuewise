@@ -49,12 +49,17 @@ export async function hashSessionToken(raw: RawSessionToken): Promise<SessionTok
   return (await sha256Hex(raw)) as SessionTokenHash;
 }
 
-/** The one blessed cast: parses `Authorization: Bearer <token>`, or null if absent/malformed. */
+/** The one blessed cast: parses `Authorization: Bearer <token>`, or null if absent/empty/malformed. */
 export function bearerToken(header: string | undefined): RawSessionToken | null {
   if (header === undefined || !header.startsWith('Bearer ')) {
     return null;
   }
-  return header.slice('Bearer '.length) as RawSessionToken;
+  const token = header.slice('Bearer '.length);
+  // An empty token ("Bearer ") is not a credential — reject here rather than hash-and-miss.
+  if (token === '') {
+    return null;
+  }
+  return token as RawSessionToken;
 }
 
 export async function sha256Base64Url(value: string): Promise<string> {
