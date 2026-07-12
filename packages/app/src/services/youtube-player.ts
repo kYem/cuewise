@@ -112,6 +112,18 @@ const MAX_CONSECUTIVE_SKIPS = 5;
 
 export type PlayerErrorAction = 'skip' | 'give-up' | 'notify';
 
+// Exact allowlist for postMessage senders: the cuewise.app proxy page (relaying
+// YouTube's own messages) and youtube-nocookie.com directly. `.includes()` used to
+// match spoofable lookalikes like evil-youtube.com or cuewise.app.attacker.com.
+const ALLOWED_MESSAGE_ORIGINS = new Set([
+  'https://cuewise.app',
+  'https://www.youtube-nocookie.com',
+]);
+
+export function isAllowedMessageOrigin(origin: string): boolean {
+  return ALLOWED_MESSAGE_ORIGINS.has(origin);
+}
+
 /**
  * Decide how to handle a YouTube onError: skip a per-video failure within a
  * playlist, give up once too many fail in a row, or just notify otherwise.
@@ -311,7 +323,7 @@ class YouTubePlayerService {
    */
   private handleMessage(event: MessageEvent): void {
     // Process messages from YouTube or our proxy page
-    if (!event.origin.includes('youtube') && !event.origin.includes('cuewise.app')) {
+    if (!isAllowedMessageOrigin(event.origin)) {
       return;
     }
 
