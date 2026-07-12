@@ -25,7 +25,8 @@ fn orphan_glow_labels(existing: &[String], monitor_count: usize) -> Vec<String> 
 }
 
 /// Show the glow on every monitor: get-or-create a window per display, position,
-/// show. Per-monitor failures are logged and skipped, never blocking the others.
+/// show. Per-monitor failures are logged and skipped; topology changes mid-glow
+/// settle on the next show.
 #[tauri::command]
 pub fn show_glow(app: AppHandle) -> Result<(), Error> {
     let monitors = app.available_monitors()?;

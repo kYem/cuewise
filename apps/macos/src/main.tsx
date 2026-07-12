@@ -20,8 +20,8 @@ const root = ReactDOM.createRoot(rootElement);
 // The glow windows (`glow.rs`) load this same bundle at `#glow` and must render
 // ONLY the vignette — duplicating the wiring below would double-fire reminders.
 if (window.location.hash === '#glow') {
-  // The app stylesheet paints opaque html/body backgrounds; inline styles beat
-  // any stylesheet, keeping the transparent overlay window actually see-through.
+  // Belt to glow-overlay.css's first-paint :target rule: force transparency via
+  // inline styles too, for engines without :has() support.
   document.documentElement.style.background = 'transparent';
   document.body.style.background = 'transparent';
   root.render(<GlowOverlay />);

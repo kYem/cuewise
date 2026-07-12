@@ -19,7 +19,7 @@ export interface PostureState {
   steadyStatus: PostureStatus | null;
   error: string | null;
   // The screen-edge glow IS the nudge (ENG-40): up after sustained poor posture,
-  // down the moment posture recovers.
+  // down once recovery holds.
   glowActive: boolean;
   nudgesPausedUntil: number | 'until-resume' | null;
 }
@@ -187,7 +187,6 @@ async function attachListeners(): Promise<void> {
     } else {
       setState({ sample });
     }
-    // Steady status first: the glow's debounced clear reads it for this frame.
     updateSteadyStatus(sample.status);
     updateNudgeGlow(sample);
   });

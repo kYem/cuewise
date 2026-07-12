@@ -1,7 +1,7 @@
 import { vi } from 'vitest';
 
 // Mock plumbing for posture-controller tests: shared spies handed to the
-// controller's mocked deps (Tauri invoke/listen, toast store, notifier).
+// controller's mocked deps (Tauri invoke/listen, toast + pomodoro/focus stores).
 
 export type EventHandler = (event: { payload: string }) => void;
 

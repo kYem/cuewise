@@ -1,3 +1,10 @@
+/* Glow windows must be transparent from the FIRST paint — the JS override in
+   main.tsx runs after the app stylesheet has already painted an opaque body. */
+html:has(#glow:target),
+html:has(#glow:target) body {
+  background: transparent !important;
+}
+
 /* Screen-edge vignette for the glow nudge windows. Design-system rose (rose-600)
    at ambient intensity — light, not alarm. */
 .glow-vignette {
