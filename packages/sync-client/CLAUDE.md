@@ -21,6 +21,8 @@ A **platform-agnostic** client for the ENG-43 cloud-sync API (`apps/api`) — no
 
 **Retry policy**: up to `MAX_RETRIES = 3` retries after the initial attempt — 4 attempts total. Retries on network failure (a rejected `fetch`, e.g. offline/DNS — folded into the same path as a synthetic status-0 error), `429`, and `5xx`. Backoff is `2^attempt * 500ms`, unless the response carried a `retryAfter` (problem+json body) or a numeric `Retry-After` header, which takes priority. Any other 4xx throws immediately, no retry.
 
+**The 404 exception**: `getRecoveryEnvelope` resolves to `null` on a 404 instead of throwing — "signed in but E2E keys never initialized" is a valid state callers branch on, not an error. Every other non-2xx still throws `ApiError` as usual.
+
 **The Apple exception**: `exchangeToken` passes `retry: false` internally whenever `req.provider === 'apple'`. Apple's `credential` is the one-time code from the server bounce (see `apps/api/CLAUDE.md` → Auth flows) — it's burned the instant the server reads it, so retrying a lost or ambiguous response would replay an already-consumed code and turn a would-be-successful sign-in into a guaranteed 401. Google and dev exchanges are idempotent and keep retrying normally.
 
 **`ApiError`** (`api-error.ts`) normalizes every failure — a non-2xx response or a thrown network error — into one shape: `code`, `status`, `retryable`, `retryAfter?`, `errors?`. `ApiError.fromResponse()` parses the server's problem+json body; if the body isn't valid JSON (e.g. an upstream 502 HTML page), it logs a warning and falls back to `code: 'internal'` rather than throwing while it's building an error.
@@ -46,7 +48,7 @@ Out of scope for this package (belongs to ENG-45 unless noted):
 - The mapping between Zustand store shapes (`goals`, `quotes`, ...) and individual `PushRecord`s.
 - LWW (last-write-wins) conflict resolution.
 - The fresh-device migration/merge state machine.
-- Encryption — `ciphertext` is an opaque string to every function here. ENG-44 owns the real envelope; until it lands, callers pass a stub plaintext envelope through the same field, and this package can't tell the difference.
+- Encryption *wiring* — the ENG-44 crypto lives in `src/crypto/` (recovery codes, key wrap/unwrap, record `sealRecord`/`openRecord`), but nothing in this package calls it yet. `ciphertext` stays an opaque string to the transport functions; ENG-45 wires stores through `sealRecord`/`openRecord`.
 
 ## Testing
 
