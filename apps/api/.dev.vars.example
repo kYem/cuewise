@@ -1,0 +1,3 @@
+# Copy to .dev.vars (gitignored) for `wrangler dev`; never commit real secrets here.
+STATE_SIGNING_KEY=dev-only-not-a-secret
+DEV_FAKE_AUTH=1
