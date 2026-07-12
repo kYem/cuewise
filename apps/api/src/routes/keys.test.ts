@@ -29,6 +29,8 @@ describe('/v1/keys/recovery', () => {
     const res = await app.request('/v1/keys/recovery', {}, env);
     expect(res.status).toBe(401);
     expect(res.headers.get('Content-Type')).toBe('application/problem+json');
+    const body = await res.json<{ code: string }>();
+    expect(body.code).toBe('unauthorized');
   });
 
   it('rejects unauthenticated PUT with 401 problem+json', async () => {
@@ -43,6 +45,8 @@ describe('/v1/keys/recovery', () => {
     );
     expect(res.status).toBe(401);
     expect(res.headers.get('Content-Type')).toBe('application/problem+json');
+    const body = await res.json<{ code: string }>();
+    expect(body.code).toBe('unauthorized');
   });
 
   it('GET before any PUT returns 404 problem+json with type not_found', async () => {
@@ -86,9 +90,32 @@ describe('/v1/keys/recovery', () => {
     expect(body.code).toBe('invalid_key_envelope');
   });
 
-  it('PUT rejects an envelope over 1024 chars with 400 invalid_key_envelope', async () => {
+  it('PUT rejects an envelope over 1024 bytes with 400 invalid_key_envelope', async () => {
     const { token } = await signedInToken();
     const res = await putRecovery(app, token, { envelope: 'x'.repeat(1025) });
+    expect(res.status).toBe(400);
+    const body = await res.json<{ code: string }>();
+    expect(body.code).toBe('invalid_key_envelope');
+  });
+
+  it('PUT accepts an envelope of exactly 1024 bytes', async () => {
+    const { token } = await signedInToken();
+    const res = await putRecovery(app, token, { envelope: 'x'.repeat(1024) });
+    expect(res.status).toBe(204);
+  });
+
+  it('PUT rejects a multi-byte envelope over 1024 UTF-8 bytes despite fewer UTF-16 units', async () => {
+    const { token } = await signedInToken();
+    // '€' is 1 UTF-16 unit but 3 UTF-8 bytes: 400 units, 1200 bytes.
+    const res = await putRecovery(app, token, { envelope: '€'.repeat(400) });
+    expect(res.status).toBe(400);
+    const body = await res.json<{ code: string }>();
+    expect(body.code).toBe('invalid_key_envelope');
+  });
+
+  it('PUT rejects a literal null JSON body with 400 invalid_key_envelope', async () => {
+    const { token } = await signedInToken();
+    const res = await putRecovery(app, token, null);
     expect(res.status).toBe(400);
     const body = await res.json<{ code: string }>();
     expect(body.code).toBe('invalid_key_envelope');
