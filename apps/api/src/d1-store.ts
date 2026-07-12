@@ -295,6 +295,7 @@ export class D1SyncStore implements SyncStore {
       this.db.prepare('DELETE FROM records WHERE user_id = ?').bind(userId),
       this.db.prepare('DELETE FROM tokens WHERE user_id = ?').bind(userId),
       this.db.prepare('DELETE FROM identities WHERE user_id = ?').bind(userId),
+      this.db.prepare('DELETE FROM key_envelopes WHERE user_id = ?').bind(userId),
       this.db.prepare('DELETE FROM users WHERE id = ?').bind(userId),
     ]);
   }
@@ -308,6 +309,30 @@ export class D1SyncStore implements SyncStore {
       .bind(cutoff)
       .run();
     return result.meta.changes ?? 0;
+  }
+
+  async getKeyEnvelope(
+    userId: string,
+    kind: string
+  ): Promise<{ envelope: string; updatedAt: number } | null> {
+    const row = await this.db
+      .prepare('SELECT envelope, updated_at FROM key_envelopes WHERE user_id = ? AND kind = ?')
+      .bind(userId, kind)
+      .first<{ envelope: string; updated_at: number }>();
+    if (row === null) {
+      return null;
+    }
+    return { envelope: row.envelope, updatedAt: row.updated_at };
+  }
+
+  async putKeyEnvelope(userId: string, kind: string, envelope: string): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO key_envelopes (user_id, kind, envelope, updated_at) VALUES (?, ?, ?, ?)
+         ON CONFLICT (user_id, kind) DO UPDATE SET envelope = excluded.envelope, updated_at = excluded.updated_at`
+      )
+      .bind(userId, kind, envelope, this.now())
+      .run();
   }
 
   // Single UPDATE...RETURNING with CASE keeps the reset-or-increment atomic within D1's

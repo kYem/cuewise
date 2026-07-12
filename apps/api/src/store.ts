@@ -46,6 +46,12 @@ export interface SyncStore {
   deleteUser(userId: string): Promise<void>;
   // Deletes tombstones older than retentionMs (a maintenance sweep across all users); returns the count.
   purgeTombstones(retentionMs: number): Promise<number>;
+  // E2E key envelopes: opaque client-wrapped blobs the server can never read.
+  getKeyEnvelope(
+    userId: string,
+    kind: string
+  ): Promise<{ envelope: string; updatedAt: number } | null>;
+  putKeyEnvelope(userId: string, kind: string, envelope: string): Promise<void>;
   // Returns null only when the token row was physically deleted mid-request (concurrent account
   // deletion); revocation leaves the row and is already caught upstream by lookupSession.
   bumpRateWindow(
