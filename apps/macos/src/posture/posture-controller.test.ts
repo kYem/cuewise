@@ -8,7 +8,6 @@ import {
   emitStopped,
   focusModeStateMock,
   invokeMock,
-  NUDGE_AFTER_POOR_SAMPLES,
   notifyMock,
   pomodoroStateMock,
   resetPostureMocks,
@@ -18,7 +17,12 @@ import {
   UNREADABLE_ERROR,
   unlistenSpies,
 } from './__fixtures__/posture-controller.fixtures';
-import { getPostureState, startPosture, stopPosture } from './posture-controller';
+import {
+  getPostureState,
+  NUDGE_AFTER_POOR_SAMPLES,
+  startPosture,
+  stopPosture,
+} from './posture-controller';
 
 vi.mock('@tauri-apps/api/core', async () => {
   const fixtures = await import('./__fixtures__/posture-controller.fixtures');
@@ -52,37 +56,42 @@ vi.mock('@cuewise/shared', async () => {
   };
 });
 
-// One macrotask turn drains the attach-listeners → invoke promise chain.
-async function flush(): Promise<void> {
-  await new Promise((resolve) => {
-    setTimeout(resolve, 0);
-  });
+let localStorageStub: ReturnType<typeof createLocalStorageStub>;
+// Each test starts on a fresh clock well past the previous test's nudge, so the
+// module-level nudge cooldown can never bleed across tests.
+let clock = Date.now();
+
+// One zero-length tick drains the attach-listeners → invoke promise chain.
+async function flushChain(): Promise<void> {
+  await vi.advanceTimersByTimeAsync(0);
 }
 
 async function startTracking(): Promise<void> {
   startPosture();
-  await flush();
+  await flushChain();
   expect(countInvokes('start_posture')).toBe(1);
   expect(getPostureState().tracking).toBe(true);
 }
 
+beforeEach(() => {
+  vi.useFakeTimers();
+  clock += 10 * 60_000;
+  vi.setSystemTime(clock);
+  resetPostureMocks();
+  localStorageStub = createLocalStorageStub();
+  vi.stubGlobal('localStorage', localStorageStub);
+});
+
+afterEach(async () => {
+  // The controller keeps module-level session state — tear it down so each
+  // test starts from idle.
+  stopPosture();
+  await flushChain();
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
+});
+
 describe('posture controller lifecycle', () => {
-  let localStorageStub: ReturnType<typeof createLocalStorageStub>;
-
-  beforeEach(() => {
-    resetPostureMocks();
-    localStorageStub = createLocalStorageStub();
-    vi.stubGlobal('localStorage', localStorageStub);
-  });
-
-  afterEach(async () => {
-    // The controller keeps module-level session state — tear it down so each
-    // test starts from idle.
-    stopPosture();
-    await flush();
-    vi.unstubAllGlobals();
-  });
-
   it('an unexpected sidecar stop surfaces the error and keeps the auto-resume pref', async () => {
     await startTracking();
 
@@ -115,7 +124,7 @@ describe('posture controller lifecycle', () => {
     invokeMock.mockRejectedValueOnce(new Error('camera denied'));
 
     startPosture();
-    await flush();
+    await flushChain();
 
     expect(getPostureState().tracking).toBe(false);
     expect(getPostureState().error).toBe(START_FAILED_ERROR);
@@ -139,35 +148,8 @@ describe('posture controller lifecycle', () => {
 });
 
 describe('smart pause (focus-session-aware nudging)', () => {
-  let localStorageStub: ReturnType<typeof createLocalStorageStub>;
-  // Each test starts on a fresh clock well past the previous test's nudge, so the
-  // module-level nudge cooldown can never bleed across tests.
-  let clock = Date.now();
-
-  beforeEach(() => {
-    vi.useFakeTimers();
-    clock += 10 * 60_000;
-    vi.setSystemTime(clock);
-    resetPostureMocks();
-    localStorageStub = createLocalStorageStub();
-    vi.stubGlobal('localStorage', localStorageStub);
-  });
-
-  afterEach(async () => {
-    stopPosture();
-    await vi.advanceTimersByTimeAsync(0);
-    vi.unstubAllGlobals();
-    vi.useRealTimers();
-  });
-
-  async function startTrackingFake(): Promise<void> {
-    startPosture();
-    await vi.advanceTimersByTimeAsync(0);
-    expect(getPostureState().tracking).toBe(true);
-  }
-
   it('nudges after sustained poor posture when no focus session is running', async () => {
-    await startTrackingFake();
+    await startTracking();
 
     emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES);
 
@@ -177,41 +159,42 @@ describe('smart pause (focus-session-aware nudging)', () => {
   it('never nudges while a work session is running', async () => {
     pomodoroStateMock.status = 'running';
     pomodoroStateMock.sessionType = 'work';
-    await startTrackingFake();
+    await startTracking();
 
     emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES * 3);
 
     expect(notifyMock).not.toHaveBeenCalled();
   });
 
-  it('a focus block is neutral — the streak restarts fresh after the session ends', async () => {
-    pomodoroStateMock.status = 'running';
-    pomodoroStateMock.sessionType = 'work';
-    await startTrackingFake();
-    emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES - 1);
+  it('a focus block resets a pre-focus streak — no stale nudge when the session ends', async () => {
+    await startTracking();
+    emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES - 1); // one frame short of a nudge
 
+    pomodoroStateMock.status = 'running';
+    emitPoorFrames(1); // suppressed, and must reset (not freeze) the streak
     pomodoroStateMock.status = 'idle';
-    emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES - 1);
-    // 28 poor frames total — a carried-over streak would have fired long ago.
-    expect(notifyMock).not.toHaveBeenCalled();
 
     emitPoorFrames(1);
+    // A frozen streak would fire right here (14 pre-focus + 1) — reset must not.
+    expect(notifyMock).not.toHaveBeenCalled();
+
+    emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES - 1);
     expect(notifyMock).toHaveBeenCalledWith(expect.objectContaining({ id: 'posture-nudge' }));
   });
 
-  it('still nudges during a break — only focus time is protected', async () => {
+  it('still nudges during a break when the focus-mode surface is not open', async () => {
     pomodoroStateMock.status = 'running';
     pomodoroStateMock.sessionType = 'break';
-    await startTrackingFake();
+    await startTracking();
 
     emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES);
 
     expect(notifyMock).toHaveBeenCalledWith(expect.objectContaining({ id: 'posture-nudge' }));
   });
 
-  it('never nudges while focus mode is active, even with the timer idle', async () => {
+  it('never nudges while the focus-mode surface is open, even with the timer idle', async () => {
     focusModeStateMock.isActive = true;
-    await startTrackingFake();
+    await startTracking();
 
     emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES * 3);
 

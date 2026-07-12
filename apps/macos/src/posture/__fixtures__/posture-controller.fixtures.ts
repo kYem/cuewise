@@ -83,9 +83,6 @@ export function countInvokes(command: string): number {
   return invokeMock.mock.calls.filter(([invoked]) => invoked === command).length;
 }
 
-/** Mirrors the controller's nudge threshold: consecutive poor samples before a nudge. */
-export const NUDGE_AFTER_POOR_SAMPLES = 15;
-
 export function emitPoorFrames(count: number): void {
   for (let i = 0; i < count; i += 1) {
     emitSampleFrame(JSON.stringify({ status: 'poor' }));
