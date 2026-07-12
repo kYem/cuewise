@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   createHeatmapTestSessions,
   createTestGoals,
@@ -19,6 +19,17 @@ import {
   exportPomodoroSessionsCSV,
   exportWeeklyTrendsCSV,
 } from './utils';
+
+// The fixtures build goals/sessions relative to "now"; on a Monday, "yesterday" falls outside
+// the this-week window and the weekly assertions flake. Freeze time to a mid-week, mid-month day.
+beforeAll(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date('2026-07-08T12:00:00Z'));
+});
+
+afterAll(() => {
+  vi.useRealTimers();
+});
 
 describe('countFocusSessionsToday', () => {
   it("counts only today's non-interrupted work sessions", () => {
