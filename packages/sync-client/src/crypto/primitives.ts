@@ -4,6 +4,8 @@ import { DecryptError, EnvelopeParseError } from './errors';
 
 const subtle = globalThis.crypto.subtle;
 
+const KEY_ID_RE = /^dk-\d+$/;
+
 // TS's Uint8Array is generic over its backing buffer (ArrayBuffer | SharedArrayBuffer); DOM's
 // BufferSource requires the ArrayBuffer-only form, which a bare `Uint8Array` param can't express.
 function asBufferSource(bytes: Uint8Array): BufferSource {
@@ -43,8 +45,21 @@ export async function hkdfSha256(
   return new Uint8Array(bits);
 }
 
+const aesKeyCache = new WeakMap<Uint8Array, Promise<CryptoKey>>();
+
+// Re-sealing/opening many records with the same data key re-imports it every time
+// without this; cache by the exact Uint8Array reference, like the HMAC key cache in crypto-utils.ts.
 async function importAesKey(key: Uint8Array): Promise<CryptoKey> {
-  return subtle.importKey('raw', asBufferSource(key), 'AES-GCM', false, ['encrypt', 'decrypt']);
+  const cached = aesKeyCache.get(key);
+  if (cached !== undefined) {
+    return cached;
+  }
+  const imported = subtle.importKey('raw', asBufferSource(key), 'AES-GCM', false, [
+    'encrypt',
+    'decrypt',
+  ]);
+  aesKeyCache.set(key, imported);
+  return imported;
 }
 
 export async function aesGcmSeal(
@@ -82,10 +97,13 @@ export async function aesGcmOpen(
   }
 }
 
+const CHUNK_SIZE = 0x8000;
+
 export function b64urlEncode(bytes: Uint8Array): string {
+  // Chunked: spreading a large typed array into String.fromCharCode blows the call-stack limit.
   let binary = '';
-  for (const b of bytes) {
-    binary += String.fromCharCode(b);
+  for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK_SIZE));
   }
   return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
 }
@@ -107,4 +125,33 @@ export function b64urlDecode(s: string): Uint8Array {
     bytes[i] = binary.charCodeAt(i);
   }
   return bytes;
+}
+
+export function isValidKeyId(keyId: string): boolean {
+  return KEY_ID_RE.test(keyId);
+}
+
+/** Shared `v1.<keyId>.<iv>.<ct>` parser used by both record envelopes and wrapped-key blobs. */
+export function splitEnvelope(value: string): { keyId: string; iv: Uint8Array; ct: Uint8Array } {
+  const parts = value.split('.');
+  if (parts.length !== 4) {
+    throw new EnvelopeParseError('envelope must have 4 parts');
+  }
+  const [version, keyId, ivPart, ctPart] = parts;
+  if (version !== 'v1') {
+    throw new EnvelopeParseError('unknown envelope version');
+  }
+  if (!isValidKeyId(keyId)) {
+    throw new EnvelopeParseError('invalid keyId');
+  }
+  const iv = b64urlDecode(ivPart);
+  const ct = b64urlDecode(ctPart);
+  if (iv.length !== 12) {
+    throw new EnvelopeParseError('invalid iv length');
+  }
+  // 16-byte GCM tag is the minimum possible payload.
+  if (ct.length < 16) {
+    throw new EnvelopeParseError('ciphertext too short');
+  }
+  return { keyId, iv, ct };
 }

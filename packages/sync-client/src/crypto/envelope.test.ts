@@ -12,23 +12,27 @@ const GOAL_JSON = JSON.stringify({
   date: '2026-07-12',
 });
 
+/** Seals GOAL_JSON under a fresh data key as ('goals', 'g1') — the shared happy-path fixture. */
+async function sealedGoal(): Promise<{ dk: Uint8Array; env: string }> {
+  const dk = generateDataKey();
+  const env = await sealRecord(dk, 'dk-1', 'goals', 'g1', GOAL_JSON);
+  return { dk, env };
+}
+
 describe('record envelope', () => {
   it('seal/open round-trips a realistic entity', async () => {
-    const dk = generateDataKey();
-    const env = await sealRecord(dk, 'dk-1', 'goals', 'g1', GOAL_JSON);
+    const { dk, env } = await sealedGoal();
     expect(env).toMatch(/^v1\.dk-1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
     await expect(openRecord(dk, env, 'goals', 'g1')).resolves.toBe(GOAL_JSON);
   });
 
   it('swap defense: a goals envelope refuses to open as another collection', async () => {
-    const dk = generateDataKey();
-    const env = await sealRecord(dk, 'dk-1', 'goals', 'g1', GOAL_JSON);
+    const { dk, env } = await sealedGoal();
     await expect(openRecord(dk, env, 'settings', 'g1')).rejects.toThrow(DecryptError);
   });
 
   it('swap defense: a g1 envelope refuses to open as g2', async () => {
-    const dk = generateDataKey();
-    const env = await sealRecord(dk, 'dk-1', 'goals', 'g1', GOAL_JSON);
+    const { dk, env } = await sealedGoal();
     await expect(openRecord(dk, env, 'goals', 'g2')).rejects.toThrow(DecryptError);
   });
 
@@ -43,8 +47,34 @@ describe('record envelope', () => {
   });
 
   it('wrong data key throws DecryptError', async () => {
-    const env = await sealRecord(generateDataKey(), 'dk-1', 'goals', 'g1', GOAL_JSON);
+    const { env } = await sealedGoal();
     await expect(openRecord(generateDataKey(), env, 'goals', 'g1')).rejects.toThrow(DecryptError);
+  });
+
+  it('AAD injection: seal rejects a collection or entityId containing "|"', async () => {
+    const dk = generateDataKey();
+    await expect(sealRecord(dk, 'dk-1', 'a|b', 'c', GOAL_JSON)).rejects.toThrow(EnvelopeParseError);
+    await expect(sealRecord(dk, 'dk-1', 'a', 'b|c', GOAL_JSON)).rejects.toThrow(EnvelopeParseError);
+  });
+
+  it('AAD injection: seal rejects an empty collection or entityId', async () => {
+    const dk = generateDataKey();
+    await expect(sealRecord(dk, 'dk-1', '', 'g1', GOAL_JSON)).rejects.toThrow(EnvelopeParseError);
+    await expect(sealRecord(dk, 'dk-1', 'goals', '', GOAL_JSON)).rejects.toThrow(
+      EnvelopeParseError
+    );
+  });
+
+  it('AAD injection: open rejects the same cross-shapes, closing the (a|b,c) vs (a,b|c) swap window', async () => {
+    const { dk, env } = await sealedGoal();
+    await expect(openRecord(dk, env, 'a|b', 'c')).rejects.toThrow(EnvelopeParseError);
+    await expect(openRecord(dk, env, 'a', 'b|c')).rejects.toThrow(EnvelopeParseError);
+  });
+
+  it('normal ids without "|" still round-trip after the AAD-component guard', async () => {
+    const dk = generateDataKey();
+    const env = await sealRecord(dk, 'dk-2', 'quotes', 'q-42', GOAL_JSON);
+    await expect(openRecord(dk, env, 'quotes', 'q-42')).resolves.toBe(GOAL_JSON);
   });
 
   it.each([

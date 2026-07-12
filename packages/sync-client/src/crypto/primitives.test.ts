@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { DecryptError, EnvelopeParseError } from './errors';
 import {
   aesGcmOpen,
@@ -76,5 +76,18 @@ describe('primitives', () => {
     expect(b64urlDecode(b64urlEncode(bytes))).toEqual(bytes);
     expect(b64urlEncode(bytes)).not.toMatch(/[+/=]/);
     expect(() => b64urlDecode('not!!valid')).toThrow(EnvelopeParseError);
+  });
+
+  it('caches the imported AES CryptoKey by object reference: same key object imports once, a different one re-imports', async () => {
+    const importKeySpy = vi.spyOn(globalThis.crypto.subtle, 'importKey');
+    const key = randomBytes(32);
+    await aesGcmSeal(key, randomBytes(12), utf8('a'), utf8('aad'));
+    await aesGcmSeal(key, randomBytes(12), utf8('b'), utf8('aad'));
+    expect(importKeySpy).toHaveBeenCalledTimes(1);
+
+    await aesGcmSeal(randomBytes(32), randomBytes(12), utf8('c'), utf8('aad'));
+    expect(importKeySpy).toHaveBeenCalledTimes(2);
+
+    importKeySpy.mockRestore();
   });
 });
