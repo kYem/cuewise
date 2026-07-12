@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { stubThirdPartyRequests, watchForRealNetworkEscapes } from './network-stub';
 
 // Console noise that is not an app fault.
 const IGNORED = [/favicon/i];
@@ -11,6 +12,10 @@ const ERROR_BOUNDARY = /We encountered an unexpected error/i;
 
 test('reused extension UI renders on every surface without errors (WebKit)', async ({ page }) => {
   const errors: string[] = [];
+  // Default colorTheme is 'glass', which fetches an Unsplash background on mount —
+  // stub it so this spec doesn't depend on the live internet either.
+  await stubThirdPartyRequests(page);
+  const getEscapedRequests = watchForRealNetworkEscapes(page);
   page.on('console', (message) => {
     if (message.type() === 'error' && !IGNORED.some((pattern) => pattern.test(message.text()))) {
       errors.push(`console.error: ${message.text()}`);
@@ -44,4 +49,5 @@ test('reused extension UI renders on every surface without errors (WebKit)', asy
   await expect(page.getByText(ERROR_BOUNDARY)).toHaveCount(0);
 
   expect(errors, `Unexpected console/page errors:\n${errors.join('\n')}`).toEqual([]);
+  expect(getEscapedRequests(), 'off-origin requests must never reach the real network').toEqual([]);
 });

@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 import { buildCspHeader, startCspServer } from './csp-static-server';
+import { stubThirdPartyRequests, watchForRealNetworkEscapes } from './network-stub';
 
 // Verifies the PRODUCTION CSP (tauri.conf.json `app.security.csp`) against the
 // real `vite build` output, served with the policy as a genuine
@@ -55,6 +56,8 @@ test('production build reports zero CSP violations across every surface (WebKit)
   page,
 }) => {
   const violations: Violation[] = [];
+  await stubThirdPartyRequests(page);
+  const getEscapedRequests = watchForRealNetworkEscapes(page);
   await page.exposeFunction('__onCspViolation', (violation: Violation) => {
     violations.push(violation);
   });
@@ -145,6 +148,7 @@ test('production build reports zero CSP violations across every surface (WebKit)
     .map((v) => `  - ${v.violatedDirective}: blocked ${v.blockedURI}`)
     .join('\n');
   expect(violations, `CSP violations:\n${details}`).toEqual([]);
+  expect(getEscapedRequests(), 'off-origin requests must never reach the real network').toEqual([]);
 });
 
 // Note on `app.security.devCsp`: for this project's devUrl-based `tauri dev`
