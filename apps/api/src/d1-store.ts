@@ -1,5 +1,12 @@
 import { logger } from '@cuewise/shared';
-import { randomToken, sha256Hex } from './crypto-utils';
+import {
+  hashSessionToken,
+  type RawSessionToken,
+  randomSessionToken,
+  randomToken,
+  type SessionTokenHash,
+  sha256Hex,
+} from './crypto-utils';
 import {
   type AuthCodePayload,
   type Identity,
@@ -18,6 +25,9 @@ export const MAX_CHANGES_PAGE_SIZE = 500;
 // Safety rail against one account filling the shared D1. Generous enough that only deliberate
 // abuse hits it; checked conservatively (all pushed rows treated as new).
 export const MAX_RECORDS_PER_USER = 100_000;
+// Tombstones older than this are safe to reclaim: a device idle longer than the session TTL is
+// logged out and re-bootstraps from since=0, so it never needs the tombstone to learn of a delete.
+export const TOMBSTONE_RETENTION_MS = SESSION_TTL_MS;
 
 export interface D1SyncStoreLimits {
   maxRecordsPerUser?: number;
@@ -92,20 +102,20 @@ export class D1SyncStore implements SyncStore {
     return userId;
   }
 
-  async createSession(userId: string, deviceName: string): Promise<string> {
-    const token = randomToken();
+  async createSession(userId: string, deviceName: string): Promise<RawSessionToken> {
+    const token = randomSessionToken();
     const ts = this.now();
     await this.db
       .prepare(
         'INSERT INTO tokens (token_hash, user_id, device_name, expires_at, created_at) VALUES (?, ?, ?, ?, ?)'
       )
-      .bind(await sha256Hex(token), userId, deviceName, ts + SESSION_TTL_MS, ts)
+      .bind(await hashSessionToken(token), userId, deviceName, ts + SESSION_TTL_MS, ts)
       .run();
     return token;
   }
 
-  async lookupSession(rawToken: string): Promise<Session | null> {
-    const tokenHash = await sha256Hex(rawToken);
+  async lookupSession(rawToken: RawSessionToken): Promise<Session | null> {
+    const tokenHash = await hashSessionToken(rawToken);
     const ts = this.now();
     const row = await this.db
       .prepare(
@@ -123,10 +133,10 @@ export class D1SyncStore implements SyncStore {
     return { userId: row.user_id, tokenHash };
   }
 
-  async revokeSession(rawToken: string): Promise<void> {
+  async revokeSession(rawToken: RawSessionToken): Promise<void> {
     await this.db
       .prepare('UPDATE tokens SET revoked_at = ? WHERE token_hash = ?')
-      .bind(this.now(), await sha256Hex(rawToken))
+      .bind(this.now(), await hashSessionToken(rawToken))
       .run();
   }
 
@@ -289,10 +299,21 @@ export class D1SyncStore implements SyncStore {
     ]);
   }
 
+  async purgeTombstones(retentionMs: number): Promise<number> {
+    // Reclaims deleted-row space across all users; the partial idx_records_tombstone keeps this
+    // off a full-table scan. server_received_at (not client time) is the trustworthy clock.
+    const cutoff = this.now() - retentionMs;
+    const result = await this.db
+      .prepare('DELETE FROM records WHERE deleted = 1 AND server_received_at < ?')
+      .bind(cutoff)
+      .run();
+    return result.meta.changes ?? 0;
+  }
+
   // Single UPDATE...RETURNING with CASE keeps the reset-or-increment atomic within D1's
   // implicit per-statement transaction (select-then-update would race under concurrent hits).
   async bumpRateWindow(
-    tokenHash: string,
+    tokenHash: SessionTokenHash,
     windowMs: number
   ): Promise<{ count: number; resetInMs: number } | null> {
     const ts = this.now();

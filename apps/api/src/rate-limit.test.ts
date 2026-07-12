@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
 import { clockedStore, getChanges, signedInToken } from './__fixtures__/api-test-helpers.fixtures';
-import { sha256Hex } from './crypto-utils';
+import { hashSessionToken } from './crypto-utils';
 import { D1SyncStore } from './d1-store';
 import { createApp } from './index';
 
@@ -75,7 +75,7 @@ describe('bumpRateWindow', () => {
       providerSub: 'vanished-token',
     });
     const token = await store.createSession(userId, 'device');
-    const tokenHash = await sha256Hex(token);
+    const tokenHash = await hashSessionToken(token);
     await env.DB.prepare('DELETE FROM tokens WHERE token_hash = ?').bind(tokenHash).run();
 
     const result = await store.bumpRateWindow(tokenHash, 60_000);

@@ -1,4 +1,5 @@
 import type { PushRecord, SyncRecord } from '@cuewise/shared';
+import type { RawSessionToken, SessionTokenHash } from './crypto-utils';
 
 export type { PushRecord, SyncRecord };
 
@@ -10,7 +11,7 @@ export interface Identity {
 
 export interface Session {
   userId: string;
-  tokenHash: string;
+  tokenHash: SessionTokenHash;
 }
 
 export interface AuthCodePayload {
@@ -29,9 +30,9 @@ export class StorageQuotaExceededError extends Error {
 
 export interface SyncStore {
   findOrCreateUser(identity: Identity): Promise<string>;
-  createSession(userId: string, deviceName: string): Promise<string>;
-  lookupSession(rawToken: string): Promise<Session | null>;
-  revokeSession(rawToken: string): Promise<void>;
+  createSession(userId: string, deviceName: string): Promise<RawSessionToken>;
+  lookupSession(rawToken: RawSessionToken): Promise<Session | null>;
+  revokeSession(rawToken: RawSessionToken): Promise<void>;
   mintAuthCode(payload: AuthCodePayload, codeChallenge: string): Promise<string>;
   consumeAuthCode(
     rawCode: string
@@ -43,10 +44,12 @@ export interface SyncStore {
   listChanges(userId: string, since: number): Promise<{ records: SyncRecord[]; cursor: number }>;
   exportUser(userId: string): Promise<{ records: SyncRecord[] }>;
   deleteUser(userId: string): Promise<void>;
+  // Deletes tombstones older than retentionMs (a maintenance sweep across all users); returns the count.
+  purgeTombstones(retentionMs: number): Promise<number>;
   // Returns null only when the token row was physically deleted mid-request (concurrent account
   // deletion); revocation leaves the row and is already caught upstream by lookupSession.
   bumpRateWindow(
-    tokenHash: string,
+    tokenHash: SessionTokenHash,
     windowMs: number
   ): Promise<{ count: number; resetInMs: number } | null>;
 }

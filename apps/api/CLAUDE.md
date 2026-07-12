@@ -13,7 +13,7 @@ Stack: Hono (routing) + D1 (`DB` binding) + `jose` (JWT/JWKS verification for Go
 ## Architecture
 
 ```
-HTTP request
+worker entry (src/worker.ts) — fetch + scheduled() tombstone-purge cron
   → Hono app (src/index.ts)
       → app.use(...) middleware — auth, rate limiting (order-sensitive, see Gotchas)
       → route handlers (src/routes/*.ts)
@@ -21,13 +21,15 @@ HTTP request
               → D1SyncStore adapter (src/d1-store.ts) → D1 binding (`DB`)
 ```
 
+`wrangler.jsonc` `main` is `src/worker.ts` (the Cloudflare entry: the app's `fetch` plus the cron `scheduled()`); `index.ts` stays the Hono app so tests drive it directly via `app.request`.
+
 This mirrors the repo's ports/adapters pattern (`packages/shared/src/platform/`): `SyncStore` is the port, `D1SyncStore` is the one adapter today. A future non-D1 backend only needs a new adapter — routes and validation stay unaware D1 exists.
 
 Auth has two shapes. **Session lookup** has no dedicated port: `requireSession()` (`auth-middleware.ts`) resolves `Authorization: Bearer <token>` → `{userId, tokenHash}` context vars, but does so through the `SyncStore` port's `lookupSession` (so tests inject store stubs). **ID-token verification** *is* a function-shaped port: `IdTokenVerifier` (`verifiers.ts`), with `verifyGoogleIdToken`/`verifyAppleIdToken` as adapters and `AppDeps` (`index.ts`) as the DI seam tests use (`createApp({ googleVerifier })`), like `storeFactory` for `SyncStore`. The `changes`/`account` handlers only read `c.get('userId')`, never a `SyncStore` session method — so swapping to Better Auth / a hosted IdP touches the auth surface (`auth-middleware.ts`, `routes/auth.ts`, `routes/apple.ts`, `verifiers.ts`) plus `SyncStore`'s session/auth-code methods (`store.ts`, `d1-store.ts`) and their migrations; the sync handlers don't change.
 
 ## Data Model
 
-D1 tables (`migrations/0001_init.sql`, plus two follow-ups):
+D1 tables (`migrations/0001_init.sql`, plus later numbered migrations):
 
 | Table | Holds | Key notes |
 |---|---|---|
@@ -37,7 +39,7 @@ D1 tables (`migrations/0001_init.sql`, plus two follow-ups):
 | `auth_codes` | `code_hash` (PK), `payload` (JSON), `expires_at`, `used_at`, `code_challenge` | Apple's one-time exchange code (also hash-only). 60s TTL; `code_challenge` binds it to a PKCE verifier. `consumeAuthCode` DELETEs the row (single-use + PII gone at once), so `used_at` is now vestigial. |
 | `records` | `(user_id, collection, entity_id)` (PK), `seq`, `ciphertext`, `deleted`, `client_updated_at`, `server_received_at` | See below. |
 
-**`records` is upsert-per-entity, not append-only history.** The primary key is the entity's identity, so pushing an update to an entity `ON CONFLICT ... DO UPDATE`s the same row in place — one row per entity ever synced, storage bounded regardless of edit count. A delete sets `deleted = 1` (tombstone) rather than removing the row, because a physically-deleted row would be invisible to `WHERE seq > ?`, and a device that pulls after the delete would never learn the entity is gone.
+**`records` is upsert-per-entity, not append-only history.** The primary key is the entity's identity, so pushing an update to an entity `ON CONFLICT ... DO UPDATE`s the same row in place — one row per entity ever synced, storage bounded regardless of edit count. A delete sets `deleted = 1` (tombstone) rather than removing the row, because a physically-deleted row would be invisible to `WHERE seq > ?`, and a device that pulls after the delete would never learn the entity is gone. A daily cron (`worker.ts` `scheduled()` → `purgeTombstones`) reclaims tombstones older than `TOMBSTONE_RETENTION_MS` (= `SESSION_TTL_MS`, 90 days): a device idle that long is logged out and re-bootstraps from `since=0`, so it never needed the tombstone. This makes re-bootstrapping from `since=0` after a logout a client contract ENG-45 must honor: a client that resumes from a persisted stale cursor after re-login — or one that pushes but never pulls for 90+ days — could miss a purged delete.
 
 `seq` is a per-user monotonic cursor, not a timestamp: `GET /changes?since=N` returns `WHERE seq > N`. `applyChanges` (`d1-store.ts`) assigns it like this:
 
@@ -91,7 +93,7 @@ Apple only redirects to registered **https** URLs, so the Worker sits in the mid
 
 ### Sessions
 
-`createSession` mints 32 random bytes, returns the raw token once, and stores only its SHA-256 (`tokens.token_hash`). Expiry is sliding: every successful `lookupSession` pushes `expires_at` forward another `SESSION_TTL_MS` (90 days) and updates `last_used_at`. `POST /v1/auth/logout` sets `revoked_at`, which `lookupSession` checks going forward.
+`createSession` mints 32 random bytes, returns the raw token once, and stores only its SHA-256 (`tokens.token_hash`). The raw token and its hash are branded types (`RawSessionToken`/`SessionTokenHash` in `crypto-utils.ts`), so passing one where the other belongs — e.g. a hash into `revokeSession` — is a compile error, not a silent no-op. Expiry is sliding: every successful `lookupSession` pushes `expires_at` forward another `SESSION_TTL_MS` (90 days) and updates `last_used_at`. `POST /v1/auth/logout` sets `revoked_at`, which `lookupSession` checks going forward.
 
 There's also a `provider: 'dev'` path, gated by `DEV_FAKE_AUTH === '1'` **and** a localhost `PUBLIC_BASE_URL`, that skips verification entirely and mints a session for whatever `credential` string you pass. Set off-localhost, it's refused and `logger.error`'d rather than honored. **Never enable this in production** — see Gotchas.
 

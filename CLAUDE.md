@@ -12,23 +12,6 @@ This document provides AI assistants (like Claude) with essential context about 
 
 **Current Version**: v1.0 (Browser Extension)
 
-## Tech Stack
-
-### Monorepo Tools
-- **Package Manager**: pnpm with workspaces
-- **Build System**: Turbo (turborepo)
-- **Language**: TypeScript throughout
-- **Linting/Formatting**: Biome (50x faster than ESLint)
-
-### Browser Extension Stack
-- **Framework**: React 18 with TypeScript
-- **Build Tool**: Vite with @crxjs/vite-plugin
-- **UI**: Tailwind CSS + custom components
-- **State Management**: Zustand
-- **Storage**: Chrome Storage API via adapters
-- **Icons**: Lucide React
-- **Target**: Chrome/Edge (Manifest V3)
-
 ## Architecture Principles
 
 ### 1. Multi-Platform Code Sharing
@@ -86,89 +69,6 @@ const reminders = await getReminders();
 
 **Key Rule**: This package must be platform-agnostic (no browser/DOM/React dependencies).
 
-## Directory Structure
-
-```
-cuewise/
-├── apps/
-│   ├── api/                          # Cloud-sync backend (Worker + D1) — see apps/api/CLAUDE.md
-│   │   ├── src/                       # routes/, store.ts (SyncStore port), d1-store.ts (adapter)
-│   │   └── migrations/                # Numbered D1 schema migrations (additive)
-│   │
-│   └── browser-extension/
-│       ├── src/
-│       │   ├── components/           # ~60 React components
-│       │   │   ├── FocusMode/        # Focus mode (timer, quote, controls, background)
-│       │   │   ├── goals/            # Goal cards, forms, pickers
-│       │   │   ├── settings/         # Settings panels (pomodoro, notifications, focus, etc.)
-│       │   │   ├── sounds/           # Soundscapes, YouTube, mini player
-│       │   │   ├── __fixtures__/     # Test fixtures for component tests
-│       │   │   ├── NewTabPage.tsx     # Home page
-│       │   │   ├── PomodoroPage.tsx   # Pomodoro timer page
-│       │   │   ├── InsightsPage.tsx   # Analytics page
-│       │   │   ├── QuoteManagementPage.tsx  # Quote management
-│       │   │   ├── GoalsPage.tsx      # Goals overview
-│       │   │   └── ...               # QuoteDisplay, Clock, Modals, etc.
-│       │   ├── stores/               # Zustand stores
-│       │   │   ├── quote-store.ts
-│       │   │   ├── goal-store.ts
-│       │   │   ├── pomodoro-store.ts
-│       │   │   ├── reminder-store.ts
-│       │   │   ├── settings-store.ts
-│       │   │   ├── focus-mode-store.ts
-│       │   │   ├── sounds-store.ts
-│       │   │   ├── insights-store.ts
-│       │   │   ├── toast-store.ts
-│       │   │   └── __fixtures__/     # Test fixtures for store tests
-│       │   ├── data/
-│       │   │   └── seed-quotes.ts
-│       │   ├── App.tsx               # Hash-based routing (#pomodoro, #insights, etc.)
-│       │   └── main.tsx
-│       ├── manifest.json             # Extension manifest (Manifest V3)
-│       └── dist/                     # Build output (load in Chrome)
-│
-├── packages/
-│   ├── shared/
-│   │   └── src/
-│   │       ├── types.ts              # 50+ interfaces/types
-│   │       ├── constants.ts          # Categories, themes, sounds, templates
-│   │       ├── utils.ts              # Pure utility functions
-│   │       ├── csv-utils.ts          # CSV parsing for bulk import
-│   │       ├── logger.ts             # Configurable logger
-│   │       ├── platform/             # Platform ports + DI registry (Scheduler, Notifier, KeyValueStore)
-│   │       └── index.ts
-│   │
-│   ├── storage/
-│   │   └── src/
-│   │       ├── chrome-key-value-store.ts  # ChromeKeyValueStore adapter (KeyValueStore port)
-│   │       ├── chrome-storage.ts     # Low-level delegators over the platform port
-│   │       ├── storage-helpers.ts    # Typed helper functions
-│   │       └── index.ts
-│   │
-│   ├── sync-client/                  # Cloud-sync API client — see packages/sync-client/CLAUDE.md
-│   │   └── src/
-│   │       ├── api-client.ts          # ApiClient (typed fetch, retry/backoff)
-│   │       ├── session-manager.ts     # SessionManager (token in 'local' storage area)
-│   │       └── sync-schedule.ts       # armSyncPull (Scheduler port)
-│   │
-│   ├── test-utils/
-│   │   └── src/
-│   │       ├── factories/            # quote, goal, pomodoro, reminder factories
-│   │       ├── mocks/                # zustand, chrome-storage mocks
-│   │       ├── fixtures/             # settings fixtures
-│   │       └── index.ts
-│   │
-│   └── ui/
-│       └── src/
-│           ├── components/           # Button, Badge, Card, Input, Toast, Chart, etc.
-│           └── lib/                  # cn() helper
-│
-├── pnpm-workspace.yaml
-├── turbo.json
-├── biome.json
-└── CLAUDE.md
-```
-
 ## Pages & Routing
 
 Hash-based routing in `App.tsx`:
@@ -177,46 +77,6 @@ Hash-based routing in `App.tsx`:
 - `#insights` → `InsightsPage` (analytics, trends, charts)
 - `#quotes` → `QuoteManagementPage` (browse, filter, bulk actions, import/export)
 - `#goals` → `GoalsPage` (goals overview, completion charts)
-
-## Key Data Types
-
-All types are in `packages/shared/src/types.ts`. Key interfaces:
-
-- **Quote**: id, text, author, category (10 types), isCustom, isFavorite, isHidden, viewCount, lastViewed, source, notes, `collectionIds`
-- **QuoteCollection**: id, name, description, createdAt, updatedAt
-- **Goal**: id, text, completed, createdAt, date, `type` ('task' | 'objective'), `parentId`, `transferCount`, `description`
-- **Reminder**: id, text, dueDate, completed, notified, recurring, category ('health' | 'productivity' | 'personal'), completedAt
-- **PomodoroSession**: id, startedAt, completedAt, interrupted, duration, type ('work' | 'break' | 'longBreak'), goalId
-- **Settings**: 50+ properties covering pomodoro, notifications, UI themes, focus mode, goals, quotes
-- **InsightsData**: Analytics data — streak, completion rates, focus time, category view counts
-- **AdvancedAnalytics**: dailyTrends, weeklyTrends, monthlyTrends, goalCompletionRate, pomodoroHeatmap
-
-### Key Type Aliases
-- `QuoteCategory`: 'inspiration' | 'learning' | 'productivity' | 'mindfulness' | 'success' | 'creativity' | 'resilience' | 'leadership' | 'health' | 'growth'
-- `ColorTheme`: 'purple' | 'forest' | 'rose' | 'glass'
-- `LayoutDensity`: 'compact' | 'comfortable' | 'spacious'
-- `QuoteDisplayMode`: 'normal' | 'compact' | 'bottom' | 'hidden'
-- `FocusImageCategory`: 'nature' | 'forest' | 'ocean' | 'mountains' | 'minimal' | 'dark'
-
-### Storage Keys
-All storage keys are defined in `packages/shared/src/types.ts`:
-```typescript
-STORAGE_KEYS = {
-  QUOTES: 'quotes',              // Legacy
-  SEED_QUOTES: 'seedQuotes',     // Always in local storage
-  CUSTOM_QUOTES: 'customQuotes', // In sync storage when enabled
-  GOALS: 'goals',
-  REMINDERS: 'reminders',
-  POMODORO_SESSIONS: 'pomodoroSessions',
-  POMODORO_STATE: 'pomodoroState',
-  SETTINGS: 'settings',
-  CURRENT_QUOTE: 'currentQuote',
-  CUSTOM_YOUTUBE_PLAYLISTS: 'customYoutubePlaylists',
-  YOUTUBE_PROGRESS: 'youtubeProgress',
-  DAILY_BACKGROUND: 'dailyBackground',
-  COLLECTIONS: 'collections',
-}
-```
 
 ## State Management Pattern
 

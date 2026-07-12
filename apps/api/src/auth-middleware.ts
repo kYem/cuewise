@@ -1,19 +1,20 @@
 import type { MiddlewareHandler } from 'hono';
+import { bearerToken, type SessionTokenHash } from './crypto-utils';
 import type { Env } from './env';
 import { problem } from './problem-details';
 import type { SyncStore } from './store';
 
-export type AuthVars = { Variables: { userId: string; tokenHash: string } };
+export type AuthVars = { Variables: { userId: string; tokenHash: SessionTokenHash } };
 
 export function requireSession(
   getStore: (env: Env) => SyncStore
 ): MiddlewareHandler<{ Bindings: Env } & AuthVars> {
   return async (c, next) => {
-    const header = c.req.header('Authorization');
-    if (header === undefined || !header.startsWith('Bearer ')) {
+    const rawToken = bearerToken(c.req.header('Authorization'));
+    if (rawToken === null) {
       return problem('unauthorized', { detail: 'Missing bearer token.' });
     }
-    const session = await getStore(c.env).lookupSession(header.slice('Bearer '.length));
+    const session = await getStore(c.env).lookupSession(rawToken);
     if (session === null) {
       return problem('invalid_token');
     }
