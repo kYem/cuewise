@@ -12,7 +12,13 @@ export default {
     env: Env,
     _ctx: ExecutionContext
   ): Promise<void> {
-    const purged = await new D1SyncStore(env.DB).purgeTombstones(TOMBSTONE_RETENTION_MS);
-    logger.info(`scheduled purge removed ${purged} tombstones past the retention window`);
+    try {
+      const purged = await new D1SyncStore(env.DB).purgeTombstones(TOMBSTONE_RETENTION_MS);
+      logger.info(`scheduled purge removed ${purged} tombstones past the retention window`);
+    } catch (err) {
+      // Annotate for a searchable log, then rethrow so Cloudflare still marks the cron failed.
+      logger.error('scheduled tombstone purge failed', err);
+      throw err;
+    }
   },
 } satisfies ExportedHandler<Env>;

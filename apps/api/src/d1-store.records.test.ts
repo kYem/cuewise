@@ -156,6 +156,37 @@ describe('D1SyncStore records', () => {
     expect(records.map((r) => r.entityId).sort()).toEqual(['keep', 'recent']);
   });
 
+  it('keeps a tombstone whose age is exactly the retention window (boundary is exclusive)', async () => {
+    const retention = 100_000;
+    const { store, tick } = clockedStore(1_000);
+    const userId = await store.findOrCreateUser({ provider: 'dev', providerSub: 'u-boundary' });
+    await store.applyChanges(userId, [record({ entityId: 'edge', deleted: true })]); // server_received_at = 1000
+    tick(retention); // now = 101_000; cutoff = 101_000 - 100_000 = 1_000, exactly the row's stamp
+    expect(await store.purgeTombstones(retention)).toBe(0);
+    const { records } = await store.exportUser(userId);
+    expect(records.map((r) => r.entityId)).toEqual(['edge']);
+  });
+
+  it('purges old tombstones across all users without touching any live row', async () => {
+    const retention = 100_000;
+    const { store, tick } = clockedStore(1_000);
+    const userA = await store.findOrCreateUser({ provider: 'dev', providerSub: 'purge-a' });
+    const userB = await store.findOrCreateUser({ provider: 'dev', providerSub: 'purge-b' });
+    await store.applyChanges(userA, [
+      record({ entityId: 'a-old', deleted: true }),
+      record({ entityId: 'a-live' }),
+    ]);
+    await store.applyChanges(userB, [
+      record({ entityId: 'b-old', deleted: true }),
+      record({ entityId: 'b-live' }),
+    ]);
+    tick(retention + 1);
+
+    expect(await store.purgeTombstones(retention)).toBe(2);
+    expect((await store.exportUser(userA)).records.map((r) => r.entityId)).toEqual(['a-live']);
+    expect((await store.exportUser(userB)).records.map((r) => r.entityId)).toEqual(['b-live']);
+  });
+
   it('purgeTombstones is a no-op (returns 0) when no tombstone is past the window', async () => {
     const { store } = clockedStore(1_000);
     const userId = await store.findOrCreateUser({ provider: 'dev', providerSub: 'u-purge-noop' });

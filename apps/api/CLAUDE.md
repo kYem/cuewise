@@ -29,7 +29,7 @@ Auth has two shapes. **Session lookup** has no dedicated port: `requireSession()
 
 ## Data Model
 
-D1 tables (`migrations/0001_init.sql`, plus two follow-ups):
+D1 tables (`migrations/0001_init.sql`, plus later numbered migrations):
 
 | Table | Holds | Key notes |
 |---|---|---|
@@ -39,7 +39,7 @@ D1 tables (`migrations/0001_init.sql`, plus two follow-ups):
 | `auth_codes` | `code_hash` (PK), `payload` (JSON), `expires_at`, `used_at`, `code_challenge` | Apple's one-time exchange code (also hash-only). 60s TTL; `code_challenge` binds it to a PKCE verifier. `consumeAuthCode` DELETEs the row (single-use + PII gone at once), so `used_at` is now vestigial. |
 | `records` | `(user_id, collection, entity_id)` (PK), `seq`, `ciphertext`, `deleted`, `client_updated_at`, `server_received_at` | See below. |
 
-**`records` is upsert-per-entity, not append-only history.** The primary key is the entity's identity, so pushing an update to an entity `ON CONFLICT ... DO UPDATE`s the same row in place — one row per entity ever synced, storage bounded regardless of edit count. A delete sets `deleted = 1` (tombstone) rather than removing the row, because a physically-deleted row would be invisible to `WHERE seq > ?`, and a device that pulls after the delete would never learn the entity is gone. A daily cron (`worker.ts` `scheduled()` → `purgeTombstones`) reclaims tombstones older than `TOMBSTONE_RETENTION_MS` (= `SESSION_TTL_MS`, 90 days): a device idle that long is logged out and re-bootstraps from `since=0`, so it never needed the tombstone. (A degenerate client that pushes but never pulls for 90+ days could miss the delete and would need a fresh bootstrap.)
+**`records` is upsert-per-entity, not append-only history.** The primary key is the entity's identity, so pushing an update to an entity `ON CONFLICT ... DO UPDATE`s the same row in place — one row per entity ever synced, storage bounded regardless of edit count. A delete sets `deleted = 1` (tombstone) rather than removing the row, because a physically-deleted row would be invisible to `WHERE seq > ?`, and a device that pulls after the delete would never learn the entity is gone. A daily cron (`worker.ts` `scheduled()` → `purgeTombstones`) reclaims tombstones older than `TOMBSTONE_RETENTION_MS` (= `SESSION_TTL_MS`, 90 days): a device idle that long is logged out and re-bootstraps from `since=0`, so it never needed the tombstone. This makes re-bootstrapping from `since=0` after a logout a client contract ENG-45 must honor: a client that resumes from a persisted stale cursor after re-login — or one that pushes but never pulls for 90+ days — could miss a purged delete.
 
 `seq` is a per-user monotonic cursor, not a timestamp: `GET /changes?since=N` returns `WHERE seq > N`. `applyChanges` (`d1-store.ts`) assigns it like this:
 
