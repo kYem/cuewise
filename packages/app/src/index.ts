@@ -13,7 +13,7 @@ export {
   SettingSubgroup,
   Switch,
 } from './components/settings/SettingControls';
-export type { BuiltInSectionId, SettingsSection } from './components/settings/SettingsSections';
+export type { SettingsSection } from './components/settings/SettingsSections';
 export type { SettingsSectionProps } from './components/settings/settings-types';
 
 // Store + selector surface for platform hosts that project state outside the app

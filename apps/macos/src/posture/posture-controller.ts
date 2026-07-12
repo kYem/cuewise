@@ -105,8 +105,8 @@ function detachListeners(): void {
   unlisteners = [];
 }
 
-// Zero the per-session derivation counters so a new session starts clean. Both
-// stop paths must call this, or a stale poorStreak can nudge early after resume.
+// Zero the per-session derivation counters so a new session starts clean. Every
+// teardown path must call this, or a stale poorStreak can nudge early after resume.
 function resetDerivation(): void {
   poorStreak = 0;
   pendingStatus = null;
@@ -223,6 +223,9 @@ export function startPosture(): void {
     })
     .catch((error) => {
       detachListeners();
+      // A frame that raced in before the rejection may have bumped the counters —
+      // clear them, or the leftovers (e.g. poorStreak) taint the next session.
+      resetDerivation();
       logCommandFailure('Failed to start posture tracking', error);
       // If the user asked to stop mid-start, the failure is moot — don't surface a
       // start-error toast for a session they already turned off.
@@ -254,7 +257,9 @@ export function stopPosture(): void {
   });
   detachListeners();
   resetDerivation();
-  setState({ tracking: false, sample: null, steadyStatus: null });
+  // Clear any stale error too — the user chose to stop, and a leftover failure
+  // message would otherwise pin the tray's ⚠️ indicator indefinitely.
+  setState({ tracking: false, sample: null, steadyStatus: null, error: null });
 }
 
 // Adopt a status for the tray only once it has held for STEADY_SAMPLES in a row.
@@ -345,6 +350,11 @@ function subscribe(callback: () => void): () => void {
 }
 
 function getSnapshot(): PostureState {
+  return state;
+}
+
+/** Non-hook snapshot of the posture state (imperative hosts, tests). */
+export function getPostureState(): PostureState {
   return state;
 }
 

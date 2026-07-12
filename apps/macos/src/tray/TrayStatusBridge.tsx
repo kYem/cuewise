@@ -73,8 +73,17 @@ export function TrayStatusBridge(): null {
   // Look up once and stay defensive: an unknown status must not throw in this
   // always-mounted component (the controller already rejects them, this is a backstop).
   const postureMeta = postureStatus ? POSTURE_META[postureStatus] : null;
-  const postureDot = postureMeta ? postureMeta.dot : null;
-  const postureLine = postureMeta ? `${postureMeta.dot} ${postureMeta.label}` : null;
+  // Posture failure toasts render in the webview, which is often hidden to the tray —
+  // mirror the degraded state here, the only always-visible surface.
+  let postureDot: string | null = null;
+  let postureLine: string | null = null;
+  if (posture.error !== null) {
+    postureDot = '⚠️';
+    postureLine = `⚠️ ${posture.error}`;
+  } else if (postureMeta !== null) {
+    postureDot = postureMeta.dot;
+    postureLine = `${postureMeta.dot} ${postureMeta.label}`;
+  }
 
   // Relay Pomodoro control clicks from the native tray menu into the store.
   useEffect(() => {

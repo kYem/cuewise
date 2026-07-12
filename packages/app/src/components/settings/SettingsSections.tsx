@@ -789,8 +789,8 @@ function AdvancedSection({ s, set, filter, onReset }: SettingsSectionProps) {
 
 /** Section identifiers, also the routing keys for the sidebar nav. */
 export const SECTION_IDS = ['timer', 'sound', 'focus', 'home', 'goals', 'advanced'] as const;
-/** The built-in sections' nav keys. Host-injected sections may use any string id. */
-export type BuiltInSectionId = (typeof SECTION_IDS)[number];
+// The built-in sections' nav keys (module-internal; hosts may use any string id).
+type BuiltInSectionId = (typeof SECTION_IDS)[number];
 
 export interface SettingsSection {
   // Open union: the built-in literals stay as autocomplete suggestions, but any host id

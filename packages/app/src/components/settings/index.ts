@@ -9,12 +9,7 @@ export {
   Stepper,
   Switch,
 } from './SettingControls';
-export {
-  type BuiltInSectionId,
-  SECTION_IDS,
-  SETTINGS_SECTIONS,
-  type SettingsSection,
-} from './SettingsSections';
+export { SECTION_IDS, SETTINGS_SECTIONS, type SettingsSection } from './SettingsSections';
 export {
   POMODORO_KEYS,
   planSettingsSideEffects,
