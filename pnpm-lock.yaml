@@ -245,6 +245,9 @@ importers:
       '@cuewise/test-utils':
         specifier: workspace:*
         version: link:../../packages/test-utils
+      '@playwright/test':
+        specifier: ^1
+        version: 1.61.1
       '@tailwindcss/postcss':
         specifier: 'catalog:'
         version: 4.3.0

@@ -1,6 +1,10 @@
 # Build output
 dist/
 
+# Playwright e2e output
+test-results/
+playwright-report/
+
 # Package files
 *.zip
 cuewise-extension-*.zip

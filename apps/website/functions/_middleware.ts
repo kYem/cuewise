@@ -22,16 +22,21 @@ const SITE_CSP = [
 const PLAYER_FRAME_ANCESTORS =
   'chrome-extension://abjkbnhoepcnmbabflkedbapbldnpkbf tauri://localhost http://localhost:1420';
 
-const PLAYER_CSP = [
-  "default-src 'none'",
-  "script-src 'self'",
-  "style-src 'self'",
-  'frame-src https://www.youtube-nocookie.com',
-  "img-src 'self' data:",
-  "base-uri 'none'",
-  "form-action 'none'",
-  `frame-ancestors ${PLAYER_FRAME_ANCESTORS}`,
-].join('; ');
+// frame-ancestors is a parameter (default: PLAYER_FRAME_ANCESTORS above) so tests
+// can prove enforcement against an arbitrary embedder id without duplicating the
+// other seven directives — see apps/browser-extension/e2e/player-frame-ancestors.spec.ts.
+function buildPlayerCsp(frameAncestors: string): string {
+  return [
+    "default-src 'none'",
+    "script-src 'self'",
+    "style-src 'self'",
+    'frame-src https://www.youtube-nocookie.com',
+    "img-src 'self' data:",
+    "base-uri 'none'",
+    "form-action 'none'",
+    `frame-ancestors ${frameAncestors}`,
+  ].join('; ');
+}
 
 const PLAYER_PATHS = new Set(['/player', '/player.html']);
 
@@ -41,11 +46,18 @@ const PLAYER_PATHS = new Set(['/player', '/player.html']);
  * No X-Frame-Options is sent anywhere: it has no allowlist form, so `frame-ancestors`
  * (which does) fully replaces it in the browsers we target.
  */
-export function applySecurityHeaders(pathname: string, response: Response): Response {
+export function applySecurityHeaders(
+  pathname: string,
+  response: Response,
+  playerFrameAncestors: string = PLAYER_FRAME_ANCESTORS
+): Response {
   const headers = new Headers(response.headers);
   const isPlayer = PLAYER_PATHS.has(pathname);
 
-  headers.set('Content-Security-Policy', isPlayer ? PLAYER_CSP : SITE_CSP);
+  headers.set(
+    'Content-Security-Policy',
+    isPlayer ? buildPlayerCsp(playerFrameAncestors) : SITE_CSP
+  );
   headers.set('X-Content-Type-Options', 'nosniff');
   headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
   headers.set('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload');

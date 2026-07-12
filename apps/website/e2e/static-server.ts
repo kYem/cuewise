@@ -17,9 +17,14 @@ const MIME_TYPES: Record<string, string> = {
 /**
  * Serves `dist/` with the REAL middleware headers (via applySecurityHeaders) instead
  * of a hand-copied CSP string, so these specs test what actually ships and can't
- * silently drift from functions/_middleware.ts.
+ * silently drift from functions/_middleware.ts. `playerFrameAncestors` overrides the
+ * default allowlist — see apps/browser-extension/e2e/player-frame-ancestors.spec.ts.
  */
-export function startSite(distDir: string, port: number): Promise<Server> {
+export function startSite(
+  distDir: string,
+  port: number,
+  playerFrameAncestors?: string
+): Promise<Server> {
   const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const urlPath = (req.url ?? '/').split('?')[0] ?? '/';
     const relative = urlPath === '/' ? 'index.html' : urlPath.replace(/^\/+/, '');
@@ -40,7 +45,7 @@ export function startSite(distDir: string, port: number): Promise<Server> {
     const upstream = new Response(body, {
       headers: { 'Content-Type': MIME_TYPES[ext] ?? 'application/octet-stream' },
     });
-    const withHeaders = applySecurityHeaders(urlPath, upstream);
+    const withHeaders = applySecurityHeaders(urlPath, upstream, playerFrameAncestors);
 
     res.writeHead(200, Object.fromEntries(withHeaders.headers.entries()));
     res.end(body);
