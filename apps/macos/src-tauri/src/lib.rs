@@ -14,7 +14,7 @@ fn reveal(app: &AppHandle, hash: Option<&str>) {
         let _ = window.show();
         let _ = window.set_focus();
         if let Some(route) = hash {
-            let _ = window.eval(&format!("window.location.hash = '{route}'"));
+            let _ = window.eval(format!("window.location.hash = '{route}'"));
         }
     }
 }
@@ -52,8 +52,16 @@ pub fn run() {
                 .item(&quit)
                 .build()?;
 
+            // The tray is the only way to reveal the window once it's hidden, so a
+            // missing bundle icon is a packaging bug worth failing loudly on rather
+            // than shipping a tray-less, undiscoverable app.
+            let icon = app
+                .default_window_icon()
+                .ok_or("Cuewise's tray icon is missing from the app bundle")?
+                .clone();
+
             let _tray = TrayIconBuilder::with_id(tray::TRAY_ID)
-                .icon(app.default_window_icon().unwrap().clone())
+                .icon(icon)
                 .tooltip("Cuewise")
                 .menu(&menu)
                 .on_menu_event(|app, event| match event.id.as_ref() {
