@@ -6,8 +6,8 @@ export default defineWorkersConfig(async () => {
   return {
     test: {
       setupFiles: ['./test/apply-migrations.ts'],
-      // Auto-restores spies (e.g. logger.warn/error) after every test, so a caller that
-      // forgets afterEach(vi.restoreAllMocks) can't leak a mock into later tests.
+      // Restores spies (e.g. logger.warn/error) before each test runs, not after — functionally
+      // beforeEach(vi.restoreAllMocks). A mock set in a file's last test is never auto-restored.
       restoreMocks: true,
       poolOptions: {
         workers: {

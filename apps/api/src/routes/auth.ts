@@ -13,12 +13,30 @@ const MAX_DEVICE_NAME_LENGTH = 100;
 // Real ID tokens run 1-2 KB and Apple's one-time code is 43 chars; this just caps abuse.
 const MAX_CREDENTIAL_LENGTH = 8192;
 // RFC 7636 §4.1: a PKCE code_verifier is 43-128 characters from the unreserved set
-// [A-Za-z0-9-._~]. ASCII-only, so byte length and character length are provably identical.
+// [A-Za-z0-9._~-]. ASCII-only, so byte length and character length are provably identical.
 const MIN_CODE_VERIFIER_LENGTH = 43;
 const MAX_CODE_VERIFIER_LENGTH = 128;
 const CODE_VERIFIER_RE = new RegExp(
   `^[A-Za-z0-9._~-]{${MIN_CODE_VERIFIER_LENGTH},${MAX_CODE_VERIFIER_LENGTH}}$`
 );
+
+/** Picks the most specific violation for a failing `CODE_VERIFIER_RE` test; the regex still decides pass/fail. */
+function codeVerifierIssue(value: unknown): ValidationIssue {
+  const pointer = '/codeVerifier';
+  if (typeof value !== 'string' || value === '') {
+    return { pointer, detail: 'required non-empty string' };
+  }
+  if (value.length < MIN_CODE_VERIFIER_LENGTH) {
+    return { pointer, detail: `must be at least ${MIN_CODE_VERIFIER_LENGTH} characters` };
+  }
+  if (value.length > MAX_CODE_VERIFIER_LENGTH) {
+    return { pointer, detail: `must not exceed ${MAX_CODE_VERIFIER_LENGTH} characters` };
+  }
+  return {
+    pointer,
+    detail: 'must contain only characters from the unreserved set [A-Za-z0-9._~-]',
+  };
+}
 
 function parseTokenRequest(body: unknown): ExchangeTokenRequest | ValidationIssue[] {
   const issues: ValidationIssue[] = [];
@@ -33,10 +51,7 @@ function parseTokenRequest(body: unknown): ExchangeTokenRequest | ValidationIssu
   if (b.provider === 'apple') {
     // Bounded (length + charset) before consumeAuthCode ever runs, so malformed input can't burn the code.
     if (typeof b.codeVerifier !== 'string' || !CODE_VERIFIER_RE.test(b.codeVerifier)) {
-      issues.push({
-        pointer: '/codeVerifier',
-        detail: `must be ${MIN_CODE_VERIFIER_LENGTH}-${MAX_CODE_VERIFIER_LENGTH} characters from the unreserved set [A-Za-z0-9-._~]`,
-      });
+      issues.push(codeVerifierIssue(b.codeVerifier));
     }
   }
   if (issues.length > 0) {
