@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import {
+  GOLDEN_CODE,
+  GOLDEN_MK_B64URL,
+  GOLDEN_SECRET,
+} from './__fixtures__/golden-recovery-code.fixtures';
 import { RecoveryCodeError } from './errors';
+import { deriveMasterKey } from './keys';
+import { b64urlEncode } from './primitives';
 import { generateRecoveryCode, parseRecoveryCode } from './recovery-code';
 
 describe('recovery code', () => {
@@ -44,5 +51,14 @@ describe('recovery code', () => {
     const a = await generateRecoveryCode();
     const b = await generateRecoveryCode();
     expect(a.secret).not.toBe(b.secret);
+  });
+
+  it('golden fixture: a committed CW1 code parses to the committed secret forever', async () => {
+    await expect(parseRecoveryCode(GOLDEN_CODE)).resolves.toBe(GOLDEN_SECRET);
+  });
+
+  it('golden fixture: deriveMasterKey(GOLDEN_SECRET) is frozen too (freezes HKDF derivation)', async () => {
+    const mk = await deriveMasterKey(GOLDEN_SECRET);
+    expect(b64urlEncode(mk)).toBe(GOLDEN_MK_B64URL);
   });
 });

@@ -86,6 +86,18 @@ describe('primitives', () => {
     expect(() => b64urlDecode('not!!valid')).toThrow(EnvelopeParseError);
   });
 
+  it.each([
+    32767, 32768, 32769, 65536,
+  ])('b64urlEncode round-trips and matches Buffer.from(bytes).toString("base64url") at length %i (CHUNK_SIZE=0x8000 boundary)', (length) => {
+    const bytes = new Uint8Array(length);
+    for (let i = 0; i < length; i += 1) {
+      bytes[i] = i % 251;
+    }
+    const encoded = b64urlEncode(bytes);
+    expect(encoded).toBe(Buffer.from(bytes).toString('base64url'));
+    expect(b64urlDecode(encoded)).toEqual(bytes);
+  });
+
   it('caches the imported AES CryptoKey by object reference: same key object imports once, a different one re-imports', async () => {
     const importKeySpy = vi.spyOn(globalThis.crypto.subtle, 'importKey');
     const key = randomBytes(32);
