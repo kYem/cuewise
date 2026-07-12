@@ -41,6 +41,39 @@ pnpm --filter @cuewise/macos build:sidecar  # swift build + copy into src-tauri/
 
 Frames are analyzed in memory only — no image is ever stored or sent.
 
+## Verifying the player CSP
+
+Before shipping a change to the player's `frame-ancestors`
+(`apps/website/functions/_middleware.ts`), prove it against a real client —
+`frame-ancestors` matches the *embedder's* origin, not where the player is
+hosted, so a player served locally with the real production headers exercises
+the identical check.
+
+1. Serve the site with real headers (build `dist/` first if it's stale): from
+   `apps/website`, run `../api/node_modules/.bin/wrangler pages dev dist --port
+   8788` (`wrangler` lives in `apps/api`'s devDeps, not the website's).
+2. Point a client at it with `VITE_PLAYER_ORIGIN=http://localhost:8788`:
+   - **Extension**: also set `VITE_EXTENSION_KEY=<store key>` so the unpacked
+     build gets the *published* extension ID — without it `frame-ancestors`
+     won't match and you'll get a false failure. Then `pnpm --filter
+     @cuewise/browser-extension build` and load `dist/` unpacked.
+   - **macOS, dev-server origin** (`http://localhost:1420`, already
+     permanently allowlisted): `pnpm --filter @cuewise/macos dev`.
+   - **macOS, bundled-app origin** (`tauri://localhost`): `tauri dev` never
+     delivers any CSP to the webview at all (same reason `devCsp` is dead code
+     — see the note at the bottom of `e2e/csp.spec.ts`), so it can't prove
+     this path; the app's own `frame-src` (`'self' https://cuewise.app`) has
+     to be extended too, which a static `tauri.conf.json` can't do per-env.
+     `src-tauri/tauri.verify.conf.json` is a checked-in overlay that extends
+     it — confirmed to deep-merge cleanly (only `frame-src` changes, every
+     other directive is untouched) by running it against this project's real
+     config. Build and run a debug binary with it:
+     `pnpm --filter @cuewise/macos tauri build --config
+     src-tauri/tauri.verify.conf.json --no-bundle --debug`, then run
+     `src-tauri/target/debug/cuewise-macos`.
+3. Play a soundscape. Success = the player iframe loads and audio plays.
+   Failure = a `frame-ancestors` violation in the console.
+
 ## Status → next
 
 - [x] Shell scaffold: window + tray, platform ports wired, on-brand landing.

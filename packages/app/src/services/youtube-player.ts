@@ -112,6 +112,20 @@ const MAX_CONSECUTIVE_SKIPS = 5;
 
 export type PlayerErrorAction = 'skip' | 'give-up' | 'notify';
 
+// Single source of truth for the player origin — overridable at build time
+// (VITE_PLAYER_ORIGIN) to verify a client's CSP locally; see apps/macos/README.md.
+const PLAYER_ORIGIN = import.meta.env.VITE_PLAYER_ORIGIN || 'https://cuewise.app';
+
+// Exact allowlist for postMessage senders: PLAYER_ORIGIN (relaying YouTube's own
+// messages) and youtube-nocookie.com directly. `.includes()` used to match
+// spoofable lookalikes like evil-youtube.com or cuewise.app.attacker.com — must
+// share PLAYER_ORIGIN with the embed URL below, or a local build rejects its own player.
+const ALLOWED_MESSAGE_ORIGINS = new Set([PLAYER_ORIGIN, 'https://www.youtube-nocookie.com']);
+
+export function isAllowedMessageOrigin(origin: string): boolean {
+  return ALLOWED_MESSAGE_ORIGINS.has(origin);
+}
+
 /**
  * Decide how to handle a YouTube onError: skip a per-video failure within a
  * playlist, give up once too many fail in a row, or just notify otherwise.
@@ -223,7 +237,7 @@ class YouTubePlayerService {
       params.set('start', Math.floor(startAt).toString());
     }
 
-    const embedUrl = `https://cuewise.app/player?${params.toString()}`;
+    const embedUrl = `${PLAYER_ORIGIN}/player?${params.toString()}`;
 
     // Create iframe
     this.iframe = document.createElement('iframe');
@@ -311,7 +325,7 @@ class YouTubePlayerService {
    */
   private handleMessage(event: MessageEvent): void {
     // Process messages from YouTube or our proxy page
-    if (!event.origin.includes('youtube') && !event.origin.includes('cuewise.app')) {
+    if (!isAllowedMessageOrigin(event.origin)) {
       return;
     }
 

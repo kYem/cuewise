@@ -4,50 +4,7 @@
     <meta charset="utf-8" />
     <meta name="robots" content="noindex" />
     <title>Cuewise Player</title>
-    <style>
-      html,
-      body {
-        margin: 0;
-        padding: 0;
-        height: 100%;
-        background: #000;
-        overflow: hidden;
-      }
-      #wrap {
-        position: fixed;
-        inset: 0;
-      }
-      #wrap iframe {
-        position: absolute;
-        inset: 0;
-        width: 100%;
-        height: 100%;
-        border: none;
-      }
-      .center {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        height: 100vh;
-        color: #fff;
-        font-family: system-ui, sans-serif;
-        text-align: center;
-        padding: 20px;
-      }
-      .spinner {
-        width: 40px;
-        height: 40px;
-        border: 3px solid #333;
-        border-top-color: #fff;
-        border-radius: 50%;
-        animation: spin 1s linear infinite;
-      }
-      @keyframes spin {
-        to {
-          transform: rotate(360deg);
-        }
-      }
-    </style>
+    <link rel="stylesheet" href="/player.css" />
   </head>
   <body>
     <!--
@@ -57,84 +14,6 @@
       Params (?v=&list=&autoplay=&start=...) are validated against an allowlist.
     -->
     <div id="wrap"><div class="center"><div class="spinner"></div></div></div>
-    <script>
-      (() => {
-        // Allowlisted YouTube params with per-key validation (+ optional default).
-        var ALLOWED = {
-          autoplay: { ok: isBool, def: '1' },
-          start: { ok: isInt },
-          end: { ok: isInt },
-          controls: { ok: isBool },
-          fs: { ok: isBool },
-          rel: { ok: isBool, def: '0' },
-          loop: { ok: isBool },
-          cc_load_policy: { ok: isBool },
-          cc_lang_pref: { ok: isLang },
-          iv_load_policy: { ok: (v) => v === '1' || v === '3' },
-          disablekb: { ok: isBool },
-          color: { ok: (v) => v === 'red' || v === 'white' },
-          hl: { ok: isLang },
-        };
-
-        function isBool(v) { return v === '0' || v === '1'; }
-        function isInt(v) { return /^\d+$/.test(v); }
-        function isLang(v) { return /^[a-z]{2}(-[a-z]{2})?$/i.test(v); }
-
-        var wrap = document.getElementById('wrap');
-        var params = new URLSearchParams(window.location.search);
-
-        function showError(message) {
-          wrap.innerHTML = '';
-          var el = document.createElement('div');
-          el.className = 'center';
-          el.textContent = message;
-          wrap.appendChild(el);
-        }
-
-        var vid = params.get('v');
-        if (!vid) {
-          showError('No video ID provided. Use ?v=VIDEO_ID');
-          return;
-        }
-        if (!/^[a-zA-Z0-9_-]{11}$/.test(vid)) {
-          showError('Invalid video ID format');
-          return;
-        }
-
-        var yt = new URLSearchParams();
-        yt.set('enablejsapi', '1'); // required for postMessage control
-        Object.keys(ALLOWED).forEach((key) => {
-          var cfg = ALLOWED[key];
-          var value = key === 'start' ? params.get('start') || params.get('t') : params.get(key);
-          if (value && cfg.ok(value)) {
-            yt.set(key, value);
-          } else if (cfg.def) {
-            yt.set(key, cfg.def);
-          }
-        });
-        var list = params.get('list');
-        if (list && /^[a-zA-Z0-9_-]+$/.test(list)) {
-          yt.set('list', list);
-        }
-
-        var iframe = document.createElement('iframe');
-        iframe.src = `https://www.youtube.com/embed/${vid}?${yt.toString()}`;
-        iframe.title = 'YouTube video player';
-        iframe.allow =
-          'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share';
-        iframe.setAttribute('allowfullscreen', '');
-        wrap.innerHTML = '';
-        wrap.appendChild(iframe);
-
-        // Relay messages both ways: parent (extension) <-> YouTube iframe.
-        window.addEventListener('message', (event) => {
-          if (event.source === window.parent && iframe.contentWindow) {
-            iframe.contentWindow.postMessage(event.data, '*');
-          } else if (event.source === iframe.contentWindow && window.parent !== window) {
-            window.parent.postMessage(event.data, '*');
-          }
-        });
-      })();
-    </script>
+    <script src="/player.js"></script>
   </body>
 </html>

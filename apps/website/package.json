@@ -11,7 +11,8 @@
     "type-check": "astro check",
     "clean": "rm -rf dist .astro",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "e2e": "playwright test"
   },
   "dependencies": {
     "astro": "catalog:",
@@ -19,6 +20,7 @@
   },
   "devDependencies": {
     "@astrojs/check": "catalog:",
+    "@playwright/test": "^1",
     "sharp": "catalog:",
     "typescript": "catalog:astro-ts6",
     "vitest": "catalog:"
