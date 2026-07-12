@@ -1,4 +1,5 @@
 import { EnvelopeParseError } from './errors';
+import type { DataKey } from './keys';
 import {
   aesGcmOpen,
   aesGcmSeal,
@@ -22,7 +23,7 @@ function recordAad(collection: string, entityId: string): Uint8Array {
 }
 
 export async function sealRecord(
-  dk: Uint8Array,
+  dk: DataKey,
   keyId: string,
   collection: string,
   entityId: string,
@@ -39,7 +40,7 @@ export async function sealRecord(
 }
 
 export async function openRecord(
-  dk: Uint8Array,
+  dk: DataKey,
   envelope: string,
   collection: string,
   entityId: string

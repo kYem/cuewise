@@ -10,6 +10,7 @@ import {
 import {
   type AuthCodePayload,
   type Identity,
+  type KeyEnvelopeRecord,
   type PushRecord,
   type Session,
   StorageQuotaExceededError,
@@ -311,10 +312,7 @@ export class D1SyncStore implements SyncStore {
     return result.meta.changes ?? 0;
   }
 
-  async getKeyEnvelope(
-    userId: string,
-    kind: string
-  ): Promise<{ envelope: string; updatedAt: number } | null> {
+  async getKeyEnvelope(userId: string, kind: string): Promise<KeyEnvelopeRecord | null> {
     const row = await this.db
       .prepare('SELECT envelope, updated_at FROM key_envelopes WHERE user_id = ? AND kind = ?')
       .bind(userId, kind)

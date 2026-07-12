@@ -1,5 +1,5 @@
 import { ApiError } from './api-error';
-import type { ExchangeTokenRequest, PushRecord, SyncRecord } from './types';
+import type { ExchangeTokenRequest, KeyEnvelopeRecord, PushRecord, SyncRecord } from './types';
 
 const MAX_RETRIES = 3;
 
@@ -75,10 +75,10 @@ export class ApiClient {
 
   // 404 means "signed in but keys never initialized" — a valid state, not an error; every
   // other non-2xx still surfaces as the normal typed ApiError.
-  async getRecoveryEnvelope(): Promise<{ envelope: string; updatedAt: number } | null> {
+  async getRecoveryEnvelope(): Promise<KeyEnvelopeRecord | null> {
     try {
       const res = await this.request('/v1/keys/recovery', { method: 'GET' }, { auth: true });
-      return await this.parseSuccessBody<{ envelope: string; updatedAt: number }>(res);
+      return await this.parseSuccessBody<KeyEnvelopeRecord>(res);
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) {
         return null;

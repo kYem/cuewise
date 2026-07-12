@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { GOLDEN } from './__fixtures__/golden-envelope.fixtures';
 import { openRecord, sealRecord } from './envelope';
 import { DecryptError, EnvelopeParseError } from './errors';
-import { generateDataKey } from './keys';
+import { type DataKey, generateDataKey } from './keys';
 import { b64urlDecode } from './primitives';
 
 const GOAL_JSON = JSON.stringify({
@@ -13,7 +13,7 @@ const GOAL_JSON = JSON.stringify({
 });
 
 /** Seals GOAL_JSON under a fresh data key as ('goals', 'g1') — the shared happy-path fixture. */
-async function sealedGoal(): Promise<{ dk: Uint8Array; env: string }> {
+async function sealedGoal(): Promise<{ dk: DataKey; env: string }> {
   const dk = generateDataKey();
   const env = await sealRecord(dk, 'dk-1', 'goals', 'g1', GOAL_JSON);
   return { dk, env };
@@ -92,7 +92,8 @@ describe('record envelope', () => {
   });
 
   it('golden fixture: a committed v1 envelope decrypts forever', async () => {
-    const dk = b64urlDecode(GOLDEN.dataKeyB64url);
+    // Golden bytes come from a fixture, not a producer function, so the brand is asserted here.
+    const dk = b64urlDecode(GOLDEN.dataKeyB64url) as DataKey;
     await expect(openRecord(dk, GOLDEN.envelope, GOLDEN.collection, GOLDEN.entityId)).resolves.toBe(
       GOLDEN.plaintext
     );

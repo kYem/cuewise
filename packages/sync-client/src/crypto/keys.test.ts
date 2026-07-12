@@ -1,11 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { DecryptError, EnvelopeParseError } from './errors';
-import { deriveMasterKey, generateDataKey, unwrapDataKey, wrapDataKey } from './keys';
+import {
+  deriveMasterKey,
+  generateDataKey,
+  type MasterKey,
+  unwrapDataKey,
+  wrapDataKey,
+} from './keys';
 import { b64urlEncode, randomBytes } from './primitives';
 import { generateRecoveryCode } from './recovery-code';
 
 /** A master key derived from a freshly generated recovery code — the shared "some valid mk" fixture. */
-async function freshMasterKey(): Promise<Uint8Array> {
+async function freshMasterKey(): Promise<MasterKey> {
   return deriveMasterKey((await generateRecoveryCode()).secret);
 }
 

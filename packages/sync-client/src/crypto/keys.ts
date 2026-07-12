@@ -13,12 +13,17 @@ import {
 const MK_INFO = 'cuewise-mk-v1';
 const WRAP_AAD = 'v1|recovery';
 
-export async function deriveMasterKey(secret: string): Promise<Uint8Array> {
-  return hkdfSha256(utf8(secret), MK_INFO, 256);
+// Branded so the compiler catches a swapped mk/dk argument at compile time, mirroring
+// RawSessionToken/SessionTokenHash in apps/api/src/crypto-utils.ts.
+export type MasterKey = Uint8Array & { readonly __brand: 'MasterKey' };
+export type DataKey = Uint8Array & { readonly __brand: 'DataKey' };
+
+export async function deriveMasterKey(secret: string): Promise<MasterKey> {
+  return (await hkdfSha256(utf8(secret), MK_INFO, 256)) as MasterKey;
 }
 
-export function generateDataKey(): Uint8Array {
-  return randomBytes(32);
+export function generateDataKey(): DataKey {
+  return randomBytes(32) as DataKey;
 }
 
 // Bind the keyId into the AAD alongside the fixed context so a swapped header fails to open.
@@ -26,7 +31,7 @@ function wrapAad(keyId: string): Uint8Array {
   return utf8(`${WRAP_AAD}|${keyId}`);
 }
 
-export async function wrapDataKey(mk: Uint8Array, dk: Uint8Array, keyId: string): Promise<string> {
+export async function wrapDataKey(mk: MasterKey, dk: DataKey, keyId: string): Promise<string> {
   if (!isValidKeyId(keyId)) {
     throw new EnvelopeParseError('invalid keyId');
   }
@@ -36,10 +41,10 @@ export async function wrapDataKey(mk: Uint8Array, dk: Uint8Array, keyId: string)
 }
 
 export async function unwrapDataKey(
-  mk: Uint8Array,
+  mk: MasterKey,
   blob: string
-): Promise<{ dk: Uint8Array; keyId: string }> {
+): Promise<{ dk: DataKey; keyId: string }> {
   const { keyId, iv, ct } = splitEnvelope(blob);
   const dk = await aesGcmOpen(mk, iv, ct, wrapAad(keyId));
-  return { dk, keyId };
+  return { dk: dk as DataKey, keyId };
 }
