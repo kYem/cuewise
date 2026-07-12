@@ -73,6 +73,32 @@ export class ApiClient {
     await this.request('/v1/account', { method: 'DELETE' }, { auth: true });
   }
 
+  // 404 means "signed in but keys never initialized" — a valid state, not an error; every
+  // other non-2xx still surfaces as the normal typed ApiError.
+  async getRecoveryEnvelope(): Promise<{ envelope: string; updatedAt: number } | null> {
+    try {
+      const res = await this.request('/v1/keys/recovery', { method: 'GET' }, { auth: true });
+      return await this.parseSuccessBody<{ envelope: string; updatedAt: number }>(res);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) {
+        return null;
+      }
+      throw err;
+    }
+  }
+
+  async putRecoveryEnvelope(envelope: string): Promise<void> {
+    await this.request(
+      '/v1/keys/recovery',
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ envelope }),
+      },
+      { auth: true }
+    );
+  }
+
   private async request(
     path: string,
     init: RequestInit,
