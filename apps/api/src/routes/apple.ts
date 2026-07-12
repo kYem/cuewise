@@ -91,7 +91,16 @@ export function registerAppleRoutes(
     if (typeof idToken !== 'string' || typeof state !== 'string') {
       return problem('invalid_request', { detail: 'id_token and state are required.' });
     }
-    const decoded = toAppleState(await verifyState(state, signingKey));
+    const verifyResult = await verifyState(state, signingKey);
+    if (!verifyResult.ok) {
+      // key_unavailable is a server/config fault (transient WebCrypto issue), not a bad
+      // client request — the other reasons all mean this state was never ours.
+      if (verifyResult.reason === 'key_unavailable') {
+        return problem('internal');
+      }
+      return problem('invalid_request', { detail: 'Bad state.' });
+    }
+    const decoded = toAppleState(verifyResult.payload);
     if (decoded === null || !isAllowedReturnUri(decoded.returnUri, c.env)) {
       return problem('invalid_request', { detail: 'Bad state.' });
     }

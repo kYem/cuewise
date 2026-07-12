@@ -1,6 +1,6 @@
 import { env } from 'cloudflare:test';
 import { errors } from 'jose';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { createTestIdp, type TestIdp } from '../__fixtures__/jwks.fixtures';
 import { base64UrlEncodeString, sha256Base64Url, signState } from '../crypto-utils';
 import { createApp } from '../index';
@@ -400,6 +400,52 @@ describe('POST /v1/auth/apple/callback', () => {
     expect(res.status).toBe(401);
     const body = await res.json<{ code: string }>();
     expect(body.code).toBe('invalid_token');
+  });
+});
+
+describe('POST /v1/auth/apple/callback when the HMAC key import fails', () => {
+  it('returns 500 internal (not 400) and does not redirect', async () => {
+    const signingKey = 'apple-key-import-failure-key';
+    const startParams = new URLSearchParams({
+      return_uri: 'cuewise://auth',
+      code_challenge: CODE_CHALLENGE,
+    });
+    const startRes = await appWithIdp().request(
+      `/v1/auth/apple/start?${startParams.toString()}`,
+      { method: 'GET' },
+      { ...testEnv(), STATE_SIGNING_KEY: signingKey }
+    );
+    const startLocation = requireHeader(startRes, 'Location');
+    const state = new URL(startLocation).searchParams.get('state');
+    if (state === null) {
+      throw new Error('Expected a state query param on the /v1/auth/apple/start redirect');
+    }
+
+    // Evict the single-slot HMAC key cache with a different key so the callback below is
+    // forced through a real (mocked-to-fail) importKey call instead of a cache hit.
+    await appWithIdp().request(
+      `/v1/auth/apple/start?${startParams.toString()}`,
+      { method: 'GET' },
+      { ...testEnv(), STATE_SIGNING_KEY: 'apple-key-import-eviction-key' }
+    );
+    vi.spyOn(crypto.subtle, 'importKey').mockRejectedValueOnce(
+      new Error('transient WebCrypto fault')
+    );
+
+    const res = await appWithIdp().request(
+      '/v1/auth/apple/callback',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ id_token: 'whatever', state }).toString(),
+      },
+      { ...testEnv(), STATE_SIGNING_KEY: signingKey }
+    );
+
+    expect(res.status).toBe(500);
+    const body = await res.json<{ code: string }>();
+    expect(body.code).toBe('internal');
+    expect(res.headers.get('Location')).toBeNull();
   });
 });
 

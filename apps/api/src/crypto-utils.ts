@@ -78,13 +78,18 @@ export async function signState(payload: object, key: string): Promise<string> {
   return `${body}.${base64UrlEncode(new Uint8Array(signature))}`;
 }
 
+/** Discriminates why verification failed so callers can tell a server fault from a bad client. */
+export type VerifyStateResult =
+  | { ok: true; payload: unknown }
+  | { ok: false; reason: 'unsigned' | 'bad_signature' | 'undecodable' | 'key_unavailable' };
+
 /** Verifies a `signState` output with a constant-time comparison; never throws. */
-export async function verifyState(state: string, key: string): Promise<unknown | null> {
+export async function verifyState(state: string, key: string): Promise<VerifyStateResult> {
   const separator = state.lastIndexOf('.');
   if (separator === -1) {
     // Our own /start always emits a signed state; an unsigned one is necessarily forged.
     logger.warn('verifyState: state is not signed');
-    return null;
+    return { ok: false, reason: 'unsigned' };
   }
   const body = state.slice(0, separator);
   const signature = state.slice(separator + 1);
@@ -95,7 +100,7 @@ export async function verifyState(state: string, key: string): Promise<unknown |
     // A key-import failure is a server misconfiguration (bad key material, crypto fault),
     // not attacker input — must be loud, not folded into the decode-failure warn below.
     logger.error('verifyState: HMAC key import failed', err);
-    return null;
+    return { ok: false, reason: 'key_unavailable' };
   }
   try {
     const signatureBytes = Uint8Array.from(base64UrlDecode(signature), (ch) => ch.charCodeAt(0));
@@ -108,12 +113,12 @@ export async function verifyState(state: string, key: string): Promise<unknown |
     if (!valid) {
       // A forged/tampered state is the exact attack this HMAC exists to stop; it must be visible.
       logger.warn('verifyState: HMAC signature verification failed');
-      return null;
+      return { ok: false, reason: 'bad_signature' };
     }
-    return JSON.parse(base64UrlDecodeString(body));
+    return { ok: true, payload: JSON.parse(base64UrlDecodeString(body)) };
   } catch {
     // A state we issued always decodes cleanly; anything that throws here wasn't ours.
     logger.warn('verifyState: state could not be decoded');
-    return null;
+    return { ok: false, reason: 'undecodable' };
   }
 }

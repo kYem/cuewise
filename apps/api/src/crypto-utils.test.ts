@@ -33,7 +33,7 @@ describe('signState / verifyState', () => {
 
     const state = await signState(payload, KEY);
 
-    expect(await verifyState(state, KEY)).toEqual(payload);
+    expect(await verifyState(state, KEY)).toEqual({ ok: true, payload });
   });
 
   it('rejects a state whose body was tampered with after signing, and warns', async () => {
@@ -43,7 +43,7 @@ describe('signState / verifyState', () => {
 
     const tampered = `${flipLastChar(body)}.${sig}`;
 
-    expect(await verifyState(tampered, KEY)).toBeNull();
+    expect(await verifyState(tampered, KEY)).toEqual({ ok: false, reason: 'bad_signature' });
     expect(warnSpy).toHaveBeenCalledWith('verifyState: HMAC signature verification failed');
   });
 
@@ -51,14 +51,20 @@ describe('signState / verifyState', () => {
     const warnSpy = spyOnLoggerWarn();
     const state = await signState({ nonce: 'n-1' }, KEY);
 
-    expect(await verifyState(state, 'a-different-signing-key')).toBeNull();
+    expect(await verifyState(state, 'a-different-signing-key')).toEqual({
+      ok: false,
+      reason: 'bad_signature',
+    });
     expect(warnSpy).toHaveBeenCalledWith('verifyState: HMAC signature verification failed');
   });
 
   it('rejects a state with no signature separator, and warns (the actual forged-state shape)', async () => {
     const warnSpy = spyOnLoggerWarn();
 
-    expect(await verifyState('not-a-signed-state', KEY)).toBeNull();
+    expect(await verifyState('not-a-signed-state', KEY)).toEqual({
+      ok: false,
+      reason: 'unsigned',
+    });
     expect(warnSpy).toHaveBeenCalledWith('verifyState: state is not signed');
   });
 
@@ -68,7 +74,7 @@ describe('signState / verifyState', () => {
     const [body] = state.split('.');
     const malformed = `${body}.!!!not-base64url!!!`;
 
-    expect(await verifyState(malformed, KEY)).toBeNull();
+    expect(await verifyState(malformed, KEY)).toEqual({ ok: false, reason: 'undecodable' });
     expect(warnSpy).toHaveBeenCalledWith('verifyState: state could not be decoded');
   });
 
@@ -82,7 +88,7 @@ describe('signState / verifyState', () => {
 
     const result = await verifyState(state, uncachedKey);
 
-    expect(result).toBeNull();
+    expect(result).toEqual({ ok: false, reason: 'key_unavailable' });
     expect(errorSpy).toHaveBeenCalledWith('verifyState: HMAC key import failed', expect.any(Error));
     expect(warnSpy).not.toHaveBeenCalled();
   });
@@ -96,11 +102,11 @@ describe('signState / verifyState', () => {
     const stateB = await signState(payloadB, otherKey);
 
     // Each state must verify under its OWN key...
-    expect(await verifyState(stateA, KEY)).toEqual(payloadA);
-    expect(await verifyState(stateB, otherKey)).toEqual(payloadB);
+    expect(await verifyState(stateA, KEY)).toEqual({ ok: true, payload: payloadA });
+    expect(await verifyState(stateB, otherKey)).toEqual({ ok: true, payload: payloadB });
     // ...and cross-verifying with the other key must fail. A cache that serves a stale
     // key would make signing/verifying self-consistently wrong and this would pass anyway.
-    expect(await verifyState(stateA, otherKey)).toBeNull();
+    expect(await verifyState(stateA, otherKey)).toEqual({ ok: false, reason: 'bad_signature' });
   });
 
   it('retries the HMAC import after a transient failure instead of caching the rejection', async () => {
@@ -112,11 +118,23 @@ describe('signState / verifyState', () => {
 
     // Any dot-shaped string reaches importHmacKey; the body/signature don't need to be real yet.
     const firstAttempt = await verifyState('irrelevant-body.irrelevant-signature', retryKey);
-    expect(firstAttempt).toBeNull();
+    expect(firstAttempt).toEqual({ ok: false, reason: 'key_unavailable' });
     expect(errorSpy).toHaveBeenCalledWith('verifyState: HMAC key import failed', expect.any(Error));
 
     const payload = { nonce: 'n-retry' };
     const secondState = await signState(payload, retryKey);
-    expect(await verifyState(secondState, retryKey)).toEqual(payload);
+    expect(await verifyState(secondState, retryKey)).toEqual({ ok: true, payload });
+  });
+
+  it('imports the HMAC key once and reuses it across repeated calls with the same key', async () => {
+    const importSpy = vi.spyOn(crypto.subtle, 'importKey');
+    const cacheKey = 'key-for-import-cache-proof';
+
+    const stateA = await signState({ nonce: 'n-cache-proof-a' }, cacheKey);
+    const stateB = await signState({ nonce: 'n-cache-proof-b' }, cacheKey);
+    await verifyState(stateA, cacheKey);
+    await verifyState(stateB, cacheKey);
+
+    expect(importSpy).toHaveBeenCalledTimes(1);
   });
 });
