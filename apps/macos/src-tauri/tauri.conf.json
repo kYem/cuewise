@@ -21,7 +21,28 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": {
+        "default-src": "'self'",
+        "script-src": "'self'",
+        "style-src": "'self' 'unsafe-inline'",
+        "img-src": "'self' https://images.unsplash.com https://i.ytimg.com https://www.google.com https://*.gstatic.com",
+        "connect-src": "'self' https://www.youtube.com",
+        "frame-src": "'self' https://cuewise.app",
+        "object-src": "'none'",
+        "base-uri": "'self'",
+        "form-action": "'self'"
+      },
+      "devCsp": {
+        "default-src": "'self'",
+        "script-src": "'self' 'unsafe-inline' 'unsafe-eval'",
+        "style-src": "'self' 'unsafe-inline'",
+        "img-src": "'self' https://images.unsplash.com https://i.ytimg.com https://www.google.com https://*.gstatic.com",
+        "connect-src": "'self' ws://localhost:1420 https://www.youtube.com",
+        "frame-src": "'self' https://cuewise.app",
+        "object-src": "'none'",
+        "base-uri": "'self'",
+        "form-action": "'self'"
+      }
     }
   },
   "bundle": {

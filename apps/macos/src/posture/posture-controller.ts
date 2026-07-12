@@ -3,6 +3,7 @@ import { getNotifier, logger, type PostureSample, type PostureStatus } from '@cu
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { useSyncExternalStore } from 'react';
+import { isCommandError } from '../platform/command-error';
 
 // Module-level posture state. Tracking outlives the Settings section (which only
 // mounts while open), so the sidecar keeps running — and the toggle stays truthful
@@ -70,6 +71,17 @@ let pendingCount = 0;
 // Persist the opt-in preferences (macOS-local) so the toggles stick across launches.
 const ENABLED_KEY = 'cuewise.posture.enabled';
 const NUDGES_KEY = 'cuewise.posture.nudges';
+
+// A poisoned Rust mutex is an internal bug (a prior panic), not the ordinary
+// camera/permission failure the callers already toast about — flag it distinctly
+// in the log so it doesn't read like just another sidecar hiccup.
+function logCommandFailure(context: string, error: unknown): void {
+  if (isCommandError(error) && error.kind === 'state_poisoned') {
+    logger.error(`${context}: internal state lock poisoned (bug)`, error);
+    return;
+  }
+  logger.error(context, error);
+}
 
 function persist(key: string, value: boolean): void {
   try {
@@ -211,7 +223,7 @@ export function startPosture(): void {
     })
     .catch((error) => {
       detachListeners();
-      logger.error('Failed to start posture tracking', error);
+      logCommandFailure('Failed to start posture tracking', error);
       // If the user asked to stop mid-start, the failure is moot — don't surface a
       // start-error toast for a session they already turned off.
       if (stopRequestedDuringStart) {
@@ -237,7 +249,7 @@ export function stopPosture(): void {
   }
   persist(ENABLED_KEY, false);
   invoke('stop_posture').catch((error) => {
-    logger.error('Failed to stop posture tracking', error);
+    logCommandFailure('Failed to stop posture tracking', error);
     useToastStore.getState().error("Couldn't stop posture tracking — the camera may still be on.");
   });
   detachListeners();
@@ -282,7 +294,7 @@ export function initPosture(): void {
 
 export function calibratePosture(): void {
   invoke('calibrate_posture').catch((error) => {
-    logger.error('Failed to calibrate posture', error);
+    logCommandFailure('Failed to calibrate posture', error);
     useToastStore.getState().error("Couldn't calibrate posture — please try again.");
   });
 }

@@ -1,3 +1,4 @@
+mod error;
 mod posture;
 mod scheduler;
 mod tray;
@@ -11,10 +12,16 @@ use tauri::{
 /// Show + focus the main window, optionally routing the hash-routed UI to a page.
 fn reveal(app: &AppHandle, hash: Option<&str>) {
     if let Some(window) = app.get_webview_window("main") {
-        let _ = window.show();
-        let _ = window.set_focus();
+        // The tray's "Open Cuewise" / Dock click do nothing else to recover from
+        // this, so a failure here would otherwise be a silent no-op for the user.
+        if let Err(e) = window.show() {
+            eprintln!("failed to show main window: {e}");
+        }
+        if let Err(e) = window.set_focus() {
+            eprintln!("failed to focus main window: {e}");
+        }
         if let Some(route) = hash {
-            let _ = window.eval(&format!("window.location.hash = '{route}'"));
+            let _ = window.eval(format!("window.location.hash = '{route}'"));
         }
     }
 }
@@ -52,8 +59,17 @@ pub fn run() {
                 .item(&quit)
                 .build()?;
 
+            // The tray is the primary way to reveal the window once it's hidden
+            // (Dock reopen also does, via `RunEvent::Reopen` below), so a missing
+            // bundle icon is a packaging bug worth failing loudly on rather than
+            // shipping a tray-less app that's harder to rediscover.
+            let icon = app
+                .default_window_icon()
+                .ok_or("Cuewise's tray icon is missing from the app bundle")?
+                .clone();
+
             let _tray = TrayIconBuilder::with_id(tray::TRAY_ID)
-                .icon(app.default_window_icon().unwrap().clone())
+                .icon(icon)
                 .tooltip("Cuewise")
                 .menu(&menu)
                 .on_menu_event(|app, event| match event.id.as_ref() {

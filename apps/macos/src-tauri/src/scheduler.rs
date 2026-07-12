@@ -15,6 +15,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::async_runtime::{spawn, JoinHandle};
 use tauri::{AppHandle, Emitter, Manager, State};
 
+use crate::error::{log_poison, Error};
+
 /// Event the frontend listens on; payload is the fired wake's id.
 const FIRE_EVENT: &str = "scheduler://fire";
 
@@ -27,6 +29,51 @@ pub struct SchedulerState {
     next_epoch: AtomicU64,
 }
 
+impl SchedulerState {
+    /// Allocate a fresh epoch to tag a new wake, so its eventual fire can tell
+    /// whether it's still the current entry for its id.
+    fn next_epoch(&self) -> u64 {
+        self.next_epoch.fetch_add(1, Ordering::Relaxed)
+    }
+
+    /// Arm `id` at `epoch`, replacing whatever was previously scheduled for `id`.
+    /// Aborts the replaced task in the same locked section — folded in here (not
+    /// left to the caller) so a reschedule can never forget to abort the old task
+    /// and leak a live timer. `Err` only if the lock is poisoned.
+    fn insert(&self, id: String, epoch: u64, handle: JoinHandle<()>) -> Result<(), Error> {
+        let mut tasks = self.tasks.lock().map_err(log_poison)?;
+        if let Some((_, previous)) = tasks.insert(id, (epoch, handle)) {
+            previous.abort();
+        }
+        Ok(())
+    }
+
+    /// Remove `id`'s entry only if it's still at `epoch` — i.e. no reschedule
+    /// raced in since this wake was armed. Returns whether it removed anything.
+    fn remove_if_current(&self, id: &str, epoch: u64) -> bool {
+        let Ok(mut tasks) = self.tasks.lock() else {
+            eprintln!("scheduler: state lock poisoned while clearing a fired wake for {id}");
+            return false;
+        };
+        if tasks.get(id).map(|(entry_epoch, _)| *entry_epoch) != Some(epoch) {
+            return false;
+        }
+        tasks.remove(id);
+        true
+    }
+
+    /// Cancel a pending wake, aborting its task in the same locked section. A
+    /// no-op if it already fired or was never scheduled. `Err` only if the lock
+    /// is poisoned.
+    fn cancel(&self, id: &str) -> Result<(), Error> {
+        let mut tasks = self.tasks.lock().map_err(log_poison)?;
+        if let Some((_, handle)) = tasks.remove(id) {
+            handle.abort();
+        }
+        Ok(())
+    }
+}
+
 fn now_ms() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -34,41 +81,202 @@ fn now_ms() -> i64 {
         .unwrap_or(0)
 }
 
+/// Sleep duration until `when_ms` (epoch millis), given the current time
+/// `now_ms`. A `when_ms` already in the past clamps to zero (fires ASAP).
+fn delay_until(when_ms: i64, now_ms: i64) -> Duration {
+    Duration::from_millis((when_ms - now_ms).max(0) as u64)
+}
+
 /// Arm (or re-arm) a wake for `id` at `when_ms` (epoch millis). A past time fires
 /// as soon as possible. Re-arming the same id replaces the previous wake.
 #[tauri::command]
-pub fn schedule_wake(app: AppHandle, state: State<'_, SchedulerState>, id: String, when_ms: i64) {
-    let epoch = state.next_epoch.fetch_add(1, Ordering::Relaxed);
-    let delay = Duration::from_millis((when_ms - now_ms()).max(0) as u64);
+pub fn schedule_wake(
+    app: AppHandle,
+    state: State<'_, SchedulerState>,
+    id: String,
+    when_ms: i64,
+) -> Result<(), Error> {
+    let epoch = state.next_epoch();
+    let delay = delay_until(when_ms, now_ms());
 
     let task_app = app.clone();
     let task_id = id.clone();
     let handle = spawn(async move {
         tokio::time::sleep(delay).await;
-        let _ = task_app.emit(FIRE_EVENT, &task_id);
+        // The frontend can't otherwise learn a reminder didn't reach it — this is
+        // the only trace of a delivery failure.
+        if let Err(e) = task_app.emit(FIRE_EVENT, &task_id) {
+            eprintln!("scheduler: failed to emit fire event for {task_id}: {e}");
+        }
         if let Some(state) = task_app.try_state::<SchedulerState>() {
-            if let Ok(mut tasks) = state.tasks.lock() {
-                // Only clear our own entry; a reschedule may already have replaced it.
-                if tasks.get(&task_id).map(|(entry_epoch, _)| *entry_epoch) == Some(epoch) {
-                    tasks.remove(&task_id);
-                }
-            }
+            state.remove_if_current(&task_id, epoch);
         }
     });
 
-    if let Ok(mut tasks) = state.tasks.lock() {
-        if let Some((_, previous)) = tasks.insert(id, (epoch, handle)) {
-            previous.abort();
-        }
-    }
+    state.insert(id, epoch, handle)
 }
 
 /// Cancel a pending wake. A no-op if it already fired or was never scheduled.
 #[tauri::command]
-pub fn cancel_wake(state: State<'_, SchedulerState>, id: String) {
-    if let Ok(mut tasks) = state.tasks.lock() {
-        if let Some((_, handle)) = tasks.remove(&id) {
-            handle.abort();
-        }
+pub fn cancel_wake(state: State<'_, SchedulerState>, id: String) -> Result<(), Error> {
+    state.cancel(&id)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::atomic::AtomicBool;
+    use std::sync::Arc;
+
+    use super::*;
+
+    /// A cheap, real `JoinHandle<()>` for entries under test — `SchedulerState`
+    /// stores Tauri's async-runtime handle type, not a mock-friendly trait object.
+    fn handle() -> JoinHandle<()> {
+        spawn(async {})
+    }
+
+    /// A handle whose task flips a shared flag after `delay` — lets a test observe
+    /// whether the task actually ran (survived) or was aborted (never touched it).
+    fn flag_after_delay(delay: Duration) -> (JoinHandle<()>, Arc<AtomicBool>) {
+        let ran = Arc::new(AtomicBool::new(false));
+        let flag = ran.clone();
+        let handle = spawn(async move {
+            tokio::time::sleep(delay).await;
+            flag.store(true, Ordering::SeqCst);
+        });
+        (handle, ran)
+    }
+
+    #[test]
+    fn rearming_replaces_entry_and_bumps_epoch() {
+        let state = SchedulerState::default();
+
+        let epoch1 = state.next_epoch();
+        assert!(state.insert("id".into(), epoch1, handle()).is_ok());
+
+        let epoch2 = state.next_epoch();
+        assert!(epoch2 > epoch1, "next_epoch must bump on every call");
+
+        assert!(
+            state.insert("id".into(), epoch2, handle()).is_ok(),
+            "re-arming an existing id must succeed"
+        );
+    }
+
+    #[test]
+    fn insert_aborts_the_task_it_replaces() {
+        let state = SchedulerState::default();
+
+        let epoch1 = state.next_epoch();
+        let (doomed, ran) = flag_after_delay(Duration::from_millis(30));
+        assert!(state.insert("id".into(), epoch1, doomed).is_ok());
+
+        // Replacing the entry must abort the task above before its delay elapses.
+        let epoch2 = state.next_epoch();
+        assert!(state.insert("id".into(), epoch2, handle()).is_ok());
+
+        std::thread::sleep(Duration::from_millis(100));
+        assert!(
+            !ran.load(Ordering::SeqCst),
+            "insert must abort the replaced task, not just forget it"
+        );
+    }
+
+    #[test]
+    fn stale_epoch_fire_does_not_remove_current_entry() {
+        let state = SchedulerState::default();
+
+        let epoch1 = state.next_epoch();
+        assert!(state.insert("id".into(), epoch1, handle()).is_ok());
+        let epoch2 = state.next_epoch();
+        assert!(state.insert("id".into(), epoch2, handle()).is_ok()); // reschedule before epoch1's task fires
+
+        assert!(
+            !state.remove_if_current("id", epoch1),
+            "a stale fire must not touch the current entry"
+        );
+        assert!(
+            state.remove_if_current("id", epoch2),
+            "the current entry must still be pending after the stale fire"
+        );
+    }
+
+    #[test]
+    fn current_epoch_fire_removes_entry() {
+        let state = SchedulerState::default();
+
+        let epoch = state.next_epoch();
+        assert!(state.insert("id".into(), epoch, handle()).is_ok());
+
+        assert!(state.remove_if_current("id", epoch));
+        assert!(
+            !state.remove_if_current("id", epoch),
+            "the entry is already gone, so a repeat fire is a no-op"
+        );
+    }
+
+    #[test]
+    fn cancel_removes_entry() {
+        let state = SchedulerState::default();
+
+        let epoch = state.next_epoch();
+        assert!(state.insert("id".into(), epoch, handle()).is_ok());
+
+        assert!(state.cancel("id").is_ok());
+        assert!(
+            !state.remove_if_current("id", epoch),
+            "cancel must remove the entry"
+        );
+        // Cancelling again is a no-op, not an error.
+        assert!(state.cancel("id").is_ok());
+    }
+
+    #[test]
+    fn cancel_aborts_the_task() {
+        let state = SchedulerState::default();
+
+        let epoch = state.next_epoch();
+        let (doomed, ran) = flag_after_delay(Duration::from_millis(30));
+        assert!(state.insert("id".into(), epoch, doomed).is_ok());
+
+        assert!(state.cancel("id").is_ok());
+
+        std::thread::sleep(Duration::from_millis(100));
+        assert!(
+            !ran.load(Ordering::SeqCst),
+            "cancel must abort the task, not just drop its handle"
+        );
+    }
+
+    #[test]
+    fn cancel_unknown_id_is_a_noop() {
+        let state = SchedulerState::default();
+        assert!(state.cancel("never-scheduled").is_ok());
+    }
+
+    #[test]
+    fn cancel_leaves_other_ids_intact() {
+        let state = SchedulerState::default();
+
+        let epoch_a = state.next_epoch();
+        assert!(state.insert("a".into(), epoch_a, handle()).is_ok());
+
+        assert!(state.cancel("b").is_ok());
+
+        assert!(
+            state.remove_if_current("a", epoch_a),
+            "cancelling an unrelated id must leave a's entry pending"
+        );
+    }
+
+    #[test]
+    fn delay_until_clamps_past_due_time_to_zero() {
+        assert_eq!(delay_until(100, 200), Duration::ZERO);
+        assert_eq!(delay_until(200, 200), Duration::ZERO);
+    }
+
+    #[test]
+    fn delay_until_returns_remaining_time_for_a_future_wake() {
+        assert_eq!(delay_until(300, 200), Duration::from_millis(100));
     }
 }
