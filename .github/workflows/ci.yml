@@ -67,3 +67,80 @@ jobs:
       - name: Verify all (main)
         if: github.event_name != 'pull_request'
         run: pnpm exec turbo run type-check test build
+
+  # Decide whether the macOS Tauri app's Rust/Swift changed, so the `rust` job
+  # below (needs a macOS runner, ~10x the cost of Linux) only runs when it must.
+  # Mirrors the native-analysis gate in codeql.yml.
+  changes:
+    name: Detect macOS app changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      macos: ${{ steps.filter.outputs.macos }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+      - name: Detect macOS app changes
+        id: filter
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if git diff --name-only "$BASE_SHA"...HEAD | grep -qE '^(apps/macos/|\.github/workflows/ci\.yml)'; then
+            echo "macos=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "macos=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  # Rust/Swift checks for the macOS Tauri app. Needs a macOS runner because the
+  # sidecar (posture-sidecar) is a Swift binary that Tauri's build script hard-
+  # requires (externalBin) — build.rs fails before cargo even compiles the crate
+  # without it, so the sidecar must exist before clippy/test.
+  rust:
+    name: Rust (macOS app)
+    needs: changes
+    if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.macos == 'true' }}
+    runs-on: macos-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: apps/macos/src-tauri
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          workspaces: apps/macos/src-tauri
+
+      # No build script involved, so this needs neither the toolchain cache nor the sidecar.
+      - name: Check formatting
+        run: cargo fmt --all --check
+
+      # posture-sidecar has no remote Swift dependencies (no Package.resolved),
+      # so keying the cache on source hashes alone is safe.
+      - name: Cache Swift build
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: apps/macos/posture-sidecar/.build
+          key: swift-sidecar-${{ runner.os }}-${{ hashFiles('apps/macos/posture-sidecar/**') }}
+
+      - name: Build Swift sidecar
+        working-directory: apps/macos
+        run: bash scripts/build-sidecar.sh
+
+      - name: Run clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Run tests
+        run: cargo test
