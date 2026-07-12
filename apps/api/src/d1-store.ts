@@ -1,5 +1,12 @@
 import { logger } from '@cuewise/shared';
-import { randomToken, sha256Hex } from './crypto-utils';
+import {
+  hashSessionToken,
+  type RawSessionToken,
+  randomSessionToken,
+  randomToken,
+  type SessionTokenHash,
+  sha256Hex,
+} from './crypto-utils';
 import {
   type AuthCodePayload,
   type Identity,
@@ -95,20 +102,20 @@ export class D1SyncStore implements SyncStore {
     return userId;
   }
 
-  async createSession(userId: string, deviceName: string): Promise<string> {
-    const token = randomToken();
+  async createSession(userId: string, deviceName: string): Promise<RawSessionToken> {
+    const token = randomSessionToken();
     const ts = this.now();
     await this.db
       .prepare(
         'INSERT INTO tokens (token_hash, user_id, device_name, expires_at, created_at) VALUES (?, ?, ?, ?, ?)'
       )
-      .bind(await sha256Hex(token), userId, deviceName, ts + SESSION_TTL_MS, ts)
+      .bind(await hashSessionToken(token), userId, deviceName, ts + SESSION_TTL_MS, ts)
       .run();
     return token;
   }
 
-  async lookupSession(rawToken: string): Promise<Session | null> {
-    const tokenHash = await sha256Hex(rawToken);
+  async lookupSession(rawToken: RawSessionToken): Promise<Session | null> {
+    const tokenHash = await hashSessionToken(rawToken);
     const ts = this.now();
     const row = await this.db
       .prepare(
@@ -126,10 +133,10 @@ export class D1SyncStore implements SyncStore {
     return { userId: row.user_id, tokenHash };
   }
 
-  async revokeSession(rawToken: string): Promise<void> {
+  async revokeSession(rawToken: RawSessionToken): Promise<void> {
     await this.db
       .prepare('UPDATE tokens SET revoked_at = ? WHERE token_hash = ?')
-      .bind(this.now(), await sha256Hex(rawToken))
+      .bind(this.now(), await hashSessionToken(rawToken))
       .run();
   }
 
@@ -306,7 +313,7 @@ export class D1SyncStore implements SyncStore {
   // Single UPDATE...RETURNING with CASE keeps the reset-or-increment atomic within D1's
   // implicit per-statement transaction (select-then-update would race under concurrent hits).
   async bumpRateWindow(
-    tokenHash: string,
+    tokenHash: SessionTokenHash,
     windowMs: number
   ): Promise<{ count: number; resetInMs: number } | null> {
     const ts = this.now();
