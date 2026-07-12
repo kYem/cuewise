@@ -47,8 +47,8 @@ export async function hkdfSha256(
 
 const aesKeyCache = new WeakMap<Uint8Array, Promise<CryptoKey>>();
 
-// Re-sealing/opening many records with the same data key re-imports it every time
-// without this; cache by the exact Uint8Array reference, like the HMAC key cache in crypto-utils.ts.
+// Caches by Uint8Array reference to skip re-importing the same data key across records.
+// Shares crypto-utils.ts's evict-on-rejection idea, not its single-slot equality cache.
 async function importAesKey(key: Uint8Array): Promise<CryptoKey> {
   const cached = aesKeyCache.get(key);
   if (cached !== undefined) {
@@ -96,9 +96,10 @@ export async function aesGcmOpen(
       asBufferSource(ciphertext)
     );
     return new Uint8Array(opened);
-  } catch {
-    // WebCrypto throws an opaque OperationError; surface our typed error with no payload data.
-    throw new DecryptError();
+  } catch (err) {
+    // WebCrypto throws an opaque OperationError; surface our typed error with no payload data,
+    // keeping the original as `cause` (only carries err.name/stack, no key material).
+    throw new DecryptError(undefined, { cause: err });
   }
 }
 
@@ -122,8 +123,8 @@ export function b64urlDecode(s: string): Uint8Array {
   let binary: string;
   try {
     binary = atob(padded);
-  } catch {
-    throw new EnvelopeParseError('invalid base64url payload');
+  } catch (err) {
+    throw new EnvelopeParseError('invalid base64url payload', { cause: err });
   }
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i += 1) {

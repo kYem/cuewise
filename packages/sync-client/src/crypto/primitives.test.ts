@@ -56,6 +56,14 @@ describe('primitives', () => {
     );
   });
 
+  it('aesGcmOpen throws DecryptError with the underlying WebCrypto failure as .cause', async () => {
+    const iv = randomBytes(12);
+    const sealed = await aesGcmSeal(randomBytes(32), iv, utf8('hello'), utf8('aad'));
+    await expect(aesGcmOpen(randomBytes(32), iv, sealed, utf8('aad'))).rejects.toMatchObject({
+      cause: expect.anything(),
+    });
+  });
+
   it('aesGcmOpen throws DecryptError on AAD mismatch', async () => {
     const key = randomBytes(32);
     const iv = randomBytes(12);

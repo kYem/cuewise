@@ -1,13 +1,13 @@
 export class DecryptError extends Error {
-  constructor(message = 'decryption failed') {
-    super(message);
+  constructor(message = 'decryption failed', options?: { cause?: unknown }) {
+    super(message, options);
     this.name = 'DecryptError';
   }
 }
 
 export class EnvelopeParseError extends Error {
-  constructor(message = 'malformed envelope') {
-    super(message);
+  constructor(message = 'malformed envelope', options?: { cause?: unknown }) {
+    super(message, options);
     this.name = 'EnvelopeParseError';
   }
 }
