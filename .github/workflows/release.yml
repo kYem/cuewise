@@ -41,7 +41,7 @@ jobs:
     steps:
       - name: Harden runner
         # Block egress (builds + attests the published artifact).
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2
         with:
           egress-policy: block
           disable-sudo: true
@@ -102,7 +102,7 @@ jobs:
           echo "Version: $VERSION"
 
       - name: Attest build provenance
-        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4
         with:
           subject-path: apps/browser-extension/build/cuewise-extension-${{ steps.version.outputs.version }}.zip
 
@@ -124,7 +124,7 @@ jobs:
     steps:
       - name: Harden runner
         # Block egress (creates the GitHub release).
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2
         with:
           egress-policy: block
           disable-sudo: true
@@ -211,7 +211,7 @@ jobs:
     steps:
       - name: Harden runner
         # Block egress (holds the store tokens).
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2
         with:
           egress-policy: block
           disable-sudo: true

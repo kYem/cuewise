@@ -12,23 +12,6 @@ This document provides AI assistants (like Claude) with essential context about 
 
 **Current Version**: v1.0 (Browser Extension)
 
-## Tech Stack
-
-### Monorepo Tools
-- **Package Manager**: pnpm with workspaces
-- **Build System**: Turbo (turborepo)
-- **Language**: TypeScript throughout
-- **Linting/Formatting**: Biome (50x faster than ESLint)
-
-### Browser Extension Stack
-- **Framework**: React 18 with TypeScript
-- **Build Tool**: Vite with @crxjs/vite-plugin
-- **UI**: Tailwind CSS + custom components
-- **State Management**: Zustand
-- **Storage**: Chrome Storage API via adapters
-- **Icons**: Lucide React
-- **Target**: Chrome/Edge (Manifest V3)
-
 ## Architecture Principles
 
 ### 1. Multi-Platform Code Sharing
@@ -47,119 +30,44 @@ apps/
   mobile/            - Future React Native app
 ```
 
-### 2. Storage Adapter Pattern
+### 2. Ports & Adapters
 
-**Critical Pattern**: All storage access uses platform-agnostic adapters.
+**Critical Pattern**: Platform-specific capabilities — scheduling wake-ups, delivering OS notifications, and persisting data — are accessed through platform-agnostic **ports** (interfaces) in `@cuewise/shared/platform`. Each app provides **adapters** and registers them once at startup through a single DI container.
 
 ```typescript
-// Shared interface for all platforms
-interface StorageAdapter {
-  get<T>(key: string): Promise<T | null>;
-  set<T>(key: string, value: T): Promise<boolean>;
-  remove(key: string): Promise<boolean>;
-  clear(): Promise<boolean>;
-}
+// Ports (interfaces) — packages/shared/src/platform/
+// Command interfaces (page/stores depend on these); subscription lives on the
+// Host variants so a command-only context can't accidentally subscribe.
+interface Scheduler { scheduleAt(id, when): Promise<void>; cancel(id): Promise<void>; }
+interface SchedulerHost extends Scheduler { onFire(handler): () => void; }
+interface Notifier { notify(opts): Promise<void>; clear(id): Promise<void>; }
+interface NotifierHost extends Notifier { onClick(handler): () => void; onAction(handler): () => void; }
+interface KeyValueStore { get(key, area); set(key, value, area); remove(key, area); getUsage(area); }
 
-// Platform-specific implementations:
-- ChromeStorageAdapter   → chrome.storage API (browser extension)
-- LocalStorageAdapter    → localStorage (web app)
-- AsyncStorageAdapter    → AsyncStorage (React Native)
+// One container, configured at startup — merges, so storage self-registers on import
+// and the app adds scheduler/notifier (page, service worker, future Tauri/RN app):
+configurePlatform({ scheduler, notifier, storage });
+// Portable code resolves via getScheduler() / getNotifier() / getStorage()
 ```
 
-**Usage Pattern**:
+Adapters:
+- Browser extension: `ChromeScheduler` / `ChromeNotifier` (`apps/browser-extension/src/platform/`), `ChromeKeyValueStore` (`@cuewise/storage`, self-registers as the default backend).
+- Future Tauri (macOS) / React Native: supply `Tauri*` / `Native*` adapters and call `configurePlatform` — no store or helper code changes.
+
+**Storage usage**: go through the typed helpers, not the port directly.
 ```typescript
-// Browser extension
-import { ChromeStorageAdapter, StorageManager } from '@cuewise/storage';
-const storage = new StorageManager(new ChromeStorageAdapter('local'));
-
-// All platforms use the same API
-await storage.set('quotes', quotesArray);
-const quotes = await storage.get<Quote[]>('quotes');
+import { getReminders, setReminders } from '@cuewise/storage';
+await setReminders(remindersArray);
+const reminders = await getReminders();
 ```
 
-**Location**: `packages/storage/src/`
+**Location**: ports + registry in `packages/shared/src/platform/`; storage adapter + typed helpers in `packages/storage/src/`.
 
 ### 3. Pure Business Logic in Shared Package
 
 `packages/shared/` contains types, constants, utilities, CSV parsing, and the logger. Also includes analytics types (InsightsData, AdvancedAnalytics), YouTube/sound types, and import/export types.
 
 **Key Rule**: This package must be platform-agnostic (no browser/DOM/React dependencies).
-
-## Directory Structure
-
-```
-cuewise/
-├── apps/
-│   └── browser-extension/
-│       ├── src/
-│       │   ├── components/           # ~60 React components
-│       │   │   ├── FocusMode/        # Focus mode (timer, quote, controls, background)
-│       │   │   ├── goals/            # Goal cards, forms, pickers
-│       │   │   ├── settings/         # Settings panels (pomodoro, notifications, focus, etc.)
-│       │   │   ├── sounds/           # Soundscapes, YouTube, mini player
-│       │   │   ├── __fixtures__/     # Test fixtures for component tests
-│       │   │   ├── NewTabPage.tsx     # Home page
-│       │   │   ├── PomodoroPage.tsx   # Pomodoro timer page
-│       │   │   ├── InsightsPage.tsx   # Analytics page
-│       │   │   ├── QuoteManagementPage.tsx  # Quote management
-│       │   │   ├── GoalsPage.tsx      # Goals overview
-│       │   │   └── ...               # QuoteDisplay, Clock, Modals, etc.
-│       │   ├── stores/               # Zustand stores
-│       │   │   ├── quote-store.ts
-│       │   │   ├── goal-store.ts
-│       │   │   ├── pomodoro-store.ts
-│       │   │   ├── reminder-store.ts
-│       │   │   ├── settings-store.ts
-│       │   │   ├── focus-mode-store.ts
-│       │   │   ├── sounds-store.ts
-│       │   │   ├── insights-store.ts
-│       │   │   ├── toast-store.ts
-│       │   │   └── __fixtures__/     # Test fixtures for store tests
-│       │   ├── data/
-│       │   │   └── seed-quotes.ts
-│       │   ├── App.tsx               # Hash-based routing (#pomodoro, #insights, etc.)
-│       │   └── main.tsx
-│       ├── manifest.json             # Extension manifest (Manifest V3)
-│       └── dist/                     # Build output (load in Chrome)
-│
-├── packages/
-│   ├── shared/
-│   │   └── src/
-│   │       ├── types.ts              # 50+ interfaces/types
-│   │       ├── constants.ts          # Categories, themes, sounds, templates
-│   │       ├── utils.ts              # Pure utility functions
-│   │       ├── csv-utils.ts          # CSV parsing for bulk import
-│   │       ├── logger.ts             # Configurable logger
-│   │       └── index.ts
-│   │
-│   ├── storage/
-│   │   └── src/
-│   │       ├── storage-interface.ts
-│   │       ├── adapters/
-│   │       │   ├── chrome-storage-adapter.ts
-│   │       │   ├── local-storage-adapter.ts
-│   │       │   └── async-storage-adapter.ts
-│   │       ├── chrome-storage.ts     # Chrome storage API wrapper
-│   │       ├── storage-helpers.ts    # Typed helper functions
-│   │       └── index.ts
-│   │
-│   ├── test-utils/
-│   │   └── src/
-│   │       ├── factories/            # quote, goal, pomodoro, reminder factories
-│   │       ├── mocks/                # zustand, chrome-storage mocks
-│   │       ├── fixtures/             # settings fixtures
-│   │       └── index.ts
-│   │
-│   └── ui/
-│       └── src/
-│           ├── components/           # Button, Badge, Card, Input, Toast, Chart, etc.
-│           └── lib/                  # cn() helper
-│
-├── pnpm-workspace.yaml
-├── turbo.json
-├── biome.json
-└── CLAUDE.md
-```
 
 ## Pages & Routing
 
@@ -169,46 +77,6 @@ Hash-based routing in `App.tsx`:
 - `#insights` → `InsightsPage` (analytics, trends, charts)
 - `#quotes` → `QuoteManagementPage` (browse, filter, bulk actions, import/export)
 - `#goals` → `GoalsPage` (goals overview, completion charts)
-
-## Key Data Types
-
-All types are in `packages/shared/src/types.ts`. Key interfaces:
-
-- **Quote**: id, text, author, category (10 types), isCustom, isFavorite, isHidden, viewCount, lastViewed, source, notes, `collectionIds`
-- **QuoteCollection**: id, name, description, createdAt, updatedAt
-- **Goal**: id, text, completed, createdAt, date, `type` ('task' | 'objective'), `parentId`, `transferCount`, `description`
-- **Reminder**: id, text, dueDate, completed, notified, recurring, category ('health' | 'productivity' | 'personal'), completedAt
-- **PomodoroSession**: id, startedAt, completedAt, interrupted, duration, type ('work' | 'break' | 'longBreak'), goalId
-- **Settings**: 50+ properties covering pomodoro, notifications, UI themes, focus mode, goals, quotes
-- **InsightsData**: Analytics data — streak, completion rates, focus time, category view counts
-- **AdvancedAnalytics**: dailyTrends, weeklyTrends, monthlyTrends, goalCompletionRate, pomodoroHeatmap
-
-### Key Type Aliases
-- `QuoteCategory`: 'inspiration' | 'learning' | 'productivity' | 'mindfulness' | 'success' | 'creativity' | 'resilience' | 'leadership' | 'health' | 'growth'
-- `ColorTheme`: 'purple' | 'forest' | 'rose' | 'glass'
-- `LayoutDensity`: 'compact' | 'comfortable' | 'spacious'
-- `QuoteDisplayMode`: 'normal' | 'compact' | 'bottom' | 'hidden'
-- `FocusImageCategory`: 'nature' | 'forest' | 'ocean' | 'mountains' | 'minimal' | 'dark'
-
-### Storage Keys
-All storage keys are defined in `packages/shared/src/types.ts`:
-```typescript
-STORAGE_KEYS = {
-  QUOTES: 'quotes',              // Legacy
-  SEED_QUOTES: 'seedQuotes',     // Always in local storage
-  CUSTOM_QUOTES: 'customQuotes', // In sync storage when enabled
-  GOALS: 'goals',
-  REMINDERS: 'reminders',
-  POMODORO_SESSIONS: 'pomodoroSessions',
-  POMODORO_STATE: 'pomodoroState',
-  SETTINGS: 'settings',
-  CURRENT_QUOTE: 'currentQuote',
-  CUSTOM_YOUTUBE_PLAYLISTS: 'customYoutubePlaylists',
-  YOUTUBE_PROGRESS: 'youtubeProgress',
-  DAILY_BACKGROUND: 'dailyBackground',
-  COLLECTIONS: 'collections',
-}
-```
 
 ## State Management Pattern
 
@@ -565,6 +433,8 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md) for adding web (Next.js) and mobile (Re
 | `packages/shared/src/logger.ts` | Configurable logger | Changing log behavior |
 | `packages/storage/src/storage-helpers.ts` | Typed storage helpers | Adding new storage operations |
 | `packages/test-utils/src/` | Factories, mocks, fixtures | Adding test infrastructure |
+| `apps/api/src/store.ts` | `SyncStore` port (routes → store → D1 adapter) | Adding a new sync-backend operation |
+| `packages/sync-client/src/api-client.ts` | Typed sync API client (`ApiClient`) | Adding/changing a sync endpoint call |
 | `apps/browser-extension/src/stores/` | 9 Zustand stores | Adding features with state |
 | `apps/browser-extension/src/components/` | ~60 React components | Adding new UI elements |
 | `apps/browser-extension/src/App.tsx` | Hash routing, theme system | Adding new pages |
@@ -616,8 +486,8 @@ pnpm --filter @cuewise/browser-extension dev
 
 ## Package Naming Convention
 
-- **Apps**: `@cuewise/browser-extension`, `@cuewise/web`, `@cuewise/mobile`
-- **Shared**: `@cuewise/shared`, `@cuewise/storage`, `@cuewise/ui`, `@cuewise/test-utils`
+- **Apps**: `@cuewise/browser-extension`, `@cuewise/api`, `@cuewise/web`, `@cuewise/mobile`
+- **Shared**: `@cuewise/shared`, `@cuewise/storage`, `@cuewise/ui`, `@cuewise/test-utils`, `@cuewise/sync-client`
 - **Scope**: Always use `@cuewise/` prefix
 
 ## Version Control
@@ -635,10 +505,12 @@ pnpm --filter @cuewise/browser-extension dev
 - [README.md](./README.md) - User-facing documentation
 - [ARCHITECTURE.md](./ARCHITECTURE.md) - Detailed architecture guide
 - [LINTING.md](./LINTING.md) - Biome setup and usage
+- [apps/api/CLAUDE.md](./apps/api/CLAUDE.md) - Cloud-sync backend (Cloudflare Worker + D1)
+- [packages/sync-client/CLAUDE.md](./packages/sync-client/CLAUDE.md) - Cloud-sync API client (used by the extension and Tauri app)
 - [Biome Docs](https://biomejs.dev/) - Linting/formatting reference
 - [Zustand Docs](https://docs.pmnd.rs/zustand) - State management
 - [Turbo Docs](https://turbo.build/repo) - Monorepo build system
 
 ---
 
-**Last Updated**: 2026-03-31
+**Last Updated**: 2026-07-11

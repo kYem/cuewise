@@ -19,8 +19,8 @@ import { SITE } from '../lib/site';
           Your Privacy Matters
         </div>
         <h1>Privacy Policy</h1>
-        <p class="hero-sub">At Cuewise, your privacy is our priority. This policy explains how we handle your data.</p>
-        <p class="last-updated">Last Updated: June 16, 2026</p>
+        <p class="hero-sub">Your data is yours. This page explains, in plain terms, exactly what Cuewise does — and doesn't do — with it.</p>
+        <p class="last-updated">Last Updated: June 28, 2026</p>
       </div>
     </section>
 
@@ -36,7 +36,7 @@ import { SITE } from '../lib/site';
             </svg>
             Our Commitment
           </h2>
-          <p>Cuewise is a browser extension designed with privacy at its core. We believe your productivity journey is personal, and your data should remain yours alone.</p>
+          <p>Cuewise is built privacy-first. Your productivity is personal, and your data should stay yours alone — so we designed the extension to keep it that way.</p>
           <p><strong>We do not collect, store, or share any of your personal information on our servers.</strong></p>
         </div>
 
@@ -103,26 +103,37 @@ import { SITE } from '../lib/site';
             </svg>
             Google Calendar Integration (Optional)
           </h2>
-          <p>Cuewise offers an <strong>optional, opt-in</strong> Google Calendar connection so you can see today's schedule beside your timer. It is off by default and only activates when you click <strong>"Connect Google Calendar."</strong></p>
+          <p>Cuewise offers an <strong>optional, opt-in</strong> Google Calendar connection so you can see today's schedule beside your timer. It is off by default and only activates when you click <strong>"Connect Google Calendar"</strong> and grant access through Google's own consent screen.</p>
           <div>
-            <h3>What we access:</h3>
+            <h3>Google user data we access:</h3>
             <ul>
-              <li>Read-only access to your <strong>primary</strong> Google Calendar (the <code>calendar.readonly</code> scope)</li>
-              <li>Only events for the <strong>current day</strong> are fetched, to show an "Up next" agenda</li>
+              <li><strong>Read-only</strong> access to your <strong>primary</strong> Google Calendar, and nothing else, via the single <code>https://www.googleapis.com/auth/calendar.readonly</code> scope.</li>
+              <li>Only events for the <strong>current day</strong> are requested. For each event we read its title, start and end time, color, status, your own attendance response, and a link back to the event in Google Calendar.</li>
+              <li>We do <strong>not</strong> access your Google profile, email address, contacts, other calendars, or any past or future days beyond today.</li>
             </ul>
           </div>
           <div>
-            <h3>How it is handled:</h3>
+            <h3>How we use this data (Data Usage):</h3>
             <ul>
-              <li><strong>Client-side only:</strong> the extension requests this data directly from Google in your browser. It never passes through, and is never stored on, any Cuewise server.</li>
-              <li><strong>Local cache:</strong> fetched events are stored only in your browser for the current day and are removed when you disconnect.</li>
-              <li><strong>Read-only:</strong> Cuewise never creates, edits, or deletes calendar events.</li>
-              <li><strong>Revocable:</strong> disconnecting revokes the access token and removes the permission. You can also revoke access anytime at <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer">myaccount.google.com/permissions</a>.</li>
+              <li><strong>Sole purpose:</strong> to display your remaining events for today as an "Up next" agenda alongside your focus timer. The data is used for no other purpose.</li>
+              <li><strong>Processed in your browser:</strong> events are fetched, filtered (cancelled and declined events are hidden), and rendered entirely on your device. No human at Cuewise ever sees your calendar data.</li>
+              <li><strong>No secondary use:</strong> your Google Calendar data is never used for advertising, profiling, training models, analytics, or any feature other than the agenda display described above.</li>
+            </ul>
+          </div>
+          <div>
+            <h3>How we store and protect this data (Data Storage &amp; Protection):</h3>
+            <ul>
+              <li><strong>No Cuewise servers:</strong> the extension requests calendar data directly from Google's API in your browser. It never passes through, and is never stored on, any Cuewise or third-party server.</li>
+              <li><strong>Encrypted transport:</strong> all requests to Google are made over HTTPS (TLS), so the data is encrypted in transit.</li>
+              <li><strong>Secure token handling:</strong> the OAuth access token is issued and stored by your browser's built-in Chrome Identity service, not by Cuewise. Cuewise never receives, stores, or has access to your Google password.</li>
+              <li><strong>Sandboxed local storage:</strong> the fetched events are cached only in your browser's extension storage, which is sandboxed to your device and isolated from other sites and extensions.</li>
+              <li><strong>Minimal retention:</strong> only the current day's events are kept; they are refreshed each day and are deleted immediately when you disconnect the calendar or uninstall the extension.</li>
+              <li><strong>Read-only and revocable:</strong> Cuewise never creates, edits, or deletes calendar events. Disconnecting revokes the access token and removes the permission, and you can revoke access at any time at <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer">myaccount.google.com/permissions</a>.</li>
             </ul>
           </div>
           <div>
             <h3>Limited Use:</h3>
-            <p>Cuewise's use and transfer of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener noreferrer">Google API Services User Data Policy</a>, including the Limited Use requirements. Google Calendar data is never used for advertising, never sold, and never transferred to others — because access is entirely client-side, it is not transferred to us at all.</p>
+            <p>Cuewise's use and transfer of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener noreferrer">Google API Services User Data Policy</a>, including the Limited Use requirements. Google Calendar data is never sold, never used for advertising, and never transferred to others — because access is entirely client-side, it is not transferred to us at all.</p>
           </div>
         </div>
 
@@ -197,9 +208,9 @@ import { SITE } from '../lib/site';
             <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
             </svg>
-            Changes to This Policy
+            When This Policy Changes
           </h2>
-          <p>We may update this privacy policy from time to time. When we do, we will:</p>
+          <p>If this policy ever changes, we'll:</p>
           <ul>
             <li>Update the "Last Updated" date at the top of this page</li>
             <li>Notify users through our newsletter (if subscribed)</li>
@@ -213,9 +224,9 @@ import { SITE } from '../lib/site';
             <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
             </svg>
-            Contact Us
+            Questions?
           </h2>
-          <p>If you have any questions or concerns about this privacy policy or how we handle your data, please reach out to us:</p>
+          <p>If anything here is unclear, or you just want to ask about your data, we're happy to help:</p>
           <ul>
             <li><strong>Email:</strong> <a href={`mailto:${SITE.privacyEmail}`}>{SITE.privacyEmail}</a></li>
             <li><strong>GitHub:</strong> <a href={SITE.githubIssuesUrl} target="_blank" rel="noopener noreferrer">Open an issue</a></li>
@@ -231,8 +242,8 @@ import { SITE } from '../lib/site';
       <div class="wrap">
         <div class="final glass reveal">
           <div class="final-inner">
-            <h2>Ready to Start Your Journey?</h2>
-            <p>Experience mindful productivity with complete privacy</p>
+            <h2>Your Data, Your Device</h2>
+            <p>That's the whole story. Head back and turn your next tab into a moment of intention.</p>
             <div class="hero-cta">
               <a class="btn btn-ghost btn-lg" href="/">
                 <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>

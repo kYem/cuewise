@@ -15,6 +15,8 @@ import {
   intervalDueDateFromNow,
   isUpcomingRecurringOccurrence,
   nextReminderDueDate,
+  reminderAlarmId,
+  reminderIdFromAlarm,
   resolveReminderNotificationAction,
   skipReminderOccurrence,
 } from './utils';
@@ -278,5 +280,19 @@ describe('resolveReminderNotificationAction', () => {
   it('dismisses an unknown button index', () => {
     const reminder = baseReminder({ recurring: undefined });
     expect(resolveReminderNotificationAction(reminder, 2, now)).toEqual({ type: 'dismiss' });
+  });
+});
+
+describe('reminder alarm ids', () => {
+  it('round-trips a reminder id through the alarm id', () => {
+    expect(reminderIdFromAlarm(reminderAlarmId('abc-123'))).toBe('abc-123');
+  });
+
+  it('prefixes the id with reminder-', () => {
+    expect(reminderAlarmId('abc-123')).toBe('reminder-abc-123');
+  });
+
+  it('returns null for an alarm id that is not a reminder', () => {
+    expect(reminderIdFromAlarm('pomodoro-complete')).toBeNull();
   });
 });

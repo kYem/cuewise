@@ -126,6 +126,22 @@ export interface PomodoroSession {
   goalId?: string; // Optional goal this session is associated with
 }
 
+// Posture tracking (macOS): a derived reading from the on-device posture sidecar.
+// This is the integration contract — it mirrors PostureKit's `PostureSample` Swift
+// struct verbatim. Never an image; only numbers. Optional metrics are absent when
+// no face is detected (the Swift encoder omits nil keys).
+export type PostureStatus = 'good' | 'mild' | 'poor' | 'absent';
+
+export interface PostureSample {
+  id: string;
+  timestamp: string; // ISO-8601
+  status: PostureStatus;
+  present: boolean; // Was a face detected this tick?
+  screenDistanceRatio?: number; // Face height / frame height; larger = closer
+  neckDeviation?: number; // Signed deviation of the tech-neck metric from baseline (0 = baseline)
+  headTiltDegrees?: number; // Head roll; chronic lean
+}
+
 // Customization types
 export type ColorTheme = 'purple' | 'forest' | 'rose' | 'glass';
 export type LayoutDensity = 'compact' | 'comfortable' | 'spacious';
@@ -294,6 +310,7 @@ export interface Settings {
   syncEnabled: boolean; // Enable Chrome sync for cross-device synchronization (default false)
   // Customization
   colorTheme: ColorTheme;
+  glassEnhanced: boolean; // Opt-in richer Glass surfaces: saturation, lit edges, legibility scrim (default false)
   layoutDensity: LayoutDensity;
   showThemeSwitcher: boolean; // Show live theme switcher sidebar
   showClock: boolean; // Show clock and date on home page (default false)
@@ -535,3 +552,21 @@ export interface BulkImportResult {
   failed: number;
   errors: string[];
 }
+
+// Cloud sync wire types (ENG-43)
+export interface PushRecord {
+  collection: string;
+  entityId: string;
+  ciphertext: string;
+  clientUpdatedAt: number;
+  deleted: boolean;
+}
+
+export interface SyncRecord extends PushRecord {
+  seq: number;
+}
+
+/** codeVerifier is required for apple (PKCE); google/dev exchanges don't use it. */
+export type ExchangeTokenRequest =
+  | { provider: 'google' | 'dev'; credential: string; deviceName: string }
+  | { provider: 'apple'; credential: string; deviceName: string; codeVerifier: string };

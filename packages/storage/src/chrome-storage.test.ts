@@ -1,61 +1,41 @@
-import type { MockChromeStorage } from '@cuewise/test-utils/mocks';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { clearStorage, removeFromStorage } from './chrome-storage';
+import { configurePlatform, type KeyValueStore } from '@cuewise/shared';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { getFromStorage, removeFromStorage, setInStorage } from './chrome-storage';
 
-describe('chrome-storage remove/clear', () => {
-  describe('with chrome.storage available', () => {
-    it('removeFromStorage removes the key via chrome.storage', async () => {
-      const local = global.chrome.storage.local as unknown as MockChromeStorage;
-      local.data.greeting = 'hi';
+// The delegators just forward to the configured KeyValueStore; backend behavior
+// is covered by chrome-key-value-store.test / local-storage-key-value-store.test.
+const fakeStore = {
+  get: vi.fn(),
+  set: vi.fn(),
+  remove: vi.fn(),
+  getUsage: vi.fn(),
+};
 
-      const result = await removeFromStorage('greeting');
+beforeEach(() => {
+  vi.clearAllMocks();
+  configurePlatform({ storage: fakeStore as unknown as KeyValueStore });
+});
 
-      expect(result).toBe(true);
-      expect(local.remove).toHaveBeenCalledWith('greeting');
-      expect(local.data.greeting).toBeUndefined();
-    });
+describe('storage delegators', () => {
+  it('getFromStorage forwards key + area to the store', async () => {
+    fakeStore.get.mockResolvedValue('value');
 
-    it('clearStorage clears via chrome.storage', async () => {
-      const local = global.chrome.storage.local as unknown as MockChromeStorage;
-      local.data.a = 1;
-
-      const result = await clearStorage();
-
-      expect(result).toBe(true);
-      expect(local.clear).toHaveBeenCalled();
-    });
+    await expect(getFromStorage('greeting', 'local')).resolves.toBe('value');
+    expect(fakeStore.get).toHaveBeenCalledWith('greeting', 'local');
   });
 
-  // Regression: in a plain web page (dev) `chrome` is undefined. These must fall
-  // back to localStorage instead of throwing (which broke quote migration on load).
-  describe('in development without chrome.storage', () => {
-    let removeItemSpy: ReturnType<typeof vi.spyOn>;
-    let clearSpy: ReturnType<typeof vi.spyOn>;
+  it('setInStorage forwards key, value + area to the store', async () => {
+    fakeStore.set.mockResolvedValue({ success: true });
 
-    beforeEach(() => {
-      vi.stubGlobal('chrome', undefined);
-      removeItemSpy = vi.spyOn(Storage.prototype, 'removeItem');
-      clearSpy = vi.spyOn(Storage.prototype, 'clear');
-    });
+    await setInStorage('count', 3, 'sync');
 
-    afterEach(() => {
-      vi.unstubAllGlobals();
-      removeItemSpy.mockRestore();
-      clearSpy.mockRestore();
-    });
+    expect(fakeStore.set).toHaveBeenCalledWith('count', 3, 'sync');
+  });
 
-    it('removeFromStorage falls back to localStorage and does not throw', async () => {
-      const result = await removeFromStorage('legacyQuotes');
+  it('removeFromStorage forwards the key (defaulting to local) to the store', async () => {
+    fakeStore.remove.mockResolvedValue(true);
 
-      expect(result).toBe(true);
-      expect(removeItemSpy).toHaveBeenCalledWith('legacyQuotes');
-    });
-
-    it('clearStorage falls back to localStorage and does not throw', async () => {
-      const result = await clearStorage();
-
-      expect(result).toBe(true);
-      expect(clearSpy).toHaveBeenCalled();
-    });
+    await expect(removeFromStorage('greeting')).resolves.toBe(true);
+    expect(fakeStore.remove).toHaveBeenCalledWith('greeting', 'local');
   });
 });

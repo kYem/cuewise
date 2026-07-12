@@ -1,105 +1,34 @@
 /**
- * Background Service Worker for handling alarms and notifications
+ * Background service worker: schedules reminder wake-ups and delivers their
+ * notifications through the platform Scheduler/Notifier ports.
  */
 
+import { handleReminderFire } from '@cuewise/app/reminder-notifications';
 import {
   logger,
-  nextReminderDueDate,
-  type Reminder,
+  reminderAlarmId,
+  reminderIdFromAlarm,
   resolveReminderNotificationAction,
 } from '@cuewise/shared';
 import { getReminders, setReminders } from '@cuewise/storage';
+import { configureChromePlatform } from './platform';
 
-// Listen for alarm triggers
-chrome.alarms.onAlarm.addListener(async (alarm) => {
-  logger.info('Alarm triggered', { alarmName: alarm.name });
+const { scheduler, notifier } = configureChromePlatform();
 
-  // Check if this is a reminder alarm
-  if (alarm.name.startsWith('reminder-')) {
-    const reminderId = alarm.name.replace('reminder-', '');
-    await handleReminderAlarm(reminderId);
-  }
-});
+// Fire a reminder's notification when its scheduled time arrives. The lookup +
+// deliver + recurring re-arm logic is shared with the macOS app so both platforms
+// behave identically.
+scheduler.onFire(handleReminderFire);
 
-/**
- * Handle reminder alarm by showing notification
- */
-async function handleReminderAlarm(reminderId: string) {
+// Notification click → focus (or open) the extension's new-tab page.
+notifier.onClick(async (notificationId) => {
   try {
-    const reminders = await getReminders();
-    const reminder = reminders.find((r) => r.id === reminderId);
-
-    if (!reminder) {
-      logger.warn(`Reminder ${reminderId} not found`);
+    if (reminderIdFromAlarm(notificationId) === null) {
       return;
     }
 
-    // Don't notify if already completed
-    if (reminder.completed) {
-      return;
-    }
+    await notifier.clear(notificationId);
 
-    // Paused recurring reminders must neither notify nor re-arm.
-    if (reminder.recurring && reminder.paused) {
-      return;
-    }
-
-    // Show notification with custom icon
-    await chrome.notifications.create(`reminder-${reminderId}`, {
-      type: 'basic',
-      iconUrl: chrome.runtime.getURL('icons/icon-128.png'),
-      title: '🔔 Reminder',
-      message: reminder.text,
-      priority: 2,
-      requireInteraction: true, // Notification stays until user dismisses
-      buttons: [{ title: 'Done' }, { title: 'Snooze 5 min' }],
-    });
-
-    // Mark as notified
-    const updatedReminders = reminders.map((r) =>
-      r.id === reminderId ? { ...r, notified: true } : r
-    );
-    await setReminders(updatedReminders);
-
-    // Handle recurring reminders (paused ones already returned above)
-    if (reminder.recurring) {
-      await scheduleRecurringReminder(reminder);
-    }
-  } catch (error) {
-    logger.error('Error handling reminder alarm', error);
-  }
-}
-
-/**
- * Schedule the next occurrence of a recurring reminder
- */
-async function scheduleRecurringReminder(reminder: Reminder) {
-  if (!reminder.recurring) {
-    return;
-  }
-
-  const nextDueDate = nextReminderDueDate(reminder, new Date());
-
-  const reminders = await getReminders();
-  const updatedReminders = reminders.map((r) =>
-    r.id === reminder.id
-      ? { ...r, dueDate: nextDueDate.toISOString(), notified: false, completed: false }
-      : r
-  );
-  await setReminders(updatedReminders);
-
-  await chrome.alarms.create(`reminder-${reminder.id}`, { when: nextDueDate.getTime() });
-}
-
-/**
- * Handle notification clicks - open the extension
- */
-chrome.notifications.onClicked.addListener(async (notificationId) => {
-  if (notificationId.startsWith('reminder-')) {
-    // Clear the notification
-    await chrome.notifications.clear(notificationId);
-
-    // Open the new tab page (where our extension lives)
     const tabs = await chrome.tabs.query({ url: chrome.runtime.getURL('index.html') });
 
     if (tabs.length > 0 && tabs[0].id) {
@@ -110,18 +39,18 @@ chrome.notifications.onClicked.addListener(async (notificationId) => {
       // Create new tab
       await chrome.tabs.create({ url: chrome.runtime.getURL('index.html') });
     }
+  } catch (error) {
+    logger.error('Error handling reminder notification click', error);
   }
 });
 
-/**
- * Handle notification button clicks (Done / Snooze 5 min)
- */
-chrome.notifications.onButtonClicked.addListener(async (notificationId, buttonIndex) => {
+// Notification action buttons (Done / Snooze 5 min).
+notifier.onAction(async (notificationId, buttonIndex) => {
   try {
-    if (!notificationId.startsWith('reminder-')) {
+    const reminderId = reminderIdFromAlarm(notificationId);
+    if (reminderId === null) {
       return;
     }
-    const reminderId = notificationId.replace('reminder-', '');
     const reminders = await getReminders();
     const reminder = reminders.find((r) => r.id === reminderId);
     const action = resolveReminderNotificationAction(reminder, buttonIndex, new Date());
@@ -136,12 +65,10 @@ chrome.notifications.onButtonClicked.addListener(async (notificationId, buttonIn
           : r
       );
       await setReminders(updated);
-      await chrome.alarms.create(`reminder-${reminderId}`, {
-        when: new Date(action.dueDate).getTime(),
-      });
+      await scheduler.scheduleAt(reminderAlarmId(reminderId), new Date(action.dueDate));
     }
 
-    await chrome.notifications.clear(notificationId);
+    await notifier.clear(notificationId);
   } catch (error) {
     logger.error('Error handling reminder notification button click', error);
   }

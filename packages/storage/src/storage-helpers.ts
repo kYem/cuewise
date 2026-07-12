@@ -9,6 +9,8 @@ import {
   DEFAULT_SETTINGS,
   type FocusImageCategory,
   type Goal,
+  getStorage,
+  getTodayDateString,
   logger,
   type PlaylistProgress,
   type PomodoroSession,
@@ -18,6 +20,7 @@ import {
   type Reminder,
   type Settings,
   STORAGE_KEYS,
+  storageFailure,
   type YoutubePlaylist,
 } from '@cuewise/shared';
 import {
@@ -136,7 +139,7 @@ export async function setQuotes(quotes: Quote[]): Promise<StorageResult> {
     return customResult;
   } catch (error) {
     logger.error('Error setting quotes', error);
-    return { success: false };
+    return storageFailure('Error setting quotes');
   }
 }
 
@@ -268,57 +271,22 @@ export interface StorageUsageInfo {
 }
 
 /**
- * Get storage usage information
- * Uses chrome.storage.sync or chrome.storage.local based on user settings
- * - Chrome.storage.sync quota: 100KB (102400 bytes), max 512 items, 8KB per item
- * - Chrome.storage.local quota: 10MB (10485760 bytes)
+ * Storage usage (bytes + quota) from the active KeyValueStore backend for the
+ * user's area, plus warning/critical thresholds. In the extension that's
+ * chrome.storage (100KB sync / 10MB local); in dev it's the localStorage estimate.
  */
 export async function getStorageUsage(): Promise<StorageUsageInfo> {
   try {
-    // Check if chrome.storage is available (extension context)
-    if (typeof chrome === 'undefined' || !chrome.storage) {
-      // Dev mode: estimate localStorage usage
-      let bytesInUse = 0;
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key) {
-          const value = localStorage.getItem(key);
-          bytesInUse += key.length + (value?.length || 0);
-        }
-      }
-      // localStorage quota is typically 5-10MB
-      const QUOTA_BYTES = 5242880; // 5MB in bytes
-      const percentageUsed = (bytesInUse / QUOTA_BYTES) * 100;
-
-      return {
-        bytesInUse,
-        quota: QUOTA_BYTES,
-        percentageUsed,
-        isWarning: percentageUsed > 75,
-        isCritical: percentageUsed > 90,
-      };
-    }
-
-    // Determine which storage area to check based on user settings
     const area = await getStorageArea();
-    const isSync = area === 'sync';
-
-    // Chrome storage quotas differ by storage type
-    const QUOTA_BYTES = isSync ? 102400 : 10485760; // 100KB for sync, 10MB for local
-
-    // Get bytes in use from Chrome storage
-    const storage = isSync ? chrome.storage.sync : chrome.storage.local;
-    const bytesInUse = await new Promise<number>((resolve) => {
-      storage.getBytesInUse(null, (bytes) => {
-        resolve(bytes);
-      });
-    });
-
-    const percentageUsed = (bytesInUse / QUOTA_BYTES) * 100;
+    const { bytesInUse, quota } = await getStorage().getUsage(area);
+    let percentageUsed = 0;
+    if (quota > 0) {
+      percentageUsed = (bytesInUse / quota) * 100;
+    }
 
     return {
       bytesInUse,
-      quota: QUOTA_BYTES,
+      quota,
       percentageUsed,
       isWarning: percentageUsed > 75,
       isCritical: percentageUsed > 90,
@@ -404,7 +372,7 @@ export async function migrateStorageData(
     return { success: true };
   } catch (error) {
     logger.error(`Error migrating data from ${fromArea} to ${toArea}`, error);
-    return { success: false };
+    return storageFailure(`Error migrating data from ${fromArea} to ${toArea}`);
   }
 }
 
@@ -475,28 +443,7 @@ export async function updateVideoProgress(
     return setInStorage(STORAGE_KEYS.YOUTUBE_PROGRESS, cleanedProgress, 'local');
   } catch (error) {
     logger.error('Error updating video progress', error);
-    return { success: false };
-  }
-}
-
-/**
- * Get saved timestamp for a specific video in a playlist
- * Returns 0 if no progress saved
- */
-export async function getVideoTimestamp(playlistId: string, videoId: string): Promise<number> {
-  try {
-    const allProgress = await getYoutubeProgress();
-    const playlistProgress = allProgress.find((p) => p.playlistId === playlistId);
-
-    if (!playlistProgress) {
-      return 0;
-    }
-
-    const videoProgress = playlistProgress.videoProgress.find((v) => v.videoId === videoId);
-    return videoProgress?.timestamp ?? 0;
-  } catch (error) {
-    logger.error('Error getting video timestamp', error);
-    return 0;
+    return storageFailure('Error updating video progress');
   }
 }
 
@@ -536,14 +483,6 @@ export async function getCurrentVideoForPlaylist(
 
 // Daily Background (persisted to change only once per day)
 // Note: Daily background is stored in local storage only (not synced)
-
-/**
- * Get today's date in YYYY-MM-DD format
- */
-function getTodayDateString(): string {
-  const today = new Date();
-  return today.toISOString().split('T')[0];
-}
 
 /**
  * Get the daily background image data
@@ -593,6 +532,6 @@ export async function setDailyBackground(
     return setInStorage(STORAGE_KEYS.DAILY_BACKGROUND, background, 'local');
   } catch (error) {
     logger.error('Error setting daily background', error);
-    return { success: false };
+    return storageFailure('Error setting daily background');
   }
 }

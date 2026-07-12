@@ -6,6 +6,7 @@ export interface MockChromeStorage {
   set: ReturnType<typeof vi.fn>;
   remove: ReturnType<typeof vi.fn>;
   clear: ReturnType<typeof vi.fn>;
+  getBytesInUse: ReturnType<typeof vi.fn>;
 }
 
 export function createChromeStorageMock(): MockChromeStorage {
@@ -45,5 +46,14 @@ export function createChromeStorageMock(): MockChromeStorage {
       }
       return Promise.resolve();
     }),
+    getBytesInUse: vi.fn(() => Promise.resolve(0)),
+  };
+}
+
+/** Install a fresh chrome.storage mock on the global (both local and sync areas). */
+export function installChromeStorageMock(): void {
+  const mockStorage = createChromeStorageMock();
+  (globalThis as { chrome?: unknown }).chrome = {
+    storage: { local: mockStorage, sync: mockStorage },
   };
 }

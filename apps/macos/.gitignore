@@ -1,0 +1,10 @@
+# Vite build output
+dist/
+
+# Playwright e2e output
+test-results/
+playwright-report/
+
+# Swift posture sidecar build output + the Tauri externalBin it's copied to
+posture-sidecar/.build/
+src-tauri/binaries/

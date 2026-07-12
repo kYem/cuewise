@@ -25,13 +25,176 @@ jobs:
     steps:
       - name: Harden runner
         # Block egress; install + lint + type-check + test + build reach only npm + GitHub.
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2
         with:
           egress-policy: block
           disable-sudo: true
           allowed-endpoints: >
             github.com:443
             registry.npmjs.org:443
+
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          # Full history so Turbo can diff a PR against its base for --affected.
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run lint
+        # Biome checks the whole tree in ~300ms — no point scoping it.
+        run: pnpm lint
+
+      # PRs only type-check/test/build the packages the diff touches (plus their
+      # dependents, via Turbo's graph); pushes to main verify everything.
+      - name: Verify affected (pull requests)
+        if: github.event_name == 'pull_request'
+        run: pnpm exec turbo run type-check test build --affected
+        env:
+          TURBO_SCM_BASE: ${{ github.event.pull_request.base.sha }}
+          TURBO_SCM_HEAD: HEAD
+
+      - name: Verify all (main)
+        if: github.event_name != 'pull_request'
+        run: pnpm exec turbo run type-check test build
+
+  # Decide whether the macOS app changed, and how much of it, so each downstream
+  # job only runs when its own surface is touched. `native` is narrow (only what
+  # can affect the Rust/Swift build); `macos_app` is the whole app (TS/UI/e2e
+  # included) for the Playwright job below. Mirrors the native-analysis gate in
+  # codeql.yml.
+  changes:
+    name: Detect macOS app changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      native: ${{ steps.filter.outputs.native }}
+      macos_app: ${{ steps.filter.outputs.macos_app }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+      - name: Detect macOS app changes
+        id: filter
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          CHANGED=$(git diff --name-only "$BASE_SHA"...HEAD)
+          if grep -qE '^(apps/macos/src-tauri/|apps/macos/posture-sidecar/|apps/macos/scripts/build-sidecar\.sh|\.github/workflows/ci\.yml)' <<< "$CHANGED"; then
+            echo "native=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "native=false" >> "$GITHUB_OUTPUT"
+          fi
+          if grep -qE '^(apps/macos/|\.github/workflows/ci\.yml)' <<< "$CHANGED"; then
+            echo "macos_app=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "macos_app=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  # Rust/Swift checks for the macOS Tauri app. Needs a macOS runner because the
+  # sidecar (posture-sidecar) is a Swift binary that Tauri's build script hard-
+  # requires (externalBin) — build.rs fails before cargo even compiles the crate
+  # without it, so the sidecar must exist before clippy/test.
+  rust:
+    name: Rust (macOS app)
+    needs: changes
+    # Fail OPEN: if the filter step itself errored, run rather than skip — a
+    # skipped required check satisfies branch protection just like a passing one.
+    if: ${{ github.event_name != 'pull_request' || needs.changes.result == 'failure' || needs.changes.outputs.native == 'true' }}
+    runs-on: macos-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: apps/macos/src-tauri
+    steps:
+      - name: Harden runner
+        # macOS GitHub-hosted runners only get harden-runner's audit (monitor-only)
+        # mode — no eBPF-based egress blocking exists there, so this can't `block`.
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          workspaces: apps/macos/src-tauri
+
+      # No build script involved, so this needs neither the toolchain cache nor the sidecar.
+      - name: Check formatting
+        run: cargo fmt --all --check
+
+      # posture-sidecar has no remote Swift dependencies (no Package.resolved),
+      # so keying the cache on source hashes alone is safe.
+      - name: Cache Swift build
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: apps/macos/posture-sidecar/.build
+          key: swift-sidecar-${{ runner.os }}-${{ hashFiles('apps/macos/posture-sidecar/**') }}
+
+      - name: Build Swift sidecar
+        working-directory: apps/macos
+        run: bash scripts/build-sidecar.sh
+
+      - name: Run clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Run tests
+        run: cargo test
+
+  # Playwright e2e (smoke + csp) for the macOS app's reused web UI. No Rust/Swift
+  # build involved: playwright.config.ts's webServer runs vite directly, and
+  # csp.spec.ts serves its own static build with the header — so this stays on
+  # the cheap Linux runner instead of needing the macOS `rust` job's toolchain.
+  e2e:
+    name: E2E (macOS app)
+    needs: changes
+    # Fail OPEN: see the comment on the `rust` job's identical gate above.
+    if: ${{ github.event_name != 'pull_request' || needs.changes.result == 'failure' || needs.changes.outputs.macos_app == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Harden runner
+        # Endpoints traced from real CI run 29178832429. csp.spec.ts/smoke.spec.ts
+        # now stub every off-origin request, so only job infra remains below.
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2
+        with:
+          egress-policy: block
+          disable-sudo: false
+          allowed-endpoints: >
+            github.com:443
+            registry.npmjs.org:443
+            cdn.playwright.dev:443
+            playwright.download.prss.microsoft.com:443
+            packages.microsoft.com:443
+            dl.google.com:443
+            azure.archive.ubuntu.com:80
+            esm.ubuntu.com:443
+            motd.ubuntu.com:443
+            results-receiver.actions.githubusercontent.com:443
+            *.blob.core.windows.net:443
 
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -48,14 +211,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Run lint
-        run: pnpm lint
+      - name: Install Playwright webkit
+        run: pnpm --filter @cuewise/macos exec playwright install --with-deps webkit
 
-      - name: Run type check
-        run: pnpm type-check
-
-      - name: Run tests
-        run: pnpm test
-
-      - name: Build
-        run: pnpm build
+      - name: Run e2e (smoke + csp)
+        run: pnpm --filter @cuewise/macos e2e

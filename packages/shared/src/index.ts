@@ -8,6 +8,8 @@ export * from './constants';
 export * from './csv-utils';
 // Export logger
 export * from './logger';
+// Export platform ports (scheduler/notifier/storage interfaces + registry)
+export * from './platform';
 // Export text search helpers
 export * from './search';
 export * from './types';

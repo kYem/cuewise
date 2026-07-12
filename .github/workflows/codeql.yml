@@ -1,0 +1,132 @@
+name: CodeQL
+
+# Advanced CodeQL setup (replaces GitHub's default setup) so we can path-gate the
+# slow, compiled languages. JS/TS + Actions need no build and run on every PR. Swift
+# (macOS runner, ~18 min autobuild) runs only when the posture-sidecar package changes;
+# Rust only when src-tauri changes. Push-to-main and the weekly scan always run both, so
+# main stays fully covered regardless of how tight the PR filters are.
+#
+# NOTE: default CodeQL setup must be turned OFF in Settings -> Code security, or both
+# run and the required checks double up.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '17 6 * * 1' # Mondays 06:17 UTC — full scan
+  workflow_dispatch: # manual full run (e.g. to validate native analysis)
+
+permissions:
+  contents: read
+
+jobs:
+  # Decide, per language, whether its native analysis needs to run for this PR.
+  changes:
+    name: Detect changed areas
+    runs-on: ubuntu-latest
+    outputs:
+      swift: ${{ steps.filter.outputs.swift }}
+      rust: ${{ steps.filter.outputs.rust }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+      - name: Detect Swift / Rust source changes
+        id: filter
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          changed="$(git diff --name-only "$BASE_SHA"...HEAD)"
+          # Swift lives only in posture-sidecar/, Rust only in src-tauri/. Every other path under
+          # apps/macos (the web src/, e2e, config, docs) affects neither analysis.
+          if printf '%s\n' "$changed" | grep -qE '^apps/macos/posture-sidecar/'; then
+            echo "swift=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "swift=false" >> "$GITHUB_OUTPUT"
+          fi
+          if printf '%s\n' "$changed" | grep -qE '^apps/macos/src-tauri/'; then
+            echo "rust=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "rust=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  # Buildless languages — cheap, run on every PR.
+  analyze-buildless:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [javascript-typescript, actions]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.37.0
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+      - name: Analyze
+        uses: github/codeql-action/analyze@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.37.0
+        with:
+          category: /language:${{ matrix.language }}
+
+  # Native languages are gated per-language, so a Rust-only or Swift-only change runs just its
+  # own analysis. They're separate jobs (not a matrix) because a job-level `if:` can read
+  # `needs`/`github` but NOT `matrix`, so per-language gating requires per-language jobs.
+  # Both always run on push-to-main and the weekly schedule (the first `if:` clause).
+
+  # Rust extractor is buildless (no cargo build → no Tauri system deps needed) — cheap.
+  analyze-rust:
+    name: Analyze (rust)
+    needs: changes
+    if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.37.0
+        with:
+          languages: rust
+          build-mode: none
+      - name: Analyze
+        uses: github/codeql-action/analyze@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.37.0
+        with:
+          category: /language:rust
+
+  # Swift needs a full autobuild on a macOS runner (~18 min), so gate it tightly: only when the
+  # posture-sidecar Swift package changes on a PR.
+  analyze-swift:
+    name: Analyze (swift)
+    needs: changes
+    if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.swift == 'true' }}
+    runs-on: macos-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.37.0
+        with:
+          languages: swift
+          build-mode: autobuild
+      - name: Analyze
+        uses: github/codeql-action/analyze@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.37.0
+        with:
+          category: /language:swift
