@@ -1,6 +1,6 @@
-//! Menu-bar tray projection. The webview owns all state; it pushes the title (the
-//! live timer text) and a rebuilt menu (status lines + Pomodoro/posture actions)
-//! here. Action clicks relay back as `tray://action` events (wired in `lib.rs`).
+//! Menu-bar tray projection. The webview owns all state; it pushes the title
+//! (live timer / posture dot) and a rebuilt menu (status lines + Pomodoro/posture
+//! actions) here. Action clicks relay back as `tray://action` events (`lib.rs`).
 
 use serde::Deserialize;
 use tauri::menu::{MenuBuilder, MenuItem};
@@ -16,7 +16,7 @@ pub struct TrayAction {
     label: String,
 }
 
-/// Set the menu-bar text next to the tray icon (the live timer). `None` clears it.
+/// Set the menu-bar text next to the tray icon (live status text). `None` clears it.
 #[tauri::command]
 pub fn set_tray_title(app: AppHandle, title: Option<String>) {
     if let Some(tray) = app.tray_by_id(TRAY_ID) {

@@ -17,7 +17,7 @@ export async function assertGlowSurfaceRenders(page: Page, baseUrl = ''): Promis
     expect(['rgba(0, 0, 0, 0)', 'transparent']).toContain(background);
   }
 
-  // And it must NOT boot the app shell (double reminder delivery per monitor) —
-  // the welcome-modal logo is the same app marker smoke.spec relies on.
-  await expect(page.locator('img[alt="Cuewise logo"]')).toHaveCount(0);
+  // And it must NOT boot the app shell (double reminder delivery per monitor):
+  // the root must hold nothing but the vignette, regardless of onboarding state.
+  await expect(page.locator('#root > :not(.glow-vignette)')).toHaveCount(0);
 }

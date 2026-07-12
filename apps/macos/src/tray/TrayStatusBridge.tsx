@@ -97,8 +97,9 @@ export function TrayStatusBridge(): null {
     pausedLine = `💤 Posture nudges paused · ${describePauseEnd(pausedUntil)}`;
   }
   // Toasts render in the often-hidden webview; the tray is the visible backstop.
+  // Gated like every other nudge line — no warning about a feature turned off.
   const glowWarningLine =
-    posture.tracking && posture.glowUndeliverable
+    postureControlsEnabled && posture.glowUndeliverable
       ? '⚠️ Posture glow unavailable — nudges may not appear'
       : null;
 
