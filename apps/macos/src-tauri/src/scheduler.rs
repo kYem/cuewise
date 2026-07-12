@@ -15,6 +15,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::async_runtime::{spawn, JoinHandle};
 use tauri::{AppHandle, Emitter, Manager, State};
 
+use crate::error::{log_poison, Error};
+
 /// Event the frontend listens on; payload is the fired wake's id.
 const FIRE_EVENT: &str = "scheduler://fire";
 
@@ -34,22 +36,23 @@ impl SchedulerState {
         self.next_epoch.fetch_add(1, Ordering::Relaxed)
     }
 
-    /// Arm `id` at `epoch`, replacing whatever was previously scheduled for
-    /// `id`. Returns the replaced handle (if any) so the caller can abort it —
-    /// a poisoned lock is treated as "nothing to replace" rather than panicking.
-    fn insert(&self, id: String, epoch: u64, handle: JoinHandle<()>) -> Option<JoinHandle<()>> {
-        let Ok(mut tasks) = self.tasks.lock() else {
-            return None;
-        };
-        tasks
-            .insert(id, (epoch, handle))
-            .map(|(_, previous)| previous)
+    /// Arm `id` at `epoch`, replacing whatever was previously scheduled for `id`.
+    /// Aborts the replaced task in the same locked section — folded in here (not
+    /// left to the caller) so a reschedule can never forget to abort the old task
+    /// and leak a live timer. `Err` only if the lock is poisoned.
+    fn insert(&self, id: String, epoch: u64, handle: JoinHandle<()>) -> Result<(), Error> {
+        let mut tasks = self.tasks.lock().map_err(log_poison)?;
+        if let Some((_, previous)) = tasks.insert(id, (epoch, handle)) {
+            previous.abort();
+        }
+        Ok(())
     }
 
     /// Remove `id`'s entry only if it's still at `epoch` — i.e. no reschedule
     /// raced in since this wake was armed. Returns whether it removed anything.
     fn remove_if_current(&self, id: &str, epoch: u64) -> bool {
         let Ok(mut tasks) = self.tasks.lock() else {
+            eprintln!("scheduler: state lock poisoned while clearing a fired wake for {id}");
             return false;
         };
         if tasks.get(id).map(|(entry_epoch, _)| *entry_epoch) != Some(epoch) {
@@ -59,13 +62,15 @@ impl SchedulerState {
         true
     }
 
-    /// Cancel a pending wake, returning its handle so the caller can abort it.
-    /// A no-op (returns `None`) if it already fired or was never scheduled.
-    fn cancel(&self, id: &str) -> Option<JoinHandle<()>> {
-        let Ok(mut tasks) = self.tasks.lock() else {
-            return None;
-        };
-        tasks.remove(id).map(|(_, handle)| handle)
+    /// Cancel a pending wake, aborting its task in the same locked section. A
+    /// no-op if it already fired or was never scheduled. `Err` only if the lock
+    /// is poisoned.
+    fn cancel(&self, id: &str) -> Result<(), Error> {
+        let mut tasks = self.tasks.lock().map_err(log_poison)?;
+        if let Some((_, handle)) = tasks.remove(id) {
+            handle.abort();
+        }
+        Ok(())
     }
 }
 
@@ -85,7 +90,12 @@ fn delay_until(when_ms: i64, now_ms: i64) -> Duration {
 /// Arm (or re-arm) a wake for `id` at `when_ms` (epoch millis). A past time fires
 /// as soon as possible. Re-arming the same id replaces the previous wake.
 #[tauri::command]
-pub fn schedule_wake(app: AppHandle, state: State<'_, SchedulerState>, id: String, when_ms: i64) {
+pub fn schedule_wake(
+    app: AppHandle,
+    state: State<'_, SchedulerState>,
+    id: String,
+    when_ms: i64,
+) -> Result<(), Error> {
     let epoch = state.next_epoch();
     let delay = delay_until(when_ms, now_ms());
 
@@ -93,23 +103,23 @@ pub fn schedule_wake(app: AppHandle, state: State<'_, SchedulerState>, id: Strin
     let task_id = id.clone();
     let handle = spawn(async move {
         tokio::time::sleep(delay).await;
-        let _ = task_app.emit(FIRE_EVENT, &task_id);
+        // The frontend can't otherwise learn a reminder didn't reach it — this is
+        // the only trace of a delivery failure.
+        if let Err(e) = task_app.emit(FIRE_EVENT, &task_id) {
+            eprintln!("scheduler: failed to emit fire event for {task_id}: {e}");
+        }
         if let Some(state) = task_app.try_state::<SchedulerState>() {
             state.remove_if_current(&task_id, epoch);
         }
     });
 
-    if let Some(previous) = state.insert(id, epoch, handle) {
-        previous.abort();
-    }
+    state.insert(id, epoch, handle)
 }
 
 /// Cancel a pending wake. A no-op if it already fired or was never scheduled.
 #[tauri::command]
-pub fn cancel_wake(state: State<'_, SchedulerState>, id: String) {
-    if let Some(handle) = state.cancel(&id) {
-        handle.abort();
-    }
+pub fn cancel_wake(state: State<'_, SchedulerState>, id: String) -> Result<(), Error> {
+    state.cancel(&id)
 }
 
 #[cfg(test)]
@@ -123,19 +133,18 @@ mod tests {
     }
 
     #[test]
-    fn rearming_replaces_entry_yields_previous_handle_and_bumps_epoch() {
+    fn rearming_replaces_entry_and_bumps_epoch() {
         let state = SchedulerState::default();
 
         let epoch1 = state.next_epoch();
-        assert!(state.insert("id".into(), epoch1, handle()).is_none());
+        assert!(state.insert("id".into(), epoch1, handle()).is_ok());
 
         let epoch2 = state.next_epoch();
         assert!(epoch2 > epoch1, "next_epoch must bump on every call");
 
-        let replaced = state.insert("id".into(), epoch2, handle());
         assert!(
-            replaced.is_some(),
-            "re-arming must yield the previous handle to abort"
+            state.insert("id".into(), epoch2, handle()).is_ok(),
+            "re-arming an existing id must succeed"
         );
     }
 
@@ -144,9 +153,9 @@ mod tests {
         let state = SchedulerState::default();
 
         let epoch1 = state.next_epoch();
-        state.insert("id".into(), epoch1, handle());
+        assert!(state.insert("id".into(), epoch1, handle()).is_ok());
         let epoch2 = state.next_epoch();
-        state.insert("id".into(), epoch2, handle()); // reschedule before epoch1's task fires
+        assert!(state.insert("id".into(), epoch2, handle()).is_ok()); // reschedule before epoch1's task fires
 
         assert!(
             !state.remove_if_current("id", epoch1),
@@ -163,7 +172,7 @@ mod tests {
         let state = SchedulerState::default();
 
         let epoch = state.next_epoch();
-        state.insert("id".into(), epoch, handle());
+        assert!(state.insert("id".into(), epoch, handle()).is_ok());
 
         assert!(state.remove_if_current("id", epoch));
         assert!(
@@ -173,23 +182,25 @@ mod tests {
     }
 
     #[test]
-    fn cancel_removes_entry_and_yields_handle() {
+    fn cancel_removes_entry() {
         let state = SchedulerState::default();
 
         let epoch = state.next_epoch();
-        state.insert("id".into(), epoch, handle());
+        assert!(state.insert("id".into(), epoch, handle()).is_ok());
 
-        assert!(state.cancel("id").is_some());
+        assert!(state.cancel("id").is_ok());
         assert!(
-            state.cancel("id").is_none(),
-            "already cancelled, so a repeat cancel is a no-op"
+            !state.remove_if_current("id", epoch),
+            "cancel must remove the entry"
         );
+        // Cancelling again is a no-op, not an error.
+        assert!(state.cancel("id").is_ok());
     }
 
     #[test]
     fn cancel_unknown_id_is_a_noop() {
         let state = SchedulerState::default();
-        assert!(state.cancel("never-scheduled").is_none());
+        assert!(state.cancel("never-scheduled").is_ok());
     }
 
     #[test]

@@ -9,7 +9,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 
-use crate::error::Error;
+use crate::error::{log_poison, Error};
 
 // Basename only — `externalBin` in tauri.conf.json points at `binaries/…`, but the
 // runtime resolves the sidecar next to the app executable by its bare name.
@@ -29,17 +29,12 @@ pub fn start_posture(app: AppHandle, state: State<'_, PostureState>) -> Result<(
     // Hold the lock across the whole check-spawn-store sequence. Otherwise a
     // stop_posture landing between the is_some() check and storing the child would
     // take() nothing, and the just-spawned sidecar (camera) would stay running.
-    let mut guard = state.child.lock().map_err(|_| Error::StatePoisoned)?;
+    let mut guard = state.child.lock().map_err(log_poison)?;
     if guard.is_some() {
         return Ok(());
     }
 
-    let (mut rx, child) = app
-        .shell()
-        .sidecar(SIDECAR)
-        .map_err(|e| Error::Sidecar(e.to_string()))?
-        .spawn()
-        .map_err(|e| Error::Sidecar(e.to_string()))?;
+    let (mut rx, child) = app.shell().sidecar(SIDECAR)?.spawn()?;
 
     *guard = Some(child);
     drop(guard); // release before the async relay task, which also locks on Terminated
@@ -81,22 +76,27 @@ pub fn start_posture(app: AppHandle, state: State<'_, PostureState>) -> Result<(
 /// Snapshot the current posture as the "sitting well" baseline.
 #[tauri::command]
 pub fn calibrate_posture(state: State<'_, PostureState>) -> Result<(), Error> {
-    let mut guard = state.child.lock().map_err(|_| Error::StatePoisoned)?;
+    let mut guard = state.child.lock().map_err(log_poison)?;
     if let Some(child) = guard.as_mut() {
-        child
-            .write(b"calibrate\n")
-            .map_err(|e| Error::Sidecar(e.to_string()))?;
+        child.write(b"calibrate\n")?;
     }
     Ok(())
 }
 
-/// Stop tracking: ask the sidecar to quit, then drop its handle so the camera turns off.
+/// Stop tracking: ask the sidecar to quit, then kill it so the camera turns off.
+/// The kill is a hard error — it's the last line of defense for turning the camera
+/// off, so the caller (and the user, via the existing toast) must hear about a
+/// failure rather than see tracking silently reported as stopped while it isn't.
 #[tauri::command]
 pub fn stop_posture(state: State<'_, PostureState>) -> Result<(), Error> {
-    let mut guard = state.child.lock().map_err(|_| Error::StatePoisoned)?;
+    let mut guard = state.child.lock().map_err(log_poison)?;
     if let Some(mut child) = guard.take() {
-        let _ = child.write(b"quit\n");
-        let _ = child.kill();
+        // Courtesy shutdown signal only — best-effort, since kill() below is the
+        // real guarantee. Log rather than drop so a failure still leaves a trace.
+        if let Err(e) = child.write(b"quit\n") {
+            eprintln!("posture sidecar: quit write failed: {e}");
+        }
+        child.kill()?;
     }
     Ok(())
 }
