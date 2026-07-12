@@ -41,7 +41,14 @@ let stopRequestedDuringStart = false;
 let parseFailures = 0;
 // The status values this build understands; anything else is a bad frame (protocol
 // drift), not a valid sample — reject it so it can't reach an unguarded consumer.
-const KNOWN_STATUSES: readonly PostureStatus[] = ['good', 'mild', 'poor', 'absent'];
+// Derived from an exhaustive Record so adding a PostureStatus without listing it here
+// is a compile error (a plain array would silently under-list and over-reject frames).
+const KNOWN_STATUSES = Object.keys({
+  good: 0,
+  mild: 0,
+  poor: 0,
+  absent: 0,
+} satisfies Record<PostureStatus, 0>) as PostureStatus[];
 
 // Nudge on sustained poor posture, then cool down so we don't nag.
 const NUDGE_AFTER_POOR_SAMPLES = 15; // ~30s at the sidecar's 2s cadence
@@ -154,16 +161,22 @@ async function attachListeners(): Promise<void> {
     maybeNudge(sample);
     updateSteadyStatus(sample.status);
   });
-  const onStopped = await listen('posture://stopped', () => {
-    // Reached only for an *unexpected* stop (stopPosture detaches first), so surface
-    // the camera/permission failure even with Settings closed. The pref is kept — the
-    // camera may be transiently busy — so tracking can still auto-resume next boot.
-    detachListeners();
-    resetDerivation();
-    const message = 'Posture tracking stopped — camera unavailable or permission denied.';
-    setState({ tracking: false, sample: null, steadyStatus: null, error: message });
-    useToastStore.getState().error(message);
-  });
+  let onStopped: UnlistenFn;
+  try {
+    onStopped = await listen('posture://stopped', () => {
+      // Reached only for an *unexpected* stop (stopPosture detaches first), so surface
+      // the camera/permission failure even with Settings closed. The pref is kept — the
+      // camera may be transiently busy — so tracking can still auto-resume next boot.
+      detachListeners();
+      resetDerivation();
+      const message = 'Posture tracking stopped — camera unavailable or permission denied.';
+      setState({ tracking: false, sample: null, steadyStatus: null, error: message });
+      useToastStore.getState().error(message);
+    });
+  } catch (error) {
+    onSample(); // the second registration failed — unlisten the first so it doesn't leak
+    throw error;
+  }
   unlisteners = [onSample, onStopped];
 }
 
@@ -218,7 +231,10 @@ export function stopPosture(): void {
     stopRequestedDuringStart = true;
   }
   persist(ENABLED_KEY, false);
-  invoke('stop_posture').catch((error) => logger.error('Failed to stop posture tracking', error));
+  invoke('stop_posture').catch((error) => {
+    logger.error('Failed to stop posture tracking', error);
+    useToastStore.getState().error("Couldn't stop posture tracking — the camera may still be on.");
+  });
   detachListeners();
   resetDerivation();
   setState({ tracking: false, sample: null, steadyStatus: null });
@@ -260,7 +276,10 @@ export function initPosture(): void {
 }
 
 export function calibratePosture(): void {
-  invoke('calibrate_posture').catch((error) => logger.error('Failed to calibrate posture', error));
+  invoke('calibrate_posture').catch((error) => {
+    logger.error('Failed to calibrate posture', error);
+    useToastStore.getState().error("Couldn't calibrate posture — please try again.");
+  });
 }
 
 /** Toggle the "remind me when I slouch" nudges. */
