@@ -2,13 +2,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   countInvokes,
   createLocalStorageStub,
+  ENABLED_KEY,
   emitSampleFrame,
-  expectWatchdogFired,
-  expectWatchdogSilent,
+  emitStopped,
+  invokeMock,
   resetPostureMocks,
+  START_FAILED_ERROR,
+  STOPPED_ERROR,
   toastErrorMock,
+  UNREADABLE_ERROR,
+  unlistenSpies,
 } from './__fixtures__/posture-controller.fixtures';
-import { startPosture, stopPosture } from './posture-controller';
+import { getPostureState, startPosture, stopPosture } from './posture-controller';
 
 vi.mock('@tauri-apps/api/core', async () => {
   const fixtures = await import('./__fixtures__/posture-controller.fixtures');
@@ -27,7 +32,6 @@ vi.mock('@cuewise/app', async () => {
       getState: () => ({
         error: fixtures.toastErrorMock,
         warning: fixtures.toastWarningMock,
-        success: fixtures.toastSuccessMock,
       }),
     },
   };
@@ -41,70 +45,88 @@ vi.mock('@cuewise/shared', async () => {
   };
 });
 
-const FIRST_FRAME_TIMEOUT_MS = 30_000;
+// One macrotask turn drains the attach-listeners → invoke promise chain.
+async function flush(): Promise<void> {
+  await new Promise((resolve) => {
+    setTimeout(resolve, 0);
+  });
+}
 
 async function startTracking(): Promise<void> {
   startPosture();
-  // Flush the attach-listeners → invoke('start_posture') promise chain.
-  await vi.advanceTimersByTimeAsync(0);
+  await flush();
   expect(countInvokes('start_posture')).toBe(1);
+  expect(getPostureState().tracking).toBe(true);
 }
 
-describe('posture first-frame watchdog', () => {
+describe('posture controller lifecycle', () => {
   let localStorageStub: ReturnType<typeof createLocalStorageStub>;
 
   beforeEach(() => {
-    vi.useFakeTimers();
     resetPostureMocks();
     localStorageStub = createLocalStorageStub();
     vi.stubGlobal('localStorage', localStorageStub);
   });
 
   afterEach(async () => {
-    // The controller keeps module-level session state — tear the session down
-    // (and let its promise chain settle) so each test starts from idle.
+    // The controller keeps module-level session state — tear it down so each
+    // test starts from idle.
     stopPosture();
-    await vi.advanceTimersByTimeAsync(0);
+    await flush();
     vi.unstubAllGlobals();
-    vi.useRealTimers();
   });
 
-  it('tears the session down when the sidecar never produces a frame', async () => {
+  it('an unexpected sidecar stop surfaces the error and keeps the auto-resume pref', async () => {
     await startTracking();
 
-    await vi.advanceTimersByTimeAsync(FIRST_FRAME_TIMEOUT_MS);
+    emitStopped();
 
-    expectWatchdogFired(localStorageStub);
+    expect(getPostureState().tracking).toBe(false);
+    expect(getPostureState().error).toBe(STOPPED_ERROR);
+    expect(toastErrorMock).toHaveBeenCalledWith(STOPPED_ERROR);
+    // Transient failures keep the opt-in so tracking can auto-resume next boot.
+    expect(localStorageStub.getItem(ENABLED_KEY)).toBe('1');
+    for (const unlisten of unlistenSpies) {
+      expect(unlisten).toHaveBeenCalled();
+    }
   });
 
-  it('stands down once a readable frame arrives', async () => {
+  it('a manual stop clears a stale error so the tray warning does not linger', async () => {
     await startTracking();
+    for (let i = 0; i < 5; i += 1) {
+      emitSampleFrame('not json');
+    }
+    expect(getPostureState().error).toBe(UNREADABLE_ERROR);
+
+    stopPosture();
+
+    expect(getPostureState().tracking).toBe(false);
+    expect(getPostureState().error).toBeNull();
+  });
+
+  it('a failed start surfaces a toast and clears the auto-resume pref', async () => {
+    invokeMock.mockRejectedValueOnce(new Error('camera denied'));
+
+    startPosture();
+    await flush();
+
+    expect(getPostureState().tracking).toBe(false);
+    expect(getPostureState().error).toBe(START_FAILED_ERROR);
+    expect(toastErrorMock).toHaveBeenCalledWith(START_FAILED_ERROR);
+    // A failed start must not retry every boot — the pref is cleared.
+    expect(localStorageStub.getItem(ENABLED_KEY)).toBe('0');
+  });
+
+  it('a readable frame becomes the live sample and clears any prior error', async () => {
+    await startTracking();
+    for (let i = 0; i < 5; i += 1) {
+      emitSampleFrame('not json');
+    }
+    expect(getPostureState().error).toBe(UNREADABLE_ERROR);
 
     emitSampleFrame(JSON.stringify({ status: 'good' }));
-    await vi.advanceTimersByTimeAsync(FIRST_FRAME_TIMEOUT_MS * 2);
 
-    expectWatchdogSilent();
-  });
-
-  it('stands down on an unreadable frame too — the sidecar is alive, just garbled', async () => {
-    await startTracking();
-
-    emitSampleFrame('not json');
-    await vi.advanceTimersByTimeAsync(FIRST_FRAME_TIMEOUT_MS * 2);
-
-    // A single bad frame is below the unreadable-frames escalation threshold, so
-    // no error toast — and crucially no watchdog teardown.
-    expectWatchdogSilent();
-  });
-
-  it('does not fire after the user stops tracking', async () => {
-    await startTracking();
-
-    stopPosture();
-    await vi.advanceTimersByTimeAsync(FIRST_FRAME_TIMEOUT_MS * 2);
-
-    // Exactly the one stop from stopPosture itself — the watchdog never added another.
-    expect(countInvokes('stop_posture')).toBe(1);
-    expect(toastErrorMock).not.toHaveBeenCalled();
+    expect(getPostureState().sample).toMatchObject({ status: 'good' });
+    expect(getPostureState().error).toBeNull();
   });
 });
