@@ -9,6 +9,8 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 
+use crate::error::Error;
+
 // Basename only — `externalBin` in tauri.conf.json points at `binaries/…`, but the
 // runtime resolves the sidecar next to the app executable by its bare name.
 const SIDECAR: &str = "posture-sidecar";
@@ -23,17 +25,22 @@ pub struct PostureState {
 /// Start tracking: spawn the sidecar and stream its samples to the webview. No-op
 /// if it's already running. The camera prompt is raised by the sidecar on start.
 #[tauri::command]
-pub fn start_posture(app: AppHandle, state: State<'_, PostureState>) -> Result<(), String> {
-    if state.child.lock().map_err(|e| e.to_string())?.is_some() {
+pub fn start_posture(app: AppHandle, state: State<'_, PostureState>) -> Result<(), Error> {
+    if state
+        .child
+        .lock()
+        .map_err(|_| Error::StatePoisoned)?
+        .is_some()
+    {
         return Ok(());
     }
 
     let (mut rx, child) = app
         .shell()
         .sidecar(SIDECAR)
-        .map_err(|e| e.to_string())?
+        .map_err(|e| Error::Sidecar(e.to_string()))?
         .spawn()
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| Error::Sidecar(e.to_string()))?;
 
     if let Ok(mut guard) = state.child.lock() {
         *guard = Some(child);
@@ -75,18 +82,20 @@ pub fn start_posture(app: AppHandle, state: State<'_, PostureState>) -> Result<(
 
 /// Snapshot the current posture as the "sitting well" baseline.
 #[tauri::command]
-pub fn calibrate_posture(state: State<'_, PostureState>) -> Result<(), String> {
-    let mut guard = state.child.lock().map_err(|e| e.to_string())?;
+pub fn calibrate_posture(state: State<'_, PostureState>) -> Result<(), Error> {
+    let mut guard = state.child.lock().map_err(|_| Error::StatePoisoned)?;
     if let Some(child) = guard.as_mut() {
-        child.write(b"calibrate\n").map_err(|e| e.to_string())?;
+        child
+            .write(b"calibrate\n")
+            .map_err(|e| Error::Sidecar(e.to_string()))?;
     }
     Ok(())
 }
 
 /// Stop tracking: ask the sidecar to quit, then drop its handle so the camera turns off.
 #[tauri::command]
-pub fn stop_posture(state: State<'_, PostureState>) -> Result<(), String> {
-    let mut guard = state.child.lock().map_err(|e| e.to_string())?;
+pub fn stop_posture(state: State<'_, PostureState>) -> Result<(), Error> {
+    let mut guard = state.child.lock().map_err(|_| Error::StatePoisoned)?;
     if let Some(mut child) = guard.take() {
         let _ = child.write(b"quit\n");
         let _ = child.kill();
