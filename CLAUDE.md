@@ -91,6 +91,10 @@ const reminders = await getReminders();
 ```
 cuewise/
 ├── apps/
+│   ├── api/                          # Cloud-sync backend (Worker + D1) — see apps/api/CLAUDE.md
+│   │   ├── src/                       # routes/, store.ts (SyncStore port), d1-store.ts (adapter)
+│   │   └── migrations/                # Numbered D1 schema migrations (additive)
+│   │
 │   └── browser-extension/
 │       ├── src/
 │       │   ├── components/           # ~60 React components
@@ -140,6 +144,12 @@ cuewise/
 │   │       ├── chrome-storage.ts     # Low-level delegators over the platform port
 │   │       ├── storage-helpers.ts    # Typed helper functions
 │   │       └── index.ts
+│   │
+│   ├── sync-client/                  # Cloud-sync API client — see packages/sync-client/CLAUDE.md
+│   │   └── src/
+│   │       ├── api-client.ts          # ApiClient (typed fetch, retry/backoff)
+│   │       ├── session-manager.ts     # SessionManager (token in 'local' storage area)
+│   │       └── sync-schedule.ts       # armSyncPull (Scheduler port)
 │   │
 │   ├── test-utils/
 │   │   └── src/
@@ -563,6 +573,8 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md) for adding web (Next.js) and mobile (Re
 | `packages/shared/src/logger.ts` | Configurable logger | Changing log behavior |
 | `packages/storage/src/storage-helpers.ts` | Typed storage helpers | Adding new storage operations |
 | `packages/test-utils/src/` | Factories, mocks, fixtures | Adding test infrastructure |
+| `apps/api/src/store.ts` | `SyncStore` port (routes → store → D1 adapter) | Adding a new sync-backend operation |
+| `packages/sync-client/src/api-client.ts` | Typed sync API client (`ApiClient`) | Adding/changing a sync endpoint call |
 | `apps/browser-extension/src/stores/` | 9 Zustand stores | Adding features with state |
 | `apps/browser-extension/src/components/` | ~60 React components | Adding new UI elements |
 | `apps/browser-extension/src/App.tsx` | Hash routing, theme system | Adding new pages |
@@ -614,8 +626,8 @@ pnpm --filter @cuewise/browser-extension dev
 
 ## Package Naming Convention
 
-- **Apps**: `@cuewise/browser-extension`, `@cuewise/web`, `@cuewise/mobile`
-- **Shared**: `@cuewise/shared`, `@cuewise/storage`, `@cuewise/ui`, `@cuewise/test-utils`
+- **Apps**: `@cuewise/browser-extension`, `@cuewise/api`, `@cuewise/web`, `@cuewise/mobile`
+- **Shared**: `@cuewise/shared`, `@cuewise/storage`, `@cuewise/ui`, `@cuewise/test-utils`, `@cuewise/sync-client`
 - **Scope**: Always use `@cuewise/` prefix
 
 ## Version Control
@@ -633,10 +645,12 @@ pnpm --filter @cuewise/browser-extension dev
 - [README.md](./README.md) - User-facing documentation
 - [ARCHITECTURE.md](./ARCHITECTURE.md) - Detailed architecture guide
 - [LINTING.md](./LINTING.md) - Biome setup and usage
+- [apps/api/CLAUDE.md](./apps/api/CLAUDE.md) - Cloud-sync backend (Cloudflare Worker + D1)
+- [packages/sync-client/CLAUDE.md](./packages/sync-client/CLAUDE.md) - Cloud-sync API client (used by the extension and Tauri app)
 - [Biome Docs](https://biomejs.dev/) - Linting/formatting reference
 - [Zustand Docs](https://docs.pmnd.rs/zustand) - State management
 - [Turbo Docs](https://turbo.build/repo) - Monorepo build system
 
 ---
 
-**Last Updated**: 2026-03-31
+**Last Updated**: 2026-07-11

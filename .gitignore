@@ -145,6 +145,12 @@ vite.config.ts.timestamp-*
 dist/
 build/
 
+# Wrangler dev build artifacts (apps/api and any future Workers)
+.wrangler/
+
+# Wrangler local secrets (apps/api and any future Workers) — never commit
+.dev.vars
+
 # Playwright MCP screenshots and artifacts
 .playwright-mcp/
 

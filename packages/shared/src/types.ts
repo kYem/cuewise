@@ -552,3 +552,21 @@ export interface BulkImportResult {
   failed: number;
   errors: string[];
 }
+
+// Cloud sync wire types (ENG-43)
+export interface PushRecord {
+  collection: string;
+  entityId: string;
+  ciphertext: string;
+  clientUpdatedAt: number;
+  deleted: boolean;
+}
+
+export interface SyncRecord extends PushRecord {
+  seq: number;
+}
+
+/** codeVerifier is required for apple (PKCE); google/dev exchanges don't use it. */
+export type ExchangeTokenRequest =
+  | { provider: 'google' | 'dev'; credential: string; deviceName: string }
+  | { provider: 'apple'; credential: string; deviceName: string; codeVerifier: string };
