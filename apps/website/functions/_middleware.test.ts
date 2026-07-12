@@ -22,7 +22,7 @@ describe('applySecurityHeaders', () => {
     const response = applySecurityHeaders('/player.html', makeUpstreamResponse());
     const csp = response.headers.get('Content-Security-Policy');
     expect(csp).toBe(
-      "default-src 'none'; script-src 'self'; style-src 'self'; frame-src https://www.youtube-nocookie.com; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors chrome-extension://abjkbnhoepcnmbabflkedbapbldnpkbf tauri://localhost http://localhost:1420"
+      "default-src 'none'; script-src 'self'; style-src 'self'; frame-src https://www.youtube-nocookie.com; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors chrome-extension://abjkbnhoepcnmbabflkedbapbldnpkbf tauri://localhost"
     );
   });
 
@@ -35,13 +35,31 @@ describe('applySecurityHeaders', () => {
     );
   });
 
-  it('lists all three legitimate embedder origins in frame-ancestors', () => {
+  it('lists both production embedder origins in frame-ancestors by default', () => {
     const csp = applySecurityHeaders('/player', makeUpstreamResponse()).headers.get(
       'Content-Security-Policy'
     );
     expect(csp).toContain('chrome-extension://abjkbnhoepcnmbabflkedbapbldnpkbf');
     expect(csp).toContain('tauri://localhost');
+  });
+
+  it('omits the localhost dev origin from the default (non-localhost) player CSP', () => {
+    const csp = applySecurityHeaders('/player', makeUpstreamResponse()).headers.get(
+      'Content-Security-Policy'
+    );
+    expect(csp).not.toContain('http://localhost:1420');
+  });
+
+  it('adds the localhost dev origin to the player CSP for a request served from localhost', () => {
+    const csp = applySecurityHeaders(
+      '/player',
+      makeUpstreamResponse(),
+      undefined,
+      true
+    ).headers.get('Content-Security-Policy');
     expect(csp).toContain('http://localhost:1420');
+    expect(csp).toContain('chrome-extension://abjkbnhoepcnmbabflkedbapbldnpkbf');
+    expect(csp).toContain('tauri://localhost');
   });
 
   it('sets exactly one Content-Security-Policy header value on the site', () => {
@@ -102,5 +120,27 @@ describe('onRequest', () => {
     expect(response.headers.get('Content-Security-Policy')).toContain(
       'frame-src https://www.youtube-nocookie.com'
     );
+  });
+
+  it('includes the localhost dev origin for a request served from localhost', async () => {
+    const response = await onRequest({
+      request: new Request('http://localhost:8788/player'),
+      next: () => Promise.resolve(makeUpstreamResponse()),
+    });
+    const csp = response.headers.get('Content-Security-Policy');
+    expect(csp).toContain('http://localhost:1420');
+    expect(csp).toContain('chrome-extension://abjkbnhoepcnmbabflkedbapbldnpkbf');
+    expect(csp).toContain('tauri://localhost');
+  });
+
+  it('omits the localhost dev origin for a request served from cuewise.app', async () => {
+    const response = await onRequest({
+      request: new Request('https://cuewise.app/player'),
+      next: () => Promise.resolve(makeUpstreamResponse()),
+    });
+    const csp = response.headers.get('Content-Security-Policy');
+    expect(csp).not.toContain('http://localhost:1420');
+    expect(csp).toContain('chrome-extension://abjkbnhoepcnmbabflkedbapbldnpkbf');
+    expect(csp).toContain('tauri://localhost');
   });
 });
