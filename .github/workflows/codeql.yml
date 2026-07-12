@@ -76,7 +76,8 @@ jobs:
           build-mode: none
           # Test helpers face no untrusted input; excluded so a hardened-but-CodeQL-
           # unrecognized guard (custom path-containment check) doesn't red the gate.
-          # scripts/ is local operator tooling (run by hand, never shipped or CI-executed).
+          # chrome-oauth-token.mts is a hand-run local tool that prints a token to its
+          # operator by design; other scripts/ (e.g. publish-chrome.mts, CI-run) stay scanned.
           config: |
             paths-ignore:
               - '**/e2e/**'
@@ -84,7 +85,7 @@ jobs:
               - '**/*.spec.ts'
               - '**/__tests__/**'
               - '**/__fixtures__/**'
-              - 'scripts/**'
+              - 'scripts/chrome-oauth-token.mts'
       - name: Analyze
         uses: github/codeql-action/analyze@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.37.0
         with:
