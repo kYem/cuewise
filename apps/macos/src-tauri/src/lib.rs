@@ -1,4 +1,5 @@
 mod error;
+mod glow;
 mod posture;
 mod scheduler;
 mod tray;
@@ -44,7 +45,9 @@ pub fn run() {
             tray::set_tray_menu,
             posture::start_posture,
             posture::stop_posture,
-            posture::calibrate_posture
+            posture::calibrate_posture,
+            glow::show_glow,
+            glow::hide_glow
         ])
         .setup(|app| {
             // Initial menu; the webview replaces it with live status (and the
@@ -76,8 +79,14 @@ pub fn run() {
                     "show" => reveal(app, None),
                     "insights" => reveal(app, Some("insights")),
                     "quit" => app.exit(0),
-                    // Pomodoro controls live in the webview store; relay the click.
-                    "pause" | "resume" | "start" => {
+                    // Pomodoro/posture controls live in the webview; relay the click.
+                    "pause"
+                    | "resume"
+                    | "start"
+                    | "posture-snooze"
+                    | "posture-pause-1h"
+                    | "posture-pause"
+                    | "posture-resume-nudges" => {
                         let _ = app.emit("tray://action", event.id.as_ref().to_string());
                     }
                     _ => {}

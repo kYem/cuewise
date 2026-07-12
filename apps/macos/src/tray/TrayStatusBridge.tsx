@@ -15,7 +15,7 @@ import { getPomodoroSessions } from '@cuewise/storage';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { useEffect } from 'react';
-import { usePosture } from '../posture/posture-controller';
+import { pausePostureNudges, resumePostureNudges, usePosture } from '../posture/posture-controller';
 
 /**
  * Projects the (single-webview) Pomodoro + reminder state onto the native
@@ -84,8 +84,22 @@ export function TrayStatusBridge(): null {
     postureDot = postureMeta.dot;
     postureLine = `${postureMeta.dot} ${postureMeta.label}`;
   }
+  const pausedUntil = posture.nudgesPausedUntil;
+  let pausedLine: string | null = null;
+  if (posture.tracking && pausedUntil !== null) {
+    if (pausedUntil === 'until-resume') {
+      pausedLine = '💤 Posture nudges paused · until resumed';
+    } else {
+      const at = new Date(pausedUntil).toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+      pausedLine = `💤 Posture nudges paused · until ${at}`;
+    }
+  }
+  const postureControlsEnabled = posture.tracking && posture.nudgesEnabled;
 
-  // Relay Pomodoro control clicks from the native tray menu into the store.
+  // Relay Pomodoro/posture control clicks from the native tray menu.
   useEffect(() => {
     const unlisten = listen<string>('tray://action', (event) => {
       const store = usePomodoroStore.getState();
@@ -98,6 +112,18 @@ export function TrayStatusBridge(): null {
           break;
         case 'start':
           store.start();
+          break;
+        case 'posture-snooze':
+          pausePostureNudges(10);
+          break;
+        case 'posture-pause-1h':
+          pausePostureNudges(60);
+          break;
+        case 'posture-pause':
+          pausePostureNudges('until-resume');
+          break;
+        case 'posture-resume-nudges':
+          resumePostureNudges();
           break;
         default:
           break;
@@ -171,13 +197,38 @@ export function TrayStatusBridge(): null {
       if (postureLine) {
         info = [postureLine, ...info];
       }
+      if (pausedLine) {
+        info = [...info, pausedLine];
+      }
+      // Nudge escape hatches must be reachable without opening the app (ENG-40).
+      if (postureControlsEnabled) {
+        if (pausedUntil !== null) {
+          actions = [...actions, { id: 'posture-resume-nudges', label: 'Resume posture nudges' }];
+        } else {
+          actions = [
+            ...actions,
+            { id: 'posture-snooze', label: 'Snooze posture nudges · 10 min' },
+            { id: 'posture-pause-1h', label: 'Pause posture nudges · 1 hour' },
+            { id: 'posture-pause', label: 'Pause posture nudges · until I resume' },
+          ];
+        }
+      }
       await invoke('set_tray_menu', { info, actions });
     };
     build().catch((error) => logger.error('Failed to build tray menu', error));
     return () => {
       cancelled = true;
     };
-  }, [status, sessionType, reminderKey, nextReminder, postureLine]);
+  }, [
+    status,
+    sessionType,
+    reminderKey,
+    nextReminder,
+    postureLine,
+    pausedLine,
+    pausedUntil,
+    postureControlsEnabled,
+  ]);
 
   return null;
 }

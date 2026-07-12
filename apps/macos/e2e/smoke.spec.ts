@@ -48,6 +48,13 @@ test('reused extension UI renders on every surface without errors (WebKit)', asy
   await page.waitForTimeout(300);
   await expect(page.getByText(ERROR_BOUNDARY)).toHaveCount(0);
 
+  // The glow-nudge overlay is a document-entry branch (#glow read at load time in
+  // main.tsx), not a client-side route — a hash-only goto is same-document, so
+  // force a real load. Kept last: after this the app document is gone.
+  await page.goto('/#glow');
+  await page.reload();
+  await expect(page.locator('.glow-vignette')).toBeVisible();
+
   expect(errors, `Unexpected console/page errors:\n${errors.join('\n')}`).toEqual([]);
   expect(getEscapedRequests(), 'off-origin requests must never reach the real network').toEqual([]);
 });

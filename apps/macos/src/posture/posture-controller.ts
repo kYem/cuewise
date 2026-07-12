@@ -1,5 +1,5 @@
 import { useFocusModeStore, usePomodoroStore, useToastStore } from '@cuewise/app';
-import { getNotifier, logger, type PostureSample, type PostureStatus } from '@cuewise/shared';
+import { logger, type PostureSample, type PostureStatus } from '@cuewise/shared';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { useSyncExternalStore } from 'react';
@@ -18,6 +18,10 @@ export interface PostureState {
   // the tray doesn't flicker on frame-to-frame jitter (Settings uses live `sample`).
   steadyStatus: PostureStatus | null;
   error: string | null;
+  // The screen-edge glow IS the nudge (ENG-40): up after sustained poor posture,
+  // down the moment posture recovers.
+  glowActive: boolean;
+  nudgesPausedUntil: number | 'until-resume' | null;
 }
 
 let state: PostureState = {
@@ -26,6 +30,8 @@ let state: PostureState = {
   sample: null,
   steadyStatus: null,
   error: null,
+  glowActive: false,
+  nudgesPausedUntil: null,
 };
 const subscribers = new Set<() => void>();
 let unlisteners: UnlistenFn[] = [];
@@ -51,15 +57,13 @@ const KNOWN_STATUSES = Object.keys({
   absent: 0,
 } satisfies Record<PostureStatus, 0>) as PostureStatus[];
 
-// Nudge on sustained poor posture, then cool down so we don't nag.
+// Glow on sustained poor posture; no cooldown — the glow persists until recovery,
+// and a re-trigger after a genuine recovery is correct behavior.
 // Exported so tests exercise the real threshold instead of mirroring it.
 export const NUDGE_AFTER_POOR_SAMPLES = 15; // ~30s at the sidecar's 2s cadence
-const NUDGE_COOLDOWN_MS = 5 * 60 * 1000;
 let poorStreak = 0;
-let lastNudgeAt = 0;
 // Warn the user once per tracking session when a failure would otherwise be silent,
-// without storming a toast on every retry. Both reset in resetDerivation.
-let warnedNudgeUndeliverable = false;
+// without storming a toast on every retry. Reset in resetDerivation.
 let warnedUnreadable = false;
 
 // Debounce the tray status: adopt a new status only after it holds for a few
@@ -72,6 +76,7 @@ let pendingCount = 0;
 // Persist the opt-in preferences (macOS-local) so the toggles stick across launches.
 const ENABLED_KEY = 'cuewise.posture.enabled';
 const NUDGES_KEY = 'cuewise.posture.nudges';
+const NUDGES_PAUSED_KEY = 'cuewise.posture.nudgesPausedUntil';
 
 // A poisoned Rust mutex is an internal bug (a prior panic), not the ordinary
 // camera/permission failure the callers already toast about — flag it distinctly
@@ -113,9 +118,8 @@ function resetDerivation(): void {
   pendingStatus = null;
   pendingCount = 0;
   parseFailures = 0;
-  // Per-session warn latches reset with the session, so a deliberate restart can
+  // Per-session warn latch resets with the session, so a deliberate restart can
   // warn again if the problem persists.
-  warnedNudgeUndeliverable = false;
   warnedUnreadable = false;
 }
 
@@ -171,7 +175,7 @@ async function attachListeners(): Promise<void> {
     } else {
       setState({ sample });
     }
-    maybeNudge(sample);
+    updateNudgeGlow(sample);
     updateSteadyStatus(sample.status);
   });
   let onStopped: UnlistenFn;
@@ -180,6 +184,7 @@ async function attachListeners(): Promise<void> {
       // Reached only for an *unexpected* stop (stopPosture detaches first), so surface
       // the camera/permission failure even with Settings closed. The pref is kept — the
       // camera may be transiently busy — so tracking can still auto-resume next boot.
+      hideGlowIfActive();
       detachListeners();
       resetDerivation();
       const message = 'Posture tracking stopped — camera unavailable or permission denied.';
@@ -252,6 +257,7 @@ export function stopPosture(): void {
     stopRequestedDuringStart = true;
   }
   persist(ENABLED_KEY, false);
+  hideGlowIfActive();
   invoke('stop_posture').catch((error) => {
     logCommandFailure('Failed to stop posture tracking', error);
     useToastStore.getState().error("Couldn't stop posture tracking — the camera may still be on.");
@@ -290,11 +296,30 @@ export function initPosture(): void {
     if (nudges !== null) {
       setState({ nudgesEnabled: nudges === '1' });
     }
+    restorePausedUntil();
     if (localStorage.getItem(ENABLED_KEY) === '1') {
       startPosture();
     }
   } catch (error) {
     logger.error('Failed to restore posture preferences', error);
+  }
+}
+
+// A pause window survives a relaunch; an already-elapsed one is discarded.
+function restorePausedUntil(): void {
+  const paused = localStorage.getItem(NUDGES_PAUSED_KEY);
+  if (paused === null) {
+    return;
+  }
+  if (paused === 'until-resume') {
+    setState({ nudgesPausedUntil: paused });
+    return;
+  }
+  const until = Number(paused);
+  if (Number.isFinite(until) && Date.now() < until) {
+    setState({ nudgesPausedUntil: until });
+  } else {
+    writePausedUntil(null);
   }
 }
 
@@ -305,11 +330,14 @@ export function calibratePosture(): void {
   });
 }
 
-/** Toggle the "remind me when I slouch" nudges. */
+/** Toggle the "remind me when I slouch" glow nudges. */
 export function setPostureNudges(enabled: boolean): void {
   persist(NUDGES_KEY, enabled);
   poorStreak = 0;
   setState({ nudgesEnabled: enabled });
+  if (!enabled) {
+    hideGlowIfActive();
+  }
 }
 
 // Smart Pause (ENG-39): suppress nudges during a running work session, or while the
@@ -322,41 +350,87 @@ function isFocusSessionActive(): boolean {
   return useFocusModeStore.getState().isActive;
 }
 
-// Fire a gentle nudge once poor posture has persisted, then hold off for a while.
-function maybeNudge(sample: PostureSample): void {
-  if (!state.nudgesEnabled || sample.status !== 'poor') {
-    poorStreak = 0;
+function showGlow(): void {
+  setState({ glowActive: true });
+  invoke('show_glow').catch((error) => {
+    // Log-only: the tray dot still mirrors the underlying posture state.
+    logCommandFailure('Failed to show the posture glow', error);
+  });
+}
+
+function hideGlowIfActive(): void {
+  if (!state.glowActive) {
     return;
   }
-  if (isFocusSessionActive()) {
-    // Focus time is neutral: reset rather than freeze the streak, so a pre-focus
-    // lean can't fire a stale nudge the moment the session ends.
+  setState({ glowActive: false });
+  invoke('hide_glow').catch((error) => {
+    logCommandFailure('Failed to hide the posture glow', error);
+  });
+}
+
+function writePausedUntil(value: number | 'until-resume' | null): void {
+  try {
+    if (value === null) {
+      localStorage.removeItem(NUDGES_PAUSED_KEY);
+    } else {
+      localStorage.setItem(NUDGES_PAUSED_KEY, String(value));
+    }
+  } catch (error) {
+    logger.error('Failed to persist the nudge pause', error);
+  }
+  setState({ nudgesPausedUntil: value });
+}
+
+/** Silence glow nudges for a while; tracking and the tray dot keep running. */
+export function pausePostureNudges(duration: 10 | 15 | 60 | 'until-resume'): void {
+  const until = duration === 'until-resume' ? duration : Date.now() + duration * 60_000;
+  writePausedUntil(until);
+  poorStreak = 0;
+  hideGlowIfActive();
+}
+
+/** Lift a pause/snooze; the next sustained-poor streak can glow again. */
+export function resumePostureNudges(): void {
+  writePausedUntil(null);
+}
+
+// Sample-time check — no timers (hidden webviews throttle them; see scheduler.rs).
+// An elapsed window clears itself on the first frame past its deadline.
+function nudgesPaused(): boolean {
+  const pausedUntil = state.nudgesPausedUntil;
+  if (pausedUntil === null) {
+    return false;
+  }
+  if (pausedUntil === 'until-resume' || Date.now() < pausedUntil) {
+    return true;
+  }
+  writePausedUntil(null);
+  return false;
+}
+
+// The glow IS the nudge (ENG-40): up after sustained poor posture, down the moment
+// posture recovers — sitting back is the dismissal.
+function updateNudgeGlow(sample: PostureSample): void {
+  if (sample.status !== 'poor') {
     poorStreak = 0;
+    hideGlowIfActive();
+    return;
+  }
+  if (!state.nudgesEnabled || nudgesPaused() || isFocusSessionActive()) {
+    // Suppressed time is neutral: reset rather than freeze the streak, so a prior
+    // lean can't fire a stale glow the moment suppression lifts.
+    poorStreak = 0;
+    hideGlowIfActive();
+    return;
+  }
+  if (state.glowActive) {
     return;
   }
   poorStreak += 1;
-  const now = Date.now();
-  if (poorStreak < NUDGE_AFTER_POOR_SAMPLES || now - lastNudgeAt < NUDGE_COOLDOWN_MS) {
-    return;
+  if (poorStreak >= NUDGE_AFTER_POOR_SAMPLES) {
+    poorStreak = 0;
+    showGlow();
   }
-  lastNudgeAt = now;
-  poorStreak = 0;
-  getNotifier()
-    .notify({
-      id: 'posture-nudge',
-      title: '🧍 Posture check',
-      body: "You've been leaning in for a while — sit back and reset.",
-    })
-    .catch((error) => {
-      logger.error('Failed to deliver posture nudge', error);
-      lastNudgeAt = 0; // delivery failed — don't spend the cooldown on a missed nudge
-      if (!warnedNudgeUndeliverable) {
-        warnedNudgeUndeliverable = true;
-        useToastStore
-          .getState()
-          .warning("Couldn't deliver a posture reminder — check notification permissions.");
-      }
-    });
 }
 
 function subscribe(callback: () => void): () => void {

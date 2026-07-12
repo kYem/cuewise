@@ -8,7 +8,7 @@ import {
   emitStopped,
   focusModeStateMock,
   invokeMock,
-  notifyMock,
+  NUDGES_PAUSED_KEY,
   pomodoroStateMock,
   resetPostureMocks,
   START_FAILED_ERROR,
@@ -19,7 +19,11 @@ import {
 } from './__fixtures__/posture-controller.fixtures';
 import {
   getPostureState,
+  initPosture,
   NUDGE_AFTER_POOR_SAMPLES,
+  pausePostureNudges,
+  resumePostureNudges,
+  setPostureNudges,
   startPosture,
   stopPosture,
 } from './posture-controller';
@@ -48,17 +52,13 @@ vi.mock('@cuewise/app', async () => {
   };
 });
 
-vi.mock('@cuewise/shared', async () => {
-  const fixtures = await import('./__fixtures__/posture-controller.fixtures');
-  return {
-    logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
-    getNotifier: () => ({ notify: fixtures.notifyMock, clear: vi.fn() }),
-  };
-});
+vi.mock('@cuewise/shared', () => ({
+  logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
+}));
 
 let localStorageStub: ReturnType<typeof createLocalStorageStub>;
-// Each test starts on a fresh clock well past the previous test's nudge, so the
-// module-level nudge cooldown can never bleed across tests.
+// Each test starts on a fresh clock so timestamp-based pause windows can't bleed
+// across tests through module-level state.
 let clock = Date.now();
 
 // One zero-length tick drains the attach-listeners → invoke promise chain.
@@ -71,6 +71,13 @@ async function startTracking(): Promise<void> {
   await flushChain();
   expect(countInvokes('start_posture')).toBe(1);
   expect(getPostureState().tracking).toBe(true);
+}
+
+/** Drive the glow on: a full sustained-poor streak while unsuppressed. */
+async function glowUp(): Promise<void> {
+  emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES);
+  expect(countInvokes('show_glow')).toBe(1);
+  expect(getPostureState().glowActive).toBe(true);
 }
 
 beforeEach(() => {
@@ -86,6 +93,8 @@ afterEach(async () => {
   // The controller keeps module-level session state — tear it down so each
   // test starts from idle.
   stopPosture();
+  resumePostureNudges();
+  setPostureNudges(true);
   await flushChain();
   vi.unstubAllGlobals();
   vi.useRealTimers();
@@ -147,28 +156,165 @@ describe('posture controller lifecycle', () => {
   });
 });
 
-describe('smart pause (focus-session-aware nudging)', () => {
-  it('nudges after sustained poor posture when no focus session is running', async () => {
+describe('glow nudge lifecycle', () => {
+  it('shows the glow after sustained poor posture', async () => {
     await startTracking();
 
-    emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES);
-
-    expect(notifyMock).toHaveBeenCalledWith(expect.objectContaining({ id: 'posture-nudge' }));
+    await glowUp();
   });
 
-  it('never nudges while a work session is running', async () => {
+  it('does not re-invoke show_glow while the glow is already up', async () => {
+    await startTracking();
+    await glowUp();
+
+    emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES * 2);
+
+    expect(countInvokes('show_glow')).toBe(1);
+  });
+
+  it('self-clears the moment posture recovers', async () => {
+    await startTracking();
+    await glowUp();
+
+    emitSampleFrame(JSON.stringify({ status: 'good' }));
+
+    expect(countInvokes('hide_glow')).toBe(1);
+    expect(getPostureState().glowActive).toBe(false);
+  });
+
+  it('self-clears when the user leaves the frame', async () => {
+    await startTracking();
+    await glowUp();
+
+    emitSampleFrame(JSON.stringify({ status: 'absent' }));
+
+    expect(countInvokes('hide_glow')).toBe(1);
+    expect(getPostureState().glowActive).toBe(false);
+  });
+
+  it('a manual stop hides an active glow', async () => {
+    await startTracking();
+    await glowUp();
+
+    stopPosture();
+
+    expect(countInvokes('hide_glow')).toBe(1);
+    expect(getPostureState().glowActive).toBe(false);
+  });
+
+  it('an unexpected sidecar stop hides an active glow', async () => {
+    await startTracking();
+    await glowUp();
+
+    emitStopped();
+
+    expect(countInvokes('hide_glow')).toBe(1);
+    expect(getPostureState().glowActive).toBe(false);
+  });
+
+  it('turning reminders off hides an active glow and suppresses future ones', async () => {
+    await startTracking();
+    await glowUp();
+
+    setPostureNudges(false);
+    expect(countInvokes('hide_glow')).toBe(1);
+    expect(getPostureState().glowActive).toBe(false);
+
+    emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES * 2);
+    expect(countInvokes('show_glow')).toBe(1);
+  });
+});
+
+describe('snooze and pause', () => {
+  it('a snoozed window suppresses the glow and resets the streak', async () => {
+    await startTracking();
+    emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES - 1);
+
+    pausePostureNudges(10);
+    emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES * 2);
+
+    expect(countInvokes('show_glow')).toBe(0);
+    expect(getPostureState().nudgesPausedUntil).toBe(Date.now() + 10 * 60_000);
+    expect(localStorageStub.getItem(NUDGES_PAUSED_KEY)).toBe(String(Date.now() + 10 * 60_000));
+  });
+
+  it('the glow re-arms after the snooze window expires', async () => {
+    await startTracking();
+    pausePostureNudges(10);
+
+    await vi.advanceTimersByTimeAsync(10 * 60_000 + 1);
+    emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES);
+
+    expect(countInvokes('show_glow')).toBe(1);
+    expect(getPostureState().nudgesPausedUntil).toBeNull();
+    expect(localStorageStub.getItem(NUDGES_PAUSED_KEY)).toBeNull();
+  });
+
+  it('pause until-resume holds indefinitely and clears on resume', async () => {
+    await startTracking();
+    pausePostureNudges('until-resume');
+
+    await vi.advanceTimersByTimeAsync(24 * 60 * 60_000);
+    emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES * 2);
+    expect(countInvokes('show_glow')).toBe(0);
+    expect(localStorageStub.getItem(NUDGES_PAUSED_KEY)).toBe('until-resume');
+
+    resumePostureNudges();
+    expect(getPostureState().nudgesPausedUntil).toBeNull();
+    expect(localStorageStub.getItem(NUDGES_PAUSED_KEY)).toBeNull();
+
+    emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES);
+    expect(countInvokes('show_glow')).toBe(1);
+  });
+
+  it('pausing while the glow is up hides it immediately', async () => {
+    await startTracking();
+    await glowUp();
+
+    pausePostureNudges(15);
+
+    expect(countInvokes('hide_glow')).toBe(1);
+    expect(getPostureState().glowActive).toBe(false);
+  });
+
+  it('a persisted pause window is restored on init', async () => {
+    localStorageStub.setItem(ENABLED_KEY, '1');
+    localStorageStub.setItem(NUDGES_PAUSED_KEY, String(Date.now() + 30 * 60_000));
+
+    initPosture();
+    await flushChain();
+    expect(getPostureState().tracking).toBe(true);
+
+    emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES * 2);
+    expect(countInvokes('show_glow')).toBe(0);
+  });
+
+  it('an expired persisted pause window is discarded on init', async () => {
+    localStorageStub.setItem(ENABLED_KEY, '1');
+    localStorageStub.setItem(NUDGES_PAUSED_KEY, String(Date.now() - 1));
+
+    initPosture();
+    await flushChain();
+
+    expect(getPostureState().nudgesPausedUntil).toBeNull();
+    expect(localStorageStub.getItem(NUDGES_PAUSED_KEY)).toBeNull();
+  });
+});
+
+describe('smart pause (focus-session-aware nudging)', () => {
+  it('never glows while a work session is running', async () => {
     pomodoroStateMock.status = 'running';
     pomodoroStateMock.sessionType = 'work';
     await startTracking();
 
     emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES * 3);
 
-    expect(notifyMock).not.toHaveBeenCalled();
+    expect(countInvokes('show_glow')).toBe(0);
   });
 
-  it('a focus block resets a pre-focus streak — no stale nudge when the session ends', async () => {
+  it('a focus block resets a pre-focus streak — no stale glow when the session ends', async () => {
     await startTracking();
-    emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES - 1); // one frame short of a nudge
+    emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES - 1); // one frame short of the glow
 
     pomodoroStateMock.status = 'running';
     emitPoorFrames(1); // suppressed, and must reset (not freeze) the streak
@@ -176,28 +322,40 @@ describe('smart pause (focus-session-aware nudging)', () => {
 
     emitPoorFrames(1);
     // A frozen streak would fire right here (14 pre-focus + 1) — reset must not.
-    expect(notifyMock).not.toHaveBeenCalled();
+    expect(countInvokes('show_glow')).toBe(0);
 
     emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES - 1);
-    expect(notifyMock).toHaveBeenCalledWith(expect.objectContaining({ id: 'posture-nudge' }));
+    expect(countInvokes('show_glow')).toBe(1);
   });
 
-  it('still nudges during a break when the focus-mode surface is not open', async () => {
+  it('starting a work session hides an active glow', async () => {
+    await startTracking();
+    await glowUp();
+
+    pomodoroStateMock.status = 'running';
+    pomodoroStateMock.sessionType = 'work';
+    emitPoorFrames(1);
+
+    expect(countInvokes('hide_glow')).toBe(1);
+    expect(getPostureState().glowActive).toBe(false);
+  });
+
+  it('still glows during a break when the focus-mode surface is not open', async () => {
     pomodoroStateMock.status = 'running';
     pomodoroStateMock.sessionType = 'break';
     await startTracking();
 
     emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES);
 
-    expect(notifyMock).toHaveBeenCalledWith(expect.objectContaining({ id: 'posture-nudge' }));
+    expect(countInvokes('show_glow')).toBe(1);
   });
 
-  it('never nudges while the focus-mode surface is open, even with the timer idle', async () => {
+  it('never glows while the focus-mode surface is open, even with the timer idle', async () => {
     focusModeStateMock.isActive = true;
     await startTracking();
 
     emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES * 3);
 
-    expect(notifyMock).not.toHaveBeenCalled();
+    expect(countInvokes('show_glow')).toBe(0);
   });
 });

@@ -15,6 +15,9 @@ pub enum Error {
     /// A shared `Mutex` was poisoned by a thread that panicked while holding it.
     #[error("internal state is poisoned")]
     StatePoisoned,
+    /// A Tauri runtime/window operation failed (e.g. managing the glow overlays).
+    #[error("window operation failed: {0}")]
+    Window(#[from] tauri::Error),
 }
 
 impl Error {
@@ -22,6 +25,7 @@ impl Error {
         match self {
             Error::Sidecar(_) => "sidecar",
             Error::StatePoisoned => "state_poisoned",
+            Error::Window(_) => "window",
         }
     }
 }

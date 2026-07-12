@@ -12,7 +12,6 @@ export const unlistenSpies: Array<ReturnType<typeof vi.fn>> = [];
 export const invokeMock = vi.fn();
 export const toastErrorMock = vi.fn();
 export const toastWarningMock = vi.fn();
-export const notifyMock = vi.fn();
 
 /** Mutable stand-ins for the pomodoro / focus-mode store snapshots (Smart Pause). */
 export const pomodoroStateMock = { status: 'idle', sessionType: 'work' };
@@ -35,8 +34,6 @@ export function resetPostureMocks(): void {
   invokeMock.mockResolvedValue(undefined);
   toastErrorMock.mockReset();
   toastWarningMock.mockReset();
-  notifyMock.mockReset();
-  notifyMock.mockResolvedValue(undefined);
   pomodoroStateMock.status = 'idle';
   pomodoroStateMock.sessionType = 'work';
   focusModeStateMock.isActive = false;
@@ -57,6 +54,7 @@ export function createLocalStorageStub(): Pick<Storage, 'getItem' | 'setItem' | 
 }
 
 export const ENABLED_KEY = 'cuewise.posture.enabled';
+export const NUDGES_PAUSED_KEY = 'cuewise.posture.nudgesPausedUntil';
 
 // User-facing messages asserted on — must mirror posture-controller.ts.
 export const STOPPED_ERROR = 'Posture tracking stopped — camera unavailable or permission denied.';
