@@ -22,6 +22,9 @@ const CONFIG_PATH = path.join(ROOT, 'src-tauri/tauri.conf.json');
 const PORT = 4173;
 const BASE_URL = `http://localhost:${PORT}`;
 
+// connect-src only lists origins with a real fetch/XHR today. ENG-43 must add
+// https://api.cuewise.app here specifically (not a wildcard) for the sync client.
+
 // A playlist id that is NOT one of DEFAULT_YOUTUBE_PLAYLISTS, so addCustomPlaylist()
 // actually calls fetchPlaylistMetadata() (the oEmbed + fallback-page connect-src
 // paths) instead of short-circuiting with the "already added" toast.
@@ -78,6 +81,20 @@ test('production build reports zero CSP violations across every surface (WebKit)
       await page.goto(`${BASE_URL}/${route}`);
       await page.waitForTimeout(300);
     }
+  });
+
+  await test.step('quick links: adding a link requests a favicon (img-src)', async () => {
+    // showQuickLinks defaults to true, so this exercises a default-on surface.
+    // google's favicon endpoint 302s to a *.gstatic.com host, and CSP checks the
+    // redirect target too — img-src needs both origins, not just google.com.
+    await page.getByRole('button', { name: 'Add a quick link' }).click();
+    // Scoped to the dropdown menu — GoalInput on the same page has its own
+    // disabled "Add" button that would otherwise make this locator ambiguous.
+    const menu = page.getByRole('menu');
+    await menu.getByRole('button', { name: 'Add link' }).click();
+    await page.getByPlaceholder('example.com').fill('https://github.com');
+    await menu.getByRole('button', { name: 'Add', exact: true }).click();
+    await expect(page.getByPlaceholder('example.com')).toHaveCount(0);
   });
 
   await test.step('open Settings', async () => {
