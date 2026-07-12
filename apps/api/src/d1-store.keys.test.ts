@@ -1,10 +1,7 @@
 import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
+import { newUser } from './__fixtures__/api-test-helpers.fixtures';
 import { D1SyncStore } from './d1-store';
-
-async function newUser(store: D1SyncStore, providerSub: string): Promise<string> {
-  return store.findOrCreateUser({ provider: 'dev', providerSub });
-}
 
 describe('D1SyncStore key envelopes', () => {
   it('returns null before any envelope is stored', async () => {

@@ -17,6 +17,10 @@ export async function signedInToken(
   return { token, userId, providerSub };
 }
 
+export async function newUser(store: D1SyncStore, providerSub: string): Promise<string> {
+  return store.findOrCreateUser({ provider: 'dev', providerSub });
+}
+
 export function record(overrides: Partial<PushRecord> = {}): PushRecord {
   return {
     collection: 'quotes',
