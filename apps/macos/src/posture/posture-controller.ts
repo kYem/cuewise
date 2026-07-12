@@ -199,6 +199,11 @@ export function startPosture(): void {
     .catch((error) => {
       detachListeners();
       logger.error('Failed to start posture tracking', error);
+      // If the user asked to stop mid-start, the failure is moot — don't surface a
+      // start-error toast for a session they already turned off.
+      if (stopRequestedDuringStart) {
+        return;
+      }
       // Nothing renders the panel error when Settings is closed (e.g. auto-resume
       // at launch), so surface it and clear the pref rather than retry every boot.
       persist(ENABLED_KEY, false);

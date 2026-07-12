@@ -24,7 +24,11 @@ pub struct PostureState {
 /// if it's already running. The camera prompt is raised by the sidecar on start.
 #[tauri::command]
 pub fn start_posture(app: AppHandle, state: State<'_, PostureState>) -> Result<(), String> {
-    if state.child.lock().map_err(|e| e.to_string())?.is_some() {
+    // Hold the lock across the whole check-spawn-store sequence. Otherwise a
+    // stop_posture landing between the is_some() check and storing the child would
+    // take() nothing, and the just-spawned sidecar (camera) would stay running.
+    let mut guard = state.child.lock().map_err(|e| e.to_string())?;
+    if guard.is_some() {
         return Ok(());
     }
 
@@ -35,9 +39,8 @@ pub fn start_posture(app: AppHandle, state: State<'_, PostureState>) -> Result<(
         .spawn()
         .map_err(|e| e.to_string())?;
 
-    if let Ok(mut guard) = state.child.lock() {
-        *guard = Some(child);
-    }
+    *guard = Some(child);
+    drop(guard); // release before the async relay task, which also locks on Terminated
 
     let task_app = app.clone();
     tauri::async_runtime::spawn(async move {
