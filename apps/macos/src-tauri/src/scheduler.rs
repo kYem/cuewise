@@ -124,12 +124,27 @@ pub fn cancel_wake(state: State<'_, SchedulerState>, id: String) -> Result<(), E
 
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::AtomicBool;
+    use std::sync::Arc;
+
     use super::*;
 
     /// A cheap, real `JoinHandle<()>` for entries under test — `SchedulerState`
     /// stores Tauri's async-runtime handle type, not a mock-friendly trait object.
     fn handle() -> JoinHandle<()> {
         spawn(async {})
+    }
+
+    /// A handle whose task flips a shared flag after `delay` — lets a test observe
+    /// whether the task actually ran (survived) or was aborted (never touched it).
+    fn flag_after_delay(delay: Duration) -> (JoinHandle<()>, Arc<AtomicBool>) {
+        let ran = Arc::new(AtomicBool::new(false));
+        let flag = ran.clone();
+        let handle = spawn(async move {
+            tokio::time::sleep(delay).await;
+            flag.store(true, Ordering::SeqCst);
+        });
+        (handle, ran)
     }
 
     #[test]
@@ -145,6 +160,25 @@ mod tests {
         assert!(
             state.insert("id".into(), epoch2, handle()).is_ok(),
             "re-arming an existing id must succeed"
+        );
+    }
+
+    #[test]
+    fn insert_aborts_the_task_it_replaces() {
+        let state = SchedulerState::default();
+
+        let epoch1 = state.next_epoch();
+        let (doomed, ran) = flag_after_delay(Duration::from_millis(30));
+        assert!(state.insert("id".into(), epoch1, doomed).is_ok());
+
+        // Replacing the entry must abort the task above before its delay elapses.
+        let epoch2 = state.next_epoch();
+        assert!(state.insert("id".into(), epoch2, handle()).is_ok());
+
+        std::thread::sleep(Duration::from_millis(100));
+        assert!(
+            !ran.load(Ordering::SeqCst),
+            "insert must abort the replaced task, not just forget it"
         );
     }
 
@@ -198,9 +232,41 @@ mod tests {
     }
 
     #[test]
+    fn cancel_aborts_the_task() {
+        let state = SchedulerState::default();
+
+        let epoch = state.next_epoch();
+        let (doomed, ran) = flag_after_delay(Duration::from_millis(30));
+        assert!(state.insert("id".into(), epoch, doomed).is_ok());
+
+        assert!(state.cancel("id").is_ok());
+
+        std::thread::sleep(Duration::from_millis(100));
+        assert!(
+            !ran.load(Ordering::SeqCst),
+            "cancel must abort the task, not just drop its handle"
+        );
+    }
+
+    #[test]
     fn cancel_unknown_id_is_a_noop() {
         let state = SchedulerState::default();
         assert!(state.cancel("never-scheduled").is_ok());
+    }
+
+    #[test]
+    fn cancel_leaves_other_ids_intact() {
+        let state = SchedulerState::default();
+
+        let epoch_a = state.next_epoch();
+        assert!(state.insert("a".into(), epoch_a, handle()).is_ok());
+
+        assert!(state.cancel("b").is_ok());
+
+        assert!(
+            state.remove_if_current("a", epoch_a),
+            "cancelling an unrelated id must leave a's entry pending"
+        );
     }
 
     #[test]
