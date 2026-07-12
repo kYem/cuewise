@@ -68,16 +68,19 @@ jobs:
         if: github.event_name != 'pull_request'
         run: pnpm exec turbo run type-check test build
 
-  # Decide whether the macOS Tauri app's Rust/Swift changed, so the `rust` job
-  # below (needs a macOS runner, ~10x the cost of Linux) only runs when it must.
-  # Mirrors the native-analysis gate in codeql.yml.
+  # Decide whether the macOS app changed, and how much of it, so each downstream
+  # job only runs when its own surface is touched. `native` is narrow (only what
+  # can affect the Rust/Swift build); `macos_app` is the whole app (TS/UI/e2e
+  # included) for the Playwright job below. Mirrors the native-analysis gate in
+  # codeql.yml.
   changes:
     name: Detect macOS app changes
     runs-on: ubuntu-latest
     permissions:
       contents: read
     outputs:
-      macos: ${{ steps.filter.outputs.macos }}
+      native: ${{ steps.filter.outputs.native }}
+      macos_app: ${{ steps.filter.outputs.macos_app }}
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -89,10 +92,16 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
-          if git diff --name-only "$BASE_SHA"...HEAD | grep -qE '^(apps/macos/|\.github/workflows/ci\.yml)'; then
-            echo "macos=true" >> "$GITHUB_OUTPUT"
+          CHANGED=$(git diff --name-only "$BASE_SHA"...HEAD)
+          if grep -qE '^(apps/macos/src-tauri/|apps/macos/posture-sidecar/|apps/macos/scripts/build-sidecar\.sh|\.github/workflows/ci\.yml)' <<< "$CHANGED"; then
+            echo "native=true" >> "$GITHUB_OUTPUT"
           else
-            echo "macos=false" >> "$GITHUB_OUTPUT"
+            echo "native=false" >> "$GITHUB_OUTPUT"
+          fi
+          if grep -qE '^(apps/macos/|\.github/workflows/ci\.yml)' <<< "$CHANGED"; then
+            echo "macos_app=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "macos_app=false" >> "$GITHUB_OUTPUT"
           fi
 
   # Rust/Swift checks for the macOS Tauri app. Needs a macOS runner because the
@@ -102,7 +111,7 @@ jobs:
   rust:
     name: Rust (macOS app)
     needs: changes
-    if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.macos == 'true' }}
+    if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.native == 'true' }}
     runs-on: macos-latest
     permissions:
       contents: read
@@ -144,3 +153,43 @@ jobs:
 
       - name: Run tests
         run: cargo test
+
+  # Playwright e2e (smoke + csp) for the macOS app's reused web UI. No Rust/Swift
+  # build involved: playwright.config.ts's webServer runs vite directly, and
+  # csp.spec.ts serves its own static build with the header — so this stays on
+  # the cheap Linux runner instead of needing the macOS `rust` job's toolchain.
+  e2e:
+    name: E2E (macOS app)
+    needs: changes
+    if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.macos_app == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Harden runner
+        # Audit only: Playwright's browser download + apt install-deps hit enough
+        # endpoints that a correct allowlist isn't known yet; tighten once traced.
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright webkit
+        run: pnpm --filter @cuewise/macos exec playwright install --with-deps webkit
+
+      - name: Run e2e (smoke + csp)
+        run: pnpm --filter @cuewise/macos e2e
