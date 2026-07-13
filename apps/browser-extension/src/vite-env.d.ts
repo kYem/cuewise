@@ -4,6 +4,12 @@ interface ImportMetaEnv {
   // Dev-only opt-in to preview the calendar companion in the Vite dev server
   // (Connect is unavailable there). Ignored in production builds.
   readonly VITE_CALENDAR_PREVIEW?: string;
+  // Dev-only opt-in to run the ENG-45 cloud-sync engine. Off by default — no
+  // enable-sync UI ships yet, so this only self-heals/resumes a session enabled
+  // some other way (e.g. devtools). Never set in production.
+  readonly VITE_CLOUD_SYNC?: string;
+  // Cloud-sync API origin, used only when VITE_CLOUD_SYNC is on.
+  readonly VITE_SYNC_API_BASE_URL?: string;
 }
 
 declare const __APP_VERSION__: string;

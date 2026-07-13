@@ -198,6 +198,12 @@ importers:
       '@cuewise/storage':
         specifier: workspace:*
         version: link:../../packages/storage
+      '@cuewise/sync-client':
+        specifier: workspace:*
+        version: link:../../packages/sync-client
+      '@cuewise/sync-engine':
+        specifier: workspace:*
+        version: link:../../packages/sync-engine
       '@cuewise/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -310,6 +316,12 @@ importers:
       '@cuewise/storage':
         specifier: workspace:*
         version: link:../../packages/storage
+      '@cuewise/sync-client':
+        specifier: workspace:*
+        version: link:../../packages/sync-client
+      '@cuewise/sync-engine':
+        specifier: workspace:*
+        version: link:../../packages/sync-engine
       '@cuewise/ui':
         specifier: workspace:*
         version: link:../../packages/ui

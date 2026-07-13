@@ -3,6 +3,7 @@ export {
   DEVICE_LOCAL_SETTINGS_KEYS,
   defaultBindings,
 } from './collections';
+export { type CreateSyncEngineOptions, createSyncEngine } from './create-engine';
 export { type CycleDeps, pullOnce, pushOnce, type SyncTransport } from './cycle';
 export {
   CLOUD_SYNC_ENABLED_KEY,

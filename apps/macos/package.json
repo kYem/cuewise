@@ -20,6 +20,8 @@
     "@cuewise/app": "workspace:*",
     "@cuewise/shared": "workspace:*",
     "@cuewise/storage": "workspace:*",
+    "@cuewise/sync-client": "workspace:*",
+    "@cuewise/sync-engine": "workspace:*",
     "@cuewise/ui": "workspace:*",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-notification": "^2",

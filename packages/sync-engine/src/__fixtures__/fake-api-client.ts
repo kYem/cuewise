@@ -49,7 +49,12 @@ export class FakeSyncServer {
   }
 
   getChanges(since: number): { records: SyncRecord[]; cursor: number } {
-    const page = this.records.filter((r) => r.seq > since).slice(0, PULL_PAGE);
+    // Real D1 always does `ORDER BY seq ASC` (records is upsert-per-entity, so array insertion
+    // order drifts from seq order once an entity is pushed a second time) — sort to match.
+    const page = this.records
+      .filter((r) => r.seq > since)
+      .sort((a, b) => a.seq - b.seq)
+      .slice(0, PULL_PAGE);
     const cursor = page.length > 0 ? page[page.length - 1].seq : since;
     return { records: page, cursor };
   }
