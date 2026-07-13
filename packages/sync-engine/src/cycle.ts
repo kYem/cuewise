@@ -1,9 +1,17 @@
-import type { DataKey } from '@cuewise/crypto';
-import { logger, type PushRecord, type SyncRecord } from '@cuewise/shared';
+import { type DataKey, DecryptError, EnvelopeParseError } from '@cuewise/crypto';
+import {
+  hlcDecode,
+  hlcEncode,
+  hlcReceive,
+  logger,
+  type PushRecord,
+  type SyncRecord,
+} from '@cuewise/shared';
+import { ApiError } from '@cuewise/sync-client';
 import type { CollectionBinding } from './collections';
 import { type SyncMeta, SyncMetadataStore } from './metadata-store';
-import { toPushRecord } from './record-map';
-import type { RecordBody } from './strategy';
+import { fromSyncRecord, toPushRecord } from './record-map';
+import type { ConflictStrategy, RecordBody } from './strategy';
 
 // Structural subset of ApiClient — the cycle only needs these two calls.
 export interface SyncTransport {
@@ -17,9 +25,15 @@ export interface CycleDeps {
   bindings: CollectionBinding[];
   dk: DataKey;
   keyId: string;
+  strategy: ConflictStrategy;
+  now?: () => number;
+  onQuarantine?: (key: string) => void;
 }
 
 const MAX_PUSH_BATCH = 100;
+// Must match the server's MAX_CHANGES_PAGE_SIZE (apps/api/src/d1-store.ts) — a page this size
+// signals "more to fetch", so pullOnce loops again.
+export const PULL_PAGE = 500;
 
 interface DirtyRecord {
   collection: string;
@@ -87,5 +101,113 @@ function clearAcked(meta: SyncMeta, batch: DirtyRecord[]): void {
 
     const key = SyncMetadataStore.entityKey(collection, entityId);
     meta.tombstones = meta.tombstones.filter((t) => t !== key);
+  }
+}
+
+/** Pulls remote changes in seq order, resolves each via the strategy, and applies the winners. */
+export async function pullOnce(deps: CycleDeps): Promise<void> {
+  const meta = await deps.meta.load();
+
+  let pageSize = PULL_PAGE;
+  while (pageSize === PULL_PAGE) {
+    let result: { records: SyncRecord[]; cursor: number };
+    try {
+      result = await deps.transport.getChanges(meta.cursor);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409 && err.code === 'resync_required') {
+        meta.cursor = 0;
+        await deps.meta.save(meta);
+        return;
+      }
+      throw err;
+    }
+    pageSize = result.records.length;
+
+    for (const rec of result.records) {
+      const applied = await applyPulledRecord(deps, meta, rec);
+      if (!applied) {
+        // Apply-before-advance: the write failed, so stop here and leave the cursor before it.
+        await deps.meta.save(meta);
+        return;
+      }
+    }
+  }
+
+  await deps.meta.save(meta);
+}
+
+/** Applies one pulled record to meta/storage. Returns false to signal "stop the cycle here". */
+async function applyPulledRecord(
+  deps: CycleDeps,
+  meta: SyncMeta,
+  rec: SyncRecord
+): Promise<boolean> {
+  const key = SyncMetadataStore.entityKey(rec.collection, rec.entityId);
+
+  let incoming: RecordBody;
+  try {
+    incoming = (await fromSyncRecord(deps.dk, rec)).body;
+  } catch (err) {
+    if (!(err instanceof DecryptError || err instanceof EnvelopeParseError)) {
+      throw err;
+    }
+    if (!meta.quarantine.includes(key)) {
+      meta.quarantine.push(key);
+      deps.onQuarantine?.(key);
+      // Metadata only — collection/entityId/seq — never the ciphertext or decoded payload.
+      logger.warn('Quarantined undecryptable sync record', {
+        collection: rec.collection,
+        entityId: rec.entityId,
+        seq: rec.seq,
+      });
+    }
+    advanceCursor(meta, rec.seq);
+    return true;
+  }
+
+  const binding = deps.bindings.find((b) => b.name === rec.collection);
+  if (binding === undefined) {
+    logger.warn('Skipping pulled record for unknown collection', { collection: rec.collection });
+    advanceCursor(meta, rec.seq);
+    return true;
+  }
+
+  const all = await binding.readAll();
+  const localEntity = all[rec.entityId];
+  const localHlc = meta.hlcs[key];
+  const local: RecordBody | null =
+    localHlc === undefined && localEntity === undefined
+      ? null
+      : { entity: localEntity ?? null, hlc: localHlc };
+
+  const resolution = deps.strategy.resolve(local, incoming);
+  if (resolution.winner === 'incoming') {
+    const res = await binding.writeOne(rec.entityId, resolution.body.entity);
+    if (!res.success) {
+      return false;
+    }
+    meta.hlcs[key] = resolution.body.hlc;
+    meta.clock = hlcEncode(
+      hlcReceive(hlcDecode(meta.clock), hlcDecode(resolution.body.hlc), (deps.now ?? Date.now)())
+    );
+    if (resolution.body.entity === null) {
+      if (!meta.tombstones.includes(key)) {
+        meta.tombstones.push(key);
+      }
+    } else {
+      meta.tombstones = meta.tombstones.filter((t) => t !== key);
+    }
+  }
+
+  advanceCursor(meta, rec.seq);
+  return true;
+}
+
+// The server-issued cursor only moves forward — a backward value is dropped, not applied.
+function advanceCursor(meta: SyncMeta, seq: number): void {
+  if (seq > meta.cursor) {
+    meta.cursor = seq;
+  } else {
+    logger.warn('Rejected backward sync cursor', { seq, cursor: meta.cursor });
   }
 }

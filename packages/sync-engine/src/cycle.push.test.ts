@@ -8,6 +8,7 @@ import { FakeTransport } from './__fixtures__/fake-transport';
 import { defaultBindings } from './collections';
 import { type CycleDeps, pushOnce } from './cycle';
 import { type SyncMeta, SyncMetadataStore } from './metadata-store';
+import { LwwHlcStrategy } from './strategy';
 
 const KEY_ID = 'dk-1';
 const HLC = hlcEncode({ physical: 1_700_000_000_000, counter: 1, node: 'device-a' });
@@ -34,6 +35,7 @@ function makeDeps(kv: FakeKvStore, transport: FakeTransport): CycleDeps {
     bindings: defaultBindings(),
     dk: generateDataKey(),
     keyId: KEY_ID,
+    strategy: new LwwHlcStrategy(),
   };
 }
 
