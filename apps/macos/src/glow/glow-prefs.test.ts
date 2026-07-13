@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { readGlowIntensity } from './glow-prefs';
+import { readGlowIntensity, readGlowStyle } from './glow-prefs';
 
 function stubStorage(getItem: () => string | null): void {
   vi.stubGlobal('localStorage', { getItem });
@@ -13,13 +13,13 @@ describe('readGlowIntensity', () => {
   it('returns a stored valid intensity', () => {
     stubStorage(() => 'subtle');
     expect(readGlowIntensity()).toBe('subtle');
-  });
-
-  it('accepts the stronger tiers', () => {
-    stubStorage(() => 'strong');
-    expect(readGlowIntensity()).toBe('strong');
     stubStorage(() => 'intense');
     expect(readGlowIntensity()).toBe('intense');
+  });
+
+  it('maps the legacy strong tier to standard', () => {
+    stubStorage(() => 'strong');
+    expect(readGlowIntensity()).toBe('standard');
   });
 
   it('falls back to standard for garbage values', () => {
@@ -37,5 +37,29 @@ describe('readGlowIntensity', () => {
       throw new Error('storage disabled');
     });
     expect(readGlowIntensity()).toBe('standard');
+  });
+});
+
+describe('readGlowStyle', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('returns a stored valid style', () => {
+    stubStorage(() => 'border');
+    expect(readGlowStyle()).toBe('border');
+    stubStorage(() => 'tint');
+    expect(readGlowStyle()).toBe('tint');
+  });
+
+  it('falls back to glow for garbage, missing, or throwing storage', () => {
+    stubStorage(() => 'confetti');
+    expect(readGlowStyle()).toBe('glow');
+    stubStorage(() => null);
+    expect(readGlowStyle()).toBe('glow');
+    stubStorage(() => {
+      throw new Error('storage disabled');
+    });
+    expect(readGlowStyle()).toBe('glow');
   });
 });

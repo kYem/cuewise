@@ -27,6 +27,7 @@ import {
   resumePostureNudges,
   STEADY_SAMPLES,
   setGlowIntensity,
+  setGlowStyle,
   setNudgeDelay,
   setPostureNudges,
   startGlowPreview,
@@ -652,6 +653,18 @@ describe('glow intensity preference', () => {
     initPosture();
     await flushChain();
     expect(getPostureState().glowIntensity).toBe('standard');
+  });
+
+  it('persists and restores the nudge style', async () => {
+    setGlowStyle('border');
+    expect(getPostureState().glowStyle).toBe('border');
+    expect(localStorageStub.getItem('cuewise.posture.glowStyle')).toBe('border');
+
+    setGlowStyle('glow');
+    localStorageStub.setItem('cuewise.posture.glowStyle', 'tint');
+    initPosture();
+    await flushChain();
+    expect(getPostureState().glowStyle).toBe('tint');
   });
 });
 

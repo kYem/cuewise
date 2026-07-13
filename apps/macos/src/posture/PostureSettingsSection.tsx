@@ -9,7 +9,7 @@ import {
 import { Button, cn } from '@cuewise/ui';
 import { PersonStanding } from 'lucide-react';
 import { useEffect } from 'react';
-import type { GlowIntensity } from '../glow/glow-prefs';
+import type { GlowIntensity, GlowStyle } from '../glow/glow-prefs';
 import {
   calibratePosture,
   describePauseEnd,
@@ -17,6 +17,7 @@ import {
   pausePostureNudges,
   resumePostureNudges,
   setGlowIntensity,
+  setGlowStyle,
   setNudgeDelay,
   setPostureNudges,
   startGlowPreview,
@@ -36,8 +37,13 @@ const NUDGE_DELAY_OPTIONS: { value: `${NudgeDelaySeconds}`; label: string }[] = 
 const GLOW_INTENSITY_OPTIONS: { value: GlowIntensity; label: string }[] = [
   { value: 'subtle', label: 'Subtle' },
   { value: 'standard', label: 'Standard' },
-  { value: 'strong', label: 'Strong' },
   { value: 'intense', label: 'Intense' },
+];
+
+const GLOW_STYLE_OPTIONS: { value: GlowStyle; label: string }[] = [
+  { value: 'glow', label: 'Glow' },
+  { value: 'border', label: 'Border' },
+  { value: 'tint', label: 'Tint' },
 ];
 
 function fmt(value: number | undefined, digits = 2): string {
@@ -56,6 +62,7 @@ function PostureSection({ filter }: SettingsSectionProps) {
     nudgesPausedUntil,
     nudgeDelaySeconds,
     glowIntensity,
+    glowStyle,
     glowPreviewActive,
   } = usePosture();
   const meta = sample ? STATUS_META[sample.status] : null;
@@ -111,6 +118,17 @@ function PostureSection({ filter }: SettingsSectionProps) {
             options={NUDGE_DELAY_OPTIONS}
             onChange={(value) => setNudgeDelay(Number(value) as NudgeDelaySeconds)}
           />
+        </SettingRow>
+      ) : null}
+
+      {nudgesEnabled ? (
+        <SettingRow
+          label="Nudge style"
+          help="How the reminder looks: a soft edge glow, a crisp border ring, or an even tint."
+          keywords="posture nudge style glow border ring tint solid visual"
+          filter={filter}
+        >
+          <Segmented value={glowStyle} options={GLOW_STYLE_OPTIONS} onChange={setGlowStyle} />
         </SettingRow>
       ) : null}
 

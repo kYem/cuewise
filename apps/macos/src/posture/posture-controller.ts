@@ -3,7 +3,14 @@ import { logger, type PostureSample, type PostureStatus } from '@cuewise/shared'
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { useSyncExternalStore } from 'react';
-import { GLOW_INTENSITY_KEY, type GlowIntensity, readGlowIntensity } from '../glow/glow-prefs';
+import {
+  GLOW_INTENSITY_KEY,
+  GLOW_STYLE_KEY,
+  type GlowIntensity,
+  type GlowStyle,
+  readGlowIntensity,
+  readGlowStyle,
+} from '../glow/glow-prefs';
 import { isCommandError } from '../platform/command-error';
 
 // Module-level posture state. Tracking outlives the Settings section (which only
@@ -36,6 +43,7 @@ export interface PostureState {
   nudgesPausedUntil: NudgePause | null;
   nudgeDelaySeconds: NudgeDelaySeconds;
   glowIntensity: GlowIntensity;
+  glowStyle: GlowStyle;
 }
 
 let state: PostureState = {
@@ -50,6 +58,7 @@ let state: PostureState = {
   nudgesPausedUntil: null,
   nudgeDelaySeconds: 30,
   glowIntensity: 'standard',
+  glowStyle: 'glow',
 };
 const subscribers = new Set<() => void>();
 let unlisteners: UnlistenFn[] = [];
@@ -342,7 +351,7 @@ export function initPosture(): void {
     }
     restorePausedUntil();
     restoreNudgeDelay();
-    setState({ glowIntensity: readGlowIntensity() });
+    setState({ glowIntensity: readGlowIntensity(), glowStyle: readGlowStyle() });
     if (localStorage.getItem(ENABLED_KEY) === '1') {
       startPosture();
     }
@@ -548,6 +557,12 @@ export function setGlowIntensity(intensity: GlowIntensity): void {
   // The glow windows read localStorage, not this state — reflect what actually
   // persisted so Settings can't show a strength the overlays won't use.
   setState({ glowIntensity: readGlowIntensity() });
+}
+
+/** Set the nudge's visual style (glow / border / tint); read like the intensity. */
+export function setGlowStyle(style: GlowStyle): void {
+  writeLocal(GLOW_STYLE_KEY, style, 'Failed to persist the glow style');
+  setState({ glowStyle: readGlowStyle() });
 }
 
 /** Show the glow on demand (Settings preview). Works with tracking off too. */

@@ -5,16 +5,56 @@ html:has(#glow:target) body {
   background: transparent;
 }
 
-/* Screen-edge vignette for the glow nudge windows. Design-system rose (rose-600)
-   at ambient intensity — light, not alarm. */
+/* The nudge overlay. Base = "glow" style at "standard" intensity; style and
+   intensity modifiers below override. Design-system rose (rose-600). */
 .glow-vignette {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  box-shadow: inset 0 0 120px 24px rgba(225, 29, 72, 0.45);
+  box-shadow: inset 0 0 150px 40px rgba(225, 29, 72, 0.62);
   animation:
     glow-enter 600ms ease-out,
     glow-breathe 4s ease-in-out 600ms infinite;
+}
+
+/* Intensity tiers for the glow style. */
+.glow-vignette--subtle {
+  box-shadow: inset 0 0 120px 24px rgba(225, 29, 72, 0.45);
+}
+
+.glow-vignette--intense {
+  box-shadow:
+    inset 0 0 190px 64px rgba(225, 29, 72, 0.75),
+    inset 0 0 70px 12px rgba(225, 29, 72, 0.5);
+}
+
+/* Border style: a crisp ring around the screen edge instead of a soft wash. */
+.glow-style-border {
+  box-shadow: inset 0 0 0 8px rgba(225, 29, 72, 0.7);
+}
+
+.glow-style-border.glow-vignette--subtle {
+  box-shadow: inset 0 0 0 4px rgba(225, 29, 72, 0.55);
+}
+
+.glow-style-border.glow-vignette--intense {
+  box-shadow:
+    inset 0 0 0 14px rgba(225, 29, 72, 0.85),
+    inset 0 0 48px 8px rgba(225, 29, 72, 0.4);
+}
+
+/* Tint style: an even wash over the whole screen. */
+.glow-style-tint {
+  box-shadow: none;
+  background: rgba(225, 29, 72, 0.1);
+}
+
+.glow-style-tint.glow-vignette--subtle {
+  background: rgba(225, 29, 72, 0.06);
+}
+
+.glow-style-tint.glow-vignette--intense {
+  background: rgba(225, 29, 72, 0.16);
 }
 
 @keyframes glow-enter {
@@ -34,21 +74,6 @@ html:has(#glow:target) body {
   50% {
     opacity: 1;
   }
-}
-
-/* Intensity tiers (Settings → Glow strength); the base rule is "standard". */
-.glow-vignette--subtle {
-  box-shadow: inset 0 0 90px 16px rgba(225, 29, 72, 0.28);
-}
-
-.glow-vignette--strong {
-  box-shadow: inset 0 0 150px 40px rgba(225, 29, 72, 0.62);
-}
-
-.glow-vignette--intense {
-  box-shadow:
-    inset 0 0 190px 64px rgba(225, 29, 72, 0.75),
-    inset 0 0 70px 12px rgba(225, 29, 72, 0.5);
 }
 
 @media (prefers-reduced-motion: reduce) {
