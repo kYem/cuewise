@@ -1,4 +1,10 @@
-import { type DataKey, RecoveryCodeError } from '@cuewise/crypto';
+import {
+  type DataKey,
+  deriveMasterKey,
+  generateRecoveryCode,
+  RecoveryCodeError,
+  wrapDataKey,
+} from '@cuewise/crypto';
 import { type KeyValueStore, logger, type Scheduler } from '@cuewise/shared';
 import {
   ApiError,
@@ -148,6 +154,18 @@ export class SyncEngine {
     this.dk = null;
     this.keyId = null;
     this.setStatus('disabled');
+  }
+
+  /** Rotates the recovery code for the current data key; overwrites the server envelope. */
+  async regenerateRecoveryCode(): Promise<string> {
+    if (this.dk === null || this.keyId === null) {
+      throw new Error('cannot regenerate recovery code without an active sync session');
+    }
+    const { code, secret } = await generateRecoveryCode();
+    const mk = await deriveMasterKey(secret);
+    const blob = await wrapDataKey(mk, this.dk, this.keyId);
+    await this.deps.apiClient.putRecoveryEnvelope(blob);
+    return code;
   }
 
   /** pullOnce then pushOnce. A no-op until a DK is held (never enabled, or self-heal hasn't run). */

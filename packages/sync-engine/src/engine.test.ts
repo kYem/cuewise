@@ -1,3 +1,4 @@
+import { DecryptError, deriveMasterKey, parseRecoveryCode, unwrapDataKey } from '@cuewise/crypto';
 import { configurePlatform } from '@cuewise/shared';
 import { getGoals, setGoals } from '@cuewise/storage';
 import { SessionManager, SYNC_PULL_WAKE_ID } from '@cuewise/sync-client';
@@ -7,7 +8,7 @@ import { FakeApiClient, FakeSyncServer } from './__fixtures__/fake-api-client';
 import { FakeKvStore } from './__fixtures__/fake-kv-store';
 import { FakeScheduler } from './__fixtures__/fake-scheduler';
 import { CLOUD_SYNC_ENABLED_KEY, SyncEngine, type SyncEngineDeps } from './engine';
-import { RecoveryCodeRequiredError, SYNC_DATA_KEY } from './key-lifecycle';
+import { loadPersistedDataKey, RecoveryCodeRequiredError, SYNC_DATA_KEY } from './key-lifecycle';
 import { SyncMetadataStore } from './metadata-store';
 import { MutationTracker } from './mutation-tracker';
 
@@ -402,5 +403,47 @@ describe('SyncEngine backfillDirty (first-enable migration)', () => {
 
     const emptyCalls = bulkSpy.mock.calls.filter(([, entityIds]) => entityIds.length === 0);
     expect(emptyCalls).toEqual([]);
+  });
+});
+
+describe('SyncEngine.regenerateRecoveryCode', () => {
+  it('rotates the recovery code: the old code stops unwrapping, the new one works', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    await device.engine.enableSync('cred-a', 'Device A');
+    const oldCode = device.onRecoveryCode.mock.calls[0][0] as string;
+
+    const newCode = await device.engine.regenerateRecoveryCode();
+
+    expect(newCode).not.toBe(oldCode);
+    const envelope = server.getRecoveryEnvelope();
+    expect(envelope).not.toBeNull();
+    if (envelope === null) {
+      throw new Error('envelope missing after regenerate');
+    }
+    const persisted = await loadPersistedDataKey(device.kv);
+    expect(persisted).not.toBeNull();
+    if (persisted === null) {
+      throw new Error('data key missing after regenerate');
+    }
+
+    // New code unwraps the rotated envelope to the same, unchanged data key.
+    const newMk = await deriveMasterKey(await parseRecoveryCode(newCode));
+    const unwrapped = await unwrapDataKey(newMk, envelope.envelope);
+    expect(unwrapped.dk).toEqual(persisted.dk);
+
+    // Old code no longer unwraps it — the server envelope was overwritten, not appended.
+    const oldMk = await deriveMasterKey(await parseRecoveryCode(oldCode));
+    await expect(unwrapDataKey(oldMk, envelope.envelope)).rejects.toThrow(DecryptError);
+  });
+
+  it('throws when regenerating with no active session', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+
+    await expect(device.engine.regenerateRecoveryCode()).rejects.toThrow();
   });
 });
