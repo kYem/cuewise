@@ -99,8 +99,11 @@ export async function aesGcmOpen(
   aad: Uint8Array
 ): Promise<Uint8Array> {
   const cryptoKey = await importAesKey(key);
+  // Resolve subtle before the try so a missing-WebCrypto error surfaces as itself, not a DecryptError
+  // (importAesKey may have been cached, skipping its own getSubtle call).
+  const subtle = getSubtle();
   try {
-    const opened = await getSubtle().decrypt(
+    const opened = await subtle.decrypt(
       { name: 'AES-GCM', iv: asBufferSource(iv), additionalData: asBufferSource(aad) },
       cryptoKey,
       asBufferSource(ciphertext)

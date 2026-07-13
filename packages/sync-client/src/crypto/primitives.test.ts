@@ -129,4 +129,19 @@ describe('primitives', () => {
     await expect(aesGcmOpen(key, iv, sealed, utf8('aad'))).resolves.toEqual(utf8('a'));
     importKeySpy.mockRestore();
   });
+
+  it('surfaces missing WebCrypto as a clear error, not a DecryptError, even on a cached key', async () => {
+    const key = randomBytes(32);
+    const iv = randomBytes(12);
+    // Import + cache the key while subtle is present, so aesGcmOpen's own getSubtle() is the guard hit.
+    const sealed = await aesGcmSeal(key, iv, utf8('a'), utf8('aad'));
+    const original = globalThis.crypto.subtle;
+    Object.defineProperty(globalThis.crypto, 'subtle', { value: undefined, configurable: true });
+    try {
+      await expect(aesGcmOpen(key, iv, sealed, utf8('aad'))).rejects.toThrow(/WebCrypto/);
+      await expect(aesGcmOpen(key, iv, sealed, utf8('aad'))).rejects.not.toThrow(DecryptError);
+    } finally {
+      Object.defineProperty(globalThis.crypto, 'subtle', { value: original, configurable: true });
+    }
+  });
 });
