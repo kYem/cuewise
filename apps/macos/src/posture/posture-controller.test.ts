@@ -277,6 +277,44 @@ describe('glow nudge lifecycle', () => {
     expect(getPostureState().glowUndeliverable).toBe(false);
   });
 
+  it('partial monitor coverage raises the undeliverable warning', async () => {
+    await startTracking();
+    invokeMock.mockResolvedValueOnce({ shown: 1, monitors: 2 });
+
+    emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES);
+    await flushChain();
+
+    // One display silently missing its glow must not read as full delivery.
+    expect(getPostureState().glowActive).toBe(true);
+    expect(getPostureState().glowUndeliverable).toBe(true);
+  });
+
+  it('an unreadable stream releases an active glow', async () => {
+    await startTracking();
+    await glowUp();
+
+    for (let i = 0; i < 5; i += 1) {
+      emitSampleFrame('not json');
+    }
+
+    // Bad frames can't attest posture is still poor — the glow must not stick.
+    expect(countInvokes('hide_glow')).toBe(1);
+    expect(getPostureState().glowActive).toBe(false);
+  });
+
+  it('a hide failure during a stop tells the user instead of staying silent', async () => {
+    await startTracking();
+    await glowUp();
+    invokeMock.mockRejectedValueOnce(new Error('hide failed'));
+
+    stopPosture();
+    await flushChain();
+
+    expect(toastErrorMock).toHaveBeenCalledWith(
+      "Couldn't clear the posture glow — restart Cuewise if it lingers."
+    );
+  });
+
   it('a rejected hide_glow retries on later recovered frames while tracking', async () => {
     await startTracking();
     await glowUp();

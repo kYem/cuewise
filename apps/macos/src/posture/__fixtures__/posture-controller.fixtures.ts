@@ -31,7 +31,14 @@ export function resetPostureMocks(): void {
   capturedHandlers.clear();
   unlistenSpies.length = 0;
   invokeMock.mockReset();
-  invokeMock.mockResolvedValue(undefined);
+  // show_glow resolves to its GlowShown report (full coverage by default);
+  // every other command resolves to undefined, mirroring the Rust contracts.
+  invokeMock.mockImplementation((command: string) => {
+    if (command === 'show_glow') {
+      return Promise.resolve({ shown: 1, monitors: 1 });
+    }
+    return Promise.resolve(undefined);
+  });
   toastErrorMock.mockReset();
   toastWarningMock.mockReset();
   pomodoroStateMock.status = 'idle';

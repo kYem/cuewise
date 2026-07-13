@@ -44,8 +44,8 @@ const subscribers = new Set<() => void>();
 let unlisteners: UnlistenFn[] = [];
 // True while a start_posture spawn is in flight. `tracking` only flips true after
 // the async chain resolves, so without this a rapid re-toggle would fire a second
-// native start_posture before the first settled (the listener leak is handled
-// separately by the detachListeners at the top of attachListeners).
+// native start_posture — and double-attach listeners, since the top-of-attach
+// detach can only see listeners that have already been recorded.
 let starting = false;
 // Set if a stop lands while a start is still spawning: the in-flight start checks it
 // and bails before turning the camera on, honoring an OFF issued during the attach
@@ -159,6 +159,9 @@ function noteBadFrame(): void {
   if (state.error !== message) {
     setState({ error: message });
   }
+  // An unreadable stream can't attest posture is still poor — release the glow
+  // rather than leave it stuck (mirrors the unexpected-stop path).
+  hideGlowIfActive();
   if (!warnedUnreadable) {
     warnedUnreadable = true;
     useToastStore.getState().error(message);
@@ -376,12 +379,20 @@ function isFocusSessionActive(): boolean {
   return useFocusModeStore.getState().isActive;
 }
 
+interface GlowShown {
+  shown: number;
+  monitors: number;
+}
+
 function showGlow(): void {
   setState({ glowActive: true });
-  invoke('show_glow')
-    .then(() => {
-      if (state.glowUndeliverable) {
-        setState({ glowUndeliverable: false });
+  invoke<GlowShown>('show_glow')
+    .then((result) => {
+      // Partial coverage (a display whose overlay failed) keeps the tray warning
+      // up — that screen silently gets no nudges until a show fully succeeds.
+      const undeliverable = result.shown < result.monitors;
+      if (state.glowUndeliverable !== undeliverable) {
+        setState({ glowUndeliverable: undeliverable });
       }
     })
     .catch((error) => {
@@ -415,6 +426,12 @@ function hideGlowIfActive(): void {
     // teardown a stale true would instead wedge the next session's first glow.
     if (state.tracking) {
       setState({ glowActive: true });
+    } else {
+      // No frames left to retry with; say so rather than leave a stuck vignette
+      // silent (needs hide AND destroy to fail natively — see glow.rs).
+      useToastStore
+        .getState()
+        .error("Couldn't clear the posture glow — restart Cuewise if it lingers.");
     }
   });
 }
@@ -425,7 +442,7 @@ function writePausedUntil(value: NudgePause | null): void {
   setState({ nudgesPausedUntil: value });
 }
 
-/** Silence glow nudges for a while; tracking and the tray dot keep running. */
+/** Silence glow nudges for N minutes (or until resumed); tracking keeps running. */
 export function pausePostureNudges(duration: 10 | 15 | 60 | 'until-resume'): void {
   const until = duration === 'until-resume' ? duration : Date.now() + duration * 60_000;
   writePausedUntil(until);

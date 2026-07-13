@@ -24,11 +24,19 @@ fn orphan_glow_labels(existing: &[String], monitor_count: usize) -> Vec<String> 
         .collect()
 }
 
+/// What a show accomplished — the webview surfaces `shown < monitors` (a display
+/// whose overlay failed) as a degraded-state tray warning.
+#[derive(serde::Serialize, Debug, PartialEq)]
+pub struct GlowShown {
+    shown: usize,
+    monitors: usize,
+}
+
 /// Show the glow on every monitor: get-or-create a window per display, position,
-/// show. Partial failure is logged and skipped, but zero windows shown returns the
-/// first error — a silent Ok would strand the webview's glowActive with no retry.
+/// show. Partial failure is logged, skipped, and reported via `GlowShown`; zero
+/// windows shown returns the first error so the webview rolls back and retries.
 #[tauri::command]
-pub fn show_glow(app: AppHandle) -> Result<(), Error> {
+pub fn show_glow(app: AppHandle) -> Result<GlowShown, Error> {
     let monitors = app.available_monitors()?;
     if monitors.is_empty() {
         // Err, not a silent Ok: the webview rolls back and retries a later nudge.
@@ -55,10 +63,10 @@ pub fn show_glow(app: AppHandle) -> Result<(), Error> {
     let mut first_error: Option<Error> = None;
     for (index, monitor) in monitors.iter().enumerate() {
         let label = glow_label(index);
-        let window = match app.get_webview_window(&label) {
-            Some(window) => window,
+        let (window, fresh) = match app.get_webview_window(&label) {
+            Some(window) => (window, false),
             None => match build_glow_window(&app, &label) {
-                Ok(window) => window,
+                Ok(window) => (window, true),
                 Err(e) => {
                     eprintln!("glow: failed to create window {label}: {e}");
                     first_error.get_or_insert(e);
@@ -68,11 +76,22 @@ pub fn show_glow(app: AppHandle) -> Result<(), Error> {
         };
         let position = monitor.position();
         let size = monitor.size();
+        let mut geometry_error: Option<tauri::Error> = None;
         if let Err(e) = window.set_position(PhysicalPosition::new(position.x, position.y)) {
             eprintln!("glow: failed to position window {label}: {e}");
+            geometry_error.get_or_insert(e);
         }
         if let Err(e) = window.set_size(PhysicalSize::new(size.width, size.height)) {
             eprintln!("glow: failed to size window {label}: {e}");
+            geometry_error.get_or_insert(e);
+        }
+        if fresh {
+            if let Some(e) = geometry_error {
+                // A fresh window with failed geometry would show as a stray
+                // default-size rectangle; a reused one keeps full-screen bounds.
+                first_error.get_or_insert(e.into());
+                continue;
+            }
         }
         match window.show() {
             Ok(()) => shown += 1,
@@ -83,10 +102,20 @@ pub fn show_glow(app: AppHandle) -> Result<(), Error> {
         }
     }
 
+    show_outcome(shown, monitors.len(), first_error)
+}
+
+// The command's contract, kept pure so it stays testable: never report success
+// with nothing on screen — the webview's rollback/retry machinery depends on it.
+fn show_outcome(
+    shown: usize,
+    monitors: usize,
+    first_error: Option<Error>,
+) -> Result<GlowShown, Error> {
     if shown == 0 {
         return Err(first_error.unwrap_or(Error::NoMonitors));
     }
-    Ok(())
+    Ok(GlowShown { shown, monitors })
 }
 
 /// Hide every glow window (hidden, not destroyed — re-shows stay instant). A
@@ -165,5 +194,40 @@ mod tests {
     fn missing_windows_are_not_orphans() {
         // A newly added monitor means fewer windows than displays — nothing to close.
         assert!(orphan_glow_labels(&labels(&["glow-0"]), 2).is_empty());
+    }
+
+    #[test]
+    fn zero_shown_returns_the_recorded_error() {
+        let result = show_outcome(0, 2, Some(Error::StatePoisoned));
+        assert!(matches!(result, Err(Error::StatePoisoned)));
+    }
+
+    #[test]
+    fn zero_shown_with_no_recorded_error_still_errs() {
+        assert!(matches!(show_outcome(0, 1, None), Err(Error::NoMonitors)));
+    }
+
+    #[test]
+    fn partial_success_reports_the_shortfall() {
+        let result = show_outcome(1, 2, Some(Error::StatePoisoned));
+        assert_eq!(
+            result.expect("partial success is still success"),
+            GlowShown {
+                shown: 1,
+                monitors: 2
+            }
+        );
+    }
+
+    #[test]
+    fn full_success_reports_full_coverage() {
+        let result = show_outcome(2, 2, None);
+        assert_eq!(
+            result.expect("full success"),
+            GlowShown {
+                shown: 2,
+                monitors: 2
+            }
+        );
     }
 }
