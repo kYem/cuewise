@@ -31,6 +31,8 @@ export interface PostureState {
   // Latest show_glow failed — mirrored to the tray, the only always-visible
   // surface, since the warn toast renders in the often-hidden webview.
   glowUndeliverable: boolean;
+  // Settings' on-demand glow preview; independent of tracking and of glowActive.
+  glowPreviewActive: boolean;
   nudgesPausedUntil: NudgePause | null;
   nudgeDelaySeconds: NudgeDelaySeconds;
   glowIntensity: GlowIntensity;
@@ -44,6 +46,7 @@ let state: PostureState = {
   error: null,
   glowActive: false,
   glowUndeliverable: false,
+  glowPreviewActive: false,
   nudgesPausedUntil: null,
   nudgeDelaySeconds: 30,
   glowIntensity: 'standard',
@@ -452,6 +455,10 @@ function hideGlowIfActive(): void {
     return;
   }
   setState({ glowActive: false });
+  if (state.glowPreviewActive) {
+    // The preview still owns the windows; it hides them when it stops.
+    return;
+  }
   invoke('hide_glow').catch((error) => {
     logCommandFailure('Failed to hide the posture glow', error);
     // Roll back only while frames still flow (a retry needs a next sample) — after
@@ -541,6 +548,32 @@ export function setGlowIntensity(intensity: GlowIntensity): void {
   // The glow windows read localStorage, not this state — reflect what actually
   // persisted so Settings can't show a strength the overlays won't use.
   setState({ glowIntensity: readGlowIntensity() });
+}
+
+/** Show the glow on demand (Settings preview). Works with tracking off too. */
+export function startGlowPreview(): void {
+  if (state.glowPreviewActive) {
+    return;
+  }
+  setState({ glowPreviewActive: true });
+  invoke('show_glow').catch((error) => {
+    logCommandFailure('Failed to show the glow preview', error);
+    setState({ glowPreviewActive: false });
+  });
+}
+
+/** End the preview; the windows stay if a real nudge glow still owns them. */
+export function stopGlowPreview(): void {
+  if (!state.glowPreviewActive) {
+    return;
+  }
+  setState({ glowPreviewActive: false });
+  if (state.glowActive) {
+    return;
+  }
+  invoke('hide_glow').catch((error) => {
+    logCommandFailure('Failed to hide the glow preview', error);
+  });
 }
 
 /** Human copy for a pause's end, shared by the tray menu and Settings. */

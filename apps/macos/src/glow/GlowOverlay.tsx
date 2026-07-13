@@ -1,6 +1,6 @@
 import type React from 'react';
 import { useEffect, useState } from 'react';
-import { readGlowIntensity } from './glow-prefs';
+import { GLOW_INTENSITY_KEY, readGlowIntensity } from './glow-prefs';
 import './glow-overlay.css';
 
 /**
@@ -17,9 +17,18 @@ export function GlowOverlay(): React.JSX.Element {
         setEpoch((current) => current + 1);
       }
     };
+    // The main window writing the intensity pref fires `storage` here (same
+    // origin), so an on-screen preview restyles live as Settings changes it.
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === GLOW_INTENSITY_KEY) {
+        setEpoch((current) => current + 1);
+      }
+    };
     document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('storage', onStorage);
     return () => {
       document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('storage', onStorage);
     };
   }, []);
 
