@@ -6,6 +6,8 @@ export * from './concept-cards';
 export * from './constants';
 // Export CSV utilities
 export * from './csv-utils';
+// Export hybrid logical clock (sync conflict ordering)
+export * from './hlc';
 // Export logger
 export * from './logger';
 // Export platform ports (scheduler/notifier/storage interfaces + registry)
