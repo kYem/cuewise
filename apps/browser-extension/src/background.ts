@@ -15,6 +15,7 @@ import { getReminders, setReminders } from '@cuewise/storage';
 import { SYNC_PULL_WAKE_ID } from '@cuewise/sync-client';
 import { createSyncEngine } from '@cuewise/sync-engine';
 import { configureChromePlatform } from './platform';
+import { handleSyncMessage } from './sync/handle-sync-message';
 
 const { scheduler, notifier } = configureChromePlatform();
 
@@ -40,6 +41,14 @@ if (syncApiBaseUrl) {
   });
   syncEngine.start().catch((error) => {
     logger.error('Sync engine failed to start', error);
+  });
+
+  // ENG-45 option B: the page realm relays its store mutations here (this
+  // service-worker realm is the single sync owner) instead of holding its own
+  // SyncEngine. The SW's own self-registered sink (from createSyncEngine) is
+  // unused here but harmless — nothing in this realm calls notifyMutated etc.
+  chrome.runtime.onMessage.addListener((msg) => {
+    handleSyncMessage(syncEngine, msg);
   });
 }
 
