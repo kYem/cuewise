@@ -27,8 +27,7 @@ const { scheduler, notifier } = configureChromePlatform();
 // behave identically.
 scheduler.onFire(handleReminderFire);
 
-// Engine SyncStatus -> UI-facing SyncUiStatus, mirroring macOS's DirectSyncController
-// mapStatus exactly (spec's intended per-host boundary — adapters own this mapping).
+// Engine SyncStatus -> UI-facing SyncUiStatus; adapters own this mapping per host.
 // Exported for unit testing.
 export function mapToUi(status: SyncStatus): SyncUiStatus {
   if (status === 'disabled') {

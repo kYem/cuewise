@@ -6,6 +6,7 @@ import {
   RecoveryCodeError,
   RecoveryCodeRequiredError,
   type SyncEngine,
+  type SyncEngineControlSurface,
   type SyncStatus,
 } from '@cuewise/sync-engine';
 
@@ -24,15 +25,6 @@ interface EngineTrampolines {
   onRecoveryCode: (code: string) => void;
 }
 
-/** The subset of SyncEngine the controller drives — lets tests substitute a real engine over fakes. */
-export interface DirectSyncEnginePort {
-  enableSync(credential: string, deviceName: string, recoveryCode?: string): Promise<void>;
-  disableSync(): Promise<void>;
-  regenerateRecoveryCode(): Promise<string>;
-  syncNow(): Promise<void>;
-  getStatus(): SyncStatus;
-}
-
 export interface CreateDirectSyncControllerOptions {
   baseUrl: string;
   keyStore: KeyValueStore;
@@ -41,7 +33,7 @@ export interface CreateDirectSyncControllerOptions {
   toast?: (message: string) => void;
 }
 
-export interface DirectSyncControllerHandle<E extends DirectSyncEnginePort = SyncEngine> {
+export interface DirectSyncControllerHandle<E extends SyncEngineControlSurface = SyncEngine> {
   controller: SyncController;
   engine: E;
 }
@@ -73,7 +65,7 @@ function mapStatus(status: SyncStatus): SyncUiStatus {
   throw new Error(`unmapped sync status: ${String(exhaustive)}`);
 }
 
-interface BuildDirectSyncControllerDeps<E extends DirectSyncEnginePort> {
+interface BuildDirectSyncControllerDeps<E extends SyncEngineControlSurface> {
   keyStore: KeyValueStore;
   toast?: (message: string) => void;
   /** Constructs the engine WITH the trampolines (E4) — production wires createSyncEngine, tests wire a real SyncEngine over fakes. */
@@ -84,7 +76,7 @@ interface BuildDirectSyncControllerDeps<E extends DirectSyncEnginePort> {
  * Core adapter logic, engine-construction-agnostic so it can be exercised against a real
  * SyncEngine over fakes in tests. `createDirectSyncController` is the production entry point.
  */
-export function buildDirectSyncController<E extends DirectSyncEnginePort>(
+export function buildDirectSyncController<E extends SyncEngineControlSurface>(
   deps: BuildDirectSyncControllerDeps<E>
 ): DirectSyncControllerHandle<E> {
   const subscribers = new Set<(status: SyncUiStatus) => void>();

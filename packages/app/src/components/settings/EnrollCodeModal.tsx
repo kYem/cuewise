@@ -1,3 +1,4 @@
+import { logger } from '@cuewise/shared';
 import type React from 'react';
 import { useEffect, useState } from 'react';
 import type { EnableResult } from '../../sync/sync-controller';
@@ -51,6 +52,9 @@ export const EnrollCodeModal: React.FC<EnrollCodeModalProps> = ({ isOpen, onSubm
         return;
       }
       setErrorMessage(messageFor(result));
+    } catch (error) {
+      logger.error('Enroll submit failed', error);
+      setErrorMessage(GENERIC_FAILURE_MESSAGE);
     } finally {
       setIsSubmitting(false);
     }

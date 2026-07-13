@@ -57,8 +57,7 @@ export const RecoveryCodeModal: React.FC<RecoveryCodeModalProps> = ({
   };
 
   // A download throw in an onClick isn't caught by React error boundaries, so guard it here.
-  // url/link are hoisted above the try so the finally can always clean them up, even if
-  // appendChild/click throws partway through.
+  // url/link are hoisted above the try so finally can always clean them up if a step throws.
   const handleDownload = () => {
     let url: string | undefined;
     let link: HTMLAnchorElement | undefined;

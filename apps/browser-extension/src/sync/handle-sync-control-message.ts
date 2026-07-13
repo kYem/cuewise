@@ -2,18 +2,9 @@ import { ApiError } from '@cuewise/sync-client';
 import {
   RecoveryCodeError,
   RecoveryCodeRequiredError,
-  type SyncStatus,
+  type SyncEngineControlSurface,
 } from '@cuewise/sync-engine';
 import type { SyncControlMessage, SyncControlResponse } from './sync-control-messages';
-
-/** Structural subset of SyncEngine the SW control handler drives. */
-export interface SyncControlEngine {
-  enableSync(credential: string, deviceName: string, recoveryCode?: string): Promise<void>;
-  disableSync(): Promise<void>;
-  syncNow(): Promise<void>;
-  regenerateRecoveryCode(): Promise<string>;
-  getStatus(): SyncStatus;
-}
 
 export interface SyncControlDeps {
   /** Reads and clears the one-shot recovery-code capture slot owned by background.ts. */
@@ -23,7 +14,7 @@ export interface SyncControlDeps {
 // Builds the response from the thrown error AND the post-call status — a 401 during
 // initial sync sets signed_out and returns rather than throws (mirrors macOS's error map).
 async function doEnable(
-  engine: SyncControlEngine,
+  engine: SyncEngineControlSurface,
   accountId: string,
   deviceName: string,
   recoveryCode: string | undefined,
@@ -52,21 +43,16 @@ async function doEnable(
 }
 
 async function runOp(
-  engine: SyncControlEngine,
+  engine: SyncEngineControlSurface,
   msg: SyncControlMessage,
   deps: SyncControlDeps
 ): Promise<SyncControlResponse> {
-  if (msg.op === 'enable') {
+  // The bridge already resolves reconnect's persisted creds into accountId/deviceName before
+  // sending; no code = silent re-auth, a code enrolls this device after reconnect.
+  if (msg.op === 'enable' || msg.op === 'reconnect') {
     if (msg.accountId === undefined || msg.deviceName === undefined) {
       return { ok: false, reason: 'error' };
     }
-    return doEnable(engine, msg.accountId, msg.deviceName, msg.recoveryCode, deps);
-  }
-  if (msg.op === 'reconnect') {
-    if (msg.accountId === undefined || msg.deviceName === undefined) {
-      return { ok: false, reason: 'error' };
-    }
-    // No code = silent re-auth via the persisted DK; a code enrolls this device after reconnect.
     return doEnable(engine, msg.accountId, msg.deviceName, msg.recoveryCode, deps);
   }
   // disable/regenerate/syncNow have no enroll control-flow — a throw is a plain error result.
@@ -102,7 +88,7 @@ function serialize<T>(fn: () => Promise<T>): Promise<T> {
  * SyncEngine and returns the response to send back over chrome.runtime messaging.
  */
 export async function handleSyncControlMessage(
-  engine: SyncControlEngine,
+  engine: SyncEngineControlSurface,
   msg: SyncControlMessage,
   deps: SyncControlDeps
 ): Promise<SyncControlResponse> {

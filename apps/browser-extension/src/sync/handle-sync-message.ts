@@ -11,14 +11,15 @@ export interface SyncMessageEngine {
   markMutatedBulk(collection: string, entityIds: string[]): Promise<void> | void;
 }
 
-function isSyncMutationMessage(msg: unknown): msg is SyncMutationMessage {
+function hasMutationKind(msg: unknown): msg is Record<string, unknown> {
   if (typeof msg !== 'object' || msg === null) {
     return false;
   }
+  return (msg as Record<string, unknown>).kind === 'cuewise-sync-mutation';
+}
+
+function isSyncMutationMessage(msg: unknown): msg is SyncMutationMessage {
   const candidate = msg as Record<string, unknown>;
-  if (candidate.kind !== 'cuewise-sync-mutation') {
-    return false;
-  }
   if (candidate.op !== 'mutated' && candidate.op !== 'deleted' && candidate.op !== 'mutatedBulk') {
     return false;
   }
@@ -27,10 +28,13 @@ function isSyncMutationMessage(msg: unknown): msg is SyncMutationMessage {
 
 /**
  * Routes a page-relayed sync-mutation message (ENG-45 option B) to the background's
- * SyncEngine. A malformed message — wrong kind/op, missing collection, or a payload
- * shape that doesn't match its op — is logged and ignored; it never throws.
+ * SyncEngine. A message on a different channel (e.g. sync-control) is silently ignored;
+ * only a message that claims the mutation kind but has a bad op/collection shape warns.
  */
 export function handleSyncMessage(engine: SyncMessageEngine, msg: unknown): void {
+  if (!hasMutationKind(msg)) {
+    return;
+  }
   if (!isSyncMutationMessage(msg)) {
     logger.warn('Ignoring malformed sync-mutation message', { received: typeof msg });
     return;

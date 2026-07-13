@@ -8,9 +8,10 @@ import { SyncSettingsSectionComponent } from './SyncSettingsSection';
 import type { SettingsSectionProps } from './settings-types';
 
 const toastError = vi.fn();
+const toastSuccess = vi.fn();
 vi.mock('../../stores/toast-store', () => ({
   useToastStore: {
-    getState: () => ({ error: toastError }),
+    getState: () => ({ error: toastError, success: toastSuccess }),
   },
 }));
 
@@ -269,6 +270,17 @@ describe('SyncSettingsSectionComponent', () => {
     await user.click(screen.getByRole('button', { name: 'Sync now' }));
 
     await waitFor(() => expect(controller.calls).toContainEqual({ method: 'syncNow', args: [] }));
+  });
+
+  it('shows a success toast when Sync now resolves', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+
+    await user.click(screen.getByRole('button', { name: 'Sync now' }));
+
+    await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith('Synced'));
   });
 
   it('calls controller.syncNow() when Try again is clicked in the error state', async () => {

@@ -1,6 +1,6 @@
 import { configurePlatform } from '@cuewise/shared';
 import { ApiError, SessionManager } from '@cuewise/sync-client';
-import { SyncEngine, type SyncStatus } from '@cuewise/sync-engine';
+import { SyncEngine, type SyncEngineControlSurface, type SyncStatus } from '@cuewise/sync-engine';
 import {
   FakeApiClient,
   FakeSyncServer,
@@ -8,11 +8,7 @@ import {
 import { FakeKvStore } from '@cuewise/sync-engine/src/__fixtures__/fake-kv-store';
 import { FakeScheduler } from '@cuewise/sync-engine/src/__fixtures__/fake-scheduler';
 import { describe, expect, it, vi } from 'vitest';
-import {
-  buildDirectSyncController,
-  type DirectSyncEnginePort,
-  LAST_SYNC_CREDS_KEY,
-} from './direct-sync-controller';
+import { buildDirectSyncController, LAST_SYNC_CREDS_KEY } from './direct-sync-controller';
 
 interface Device {
   kv: FakeKvStore;
@@ -185,14 +181,14 @@ describe('createDirectSyncController: enable()', () => {
   });
 
   it('maps a thrown ApiError(401) to auth', async () => {
-    const engine: DirectSyncEnginePort = {
+    const engine: SyncEngineControlSurface = {
       enableSync: vi.fn().mockRejectedValue(new ApiError('invalid_token', 401)),
       disableSync: vi.fn().mockResolvedValue(undefined),
       regenerateRecoveryCode: vi.fn().mockResolvedValue('unused'),
       syncNow: vi.fn().mockResolvedValue(undefined),
       getStatus: vi.fn().mockReturnValue('error' as SyncStatus),
     };
-    const { controller } = buildDirectSyncController<DirectSyncEnginePort>({
+    const { controller } = buildDirectSyncController<SyncEngineControlSurface>({
       keyStore: new FakeKvStore(),
       buildEngine: () => engine,
     });
@@ -248,7 +244,7 @@ describe('createDirectSyncController: enable()', () => {
     const toast = vi.fn();
     // The engine (real or fake) invokes onQuarantine from inside its own construction-time
     // trampolines — calling it here from buildEngine exercises that exact wiring.
-    buildDirectSyncController<DirectSyncEnginePort>({
+    buildDirectSyncController<SyncEngineControlSurface>({
       keyStore: new FakeKvStore(),
       toast,
       buildEngine: (trampolines) => {

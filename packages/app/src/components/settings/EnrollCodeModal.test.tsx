@@ -193,23 +193,20 @@ describe('EnrollCodeModal', () => {
     expect(h.onClose).toHaveBeenCalledTimes(1);
   });
 
-  it('re-enables the Enroll button after a rejected onSubmit settles', async () => {
+  it('shows the generic failure message and re-enables the Enroll button when onSubmit rejects', async () => {
     const user = userEvent.setup();
     const h = handlers(() => Promise.reject(new Error('boom')));
-    // handleSubmit's onClick promise is never awaited by React, so the rejection is
-    // unhandled by design here; a second listener stops Vitest treating it as a failure
-    // (see vitest's listenForErrors: it no-ops once `process.listeners(event).length > 1`).
-    const swallowRejection = () => {};
-    process.on('unhandledRejection', swallowRejection);
     render(<EnrollCodeModal isOpen {...h} />);
 
     await typeCode(user, CODE);
     await user.click(screen.getByRole('button', { name: 'Enroll' }));
 
+    expect(
+      await screen.findByText("Couldn't enroll this device — please try again")
+    ).toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole('button', { name: 'Enroll' })).toBeEnabled());
     expect(screen.queryByTestId('enroll-spinner')).not.toBeInTheDocument();
-
-    process.off('unhandledRejection', swallowRejection);
+    expect(h.onClose).not.toHaveBeenCalled();
   });
 
   it('resets the code and error state each time the modal reopens', async () => {

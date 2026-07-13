@@ -2,17 +2,14 @@ import { ApiError } from '@cuewise/sync-client';
 import {
   RecoveryCodeError,
   RecoveryCodeRequiredError,
+  type SyncEngineControlSurface,
   type SyncStatus,
 } from '@cuewise/sync-engine';
 import { describe, expect, it, vi } from 'vitest';
-import {
-  handleSyncControlMessage,
-  type SyncControlDeps,
-  type SyncControlEngine,
-} from './handle-sync-control-message';
+import { handleSyncControlMessage, type SyncControlDeps } from './handle-sync-control-message';
 import { isSyncControlMessage, type SyncControlMessage } from './sync-control-messages';
 
-function fakeEngine(overrides: Partial<SyncControlEngine> = {}): SyncControlEngine {
+function fakeEngine(overrides: Partial<SyncEngineControlSurface> = {}): SyncEngineControlSurface {
   return {
     enableSync: vi.fn().mockResolvedValue(undefined),
     disableSync: vi.fn().mockResolvedValue(undefined),

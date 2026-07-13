@@ -70,6 +70,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   const [deviceName, setDeviceName] = useState(deriveDeviceName);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
+  const [isDisabling, setIsDisabling] = useState(false);
   const [recoveryCode, setRecoveryCode] = useState<string | null>(null);
   const [enrollOpen, setEnrollOpen] = useState(false);
   // Which flow opened EnrollCodeModal — reconnect reuses persisted creds, enable uses form inputs.
@@ -137,7 +138,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   };
 
   // Reconnect-after-needs-code reuses the persisted creds; a brand-new enable uses the form inputs.
-  // Never rejects — EnrollCodeModal awaits this and relies on a resolved EnableResult to clear its spinner.
+  // Never rejects — messageFor can render a specific message instead of an unhandled rejection.
   const handleEnrollSubmit = async (code: string): Promise<EnableResult> => {
     let result: EnableResult;
     try {
@@ -172,6 +173,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   const handleSyncNow = async () => {
     try {
       await controller.syncNow();
+      useToastStore.getState().success('Synced');
     } catch (error) {
       logger.error('Cloud sync sync-now failed', error);
       useToastStore.getState().error("Couldn't sync right now — please try again.");
@@ -190,6 +192,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
 
   // finally closes the confirm dialog so a disable failure can't strand it open.
   const handleDisable = async () => {
+    setIsDisabling(true);
     try {
       await controller.disable();
       setEnabling(false);
@@ -198,6 +201,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       useToastStore.getState().error("Couldn't disable sync — please try again.");
     } finally {
       setConfirmDisableOpen(false);
+      setIsDisabling(false);
     }
   };
 
@@ -356,6 +360,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
         message={unsavedCode ? DISABLE_MESSAGE_UNSAVED : DISABLE_MESSAGE}
         confirmText="Disable"
         variant="warning"
+        isLoading={isDisabling}
       />
 
       <RecoveryCodeModal
