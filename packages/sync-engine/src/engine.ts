@@ -1,0 +1,261 @@
+import type { DataKey } from '@cuewise/crypto';
+import { type KeyValueStore, logger, type Scheduler } from '@cuewise/shared';
+import {
+  ApiError,
+  armSyncPull,
+  type ApiClient as RealApiClient,
+  type SessionManager,
+  SYNC_PULL_WAKE_ID,
+} from '@cuewise/sync-client';
+import { type CollectionBinding, defaultBindings } from './collections';
+import { type CycleDeps, pullOnce, pushOnce } from './cycle';
+import {
+  initOrEnrollKey,
+  type KeyLifecycleDeps,
+  loadPersistedDataKey,
+  SelfHealNeedsEnrollError,
+  SelfHealUnrecoverableError,
+  SYNC_DATA_KEY,
+  selfHealKeyBlob,
+} from './key-lifecycle';
+import { SyncMetadataStore } from './metadata-store';
+import { MutationTracker } from './mutation-tracker';
+import { type ConflictStrategy, LwwHlcStrategy } from './strategy';
+
+export const CLOUD_SYNC_ENABLED_KEY = 'cloudSyncEnabled';
+
+// The periodic pull backstop cadence (spec §3: "~5 min"); foreground opens trigger sooner via syncNow.
+const PULL_REARM_MINUTES = 5;
+
+export type SyncStatus =
+  | 'disabled'
+  | 'signing_in'
+  | 'key_init'
+  | 'enrolling'
+  | 'initial_sync'
+  | 'active'
+  | 'signed_out'
+  | 'error';
+
+/**
+ * Structural subset of ApiClient the engine needs (auth + the pull/push + key-envelope calls).
+ * A real ApiClient instance satisfies this directly; tests supply an in-memory fake.
+ */
+export type EngineApiClient = Pick<
+  RealApiClient,
+  'exchangeToken' | 'getChanges' | 'pushChanges' | 'getRecoveryEnvelope' | 'putRecoveryEnvelope'
+>;
+
+export interface SyncEngineDeps {
+  apiClient: EngineApiClient;
+  sessionManager: SessionManager;
+  keyStore: KeyValueStore;
+  scheduler: Scheduler;
+  strategy?: ConflictStrategy;
+  bindings?: CollectionBinding[];
+  now?: () => number;
+  onStatus?: (status: SyncStatus) => void;
+  onQuarantine?: (key: string) => void;
+  onRecoveryCode?: (code: string) => void;
+}
+
+/**
+ * Top-level orchestration façade (ENG-45): enable/enroll, the migration backfill, the
+ * pull-then-push cycle, and the pull-loop re-arm. See package CLAUDE.md for host wiring.
+ */
+export class SyncEngine {
+  private readonly meta: SyncMetadataStore;
+  private readonly tracker: MutationTracker;
+  private readonly strategy: ConflictStrategy;
+  private readonly bindings: CollectionBinding[];
+  private readonly now: () => number;
+  private status: SyncStatus = 'disabled';
+  private dk: DataKey | null = null;
+  private keyId: string | null = null;
+
+  constructor(private readonly deps: SyncEngineDeps) {
+    this.now = deps.now ?? Date.now;
+    this.meta = new SyncMetadataStore(deps.keyStore);
+    this.tracker = new MutationTracker(this.meta, this.now);
+    this.strategy = deps.strategy ?? new LwwHlcStrategy();
+    this.bindings = deps.bindings ?? defaultBindings();
+  }
+
+  getStatus(): SyncStatus {
+    return this.status;
+  }
+
+  /** DISABLED → SIGNING_IN → KEY_INIT/ENROLLING → INITIAL_SYNC → ACTIVE (spec §4). */
+  async enableSync(credential: string, deviceName: string, recoveryCode?: string): Promise<void> {
+    try {
+      this.setStatus('signing_in');
+      const { token } = await this.deps.apiClient.exchangeToken({
+        provider: 'dev',
+        credential,
+        deviceName,
+      });
+      const saved = await this.deps.sessionManager.saveToken(token);
+      if (!saved.success) {
+        throw new Error(`failed to persist sync session: ${saved.error.message}`);
+      }
+
+      this.setStatus('key_init');
+      const enrolled = await initOrEnrollKey(this.keyDeps(), recoveryCode);
+      this.dk = enrolled.dk;
+      this.keyId = enrolled.keyId;
+      if (enrolled.recoveryCodeToShow !== undefined) {
+        this.deps.onRecoveryCode?.(enrolled.recoveryCodeToShow);
+      }
+
+      this.setStatus('initial_sync');
+      await this.backfillDirty();
+      await this.syncNow();
+      if (this.status === 'signed_out') {
+        // syncNow already ran handleAuthLoss (dropped the session, kept the DK) — enable didn't finish.
+        return;
+      }
+
+      const enabledResult = await this.deps.keyStore.set(CLOUD_SYNC_ENABLED_KEY, true, 'local');
+      if (!enabledResult.success) {
+        throw new Error(`failed to persist cloudSyncEnabled: ${enabledResult.error.message}`);
+      }
+      this.setStatus('active');
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        await this.handleAuthLoss();
+        return;
+      }
+      this.setStatus('error');
+      throw err;
+    }
+  }
+
+  /** Clears session + DK + the enabled flag + sync bookkeeping. Local domain data is untouched. */
+  async disableSync(): Promise<void> {
+    await this.stop();
+    await this.deps.sessionManager.clear();
+    await this.deps.keyStore.remove(SYNC_DATA_KEY, 'local');
+    await this.deps.keyStore.remove(CLOUD_SYNC_ENABLED_KEY, 'local');
+    await this.resetMeta();
+    this.dk = null;
+    this.keyId = null;
+    this.setStatus('disabled');
+  }
+
+  /** pullOnce then pushOnce. A no-op until a DK is held (never enabled, or self-heal hasn't run). */
+  async syncNow(): Promise<void> {
+    if (this.dk === null || this.keyId === null) {
+      return;
+    }
+    const cycleDeps: CycleDeps = {
+      transport: this.deps.apiClient,
+      meta: this.meta,
+      bindings: this.bindings,
+      dk: this.dk,
+      keyId: this.keyId,
+      strategy: this.strategy,
+      now: this.now,
+      onQuarantine: this.deps.onQuarantine,
+    };
+    try {
+      await pullOnce(cycleDeps);
+      await pushOnce(cycleDeps);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        await this.handleAuthLoss();
+        return;
+      }
+      throw err;
+    }
+  }
+
+  /** Self-heal, then hold the DK and arm the pull loop. No-op if sync was never enabled here. */
+  async start(): Promise<void> {
+    const enabled = await this.deps.keyStore.get<boolean>(CLOUD_SYNC_ENABLED_KEY, 'local');
+    if (enabled !== true) {
+      return;
+    }
+
+    try {
+      await selfHealKeyBlob(this.keyDeps());
+    } catch (err) {
+      if (err instanceof SelfHealNeedsEnrollError || err instanceof SelfHealUnrecoverableError) {
+        logger.warn('Sync self-heal requires the recovery code; staying signed out', {
+          reason: err.name,
+        });
+        this.setStatus('signed_out');
+        return;
+      }
+      throw err;
+    }
+
+    const persisted = await loadPersistedDataKey(this.deps.keyStore);
+    if (persisted === null) {
+      return;
+    }
+
+    this.dk = persisted.dk;
+    this.keyId = persisted.keyId;
+    this.setStatus('active');
+    await this.syncNow();
+    await armSyncPull(this.deps.scheduler, PULL_REARM_MINUTES, this.now);
+  }
+
+  /** Cancels the armed pull wake. Does not touch session/keys — call disableSync() for that. */
+  async stop(): Promise<void> {
+    await this.deps.scheduler.cancel(SYNC_PULL_WAKE_ID);
+  }
+
+  /**
+   * Host wiring: `armSyncPull` only schedules a single shot, so the host's
+   * `SchedulerHost.onFire(id => { if (id === SYNC_PULL_WAKE_ID) engine.handlePullWake(); })`
+   * must call this to run the cycle and re-arm the next wake. See package CLAUDE.md.
+   */
+  async handlePullWake(): Promise<void> {
+    await this.syncNow();
+    await armSyncPull(this.deps.scheduler, PULL_REARM_MINUTES, this.now);
+  }
+
+  async markMutated(collection: string, entityId: string): Promise<void> {
+    await this.tracker.markMutated(collection, entityId);
+  }
+
+  async markDeleted(collection: string, entityId: string): Promise<void> {
+    await this.tracker.markDeleted(collection, entityId);
+  }
+
+  private setStatus(status: SyncStatus): void {
+    this.status = status;
+    this.deps.onStatus?.(status);
+  }
+
+  private keyDeps(): KeyLifecycleDeps {
+    return { transport: this.deps.apiClient, keyStore: this.deps.keyStore };
+  }
+
+  private async backfillDirty(): Promise<void> {
+    for (const binding of this.bindings) {
+      const all = await binding.readAll();
+      for (const entityId of Object.keys(all)) {
+        await this.tracker.markMutated(binding.name, entityId);
+      }
+    }
+  }
+
+  private async resetMeta(): Promise<void> {
+    const meta = await this.meta.load();
+    meta.cursor = 0;
+    meta.dirty = {};
+    meta.hlcs = {};
+    meta.tombstones = [];
+    meta.quarantine = [];
+    await this.meta.save(meta);
+  }
+
+  // Auth 401 (spec §5): drop the session, stop the loop, keep local data + DK. User re-enables.
+  private async handleAuthLoss(): Promise<void> {
+    await this.deps.sessionManager.clear();
+    await this.stop();
+    this.setStatus('signed_out');
+  }
+}

@@ -1,0 +1,242 @@
+import { configurePlatform } from '@cuewise/shared';
+import { getGoals, setGoals } from '@cuewise/storage';
+import { SessionManager, SYNC_PULL_WAKE_ID } from '@cuewise/sync-client';
+import { goalFactory } from '@cuewise/test-utils/factories';
+import { describe, expect, it, vi } from 'vitest';
+import { FakeApiClient, FakeSyncServer } from './__fixtures__/fake-api-client';
+import { FakeKvStore } from './__fixtures__/fake-kv-store';
+import { FakeScheduler } from './__fixtures__/fake-scheduler';
+import { CLOUD_SYNC_ENABLED_KEY, SyncEngine, type SyncEngineDeps } from './engine';
+import { SYNC_DATA_KEY } from './key-lifecycle';
+import { SyncMetadataStore } from './metadata-store';
+
+interface Device {
+  kv: FakeKvStore;
+  apiClient: FakeApiClient;
+  scheduler: FakeScheduler;
+  engine: SyncEngine;
+  onStatus: ReturnType<typeof vi.fn>;
+  onRecoveryCode: ReturnType<typeof vi.fn>;
+}
+
+/** Builds one "device": its own storage/scheduler/session, sharing the given fake server. */
+function createDevice(server: FakeSyncServer, overrides: Partial<SyncEngineDeps> = {}): Device {
+  const kv = new FakeKvStore();
+  const apiClient = new FakeApiClient(server);
+  const scheduler = new FakeScheduler();
+  const onStatus = vi.fn();
+  const onRecoveryCode = vi.fn();
+  const engine = new SyncEngine({
+    apiClient,
+    sessionManager: new SessionManager(kv),
+    keyStore: kv,
+    scheduler,
+    onStatus,
+    onRecoveryCode,
+    ...overrides,
+  });
+  return { kv, apiClient, scheduler, engine, onStatus, onRecoveryCode };
+}
+
+/** Points the shared @cuewise/storage helpers at this device's backend for the next await chain. */
+function useStorage(device: Pick<Device, 'kv'>): void {
+  configurePlatform({ storage: device.kv });
+}
+
+describe('SyncEngine.enableSync', () => {
+  it('walks a brand-new account to active, fires onRecoveryCode, and uploads a seeded goal', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    const goal = goalFactory.build({ id: 'g1' });
+    await setGoals([goal]);
+
+    await device.engine.enableSync('cred-a', 'Device A');
+
+    expect(device.engine.getStatus()).toBe('active');
+    expect(device.onStatus.mock.calls.map((call) => call[0])).toEqual([
+      'signing_in',
+      'key_init',
+      'initial_sync',
+      'active',
+    ]);
+    expect(device.onRecoveryCode).toHaveBeenCalledTimes(1);
+    const uploaded = server
+      .allRecords()
+      .some((r) => r.collection === 'goals' && r.entityId === 'g1' && !r.deleted);
+    expect(uploaded).toBe(true);
+  });
+
+  it('downloads existing server data into a fresh device enrolling with the recovery code', async () => {
+    const server = new FakeSyncServer();
+    const deviceA = createDevice(server);
+    useStorage(deviceA);
+    const goal = goalFactory.build({ id: 'g1' });
+    await setGoals([goal]);
+    await deviceA.engine.enableSync('cred-a', 'Device A');
+    const recoveryCode = deviceA.onRecoveryCode.mock.calls[0][0] as string;
+
+    const deviceB = createDevice(server);
+    useStorage(deviceB);
+
+    await deviceB.engine.enableSync('cred-b', 'Device B', recoveryCode);
+
+    expect(deviceB.engine.getStatus()).toBe('active');
+    const goals = await getGoals();
+    expect(goals.map((g) => g.id)).toContain('g1');
+  });
+
+  it('unions distinct local data on both sides instead of one clobbering the other', async () => {
+    const server = new FakeSyncServer();
+    const deviceA = createDevice(server);
+    useStorage(deviceA);
+    await setGoals([goalFactory.build({ id: 'g-a' })]);
+    await deviceA.engine.enableSync('cred-a', 'Device A');
+    const recoveryCode = deviceA.onRecoveryCode.mock.calls[0][0] as string;
+
+    const deviceB = createDevice(server);
+    useStorage(deviceB);
+    await setGoals([goalFactory.build({ id: 'g-b' })]);
+
+    await deviceB.engine.enableSync('cred-b', 'Device B', recoveryCode);
+
+    const goals = await getGoals();
+    expect(goals.map((g) => g.id).sort()).toEqual(['g-a', 'g-b']);
+  });
+
+  it('a 401 from exchangeToken leaves status signed_out with local data intact and no DK persisted', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    const goal = goalFactory.build({ id: 'g1' });
+    await setGoals([goal]);
+    device.apiClient.rejectExchangeWith401 = true;
+
+    await device.engine.enableSync('cred-a', 'Device A');
+
+    expect(device.engine.getStatus()).toBe('signed_out');
+    expect(await getGoals()).toEqual([goal]);
+    expect(await device.kv.get(SYNC_DATA_KEY, 'local')).toBeNull();
+  });
+});
+
+describe('SyncEngine.syncNow', () => {
+  it('calls getChanges before pushChanges', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    await device.engine.enableSync('cred-a', 'Device A');
+    await device.engine.markMutated('goals', 'g1');
+    device.apiClient.callOrder.length = 0;
+
+    await device.engine.syncNow();
+
+    expect(device.apiClient.callOrder).toEqual(['getChanges', 'pushChanges']);
+  });
+
+  it('a 401 mid-sync drops to signed_out without clearing the DK or touching local data', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    const goal = goalFactory.build({ id: 'g1' });
+    await setGoals([goal]);
+    await device.engine.enableSync('cred-a', 'Device A');
+    expect(device.engine.getStatus()).toBe('active');
+
+    device.apiClient.rejectAllWith401 = true;
+    await device.engine.syncNow();
+
+    expect(device.engine.getStatus()).toBe('signed_out');
+    expect(await device.kv.get(SYNC_DATA_KEY, 'local')).not.toBeNull();
+    expect(await getGoals()).toEqual([goal]);
+  });
+
+  it('is a no-op before any DK is held', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+
+    await device.engine.syncNow();
+
+    expect(device.apiClient.callOrder).toEqual([]);
+  });
+});
+
+describe('SyncEngine.disableSync', () => {
+  it('clears status/DK/enabled-flag but leaves local domain data untouched', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    const goal = goalFactory.build({ id: 'g1' });
+    await setGoals([goal]);
+    await device.engine.enableSync('cred-a', 'Device A');
+
+    await device.engine.disableSync();
+
+    expect(device.engine.getStatus()).toBe('disabled');
+    expect(await device.kv.get(SYNC_DATA_KEY, 'local')).toBeNull();
+    expect(await device.kv.get(CLOUD_SYNC_ENABLED_KEY, 'local')).toBeNull();
+    expect(await getGoals()).toEqual([goal]);
+  });
+});
+
+describe('SyncEngine.start / stop', () => {
+  it('is a no-op when sync was never enabled on this device', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+
+    await device.engine.start();
+
+    expect(device.engine.getStatus()).toBe('disabled');
+    expect(device.scheduler.scheduled).toEqual([]);
+  });
+
+  it('self-heals the DK, syncs, and arms the pull loop for a restarted engine instance', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    await device.engine.enableSync('cred-a', 'Device A');
+
+    // Simulate an app restart: a fresh SyncEngine over the same persisted keyStore.
+    const restartedScheduler = new FakeScheduler();
+    const restarted = new SyncEngine({
+      apiClient: device.apiClient,
+      sessionManager: new SessionManager(device.kv),
+      keyStore: device.kv,
+      scheduler: restartedScheduler,
+    });
+
+    await restarted.start();
+
+    expect(restarted.getStatus()).toBe('active');
+    expect(restartedScheduler.scheduled.some((s) => s.id === SYNC_PULL_WAKE_ID)).toBe(true);
+  });
+
+  it('stop cancels the armed pull wake', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+
+    await device.engine.stop();
+
+    expect(device.scheduler.cancelled).toContain(SYNC_PULL_WAKE_ID);
+  });
+});
+
+describe('SyncEngine.markMutated / markDeleted', () => {
+  it('delegate to the mutation tracker', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    const metaStore = new SyncMetadataStore(device.kv);
+
+    await device.engine.markMutated('goals', 'g1');
+    expect((await metaStore.load()).dirty.goals).toEqual(['g1']);
+
+    await device.engine.markDeleted('goals', 'g1');
+    expect((await metaStore.load()).tombstones).toContain('goals/g1');
+  });
+});

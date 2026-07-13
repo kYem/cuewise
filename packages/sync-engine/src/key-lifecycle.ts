@@ -92,7 +92,8 @@ async function persistDataKey(keyStore: KeyValueStore, keyId: string, dk: DataKe
   }
 }
 
-async function loadPersistedDataKey(
+/** Reads back what `initOrEnrollKey` persisted, for callers (e.g. `start()`) that need the DK directly. */
+export async function loadPersistedDataKey(
   keyStore: KeyValueStore
 ): Promise<{ dk: DataKey; keyId: string } | null> {
   const persisted = await keyStore.get<PersistedDataKey>(SYNC_DATA_KEY, 'local');

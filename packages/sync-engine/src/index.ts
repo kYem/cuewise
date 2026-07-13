@@ -5,9 +5,17 @@ export {
 } from './collections';
 export { type CycleDeps, pullOnce, pushOnce, type SyncTransport } from './cycle';
 export {
+  CLOUD_SYNC_ENABLED_KEY,
+  type EngineApiClient,
+  SyncEngine,
+  type SyncEngineDeps,
+  type SyncStatus,
+} from './engine';
+export {
   initOrEnrollKey,
   type KeyLifecycleDeps,
   type KeyTransport,
+  loadPersistedDataKey,
   RecoveryCodeRequiredError,
   SelfHealNeedsEnrollError,
   SelfHealUnrecoverableError,
