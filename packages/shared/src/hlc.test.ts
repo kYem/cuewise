@@ -65,6 +65,15 @@ describe('hlc', () => {
     expect(merged.node).toBe('devA'); // our node id is preserved
   });
 
+  it('hlcReceive resets the counter when the wall clock alone is the maximum', () => {
+    const local = { physical: 1000, counter: 3, node: 'devA' };
+    const remote = { physical: 900, counter: 7, node: 'devB' };
+    const merged = hlcReceive(local, remote, 2000); // wall ahead of both
+    expect(merged.physical).toBe(2000);
+    expect(merged.counter).toBe(0);
+    expect(merged.node).toBe('devA');
+  });
+
   it('hlcReceive clamps an absurdly-future remote to wall + drift bound', () => {
     const local = hlcNow(hlcInit('devA'), 1000);
     const remote = { physical: 1000 + HLC_MAX_DRIFT_MS + 10_000, counter: 0, node: 'devB' };

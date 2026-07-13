@@ -36,7 +36,7 @@ export function hlcReceive(prev: Hlc, remote: Hlc, wallMs: number): Hlc {
   return { physical, counter, node: prev.node };
 }
 
-const PHYS_WIDTH = 15; // ms since epoch fits in 15 decimal digits until year ~5138
+const PHYS_WIDTH = 15; // 15 decimal digits holds epoch-ms well past year 30000
 const COUNTER_WIDTH = 5;
 
 export function hlcEncode(h: Hlc): string {
