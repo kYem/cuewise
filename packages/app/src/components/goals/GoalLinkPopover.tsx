@@ -17,7 +17,7 @@ interface GoalLinkPopoverProps {
 
 // WebKit doesn't focus buttons on mouse click, so without this the edit input
 // blurs with relatedTarget=null, the row's blur guard ends editing, and this
-// popover unmounts before the click lands (Chromium passes the guard by luck).
+// popover unmounts before the click lands.
 function keepEditFocus(e: React.MouseEvent): void {
   e.preventDefault();
 }

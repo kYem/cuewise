@@ -1,9 +1,9 @@
 import { expect, test } from '@playwright/test';
 import { stubThirdPartyRequests } from './network-stub';
 
-// ENG-57 regression, in the engine it was exclusive to: WebKit doesn't focus
-// buttons on mouse click, so the edit row's blur guard saw relatedTarget=null
-// and ended editing — unmounting the link picker before its click landed.
+// ENG-57 regression (WebKit-only): WebKit doesn't focus buttons on mouse click,
+// so the edit row's blur guard saw relatedTarget=null and ended editing —
+// unmounting the link picker before its click landed.
 test('link-to-goal picker opens from the edit row without closing it (WebKit)', async ({
   page,
 }) => {
@@ -38,6 +38,10 @@ test('link-to-goal picker opens from the edit row without closing it (WebKit)', 
   });
   await page.reload();
 
+  await expect(
+    page.getByRole('button', { name: 'Write report' }),
+    'seeded goals failed to load — check the localStorage "goals" contract'
+  ).toBeVisible();
   await page.getByRole('button', { name: 'Write report' }).click();
   const editInput = page.getByRole('textbox', { name: 'Edit task text' });
   await expect(editInput).toHaveValue('Write report');

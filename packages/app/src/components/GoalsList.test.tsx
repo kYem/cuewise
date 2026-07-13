@@ -13,6 +13,7 @@ import {
   createGoalStoreMock,
   createMockGoalStore,
   createSettingsStoreMock,
+  type MockGoalStore,
 } from './__fixtures__/goals-list.fixtures';
 import { GoalsList } from './GoalsList';
 
@@ -419,7 +420,7 @@ describe('GoalsList - Link to goal picker', () => {
 
   // The task is pre-linked so its trigger reads "Change linked goal" — unique in
   // the tree (the add-row's GoalInput button is also named "Link to goal").
-  function renderLinkedTaskInEditMode() {
+  function renderLinkedTaskInEditMode(storeOverrides: Partial<MockGoalStore> = {}) {
     const objective = goalFactory.build({ text: 'Ship the release', completed: false });
     const task = goalFactory.build({
       text: 'Write report',
@@ -430,6 +431,7 @@ describe('GoalsList - Link to goal picker', () => {
       todayTasks: [task],
       goals: [task, objective],
       getActiveGoals: vi.fn(() => [objective]),
+      ...storeOverrides,
     });
     vi.mocked(useGoalStore).mockImplementation(createGoalStoreMock(store));
     render(<GoalsList />);
@@ -441,9 +443,8 @@ describe('GoalsList - Link to goal picker', () => {
     renderLinkedTaskInEditMode();
     await user.click(screen.getByRole('button', { name: 'Write report' }));
 
-    // WebKit fires the input's blur with relatedTarget=null on button clicks, which
-    // ends editing and unmounts the picker — preventing mousedown's default is the
-    // fix, and fireEvent returns false exactly when the default was prevented.
+    // Preventing mousedown's default is the fix (see keepEditFocus); fireEvent
+    // returns false exactly when the default was prevented.
     expect(fireEvent.mouseDown(screen.getByRole('button', { name: 'Change linked goal' }))).toBe(
       false
     );
@@ -466,6 +467,38 @@ describe('GoalsList - Link to goal picker', () => {
     await user.click(entry);
 
     expect(store.linkTaskToGoal).toHaveBeenCalledWith(task.id, objective.id);
+    // A successful pick ends the edit flow.
+    expect(screen.queryByDisplayValue('Write report')).not.toBeInTheDocument();
+  });
+
+  it('a failed link keeps the picker and edit row open for a retry', async () => {
+    const user = userEvent.setup();
+    renderLinkedTaskInEditMode({ linkTaskToGoal: vi.fn(async () => false) });
+    await user.click(screen.getByRole('button', { name: 'Write report' }));
+    await user.click(screen.getByRole('button', { name: 'Change linked goal' }));
+
+    await user.click(await screen.findByRole('button', { name: /Ship the release/ }));
+
+    // The store toasts "try again" — tearing down the picker would make that a lie.
+    expect(screen.getByRole('button', { name: 'Remove link' })).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Write report')).toBeInTheDocument();
+  });
+
+  it('committing with enter while the picker is open does not prime it to reopen', async () => {
+    const user = userEvent.setup();
+    renderLinkedTaskInEditMode();
+    await user.click(screen.getByRole('button', { name: 'Write report' }));
+    await user.click(screen.getByRole('button', { name: 'Change linked goal' }));
+    await screen.findByRole('button', { name: 'Remove link' });
+
+    // Focus stayed in the input (pointer open), so Enter commits the edit; the
+    // controlled popover unmounts without ever firing onOpenChange.
+    await user.keyboard('{Enter}');
+    expect(screen.queryByDisplayValue('Write report')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Write report' }));
+
+    expect(screen.queryByRole('button', { name: 'Remove link' })).not.toBeInTheDocument();
   });
 
   it('a keyboard open hands focus to the picker, not the edit input', async () => {
@@ -479,8 +512,8 @@ describe('GoalsList - Link to goal picker', () => {
 
     // Radix's focus-into-content must proceed for keyboard users — only pointer
     // opens (focus still in the input) suppress it.
-    await screen.findByRole('button', { name: 'Remove link' });
-    expect(trigger).not.toHaveFocus();
+    const picker = await screen.findByRole('dialog');
+    expect(picker).toContainElement(document.activeElement as HTMLElement);
     expect(screen.getByDisplayValue('Write report')).toBeInTheDocument();
   });
 });
