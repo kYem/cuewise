@@ -54,10 +54,12 @@ pub fn run() {
             // Pomodoro/posture actions) via `set_tray_menu` once it loads.
             let open = MenuItem::with_id(app, "show", "Open Cuewise", true, None::<&str>)?;
             let insights = MenuItem::with_id(app, "insights", "View Insights", true, None::<&str>)?;
+            let settings = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit Cuewise", true, None::<&str>)?;
             let menu = MenuBuilder::new(app)
                 .item(&open)
                 .item(&insights)
+                .item(&settings)
                 .separator()
                 .item(&quit)
                 .build()?;
@@ -78,6 +80,8 @@ pub fn run() {
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "show" => reveal(app, None),
                     "insights" => reveal(app, Some("insights")),
+                    // #settings is a deep link: home + the settings modal open.
+                    "settings" => reveal(app, Some("settings")),
                     "quit" => app.exit(0),
                     // Everything else is a webview-supplied action id (set_tray_menu
                     // builds those), so relay it — the webview no-ops unknown ids.

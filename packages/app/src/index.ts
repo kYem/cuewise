@@ -22,6 +22,7 @@ export type { SettingsSectionProps } from './components/settings/settings-types'
 export { useFocusModeStore } from './stores/focus-mode-store';
 export { usePomodoroStore } from './stores/pomodoro-store';
 export { useReminderStore } from './stores/reminder-store';
+export { useSettingsStore } from './stores/settings-store';
 export { useToastStore } from './stores/toast-store';
 export type { SessionType } from './utils/pomodoro-styles';
 export { getSessionLabel } from './utils/pomodoro-styles';

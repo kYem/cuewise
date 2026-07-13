@@ -66,11 +66,13 @@ pub fn set_tray_menu(
 
     let show = MenuItem::with_id(&app, "show", "Open Cuewise", true, None::<&str>)?;
     let insights = MenuItem::with_id(&app, "insights", "View Insights", true, None::<&str>)?;
+    let settings = MenuItem::with_id(&app, "settings", "Settings…", true, None::<&str>)?;
     let quit = MenuItem::with_id(&app, "quit", "Quit Cuewise", true, None::<&str>)?;
 
     let menu = builder
         .item(&show)
         .item(&insights)
+        .item(&settings)
         .separator()
         .item(&quit)
         .build()?;
