@@ -21,11 +21,14 @@ let stderr = FileHandle.standardError
 var camera: CameraSession?
 
 func emit(_ sample: PostureSample) {
-  guard var line = try? encoder.encode(sample) else {
-    return
+  do {
+    var line = try encoder.encode(sample)
+    line.append(0x0A) // newline-delimited JSON
+    stdout.write(line)
+  } catch {
+    // A silent encode failure starves stdout and reads as a camera stall upstream.
+    log("failed to encode sample: \(error)")
   }
-  line.append(0x0A) // newline-delimited JSON
-  stdout.write(line)
 }
 
 func log(_ message: String) {

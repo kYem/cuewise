@@ -1,3 +1,4 @@
+import { logger } from '@cuewise/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   countInvokes,
@@ -15,6 +16,7 @@ import {
   resetPostureMocks,
   SAVE_FAILED_WARNING,
   SENSITIVITY_APPLY_FAILED_WARNING,
+  STALLED_ERROR,
   START_FAILED_ERROR,
   STOPPED_ERROR,
   toastErrorMock,
@@ -126,6 +128,47 @@ describe('posture controller lifecycle', () => {
     for (const unlisten of unlistenSpies) {
       expect(unlisten).toHaveBeenCalled();
     }
+  });
+
+  it('a liveness stall reports its own cause instead of blaming permissions', async () => {
+    await startTracking();
+    await glowUp();
+    vi.mocked(logger.warn).mockClear();
+
+    emitStopped('stalled');
+
+    expect(getPostureState().tracking).toBe(false);
+    expect(getPostureState().error).toBe(STALLED_ERROR);
+    expect(toastErrorMock).toHaveBeenCalledWith(STALLED_ERROR);
+    expect(logger.warn).not.toHaveBeenCalled();
+    // The shared teardown must run for a stall too — glow down, listeners detached.
+    expect(countInvokes('hide_glow')).toBe(1);
+    for (const unlisten of unlistenSpies) {
+      expect(unlisten).toHaveBeenCalled();
+    }
+    // A stall is transient — the opt-in survives so tracking auto-resumes next boot.
+    expect(localStorageStub.getItem(ENABLED_KEY)).toBe('1');
+  });
+
+  it('a mute reap is a recognized cause using the camera copy', async () => {
+    await startTracking();
+    vi.mocked(logger.warn).mockClear();
+
+    emitStopped('mute');
+
+    expect(getPostureState().error).toBe(STOPPED_ERROR);
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('an unknown stop cause falls back to the camera copy, leaving a trace', async () => {
+    await startTracking();
+
+    emitStopped('rebooted');
+
+    expect(getPostureState().error).toBe(STOPPED_ERROR);
+    expect(logger.warn).toHaveBeenCalledWith('Unrecognized posture stop cause', {
+      cause: 'rebooted',
+    });
   });
 
   it('a manual stop clears a stale error so the tray warning does not linger', async () => {
