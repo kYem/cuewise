@@ -118,8 +118,10 @@ pub fn start_posture(app: AppHandle, state: State<'_, PostureState>) -> Result<(
                     }
                 }
                 CommandEvent::Error(message) => {
+                    // A pipe/wait error doesn't imply the process died — reap, don't
+                    // just release, or a wedged sidecar could keep the camera.
                     eprintln!("posture sidecar: relay error: {message}");
-                    if release_owned_child(&task_app, generation) {
+                    if reap_owned_child(&task_app, generation) {
                         let _ = task_app.emit(STOPPED_EVENT, "exited");
                     }
                     break;

@@ -142,6 +142,16 @@ describe('posture controller lifecycle', () => {
     expect(localStorageStub.getItem(ENABLED_KEY)).toBe('1');
   });
 
+  it('a mute reap is a recognized cause using the camera copy', async () => {
+    await startTracking();
+    vi.mocked(logger.warn).mockClear();
+
+    emitStopped('mute');
+
+    expect(getPostureState().error).toBe(STOPPED_ERROR);
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
   it('an unknown stop cause falls back to the camera copy, leaving a trace', async () => {
     await startTracking();
 

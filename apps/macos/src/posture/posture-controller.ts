@@ -265,7 +265,7 @@ async function attachListeners(): Promise<void> {
       resetDerivation();
       // "stalled" = the watchdog killed a sidecar whose readings dried up (e.g. the
       // camera stream was interrupted) — blaming permissions would misdirect. The
-      // other causes ("exited", "mute" = never produced a frame) fit the camera copy.
+      // camera copy fits the rest: "exited", and "mute" (reaped before any frame).
       if (event.payload !== 'stalled' && event.payload !== 'exited' && event.payload !== 'mute') {
         logger.warn('Unrecognized posture stop cause', { cause: event.payload });
       }
