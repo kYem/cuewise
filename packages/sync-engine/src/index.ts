@@ -4,6 +4,7 @@ export {
   defaultBindings,
 } from './collections';
 export { defaultMeta, SYNC_META_KEY, type SyncMeta, SyncMetadataStore } from './metadata-store';
+export { MutationTracker } from './mutation-tracker';
 export { fromSyncRecord, toPushRecord } from './record-map';
 export {
   type ConflictStrategy,
