@@ -410,3 +410,62 @@ describe('GoalsList - Empty state', () => {
     expect(screen.getByRole('textbox')).toBeInTheDocument();
   });
 });
+
+describe('GoalsList - Link to goal picker', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useSettingsStore).mockImplementation(createSettingsStoreMock());
+  });
+
+  // The task is pre-linked so its trigger reads "Change linked goal" — unique in
+  // the tree (the add-row's GoalInput button is also named "Link to goal").
+  function renderLinkedTaskInEditMode() {
+    const objective = goalFactory.build({ text: 'Ship the release', completed: false });
+    const task = goalFactory.build({
+      text: 'Write report',
+      completed: false,
+      parentId: objective.id,
+    });
+    const store = createMockGoalStore({
+      todayTasks: [task],
+      goals: [task, objective],
+      getActiveGoals: vi.fn(() => [objective]),
+    });
+    vi.mocked(useGoalStore).mockImplementation(createGoalStoreMock(store));
+    render(<GoalsList />);
+    return { task, objective, store };
+  }
+
+  it('mousedown on the link trigger must not steal focus from the edit input', async () => {
+    const user = userEvent.setup();
+    renderLinkedTaskInEditMode();
+    await user.click(screen.getByRole('button', { name: 'Write report' }));
+
+    // WebKit fires the input's blur with relatedTarget=null on button clicks, which
+    // ends editing and unmounts the picker — preventing mousedown's default is the fix.
+    const notPrevented = fireEvent.mouseDown(
+      screen.getByRole('button', { name: 'Change linked goal' })
+    );
+
+    expect(notPrevented).toBe(false);
+    expect(screen.getByDisplayValue('Write report')).toBeInTheDocument();
+  });
+
+  it('opens the picker and relinks without closing the edit row early', async () => {
+    const user = userEvent.setup();
+    const { task, store } = renderLinkedTaskInEditMode();
+    await user.click(screen.getByRole('button', { name: 'Write report' }));
+
+    await user.click(screen.getByRole('button', { name: 'Change linked goal' }));
+
+    // The edit row must survive the trigger click (the WebKit regression closed it).
+    expect(screen.getByDisplayValue('Write report')).toBeInTheDocument();
+
+    const removeLink = await screen.findByRole('button', { name: 'Remove link' });
+    // Chromium focuses buttons on mousedown — picker items need the same blur guard.
+    expect(fireEvent.mouseDown(removeLink)).toBe(false);
+    await user.click(removeLink);
+
+    expect(store.linkTaskToGoal).toHaveBeenCalledWith(task.id, null);
+  });
+});

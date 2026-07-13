@@ -8,7 +8,7 @@ import {
   isObjective,
   isPastGoalTransferTime,
 } from '@cuewise/shared';
-import { cn, Popover, PopoverContent, PopoverTrigger } from '@cuewise/ui';
+import { cn } from '@cuewise/ui';
 import {
   closestCenter,
   DndContext,
@@ -26,13 +26,11 @@ import {
 import {
   ArrowRight,
   CalendarClock,
-  Check,
   ChevronDown,
   ChevronUp,
   Copy,
   ExternalLink,
   Flag,
-  Link2,
   MoveRight,
   Plus,
   Trash2,
@@ -49,6 +47,7 @@ import { CompactGoalRow } from './CompactGoalRow';
 import { DueDateControl } from './DueDateControl';
 import { EmptyState } from './EmptyState';
 import { GoalInput } from './GoalInput';
+import { GoalLinkPopover } from './goals/GoalLinkPopover';
 import { getFilteredReorder, SortableTaskItem } from './SortableTaskItem';
 import { UpcomingTasks } from './UpcomingTasks';
 
@@ -261,6 +260,7 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
                             onBlur={handleBlur}
                             onKeyDown={handleKeyDown}
                             maxLength={200}
+                            aria-label="Edit task text"
                             className="flex-1 min-w-0 text-sm px-2 py-1 border-2 border-primary-500 rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
                           />
                         ) : (
@@ -358,61 +358,16 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
 
                           {/* Link to Goal Button - only show in edit mode */}
                           {isEditing(goal.id) && activeGoals.length > 0 && (
-                            <Popover
+                            <GoalLinkPopover
                               open={isLinkPickerOpen(goal.id)}
                               onOpenChange={(open) =>
                                 open ? openLinkPicker(goal.id) : closeLinkPicker()
                               }
-                            >
-                              <PopoverTrigger asChild>
-                                <button
-                                  type="button"
-                                  className={cn(
-                                    'p-1 transition-colors focus:outline-none rounded',
-                                    goal.parentId
-                                      ? 'text-primary-600 hover:text-primary-700'
-                                      : 'text-secondary hover:text-primary-600'
-                                  )}
-                                  aria-label={goal.parentId ? 'Change linked goal' : 'Link to goal'}
-                                  title={goal.parentId ? 'Change linked goal' : 'Link to goal'}
-                                >
-                                  <Link2 className="w-4 h-4" />
-                                </button>
-                              </PopoverTrigger>
-                              <PopoverContent className="min-w-[180px] py-1 bg-surface/95 backdrop-blur-xl">
-                                {goal.parentId && (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleLinkToGoal(goal.id, null)}
-                                    className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 transition-colors"
-                                  >
-                                    <span>Remove link</span>
-                                  </button>
-                                )}
-                                {activeGoals.map((obj) => {
-                                  const isLinked = goal.parentId === obj.id;
-                                  return (
-                                    <button
-                                      key={obj.id}
-                                      type="button"
-                                      onClick={() => handleLinkToGoal(goal.id, obj.id)}
-                                      className={cn(
-                                        'w-full flex items-center gap-2 px-3 py-2 text-left text-sm transition-colors',
-                                        isLinked
-                                          ? 'bg-primary-50 text-primary-600'
-                                          : 'text-primary hover:bg-surface-variant'
-                                      )}
-                                    >
-                                      <Flag className="w-3 h-3 flex-shrink-0" />
-                                      <span className="flex-1 truncate">{obj.text}</span>
-                                      {isLinked && (
-                                        <Check className="w-4 h-4 text-primary-600 flex-shrink-0" />
-                                      )}
-                                    </button>
-                                  );
-                                })}
-                              </PopoverContent>
-                            </Popover>
+                              parentId={goal.parentId}
+                              activeGoals={activeGoals}
+                              onSelect={(goalId) => handleLinkToGoal(goal.id, goalId)}
+                              editInputRef={inputRef}
+                            />
                           )}
 
                           {/* Duplicate Button - only show in edit mode */}
