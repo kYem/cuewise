@@ -17,6 +17,8 @@
     "@cuewise/sync-client": "workspace:*"
   },
   "devDependencies": {
+    "@cuewise/test-utils": "workspace:*",
+    "@types/chrome": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

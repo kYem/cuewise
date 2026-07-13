@@ -563,6 +563,12 @@ importers:
         specifier: workspace:*
         version: link:../sync-client
     devDependencies:
+      '@cuewise/test-utils':
+        specifier: workspace:*
+        version: link:../test-utils
+      '@types/chrome':
+        specifier: 'catalog:'
+        version: 0.1.42
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
