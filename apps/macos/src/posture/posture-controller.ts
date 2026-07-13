@@ -24,6 +24,19 @@ export type NudgePause = number | 'until-resume';
 /** How long poor posture must persist before the glow shows (Settings presets). */
 export type NudgeDelaySeconds = 15 | 30 | 60;
 
+/**
+ * How much lean counts as slouching; each preset bundles its dead zone. Keep in
+ * sync with `KNOWN_PRESETS` (posture.rs) and `SensitivityPreset` (PostureAnalyzer.swift).
+ */
+export type NudgeSensitivity = 'strict' | 'balanced' | 'relaxed';
+
+/** A daily no-nudge window; overnight ranges (start > end) wrap midnight. */
+export interface QuietHours {
+  enabled: boolean;
+  start: string; // "HH:MM", 24-hour
+  end: string;
+}
+
 export interface PostureState {
   tracking: boolean;
   nudgesEnabled: boolean;
@@ -44,7 +57,11 @@ export interface PostureState {
   nudgeDelaySeconds: NudgeDelaySeconds;
   glowIntensity: GlowIntensity;
   glowStyle: GlowStyle;
+  nudgeSensitivity: NudgeSensitivity;
+  quietHours: QuietHours;
 }
+
+const DEFAULT_QUIET_HOURS: QuietHours = { enabled: false, start: '22:00', end: '08:00' };
 
 let state: PostureState = {
   tracking: false,
@@ -59,6 +76,8 @@ let state: PostureState = {
   nudgeDelaySeconds: 30,
   glowIntensity: 'standard',
   glowStyle: 'glow',
+  nudgeSensitivity: 'balanced',
+  quietHours: DEFAULT_QUIET_HOURS,
 };
 const subscribers = new Set<() => void>();
 let unlisteners: UnlistenFn[] = [];
@@ -115,6 +134,8 @@ const ENABLED_KEY = 'cuewise.posture.enabled';
 const NUDGES_KEY = 'cuewise.posture.nudges';
 const NUDGES_PAUSED_KEY = 'cuewise.posture.nudgesPausedUntil';
 const NUDGE_DELAY_KEY = 'cuewise.posture.nudgeDelaySeconds';
+const SENSITIVITY_KEY = 'cuewise.posture.sensitivity';
+const QUIET_HOURS_KEY = 'cuewise.posture.quietHours';
 
 // A poisoned Rust mutex is an internal bug (a prior panic), not the ordinary
 // camera/permission failure the callers already toast about — flag it distinctly
@@ -280,6 +301,7 @@ export function startPosture(): void {
       // onStopped (which detaches) — either way the session is no longer valid.
       if (!stopRequestedDuringStart && unlisteners.length > 0) {
         setState({ tracking: true });
+        applySensitivity();
       }
     })
     .catch((error) => {
@@ -353,6 +375,8 @@ export function initPosture(): void {
     }
     restorePausedUntil();
     restoreNudgeDelay();
+    restoreSensitivity();
+    restoreQuietHours();
     setState({ glowIntensity: readGlowIntensity(), glowStyle: readGlowStyle() });
     if (localStorage.getItem(ENABLED_KEY) === '1') {
       startPosture();
@@ -374,6 +398,58 @@ function restoreNudgeDelay(): void {
   } else {
     writeLocal(NUDGE_DELAY_KEY, null, 'Failed to discard the nudge delay');
     setState({ nudgeDelaySeconds: 30 });
+  }
+}
+
+// Only known presets restore; anything else is discarded back to the default.
+function restoreSensitivity(): void {
+  const persisted = localStorage.getItem(SENSITIVITY_KEY);
+  if (persisted === null) {
+    return;
+  }
+  if (persisted === 'strict' || persisted === 'balanced' || persisted === 'relaxed') {
+    setState({ nudgeSensitivity: persisted });
+  } else {
+    writeLocal(SENSITIVITY_KEY, null, 'Failed to discard the nudge sensitivity');
+    setState({ nudgeSensitivity: 'balanced' });
+  }
+}
+
+// A malformed persisted window restores as the default rather than lingering.
+function restoreQuietHours(): void {
+  const persisted = localStorage.getItem(QUIET_HOURS_KEY);
+  if (persisted === null) {
+    return;
+  }
+  const parsed = parseQuietHours(persisted);
+  if (parsed !== null) {
+    setState({ quietHours: parsed });
+  } else {
+    writeLocal(QUIET_HOURS_KEY, null, 'Failed to discard the quiet hours');
+    setState({ quietHours: DEFAULT_QUIET_HOURS });
+  }
+}
+
+function parseQuietHours(persisted: string): QuietHours | null {
+  try {
+    const value: unknown = JSON.parse(persisted);
+    if (typeof value !== 'object' || value === null) {
+      return null;
+    }
+    const record = value as Record<string, unknown>;
+    if (
+      typeof record.enabled !== 'boolean' ||
+      typeof record.start !== 'string' ||
+      typeof record.end !== 'string'
+    ) {
+      return null;
+    }
+    if (parseMinutes(record.start) === null || parseMinutes(record.end) === null) {
+      return null;
+    }
+    return { enabled: record.enabled, start: record.start, end: record.end };
+  } catch {
+    return null;
   }
 }
 
@@ -423,6 +499,44 @@ function isFocusSessionActive(): boolean {
     return true;
   }
   return useFocusModeStore.getState().isActive;
+}
+
+// Minutes since midnight for a strict "HH:MM", or null for anything else.
+function parseMinutes(time: string): number | null {
+  const match = /^(\d{2}):(\d{2})$/.exec(time);
+  if (match === null) {
+    return null;
+  }
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours > 23 || minutes > 59) {
+    return null;
+  }
+  return hours * 60 + minutes;
+}
+
+/** True while `now` is inside the window [start, end); start > end wraps midnight. */
+export function isWithinQuietHours(quietHours: QuietHours, now: Date): boolean {
+  if (!quietHours.enabled) {
+    return false;
+  }
+  const start = parseMinutes(quietHours.start);
+  const end = parseMinutes(quietHours.end);
+  // Equal times are an empty window, not a full day — matching [start, end).
+  if (start === null || end === null || start === end) {
+    return false;
+  }
+  const current = now.getHours() * 60 + now.getMinutes();
+  if (start < end) {
+    return current >= start && current < end;
+  }
+  return current >= start || current < end;
+}
+
+/** Configure the daily no-nudge window; tracking keeps running through it. */
+export function setQuietHours(quietHours: QuietHours): void {
+  writeLocal(QUIET_HOURS_KEY, JSON.stringify(quietHours), 'Failed to persist the quiet hours');
+  setState({ quietHours });
 }
 
 interface GlowShown {
@@ -518,7 +632,12 @@ function clearElapsedPause(): void {
 // recovery holds — sitting back is the dismissal.
 function updateNudgeGlow(sample: PostureSample): void {
   clearElapsedPause();
-  if (!state.nudgesEnabled || state.nudgesPausedUntil !== null || isFocusSessionActive()) {
+  if (
+    !state.nudgesEnabled ||
+    state.nudgesPausedUntil !== null ||
+    isFocusSessionActive() ||
+    isWithinQuietHours(state.quietHours, new Date())
+  ) {
     // Suppression hides immediately, on any frame. It is also streak-neutral:
     // reset, don't freeze, so a prior lean can't fire a stale glow when it lifts.
     poorStreak = 0;
@@ -557,6 +676,27 @@ export function setNudgeDelay(seconds: NudgeDelaySeconds): void {
 // the control — this toast says what the user is actually left with.
 const SAVE_FAILED_WARNING = "Couldn't save the setting — showing what's in effect instead.";
 
+/** Set how much lean counts as slouching; applies to the live session too. */
+export function setNudgeSensitivity(sensitivity: NudgeSensitivity): void {
+  writeLocal(SENSITIVITY_KEY, sensitivity, 'Failed to persist the nudge sensitivity');
+  setState({ nudgeSensitivity: sensitivity });
+  applySensitivity();
+}
+
+// A fresh sidecar process boots with default thresholds, so every start re-sends
+// the persisted preset (a no-op for 'balanced').
+function applySensitivity(): void {
+  if (!state.tracking) {
+    return;
+  }
+  invoke('set_posture_sensitivity', { preset: state.nudgeSensitivity }).catch((error) => {
+    logCommandFailure('Failed to apply the posture sensitivity', error);
+    useToastStore
+      .getState()
+      .warning("Couldn't apply the sensitivity — readings may use the previous setting.");
+  });
+}
+
 /** Set the glow strength; the glow windows read it from localStorage on show. */
 export function setGlowIntensity(intensity: GlowIntensity): void {
   const persisted = writeLocal(
@@ -590,6 +730,8 @@ export function startGlowPreview(): void {
   invoke('show_glow').catch((error) => {
     logCommandFailure('Failed to show the glow preview', error);
     setState({ glowPreviewActive: false });
+    // User-initiated with an expected visual — a silent no-show reads as broken.
+    useToastStore.getState().warning("Couldn't show the glow preview — please try again.");
   });
 }
 

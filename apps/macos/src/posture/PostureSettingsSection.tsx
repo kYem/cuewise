@@ -8,18 +8,21 @@ import {
 } from '@cuewise/app';
 import { Button, cn } from '@cuewise/ui';
 import { PersonStanding } from 'lucide-react';
-import { useEffect } from 'react';
+import { useEffect, useReducer } from 'react';
 import type { GlowIntensity, GlowStyle } from '../glow/glow-prefs';
 import {
   calibratePosture,
   describePauseEnd,
   type NudgeDelaySeconds,
+  type NudgeSensitivity,
   pausePostureNudges,
   resumePostureNudges,
   setGlowIntensity,
   setGlowStyle,
   setNudgeDelay,
+  setNudgeSensitivity,
   setPostureNudges,
+  setQuietHours,
   startGlowPreview,
   startPosture,
   stopGlowPreview,
@@ -46,6 +49,15 @@ const GLOW_STYLE_OPTIONS: { value: GlowStyle; label: string }[] = [
   { value: 'tint', label: 'Tint' },
 ];
 
+const SENSITIVITY_OPTIONS: { value: NudgeSensitivity; label: string }[] = [
+  { value: 'strict', label: 'Strict' },
+  { value: 'balanced', label: 'Balanced' },
+  { value: 'relaxed', label: 'Relaxed' },
+];
+
+const TIME_INPUT_CLASS =
+  'rounded border border-border bg-transparent px-1.5 py-0.5 text-xs text-primary dark:[color-scheme:dark]';
+
 function fmt(value: number | undefined, digits = 2): string {
   if (value === undefined) {
     return '—';
@@ -64,6 +76,8 @@ function PostureSection({ filter }: SettingsSectionProps) {
     glowIntensity,
     glowStyle,
     glowPreviewActive,
+    nudgeSensitivity,
+    quietHours,
   } = usePosture();
   const meta = sample ? STATUS_META[sample.status] : null;
 
@@ -71,6 +85,21 @@ function PostureSection({ filter }: SettingsSectionProps) {
   useEffect(() => {
     return () => {
       stopGlowPreview();
+    };
+  }, []);
+
+  // The window hides rather than closes, which fires no blur — re-render on
+  // re-show so a time field cleared mid-edit re-syncs to the enforced window.
+  const [, bumpVisibilityEpoch] = useReducer((epoch: number) => epoch + 1, 0);
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        bumpVisibilityEpoch();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
     };
   }, []);
 
@@ -96,6 +125,21 @@ function PostureSection({ filter }: SettingsSectionProps) {
           onChange={(next) => (next ? startPosture() : stopPosture())}
         />
       </SettingRow>
+
+      {tracking ? (
+        <SettingRow
+          label="Sensitivity"
+          help="How much lean counts. Strict flags small leans; Relaxed forgives more — sitting back never counts."
+          keywords="posture sensitivity dead zone strict balanced relaxed threshold lean slouch"
+          filter={filter}
+        >
+          <Segmented
+            value={nudgeSensitivity}
+            options={SENSITIVITY_OPTIONS}
+            onChange={setNudgeSensitivity}
+          />
+        </SettingRow>
+      ) : null}
 
       <SettingRow
         label="Remind me to fix my posture"
@@ -152,6 +196,62 @@ function PostureSection({ filter }: SettingsSectionProps) {
             >
               {glowPreviewActive ? 'Stop preview' : 'Preview'}
             </Button>
+          </div>
+        </SettingRow>
+      ) : null}
+
+      {nudgesEnabled ? (
+        <SettingRow
+          label="Quiet hours"
+          help="A daily window with no reminders — overnight ranges work too. Tracking keeps running."
+          keywords="posture quiet hours schedule night window nudges do not disturb"
+          filter={filter}
+        >
+          <div className="flex items-center gap-3">
+            <Switch
+              label="Quiet hours"
+              checked={quietHours.enabled}
+              onChange={(enabled) => setQuietHours({ ...quietHours, enabled })}
+            />
+            {quietHours.enabled ? (
+              <div className="flex items-center gap-1.5 text-xs text-tertiary">
+                <input
+                  type="time"
+                  value={quietHours.start}
+                  aria-label="Quiet hours start"
+                  className={TIME_INPUT_CLASS}
+                  onChange={(e) => {
+                    if (e.target.value !== '') {
+                      setQuietHours({ ...quietHours, start: e.target.value });
+                    }
+                  }}
+                  onBlur={(e) => {
+                    // A cleared field never reaches state — re-sync the display so it
+                    // can't disagree with the window still being enforced.
+                    if (e.target.value === '') {
+                      e.target.value = quietHours.start;
+                    }
+                  }}
+                />
+                <span>–</span>
+                <input
+                  type="time"
+                  value={quietHours.end}
+                  aria-label="Quiet hours end"
+                  className={TIME_INPUT_CLASS}
+                  onChange={(e) => {
+                    if (e.target.value !== '') {
+                      setQuietHours({ ...quietHours, end: e.target.value });
+                    }
+                  }}
+                  onBlur={(e) => {
+                    if (e.target.value === '') {
+                      e.target.value = quietHours.end;
+                    }
+                  }}
+                />
+              </div>
+            ) : null}
           </div>
         </SettingRow>
       ) : null}

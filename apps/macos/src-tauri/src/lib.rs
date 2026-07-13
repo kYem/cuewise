@@ -43,6 +43,7 @@ pub fn run() {
             posture::start_posture,
             posture::stop_posture,
             posture::calibrate_posture,
+            posture::set_posture_sensitivity,
             glow::show_glow,
             glow::hide_glow
         ])

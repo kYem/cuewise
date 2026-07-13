@@ -6,7 +6,8 @@ import PostureKit
 // + CameraSession pipeline and speaks newline-delimited JSON over stdio so the
 // Tauri app can drive it:
 //   - stdout: one PostureSample JSON object per line
-//   - stdin:  line commands — "calibrate" (snapshot the baseline) / "quit" (exit)
+//   - stdin:  line commands — "calibrate" (snapshot the baseline) /
+//             "sensitivity <strict|balanced|relaxed>" / "quit" (exit)
 // No image is ever stored or emitted — only derived numbers.
 
 let sampleInterval: TimeInterval = 2.0
@@ -49,10 +50,20 @@ func startCapture() {
 func listenForCommands() {
   DispatchQueue.global(qos: .utility).async {
     while let line = readLine(strippingNewline: true) {
-      switch line.trimmingCharacters(in: .whitespaces) {
+      let command = line.trimmingCharacters(in: .whitespaces)
+      switch command {
       case "calibrate":
         let ok = analyzer.calibrate()
         log(ok ? "recalibrated to current posture" : "not enough data to calibrate yet")
+      case let sensitivity where sensitivity.hasPrefix("sensitivity "):
+        let raw = String(sensitivity.dropFirst("sensitivity ".count))
+          .trimmingCharacters(in: .whitespaces)
+        if let preset = SensitivityPreset(rawValue: raw) {
+          analyzer.apply(preset)
+          log("sensitivity set to \(raw)")
+        } else {
+          log("unknown sensitivity preset: \(raw)")
+        }
       case "quit":
         camera?.stop()
         exit(0)

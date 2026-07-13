@@ -132,6 +132,40 @@ pub fn calibrate_posture(state: State<'_, PostureState>) -> Result<(), Error> {
     Ok(())
 }
 
+// Keep in sync with `SensitivityPreset` (PostureAnalyzer.swift) and
+// `NudgeSensitivity` (posture-controller.ts) — a Swift-side miss fails silently.
+const KNOWN_PRESETS: [&str; 3] = ["strict", "balanced", "relaxed"];
+
+// Whitelist before writing — the stdin line protocol must never carry an
+// arbitrary webview string.
+fn validate_preset(preset: &str) -> Result<(), Error> {
+    if KNOWN_PRESETS.contains(&preset) {
+        Ok(())
+    } else {
+        Err(Error::UnknownPreset)
+    }
+}
+
+/// Apply a sensitivity preset to the running sidecar (no-op while stopped). The
+/// webview re-sends the persisted preset after every start — a fresh sidecar
+/// process boots with the default thresholds.
+#[tauri::command]
+pub fn set_posture_sensitivity(
+    state: State<'_, PostureState>,
+    preset: String,
+) -> Result<(), Error> {
+    validate_preset(&preset)?;
+    let mut guard = state.child.lock().map_err(log_poison)?;
+    if let Some(child) = guard.as_mut() {
+        child.write(format!("sensitivity {preset}\n").as_bytes())?;
+    } else {
+        // The webview only calls this while it believes tracking is on — a miss
+        // here is a start/stop race worth a trace.
+        eprintln!("posture sidecar: sensitivity {preset} dropped — no child running");
+    }
+    Ok(())
+}
+
 /// Stop tracking: ask the sidecar to quit, then kill it so the camera turns off.
 /// The kill is a hard error — it's the last line of defense for turning the camera
 /// off, so the caller (and the user, via the existing toast) must hear about a
@@ -157,6 +191,34 @@ mod tests {
     use tokio::time::Instant;
 
     const CAP: Duration = Duration::from_millis(30);
+
+    #[test]
+    fn known_presets_stay_line_protocol_safe() {
+        // Presets are written verbatim into a newline-delimited stdin protocol —
+        // a newline in one would smuggle in a second command; keep them bare words.
+        for preset in KNOWN_PRESETS {
+            assert!(
+                preset.chars().all(|c| c.is_ascii_lowercase()),
+                "preset {preset:?} must be a bare lowercase word"
+            );
+        }
+        // Pin the list: adding a preset must route through this file, whose sync
+        // comment names the Swift and TS siblings.
+        assert_eq!(KNOWN_PRESETS, ["strict", "balanced", "relaxed"]);
+    }
+
+    #[test]
+    fn preset_validation_rejects_anything_off_the_whitelist() {
+        for preset in KNOWN_PRESETS {
+            assert!(validate_preset(preset).is_ok());
+        }
+        for bad in ["ultra", "", "strict\nquit", "Strict", "sensitivity strict"] {
+            assert!(
+                matches!(validate_preset(bad), Err(Error::UnknownPreset)),
+                "{bad:?} must be rejected before reaching the sidecar's stdin"
+            );
+        }
+    }
 
     #[test]
     fn bounded_wait_elapses_when_nothing_arrives() {
