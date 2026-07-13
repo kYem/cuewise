@@ -11,6 +11,7 @@ import {
   NUDGES_PAUSED_KEY,
   pomodoroStateMock,
   resetPostureMocks,
+  SAVE_FAILED_WARNING,
   START_FAILED_ERROR,
   STOPPED_ERROR,
   toastErrorMock,
@@ -668,7 +669,8 @@ describe('glow appearance preferences', () => {
     expect(getPostureState().glowStyle).toBe('tint');
   });
 
-  it('reflects the persisted value when the write fails', () => {
+  it('keeps the persisted style and warns when the write fails', () => {
+    setGlowStyle('border');
     const failingWrite = vi.spyOn(localStorageStub, 'setItem').mockImplementation(() => {
       throw new Error('storage full');
     });
@@ -676,8 +678,9 @@ describe('glow appearance preferences', () => {
     failingWrite.mockRestore();
 
     // The glow windows read localStorage — Settings must not claim a style they won't use.
-    expect(getPostureState().glowStyle).toBe('glow');
-    expect(localStorageStub.getItem('cuewise.posture.glowStyle')).toBeNull();
+    expect(getPostureState().glowStyle).toBe('border');
+    expect(localStorageStub.getItem('cuewise.posture.glowStyle')).toBe('border');
+    expect(toastWarningMock).toHaveBeenCalledWith(SAVE_FAILED_WARNING);
   });
 });
 

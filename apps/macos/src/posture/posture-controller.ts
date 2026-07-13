@@ -129,15 +129,17 @@ function logCommandFailure(context: string, error: unknown): void {
 
 // localStorage can throw (private mode, quota); prefs must never take the
 // controller down over it.
-function writeLocal(key: string, value: string | null, context: string): void {
+function writeLocal(key: string, value: string | null, context: string): boolean {
   try {
     if (value === null) {
       localStorage.removeItem(key);
     } else {
       localStorage.setItem(key, value);
     }
+    return true;
   } catch (error) {
     logger.error(context, error);
+    return false;
   }
 }
 
@@ -551,18 +553,31 @@ export function setNudgeDelay(seconds: NudgeDelaySeconds): void {
   setState({ nudgeDelaySeconds: seconds });
 }
 
+const SAVE_FAILED_WARNING = "Couldn't save the setting — the previous value is still in use.";
+
 /** Set the glow strength; the glow windows read it from localStorage on show. */
 export function setGlowIntensity(intensity: GlowIntensity): void {
-  writeLocal(GLOW_INTENSITY_KEY, intensity, 'Failed to persist the glow intensity');
+  const persisted = writeLocal(
+    GLOW_INTENSITY_KEY,
+    intensity,
+    'Failed to persist the glow intensity'
+  );
   // The glow windows read localStorage, not this state — reflect what actually
   // persisted so Settings can't show a strength the overlays won't use.
   setState({ glowIntensity: readGlowIntensity() });
+  if (!persisted) {
+    // Unlike the other prefs, the control visibly snaps back — explain why.
+    useToastStore.getState().warning(SAVE_FAILED_WARNING);
+  }
 }
 
 /** Set the nudge style; persisted and read back exactly like the intensity above. */
 export function setGlowStyle(style: GlowStyle): void {
-  writeLocal(GLOW_STYLE_KEY, style, 'Failed to persist the glow style');
+  const persisted = writeLocal(GLOW_STYLE_KEY, style, 'Failed to persist the glow style');
   setState({ glowStyle: readGlowStyle() });
+  if (!persisted) {
+    useToastStore.getState().warning(SAVE_FAILED_WARNING);
+  }
 }
 
 /** Show the glow on demand (Settings preview). Works with tracking off too. */

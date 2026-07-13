@@ -64,6 +64,8 @@ export const ENABLED_KEY = 'cuewise.posture.enabled';
 export const NUDGES_PAUSED_KEY = 'cuewise.posture.nudgesPausedUntil';
 
 // User-facing messages asserted on — must mirror posture-controller.ts.
+export const SAVE_FAILED_WARNING =
+  "Couldn't save the setting — the previous value is still in use.";
 export const STOPPED_ERROR = 'Posture tracking stopped — camera unavailable or permission denied.';
 export const UNREADABLE_ERROR = 'Posture readings could not be read.';
 export const START_FAILED_ERROR = 'Could not start posture tracking — check camera access.';

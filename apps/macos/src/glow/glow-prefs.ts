@@ -1,3 +1,5 @@
+import { logger } from '@cuewise/shared';
+
 // Shared between the posture controller (writes) and the glow windows (read) —
 // same-origin localStorage is the IPC-free channel into the isolated overlays.
 export const GLOW_INTENSITY_KEY = 'cuewise.posture.glowIntensity';
@@ -18,9 +20,9 @@ export function readGlowIntensity(): GlowIntensity {
       // Legacy tier from the 4-level scale; its look is today's standard.
       return 'standard';
     }
-  } catch {
-    // Storage unavailable — fall through to the default; kept logger-free so the
-    // glow windows stay dependency-light.
+  } catch (error) {
+    // A pref read must never break an overlay — default below, but leave a trace.
+    logger.warn('Glow intensity unreadable — using the default', { error });
   }
   return 'standard';
 }
@@ -31,8 +33,9 @@ export function readGlowStyle(): GlowStyle {
     if (value === 'glow' || value === 'border' || value === 'tint') {
       return value;
     }
-  } catch {
+  } catch (error) {
     // Same rationale as readGlowIntensity.
+    logger.warn('Glow style unreadable — using the default', { error });
   }
   return 'glow';
 }

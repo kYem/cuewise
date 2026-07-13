@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { glowVignetteClassName, readGlowIntensity, readGlowStyle } from './glow-prefs';
 
+vi.mock('@cuewise/shared', () => ({
+  logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
+}));
+
 function stubStorage(getItem: () => string | null): void {
   vi.stubGlobal('localStorage', { getItem });
 }

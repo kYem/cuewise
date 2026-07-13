@@ -4,6 +4,12 @@ import { expect, type Page } from '@playwright/test';
 // same-document, so force a real load. Call last — the app document is gone after.
 export async function assertGlowSurfaceRenders(page: Page, baseUrl = ''): Promise<void> {
   await page.goto(`${baseUrl}/#glow`);
+  // Prefs leaked by earlier spec steps would disarm every comparison below —
+  // the baseline must be the default rendering.
+  await page.evaluate(() => {
+    localStorage.removeItem('cuewise.posture.glowIntensity');
+    localStorage.removeItem('cuewise.posture.glowStyle');
+  });
   await page.reload();
   await expect(page.locator('.glow-vignette')).toBeVisible();
 
@@ -47,5 +53,14 @@ export async function assertGlowSurfaceRenders(page: Page, baseUrl = ''): Promis
   const tint = await readVignette();
   expect(tint.boxShadow).toBe('none');
   expect(tint.background).not.toBe(standard.background);
-  await page.evaluate(() => localStorage.removeItem('cuewise.posture.glowStyle'));
+
+  // Tint at a non-standard intensity: its `box-shadow: none` beats the intensity
+  // tiers by CSS source order only — a stylesheet reorder would regress this.
+  await applyPref('cuewise.posture.glowIntensity', 'subtle');
+  expect((await readVignette()).boxShadow).toBe('none');
+
+  await page.evaluate(() => {
+    localStorage.removeItem('cuewise.posture.glowIntensity');
+    localStorage.removeItem('cuewise.posture.glowStyle');
+  });
 }
