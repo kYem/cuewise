@@ -835,6 +835,15 @@ describe('sync sink wiring', () => {
     expect(markMutated).toHaveBeenCalledWith('quotes', customQuote.id);
   });
 
+  it('does not notify when unhiding a seed (non-custom) quote', async () => {
+    const seedQuote = quoteFactory.build({ isCustom: false, isHidden: true });
+    useQuoteStore.setState({ quotes: [seedQuote] });
+
+    await useQuoteStore.getState().unhideQuote(seedQuote.id);
+
+    expect(markMutated).not.toHaveBeenCalled();
+  });
+
   it('notifies markMutated with the quote id after addQuoteToCollection persists a custom quote', async () => {
     const customQuote = quoteFactory.build({ isCustom: true, collectionIds: [] });
     useQuoteStore.setState({ quotes: [customQuote], currentQuote: null });
@@ -860,6 +869,15 @@ describe('sync sink wiring', () => {
     await useQuoteStore.getState().removeQuoteFromCollection(customQuote.id, 'collection-1');
 
     expect(markMutated).toHaveBeenCalledWith('quotes', customQuote.id);
+  });
+
+  it('does not notify removeQuoteFromCollection for a seed (non-custom) quote', async () => {
+    const seedQuote = quoteFactory.build({ isCustom: false, collectionIds: ['collection-1'] });
+    useQuoteStore.setState({ quotes: [seedQuote], currentQuote: null });
+
+    await useQuoteStore.getState().removeQuoteFromCollection(seedQuote.id, 'collection-1');
+
+    expect(markMutated).not.toHaveBeenCalled();
   });
 
   it('notifies markMutatedBulk with only the custom ids after bulkToggleFavorite', async () => {
@@ -902,6 +920,22 @@ describe('sync sink wiring', () => {
 
     expect(markMutatedBulk).toHaveBeenCalledWith('quotes', [customA.id, customB.id]);
     expect(markMutated).not.toHaveBeenCalled();
+  });
+
+  it('filters an already-member custom quote out of addQuotesToCollection notifications', async () => {
+    const alreadyMember = quoteFactory.build({ isCustom: true, collectionIds: ['collection-1'] });
+    const newMember = quoteFactory.build({ isCustom: true, collectionIds: [] });
+    useQuoteStore.setState({
+      quotes: [alreadyMember, newMember],
+      collections: [],
+      currentQuote: null,
+    });
+
+    await useQuoteStore
+      .getState()
+      .addQuotesToCollection([alreadyMember.id, newMember.id], 'collection-1');
+
+    expect(markMutatedBulk).toHaveBeenCalledWith('quotes', [newMember.id]);
   });
 
   it('notifies markMutatedBulk with every imported id after bulkAddQuotes', async () => {
