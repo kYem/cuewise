@@ -3,6 +3,7 @@
  * notifications through the platform Scheduler/Notifier ports.
  */
 
+import type { SyncUiStatus } from '@cuewise/app';
 import { handleReminderFire } from '@cuewise/app/reminder-notifications';
 import {
   getStorage,
@@ -13,9 +14,11 @@ import {
 } from '@cuewise/shared';
 import { getReminders, setReminders } from '@cuewise/storage';
 import { SYNC_PULL_WAKE_ID } from '@cuewise/sync-client';
-import { createSyncEngine } from '@cuewise/sync-engine';
+import { createSyncEngine, type SyncStatus } from '@cuewise/sync-engine';
 import { configureChromePlatform } from './platform';
+import { handleSyncControlMessage } from './sync/handle-sync-control-message';
 import { handleSyncMessage } from './sync/handle-sync-message';
+import { isSyncControlMessage } from './sync/sync-control-messages';
 
 const { scheduler, notifier } = configureChromePlatform();
 
@@ -24,15 +27,56 @@ const { scheduler, notifier } = configureChromePlatform();
 // behave identically.
 scheduler.onFire(handleReminderFire);
 
+// Engine SyncStatus -> UI-facing SyncUiStatus, mirroring macOS's DirectSyncController
+// mapStatus exactly (spec's intended per-host boundary — adapters own this mapping).
+function mapToUi(status: SyncStatus): SyncUiStatus {
+  if (status === 'disabled') {
+    return 'off';
+  }
+  if (
+    status === 'signing_in' ||
+    status === 'key_init' ||
+    status === 'enrolling' ||
+    status === 'initial_sync'
+  ) {
+    return 'connecting';
+  }
+  if (status === 'active') {
+    return 'active';
+  }
+  if (status === 'error') {
+    return 'error';
+  }
+  if (status === 'signed_out') {
+    return 'needs_reauth';
+  }
+  // Exhaustiveness guard: a new SyncStatus member is a compile error here, not a silent fallthrough.
+  const exhaustive: never = status;
+  throw new Error(`unmapped sync status: ${String(exhaustive)}`);
+}
+
 // ENG-45 cloud sync: off by default — no enable-sync UI ships yet. Set
 // VITE_SYNC_API_BASE_URL locally (pointed at `wrangler dev`, e.g. localhost:8787) to
 // resume/self-heal a session that was enabled some other way (e.g. devtools).
 const syncApiBaseUrl = import.meta.env.VITE_SYNC_API_BASE_URL;
 if (syncApiBaseUrl) {
+  // One-shot capture slot (E4): the control handler reads-and-clears it via takeRecoveryCode.
+  // NEVER persisted or logged — the code only ever leaves this module in a control response.
+  let capturedRecoveryCode: string | undefined;
+
   const syncEngine = createSyncEngine({
     baseUrl: syncApiBaseUrl,
     keyStore: getStorage(),
     scheduler,
+    onStatus: (status) => {
+      void chrome.storage.local.set({ 'cuewise.sync.status': mapToUi(status) });
+    },
+    onQuarantine: () => {
+      void chrome.storage.local.set({ 'cuewise.sync.lastQuarantineAt': Date.now() });
+    },
+    onRecoveryCode: (code) => {
+      capturedRecoveryCode = code;
+    },
   });
   scheduler.onFire((id) => {
     if (id === SYNC_PULL_WAKE_ID) {
@@ -49,6 +93,22 @@ if (syncApiBaseUrl) {
   // unused here but harmless — nothing in this realm calls notifyMutated etc.
   chrome.runtime.onMessage.addListener((msg) => {
     handleSyncMessage(syncEngine, msg);
+  });
+
+  // ENG-45 Task 10: the page-realm enable-sync UI control channel. Ignores non-control
+  // messages (the mutation listener above handles those) and holds the channel open.
+  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+    if (!isSyncControlMessage(msg)) {
+      return false;
+    }
+    handleSyncControlMessage(syncEngine, msg, {
+      takeRecoveryCode: () => {
+        const code = capturedRecoveryCode;
+        capturedRecoveryCode = undefined;
+        return code;
+      },
+    }).then(sendResponse);
+    return true;
   });
 }
 
