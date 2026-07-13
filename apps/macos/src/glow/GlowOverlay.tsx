@@ -35,6 +35,6 @@ export function GlowOverlay(): React.JSX.Element {
   // Re-read per show (the epoch remount) so a Settings change applies next glow.
   const intensity = readGlowIntensity();
   const className =
-    intensity === 'subtle' ? 'glow-vignette glow-vignette--subtle' : 'glow-vignette';
+    intensity === 'standard' ? 'glow-vignette' : `glow-vignette glow-vignette--${intensity}`;
   return <div key={epoch} className={className} aria-hidden="true" />;
 }

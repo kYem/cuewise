@@ -2,12 +2,12 @@
 // same-origin localStorage is the IPC-free channel into the isolated overlays.
 export const GLOW_INTENSITY_KEY = 'cuewise.posture.glowIntensity';
 
-export type GlowIntensity = 'subtle' | 'standard';
+export type GlowIntensity = 'subtle' | 'standard' | 'strong' | 'intense';
 
 export function readGlowIntensity(): GlowIntensity {
   try {
     const value = localStorage.getItem(GLOW_INTENSITY_KEY);
-    if (value === 'subtle' || value === 'standard') {
+    if (value === 'subtle' || value === 'standard' || value === 'strong' || value === 'intense') {
       return value;
     }
   } catch {

@@ -36,6 +36,8 @@ const NUDGE_DELAY_OPTIONS: { value: `${NudgeDelaySeconds}`; label: string }[] = 
 const GLOW_INTENSITY_OPTIONS: { value: GlowIntensity; label: string }[] = [
   { value: 'subtle', label: 'Subtle' },
   { value: 'standard', label: 'Standard' },
+  { value: 'strong', label: 'Strong' },
+  { value: 'intense', label: 'Intense' },
 ];
 
 function fmt(value: number | undefined, digits = 2): string {
