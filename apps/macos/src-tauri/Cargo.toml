@@ -29,4 +29,6 @@ codegen-units = 1
 lto = true
 opt-level = "s"
 panic = "abort"
-strip = true
+# Keep the symbol table (drop only DWARF): panic=abort means any panic becomes a
+# SIGABRT crash report, which is bare addresses without symbols (ENG-55).
+strip = "debuginfo"
