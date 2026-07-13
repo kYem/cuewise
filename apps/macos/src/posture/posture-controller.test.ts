@@ -11,6 +11,7 @@ import {
   NUDGES_PAUSED_KEY,
   pomodoroStateMock,
   resetPostureMocks,
+  SAVE_FAILED_WARNING,
   START_FAILED_ERROR,
   STOPPED_ERROR,
   toastErrorMock,
@@ -27,6 +28,7 @@ import {
   resumePostureNudges,
   STEADY_SAMPLES,
   setGlowIntensity,
+  setGlowStyle,
   setNudgeDelay,
   setPostureNudges,
   startGlowPreview,
@@ -630,9 +632,10 @@ describe('configurable nudge delay', () => {
   });
 });
 
-describe('glow intensity preference', () => {
+describe('glow appearance preferences', () => {
   afterEach(() => {
     setGlowIntensity('standard');
+    setGlowStyle('glow');
   });
 
   it('persists the choice for the glow windows to read', () => {
@@ -652,6 +655,48 @@ describe('glow intensity preference', () => {
     initPosture();
     await flushChain();
     expect(getPostureState().glowIntensity).toBe('standard');
+  });
+
+  it('persists and restores the nudge style', async () => {
+    setGlowStyle('border');
+    expect(getPostureState().glowStyle).toBe('border');
+    expect(localStorageStub.getItem('cuewise.posture.glowStyle')).toBe('border');
+
+    setGlowStyle('glow');
+    localStorageStub.setItem('cuewise.posture.glowStyle', 'tint');
+    initPosture();
+    await flushChain();
+    expect(getPostureState().glowStyle).toBe('tint');
+  });
+
+  it('keeps the persisted style and warns when the write fails', () => {
+    setGlowStyle('border');
+    const failingWrite = vi.spyOn(localStorageStub, 'setItem').mockImplementation(() => {
+      throw new Error('storage full');
+    });
+    setGlowStyle('tint');
+    failingWrite.mockRestore();
+
+    // The glow windows read localStorage — Settings must not claim a style they won't use.
+    expect(getPostureState().glowStyle).toBe('border');
+    expect(localStorageStub.getItem('cuewise.posture.glowStyle')).toBe('border');
+    // Exactly one: the failed write warns, the successful seed write must not.
+    expect(toastWarningMock).toHaveBeenCalledTimes(1);
+    expect(toastWarningMock).toHaveBeenCalledWith(SAVE_FAILED_WARNING);
+  });
+
+  it('keeps the persisted strength and warns when the write fails', () => {
+    setGlowIntensity('subtle');
+    const failingWrite = vi.spyOn(localStorageStub, 'setItem').mockImplementation(() => {
+      throw new Error('storage full');
+    });
+    setGlowIntensity('intense');
+    failingWrite.mockRestore();
+
+    expect(getPostureState().glowIntensity).toBe('subtle');
+    expect(localStorageStub.getItem('cuewise.posture.glowIntensity')).toBe('subtle');
+    expect(toastWarningMock).toHaveBeenCalledTimes(1);
+    expect(toastWarningMock).toHaveBeenCalledWith(SAVE_FAILED_WARNING);
   });
 });
 

@@ -3,7 +3,14 @@ import { logger, type PostureSample, type PostureStatus } from '@cuewise/shared'
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { useSyncExternalStore } from 'react';
-import { GLOW_INTENSITY_KEY, type GlowIntensity, readGlowIntensity } from '../glow/glow-prefs';
+import {
+  GLOW_INTENSITY_KEY,
+  GLOW_STYLE_KEY,
+  type GlowIntensity,
+  type GlowStyle,
+  readGlowIntensity,
+  readGlowStyle,
+} from '../glow/glow-prefs';
 import { isCommandError } from '../platform/command-error';
 
 // Module-level posture state. Tracking outlives the Settings section (which only
@@ -36,6 +43,7 @@ export interface PostureState {
   nudgesPausedUntil: NudgePause | null;
   nudgeDelaySeconds: NudgeDelaySeconds;
   glowIntensity: GlowIntensity;
+  glowStyle: GlowStyle;
 }
 
 let state: PostureState = {
@@ -50,6 +58,7 @@ let state: PostureState = {
   nudgesPausedUntil: null,
   nudgeDelaySeconds: 30,
   glowIntensity: 'standard',
+  glowStyle: 'glow',
 };
 const subscribers = new Set<() => void>();
 let unlisteners: UnlistenFn[] = [];
@@ -120,15 +129,17 @@ function logCommandFailure(context: string, error: unknown): void {
 
 // localStorage can throw (private mode, quota); prefs must never take the
 // controller down over it.
-function writeLocal(key: string, value: string | null, context: string): void {
+function writeLocal(key: string, value: string | null, context: string): boolean {
   try {
     if (value === null) {
       localStorage.removeItem(key);
     } else {
       localStorage.setItem(key, value);
     }
+    return true;
   } catch (error) {
     logger.error(context, error);
+    return false;
   }
 }
 
@@ -342,7 +353,7 @@ export function initPosture(): void {
     }
     restorePausedUntil();
     restoreNudgeDelay();
-    setState({ glowIntensity: readGlowIntensity() });
+    setState({ glowIntensity: readGlowIntensity(), glowStyle: readGlowStyle() });
     if (localStorage.getItem(ENABLED_KEY) === '1') {
       startPosture();
     }
@@ -542,12 +553,32 @@ export function setNudgeDelay(seconds: NudgeDelaySeconds): void {
   setState({ nudgeDelaySeconds: seconds });
 }
 
+// Only the glow prefs read back from storage, so a failed write visibly snaps
+// the control — this toast says what the user is actually left with.
+const SAVE_FAILED_WARNING = "Couldn't save the setting — showing what's in effect instead.";
+
 /** Set the glow strength; the glow windows read it from localStorage on show. */
 export function setGlowIntensity(intensity: GlowIntensity): void {
-  writeLocal(GLOW_INTENSITY_KEY, intensity, 'Failed to persist the glow intensity');
+  const persisted = writeLocal(
+    GLOW_INTENSITY_KEY,
+    intensity,
+    'Failed to persist the glow intensity'
+  );
   // The glow windows read localStorage, not this state — reflect what actually
   // persisted so Settings can't show a strength the overlays won't use.
   setState({ glowIntensity: readGlowIntensity() });
+  if (!persisted) {
+    useToastStore.getState().warning(SAVE_FAILED_WARNING);
+  }
+}
+
+/** Set the nudge style; persisted and read back exactly like the intensity above. */
+export function setGlowStyle(style: GlowStyle): void {
+  const persisted = writeLocal(GLOW_STYLE_KEY, style, 'Failed to persist the glow style');
+  setState({ glowStyle: readGlowStyle() });
+  if (!persisted) {
+    useToastStore.getState().warning(SAVE_FAILED_WARNING);
+  }
 }
 
 /** Show the glow on demand (Settings preview). Works with tracking off too. */

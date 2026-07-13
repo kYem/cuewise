@@ -9,7 +9,7 @@ import {
 import { Button, cn } from '@cuewise/ui';
 import { PersonStanding } from 'lucide-react';
 import { useEffect } from 'react';
-import type { GlowIntensity } from '../glow/glow-prefs';
+import type { GlowIntensity, GlowStyle } from '../glow/glow-prefs';
 import {
   calibratePosture,
   describePauseEnd,
@@ -17,6 +17,7 @@ import {
   pausePostureNudges,
   resumePostureNudges,
   setGlowIntensity,
+  setGlowStyle,
   setNudgeDelay,
   setPostureNudges,
   startGlowPreview,
@@ -36,8 +37,13 @@ const NUDGE_DELAY_OPTIONS: { value: `${NudgeDelaySeconds}`; label: string }[] = 
 const GLOW_INTENSITY_OPTIONS: { value: GlowIntensity; label: string }[] = [
   { value: 'subtle', label: 'Subtle' },
   { value: 'standard', label: 'Standard' },
-  { value: 'strong', label: 'Strong' },
   { value: 'intense', label: 'Intense' },
+];
+
+const GLOW_STYLE_OPTIONS: { value: GlowStyle; label: string }[] = [
+  { value: 'glow', label: 'Glow' },
+  { value: 'border', label: 'Border' },
+  { value: 'tint', label: 'Tint' },
 ];
 
 function fmt(value: number | undefined, digits = 2): string {
@@ -56,6 +62,7 @@ function PostureSection({ filter }: SettingsSectionProps) {
     nudgesPausedUntil,
     nudgeDelaySeconds,
     glowIntensity,
+    glowStyle,
     glowPreviewActive,
   } = usePosture();
   const meta = sample ? STATUS_META[sample.status] : null;
@@ -92,7 +99,7 @@ function PostureSection({ filter }: SettingsSectionProps) {
 
       <SettingRow
         label="Remind me to fix my posture"
-        help="A gentle glow around the screen edge when you've been leaning in for a while — it clears once you sit back."
+        help="A gentle visual cue on screen when you've been leaning in for a while — it clears once you sit back."
         keywords="posture nudge remind glow slouch reminder screen edge"
         filter={filter}
       >
@@ -102,7 +109,7 @@ function PostureSection({ filter }: SettingsSectionProps) {
       {nudgesEnabled ? (
         <SettingRow
           label="Nudge after"
-          help="How long you can lean in before the glow appears."
+          help="How long you can lean in before the reminder appears."
           keywords="posture nudge delay threshold strict gentle seconds glow trigger"
           filter={filter}
         >
@@ -116,9 +123,20 @@ function PostureSection({ filter }: SettingsSectionProps) {
 
       {nudgesEnabled ? (
         <SettingRow
-          label="Glow strength"
-          help="How present the screen-edge glow feels. Preview shows it now and stops when you leave Settings."
-          keywords="posture glow intensity strength subtle standard brightness preview test"
+          label="Nudge style"
+          help="How the reminder looks: a soft edge glow, a crisp border ring, or an even tint."
+          keywords="posture nudge style glow border ring tint solid visual"
+          filter={filter}
+        >
+          <Segmented value={glowStyle} options={GLOW_STYLE_OPTIONS} onChange={setGlowStyle} />
+        </SettingRow>
+      ) : null}
+
+      {nudgesEnabled ? (
+        <SettingRow
+          label="Nudge strength"
+          help="How present the reminder feels. Preview shows it now and stops when you leave Settings."
+          keywords="posture glow border tint intensity strength subtle standard intense brightness preview test"
           filter={filter}
         >
           <div className="flex items-center gap-3">
@@ -141,7 +159,7 @@ function PostureSection({ filter }: SettingsSectionProps) {
       {tracking && nudgesEnabled ? (
         <SettingRow
           label="Pause reminders"
-          help="Silence the glow for a while — posture tracking keeps running. A 10-minute snooze also lives in the menu-bar tray."
+          help="Silence the nudges for a while — posture tracking keeps running. A 10-minute snooze also lives in the menu-bar tray."
           keywords="posture pause snooze nudges quiet silence glow"
           filter={filter}
         >
