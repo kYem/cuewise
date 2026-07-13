@@ -18,6 +18,7 @@ import {
   UNREADABLE_ERROR,
   unlistenSpies,
 } from './__fixtures__/posture-controller.fixtures';
+import { chipPresentation } from './chip-presentation';
 import {
   getPostureState,
   initPosture,
@@ -25,6 +26,8 @@ import {
   pausePostureNudges,
   resumePostureNudges,
   STEADY_SAMPLES,
+  setGlowIntensity,
+  setNudgeDelay,
   setPostureNudges,
   startPosture,
   stopPosture,
@@ -510,6 +513,137 @@ describe('snooze and pause', () => {
 
     expect(getPostureState().nudgesPausedUntil).toBeNull();
     expect(localStorageStub.getItem(NUDGES_PAUSED_KEY)).toBeNull();
+  });
+});
+
+describe('configurable nudge delay', () => {
+  afterEach(() => {
+    setNudgeDelay(30);
+  });
+
+  it('a strict delay glows after ~15s of poor posture', async () => {
+    await startTracking();
+    setNudgeDelay(15);
+
+    emitPoorFrames(7); // one frame short at the 2s cadence
+    expect(countInvokes('show_glow')).toBe(0);
+
+    emitPoorFrames(1);
+    expect(countInvokes('show_glow')).toBe(1);
+  });
+
+  it('a gentle delay needs ~60s of poor posture', async () => {
+    await startTracking();
+    setNudgeDelay(60);
+
+    emitPoorFrames(29);
+    expect(countInvokes('show_glow')).toBe(0);
+
+    emitPoorFrames(1);
+    expect(countInvokes('show_glow')).toBe(1);
+  });
+
+  it('changing the delay restarts the count instead of firing instantly', async () => {
+    await startTracking();
+    emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES - 1); // one short of the default
+
+    setNudgeDelay(15); // shorter threshold than the accumulated streak
+    emitPoorFrames(7);
+    expect(countInvokes('show_glow')).toBe(0);
+
+    emitPoorFrames(1);
+    expect(countInvokes('show_glow')).toBe(1);
+  });
+
+  it('persists and restores across a relaunch, discarding garbage', async () => {
+    setNudgeDelay(60);
+    expect(localStorageStub.getItem('cuewise.posture.nudgeDelaySeconds')).toBe('60');
+
+    localStorageStub.setItem(ENABLED_KEY, '1');
+    initPosture();
+    await flushChain();
+    expect(getPostureState().nudgeDelaySeconds).toBe(60);
+
+    stopPosture();
+    localStorageStub.setItem('cuewise.posture.nudgeDelaySeconds', '45'); // not a preset
+    initPosture();
+    await flushChain();
+    expect(getPostureState().nudgeDelaySeconds).toBe(30);
+    expect(localStorageStub.getItem('cuewise.posture.nudgeDelaySeconds')).toBeNull();
+  });
+});
+
+describe('glow intensity preference', () => {
+  afterEach(() => {
+    setGlowIntensity('standard');
+  });
+
+  it('persists the choice for the glow windows to read', () => {
+    setGlowIntensity('subtle');
+
+    expect(getPostureState().glowIntensity).toBe('subtle');
+    expect(localStorageStub.getItem('cuewise.posture.glowIntensity')).toBe('subtle');
+  });
+
+  it('restores on init and discards garbage', async () => {
+    localStorageStub.setItem('cuewise.posture.glowIntensity', 'subtle');
+    initPosture();
+    await flushChain();
+    expect(getPostureState().glowIntensity).toBe('subtle');
+
+    localStorageStub.setItem('cuewise.posture.glowIntensity', 'blinding');
+    initPosture();
+    await flushChain();
+    expect(getPostureState().glowIntensity).toBe('standard');
+  });
+});
+
+describe('posture chip presentation', () => {
+  it('is hidden while not tracking', () => {
+    expect(chipPresentation(getPostureState())).toBeNull();
+  });
+
+  it('shows starting before any steady status settles', async () => {
+    await startTracking();
+    expect(chipPresentation(getPostureState())).toMatchObject({ label: 'Starting…' });
+  });
+
+  it('shows the steady status once it holds', async () => {
+    await startTracking();
+    for (let i = 0; i < STEADY_SAMPLES; i += 1) {
+      emitSampleFrame(JSON.stringify({ status: 'good' }));
+    }
+    expect(chipPresentation(getPostureState())).toMatchObject({ label: 'Good posture' });
+  });
+
+  it('surfaces a readings error above the stale status', async () => {
+    await startTracking();
+    for (let i = 0; i < STEADY_SAMPLES; i += 1) {
+      emitSampleFrame(JSON.stringify({ status: 'good' }));
+    }
+    for (let i = 0; i < 5; i += 1) {
+      emitSampleFrame('not json');
+    }
+    // The tray mirrors this state too — the chip must not keep saying "Good".
+    expect(chipPresentation(getPostureState())).toMatchObject({ label: 'Readings unavailable' });
+  });
+
+  it('surfaces glow undeliverability above the status', async () => {
+    await startTracking();
+    invokeMock.mockRejectedValueOnce({ kind: 'window', message: 'boom' });
+    emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES);
+    await flushChain();
+    emitSampleFrame(JSON.stringify({ status: 'good' }));
+
+    expect(chipPresentation(getPostureState())).toMatchObject({ label: 'Glow unavailable' });
+  });
+
+  it('shows an active pause', async () => {
+    await startTracking();
+    pausePostureNudges('until-resume');
+
+    const presentation = chipPresentation(getPostureState());
+    expect(presentation?.label).toBe('Nudges paused until you resume');
   });
 });
 

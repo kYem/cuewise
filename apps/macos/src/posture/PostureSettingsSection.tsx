@@ -1,30 +1,39 @@
 import {
+  Segmented,
   SettingDivider,
   SettingRow,
   type SettingsSection,
   type SettingsSectionProps,
   Switch,
 } from '@cuewise/app';
-import type { PostureStatus } from '@cuewise/shared';
 import { Button, cn } from '@cuewise/ui';
 import { PersonStanding } from 'lucide-react';
+import type { GlowIntensity } from '../glow/glow-prefs';
 import {
   calibratePosture,
   describePauseEnd,
+  type NudgeDelaySeconds,
   pausePostureNudges,
   resumePostureNudges,
+  setGlowIntensity,
+  setNudgeDelay,
   setPostureNudges,
   startPosture,
   stopPosture,
   usePosture,
 } from './posture-controller';
+import { STATUS_META } from './status-meta';
 
-const STATUS_META: Record<PostureStatus, { label: string; dot: string }> = {
-  good: { label: 'Good posture', dot: 'bg-emerald-500' },
-  mild: { label: 'Ease up', dot: 'bg-amber-500' },
-  poor: { label: 'Sit back', dot: 'bg-rose-500' },
-  absent: { label: 'No face in frame', dot: 'bg-tertiary' },
-};
+const NUDGE_DELAY_OPTIONS: { value: `${NudgeDelaySeconds}`; label: string }[] = [
+  { value: '15', label: 'Strict · 15s' },
+  { value: '30', label: 'Balanced · 30s' },
+  { value: '60', label: 'Gentle · 60s' },
+];
+
+const GLOW_INTENSITY_OPTIONS: { value: GlowIntensity; label: string }[] = [
+  { value: 'subtle', label: 'Subtle' },
+  { value: 'standard', label: 'Standard' },
+];
 
 function fmt(value: number | undefined, digits = 2): string {
   if (value === undefined) {
@@ -34,7 +43,15 @@ function fmt(value: number | undefined, digits = 2): string {
 }
 
 function PostureSection({ filter }: SettingsSectionProps) {
-  const { tracking, nudgesEnabled, sample, error, nudgesPausedUntil } = usePosture();
+  const {
+    tracking,
+    nudgesEnabled,
+    sample,
+    error,
+    nudgesPausedUntil,
+    nudgeDelaySeconds,
+    glowIntensity,
+  } = usePosture();
   const meta = sample ? STATUS_META[sample.status] : null;
 
   return (
@@ -68,6 +85,36 @@ function PostureSection({ filter }: SettingsSectionProps) {
       >
         <Switch label="Posture reminders" checked={nudgesEnabled} onChange={setPostureNudges} />
       </SettingRow>
+
+      {nudgesEnabled ? (
+        <SettingRow
+          label="Nudge after"
+          help="How long you can lean in before the glow appears."
+          keywords="posture nudge delay threshold strict gentle seconds glow trigger"
+          filter={filter}
+        >
+          <Segmented
+            value={`${nudgeDelaySeconds}` as `${NudgeDelaySeconds}`}
+            options={NUDGE_DELAY_OPTIONS}
+            onChange={(value) => setNudgeDelay(Number(value) as NudgeDelaySeconds)}
+          />
+        </SettingRow>
+      ) : null}
+
+      {nudgesEnabled ? (
+        <SettingRow
+          label="Glow strength"
+          help="How present the screen-edge glow feels."
+          keywords="posture glow intensity strength subtle standard brightness"
+          filter={filter}
+        >
+          <Segmented
+            value={glowIntensity}
+            options={GLOW_INTENSITY_OPTIONS}
+            onChange={setGlowIntensity}
+          />
+        </SettingRow>
+      ) : null}
 
       {tracking && nudgesEnabled ? (
         <SettingRow

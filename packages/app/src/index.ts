@@ -8,6 +8,7 @@ export { PomodoroPipProvider } from './components/PomodoroPipProvider';
 // Settings-section kit for hosts that inject a platform-specific section into the
 // shared Settings modal (e.g. the macOS "Posture" section).
 export {
+  Segmented,
   SettingDivider,
   SettingRow,
   SettingSubgroup,
@@ -21,6 +22,7 @@ export type { SettingsSectionProps } from './components/settings/settings-types'
 export { useFocusModeStore } from './stores/focus-mode-store';
 export { usePomodoroStore } from './stores/pomodoro-store';
 export { useReminderStore } from './stores/reminder-store';
+export { useSettingsStore } from './stores/settings-store';
 export { useToastStore } from './stores/toast-store';
 export type { SessionType } from './utils/pomodoro-styles';
 export { getSessionLabel } from './utils/pomodoro-styles';

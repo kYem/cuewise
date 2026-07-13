@@ -20,4 +20,15 @@ export async function assertGlowSurfaceRenders(page: Page, baseUrl = ''): Promis
   // And it must NOT boot the app shell (double reminder delivery per monitor):
   // the root must hold nothing but the vignette, regardless of onboarding state.
   await expect(page.locator('#root > :not(.glow-vignette)')).toHaveCount(0);
+
+  // The Subtle intensity pref must visibly change the vignette — a broken pref
+  // read would ship a Settings control that silently does nothing.
+  const readShadow = () =>
+    page.locator('.glow-vignette').evaluate((el) => getComputedStyle(el).boxShadow);
+  const standardShadow = await readShadow();
+  await page.evaluate(() => localStorage.setItem('cuewise.posture.glowIntensity', 'subtle'));
+  await page.reload();
+  await expect(page.locator('.glow-vignette')).toBeVisible();
+  expect(await readShadow()).not.toBe(standardShadow);
+  await page.evaluate(() => localStorage.removeItem('cuewise.posture.glowIntensity'));
 }
