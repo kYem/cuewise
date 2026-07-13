@@ -21,6 +21,7 @@ export interface MockGoalStore {
   transferTaskToNextDay: Mock;
   moveTaskToToday: Mock;
   getActiveGoals: Mock;
+  getGoalProgress: Mock;
   linkTaskToGoal: Mock;
   clearCompleted: Mock;
   // Task Enhancement actions (Phase 2)
@@ -43,6 +44,7 @@ export function createMockGoalStore(overrides: Partial<MockGoalStore> = {}): Moc
     transferTaskToNextDay: vi.fn(async () => true),
     moveTaskToToday: vi.fn(async () => true),
     getActiveGoals: vi.fn(() => []),
+    getGoalProgress: vi.fn(() => null),
     linkTaskToGoal: vi.fn(async () => true),
     clearCompleted: vi.fn(async () => true),
     duplicateTask: vi.fn(async () => true),

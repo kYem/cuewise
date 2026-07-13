@@ -13,6 +13,7 @@ import {
   createGoalStoreMock,
   createMockGoalStore,
   createSettingsStoreMock,
+  type MockGoalStore,
 } from './__fixtures__/goals-list.fixtures';
 import { GoalsList } from './GoalsList';
 
@@ -408,5 +409,111 @@ describe('GoalsList - Empty state', () => {
 
     expect(screen.queryByText('No tasks for today')).not.toBeInTheDocument();
     expect(screen.getByRole('textbox')).toBeInTheDocument();
+  });
+});
+
+describe('GoalsList - Link to goal picker', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useSettingsStore).mockImplementation(createSettingsStoreMock());
+  });
+
+  // The task is pre-linked so its trigger reads "Change linked goal" — unique in
+  // the tree (the add-row's GoalInput button is also named "Link to goal").
+  function renderLinkedTaskInEditMode(storeOverrides: Partial<MockGoalStore> = {}) {
+    const objective = goalFactory.build({ text: 'Ship the release', completed: false });
+    const task = goalFactory.build({
+      text: 'Write report',
+      completed: false,
+      parentId: objective.id,
+    });
+    const store = createMockGoalStore({
+      todayTasks: [task],
+      goals: [task, objective],
+      getActiveGoals: vi.fn(() => [objective]),
+      ...storeOverrides,
+    });
+    vi.mocked(useGoalStore).mockImplementation(createGoalStoreMock(store));
+    render(<GoalsList />);
+    return { task, objective, store };
+  }
+
+  it('mousedown on the link trigger must not steal focus from the edit input', async () => {
+    const user = userEvent.setup();
+    renderLinkedTaskInEditMode();
+    await user.click(screen.getByRole('button', { name: 'Write report' }));
+
+    // Preventing mousedown's default is the fix (see keepEditFocus); fireEvent
+    // returns false exactly when the default was prevented.
+    expect(fireEvent.mouseDown(screen.getByRole('button', { name: 'Change linked goal' }))).toBe(
+      false
+    );
+    expect(screen.getByDisplayValue('Write report')).toBeInTheDocument();
+  });
+
+  it('opens the picker and picks a goal without closing the edit row early', async () => {
+    const user = userEvent.setup();
+    const { task, objective, store } = renderLinkedTaskInEditMode();
+    await user.click(screen.getByRole('button', { name: 'Write report' }));
+
+    await user.click(screen.getByRole('button', { name: 'Change linked goal' }));
+
+    // The edit row must survive the trigger click (the WebKit regression closed it).
+    expect(screen.getByDisplayValue('Write report')).toBeInTheDocument();
+
+    const entry = await screen.findByRole('button', { name: /Ship the release/ });
+    // Chromium focuses buttons on mousedown — picker items need the same blur guard.
+    expect(fireEvent.mouseDown(entry)).toBe(false);
+    await user.click(entry);
+
+    expect(store.linkTaskToGoal).toHaveBeenCalledWith(task.id, objective.id);
+    // A successful pick ends the edit flow.
+    expect(screen.queryByDisplayValue('Write report')).not.toBeInTheDocument();
+  });
+
+  it('a failed link keeps the picker and edit row open for a retry', async () => {
+    const user = userEvent.setup();
+    renderLinkedTaskInEditMode({ linkTaskToGoal: vi.fn(async () => false) });
+    await user.click(screen.getByRole('button', { name: 'Write report' }));
+    await user.click(screen.getByRole('button', { name: 'Change linked goal' }));
+
+    await user.click(await screen.findByRole('button', { name: /Ship the release/ }));
+
+    // The store toasts "try again" — tearing down the picker would make that a lie.
+    expect(screen.getByRole('button', { name: 'Remove link' })).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Write report')).toBeInTheDocument();
+  });
+
+  it('committing with enter while the picker is open does not prime it to reopen', async () => {
+    const user = userEvent.setup();
+    renderLinkedTaskInEditMode();
+    await user.click(screen.getByRole('button', { name: 'Write report' }));
+    await user.click(screen.getByRole('button', { name: 'Change linked goal' }));
+    await screen.findByRole('button', { name: 'Remove link' });
+
+    // Focus stayed in the input (pointer open), so Enter commits the edit; the
+    // controlled popover unmounts without ever firing onOpenChange.
+    await user.keyboard('{Enter}');
+    expect(screen.queryByDisplayValue('Write report')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Write report' }));
+
+    expect(screen.queryByRole('button', { name: 'Remove link' })).not.toBeInTheDocument();
+  });
+
+  it('a keyboard open hands focus to the picker, not the edit input', async () => {
+    const user = userEvent.setup();
+    renderLinkedTaskInEditMode();
+    await user.click(screen.getByRole('button', { name: 'Write report' }));
+
+    const trigger = screen.getByRole('button', { name: 'Change linked goal' });
+    trigger.focus();
+    await user.keyboard('{Enter}');
+
+    // Radix's focus-into-content must proceed for keyboard users — only pointer
+    // opens (focus still in the input) suppress it.
+    const picker = await screen.findByRole('dialog');
+    expect(picker).toContainElement(document.activeElement as HTMLElement);
+    expect(screen.getByDisplayValue('Write report')).toBeInTheDocument();
   });
 });
