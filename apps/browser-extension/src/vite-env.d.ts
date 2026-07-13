@@ -5,8 +5,8 @@ interface ImportMetaEnv {
   // (Connect is unavailable there). Ignored in production builds.
   readonly VITE_CALENDAR_PREVIEW?: string;
   // Cloud-sync API origin. A non-empty value IS the ENG-45 enable signal — off by
-  // default (no enable-sync UI ships yet), so this only self-heals/resumes a
-  // session enabled some other way (e.g. devtools). Never set in production.
+  // default; when set it enables the Cloud Sync settings section and self-heals/resumes
+  // a session enabled some other way (e.g. devtools). Never set in production.
   readonly VITE_SYNC_API_BASE_URL?: string;
 }
 

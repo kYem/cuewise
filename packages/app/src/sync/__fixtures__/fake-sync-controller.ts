@@ -59,8 +59,8 @@ export class FakeSyncController implements SyncController {
     return DEFAULT_ENABLE_RESULT;
   }
 
-  async reconnect(): Promise<EnableResult> {
-    this.calls.push({ method: 'reconnect', args: [] });
+  async reconnect(recoveryCode?: string): Promise<EnableResult> {
+    this.calls.push({ method: 'reconnect', args: [recoveryCode] });
     const next = this.reconnectResults.shift();
     if (next !== undefined) {
       return next;

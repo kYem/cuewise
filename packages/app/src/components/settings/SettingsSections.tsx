@@ -705,10 +705,6 @@ function GoalsSection({ s, set, filter }: SettingsSectionProps) {
   );
 }
 
-// Cloud Sync statuses that mean it's actively managing data, so the legacy
-// Chrome-sync toggle should be gated to avoid two systems fighting over storage.
-const SYNC_MANAGED_STATUSES: SyncUiStatus[] = ['active', 'connecting', 'syncing'];
-
 /* Advanced */
 function AdvancedSection({ s, set, filter, onReset }: SettingsSectionProps) {
   const [confirming, setConfirming] = useState(false);
@@ -745,8 +741,9 @@ function AdvancedSection({ s, set, filter, onReset }: SettingsSectionProps) {
   // Chrome sync rides on chrome.storage.sync; local-only backends (the macOS app,
   // dev/web) have no sync area, so hide the toggle rather than show an inert one.
   const syncSupported = getStorage().supportsSync;
-  const syncManagedByCloudSync =
-    syncController !== null && SYNC_MANAGED_STATUSES.includes(syncStatus);
+  // Gate the legacy Chrome-sync toggle whenever Cloud Sync is not off — in error/needs_reauth it's
+  // still enrolled and owns local storage, so the two systems must never fight over it.
+  const syncManagedByCloudSync = syncController !== null && syncStatus !== 'off';
 
   return (
     <div>

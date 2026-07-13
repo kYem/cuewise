@@ -1,3 +1,4 @@
+import { logger } from '@cuewise/shared';
 import { Copy, Download } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
@@ -48,21 +49,29 @@ export const RecoveryCodeModal: React.FC<RecoveryCodeModalProps> = ({
     try {
       await navigator.clipboard.writeText(code);
       useToastStore.getState().success('Recovery code copied to clipboard');
-    } catch {
+    } catch (error) {
+      // Log the failure only — never the code itself.
+      logger.error('Failed to copy recovery code', error);
       useToastStore.getState().error('Failed to copy to clipboard');
     }
   };
 
+  // A download throw in an onClick isn't caught by React error boundaries, so guard it here.
   const handleDownload = () => {
-    const blob = new Blob([code], { type: 'text/plain;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'cuewise-recovery-code.txt';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    try {
+      const blob = new Blob([code], { type: 'text/plain;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'cuewise-recovery-code.txt';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      logger.error('Failed to download recovery code', error);
+      useToastStore.getState().error('Failed to download recovery code');
+    }
   };
 
   const handleDone = () => {

@@ -149,6 +149,21 @@ describe('SyncEngine.enableSync', () => {
     expect(device.scheduler.scheduled.some((s) => s.id === SYNC_PULL_WAKE_ID)).toBe(true);
   });
 
+  it('a 401 on the pull during enableSync stops at signed_out without enabling sync or arming the wake', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    // Key init persists the DK, then the initial-sync pull 401s — the guard must return early.
+    device.apiClient.rejectNextGetChangesWith401 = true;
+
+    await device.engine.enableSync('cred-a', 'Device A');
+
+    expect(device.engine.getStatus()).toBe('signed_out');
+    expect(await device.kv.get(CLOUD_SYNC_ENABLED_KEY, 'local')).not.toBe(true);
+    expect(device.scheduler.scheduled.some((s) => s.id === SYNC_PULL_WAKE_ID)).toBe(false);
+  });
+
   it('leaves status disabled (not error) when enroll needs a recovery code', async () => {
     const server = new FakeSyncServer();
     const deviceA = createDevice(server);

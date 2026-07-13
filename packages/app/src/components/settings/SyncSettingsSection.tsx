@@ -1,3 +1,4 @@
+import { logger } from '@cuewise/shared';
 import { AlertTriangle, CloudUpload, KeyRound, Loader2, RefreshCw } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useState } from 'react';
@@ -71,6 +72,8 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [recoveryCode, setRecoveryCode] = useState<string | null>(null);
   const [enrollOpen, setEnrollOpen] = useState(false);
+  // Which flow opened EnrollCodeModal — reconnect reuses persisted creds, enable uses form inputs.
+  const [enrollSource, setEnrollSource] = useState<'enable' | 'reconnect'>('enable');
   const [confirmDisableOpen, setConfirmDisableOpen] = useState(false);
   const [unsavedCode, setUnsavedCode] = useState(false);
 
@@ -90,7 +93,8 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   }
 
   // Shared by the initial enable() and the reconnect() flows — both surface the same shape.
-  const routeEnableResult = (result: EnableResult) => {
+  // source records which flow needs a code, so the EnrollCodeModal submit routes back correctly.
+  const routeEnableResult = (result: EnableResult, source: 'enable' | 'reconnect') => {
     if (result.ok) {
       setEnabling(false);
       if (result.recoveryCode) {
@@ -99,6 +103,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       return;
     }
     if (result.reason === 'needs-code') {
+      setEnrollSource(source);
       setEnrollOpen(true);
       return;
     }
@@ -107,20 +112,36 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
 
   const handleEnable = async () => {
     setIsSubmitting(true);
-    const result = await controller.enable(accountId, deviceName);
-    setIsSubmitting(false);
-    routeEnableResult(result);
+    try {
+      const result = await controller.enable(accountId, deviceName);
+      routeEnableResult(result, 'enable');
+    } catch (error) {
+      logger.error('Cloud sync enable failed', error);
+      useToastStore.getState().error('Something went wrong enabling sync — please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleReconnect = async () => {
     setIsReconnecting(true);
-    const result = await controller.reconnect();
-    setIsReconnecting(false);
-    routeEnableResult(result);
+    try {
+      const result = await controller.reconnect();
+      routeEnableResult(result, 'reconnect');
+    } catch (error) {
+      logger.error('Cloud sync reconnect failed', error);
+      useToastStore.getState().error("Couldn't reconnect sync — please try again.");
+    } finally {
+      setIsReconnecting(false);
+    }
   };
 
+  // Reconnect-after-needs-code reuses the persisted creds; a brand-new enable uses the form inputs.
   const handleEnrollSubmit = async (code: string): Promise<EnableResult> => {
-    const result = await controller.enable(accountId, deviceName, code);
+    const result =
+      enrollSource === 'reconnect'
+        ? await controller.reconnect(code)
+        : await controller.enable(accountId, deviceName, code);
     if (result.ok) {
       setEnabling(false);
       if (result.recoveryCode) {
@@ -131,13 +152,23 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   };
 
   const handleRegenerate = async () => {
-    const code = await controller.regenerateRecoveryCode();
-    setUnsavedCode(false);
-    setRecoveryCode(code);
+    try {
+      const code = await controller.regenerateRecoveryCode();
+      setUnsavedCode(false);
+      setRecoveryCode(code);
+    } catch (error) {
+      logger.error('Cloud sync regenerate recovery code failed', error);
+      useToastStore.getState().error("Couldn't regenerate your recovery code — please try again.");
+    }
   };
 
   const handleSyncNow = async () => {
-    await controller.syncNow();
+    try {
+      await controller.syncNow();
+    } catch (error) {
+      logger.error('Cloud sync sync-now failed', error);
+      useToastStore.getState().error("Couldn't sync right now — please try again.");
+    }
   };
 
   const handleToggle = (checked: boolean) => {
@@ -150,10 +181,17 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     }
   };
 
+  // finally closes the confirm dialog so a disable failure can't strand it open.
   const handleDisable = async () => {
-    await controller.disable();
-    setConfirmDisableOpen(false);
-    setEnabling(false);
+    try {
+      await controller.disable();
+      setEnabling(false);
+    } catch (error) {
+      logger.error('Cloud sync disable failed', error);
+      useToastStore.getState().error("Couldn't disable sync — please try again.");
+    } finally {
+      setConfirmDisableOpen(false);
+    }
   };
 
   const handleRecoverySaved = () => {

@@ -75,6 +75,15 @@ describe('App sync wiring', () => {
     expect(within(nav).queryByRole('button', { name: 'Cloud Sync' })).not.toBeInTheDocument();
   });
 
+  it('shows both the Cloud Sync section and host extraSections when a syncController is provided', async () => {
+    openViaHash();
+    render(<App syncController={new FakeSyncController()} extraSections={[EXTRA_SECTION]} />);
+
+    const nav = await settingsSectionsNav();
+    expect(within(nav).getByRole('button', { name: 'Cloud Sync' })).toBeInTheDocument();
+    expect(within(nav).getByRole('button', { name: 'Posture' })).toBeInTheDocument();
+  });
+
   it('leaves the legacy Chrome sync toggle enabled when there is no syncController', async () => {
     const user = userEvent.setup();
     openViaHash();
@@ -99,6 +108,37 @@ describe('App sync wiring', () => {
     expect(chromeSyncSwitch()).toBeEnabled();
 
     act(() => controller.setStatus('active'));
+
+    expect(chromeSyncSwitch()).toBeDisabled();
+    expect(screen.getByText('Managed by Cloud Sync')).toBeInTheDocument();
+  });
+
+  // error/needs_reauth still own local storage (enrolled), so the legacy toggle must stay gated.
+  it('disables the legacy Chrome sync toggle when Cloud Sync is in needs_reauth', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    openViaHash();
+    render(<App syncController={controller} />);
+
+    const nav = await settingsSectionsNav();
+    await user.click(within(nav).getByRole('button', { name: 'Advanced' }));
+
+    act(() => controller.setStatus('needs_reauth'));
+
+    expect(chromeSyncSwitch()).toBeDisabled();
+    expect(screen.getByText('Managed by Cloud Sync')).toBeInTheDocument();
+  });
+
+  it('disables the legacy Chrome sync toggle when Cloud Sync is in error', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    openViaHash();
+    render(<App syncController={controller} />);
+
+    const nav = await settingsSectionsNav();
+    await user.click(within(nav).getByRole('button', { name: 'Advanced' }));
+
+    act(() => controller.setStatus('error'));
 
     expect(chromeSyncSwitch()).toBeDisabled();
     expect(screen.getByText('Managed by Cloud Sync')).toBeInTheDocument();

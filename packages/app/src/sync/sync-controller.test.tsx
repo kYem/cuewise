@@ -72,7 +72,15 @@ describe('FakeSyncController', () => {
     const result = await controller.reconnect();
 
     expect(result).toEqual({ ok: false, reason: 'auth' });
-    expect(controller.calls).toEqual([{ method: 'reconnect', args: [] }]);
+    expect(controller.calls).toEqual([{ method: 'reconnect', args: [undefined] }]);
+  });
+
+  it('records the recovery code passed to reconnect()', async () => {
+    const controller = new FakeSyncController();
+
+    await controller.reconnect('recovery-code');
+
+    expect(controller.calls).toEqual([{ method: 'reconnect', args: ['recovery-code'] }]);
   });
 
   it('falls back to an ok result when no script was queued', async () => {

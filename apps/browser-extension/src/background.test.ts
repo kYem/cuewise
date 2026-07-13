@@ -64,6 +64,21 @@ beforeEach(async () => {
   setRemindersMock.mockResolvedValue({ success: true });
 });
 
+describe('background: mapToUi', () => {
+  it('maps each engine SyncStatus to its UI status', async () => {
+    const { mapToUi } = await import('./background');
+
+    expect(mapToUi('disabled')).toBe('off');
+    expect(mapToUi('signing_in')).toBe('connecting');
+    expect(mapToUi('key_init')).toBe('connecting');
+    expect(mapToUi('enrolling')).toBe('connecting');
+    expect(mapToUi('initial_sync')).toBe('connecting');
+    expect(mapToUi('active')).toBe('active');
+    expect(mapToUi('error')).toBe('error');
+    expect(mapToUi('signed_out')).toBe('needs_reauth');
+  });
+});
+
 describe('background: reminder alarm fires', () => {
   it('notifies with Done/Snooze buttons and re-arms a recurring reminder', async () => {
     const reminder = recurringReminderFactory.build({

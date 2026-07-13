@@ -29,7 +29,8 @@ scheduler.onFire(handleReminderFire);
 
 // Engine SyncStatus -> UI-facing SyncUiStatus, mirroring macOS's DirectSyncController
 // mapStatus exactly (spec's intended per-host boundary — adapters own this mapping).
-function mapToUi(status: SyncStatus): SyncUiStatus {
+// Exported for unit testing.
+export function mapToUi(status: SyncStatus): SyncUiStatus {
   if (status === 'disabled') {
     return 'off';
   }
@@ -55,8 +56,8 @@ function mapToUi(status: SyncStatus): SyncUiStatus {
   throw new Error(`unmapped sync status: ${String(exhaustive)}`);
 }
 
-// ENG-45 cloud sync: off by default — no enable-sync UI ships yet. Set
-// VITE_SYNC_API_BASE_URL locally (pointed at `wrangler dev`, e.g. localhost:8787) to
+// ENG-45 cloud sync: off by default. Set VITE_SYNC_API_BASE_URL locally (pointed at
+// `wrangler dev`, e.g. localhost:8787) to enable the Cloud Sync settings section and
 // resume/self-heal a session that was enabled some other way (e.g. devtools).
 const syncApiBaseUrl = import.meta.env.VITE_SYNC_API_BASE_URL;
 if (syncApiBaseUrl) {
@@ -69,10 +70,14 @@ if (syncApiBaseUrl) {
     keyStore: getStorage(),
     scheduler,
     onStatus: (status) => {
-      void chrome.storage.local.set({ 'cuewise.sync.status': mapToUi(status) });
+      chrome.storage.local
+        .set({ 'cuewise.sync.status': mapToUi(status) })
+        .catch((error) => logger.error('Failed to persist sync status', error));
     },
     onQuarantine: () => {
-      void chrome.storage.local.set({ 'cuewise.sync.lastQuarantineAt': Date.now() });
+      chrome.storage.local
+        .set({ 'cuewise.sync.lastQuarantineAt': Date.now() })
+        .catch((error) => logger.error('Failed to persist sync quarantine timestamp', error));
     },
     onRecoveryCode: (code) => {
       capturedRecoveryCode = code;
@@ -107,7 +112,13 @@ if (syncApiBaseUrl) {
         capturedRecoveryCode = undefined;
         return code;
       },
-    }).then(sendResponse);
+    })
+      .then(sendResponse)
+      .catch((error) => {
+        // Always close the message port, even on an unexpected handler rejection.
+        logger.error('Sync control handler failed', error);
+        sendResponse({ ok: false, reason: 'error' });
+      });
     return true;
   });
 }

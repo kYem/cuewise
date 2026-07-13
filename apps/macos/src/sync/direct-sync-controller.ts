@@ -181,14 +181,14 @@ export function buildDirectSyncController<E extends DirectSyncEnginePort>(
     enable(accountId, deviceName, recoveryCode): Promise<EnableResult> {
       return serialize(() => doEnable(accountId, deviceName, recoveryCode));
     },
-    reconnect(): Promise<EnableResult> {
+    reconnect(recoveryCode?: string): Promise<EnableResult> {
       return serialize(async () => {
         const creds = await loadCreds();
         if (creds === null) {
           return { ok: false, reason: 'error' };
         }
-        // Silent re-auth: no recovery code — relies on the persisted DK resume (E2).
-        return doEnable(creds.accountId, creds.deviceName);
+        // No code = silent re-auth via persisted DK (E2); a code enrolls this device after reconnect.
+        return doEnable(creds.accountId, creds.deviceName, recoveryCode);
       });
     },
     async disable(): Promise<void> {
@@ -199,8 +199,12 @@ export function buildDirectSyncController<E extends DirectSyncEnginePort>(
     },
     async syncNow(): Promise<void> {
       emit('syncing');
-      await engine.syncNow();
-      emit(mapStatus(engine.getStatus()));
+      // Reconcile in finally so an engine throw doesn't strand the pill on "Syncing…".
+      try {
+        await engine.syncNow();
+      } finally {
+        emit(mapStatus(engine.getStatus()));
+      }
     },
   };
 

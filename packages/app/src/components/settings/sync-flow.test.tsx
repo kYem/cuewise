@@ -95,7 +95,7 @@ describe('enable-sync UI end-to-end flow', () => {
 
     expect(screen.getByTestId('sync-status-pill')).toHaveTextContent('Active');
     expect(screen.queryByText('Save your recovery code')).not.toBeInTheDocument();
-    expect(controller.calls).toContainEqual({ method: 'reconnect', args: [] });
+    expect(controller.calls).toContainEqual({ method: 'reconnect', args: [undefined] });
   });
 
   it('reconnect returning needs-code opens EnrollCodeModal', async () => {

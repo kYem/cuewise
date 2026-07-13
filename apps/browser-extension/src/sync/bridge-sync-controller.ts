@@ -23,10 +23,8 @@ export interface BridgeSyncControllerOptions {
 }
 
 /**
- * Page-realm SyncController (ENG-45 option B). The page has no SyncEngine of its own —
- * control ops relay to the background over chrome.runtime messaging (with a timeout, so a
- * dead/asleep SW rejects instead of hanging the UI) and status hydrates from
- * chrome.storage.local, which the background writes on every engine status change.
+ * Page-realm SyncController (option B): no SyncEngine here — control ops relay to the background over
+ * chrome.runtime messaging (timed out so a dead SW rejects); status hydrates from chrome.storage.local.
  */
 export class BridgeSyncController implements SyncController {
   private status: SyncUiStatus = 'off';
@@ -71,24 +69,31 @@ export class BridgeSyncController implements SyncController {
       return { ok: false, reason: 'error' };
     }
     if (response.ok) {
-      await this.persistCreds({ accountId, deviceName });
+      // Persist inside a guard: a storage failure must not turn a successful enroll into a
+      // rejection or lose the one-shot recovery code — log and still return the ok response.
+      try {
+        await this.persistCreds({ accountId, deviceName });
+      } catch (error) {
+        logger.error('Failed to persist sync credentials for reconnect', error);
+      }
     }
     return response;
   }
 
-  async reconnect(): Promise<EnableResult> {
-    const stored = await chrome.storage.local.get(LAST_SYNC_CREDS_KEY);
-    const creds = stored[LAST_SYNC_CREDS_KEY] as LastSyncCreds | undefined;
-    if (creds === undefined) {
-      return { ok: false, reason: 'error' };
-    }
+  async reconnect(recoveryCode?: string): Promise<EnableResult> {
     try {
-      // Silent re-auth: no recovery code — the SW resumes from the persisted DK (E2).
+      const stored = await chrome.storage.local.get(LAST_SYNC_CREDS_KEY);
+      const creds = stored[LAST_SYNC_CREDS_KEY] as LastSyncCreds | undefined;
+      if (creds === undefined) {
+        return { ok: false, reason: 'error' };
+      }
+      // No code = silent re-auth via the persisted DK (E2); a code enrolls this device after reconnect.
       return await this.send({
         kind: 'cuewise-sync-control',
         op: 'reconnect',
         accountId: creds.accountId,
         deviceName: creds.deviceName,
+        recoveryCode,
       });
     } catch (error) {
       logger.error('Sync reconnect control message failed', error);

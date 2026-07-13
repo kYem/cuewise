@@ -66,18 +66,23 @@ async function runOp(
     if (msg.accountId === undefined || msg.deviceName === undefined) {
       return { ok: false, reason: 'error' };
     }
-    // Silent re-auth: no recovery code — relies on the persisted DK resume.
-    return doEnable(engine, msg.accountId, msg.deviceName, undefined, deps);
+    // No code = silent re-auth via the persisted DK; a code enrolls this device after reconnect.
+    return doEnable(engine, msg.accountId, msg.deviceName, msg.recoveryCode, deps);
   }
-  if (msg.op === 'disable') {
-    await engine.disableSync();
+  // disable/regenerate/syncNow have no enroll control-flow — a throw is a plain error result.
+  try {
+    if (msg.op === 'disable') {
+      await engine.disableSync();
+      return { ok: true };
+    }
+    if (msg.op === 'regenerate') {
+      return { ok: true, recoveryCode: await engine.regenerateRecoveryCode() };
+    }
+    await engine.syncNow();
     return { ok: true };
+  } catch (err) {
+    return { ok: false, reason: 'error', detail: err instanceof Error ? err.message : undefined };
   }
-  if (msg.op === 'regenerate') {
-    return { ok: true, recoveryCode: await engine.regenerateRecoveryCode() };
-  }
-  await engine.syncNow();
-  return { ok: true };
 }
 
 // Promise-chain mutex: every op is serialized per SW so two concurrent ops (chiefly

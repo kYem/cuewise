@@ -170,6 +170,24 @@ describe('SyncSettingsSectionComponent', () => {
     expect(await screen.findByText('Enter recovery code')).toBeInTheDocument();
   });
 
+  it('routes the reconnect→needs-code enroll submit through reconnect(code), never enable', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptReconnect({ ok: false, reason: 'needs-code' });
+    renderSection(controller);
+    act(() => controller.setStatus('needs_reauth'));
+
+    await user.click(screen.getByRole('button', { name: 'Reconnect' }));
+    await screen.findByText('Enter recovery code');
+    await user.type(screen.getByLabelText(/recovery code/i), CODE);
+    await user.click(screen.getByRole('button', { name: 'Enroll' }));
+
+    await waitFor(() =>
+      expect(controller.calls).toContainEqual({ method: 'reconnect', args: [CODE] })
+    );
+    expect(controller.calls.some((call) => call.method === 'enable')).toBe(false);
+  });
+
   it('shows the confirm dialog with the recovery-code warning when the on-state switch is toggled off', async () => {
     const user = userEvent.setup();
     const controller = new FakeSyncController();

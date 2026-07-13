@@ -185,6 +185,19 @@ describe('handleSyncControlMessage: enable', () => {
     expect(result).toEqual({ ok: false, reason: 'bad-code', detail: 'checksum' });
   });
 
+  it('maps a thrown RecoveryCodeError(version) to bad-code with detail "version"', async () => {
+    const engine = fakeEngine({
+      enableSync: vi
+        .fn()
+        .mockRejectedValue(new RecoveryCodeError('version', 'unsupported version')),
+    });
+    const deps = fakeDeps();
+
+    const result = await handleSyncControlMessage(engine, enableMessage(), deps);
+
+    expect(result).toEqual({ ok: false, reason: 'bad-code', detail: 'version' });
+  });
+
   it('maps a thrown ApiError(401) to auth', async () => {
     const engine = fakeEngine({
       enableSync: vi.fn().mockRejectedValue(new ApiError('invalid_token', 401)),
@@ -270,6 +283,50 @@ describe('handleSyncControlMessage: reconnect', () => {
     );
 
     expect(result).toEqual({ ok: false, reason: 'auth' });
+  });
+});
+
+describe('handleSyncControlMessage: op errors', () => {
+  it('maps a thrown disableSync to an error result', async () => {
+    const engine = fakeEngine({
+      disableSync: vi.fn().mockRejectedValue(new Error('storage down')),
+    });
+
+    const result = await handleSyncControlMessage(
+      engine,
+      { kind: 'cuewise-sync-control', op: 'disable' },
+      fakeDeps()
+    );
+
+    expect(result).toEqual({ ok: false, reason: 'error', detail: 'storage down' });
+  });
+
+  it('maps a thrown regenerateRecoveryCode to an error result', async () => {
+    const engine = fakeEngine({
+      regenerateRecoveryCode: vi.fn().mockRejectedValue(new Error('no session')),
+    });
+
+    const result = await handleSyncControlMessage(
+      engine,
+      { kind: 'cuewise-sync-control', op: 'regenerate' },
+      fakeDeps()
+    );
+
+    expect(result).toEqual({ ok: false, reason: 'error', detail: 'no session' });
+  });
+
+  it('maps a thrown syncNow to an error result', async () => {
+    const engine = fakeEngine({
+      syncNow: vi.fn().mockRejectedValue(new Error('boom')),
+    });
+
+    const result = await handleSyncControlMessage(
+      engine,
+      { kind: 'cuewise-sync-control', op: 'syncNow' },
+      fakeDeps()
+    );
+
+    expect(result).toEqual({ ok: false, reason: 'error', detail: 'boom' });
   });
 });
 
