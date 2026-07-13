@@ -538,7 +538,9 @@ export function setNudgeDelay(seconds: NudgeDelaySeconds): void {
 /** Set the glow strength; the glow windows read it from localStorage on show. */
 export function setGlowIntensity(intensity: GlowIntensity): void {
   writeLocal(GLOW_INTENSITY_KEY, intensity, 'Failed to persist the glow intensity');
-  setState({ glowIntensity: intensity });
+  // The glow windows read localStorage, not this state — reflect what actually
+  // persisted so Settings can't show a strength the overlays won't use.
+  setState({ glowIntensity: readGlowIntensity() });
 }
 
 /** Human copy for a pause's end, shared by the tray menu and Settings. */

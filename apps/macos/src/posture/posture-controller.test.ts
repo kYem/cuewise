@@ -18,6 +18,7 @@ import {
   UNREADABLE_ERROR,
   unlistenSpies,
 } from './__fixtures__/posture-controller.fixtures';
+import { chipPresentation } from './chip-presentation';
 import {
   getPostureState,
   initPosture,
@@ -594,6 +595,55 @@ describe('glow intensity preference', () => {
     initPosture();
     await flushChain();
     expect(getPostureState().glowIntensity).toBe('standard');
+  });
+});
+
+describe('posture chip presentation', () => {
+  it('is hidden while not tracking', () => {
+    expect(chipPresentation(getPostureState())).toBeNull();
+  });
+
+  it('shows starting before any steady status settles', async () => {
+    await startTracking();
+    expect(chipPresentation(getPostureState())).toMatchObject({ label: 'Starting…' });
+  });
+
+  it('shows the steady status once it holds', async () => {
+    await startTracking();
+    for (let i = 0; i < STEADY_SAMPLES; i += 1) {
+      emitSampleFrame(JSON.stringify({ status: 'good' }));
+    }
+    expect(chipPresentation(getPostureState())).toMatchObject({ label: 'Good posture' });
+  });
+
+  it('surfaces a readings error above the stale status', async () => {
+    await startTracking();
+    for (let i = 0; i < STEADY_SAMPLES; i += 1) {
+      emitSampleFrame(JSON.stringify({ status: 'good' }));
+    }
+    for (let i = 0; i < 5; i += 1) {
+      emitSampleFrame('not json');
+    }
+    // The tray mirrors this state too — the chip must not keep saying "Good".
+    expect(chipPresentation(getPostureState())).toMatchObject({ label: 'Readings unavailable' });
+  });
+
+  it('surfaces glow undeliverability above the status', async () => {
+    await startTracking();
+    invokeMock.mockRejectedValueOnce({ kind: 'window', message: 'boom' });
+    emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES);
+    await flushChain();
+    emitSampleFrame(JSON.stringify({ status: 'good' }));
+
+    expect(chipPresentation(getPostureState())).toMatchObject({ label: 'Glow unavailable' });
+  });
+
+  it('shows an active pause', async () => {
+    await startTracking();
+    pausePostureNudges('until-resume');
+
+    const presentation = chipPresentation(getPostureState());
+    expect(presentation?.label).toBe('Nudges paused until you resume');
   });
 });
 
