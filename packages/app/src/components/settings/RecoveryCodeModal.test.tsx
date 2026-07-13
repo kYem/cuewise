@@ -101,6 +101,25 @@ describe('RecoveryCodeModal', () => {
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:mock-url');
   });
 
+  it('shows an error toast and does not crash when the download fails', async () => {
+    const user = userEvent.setup();
+    const h = handlers();
+    // jsdom does not implement Blob URLs, so createObjectURL is a plain assignment
+    // (not a pre-existing method), mirroring the happy-path download test's stub.
+    const originalCreateObjectURL = URL.createObjectURL;
+    URL.createObjectURL = vi.fn(() => {
+      throw new Error('blocked');
+    });
+
+    render(<RecoveryCodeModal isOpen code={CODE} {...h} />);
+    await user.click(screen.getByRole('button', { name: /download/i }));
+
+    await waitFor(() => expect(toastError).toHaveBeenCalledTimes(1));
+    expect(toastError).toHaveBeenCalledWith('Failed to download recovery code');
+
+    URL.createObjectURL = originalCreateObjectURL;
+  });
+
   it('disables Done until the group-3 segment is typed correctly', async () => {
     const user = userEvent.setup();
     const h = handlers();

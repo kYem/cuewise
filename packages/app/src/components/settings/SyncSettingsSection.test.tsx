@@ -384,4 +384,19 @@ describe('SyncSettingsSectionComponent', () => {
     await waitFor(() => expect(toastError).toHaveBeenCalledTimes(1));
     expect(screen.queryByText(DISABLE_MESSAGE)).not.toBeInTheDocument();
   });
+
+  it('shows a toast error and clears the reconnecting state when controller.reconnect() rejects', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.failNext('reconnect');
+    renderSection(controller);
+    act(() => controller.setStatus('needs_reauth'));
+
+    await user.click(screen.getByRole('button', { name: 'Reconnect' }));
+
+    await waitFor(() => expect(toastError).toHaveBeenCalledTimes(1));
+    const reconnectButton = await screen.findByRole('button', { name: 'Reconnect' });
+    expect(reconnectButton).toBeEnabled();
+    expect(screen.queryByText('Reconnecting…')).not.toBeInTheDocument();
+  });
 });
