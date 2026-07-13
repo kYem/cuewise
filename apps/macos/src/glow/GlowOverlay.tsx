@@ -1,11 +1,18 @@
 import type React from 'react';
 import { useEffect, useState } from 'react';
-import { GLOW_INTENSITY_KEY, GLOW_STYLE_KEY, readGlowIntensity, readGlowStyle } from './glow-prefs';
+import {
+  GLOW_INTENSITY_KEY,
+  GLOW_STYLE_KEY,
+  glowVignetteClassName,
+  readGlowIntensity,
+  readGlowStyle,
+} from './glow-prefs';
 import './glow-overlay.css';
 
 /**
- * A glow window's whole UI: a full-viewport, click-through screen-edge vignette.
- * Native code (`glow.rs`) shows/hides the windows; this renders unconditionally.
+ * A glow window's whole UI: a full-viewport, click-through nudge overlay
+ * (glow, border, or tint per prefs). `glow.rs` shows/hides the windows;
+ * this renders unconditionally.
  */
 export function GlowOverlay(): React.JSX.Element {
   // Windows are reused (hidden, not destroyed), so remount the vignette whenever
@@ -33,14 +40,6 @@ export function GlowOverlay(): React.JSX.Element {
   }, []);
 
   // Re-read per show (the epoch remount) so a Settings change applies next glow.
-  const intensity = readGlowIntensity();
-  const style = readGlowStyle();
-  const classes = ['glow-vignette'];
-  if (style !== 'glow') {
-    classes.push(`glow-style-${style}`);
-  }
-  if (intensity !== 'standard') {
-    classes.push(`glow-vignette--${intensity}`);
-  }
-  return <div key={epoch} className={classes.join(' ')} aria-hidden="true" />;
+  const className = glowVignetteClassName(readGlowStyle(), readGlowIntensity());
+  return <div key={epoch} className={className} aria-hidden="true" />;
 }

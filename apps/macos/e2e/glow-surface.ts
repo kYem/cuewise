@@ -21,14 +21,31 @@ export async function assertGlowSurfaceRenders(page: Page, baseUrl = ''): Promis
   // the root must hold nothing but the vignette, regardless of onboarding state.
   await expect(page.locator('#root > :not(.glow-vignette)')).toHaveCount(0);
 
-  // The Subtle intensity pref must visibly change the vignette — a broken pref
-  // read would ship a Settings control that silently does nothing.
-  const readShadow = () =>
-    page.locator('.glow-vignette').evaluate((el) => getComputedStyle(el).boxShadow);
-  const standardShadow = await readShadow();
-  await page.evaluate(() => localStorage.setItem('cuewise.posture.glowIntensity', 'subtle'));
-  await page.reload();
-  await expect(page.locator('.glow-vignette')).toBeVisible();
-  expect(await readShadow()).not.toBe(standardShadow);
+  // Each pref must visibly change the vignette — a broken pref read would ship
+  // a Settings control that silently does nothing.
+  const readVignette = () =>
+    page.locator('.glow-vignette').evaluate((el) => {
+      const style = getComputedStyle(el);
+      return { boxShadow: style.boxShadow, background: style.backgroundColor };
+    });
+  const applyPref = async (key: string, value: string) => {
+    await page.evaluate(([k, v]) => localStorage.setItem(k, v), [key, value]);
+    await page.reload();
+    await expect(page.locator('.glow-vignette')).toBeVisible();
+  };
+  const standard = await readVignette();
+
+  await applyPref('cuewise.posture.glowIntensity', 'subtle');
+  expect((await readVignette()).boxShadow).not.toBe(standard.boxShadow);
   await page.evaluate(() => localStorage.removeItem('cuewise.posture.glowIntensity'));
+
+  await applyPref('cuewise.posture.glowStyle', 'border');
+  expect((await readVignette()).boxShadow).not.toBe(standard.boxShadow);
+
+  // Tint swaps the edge shadow for an even background wash.
+  await applyPref('cuewise.posture.glowStyle', 'tint');
+  const tint = await readVignette();
+  expect(tint.boxShadow).toBe('none');
+  expect(tint.background).not.toBe(standard.background);
+  await page.evaluate(() => localStorage.removeItem('cuewise.posture.glowStyle'));
 }

@@ -631,9 +631,10 @@ describe('configurable nudge delay', () => {
   });
 });
 
-describe('glow intensity preference', () => {
+describe('glow appearance preferences', () => {
   afterEach(() => {
     setGlowIntensity('standard');
+    setGlowStyle('glow');
   });
 
   it('persists the choice for the glow windows to read', () => {
@@ -665,6 +666,18 @@ describe('glow intensity preference', () => {
     initPosture();
     await flushChain();
     expect(getPostureState().glowStyle).toBe('tint');
+  });
+
+  it('reflects the persisted value when the write fails', () => {
+    const failingWrite = vi.spyOn(localStorageStub, 'setItem').mockImplementation(() => {
+      throw new Error('storage full');
+    });
+    setGlowStyle('tint');
+    failingWrite.mockRestore();
+
+    // The glow windows read localStorage — Settings must not claim a style they won't use.
+    expect(getPostureState().glowStyle).toBe('glow');
+    expect(localStorageStub.getItem('cuewise.posture.glowStyle')).toBeNull();
   });
 });
 

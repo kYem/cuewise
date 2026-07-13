@@ -36,3 +36,15 @@ export function readGlowStyle(): GlowStyle {
   }
   return 'glow';
 }
+
+/** Vignette class list for a style/intensity pair; the base covers glow + standard. */
+export function glowVignetteClassName(style: GlowStyle, intensity: GlowIntensity): string {
+  const classes = ['glow-vignette'];
+  if (style !== 'glow') {
+    classes.push(`glow-style-${style}`);
+  }
+  if (intensity !== 'standard') {
+    classes.push(`glow-vignette--${intensity}`);
+  }
+  return classes.join(' ');
+}

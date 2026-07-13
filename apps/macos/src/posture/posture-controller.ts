@@ -559,7 +559,7 @@ export function setGlowIntensity(intensity: GlowIntensity): void {
   setState({ glowIntensity: readGlowIntensity() });
 }
 
-/** Set the nudge's visual style (glow / border / tint); read like the intensity. */
+/** Set the nudge style; persisted and read back exactly like the intensity above. */
 export function setGlowStyle(style: GlowStyle): void {
   writeLocal(GLOW_STYLE_KEY, style, 'Failed to persist the glow style');
   setState({ glowStyle: readGlowStyle() });

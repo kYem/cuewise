@@ -43,7 +43,8 @@ html:has(#glow:target) body {
     inset 0 0 48px 8px rgba(225, 29, 72, 0.4);
 }
 
-/* Tint style: an even wash over the whole screen. */
+/* Tint style: an even wash. Must follow the intensity tiers — its
+   `box-shadow: none` beats them by source order, not specificity. */
 .glow-style-tint {
   box-shadow: none;
   background: rgba(225, 29, 72, 0.1);
