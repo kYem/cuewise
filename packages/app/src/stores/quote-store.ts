@@ -22,7 +22,7 @@ import {
 } from '@cuewise/storage';
 import { create } from 'zustand';
 import { SEED_QUOTES } from '../data/seed-quotes';
-import { notifyDeleted, notifyMutated } from './sync-hook';
+import { notifyDeleted, notifyMutated, notifyMutatedBulk } from './sync-hook';
 import { useToastStore } from './toast-store';
 
 /** Seed quotes not present in the given list, keyed by id. */
@@ -578,9 +578,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
 
       await setQuotes(updatedQuotes);
       set({ quotes: updatedQuotes, error: null });
-      for (const id of affectedCustomIds) {
-        notifyMutated('quotes', id);
-      }
+      notifyMutatedBulk('quotes', affectedCustomIds);
 
       // Update current quote if it was in the selection
       if (currentQuote && quoteIdSet.has(currentQuote.id)) {
@@ -617,9 +615,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
 
       await setQuotes(updatedQuotes);
       set({ quotes: updatedQuotes, error: null });
-      for (const id of affectedCustomIds) {
-        notifyMutated('quotes', id);
-      }
+      notifyMutatedBulk('quotes', affectedCustomIds);
 
       // If hiding current quote, refresh to a new one
       if (setHidden && currentQuote && quoteIdSet.has(currentQuote.id)) {
@@ -915,9 +911,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
 
       await setQuotes(updatedQuotes);
       set({ quotes: updatedQuotes, error: null });
-      for (const id of affectedCustomIds) {
-        notifyMutated('quotes', id);
-      }
+      notifyMutatedBulk('quotes', affectedCustomIds);
 
       const collection = collections.find((c) => c.id === collectionId);
       const collectionName = collection?.name ?? 'collection';
@@ -990,9 +984,10 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       const updatedQuotes = [...quotes, ...newQuotes];
       await setQuotes(updatedQuotes);
       set({ quotes: updatedQuotes, error: null });
-      for (const quote of newQuotes) {
-        notifyMutated('quotes', quote.id);
-      }
+      notifyMutatedBulk(
+        'quotes',
+        newQuotes.map((quote) => quote.id)
+      );
 
       result.success = true;
       result.imported = newQuotes.length;

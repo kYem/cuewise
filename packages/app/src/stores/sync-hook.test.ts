@@ -1,6 +1,12 @@
 import { logger } from '@cuewise/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { notifyDeleted, notifyMutated, type SyncMutationSink, setSyncEngine } from './sync-hook';
+import {
+  notifyDeleted,
+  notifyMutated,
+  notifyMutatedBulk,
+  type SyncMutationSink,
+  setSyncEngine,
+} from './sync-hook';
 
 describe('sync-hook', () => {
   afterEach(() => {
@@ -83,6 +89,64 @@ describe('sync-hook', () => {
     setSyncEngine(null);
 
     notifyMutated('goals', 'goal-1');
+
+    expect(markMutated).not.toHaveBeenCalled();
+  });
+
+  it('notifyMutatedBulk is a no-op when no engine is registered', () => {
+    expect(() => notifyMutatedBulk('goals', ['goal-1', 'goal-2'])).not.toThrow();
+  });
+
+  it('notifyMutatedBulk calls the registered engine markMutatedBulk with the id array', () => {
+    const markMutatedBulk = vi.fn();
+    const fake: SyncMutationSink = {
+      markMutated: vi.fn(),
+      markDeleted: vi.fn(),
+      markMutatedBulk,
+    };
+    setSyncEngine(fake);
+
+    notifyMutatedBulk('goals', ['goal-1', 'goal-2']);
+
+    expect(markMutatedBulk).toHaveBeenCalledWith('goals', ['goal-1', 'goal-2']);
+  });
+
+  it('notifyMutatedBulk swallows a synchronous throw from markMutatedBulk and logs a warning', () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    const fake: SyncMutationSink = {
+      markMutated: vi.fn(),
+      markDeleted: vi.fn(),
+      markMutatedBulk: () => {
+        throw new Error('boom');
+      },
+    };
+    setSyncEngine(fake);
+
+    expect(() => notifyMutatedBulk('goals', ['goal-1'])).not.toThrow();
+    expect(warnSpy).toHaveBeenCalled();
+  });
+
+  it('notifyMutatedBulk swallows an async rejection from markMutatedBulk and logs a warning', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    const fake: SyncMutationSink = {
+      markMutated: vi.fn(),
+      markDeleted: vi.fn(),
+      markMutatedBulk: () => Promise.reject(new Error('boom')),
+    };
+    setSyncEngine(fake);
+
+    expect(() => notifyMutatedBulk('goals', ['goal-1'])).not.toThrow();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(warnSpy).toHaveBeenCalled();
+  });
+
+  it('notifyMutatedBulk is a no-op when the registered sink has no markMutatedBulk', () => {
+    const markMutated = vi.fn();
+    setSyncEngine({ markMutated, markDeleted: vi.fn() });
+
+    expect(() => notifyMutatedBulk('goals', ['goal-1'])).not.toThrow();
 
     expect(markMutated).not.toHaveBeenCalled();
   });

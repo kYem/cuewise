@@ -741,13 +741,15 @@ describe('Quote Store', () => {
 describe('sync-hook wiring', () => {
   const markMutated = vi.fn();
   const markDeleted = vi.fn();
-  const fakeSink: SyncMutationSink = { markMutated, markDeleted };
+  const markMutatedBulk = vi.fn();
+  const fakeSink: SyncMutationSink = { markMutated, markDeleted, markMutatedBulk };
 
   beforeEach(() => {
     useQuoteStore.setState(EMPTY_STORE_STATE);
     vi.clearAllMocks();
     markMutated.mockClear();
     markDeleted.mockClear();
+    markMutatedBulk.mockClear();
     setSyncEngine(fakeSink);
   });
 
@@ -853,5 +855,63 @@ describe('sync-hook wiring', () => {
     await useQuoteStore.getState().removeQuoteFromCollection(customQuote.id, 'collection-1');
 
     expect(markMutated).toHaveBeenCalledWith('quotes', customQuote.id);
+  });
+
+  it('notifies markMutatedBulk with only the custom ids after bulkToggleFavorite', async () => {
+    const customA = quoteFactory.build({ isCustom: true, isFavorite: false });
+    const customB = quoteFactory.build({ isCustom: true, isFavorite: false });
+    const seed = quoteFactory.build({ isCustom: false, isFavorite: false });
+    useQuoteStore.setState({ quotes: [customA, customB, seed], currentQuote: null });
+
+    await useQuoteStore.getState().bulkToggleFavorite([customA.id, customB.id, seed.id], true);
+
+    expect(markMutatedBulk).toHaveBeenCalledWith('quotes', [customA.id, customB.id]);
+    expect(markMutated).not.toHaveBeenCalled();
+  });
+
+  it('notifies markMutatedBulk with only the custom ids after bulkToggleHidden', async () => {
+    const customA = quoteFactory.build({ isCustom: true, isHidden: false });
+    const customB = quoteFactory.build({ isCustom: true, isHidden: false });
+    const seed = quoteFactory.build({ isCustom: false, isHidden: false });
+    useQuoteStore.setState({ quotes: [customA, customB, seed], currentQuote: null });
+
+    await useQuoteStore.getState().bulkToggleHidden([customA.id, customB.id, seed.id], true);
+
+    expect(markMutatedBulk).toHaveBeenCalledWith('quotes', [customA.id, customB.id]);
+    expect(markMutated).not.toHaveBeenCalled();
+  });
+
+  it('notifies markMutatedBulk with only the custom ids after addQuotesToCollection', async () => {
+    const customA = quoteFactory.build({ isCustom: true, collectionIds: [] });
+    const customB = quoteFactory.build({ isCustom: true, collectionIds: [] });
+    const seed = quoteFactory.build({ isCustom: false, collectionIds: [] });
+    useQuoteStore.setState({
+      quotes: [customA, customB, seed],
+      collections: [],
+      currentQuote: null,
+    });
+
+    await useQuoteStore
+      .getState()
+      .addQuotesToCollection([customA.id, customB.id, seed.id], 'collection-1');
+
+    expect(markMutatedBulk).toHaveBeenCalledWith('quotes', [customA.id, customB.id]);
+    expect(markMutated).not.toHaveBeenCalled();
+  });
+
+  it('notifies markMutatedBulk with every imported id after bulkAddQuotes', async () => {
+    useQuoteStore.setState({ quotes: [] });
+
+    await useQuoteStore.getState().bulkAddQuotes([
+      { text: 'Quote A', author: 'Author A', category: 'inspiration' },
+      { text: 'Quote B', author: 'Author B', category: 'inspiration' },
+    ]);
+
+    const created = useQuoteStore.getState().quotes;
+    expect(markMutatedBulk).toHaveBeenCalledWith(
+      'quotes',
+      created.map((q) => q.id)
+    );
+    expect(markMutated).not.toHaveBeenCalled();
   });
 });

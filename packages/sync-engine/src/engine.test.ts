@@ -9,6 +9,7 @@ import { FakeScheduler } from './__fixtures__/fake-scheduler';
 import { CLOUD_SYNC_ENABLED_KEY, SyncEngine, type SyncEngineDeps } from './engine';
 import { SYNC_DATA_KEY } from './key-lifecycle';
 import { SyncMetadataStore } from './metadata-store';
+import { MutationTracker } from './mutation-tracker';
 
 interface Device {
   kv: FakeKvStore;
@@ -315,5 +316,60 @@ describe('SyncEngine.markMutated / markDeleted', () => {
 
     await device.engine.markDeleted('goals', 'g1');
     expect((await metaStore.load()).tombstones).toContain('goals/g1');
+  });
+});
+
+describe('SyncEngine.markMutatedBulk', () => {
+  it('delegates to the mutation tracker with the full id list', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    const metaStore = new SyncMetadataStore(device.kv);
+
+    await device.engine.markMutatedBulk('goals', ['g1', 'g2']);
+
+    expect((await metaStore.load()).dirty.goals).toEqual(['g1', 'g2']);
+  });
+});
+
+describe('SyncEngine backfillDirty (first-enable migration)', () => {
+  it('marks every seeded entity dirty via one markMutatedBulk call per collection, not one markMutated per entity', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    const goals = [
+      goalFactory.build({ id: 'g1' }),
+      goalFactory.build({ id: 'g2' }),
+      goalFactory.build({ id: 'g3' }),
+    ];
+    await setGoals(goals);
+    const bulkSpy = vi.spyOn(MutationTracker.prototype, 'markMutatedBulk');
+    const singleSpy = vi.spyOn(MutationTracker.prototype, 'markMutated');
+
+    await device.engine.enableSync('cred-a', 'Device A');
+
+    // Batched, not per-entity: backfill never falls back to the single-id path.
+    expect(singleSpy).not.toHaveBeenCalled();
+    const goalsCall = bulkSpy.mock.calls.find(([collection]) => collection === 'goals');
+    expect(goalsCall?.[1].slice().sort()).toEqual(['g1', 'g2', 'g3']);
+
+    // Same end result as the old per-entity backfill: every seeded goal reaches the server.
+    const uploadedIds = server
+      .allRecords()
+      .filter((r) => r.collection === 'goals' && !r.deleted)
+      .map((r) => r.entityId);
+    expect(uploadedIds.slice().sort()).toEqual(['g1', 'g2', 'g3']);
+  });
+
+  it('skips collections with nothing to backfill instead of calling markMutatedBulk with an empty list', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    const bulkSpy = vi.spyOn(MutationTracker.prototype, 'markMutatedBulk');
+
+    await device.engine.enableSync('cred-a', 'Device A');
+
+    const emptyCalls = bulkSpy.mock.calls.filter(([, entityIds]) => entityIds.length === 0);
+    expect(emptyCalls).toEqual([]);
   });
 });

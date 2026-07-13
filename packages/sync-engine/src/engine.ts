@@ -221,6 +221,11 @@ export class SyncEngine {
     await this.tracker.markMutated(collection, entityId);
   }
 
+  /** Bulk form of markMutated: one meta load/save for the whole id list, not one per id. */
+  async markMutatedBulk(collection: string, entityIds: string[]): Promise<void> {
+    await this.tracker.markMutatedBulk(collection, entityIds);
+  }
+
   async markDeleted(collection: string, entityId: string): Promise<void> {
     await this.tracker.markDeleted(collection, entityId);
   }
@@ -254,12 +259,16 @@ export class SyncEngine {
     return { transport: this.deps.apiClient, keyStore: this.deps.keyStore };
   }
 
+  // One markMutatedBulk call per collection instead of one markMutated per entity, so a
+  // first-enable migration over an existing library does O(collections) meta saves, not O(entities).
   private async backfillDirty(): Promise<void> {
     for (const binding of this.bindings) {
       const all = await binding.readAll();
-      for (const entityId of Object.keys(all)) {
-        await this.tracker.markMutated(binding.name, entityId);
+      const entityIds = Object.keys(all);
+      if (entityIds.length === 0) {
+        continue;
       }
+      await this.tracker.markMutatedBulk(binding.name, entityIds);
     }
   }
 

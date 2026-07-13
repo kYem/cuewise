@@ -18,6 +18,19 @@ export class MutationTracker {
     await this.meta.save(meta);
   }
 
+  /** Same as markMutated, but loads/saves meta ONCE for the whole batch instead of per-id. */
+  async markMutatedBulk(collection: string, entityIds: string[]): Promise<void> {
+    const meta = await this.meta.load();
+    for (const entityId of entityIds) {
+      const key = this.stamp(meta, collection, entityId);
+      const tombstoneIndex = meta.tombstones.indexOf(key);
+      if (tombstoneIndex !== -1) {
+        meta.tombstones.splice(tombstoneIndex, 1);
+      }
+    }
+    await this.meta.save(meta);
+  }
+
   async markDeleted(collection: string, entityId: string): Promise<void> {
     const meta = await this.meta.load();
     const key = this.stamp(meta, collection, entityId);

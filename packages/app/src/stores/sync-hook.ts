@@ -7,6 +7,8 @@ import { logger } from '@cuewise/shared';
 export interface SyncMutationSink {
   markMutated(collection: string, entityId: string): Promise<void> | void;
   markDeleted(collection: string, entityId: string): Promise<void> | void;
+  // Optional so callers that never bulk-notify (and the no-op no-sink path) stay safe.
+  markMutatedBulk?(collection: string, entityIds: string[]): Promise<void> | void;
 }
 
 let sink: SyncMutationSink | null = null;
@@ -27,6 +29,20 @@ export function notifyMutated(collection: string, entityId: string): void {
     });
   } catch (error) {
     logger.warn('Sync notify (markMutated) failed', { collection, entityId, error });
+  }
+}
+
+// Bulk form of notifyMutated: one round trip for a whole batch of ids instead of one per id.
+export function notifyMutatedBulk(collection: string, entityIds: string[]): void {
+  if (sink === null || sink.markMutatedBulk === undefined || entityIds.length === 0) {
+    return;
+  }
+  try {
+    Promise.resolve(sink.markMutatedBulk(collection, entityIds)).catch((error) => {
+      logger.warn('Sync notify (markMutatedBulk) failed', { collection, entityIds, error });
+    });
+  } catch (error) {
+    logger.warn('Sync notify (markMutatedBulk) failed', { collection, entityIds, error });
   }
 }
 

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { FakeKvStore } from './__fixtures__/fake-kv-store';
 import { SyncMetadataStore } from './metadata-store';
 import { MutationTracker } from './mutation-tracker';
@@ -43,5 +43,52 @@ describe('MutationTracker', () => {
     const saved = await meta.load();
     expect(saved.dirty.goals).toEqual(['g3']);
     expect(saved.tombstones).not.toContain('goals/g3');
+  });
+
+  describe('markMutatedBulk', () => {
+    it('marks every id dirty with distinct advancing hlcs in a single save', async () => {
+      const kv = new FakeKvStore();
+      const meta = new SyncMetadataStore(kv);
+      // Warm the store (load() lazily creates + saves default meta) before spying, so the
+      // spy only sees the save this test cares about.
+      await meta.load();
+      const setSpy = vi.spyOn(kv, 'set');
+      let now = 1000;
+      const tracker = new MutationTracker(meta, () => now++);
+
+      await tracker.markMutatedBulk('goals', ['a', 'b', 'c']);
+
+      const saved = await meta.load();
+      expect(saved.dirty.goals).toEqual(['a', 'b', 'c']);
+      const hlcs = ['a', 'b', 'c'].map((id) => saved.hlcs[`goals/${id}`]);
+      expect(hlcs.every((hlc) => hlc !== undefined)).toBe(true);
+      expect(new Set(hlcs).size).toBe(3);
+      expect(hlcs[0] < hlcs[1]).toBe(true);
+      expect(hlcs[1] < hlcs[2]).toBe(true);
+      // One save for the whole batch, not one per id.
+      expect(setSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('dedupes a repeated id instead of adding it twice to dirty', async () => {
+      const meta = new SyncMetadataStore(new FakeKvStore());
+      const tracker = new MutationTracker(meta, () => 1000);
+
+      await tracker.markMutatedBulk('goals', ['a', 'b', 'a']);
+
+      const saved = await meta.load();
+      expect(saved.dirty.goals).toEqual(['a', 'b']);
+    });
+
+    it('clears tombstones for ids that were previously deleted', async () => {
+      const meta = new SyncMetadataStore(new FakeKvStore());
+      const tracker = new MutationTracker(meta, () => 1000);
+      await tracker.markDeleted('goals', 'a');
+
+      await tracker.markMutatedBulk('goals', ['a', 'b']);
+
+      const saved = await meta.load();
+      expect(saved.tombstones).not.toContain('goals/a');
+      expect(saved.dirty.goals).toEqual(['a', 'b']);
+    });
   });
 });
