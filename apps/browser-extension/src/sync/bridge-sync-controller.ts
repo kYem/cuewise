@@ -102,10 +102,9 @@ export class BridgeSyncController implements SyncController {
   }
 
   async disable(): Promise<void> {
-    try {
-      await this.send({ kind: 'cuewise-sync-control', op: 'disable' });
-    } catch (error) {
-      logger.error('Sync disable control message failed', error);
+    const response = await this.send({ kind: 'cuewise-sync-control', op: 'disable' });
+    if (!response.ok) {
+      throw new Error(response.reason);
     }
   }
 
@@ -123,10 +122,9 @@ export class BridgeSyncController implements SyncController {
   // No transient 'syncing' emission: the SW's onStatus trampoline never emits it either,
   // so adding one here would be a page-only flicker the background can't corroborate.
   async syncNow(): Promise<void> {
-    try {
-      await this.send({ kind: 'cuewise-sync-control', op: 'syncNow' });
-    } catch (error) {
-      logger.error('Sync-now control message failed', error);
+    const response = await this.send({ kind: 'cuewise-sync-control', op: 'syncNow' });
+    if (!response.ok) {
+      throw new Error(response.reason);
     }
   }
 

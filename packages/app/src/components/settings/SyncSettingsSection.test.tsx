@@ -383,6 +383,24 @@ describe('SyncSettingsSectionComponent', () => {
     await waitFor(() => expect(toastError).toHaveBeenCalledTimes(1));
   });
 
+  it('shows the ConfirmationDialog loading state while disable() is pending, then clears it', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.deferNextDisable();
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+
+    await user.click(cloudSyncSwitch());
+    await user.click(screen.getByRole('button', { name: 'Disable' }));
+
+    expect(await screen.findByText('Processing...')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
+
+    act(() => controller.resolveDisable());
+
+    await waitFor(() => expect(screen.queryByText(DISABLE_MESSAGE)).not.toBeInTheDocument());
+  });
+
   it('shows a toast error and closes the confirm dialog when controller.disable() rejects', async () => {
     const user = userEvent.setup();
     const controller = new FakeSyncController();

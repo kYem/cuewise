@@ -273,14 +273,46 @@ describe('BridgeSyncController: disable / syncNow', () => {
     });
   });
 
-  it('swallows a timed-out send rather than throwing', async () => {
-    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+  it('resolves disable() on an ok response', async () => {
+    runtime.sendMessage.mockResolvedValueOnce({ ok: true });
+    const controller = new BridgeSyncController();
+
+    await expect(controller.disable()).resolves.toBeUndefined();
+  });
+
+  it('resolves syncNow() on an ok response', async () => {
+    runtime.sendMessage.mockResolvedValueOnce({ ok: true });
+    const controller = new BridgeSyncController();
+
+    await expect(controller.syncNow()).resolves.toBeUndefined();
+  });
+
+  it('rejects disable() on a non-ok response instead of resolving silently', async () => {
+    runtime.sendMessage.mockResolvedValueOnce({ ok: false, reason: 'error' });
+    const controller = new BridgeSyncController();
+
+    await expect(controller.disable()).rejects.toThrow();
+  });
+
+  it('rejects syncNow() on a non-ok response instead of resolving silently', async () => {
+    runtime.sendMessage.mockResolvedValueOnce({ ok: false, reason: 'error' });
+    const controller = new BridgeSyncController();
+
+    await expect(controller.syncNow()).rejects.toThrow();
+  });
+
+  it('rejects disable() on a timed-out send', async () => {
     runtime.sendMessage.mockImplementation(() => new Promise(() => {}));
     const controller = new BridgeSyncController({ timeoutMs: 10 });
 
-    await expect(controller.disable()).resolves.toBeUndefined();
+    await expect(controller.disable()).rejects.toThrow();
+  });
 
-    errorSpy.mockRestore();
+  it('rejects syncNow() on a timed-out send', async () => {
+    runtime.sendMessage.mockImplementation(() => new Promise(() => {}));
+    const controller = new BridgeSyncController({ timeoutMs: 10 });
+
+    await expect(controller.syncNow()).rejects.toThrow();
   });
 });
 

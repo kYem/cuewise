@@ -19,10 +19,26 @@ export class FakeSyncController implements SyncController {
   private readonly enableResults: EnableResult[] = [];
   private readonly reconnectResults: EnableResult[] = [];
   private readonly failingMethods = new Set<FailableMethod>();
+  private deferredDisable = false;
+  private pendingDisable: (() => void) | null = null;
 
   /** Makes the next call to `method` reject with an Error instead of resolving; clears after firing once. */
   failNext(method: FailableMethod): void {
     this.failingMethods.add(method);
+  }
+
+  /** Makes the next disable() call hang until resolveDisable() releases it — for asserting in-flight UI state (e.g. a loading spinner). */
+  deferNextDisable(): void {
+    this.deferredDisable = true;
+  }
+
+  /** Releases a disable() call armed via deferNextDisable(). */
+  resolveDisable(): void {
+    if (this.pendingDisable === null) {
+      throw new Error('FakeSyncController: no pending disable() to resolve');
+    }
+    this.pendingDisable();
+    this.pendingDisable = null;
   }
 
   /** Records the call, then throws if `method` was armed via failNext (clearing the arm). */
@@ -88,6 +104,12 @@ export class FakeSyncController implements SyncController {
   async disable(): Promise<void> {
     this.calls.push({ method: 'disable', args: [] });
     this.maybeFail('disable');
+    if (this.deferredDisable) {
+      this.deferredDisable = false;
+      return new Promise((resolve) => {
+        this.pendingDisable = resolve;
+      });
+    }
   }
 
   async regenerateRecoveryCode(): Promise<string> {
