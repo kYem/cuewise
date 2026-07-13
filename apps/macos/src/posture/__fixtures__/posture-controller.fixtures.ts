@@ -94,7 +94,8 @@ export function emitSampleFrame(payload: string): void {
   getHandler('posture://sample')({ payload });
 }
 
-export function emitStopped(cause: 'exited' | 'stalled' = 'exited'): void {
+// `cause` models the wire, where any string can arrive — not just the known set.
+export function emitStopped(cause: string = 'exited'): void {
   getHandler('posture://stopped')({ payload: cause });
 }
 

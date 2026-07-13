@@ -1,3 +1,4 @@
+import { logger } from '@cuewise/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   countInvokes,
@@ -139,6 +140,17 @@ describe('posture controller lifecycle', () => {
     expect(toastErrorMock).toHaveBeenCalledWith(STALLED_ERROR);
     // A stall is transient — the opt-in survives so tracking auto-resumes next boot.
     expect(localStorageStub.getItem(ENABLED_KEY)).toBe('1');
+  });
+
+  it('an unknown stop cause falls back to the camera copy, leaving a trace', async () => {
+    await startTracking();
+
+    emitStopped('rebooted');
+
+    expect(getPostureState().error).toBe(STOPPED_ERROR);
+    expect(logger.warn).toHaveBeenCalledWith('Unrecognized posture stop cause', {
+      cause: 'rebooted',
+    });
   });
 
   it('a manual stop clears a stale error so the tray warning does not linger', async () => {

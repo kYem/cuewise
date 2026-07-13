@@ -263,8 +263,12 @@ async function attachListeners(): Promise<void> {
       hideGlowIfActive();
       detachListeners();
       resetDerivation();
-      // "stalled" = the liveness watchdog killed a mute sidecar (e.g. the camera
-      // stream was interrupted) — blaming permissions would misdirect the user.
+      // "stalled" = the watchdog killed a sidecar whose readings dried up (e.g. the
+      // camera stream was interrupted) — blaming permissions would misdirect. The
+      // other causes ("exited", "mute" = never produced a frame) fit the camera copy.
+      if (event.payload !== 'stalled' && event.payload !== 'exited' && event.payload !== 'mute') {
+        logger.warn('Unrecognized posture stop cause', { cause: event.payload });
+      }
       const message =
         event.payload === 'stalled'
           ? 'Posture readings stalled — tracking stopped to release the camera. Start it again to resume.'

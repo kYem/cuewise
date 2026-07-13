@@ -21,10 +21,11 @@ const STOPPED_EVENT: &str = "posture://stopped";
 // Cap on a spawned-but-mute sidecar's silence before we kill it (camera off). Generous
 // because the first-run permission prompt delays the first frame (camera off till granted).
 const FIRST_FRAME_TIMEOUT: Duration = Duration::from_secs(30);
-// Once frames have flowed (2s cadence), a hung-but-alive sidecar is killed after this
-// bound — otherwise the camera stays on with every UI surface silently frozen. tokio
-// Instants don't tick during system sleep, so sleep alone can't trip it; the slack
-// absorbs camera re-init hiccups around wake.
+// Once frames have flowed (2s cadence), a hung-but-alive sidecar is reaped after two
+// consecutive silent windows of this length — otherwise the camera stays on with
+// every UI surface silently frozen. Two windows, not one: waking from sleep fires
+// the stale timer before the camera re-inits (monotonic clocks can advance through
+// sleep on Apple Silicon), and the grace window absorbs that without a platform API.
 const LIVENESS_TIMEOUT: Duration = Duration::from_secs(15);
 
 // The slot pairs the child with its session generation so a stale relay task (a
@@ -59,19 +60,29 @@ pub fn start_posture(app: AppHandle, state: State<'_, PostureState>) -> Result<(
     tauri::async_runtime::spawn(async move {
         // The deadline lives in the Rust core, not the webview (same reason as
         // scheduler.rs): hidden-to-tray — this app's resident mode — throttles JS timers.
-        // Only stdout rolls it — stderr chatter can't keep a frameless sidecar alive.
+        // Only a relayed sample rolls it — stderr chatter can't keep it alive.
         let mut deadline = tokio::time::Instant::now() + FIRST_FRAME_TIMEOUT;
+        let mut in_grace_window = false;
+        let mut saw_sample = false;
         loop {
             let received = match next_sidecar_event(&mut rx, deadline).await {
                 Ok(received) => received,
                 Err(_elapsed) => {
-                    // Alive but mute: kill it so the camera turns off, then report the
-                    // stop with its cause so the webview's copy doesn't blame permissions.
+                    if !in_grace_window {
+                        // One silent window isn't proof of a hang — a wake from sleep
+                        // fires the stale timer before the camera re-inits.
+                        in_grace_window = true;
+                        deadline = tokio::time::Instant::now() + LIVENESS_TIMEOUT;
+                        continue;
+                    }
+                    // Silent through the grace window too: kill it so the camera turns
+                    // off. "mute" (never a frame) keeps the permission-oriented copy.
                     if reap_owned_child(&task_app, generation) {
                         eprintln!(
                             "posture sidecar: no output within the liveness deadline; killed"
                         );
-                        let _ = task_app.emit(STOPPED_EVENT, "stalled");
+                        let cause = if saw_sample { "stalled" } else { "mute" };
+                        let _ = task_app.emit(STOPPED_EVENT, cause);
                     }
                     break;
                 }
@@ -92,6 +103,8 @@ pub fn start_posture(app: AppHandle, state: State<'_, PostureState>) -> Result<(
                             // Only a relayed sample rolls the bound — the watchdog
                             // guards the webview surface, not bare pipe activity.
                             deadline = tokio::time::Instant::now() + LIVENESS_TIMEOUT;
+                            in_grace_window = false;
+                            saw_sample = true;
                             let _ = task_app.emit(SAMPLE_EVENT, trimmed.to_string());
                         }
                     }
