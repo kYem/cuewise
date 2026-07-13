@@ -8,6 +8,7 @@ import {
 } from '@cuewise/app';
 import { Button, cn } from '@cuewise/ui';
 import { PersonStanding } from 'lucide-react';
+import { useEffect } from 'react';
 import type { GlowIntensity } from '../glow/glow-prefs';
 import {
   calibratePosture,
@@ -18,7 +19,9 @@ import {
   setGlowIntensity,
   setNudgeDelay,
   setPostureNudges,
+  startGlowPreview,
   startPosture,
+  stopGlowPreview,
   stopPosture,
   usePosture,
 } from './posture-controller';
@@ -33,6 +36,8 @@ const NUDGE_DELAY_OPTIONS: { value: `${NudgeDelaySeconds}`; label: string }[] = 
 const GLOW_INTENSITY_OPTIONS: { value: GlowIntensity; label: string }[] = [
   { value: 'subtle', label: 'Subtle' },
   { value: 'standard', label: 'Standard' },
+  { value: 'strong', label: 'Strong' },
+  { value: 'intense', label: 'Intense' },
 ];
 
 function fmt(value: number | undefined, digits = 2): string {
@@ -51,8 +56,16 @@ function PostureSection({ filter }: SettingsSectionProps) {
     nudgesPausedUntil,
     nudgeDelaySeconds,
     glowIntensity,
+    glowPreviewActive,
   } = usePosture();
   const meta = sample ? STATUS_META[sample.status] : null;
+
+  // Leaving this section (or closing Settings) always ends a running preview.
+  useEffect(() => {
+    return () => {
+      stopGlowPreview();
+    };
+  }, []);
 
   return (
     <div>
@@ -104,15 +117,24 @@ function PostureSection({ filter }: SettingsSectionProps) {
       {nudgesEnabled ? (
         <SettingRow
           label="Glow strength"
-          help="How present the screen-edge glow feels."
-          keywords="posture glow intensity strength subtle standard brightness"
+          help="How present the screen-edge glow feels. Preview shows it now and stops when you leave Settings."
+          keywords="posture glow intensity strength subtle standard brightness preview test"
           filter={filter}
         >
-          <Segmented
-            value={glowIntensity}
-            options={GLOW_INTENSITY_OPTIONS}
-            onChange={setGlowIntensity}
-          />
+          <div className="flex items-center gap-3">
+            <Segmented
+              value={glowIntensity}
+              options={GLOW_INTENSITY_OPTIONS}
+              onChange={setGlowIntensity}
+            />
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => (glowPreviewActive ? stopGlowPreview() : startGlowPreview())}
+            >
+              {glowPreviewActive ? 'Stop preview' : 'Preview'}
+            </Button>
+          </div>
         </SettingRow>
       ) : null}
 

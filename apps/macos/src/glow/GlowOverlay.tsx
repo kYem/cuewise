@@ -1,6 +1,6 @@
 import type React from 'react';
 import { useEffect, useState } from 'react';
-import { readGlowIntensity } from './glow-prefs';
+import { GLOW_INTENSITY_KEY, readGlowIntensity } from './glow-prefs';
 import './glow-overlay.css';
 
 /**
@@ -17,15 +17,24 @@ export function GlowOverlay(): React.JSX.Element {
         setEpoch((current) => current + 1);
       }
     };
+    // Same-origin webviews may fire `storage` on the pref write — a visible
+    // preview then restyles live; otherwise the next show picks it up at mount.
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === GLOW_INTENSITY_KEY) {
+        setEpoch((current) => current + 1);
+      }
+    };
     document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('storage', onStorage);
     return () => {
       document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('storage', onStorage);
     };
   }, []);
 
   // Re-read per show (the epoch remount) so a Settings change applies next glow.
   const intensity = readGlowIntensity();
   const className =
-    intensity === 'subtle' ? 'glow-vignette glow-vignette--subtle' : 'glow-vignette';
+    intensity === 'standard' ? 'glow-vignette' : `glow-vignette glow-vignette--${intensity}`;
   return <div key={epoch} className={className} aria-hidden="true" />;
 }

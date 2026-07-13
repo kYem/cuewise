@@ -15,6 +15,13 @@ describe('readGlowIntensity', () => {
     expect(readGlowIntensity()).toBe('subtle');
   });
 
+  it('accepts the stronger tiers', () => {
+    stubStorage(() => 'strong');
+    expect(readGlowIntensity()).toBe('strong');
+    stubStorage(() => 'intense');
+    expect(readGlowIntensity()).toBe('intense');
+  });
+
   it('falls back to standard for garbage values', () => {
     stubStorage(() => 'blinding');
     expect(readGlowIntensity()).toBe('standard');

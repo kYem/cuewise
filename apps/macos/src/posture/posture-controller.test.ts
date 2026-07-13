@@ -29,7 +29,9 @@ import {
   setGlowIntensity,
   setNudgeDelay,
   setPostureNudges,
+  startGlowPreview,
   startPosture,
+  stopGlowPreview,
   stopPosture,
 } from './posture-controller';
 
@@ -513,6 +515,61 @@ describe('snooze and pause', () => {
 
     expect(getPostureState().nudgesPausedUntil).toBeNull();
     expect(localStorageStub.getItem(NUDGES_PAUSED_KEY)).toBeNull();
+  });
+});
+
+describe('glow preview', () => {
+  afterEach(() => {
+    stopGlowPreview();
+  });
+
+  it('shows the glow on demand, without tracking and without touching glowActive', async () => {
+    startGlowPreview();
+    await flushChain();
+
+    expect(countInvokes('show_glow')).toBe(1);
+    expect(getPostureState().glowPreviewActive).toBe(true);
+    expect(getPostureState().glowActive).toBe(false);
+  });
+
+  it('stopping the preview hides the glow', async () => {
+    startGlowPreview();
+    await flushChain();
+
+    stopGlowPreview();
+
+    expect(countInvokes('hide_glow')).toBe(1);
+    expect(getPostureState().glowPreviewActive).toBe(false);
+  });
+
+  it('stopping the preview leaves a real nudge glow on screen', async () => {
+    await startTracking();
+    await glowUp();
+    startGlowPreview();
+
+    stopGlowPreview();
+
+    // The nudge still owns the windows — the preview must not steal them.
+    expect(countInvokes('hide_glow')).toBe(0);
+  });
+
+  it('a nudge recovery during a preview leaves the preview on screen', async () => {
+    await startTracking();
+    startGlowPreview();
+    await flushChain();
+    emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES); // a real nudge fires mid-preview
+    expect(getPostureState().glowActive).toBe(true);
+
+    for (let i = 0; i < STEADY_SAMPLES; i += 1) {
+      emitSampleFrame(JSON.stringify({ status: 'good' }));
+    }
+
+    // glowActive clears, but the preview still owns the windows.
+    expect(getPostureState().glowActive).toBe(false);
+    expect(countInvokes('hide_glow')).toBe(0);
+
+    stopGlowPreview();
+    expect(countInvokes('hide_glow')).toBe(1);
   });
 });
 
