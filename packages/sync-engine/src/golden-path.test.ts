@@ -243,16 +243,25 @@ describe('settings: per-key sync round-trips a shared key but excludes device-lo
     const bSettingsAfterThemeSync = await getSettings();
     expect(bSettingsAfterThemeSync.theme).toBe('dark');
 
-    // A changes a device-local setting; it must never leave A's device.
+    // A changes device-local settings; none of them must ever leave A's device.
     useStorage(deviceA);
     const aSettingsAfterTheme = await getSettings();
-    await setSettings({ ...aSettingsAfterTheme, logLevel: 'debug' });
+    await setSettings({
+      ...aSettingsAfterTheme,
+      logLevel: 'debug',
+      focusedGoalId: 'g1',
+      hasSeenOnboarding: true,
+    });
     await deviceA.engine.markMutated('settings', 'logLevel');
+    await deviceA.engine.markMutated('settings', 'focusedGoalId');
+    await deviceA.engine.markMutated('settings', 'hasSeenOnboarding');
     await deviceA.engine.syncNow();
 
     useStorage(deviceB);
     await deviceB.engine.syncNow();
-    const bSettingsAfterLogLevelSync = await getSettings();
-    expect(bSettingsAfterLogLevelSync.logLevel).toBe('error');
+    const bSettingsAfterDeviceLocalSync = await getSettings();
+    expect(bSettingsAfterDeviceLocalSync.logLevel).toBe('error');
+    expect(bSettingsAfterDeviceLocalSync.focusedGoalId).toBe(null);
+    expect(bSettingsAfterDeviceLocalSync.hasSeenOnboarding).toBe(false);
   });
 });

@@ -1,4 +1,4 @@
-import type { Settings } from '@cuewise/shared';
+import { DEVICE_LOCAL_SETTINGS_KEYS, type Settings } from '@cuewise/shared';
 import {
   getCollections,
   getGoals,
@@ -20,14 +20,9 @@ export interface CollectionBinding {
   writeOne(entityId: string, entity: unknown | null): Promise<StorageResult>;
 }
 
-// Settings keys that must never leave the device.
-// syncEnabled/cloudSyncEnabled: a synced toggle would let devices fight over on/off (spec §2).
-// logLevel: per-device debug verbosity, not a shared user preference.
-export const DEVICE_LOCAL_SETTINGS_KEYS: readonly string[] = [
-  'syncEnabled',
-  'cloudSyncEnabled',
-  'logLevel',
-];
+// Re-exported so existing consumers (cycle.ts, index.ts, tests) keep importing from here — the
+// single source of truth now lives in @cuewise/shared so the app package can share it too.
+export { DEVICE_LOCAL_SETTINGS_KEYS };
 
 interface HasId {
   id: string;

@@ -3,6 +3,7 @@ import {
   clampPomodoroDurations,
   configureLogger,
   DEFAULT_SETTINGS,
+  DEVICE_LOCAL_SETTINGS_KEYS,
   type LayoutDensity,
   LogLevel as LoggerLevel,
   logger,
@@ -12,14 +13,6 @@ import { getSettings, migrateStorageData, setSettings } from '@cuewise/storage';
 import { create } from 'zustand';
 import { notifyMutated } from './sync-hook';
 import { useToastStore } from './toast-store';
-
-// Mirrors DEVICE_LOCAL_SETTINGS_KEYS in packages/sync-engine/src/collections.ts — kept local
-// so this package never imports @cuewise/sync-engine (avoids a dependency cycle).
-const DEVICE_LOCAL_SETTINGS_KEYS: readonly string[] = [
-  'syncEnabled',
-  'cloudSyncEnabled',
-  'logLevel',
-];
 
 interface SettingsStore {
   // State

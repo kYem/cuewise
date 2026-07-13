@@ -14,6 +14,8 @@ export * from './logger';
 export * from './platform';
 // Export text search helpers
 export * from './search';
+// Export device-local settings-sync scope
+export * from './sync-scope';
 export * from './types';
 // Export utilities
 export * from './utils';

@@ -44,8 +44,13 @@ describe('sync-hook wiring', () => {
     expect(markMutated).toHaveBeenCalledWith('settings', 'colorTheme');
   });
 
-  it('does not notify for device-local keys (syncEnabled, cloudSyncEnabled, logLevel)', async () => {
-    await useSettingsStore.getState().updateSettings({ syncEnabled: true, logLevel: 'debug' });
+  it('does not notify for device-local keys (syncEnabled, cloudSyncEnabled, logLevel, focusedGoalId, hasSeenOnboarding)', async () => {
+    await useSettingsStore.getState().updateSettings({
+      syncEnabled: true,
+      logLevel: 'debug',
+      focusedGoalId: 'g1',
+      hasSeenOnboarding: true,
+    });
 
     expect(markMutated).not.toHaveBeenCalled();
   });
