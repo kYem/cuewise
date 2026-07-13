@@ -34,7 +34,7 @@ export function registerChangesRoutes(
     if (raw instanceof Response) {
       return raw;
     }
-    const parsed = validatePushBody(raw);
+    const parsed = validatePushBody(raw, Date.now());
     if ('problemCode' in parsed) {
       return problem(parsed.problemCode, { errors: parsed.issues });
     }

@@ -5,6 +5,8 @@ export const MAX_BATCH_SIZE = 100;
 export const MAX_CIPHERTEXT_BYTES = 65536;
 export const MAX_COLLECTION_LENGTH = 64;
 export const MAX_ENTITY_ID_LENGTH = 128;
+// Catches a device with a wildly-wrong clock before its bad HLC pollutes other devices.
+export const MAX_CLOCK_DRIFT_MS = 24 * 60 * 60 * 1000;
 
 type PushBodyProblem = {
   problemCode: 'invalid_request' | 'batch_too_large' | 'invalid_record';
@@ -13,7 +15,12 @@ type PushBodyProblem = {
 
 const encoder = new TextEncoder();
 
-function validateRecord(raw: unknown, index: number, issues: ValidationIssue[]): void {
+function validateRecord(
+  raw: unknown,
+  index: number,
+  issues: ValidationIssue[],
+  nowMs: number
+): void {
   const r = (raw ?? {}) as Record<string, unknown>;
   requireNonEmptyString(r.collection, `/records/${index}/collection`, issues, {
     maxLength: MAX_COLLECTION_LENGTH,
@@ -38,13 +45,22 @@ function validateRecord(raw: unknown, index: number, issues: ValidationIssue[]):
       pointer: `/records/${index}/clientUpdatedAt`,
       detail: 'required finite number',
     });
+  } else if (Math.abs(r.clientUpdatedAt - nowMs) > MAX_CLOCK_DRIFT_MS) {
+    issues.push({
+      index,
+      pointer: `/records/${index}/clientUpdatedAt`,
+      detail: 'client clock drift too large',
+    });
   }
   if (typeof r.deleted !== 'boolean') {
     issues.push({ index, pointer: `/records/${index}/deleted`, detail: 'required boolean' });
   }
 }
 
-export function validatePushBody(body: unknown): { records: PushRecord[] } | PushBodyProblem {
+export function validatePushBody(
+  body: unknown,
+  nowMs: number
+): { records: PushRecord[] } | PushBodyProblem {
   if (body === null || typeof body !== 'object') {
     return {
       problemCode: 'invalid_request',
@@ -66,7 +82,7 @@ export function validatePushBody(body: unknown): { records: PushRecord[] } | Pus
   }
   const issues: ValidationIssue[] = [];
   records.forEach((raw, index) => {
-    validateRecord(raw, index, issues);
+    validateRecord(raw, index, issues, nowMs);
   });
   if (issues.length > 0) {
     return { problemCode: 'invalid_record', issues };

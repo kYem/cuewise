@@ -26,7 +26,8 @@ export function record(overrides: Partial<PushRecord> = {}): PushRecord {
     collection: 'quotes',
     entityId: 'entity-1',
     ciphertext: 'cipher-1',
-    clientUpdatedAt: 1_000,
+    // Real wall-clock time: routes/changes.ts clamps pushes to +/-24h of Date.now().
+    clientUpdatedAt: Date.now(),
     deleted: false,
     ...overrides,
   };
