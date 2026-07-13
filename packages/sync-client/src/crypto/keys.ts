@@ -9,6 +9,7 @@ import {
   splitEnvelope,
   utf8,
 } from './primitives';
+import type { RecoverySecret } from './recovery-code';
 
 const MK_INFO = 'cuewise-mk-v1';
 const WRAP_AAD = 'v1|recovery';
@@ -18,7 +19,7 @@ const WRAP_AAD = 'v1|recovery';
 export type MasterKey = Uint8Array & { readonly __brand: 'MasterKey' };
 export type DataKey = Uint8Array & { readonly __brand: 'DataKey' };
 
-export async function deriveMasterKey(secret: string): Promise<MasterKey> {
+export async function deriveMasterKey(secret: RecoverySecret): Promise<MasterKey> {
   return (await hkdfSha256(utf8(secret), MK_INFO, 256)) as MasterKey;
 }
 

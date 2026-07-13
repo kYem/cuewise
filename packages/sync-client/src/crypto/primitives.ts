@@ -2,7 +2,15 @@
 // crypto.subtle (probed in the bundled Tauri app: tauri://localhost is a secure context).
 import { DecryptError, EnvelopeParseError } from './errors';
 
-const subtle = globalThis.crypto.subtle;
+// Lazy so a runtime without WebCrypto fails at first use with a clear message (not at import,
+// and not as an opaque TypeError mid-crypto) — the seam a future non-WebCrypto backend replaces.
+function getSubtle(): SubtleCrypto {
+  const subtle = globalThis.crypto?.subtle;
+  if (subtle === undefined) {
+    throw new Error('crypto.subtle is unavailable in this runtime; E2E crypto requires WebCrypto');
+  }
+  return subtle;
+}
 
 const KEY_ID_RE = /^dk-\d+$/;
 
@@ -23,7 +31,7 @@ export function utf8(s: string): Uint8Array {
 }
 
 export async function sha256(data: Uint8Array): Promise<Uint8Array> {
-  return new Uint8Array(await subtle.digest('SHA-256', asBufferSource(data)));
+  return new Uint8Array(await getSubtle().digest('SHA-256', asBufferSource(data)));
 }
 
 export async function hkdfSha256(
@@ -31,8 +39,10 @@ export async function hkdfSha256(
   info: string,
   lengthBits: number
 ): Promise<Uint8Array> {
-  const key = await subtle.importKey('raw', asBufferSource(ikm), 'HKDF', false, ['deriveBits']);
-  const bits = await subtle.deriveBits(
+  const key = await getSubtle().importKey('raw', asBufferSource(ikm), 'HKDF', false, [
+    'deriveBits',
+  ]);
+  const bits = await getSubtle().deriveBits(
     {
       name: 'HKDF',
       hash: 'SHA-256',
@@ -54,7 +64,7 @@ async function importAesKey(key: Uint8Array): Promise<CryptoKey> {
   if (cached !== undefined) {
     return cached;
   }
-  const imported = subtle.importKey('raw', asBufferSource(key), 'AES-GCM', false, [
+  const imported = getSubtle().importKey('raw', asBufferSource(key), 'AES-GCM', false, [
     'encrypt',
     'decrypt',
   ]);
@@ -74,7 +84,7 @@ export async function aesGcmSeal(
   aad: Uint8Array
 ): Promise<Uint8Array> {
   const cryptoKey = await importAesKey(key);
-  const sealed = await subtle.encrypt(
+  const sealed = await getSubtle().encrypt(
     { name: 'AES-GCM', iv: asBufferSource(iv), additionalData: asBufferSource(aad) },
     cryptoKey,
     asBufferSource(plaintext)
@@ -90,7 +100,7 @@ export async function aesGcmOpen(
 ): Promise<Uint8Array> {
   const cryptoKey = await importAesKey(key);
   try {
-    const opened = await subtle.decrypt(
+    const opened = await getSubtle().decrypt(
       { name: 'AES-GCM', iv: asBufferSource(iv), additionalData: asBufferSource(aad) },
       cryptoKey,
       asBufferSource(ciphertext)

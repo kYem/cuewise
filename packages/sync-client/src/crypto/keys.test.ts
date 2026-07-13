@@ -16,6 +16,12 @@ async function freshMasterKey(): Promise<MasterKey> {
 }
 
 describe('key hierarchy', () => {
+  it('rejects a wrapped-key blob whose iv is not 12 bytes with EnvelopeParseError', async () => {
+    const mk = await freshMasterKey();
+    const blob = `v1.dk-1.${b64urlEncode(randomBytes(8))}.${b64urlEncode(randomBytes(24))}`;
+    await expect(unwrapDataKey(mk, blob)).rejects.toThrow(EnvelopeParseError);
+  });
+
   it('deriveMasterKey is deterministic over the same secret', async () => {
     const { secret } = await generateRecoveryCode();
     const a = await deriveMasterKey(secret);

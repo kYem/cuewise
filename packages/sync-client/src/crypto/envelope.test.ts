@@ -3,7 +3,7 @@ import { GOLDEN } from './__fixtures__/golden-envelope.fixtures';
 import { openRecord, sealRecord } from './envelope';
 import { DecryptError, EnvelopeParseError } from './errors';
 import { type DataKey, generateDataKey } from './keys';
-import { b64urlDecode } from './primitives';
+import { b64urlDecode, b64urlEncode, randomBytes } from './primitives';
 
 const GOAL_JSON = JSON.stringify({
   id: 'g1',
@@ -20,6 +20,13 @@ async function sealedGoal(): Promise<{ dk: DataKey; env: string }> {
 }
 
 describe('record envelope', () => {
+  it('rejects an envelope whose iv is not 12 bytes with EnvelopeParseError', async () => {
+    const bad = `v1.dk-1.${b64urlEncode(randomBytes(8))}.${b64urlEncode(randomBytes(24))}`;
+    await expect(openRecord(generateDataKey(), bad, 'goals', 'g1')).rejects.toThrow(
+      EnvelopeParseError
+    );
+  });
+
   it('seal/open round-trips a realistic entity', async () => {
     const { dk, env } = await sealedGoal();
     expect(env).toMatch(/^v1\.dk-1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);

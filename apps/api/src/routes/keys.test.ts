@@ -82,6 +82,14 @@ describe('/v1/keys/recovery', () => {
     expect(body.envelope).toBe('v1.dk-2.cccc.dddd');
   });
 
+  it('PUT rejects an empty-string envelope with 400 invalid_key_envelope', async () => {
+    const { token } = await signedInToken();
+    const res = await putRecovery(app, token, { envelope: '' });
+    expect(res.status).toBe(400);
+    const body = await res.json<{ code: string }>();
+    expect(body.code).toBe('invalid_key_envelope');
+  });
+
   it('PUT rejects a non-string envelope with 400 invalid_key_envelope', async () => {
     const { token } = await signedInToken();
     const res = await putRecovery(app, token, { envelope: 123 });

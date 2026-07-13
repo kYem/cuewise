@@ -7,9 +7,13 @@ const VERSION = 'CW1';
 const SECRET_CHARS = 30; // 150 bits of entropy; the canonical secret IS this string
 const CHECKSUM_CHARS = 5;
 
+// Branded so the compiler rejects passing the display code where the HKDF input belongs —
+// deriveMasterKey(rc.code) would silently wrap with the wrong key and break recovery.
+export type RecoverySecret = string & { readonly __brand: 'RecoverySecret' };
+
 export interface RecoveryCode {
   code: string;
-  secret: string;
+  secret: RecoverySecret;
 }
 
 async function checksumOf(secret: string): Promise<string> {
@@ -41,10 +45,10 @@ export async function generateRecoveryCode(): Promise<RecoveryCode> {
     secret += ALPHABET[b & 31];
   }
   const code = `${VERSION}-${groupsOf5(secret + (await checksumOf(secret)))}`;
-  return { code, secret };
+  return { code, secret: secret as RecoverySecret };
 }
 
-export async function parseRecoveryCode(input: string): Promise<string> {
+export async function parseRecoveryCode(input: string): Promise<RecoverySecret> {
   const cleaned = input
     .toUpperCase()
     .replaceAll(/[^0-9A-Z]/g, '')
@@ -70,5 +74,5 @@ export async function parseRecoveryCode(input: string): Promise<string> {
   if ((await checksumOf(secret)) !== checksum) {
     throw new RecoveryCodeError('checksum', 'recovery code checksum mismatch');
   }
-  return secret;
+  return secret as RecoverySecret;
 }
