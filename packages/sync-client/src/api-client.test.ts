@@ -359,5 +359,34 @@ describe('ApiClient', () => {
       });
       expect(calls).toHaveLength(1);
     });
+
+    it('putRecoveryEnvelope with ifAbsent:true sends the flag and resolves on 204', async () => {
+      const { fetchFn, calls } = stubFetch([{ status: 204 }]);
+      const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
+
+      await expect(
+        client.putRecoveryEnvelope('v1.dk-1.a.b', { ifAbsent: true })
+      ).resolves.toBeUndefined();
+
+      expect(calls).toHaveLength(1);
+      expect(JSON.parse(calls[0].init.body as string)).toEqual({
+        envelope: 'v1.dk-1.a.b',
+        ifAbsent: true,
+      });
+    });
+
+    it('putRecoveryEnvelope with ifAbsent:true throws key_envelope_exists on 409, no retry', async () => {
+      const { fetchFn, calls } = stubFetch([problemResponse('key_envelope_exists', 409)]);
+      const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
+
+      await expect(
+        client.putRecoveryEnvelope('v1.dk-1.a.b', { ifAbsent: true })
+      ).rejects.toMatchObject({
+        code: 'key_envelope_exists',
+        status: 409,
+        retryable: false,
+      });
+      expect(calls).toHaveLength(1);
+    });
   });
 });

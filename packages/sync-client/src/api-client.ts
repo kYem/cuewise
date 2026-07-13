@@ -87,13 +87,19 @@ export class ApiClient {
     }
   }
 
-  async putRecoveryEnvelope(envelope: string): Promise<void> {
+  // ifAbsent maps to a create-only PUT (server 409s `key_envelope_exists` if a blob exists) —
+  // closes the "two devices both generate a key" race on first enable.
+  async putRecoveryEnvelope(envelope: string, opts?: { ifAbsent?: boolean }): Promise<void> {
+    const body: { envelope: string; ifAbsent?: boolean } = { envelope };
+    if (opts?.ifAbsent === true) {
+      body.ifAbsent = true;
+    }
     await this.request(
       '/v1/keys/recovery',
       {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ envelope }),
+        body: JSON.stringify(body),
       },
       { auth: true }
     );
