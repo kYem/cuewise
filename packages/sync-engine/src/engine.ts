@@ -1,4 +1,4 @@
-import type { DataKey } from '@cuewise/crypto';
+import { type DataKey, RecoveryCodeError } from '@cuewise/crypto';
 import { type KeyValueStore, logger, type Scheduler } from '@cuewise/shared';
 import {
   ApiError,
@@ -13,6 +13,7 @@ import {
   initOrEnrollKey,
   type KeyLifecycleDeps,
   loadPersistedDataKey,
+  RecoveryCodeRequiredError,
   SelfHealNeedsEnrollError,
   SelfHealUnrecoverableError,
   SYNC_DATA_KEY,
@@ -121,10 +122,16 @@ export class SyncEngine {
         throw new Error(`failed to persist cloudSyncEnabled: ${enabledResult.error.message}`);
       }
       this.setStatus('active');
+      await this.armPullLoopUnlessSignedOut();
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         await this.handleAuthLoss();
         return;
+      }
+      if (err instanceof RecoveryCodeRequiredError || err instanceof RecoveryCodeError) {
+        // Expected enroll control-flow, not a failure — don't poison the persisted status other tabs read.
+        this.setStatus('disabled');
+        throw err;
       }
       this.setStatus('error');
       throw err;

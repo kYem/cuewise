@@ -7,7 +7,7 @@ import { FakeApiClient, FakeSyncServer } from './__fixtures__/fake-api-client';
 import { FakeKvStore } from './__fixtures__/fake-kv-store';
 import { FakeScheduler } from './__fixtures__/fake-scheduler';
 import { CLOUD_SYNC_ENABLED_KEY, SyncEngine, type SyncEngineDeps } from './engine';
-import { SYNC_DATA_KEY } from './key-lifecycle';
+import { RecoveryCodeRequiredError, SYNC_DATA_KEY } from './key-lifecycle';
 import { SyncMetadataStore } from './metadata-store';
 import { MutationTracker } from './mutation-tracker';
 
@@ -135,6 +135,35 @@ describe('SyncEngine.enableSync', () => {
     expect(device.engine.getStatus()).toBe('signed_out');
     expect(await getGoals()).toEqual([goal]);
     expect(await device.kv.get(SYNC_DATA_KEY, 'local')).toBeNull();
+  });
+
+  it('arms the pull wake after a successful enable', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+
+    await device.engine.enableSync('cred-a', 'Device A');
+
+    expect(device.scheduler.scheduled.some((s) => s.id === SYNC_PULL_WAKE_ID)).toBe(true);
+  });
+
+  it('leaves status disabled (not error) when enroll needs a recovery code', async () => {
+    const server = new FakeSyncServer();
+    const deviceA = createDevice(server);
+    useStorage(deviceA);
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    await deviceA.engine.enableSync('cred-a', 'Device A');
+
+    const deviceB = createDevice(server);
+    useStorage(deviceB);
+
+    await expect(deviceB.engine.enableSync('cred-b', 'Device B')).rejects.toThrow(
+      RecoveryCodeRequiredError
+    );
+
+    expect(deviceB.engine.getStatus()).toBe('disabled');
+    expect(deviceB.onStatus).not.toHaveBeenCalledWith('error');
   });
 });
 
@@ -295,6 +324,8 @@ describe('SyncEngine.handlePullWake', () => {
     await device.engine.enableSync('cred-a', 'Device A');
     device.apiClient.rejectAllWith401 = true;
     device.scheduler.cancelled.length = 0;
+    // enableSync itself arms the loop (E1) — reset so this only observes the wake's own behavior.
+    device.scheduler.scheduled.length = 0;
 
     await device.engine.handlePullWake();
 
