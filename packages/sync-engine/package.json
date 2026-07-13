@@ -1,0 +1,23 @@
+{
+  "name": "@cuewise/sync-engine",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "type-check": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@cuewise/shared": "workspace:*",
+    "@cuewise/storage": "workspace:*",
+    "@cuewise/crypto": "workspace:*",
+    "@cuewise/sync-client": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
