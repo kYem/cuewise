@@ -1,5 +1,12 @@
 import { configurePlatform } from '@cuewise/shared';
-import { getGoals, getQuotes, setGoals, setQuotes } from '@cuewise/storage';
+import {
+  getGoals,
+  getQuotes,
+  getSettings,
+  setGoals,
+  setQuotes,
+  setSettings,
+} from '@cuewise/storage';
 import { SessionManager } from '@cuewise/sync-client';
 import { goalFactory, quoteFactory } from '@cuewise/test-utils/factories';
 import { describe, expect, it, vi } from 'vitest';
@@ -146,29 +153,106 @@ describe('golden path: two devices converge through one shared fake server', () 
     expect(aFinalGoals.find((g) => g.id === 'g1')?.text).toBe('B concurrent edit');
     expect(bFinalGoals.find((g) => g.id === 'g1')?.text).toBe('B concurrent edit');
     expect(aFinalGoals).toEqual(bFinalGoals);
+
+    // Delete propagation: A deletes g1, which both devices already hold. The tombstone must
+    // reach B and binding.writeOne(id, null) must actually remove it from B's local storage.
+    useStorage(deviceA);
+    await goalsBinding.writeOne('g1', null);
+    await deviceA.engine.markDeleted('goals', 'g1');
+    await deviceA.engine.syncNow();
+
+    useStorage(deviceB);
+    await deviceB.engine.syncNow();
+    const bGoalsAfterDelete = await getGoals();
+    expect(bGoalsAfterDelete.find((g) => g.id === 'g1')).toBeUndefined();
+
+    useStorage(deviceA);
+    const aGoalsAfterDelete = await getGoals();
+    expect(aGoalsAfterDelete.find((g) => g.id === 'g1')).toBeUndefined();
   });
 });
 
 describe('swappability guard: ConflictStrategy is the only conflict decision point', () => {
-  it('a NoopStrategy device never lets an incoming record overwrite its local value', async () => {
+  /**
+   * A's clock offset outranks B's for this whole scenario, so A's seed for g1 is PROVABLY
+   * newer than B's local seed for g1 — a real LWW resolution must overwrite B's local value.
+   * enableSync's own backfillDirty (stamps B's local hlc) + syncNow (pulls A's record) is the
+   * exact conflict point this guard exists to exercise. Swapping in `strategyOverride` proves
+   * the engine actually asks the strategy instead of hardcoding LWW.
+   */
+  async function runOverwriteScenario(
+    strategyOverride?: Partial<SyncEngineDeps>
+  ): Promise<string | undefined> {
     const server = new FakeSyncServer();
 
-    const deviceA = createDevice(server, makeClock(1_000_000));
+    const deviceA = createDevice(server, makeClock(5_000_000));
     useStorage(deviceA);
     await setGoals([goalFactory.build({ id: 'g1', text: 'A original' })]);
     await deviceA.engine.enableSync('devA-cred', 'Device A');
     const recoveryCode = deviceA.onRecoveryCode.mock.calls[0][0] as string;
 
-    // Device B seeds a conflicting local value for the same entity id, then enrolls with a
-    // strategy that always keeps local — with real LWW this seed would be overwritten by A's.
-    const deviceB = createDevice(server, makeClock(5_000_000), { strategy: new NoopStrategy() });
+    const deviceB = createDevice(server, makeClock(1_000_000), strategyOverride);
     useStorage(deviceB);
     await setGoals([goalFactory.build({ id: 'g1', text: 'B local — must never be overwritten' })]);
-
     await deviceB.engine.enableSync('devB-cred', 'Device B', recoveryCode);
     await deviceB.engine.syncNow();
 
     const bGoals = await getGoals();
-    expect(bGoals.find((g) => g.id === 'g1')?.text).toBe('B local — must never be overwritten');
+    return bGoals.find((g) => g.id === 'g1')?.text;
+  }
+
+  it('proof: the default LwwHlcStrategy lets a provably newer incoming edit overwrite local', async () => {
+    const text = await runOverwriteScenario();
+    expect(text).toBe('A original');
+  });
+
+  it('a NoopStrategy device blocks that same provably newer incoming edit; local survives', async () => {
+    const text = await runOverwriteScenario({ strategy: new NoopStrategy() });
+    expect(text).toBe('B local — must never be overwritten');
+  });
+});
+
+describe('settings: per-key sync round-trips a shared key but excludes device-local keys', () => {
+  it('propagates a shared setting to the other device but never a device-local one', async () => {
+    const server = new FakeSyncServer();
+
+    // A enables first with the higher clock offset. The settings binding backfills every
+    // non-device-local key from DEFAULT_SETTINGS on enable (even unset ones), so B (enrolling
+    // second) needs a LOWER offset than A's already-pushed defaults — otherwise B's own backfill
+    // would numerically outrank A's incoming records and B would never adopt (or clock-catch-up
+    // to) anything A sends, including its later theme edit.
+    const deviceA = createDevice(server, makeClock(5_000_000));
+    useStorage(deviceA);
+    await deviceA.engine.enableSync('devA-cred', 'Device A');
+    const recoveryCode = deviceA.onRecoveryCode.mock.calls[0][0] as string;
+
+    const deviceB = createDevice(server, makeClock(1_000_000));
+    useStorage(deviceB);
+    await deviceB.engine.enableSync('devB-cred', 'Device B', recoveryCode);
+    await deviceB.engine.syncNow();
+
+    // A changes a shared setting and syncs; B must adopt the new value.
+    useStorage(deviceA);
+    const aSettings = await getSettings();
+    await setSettings({ ...aSettings, theme: 'dark' });
+    await deviceA.engine.markMutated('settings', 'theme');
+    await deviceA.engine.syncNow();
+
+    useStorage(deviceB);
+    await deviceB.engine.syncNow();
+    const bSettingsAfterThemeSync = await getSettings();
+    expect(bSettingsAfterThemeSync.theme).toBe('dark');
+
+    // A changes a device-local setting; it must never leave A's device.
+    useStorage(deviceA);
+    const aSettingsAfterTheme = await getSettings();
+    await setSettings({ ...aSettingsAfterTheme, logLevel: 'debug' });
+    await deviceA.engine.markMutated('settings', 'logLevel');
+    await deviceA.engine.syncNow();
+
+    useStorage(deviceB);
+    await deviceB.engine.syncNow();
+    const bSettingsAfterLogLevelSync = await getSettings();
+    expect(bSettingsAfterLogLevelSync.logLevel).toBe('error');
   });
 });
