@@ -1,0 +1,44 @@
+/* Transparent from the FIRST paint (main.tsx's JS override runs after the app
+   stylesheet painted an opaque body); :has(#glow:target) out-ranks theme rules. */
+html:has(#glow:target),
+html:has(#glow:target) body {
+  background: transparent;
+}
+
+/* Screen-edge vignette for the glow nudge windows. Design-system rose (rose-600)
+   at ambient intensity — light, not alarm. */
+.glow-vignette {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 120px 24px rgba(225, 29, 72, 0.45);
+  animation:
+    glow-enter 600ms ease-out,
+    glow-breathe 4s ease-in-out 600ms infinite;
+}
+
+@keyframes glow-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes glow-breathe {
+  0%,
+  100% {
+    opacity: 0.65;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glow-vignette {
+    animation: none;
+    opacity: 0.8;
+  }
+}

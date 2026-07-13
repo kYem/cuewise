@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { assertGlowSurfaceRenders } from './glow-surface';
 import { stubThirdPartyRequests, watchForRealNetworkEscapes } from './network-stub';
 
 // Console noise that is not an app fault.
@@ -47,6 +48,8 @@ test('reused extension UI renders on every surface without errors (WebKit)', asy
   await page.getByRole('menuitem', { name: 'Settings' }).last().click();
   await page.waitForTimeout(300);
   await expect(page.getByText(ERROR_BOUNDARY)).toHaveCount(0);
+
+  await assertGlowSurfaceRenders(page);
 
   expect(errors, `Unexpected console/page errors:\n${errors.join('\n')}`).toEqual([]);
   expect(getEscapedRequests(), 'off-origin requests must never reach the real network').toEqual([]);

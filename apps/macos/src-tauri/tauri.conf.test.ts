@@ -44,3 +44,22 @@ describe('tauri.conf.json CSP allows Tauri IPC', () => {
     }
   });
 });
+
+// Regression guard for ENG-40: without macOSPrivateApi (and the matching cargo
+// feature) `transparent(true)` silently stops applying on macOS, and every glow
+// nudge renders as an OPAQUE full-screen sheet on every monitor — a plausible
+// casualty of a future Mac-App-Store compliance pass, invisible to all other tests.
+describe('glow overlay transparency prerequisites', () => {
+  const config = JSON.parse(readFileSync(CONFIG_PATH, 'utf-8'));
+
+  it('keeps app.macOSPrivateApi enabled', () => {
+    expect(config.app.macOSPrivateApi).toBe(true);
+  });
+
+  it('keeps the tauri macos-private-api cargo feature', () => {
+    const cargoToml = readFileSync(path.join(__dirname, 'Cargo.toml'), 'utf-8');
+    // Match the feature inside the tauri dependency's features array — a bare
+    // substring check would stay green on the explanatory comment alone.
+    expect(cargoToml).toMatch(/tauri\s*=\s*\{[^}]*"macos-private-api"/);
+  });
+});

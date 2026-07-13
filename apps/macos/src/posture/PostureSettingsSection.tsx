@@ -10,6 +10,9 @@ import { Button, cn } from '@cuewise/ui';
 import { PersonStanding } from 'lucide-react';
 import {
   calibratePosture,
+  describePauseEnd,
+  pausePostureNudges,
+  resumePostureNudges,
   setPostureNudges,
   startPosture,
   stopPosture,
@@ -31,7 +34,7 @@ function fmt(value: number | undefined, digits = 2): string {
 }
 
 function PostureSection({ filter }: SettingsSectionProps) {
-  const { tracking, nudgesEnabled, sample, error } = usePosture();
+  const { tracking, nudgesEnabled, sample, error, nudgesPausedUntil } = usePosture();
   const meta = sample ? STATUS_META[sample.status] : null;
 
   return (
@@ -59,12 +62,48 @@ function PostureSection({ filter }: SettingsSectionProps) {
 
       <SettingRow
         label="Remind me to fix my posture"
-        help="A gentle notification when you've been leaning in for a while."
-        keywords="posture nudge remind notification slouch reminder"
+        help="A gentle glow around the screen edge when you've been leaning in for a while — it clears once you sit back."
+        keywords="posture nudge remind glow slouch reminder screen edge"
         filter={filter}
       >
         <Switch label="Posture reminders" checked={nudgesEnabled} onChange={setPostureNudges} />
       </SettingRow>
+
+      {tracking && nudgesEnabled ? (
+        <SettingRow
+          label="Pause reminders"
+          help="Silence the glow for a while — posture tracking keeps running. A 10-minute snooze also lives in the menu-bar tray."
+          keywords="posture pause snooze nudges quiet silence glow"
+          filter={filter}
+        >
+          {nudgesPausedUntil !== null ? (
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-tertiary">
+                Paused {describePauseEnd(nudgesPausedUntil)}
+              </span>
+              <Button variant="secondary" size="sm" onClick={resumePostureNudges}>
+                Resume
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Button variant="secondary" size="sm" onClick={() => pausePostureNudges(15)}>
+                15 min
+              </Button>
+              <Button variant="secondary" size="sm" onClick={() => pausePostureNudges(60)}>
+                1 hour
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => pausePostureNudges('until-resume')}
+              >
+                Until I resume
+              </Button>
+            </div>
+          )}
+        </SettingRow>
+      ) : null}
 
       {tracking ? (
         <>

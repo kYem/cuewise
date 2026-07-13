@@ -15,13 +15,18 @@ import { getPomodoroSessions } from '@cuewise/storage';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { useEffect } from 'react';
-import { usePosture } from '../posture/posture-controller';
+import {
+  describePauseEnd,
+  pausePostureNudges,
+  resumePostureNudges,
+  usePosture,
+} from '../posture/posture-controller';
 
 /**
- * Projects the (single-webview) Pomodoro + reminder state onto the native
- * menu-bar tray: the live timer as the tray title, and a rebuilt menu with status
- * lines + controls. Pomodoro menu clicks come back as `tray://action` events and
- * are dispatched into the store. macOS-only — mounted from main.tsx under Tauri.
+ * Projects the (single-webview) Pomodoro + reminder + posture state onto the
+ * native menu-bar tray: the live timer as the title, a rebuilt menu with status
+ * lines + controls. Menu clicks come back as `tray://action` events and dispatch
+ * into the Pomodoro store / posture controller. Mounted from main.tsx under Tauri.
  */
 
 type TrayAction = { id: string; label: string };
@@ -71,8 +76,9 @@ export function TrayStatusBridge(): null {
   const posture = usePosture();
   const postureStatus = posture.tracking ? posture.steadyStatus : null;
   // Look up once and stay defensive: an unknown status must not throw in this
-  // always-mounted component (the controller already rejects them, this is a backstop).
-  const postureMeta = postureStatus ? POSTURE_META[postureStatus] : null;
+  // always-mounted component (the controller already rejects them, this is a
+  // backstop — `?? null` is what makes it real for an unlisted status).
+  const postureMeta = postureStatus ? (POSTURE_META[postureStatus] ?? null) : null;
   // Posture failure toasts render in the webview, which is often hidden to the tray —
   // mirror the degraded state here, the only always-visible surface.
   let postureDot: string | null = null;
@@ -84,8 +90,20 @@ export function TrayStatusBridge(): null {
     postureDot = postureMeta.dot;
     postureLine = `${postureMeta.dot} ${postureMeta.label}`;
   }
+  const postureControlsEnabled = posture.tracking && posture.nudgesEnabled;
+  const pausedUntil = posture.nudgesPausedUntil;
+  let pausedLine: string | null = null;
+  if (postureControlsEnabled && pausedUntil !== null) {
+    pausedLine = `💤 Posture nudges paused · ${describePauseEnd(pausedUntil)}`;
+  }
+  // Toasts render in the often-hidden webview; the tray is the visible backstop.
+  // Gated like every other nudge line — no warning about a feature turned off.
+  const glowWarningLine =
+    postureControlsEnabled && posture.glowUndeliverable
+      ? '⚠️ Posture glow unavailable — nudges may not appear'
+      : null;
 
-  // Relay Pomodoro control clicks from the native tray menu into the store.
+  // Relay Pomodoro/posture control clicks from the native tray menu.
   useEffect(() => {
     const unlisten = listen<string>('tray://action', (event) => {
       const store = usePomodoroStore.getState();
@@ -98,6 +116,18 @@ export function TrayStatusBridge(): null {
           break;
         case 'start':
           store.start();
+          break;
+        case 'posture-snooze':
+          pausePostureNudges(10);
+          break;
+        case 'posture-pause-1h':
+          pausePostureNudges(60);
+          break;
+        case 'posture-pause':
+          pausePostureNudges('until-resume');
+          break;
+        case 'posture-resume-nudges':
+          resumePostureNudges();
           break;
         default:
           break;
@@ -171,13 +201,42 @@ export function TrayStatusBridge(): null {
       if (postureLine) {
         info = [postureLine, ...info];
       }
+      if (pausedLine) {
+        info = [...info, pausedLine];
+      }
+      if (glowWarningLine) {
+        info = [...info, glowWarningLine];
+      }
+      // Nudge escape hatches must be reachable without opening the app (ENG-40).
+      if (postureControlsEnabled) {
+        if (pausedUntil !== null) {
+          actions = [...actions, { id: 'posture-resume-nudges', label: 'Resume posture nudges' }];
+        } else {
+          actions = [
+            ...actions,
+            { id: 'posture-snooze', label: 'Snooze posture nudges · 10 min' },
+            { id: 'posture-pause-1h', label: 'Pause posture nudges · 1 hour' },
+            { id: 'posture-pause', label: 'Pause posture nudges · until I resume' },
+          ];
+        }
+      }
       await invoke('set_tray_menu', { info, actions });
     };
     build().catch((error) => logger.error('Failed to build tray menu', error));
     return () => {
       cancelled = true;
     };
-  }, [status, sessionType, reminderKey, nextReminder, postureLine]);
+  }, [
+    status,
+    sessionType,
+    reminderKey,
+    nextReminder,
+    postureLine,
+    pausedLine,
+    pausedUntil,
+    postureControlsEnabled,
+    glowWarningLine,
+  ]);
 
   return null;
 }

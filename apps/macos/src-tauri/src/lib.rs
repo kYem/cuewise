@@ -1,4 +1,5 @@
 mod error;
+mod glow;
 mod posture;
 mod scheduler;
 mod tray;
@@ -44,11 +45,13 @@ pub fn run() {
             tray::set_tray_menu,
             posture::start_posture,
             posture::stop_posture,
-            posture::calibrate_posture
+            posture::calibrate_posture,
+            glow::show_glow,
+            glow::hide_glow
         ])
         .setup(|app| {
             // Initial menu; the webview replaces it with live status (and the
-            // Pomodoro actions) via `set_tray_menu` once it loads.
+            // Pomodoro/posture actions) via `set_tray_menu` once it loads.
             let open = MenuItem::with_id(app, "show", "Open Cuewise", true, None::<&str>)?;
             let insights = MenuItem::with_id(app, "insights", "View Insights", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit Cuewise", true, None::<&str>)?;
@@ -76,22 +79,26 @@ pub fn run() {
                     "show" => reveal(app, None),
                     "insights" => reveal(app, Some("insights")),
                     "quit" => app.exit(0),
-                    // Pomodoro controls live in the webview store; relay the click.
-                    "pause" | "resume" | "start" => {
-                        let _ = app.emit("tray://action", event.id.as_ref().to_string());
+                    // Everything else is a webview-supplied action id (set_tray_menu
+                    // builds those), so relay it — the webview no-ops unknown ids.
+                    id => {
+                        if let Err(e) = app.emit("tray://action", id.to_string()) {
+                            eprintln!("failed to relay tray action {id}: {e}");
+                        }
                     }
-                    _ => {}
                 })
                 .build(app)?;
 
             Ok(())
         })
         .on_window_event(|window, event| {
-            // Hide to the tray instead of quitting so the app stays resident and
-            // keeps firing nudges. Tray "Quit Cuewise" / Cmd-Q still exit.
+            // Hide the MAIN window to the tray instead of quitting, so the app stays
+            // resident. Scoped by label: glow overlays are closed natively (glow.rs).
             if let WindowEvent::CloseRequested { api, .. } = event {
-                let _ = window.hide();
-                api.prevent_close();
+                if window.label() == "main" {
+                    let _ = window.hide();
+                    api.prevent_close();
+                }
             }
         })
         .build(tauri::generate_context!())

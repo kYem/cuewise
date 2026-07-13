@@ -1,7 +1,7 @@
 import { vi } from 'vitest';
 
 // Mock plumbing for posture-controller tests: shared spies handed to the
-// controller's mocked deps (Tauri invoke/listen, toast store, notifier).
+// controller's mocked deps (Tauri invoke/listen, toast + pomodoro/focus stores).
 
 export type EventHandler = (event: { payload: string }) => void;
 
@@ -12,7 +12,6 @@ export const unlistenSpies: Array<ReturnType<typeof vi.fn>> = [];
 export const invokeMock = vi.fn();
 export const toastErrorMock = vi.fn();
 export const toastWarningMock = vi.fn();
-export const notifyMock = vi.fn();
 
 /** Mutable stand-ins for the pomodoro / focus-mode store snapshots (Smart Pause). */
 export const pomodoroStateMock = { status: 'idle', sessionType: 'work' };
@@ -32,11 +31,16 @@ export function resetPostureMocks(): void {
   capturedHandlers.clear();
   unlistenSpies.length = 0;
   invokeMock.mockReset();
-  invokeMock.mockResolvedValue(undefined);
+  // show_glow resolves to its GlowShown report (full coverage by default);
+  // every other command resolves to undefined, mirroring the Rust contracts.
+  invokeMock.mockImplementation((command: string) => {
+    if (command === 'show_glow') {
+      return Promise.resolve({ shown: 1, monitors: 1 });
+    }
+    return Promise.resolve(undefined);
+  });
   toastErrorMock.mockReset();
   toastWarningMock.mockReset();
-  notifyMock.mockReset();
-  notifyMock.mockResolvedValue(undefined);
   pomodoroStateMock.status = 'idle';
   pomodoroStateMock.sessionType = 'work';
   focusModeStateMock.isActive = false;
@@ -57,6 +61,7 @@ export function createLocalStorageStub(): Pick<Storage, 'getItem' | 'setItem' | 
 }
 
 export const ENABLED_KEY = 'cuewise.posture.enabled';
+export const NUDGES_PAUSED_KEY = 'cuewise.posture.nudgesPausedUntil';
 
 // User-facing messages asserted on — must mirror posture-controller.ts.
 export const STOPPED_ERROR = 'Posture tracking stopped — camera unavailable or permission denied.';
