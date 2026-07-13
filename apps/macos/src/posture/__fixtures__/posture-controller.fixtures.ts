@@ -64,9 +64,21 @@ export const ENABLED_KEY = 'cuewise.posture.enabled';
 export const NUDGES_PAUSED_KEY = 'cuewise.posture.nudgesPausedUntil';
 
 // User-facing messages asserted on — must mirror posture-controller.ts.
+export const SAVE_FAILED_WARNING = "Couldn't save the setting — showing what's in effect instead.";
+export const SENSITIVITY_APPLY_FAILED_WARNING =
+  "Couldn't apply the sensitivity — readings may use the previous setting.";
+export const PREVIEW_FAILED_WARNING = "Couldn't show the glow preview — please try again.";
 export const STOPPED_ERROR = 'Posture tracking stopped — camera unavailable or permission denied.';
 export const UNREADABLE_ERROR = 'Posture readings could not be read.';
 export const START_FAILED_ERROR = 'Could not start posture tracking — check camera access.';
+
+/** "HH:MM" for the (fake) clock plus an offset — quiet-hours windows in tests. */
+export function hhmmFromNow(offsetMinutes: number): string {
+  const date = new Date(Date.now() + offsetMinutes * 60_000);
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
+}
 
 export function getHandler(event: string): EventHandler {
   const handler = capturedHandlers.get(event);

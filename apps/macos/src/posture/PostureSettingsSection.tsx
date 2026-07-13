@@ -1,30 +1,62 @@
 import {
+  Segmented,
   SettingDivider,
   SettingRow,
   type SettingsSection,
   type SettingsSectionProps,
   Switch,
 } from '@cuewise/app';
-import type { PostureStatus } from '@cuewise/shared';
 import { Button, cn } from '@cuewise/ui';
 import { PersonStanding } from 'lucide-react';
+import { useEffect, useReducer } from 'react';
+import type { GlowIntensity, GlowStyle } from '../glow/glow-prefs';
 import {
   calibratePosture,
   describePauseEnd,
+  type NudgeDelaySeconds,
+  type NudgeSensitivity,
   pausePostureNudges,
   resumePostureNudges,
+  setGlowIntensity,
+  setGlowStyle,
+  setNudgeDelay,
+  setNudgeSensitivity,
   setPostureNudges,
+  setQuietHours,
+  startGlowPreview,
   startPosture,
+  stopGlowPreview,
   stopPosture,
   usePosture,
 } from './posture-controller';
+import { STATUS_META } from './status-meta';
 
-const STATUS_META: Record<PostureStatus, { label: string; dot: string }> = {
-  good: { label: 'Good posture', dot: 'bg-emerald-500' },
-  mild: { label: 'Ease up', dot: 'bg-amber-500' },
-  poor: { label: 'Sit back', dot: 'bg-rose-500' },
-  absent: { label: 'No face in frame', dot: 'bg-tertiary' },
-};
+const NUDGE_DELAY_OPTIONS: { value: `${NudgeDelaySeconds}`; label: string }[] = [
+  { value: '15', label: 'Strict · 15s' },
+  { value: '30', label: 'Balanced · 30s' },
+  { value: '60', label: 'Gentle · 60s' },
+];
+
+const GLOW_INTENSITY_OPTIONS: { value: GlowIntensity; label: string }[] = [
+  { value: 'subtle', label: 'Subtle' },
+  { value: 'standard', label: 'Standard' },
+  { value: 'intense', label: 'Intense' },
+];
+
+const GLOW_STYLE_OPTIONS: { value: GlowStyle; label: string }[] = [
+  { value: 'glow', label: 'Glow' },
+  { value: 'border', label: 'Border' },
+  { value: 'tint', label: 'Tint' },
+];
+
+const SENSITIVITY_OPTIONS: { value: NudgeSensitivity; label: string }[] = [
+  { value: 'strict', label: 'Strict' },
+  { value: 'balanced', label: 'Balanced' },
+  { value: 'relaxed', label: 'Relaxed' },
+];
+
+const TIME_INPUT_CLASS =
+  'rounded border border-border bg-transparent px-1.5 py-0.5 text-xs text-primary dark:[color-scheme:dark]';
 
 function fmt(value: number | undefined, digits = 2): string {
   if (value === undefined) {
@@ -34,8 +66,42 @@ function fmt(value: number | undefined, digits = 2): string {
 }
 
 function PostureSection({ filter }: SettingsSectionProps) {
-  const { tracking, nudgesEnabled, sample, error, nudgesPausedUntil } = usePosture();
+  const {
+    tracking,
+    nudgesEnabled,
+    sample,
+    error,
+    nudgesPausedUntil,
+    nudgeDelaySeconds,
+    glowIntensity,
+    glowStyle,
+    glowPreviewActive,
+    nudgeSensitivity,
+    quietHours,
+  } = usePosture();
   const meta = sample ? STATUS_META[sample.status] : null;
+
+  // Leaving this section (or closing Settings) always ends a running preview.
+  useEffect(() => {
+    return () => {
+      stopGlowPreview();
+    };
+  }, []);
+
+  // The window hides rather than closes, which fires no blur — re-render on
+  // re-show so a time field cleared mid-edit re-syncs to the enforced window.
+  const [, bumpVisibilityEpoch] = useReducer((epoch: number) => epoch + 1, 0);
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        bumpVisibilityEpoch();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, []);
 
   return (
     <div>
@@ -60,19 +126,140 @@ function PostureSection({ filter }: SettingsSectionProps) {
         />
       </SettingRow>
 
+      {tracking ? (
+        <SettingRow
+          label="Sensitivity"
+          help="How much lean counts. Strict flags small leans; Relaxed forgives more — sitting back never counts."
+          keywords="posture sensitivity dead zone strict balanced relaxed threshold lean slouch"
+          filter={filter}
+        >
+          <Segmented
+            value={nudgeSensitivity}
+            options={SENSITIVITY_OPTIONS}
+            onChange={setNudgeSensitivity}
+          />
+        </SettingRow>
+      ) : null}
+
       <SettingRow
         label="Remind me to fix my posture"
-        help="A gentle glow around the screen edge when you've been leaning in for a while — it clears once you sit back."
+        help="A gentle visual cue on screen when you've been leaning in for a while — it clears once you sit back."
         keywords="posture nudge remind glow slouch reminder screen edge"
         filter={filter}
       >
         <Switch label="Posture reminders" checked={nudgesEnabled} onChange={setPostureNudges} />
       </SettingRow>
 
+      {nudgesEnabled ? (
+        <SettingRow
+          label="Nudge after"
+          help="How long you can lean in before the reminder appears."
+          keywords="posture nudge delay threshold strict gentle seconds glow trigger"
+          filter={filter}
+        >
+          <Segmented
+            value={`${nudgeDelaySeconds}` as `${NudgeDelaySeconds}`}
+            options={NUDGE_DELAY_OPTIONS}
+            onChange={(value) => setNudgeDelay(Number(value) as NudgeDelaySeconds)}
+          />
+        </SettingRow>
+      ) : null}
+
+      {nudgesEnabled ? (
+        <SettingRow
+          label="Nudge style"
+          help="How the reminder looks: a soft edge glow, a crisp border ring, or an even tint."
+          keywords="posture nudge style glow border ring tint solid visual"
+          filter={filter}
+        >
+          <Segmented value={glowStyle} options={GLOW_STYLE_OPTIONS} onChange={setGlowStyle} />
+        </SettingRow>
+      ) : null}
+
+      {nudgesEnabled ? (
+        <SettingRow
+          label="Nudge strength"
+          help="How present the reminder feels. Preview shows it now and stops when you leave Settings."
+          keywords="posture glow border tint intensity strength subtle standard intense brightness preview test"
+          filter={filter}
+        >
+          <div className="flex items-center gap-3">
+            <Segmented
+              value={glowIntensity}
+              options={GLOW_INTENSITY_OPTIONS}
+              onChange={setGlowIntensity}
+            />
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => (glowPreviewActive ? stopGlowPreview() : startGlowPreview())}
+            >
+              {glowPreviewActive ? 'Stop preview' : 'Preview'}
+            </Button>
+          </div>
+        </SettingRow>
+      ) : null}
+
+      {nudgesEnabled ? (
+        <SettingRow
+          label="Quiet hours"
+          help="A daily window with no reminders — overnight ranges work too. Tracking keeps running."
+          keywords="posture quiet hours schedule night window nudges do not disturb"
+          filter={filter}
+        >
+          <div className="flex items-center gap-3">
+            <Switch
+              label="Quiet hours"
+              checked={quietHours.enabled}
+              onChange={(enabled) => setQuietHours({ ...quietHours, enabled })}
+            />
+            {quietHours.enabled ? (
+              <div className="flex items-center gap-1.5 text-xs text-tertiary">
+                <input
+                  type="time"
+                  value={quietHours.start}
+                  aria-label="Quiet hours start"
+                  className={TIME_INPUT_CLASS}
+                  onChange={(e) => {
+                    if (e.target.value !== '') {
+                      setQuietHours({ ...quietHours, start: e.target.value });
+                    }
+                  }}
+                  onBlur={(e) => {
+                    // A cleared field never reaches state — re-sync the display so it
+                    // can't disagree with the window still being enforced.
+                    if (e.target.value === '') {
+                      e.target.value = quietHours.start;
+                    }
+                  }}
+                />
+                <span>–</span>
+                <input
+                  type="time"
+                  value={quietHours.end}
+                  aria-label="Quiet hours end"
+                  className={TIME_INPUT_CLASS}
+                  onChange={(e) => {
+                    if (e.target.value !== '') {
+                      setQuietHours({ ...quietHours, end: e.target.value });
+                    }
+                  }}
+                  onBlur={(e) => {
+                    if (e.target.value === '') {
+                      e.target.value = quietHours.end;
+                    }
+                  }}
+                />
+              </div>
+            ) : null}
+          </div>
+        </SettingRow>
+      ) : null}
+
       {tracking && nudgesEnabled ? (
         <SettingRow
           label="Pause reminders"
-          help="Silence the glow for a while — posture tracking keeps running. A 10-minute snooze also lives in the menu-bar tray."
+          help="Silence the nudges for a while — posture tracking keeps running. A 10-minute snooze also lives in the menu-bar tray."
           keywords="posture pause snooze nudges quiet silence glow"
           filter={filter}
         >

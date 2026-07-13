@@ -3,6 +3,14 @@ import { logger, type PostureSample, type PostureStatus } from '@cuewise/shared'
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { useSyncExternalStore } from 'react';
+import {
+  GLOW_INTENSITY_KEY,
+  GLOW_STYLE_KEY,
+  type GlowIntensity,
+  type GlowStyle,
+  readGlowIntensity,
+  readGlowStyle,
+} from '../glow/glow-prefs';
 import { isCommandError } from '../platform/command-error';
 
 // Module-level posture state. Tracking outlives the Settings section (which only
@@ -12,6 +20,22 @@ import { isCommandError } from '../platform/command-error';
 
 /** A nudge pause: an epoch-ms deadline, or open-ended until the user resumes. */
 export type NudgePause = number | 'until-resume';
+
+/** How long poor posture must persist before the glow shows (Settings presets). */
+export type NudgeDelaySeconds = 15 | 30 | 60;
+
+/**
+ * How much lean counts as slouching; each preset bundles its dead zone. Keep in
+ * sync with `KNOWN_PRESETS` (posture.rs) and `SensitivityPreset` (PostureAnalyzer.swift).
+ */
+export type NudgeSensitivity = 'strict' | 'balanced' | 'relaxed';
+
+/** A daily no-nudge window; overnight ranges (start > end) wrap midnight. */
+export interface QuietHours {
+  enabled: boolean;
+  start: string; // "HH:MM", 24-hour
+  end: string;
+}
 
 export interface PostureState {
   tracking: boolean;
@@ -27,8 +51,17 @@ export interface PostureState {
   // Latest show_glow failed — mirrored to the tray, the only always-visible
   // surface, since the warn toast renders in the often-hidden webview.
   glowUndeliverable: boolean;
+  // Settings' on-demand glow preview; independent of tracking and of glowActive.
+  glowPreviewActive: boolean;
   nudgesPausedUntil: NudgePause | null;
+  nudgeDelaySeconds: NudgeDelaySeconds;
+  glowIntensity: GlowIntensity;
+  glowStyle: GlowStyle;
+  nudgeSensitivity: NudgeSensitivity;
+  quietHours: QuietHours;
 }
+
+const DEFAULT_QUIET_HOURS: QuietHours = { enabled: false, start: '22:00', end: '08:00' };
 
 let state: PostureState = {
   tracking: false,
@@ -38,7 +71,13 @@ let state: PostureState = {
   error: null,
   glowActive: false,
   glowUndeliverable: false,
+  glowPreviewActive: false,
   nudgesPausedUntil: null,
+  nudgeDelaySeconds: 30,
+  glowIntensity: 'standard',
+  glowStyle: 'glow',
+  nudgeSensitivity: 'balanced',
+  quietHours: DEFAULT_QUIET_HOURS,
 };
 const subscribers = new Set<() => void>();
 let unlisteners: UnlistenFn[] = [];
@@ -64,9 +103,15 @@ const KNOWN_STATUSES = Object.keys({
   absent: 0,
 } satisfies Record<PostureStatus, 0>) as PostureStatus[];
 
-// Glow threshold; no cooldown — the glow persists until recovery instead.
-// Exported so tests exercise the real threshold instead of mirroring it.
-export const NUDGE_AFTER_POOR_SAMPLES = 15; // ~30s at the sidecar's 2s cadence
+const SAMPLE_INTERVAL_SECONDS = 2; // the sidecar's cadence
+// Default glow threshold (the 30s preset); no cooldown — the glow persists until
+// recovery instead. Exported so tests exercise the real default.
+export const NUDGE_AFTER_POOR_SAMPLES = 30 / SAMPLE_INTERVAL_SECONDS;
+
+// The user-selected delay, as a sample count for the streak comparison.
+function nudgeThresholdSamples(): number {
+  return Math.max(1, Math.round(state.nudgeDelaySeconds / SAMPLE_INTERVAL_SECONDS));
+}
 let poorStreak = 0;
 // Consecutive non-poor frames; the glow clears once this holds, so one jitter
 // frame can't drop it (any non-poor status counts — oscillation still clears).
@@ -88,6 +133,9 @@ let pendingCount = 0;
 const ENABLED_KEY = 'cuewise.posture.enabled';
 const NUDGES_KEY = 'cuewise.posture.nudges';
 const NUDGES_PAUSED_KEY = 'cuewise.posture.nudgesPausedUntil';
+const NUDGE_DELAY_KEY = 'cuewise.posture.nudgeDelaySeconds';
+const SENSITIVITY_KEY = 'cuewise.posture.sensitivity';
+const QUIET_HOURS_KEY = 'cuewise.posture.quietHours';
 
 // A poisoned Rust mutex is an internal bug (a prior panic), not the ordinary
 // camera/permission failure the callers already toast about — flag it distinctly
@@ -102,15 +150,17 @@ function logCommandFailure(context: string, error: unknown): void {
 
 // localStorage can throw (private mode, quota); prefs must never take the
 // controller down over it.
-function writeLocal(key: string, value: string | null, context: string): void {
+function writeLocal(key: string, value: string | null, context: string): boolean {
   try {
     if (value === null) {
       localStorage.removeItem(key);
     } else {
       localStorage.setItem(key, value);
     }
+    return true;
   } catch (error) {
     logger.error(context, error);
+    return false;
   }
 }
 
@@ -251,6 +301,7 @@ export function startPosture(): void {
       // onStopped (which detaches) — either way the session is no longer valid.
       if (!stopRequestedDuringStart && unlisteners.length > 0) {
         setState({ tracking: true });
+        applySensitivity();
       }
     })
     .catch((error) => {
@@ -323,11 +374,82 @@ export function initPosture(): void {
       setState({ nudgesEnabled: nudges === '1' });
     }
     restorePausedUntil();
+    restoreNudgeDelay();
+    restoreSensitivity();
+    restoreQuietHours();
+    setState({ glowIntensity: readGlowIntensity(), glowStyle: readGlowStyle() });
     if (localStorage.getItem(ENABLED_KEY) === '1') {
       startPosture();
     }
   } catch (error) {
     logger.error('Failed to restore posture preferences', error);
+  }
+}
+
+// Only the known presets restore; anything else is discarded back to the default.
+function restoreNudgeDelay(): void {
+  const persisted = localStorage.getItem(NUDGE_DELAY_KEY);
+  if (persisted === null) {
+    return;
+  }
+  const seconds = Number(persisted);
+  if (seconds === 15 || seconds === 30 || seconds === 60) {
+    setState({ nudgeDelaySeconds: seconds });
+  } else {
+    writeLocal(NUDGE_DELAY_KEY, null, 'Failed to discard the nudge delay');
+    setState({ nudgeDelaySeconds: 30 });
+  }
+}
+
+// Only known presets restore; anything else is discarded back to the default.
+function restoreSensitivity(): void {
+  const persisted = localStorage.getItem(SENSITIVITY_KEY);
+  if (persisted === null) {
+    return;
+  }
+  if (persisted === 'strict' || persisted === 'balanced' || persisted === 'relaxed') {
+    setState({ nudgeSensitivity: persisted });
+  } else {
+    writeLocal(SENSITIVITY_KEY, null, 'Failed to discard the nudge sensitivity');
+    setState({ nudgeSensitivity: 'balanced' });
+  }
+}
+
+// A malformed persisted window restores as the default rather than lingering.
+function restoreQuietHours(): void {
+  const persisted = localStorage.getItem(QUIET_HOURS_KEY);
+  if (persisted === null) {
+    return;
+  }
+  const parsed = parseQuietHours(persisted);
+  if (parsed !== null) {
+    setState({ quietHours: parsed });
+  } else {
+    writeLocal(QUIET_HOURS_KEY, null, 'Failed to discard the quiet hours');
+    setState({ quietHours: DEFAULT_QUIET_HOURS });
+  }
+}
+
+function parseQuietHours(persisted: string): QuietHours | null {
+  try {
+    const value: unknown = JSON.parse(persisted);
+    if (typeof value !== 'object' || value === null) {
+      return null;
+    }
+    const record = value as Record<string, unknown>;
+    if (
+      typeof record.enabled !== 'boolean' ||
+      typeof record.start !== 'string' ||
+      typeof record.end !== 'string'
+    ) {
+      return null;
+    }
+    if (parseMinutes(record.start) === null || parseMinutes(record.end) === null) {
+      return null;
+    }
+    return { enabled: record.enabled, start: record.start, end: record.end };
+  } catch {
+    return null;
   }
 }
 
@@ -379,6 +501,44 @@ function isFocusSessionActive(): boolean {
   return useFocusModeStore.getState().isActive;
 }
 
+// Minutes since midnight for a strict "HH:MM", or null for anything else.
+function parseMinutes(time: string): number | null {
+  const match = /^(\d{2}):(\d{2})$/.exec(time);
+  if (match === null) {
+    return null;
+  }
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours > 23 || minutes > 59) {
+    return null;
+  }
+  return hours * 60 + minutes;
+}
+
+/** True while `now` is inside the window [start, end); start > end wraps midnight. */
+export function isWithinQuietHours(quietHours: QuietHours, now: Date): boolean {
+  if (!quietHours.enabled) {
+    return false;
+  }
+  const start = parseMinutes(quietHours.start);
+  const end = parseMinutes(quietHours.end);
+  // Equal times are an empty window, not a full day — matching [start, end).
+  if (start === null || end === null || start === end) {
+    return false;
+  }
+  const current = now.getHours() * 60 + now.getMinutes();
+  if (start < end) {
+    return current >= start && current < end;
+  }
+  return current >= start || current < end;
+}
+
+/** Configure the daily no-nudge window; tracking keeps running through it. */
+export function setQuietHours(quietHours: QuietHours): void {
+  writeLocal(QUIET_HOURS_KEY, JSON.stringify(quietHours), 'Failed to persist the quiet hours');
+  setState({ quietHours });
+}
+
 interface GlowShown {
   shown: number;
   monitors: number;
@@ -420,6 +580,10 @@ function hideGlowIfActive(): void {
     return;
   }
   setState({ glowActive: false });
+  if (state.glowPreviewActive) {
+    // The preview still owns the windows; it hides them when it stops.
+    return;
+  }
   invoke('hide_glow').catch((error) => {
     logCommandFailure('Failed to hide the posture glow', error);
     // Roll back only while frames still flow (a retry needs a next sample) — after
@@ -468,7 +632,12 @@ function clearElapsedPause(): void {
 // recovery holds — sitting back is the dismissal.
 function updateNudgeGlow(sample: PostureSample): void {
   clearElapsedPause();
-  if (!state.nudgesEnabled || state.nudgesPausedUntil !== null || isFocusSessionActive()) {
+  if (
+    !state.nudgesEnabled ||
+    state.nudgesPausedUntil !== null ||
+    isFocusSessionActive() ||
+    isWithinQuietHours(state.quietHours, new Date())
+  ) {
     // Suppression hides immediately, on any frame. It is also streak-neutral:
     // reset, don't freeze, so a prior lean can't fire a stale glow when it lifts.
     poorStreak = 0;
@@ -489,10 +658,100 @@ function updateNudgeGlow(sample: PostureSample): void {
     return;
   }
   poorStreak += 1;
-  if (poorStreak >= NUDGE_AFTER_POOR_SAMPLES) {
+  if (poorStreak >= nudgeThresholdSamples()) {
     poorStreak = 0;
     showGlow();
   }
+}
+
+/** Set how long poor posture must persist before the glow shows. */
+export function setNudgeDelay(seconds: NudgeDelaySeconds): void {
+  writeLocal(NUDGE_DELAY_KEY, String(seconds), 'Failed to persist the nudge delay');
+  // Restart the count: shortening the delay must never fire off an old streak.
+  poorStreak = 0;
+  setState({ nudgeDelaySeconds: seconds });
+}
+
+// Only the glow prefs read back from storage, so a failed write visibly snaps
+// the control — this toast says what the user is actually left with.
+const SAVE_FAILED_WARNING = "Couldn't save the setting — showing what's in effect instead.";
+
+/** Set how much lean counts as slouching; applies to the live session too. */
+export function setNudgeSensitivity(sensitivity: NudgeSensitivity): void {
+  writeLocal(SENSITIVITY_KEY, sensitivity, 'Failed to persist the nudge sensitivity');
+  setState({ nudgeSensitivity: sensitivity });
+  applySensitivity();
+}
+
+// A fresh sidecar process boots with default thresholds, so every start re-sends
+// the persisted preset (a no-op for 'balanced').
+function applySensitivity(): void {
+  if (!state.tracking) {
+    return;
+  }
+  invoke('set_posture_sensitivity', { preset: state.nudgeSensitivity }).catch((error) => {
+    logCommandFailure('Failed to apply the posture sensitivity', error);
+    useToastStore
+      .getState()
+      .warning("Couldn't apply the sensitivity — readings may use the previous setting.");
+  });
+}
+
+/** Set the glow strength; the glow windows read it from localStorage on show. */
+export function setGlowIntensity(intensity: GlowIntensity): void {
+  const persisted = writeLocal(
+    GLOW_INTENSITY_KEY,
+    intensity,
+    'Failed to persist the glow intensity'
+  );
+  // The glow windows read localStorage, not this state — reflect what actually
+  // persisted so Settings can't show a strength the overlays won't use.
+  setState({ glowIntensity: readGlowIntensity() });
+  if (!persisted) {
+    useToastStore.getState().warning(SAVE_FAILED_WARNING);
+  }
+}
+
+/** Set the nudge style; persisted and read back exactly like the intensity above. */
+export function setGlowStyle(style: GlowStyle): void {
+  const persisted = writeLocal(GLOW_STYLE_KEY, style, 'Failed to persist the glow style');
+  setState({ glowStyle: readGlowStyle() });
+  if (!persisted) {
+    useToastStore.getState().warning(SAVE_FAILED_WARNING);
+  }
+}
+
+/** Show the glow on demand (Settings preview). Works with tracking off too. */
+export function startGlowPreview(): void {
+  if (state.glowPreviewActive) {
+    return;
+  }
+  setState({ glowPreviewActive: true });
+  invoke('show_glow').catch((error) => {
+    logCommandFailure('Failed to show the glow preview', error);
+    setState({ glowPreviewActive: false });
+    // User-initiated with an expected visual — a silent no-show reads as broken.
+    useToastStore.getState().warning("Couldn't show the glow preview — please try again.");
+  });
+}
+
+/** End the preview; the windows stay if a real nudge glow still owns them. */
+export function stopGlowPreview(): void {
+  if (!state.glowPreviewActive) {
+    return;
+  }
+  setState({ glowPreviewActive: false });
+  if (state.glowActive) {
+    return;
+  }
+  invoke('hide_glow').catch((error) => {
+    logCommandFailure('Failed to hide the glow preview', error);
+    // Same no-retry situation as a teardown hide — say so rather than strand a
+    // stuck vignette behind a button that now reads "Preview".
+    useToastStore
+      .getState()
+      .error("Couldn't clear the posture glow — restart Cuewise if it lingers.");
+  });
 }
 
 /** Human copy for a pause's end, shared by the tray menu and Settings. */

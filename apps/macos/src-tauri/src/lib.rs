@@ -4,11 +4,7 @@ mod posture;
 mod scheduler;
 mod tray;
 
-use tauri::{
-    menu::{MenuBuilder, MenuItem},
-    tray::TrayIconBuilder,
-    AppHandle, Emitter, Manager, RunEvent, WindowEvent,
-};
+use tauri::{tray::TrayIconBuilder, AppHandle, Emitter, Manager, RunEvent, WindowEvent};
 
 /// Show + focus the main window, optionally routing the hash-routed UI to a page.
 fn reveal(app: &AppHandle, hash: Option<&str>) {
@@ -38,6 +34,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .manage(scheduler::SchedulerState::default())
         .manage(posture::PostureState::default())
+        .manage(tray::TrayMenuState::default())
         .invoke_handler(tauri::generate_handler![
             scheduler::schedule_wake,
             scheduler::cancel_wake,
@@ -46,21 +43,14 @@ pub fn run() {
             posture::start_posture,
             posture::stop_posture,
             posture::calibrate_posture,
+            posture::set_posture_sensitivity,
             glow::show_glow,
             glow::hide_glow
         ])
         .setup(|app| {
-            // Initial menu; the webview replaces it with live status (and the
-            // Pomodoro/posture actions) via `set_tray_menu` once it loads.
-            let open = MenuItem::with_id(app, "show", "Open Cuewise", true, None::<&str>)?;
-            let insights = MenuItem::with_id(app, "insights", "View Insights", true, None::<&str>)?;
-            let quit = MenuItem::with_id(app, "quit", "Quit Cuewise", true, None::<&str>)?;
-            let menu = MenuBuilder::new(app)
-                .item(&open)
-                .item(&insights)
-                .separator()
-                .item(&quit)
-                .build()?;
+            // The one tray menu: created once here with the fixed items, then only
+            // mutated in place by `set_tray_menu` — never replaced (ENG-55).
+            let menu = tray::init_tray_menu(app.handle())?;
 
             // The tray is the primary way to reveal the window once it's hidden
             // (Dock reopen also does, via `RunEvent::Reopen` below), so a missing
@@ -78,6 +68,8 @@ pub fn run() {
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "show" => reveal(app, None),
                     "insights" => reveal(app, Some("insights")),
+                    // #settings is a deep link: home + the settings modal open.
+                    "settings" => reveal(app, Some("settings")),
                     "quit" => app.exit(0),
                     // Everything else is a webview-supplied action id (set_tray_menu
                     // builds those), so relay it — the webview no-ops unknown ids.

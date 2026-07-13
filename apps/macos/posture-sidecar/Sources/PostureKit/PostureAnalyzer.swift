@@ -1,16 +1,42 @@
 import Foundation
 import Vision
 
+/// Deviation tuning bundles: the dead zone (below `mild` nothing registers) and
+/// how far past baseline reaches `poor`. Strict flags small leans; relaxed
+/// forgives more. Heuristic values — refine with field data.
+/// Keep in sync with `KNOWN_PRESETS` (posture.rs) and `NudgeSensitivity`
+/// (posture-controller.ts) — a miss here fails silently (stderr log only).
+public enum SensitivityPreset: String, CaseIterable {
+  case strict
+  case balanced
+  case relaxed
+
+  var mildThreshold: Double {
+    switch self {
+    case .strict: return 0.02
+    case .balanced: return 0.03
+    case .relaxed: return 0.045
+    }
+  }
+
+  var poorThreshold: Double {
+    switch self {
+    case .strict: return 0.04
+    case .balanced: return 0.06
+    case .relaxed: return 0.09
+    }
+  }
+}
+
 /// Turns a stream of Vision observations into smoothed, calibrated samples.
 ///
 /// This is the piece worth keeping. A real macOS app (native or a Tauri
 /// sidecar) would embed `PostureKit` and feed it observations; the spike's
 /// executable is just one throwaway consumer.
 public final class PostureAnalyzer {
-  // Deviation thresholds for the coarse status rollup. Heuristic — tuned so a
-  // moderate lean-in reaches "poor" (which drives nudges); refine with field data.
-  private let mildThreshold: Double
-  private let poorThreshold: Double
+  // Deviation thresholds for the coarse status rollup; `apply(_:)` retunes them.
+  private var mildThreshold: Double
+  private var poorThreshold: Double
   private let autoCalibrateAfter: Int
 
   private var distanceEMA = EMA(alpha: 0.3)
@@ -29,6 +55,12 @@ public final class PostureAnalyzer {
 
   public var isCalibrated: Bool {
     return baselineNeck != nil
+  }
+
+  /// Retune the classification thresholds; takes effect from the next sample.
+  public func apply(_ preset: SensitivityPreset) {
+    mildThreshold = preset.mildThreshold
+    poorThreshold = preset.poorThreshold
   }
 
   /// Snapshot the current smoothed posture as the "sitting well" baseline.

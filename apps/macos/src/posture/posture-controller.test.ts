@@ -7,10 +7,14 @@ import {
   emitSampleFrame,
   emitStopped,
   focusModeStateMock,
+  hhmmFromNow,
   invokeMock,
   NUDGES_PAUSED_KEY,
+  PREVIEW_FAILED_WARNING,
   pomodoroStateMock,
   resetPostureMocks,
+  SAVE_FAILED_WARNING,
+  SENSITIVITY_APPLY_FAILED_WARNING,
   START_FAILED_ERROR,
   STOPPED_ERROR,
   toastErrorMock,
@@ -18,15 +22,24 @@ import {
   UNREADABLE_ERROR,
   unlistenSpies,
 } from './__fixtures__/posture-controller.fixtures';
+import { chipPresentation } from './chip-presentation';
 import {
   getPostureState,
   initPosture,
+  isWithinQuietHours,
   NUDGE_AFTER_POOR_SAMPLES,
   pausePostureNudges,
   resumePostureNudges,
   STEADY_SAMPLES,
+  setGlowIntensity,
+  setGlowStyle,
+  setNudgeDelay,
+  setNudgeSensitivity,
   setPostureNudges,
+  setQuietHours,
+  startGlowPreview,
   startPosture,
+  stopGlowPreview,
   stopPosture,
 } from './posture-controller';
 
@@ -510,6 +523,444 @@ describe('snooze and pause', () => {
 
     expect(getPostureState().nudgesPausedUntil).toBeNull();
     expect(localStorageStub.getItem(NUDGES_PAUSED_KEY)).toBeNull();
+  });
+});
+
+describe('glow preview', () => {
+  afterEach(() => {
+    stopGlowPreview();
+  });
+
+  it('shows the glow on demand, without tracking and without touching glowActive', async () => {
+    startGlowPreview();
+    await flushChain();
+
+    expect(countInvokes('show_glow')).toBe(1);
+    expect(getPostureState().glowPreviewActive).toBe(true);
+    expect(getPostureState().glowActive).toBe(false);
+  });
+
+  it('warns and rolls back when the preview cannot be shown', async () => {
+    invokeMock.mockRejectedValueOnce(new Error('no windows'));
+
+    startGlowPreview();
+    await flushChain();
+
+    expect(getPostureState().glowPreviewActive).toBe(false);
+    expect(toastWarningMock).toHaveBeenCalledWith(PREVIEW_FAILED_WARNING);
+  });
+
+  it('stopping the preview hides the glow', async () => {
+    startGlowPreview();
+    await flushChain();
+
+    stopGlowPreview();
+
+    expect(countInvokes('hide_glow')).toBe(1);
+    expect(getPostureState().glowPreviewActive).toBe(false);
+  });
+
+  it('stopping the preview leaves a real nudge glow on screen', async () => {
+    await startTracking();
+    await glowUp();
+    startGlowPreview();
+
+    stopGlowPreview();
+
+    // The nudge still owns the windows — the preview must not steal them.
+    expect(countInvokes('hide_glow')).toBe(0);
+  });
+
+  it('a nudge recovery during a preview leaves the preview on screen', async () => {
+    await startTracking();
+    startGlowPreview();
+    await flushChain();
+    emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES); // a real nudge fires mid-preview
+    expect(getPostureState().glowActive).toBe(true);
+
+    for (let i = 0; i < STEADY_SAMPLES; i += 1) {
+      emitSampleFrame(JSON.stringify({ status: 'good' }));
+    }
+
+    // glowActive clears, but the preview still owns the windows.
+    expect(getPostureState().glowActive).toBe(false);
+    expect(countInvokes('hide_glow')).toBe(0);
+
+    stopGlowPreview();
+    expect(countInvokes('hide_glow')).toBe(1);
+  });
+});
+
+describe('configurable nudge delay', () => {
+  afterEach(() => {
+    setNudgeDelay(30);
+  });
+
+  it('a strict delay glows after ~15s of poor posture', async () => {
+    await startTracking();
+    setNudgeDelay(15);
+
+    emitPoorFrames(7); // one frame short at the 2s cadence
+    expect(countInvokes('show_glow')).toBe(0);
+
+    emitPoorFrames(1);
+    expect(countInvokes('show_glow')).toBe(1);
+  });
+
+  it('a gentle delay needs ~60s of poor posture', async () => {
+    await startTracking();
+    setNudgeDelay(60);
+
+    emitPoorFrames(29);
+    expect(countInvokes('show_glow')).toBe(0);
+
+    emitPoorFrames(1);
+    expect(countInvokes('show_glow')).toBe(1);
+  });
+
+  it('changing the delay restarts the count instead of firing instantly', async () => {
+    await startTracking();
+    emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES - 1); // one short of the default
+
+    setNudgeDelay(15); // shorter threshold than the accumulated streak
+    emitPoorFrames(7);
+    expect(countInvokes('show_glow')).toBe(0);
+
+    emitPoorFrames(1);
+    expect(countInvokes('show_glow')).toBe(1);
+  });
+
+  it('persists and restores across a relaunch, discarding garbage', async () => {
+    setNudgeDelay(60);
+    expect(localStorageStub.getItem('cuewise.posture.nudgeDelaySeconds')).toBe('60');
+
+    localStorageStub.setItem(ENABLED_KEY, '1');
+    initPosture();
+    await flushChain();
+    expect(getPostureState().nudgeDelaySeconds).toBe(60);
+
+    stopPosture();
+    localStorageStub.setItem('cuewise.posture.nudgeDelaySeconds', '45'); // not a preset
+    initPosture();
+    await flushChain();
+    expect(getPostureState().nudgeDelaySeconds).toBe(30);
+    expect(localStorageStub.getItem('cuewise.posture.nudgeDelaySeconds')).toBeNull();
+  });
+});
+
+describe('glow appearance preferences', () => {
+  afterEach(() => {
+    setGlowIntensity('standard');
+    setGlowStyle('glow');
+  });
+
+  it('persists the choice for the glow windows to read', () => {
+    setGlowIntensity('subtle');
+
+    expect(getPostureState().glowIntensity).toBe('subtle');
+    expect(localStorageStub.getItem('cuewise.posture.glowIntensity')).toBe('subtle');
+  });
+
+  it('restores on init and discards garbage', async () => {
+    localStorageStub.setItem('cuewise.posture.glowIntensity', 'subtle');
+    initPosture();
+    await flushChain();
+    expect(getPostureState().glowIntensity).toBe('subtle');
+
+    localStorageStub.setItem('cuewise.posture.glowIntensity', 'blinding');
+    initPosture();
+    await flushChain();
+    expect(getPostureState().glowIntensity).toBe('standard');
+  });
+
+  it('persists and restores the nudge style', async () => {
+    setGlowStyle('border');
+    expect(getPostureState().glowStyle).toBe('border');
+    expect(localStorageStub.getItem('cuewise.posture.glowStyle')).toBe('border');
+
+    setGlowStyle('glow');
+    localStorageStub.setItem('cuewise.posture.glowStyle', 'tint');
+    initPosture();
+    await flushChain();
+    expect(getPostureState().glowStyle).toBe('tint');
+  });
+
+  it('keeps the persisted style and warns when the write fails', () => {
+    setGlowStyle('border');
+    const failingWrite = vi.spyOn(localStorageStub, 'setItem').mockImplementation(() => {
+      throw new Error('storage full');
+    });
+    setGlowStyle('tint');
+    failingWrite.mockRestore();
+
+    // The glow windows read localStorage — Settings must not claim a style they won't use.
+    expect(getPostureState().glowStyle).toBe('border');
+    expect(localStorageStub.getItem('cuewise.posture.glowStyle')).toBe('border');
+    // Exactly one: the failed write warns, the successful seed write must not.
+    expect(toastWarningMock).toHaveBeenCalledTimes(1);
+    expect(toastWarningMock).toHaveBeenCalledWith(SAVE_FAILED_WARNING);
+  });
+
+  it('keeps the persisted strength and warns when the write fails', () => {
+    setGlowIntensity('subtle');
+    const failingWrite = vi.spyOn(localStorageStub, 'setItem').mockImplementation(() => {
+      throw new Error('storage full');
+    });
+    setGlowIntensity('intense');
+    failingWrite.mockRestore();
+
+    expect(getPostureState().glowIntensity).toBe('subtle');
+    expect(localStorageStub.getItem('cuewise.posture.glowIntensity')).toBe('subtle');
+    expect(toastWarningMock).toHaveBeenCalledTimes(1);
+    expect(toastWarningMock).toHaveBeenCalledWith(SAVE_FAILED_WARNING);
+  });
+});
+
+describe('nudge sensitivity', () => {
+  afterEach(() => {
+    setNudgeSensitivity('balanced');
+  });
+
+  it('persists without applying while tracking is off', () => {
+    setNudgeSensitivity('strict');
+
+    expect(getPostureState().nudgeSensitivity).toBe('strict');
+    expect(localStorageStub.getItem('cuewise.posture.sensitivity')).toBe('strict');
+    expect(countInvokes('set_posture_sensitivity')).toBe(0);
+  });
+
+  it('applies on every start and again on a live change', async () => {
+    setNudgeSensitivity('strict');
+    await startTracking();
+    // A fresh sidecar boots with default thresholds — the start must re-send.
+    expect(countInvokes('set_posture_sensitivity')).toBe(1);
+    expect(invokeMock).toHaveBeenLastCalledWith('set_posture_sensitivity', { preset: 'strict' });
+
+    setNudgeSensitivity('relaxed');
+    await flushChain();
+    expect(countInvokes('set_posture_sensitivity')).toBe(2);
+    expect(invokeMock).toHaveBeenLastCalledWith('set_posture_sensitivity', { preset: 'relaxed' });
+
+    // "Every start" means every start — a stop/start cycle must re-send too.
+    stopPosture();
+    await flushChain();
+    startPosture();
+    await flushChain();
+    expect(countInvokes('set_posture_sensitivity')).toBe(3);
+    expect(invokeMock).toHaveBeenLastCalledWith('set_posture_sensitivity', { preset: 'relaxed' });
+  });
+
+  it('applies the restored preset when tracking auto-resumes at boot', async () => {
+    localStorageStub.setItem('cuewise.posture.sensitivity', 'strict');
+    localStorageStub.setItem(ENABLED_KEY, '1');
+
+    initPosture();
+    await flushChain();
+
+    // The boot auto-start must send the restored preset, not the default.
+    expect(getPostureState().tracking).toBe(true);
+    expect(countInvokes('set_posture_sensitivity')).toBe(1);
+    expect(invokeMock).toHaveBeenLastCalledWith('set_posture_sensitivity', { preset: 'strict' });
+  });
+
+  it('warns when the live apply fails but keeps the preference', async () => {
+    await startTracking();
+    invokeMock.mockRejectedValueOnce(new Error('sidecar pipe broke'));
+
+    setNudgeSensitivity('strict');
+    await flushChain();
+
+    expect(toastWarningMock).toHaveBeenCalledWith(SENSITIVITY_APPLY_FAILED_WARNING);
+    // The preference still landed — it re-applies on the next start.
+    expect(localStorageStub.getItem('cuewise.posture.sensitivity')).toBe('strict');
+  });
+
+  it('restores on init and discards garbage', async () => {
+    localStorageStub.setItem('cuewise.posture.sensitivity', 'relaxed');
+    initPosture();
+    await flushChain();
+    expect(getPostureState().nudgeSensitivity).toBe('relaxed');
+
+    localStorageStub.setItem('cuewise.posture.sensitivity', 'ultra');
+    initPosture();
+    await flushChain();
+    expect(getPostureState().nudgeSensitivity).toBe('balanced');
+    expect(localStorageStub.getItem('cuewise.posture.sensitivity')).toBeNull();
+  });
+});
+
+describe('isWithinQuietHours', () => {
+  function window(enabled: boolean, start: string, end: string) {
+    return { enabled, start, end };
+  }
+  function at(hours: number, minutes: number): Date {
+    return new Date(2026, 6, 13, hours, minutes);
+  }
+
+  it('is inert while disabled', () => {
+    expect(isWithinQuietHours(window(false, '00:00', '23:59'), at(12, 0))).toBe(false);
+  });
+
+  it('covers a same-day window as [start, end)', () => {
+    const quiet = window(true, '09:00', '17:00');
+    expect(isWithinQuietHours(quiet, at(9, 0))).toBe(true);
+    expect(isWithinQuietHours(quiet, at(16, 59))).toBe(true);
+    expect(isWithinQuietHours(quiet, at(8, 59))).toBe(false);
+    expect(isWithinQuietHours(quiet, at(17, 0))).toBe(false);
+  });
+
+  it('wraps midnight when start is after end', () => {
+    const quiet = window(true, '22:00', '08:00');
+    expect(isWithinQuietHours(quiet, at(23, 30))).toBe(true);
+    expect(isWithinQuietHours(quiet, at(7, 59))).toBe(true);
+    expect(isWithinQuietHours(quiet, at(12, 0))).toBe(false);
+  });
+
+  it('treats equal times as an empty window and malformed times as inert', () => {
+    expect(isWithinQuietHours(window(true, '10:00', '10:00'), at(10, 0))).toBe(false);
+    expect(isWithinQuietHours(window(true, '25:00', '08:00'), at(12, 0))).toBe(false);
+    expect(isWithinQuietHours(window(true, 'zz:00', '08:00'), at(12, 0))).toBe(false);
+  });
+});
+
+describe('quiet hours', () => {
+  afterEach(() => {
+    setQuietHours({ enabled: false, start: '22:00', end: '08:00' });
+  });
+
+  it('suppresses new glows inside the window and clears an active one', async () => {
+    await startTracking();
+    await glowUp();
+
+    setQuietHours({ enabled: true, start: hhmmFromNow(-60), end: hhmmFromNow(60) });
+    emitSampleFrame(JSON.stringify({ status: 'poor' }));
+
+    expect(countInvokes('hide_glow')).toBe(1);
+    expect(getPostureState().glowActive).toBe(false);
+
+    emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES * 2);
+    expect(countInvokes('show_glow')).toBe(1);
+  });
+
+  it('does not suppress outside the window', async () => {
+    await startTracking();
+    setQuietHours({ enabled: true, start: hhmmFromNow(60), end: hhmmFromNow(120) });
+
+    await glowUp();
+  });
+
+  it('resets — not freezes — a lean built up before the window started', async () => {
+    await startTracking();
+    setQuietHours({ enabled: true, start: hhmmFromNow(2), end: hhmmFromNow(60) });
+    emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES - 1);
+    expect(countInvokes('show_glow')).toBe(0);
+
+    vi.setSystemTime(Date.now() + 3 * 60_000);
+    emitPoorFrames(1); // suppressed — and it must zero the pre-window streak
+
+    vi.setSystemTime(Date.now() + 60 * 60_000);
+    emitPoorFrames(1);
+    // A frozen streak would fire here on the first post-window frame.
+    expect(countInvokes('show_glow')).toBe(0);
+  });
+
+  it('resumes nudging once the window ends, needing a fresh streak', async () => {
+    await startTracking();
+    setQuietHours({ enabled: true, start: hhmmFromNow(-60), end: hhmmFromNow(30) });
+    emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES * 2);
+    expect(countInvokes('show_glow')).toBe(0);
+
+    vi.setSystemTime(Date.now() + 31 * 60_000);
+
+    // Suppression was streak-neutral: the leaning above must not count now.
+    emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES - 1);
+    expect(countInvokes('show_glow')).toBe(0);
+    emitPoorFrames(1);
+    expect(countInvokes('show_glow')).toBe(1);
+  });
+
+  it('persists and restores, discarding garbage', async () => {
+    setQuietHours({ enabled: true, start: '21:00', end: '07:30' });
+    expect(JSON.parse(localStorageStub.getItem('cuewise.posture.quietHours') ?? 'null')).toEqual({
+      enabled: true,
+      start: '21:00',
+      end: '07:30',
+    });
+
+    initPosture();
+    await flushChain();
+    expect(getPostureState().quietHours).toEqual({ enabled: true, start: '21:00', end: '07:30' });
+
+    localStorageStub.setItem('cuewise.posture.quietHours', '{"enabled":"yes"}');
+    initPosture();
+    await flushChain();
+    expect(getPostureState().quietHours).toEqual({ enabled: false, start: '22:00', end: '08:00' });
+    expect(localStorageStub.getItem('cuewise.posture.quietHours')).toBeNull();
+  });
+
+  it('surfaces the active window on the chip, outranking the steady status', async () => {
+    await startTracking();
+    for (let i = 0; i < STEADY_SAMPLES; i += 1) {
+      emitSampleFrame(JSON.stringify({ status: 'good' }));
+    }
+    expect(getPostureState().steadyStatus).toBe('good');
+
+    const end = hhmmFromNow(60);
+    setQuietHours({ enabled: true, start: hhmmFromNow(-60), end });
+
+    expect(chipPresentation(getPostureState())).toEqual({
+      dot: 'bg-tertiary',
+      label: `Quiet hours until ${end}`,
+    });
+  });
+});
+
+describe('posture chip presentation', () => {
+  it('is hidden while not tracking', () => {
+    expect(chipPresentation(getPostureState())).toBeNull();
+  });
+
+  it('shows starting before any steady status settles', async () => {
+    await startTracking();
+    expect(chipPresentation(getPostureState())).toMatchObject({ label: 'Starting…' });
+  });
+
+  it('shows the steady status once it holds', async () => {
+    await startTracking();
+    for (let i = 0; i < STEADY_SAMPLES; i += 1) {
+      emitSampleFrame(JSON.stringify({ status: 'good' }));
+    }
+    expect(chipPresentation(getPostureState())).toMatchObject({ label: 'Good posture' });
+  });
+
+  it('surfaces a readings error above the stale status', async () => {
+    await startTracking();
+    for (let i = 0; i < STEADY_SAMPLES; i += 1) {
+      emitSampleFrame(JSON.stringify({ status: 'good' }));
+    }
+    for (let i = 0; i < 5; i += 1) {
+      emitSampleFrame('not json');
+    }
+    // The tray mirrors this state too — the chip must not keep saying "Good".
+    expect(chipPresentation(getPostureState())).toMatchObject({ label: 'Readings unavailable' });
+  });
+
+  it('surfaces glow undeliverability above the status', async () => {
+    await startTracking();
+    invokeMock.mockRejectedValueOnce({ kind: 'window', message: 'boom' });
+    emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES);
+    await flushChain();
+    emitSampleFrame(JSON.stringify({ status: 'good' }));
+
+    expect(chipPresentation(getPostureState())).toMatchObject({ label: 'Glow unavailable' });
+  });
+
+  it('shows an active pause', async () => {
+    await startTracking();
+    pausePostureNudges('until-resume');
+
+    const presentation = chipPresentation(getPostureState());
+    expect(presentation?.label).toBe('Nudges paused until you resume');
   });
 });
 

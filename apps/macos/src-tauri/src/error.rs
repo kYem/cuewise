@@ -22,6 +22,14 @@ pub enum Error {
     /// rolls its state back and retries on a later nudge.
     #[error("no monitors available")]
     NoMonitors,
+    /// `set_tray_menu` ran before `init_tray_menu` — unreachable once the app is
+    /// up (setup aborts on init failure), loud if a refactor breaks the invariant.
+    #[error("the tray menu was never initialized")]
+    TrayNotInitialized,
+    /// A sensitivity preset outside the known set — rejected before it can reach
+    /// the sidecar's stdin line protocol.
+    #[error("unknown sensitivity preset")]
+    UnknownPreset,
 }
 
 impl Error {
@@ -31,6 +39,8 @@ impl Error {
             Error::StatePoisoned => "state_poisoned",
             Error::Window(_) => "window",
             Error::NoMonitors => "no_monitors",
+            Error::TrayNotInitialized => "tray_not_initialized",
+            Error::UnknownPreset => "unknown_preset",
         }
     }
 }

@@ -79,6 +79,22 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({ extraSections }) => {
   const [isAddConceptOpen, setIsAddConceptOpen] = useState(false);
   const [isWelcomeOpen, setIsWelcomeOpen] = useState(false);
 
+  // #settings deep link (used by the macOS tray): open the modal, then clear the
+  // hash silently so refresh/back land on plain home.
+  useEffect(() => {
+    const openFromHash = () => {
+      if (window.location.hash === '#settings') {
+        setIsSettingsModalOpen(true);
+        window.history.replaceState(null, '', window.location.pathname);
+      }
+    };
+    openFromHash();
+    window.addEventListener('hashchange', openFromHash);
+    return () => {
+      window.removeEventListener('hashchange', openFromHash);
+    };
+  }, []);
+
   const reviewPrompt = useReviewPrompt({
     ready: !settingsLoading,
     pomodoroIdle: pomodoroStatus === 'idle',
