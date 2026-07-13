@@ -48,7 +48,7 @@ Out of scope for this package (belongs to ENG-45 unless noted):
 - The mapping between Zustand store shapes (`goals`, `quotes`, ...) and individual `PushRecord`s.
 - LWW (last-write-wins) conflict resolution.
 - The fresh-device migration/merge state machine.
-- Encryption *wiring* — the ENG-44 crypto lives in `src/crypto/` (recovery codes, key wrap/unwrap, record `sealRecord`/`openRecord`), but nothing in this package calls it yet. `ciphertext` stays an opaque string to the transport functions; ENG-45 wires stores through `sealRecord`/`openRecord`.
+- Encryption — the ENG-44 crypto lives in its own leaf package `@cuewise/crypto` (recovery codes, key wrap/unwrap, record `sealRecord`/`openRecord`), **not re-exported here**. `ciphertext` is an opaque string to this package's transport functions; ENG-45 wires stores through `@cuewise/crypto` directly. This package is the transport, not the cipher.
 
 ## Testing
 
