@@ -740,6 +740,27 @@ describe('nudge sensitivity', () => {
     await flushChain();
     expect(countInvokes('set_posture_sensitivity')).toBe(2);
     expect(invokeMock).toHaveBeenLastCalledWith('set_posture_sensitivity', { preset: 'relaxed' });
+
+    // "Every start" means every start — a stop/start cycle must re-send too.
+    stopPosture();
+    await flushChain();
+    startPosture();
+    await flushChain();
+    expect(countInvokes('set_posture_sensitivity')).toBe(3);
+    expect(invokeMock).toHaveBeenLastCalledWith('set_posture_sensitivity', { preset: 'relaxed' });
+  });
+
+  it('applies the restored preset when tracking auto-resumes at boot', async () => {
+    localStorageStub.setItem('cuewise.posture.sensitivity', 'strict');
+    localStorageStub.setItem(ENABLED_KEY, '1');
+
+    initPosture();
+    await flushChain();
+
+    // Restore must run before the auto-start, or the sidecar gets the default.
+    expect(getPostureState().tracking).toBe(true);
+    expect(countInvokes('set_posture_sensitivity')).toBe(1);
+    expect(invokeMock).toHaveBeenLastCalledWith('set_posture_sensitivity', { preset: 'strict' });
   });
 
   it('warns when the live apply fails but keeps the preference', async () => {
@@ -828,11 +849,28 @@ describe('quiet hours', () => {
     await glowUp();
   });
 
+  it('resumes nudging once the window ends, needing a fresh streak', async () => {
+    await startTracking();
+    setQuietHours({ enabled: true, start: hhmmFromNow(-60), end: hhmmFromNow(30) });
+    emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES * 2);
+    expect(countInvokes('show_glow')).toBe(0);
+
+    vi.setSystemTime(Date.now() + 31 * 60_000);
+
+    // Suppression was streak-neutral: the leaning above must not count now.
+    emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES - 1);
+    expect(countInvokes('show_glow')).toBe(0);
+    emitPoorFrames(1);
+    expect(countInvokes('show_glow')).toBe(1);
+  });
+
   it('persists and restores, discarding garbage', async () => {
     setQuietHours({ enabled: true, start: '21:00', end: '07:30' });
-    expect(localStorageStub.getItem('cuewise.posture.quietHours')).toBe(
-      '{"enabled":true,"start":"21:00","end":"07:30"}'
-    );
+    expect(JSON.parse(localStorageStub.getItem('cuewise.posture.quietHours') ?? 'null')).toEqual({
+      enabled: true,
+      start: '21:00',
+      end: '07:30',
+    });
 
     initPosture();
     await flushChain();
@@ -845,8 +883,13 @@ describe('quiet hours', () => {
     expect(localStorageStub.getItem('cuewise.posture.quietHours')).toBeNull();
   });
 
-  it('surfaces the active window on the chip', async () => {
+  it('surfaces the active window on the chip, outranking the steady status', async () => {
     await startTracking();
+    for (let i = 0; i < STEADY_SAMPLES; i += 1) {
+      emitSampleFrame(JSON.stringify({ status: 'good' }));
+    }
+    expect(getPostureState().steadyStatus).toBe('good');
+
     const end = hhmmFromNow(60);
     setQuietHours({ enabled: true, start: hhmmFromNow(-60), end });
 

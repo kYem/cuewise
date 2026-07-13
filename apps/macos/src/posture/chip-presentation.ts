@@ -7,9 +7,8 @@ export interface ChipPresentation {
 }
 
 // Precedence mirrors the tray (the authoritative surface): error > glow
-// unavailable > paused > quiet hours > steady status > starting. Null while
-// not tracking. `now` is injectable for tests; frames re-render every ~2s, so
-// the quiet-hours label can't go stale for long.
+// unavailable > paused > quiet hours > steady status > starting. Null while not
+// tracking. Sample frames re-render every ~2s, so the label can't go stale long.
 export function chipPresentation(
   posture: PostureState,
   now: Date = new Date()

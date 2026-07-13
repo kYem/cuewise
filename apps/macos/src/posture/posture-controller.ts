@@ -24,7 +24,10 @@ export type NudgePause = number | 'until-resume';
 /** How long poor posture must persist before the glow shows (Settings presets). */
 export type NudgeDelaySeconds = 15 | 30 | 60;
 
-/** How much lean counts as slouching; each preset bundles its dead zone. */
+/**
+ * How much lean counts as slouching; each preset bundles its dead zone. Keep in
+ * sync with `KNOWN_PRESETS` (posture.rs) and `SensitivityPreset` (PostureAnalyzer.swift).
+ */
 export type NudgeSensitivity = 'strict' | 'balanced' | 'relaxed';
 
 /** A daily no-nudge window; overnight ranges (start > end) wrap midnight. */
@@ -681,7 +684,7 @@ export function setNudgeSensitivity(sensitivity: NudgeSensitivity): void {
 }
 
 // A fresh sidecar process boots with default thresholds, so every start re-sends
-// the persisted preset (idempotent for 'balanced').
+// the persisted preset (a no-op for 'balanced').
 function applySensitivity(): void {
   if (!state.tracking) {
     return;

@@ -4,6 +4,8 @@ import Vision
 /// Deviation tuning bundles: the dead zone (below `mild` nothing registers) and
 /// how far past baseline reaches `poor`. Strict flags small leans; relaxed
 /// forgives more. Heuristic values — refine with field data.
+/// Keep in sync with `KNOWN_PRESETS` (posture.rs) and `NudgeSensitivity`
+/// (posture-controller.ts) — a miss here fails silently (stderr log only).
 public enum SensitivityPreset: String, CaseIterable {
   case strict
   case balanced

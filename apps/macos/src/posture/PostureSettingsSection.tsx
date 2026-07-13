@@ -210,6 +210,13 @@ function PostureSection({ filter }: SettingsSectionProps) {
                       setQuietHours({ ...quietHours, start: e.target.value });
                     }
                   }}
+                  onBlur={(e) => {
+                    // A cleared field never reaches state — re-sync the display so it
+                    // can't disagree with the window still being enforced.
+                    if (e.target.value === '') {
+                      e.target.value = quietHours.start;
+                    }
+                  }}
                 />
                 <span>–</span>
                 <input
@@ -220,6 +227,11 @@ function PostureSection({ filter }: SettingsSectionProps) {
                   onChange={(e) => {
                     if (e.target.value !== '') {
                       setQuietHours({ ...quietHours, end: e.target.value });
+                    }
+                  }}
+                  onBlur={(e) => {
+                    if (e.target.value === '') {
+                      e.target.value = quietHours.end;
                     }
                   }}
                 />
