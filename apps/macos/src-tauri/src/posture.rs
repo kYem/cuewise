@@ -178,7 +178,7 @@ fn reap_owned_child(app: &AppHandle, generation: u64) -> bool {
     match take_owned_child(app, generation) {
         Some(child) => {
             if let Err(e) = child.kill() {
-                eprintln!("posture sidecar: watchdog kill failed: {e}");
+                eprintln!("posture sidecar: kill failed: {e}");
             }
             true
         }
