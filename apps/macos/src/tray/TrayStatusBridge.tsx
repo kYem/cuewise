@@ -26,7 +26,7 @@ import {
 
 /**
  * Projects the (single-webview) Pomodoro + reminder + posture state onto the
- * native menu-bar tray: the live timer as the title, a rebuilt menu with status
+ * native menu-bar tray: the live timer as the title, the menu content with status
  * lines + controls. Menu clicks come back as `tray://action` events and dispatch
  * into the Pomodoro store / posture controller. Mounted from main.tsx under Tauri.
  */
