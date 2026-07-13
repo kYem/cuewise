@@ -104,8 +104,8 @@ export async function loadPersistedDataKey(
 }
 
 /**
- * Resolves this device's DataKey. A brand-new account generates+uploads a key (code shown once);
- * a device that finds an existing envelope must enroll with the code — this serializes first-enable.
+ * Resolves this device's DataKey: resumes silently from a persisted DK if one exists, else a
+ * brand-new account generates+uploads a key (code shown once), else an existing envelope enrolls with the code.
  */
 export async function initOrEnrollKey(
   deps: KeyLifecycleDeps,
