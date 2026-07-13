@@ -1,5 +1,6 @@
 // Settings modal building blocks (redesigned, theme-aware)
 export { PresetGrid } from './PresetGrid';
+export { RecoveryCodeModal, type RecoveryCodeModalProps } from './RecoveryCodeModal';
 export {
   Segmented,
   SelectControl,
