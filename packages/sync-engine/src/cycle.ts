@@ -165,6 +165,11 @@ async function applyPulledRecord(
     return true;
   }
 
+  // Decrypt succeeded: a previously-quarantined key has recovered (spec §5.3 self-heal).
+  if (meta.quarantine.includes(key)) {
+    meta.quarantine = meta.quarantine.filter((q) => q !== key);
+  }
+
   const binding = deps.bindings.find((b) => b.name === rec.collection);
   if (binding === undefined) {
     logger.warn('Skipping pulled record for unknown collection', { collection: rec.collection });
@@ -175,10 +180,10 @@ async function applyPulledRecord(
   const all = await binding.readAll();
   const localEntity = all[rec.entityId];
   const localHlc = meta.hlcs[key];
+  // No hlc means this key is unknown to the engine (e.g. legacy pre-sync data) even if an
+  // entity exists locally — treat it as null so incoming always wins, per union-migration intent.
   const local: RecordBody | null =
-    localHlc === undefined && localEntity === undefined
-      ? null
-      : { entity: localEntity ?? null, hlc: localHlc };
+    localHlc === undefined ? null : { entity: localEntity ?? null, hlc: localHlc };
 
   const resolution = deps.strategy.resolve(local, incoming);
   if (resolution.winner === 'incoming') {

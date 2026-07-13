@@ -173,4 +173,86 @@ describe('pullOnce', () => {
     const saved = await metaStore.load();
     expect(saved.cursor).toBe(0);
   });
+
+  it('propagates a non-resync ApiError from getChanges without resetting the cursor', async () => {
+    const meta = await metaStore.load();
+    meta.cursor = 7;
+    await metaStore.save(meta);
+    transport.getChangesError = new ApiError('invalid_token', 401);
+
+    await expect(pullOnce(makeDeps())).rejects.toThrow(ApiError);
+
+    const saved = await metaStore.load();
+    expect(saved.cursor).toBe(7);
+  });
+
+  it('treats a local entity with no known hlc as unknown, so a matching incoming record applies without throwing', async () => {
+    // Legacy pre-sync data: the entity exists locally but meta.hlcs has no entry for it.
+    const local = goalFactory.build({ id: 'g1', text: 'legacy-local' });
+    await setGoals([local]);
+    const incomingGoal = goalFactory.build({ id: 'g1', text: 'incoming' });
+    const rec = await sealRecord(dk, 'goals', 'g1', { entity: incomingGoal, hlc: NEWER_HLC }, 1);
+    transport.pullRecords = [rec];
+
+    await expect(pullOnce(makeDeps())).resolves.toBeUndefined();
+
+    const goals = await getGoals();
+    expect(goals).toEqual([incomingGoal]);
+    const saved = await metaStore.load();
+    expect(saved.hlcs['goals/g1']).toBe(NEWER_HLC);
+  });
+
+  it('does not move the cursor backward when a later record in the page carries a lower seq', async () => {
+    const firstGoal = goalFactory.build({ id: 'g1' });
+    const secondGoal = goalFactory.build({ id: 'g2' });
+    const higherSeqRec = await sealRecord(
+      dk,
+      'goals',
+      'g1',
+      { entity: firstGoal, hlc: NEWER_HLC },
+      5
+    );
+    const lowerSeqRec = await sealRecord(
+      dk,
+      'goals',
+      'g2',
+      { entity: secondGoal, hlc: NEWER_HLC },
+      3
+    );
+    transport.pullRecords = [higherSeqRec, lowerSeqRec];
+
+    await pullOnce(makeDeps());
+
+    const saved = await metaStore.load();
+    expect(saved.cursor).toBe(5);
+  });
+
+  it('recovers a quarantined key once a later pull decrypts it cleanly, removing it from quarantine', async () => {
+    const goal = goalFactory.build({ id: 'g1' });
+    const sealed = await sealRecord(dk, 'goals', 'g1', { entity: goal, hlc: NEWER_HLC }, 1);
+    const poisoned: SyncRecord = { ...sealed, ciphertext: 'garbage' };
+    transport.pullRecords = [poisoned];
+
+    await pullOnce(makeDeps());
+
+    const afterQuarantine = await metaStore.load();
+    expect(afterQuarantine.quarantine).toEqual(['goals/g1']);
+
+    const recoveredGoal = goalFactory.build({ id: 'g1', text: 'recovered' });
+    const recoveredRec = await sealRecord(
+      dk,
+      'goals',
+      'g1',
+      { entity: recoveredGoal, hlc: NEWER_HLC },
+      2
+    );
+    transport.pullRecords = [recoveredRec];
+
+    await pullOnce(makeDeps());
+
+    const saved = await metaStore.load();
+    expect(saved.quarantine).toEqual([]);
+    const goals = await getGoals();
+    expect(goals).toEqual([recoveredGoal]);
+  });
 });
