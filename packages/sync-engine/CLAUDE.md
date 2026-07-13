@@ -40,4 +40,6 @@ schedulerHost.onFire((id) => {
 
 `engine.start()` (call once per app/tab open) self-heals the DK against the server (`selfHealKeyBlob` — typed `SelfHealNeedsEnrollError`/`SelfHealUnrecoverableError` land the engine in `signed_out` rather than crashing), then syncs and arms the first pull wake if `cloudSyncEnabled` is set. `engine.stop()` just cancels the armed wake; it does not touch the session or the DK — use `disableSync()` for that.
 
+**Known limitation — Chrome extension realms.** `createSyncEngine` (and thus the sink registration) only runs in `background.ts`'s service-worker realm; store mutations happen in `main.tsx`'s page realm, a separate MV3 JS module state, so `getSyncSink()` there is always null and page-realm mutations never push (pull still works). See the `TODO(ENG-45)` in `apps/browser-extension/src/main.tsx`. The macOS app is unaffected (single Tauri webview realm).
+
 **Auth loss.** Any 401 (during `enableSync`, `syncNow`, or the pull wake) clears the session and stops the loop but keeps local data *and* the DK — status goes to `signed_out` so the user can silently re-authenticate later without re-enrolling the key.
