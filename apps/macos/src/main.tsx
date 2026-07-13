@@ -1,6 +1,5 @@
 import { PomodoroPipProvider } from '@cuewise/app';
 import { handleReminderFire } from '@cuewise/app/reminder-notifications';
-import { setSyncEngine } from '@cuewise/app/sync-hook';
 import '@cuewise/app/styles.css';
 import { configurePlatform, logger } from '@cuewise/shared';
 import { LocalStorageKeyValueStore } from '@cuewise/storage';
@@ -57,7 +56,6 @@ if (window.location.hash === '#glow') {
       keyStore: storage,
       scheduler,
     });
-    setSyncEngine(syncEngine);
     scheduler.onFire((id) => {
       if (id === SYNC_PULL_WAKE_ID) {
         syncEngine.handlePullWake();

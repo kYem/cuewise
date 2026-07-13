@@ -14,13 +14,14 @@ import {
   isObjective,
   isTask,
   logger,
+  notifyDeleted,
+  notifyMutated,
   removeSubtaskFromGoal,
   reorderGoals as reorderGoalsUtil,
   toggleSubtaskInGoal,
 } from '@cuewise/shared';
 import { getGoals as loadAllGoals, setGoals as saveAllGoals } from '@cuewise/storage';
 import { create } from 'zustand';
-import { notifyDeleted, notifyMutated } from './sync-hook';
 import { useToastStore } from './toast-store';
 
 export type CompletionFilter = 'all' | 'completed' | 'incomplete';

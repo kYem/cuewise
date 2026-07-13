@@ -1,9 +1,8 @@
-import { configurePlatform } from '@cuewise/shared';
+import { configurePlatform, type SyncMutationSink } from '@cuewise/shared';
 import * as storage from '@cuewise/storage';
 import { recurringReminderFactory, reminderFactory } from '@cuewise/test-utils/factories';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useReminderStore } from './reminder-store';
-import { type SyncMutationSink, setSyncEngine } from './sync-hook';
 
 // Mock storage functions
 vi.mock('@cuewise/storage', () => ({
@@ -514,7 +513,7 @@ describe('alarm scheduling failures', () => {
   });
 });
 
-describe('sync-hook wiring', () => {
+describe('sync sink wiring', () => {
   const markMutated = vi.fn();
   const markDeleted = vi.fn();
   const fakeSink: SyncMutationSink = { markMutated, markDeleted };
@@ -522,11 +521,11 @@ describe('sync-hook wiring', () => {
   beforeEach(() => {
     markMutated.mockClear();
     markDeleted.mockClear();
-    setSyncEngine(fakeSink);
+    configurePlatform({ syncSink: fakeSink });
   });
 
   afterEach(() => {
-    setSyncEngine(null);
+    configurePlatform({ syncSink: null });
   });
 
   it('notifies markMutated with the new reminder id after addReminder persists', async () => {

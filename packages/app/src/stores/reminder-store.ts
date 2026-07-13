@@ -5,6 +5,8 @@ import {
   isUpcomingRecurringOccurrence,
   logger,
   nextReminderDueDate,
+  notifyDeleted,
+  notifyMutated,
   type Reminder,
   type ReminderCategory,
   type ReminderRecurrence,
@@ -13,7 +15,6 @@ import {
 } from '@cuewise/shared';
 import { getReminders, setReminders } from '@cuewise/storage';
 import { create } from 'zustand';
-import { notifyDeleted, notifyMutated } from './sync-hook';
 import { useToastStore } from './toast-store';
 
 interface ReminderStore {

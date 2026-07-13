@@ -1,4 +1,9 @@
-import { getTodayDateString, storageFailure } from '@cuewise/shared';
+import {
+  configurePlatform,
+  getTodayDateString,
+  type SyncMutationSink,
+  storageFailure,
+} from '@cuewise/shared';
 import * as storage from '@cuewise/storage';
 import {
   completedGoalFactory,
@@ -8,7 +13,6 @@ import {
 } from '@cuewise/test-utils/factories';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useGoalStore } from './goal-store';
-import { type SyncMutationSink, setSyncEngine } from './sync-hook';
 
 // Mock storage functions
 vi.mock('@cuewise/storage', () => ({
@@ -895,7 +899,7 @@ describe('toggleTask persistence', () => {
   });
 });
 
-describe('sync-hook wiring', () => {
+describe('sync sink wiring', () => {
   const markMutated = vi.fn();
   const markDeleted = vi.fn();
   const fakeSink: SyncMutationSink = { markMutated, markDeleted };
@@ -904,11 +908,11 @@ describe('sync-hook wiring', () => {
     markMutated.mockClear();
     markDeleted.mockClear();
     vi.mocked(storage.setGoals).mockResolvedValue({ success: true });
-    setSyncEngine(fakeSink);
+    configurePlatform({ syncSink: fakeSink });
   });
 
   afterEach(() => {
-    setSyncEngine(null);
+    configurePlatform({ syncSink: null });
   });
 
   it('notifies markMutated with the new task id after addTask persists', async () => {

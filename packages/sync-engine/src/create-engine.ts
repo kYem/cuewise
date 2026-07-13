@@ -1,4 +1,4 @@
-import type { KeyValueStore, Scheduler } from '@cuewise/shared';
+import { configurePlatform, type KeyValueStore, type Scheduler } from '@cuewise/shared';
 import { ApiClient, type ApiClientOptions, SessionManager } from '@cuewise/sync-client';
 import type { CollectionBinding } from './collections';
 import { SyncEngine, type SyncStatus } from './engine';
@@ -31,7 +31,7 @@ export function createSyncEngine(opts: CreateSyncEngineOptions): SyncEngine {
     fetchFn: opts.fetchFn,
     sleep: opts.sleep,
   });
-  return new SyncEngine({
+  const engine = new SyncEngine({
     apiClient,
     sessionManager,
     keyStore: opts.keyStore,
@@ -43,4 +43,9 @@ export function createSyncEngine(opts: CreateSyncEngineOptions): SyncEngine {
     onQuarantine: opts.onQuarantine,
     onRecoveryCode: opts.onRecoveryCode,
   });
+  // Constructing the engine IS wiring it — hosts can no longer forget the manual
+  // setSyncEngine() step. SyncEngine's markMutated/markMutatedBulk/markDeleted
+  // structurally satisfy SyncMutationSink, so no adapter is needed here.
+  configurePlatform({ syncSink: engine });
+  return engine;
 }

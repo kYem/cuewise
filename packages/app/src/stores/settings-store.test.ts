@@ -1,8 +1,8 @@
+import { configurePlatform, type SyncMutationSink } from '@cuewise/shared';
 import * as storage from '@cuewise/storage';
 import { defaultSettings } from '@cuewise/test-utils/fixtures';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useSettingsStore } from './settings-store';
-import { type SyncMutationSink, setSyncEngine } from './sync-hook';
 
 vi.mock('@cuewise/storage', () => ({
   getSettings: vi.fn(),
@@ -20,7 +20,7 @@ vi.mock('./toast-store', () => ({
   },
 }));
 
-describe('sync-hook wiring', () => {
+describe('sync sink wiring', () => {
   const markMutated = vi.fn();
   const fakeSink: SyncMutationSink = { markMutated, markDeleted: vi.fn() };
 
@@ -30,11 +30,11 @@ describe('sync-hook wiring', () => {
     markMutated.mockClear();
     vi.mocked(storage.setSettings).mockResolvedValue({ success: true });
     vi.mocked(storage.migrateStorageData).mockResolvedValue({ success: true });
-    setSyncEngine(fakeSink);
+    configurePlatform({ syncSink: fakeSink });
   });
 
   afterEach(() => {
-    setSyncEngine(null);
+    configurePlatform({ syncSink: null });
   });
 
   it('notifies markMutated for each changed, non-device-local key after updateSettings persists', async () => {

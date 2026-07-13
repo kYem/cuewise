@@ -4,7 +4,6 @@
  */
 
 import { handleReminderFire } from '@cuewise/app/reminder-notifications';
-import { setSyncEngine } from '@cuewise/app/sync-hook';
 import {
   getStorage,
   logger,
@@ -34,7 +33,6 @@ if (syncApiBaseUrl) {
     keyStore: getStorage(),
     scheduler,
   });
-  setSyncEngine(syncEngine);
   scheduler.onFire((id) => {
     if (id === SYNC_PULL_WAKE_ID) {
       syncEngine.handlePullWake();

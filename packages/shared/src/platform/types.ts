@@ -97,3 +97,14 @@ export interface KeyValueStore {
   remove(key: string, area: StorageArea): Promise<boolean>;
   getUsage(area: StorageArea): Promise<StorageUsage>;
 }
+
+/**
+ * Optional sink notified when a store mutates a synced entity. Unlike the ports above,
+ * sync is opt-in (ENG-45): the app only configures this once cloud sync is enabled.
+ */
+export interface SyncMutationSink {
+  markMutated(collection: string, entityId: string): Promise<void> | void;
+  markDeleted(collection: string, entityId: string): Promise<void> | void;
+  // Optional so callers that never bulk-notify (and the no-op no-sink path) stay safe.
+  markMutatedBulk?(collection: string, entityIds: string[]): Promise<void> | void;
+}

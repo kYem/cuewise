@@ -1,38 +1,38 @@
-import { logger } from '@cuewise/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import {
-  notifyDeleted,
-  notifyMutated,
-  notifyMutatedBulk,
-  type SyncMutationSink,
-  setSyncEngine,
-} from './sync-hook';
+import { logger } from '../logger';
+import { configurePlatform, getSyncSink } from './registry';
+import { notifyDeleted, notifyMutated, notifyMutatedBulk } from './sync-sink';
+import type { SyncMutationSink } from './types';
 
-describe('sync-hook', () => {
+describe('sync-sink', () => {
   afterEach(() => {
-    setSyncEngine(null);
+    configurePlatform({ syncSink: null });
     vi.restoreAllMocks();
   });
 
-  it('is a no-op when no engine is registered', () => {
+  it('getSyncSink returns null when no sink is configured', () => {
+    expect(getSyncSink()).toBeNull();
+  });
+
+  it('is a no-op when no sink is registered', () => {
     expect(() => notifyMutated('goals', 'goal-1')).not.toThrow();
     expect(() => notifyDeleted('goals', 'goal-1')).not.toThrow();
   });
 
-  it('calls the registered engine markMutated with the collection and entity id', () => {
+  it('calls the registered sink markMutated with the collection and entity id', () => {
     const markMutated = vi.fn();
     const fake: SyncMutationSink = { markMutated, markDeleted: vi.fn() };
-    setSyncEngine(fake);
+    configurePlatform({ syncSink: fake });
 
     notifyMutated('goals', 'goal-1');
 
     expect(markMutated).toHaveBeenCalledWith('goals', 'goal-1');
   });
 
-  it('calls the registered engine markDeleted with the collection and entity id', () => {
+  it('calls the registered sink markDeleted with the collection and entity id', () => {
     const markDeleted = vi.fn();
     const fake: SyncMutationSink = { markMutated: vi.fn(), markDeleted };
-    setSyncEngine(fake);
+    configurePlatform({ syncSink: fake });
 
     notifyDeleted('goals', 'goal-1');
 
@@ -47,7 +47,7 @@ describe('sync-hook', () => {
       },
       markDeleted: vi.fn(),
     };
-    setSyncEngine(fake);
+    configurePlatform({ syncSink: fake });
 
     expect(() => notifyMutated('goals', 'goal-1')).not.toThrow();
     expect(warnSpy).toHaveBeenCalled();
@@ -59,7 +59,7 @@ describe('sync-hook', () => {
       markMutated: () => Promise.reject(new Error('boom')),
       markDeleted: vi.fn(),
     };
-    setSyncEngine(fake);
+    configurePlatform({ syncSink: fake });
 
     expect(() => notifyMutated('goals', 'goal-1')).not.toThrow();
     // Flush the microtask queue so the rejection handler runs before asserting.
@@ -77,34 +77,35 @@ describe('sync-hook', () => {
         throw new Error('boom');
       },
     };
-    setSyncEngine(fake);
+    configurePlatform({ syncSink: fake });
 
     expect(() => notifyDeleted('goals', 'goal-1')).not.toThrow();
     expect(warnSpy).toHaveBeenCalled();
   });
 
-  it('does not call the sink after setSyncEngine(null) resets it', () => {
+  it('does not call the sink after configurePlatform({ syncSink: null }) clears it', () => {
     const markMutated = vi.fn();
-    setSyncEngine({ markMutated, markDeleted: vi.fn() });
-    setSyncEngine(null);
+    configurePlatform({ syncSink: { markMutated, markDeleted: vi.fn() } });
+    configurePlatform({ syncSink: null });
 
     notifyMutated('goals', 'goal-1');
 
     expect(markMutated).not.toHaveBeenCalled();
+    expect(getSyncSink()).toBeNull();
   });
 
-  it('notifyMutatedBulk is a no-op when no engine is registered', () => {
+  it('notifyMutatedBulk is a no-op when no sink is registered', () => {
     expect(() => notifyMutatedBulk('goals', ['goal-1', 'goal-2'])).not.toThrow();
   });
 
-  it('notifyMutatedBulk calls the registered engine markMutatedBulk with the id array', () => {
+  it('notifyMutatedBulk calls the registered sink markMutatedBulk with the id array', () => {
     const markMutatedBulk = vi.fn();
     const fake: SyncMutationSink = {
       markMutated: vi.fn(),
       markDeleted: vi.fn(),
       markMutatedBulk,
     };
-    setSyncEngine(fake);
+    configurePlatform({ syncSink: fake });
 
     notifyMutatedBulk('goals', ['goal-1', 'goal-2']);
 
@@ -120,7 +121,7 @@ describe('sync-hook', () => {
         throw new Error('boom');
       },
     };
-    setSyncEngine(fake);
+    configurePlatform({ syncSink: fake });
 
     expect(() => notifyMutatedBulk('goals', ['goal-1'])).not.toThrow();
     expect(warnSpy).toHaveBeenCalled();
@@ -133,7 +134,7 @@ describe('sync-hook', () => {
       markDeleted: vi.fn(),
       markMutatedBulk: () => Promise.reject(new Error('boom')),
     };
-    setSyncEngine(fake);
+    configurePlatform({ syncSink: fake });
 
     expect(() => notifyMutatedBulk('goals', ['goal-1'])).not.toThrow();
     await Promise.resolve();
@@ -144,7 +145,7 @@ describe('sync-hook', () => {
 
   it('notifyMutatedBulk is a no-op when the registered sink has no markMutatedBulk', () => {
     const markMutated = vi.fn();
-    setSyncEngine({ markMutated, markDeleted: vi.fn() });
+    configurePlatform({ syncSink: { markMutated, markDeleted: vi.fn() } });
 
     expect(() => notifyMutatedBulk('goals', ['goal-1'])).not.toThrow();
 

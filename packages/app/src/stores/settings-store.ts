@@ -7,11 +7,11 @@ import {
   type LayoutDensity,
   LogLevel as LoggerLevel,
   logger,
+  notifyMutated,
   type Settings,
 } from '@cuewise/shared';
 import { getSettings, migrateStorageData, setSettings } from '@cuewise/storage';
 import { create } from 'zustand';
-import { notifyMutated } from './sync-hook';
 import { useToastStore } from './toast-store';
 
 interface SettingsStore {

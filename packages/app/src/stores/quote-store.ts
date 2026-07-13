@@ -6,6 +6,9 @@ import {
   generateId,
   getRandomQuote,
   logger,
+  notifyDeleted,
+  notifyMutated,
+  notifyMutatedBulk,
   type Quote,
   type QuoteCategory,
   type QuoteCollection,
@@ -22,7 +25,6 @@ import {
 } from '@cuewise/storage';
 import { create } from 'zustand';
 import { SEED_QUOTES } from '../data/seed-quotes';
-import { notifyDeleted, notifyMutated, notifyMutatedBulk } from './sync-hook';
 import { useToastStore } from './toast-store';
 
 /** Seed quotes not present in the given list, keyed by id. */

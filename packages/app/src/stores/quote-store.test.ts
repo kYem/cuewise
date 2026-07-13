@@ -1,4 +1,10 @@
-import { ALL_QUOTE_CATEGORIES, type QuoteCollection, type Settings } from '@cuewise/shared';
+import {
+  ALL_QUOTE_CATEGORIES,
+  configurePlatform,
+  type QuoteCollection,
+  type Settings,
+  type SyncMutationSink,
+} from '@cuewise/shared';
 import * as storage from '@cuewise/storage';
 import { quoteFactory } from '@cuewise/test-utils/factories';
 import { defaultSettings } from '@cuewise/test-utils/fixtures';
@@ -19,7 +25,6 @@ import {
   expectViewCountIncremented,
 } from './__fixtures__/quote-store.fixtures';
 import { useQuoteStore } from './quote-store';
-import { type SyncMutationSink, setSyncEngine } from './sync-hook';
 
 // Mock storage functions
 vi.mock('@cuewise/storage', () => ({
@@ -738,7 +743,7 @@ describe('Quote Store', () => {
   });
 });
 
-describe('sync-hook wiring', () => {
+describe('sync sink wiring', () => {
   const markMutated = vi.fn();
   const markDeleted = vi.fn();
   const markMutatedBulk = vi.fn();
@@ -750,11 +755,11 @@ describe('sync-hook wiring', () => {
     markMutated.mockClear();
     markDeleted.mockClear();
     markMutatedBulk.mockClear();
-    setSyncEngine(fakeSink);
+    configurePlatform({ syncSink: fakeSink });
   });
 
   afterEach(() => {
-    setSyncEngine(null);
+    configurePlatform({ syncSink: null });
   });
 
   it('notifies markMutated with the new custom quote id after addCustomQuote persists', async () => {

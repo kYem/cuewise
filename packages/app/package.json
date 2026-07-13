@@ -8,7 +8,6 @@
   "exports": {
     ".": "./src/index.ts",
     "./reminder-notifications": "./src/services/reminder-notifications.ts",
-    "./sync-hook": "./src/stores/sync-hook.ts",
     "./styles.css": "./src/index.css"
   },
   "scripts": {
