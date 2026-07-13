@@ -345,4 +345,43 @@ describe('SyncSettingsSectionComponent', () => {
 
     expect(screen.getByLabelText('Device name')).toHaveValue('This device');
   });
+
+  it('shows a toast error when controller.regenerateRecoveryCode() rejects', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.failNext('regenerateRecoveryCode');
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+
+    await user.click(screen.getByRole('button', { name: 'Regenerate recovery code' }));
+
+    await waitFor(() => expect(toastError).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText('Save your recovery code')).not.toBeInTheDocument();
+  });
+
+  it('shows a toast error when controller.syncNow() rejects', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.failNext('syncNow');
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+
+    await user.click(screen.getByRole('button', { name: 'Sync now' }));
+
+    await waitFor(() => expect(toastError).toHaveBeenCalledTimes(1));
+  });
+
+  it('shows a toast error and closes the confirm dialog when controller.disable() rejects', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.failNext('disable');
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+
+    await user.click(cloudSyncSwitch());
+    await user.click(screen.getByRole('button', { name: 'Disable' }));
+
+    await waitFor(() => expect(toastError).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText(DISABLE_MESSAGE)).not.toBeInTheDocument();
+  });
 });

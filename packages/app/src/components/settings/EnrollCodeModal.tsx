@@ -44,15 +44,16 @@ export const EnrollCodeModal: React.FC<EnrollCodeModalProps> = ({ isOpen, onSubm
   const handleSubmit = async () => {
     setIsSubmitting(true);
     setErrorMessage(null);
-    const result = await onSubmit(code);
-    setIsSubmitting(false);
-
-    if (result.ok) {
-      onClose();
-      return;
+    try {
+      const result = await onSubmit(code);
+      if (result.ok) {
+        onClose();
+        return;
+      }
+      setErrorMessage(messageFor(result));
+    } finally {
+      setIsSubmitting(false);
     }
-
-    setErrorMessage(messageFor(result));
   };
 
   return (

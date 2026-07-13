@@ -117,7 +117,14 @@ if (syncApiBaseUrl) {
       .catch((error) => {
         // Always close the message port, even on an unexpected handler rejection.
         logger.error('Sync control handler failed', error);
-        sendResponse({ ok: false, reason: 'error' });
+        try {
+          sendResponse({ ok: false, reason: 'error' });
+        } catch (sendError) {
+          // The requesting page's port may already be torn down — expected, not an error.
+          logger.debug('Sync control sendResponse failed on a torn-down port', {
+            error: sendError,
+          });
+        }
       });
     return true;
   });

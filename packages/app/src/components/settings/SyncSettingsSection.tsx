@@ -137,11 +137,18 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   };
 
   // Reconnect-after-needs-code reuses the persisted creds; a brand-new enable uses the form inputs.
+  // Never rejects — EnrollCodeModal awaits this and relies on a resolved EnableResult to clear its spinner.
   const handleEnrollSubmit = async (code: string): Promise<EnableResult> => {
-    const result =
-      enrollSource === 'reconnect'
-        ? await controller.reconnect(code)
-        : await controller.enable(accountId, deviceName, code);
+    let result: EnableResult;
+    try {
+      result =
+        enrollSource === 'reconnect'
+          ? await controller.reconnect(code)
+          : await controller.enable(accountId, deviceName, code);
+    } catch (error) {
+      logger.error('Enroll submit failed', error);
+      return { ok: false, reason: 'error' };
+    }
     if (result.ok) {
       setEnabling(false);
       if (result.recoveryCode) {

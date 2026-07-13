@@ -5,6 +5,8 @@ interface RecordedCall {
   args: unknown[];
 }
 
+type FailableMethod = 'enable' | 'reconnect' | 'disable' | 'regenerateRecoveryCode' | 'syncNow';
+
 const DEFAULT_ENABLE_RESULT: EnableResult = { ok: true };
 const DEFAULT_RECOVERY_CODE = 'FAKE-RECOVERY-CODE';
 
@@ -16,6 +18,19 @@ export class FakeSyncController implements SyncController {
   private readonly subscribers = new Set<(status: SyncUiStatus) => void>();
   private readonly enableResults: EnableResult[] = [];
   private readonly reconnectResults: EnableResult[] = [];
+  private readonly failingMethods = new Set<FailableMethod>();
+
+  /** Makes the next call to `method` reject with an Error instead of resolving; clears after firing once. */
+  failNext(method: FailableMethod): void {
+    this.failingMethods.add(method);
+  }
+
+  /** Records the call, then throws if `method` was armed via failNext (clearing the arm). */
+  private maybeFail(method: FailableMethod): void {
+    if (this.failingMethods.delete(method)) {
+      throw new Error(`FakeSyncController: ${method} failed`);
+    }
+  }
 
   getStatus(): SyncUiStatus {
     return this.status;
@@ -52,6 +67,7 @@ export class FakeSyncController implements SyncController {
     recoveryCode?: string
   ): Promise<EnableResult> {
     this.calls.push({ method: 'enable', args: [accountId, deviceName, recoveryCode] });
+    this.maybeFail('enable');
     const next = this.enableResults.shift();
     if (next !== undefined) {
       return next;
@@ -61,6 +77,7 @@ export class FakeSyncController implements SyncController {
 
   async reconnect(recoveryCode?: string): Promise<EnableResult> {
     this.calls.push({ method: 'reconnect', args: [recoveryCode] });
+    this.maybeFail('reconnect');
     const next = this.reconnectResults.shift();
     if (next !== undefined) {
       return next;
@@ -70,14 +87,17 @@ export class FakeSyncController implements SyncController {
 
   async disable(): Promise<void> {
     this.calls.push({ method: 'disable', args: [] });
+    this.maybeFail('disable');
   }
 
   async regenerateRecoveryCode(): Promise<string> {
     this.calls.push({ method: 'regenerateRecoveryCode', args: [] });
+    this.maybeFail('regenerateRecoveryCode');
     return DEFAULT_RECOVERY_CODE;
   }
 
   async syncNow(): Promise<void> {
     this.calls.push({ method: 'syncNow', args: [] });
+    this.maybeFail('syncNow');
   }
 }
