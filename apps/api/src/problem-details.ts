@@ -9,6 +9,7 @@ const PROBLEM_DEFS = {
   invalid_cursor: { status: 400, title: 'Invalid cursor' },
   invalid_request: { status: 400, title: 'Malformed request' },
   invalid_key_envelope: { status: 400, title: 'Invalid key envelope' },
+  key_envelope_exists: { status: 409, title: 'Key envelope already exists' },
   not_found: { status: 404, title: 'Not found' },
   internal: { status: 500, title: 'Internal error' },
 } as const;

@@ -153,4 +153,38 @@ describe('/v1/keys/recovery', () => {
     const bBody = await bRes.json<{ envelope: string }>();
     expect(bBody.envelope).toBe('v1.dk-1.b-only');
   });
+
+  it('PUT with ifAbsent:true creates the envelope on first call', async () => {
+    const { token } = await signedInToken();
+    const res = await putRecovery(app, token, { envelope: 'v1.dk-1.first', ifAbsent: true });
+    expect(res.status).toBe(204);
+
+    const getRes = await getRecovery(app, token);
+    const body = await getRes.json<{ envelope: string }>();
+    expect(body.envelope).toBe('v1.dk-1.first');
+  });
+
+  it('PUT with ifAbsent:true on an existing envelope returns 409 and does not overwrite', async () => {
+    const { token } = await signedInToken();
+    await putRecovery(app, token, { envelope: 'v1.dk-1.first', ifAbsent: true });
+
+    const res = await putRecovery(app, token, { envelope: 'v1.dk-1.other.blob', ifAbsent: true });
+    expect(res.status).toBe(409);
+    expect(res.headers.get('Content-Type')).toBe('application/problem+json');
+    const body = await res.json<{ code: string }>();
+    expect(body.code).toBe('key_envelope_exists');
+
+    const getRes = await getRecovery(app, token);
+    const getBody = await getRes.json<{ envelope: string }>();
+    expect(getBody.envelope).toBe('v1.dk-1.first');
+  });
+
+  it('two different users can each ifAbsent:true-create their own envelope', async () => {
+    const a = await signedInToken();
+    const b = await signedInToken();
+    const aRes = await putRecovery(app, a.token, { envelope: 'v1.dk-1.a-only', ifAbsent: true });
+    const bRes = await putRecovery(app, b.token, { envelope: 'v1.dk-1.b-only', ifAbsent: true });
+    expect(aRes.status).toBe(204);
+    expect(bRes.status).toBe(204);
+  });
 });

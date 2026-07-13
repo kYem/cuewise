@@ -31,6 +31,7 @@ export function registerKeysRoutes(
       return problem('invalid_key_envelope');
     }
     const envelope = (raw as { envelope?: unknown }).envelope;
+    const ifAbsent = (raw as { ifAbsent?: unknown }).ifAbsent === true;
     const issues: ValidationIssue[] = [];
     requireNonEmptyString(envelope, '/envelope', issues, { maxLength: MAX_ENVELOPE_BYTES });
     // The typeof re-check only narrows for TS; requireNonEmptyString owns the actual rule.
@@ -38,6 +39,13 @@ export function registerKeysRoutes(
       return problem('invalid_key_envelope', { errors: issues });
     }
     const store = deps.storeFactory(c.env.DB);
+    if (ifAbsent) {
+      const created = await store.putKeyEnvelopeIfAbsent(c.get('userId'), 'recovery', envelope);
+      if (!created) {
+        return problem('key_envelope_exists');
+      }
+      return c.body(null, 204);
+    }
     await store.putKeyEnvelope(c.get('userId'), 'recovery', envelope);
     return c.body(null, 204);
   });

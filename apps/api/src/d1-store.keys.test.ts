@@ -45,4 +45,33 @@ describe('D1SyncStore key envelopes', () => {
     // A fresh identical identity gets a NEW user id; the old id must have nothing.
     await expect(store.getKeyEnvelope(userId, 'recovery')).resolves.toBeNull();
   });
+
+  it('putKeyEnvelopeIfAbsent creates the row and returns true when none existed', async () => {
+    const store = new D1SyncStore(env.DB);
+    const userId = await newUser(store, 'k6');
+    await expect(store.putKeyEnvelopeIfAbsent(userId, 'recovery', 'v1.dk-1.first')).resolves.toBe(
+      true
+    );
+    const got = await store.getKeyEnvelope(userId, 'recovery');
+    expect(got?.envelope).toBe('v1.dk-1.first');
+  });
+
+  it('putKeyEnvelopeIfAbsent returns false and leaves the existing row untouched', async () => {
+    const store = new D1SyncStore(env.DB);
+    const userId = await newUser(store, 'k7');
+    await store.putKeyEnvelopeIfAbsent(userId, 'recovery', 'v1.dk-1.first');
+    await expect(store.putKeyEnvelopeIfAbsent(userId, 'recovery', 'v1.dk-1.second')).resolves.toBe(
+      false
+    );
+    const got = await store.getKeyEnvelope(userId, 'recovery');
+    expect(got?.envelope).toBe('v1.dk-1.first');
+  });
+
+  it('putKeyEnvelopeIfAbsent is isolated per user', async () => {
+    const store = new D1SyncStore(env.DB);
+    const a = await newUser(store, 'k8a');
+    const b = await newUser(store, 'k8b');
+    await expect(store.putKeyEnvelopeIfAbsent(a, 'recovery', 'v1.dk-1.a-only')).resolves.toBe(true);
+    await expect(store.putKeyEnvelopeIfAbsent(b, 'recovery', 'v1.dk-1.b-only')).resolves.toBe(true);
+  });
 });

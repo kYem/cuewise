@@ -49,6 +49,9 @@ export interface SyncStore {
   // E2E key envelopes: opaque client-wrapped blobs the server can never read.
   getKeyEnvelope(userId: string, kind: string): Promise<KeyEnvelopeRecord | null>;
   putKeyEnvelope(userId: string, kind: string, envelope: string): Promise<void>;
+  // Create-only: inserts iff no (userId, kind) row exists yet. Returns false (no-op) when one
+  // already does — the caller maps that to a 409, closing the "two devices both generate a key" race.
+  putKeyEnvelopeIfAbsent(userId: string, kind: string, envelope: string): Promise<boolean>;
   // Returns null only when the token row was physically deleted mid-request (concurrent account
   // deletion); revocation leaves the row and is already caught upstream by lookupSession.
   bumpRateWindow(

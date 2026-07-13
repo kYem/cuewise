@@ -333,6 +333,17 @@ export class D1SyncStore implements SyncStore {
       .run();
   }
 
+  async putKeyEnvelopeIfAbsent(userId: string, kind: string, envelope: string): Promise<boolean> {
+    const result = await this.db
+      .prepare(
+        `INSERT INTO key_envelopes (user_id, kind, envelope, updated_at) VALUES (?, ?, ?, ?)
+         ON CONFLICT (user_id, kind) DO NOTHING`
+      )
+      .bind(userId, kind, envelope, this.now())
+      .run();
+    return (result.meta.changes ?? 0) > 0;
+  }
+
   // Single UPDATE...RETURNING with CASE keeps the reset-or-increment atomic within D1's
   // implicit per-statement transaction (select-then-update would race under concurrent hits).
   async bumpRateWindow(
