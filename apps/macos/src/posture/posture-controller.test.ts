@@ -757,7 +757,7 @@ describe('nudge sensitivity', () => {
     initPosture();
     await flushChain();
 
-    // Restore must run before the auto-start, or the sidecar gets the default.
+    // The boot auto-start must send the restored preset, not the default.
     expect(getPostureState().tracking).toBe(true);
     expect(countInvokes('set_posture_sensitivity')).toBe(1);
     expect(invokeMock).toHaveBeenLastCalledWith('set_posture_sensitivity', { preset: 'strict' });
@@ -847,6 +847,21 @@ describe('quiet hours', () => {
     setQuietHours({ enabled: true, start: hhmmFromNow(60), end: hhmmFromNow(120) });
 
     await glowUp();
+  });
+
+  it('resets — not freezes — a lean built up before the window started', async () => {
+    await startTracking();
+    setQuietHours({ enabled: true, start: hhmmFromNow(2), end: hhmmFromNow(60) });
+    emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES - 1);
+    expect(countInvokes('show_glow')).toBe(0);
+
+    vi.setSystemTime(Date.now() + 3 * 60_000);
+    emitPoorFrames(1); // suppressed — and it must zero the pre-window streak
+
+    vi.setSystemTime(Date.now() + 60 * 60_000);
+    emitPoorFrames(1);
+    // A frozen streak would fire here on the first post-window frame.
+    expect(countInvokes('show_glow')).toBe(0);
   });
 
   it('resumes nudging once the window ends, needing a fresh streak', async () => {

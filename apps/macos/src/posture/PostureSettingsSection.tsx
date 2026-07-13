@@ -8,7 +8,7 @@ import {
 } from '@cuewise/app';
 import { Button, cn } from '@cuewise/ui';
 import { PersonStanding } from 'lucide-react';
-import { useEffect } from 'react';
+import { useEffect, useReducer } from 'react';
 import type { GlowIntensity, GlowStyle } from '../glow/glow-prefs';
 import {
   calibratePosture,
@@ -85,6 +85,21 @@ function PostureSection({ filter }: SettingsSectionProps) {
   useEffect(() => {
     return () => {
       stopGlowPreview();
+    };
+  }, []);
+
+  // The window hides rather than closes, which fires no blur — re-render on
+  // re-show so a time field cleared mid-edit re-syncs to the enforced window.
+  const [, bumpVisibilityEpoch] = useReducer((epoch: number) => epoch + 1, 0);
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        bumpVisibilityEpoch();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
     };
   }, []);
 
