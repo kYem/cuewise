@@ -1,3 +1,6 @@
+// Re-exported so hosts (macOS/extension DirectSyncController) can match enableSync's thrown-error
+// contract without taking a direct @cuewise/crypto dependency of their own.
+export { RecoveryCodeError, type RecoveryCodeErrorKind } from '@cuewise/crypto';
 export {
   type CollectionBinding,
   DEVICE_LOCAL_SETTINGS_KEYS,

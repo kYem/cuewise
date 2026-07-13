@@ -1,16 +1,17 @@
-import { PomodoroPipProvider } from '@cuewise/app';
+import type { SyncController } from '@cuewise/app';
+import { PomodoroPipProvider, useToastStore } from '@cuewise/app';
 import { handleReminderFire } from '@cuewise/app/reminder-notifications';
 import '@cuewise/app/styles.css';
 import { configurePlatform, logger } from '@cuewise/shared';
 import { LocalStorageKeyValueStore } from '@cuewise/storage';
 import { SYNC_PULL_WAKE_ID } from '@cuewise/sync-client';
-import { createSyncEngine } from '@cuewise/sync-engine';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { AppWrapper } from './AppWrapper';
 import { GlowOverlay } from './glow/GlowOverlay';
 import { NoopScheduler, TauriNotifier, TauriScheduler, WebNotifier } from './platform';
 import { initPosture } from './posture/posture-controller';
+import { createDirectSyncController } from './sync/direct-sync-controller';
 import { TrayStatusBridge } from './tray/TrayStatusBridge';
 
 const rootElement = document.getElementById('root');
@@ -46,16 +47,21 @@ if (window.location.hash === '#glow') {
   // mirrors the extension's service worker. No-op under NoopScheduler.
   scheduler.onFire(handleReminderFire);
 
-  // ENG-45 cloud sync: off by default — no enable-sync UI ships yet. Set
-  // VITE_SYNC_API_BASE_URL locally (pointed at `wrangler dev`, e.g. localhost:8787) to
+  // ENG-45 cloud sync: off by default. Set VITE_SYNC_API_BASE_URL locally (pointed at
+  // `wrangler dev`, e.g. localhost:8787) to enable the Cloud Sync settings section and
   // resume/self-heal a session that was enabled some other way (e.g. devtools).
   const syncApiBaseUrl = import.meta.env.VITE_SYNC_API_BASE_URL;
+  let syncController: SyncController | null = null;
   if (syncApiBaseUrl) {
-    const syncEngine = createSyncEngine({
+    // E4: construct the controller WITH the engine — DirectSyncController wires its own
+    // trampoline callbacks into createSyncEngine, so it (not main.tsx) owns onStatus/etc.
+    const { controller, engine: syncEngine } = createDirectSyncController({
       baseUrl: syncApiBaseUrl,
       keyStore: storage,
       scheduler,
+      toast: (message) => useToastStore.getState().warning(message),
     });
+    syncController = controller;
     scheduler.onFire((id) => {
       if (id === SYNC_PULL_WAKE_ID) {
         syncEngine.handlePullWake();
@@ -75,7 +81,7 @@ if (window.location.hash === '#glow') {
     <React.StrictMode>
       <PomodoroPipProvider>
         {inTauri ? <TrayStatusBridge /> : null}
-        <AppWrapper />
+        <AppWrapper syncController={syncController} />
       </PomodoroPipProvider>
     </React.StrictMode>
   );
