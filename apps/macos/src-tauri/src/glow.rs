@@ -88,7 +88,9 @@ pub fn show_glow(app: AppHandle) -> Result<GlowShown, Error> {
         if fresh {
             if let Some(e) = geometry_error {
                 // A fresh window with failed geometry would show as a stray
-                // default-size rectangle; a reused one keeps full-screen bounds.
+                // default-size rectangle; destroy it so the next show rebuilds
+                // clean instead of reusing a window that never got real bounds.
+                let _ = window.destroy();
                 first_error.get_or_insert(e.into());
                 continue;
             }

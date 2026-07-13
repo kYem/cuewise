@@ -58,6 +58,8 @@ describe('glow overlay transparency prerequisites', () => {
 
   it('keeps the tauri macos-private-api cargo feature', () => {
     const cargoToml = readFileSync(path.join(__dirname, 'Cargo.toml'), 'utf-8');
-    expect(cargoToml).toContain('macos-private-api');
+    // Match the feature inside the tauri dependency's features array — a bare
+    // substring check would stay green on the explanatory comment alone.
+    expect(cargoToml).toMatch(/tauri\s*=\s*\{[^}]*"macos-private-api"/);
   });
 });

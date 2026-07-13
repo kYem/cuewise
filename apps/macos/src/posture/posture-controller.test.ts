@@ -393,6 +393,11 @@ describe('snooze and pause', () => {
     expect(countInvokes('show_glow')).toBe(0);
     expect(getPostureState().nudgesPausedUntil).toBe(Date.now() + 10 * 60_000);
     expect(localStorageStub.getItem(NUDGES_PAUSED_KEY)).toBe(String(Date.now() + 10 * 60_000));
+
+    resumePostureNudges();
+    emitPoorFrames(1);
+    // A frozen streak would fire here (14 pre-pause + 1) — reset must not.
+    expect(countInvokes('show_glow')).toBe(0);
   });
 
   it('the glow re-arms after the snooze window expires', async () => {
