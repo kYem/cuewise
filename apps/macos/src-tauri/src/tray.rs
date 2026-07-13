@@ -3,17 +3,20 @@
 //! actions) here. Action clicks relay back as `tray://action` events (`lib.rs`).
 
 use serde::Deserialize;
-use tauri::menu::{MenuBuilder, MenuItem};
+use tauri::menu::{MenuBuilder, MenuItem, SubmenuBuilder};
 use tauri::AppHandle;
 
 /// Tray icon id, so the commands can look the icon up to update it.
 pub const TRAY_ID: &str = "cuewise-tray";
 
 /// An enabled menu item whose `id` the webview handles via `tray://action`.
+/// With `children`, it renders as a submenu instead (the children carry the ids).
 #[derive(Deserialize)]
 pub struct TrayAction {
     id: String,
     label: String,
+    #[serde(default)]
+    children: Vec<TrayAction>,
 }
 
 /// Set the menu-bar text next to the tray icon (live status text). `None` clears it.
@@ -45,8 +48,17 @@ pub fn set_tray_menu(
         builder = builder.separator();
     }
     for action in &actions {
-        let item = MenuItem::with_id(&app, &action.id, &action.label, true, None::<&str>)?;
-        builder = builder.item(&item);
+        if action.children.is_empty() {
+            let item = MenuItem::with_id(&app, &action.id, &action.label, true, None::<&str>)?;
+            builder = builder.item(&item);
+        } else {
+            let mut submenu = SubmenuBuilder::new(&app, &action.label);
+            for child in &action.children {
+                let item = MenuItem::with_id(&app, &child.id, &child.label, true, None::<&str>)?;
+                submenu = submenu.item(&item);
+            }
+            builder = builder.item(&submenu.build()?);
+        }
     }
     if !actions.is_empty() {
         builder = builder.separator();
@@ -65,4 +77,23 @@ pub fn set_tray_menu(
 
     tray.set_menu(Some(menu))?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tray_action_children_default_to_empty() {
+        let action: TrayAction = serde_json::from_str(r#"{"id":"a","label":"A"}"#).expect("parse");
+        assert!(action.children.is_empty());
+    }
+
+    #[test]
+    fn tray_action_parses_nested_children() {
+        let json = r#"{"id":"menu","label":"Menu","children":[{"id":"child","label":"Child"}]}"#;
+        let action: TrayAction = serde_json::from_str(json).expect("parse");
+        assert_eq!(action.children.len(), 1);
+        assert_eq!(action.children[0].id, "child");
+    }
 }

@@ -19,6 +19,8 @@ import {
   describePauseEnd,
   pausePostureNudges,
   resumePostureNudges,
+  setPostureNudges,
+  startPosture,
   usePosture,
 } from '../posture/posture-controller';
 
@@ -29,7 +31,7 @@ import {
  * into the Pomodoro store / posture controller. Mounted from main.tsx under Tauri.
  */
 
-type TrayAction = { id: string; label: string };
+type TrayAction = { id: string; label: string; children?: TrayAction[] };
 
 const SESSION_EMOJI: Record<SessionType, string> = {
   work: '🍅',
@@ -129,6 +131,15 @@ export function TrayStatusBridge(): null {
         case 'posture-resume-nudges':
           resumePostureNudges();
           break;
+        case 'posture-nudges-off':
+          setPostureNudges(false);
+          break;
+        case 'posture-nudges-on':
+          setPostureNudges(true);
+          break;
+        case 'posture-track-on':
+          startPosture();
+          break;
         default:
           break;
       }
@@ -208,17 +219,26 @@ export function TrayStatusBridge(): null {
         info = [...info, glowWarningLine];
       }
       // Nudge escape hatches must be reachable without opening the app (ENG-40).
-      if (postureControlsEnabled) {
-        if (pausedUntil !== null) {
-          actions = [...actions, { id: 'posture-resume-nudges', label: 'Resume posture nudges' }];
-        } else {
-          actions = [
-            ...actions,
-            { id: 'posture-snooze', label: 'Snooze posture nudges · 10 min' },
-            { id: 'posture-pause-1h', label: 'Pause posture nudges · 1 hour' },
-            { id: 'posture-pause', label: 'Pause posture nudges · until I resume' },
-          ];
-        }
+      if (!posture.tracking) {
+        actions = [...actions, { id: 'posture-track-on', label: 'Enable posture tracking' }];
+      } else if (!posture.nudgesEnabled) {
+        actions = [...actions, { id: 'posture-nudges-on', label: 'Turn on posture nudges' }];
+      } else if (pausedUntil !== null) {
+        actions = [...actions, { id: 'posture-resume-nudges', label: 'Resume posture nudges' }];
+      } else {
+        actions = [
+          ...actions,
+          {
+            id: 'posture-pause-menu',
+            label: 'Pause posture nudges',
+            children: [
+              { id: 'posture-snooze', label: 'Snooze · 10 minutes' },
+              { id: 'posture-pause-1h', label: '1 hour' },
+              { id: 'posture-pause', label: 'Until I resume' },
+              { id: 'posture-nudges-off', label: 'Turn off nudges' },
+            ],
+          },
+        ];
       }
       await invoke('set_tray_menu', { info, actions });
     };
@@ -235,6 +255,8 @@ export function TrayStatusBridge(): null {
     pausedLine,
     pausedUntil,
     postureControlsEnabled,
+    posture.tracking,
+    posture.nudgesEnabled,
     glowWarningLine,
   ]);
 
