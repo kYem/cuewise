@@ -25,6 +25,8 @@ import {
   pausePostureNudges,
   resumePostureNudges,
   STEADY_SAMPLES,
+  setGlowIntensity,
+  setNudgeDelay,
   setPostureNudges,
   startPosture,
   stopPosture,
@@ -510,6 +512,88 @@ describe('snooze and pause', () => {
 
     expect(getPostureState().nudgesPausedUntil).toBeNull();
     expect(localStorageStub.getItem(NUDGES_PAUSED_KEY)).toBeNull();
+  });
+});
+
+describe('configurable nudge delay', () => {
+  afterEach(() => {
+    setNudgeDelay(30);
+  });
+
+  it('a strict delay glows after ~15s of poor posture', async () => {
+    await startTracking();
+    setNudgeDelay(15);
+
+    emitPoorFrames(7); // one frame short at the 2s cadence
+    expect(countInvokes('show_glow')).toBe(0);
+
+    emitPoorFrames(1);
+    expect(countInvokes('show_glow')).toBe(1);
+  });
+
+  it('a gentle delay needs ~60s of poor posture', async () => {
+    await startTracking();
+    setNudgeDelay(60);
+
+    emitPoorFrames(29);
+    expect(countInvokes('show_glow')).toBe(0);
+
+    emitPoorFrames(1);
+    expect(countInvokes('show_glow')).toBe(1);
+  });
+
+  it('changing the delay restarts the count instead of firing instantly', async () => {
+    await startTracking();
+    emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES - 1); // one short of the default
+
+    setNudgeDelay(15); // shorter threshold than the accumulated streak
+    emitPoorFrames(7);
+    expect(countInvokes('show_glow')).toBe(0);
+
+    emitPoorFrames(1);
+    expect(countInvokes('show_glow')).toBe(1);
+  });
+
+  it('persists and restores across a relaunch, discarding garbage', async () => {
+    setNudgeDelay(60);
+    expect(localStorageStub.getItem('cuewise.posture.nudgeDelaySeconds')).toBe('60');
+
+    localStorageStub.setItem(ENABLED_KEY, '1');
+    initPosture();
+    await flushChain();
+    expect(getPostureState().nudgeDelaySeconds).toBe(60);
+
+    stopPosture();
+    localStorageStub.setItem('cuewise.posture.nudgeDelaySeconds', '45'); // not a preset
+    initPosture();
+    await flushChain();
+    expect(getPostureState().nudgeDelaySeconds).toBe(30);
+    expect(localStorageStub.getItem('cuewise.posture.nudgeDelaySeconds')).toBeNull();
+  });
+});
+
+describe('glow intensity preference', () => {
+  afterEach(() => {
+    setGlowIntensity('standard');
+  });
+
+  it('persists the choice for the glow windows to read', () => {
+    setGlowIntensity('subtle');
+
+    expect(getPostureState().glowIntensity).toBe('subtle');
+    expect(localStorageStub.getItem('cuewise.posture.glowIntensity')).toBe('subtle');
+  });
+
+  it('restores on init and discards garbage', async () => {
+    localStorageStub.setItem('cuewise.posture.glowIntensity', 'subtle');
+    initPosture();
+    await flushChain();
+    expect(getPostureState().glowIntensity).toBe('subtle');
+
+    localStorageStub.setItem('cuewise.posture.glowIntensity', 'blinding');
+    initPosture();
+    await flushChain();
+    expect(getPostureState().glowIntensity).toBe('standard');
   });
 });
 

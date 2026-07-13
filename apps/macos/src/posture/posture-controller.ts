@@ -3,6 +3,7 @@ import { logger, type PostureSample, type PostureStatus } from '@cuewise/shared'
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { useSyncExternalStore } from 'react';
+import { GLOW_INTENSITY_KEY, type GlowIntensity, readGlowIntensity } from '../glow/glow-prefs';
 import { isCommandError } from '../platform/command-error';
 
 // Module-level posture state. Tracking outlives the Settings section (which only
@@ -12,6 +13,9 @@ import { isCommandError } from '../platform/command-error';
 
 /** A nudge pause: an epoch-ms deadline, or open-ended until the user resumes. */
 export type NudgePause = number | 'until-resume';
+
+/** How long poor posture must persist before the glow shows (Settings presets). */
+export type NudgeDelaySeconds = 15 | 30 | 60;
 
 export interface PostureState {
   tracking: boolean;
@@ -28,6 +32,8 @@ export interface PostureState {
   // surface, since the warn toast renders in the often-hidden webview.
   glowUndeliverable: boolean;
   nudgesPausedUntil: NudgePause | null;
+  nudgeDelaySeconds: NudgeDelaySeconds;
+  glowIntensity: GlowIntensity;
 }
 
 let state: PostureState = {
@@ -39,6 +45,8 @@ let state: PostureState = {
   glowActive: false,
   glowUndeliverable: false,
   nudgesPausedUntil: null,
+  nudgeDelaySeconds: 30,
+  glowIntensity: 'standard',
 };
 const subscribers = new Set<() => void>();
 let unlisteners: UnlistenFn[] = [];
@@ -64,9 +72,15 @@ const KNOWN_STATUSES = Object.keys({
   absent: 0,
 } satisfies Record<PostureStatus, 0>) as PostureStatus[];
 
-// Glow threshold; no cooldown — the glow persists until recovery instead.
-// Exported so tests exercise the real threshold instead of mirroring it.
-export const NUDGE_AFTER_POOR_SAMPLES = 15; // ~30s at the sidecar's 2s cadence
+const SAMPLE_INTERVAL_SECONDS = 2; // the sidecar's cadence
+// Default glow threshold (the 30s preset); no cooldown — the glow persists until
+// recovery instead. Exported so tests exercise the real default.
+export const NUDGE_AFTER_POOR_SAMPLES = 30 / SAMPLE_INTERVAL_SECONDS;
+
+// The user-selected delay, as a sample count for the streak comparison.
+function nudgeThresholdSamples(): number {
+  return Math.max(1, Math.round(state.nudgeDelaySeconds / SAMPLE_INTERVAL_SECONDS));
+}
 let poorStreak = 0;
 // Consecutive non-poor frames; the glow clears once this holds, so one jitter
 // frame can't drop it (any non-poor status counts — oscillation still clears).
@@ -88,6 +102,7 @@ let pendingCount = 0;
 const ENABLED_KEY = 'cuewise.posture.enabled';
 const NUDGES_KEY = 'cuewise.posture.nudges';
 const NUDGES_PAUSED_KEY = 'cuewise.posture.nudgesPausedUntil';
+const NUDGE_DELAY_KEY = 'cuewise.posture.nudgeDelaySeconds';
 
 // A poisoned Rust mutex is an internal bug (a prior panic), not the ordinary
 // camera/permission failure the callers already toast about — flag it distinctly
@@ -323,11 +338,28 @@ export function initPosture(): void {
       setState({ nudgesEnabled: nudges === '1' });
     }
     restorePausedUntil();
+    restoreNudgeDelay();
+    setState({ glowIntensity: readGlowIntensity() });
     if (localStorage.getItem(ENABLED_KEY) === '1') {
       startPosture();
     }
   } catch (error) {
     logger.error('Failed to restore posture preferences', error);
+  }
+}
+
+// Only the known presets restore; anything else is discarded back to the default.
+function restoreNudgeDelay(): void {
+  const persisted = localStorage.getItem(NUDGE_DELAY_KEY);
+  if (persisted === null) {
+    return;
+  }
+  const seconds = Number(persisted);
+  if (seconds === 15 || seconds === 30 || seconds === 60) {
+    setState({ nudgeDelaySeconds: seconds });
+  } else {
+    writeLocal(NUDGE_DELAY_KEY, null, 'Failed to discard the nudge delay');
+    setState({ nudgeDelaySeconds: 30 });
   }
 }
 
@@ -489,10 +521,24 @@ function updateNudgeGlow(sample: PostureSample): void {
     return;
   }
   poorStreak += 1;
-  if (poorStreak >= NUDGE_AFTER_POOR_SAMPLES) {
+  if (poorStreak >= nudgeThresholdSamples()) {
     poorStreak = 0;
     showGlow();
   }
+}
+
+/** Set how long poor posture must persist before the glow shows. */
+export function setNudgeDelay(seconds: NudgeDelaySeconds): void {
+  writeLocal(NUDGE_DELAY_KEY, String(seconds), 'Failed to persist the nudge delay');
+  // Restart the count: shortening the delay must never fire off an old streak.
+  poorStreak = 0;
+  setState({ nudgeDelaySeconds: seconds });
+}
+
+/** Set the glow strength; the glow windows read it from localStorage on show. */
+export function setGlowIntensity(intensity: GlowIntensity): void {
+  writeLocal(GLOW_INTENSITY_KEY, intensity, 'Failed to persist the glow intensity');
+  setState({ glowIntensity: intensity });
 }
 
 /** Human copy for a pause's end, shared by the tray menu and Settings. */

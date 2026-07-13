@@ -8,6 +8,7 @@ export { PomodoroPipProvider } from './components/PomodoroPipProvider';
 // Settings-section kit for hosts that inject a platform-specific section into the
 // shared Settings modal (e.g. the macOS "Posture" section).
 export {
+  Segmented,
   SettingDivider,
   SettingRow,
   SettingSubgroup,
