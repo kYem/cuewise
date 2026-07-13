@@ -12,6 +12,7 @@ export {
   Switch,
 } from './SettingControls';
 export { SECTION_IDS, SETTINGS_SECTIONS, type SettingsSection } from './SettingsSections';
+export { SyncSettingsSectionComponent, syncSettingsSection } from './SyncSettingsSection';
 export {
   POMODORO_KEYS,
   planSettingsSideEffects,
