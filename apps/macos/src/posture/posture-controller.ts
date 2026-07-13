@@ -573,6 +573,11 @@ export function stopGlowPreview(): void {
   }
   invoke('hide_glow').catch((error) => {
     logCommandFailure('Failed to hide the glow preview', error);
+    // Same no-retry situation as a teardown hide — say so rather than strand a
+    // stuck vignette behind a button that now reads "Preview".
+    useToastStore
+      .getState()
+      .error("Couldn't clear the posture glow — restart Cuewise if it lingers.");
   });
 }
 

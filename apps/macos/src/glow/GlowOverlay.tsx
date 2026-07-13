@@ -17,8 +17,8 @@ export function GlowOverlay(): React.JSX.Element {
         setEpoch((current) => current + 1);
       }
     };
-    // The main window writing the intensity pref fires `storage` here (same
-    // origin), so an on-screen preview restyles live as Settings changes it.
+    // Same-origin webviews may fire `storage` on the pref write — a visible
+    // preview then restyles live; otherwise the next show picks it up at mount.
     const onStorage = (event: StorageEvent) => {
       if (event.key === GLOW_INTENSITY_KEY) {
         setEpoch((current) => current + 1);

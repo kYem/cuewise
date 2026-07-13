@@ -115,7 +115,7 @@ function PostureSection({ filter }: SettingsSectionProps) {
       {nudgesEnabled ? (
         <SettingRow
           label="Glow strength"
-          help="How present the screen-edge glow feels. Preview shows it now — it updates live as you switch, and stops when you leave Settings."
+          help="How present the screen-edge glow feels. Preview shows it now and stops when you leave Settings."
           keywords="posture glow intensity strength subtle standard brightness preview test"
           filter={filter}
         >
