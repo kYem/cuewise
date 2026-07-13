@@ -1,4 +1,5 @@
 // Settings modal building blocks (redesigned, theme-aware)
+export { EnrollCodeModal, type EnrollCodeModalProps } from './EnrollCodeModal';
 export { PresetGrid } from './PresetGrid';
 export { RecoveryCodeModal, type RecoveryCodeModalProps } from './RecoveryCodeModal';
 export {
