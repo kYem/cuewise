@@ -25,11 +25,12 @@ const { scheduler, notifier } = configureChromePlatform();
 scheduler.onFire(handleReminderFire);
 
 // ENG-45 cloud sync: off by default — no enable-sync UI ships yet. Set
-// VITE_CLOUD_SYNC=1 locally (pointed at `wrangler dev`, default localhost:8787) to
+// VITE_SYNC_API_BASE_URL locally (pointed at `wrangler dev`, e.g. localhost:8787) to
 // resume/self-heal a session that was enabled some other way (e.g. devtools).
-if (import.meta.env.VITE_CLOUD_SYNC === '1') {
+const syncApiBaseUrl = import.meta.env.VITE_SYNC_API_BASE_URL;
+if (syncApiBaseUrl) {
   const syncEngine = createSyncEngine({
-    baseUrl: import.meta.env.VITE_SYNC_API_BASE_URL ?? 'http://localhost:8787',
+    baseUrl: syncApiBaseUrl,
     keyStore: getStorage(),
     scheduler,
   });

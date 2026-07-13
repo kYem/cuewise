@@ -63,7 +63,7 @@ export default defineManifest(async (env) => {
   if (env.mode !== 'production') {
     connectSrc.push('http://localhost:5173', 'ws://localhost:5173');
     // ENG-45 cloud sync, dev-only: the wrangler-dev cloud-sync API (see
-    // VITE_CLOUD_SYNC in src/vite-env.d.ts). Never added to a production build.
+    // VITE_SYNC_API_BASE_URL in src/vite-env.d.ts). Never added to a production build.
     connectSrc.push(viteEnv.VITE_SYNC_API_BASE_URL ?? 'http://localhost:8787');
   }
 

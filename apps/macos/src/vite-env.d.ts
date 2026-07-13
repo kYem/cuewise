@@ -1,11 +1,9 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
-  // Dev-only opt-in to run the ENG-45 cloud-sync engine. Off by default — no
-  // enable-sync UI ships yet, so this only self-heals/resumes a session enabled
-  // some other way (e.g. devtools). Never set in production.
-  readonly VITE_CLOUD_SYNC?: string;
-  // Cloud-sync API origin, used only when VITE_CLOUD_SYNC is on.
+  // Cloud-sync API origin. A non-empty value IS the ENG-45 enable signal — off by
+  // default (no enable-sync UI ships yet), so this only self-heals/resumes a
+  // session enabled some other way (e.g. devtools). Never set in production.
   readonly VITE_SYNC_API_BASE_URL?: string;
 }
 
