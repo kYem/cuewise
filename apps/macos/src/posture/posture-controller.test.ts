@@ -7,11 +7,14 @@ import {
   emitSampleFrame,
   emitStopped,
   focusModeStateMock,
+  hhmmFromNow,
   invokeMock,
   NUDGES_PAUSED_KEY,
+  PREVIEW_FAILED_WARNING,
   pomodoroStateMock,
   resetPostureMocks,
   SAVE_FAILED_WARNING,
+  SENSITIVITY_APPLY_FAILED_WARNING,
   START_FAILED_ERROR,
   STOPPED_ERROR,
   toastErrorMock,
@@ -23,6 +26,7 @@ import { chipPresentation } from './chip-presentation';
 import {
   getPostureState,
   initPosture,
+  isWithinQuietHours,
   NUDGE_AFTER_POOR_SAMPLES,
   pausePostureNudges,
   resumePostureNudges,
@@ -30,7 +34,9 @@ import {
   setGlowIntensity,
   setGlowStyle,
   setNudgeDelay,
+  setNudgeSensitivity,
   setPostureNudges,
+  setQuietHours,
   startGlowPreview,
   startPosture,
   stopGlowPreview,
@@ -534,6 +540,16 @@ describe('glow preview', () => {
     expect(getPostureState().glowActive).toBe(false);
   });
 
+  it('warns and rolls back when the preview cannot be shown', async () => {
+    invokeMock.mockRejectedValueOnce(new Error('no windows'));
+
+    startGlowPreview();
+    await flushChain();
+
+    expect(getPostureState().glowPreviewActive).toBe(false);
+    expect(toastWarningMock).toHaveBeenCalledWith(PREVIEW_FAILED_WARNING);
+  });
+
   it('stopping the preview hides the glow', async () => {
     startGlowPreview();
     await flushChain();
@@ -697,6 +713,147 @@ describe('glow appearance preferences', () => {
     expect(localStorageStub.getItem('cuewise.posture.glowIntensity')).toBe('subtle');
     expect(toastWarningMock).toHaveBeenCalledTimes(1);
     expect(toastWarningMock).toHaveBeenCalledWith(SAVE_FAILED_WARNING);
+  });
+});
+
+describe('nudge sensitivity', () => {
+  afterEach(() => {
+    setNudgeSensitivity('balanced');
+  });
+
+  it('persists without applying while tracking is off', () => {
+    setNudgeSensitivity('strict');
+
+    expect(getPostureState().nudgeSensitivity).toBe('strict');
+    expect(localStorageStub.getItem('cuewise.posture.sensitivity')).toBe('strict');
+    expect(countInvokes('set_posture_sensitivity')).toBe(0);
+  });
+
+  it('applies on every start and again on a live change', async () => {
+    setNudgeSensitivity('strict');
+    await startTracking();
+    // A fresh sidecar boots with default thresholds — the start must re-send.
+    expect(countInvokes('set_posture_sensitivity')).toBe(1);
+    expect(invokeMock).toHaveBeenLastCalledWith('set_posture_sensitivity', { preset: 'strict' });
+
+    setNudgeSensitivity('relaxed');
+    await flushChain();
+    expect(countInvokes('set_posture_sensitivity')).toBe(2);
+    expect(invokeMock).toHaveBeenLastCalledWith('set_posture_sensitivity', { preset: 'relaxed' });
+  });
+
+  it('warns when the live apply fails but keeps the preference', async () => {
+    await startTracking();
+    invokeMock.mockRejectedValueOnce(new Error('sidecar pipe broke'));
+
+    setNudgeSensitivity('strict');
+    await flushChain();
+
+    expect(toastWarningMock).toHaveBeenCalledWith(SENSITIVITY_APPLY_FAILED_WARNING);
+    // The preference still landed — it re-applies on the next start.
+    expect(localStorageStub.getItem('cuewise.posture.sensitivity')).toBe('strict');
+  });
+
+  it('restores on init and discards garbage', async () => {
+    localStorageStub.setItem('cuewise.posture.sensitivity', 'relaxed');
+    initPosture();
+    await flushChain();
+    expect(getPostureState().nudgeSensitivity).toBe('relaxed');
+
+    localStorageStub.setItem('cuewise.posture.sensitivity', 'ultra');
+    initPosture();
+    await flushChain();
+    expect(getPostureState().nudgeSensitivity).toBe('balanced');
+    expect(localStorageStub.getItem('cuewise.posture.sensitivity')).toBeNull();
+  });
+});
+
+describe('isWithinQuietHours', () => {
+  function window(enabled: boolean, start: string, end: string) {
+    return { enabled, start, end };
+  }
+  function at(hours: number, minutes: number): Date {
+    return new Date(2026, 6, 13, hours, minutes);
+  }
+
+  it('is inert while disabled', () => {
+    expect(isWithinQuietHours(window(false, '00:00', '23:59'), at(12, 0))).toBe(false);
+  });
+
+  it('covers a same-day window as [start, end)', () => {
+    const quiet = window(true, '09:00', '17:00');
+    expect(isWithinQuietHours(quiet, at(9, 0))).toBe(true);
+    expect(isWithinQuietHours(quiet, at(16, 59))).toBe(true);
+    expect(isWithinQuietHours(quiet, at(8, 59))).toBe(false);
+    expect(isWithinQuietHours(quiet, at(17, 0))).toBe(false);
+  });
+
+  it('wraps midnight when start is after end', () => {
+    const quiet = window(true, '22:00', '08:00');
+    expect(isWithinQuietHours(quiet, at(23, 30))).toBe(true);
+    expect(isWithinQuietHours(quiet, at(7, 59))).toBe(true);
+    expect(isWithinQuietHours(quiet, at(12, 0))).toBe(false);
+  });
+
+  it('treats equal times as an empty window and malformed times as inert', () => {
+    expect(isWithinQuietHours(window(true, '10:00', '10:00'), at(10, 0))).toBe(false);
+    expect(isWithinQuietHours(window(true, '25:00', '08:00'), at(12, 0))).toBe(false);
+    expect(isWithinQuietHours(window(true, 'zz:00', '08:00'), at(12, 0))).toBe(false);
+  });
+});
+
+describe('quiet hours', () => {
+  afterEach(() => {
+    setQuietHours({ enabled: false, start: '22:00', end: '08:00' });
+  });
+
+  it('suppresses new glows inside the window and clears an active one', async () => {
+    await startTracking();
+    await glowUp();
+
+    setQuietHours({ enabled: true, start: hhmmFromNow(-60), end: hhmmFromNow(60) });
+    emitSampleFrame(JSON.stringify({ status: 'poor' }));
+
+    expect(countInvokes('hide_glow')).toBe(1);
+    expect(getPostureState().glowActive).toBe(false);
+
+    emitPoorFrames(NUDGE_AFTER_POOR_SAMPLES * 2);
+    expect(countInvokes('show_glow')).toBe(1);
+  });
+
+  it('does not suppress outside the window', async () => {
+    await startTracking();
+    setQuietHours({ enabled: true, start: hhmmFromNow(60), end: hhmmFromNow(120) });
+
+    await glowUp();
+  });
+
+  it('persists and restores, discarding garbage', async () => {
+    setQuietHours({ enabled: true, start: '21:00', end: '07:30' });
+    expect(localStorageStub.getItem('cuewise.posture.quietHours')).toBe(
+      '{"enabled":true,"start":"21:00","end":"07:30"}'
+    );
+
+    initPosture();
+    await flushChain();
+    expect(getPostureState().quietHours).toEqual({ enabled: true, start: '21:00', end: '07:30' });
+
+    localStorageStub.setItem('cuewise.posture.quietHours', '{"enabled":"yes"}');
+    initPosture();
+    await flushChain();
+    expect(getPostureState().quietHours).toEqual({ enabled: false, start: '22:00', end: '08:00' });
+    expect(localStorageStub.getItem('cuewise.posture.quietHours')).toBeNull();
+  });
+
+  it('surfaces the active window on the chip', async () => {
+    await startTracking();
+    const end = hhmmFromNow(60);
+    setQuietHours({ enabled: true, start: hhmmFromNow(-60), end });
+
+    expect(chipPresentation(getPostureState())).toEqual({
+      dot: 'bg-tertiary',
+      label: `Quiet hours until ${end}`,
+    });
   });
 });
 

@@ -17,6 +17,7 @@ import { listen } from '@tauri-apps/api/event';
 import { useEffect } from 'react';
 import {
   describePauseEnd,
+  isWithinQuietHours,
   pausePostureNudges,
   resumePostureNudges,
   setPostureNudges,
@@ -97,6 +98,9 @@ export function TrayStatusBridge(): null {
   let pausedLine: string | null = null;
   if (postureControlsEnabled && pausedUntil !== null) {
     pausedLine = `💤 Posture nudges paused · ${describePauseEnd(pausedUntil)}`;
+  } else if (postureControlsEnabled && isWithinQuietHours(posture.quietHours, new Date())) {
+    // Frames re-render this component every ~2s, so the line can't go stale for long.
+    pausedLine = `💤 Posture quiet hours · until ${posture.quietHours.end}`;
   }
   // Toasts render in the often-hidden webview; the tray is the visible backstop.
   // Gated like every other nudge line — no warning about a feature turned off.
