@@ -104,6 +104,23 @@ describe('SyncEngine.enableSync', () => {
     expect(goals.map((g) => g.id).sort()).toEqual(['g-a', 'g-b']);
   });
 
+  it('enroll-with-code (device #2) walks through enrolling, not key_init', async () => {
+    const server = new FakeSyncServer();
+    const deviceA = createDevice(server);
+    useStorage(deviceA);
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    await deviceA.engine.enableSync('cred-a', 'Device A');
+    const recoveryCode = deviceA.onRecoveryCode.mock.calls[0][0] as string;
+
+    const deviceB = createDevice(server);
+    useStorage(deviceB);
+    await deviceB.engine.enableSync('cred-b', 'Device B', recoveryCode);
+
+    const statuses = deviceB.onStatus.mock.calls.map((call) => call[0]);
+    expect(statuses).toContain('enrolling');
+    expect(statuses).not.toContain('key_init');
+  });
+
   it('a 401 from exchangeToken leaves status signed_out with local data intact and no DK persisted', async () => {
     const server = new FakeSyncServer();
     const device = createDevice(server);
@@ -215,6 +232,28 @@ describe('SyncEngine.start / stop', () => {
     expect(restartedScheduler.scheduled.some((s) => s.id === SYNC_PULL_WAKE_ID)).toBe(true);
   });
 
+  it('a failed initial sync during start still arms the pull loop instead of leaving it dead', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    await device.engine.enableSync('cred-a', 'Device A');
+
+    const restartedScheduler = new FakeScheduler();
+    const restarted = new SyncEngine({
+      apiClient: device.apiClient,
+      sessionManager: new SessionManager(device.kv),
+      keyStore: device.kv,
+      scheduler: restartedScheduler,
+    });
+    device.apiClient.rejectNextGetChangesWithNetworkError = true;
+
+    await restarted.start();
+
+    expect(restarted.getStatus()).toBe('active');
+    expect(restartedScheduler.scheduled.some((s) => s.id === SYNC_PULL_WAKE_ID)).toBe(true);
+  });
+
   it('stop cancels the armed pull wake', async () => {
     const server = new FakeSyncServer();
     const device = createDevice(server);
@@ -223,6 +262,44 @@ describe('SyncEngine.start / stop', () => {
     await device.engine.stop();
 
     expect(device.scheduler.cancelled).toContain(SYNC_PULL_WAKE_ID);
+  });
+});
+
+describe('SyncEngine.handlePullWake', () => {
+  it('swallows a transient network error, re-arms the wake, and recovers on the next call', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    await device.engine.enableSync('cred-a', 'Device A');
+    device.apiClient.rejectNextGetChangesWithNetworkError = true;
+
+    await expect(device.engine.handlePullWake()).resolves.toBeUndefined();
+
+    expect(device.engine.getStatus()).toBe('active');
+    expect(device.scheduler.scheduled.some((s) => s.id === SYNC_PULL_WAKE_ID)).toBe(true);
+
+    await device.engine.markMutated('goals', 'g1');
+    device.apiClient.callOrder.length = 0;
+    await device.engine.handlePullWake();
+
+    expect(device.apiClient.callOrder).toEqual(['getChanges', 'pushChanges']);
+  });
+
+  it('a 401 during the wake drops to signed_out and does not re-arm', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    await device.engine.enableSync('cred-a', 'Device A');
+    device.apiClient.rejectAllWith401 = true;
+    device.scheduler.cancelled.length = 0;
+
+    await device.engine.handlePullWake();
+
+    expect(device.engine.getStatus()).toBe('signed_out');
+    expect(device.scheduler.cancelled).toContain(SYNC_PULL_WAKE_ID);
+    expect(device.scheduler.scheduled).toEqual([]);
   });
 });
 

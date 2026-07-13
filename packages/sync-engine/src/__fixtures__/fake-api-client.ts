@@ -68,6 +68,8 @@ export class FakeSyncServer {
 export class FakeApiClient implements EngineApiClient {
   rejectExchangeWith401 = false;
   rejectAllWith401 = false;
+  /** One-shot: throws a retryable network_error on the next getChanges call, then clears itself. */
+  rejectNextGetChangesWithNetworkError = false;
   readonly callOrder: string[] = [];
   private tokenCounter = 0;
 
@@ -93,6 +95,10 @@ export class FakeApiClient implements EngineApiClient {
 
   async getChanges(since: number): Promise<{ records: SyncRecord[]; cursor: number }> {
     this.assertAuthorized();
+    if (this.rejectNextGetChangesWithNetworkError) {
+      this.rejectNextGetChangesWithNetworkError = false;
+      throw new ApiError('network_error', 0);
+    }
     this.callOrder.push('getChanges');
     return this.server.getChanges(since);
   }

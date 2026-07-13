@@ -99,7 +99,8 @@ export class SyncEngine {
         throw new Error(`failed to persist sync session: ${saved.error.message}`);
       }
 
-      this.setStatus('key_init');
+      // A code is only passed when enrolling an additional device; brand-new enable passes none.
+      this.setStatus(recoveryCode ? 'enrolling' : 'key_init');
       const enrolled = await initOrEnrollKey(this.keyDeps(), recoveryCode);
       this.dk = enrolled.dk;
       this.keyId = enrolled.keyId;
@@ -197,8 +198,8 @@ export class SyncEngine {
     this.dk = persisted.dk;
     this.keyId = persisted.keyId;
     this.setStatus('active');
-    await this.syncNow();
-    await armSyncPull(this.deps.scheduler, PULL_REARM_MINUTES, this.now);
+    await this.syncNowLoopSafe();
+    await this.armPullLoopUnlessSignedOut();
   }
 
   /** Cancels the armed pull wake. Does not touch session/keys — call disableSync() for that. */
@@ -212,8 +213,8 @@ export class SyncEngine {
    * must call this to run the cycle and re-arm the next wake. See package CLAUDE.md.
    */
   async handlePullWake(): Promise<void> {
-    await this.syncNow();
-    await armSyncPull(this.deps.scheduler, PULL_REARM_MINUTES, this.now);
+    await this.syncNowLoopSafe();
+    await this.armPullLoopUnlessSignedOut();
   }
 
   async markMutated(collection: string, entityId: string): Promise<void> {
@@ -222,6 +223,26 @@ export class SyncEngine {
 
   async markDeleted(collection: string, entityId: string): Promise<void> {
     await this.tracker.markDeleted(collection, entityId);
+  }
+
+  // LOOP callers must never let a transient failure (e.g. offline) kill the backstop poll
+  // (spec §5). A 401 is handled inside syncNow itself (handleAuthLoss), never reaches this catch.
+  private async syncNowLoopSafe(): Promise<void> {
+    try {
+      await this.syncNow();
+    } catch (err) {
+      logger.warn('Sync failed in the pull loop; the next scheduled wake will retry', {
+        code: err instanceof ApiError ? err.code : undefined,
+      });
+    }
+  }
+
+  // handleAuthLoss already cancelled the wake; re-arming here would silently undo that.
+  private async armPullLoopUnlessSignedOut(): Promise<void> {
+    if (this.status === 'signed_out') {
+      return;
+    }
+    await armSyncPull(this.deps.scheduler, PULL_REARM_MINUTES, this.now);
   }
 
   private setStatus(status: SyncStatus): void {
