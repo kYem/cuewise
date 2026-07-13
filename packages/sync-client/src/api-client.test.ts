@@ -288,4 +288,76 @@ describe('ApiClient', () => {
       })
     ).rejects.toMatchObject({ code: 'network_error', cause: expect.any(TypeError) });
   });
+
+  describe('recovery envelope', () => {
+    it('getRecoveryEnvelope returns the parsed body on 200', async () => {
+      const body = { envelope: 'v1.dk-1.a.b', updatedAt: 123 };
+      const { fetchFn, calls } = stubFetch([{ status: 200, body }]);
+      const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
+
+      const result = await client.getRecoveryEnvelope();
+
+      expect(result).toEqual(body);
+      expect(calls).toHaveLength(1);
+      expect(calls[0].url).toBe(`${BASE_URL}/v1/keys/recovery`);
+      expect(calls[0].init.method).toBe('GET');
+      const headers = new Headers(calls[0].init.headers);
+      expect(headers.get('Authorization')).toBe(`Bearer ${TOKEN}`);
+    });
+
+    it('getRecoveryEnvelope returns null on 404 instead of throwing', async () => {
+      const { fetchFn, calls } = stubFetch([problemResponse('not_found', 404)]);
+      const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
+
+      const result = await client.getRecoveryEnvelope();
+
+      expect(result).toBeNull();
+      expect(calls).toHaveLength(1);
+    });
+
+    it('getRecoveryEnvelope still throws ApiError on 500', async () => {
+      const { fetchFn, calls } = stubFetch([
+        problemResponse('internal', 500),
+        problemResponse('internal', 500),
+        problemResponse('internal', 500),
+        problemResponse('internal', 500),
+      ]);
+      const sleep = vi.fn().mockResolvedValue(undefined);
+      const client = new ApiClient({
+        baseUrl: BASE_URL,
+        getToken: async () => TOKEN,
+        fetchFn,
+        sleep,
+      });
+
+      await expect(client.getRecoveryEnvelope()).rejects.toMatchObject({
+        code: 'internal',
+        status: 500,
+      });
+      expect(calls).toHaveLength(4);
+    });
+
+    it('putRecoveryEnvelope PUTs the envelope and resolves on 204', async () => {
+      const { fetchFn, calls } = stubFetch([{ status: 204 }]);
+      const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
+
+      await expect(client.putRecoveryEnvelope('v1.dk-1.a.b')).resolves.toBeUndefined();
+
+      expect(calls).toHaveLength(1);
+      expect(calls[0].url).toBe(`${BASE_URL}/v1/keys/recovery`);
+      expect(calls[0].init.method).toBe('PUT');
+      expect(JSON.parse(calls[0].init.body as string)).toEqual({ envelope: 'v1.dk-1.a.b' });
+    });
+
+    it('putRecoveryEnvelope throws ApiError on 400', async () => {
+      const { fetchFn, calls } = stubFetch([problemResponse('invalid_key_envelope', 400)]);
+      const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
+
+      await expect(client.putRecoveryEnvelope('bad-envelope')).rejects.toMatchObject({
+        code: 'invalid_key_envelope',
+        retryable: false,
+      });
+      expect(calls).toHaveLength(1);
+    });
+  });
 });

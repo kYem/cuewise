@@ -487,7 +487,7 @@ pnpm --filter @cuewise/browser-extension dev
 ## Package Naming Convention
 
 - **Apps**: `@cuewise/browser-extension`, `@cuewise/api`, `@cuewise/web`, `@cuewise/mobile`
-- **Shared**: `@cuewise/shared`, `@cuewise/storage`, `@cuewise/ui`, `@cuewise/test-utils`, `@cuewise/sync-client`
+- **Shared**: `@cuewise/shared`, `@cuewise/storage`, `@cuewise/ui`, `@cuewise/test-utils`, `@cuewise/sync-client`, `@cuewise/crypto`
 - **Scope**: Always use `@cuewise/` prefix
 
 ## Version Control

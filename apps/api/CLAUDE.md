@@ -38,6 +38,7 @@ D1 tables (`migrations/0001_init.sql`, plus later numbered migrations):
 | `tokens` | `token_hash` (PK), `user_id`, `device_name`, `expires_at`, `revoked_at`, `last_used_at`, `window_start`/`window_count`, `created_at` | The raw session token is never stored, only its SHA-256. Rate-limit counters live on the token's own row, so per-token limiting needs no separate table. |
 | `auth_codes` | `code_hash` (PK), `payload` (JSON), `expires_at`, `used_at`, `code_challenge` | Apple's one-time exchange code (also hash-only). 60s TTL; `code_challenge` binds it to a PKCE verifier. `consumeAuthCode` DELETEs the row (single-use + PII gone at once), so `used_at` is now vestigial. |
 | `records` | `(user_id, collection, entity_id)` (PK), `seq`, `ciphertext`, `deleted`, `client_updated_at`, `server_received_at` | See below. |
+| `key_envelopes` | `(user_id, kind)` (PK), `envelope`, `updated_at` | ENG-44 E2E key material, client-wrapped — `envelope` is opaque, the server never reads it. |
 
 **`records` is upsert-per-entity, not append-only history.** The primary key is the entity's identity, so pushing an update to an entity `ON CONFLICT ... DO UPDATE`s the same row in place — one row per entity ever synced, storage bounded regardless of edit count. A delete sets `deleted = 1` (tombstone) rather than removing the row, because a physically-deleted row would be invisible to `WHERE seq > ?`, and a device that pulls after the delete would never learn the entity is gone. A daily cron (`worker.ts` `scheduled()` → `purgeTombstones`) reclaims tombstones older than `TOMBSTONE_RETENTION_MS` (= `SESSION_TTL_MS`, 90 days): a device idle that long is logged out and re-bootstraps from `since=0`, so it never needed the tombstone. This makes re-bootstrapping from `since=0` after a logout a client contract ENG-45 must honor: a client that resumes from a persisted stale cursor after re-login — or one that pushes but never pulls for 90+ days — could miss a purged delete.
 
@@ -65,8 +66,10 @@ All endpoints are under `/v1`.
 | `POST` | `/v1/auth/logout` | Revoke the presented session token | Yes |
 | `GET` | `/v1/changes?since=<seq>` | Incremental pull, ≤500 records/page (`since=0` = fresh-device bootstrap). A full page means pull again from the returned `cursor`. | Yes |
 | `POST` | `/v1/changes` | Atomic batch push, ≤100 records, ≤64 KB ciphertext/record | Yes |
+| `GET` | `/v1/keys/recovery` | Fetch the caller's opaque recovery key envelope | Yes |
+| `PUT` | `/v1/keys/recovery` | Store/replace the caller's opaque recovery key envelope, ≤1024 bytes | Yes |
 | `GET` | `/v1/export` | Dump all of the caller's records | Yes |
-| `DELETE` | `/v1/account` | Delete user, identities, tokens, and records | Yes |
+| `DELETE` | `/v1/account` | Delete user, identities, tokens, records, and key envelopes | Yes |
 
 ## Auth Flows
 
@@ -129,7 +132,7 @@ Body: `type` (`https://cuewise.app/problems/<code-with-dashes>`), `title`, `stat
 
 | Scope | Applies to | Limit | Window |
 |---|---|---|---|
-| Per-token, fixed window (`rate-limit.ts`) | `/v1/changes/*`, `/v1/export`, `/v1/account` | 60 req | 60s — counter anchored on the token's own D1 row, no extra infra |
+| Per-token, fixed window (`rate-limit.ts`) | `/v1/changes/*`, `/v1/keys/*`, `/v1/export`, `/v1/account` | 60 req | 60s — counter anchored on the token's own D1 row, no extra infra |
 | Per-IP, fixed window, isolate-local (`ip-rate-limit.ts`) | `/v1/auth/token`, `/v1/auth/apple/start`, `/v1/auth/apple/callback` | 30 req (default) | 60s — in-memory `Map`, resets on isolate recycle; defense-in-depth, production also fronts these with WAF rules |
 
 Both emit `Retry-After`. `/v1/auth/logout` requires a Bearer token but isn't covered by either limiter. The IP limiter is bounded to 20,000 tracked IPs and skips entirely when `CF-Connecting-IP` is absent (a non-edge invocation).

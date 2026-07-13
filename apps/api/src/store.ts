@@ -1,7 +1,7 @@
-import type { PushRecord, SyncRecord } from '@cuewise/shared';
+import type { KeyEnvelopeRecord, PushRecord, SyncRecord } from '@cuewise/shared';
 import type { RawSessionToken, SessionTokenHash } from './crypto-utils';
 
-export type { PushRecord, SyncRecord };
+export type { KeyEnvelopeRecord, PushRecord, SyncRecord };
 
 export interface Identity {
   provider: 'google' | 'apple' | 'dev';
@@ -46,6 +46,9 @@ export interface SyncStore {
   deleteUser(userId: string): Promise<void>;
   // Deletes tombstones older than retentionMs (a maintenance sweep across all users); returns the count.
   purgeTombstones(retentionMs: number): Promise<number>;
+  // E2E key envelopes: opaque client-wrapped blobs the server can never read.
+  getKeyEnvelope(userId: string, kind: string): Promise<KeyEnvelopeRecord | null>;
+  putKeyEnvelope(userId: string, kind: string, envelope: string): Promise<void>;
   // Returns null only when the token row was physically deleted mid-request (concurrent account
   // deletion); revocation leaves the row and is already caught upstream by lookupSession.
   bumpRateWindow(

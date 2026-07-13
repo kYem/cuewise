@@ -10,6 +10,7 @@ import { registerAccountRoutes } from './routes/account';
 import { registerAppleRoutes } from './routes/apple';
 import { registerAuthRoutes } from './routes/auth';
 import { registerChangesRoutes } from './routes/changes';
+import { registerKeysRoutes } from './routes/keys';
 import type { SyncStore } from './store';
 import { type IdTokenVerifier, verifyAppleIdToken, verifyGoogleIdToken } from './verifiers';
 
@@ -39,6 +40,7 @@ export function createApp(deps: AppDeps = {}): Hono<{ Bindings: Env } & AuthVars
   // Hono's `/*` wildcard already matches the bare prefix — see the rate-limit
   // registration below, which relies on the same behavior.
   app.use('/v1/changes/*', auth);
+  app.use('/v1/keys/*', auth);
   app.use('/v1/export', auth);
   app.use('/v1/account', auth);
   app.use('/v1/auth/logout', auth);
@@ -48,6 +50,7 @@ export function createApp(deps: AppDeps = {}): Hono<{ Bindings: Env } & AuthVars
     windowMs: 60_000,
   });
   app.use('/v1/changes/*', perTokenRateLimit);
+  app.use('/v1/keys/*', perTokenRateLimit);
   app.use('/v1/export', perTokenRateLimit);
   app.use('/v1/account', perTokenRateLimit);
 
@@ -60,6 +63,7 @@ export function createApp(deps: AppDeps = {}): Hono<{ Bindings: Env } & AuthVars
   registerAuthRoutes(app, resolved);
   registerAppleRoutes(app, resolved);
   registerChangesRoutes(app, resolved);
+  registerKeysRoutes(app, resolved);
   registerAccountRoutes(app, resolved);
 
   app.notFound(() => {
