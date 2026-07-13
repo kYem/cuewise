@@ -25,7 +25,16 @@ export function registerChangesRoutes(
       return problem('invalid_cursor');
     }
     const store = deps.storeFactory(c.env.DB);
-    const { records, cursor } = await store.listChanges(c.get('userId'), since);
+    const userId = c.get('userId');
+    // since=0 is always valid (full re-bootstrap); anything else must not predate a
+    // purged tombstone, or the client would silently miss a delete.
+    if (since > 0) {
+      const purgedSeq = await store.getPurgedSeq(userId);
+      if (since < purgedSeq) {
+        return problem('resync_required');
+      }
+    }
+    const { records, cursor } = await store.listChanges(userId, since);
     return c.json({ records, cursor });
   });
 

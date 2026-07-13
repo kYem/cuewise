@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  clockedStore,
   getChanges,
   postChanges,
   record,
@@ -195,6 +196,61 @@ describe('POST /v1/changes record validation', () => {
     expect(res.status).toBe(400);
     const body = await res.json<{ code: string }>();
     expect(body.code).toBe('invalid_request');
+  });
+});
+
+describe('GET /v1/changes tombstone-boundary resync signal', () => {
+  // Session creation stays on the real-time default store; only the tombstone
+  // push/purge use a fake clock, so the retention window is controllable
+  // without also expiring the session token (its TTL is measured in real time).
+  it('returns 409 resync_required when since predates the purged tombstone watermark', async () => {
+    const { token, userId } = await signedInToken();
+    const retention = 100_000;
+    const { store, tick } = clockedStore(1_000);
+    await store.applyChanges(userId, [
+      record({ entityId: 'a' }),
+      record({ entityId: 'b', deleted: true }),
+    ]);
+    tick(retention + 1);
+    await store.purgeTombstones(retention);
+
+    const stale = await getChanges(app, token, '1');
+    expect(stale.status).toBe(409);
+    const body = await stale.json<{ code: string }>();
+    expect(body.code).toBe('resync_required');
+  });
+
+  it('since=0 is always valid even after a purge advanced the watermark', async () => {
+    const { token, userId } = await signedInToken();
+    const retention = 100_000;
+    const { store, tick } = clockedStore(1_000);
+    await store.applyChanges(userId, [record({ entityId: 'a', deleted: true })]);
+    tick(retention + 1);
+    await store.purgeTombstones(retention);
+
+    const res = await getChanges(app, token, '0');
+    expect(res.status).toBe(200);
+  });
+
+  it('since equal to the purged watermark is valid (the client already saw that seq)', async () => {
+    const { token, userId } = await signedInToken();
+    const retention = 100_000;
+    const { store, tick } = clockedStore(1_000);
+    await store.applyChanges(userId, [
+      record({ entityId: 'a' }),
+      record({ entityId: 'b', deleted: true }),
+    ]);
+    tick(retention + 1);
+    await store.purgeTombstones(retention);
+
+    const res = await getChanges(app, token, '2');
+    expect(res.status).toBe(200);
+  });
+
+  it('never resyncs a user who has never had a tombstone purged, at any cursor', async () => {
+    const { token } = await signedInToken();
+    const res = await getChanges(app, token, '999999');
+    expect(res.status).toBe(200);
   });
 });
 

@@ -46,6 +46,9 @@ export interface SyncStore {
   deleteUser(userId: string): Promise<void>;
   // Deletes tombstones older than retentionMs (a maintenance sweep across all users); returns the count.
   purgeTombstones(retentionMs: number): Promise<number>;
+  // Highest seq ever purged for this user (0 if never purged) — the resync-required boundary
+  // for GET /changes: a since cursor below this may have missed a purged tombstone.
+  getPurgedSeq(userId: string): Promise<number>;
   // E2E key envelopes: opaque client-wrapped blobs the server can never read.
   getKeyEnvelope(userId: string, kind: string): Promise<KeyEnvelopeRecord | null>;
   putKeyEnvelope(userId: string, kind: string, envelope: string): Promise<void>;

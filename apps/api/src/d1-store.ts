@@ -305,11 +305,31 @@ export class D1SyncStore implements SyncStore {
     // Reclaims deleted-row space across all users; the partial idx_records_tombstone keeps this
     // off a full-table scan. server_received_at (not client time) is the trustworthy clock.
     const cutoff = this.now() - retentionMs;
-    const result = await this.db
-      .prepare('DELETE FROM records WHERE deleted = 1 AND server_received_at < ?')
-      .bind(cutoff)
-      .run();
-    return result.meta.changes ?? 0;
+    // Same db.batch as the delete below: a device must never observe a purge without the
+    // watermark bump, or GET /changes could resurrect a delete it hasn't seen yet.
+    const results = await this.db.batch([
+      this.db
+        .prepare(
+          `UPDATE users SET purged_seq = MAX(purged_seq, COALESCE((
+             SELECT MAX(r.seq) FROM records r
+             WHERE r.user_id = users.id AND r.deleted = 1 AND r.server_received_at < ?
+           ), 0))`
+        )
+        .bind(cutoff),
+      this.db
+        .prepare('DELETE FROM records WHERE deleted = 1 AND server_received_at < ?')
+        .bind(cutoff),
+    ]);
+    const deleteResult = results[1];
+    return deleteResult === undefined ? 0 : (deleteResult.meta.changes ?? 0);
+  }
+
+  async getPurgedSeq(userId: string): Promise<number> {
+    const row = await this.db
+      .prepare('SELECT purged_seq FROM users WHERE id = ?')
+      .bind(userId)
+      .first<{ purged_seq: number }>();
+    return row === null ? 0 : row.purged_seq;
   }
 
   async getKeyEnvelope(userId: string, kind: string): Promise<KeyEnvelopeRecord | null> {
