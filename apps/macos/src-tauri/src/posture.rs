@@ -18,14 +18,12 @@ use crate::error::{log_poison, Error};
 const SIDECAR: &str = "posture-sidecar";
 const SAMPLE_EVENT: &str = "posture://sample";
 const STOPPED_EVENT: &str = "posture://stopped";
-// Cap on a spawned-but-mute sidecar's silence before we kill it (camera off). Generous
-// because the first-run permission prompt delays the first frame (camera off till granted).
+// Initial silent window for a spawned-but-mute sidecar — generous because the
+// first-run permission prompt delays the first frame. The grace window applies here
+// too, so the effective mute kill lands at this plus LIVENESS_TIMEOUT.
 const FIRST_FRAME_TIMEOUT: Duration = Duration::from_secs(30);
-// Once frames have flowed (2s cadence), a hung-but-alive sidecar is reaped after two
-// consecutive silent windows of this length — otherwise the camera stays on with
-// every UI surface silently frozen. Two windows, not one: waking from sleep fires
-// the stale timer before the camera re-inits (monotonic clocks can advance through
-// sleep on Apple Silicon), and the grace window absorbs that without a platform API.
+// A hung sidecar (2s frame cadence) is reaped after two consecutive silent windows
+// of this length — otherwise the camera stays on with every surface silently frozen.
 const LIVENESS_TIMEOUT: Duration = Duration::from_secs(15);
 
 // The slot pairs the child with its session generation so a stale relay task (a
@@ -69,8 +67,9 @@ pub fn start_posture(app: AppHandle, state: State<'_, PostureState>) -> Result<(
                 Ok(received) => received,
                 Err(_elapsed) => {
                     if !in_grace_window {
-                        // One silent window isn't proof of a hang — a wake from sleep
-                        // fires the stale timer before the camera re-inits.
+                        // One silent window isn't proof of a hang: monotonic clocks
+                        // advance through sleep on Apple Silicon, so a wake fires the
+                        // stale timer before the camera re-inits — grant one grace window.
                         in_grace_window = true;
                         deadline = tokio::time::Instant::now() + LIVENESS_TIMEOUT;
                         continue;
@@ -78,19 +77,19 @@ pub fn start_posture(app: AppHandle, state: State<'_, PostureState>) -> Result<(
                     // Silent through the grace window too: kill it so the camera turns
                     // off. "mute" (never a frame) keeps the permission-oriented copy.
                     if reap_owned_child(&task_app, generation) {
-                        eprintln!(
-                            "posture sidecar: no output within the liveness deadline; killed"
-                        );
                         let cause = if saw_sample { "stalled" } else { "mute" };
+                        eprintln!(
+                            "posture sidecar: no output within the deadline; killed ({cause})"
+                        );
                         let _ = task_app.emit(STOPPED_EVENT, cause);
                     }
                     break;
                 }
             };
             let Some(event) = received else {
-                // Stream ended without a Terminated — still release, or the slot
-                // wedges every future start behind a dead child.
-                if release_owned_child(&task_app, generation) {
+                // Stream ended without a Terminated — the process state is unknown,
+                // so reap like the error arm; killing an already-dead child just logs.
+                if reap_owned_child(&task_app, generation) {
                     let _ = task_app.emit(STOPPED_EVENT, "exited");
                 }
                 break;
@@ -142,7 +141,7 @@ pub fn start_posture(app: AppHandle, state: State<'_, PostureState>) -> Result<(
     Ok(())
 }
 
-/// Next relay event, bounded by the current liveness deadline — a mute sidecar
+/// Next relay event, bounded by the current liveness deadline — a silent sidecar
 /// (never produced a frame, or hung mid-session) can't hold the camera open.
 async fn next_sidecar_event<T>(
     rx: &mut tauri::async_runtime::Receiver<T>,
@@ -174,7 +173,7 @@ fn take_owned_child(app: &AppHandle, generation: u64) -> Option<CommandChild> {
     None
 }
 
-// Watchdog path: the process is presumed alive, so taking the slot must kill it.
+// Kill path: the process may still be alive, so taking the slot must kill it.
 fn reap_owned_child(app: &AppHandle, generation: u64) -> bool {
     match take_owned_child(app, generation) {
         Some(child) => {

@@ -132,12 +132,20 @@ describe('posture controller lifecycle', () => {
 
   it('a liveness stall reports its own cause instead of blaming permissions', async () => {
     await startTracking();
+    await glowUp();
+    vi.mocked(logger.warn).mockClear();
 
     emitStopped('stalled');
 
     expect(getPostureState().tracking).toBe(false);
     expect(getPostureState().error).toBe(STALLED_ERROR);
     expect(toastErrorMock).toHaveBeenCalledWith(STALLED_ERROR);
+    expect(logger.warn).not.toHaveBeenCalled();
+    // The shared teardown must run for a stall too — glow down, listeners detached.
+    expect(countInvokes('hide_glow')).toBe(1);
+    for (const unlisten of unlistenSpies) {
+      expect(unlisten).toHaveBeenCalled();
+    }
     // A stall is transient — the opt-in survives so tracking auto-resumes next boot.
     expect(localStorageStub.getItem(ENABLED_KEY)).toBe('1');
   });
