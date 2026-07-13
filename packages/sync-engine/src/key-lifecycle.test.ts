@@ -5,7 +5,7 @@ import {
   generateRecoveryCode,
   wrapDataKey,
 } from '@cuewise/crypto';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { FakeKeyTransport } from './__fixtures__/fake-key-transport';
 import { FakeKvStore } from './__fixtures__/fake-kv-store';
 import {
@@ -88,6 +88,19 @@ describe('initOrEnrollKey', () => {
     await expect(initOrEnrollKey({ transport, keyStore: new FakeKvStore() })).rejects.toThrow(
       RecoveryCodeRequiredError
     );
+  });
+
+  it('resumes from a persisted data key without fetching the envelope or needing a code', async () => {
+    const transport = new FakeKeyTransport();
+    const keyStore = new FakeKvStore();
+    const first = await initOrEnrollKey({ transport, keyStore });
+
+    const getEnvSpy = vi.spyOn(transport, 'getRecoveryEnvelope');
+    const again = await initOrEnrollKey({ transport, keyStore });
+
+    expect(again.dk).toEqual(first.dk);
+    expect(getEnvSpy).not.toHaveBeenCalled();
+    expect(again.recoveryCodeToShow).toBeUndefined();
   });
 });
 

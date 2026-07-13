@@ -111,6 +111,12 @@ export async function initOrEnrollKey(
   deps: KeyLifecycleDeps,
   recoveryCode?: string
 ): Promise<{ dk: DataKey; keyId: string; recoveryCodeToShow?: string }> {
+  const persisted = await loadPersistedDataKey(deps.keyStore);
+  if (persisted !== null) {
+    // This device already set up sync (and wasn't disabled — disable clears the DK). Resume silently.
+    return persisted;
+  }
+
   const existing = await deps.transport.getRecoveryEnvelope();
   if (existing !== null) {
     return enrollFromEnvelope(deps, existing, recoveryCode);
