@@ -8,7 +8,7 @@ import {
   type SyncRecord,
 } from '@cuewise/shared';
 import { ApiError } from '@cuewise/sync-client';
-import type { CollectionBinding } from './collections';
+import { type CollectionBinding, DEVICE_LOCAL_SETTINGS_KEYS } from './collections';
 import { type SyncMeta, SyncMetadataStore } from './metadata-store';
 import { fromSyncRecord, toPushRecord } from './record-map';
 import type { ConflictStrategy, RecordBody } from './strategy';
@@ -69,6 +69,11 @@ async function buildDirtyRecords(deps: CycleDeps, meta: SyncMeta): Promise<Dirty
 
     const all = await binding.readAll();
     for (const entityId of meta.dirty[collection]) {
+      // Mirrors settingsBinding.writeOne's guard: a device-local key that snuck into dirty must
+      // never push — readAll() already excludes it, so pushing would seal a spurious tombstone.
+      if (collection === 'settings' && DEVICE_LOCAL_SETTINGS_KEYS.includes(entityId)) {
+        continue;
+      }
       const key = SyncMetadataStore.entityKey(collection, entityId);
       const hlc = meta.hlcs[key];
       if (hlc === undefined) {

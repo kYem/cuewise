@@ -1,4 +1,4 @@
-import { generateDataKey } from '@cuewise/crypto';
+import { generateDataKey, sealRecord as sealCiphertext } from '@cuewise/crypto';
 import { configurePlatform, hlcEncode, type SyncRecord, storageFailure } from '@cuewise/shared';
 import { getGoals, setGoals } from '@cuewise/storage';
 import { ApiError } from '@cuewise/sync-client';
@@ -118,6 +118,30 @@ describe('pullOnce', () => {
     const rec = await sealRecord(dk, 'goals', 'g1', { entity: goal, hlc: NEWER_HLC }, 1);
     const poisoned: SyncRecord = { ...rec, ciphertext: 'garbage' };
     transport.pullRecords = [poisoned];
+    const onQuarantine = vi.fn();
+
+    await pullOnce(makeDeps({ onQuarantine }));
+
+    const saved = await metaStore.load();
+    expect(saved.quarantine).toEqual(['goals/g1']);
+    expect(saved.cursor).toBe(1);
+    expect(onQuarantine).toHaveBeenCalledTimes(1);
+    expect(onQuarantine).toHaveBeenCalledWith('goals/g1');
+    const goals = await getGoals();
+    expect(goals).toEqual([]);
+  });
+
+  it('quarantines a malformed-JSON payload (valid ciphertext, garbage plaintext), skips the write, fires onQuarantine once, and still advances the cursor', async () => {
+    const ciphertext = await sealCiphertext(dk, KEY_ID, 'goals', 'g1', 'not-json{{{');
+    const malformed: SyncRecord = {
+      collection: 'goals',
+      entityId: 'g1',
+      ciphertext,
+      clientUpdatedAt: 0,
+      deleted: false,
+      seq: 1,
+    };
+    transport.pullRecords = [malformed];
     const onQuarantine = vi.fn();
 
     await pullOnce(makeDeps({ onQuarantine }));

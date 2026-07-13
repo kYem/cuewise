@@ -1,4 +1,4 @@
-import { DecryptError, generateDataKey } from '@cuewise/crypto';
+import { DecryptError, EnvelopeParseError, generateDataKey, sealRecord } from '@cuewise/crypto';
 import { hlcDecode, hlcEncode, type SyncRecord } from '@cuewise/shared';
 import { describe, expect, it } from 'vitest';
 import { fromSyncRecord, toPushRecord } from './record-map';
@@ -63,5 +63,35 @@ describe('fromSyncRecord', () => {
     const forged = asSyncRecord({ ...pushRecord, entityId: 'g2' });
 
     await expect(fromSyncRecord(dk, forged)).rejects.toThrow(DecryptError);
+  });
+
+  it('throws EnvelopeParseError, not SyntaxError, when the decrypted plaintext is not JSON', async () => {
+    const dk = generateDataKey();
+    const ciphertext = await sealRecord(dk, 'dk-1', 'goals', 'g1', 'not-json{{{');
+    const rec: SyncRecord = {
+      collection: 'goals',
+      entityId: 'g1',
+      ciphertext,
+      clientUpdatedAt: 0,
+      deleted: false,
+      seq: 1,
+    };
+
+    await expect(fromSyncRecord(dk, rec)).rejects.toThrow(EnvelopeParseError);
+  });
+
+  it('throws EnvelopeParseError when the decrypted JSON is missing hlc/entity', async () => {
+    const dk = generateDataKey();
+    const ciphertext = await sealRecord(dk, 'dk-1', 'goals', 'g1', JSON.stringify({ foo: 'bar' }));
+    const rec: SyncRecord = {
+      collection: 'goals',
+      entityId: 'g1',
+      ciphertext,
+      clientUpdatedAt: 0,
+      deleted: false,
+      seq: 1,
+    };
+
+    await expect(fromSyncRecord(dk, rec)).rejects.toThrow(EnvelopeParseError);
   });
 });

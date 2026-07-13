@@ -100,6 +100,19 @@ describe('pushOnce', () => {
     expect(saved.dirty.goals).toBeUndefined();
   });
 
+  it('skips a device-local settings key that snuck into dirty, pushing only the synced one', async () => {
+    const metaStore = new SyncMetadataStore(kv);
+    await seedDirty(metaStore, 'settings', ['theme', 'cloudSyncEnabled']);
+    const deps = makeDeps(kv, transport);
+
+    await pushOnce(deps);
+
+    expect(transport.pushedBatches).toHaveLength(1);
+    const pushedIds = transport.pushedBatches[0].map((record) => record.entityId);
+    expect(pushedIds).toContain('theme');
+    expect(pushedIds).not.toContain('cloudSyncEnabled');
+  });
+
   it('leaves meta.dirty intact when pushChanges rejects', async () => {
     const g1 = goalFactory.build({ id: 'g1' });
     await setGoals([g1]);

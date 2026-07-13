@@ -1,4 +1,4 @@
-import { type DataKey, openRecord, sealRecord } from '@cuewise/crypto';
+import { type DataKey, EnvelopeParseError, openRecord, sealRecord } from '@cuewise/crypto';
 import { hlcDecode, type PushRecord, type SyncRecord } from '@cuewise/shared';
 import type { RecordBody } from './strategy';
 
@@ -20,8 +20,30 @@ export async function toPushRecord(
   };
 }
 
-// openRecord's DecryptError/EnvelopeParseError propagate — the pull cycle quarantines, not us.
+// DecryptError/EnvelopeParseError (from openRecord or the parse below) propagate — the pull
+// cycle quarantines, not us.
 export async function fromSyncRecord(dk: DataKey, rec: SyncRecord): Promise<{ body: RecordBody }> {
   const plaintext = await openRecord(dk, rec.ciphertext, rec.collection, rec.entityId);
-  return { body: JSON.parse(plaintext) as RecordBody };
+  return { body: parseRecordBody(plaintext) };
+}
+
+// A decrypted-but-malformed payload (e.g. a future payload version an older device can't read,
+// per the Swappability section) is an envelope-parse failure conceptually, not a crash — never
+// include the payload itself in the thrown message.
+function parseRecordBody(plaintext: string): RecordBody {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(plaintext);
+  } catch (err) {
+    throw new EnvelopeParseError('decrypted payload is not valid JSON', { cause: err });
+  }
+  if (
+    typeof parsed !== 'object' ||
+    parsed === null ||
+    typeof (parsed as RecordBody).hlc !== 'string' ||
+    !('entity' in parsed)
+  ) {
+    throw new EnvelopeParseError('decrypted payload has an unexpected shape');
+  }
+  return parsed as RecordBody;
 }
