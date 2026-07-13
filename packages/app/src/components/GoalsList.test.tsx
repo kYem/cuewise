@@ -442,18 +442,17 @@ describe('GoalsList - Link to goal picker', () => {
     await user.click(screen.getByRole('button', { name: 'Write report' }));
 
     // WebKit fires the input's blur with relatedTarget=null on button clicks, which
-    // ends editing and unmounts the picker — preventing mousedown's default is the fix.
-    const notPrevented = fireEvent.mouseDown(
-      screen.getByRole('button', { name: 'Change linked goal' })
+    // ends editing and unmounts the picker — preventing mousedown's default is the
+    // fix, and fireEvent returns false exactly when the default was prevented.
+    expect(fireEvent.mouseDown(screen.getByRole('button', { name: 'Change linked goal' }))).toBe(
+      false
     );
-
-    expect(notPrevented).toBe(false);
     expect(screen.getByDisplayValue('Write report')).toBeInTheDocument();
   });
 
-  it('opens the picker and relinks without closing the edit row early', async () => {
+  it('opens the picker and picks a goal without closing the edit row early', async () => {
     const user = userEvent.setup();
-    const { task, store } = renderLinkedTaskInEditMode();
+    const { task, objective, store } = renderLinkedTaskInEditMode();
     await user.click(screen.getByRole('button', { name: 'Write report' }));
 
     await user.click(screen.getByRole('button', { name: 'Change linked goal' }));
@@ -461,11 +460,27 @@ describe('GoalsList - Link to goal picker', () => {
     // The edit row must survive the trigger click (the WebKit regression closed it).
     expect(screen.getByDisplayValue('Write report')).toBeInTheDocument();
 
-    const removeLink = await screen.findByRole('button', { name: 'Remove link' });
+    const entry = await screen.findByRole('button', { name: /Ship the release/ });
     // Chromium focuses buttons on mousedown — picker items need the same blur guard.
-    expect(fireEvent.mouseDown(removeLink)).toBe(false);
-    await user.click(removeLink);
+    expect(fireEvent.mouseDown(entry)).toBe(false);
+    await user.click(entry);
 
-    expect(store.linkTaskToGoal).toHaveBeenCalledWith(task.id, null);
+    expect(store.linkTaskToGoal).toHaveBeenCalledWith(task.id, objective.id);
+  });
+
+  it('a keyboard open hands focus to the picker, not the edit input', async () => {
+    const user = userEvent.setup();
+    renderLinkedTaskInEditMode();
+    await user.click(screen.getByRole('button', { name: 'Write report' }));
+
+    const trigger = screen.getByRole('button', { name: 'Change linked goal' });
+    trigger.focus();
+    await user.keyboard('{Enter}');
+
+    // Radix's focus-into-content must proceed for keyboard users — only pointer
+    // opens (focus still in the input) suppress it.
+    await screen.findByRole('button', { name: 'Remove link' });
+    expect(trigger).not.toHaveFocus();
+    expect(screen.getByDisplayValue('Write report')).toBeInTheDocument();
   });
 });

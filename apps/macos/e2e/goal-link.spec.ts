@@ -14,7 +14,9 @@ test('link-to-goal picker opens from the edit row without closing it (WebKit)', 
   // Seed an objective plus a linked task for today. The link makes the trigger
   // read "Change linked goal" — unique (the add-row also offers "Link to goal").
   await page.evaluate(() => {
-    const today = new Date().toISOString().split('T')[0];
+    // Local calendar day — the app's getTodayDateString() is local, and a UTC
+    // date here would miss "today" on machines west of UTC in the evening.
+    const today = new Date().toLocaleDateString('en-CA');
     const createdAt = new Date().toISOString();
     const objective = {
       id: 'obj-1',
