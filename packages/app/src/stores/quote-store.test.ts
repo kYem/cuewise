@@ -800,4 +800,58 @@ describe('sync-hook wiring', () => {
     const created = useQuoteStore.getState().collections[0];
     expect(markMutated).toHaveBeenCalledWith('collections', created.id);
   });
+
+  it('notifies markMutated when hiding a custom quote', async () => {
+    const customQuote = quoteFactory.build({ isCustom: true, isHidden: false });
+    useQuoteStore.setState({ quotes: [customQuote], currentQuote: null });
+
+    await useQuoteStore.getState().hideQuote(customQuote.id);
+
+    expect(markMutated).toHaveBeenCalledWith('quotes', customQuote.id);
+  });
+
+  it('does not notify when hiding a seed (non-custom) quote', async () => {
+    const seedQuote = quoteFactory.build({ isCustom: false, isHidden: false });
+    useQuoteStore.setState({ quotes: [seedQuote], currentQuote: null });
+
+    await useQuoteStore.getState().hideQuote(seedQuote.id);
+
+    expect(markMutated).not.toHaveBeenCalled();
+  });
+
+  it('notifies markMutated when unhiding a custom quote', async () => {
+    const customQuote = quoteFactory.build({ isCustom: true, isHidden: true });
+    useQuoteStore.setState({ quotes: [customQuote] });
+
+    await useQuoteStore.getState().unhideQuote(customQuote.id);
+
+    expect(markMutated).toHaveBeenCalledWith('quotes', customQuote.id);
+  });
+
+  it('notifies markMutated with the quote id after addQuoteToCollection persists a custom quote', async () => {
+    const customQuote = quoteFactory.build({ isCustom: true, collectionIds: [] });
+    useQuoteStore.setState({ quotes: [customQuote], currentQuote: null });
+
+    await useQuoteStore.getState().addQuoteToCollection(customQuote.id, 'collection-1');
+
+    expect(markMutated).toHaveBeenCalledWith('quotes', customQuote.id);
+  });
+
+  it('does not notify addQuoteToCollection for a seed (non-custom) quote', async () => {
+    const seedQuote = quoteFactory.build({ isCustom: false, collectionIds: [] });
+    useQuoteStore.setState({ quotes: [seedQuote], currentQuote: null });
+
+    await useQuoteStore.getState().addQuoteToCollection(seedQuote.id, 'collection-1');
+
+    expect(markMutated).not.toHaveBeenCalled();
+  });
+
+  it('notifies markMutated with the quote id after removeQuoteFromCollection persists a custom quote', async () => {
+    const customQuote = quoteFactory.build({ isCustom: true, collectionIds: ['collection-1'] });
+    useQuoteStore.setState({ quotes: [customQuote], currentQuote: null });
+
+    await useQuoteStore.getState().removeQuoteFromCollection(customQuote.id, 'collection-1');
+
+    expect(markMutated).toHaveBeenCalledWith('quotes', customQuote.id);
+  });
 });

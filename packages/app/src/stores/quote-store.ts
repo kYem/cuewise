@@ -352,10 +352,15 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
   hideQuote: async (quoteId: string) => {
     try {
       const { quotes } = get();
+      const target = quotes.find((q) => q.id === quoteId);
       const updatedQuotes = quotes.map((q) => (q.id === quoteId ? { ...q, isHidden: true } : q));
 
       await setQuotes(updatedQuotes);
       set({ quotes: updatedQuotes });
+      // Only custom quotes sync — seed quotes are excluded (spec v1 scope).
+      if (target?.isCustom) {
+        notifyMutated('quotes', quoteId);
+      }
 
       // If hiding current quote, get a new one
       const currentQuote = get().currentQuote;
@@ -423,10 +428,15 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
   unhideQuote: async (quoteId: string) => {
     try {
       const { quotes } = get();
+      const target = quotes.find((q) => q.id === quoteId);
       const updatedQuotes = quotes.map((q) => (q.id === quoteId ? { ...q, isHidden: false } : q));
 
       await setQuotes(updatedQuotes);
       set({ quotes: updatedQuotes });
+      // Only custom quotes sync — seed quotes are excluded (spec v1 scope).
+      if (target?.isCustom) {
+        notifyMutated('quotes', quoteId);
+      }
       useToastStore.getState().success('Quote unhidden successfully');
     } catch (error) {
       logger.error('Error unhiding quote', error);
@@ -798,6 +808,8 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
   addQuoteToCollection: async (quoteId: string, collectionId: string) => {
     try {
       const { quotes, currentQuote } = get();
+      const target = quotes.find((q) => q.id === quoteId);
+      const alreadyInCollection = target?.collectionIds?.includes(collectionId) ?? false;
 
       const updatedQuotes = quotes.map((q) => {
         if (q.id === quoteId) {
@@ -812,6 +824,10 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
 
       await setQuotes(updatedQuotes);
       set({ quotes: updatedQuotes, error: null });
+      // Membership lives on the quote (collectionIds); only custom quotes sync (spec v1 scope).
+      if (!alreadyInCollection && target?.isCustom) {
+        notifyMutated('quotes', quoteId);
+      }
 
       // Update current quote if it was the one modified
       if (currentQuote && currentQuote.id === quoteId) {
@@ -835,6 +851,8 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
   removeQuoteFromCollection: async (quoteId: string, collectionId: string) => {
     try {
       const { quotes, currentQuote } = get();
+      const target = quotes.find((q) => q.id === quoteId);
+      const wasInCollection = target?.collectionIds?.includes(collectionId) ?? false;
 
       const updatedQuotes = quotes.map((q) => {
         if (q.id === quoteId && q.collectionIds) {
@@ -848,6 +866,10 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
 
       await setQuotes(updatedQuotes);
       set({ quotes: updatedQuotes, error: null });
+      // Membership lives on the quote (collectionIds); only custom quotes sync (spec v1 scope).
+      if (wasInCollection && target?.isCustom) {
+        notifyMutated('quotes', quoteId);
+      }
 
       // Update current quote if it was the one modified
       if (currentQuote && currentQuote.id === quoteId) {
@@ -872,6 +894,13 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     try {
       const { quotes, collections } = get();
       const quoteIdSet = new Set(quoteIds);
+      // Membership lives on the quote (collectionIds); only custom quotes sync (spec v1 scope).
+      const affectedCustomIds = quotes
+        .filter(
+          (q) =>
+            quoteIdSet.has(q.id) && q.isCustom && !(q.collectionIds ?? []).includes(collectionId)
+        )
+        .map((q) => q.id);
 
       const updatedQuotes = quotes.map((q) => {
         if (quoteIdSet.has(q.id)) {
@@ -886,6 +915,9 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
 
       await setQuotes(updatedQuotes);
       set({ quotes: updatedQuotes, error: null });
+      for (const id of affectedCustomIds) {
+        notifyMutated('quotes', id);
+      }
 
       const collection = collections.find((c) => c.id === collectionId);
       const collectionName = collection?.name ?? 'collection';
