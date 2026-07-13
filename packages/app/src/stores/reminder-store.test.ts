@@ -1,8 +1,9 @@
 import { configurePlatform } from '@cuewise/shared';
 import * as storage from '@cuewise/storage';
 import { recurringReminderFactory, reminderFactory } from '@cuewise/test-utils/factories';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useReminderStore } from './reminder-store';
+import { type SyncMutationSink, setSyncEngine } from './sync-hook';
 
 // Mock storage functions
 vi.mock('@cuewise/storage', () => ({
@@ -510,5 +511,37 @@ describe('alarm scheduling failures', () => {
     expect(useReminderStore.getState().reminders).toHaveLength(0);
     expect(toastError).not.toHaveBeenCalled();
     expect(toastWarning).not.toHaveBeenCalled();
+  });
+});
+
+describe('sync-hook wiring', () => {
+  const markMutated = vi.fn();
+  const markDeleted = vi.fn();
+  const fakeSink: SyncMutationSink = { markMutated, markDeleted };
+
+  beforeEach(() => {
+    markMutated.mockClear();
+    markDeleted.mockClear();
+    setSyncEngine(fakeSink);
+  });
+
+  afterEach(() => {
+    setSyncEngine(null);
+  });
+
+  it('notifies markMutated with the new reminder id after addReminder persists', async () => {
+    await useReminderStore.getState().addReminder('Drink water', new Date(Date.now() + 60_000));
+
+    const created = useReminderStore.getState().reminders[0];
+    expect(markMutated).toHaveBeenCalledWith('reminders', created.id);
+  });
+
+  it('notifies markDeleted with the reminder id after deleteReminder persists', async () => {
+    const reminder = reminderFactory.build();
+    useReminderStore.setState({ reminders: [reminder] });
+
+    await useReminderStore.getState().deleteReminder(reminder.id);
+
+    expect(markDeleted).toHaveBeenCalledWith('reminders', reminder.id);
   });
 });

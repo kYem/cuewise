@@ -20,6 +20,7 @@ import {
 } from '@cuewise/shared';
 import { getGoals as loadAllGoals, setGoals as saveAllGoals } from '@cuewise/storage';
 import { create } from 'zustand';
+import { notifyDeleted, notifyMutated } from './sync-hook';
 import { useToastStore } from './toast-store';
 
 export type CompletionFilter = 'all' | 'completed' | 'incomplete';
@@ -118,6 +119,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       await saveAllGoals(updatedGoals);
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
+      notifyMutated('goals', newGoal.id);
       return true;
     } catch (error) {
       logger.error('Error adding goal', error);
@@ -143,6 +145,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       await saveAllGoals(updatedGoals);
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
+      notifyMutated('goals', goalId);
       return true;
     } catch (error) {
       logger.error('Error updating goal', error);
@@ -174,6 +177,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
 
       const updatedTodayTasks = filterTodayTasks(updatedGoals);
       set({ goals: updatedGoals, todayTasks: updatedTodayTasks });
+      notifyMutated('goals', goalId);
 
       return true;
     } catch (error) {
@@ -194,6 +198,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       await saveAllGoals(updatedGoals);
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
+      notifyDeleted('goals', goalId);
       return true;
     } catch (error) {
       logger.error('Error deleting goal', error);
@@ -210,13 +215,18 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       const today = getTodayDateString();
 
       // Remove completed tasks from today only (don't remove objectives)
-      const updatedGoals = goals.filter(
-        (goal) => !(goal.date === today && goal.completed && isTask(goal))
-      );
+      const removedIds = goals
+        .filter((goal) => goal.date === today && goal.completed && isTask(goal))
+        .map((goal) => goal.id);
+      const removedIdSet = new Set(removedIds);
+      const updatedGoals = goals.filter((goal) => !removedIdSet.has(goal.id));
 
       await saveAllGoals(updatedGoals);
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
+      for (const id of removedIds) {
+        notifyDeleted('goals', id);
+      }
       return true;
     } catch (error) {
       logger.error('Error clearing completed goals', error);
@@ -246,6 +256,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       await saveAllGoals(updatedGoals);
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
+      notifyMutated('goals', goalId);
 
       useToastStore.getState().success('Goal transferred to tomorrow');
       return true;
@@ -277,6 +288,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       await saveAllGoals(updatedGoals);
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
+      notifyMutated('goals', goalId);
 
       useToastStore.getState().success('Goal moved to today');
       return true;
@@ -331,6 +343,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       await saveAllGoals(updatedGoals);
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
+      notifyMutated('goals', copy.id);
       useToastStore.getState().success('Task duplicated');
       return true;
     } catch (error) {
@@ -365,6 +378,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       await saveAllGoals(updatedGoals);
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
+      notifyMutated('goals', goalId);
       return true;
     } catch (error) {
       logger.error('Error setting task due date', error);
@@ -398,6 +412,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       await saveAllGoals(updatedGoals);
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
+      notifyMutated('goals', goalId);
       return true;
     } catch (error) {
       logger.error('Error adding subtask', error);
@@ -427,6 +442,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       await saveAllGoals(updatedGoals);
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
+      notifyMutated('goals', goalId);
       return true;
     } catch (error) {
       logger.error('Error toggling subtask', error);
@@ -456,6 +472,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       await saveAllGoals(updatedGoals);
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
+      notifyMutated('goals', goalId);
       return true;
     } catch (error) {
       logger.error('Error removing subtask', error);
@@ -490,6 +507,9 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       await saveAllGoals(updatedGoals);
 
       set({ goals: updatedGoals, todayTasks: reorderedTodayTasks });
+      for (const task of reorderedTodayTasks) {
+        notifyMutated('goals', task.id);
+      }
       return true;
     } catch (error) {
       logger.error('Error reordering tasks', error);
@@ -525,6 +545,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
 
       await saveAllGoals(updatedGoals);
       set({ goals: updatedGoals });
+      notifyMutated('goals', newGoal.id);
 
       useToastStore.getState().success('Goal created');
       return true;
@@ -559,6 +580,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
 
       await saveAllGoals(updatedGoals);
       set({ goals: updatedGoals });
+      notifyMutated('goals', goalId);
 
       if (updates.completed === true) {
         useToastStore.getState().success('Goal completed!');
@@ -580,6 +602,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
   deleteGoal: async (goalId: string) => {
     try {
       const { goals } = get();
+      const orphanedIds = goals.filter((goal) => goal.parentId === goalId).map((goal) => goal.id);
 
       // Remove the goal and unlink any tasks that were linked to it
       const updatedGoals = goals
@@ -596,6 +619,10 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       await saveAllGoals(updatedGoals);
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
+      notifyDeleted('goals', goalId);
+      for (const id of orphanedIds) {
+        notifyMutated('goals', id);
+      }
 
       useToastStore.getState().success('Goal deleted');
       return true;
@@ -627,6 +654,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       await saveAllGoals(updatedGoals);
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
+      notifyMutated('goals', taskId);
       return true;
     } catch (error) {
       logger.error('Error linking task to goal', error);

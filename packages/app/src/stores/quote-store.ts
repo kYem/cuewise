@@ -22,6 +22,7 @@ import {
 } from '@cuewise/storage';
 import { create } from 'zustand';
 import { SEED_QUOTES } from '../data/seed-quotes';
+import { notifyDeleted, notifyMutated } from './sync-hook';
 import { useToastStore } from './toast-store';
 
 /** Seed quotes not present in the given list, keyed by id. */
@@ -321,12 +322,17 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
   toggleFavorite: async (quoteId: string) => {
     try {
       const { quotes } = get();
+      const target = quotes.find((q) => q.id === quoteId);
       const updatedQuotes = quotes.map((q) =>
         q.id === quoteId ? { ...q, isFavorite: !q.isFavorite } : q
       );
 
       await setQuotes(updatedQuotes);
       set({ quotes: updatedQuotes });
+      // Only custom quotes sync — seed quotes are excluded (spec v1 scope).
+      if (target?.isCustom) {
+        notifyMutated('quotes', quoteId);
+      }
 
       // Update current quote if it's the one being favorited
       const currentQuote = get().currentQuote;
@@ -389,6 +395,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       const updatedQuotes = [...quotes, newQuote];
       await setQuotes(updatedQuotes);
       set({ quotes: updatedQuotes });
+      notifyMutated('quotes', newQuote.id);
     } catch (error) {
       logger.error('Error adding custom quote', error);
       const errorMessage = 'Failed to add custom quote. Please try again.';
@@ -432,10 +439,15 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
   editQuote: async (quoteId: string, updates) => {
     try {
       const { quotes } = get();
+      const target = quotes.find((q) => q.id === quoteId);
       const updatedQuotes = quotes.map((q) => (q.id === quoteId ? { ...q, ...updates } : q));
 
       await setQuotes(updatedQuotes);
       set({ quotes: updatedQuotes });
+      // Only custom quotes sync — seed quotes are excluded (spec v1 scope).
+      if (target?.isCustom) {
+        notifyMutated('quotes', quoteId);
+      }
 
       // Update current quote if it's the one being edited
       const currentQuote = get().currentQuote;
@@ -457,10 +469,15 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
   deleteQuote: async (quoteId: string) => {
     try {
       const { quotes } = get();
+      const target = quotes.find((q) => q.id === quoteId);
       const updatedQuotes = quotes.filter((q) => q.id !== quoteId);
 
       await setQuotes(updatedQuotes);
       set({ quotes: updatedQuotes });
+      // Only custom quotes sync — seed quotes are excluded (spec v1 scope).
+      if (target?.isCustom) {
+        notifyDeleted('quotes', quoteId);
+      }
 
       // If deleting current quote, get a new one
       const currentQuote = get().currentQuote;
@@ -511,10 +528,17 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     try {
       const { quotes, currentQuote } = get();
       const quoteIdSet = new Set(quoteIds);
+      // Only custom quotes sync — seed quotes are excluded (spec v1 scope).
+      const deletedCustomIds = quotes
+        .filter((q) => quoteIdSet.has(q.id) && q.isCustom)
+        .map((q) => q.id);
       const updatedQuotes = quotes.filter((q) => !quoteIdSet.has(q.id));
 
       await setQuotes(updatedQuotes);
       set({ quotes: updatedQuotes, error: null });
+      for (const id of deletedCustomIds) {
+        notifyDeleted('quotes', id);
+      }
 
       // If current quote was deleted, refresh to a new one
       if (currentQuote && quoteIdSet.has(currentQuote.id)) {
@@ -534,12 +558,19 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     try {
       const { quotes, currentQuote } = get();
       const quoteIdSet = new Set(quoteIds);
+      // Only custom quotes sync — seed quotes are excluded (spec v1 scope).
+      const affectedCustomIds = quotes
+        .filter((q) => quoteIdSet.has(q.id) && q.isCustom)
+        .map((q) => q.id);
       const updatedQuotes = quotes.map((q) =>
         quoteIdSet.has(q.id) ? { ...q, isFavorite: setFavorite } : q
       );
 
       await setQuotes(updatedQuotes);
       set({ quotes: updatedQuotes, error: null });
+      for (const id of affectedCustomIds) {
+        notifyMutated('quotes', id);
+      }
 
       // Update current quote if it was in the selection
       if (currentQuote && quoteIdSet.has(currentQuote.id)) {
@@ -566,12 +597,19 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     try {
       const { quotes, currentQuote } = get();
       const quoteIdSet = new Set(quoteIds);
+      // Only custom quotes sync — seed quotes are excluded (spec v1 scope).
+      const affectedCustomIds = quotes
+        .filter((q) => quoteIdSet.has(q.id) && q.isCustom)
+        .map((q) => q.id);
       const updatedQuotes = quotes.map((q) =>
         quoteIdSet.has(q.id) ? { ...q, isHidden: setHidden } : q
       );
 
       await setQuotes(updatedQuotes);
       set({ quotes: updatedQuotes, error: null });
+      for (const id of affectedCustomIds) {
+        notifyMutated('quotes', id);
+      }
 
       // If hiding current quote, refresh to a new one
       if (setHidden && currentQuote && quoteIdSet.has(currentQuote.id)) {
@@ -675,6 +713,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       const updatedCollections = [...collections, newCollection];
       await setCollections(updatedCollections);
       set({ collections: updatedCollections, error: null });
+      notifyMutated('collections', newCollection.id);
 
       useToastStore.getState().success(`Collection "${name}" created`);
       return true;
@@ -698,6 +737,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
 
       await setCollections(updatedCollections);
       set({ collections: updatedCollections, error: null });
+      notifyMutated('collections', id);
 
       useToastStore.getState().success('Collection updated');
       return true;
@@ -742,6 +782,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
 
       // Persist updated filter settings (collection removed from active filters)
       await persistFilterSettings(get());
+      notifyDeleted('collections', id);
 
       useToastStore.getState().success('Collection deleted');
       return true;
@@ -917,6 +958,9 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       const updatedQuotes = [...quotes, ...newQuotes];
       await setQuotes(updatedQuotes);
       set({ quotes: updatedQuotes, error: null });
+      for (const quote of newQuotes) {
+        notifyMutated('quotes', quote.id);
+      }
 
       result.success = true;
       result.imported = newQuotes.length;
