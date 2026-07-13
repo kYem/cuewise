@@ -3,11 +3,15 @@
 //! actions) here. Action clicks relay back as `tray://action` events (`lib.rs`).
 //!
 //! The frequent updates (posture dot, timer stats — every few seconds) are
-//! label-only: they `set_text` on stable item handles and never add/remove items,
-//! so an open menu or submenu can't be left dangling (the ENG-55 SIGABRT).
-//! Structural changes (a different item tree) drain and rebuild — rare, and
-//! almost always right after a click that closed the menu.
+//! label-only: they `set_text` on stable item handles and never add/remove items.
+//! Structural changes (a different item tree) drain and rebuild, and the replaced
+//! generation's handles are RETAINED for a while: muda items dispatch through a
+//! raw pointer that dangles the moment the last handle drops, so freeing items an
+//! open tracking session still references is the ENG-55 SIGABRT — even rebuilds
+//! fired by timers (a snooze expiring, a session completing) while the menu is
+//! held open stay safe this way.
 
+use std::collections::VecDeque;
 use std::sync::Mutex;
 
 use serde::Deserialize;
@@ -39,11 +43,25 @@ enum ActionHandle {
     },
 }
 
+/// Every handle a menu generation created — kept together so retiring one keeps
+/// all of its items (incl. separators and the fixed tail) alive as a unit.
+#[derive(Default)]
+struct Generation {
+    info: Vec<MenuItem<Wry>>,
+    actions: Vec<ActionHandle>,
+    separators: Vec<PredefinedMenuItem<Wry>>,
+    tail: Vec<MenuItem<Wry>>,
+}
+
+// A menu held open across this many structural rebuilds (each a rare, discrete
+// transition) is not a realistic tracking session; older generations drop.
+const RETIRED_GENERATIONS: usize = 3;
+
 struct TrayMenu {
     menu: Menu<Wry>,
     signature: Signature,
-    info_items: Vec<MenuItem<Wry>>,
-    action_handles: Vec<ActionHandle>,
+    current: Generation,
+    retired: VecDeque<Generation>,
 }
 
 /// The one tray Menu instance plus its dynamic-item handles. The Menu object is
@@ -84,14 +102,15 @@ pub fn set_tray_title(app: AppHandle, title: Option<String>) {
 /// mutates this same instance (see `TrayMenuState`).
 pub fn init_tray_menu(app: &AppHandle) -> Result<Menu<Wry>, Error> {
     let menu = Menu::new(app)?;
-    append_fixed_tail(app, &menu)?;
+    let mut generation = Generation::default();
+    append_fixed_tail(app, &menu, &mut generation)?;
     let state = app.state::<TrayMenuState>();
     let mut guard = state.menu.lock().map_err(log_poison)?;
     *guard = Some(TrayMenu {
         menu: menu.clone(),
         signature: signature_of(&[], &[]),
-        info_items: Vec::new(),
-        action_handles: Vec::new(),
+        current: generation,
+        retired: VecDeque::new(),
     });
     Ok(menu)
 }
@@ -127,10 +146,10 @@ fn refresh_labels(
     info: &[String],
     actions: &[TrayAction],
 ) -> Result<(), Error> {
-    for (item, line) in tray_menu.info_items.iter().zip(info) {
+    for (item, line) in tray_menu.current.info.iter().zip(info) {
         item.set_text(line)?;
     }
-    for (handle, action) in tray_menu.action_handles.iter().zip(actions) {
+    for (handle, action) in tray_menu.current.actions.iter().zip(actions) {
         match handle {
             ActionHandle::Flat(item) => item.set_text(&action.label)?,
             ActionHandle::Nested { submenu, children } => {
@@ -155,11 +174,28 @@ fn rebuild(
     if let Err(e) = result {
         // Best-effort: never leave the menu without Open/Settings/Quit — the tray
         // is the only way back into a hidden-to-tray app.
-        let _ = append_fixed_tail(app, &tray_menu.menu);
+        let mut rescue = Generation::default();
+        if append_fixed_tail(app, &tray_menu.menu, &mut rescue).is_ok() {
+            retire(tray_menu, rescue);
+        }
         return Err(e);
     }
     tray_menu.signature = signature;
     Ok(())
+}
+
+// The replaced generation stays alive for a while (see the module doc): dropping
+// the last handle frees the MenuChild an open tracking session may still hold.
+fn retire(tray_menu: &mut TrayMenu, next: Generation) {
+    let previous = std::mem::replace(&mut tray_menu.current, next);
+    retire_into(&mut tray_menu.retired, previous);
+}
+
+fn retire_into(retired: &mut VecDeque<Generation>, previous: Generation) {
+    retired.push_back(previous);
+    while retired.len() > RETIRED_GENERATIONS {
+        retired.pop_front();
+    }
 }
 
 fn rebuild_items(
@@ -170,9 +206,9 @@ fn rebuild_items(
 ) -> Result<(), Error> {
     // All fallible construction happens BEFORE the menu is touched, so a build
     // failure leaves the previous menu fully intact.
-    let mut info_items = Vec::with_capacity(info.len());
+    let mut generation = Generation::default();
     for (index, line) in info.iter().enumerate() {
-        info_items.push(MenuItem::with_id(
+        generation.info.push(MenuItem::with_id(
             app,
             format!("info-{index}"),
             line,
@@ -180,11 +216,10 @@ fn rebuild_items(
             None::<&str>,
         )?);
     }
-    let mut action_handles = Vec::with_capacity(actions.len());
     for action in actions {
         if action.children.is_empty() {
             let item = MenuItem::with_id(app, &action.id, &action.label, true, None::<&str>)?;
-            action_handles.push(ActionHandle::Flat(item));
+            generation.actions.push(ActionHandle::Flat(item));
         } else {
             let mut children = Vec::with_capacity(action.children.len());
             let mut builder = SubmenuBuilder::new(app, &action.label);
@@ -193,47 +228,57 @@ fn rebuild_items(
                 builder = builder.item(&item);
                 children.push(item);
             }
-            action_handles.push(ActionHandle::Nested {
+            generation.actions.push(ActionHandle::Nested {
                 submenu: builder.build()?,
                 children,
             });
         }
     }
 
-    let menu = &tray_menu.menu;
+    let menu = tray_menu.menu.clone();
     while menu.remove_at(0)?.is_some() {}
-    for item in &info_items {
+    for item in &generation.info {
         menu.append(item)?;
     }
-    if !info_items.is_empty() {
-        menu.append(&PredefinedMenuItem::separator(app)?)?;
+    if !generation.info.is_empty() {
+        let separator = PredefinedMenuItem::separator(app)?;
+        menu.append(&separator)?;
+        generation.separators.push(separator);
     }
-    for handle in &action_handles {
+    for handle in &generation.actions {
         match handle {
             ActionHandle::Flat(item) => menu.append(item)?,
             ActionHandle::Nested { submenu, .. } => menu.append(submenu)?,
         }
     }
-    if !action_handles.is_empty() {
-        menu.append(&PredefinedMenuItem::separator(app)?)?;
+    if !generation.actions.is_empty() {
+        let separator = PredefinedMenuItem::separator(app)?;
+        menu.append(&separator)?;
+        generation.separators.push(separator);
     }
-    append_fixed_tail(app, menu)?;
+    append_fixed_tail(app, &menu, &mut generation)?;
 
-    tray_menu.info_items = info_items;
-    tray_menu.action_handles = action_handles;
+    retire(tray_menu, generation);
     Ok(())
 }
 
-fn append_fixed_tail(app: &AppHandle, menu: &Menu<Wry>) -> Result<(), Error> {
+fn append_fixed_tail(
+    app: &AppHandle,
+    menu: &Menu<Wry>,
+    generation: &mut Generation,
+) -> Result<(), Error> {
     let show = MenuItem::with_id(app, "show", "Open Cuewise", true, None::<&str>)?;
     let insights = MenuItem::with_id(app, "insights", "View Insights", true, None::<&str>)?;
     let settings = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit Cuewise", true, None::<&str>)?;
+    let separator = PredefinedMenuItem::separator(app)?;
     menu.append(&show)?;
     menu.append(&insights)?;
     menu.append(&settings)?;
-    menu.append(&PredefinedMenuItem::separator(app)?)?;
+    menu.append(&separator)?;
     menu.append(&quit)?;
+    generation.tail.extend([show, insights, settings, quit]);
+    generation.separators.push(separator);
     Ok(())
 }
 
@@ -292,6 +337,15 @@ mod tests {
         assert_ne!(flat, renamed_id);
         assert_ne!(flat, nested);
         assert_ne!(flat, more_info);
+    }
+
+    #[test]
+    fn retired_generations_are_capped() {
+        let mut retired = VecDeque::new();
+        for _ in 0..(RETIRED_GENERATIONS + 2) {
+            retire_into(&mut retired, Generation::default());
+        }
+        assert_eq!(retired.len(), RETIRED_GENERATIONS);
     }
 
     #[test]
