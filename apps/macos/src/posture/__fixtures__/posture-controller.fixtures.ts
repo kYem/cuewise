@@ -69,6 +69,8 @@ export const SENSITIVITY_APPLY_FAILED_WARNING =
   "Couldn't apply the sensitivity — readings may use the previous setting.";
 export const PREVIEW_FAILED_WARNING = "Couldn't show the glow preview — please try again.";
 export const STOPPED_ERROR = 'Posture tracking stopped — camera unavailable or permission denied.';
+export const STALLED_ERROR =
+  'Posture readings stalled — tracking stopped to release the camera. Start it again to resume.';
 export const UNREADABLE_ERROR = 'Posture readings could not be read.';
 export const START_FAILED_ERROR = 'Could not start posture tracking — check camera access.';
 
@@ -92,8 +94,8 @@ export function emitSampleFrame(payload: string): void {
   getHandler('posture://sample')({ payload });
 }
 
-export function emitStopped(): void {
-  getHandler('posture://stopped')({ payload: '' });
+export function emitStopped(cause: 'exited' | 'stalled' = 'exited'): void {
+  getHandler('posture://stopped')({ payload: cause });
 }
 
 export function countInvokes(command: string): number {

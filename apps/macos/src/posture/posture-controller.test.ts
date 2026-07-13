@@ -15,6 +15,7 @@ import {
   resetPostureMocks,
   SAVE_FAILED_WARNING,
   SENSITIVITY_APPLY_FAILED_WARNING,
+  STALLED_ERROR,
   START_FAILED_ERROR,
   STOPPED_ERROR,
   toastErrorMock,
@@ -126,6 +127,18 @@ describe('posture controller lifecycle', () => {
     for (const unlisten of unlistenSpies) {
       expect(unlisten).toHaveBeenCalled();
     }
+  });
+
+  it('a liveness stall reports its own cause instead of blaming permissions', async () => {
+    await startTracking();
+
+    emitStopped('stalled');
+
+    expect(getPostureState().tracking).toBe(false);
+    expect(getPostureState().error).toBe(STALLED_ERROR);
+    expect(toastErrorMock).toHaveBeenCalledWith(STALLED_ERROR);
+    // A stall is transient — the opt-in survives so tracking auto-resumes next boot.
+    expect(localStorageStub.getItem(ENABLED_KEY)).toBe('1');
   });
 
   it('a manual stop clears a stale error so the tray warning does not linger', async () => {

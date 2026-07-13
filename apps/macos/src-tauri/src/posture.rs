@@ -65,39 +65,57 @@ pub fn start_posture(app: AppHandle, state: State<'_, PostureState>) -> Result<(
             let received = match next_sidecar_event(&mut rx, deadline).await {
                 Ok(received) => received,
                 Err(_elapsed) => {
-                    // Alive but mute: kill it so the camera turns off, then report a
-                    // normal stop so the webview runs its existing teardown.
-                    eprintln!("posture sidecar: no output within the liveness deadline; killing");
+                    // Alive but mute: kill it so the camera turns off, then report the
+                    // stop with its cause so the webview's copy doesn't blame permissions.
                     if reap_owned_child(&task_app, generation) {
-                        let _ = task_app.emit(STOPPED_EVENT, ());
+                        eprintln!(
+                            "posture sidecar: no output within the liveness deadline; killed"
+                        );
+                        let _ = task_app.emit(STOPPED_EVENT, "stalled");
                     }
                     break;
                 }
             };
             let Some(event) = received else {
+                // Stream ended without a Terminated — still release, or the slot
+                // wedges every future start behind a dead child.
+                if release_owned_child(&task_app, generation) {
+                    let _ = task_app.emit(STOPPED_EVENT, "exited");
+                }
                 break;
             };
             match event {
-                CommandEvent::Stdout(bytes) => {
-                    // Any stdout line proves the pipeline is alive — roll the bound.
-                    deadline = tokio::time::Instant::now() + LIVENESS_TIMEOUT;
-                    if let Ok(line) = String::from_utf8(bytes) {
+                CommandEvent::Stdout(bytes) => match String::from_utf8(bytes) {
+                    Ok(line) => {
                         let trimmed = line.trim();
                         if !trimmed.is_empty() {
+                            // Only a relayed sample rolls the bound — the watchdog
+                            // guards the webview surface, not bare pipe activity.
+                            deadline = tokio::time::Instant::now() + LIVENESS_TIMEOUT;
                             let _ = task_app.emit(SAMPLE_EVENT, trimmed.to_string());
                         }
                     }
-                }
+                    Err(error) => {
+                        eprintln!("posture sidecar: dropped non-utf8 stdout line: {error}");
+                    }
+                },
                 CommandEvent::Stderr(bytes) => {
                     if let Ok(line) = String::from_utf8(bytes) {
                         eprintln!("{}", line.trim_end());
                     }
                 }
-                CommandEvent::Error(_) | CommandEvent::Terminated(_) => {
+                CommandEvent::Error(message) => {
+                    eprintln!("posture sidecar: relay error: {message}");
+                    if release_owned_child(&task_app, generation) {
+                        let _ = task_app.emit(STOPPED_EVENT, "exited");
+                    }
+                    break;
+                }
+                CommandEvent::Terminated(_) => {
                     // Only the owning session clears the slot and reports the stop —
                     // a straggling Terminated must not tear down a successor session.
                     if release_owned_child(&task_app, generation) {
-                        let _ = task_app.emit(STOPPED_EVENT, ());
+                        let _ = task_app.emit(STOPPED_EVENT, "exited");
                     }
                     break;
                 }
@@ -126,7 +144,15 @@ fn owns<T>(entry: &Option<(u64, T)>, generation: u64) -> bool {
 // Take the child out of the slot only if this session still owns it.
 fn take_owned_child(app: &AppHandle, generation: u64) -> Option<CommandChild> {
     let state = app.try_state::<PostureState>()?;
-    let mut guard = state.child.lock().ok()?;
+    let mut guard = match state.child.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => {
+            // The slot can't be torn (a plain Option swap), and the kill must still
+            // happen — recover rather than strand a live camera behind a prior panic.
+            eprintln!("posture sidecar: child slot lock poisoned; recovering");
+            poisoned.into_inner()
+        }
+    };
     if owns(&guard, generation) {
         return guard.take().map(|(_, child)| child);
     }
