@@ -680,6 +680,22 @@ describe('glow appearance preferences', () => {
     // The glow windows read localStorage — Settings must not claim a style they won't use.
     expect(getPostureState().glowStyle).toBe('border');
     expect(localStorageStub.getItem('cuewise.posture.glowStyle')).toBe('border');
+    // Exactly one: the failed write warns, the successful seed write must not.
+    expect(toastWarningMock).toHaveBeenCalledTimes(1);
+    expect(toastWarningMock).toHaveBeenCalledWith(SAVE_FAILED_WARNING);
+  });
+
+  it('keeps the persisted strength and warns when the write fails', () => {
+    setGlowIntensity('subtle');
+    const failingWrite = vi.spyOn(localStorageStub, 'setItem').mockImplementation(() => {
+      throw new Error('storage full');
+    });
+    setGlowIntensity('intense');
+    failingWrite.mockRestore();
+
+    expect(getPostureState().glowIntensity).toBe('subtle');
+    expect(localStorageStub.getItem('cuewise.posture.glowIntensity')).toBe('subtle');
+    expect(toastWarningMock).toHaveBeenCalledTimes(1);
     expect(toastWarningMock).toHaveBeenCalledWith(SAVE_FAILED_WARNING);
   });
 });

@@ -1,3 +1,4 @@
+import { logger } from '@cuewise/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { glowVignetteClassName, readGlowIntensity, readGlowStyle } from './glow-prefs';
 
@@ -12,6 +13,7 @@ function stubStorage(getItem: () => string | null): void {
 describe('readGlowIntensity', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.clearAllMocks();
   });
 
   it('returns a stored valid intensity', () => {
@@ -36,17 +38,20 @@ describe('readGlowIntensity', () => {
     expect(readGlowIntensity()).toBe('standard');
   });
 
-  it('falls back to standard when storage throws', () => {
+  it('falls back to standard when storage throws, leaving a trace', () => {
     stubStorage(() => {
       throw new Error('storage disabled');
     });
     expect(readGlowIntensity()).toBe('standard');
+    // A bare swallow here would ship undebuggable pref downgrades.
+    expect(logger.warn).toHaveBeenCalledTimes(1);
   });
 });
 
 describe('readGlowStyle', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.clearAllMocks();
   });
 
   it('returns a stored valid style', () => {
@@ -65,6 +70,8 @@ describe('readGlowStyle', () => {
       throw new Error('storage disabled');
     });
     expect(readGlowStyle()).toBe('glow');
+    // Only the throwing read warns — garbage and missing values are ordinary.
+    expect(logger.warn).toHaveBeenCalledTimes(1);
   });
 });
 

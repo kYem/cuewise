@@ -553,7 +553,9 @@ export function setNudgeDelay(seconds: NudgeDelaySeconds): void {
   setState({ nudgeDelaySeconds: seconds });
 }
 
-const SAVE_FAILED_WARNING = "Couldn't save the setting — the previous value is still in use.";
+// Only the glow prefs read back from storage, so a failed write visibly snaps
+// the control — this toast says what the user is actually left with.
+const SAVE_FAILED_WARNING = "Couldn't save the setting — showing what's in effect instead.";
 
 /** Set the glow strength; the glow windows read it from localStorage on show. */
 export function setGlowIntensity(intensity: GlowIntensity): void {
@@ -566,7 +568,6 @@ export function setGlowIntensity(intensity: GlowIntensity): void {
   // persisted so Settings can't show a strength the overlays won't use.
   setState({ glowIntensity: readGlowIntensity() });
   if (!persisted) {
-    // Unlike the other prefs, the control visibly snaps back — explain why.
     useToastStore.getState().warning(SAVE_FAILED_WARNING);
   }
 }
