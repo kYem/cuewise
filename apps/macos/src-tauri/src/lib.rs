@@ -4,11 +4,7 @@ mod posture;
 mod scheduler;
 mod tray;
 
-use tauri::{
-    menu::{MenuBuilder, MenuItem},
-    tray::TrayIconBuilder,
-    AppHandle, Emitter, Manager, RunEvent, WindowEvent,
-};
+use tauri::{tray::TrayIconBuilder, AppHandle, Emitter, Manager, RunEvent, WindowEvent};
 
 /// Show + focus the main window, optionally routing the hash-routed UI to a page.
 fn reveal(app: &AppHandle, hash: Option<&str>) {
@@ -38,6 +34,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .manage(scheduler::SchedulerState::default())
         .manage(posture::PostureState::default())
+        .manage(tray::TrayMenuState::default())
         .invoke_handler(tauri::generate_handler![
             scheduler::schedule_wake,
             scheduler::cancel_wake,
@@ -50,19 +47,9 @@ pub fn run() {
             glow::hide_glow
         ])
         .setup(|app| {
-            // Initial menu; the webview replaces it with live status (and the
-            // Pomodoro/posture actions) via `set_tray_menu` once it loads.
-            let open = MenuItem::with_id(app, "show", "Open Cuewise", true, None::<&str>)?;
-            let insights = MenuItem::with_id(app, "insights", "View Insights", true, None::<&str>)?;
-            let settings = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
-            let quit = MenuItem::with_id(app, "quit", "Quit Cuewise", true, None::<&str>)?;
-            let menu = MenuBuilder::new(app)
-                .item(&open)
-                .item(&insights)
-                .item(&settings)
-                .separator()
-                .item(&quit)
-                .build()?;
+            // The one tray menu: created once here with the fixed items, then only
+            // mutated in place by `set_tray_menu` — never replaced (ENG-55).
+            let menu = tray::init_tray_menu(app.handle())?;
 
             // The tray is the primary way to reveal the window once it's hidden
             // (Dock reopen also does, via `RunEvent::Reopen` below), so a missing
