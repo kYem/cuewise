@@ -190,6 +190,39 @@ describe('D1SyncStore records', () => {
     expect(await store.purgeTombstones(100_000)).toBe(0);
   });
 
+  it('getPurgedSeq is 0 for a user who has never had a tombstone purged', async () => {
+    const store = new D1SyncStore(env.DB);
+    const userId = await newUser(store, 'u-never-purged');
+    expect(await store.getPurgedSeq(userId)).toBe(0);
+  });
+
+  it('purgeTombstones advances the user watermark to the purged tombstone highest seq', async () => {
+    const retention = 100_000;
+    const { store, tick } = clockedStore(1_000);
+    const userId = await store.findOrCreateUser({ provider: 'dev', providerSub: 'u-watermark' });
+    // Live record keeps a low seq forever; the tombstone at the higher seq is what
+    // must set the watermark (MIN(seq) over survivors would stay pinned at 1 instead).
+    await store.applyChanges(userId, [
+      record({ entityId: 'live', deleted: false }),
+      record({ entityId: 'gone', deleted: true }),
+    ]);
+    tick(retention + 1);
+
+    expect(await store.purgeTombstones(retention)).toBe(1);
+    expect(await store.getPurgedSeq(userId)).toBe(2);
+  });
+
+  it('purgeTombstones does not bump the watermark for a user with no purged tombstone', async () => {
+    const retention = 100_000;
+    const { store, tick } = clockedStore(1_000);
+    const userId = await store.findOrCreateUser({ provider: 'dev', providerSub: 'u-no-tombstone' });
+    await store.applyChanges(userId, [record({ entityId: 'live', deleted: false })]);
+    tick(retention + 1);
+
+    expect(await store.purgeTombstones(retention)).toBe(0);
+    expect(await store.getPurgedSeq(userId)).toBe(0);
+  });
+
   it('applyChanges with an empty array returns the current cursor and writes nothing', async () => {
     const store = new D1SyncStore(env.DB);
     const userId = await newUser(store, 'u1');

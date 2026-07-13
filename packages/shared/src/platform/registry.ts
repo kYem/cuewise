@@ -1,4 +1,4 @@
-import type { KeyValueStore, Notifier, Scheduler } from './types';
+import type { KeyValueStore, Notifier, Scheduler, SyncMutationSink } from './types';
 
 /**
  * Bootstrap container for the active platform implementations. `configurePlatform`
@@ -9,11 +9,15 @@ import type { KeyValueStore, Notifier, Scheduler } from './types';
 let scheduler: Scheduler | null = null;
 let notifier: Notifier | null = null;
 let storage: KeyValueStore | null = null;
+let syncSink: SyncMutationSink | null = null;
 
 export function configurePlatform(impls: {
   scheduler?: Scheduler;
   notifier?: Notifier;
   storage?: KeyValueStore;
+  // Passing `null` explicitly CLEARS the sink (targeted test reset); omitting the key
+  // leaves it untouched, same `!== undefined` merge as the other bindings above.
+  syncSink?: SyncMutationSink | null;
 }): void {
   if (impls.scheduler !== undefined) {
     scheduler = impls.scheduler;
@@ -23,6 +27,9 @@ export function configurePlatform(impls: {
   }
   if (impls.storage !== undefined) {
     storage = impls.storage;
+  }
+  if (impls.syncSink !== undefined) {
+    syncSink = impls.syncSink;
   }
 }
 
@@ -47,9 +54,15 @@ export function getStorage(): KeyValueStore {
   return storage;
 }
 
+/** Nullable, unlike the getters above — sync is optional, so an unconfigured sink is valid. */
+export function getSyncSink(): SyncMutationSink | null {
+  return syncSink;
+}
+
 /** Clear the active implementations. For test isolation. */
 export function resetPlatform(): void {
   scheduler = null;
   notifier = null;
   storage = null;
+  syncSink = null;
 }

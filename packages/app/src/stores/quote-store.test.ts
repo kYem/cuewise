@@ -1,8 +1,14 @@
-import { ALL_QUOTE_CATEGORIES, type QuoteCollection, type Settings } from '@cuewise/shared';
+import {
+  ALL_QUOTE_CATEGORIES,
+  configurePlatform,
+  type QuoteCollection,
+  type Settings,
+  type SyncMutationSink,
+} from '@cuewise/shared';
 import * as storage from '@cuewise/storage';
 import { quoteFactory } from '@cuewise/test-utils/factories';
 import { defaultSettings } from '@cuewise/test-utils/fixtures';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SEED_QUOTES } from '../data/seed-quotes';
 import {
   createAtBeginningState,
@@ -734,5 +740,217 @@ describe('Quote Store', () => {
         );
       });
     });
+  });
+});
+
+describe('sync sink wiring', () => {
+  const markMutated = vi.fn();
+  const markDeleted = vi.fn();
+  const markMutatedBulk = vi.fn();
+  const fakeSink: SyncMutationSink = { markMutated, markDeleted, markMutatedBulk };
+
+  beforeEach(() => {
+    useQuoteStore.setState(EMPTY_STORE_STATE);
+    vi.clearAllMocks();
+    markMutated.mockClear();
+    markDeleted.mockClear();
+    markMutatedBulk.mockClear();
+    configurePlatform({ syncSink: fakeSink });
+  });
+
+  afterEach(() => {
+    configurePlatform({ syncSink: null });
+  });
+
+  it('notifies markMutated with the new custom quote id after addCustomQuote persists', async () => {
+    useQuoteStore.setState({ quotes: [] });
+
+    await useQuoteStore.getState().addCustomQuote('A quote', 'Author', 'inspiration');
+
+    const created = useQuoteStore.getState().quotes[0];
+    expect(markMutated).toHaveBeenCalledWith('quotes', created.id);
+  });
+
+  it('notifies markDeleted with the quote id after deleteQuote persists a custom quote', async () => {
+    const customQuote = quoteFactory.build({ isCustom: true });
+    useQuoteStore.setState({ quotes: [customQuote] });
+
+    await useQuoteStore.getState().deleteQuote(customQuote.id);
+
+    expect(markDeleted).toHaveBeenCalledWith('quotes', customQuote.id);
+  });
+
+  it('does not notify when toggling favorite on a seed (non-custom) quote', async () => {
+    const seedQuote = quoteFactory.build({ isCustom: false });
+    useQuoteStore.setState({ quotes: [seedQuote] });
+
+    await useQuoteStore.getState().toggleFavorite(seedQuote.id);
+
+    expect(markMutated).not.toHaveBeenCalled();
+  });
+
+  it('notifies markMutated when toggling favorite on a custom quote', async () => {
+    const customQuote = quoteFactory.build({ isCustom: true });
+    useQuoteStore.setState({ quotes: [customQuote] });
+
+    await useQuoteStore.getState().toggleFavorite(customQuote.id);
+
+    expect(markMutated).toHaveBeenCalledWith('quotes', customQuote.id);
+  });
+
+  it('notifies markMutated with the new collection id after createCollection persists', async () => {
+    vi.mocked(storage.setCollections).mockResolvedValue({ success: true });
+    useQuoteStore.setState({ collections: [] });
+
+    await useQuoteStore.getState().createCollection('My collection');
+
+    const created = useQuoteStore.getState().collections[0];
+    expect(markMutated).toHaveBeenCalledWith('collections', created.id);
+  });
+
+  it('notifies markMutated when hiding a custom quote', async () => {
+    const customQuote = quoteFactory.build({ isCustom: true, isHidden: false });
+    useQuoteStore.setState({ quotes: [customQuote], currentQuote: null });
+
+    await useQuoteStore.getState().hideQuote(customQuote.id);
+
+    expect(markMutated).toHaveBeenCalledWith('quotes', customQuote.id);
+  });
+
+  it('does not notify when hiding a seed (non-custom) quote', async () => {
+    const seedQuote = quoteFactory.build({ isCustom: false, isHidden: false });
+    useQuoteStore.setState({ quotes: [seedQuote], currentQuote: null });
+
+    await useQuoteStore.getState().hideQuote(seedQuote.id);
+
+    expect(markMutated).not.toHaveBeenCalled();
+  });
+
+  it('notifies markMutated when unhiding a custom quote', async () => {
+    const customQuote = quoteFactory.build({ isCustom: true, isHidden: true });
+    useQuoteStore.setState({ quotes: [customQuote] });
+
+    await useQuoteStore.getState().unhideQuote(customQuote.id);
+
+    expect(markMutated).toHaveBeenCalledWith('quotes', customQuote.id);
+  });
+
+  it('does not notify when unhiding a seed (non-custom) quote', async () => {
+    const seedQuote = quoteFactory.build({ isCustom: false, isHidden: true });
+    useQuoteStore.setState({ quotes: [seedQuote] });
+
+    await useQuoteStore.getState().unhideQuote(seedQuote.id);
+
+    expect(markMutated).not.toHaveBeenCalled();
+  });
+
+  it('notifies markMutated with the quote id after addQuoteToCollection persists a custom quote', async () => {
+    const customQuote = quoteFactory.build({ isCustom: true, collectionIds: [] });
+    useQuoteStore.setState({ quotes: [customQuote], currentQuote: null });
+
+    await useQuoteStore.getState().addQuoteToCollection(customQuote.id, 'collection-1');
+
+    expect(markMutated).toHaveBeenCalledWith('quotes', customQuote.id);
+  });
+
+  it('does not notify addQuoteToCollection for a seed (non-custom) quote', async () => {
+    const seedQuote = quoteFactory.build({ isCustom: false, collectionIds: [] });
+    useQuoteStore.setState({ quotes: [seedQuote], currentQuote: null });
+
+    await useQuoteStore.getState().addQuoteToCollection(seedQuote.id, 'collection-1');
+
+    expect(markMutated).not.toHaveBeenCalled();
+  });
+
+  it('notifies markMutated with the quote id after removeQuoteFromCollection persists a custom quote', async () => {
+    const customQuote = quoteFactory.build({ isCustom: true, collectionIds: ['collection-1'] });
+    useQuoteStore.setState({ quotes: [customQuote], currentQuote: null });
+
+    await useQuoteStore.getState().removeQuoteFromCollection(customQuote.id, 'collection-1');
+
+    expect(markMutated).toHaveBeenCalledWith('quotes', customQuote.id);
+  });
+
+  it('does not notify removeQuoteFromCollection for a seed (non-custom) quote', async () => {
+    const seedQuote = quoteFactory.build({ isCustom: false, collectionIds: ['collection-1'] });
+    useQuoteStore.setState({ quotes: [seedQuote], currentQuote: null });
+
+    await useQuoteStore.getState().removeQuoteFromCollection(seedQuote.id, 'collection-1');
+
+    expect(markMutated).not.toHaveBeenCalled();
+  });
+
+  it('notifies markMutatedBulk with only the custom ids after bulkToggleFavorite', async () => {
+    const customA = quoteFactory.build({ isCustom: true, isFavorite: false });
+    const customB = quoteFactory.build({ isCustom: true, isFavorite: false });
+    const seed = quoteFactory.build({ isCustom: false, isFavorite: false });
+    useQuoteStore.setState({ quotes: [customA, customB, seed], currentQuote: null });
+
+    await useQuoteStore.getState().bulkToggleFavorite([customA.id, customB.id, seed.id], true);
+
+    expect(markMutatedBulk).toHaveBeenCalledWith('quotes', [customA.id, customB.id]);
+    expect(markMutated).not.toHaveBeenCalled();
+  });
+
+  it('notifies markMutatedBulk with only the custom ids after bulkToggleHidden', async () => {
+    const customA = quoteFactory.build({ isCustom: true, isHidden: false });
+    const customB = quoteFactory.build({ isCustom: true, isHidden: false });
+    const seed = quoteFactory.build({ isCustom: false, isHidden: false });
+    useQuoteStore.setState({ quotes: [customA, customB, seed], currentQuote: null });
+
+    await useQuoteStore.getState().bulkToggleHidden([customA.id, customB.id, seed.id], true);
+
+    expect(markMutatedBulk).toHaveBeenCalledWith('quotes', [customA.id, customB.id]);
+    expect(markMutated).not.toHaveBeenCalled();
+  });
+
+  it('notifies markMutatedBulk with only the custom ids after addQuotesToCollection', async () => {
+    const customA = quoteFactory.build({ isCustom: true, collectionIds: [] });
+    const customB = quoteFactory.build({ isCustom: true, collectionIds: [] });
+    const seed = quoteFactory.build({ isCustom: false, collectionIds: [] });
+    useQuoteStore.setState({
+      quotes: [customA, customB, seed],
+      collections: [],
+      currentQuote: null,
+    });
+
+    await useQuoteStore
+      .getState()
+      .addQuotesToCollection([customA.id, customB.id, seed.id], 'collection-1');
+
+    expect(markMutatedBulk).toHaveBeenCalledWith('quotes', [customA.id, customB.id]);
+    expect(markMutated).not.toHaveBeenCalled();
+  });
+
+  it('filters an already-member custom quote out of addQuotesToCollection notifications', async () => {
+    const alreadyMember = quoteFactory.build({ isCustom: true, collectionIds: ['collection-1'] });
+    const newMember = quoteFactory.build({ isCustom: true, collectionIds: [] });
+    useQuoteStore.setState({
+      quotes: [alreadyMember, newMember],
+      collections: [],
+      currentQuote: null,
+    });
+
+    await useQuoteStore
+      .getState()
+      .addQuotesToCollection([alreadyMember.id, newMember.id], 'collection-1');
+
+    expect(markMutatedBulk).toHaveBeenCalledWith('quotes', [newMember.id]);
+  });
+
+  it('notifies markMutatedBulk with every imported id after bulkAddQuotes', async () => {
+    useQuoteStore.setState({ quotes: [] });
+
+    await useQuoteStore.getState().bulkAddQuotes([
+      { text: 'Quote A', author: 'Author A', category: 'inspiration' },
+      { text: 'Quote B', author: 'Author B', category: 'inspiration' },
+    ]);
+
+    const created = useQuoteStore.getState().quotes;
+    expect(markMutatedBulk).toHaveBeenCalledWith(
+      'quotes',
+      created.map((q) => q.id)
+    );
+    expect(markMutated).not.toHaveBeenCalled();
   });
 });

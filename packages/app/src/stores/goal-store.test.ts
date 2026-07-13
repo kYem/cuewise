@@ -1,4 +1,9 @@
-import { getTodayDateString, storageFailure } from '@cuewise/shared';
+import {
+  configurePlatform,
+  getTodayDateString,
+  type SyncMutationSink,
+  storageFailure,
+} from '@cuewise/shared';
 import * as storage from '@cuewise/storage';
 import {
   completedGoalFactory,
@@ -6,7 +11,7 @@ import {
   objectiveFactory,
   taskWithSubtasksFactory,
 } from '@cuewise/test-utils/factories';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useGoalStore } from './goal-store';
 
 // Mock storage functions
@@ -891,5 +896,40 @@ describe('toggleTask persistence', () => {
 
     expect(result).toBe(false);
     expect(useGoalStore.getState().goals[0].completed).toBe(false);
+  });
+});
+
+describe('sync sink wiring', () => {
+  const markMutated = vi.fn();
+  const markDeleted = vi.fn();
+  const fakeSink: SyncMutationSink = { markMutated, markDeleted };
+
+  beforeEach(() => {
+    markMutated.mockClear();
+    markDeleted.mockClear();
+    vi.mocked(storage.setGoals).mockResolvedValue({ success: true });
+    configurePlatform({ syncSink: fakeSink });
+  });
+
+  afterEach(() => {
+    configurePlatform({ syncSink: null });
+  });
+
+  it('notifies markMutated with the new task id after addTask persists', async () => {
+    useGoalStore.setState({ goals: [] });
+
+    await useGoalStore.getState().addTask('New task');
+
+    const created = useGoalStore.getState().goals[0];
+    expect(markMutated).toHaveBeenCalledWith('goals', created.id);
+  });
+
+  it('notifies markDeleted with the goal id after deleteTask persists', async () => {
+    const task = goalFactory.build({ date: getTodayDateString() });
+    useGoalStore.setState({ goals: [task], todayTasks: [task] });
+
+    await useGoalStore.getState().deleteTask(task.id);
+
+    expect(markDeleted).toHaveBeenCalledWith('goals', task.id);
   });
 });

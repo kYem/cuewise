@@ -198,6 +198,12 @@ importers:
       '@cuewise/storage':
         specifier: workspace:*
         version: link:../../packages/storage
+      '@cuewise/sync-client':
+        specifier: workspace:*
+        version: link:../../packages/sync-client
+      '@cuewise/sync-engine':
+        specifier: workspace:*
+        version: link:../../packages/sync-engine
       '@cuewise/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -310,6 +316,12 @@ importers:
       '@cuewise/storage':
         specifier: workspace:*
         version: link:../../packages/storage
+      '@cuewise/sync-client':
+        specifier: workspace:*
+        version: link:../../packages/sync-client
+      '@cuewise/sync-engine':
+        specifier: workspace:*
+        version: link:../../packages/sync-engine
       '@cuewise/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -541,6 +553,34 @@ importers:
         specifier: workspace:*
         version: link:../shared
     devDependencies:
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 3.2.6(@types/debug@4.1.13)(@types/node@25.0.1)(@vitest/ui@3.2.6)(jiti@2.7.0)(jsdom@29.1.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.21.0)(yaml@2.9.0)
+
+  packages/sync-engine:
+    dependencies:
+      '@cuewise/crypto':
+        specifier: workspace:*
+        version: link:../crypto
+      '@cuewise/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@cuewise/storage':
+        specifier: workspace:*
+        version: link:../storage
+      '@cuewise/sync-client':
+        specifier: workspace:*
+        version: link:../sync-client
+    devDependencies:
+      '@cuewise/test-utils':
+        specifier: workspace:*
+        version: link:../test-utils
+      '@types/chrome':
+        specifier: 'catalog:'
+        version: 0.1.42
       typescript:
         specifier: 'catalog:'
         version: 7.0.2

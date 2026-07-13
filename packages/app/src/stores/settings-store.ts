@@ -3,9 +3,11 @@ import {
   clampPomodoroDurations,
   configureLogger,
   DEFAULT_SETTINGS,
+  DEVICE_LOCAL_SETTINGS_KEYS,
   type LayoutDensity,
   LogLevel as LoggerLevel,
   logger,
+  notifyMutated,
   type Settings,
 } from '@cuewise/shared';
 import { getSettings, migrateStorageData, setSettings } from '@cuewise/storage';
@@ -69,6 +71,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     try {
       await setSettings(updatedSettings);
       set({ settings: updatedSettings });
+      notifyMutated('settings', 'theme');
       applyTheme(theme);
     } catch (error) {
       logger.error('Error updating theme', error);
@@ -97,6 +100,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
 
       await setSettings(updatedSettings);
       set({ settings: updatedSettings });
+      notifyMutated('settings', 'enableNotifications');
     } catch (error) {
       logger.error('Error updating notifications', error);
       const errorMessage = 'Failed to update notifications. Please try again.';
@@ -114,6 +118,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     try {
       await setSettings(updatedSettings);
       set({ settings: updatedSettings });
+      notifyMutated('settings', 'quoteChangeInterval');
     } catch (error) {
       logger.error('Error updating quote interval', error);
       const errorMessage = 'Failed to update quote interval. Please try again.';
@@ -129,6 +134,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     try {
       await setSettings(updatedSettings);
       set({ settings: updatedSettings });
+      notifyMutated('settings', 'colorTheme');
       applyColorTheme(colorTheme);
     } catch (error) {
       logger.error('Error updating color theme', error);
@@ -145,6 +151,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     try {
       await setSettings(updatedSettings);
       set({ settings: updatedSettings });
+      notifyMutated('settings', 'layoutDensity');
       applyLayoutDensity(density);
     } catch (error) {
       logger.error('Error updating layout density', error);
@@ -161,7 +168,8 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       // Clamp pomodoro durations here — the settings write path the UI uses — so
       // presets/steppers (and a future settings import) can't persist an out-of-range
       // value. Inside the try so a future throwing clamp is caught here.
-      const updatedSettings = { ...settings, ...clampPomodoroDurations(partialSettings) };
+      const clampedPartial = clampPomodoroDurations(partialSettings);
+      const updatedSettings = { ...settings, ...clampedPartial };
 
       // Check if syncEnabled changed
       const syncChanged =
@@ -196,6 +204,16 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       await setSettings(updatedSettings);
       set({ settings: updatedSettings });
 
+      // Sync every changed key that isn't device-local (each setting syncs per-key, spec §2).
+      for (const key of Object.keys(clampedPartial)) {
+        if (
+          !DEVICE_LOCAL_SETTINGS_KEYS.includes(key) &&
+          updatedSettings[key as keyof Settings] !== settings[key as keyof Settings]
+        ) {
+          notifyMutated('settings', key);
+        }
+      }
+
       // Apply customizations if they were updated
       if (partialSettings.theme) {
         applyTheme(partialSettings.theme);
@@ -224,6 +242,11 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     try {
       await setSettings(DEFAULT_SETTINGS);
       set({ settings: DEFAULT_SETTINGS });
+      for (const key of Object.keys(DEFAULT_SETTINGS)) {
+        if (!DEVICE_LOCAL_SETTINGS_KEYS.includes(key)) {
+          notifyMutated('settings', key);
+        }
+      }
       applyTheme(DEFAULT_SETTINGS.theme);
       applyColorTheme(DEFAULT_SETTINGS.colorTheme);
       applyGlassEnhanced(DEFAULT_SETTINGS.glassEnhanced);

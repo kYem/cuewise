@@ -5,6 +5,8 @@ import {
   isUpcomingRecurringOccurrence,
   logger,
   nextReminderDueDate,
+  notifyDeleted,
+  notifyMutated,
   type Reminder,
   type ReminderCategory,
   type ReminderRecurrence,
@@ -228,6 +230,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       }
 
       commitReminders(set, updatedReminders);
+      notifyMutated('reminders', newReminder.id);
 
       // Schedule alarm for this reminder
       await armReminderAlarm(newReminder.id, dueDate.getTime());
@@ -284,6 +287,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
         }
 
         commitReminders(set, updatedReminders);
+        notifyMutated('reminders', reminderId);
 
         // Only (re)arm an alarm when the reminder is active; a paused one must not fire.
         await clearReminderAlarm(reminderId);
@@ -316,6 +320,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       }
 
       commitReminders(set, updatedReminders);
+      notifyMutated('reminders', reminderId);
 
       // Cancel alarm if completed
       if (isCompleting) {
@@ -350,6 +355,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       }
 
       commitReminders(set, updatedReminders);
+      notifyDeleted('reminders', reminderId);
 
       // Cancel alarm
       await clearReminderAlarm(reminderId);
@@ -387,6 +393,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       }
 
       commitReminders(set, updatedReminders);
+      notifyMutated('reminders', reminderId);
 
       // Update alarm if dueDate changed
       if (updates.dueDate) {
@@ -437,6 +444,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       }
 
       commitReminders(set, updatedReminders);
+      notifyMutated('reminders', reminderId);
 
       // Update alarm
       await clearReminderAlarm(reminderId);
@@ -475,6 +483,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       }
 
       commitReminders(set, updated);
+      notifyMutated('reminders', reminderId);
 
       if (paused) {
         await clearReminderAlarm(reminderId);

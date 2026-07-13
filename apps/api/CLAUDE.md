@@ -64,10 +64,10 @@ All endpoints are under `/v1`.
 | `GET` | `/v1/auth/apple/start` | Begin the Apple server-bounce flow | No |
 | `POST` | `/v1/auth/apple/callback` | Apple's redirect target; mints a one-time code | No |
 | `POST` | `/v1/auth/logout` | Revoke the presented session token | Yes |
-| `GET` | `/v1/changes?since=<seq>` | Incremental pull, ≤500 records/page (`since=0` = fresh-device bootstrap). A full page means pull again from the returned `cursor`. | Yes |
+| `GET` | `/v1/changes?since=<seq>` | Incremental pull, ≤500 records/page (`since=0` = fresh-device bootstrap). A full page means pull again from the returned `cursor`. 409 `resync_required` if `since` predates the purged-tombstone watermark — the client must resync from `since=0`. | Yes |
 | `POST` | `/v1/changes` | Atomic batch push, ≤100 records, ≤64 KB ciphertext/record | Yes |
 | `GET` | `/v1/keys/recovery` | Fetch the caller's opaque recovery key envelope | Yes |
-| `PUT` | `/v1/keys/recovery` | Store/replace the caller's opaque recovery key envelope, ≤1024 bytes | Yes |
+| `PUT` | `/v1/keys/recovery` | Store/replace the caller's opaque recovery key envelope, ≤1024 bytes. `{ifAbsent: true}` makes it create-only — 409 `key_envelope_exists` if one is already stored, no overwrite. | Yes |
 | `GET` | `/v1/export` | Dump all of the caller's records | Yes |
 | `DELETE` | `/v1/account` | Delete user, identities, tokens, records, and key envelopes | Yes |
 
@@ -119,6 +119,9 @@ Every error response is `application/problem+json` (RFC 9457), built by `problem
 | `payload_too_large` | 413 | Request body `Content-Length` exceeded `MAX_REQUEST_BODY_BYTES` |
 | `invalid_cursor` | 400 | `since` isn't a plain non-negative safe integer |
 | `invalid_request` | 400 | Malformed/unparseable body, or a structurally wrong one |
+| `invalid_key_envelope` | 400 | `PUT /v1/keys/recovery` body missing/empty/non-string `envelope`, or over `MAX_ENVELOPE_BYTES` (1024) |
+| `key_envelope_exists` | 409 | `PUT /v1/keys/recovery` with `ifAbsent:true` when the caller already has an envelope stored — create-only, never overwrites |
+| `resync_required` | 409 | `GET /v1/changes`'s `since` predates the purged-tombstone watermark — client must resync from `since=0` |
 | `not_found` | 404 | No route matched |
 | `internal` | 500 | Unhandled exception, upstream (JWKS) outage, or a config fault (empty signing key / client-id) |
 
