@@ -135,6 +135,13 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       return;
     }
     setFailedAction(source);
+    // A returned failure never hits the handlers' catch, so log the real reason/detail here —
+    // otherwise the generic toast is the only trace and the actual cause is invisible.
+    logger.error('Cloud sync enable failed', {
+      source,
+      reason: result.reason,
+      detail: result.detail,
+    });
     useToastStore.getState().error(enableFailureMessage(result));
   };
 
