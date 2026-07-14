@@ -37,8 +37,9 @@ async function doEnable(
       return { ok: false, reason: 'auth' };
     }
     const detail = err instanceof Error ? err.message : String(err);
-    // Surface the real cause (e.g. a 400 the UI collapses to a generic message) — metadata only.
-    logger.error('Cloud sync enable failed', err);
+    // Put the cause in the message text so it survives string-coercing surfaces (Chrome's Errors
+    // panel); the Error arg still carries the stack in the console. Metadata only, never the token.
+    logger.error(`Cloud sync enable failed: ${detail}`, err);
     return { ok: false, reason: 'error', detail };
   }
   if (engine.getStatus() === 'signed_out') {
@@ -82,7 +83,7 @@ async function runOp(
     await engine.syncNow();
     return { ok: true };
   } catch (err) {
-    logger.error('Cloud sync control op failed', err);
+    logger.error(`Cloud sync control op '${msg.op}' failed`, err);
     return { ok: false, reason: 'error', detail: err instanceof Error ? err.message : undefined };
   }
 }

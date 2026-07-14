@@ -400,6 +400,26 @@ describe('SyncSettingsSectionComponent', () => {
     expect(controller.calls.some((c) => c.method === 'syncNow')).toBe(false);
   });
 
+  it('re-runs Google sign-in (not reconnect) when Try again is clicked after a failed Google sign-in', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptEnableWithGoogle({ ok: false, reason: 'error' });
+    renderSection(controller);
+
+    await user.click(cloudSyncSwitch());
+    await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
+    // The engine surfaces the sign-in failure as the error status.
+    act(() => controller.setStatus('error'));
+
+    controller.scriptEnableWithGoogle({ ok: true });
+    await user.click(screen.getByRole('button', { name: 'Try again' }));
+
+    await waitFor(() =>
+      expect(controller.calls.filter((c) => c.method === 'enableWithGoogle')).toHaveLength(2)
+    );
+    expect(controller.calls.some((c) => c.method === 'reconnect')).toBe(false);
+  });
+
   it('retries via reconnect (not enable with an empty account) when it mounts straight into error', async () => {
     const user = userEvent.setup();
     const controller = new FakeSyncController();

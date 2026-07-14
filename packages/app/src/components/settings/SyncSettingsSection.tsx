@@ -100,9 +100,9 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   const [enrollSource, setEnrollSource] = useState<'enable' | 'reconnect'>('enable');
   const [confirmDisableOpen, setConfirmDisableOpen] = useState(false);
   const [unsavedCode, setUnsavedCode] = useState(false);
-  // The error status only ever comes from a failed enable/reconnect, so the error state's
-  // "Try again" retries that action — syncNow can't recover it and would falsely report success.
-  const [failedAction, setFailedAction] = useState<'enable' | 'reconnect'>('enable');
+  // The error state's "Try again" retries the exact action that failed (enable / google /
+  // reconnect) — syncNow can't recover it and would falsely report success.
+  const [failedAction, setFailedAction] = useState<'enable' | 'google' | 'reconnect'>('enable');
 
   useEffect(() => {
     if (!controller) {
@@ -121,7 +121,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
 
   // Shared by the initial enable() and the reconnect() flows — both surface the same shape.
   // source records which flow needs a code, so the EnrollCodeModal submit routes back correctly.
-  const routeEnableResult = (result: EnableResult, source: 'enable' | 'reconnect') => {
+  const routeEnableResult = (result: EnableResult, source: 'enable' | 'google' | 'reconnect') => {
     if (result.ok) {
       setEnabling(false);
       if (result.recoveryCode) {
@@ -130,18 +130,18 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       return;
     }
     if (result.reason === 'needs-code') {
-      setEnrollSource(source);
+      // Google device-#2 enrollment isn't wired yet (follow-up); route its code entry through the
+      // enable path — a brand-new Google sign-in (device #1) never needs a code.
+      setEnrollSource(source === 'reconnect' ? 'reconnect' : 'enable');
       setEnrollOpen(true);
       return;
     }
     setFailedAction(source);
-    // A returned failure never hits the handlers' catch, so log the real reason/detail here —
-    // otherwise the generic toast is the only trace and the actual cause is invisible.
-    logger.error('Cloud sync enable failed', {
-      source,
-      reason: result.reason,
-      detail: result.detail,
-    });
+    // Format the cause into the message: a plain object logs as "[object Object]" in Chrome's
+    // extension Errors panel and log aggregators, even though the console expands it.
+    logger.error(
+      `Cloud sync ${source} failed — reason=${result.reason}, detail=${result.detail ?? 'none'}`
+    );
     useToastStore.getState().error(enableFailureMessage(result));
   };
 
@@ -162,7 +162,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     setIsGoogleSigningIn(true);
     try {
       const result = await controller.enableWithGoogle(deviceName);
-      routeEnableResult(result, 'enable');
+      routeEnableResult(result, 'google');
     } catch (error) {
       logger.error('Google sign-in for cloud sync failed', error);
       useToastStore.getState().error('Something went wrong enabling sync — please try again.');
@@ -227,10 +227,14 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     }
   };
 
-  // The error status only follows a failed enable/reconnect — retry that same action. An enable
-  // retry needs the form's account id; without it (e.g. the UI mounted straight into a persisted
-  // error after a reload) fall back to reconnect, which recovers from persisted creds.
+  // Retry the exact action that failed. A dev-enable retry needs the form's account id; without it
+  // (e.g. the UI mounted straight into a persisted error after a reload) fall back to reconnect,
+  // which recovers from persisted creds. Google carries no account id, so it retries directly.
   const handleRetry = async () => {
+    if (failedAction === 'google') {
+      await handleGoogleSignIn();
+      return;
+    }
     if (failedAction === 'reconnect' || accountId.trim().length === 0) {
       await handleReconnect();
       return;
