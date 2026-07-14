@@ -25,7 +25,7 @@ import {
   UNREADABLE_ERROR,
   unlistenSpies,
 } from './__fixtures__/posture-controller.fixtures';
-import { chipPresentation } from './chip-presentation';
+import { chipPlacement, chipPresentation, chipVisibleOnSurface } from './chip-presentation';
 import {
   getPostureState,
   initPosture,
@@ -970,6 +970,68 @@ describe('quiet hours', () => {
       dot: 'bg-tertiary',
       label: `Quiet hours until ${end}`,
     });
+  });
+});
+
+describe('chip surface visibility', () => {
+  it('hides on the full-page library surfaces', () => {
+    expect(chipVisibleOnSurface('#insights', false)).toBe(false);
+    expect(chipVisibleOnSurface('#quotes', false)).toBe(false);
+    expect(chipVisibleOnSurface('#goals', false)).toBe(false);
+    expect(chipVisibleOnSurface('#concepts', false)).toBe(false);
+  });
+
+  it('shows on home, pomodoro, and modal-only hashes', () => {
+    expect(chipVisibleOnSurface('', false)).toBe(true);
+    expect(chipVisibleOnSurface('#', false)).toBe(true);
+    expect(chipVisibleOnSurface('#pomodoro', false)).toBe(true);
+    // The #settings deep-link opens a modal over home and clears its hash via
+    // replaceState (no hashchange) — unknown hashes must behave like home.
+    expect(chipVisibleOnSurface('#settings', false)).toBe(true);
+  });
+
+  it('focus mode keeps the chip on any surface', () => {
+    expect(chipVisibleOnSurface('#insights', true)).toBe(true);
+  });
+});
+
+describe('chip placement', () => {
+  function surface(overrides: Partial<Parameters<typeof chipPlacement>[0]> = {}) {
+    return {
+      hash: '',
+      focusModeActive: false,
+      reminderPanelPinned: false,
+      showThemeSwitcher: false,
+      ...overrides,
+    };
+  }
+
+  it('sits above the bell by default, mirroring the theme-switcher shift', () => {
+    expect(chipPlacement(surface())).toBe('bottom-[4.75rem] right-4 z-30');
+    expect(chipPlacement(surface({ showThemeSwitcher: true }))).toBe(
+      'bottom-[4.75rem] right-[340px] z-30'
+    );
+  });
+
+  it('moves beside the bell when the pinned panel owns the space above', () => {
+    expect(chipPlacement(surface({ reminderPanelPinned: true }))).toBe(
+      'bottom-[1.5625rem] right-[4.5rem] z-30'
+    );
+    expect(chipPlacement(surface({ reminderPanelPinned: true, showThemeSwitcher: true }))).toBe(
+      'bottom-[1.5625rem] right-[396px] z-30'
+    );
+  });
+
+  it('ignores the pinned offset on pomodoro, where no bell renders', () => {
+    expect(chipPlacement(surface({ hash: '#pomodoro', reminderPanelPinned: true }))).toBe(
+      'bottom-[4.75rem] right-4 z-30'
+    );
+  });
+
+  it('outranks the focus-mode overlay (a body portal at z-50)', () => {
+    expect(chipPlacement(surface({ focusModeActive: true, reminderPanelPinned: true }))).toBe(
+      'bottom-[4.75rem] right-4 z-[60]'
+    );
   });
 });
 
