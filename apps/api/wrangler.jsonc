@@ -17,7 +17,9 @@
     }
   ],
   "vars": {
-    "GOOGLE_CLIENT_IDS": "",
+    // Comma-separated Google OAuth client ids trusted as ID-token `aud` (the "Cuewise-Sync" web
+    // client used by the extension's launchWebAuthFlow). Empty fails closed — provision before serving.
+    "GOOGLE_CLIENT_IDS": "534651491221-09btdvkrf1ard9pspbsac988b0bmojgp.apps.googleusercontent.com",
     "APPLE_CLIENT_ID": "",
     // Dev/test default (this file is also the test + `wrangler dev` env). The production
     // deploy overrides this to https://api.cuewise.app via the `deploy` script's --var.
