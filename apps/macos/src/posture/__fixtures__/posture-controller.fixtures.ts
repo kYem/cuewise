@@ -73,6 +73,7 @@ export const STALLED_ERROR =
   'Posture readings stalled — tracking stopped to release the camera. Start it again to resume.';
 export const UNREADABLE_ERROR = 'Posture readings could not be read.';
 export const START_FAILED_ERROR = 'Could not start posture tracking — check camera access.';
+export const STOP_FAILED_ERROR = "Couldn't stop posture tracking — the camera may still be on.";
 
 /** "HH:MM" for the (fake) clock plus an offset — quiet-hours windows in tests. */
 export function hhmmFromNow(offsetMinutes: number): string {

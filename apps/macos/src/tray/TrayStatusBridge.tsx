@@ -22,6 +22,7 @@ import {
   resumePostureNudges,
   setPostureNudges,
   startPosture,
+  stopPosture,
   usePosture,
 } from '../posture/posture-controller';
 
@@ -144,6 +145,9 @@ export function TrayStatusBridge(): null {
         case 'posture-track-on':
           startPosture();
           break;
+        case 'posture-track-off':
+          stopPosture();
+          break;
         default:
           break;
       }
@@ -243,6 +247,10 @@ export function TrayStatusBridge(): null {
             ],
           },
         ];
+      }
+      // The camera kill-switch is always one click away while tracking (ENG-59).
+      if (posture.tracking) {
+        actions = [...actions, { id: 'posture-track-off', label: 'Turn off camera' }];
       }
       await invoke('set_tray_menu', { info, actions });
     };

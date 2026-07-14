@@ -18,6 +18,7 @@ import {
   SENSITIVITY_APPLY_FAILED_WARNING,
   STALLED_ERROR,
   START_FAILED_ERROR,
+  STOP_FAILED_ERROR,
   STOPPED_ERROR,
   toastErrorMock,
   toastWarningMock,
@@ -169,6 +170,20 @@ describe('posture controller lifecycle', () => {
     expect(logger.warn).toHaveBeenCalledWith('Unrecognized posture stop cause', {
       cause: 'rebooted',
     });
+  });
+
+  it('a failed stop surfaces on the tray via state, not just the hidden toast', async () => {
+    await startTracking();
+    invokeMock.mockRejectedValueOnce(new Error('kill failed'));
+
+    stopPosture();
+    await flushChain();
+
+    // Tray-initiated stops have no visible webview — the ⚠️ error line is the
+    // only surface that can contradict a menu now claiming tracking is off.
+    expect(getPostureState().tracking).toBe(false);
+    expect(getPostureState().error).toBe(STOP_FAILED_ERROR);
+    expect(toastErrorMock).toHaveBeenCalledWith(STOP_FAILED_ERROR);
   });
 
   it('a manual stop clears a stale error so the tray warning does not linger', async () => {

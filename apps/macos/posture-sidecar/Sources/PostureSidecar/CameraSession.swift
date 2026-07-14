@@ -57,6 +57,15 @@ final class CameraSession: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
     session.stopRunning()
   }
 
+  /// Re-acquire the camera after a stop — the configured pipeline survives
+  /// stopRunning, so no reconfiguration is needed (idempotent while running).
+  /// startRunning doesn't throw; report whether the session actually restarted.
+  @discardableResult
+  func resume() -> Bool {
+    session.startRunning()
+    return session.isRunning
+  }
+
   func captureOutput(
     _ output: AVCaptureOutput,
     didOutput sampleBuffer: CMSampleBuffer,
