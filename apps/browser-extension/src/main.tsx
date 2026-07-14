@@ -20,8 +20,14 @@ configureChromePlatform();
 // etc.) relay to the background over chrome.runtime messaging instead — background.ts
 // is the single sync owner and marks them dirty. Same enable gate as background.ts.
 const syncApiBaseUrl = import.meta.env.VITE_SYNC_API_BASE_URL;
+// The bridge relays mutations + control ops to the service worker over chrome.runtime and
+// hydrates status from chrome.storage. Outside an extension page (e.g. the localhost dev
+// server) those APIs are absent — wiring it there throws in the constructor and blanks the
+// whole app, and there's no service worker to relay to anyway. chrome.storage.local is the
+// decisive signal: a plain web page never has it.
+const hasExtensionApis = typeof chrome !== 'undefined' && chrome.storage?.local !== undefined;
 let syncController: SyncController | undefined;
-if (syncApiBaseUrl) {
+if (syncApiBaseUrl && hasExtensionApis) {
   configurePlatform({ syncSink: new ChromeRuntimeSyncSink() });
   // Task 11: the enable-sync UI's control seam, relaying to the SW's handleSyncControlMessage.
   syncController = new BridgeSyncController({
