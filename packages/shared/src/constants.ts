@@ -1,5 +1,6 @@
 import type {
   ColorTheme,
+  ConceptTemplate,
   FocusImageCategory,
   LayoutDensity,
   QuoteCategory,
@@ -421,3 +422,585 @@ export const REMINDER_INTERVAL_PRESETS = [30, 45, 60, 90] as const;
 
 // Minutes a reminder notification's "Snooze" button defers the next alarm.
 export const REMINDER_SNOOZE_MINUTES = 5;
+
+// Curated concept-card starter packs — each is ~10 common terms for a topic,
+// added in one click and tagged so they group cleanly in the deck. Content is
+// intentionally concise (one or two sentences) to match the recall UI. Users
+// edit or delete any card afterwards; re-adding a pack skips cards already saved.
+export const CONCEPT_TEMPLATES: ConceptTemplate[] = [
+  {
+    id: 'study-skills',
+    name: 'Study Skills',
+    description: 'Evidence-based techniques for learning that sticks.',
+    tag: 'study-skills',
+    cards: [
+      {
+        term: 'Active recall',
+        definition:
+          'Testing yourself to pull information from memory, which strengthens it far more than rereading.',
+        details: 'Flashcards and practice questions beat highlighting.',
+      },
+      {
+        term: 'Spaced repetition',
+        definition:
+          'Reviewing material at increasing intervals so you relearn it just before you would forget.',
+      },
+      {
+        term: 'The Pomodoro Technique',
+        definition:
+          'Studying in focused ~25-minute blocks with short breaks to sustain concentration.',
+      },
+      {
+        term: 'Interleaving',
+        definition:
+          'Mixing different topics or problem types in one session instead of practicing one thing at a time.',
+        details: 'It feels harder but improves your ability to tell problems apart.',
+      },
+      {
+        term: 'The Feynman Technique',
+        definition:
+          'Explaining a concept in plain language as if teaching it, to expose the gaps in your understanding.',
+      },
+      {
+        term: 'Elaboration',
+        definition:
+          'Connecting new information to what you already know and asking "why" and "how" to deepen memory.',
+      },
+      {
+        term: 'Dual coding',
+        definition:
+          'Pairing words with visuals — diagrams, timelines, sketches — so ideas are stored two ways.',
+      },
+      {
+        term: 'Cramming vs distributed practice',
+        definition:
+          'Massed cramming helps a test tomorrow but fades fast; spreading study over days retains far more.',
+      },
+      {
+        term: 'Metacognition',
+        definition:
+          'Thinking about your own thinking — judging what you do and don’t know so you study the right things.',
+      },
+      {
+        term: 'Retrieval practice',
+        definition:
+          'Deliberately recalling learned material without looking, the single most effective study habit.',
+      },
+    ],
+  },
+  {
+    id: 'cognitive-biases',
+    name: 'Cognitive Biases',
+    description: 'Common thinking traps worth recognizing in yourself.',
+    tag: 'psychology',
+    cards: [
+      {
+        term: 'Confirmation bias',
+        definition:
+          'The tendency to seek, interpret, and remember information in a way that confirms what you already believe.',
+      },
+      {
+        term: 'Anchoring',
+        definition:
+          'Relying too heavily on the first piece of information encountered when making a decision.',
+        details: 'The initial price in a negotiation anchors everything that follows.',
+      },
+      {
+        term: 'Sunk cost fallacy',
+        definition:
+          'Continuing an endeavor because of already-invested resources rather than future value.',
+      },
+      {
+        term: 'Availability heuristic',
+        definition:
+          'Judging how likely something is by how easily examples come to mind, which overweights vivid or recent events.',
+      },
+      {
+        term: 'Dunning–Kruger effect',
+        definition:
+          'People with low competence in an area tend to overestimate their ability, lacking the skill to see their own gaps.',
+      },
+      {
+        term: 'Survivorship bias',
+        definition:
+          'Focusing on the things that made it past a selection while ignoring those that did not, skewing conclusions.',
+      },
+      {
+        term: 'Loss aversion',
+        definition:
+          'The pain of losing something is felt roughly twice as strongly as the pleasure of gaining the equivalent.',
+      },
+      {
+        term: 'Hindsight bias',
+        definition: 'After an event, seeing it as having been predictable all along ("I knew it").',
+      },
+      {
+        term: 'Fundamental attribution error',
+        definition:
+          "Attributing others' behavior to their character while attributing your own to circumstances.",
+      },
+      {
+        term: 'Framing effect',
+        definition:
+          'Reaching different conclusions from the same information depending on how it is presented.',
+        details: '"90% survival" feels better than "10% mortality" for identical odds.',
+      },
+    ],
+  },
+  {
+    id: 'personal-finance',
+    name: 'Personal Finance',
+    description: 'Everyday money concepts worth internalizing.',
+    tag: 'finance',
+    cards: [
+      {
+        term: 'Compound interest',
+        definition:
+          'Earning interest on both your principal and previously accumulated interest, so growth accelerates over time.',
+      },
+      {
+        term: 'Emergency fund',
+        definition:
+          'Cash set aside (often 3–6 months of expenses) to cover unexpected costs without taking on debt.',
+      },
+      {
+        term: 'Budget',
+        definition:
+          'A plan that assigns your income to spending, saving, and goals so you know where your money goes.',
+      },
+      {
+        term: 'Inflation',
+        definition:
+          'The general rise in prices over time, which erodes the purchasing power of money held in cash.',
+      },
+      {
+        term: 'Net worth',
+        definition: 'Everything you own (assets) minus everything you owe (liabilities).',
+      },
+      {
+        term: 'Interest on debt',
+        definition:
+          'The extra cost of borrowing; high-interest debt like credit cards can grow faster than savings can keep up.',
+      },
+      {
+        term: 'Diversification',
+        definition:
+          'Spreading money across different investments so a loss in one is cushioned by others.',
+      },
+      {
+        term: 'Needs vs wants',
+        definition:
+          'Distinguishing essentials (rent, food) from discretionary spending to prioritize when money is tight.',
+      },
+      {
+        term: 'Credit score',
+        definition:
+          'A number summarizing how reliably you repay debt, affecting loans, rent, and interest rates you are offered.',
+      },
+      {
+        term: 'Opportunity cost',
+        definition:
+          'The value of the next-best option you give up when you choose to spend money or time one way.',
+      },
+    ],
+  },
+  {
+    id: 'world-geography',
+    name: 'World Geography',
+    description: 'Places, features, and terms to know the world by.',
+    tag: 'geography',
+    cards: [
+      {
+        term: 'Continent',
+        definition:
+          'One of Earth’s seven large landmasses: Africa, Antarctica, Asia, Europe, North America, Oceania, and South America.',
+      },
+      {
+        term: 'Equator',
+        definition:
+          'The imaginary line at 0° latitude circling the middle of Earth, dividing it into the Northern and Southern hemispheres.',
+      },
+      {
+        term: 'Latitude vs longitude',
+        definition:
+          'Latitude measures distance north–south of the equator; longitude measures east–west of the prime meridian.',
+      },
+      {
+        term: 'Longest river',
+        definition:
+          'The Nile in Africa and the Amazon in South America are the two longest rivers, each roughly 6,600 km.',
+      },
+      {
+        term: 'Largest ocean',
+        definition:
+          'The Pacific Ocean is the largest and deepest, covering about a third of Earth’s surface.',
+      },
+      {
+        term: 'Tectonic plates',
+        definition:
+          'Large slabs of Earth’s crust that slowly move; their boundaries cause earthquakes, volcanoes, and mountains.',
+      },
+      {
+        term: 'Climate vs weather',
+        definition:
+          'Weather is the day-to-day state of the atmosphere; climate is the average pattern over decades.',
+      },
+      {
+        term: 'Capital city',
+        definition:
+          'The city where a country’s government is seated — not always its largest (e.g. Canberra, not Sydney).',
+      },
+      {
+        term: 'Time zones',
+        definition:
+          'Regions that share a standard time, roughly one per 15° of longitude, set relative to UTC.',
+      },
+      {
+        term: 'Desert',
+        definition:
+          'A region receiving very little precipitation; the Sahara is the largest hot desert, Antarctica the largest cold one.',
+      },
+    ],
+  },
+  {
+    id: 'world-history',
+    name: 'World History',
+    description: 'Turning points that shaped the modern world.',
+    tag: 'history',
+    cards: [
+      {
+        term: 'The Agricultural Revolution',
+        definition:
+          'The shift ~10,000 years ago from hunting and gathering to farming, which enabled permanent settlements and cities.',
+      },
+      {
+        term: 'Ancient Rome',
+        definition:
+          'A civilization that grew from a city to an empire ruling the Mediterranean, shaping law, language, and government.',
+      },
+      {
+        term: 'The Renaissance',
+        definition:
+          'A revival of art, science, and learning in Europe from the 14th–17th centuries, rooted in classical ideas.',
+      },
+      {
+        term: 'The printing press',
+        definition:
+          'Gutenberg’s ~1440 movable-type press that made books cheap and spread literacy and ideas rapidly.',
+      },
+      {
+        term: 'The Industrial Revolution',
+        definition:
+          'The 18th–19th century move to machine manufacturing, transforming economies, cities, and daily life.',
+      },
+      {
+        term: 'The Enlightenment',
+        definition:
+          'An 18th-century movement emphasizing reason, science, and individual rights that influenced modern democracies.',
+      },
+      {
+        term: 'World War I & II',
+        definition:
+          'Two global conflicts (1914–1918 and 1939–1945) that reshaped borders, alliances, and the balance of world power.',
+      },
+      {
+        term: 'The Cold War',
+        definition:
+          'A decades-long rivalry after 1945 between the US-led West and Soviet-led East, without direct large-scale war.',
+      },
+      {
+        term: 'Decolonization',
+        definition:
+          'The mid-20th-century process by which many colonies in Africa and Asia gained independence.',
+      },
+      {
+        term: 'Primary vs secondary source',
+        definition:
+          'A primary source is firsthand evidence from the time; a secondary source analyzes or interprets it later.',
+      },
+    ],
+  },
+  {
+    id: 'human-biology',
+    name: 'Human Biology',
+    description: 'How the human body is built and works.',
+    tag: 'biology',
+    cards: [
+      {
+        term: 'Cell',
+        definition:
+          'The basic structural and functional unit of all living things; the human body has trillions of them.',
+      },
+      {
+        term: 'DNA',
+        definition:
+          'The molecule carrying genetic instructions, structured as a double helix of paired bases.',
+      },
+      {
+        term: 'The circulatory system',
+        definition:
+          'The heart and blood vessels that transport oxygen, nutrients, and waste throughout the body.',
+      },
+      {
+        term: 'The nervous system',
+        definition:
+          'The brain, spinal cord, and nerves that sense the environment and coordinate the body’s responses.',
+      },
+      {
+        term: 'Homeostasis',
+        definition:
+          'The body’s maintenance of a stable internal state — temperature, pH, blood sugar — despite outside change.',
+      },
+      {
+        term: 'Photosynthesis vs respiration',
+        definition:
+          'Plants make glucose from sunlight (photosynthesis); cells release its energy using oxygen (respiration).',
+      },
+      {
+        term: 'The immune system',
+        definition:
+          'The network of cells and organs that defends the body against bacteria, viruses, and other threats.',
+      },
+      {
+        term: 'Neuron',
+        definition:
+          'A nerve cell that transmits electrical and chemical signals, the building block of the nervous system.',
+      },
+      {
+        term: 'Genes and inheritance',
+        definition:
+          'Segments of DNA passed from parents to offspring that determine inherited traits.',
+      },
+      {
+        term: 'The respiratory system',
+        definition:
+          'The lungs and airways that bring in oxygen and expel carbon dioxide from the blood.',
+      },
+    ],
+  },
+  {
+    id: 'literary-devices',
+    name: 'Literary Devices',
+    description: 'Tools writers use — essential for English class.',
+    tag: 'literature',
+    cards: [
+      {
+        term: 'Metaphor',
+        definition:
+          'A direct comparison saying one thing is another, without "like" or "as" (e.g. "time is a thief").',
+      },
+      {
+        term: 'Simile',
+        definition: 'A comparison using "like" or "as" (e.g. "brave as a lion").',
+      },
+      {
+        term: 'Personification',
+        definition: 'Giving human qualities to non-human things (e.g. "the wind whispered").',
+      },
+      {
+        term: 'Alliteration',
+        definition:
+          'The repetition of the same initial consonant sound in nearby words (e.g. "wild and windy").',
+      },
+      {
+        term: 'Hyperbole',
+        definition:
+          'Deliberate exaggeration for emphasis, not meant literally (e.g. "I’ve told you a million times").',
+      },
+      {
+        term: 'Irony',
+        definition:
+          'A contrast between expectation and reality — what is said or happens differs from what is meant or expected.',
+      },
+      {
+        term: 'Foreshadowing',
+        definition: 'Hints or clues an author plants about what will happen later in a story.',
+      },
+      {
+        term: 'Symbolism',
+        definition:
+          'Using an object, color, or figure to represent a larger idea (e.g. a dove for peace).',
+      },
+      {
+        term: 'Imagery',
+        definition:
+          'Descriptive language that appeals to the senses to create vivid mental pictures.',
+      },
+      {
+        term: 'Theme',
+        definition:
+          'The central idea or underlying message a work explores (e.g. love, justice, loss).',
+      },
+    ],
+  },
+  {
+    id: 'computer-science',
+    name: 'Computer Science Basics',
+    description: 'Core ideas behind how software and computers work.',
+    tag: 'computer-science',
+    cards: [
+      {
+        term: 'Algorithm',
+        definition:
+          'A step-by-step set of instructions for solving a problem or completing a task.',
+      },
+      {
+        term: 'Data structure',
+        definition:
+          'A way of organizing data so it can be accessed and modified efficiently, e.g. arrays, lists, and trees.',
+      },
+      {
+        term: 'Binary',
+        definition:
+          'The base-2 number system of 0s and 1s that computers use to represent all data at the lowest level.',
+      },
+      {
+        term: 'Big-O notation',
+        definition:
+          'A way to describe how an algorithm’s running time or memory grows as the input size increases.',
+        details: 'O(n) grows linearly; O(n²) grows much faster.',
+      },
+      {
+        term: 'Variable',
+        definition: 'A named container that stores a value a program can read and change.',
+      },
+      {
+        term: 'Function',
+        definition:
+          'A reusable block of code that performs a task, optionally taking inputs and returning a result.',
+      },
+      {
+        term: 'Boolean logic',
+        definition:
+          'Logic based on true/false values combined with AND, OR, and NOT — the foundation of decisions in code.',
+      },
+      {
+        term: 'Recursion',
+        definition:
+          'A technique where a function calls itself to solve smaller instances of the same problem.',
+      },
+      {
+        term: 'Compiler vs interpreter',
+        definition:
+          'A compiler translates whole programs to machine code ahead of time; an interpreter runs code line by line.',
+      },
+      {
+        term: 'Bug vs debugging',
+        definition:
+          'A bug is an error in a program; debugging is the process of finding and fixing it.',
+      },
+    ],
+  },
+  {
+    id: 'machine-learning',
+    name: 'AI & Machine Learning',
+    description: 'Foundational ideas behind AI models.',
+    tag: 'machine-learning',
+    cards: [
+      {
+        term: 'Machine learning',
+        definition:
+          'A field where computers learn patterns from data to make predictions or decisions, rather than being explicitly programmed.',
+      },
+      {
+        term: 'Supervised vs unsupervised learning',
+        definition:
+          'Supervised learning trains on labeled examples; unsupervised learning finds structure in unlabeled data.',
+      },
+      {
+        term: 'Training vs test data',
+        definition:
+          'The training set fits the model; the held-out test set estimates how well it generalizes to unseen data.',
+      },
+      {
+        term: 'Overfitting vs underfitting',
+        definition:
+          'Overfitting memorizes noise and fails on new data; underfitting is too simple to capture the real pattern.',
+      },
+      {
+        term: 'Neural network',
+        definition:
+          'A model of layered interconnected nodes that learns weighted transformations of its inputs.',
+      },
+      {
+        term: 'Gradient descent',
+        definition:
+          'An optimization method that iteratively adjusts parameters in the direction that most reduces error.',
+      },
+      {
+        term: 'Feature',
+        definition: 'An individual measurable input variable the model uses to make predictions.',
+      },
+      {
+        term: 'Classification vs regression',
+        definition:
+          'Classification predicts discrete categories; regression predicts continuous numeric values.',
+      },
+      {
+        term: 'Large language model (LLM)',
+        definition:
+          'An AI model trained on vast text to predict the next word, enabling it to generate and understand language.',
+      },
+      {
+        term: 'Bias in AI',
+        definition:
+          'When a model produces systematically unfair results because its training data or design reflected human or sampling bias.',
+      },
+    ],
+  },
+  {
+    id: 'grammar-writing',
+    name: 'Grammar & Writing',
+    description: 'Building blocks of clear, correct writing.',
+    tag: 'writing',
+    cards: [
+      {
+        term: 'Noun, verb, adjective, adverb',
+        definition:
+          'A noun names a thing, a verb shows action, an adjective describes a noun, and an adverb describes a verb or adjective.',
+      },
+      {
+        term: 'Subject and predicate',
+        definition:
+          'The subject is who or what the sentence is about; the predicate says what the subject does or is.',
+      },
+      {
+        term: 'Their / there / they’re',
+        definition:
+          '"Their" shows possession, "there" refers to a place, and "they’re" is short for "they are".',
+      },
+      {
+        term: 'Your vs you’re',
+        definition: '"Your" shows possession; "you’re" is a contraction of "you are".',
+      },
+      {
+        term: 'Its vs it’s',
+        definition: '"Its" is possessive; "it’s" means "it is" or "it has".',
+      },
+      {
+        term: 'Active vs passive voice',
+        definition:
+          'Active: the subject does the action ("the dog chased the ball"). Passive: it receives it ("the ball was chased").',
+      },
+      {
+        term: 'Comma splice',
+        definition:
+          'The error of joining two complete sentences with only a comma; fix it with a period, semicolon, or conjunction.',
+      },
+      {
+        term: 'Apostrophe',
+        definition:
+          'A mark used for contractions ("don’t") and possession ("Sam’s"), but not for ordinary plurals.',
+      },
+      {
+        term: 'Synonym vs antonym',
+        definition: 'A synonym means the same as another word; an antonym means the opposite.',
+      },
+      {
+        term: 'Topic sentence',
+        definition:
+          'The sentence, usually first, that states the main idea a paragraph will develop.',
+      },
+    ],
+  },
+];
