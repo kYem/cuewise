@@ -53,11 +53,28 @@ describe('handleSyncMessage', () => {
     expect(engine.markMutatedBulk).toHaveBeenCalledWith('quotes', ['a', 'b']);
   });
 
-  it('ignores a message with the wrong kind and never calls the engine', () => {
+  it('silently ignores a message with a different kind (e.g. sync-control) and never calls the engine', () => {
     const engine = fakeEngine();
     const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
 
-    handleSyncMessage(engine, { kind: 'some-other-message', op: 'mutated' });
+    handleSyncMessage(engine, { kind: 'cuewise-sync-control', op: 'enable' });
+
+    expect(engine.markMutated).not.toHaveBeenCalled();
+    expect(engine.markDeleted).not.toHaveBeenCalled();
+    expect(engine.markMutatedBulk).not.toHaveBeenCalled();
+    expect(warnSpy).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it('warns on a genuinely malformed sync-mutation message (unrecognised op)', () => {
+    const engine = fakeEngine();
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+
+    handleSyncMessage(engine, {
+      kind: 'cuewise-sync-mutation',
+      op: 'not-a-real-op',
+      collection: 'goals',
+    });
 
     expect(engine.markMutated).not.toHaveBeenCalled();
     expect(engine.markDeleted).not.toHaveBeenCalled();
@@ -107,7 +124,7 @@ describe('handleSyncMessage', () => {
     warnSpy.mockRestore();
   });
 
-  it('ignores a non-object message (e.g. null or a primitive) and never calls the engine', () => {
+  it('silently ignores a non-object message (e.g. null or a primitive) and never calls the engine', () => {
     const engine = fakeEngine();
     const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
 
@@ -117,7 +134,7 @@ describe('handleSyncMessage', () => {
     expect(engine.markMutated).not.toHaveBeenCalled();
     expect(engine.markDeleted).not.toHaveBeenCalled();
     expect(engine.markMutatedBulk).not.toHaveBeenCalled();
-    expect(warnSpy).toHaveBeenCalledTimes(2);
+    expect(warnSpy).not.toHaveBeenCalled();
     warnSpy.mockRestore();
   });
 });

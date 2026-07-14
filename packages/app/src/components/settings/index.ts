@@ -1,5 +1,7 @@
 // Settings modal building blocks (redesigned, theme-aware)
+export { EnrollCodeModal, type EnrollCodeModalProps } from './EnrollCodeModal';
 export { PresetGrid } from './PresetGrid';
+export { RecoveryCodeModal, type RecoveryCodeModalProps } from './RecoveryCodeModal';
 export {
   Segmented,
   SelectControl,
@@ -10,6 +12,7 @@ export {
   Switch,
 } from './SettingControls';
 export { SECTION_IDS, SETTINGS_SECTIONS, type SettingsSection } from './SettingsSections';
+export { SyncSettingsSectionComponent, syncSettingsSection } from './SyncSettingsSection';
 export {
   POMODORO_KEYS,
   planSettingsSideEffects,

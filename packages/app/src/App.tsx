@@ -10,9 +10,11 @@ import { NewTabPage } from './components/NewTabPage';
 import { PomodoroPage } from './components/PomodoroPage';
 import { QuoteManagementPage } from './components/QuoteManagementPage';
 import type { SettingsSection } from './components/settings/SettingsSections';
+import { syncSettingsSection } from './components/settings/SyncSettingsSection';
 import { ThemeSwitcher } from './components/ThemeSwitcher';
 import { useSettingsStore } from './stores/settings-store';
 import { useToastStore } from './stores/toast-store';
+import { type SyncController, SyncControllerContext } from './sync/sync-controller';
 import { getPreloadedCurrentUrl, preloadImages } from './utils/image-preload-cache';
 import { loadImageWithFallback } from './utils/unsplash';
 
@@ -21,9 +23,11 @@ type Page = 'home' | 'pomodoro' | 'insights' | 'quotes' | 'goals' | 'concepts';
 interface AppProps {
   /** Platform-specific settings sections injected by the host (macOS Posture). */
   extraSections?: SettingsSection[];
+  /** Platform sync adapter (Task 4 seam); when present the Cloud Sync section is injected. */
+  syncController?: SyncController | null;
 }
 
-function App({ extraSections }: AppProps = {}) {
+function App({ extraSections, syncController }: AppProps = {}) {
   const [currentPage, setCurrentPage] = useState<Page>('home');
   const { toasts, removeToast } = useToastStore();
   const { settings } = useSettingsStore();
@@ -133,89 +137,96 @@ function App({ extraSections }: AppProps = {}) {
     };
   }, [showBackgroundImage, settings.focusModeImageCategory]);
 
+  // Inject the Cloud Sync section only when a host actually wires a controller in.
+  const effectiveExtraSections = syncController
+    ? [syncSettingsSection, ...(extraSections ?? [])]
+    : extraSections;
+
   return (
-    <ErrorBoundary>
-      {/* Skip to main content link - visible on focus for keyboard users */}
-      <a
-        href="#main-content"
-        className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-[100] focus:px-4 focus:py-2 focus:bg-primary-600 focus:text-white focus:rounded-md focus:shadow-lg focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2"
-      >
-        Skip to main content
-      </a>
+    <SyncControllerContext.Provider value={syncController ?? null}>
+      <ErrorBoundary>
+        {/* Skip to main content link - visible on focus for keyboard users */}
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-[100] focus:px-4 focus:py-2 focus:bg-primary-600 focus:text-white focus:rounded-md focus:shadow-lg focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2"
+        >
+          Skip to main content
+        </a>
 
-      {/* Glass theme background layers */}
-      {showBackgroundImage && (
-        <>
-          {/* Fallback dark gradient - always visible as base layer */}
-          <div className="fixed inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900" />
+        {/* Glass theme background layers */}
+        {showBackgroundImage && (
+          <>
+            {/* Fallback dark gradient - always visible as base layer */}
+            <div className="fixed inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900" />
 
-          {/* Background image - fades in when loaded */}
-          <div
-            className={`fixed inset-0 bg-cover bg-center bg-no-repeat transition-opacity duration-1000 ${
-              imageLoaded && backgroundImage ? 'opacity-100' : 'opacity-0'
-            }`}
-            style={{
-              backgroundImage: backgroundImage ? `url(${backgroundImage})` : undefined,
-            }}
-          />
-
-          {settings.glassEnhanced && (
+            {/* Background image - fades in when loaded */}
             <div
-              className="fixed inset-0 pointer-events-none"
-              style={{ background: 'var(--glass-scrim)' }}
+              className={`fixed inset-0 bg-cover bg-center bg-no-repeat transition-opacity duration-1000 ${
+                imageLoaded && backgroundImage ? 'opacity-100' : 'opacity-0'
+              }`}
+              style={{
+                backgroundImage: backgroundImage ? `url(${backgroundImage})` : undefined,
+              }}
             />
-          )}
 
-          {/* Dark overlay for better readability on content-heavy pages (not home/pomodoro) */}
-          {(currentPage === 'goals' ||
-            currentPage === 'quotes' ||
-            currentPage === 'insights' ||
-            currentPage === 'concepts') && <div className="fixed inset-0 bg-black/25" />}
+            {settings.glassEnhanced && (
+              <div
+                className="fixed inset-0 pointer-events-none"
+                style={{ background: 'var(--glass-scrim)' }}
+              />
+            )}
 
-          {/* Loading indicator - shown while image loads */}
-          {!imageLoaded && (
-            <div className="fixed inset-0 z-40 flex items-center justify-center pointer-events-none">
-              <div className="flex flex-col items-center gap-4">
-                <div className="p-5 rounded-2xl bg-white/10 backdrop-blur-md shadow-2xl animate-float">
-                  <Coffee className="w-14 h-14 text-white/90" />
-                </div>
-                <div className="flex items-center gap-1 text-white/70 text-sm font-medium">
-                  <span>Brewing your view</span>
-                  <span className="animate-bounce-dots">.</span>
-                  <span className="animate-bounce-dots animation-delay-200">.</span>
-                  <span className="animate-bounce-dots animation-delay-400">.</span>
+            {/* Dark overlay for better readability on content-heavy pages (not home/pomodoro) */}
+            {(currentPage === 'goals' ||
+              currentPage === 'quotes' ||
+              currentPage === 'insights' ||
+              currentPage === 'concepts') && <div className="fixed inset-0 bg-black/25" />}
+
+            {/* Loading indicator - shown while image loads */}
+            {!imageLoaded && (
+              <div className="fixed inset-0 z-40 flex items-center justify-center pointer-events-none">
+                <div className="flex flex-col items-center gap-4">
+                  <div className="p-5 rounded-2xl bg-white/10 backdrop-blur-md shadow-2xl animate-float">
+                    <Coffee className="w-14 h-14 text-white/90" />
+                  </div>
+                  <div className="flex items-center gap-1 text-white/70 text-sm font-medium">
+                    <span>Brewing your view</span>
+                    <span className="animate-bounce-dots">.</span>
+                    <span className="animate-bounce-dots animation-delay-200">.</span>
+                    <span className="animate-bounce-dots animation-delay-400">.</span>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
-        </>
-      )}
+            )}
+          </>
+        )}
 
-      {/* Hide content while settings load or glass theme background loads */}
-      <div
-        className={`flex h-full w-full relative transition-opacity duration-500 ${
-          hideContent ? 'opacity-0' : 'opacity-100'
-        }`}
-      >
-        {/* Main content area */}
-        <main id="main-content" className="flex-1 overflow-auto" tabIndex={-1}>
-          {currentPage === 'pomodoro' && <PomodoroPage />}
-          {currentPage === 'insights' && <InsightsPage />}
-          {currentPage === 'quotes' && <QuoteManagementPage />}
-          {currentPage === 'goals' && <GoalsPage />}
-          {currentPage === 'concepts' && <ConceptsPage />}
-          {currentPage === 'home' && <NewTabPage extraSections={extraSections} />}
-        </main>
+        {/* Hide content while settings load or glass theme background loads */}
+        <div
+          className={`flex h-full w-full relative transition-opacity duration-500 ${
+            hideContent ? 'opacity-0' : 'opacity-100'
+          }`}
+        >
+          {/* Main content area */}
+          <main id="main-content" className="flex-1 overflow-auto" tabIndex={-1}>
+            {currentPage === 'pomodoro' && <PomodoroPage />}
+            {currentPage === 'insights' && <InsightsPage />}
+            {currentPage === 'quotes' && <QuoteManagementPage />}
+            {currentPage === 'goals' && <GoalsPage />}
+            {currentPage === 'concepts' && <ConceptsPage />}
+            {currentPage === 'home' && <NewTabPage extraSections={effectiveExtraSections} />}
+          </main>
 
-        {/* Live Theme Switcher (pushes content to the left when visible) */}
-        <ThemeSwitcher isVisible={settings.showThemeSwitcher} />
-      </div>
+          {/* Live Theme Switcher (pushes content to the left when visible) */}
+          <ThemeSwitcher isVisible={settings.showThemeSwitcher} />
+        </div>
 
-      {/* Toast notifications */}
-      <ToastContainer toasts={toasts} onClose={removeToast} position="top-right" />
-      {/* Completion celebrations */}
-      <CelebrationOverlay />
-    </ErrorBoundary>
+        {/* Toast notifications */}
+        <ToastContainer toasts={toasts} onClose={removeToast} position="top-right" />
+        {/* Completion celebrations */}
+        <CelebrationOverlay />
+      </ErrorBoundary>
+    </SyncControllerContext.Provider>
   );
 }
 

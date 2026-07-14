@@ -143,7 +143,7 @@ export const ToastContainer: React.FC<ToastContainerProps> = ({
   };
 
   return (
-    <div className={cn('fixed z-50 flex flex-col gap-2', getPositionStyles())}>
+    <div className={cn('fixed z-[100] flex flex-col gap-2', getPositionStyles())}>
       {toasts.map((toast) => (
         <ToastItem key={toast.id} toast={toast} onClose={onClose} />
       ))}

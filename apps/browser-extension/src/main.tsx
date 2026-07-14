@@ -1,10 +1,12 @@
-import { App, PomodoroPipProvider } from '@cuewise/app';
+import type { SyncController } from '@cuewise/app';
+import { App, PomodoroPipProvider, useToastStore } from '@cuewise/app';
 import '@cuewise/app/styles.css';
 import { configurePlatform } from '@cuewise/shared';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { initializeLogger } from './lib/logger-config';
 import { configureChromePlatform } from './platform';
+import { BridgeSyncController } from './sync/bridge-sync-controller';
 import { ChromeRuntimeSyncSink } from './sync/chrome-runtime-sync-sink';
 
 // Initialize logger configuration based on environment
@@ -18,8 +20,13 @@ configureChromePlatform();
 // etc.) relay to the background over chrome.runtime messaging instead — background.ts
 // is the single sync owner and marks them dirty. Same enable gate as background.ts.
 const syncApiBaseUrl = import.meta.env.VITE_SYNC_API_BASE_URL;
+let syncController: SyncController | undefined;
 if (syncApiBaseUrl) {
   configurePlatform({ syncSink: new ChromeRuntimeSyncSink() });
+  // Task 11: the enable-sync UI's control seam, relaying to the SW's handleSyncControlMessage.
+  syncController = new BridgeSyncController({
+    toast: (message) => useToastStore.getState().warning(message),
+  });
 }
 
 const rootElement = document.getElementById('root');
@@ -30,7 +37,7 @@ if (!rootElement) {
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
     <PomodoroPipProvider>
-      <App />
+      <App syncController={syncController} />
     </PomodoroPipProvider>
   </React.StrictMode>
 );

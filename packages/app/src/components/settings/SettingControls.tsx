@@ -69,16 +69,29 @@ interface SwitchProps {
   onChange: (checked: boolean) => void;
   label: string;
   id?: string;
+  disabled?: boolean;
 }
 
 /** Bare on/off toggle. The label lives in the parent SettingRow. */
-export const Switch: React.FC<SwitchProps> = ({ checked, onChange, label, id }) => (
-  <label className="relative inline-flex cursor-pointer items-center">
+export const Switch: React.FC<SwitchProps> = ({
+  checked,
+  onChange,
+  label,
+  id,
+  disabled = false,
+}) => (
+  <label
+    className={cn(
+      'relative inline-flex items-center',
+      disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
+    )}
+  >
     <input
       id={id}
       type="checkbox"
       checked={checked}
       aria-label={label}
+      disabled={disabled}
       onChange={(e) => onChange(e.target.checked)}
       className="peer sr-only"
     />

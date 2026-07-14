@@ -1,0 +1,211 @@
+import type { EnableResult, SyncController, SyncUiStatus } from '@cuewise/app';
+import { logger } from '@cuewise/shared';
+import { CLOUD_SYNC_ENABLED_KEY } from '@cuewise/sync-engine';
+import type { SyncControlMessage, SyncControlResponse } from './sync-control-messages';
+
+// Raw (unnamespaced) chrome.storage.local keys the background writes — see background.ts.
+const STATUS_KEY = 'cuewise.sync.status';
+const QUARANTINE_KEY = 'cuewise.sync.lastQuarantineAt';
+/** Exported so tests can assert against it without duplicating the literal (mirrors macOS's DirectSyncController). */
+export const LAST_SYNC_CREDS_KEY = 'cuewise.sync.lastCreds';
+
+const DEFAULT_TIMEOUT_MS = 30000;
+
+interface LastSyncCreds {
+  accountId: string;
+  deviceName: string;
+}
+
+export interface BridgeSyncControllerOptions {
+  /** Fires on quarantine (never the recovery code/credential/token — those are secrets). */
+  toast?: (message: string) => void;
+  timeoutMs?: number;
+}
+
+/**
+ * Page-realm SyncController (option B): no SyncEngine here — control ops relay to the background over
+ * chrome.runtime messaging (timed out so a dead SW rejects); status hydrates from chrome.storage.local.
+ */
+export class BridgeSyncController implements SyncController {
+  private status: SyncUiStatus = 'off';
+  private readonly subscribers = new Set<(status: SyncUiStatus) => void>();
+  private readonly toast?: (message: string) => void;
+  private readonly timeoutMs: number;
+
+  constructor(opts: BridgeSyncControllerOptions = {}) {
+    this.toast = opts.toast;
+    this.timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    this.registerStorageListener();
+    void this.hydrate();
+  }
+
+  getStatus(): SyncUiStatus {
+    return this.status;
+  }
+
+  subscribe(cb: (status: SyncUiStatus) => void): () => void {
+    this.subscribers.add(cb);
+    return () => {
+      this.subscribers.delete(cb);
+    };
+  }
+
+  async enable(
+    accountId: string,
+    deviceName: string,
+    recoveryCode?: string
+  ): Promise<EnableResult> {
+    let response: SyncControlResponse;
+    try {
+      response = await this.send({
+        kind: 'cuewise-sync-control',
+        op: 'enable',
+        accountId,
+        deviceName,
+        recoveryCode,
+      });
+    } catch (error) {
+      logger.error('Sync enable control message failed', error);
+      return { ok: false, reason: 'error' };
+    }
+    if (response.ok) {
+      // Persist inside a guard: a storage failure must not turn a successful enroll into a
+      // rejection or lose the one-shot recovery code — log and still return the ok response.
+      try {
+        await this.persistCreds({ accountId, deviceName });
+      } catch (error) {
+        logger.error('Failed to persist sync credentials for reconnect', error);
+      }
+    }
+    return response;
+  }
+
+  async reconnect(recoveryCode?: string): Promise<EnableResult> {
+    try {
+      const stored = await chrome.storage.local.get(LAST_SYNC_CREDS_KEY);
+      const creds = stored[LAST_SYNC_CREDS_KEY] as LastSyncCreds | undefined;
+      if (creds === undefined) {
+        return { ok: false, reason: 'error' };
+      }
+      // No code = silent re-auth via the persisted DK (E2); a code enrolls this device after reconnect.
+      return await this.send({
+        kind: 'cuewise-sync-control',
+        op: 'reconnect',
+        accountId: creds.accountId,
+        deviceName: creds.deviceName,
+        recoveryCode,
+      });
+    } catch (error) {
+      logger.error('Sync reconnect control message failed', error);
+      return { ok: false, reason: 'error' };
+    }
+  }
+
+  async disable(): Promise<void> {
+    const response = await this.send({ kind: 'cuewise-sync-control', op: 'disable' });
+    if (!response.ok) {
+      throw new Error(response.reason);
+    }
+  }
+
+  async regenerateRecoveryCode(): Promise<string> {
+    const response = await this.send({ kind: 'cuewise-sync-control', op: 'regenerate' });
+    if (!response.ok) {
+      throw new Error(`Failed to regenerate recovery code: ${response.reason}`);
+    }
+    if (response.recoveryCode === undefined) {
+      throw new Error('Regenerate response missing a recovery code');
+    }
+    return response.recoveryCode;
+  }
+
+  // No transient 'syncing' emission: the SW's onStatus trampoline never emits it either,
+  // so adding one here would be a page-only flicker the background can't corroborate.
+  async syncNow(): Promise<void> {
+    const response = await this.send({ kind: 'cuewise-sync-control', op: 'syncNow' });
+    if (!response.ok) {
+      throw new Error(response.reason);
+    }
+  }
+
+  private setStatus(status: SyncUiStatus): void {
+    this.status = status;
+    for (const subscriber of this.subscribers) {
+      subscriber(status);
+    }
+  }
+
+  private async hydrate(): Promise<void> {
+    let stored: Record<string, unknown>;
+    try {
+      stored = await chrome.storage.local.get([STATUS_KEY, CLOUD_SYNC_ENABLED_KEY]);
+    } catch (error) {
+      logger.error('Failed to hydrate sync status', error);
+      this.setStatus('off');
+      return;
+    }
+    const persistedStatus = stored[STATUS_KEY] as SyncUiStatus | undefined;
+    if (persistedStatus !== undefined) {
+      this.setStatus(persistedStatus);
+      return;
+    }
+    if (stored[CLOUD_SYNC_ENABLED_KEY] === true) {
+      // Enabled but the SW died before writing a status — reconcile to active rather
+      // than showing 'off' and implying sync is disabled.
+      this.setStatus('active');
+      return;
+    }
+    this.setStatus('off');
+  }
+
+  private registerStorageListener(): void {
+    chrome.storage.onChanged.addListener(
+      (changes: { [key: string]: chrome.storage.StorageChange }, area: string) => {
+        if (area !== 'local') {
+          return;
+        }
+        const statusChange = changes[STATUS_KEY];
+        if (statusChange !== undefined) {
+          const newStatus = statusChange.newValue as SyncUiStatus | undefined;
+          if (newStatus !== undefined) {
+            this.setStatus(newStatus);
+          }
+        }
+        const quarantineChange = changes[QUARANTINE_KEY];
+        if (
+          quarantineChange !== undefined &&
+          quarantineChange.newValue !== undefined &&
+          this.toast !== undefined
+        ) {
+          this.toast("A synced item couldn't be read and was skipped");
+        }
+      }
+    );
+  }
+
+  private async persistCreds(creds: LastSyncCreds): Promise<void> {
+    await chrome.storage.local.set({ [LAST_SYNC_CREDS_KEY]: creds });
+  }
+
+  // Races the control response against timeoutMs so a dead/asleep SW rejects instead of
+  // hanging the UI forever; clears the timer on either settling path.
+  private send(msg: SyncControlMessage): Promise<SyncControlResponse> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => {
+        reject(new Error('Sync control message timed out'));
+      }, this.timeoutMs);
+    });
+
+    let response: Promise<SyncControlResponse>;
+    try {
+      response = Promise.resolve(chrome.runtime.sendMessage(msg)) as Promise<SyncControlResponse>;
+    } catch (error) {
+      response = Promise.reject(error);
+    }
+
+    return Promise.race([response, timeout]).finally(() => {
+      clearTimeout(timer);
+    });
+  }
+}

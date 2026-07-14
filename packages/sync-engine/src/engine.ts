@@ -1,4 +1,10 @@
-import type { DataKey } from '@cuewise/crypto';
+import {
+  type DataKey,
+  deriveMasterKey,
+  generateRecoveryCode,
+  RecoveryCodeError,
+  wrapDataKey,
+} from '@cuewise/crypto';
 import { type KeyValueStore, logger, type Scheduler } from '@cuewise/shared';
 import {
   ApiError,
@@ -13,6 +19,7 @@ import {
   initOrEnrollKey,
   type KeyLifecycleDeps,
   loadPersistedDataKey,
+  RecoveryCodeRequiredError,
   SelfHealNeedsEnrollError,
   SelfHealUnrecoverableError,
   SYNC_DATA_KEY,
@@ -121,10 +128,16 @@ export class SyncEngine {
         throw new Error(`failed to persist cloudSyncEnabled: ${enabledResult.error.message}`);
       }
       this.setStatus('active');
+      await this.armPullLoopUnlessSignedOut();
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         await this.handleAuthLoss();
         return;
+      }
+      if (err instanceof RecoveryCodeRequiredError || err instanceof RecoveryCodeError) {
+        // Expected enroll control-flow, not a failure — don't poison the persisted status other tabs read.
+        this.setStatus('disabled');
+        throw err;
       }
       this.setStatus('error');
       throw err;
@@ -141,6 +154,18 @@ export class SyncEngine {
     this.dk = null;
     this.keyId = null;
     this.setStatus('disabled');
+  }
+
+  /** Rotates the recovery code for the current data key; overwrites the server envelope. */
+  async regenerateRecoveryCode(): Promise<string> {
+    if (this.dk === null || this.keyId === null) {
+      throw new Error('cannot regenerate recovery code without an active sync session');
+    }
+    const { code, secret } = await generateRecoveryCode();
+    const mk = await deriveMasterKey(secret);
+    const blob = await wrapDataKey(mk, this.dk, this.keyId);
+    await this.deps.apiClient.putRecoveryEnvelope(blob);
+    return code;
   }
 
   /** pullOnce then pushOnce. A no-op until a DK is held (never enabled, or self-heal hasn't run). */

@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useState } from 'react';
+import { type SyncUiStatus, useSyncController } from '../../sync/sync-controller';
 import { isCalendarFeatureEnabled } from '../../utils/google-calendar';
 import { previewSound } from '../../utils/sounds';
 import { PresetGrid } from './PresetGrid';
@@ -707,6 +708,10 @@ function GoalsSection({ s, set, filter }: SettingsSectionProps) {
 /* Advanced */
 function AdvancedSection({ s, set, filter, onReset }: SettingsSectionProps) {
   const [confirming, setConfirming] = useState(false);
+  const syncController = useSyncController();
+  const [syncStatus, setSyncStatus] = useState<SyncUiStatus>(
+    () => syncController?.getStatus() ?? 'off'
+  );
 
   useEffect(() => {
     if (!confirming) {
@@ -715,6 +720,14 @@ function AdvancedSection({ s, set, filter, onReset }: SettingsSectionProps) {
     const timeout = setTimeout(() => setConfirming(false), 3500);
     return () => clearTimeout(timeout);
   }, [confirming]);
+
+  useEffect(() => {
+    if (!syncController) {
+      return undefined;
+    }
+    setSyncStatus(syncController.getStatus());
+    return syncController.subscribe(setSyncStatus);
+  }, [syncController]);
 
   const handleResetClick = () => {
     if (confirming) {
@@ -728,6 +741,9 @@ function AdvancedSection({ s, set, filter, onReset }: SettingsSectionProps) {
   // Chrome sync rides on chrome.storage.sync; local-only backends (the macOS app,
   // dev/web) have no sync area, so hide the toggle rather than show an inert one.
   const syncSupported = getStorage().supportsSync;
+  // Gate the legacy Chrome-sync toggle whenever Cloud Sync is not off — in error/needs_reauth it's
+  // still enrolled and owns local storage, so the two systems must never fight over it.
+  const syncManagedByCloudSync = syncController !== null && syncStatus !== 'off';
 
   return (
     <div>
@@ -741,9 +757,13 @@ function AdvancedSection({ s, set, filter, onReset }: SettingsSectionProps) {
           <Switch
             label="Chrome sync"
             checked={s.syncEnabled}
+            disabled={syncManagedByCloudSync}
             onChange={(v) => set({ syncEnabled: v })}
           />
         </SettingRow>
+      )}
+      {syncSupported && syncManagedByCloudSync && (
+        <p className="-mt-1 mb-2 text-xs text-tertiary">Managed by Cloud Sync</p>
       )}
       <SettingRow
         label="Console logs"

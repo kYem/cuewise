@@ -1,3 +1,8 @@
+import type { SyncEngine } from './engine';
+
+// Re-exported so hosts (macOS/extension DirectSyncController) can match enableSync's thrown-error
+// contract without taking a direct @cuewise/crypto dependency of their own.
+export { RecoveryCodeError, type RecoveryCodeErrorKind } from '@cuewise/crypto';
 export {
   type CollectionBinding,
   DEVICE_LOCAL_SETTINGS_KEYS,
@@ -12,6 +17,12 @@ export {
   type SyncEngineDeps,
   type SyncStatus,
 } from './engine';
+
+/** Structural subset of SyncEngine that host control surfaces (SW/macOS) drive. */
+export type SyncEngineControlSurface = Pick<
+  SyncEngine,
+  'enableSync' | 'disableSync' | 'regenerateRecoveryCode' | 'syncNow' | 'getStatus'
+>;
 export {
   initOrEnrollKey,
   type KeyLifecycleDeps,

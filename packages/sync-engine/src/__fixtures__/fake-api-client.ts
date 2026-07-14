@@ -75,6 +75,8 @@ export class FakeApiClient implements EngineApiClient {
   rejectAllWith401 = false;
   /** One-shot: throws a retryable network_error on the next getChanges call, then clears itself. */
   rejectNextGetChangesWithNetworkError = false;
+  /** One-shot: throws a 401 on the next getChanges (pull) call only, then clears itself. */
+  rejectNextGetChangesWith401 = false;
   readonly callOrder: string[] = [];
   private tokenCounter = 0;
 
@@ -103,6 +105,10 @@ export class FakeApiClient implements EngineApiClient {
     if (this.rejectNextGetChangesWithNetworkError) {
       this.rejectNextGetChangesWithNetworkError = false;
       throw new ApiError('network_error', 0);
+    }
+    if (this.rejectNextGetChangesWith401) {
+      this.rejectNextGetChangesWith401 = false;
+      throw new ApiError('invalid_token', 401);
     }
     this.callOrder.push('getChanges');
     return this.server.getChanges(since);

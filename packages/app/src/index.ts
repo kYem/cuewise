@@ -16,7 +16,6 @@ export {
 } from './components/settings/SettingControls';
 export type { SettingsSection } from './components/settings/SettingsSections';
 export type { SettingsSectionProps } from './components/settings/settings-types';
-
 // Store + selector surface for platform hosts that project state outside the app
 // tree (e.g. the macOS menu-bar tray).
 export { useFocusModeStore } from './stores/focus-mode-store';
@@ -24,5 +23,9 @@ export { usePomodoroStore } from './stores/pomodoro-store';
 export { useReminderStore } from './stores/reminder-store';
 export { useSettingsStore } from './stores/settings-store';
 export { useToastStore } from './stores/toast-store';
+// Sync seam: platform-agnostic controller interface + context the enable-sync UI
+// drives; host adapters (macOS/extension) implement SyncController and provide it.
+export type { EnableResult, SyncController, SyncUiStatus } from './sync/sync-controller';
+export { SyncControllerContext, useSyncController } from './sync/sync-controller';
 export type { SessionType } from './utils/pomodoro-styles';
 export { getSessionLabel } from './utils/pomodoro-styles';
