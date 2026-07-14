@@ -3,9 +3,13 @@ import {
   Brain,
   BrainCog,
   Code2,
+  Cpu,
   Layers,
   LineChart,
+  Network,
+  PenTool,
   PiggyBank,
+  ShieldCheck,
   Sparkles,
   Timer,
 } from 'lucide-react';
@@ -21,6 +25,10 @@ const TEMPLATE_ICONS: Record<string, React.FC<{ className?: string }>> = {
   productivity: Timer,
   statistics: LineChart,
   'personal-finance': PiggyBank,
+  'web-security': ShieldCheck,
+  networking: Network,
+  'machine-learning': Cpu,
+  'ux-design': PenTool,
 };
 
 interface ConceptTemplateGridProps {

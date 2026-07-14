@@ -788,4 +788,236 @@ export const CONCEPT_TEMPLATES: ConceptTemplate[] = [
       },
     ],
   },
+  {
+    id: 'web-security',
+    name: 'Web Security',
+    description: 'Common web attacks and the defenses against them.',
+    tag: 'security',
+    cards: [
+      {
+        term: 'XSS (Cross-Site Scripting)',
+        definition:
+          'An attack where malicious scripts are injected into pages viewed by other users, running in their browser context.',
+        details: 'Defend by escaping output and using a Content Security Policy.',
+      },
+      {
+        term: 'CSRF (Cross-Site Request Forgery)',
+        definition:
+          "Tricking a logged-in user's browser into making an unwanted authenticated request to a site.",
+        details: 'Mitigated with anti-CSRF tokens and SameSite cookies.',
+      },
+      {
+        term: 'SQL injection',
+        definition:
+          'Injecting malicious SQL through unsanitized input to read or modify the database.',
+        details: 'Prevented by parameterized queries / prepared statements.',
+      },
+      {
+        term: 'Hashing vs encryption',
+        definition:
+          'Hashing is a one-way transform used for passwords; encryption is reversible with a key for protecting data in transit or at rest.',
+      },
+      {
+        term: 'Salting',
+        definition:
+          'Adding a unique random value to each password before hashing so identical passwords produce different hashes and rainbow tables fail.',
+      },
+      {
+        term: 'HTTPS / TLS',
+        definition:
+          'A protocol that encrypts traffic between client and server and authenticates the server via certificates.',
+      },
+      {
+        term: 'Principle of least privilege',
+        definition:
+          'Granting each user or process only the minimum access needed to do its job, limiting blast radius if compromised.',
+      },
+      {
+        term: 'Authentication vs authorization',
+        definition:
+          'Authentication verifies who you are; authorization determines what you are allowed to do.',
+      },
+      {
+        term: 'CORS',
+        definition:
+          'A browser mechanism that uses server headers to control which cross-origin sites may read a response.',
+      },
+      {
+        term: 'Man-in-the-middle attack',
+        definition:
+          'An attacker secretly relays or alters communication between two parties who believe they talk directly.',
+      },
+    ],
+  },
+  {
+    id: 'networking',
+    name: 'Networking & the Web',
+    description: 'How data moves across the internet.',
+    tag: 'networking',
+    cards: [
+      {
+        term: 'TCP vs UDP',
+        definition:
+          'TCP is connection-oriented and reliable with ordered delivery; UDP is connectionless and faster but makes no delivery guarantees.',
+      },
+      {
+        term: 'DNS',
+        definition:
+          'The system that translates human-readable domain names into the IP addresses machines route to.',
+      },
+      {
+        term: 'HTTP status codes',
+        definition:
+          'Three-digit codes signaling a response outcome: 2xx success, 3xx redirect, 4xx client error, 5xx server error.',
+      },
+      {
+        term: 'REST',
+        definition:
+          'An architectural style for APIs using stateless HTTP methods (GET, POST, PUT, DELETE) over resource URLs.',
+      },
+      {
+        term: 'IP address',
+        definition:
+          'A numerical label identifying a device on a network; IPv4 uses 32 bits, IPv6 uses 128 bits.',
+      },
+      {
+        term: 'Latency vs bandwidth',
+        definition:
+          'Latency is the delay before data transfers; bandwidth is how much data can transfer per unit of time.',
+      },
+      {
+        term: 'Ports',
+        definition:
+          'Numbered endpoints on a host that let one machine run many networked services (e.g. 80 for HTTP, 443 for HTTPS).',
+      },
+      {
+        term: 'TCP handshake',
+        definition:
+          'The three-step SYN → SYN-ACK → ACK exchange that establishes a reliable TCP connection.',
+      },
+      {
+        term: 'WebSocket',
+        definition:
+          'A protocol providing a persistent, full-duplex connection over a single TCP link, used for real-time updates.',
+      },
+      {
+        term: 'Packet',
+        definition:
+          'A small unit of data with a header and payload that is routed independently across a network and reassembled at the destination.',
+      },
+    ],
+  },
+  {
+    id: 'machine-learning',
+    name: 'Machine Learning',
+    description: 'Foundational ideas behind ML models.',
+    tag: 'machine-learning',
+    cards: [
+      {
+        term: 'Supervised vs unsupervised learning',
+        definition:
+          'Supervised learning trains on labeled examples; unsupervised learning finds structure in unlabeled data.',
+      },
+      {
+        term: 'Training vs test set',
+        definition:
+          'The training set fits the model; the held-out test set estimates how well it generalizes to unseen data.',
+      },
+      {
+        term: 'Overfitting vs underfitting',
+        definition:
+          'Overfitting memorizes noise and fails on new data; underfitting is too simple to capture the real pattern.',
+      },
+      {
+        term: 'Gradient descent',
+        definition:
+          'An optimization method that iteratively adjusts parameters in the direction that most reduces the loss.',
+      },
+      {
+        term: 'Loss function',
+        definition: 'A measure of how wrong a model’s predictions are; training minimizes it.',
+      },
+      {
+        term: 'Neural network',
+        definition:
+          'A model of layered interconnected nodes that learns weighted transformations of its inputs.',
+      },
+      {
+        term: 'Feature',
+        definition: 'An individual measurable input variable the model uses to make predictions.',
+      },
+      {
+        term: 'Classification vs regression',
+        definition:
+          'Classification predicts discrete categories; regression predicts continuous numeric values.',
+      },
+      {
+        term: 'Bias–variance tradeoff',
+        definition:
+          'Simpler models have high bias (underfit); complex ones have high variance (overfit). Good models balance the two.',
+      },
+      {
+        term: 'Overfitting remedy: regularization',
+        definition:
+          'Adding a penalty on model complexity (e.g. L1/L2) to discourage overfitting and improve generalization.',
+      },
+    ],
+  },
+  {
+    id: 'ux-design',
+    name: 'Design & UX',
+    description: 'Principles behind interfaces that feel right.',
+    tag: 'design',
+    cards: [
+      {
+        term: 'Affordance',
+        definition:
+          'A property that signals how an object can be used — a button that looks pressable invites a click.',
+      },
+      {
+        term: 'Hick’s Law',
+        definition:
+          'The time to make a decision grows with the number and complexity of choices offered.',
+      },
+      {
+        term: 'Fitts’s Law',
+        definition:
+          'The time to reach a target depends on its distance and size — bigger, closer targets are faster to hit.',
+      },
+      {
+        term: 'Visual hierarchy',
+        definition:
+          'Arranging elements by size, color, and placement so the eye is guided to what matters most first.',
+      },
+      {
+        term: 'Contrast (accessibility)',
+        definition:
+          'Sufficient difference between text and background luminance so content is legible; WCAG sets minimum ratios.',
+      },
+      {
+        term: 'Consistency',
+        definition:
+          'Reusing patterns, wording, and controls so users can transfer what they learned across the product.',
+      },
+      {
+        term: 'Feedback',
+        definition:
+          'Immediate, clear responses to user actions so people know a system received and understood their input.',
+      },
+      {
+        term: 'Progressive disclosure',
+        definition:
+          'Showing only what’s needed now and revealing advanced options on demand to reduce overwhelm.',
+      },
+      {
+        term: 'White space',
+        definition:
+          'Empty space around elements that improves readability, grouping, and focus — not wasted space.',
+      },
+      {
+        term: 'Gestalt proximity',
+        definition: 'People perceive elements placed close together as a related group.',
+      },
+    ],
+  },
 ];
