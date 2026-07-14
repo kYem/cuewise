@@ -8,6 +8,7 @@ import {
   emitSampleFrame,
   emitStopped,
   focusModeStateMock,
+  getPostureStatsMock,
   hhmmFromNow,
   invokeMock,
   NUDGES_PAUSED_KEY,
@@ -20,6 +21,7 @@ import {
   START_FAILED_ERROR,
   STOP_FAILED_ERROR,
   STOPPED_ERROR,
+  setPostureStatsMock,
   toastErrorMock,
   toastWarningMock,
   UNREADABLE_ERROR,
@@ -67,9 +69,18 @@ vi.mock('@cuewise/app', async () => {
   };
 });
 
-vi.mock('@cuewise/shared', () => ({
+vi.mock('@cuewise/shared', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@cuewise/shared')>()),
   logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
 }));
+
+vi.mock('@cuewise/storage', async () => {
+  const fixtures = await import('./__fixtures__/posture-controller.fixtures');
+  return {
+    getPostureStats: fixtures.getPostureStatsMock,
+    setPostureStats: fixtures.setPostureStatsMock,
+  };
+});
 
 let localStorageStub: ReturnType<typeof createLocalStorageStub>;
 // The clock jump gives each test fresh, distinct timestamps; pause windows are
@@ -970,6 +981,51 @@ describe('quiet hours', () => {
       dot: 'bg-tertiary',
       label: `Quiet hours until ${end}`,
     });
+  });
+});
+
+describe('posture stats rollup', () => {
+  beforeEach(async () => {
+    // Reload from the (empty) mocked store so the module-level rollups reset.
+    initPosture();
+    await flushChain();
+    getPostureStatsMock.mockClear();
+    setPostureStatsMock.mockClear();
+  });
+
+  it('flushes a rollup of accepted samples once the throttle fills', async () => {
+    await startTracking();
+    emitPoorFrames(29);
+    expect(setPostureStatsMock).not.toHaveBeenCalled();
+
+    emitSampleFrame(JSON.stringify({ status: 'good' }));
+
+    expect(setPostureStatsMock).toHaveBeenCalledOnce();
+    expect(setPostureStatsMock).toHaveBeenCalledWith([
+      expect.objectContaining({ counts: expect.objectContaining({ poor: 29, good: 1 }) }),
+    ]);
+  });
+
+  it('flushes the remainder when tracking stops', async () => {
+    await startTracking();
+    emitPoorFrames(5);
+    expect(setPostureStatsMock).not.toHaveBeenCalled();
+
+    stopPosture();
+
+    expect(setPostureStatsMock).toHaveBeenCalledOnce();
+    expect(setPostureStatsMock).toHaveBeenCalledWith([
+      expect.objectContaining({ counts: expect.objectContaining({ poor: 5 }) }),
+    ]);
+  });
+
+  it('unreadable frames never reach the rollup', async () => {
+    await startTracking();
+    emitSampleFrame('not json');
+
+    stopPosture();
+
+    expect(setPostureStatsMock).not.toHaveBeenCalled();
   });
 });
 

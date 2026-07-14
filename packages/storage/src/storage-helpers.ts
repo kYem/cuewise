@@ -14,6 +14,7 @@ import {
   logger,
   type PlaylistProgress,
   type PomodoroSession,
+  type PostureDailyStat,
   type QuickLink,
   type Quote,
   type QuoteCollection,
@@ -211,6 +212,16 @@ export async function getConceptCards(): Promise<ConceptCard[]> {
 export async function setConceptCards(cards: ConceptCard[]): Promise<StorageResult> {
   const area = await getStorageArea();
   return setInStorage(STORAGE_KEYS.CONCEPT_CARDS, cards, area);
+}
+
+// Posture daily rollups (macOS tracking; always local — device-specific data)
+export async function getPostureStats(): Promise<PostureDailyStat[]> {
+  const stats = await getFromStorage<PostureDailyStat[]>(STORAGE_KEYS.POSTURE_STATS, 'local');
+  return stats ?? [];
+}
+
+export async function setPostureStats(stats: PostureDailyStat[]): Promise<StorageResult> {
+  return setInStorage(STORAGE_KEYS.POSTURE_STATS, stats, 'local');
 }
 
 // Google Calendar (connection + cached events; always local)

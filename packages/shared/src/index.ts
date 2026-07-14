@@ -12,6 +12,8 @@ export * from './hlc';
 export * from './logger';
 // Export platform ports (scheduler/notifier/storage interfaces + registry)
 export * from './platform';
+// Export posture daily-rollup helpers (macOS tracking → Insights)
+export * from './posture-stats';
 // Export text search helpers
 export * from './search';
 // Export device-local settings-sync scope

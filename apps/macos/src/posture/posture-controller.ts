@@ -1,5 +1,15 @@
 import { useFocusModeStore, usePomodoroStore, useToastStore } from '@cuewise/app';
-import { logger, type PostureSample, type PostureStatus } from '@cuewise/shared';
+import {
+  addPostureSample,
+  getTodayDateString,
+  logger,
+  POSTURE_SAMPLE_INTERVAL_SECONDS,
+  type PostureDailyStat,
+  type PostureSample,
+  type PostureStatus,
+  prunePostureStats,
+} from '@cuewise/shared';
+import { getPostureStats, setPostureStats } from '@cuewise/storage';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { useSyncExternalStore } from 'react';
@@ -103,7 +113,8 @@ const KNOWN_STATUSES = Object.keys({
   absent: 0,
 } satisfies Record<PostureStatus, 0>) as PostureStatus[];
 
-const SAMPLE_INTERVAL_SECONDS = 2; // the sidecar's cadence
+// The sidecar's cadence — single-sourced in shared so the Insights math agrees.
+const SAMPLE_INTERVAL_SECONDS = POSTURE_SAMPLE_INTERVAL_SECONDS;
 // Default glow threshold (the 30s preset); no cooldown — the glow persists until
 // recovery instead. Exported so tests exercise the real default.
 export const NUDGE_AFTER_POOR_SAMPLES = 30 / SAMPLE_INTERVAL_SECONDS;
@@ -128,6 +139,41 @@ let warnedUnreadable = false;
 export const STEADY_SAMPLES = 3; // ~6s at the sidecar's 2s cadence
 let pendingStatus: PostureStatus | null = null;
 let pendingCount = 0;
+
+// Daily posture rollups for Insights (ENG-38): every accepted sample increments
+// today's stat; writes are throttled to roughly once a minute.
+const STATS_FLUSH_EVERY_SAMPLES = 30;
+let postureStats: PostureDailyStat[] = [];
+let unflushedSamples = 0;
+
+function recordSampleForStats(status: PostureStatus): void {
+  postureStats = addPostureSample(postureStats, getTodayDateString(), status);
+  unflushedSamples += 1;
+  if (unflushedSamples >= STATS_FLUSH_EVERY_SAMPLES) {
+    flushPostureStats();
+  }
+}
+
+// Resolves long before the sidecar's first frame (a spawn takes seconds), so
+// overwriting the in-memory array is safe; prunes past-retention days on load.
+async function loadPostureStats(): Promise<void> {
+  try {
+    postureStats = prunePostureStats(await getPostureStats(), getTodayDateString());
+  } catch (error) {
+    logger.error('Failed to load posture stats', error);
+  }
+}
+
+// Fire-and-forget: a failed write only costs up to a minute of rollup counts.
+function flushPostureStats(): void {
+  if (unflushedSamples === 0) {
+    return;
+  }
+  unflushedSamples = 0;
+  setPostureStats(postureStats).catch((error) => {
+    logger.error('Failed to persist posture stats', error);
+  });
+}
 
 // Persist the opt-in preferences (macOS-local) so the toggles stick across launches.
 const ENABLED_KEY = 'cuewise.posture.enabled';
@@ -251,6 +297,7 @@ async function attachListeners(): Promise<void> {
     } else {
       setState({ sample });
     }
+    recordSampleForStats(sample.status);
     updateSteadyStatus(sample.status);
     updateNudgeGlow(sample);
   });
@@ -263,6 +310,7 @@ async function attachListeners(): Promise<void> {
       hideGlowIfActive();
       detachListeners();
       resetDerivation();
+      flushPostureStats();
       // "stalled" = the watchdog killed a sidecar whose readings dried up (e.g. the
       // camera stream was interrupted) — blaming permissions would misdirect. The
       // camera copy fits the rest: "exited", and "mute" (reaped before any frame).
@@ -354,6 +402,7 @@ export function stopPosture(): void {
   });
   detachListeners();
   resetDerivation();
+  flushPostureStats();
   // Clear any stale error too — the user chose to stop, and a leftover failure
   // message would otherwise pin the tray's ⚠️ indicator indefinitely.
   setState({ tracking: false, sample: null, steadyStatus: null, error: null });
@@ -381,6 +430,7 @@ function updateSteadyStatus(status: PostureStatus): void {
 
 /** Restore persisted preferences and auto-resume tracking if it was left on. */
 export function initPosture(): void {
+  void loadPostureStats();
   try {
     const nudges = localStorage.getItem(NUDGES_KEY);
     if (nudges !== null) {

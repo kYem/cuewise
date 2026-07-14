@@ -4,7 +4,16 @@ import {
   getMostViewedCategory,
   QUOTE_CATEGORIES,
 } from '@cuewise/shared';
-import { Award, Calendar, Clock, Flag, Flame, Target, TrendingUp } from 'lucide-react';
+import {
+  Award,
+  Calendar,
+  Clock,
+  Flag,
+  Flame,
+  PersonStanding,
+  Target,
+  TrendingUp,
+} from 'lucide-react';
 import type React from 'react';
 import { useEffect, useState } from 'react';
 import { useConceptCardsStore } from '../stores/concept-cards-store';
@@ -23,6 +32,7 @@ export const InsightsPage: React.FC = () => {
   const {
     insights,
     analytics,
+    postureSummary,
     isLoading,
     initialize,
     exportAsJSON,
@@ -206,6 +216,29 @@ export const InsightsPage: React.FC = () => {
                 <h3 className="text-secondary text-sm font-medium mb-1">Pomodoros Today</h3>
                 <p className="text-xs text-tertiary">Focus sessions completed</p>
               </div>
+
+              {/* Posture (macOS tracking) — only rendered when data exists */}
+              {postureSummary && (
+                <div className="bg-surface rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="p-3 bg-emerald-100 rounded-lg">
+                      <PersonStanding className="w-6 h-6 text-emerald-600" />
+                    </div>
+                    <span className="text-3xl font-bold text-emerald-600">
+                      {postureSummary.todayPercent !== null
+                        ? `${postureSummary.todayPercent}%`
+                        : '—'}
+                    </span>
+                  </div>
+                  <h3 className="text-secondary text-sm font-medium mb-1">Upright Today</h3>
+                  <p className="text-xs text-tertiary">
+                    {postureSummary.sevenDayPercent !== null
+                      ? `7-day avg ${postureSummary.sevenDayPercent}%`
+                      : 'No week data yet'}{' '}
+                    | {postureSummary.trackedHoursToday}h tracked
+                  </p>
+                </div>
+              )}
 
               {/* Total Quotes Viewed */}
               <div className="bg-surface rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow">

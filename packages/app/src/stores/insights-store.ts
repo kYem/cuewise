@@ -18,12 +18,15 @@ import {
   type InsightsData,
   logger,
   type PomodoroSession,
+  type PostureSummary,
   parseImportData,
   type Quote,
+  summarizePosture,
 } from '@cuewise/shared';
 import {
   getGoals,
   getPomodoroSessions,
+  getPostureStats,
   getQuotes,
   setGoals,
   setPomodoroSessions,
@@ -60,6 +63,8 @@ function mergeImport<T extends { id: string }>(
 interface InsightsStore {
   insights: InsightsData | null;
   analytics: AdvancedAnalytics | null;
+  // Null when nothing was ever tracked (e.g. the extension, which has no camera).
+  postureSummary: PostureSummary | null;
   isLoading: boolean;
   error: string | null;
 
@@ -88,6 +93,7 @@ interface InsightsStore {
 export const useInsightsStore = create<InsightsStore>((set, get) => ({
   insights: null,
   analytics: null,
+  postureSummary: null,
   isLoading: true,
   error: null,
   quotes: [],
@@ -101,17 +107,28 @@ export const useInsightsStore = create<InsightsStore>((set, get) => ({
       set({ isLoading: true, error: null });
 
       // Load all data needed for insights
-      const [quotes, goals, pomodoroSessions] = await Promise.all([
+      const [quotes, goals, pomodoroSessions, postureStats] = await Promise.all([
         getQuotes(),
         getGoals(),
         getPomodoroSessions(),
+        getPostureStats(),
       ]);
 
       // Calculate insights and analytics
       const insights = calculateInsights(quotes, goals, pomodoroSessions);
       const analytics = calculateAdvancedAnalytics(goals, pomodoroSessions);
+      const postureSummary =
+        postureStats.length > 0 ? summarizePosture(postureStats, getTodayDateString()) : null;
 
-      set({ insights, analytics, quotes, goals, pomodoroSessions, isLoading: false });
+      set({
+        insights,
+        analytics,
+        postureSummary,
+        quotes,
+        goals,
+        pomodoroSessions,
+        isLoading: false,
+      });
     } catch (error) {
       logger.error('Error initializing insights store', error);
       const errorMessage = 'Failed to load insights. Please refresh the page.';
@@ -125,16 +142,19 @@ export const useInsightsStore = create<InsightsStore>((set, get) => ({
       set({ error: null });
 
       // Reload data and recalculate insights
-      const [quotes, goals, pomodoroSessions] = await Promise.all([
+      const [quotes, goals, pomodoroSessions, postureStats] = await Promise.all([
         getQuotes(),
         getGoals(),
         getPomodoroSessions(),
+        getPostureStats(),
       ]);
 
       const insights = calculateInsights(quotes, goals, pomodoroSessions);
       const analytics = calculateAdvancedAnalytics(goals, pomodoroSessions);
+      const postureSummary =
+        postureStats.length > 0 ? summarizePosture(postureStats, getTodayDateString()) : null;
 
-      set({ insights, analytics, quotes, goals, pomodoroSessions });
+      set({ insights, analytics, postureSummary, quotes, goals, pomodoroSessions });
     } catch (error) {
       logger.error('Error refreshing insights', error);
       const errorMessage = 'Failed to refresh insights. Please try again.';

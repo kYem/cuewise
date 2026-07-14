@@ -38,12 +38,18 @@ function makeInsights(): InsightsData {
 interface SetupOptions {
   enabled?: boolean;
   cards?: ReturnType<typeof conceptCardFactory.build>[];
+  postureSummary?: {
+    todayPercent: number | null;
+    sevenDayPercent: number | null;
+    trackedHoursToday: number;
+  } | null;
 }
 
-function setup({ enabled = true, cards = [] }: SetupOptions = {}) {
+function setup({ enabled = true, cards = [], postureSummary = null }: SetupOptions = {}) {
   vi.mocked(useInsightsStore).mockReturnValue({
     insights: makeInsights(),
     analytics: null,
+    postureSummary,
     isLoading: false,
     initialize: vi.fn(),
     exportAsJSON: vi.fn(),
@@ -66,6 +72,39 @@ function setup({ enabled = true, cards = [] }: SetupOptions = {}) {
 function conceptsTab() {
   return screen.queryByRole('button', { name: 'Concepts' });
 }
+
+describe('InsightsPage — posture card', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('shows the upright card when posture data exists', () => {
+    setup({ postureSummary: { todayPercent: 82, sevenDayPercent: 76, trackedHoursToday: 4.2 } });
+
+    render(<InsightsPage />);
+
+    expect(screen.getByText('Upright Today')).toBeInTheDocument();
+    expect(screen.getByText('82%')).toBeInTheDocument();
+    expect(screen.getByText(/7-day avg 76% \| 4.2h tracked/)).toBeInTheDocument();
+  });
+
+  it('renders a dash when today has no readings yet', () => {
+    setup({ postureSummary: { todayPercent: null, sevenDayPercent: 76, trackedHoursToday: 0 } });
+
+    render(<InsightsPage />);
+
+    expect(screen.getByText('Upright Today')).toBeInTheDocument();
+    expect(screen.getByText('—')).toBeInTheDocument();
+  });
+
+  it('hides the card entirely without posture data (e.g. the extension)', () => {
+    setup();
+
+    render(<InsightsPage />);
+
+    expect(screen.queryByText('Upright Today')).not.toBeInTheDocument();
+  });
+});
 
 describe('InsightsPage — Concepts tab', () => {
   beforeEach(() => {
