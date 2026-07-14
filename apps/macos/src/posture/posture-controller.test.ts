@@ -24,7 +24,7 @@ import {
   UNREADABLE_ERROR,
   unlistenSpies,
 } from './__fixtures__/posture-controller.fixtures';
-import { chipPresentation } from './chip-presentation';
+import { chipPresentation, chipVisibleOnSurface } from './chip-presentation';
 import {
   getPostureState,
   initPosture,
@@ -955,6 +955,28 @@ describe('quiet hours', () => {
       dot: 'bg-tertiary',
       label: `Quiet hours until ${end}`,
     });
+  });
+});
+
+describe('chip surface visibility', () => {
+  it('hides on the full-page library surfaces', () => {
+    expect(chipVisibleOnSurface('#insights', false)).toBe(false);
+    expect(chipVisibleOnSurface('#quotes', false)).toBe(false);
+    expect(chipVisibleOnSurface('#goals', false)).toBe(false);
+    expect(chipVisibleOnSurface('#concepts', false)).toBe(false);
+  });
+
+  it('shows on home, pomodoro, and modal-only hashes', () => {
+    expect(chipVisibleOnSurface('', false)).toBe(true);
+    expect(chipVisibleOnSurface('#', false)).toBe(true);
+    expect(chipVisibleOnSurface('#pomodoro', false)).toBe(true);
+    // The #settings deep-link opens a modal over home and clears its hash via
+    // replaceState (no hashchange) — unknown hashes must behave like home.
+    expect(chipVisibleOnSurface('#settings', false)).toBe(true);
+  });
+
+  it('focus mode keeps the chip on any surface', () => {
+    expect(chipVisibleOnSurface('#insights', true)).toBe(true);
   });
 });
 

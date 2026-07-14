@@ -6,6 +6,19 @@ export interface ChipPresentation {
   label: string;
 }
 
+// Full-page surfaces where the floating chip would sit on top of content. A
+// deny-list, not an allow-list: modal-only hashes (e.g. the #settings deep
+// link, cleared via replaceState with no hashchange) must behave like home.
+const CHIP_HIDDEN_PAGES = new Set(['insights', 'quotes', 'goals', 'concepts']);
+
+/** The chip belongs on home, pomodoro, and the focus-mode overlay only. */
+export function chipVisibleOnSurface(hash: string, focusModeActive: boolean): boolean {
+  if (focusModeActive) {
+    return true;
+  }
+  return !CHIP_HIDDEN_PAGES.has(hash.replace(/^#/, ''));
+}
+
 // Precedence mirrors the tray (the authoritative surface): error > glow
 // unavailable > paused > quiet hours > steady status > starting. Null while not
 // tracking. Sample frames re-render every ~2s, so the label can't go stale long.
