@@ -253,6 +253,24 @@ export type ConceptFraming = 'ambient' | 'queue';
 // A card's difficulty bucket for the deck UI (derived by getConceptDifficulty)
 export type ConceptDifficulty = 'new' | 'struggling' | 'solid' | 'strong';
 
+// One card inside a starter template pack — just the content; the id, createdAt,
+// and review schedule are minted when the user adds the pack to their deck.
+export interface ConceptTemplateCard {
+  term: string;
+  definition: string;
+  details?: string; // optional "how it works" / example
+}
+
+// A curated topic pack (~10 cards) for one-click deck seeding, e.g. "System
+// Design". Every card in the pack is tagged with `tag` on import.
+export interface ConceptTemplate {
+  id: string;
+  name: string; // display name, e.g. "System Design"
+  description: string; // one-line summary of the pack
+  tag: string; // learning-topic tag applied to every card on import
+  cards: ConceptTemplateCard[];
+}
+
 // Google Calendar (read-only) — shown beside the Pomodoro timer.
 // Discriminated on `allDay` so the two time representations can't be confused:
 // timed events carry full ISO datetimes (safe for `new Date(...)`), all-day

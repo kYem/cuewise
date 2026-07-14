@@ -21,6 +21,13 @@ const REVIEW_ERROR_MESSAGE = 'Failed to save review. Please try again.';
 // Optional content fields, derived from ConceptCard so the two stay in lockstep.
 type ConceptCardExtras = Pick<ConceptCard, 'details' | 'tags' | 'source'>;
 
+// One card for the bulk-add path (term + definition, plus the optional extras).
+interface ConceptCardInput {
+  term: string;
+  definition: string;
+  extras?: ConceptCardExtras;
+}
+
 type ConceptCardUpdates = Partial<
   Pick<ConceptCard, 'term' | 'definition' | 'isFavorite'> & ConceptCardExtras
 >;
@@ -33,6 +40,9 @@ interface ConceptCardsStore {
   // Actions - return false on error, true on success
   initialize: () => Promise<void>;
   addCard: (term: string, definition: string, extras?: ConceptCardExtras) => Promise<boolean>;
+  // Bulk-add (e.g. a starter template pack). Skips blanks and terms already in
+  // the deck (case-insensitive), persists once, and resolves to the count added.
+  addCards: (inputs: ConceptCardInput[]) => Promise<number>;
   updateCard: (id: string, updates: ConceptCardUpdates) => Promise<boolean>;
   deleteCard: (id: string) => Promise<boolean>;
   reviewCard: (id: string, grade: ConceptGrade) => Promise<boolean>;
@@ -121,6 +131,59 @@ export const useConceptCardsStore = create<ConceptCardsStore>((set, get) => ({
     } catch (error) {
       logger.error('Error adding concept card', error);
       return reportError(set, SAVE_ERROR_MESSAGE);
+    }
+  },
+
+  addCards: async (inputs: ConceptCardInput[]) => {
+    const existing = get().cards;
+    // Case-insensitive dedup against the deck and within the incoming batch.
+    const seen = new Set(existing.map((card) => card.term.trim().toLowerCase()));
+    const now = new Date();
+    const schedule = newConceptSchedule(now);
+    const createdAt = now.toISOString();
+
+    const newCards: ConceptCard[] = [];
+    for (const input of inputs) {
+      const term = input.term.trim();
+      const definition = input.definition.trim();
+      if (!term || !definition) {
+        continue;
+      }
+      const key = term.toLowerCase();
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      newCards.push({
+        id: generateId(),
+        term,
+        definition,
+        details: input.extras?.details?.trim() || undefined,
+        tags: input.extras?.tags,
+        source: input.extras?.source?.trim() || undefined,
+        createdAt,
+        schedule,
+      });
+    }
+
+    if (newCards.length === 0) {
+      return 0;
+    }
+
+    try {
+      const updatedCards = [...existing, ...newCards];
+      const result = await saveConceptCards(updatedCards);
+      if (result?.success === false) {
+        reportError(set, SAVE_ERROR_MESSAGE);
+        return 0;
+      }
+
+      set({ cards: updatedCards, error: null });
+      return newCards.length;
+    } catch (error) {
+      logger.error('Error adding concept cards', error);
+      reportError(set, SAVE_ERROR_MESSAGE);
+      return 0;
     }
   },
 

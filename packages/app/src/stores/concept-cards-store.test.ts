@@ -80,6 +80,67 @@ describe('Concept Cards Store', () => {
     });
   });
 
+  describe('addCards', () => {
+    it('bulk-adds cards due today and returns the count', async () => {
+      const added = await useConceptCardsStore.getState().addCards([
+        { term: 'Load balancer', definition: 'Spreads load.', extras: { tags: ['system-design'] } },
+        { term: 'Caching', definition: 'Stores results.', extras: { tags: ['system-design'] } },
+      ]);
+
+      expect(added).toBe(2);
+      const { cards } = useConceptCardsStore.getState();
+      expect(cards).toHaveLength(2);
+      expect(cards[0].tags).toEqual(['system-design']);
+      expect(cards[0].schedule.repetitions).toBe(0);
+      expect(storage.setConceptCards).toHaveBeenCalledOnce();
+    });
+
+    it('skips blanks and terms already in the deck (case-insensitive)', async () => {
+      useConceptCardsStore.setState({
+        cards: [conceptCardFactory.build({ id: '1', term: 'Caching' })],
+      });
+
+      const added = await useConceptCardsStore.getState().addCards([
+        { term: 'caching', definition: 'Dupe of an existing term.' },
+        { term: '   ', definition: 'Blank term.' },
+        { term: 'Sharding', definition: 'Splits data across nodes.' },
+      ]);
+
+      expect(added).toBe(1);
+      const terms = useConceptCardsStore.getState().cards.map((c) => c.term);
+      expect(terms).toEqual(['Caching', 'Sharding']);
+    });
+
+    it('dedups within the incoming batch', async () => {
+      const added = await useConceptCardsStore.getState().addCards([
+        { term: 'Idempotency', definition: 'Same effect on repeat.' },
+        { term: 'idempotency', definition: 'Duplicate in the same batch.' },
+      ]);
+
+      expect(added).toBe(1);
+      expect(useConceptCardsStore.getState().cards).toHaveLength(1);
+    });
+
+    it('does not persist when nothing new is added', async () => {
+      const added = await useConceptCardsStore.getState().addCards([{ term: '', definition: '' }]);
+
+      expect(added).toBe(0);
+      expect(storage.setConceptCards).not.toHaveBeenCalled();
+    });
+
+    it('returns 0 and reports on a failed persist', async () => {
+      vi.mocked(storage.setConceptCards).mockResolvedValue(storageFailure('write failed'));
+
+      const added = await useConceptCardsStore
+        .getState()
+        .addCards([{ term: 'Sharding', definition: 'Splits data.' }]);
+
+      expect(added).toBe(0);
+      expect(useConceptCardsStore.getState().cards).toHaveLength(0);
+      expect(toastError).toHaveBeenCalled();
+    });
+  });
+
   describe('updateCard', () => {
     it('updates term and trims it', async () => {
       const card = conceptCardFactory.build({ id: '1' });

@@ -1,5 +1,6 @@
 import type {
   ColorTheme,
+  ConceptTemplate,
   FocusImageCategory,
   LayoutDensity,
   QuoteCategory,
@@ -420,3 +421,371 @@ export const REMINDER_INTERVAL_PRESETS = [30, 45, 60, 90] as const;
 
 // Minutes a reminder notification's "Snooze" button defers the next alarm.
 export const REMINDER_SNOOZE_MINUTES = 5;
+
+// Curated concept-card starter packs — each is ~10 common terms for a topic,
+// added in one click and tagged so they group cleanly in the deck. Content is
+// intentionally concise (one or two sentences) to match the recall UI. Users
+// edit or delete any card afterwards; re-adding a pack skips cards already saved.
+export const CONCEPT_TEMPLATES: ConceptTemplate[] = [
+  {
+    id: 'system-design',
+    name: 'System Design',
+    description: 'Core building blocks for scalable backend systems.',
+    tag: 'system-design',
+    cards: [
+      {
+        term: 'Load balancer',
+        definition:
+          'A component that distributes incoming requests across multiple servers to spread load and avoid any single instance becoming a bottleneck.',
+        details: 'Common strategies: round-robin, least-connections, and IP-hash.',
+      },
+      {
+        term: 'Horizontal vs vertical scaling',
+        definition:
+          'Horizontal scaling adds more machines; vertical scaling adds more power (CPU/RAM) to one machine.',
+        details:
+          'Horizontal scales further but needs statelessness; vertical is simpler but capped.',
+      },
+      {
+        term: 'Caching',
+        definition:
+          'Storing the result of an expensive operation so future requests for the same data are served faster.',
+        details: 'Watch for staleness — invalidation is one of the hard problems.',
+      },
+      {
+        term: 'CAP theorem',
+        definition:
+          'A distributed store can guarantee at most two of Consistency, Availability, and Partition tolerance at once.',
+        details:
+          'Since partitions are unavoidable, the real trade-off is C vs A during a partition.',
+      },
+      {
+        term: 'Sharding',
+        definition:
+          'Splitting a database horizontally across nodes by a shard key so no single node holds all the data.',
+        details: 'A poorly chosen shard key creates hot spots.',
+      },
+      {
+        term: 'Message queue',
+        definition:
+          'A buffer that decouples producers from consumers, letting work be processed asynchronously and absorb spikes.',
+        details: 'Examples: Kafka, RabbitMQ, SQS.',
+      },
+      {
+        term: 'Idempotency',
+        definition:
+          'A property where making the same request multiple times has the same effect as making it once.',
+        details: 'Essential for safe retries in distributed systems.',
+      },
+      {
+        term: 'Rate limiting',
+        definition:
+          'Capping how many requests a client can make in a time window to protect a service from overload or abuse.',
+        details: 'Token bucket and sliding window are common algorithms.',
+      },
+      {
+        term: 'CDN',
+        definition:
+          'A geographically distributed network of servers that caches static content close to users to cut latency.',
+      },
+      {
+        term: 'Consistent hashing',
+        definition:
+          'A hashing scheme that minimizes the number of keys that must move when nodes are added or removed.',
+        details: 'Used to distribute cache keys and shards with minimal reshuffling.',
+      },
+    ],
+  },
+  {
+    id: 'javascript',
+    name: 'JavaScript & TypeScript',
+    description: 'Language fundamentals every JS/TS developer leans on.',
+    tag: 'javascript',
+    cards: [
+      {
+        term: 'Closure',
+        definition:
+          'A function bundled together with references to the variables from the scope where it was defined, so it keeps access to them after that scope returns.',
+      },
+      {
+        term: 'Event loop',
+        definition:
+          'The mechanism that lets single-threaded JavaScript run non-blocking async code by processing queued callbacks once the call stack is empty.',
+        details: 'Microtasks (promises) run before macrotasks (timers).',
+      },
+      {
+        term: 'Hoisting',
+        definition:
+          'JavaScript moves declarations to the top of their scope at compile time; `var` initializes to undefined, while `let`/`const` stay in the temporal dead zone.',
+      },
+      {
+        term: 'Promise',
+        definition:
+          'An object representing the eventual result of an async operation, which can be pending, fulfilled, or rejected.',
+      },
+      {
+        term: 'this binding',
+        definition:
+          "The value of `this` depends on how a function is called, not where it's defined; arrow functions instead capture `this` from their enclosing scope.",
+      },
+      {
+        term: 'Prototypal inheritance',
+        definition:
+          'Objects delegate to a prototype object for properties they lack, forming a prototype chain used for lookups.',
+      },
+      {
+        term: 'Structural typing',
+        definition:
+          "TypeScript checks type compatibility by an object's shape rather than its declared name — if it has the required members, it fits.",
+      },
+      {
+        term: 'Union vs intersection types',
+        definition:
+          'A union (`A | B`) is one of several types; an intersection (`A & B`) combines all their members into one.',
+      },
+      {
+        term: 'Generics',
+        definition:
+          'Type parameters that let a function or type work over many types while preserving the relationship between inputs and outputs.',
+      },
+      {
+        term: 'Type narrowing',
+        definition:
+          'Refining a broad type to a more specific one within a branch using checks like `typeof`, `in`, or truthiness guards.',
+      },
+    ],
+  },
+  {
+    id: 'cognitive-biases',
+    name: 'Cognitive Biases',
+    description: 'Common thinking traps worth recognizing in yourself.',
+    tag: 'psychology',
+    cards: [
+      {
+        term: 'Confirmation bias',
+        definition:
+          'The tendency to seek, interpret, and remember information in a way that confirms what you already believe.',
+      },
+      {
+        term: 'Anchoring',
+        definition:
+          'Relying too heavily on the first piece of information encountered when making a decision.',
+        details: 'The initial price in a negotiation anchors everything that follows.',
+      },
+      {
+        term: 'Sunk cost fallacy',
+        definition:
+          'Continuing an endeavor because of already-invested resources rather than future value.',
+      },
+      {
+        term: 'Availability heuristic',
+        definition:
+          'Judging how likely something is by how easily examples come to mind, which overweights vivid or recent events.',
+      },
+      {
+        term: 'Dunning–Kruger effect',
+        definition:
+          'People with low competence in an area tend to overestimate their ability, lacking the skill to see their own gaps.',
+      },
+      {
+        term: 'Survivorship bias',
+        definition:
+          'Focusing on the things that made it past a selection while ignoring those that did not, skewing conclusions.',
+      },
+      {
+        term: 'Loss aversion',
+        definition:
+          'The pain of losing something is felt roughly twice as strongly as the pleasure of gaining the equivalent.',
+      },
+      {
+        term: 'Hindsight bias',
+        definition: 'After an event, seeing it as having been predictable all along ("I knew it").',
+      },
+      {
+        term: 'Fundamental attribution error',
+        definition:
+          "Attributing others' behavior to their character while attributing your own to circumstances.",
+      },
+      {
+        term: 'Framing effect',
+        definition:
+          'Reaching different conclusions from the same information depending on how it is presented.',
+        details: '"90% survival" feels better than "10% mortality" for identical odds.',
+      },
+    ],
+  },
+  {
+    id: 'productivity',
+    name: 'Productivity & Focus',
+    description: 'Methods and ideas for doing meaningful work.',
+    tag: 'productivity',
+    cards: [
+      {
+        term: 'Pomodoro Technique',
+        definition:
+          'Working in focused ~25-minute intervals separated by short breaks to sustain concentration.',
+      },
+      {
+        term: 'Deep work',
+        definition:
+          'Distraction-free concentration on a cognitively demanding task, where the most valuable output tends to happen.',
+      },
+      {
+        term: 'Eisenhower Matrix',
+        definition:
+          'Sorting tasks by urgency and importance into four quadrants to decide what to do, schedule, delegate, or drop.',
+      },
+      {
+        term: 'Parkinson’s Law',
+        definition:
+          'Work expands to fill the time available for its completion — so tighter deadlines can sharpen focus.',
+      },
+      {
+        term: 'Time blocking',
+        definition:
+          'Assigning specific tasks to specific blocks on your calendar rather than working from an open to-do list.',
+      },
+      {
+        term: 'Eat the frog',
+        definition:
+          'Do your most important or dreaded task first thing, before the day erodes your energy and attention.',
+      },
+      {
+        term: 'Two-minute rule',
+        definition:
+          'If a task takes less than two minutes, do it immediately instead of tracking it for later.',
+      },
+      {
+        term: 'Pareto principle',
+        definition:
+          'Roughly 80% of results come from 20% of causes — focus effort on the vital few.',
+      },
+      {
+        term: 'Context switching cost',
+        definition: 'The hidden time and focus lost each time you jump between unrelated tasks.',
+      },
+      {
+        term: 'Getting Things Done (GTD)',
+        definition:
+          'A method of capturing every task in a trusted external system so your mind is free to focus on doing.',
+      },
+    ],
+  },
+  {
+    id: 'statistics',
+    name: 'Statistics & Data',
+    description: 'Concepts for reasoning about data and uncertainty.',
+    tag: 'statistics',
+    cards: [
+      {
+        term: 'Mean vs median',
+        definition:
+          'The mean is the average; the median is the middle value. The median is more robust to outliers.',
+      },
+      {
+        term: 'Standard deviation',
+        definition:
+          'A measure of how spread out values are around the mean — larger means more variability.',
+      },
+      {
+        term: 'p-value',
+        definition:
+          'The probability of observing a result at least as extreme as yours if the null hypothesis were true.',
+        details:
+          'A small p-value suggests the data is unlikely under the null — not that the effect is large.',
+      },
+      {
+        term: 'Correlation vs causation',
+        definition:
+          'Two variables moving together does not mean one causes the other; a hidden factor may drive both.',
+      },
+      {
+        term: 'Normal distribution',
+        definition:
+          'A symmetric bell-shaped distribution where most values cluster near the mean; many natural measures approximate it.',
+      },
+      {
+        term: 'Sampling bias',
+        definition:
+          'When the sample collected is not representative of the population, distorting conclusions.',
+      },
+      {
+        term: 'Regression to the mean',
+        definition:
+          'Extreme measurements tend to be followed by ones closer to the average on remeasurement.',
+      },
+      {
+        term: 'Confidence interval',
+        definition:
+          'A range of values that, under repeated sampling, would contain the true parameter a stated percentage of the time.',
+      },
+      {
+        term: 'Overfitting',
+        definition:
+          'A model that captures noise in its training data and therefore generalizes poorly to new data.',
+      },
+      {
+        term: 'Base rate',
+        definition:
+          'The underlying prevalence of something in a population — ignoring it leads to the base rate fallacy.',
+      },
+    ],
+  },
+  {
+    id: 'personal-finance',
+    name: 'Personal Finance',
+    description: 'Everyday money concepts worth internalizing.',
+    tag: 'finance',
+    cards: [
+      {
+        term: 'Compound interest',
+        definition:
+          'Earning interest on both your principal and previously accumulated interest, so growth accelerates over time.',
+      },
+      {
+        term: 'Emergency fund',
+        definition:
+          'Cash set aside (often 3–6 months of expenses) to cover unexpected costs without taking on debt.',
+      },
+      {
+        term: 'Diversification',
+        definition:
+          'Spreading investments across assets so a loss in one is cushioned by others, reducing overall risk.',
+      },
+      {
+        term: 'Index fund',
+        definition:
+          'A fund that tracks a market index, offering broad diversification at low cost with minimal active management.',
+      },
+      {
+        term: 'Inflation',
+        definition:
+          'The general rise in prices over time, which erodes the purchasing power of money held in cash.',
+      },
+      {
+        term: 'Net worth',
+        definition: 'Everything you own (assets) minus everything you owe (liabilities).',
+      },
+      {
+        term: 'APR vs APY',
+        definition:
+          'APR is the annual rate without compounding; APY includes the effect of compounding, so it reflects true yearly cost or return.',
+      },
+      {
+        term: 'Asset vs liability',
+        definition:
+          'An asset puts money in your pocket or holds value; a liability takes money out through payments or interest.',
+      },
+      {
+        term: 'Dollar-cost averaging',
+        definition:
+          'Investing a fixed amount at regular intervals regardless of price, smoothing out the effect of volatility.',
+      },
+      {
+        term: 'Opportunity cost',
+        definition:
+          'The value of the next-best option you give up when you choose to spend money or time one way.',
+      },
+    ],
+  },
+];
