@@ -2,16 +2,16 @@ import { CONCEPT_TEMPLATES, type ConceptTemplate } from '@cuewise/shared';
 import {
   Brain,
   BrainCog,
-  Code2,
-  Cpu,
-  Layers,
-  LineChart,
-  Network,
-  PenTool,
+  Dna,
+  Globe,
+  GraduationCap,
+  Landmark,
+  Languages,
+  Pencil,
   PiggyBank,
-  ShieldCheck,
+  Rocket,
   Sparkles,
-  Timer,
+  Type as TypeIcon,
 } from 'lucide-react';
 import type React from 'react';
 import { useConceptCardsStore } from '../stores/concept-cards-store';
@@ -19,16 +19,16 @@ import { useToastStore } from '../stores/toast-store';
 
 // Per-pack icon; falls back to a generic mark for any future pack.
 const TEMPLATE_ICONS: Record<string, React.FC<{ className?: string }>> = {
-  'system-design': Layers,
-  javascript: Code2,
+  'study-skills': GraduationCap,
   'cognitive-biases': BrainCog,
-  productivity: Timer,
-  statistics: LineChart,
   'personal-finance': PiggyBank,
-  'web-security': ShieldCheck,
-  networking: Network,
-  'machine-learning': Cpu,
-  'ux-design': PenTool,
+  'world-geography': Globe,
+  'world-history': Landmark,
+  'human-biology': Dna,
+  'vocabulary-builder': Languages,
+  'literary-devices': TypeIcon,
+  'space-astronomy': Rocket,
+  'grammar-writing': Pencil,
 };
 
 interface ConceptTemplateGridProps {

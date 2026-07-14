@@ -428,130 +428,62 @@ export const REMINDER_SNOOZE_MINUTES = 5;
 // edit or delete any card afterwards; re-adding a pack skips cards already saved.
 export const CONCEPT_TEMPLATES: ConceptTemplate[] = [
   {
-    id: 'system-design',
-    name: 'System Design',
-    description: 'Core building blocks for scalable backend systems.',
-    tag: 'system-design',
+    id: 'study-skills',
+    name: 'Study Skills',
+    description: 'Evidence-based techniques for learning that sticks.',
+    tag: 'study-skills',
     cards: [
       {
-        term: 'Load balancer',
+        term: 'Active recall',
         definition:
-          'A component that distributes incoming requests across multiple servers to spread load and avoid any single instance becoming a bottleneck.',
-        details: 'Common strategies: round-robin, least-connections, and IP-hash.',
+          'Testing yourself to pull information from memory, which strengthens it far more than rereading.',
+        details: 'Flashcards and practice questions beat highlighting.',
       },
       {
-        term: 'Horizontal vs vertical scaling',
+        term: 'Spaced repetition',
         definition:
-          'Horizontal scaling adds more machines; vertical scaling adds more power (CPU/RAM) to one machine.',
-        details:
-          'Horizontal scales further but needs statelessness; vertical is simpler but capped.',
+          'Reviewing material at increasing intervals so you relearn it just before you would forget.',
       },
       {
-        term: 'Caching',
+        term: 'The Pomodoro Technique',
         definition:
-          'Storing the result of an expensive operation so future requests for the same data are served faster.',
-        details: 'Watch for staleness — invalidation is one of the hard problems.',
+          'Studying in focused ~25-minute blocks with short breaks to sustain concentration.',
       },
       {
-        term: 'CAP theorem',
+        term: 'Interleaving',
         definition:
-          'A distributed store can guarantee at most two of Consistency, Availability, and Partition tolerance at once.',
-        details:
-          'Since partitions are unavoidable, the real trade-off is C vs A during a partition.',
+          'Mixing different topics or problem types in one session instead of practicing one thing at a time.',
+        details: 'It feels harder but improves your ability to tell problems apart.',
       },
       {
-        term: 'Sharding',
+        term: 'The Feynman Technique',
         definition:
-          'Splitting a database horizontally across nodes by a shard key so no single node holds all the data.',
-        details: 'A poorly chosen shard key creates hot spots.',
+          'Explaining a concept in plain language as if teaching it, to expose the gaps in your understanding.',
       },
       {
-        term: 'Message queue',
+        term: 'Elaboration',
         definition:
-          'A buffer that decouples producers from consumers, letting work be processed asynchronously and absorb spikes.',
-        details: 'Examples: Kafka, RabbitMQ, SQS.',
+          'Connecting new information to what you already know and asking "why" and "how" to deepen memory.',
       },
       {
-        term: 'Idempotency',
+        term: 'Dual coding',
         definition:
-          'A property where making the same request multiple times has the same effect as making it once.',
-        details: 'Essential for safe retries in distributed systems.',
+          'Pairing words with visuals — diagrams, timelines, sketches — so ideas are stored two ways.',
       },
       {
-        term: 'Rate limiting',
+        term: 'Cramming vs distributed practice',
         definition:
-          'Capping how many requests a client can make in a time window to protect a service from overload or abuse.',
-        details: 'Token bucket and sliding window are common algorithms.',
+          'Massed cramming helps a test tomorrow but fades fast; spreading study over days retains far more.',
       },
       {
-        term: 'CDN',
+        term: 'Metacognition',
         definition:
-          'A geographically distributed network of servers that caches static content close to users to cut latency.',
+          'Thinking about your own thinking — judging what you do and don’t know so you study the right things.',
       },
       {
-        term: 'Consistent hashing',
+        term: 'Retrieval practice',
         definition:
-          'A hashing scheme that minimizes the number of keys that must move when nodes are added or removed.',
-        details: 'Used to distribute cache keys and shards with minimal reshuffling.',
-      },
-    ],
-  },
-  {
-    id: 'javascript',
-    name: 'JavaScript & TypeScript',
-    description: 'Language fundamentals every JS/TS developer leans on.',
-    tag: 'javascript',
-    cards: [
-      {
-        term: 'Closure',
-        definition:
-          'A function bundled together with references to the variables from the scope where it was defined, so it keeps access to them after that scope returns.',
-      },
-      {
-        term: 'Event loop',
-        definition:
-          'The mechanism that lets single-threaded JavaScript run non-blocking async code by processing queued callbacks once the call stack is empty.',
-        details: 'Microtasks (promises) run before macrotasks (timers).',
-      },
-      {
-        term: 'Hoisting',
-        definition:
-          'JavaScript moves declarations to the top of their scope at compile time; `var` initializes to undefined, while `let`/`const` stay in the temporal dead zone.',
-      },
-      {
-        term: 'Promise',
-        definition:
-          'An object representing the eventual result of an async operation, which can be pending, fulfilled, or rejected.',
-      },
-      {
-        term: 'this binding',
-        definition:
-          "The value of `this` depends on how a function is called, not where it's defined; arrow functions instead capture `this` from their enclosing scope.",
-      },
-      {
-        term: 'Prototypal inheritance',
-        definition:
-          'Objects delegate to a prototype object for properties they lack, forming a prototype chain used for lookups.',
-      },
-      {
-        term: 'Structural typing',
-        definition:
-          "TypeScript checks type compatibility by an object's shape rather than its declared name — if it has the required members, it fits.",
-      },
-      {
-        term: 'Union vs intersection types',
-        definition:
-          'A union (`A | B`) is one of several types; an intersection (`A & B`) combines all their members into one.',
-      },
-      {
-        term: 'Generics',
-        definition:
-          'Type parameters that let a function or type work over many types while preserving the relationship between inputs and outputs.',
-      },
-      {
-        term: 'Type narrowing',
-        definition:
-          'Refining a broad type to a more specific one within a branch using checks like `typeof`, `in`, or truthiness guards.',
+          'Deliberately recalling learned material without looking, the single most effective study habit.',
       },
     ],
   },
@@ -615,123 +547,6 @@ export const CONCEPT_TEMPLATES: ConceptTemplate[] = [
     ],
   },
   {
-    id: 'productivity',
-    name: 'Productivity & Focus',
-    description: 'Methods and ideas for doing meaningful work.',
-    tag: 'productivity',
-    cards: [
-      {
-        term: 'Pomodoro Technique',
-        definition:
-          'Working in focused ~25-minute intervals separated by short breaks to sustain concentration.',
-      },
-      {
-        term: 'Deep work',
-        definition:
-          'Distraction-free concentration on a cognitively demanding task, where the most valuable output tends to happen.',
-      },
-      {
-        term: 'Eisenhower Matrix',
-        definition:
-          'Sorting tasks by urgency and importance into four quadrants to decide what to do, schedule, delegate, or drop.',
-      },
-      {
-        term: 'Parkinson’s Law',
-        definition:
-          'Work expands to fill the time available for its completion — so tighter deadlines can sharpen focus.',
-      },
-      {
-        term: 'Time blocking',
-        definition:
-          'Assigning specific tasks to specific blocks on your calendar rather than working from an open to-do list.',
-      },
-      {
-        term: 'Eat the frog',
-        definition:
-          'Do your most important or dreaded task first thing, before the day erodes your energy and attention.',
-      },
-      {
-        term: 'Two-minute rule',
-        definition:
-          'If a task takes less than two minutes, do it immediately instead of tracking it for later.',
-      },
-      {
-        term: 'Pareto principle',
-        definition:
-          'Roughly 80% of results come from 20% of causes — focus effort on the vital few.',
-      },
-      {
-        term: 'Context switching cost',
-        definition: 'The hidden time and focus lost each time you jump between unrelated tasks.',
-      },
-      {
-        term: 'Getting Things Done (GTD)',
-        definition:
-          'A method of capturing every task in a trusted external system so your mind is free to focus on doing.',
-      },
-    ],
-  },
-  {
-    id: 'statistics',
-    name: 'Statistics & Data',
-    description: 'Concepts for reasoning about data and uncertainty.',
-    tag: 'statistics',
-    cards: [
-      {
-        term: 'Mean vs median',
-        definition:
-          'The mean is the average; the median is the middle value. The median is more robust to outliers.',
-      },
-      {
-        term: 'Standard deviation',
-        definition:
-          'A measure of how spread out values are around the mean — larger means more variability.',
-      },
-      {
-        term: 'p-value',
-        definition:
-          'The probability of observing a result at least as extreme as yours if the null hypothesis were true.',
-        details:
-          'A small p-value suggests the data is unlikely under the null — not that the effect is large.',
-      },
-      {
-        term: 'Correlation vs causation',
-        definition:
-          'Two variables moving together does not mean one causes the other; a hidden factor may drive both.',
-      },
-      {
-        term: 'Normal distribution',
-        definition:
-          'A symmetric bell-shaped distribution where most values cluster near the mean; many natural measures approximate it.',
-      },
-      {
-        term: 'Sampling bias',
-        definition:
-          'When the sample collected is not representative of the population, distorting conclusions.',
-      },
-      {
-        term: 'Regression to the mean',
-        definition:
-          'Extreme measurements tend to be followed by ones closer to the average on remeasurement.',
-      },
-      {
-        term: 'Confidence interval',
-        definition:
-          'A range of values that, under repeated sampling, would contain the true parameter a stated percentage of the time.',
-      },
-      {
-        term: 'Overfitting',
-        definition:
-          'A model that captures noise in its training data and therefore generalizes poorly to new data.',
-      },
-      {
-        term: 'Base rate',
-        definition:
-          'The underlying prevalence of something in a population — ignoring it leads to the base rate fallacy.',
-      },
-    ],
-  },
-  {
     id: 'personal-finance',
     name: 'Personal Finance',
     description: 'Everyday money concepts worth internalizing.',
@@ -748,14 +563,9 @@ export const CONCEPT_TEMPLATES: ConceptTemplate[] = [
           'Cash set aside (often 3–6 months of expenses) to cover unexpected costs without taking on debt.',
       },
       {
-        term: 'Diversification',
+        term: 'Budget',
         definition:
-          'Spreading investments across assets so a loss in one is cushioned by others, reducing overall risk.',
-      },
-      {
-        term: 'Index fund',
-        definition:
-          'A fund that tracks a market index, offering broad diversification at low cost with minimal active management.',
+          'A plan that assigns your income to spending, saving, and goals so you know where your money goes.',
       },
       {
         term: 'Inflation',
@@ -767,19 +577,24 @@ export const CONCEPT_TEMPLATES: ConceptTemplate[] = [
         definition: 'Everything you own (assets) minus everything you owe (liabilities).',
       },
       {
-        term: 'APR vs APY',
+        term: 'Interest on debt',
         definition:
-          'APR is the annual rate without compounding; APY includes the effect of compounding, so it reflects true yearly cost or return.',
+          'The extra cost of borrowing; high-interest debt like credit cards can grow faster than savings can keep up.',
       },
       {
-        term: 'Asset vs liability',
+        term: 'Diversification',
         definition:
-          'An asset puts money in your pocket or holds value; a liability takes money out through payments or interest.',
+          'Spreading money across different investments so a loss in one is cushioned by others.',
       },
       {
-        term: 'Dollar-cost averaging',
+        term: 'Needs vs wants',
         definition:
-          'Investing a fixed amount at regular intervals regardless of price, smoothing out the effect of volatility.',
+          'Distinguishing essentials (rent, food) from discretionary spending to prioritize when money is tight.',
+      },
+      {
+        term: 'Credit score',
+        definition:
+          'A number summarizing how reliably you repay debt, affecting loans, rent, and interest rates you are offered.',
       },
       {
         term: 'Opportunity cost',
@@ -789,234 +604,393 @@ export const CONCEPT_TEMPLATES: ConceptTemplate[] = [
     ],
   },
   {
-    id: 'web-security',
-    name: 'Web Security',
-    description: 'Common web attacks and the defenses against them.',
-    tag: 'security',
+    id: 'world-geography',
+    name: 'World Geography',
+    description: 'Places, features, and terms to know the world by.',
+    tag: 'geography',
     cards: [
       {
-        term: 'XSS (Cross-Site Scripting)',
+        term: 'Continent',
         definition:
-          'An attack where malicious scripts are injected into pages viewed by other users, running in their browser context.',
-        details: 'Defend by escaping output and using a Content Security Policy.',
+          'One of Earth’s seven large landmasses: Africa, Antarctica, Asia, Europe, North America, Oceania, and South America.',
       },
       {
-        term: 'CSRF (Cross-Site Request Forgery)',
+        term: 'Equator',
         definition:
-          "Tricking a logged-in user's browser into making an unwanted authenticated request to a site.",
-        details: 'Mitigated with anti-CSRF tokens and SameSite cookies.',
+          'The imaginary line at 0° latitude circling the middle of Earth, dividing it into the Northern and Southern hemispheres.',
       },
       {
-        term: 'SQL injection',
+        term: 'Latitude vs longitude',
         definition:
-          'Injecting malicious SQL through unsanitized input to read or modify the database.',
-        details: 'Prevented by parameterized queries / prepared statements.',
+          'Latitude measures distance north–south of the equator; longitude measures east–west of the prime meridian.',
       },
       {
-        term: 'Hashing vs encryption',
+        term: 'Longest river',
         definition:
-          'Hashing is a one-way transform used for passwords; encryption is reversible with a key for protecting data in transit or at rest.',
+          'The Nile in Africa and the Amazon in South America are the two longest rivers, each roughly 6,600 km.',
       },
       {
-        term: 'Salting',
+        term: 'Largest ocean',
         definition:
-          'Adding a unique random value to each password before hashing so identical passwords produce different hashes and rainbow tables fail.',
+          'The Pacific Ocean is the largest and deepest, covering about a third of Earth’s surface.',
       },
       {
-        term: 'HTTPS / TLS',
+        term: 'Tectonic plates',
         definition:
-          'A protocol that encrypts traffic between client and server and authenticates the server via certificates.',
+          'Large slabs of Earth’s crust that slowly move; their boundaries cause earthquakes, volcanoes, and mountains.',
       },
       {
-        term: 'Principle of least privilege',
+        term: 'Climate vs weather',
         definition:
-          'Granting each user or process only the minimum access needed to do its job, limiting blast radius if compromised.',
+          'Weather is the day-to-day state of the atmosphere; climate is the average pattern over decades.',
       },
       {
-        term: 'Authentication vs authorization',
+        term: 'Capital city',
         definition:
-          'Authentication verifies who you are; authorization determines what you are allowed to do.',
+          'The city where a country’s government is seated — not always its largest (e.g. Canberra, not Sydney).',
       },
       {
-        term: 'CORS',
+        term: 'Time zones',
         definition:
-          'A browser mechanism that uses server headers to control which cross-origin sites may read a response.',
+          'Regions that share a standard time, roughly one per 15° of longitude, set relative to UTC.',
       },
       {
-        term: 'Man-in-the-middle attack',
+        term: 'Desert',
         definition:
-          'An attacker secretly relays or alters communication between two parties who believe they talk directly.',
+          'A region receiving very little precipitation; the Sahara is the largest hot desert, Antarctica the largest cold one.',
       },
     ],
   },
   {
-    id: 'networking',
-    name: 'Networking & the Web',
-    description: 'How data moves across the internet.',
-    tag: 'networking',
+    id: 'world-history',
+    name: 'World History',
+    description: 'Turning points that shaped the modern world.',
+    tag: 'history',
     cards: [
       {
-        term: 'TCP vs UDP',
+        term: 'The Agricultural Revolution',
         definition:
-          'TCP is connection-oriented and reliable with ordered delivery; UDP is connectionless and faster but makes no delivery guarantees.',
+          'The shift ~10,000 years ago from hunting and gathering to farming, which enabled permanent settlements and cities.',
       },
       {
-        term: 'DNS',
+        term: 'Ancient Rome',
         definition:
-          'The system that translates human-readable domain names into the IP addresses machines route to.',
+          'A civilization that grew from a city to an empire ruling the Mediterranean, shaping law, language, and government.',
       },
       {
-        term: 'HTTP status codes',
+        term: 'The Renaissance',
         definition:
-          'Three-digit codes signaling a response outcome: 2xx success, 3xx redirect, 4xx client error, 5xx server error.',
+          'A revival of art, science, and learning in Europe from the 14th–17th centuries, rooted in classical ideas.',
       },
       {
-        term: 'REST',
+        term: 'The printing press',
         definition:
-          'An architectural style for APIs using stateless HTTP methods (GET, POST, PUT, DELETE) over resource URLs.',
+          'Gutenberg’s ~1440 movable-type press that made books cheap and spread literacy and ideas rapidly.',
       },
       {
-        term: 'IP address',
+        term: 'The Industrial Revolution',
         definition:
-          'A numerical label identifying a device on a network; IPv4 uses 32 bits, IPv6 uses 128 bits.',
+          'The 18th–19th century move to machine manufacturing, transforming economies, cities, and daily life.',
       },
       {
-        term: 'Latency vs bandwidth',
+        term: 'The Enlightenment',
         definition:
-          'Latency is the delay before data transfers; bandwidth is how much data can transfer per unit of time.',
+          'An 18th-century movement emphasizing reason, science, and individual rights that influenced modern democracies.',
       },
       {
-        term: 'Ports',
+        term: 'World War I & II',
         definition:
-          'Numbered endpoints on a host that let one machine run many networked services (e.g. 80 for HTTP, 443 for HTTPS).',
+          'Two global conflicts (1914–1918 and 1939–1945) that reshaped borders, alliances, and the balance of world power.',
       },
       {
-        term: 'TCP handshake',
+        term: 'The Cold War',
         definition:
-          'The three-step SYN → SYN-ACK → ACK exchange that establishes a reliable TCP connection.',
+          'A decades-long rivalry after 1945 between the US-led West and Soviet-led East, without direct large-scale war.',
       },
       {
-        term: 'WebSocket',
+        term: 'Decolonization',
         definition:
-          'A protocol providing a persistent, full-duplex connection over a single TCP link, used for real-time updates.',
+          'The mid-20th-century process by which many colonies in Africa and Asia gained independence.',
       },
       {
-        term: 'Packet',
+        term: 'Primary vs secondary source',
         definition:
-          'A small unit of data with a header and payload that is routed independently across a network and reassembled at the destination.',
+          'A primary source is firsthand evidence from the time; a secondary source analyzes or interprets it later.',
       },
     ],
   },
   {
-    id: 'machine-learning',
-    name: 'Machine Learning',
-    description: 'Foundational ideas behind ML models.',
-    tag: 'machine-learning',
+    id: 'human-biology',
+    name: 'Human Biology',
+    description: 'How the human body is built and works.',
+    tag: 'biology',
     cards: [
       {
-        term: 'Supervised vs unsupervised learning',
+        term: 'Cell',
         definition:
-          'Supervised learning trains on labeled examples; unsupervised learning finds structure in unlabeled data.',
+          'The basic structural and functional unit of all living things; the human body has trillions of them.',
       },
       {
-        term: 'Training vs test set',
+        term: 'DNA',
         definition:
-          'The training set fits the model; the held-out test set estimates how well it generalizes to unseen data.',
+          'The molecule carrying genetic instructions, structured as a double helix of paired bases.',
       },
       {
-        term: 'Overfitting vs underfitting',
+        term: 'The circulatory system',
         definition:
-          'Overfitting memorizes noise and fails on new data; underfitting is too simple to capture the real pattern.',
+          'The heart and blood vessels that transport oxygen, nutrients, and waste throughout the body.',
       },
       {
-        term: 'Gradient descent',
+        term: 'The nervous system',
         definition:
-          'An optimization method that iteratively adjusts parameters in the direction that most reduces the loss.',
+          'The brain, spinal cord, and nerves that sense the environment and coordinate the body’s responses.',
       },
       {
-        term: 'Loss function',
-        definition: 'A measure of how wrong a model’s predictions are; training minimizes it.',
-      },
-      {
-        term: 'Neural network',
+        term: 'Homeostasis',
         definition:
-          'A model of layered interconnected nodes that learns weighted transformations of its inputs.',
+          'The body’s maintenance of a stable internal state — temperature, pH, blood sugar — despite outside change.',
       },
       {
-        term: 'Feature',
-        definition: 'An individual measurable input variable the model uses to make predictions.',
-      },
-      {
-        term: 'Classification vs regression',
+        term: 'Photosynthesis vs respiration',
         definition:
-          'Classification predicts discrete categories; regression predicts continuous numeric values.',
+          'Plants make glucose from sunlight (photosynthesis); cells release its energy using oxygen (respiration).',
       },
       {
-        term: 'Bias–variance tradeoff',
+        term: 'The immune system',
         definition:
-          'Simpler models have high bias (underfit); complex ones have high variance (overfit). Good models balance the two.',
+          'The network of cells and organs that defends the body against bacteria, viruses, and other threats.',
       },
       {
-        term: 'Overfitting remedy: regularization',
+        term: 'Neuron',
         definition:
-          'Adding a penalty on model complexity (e.g. L1/L2) to discourage overfitting and improve generalization.',
+          'A nerve cell that transmits electrical and chemical signals, the building block of the nervous system.',
+      },
+      {
+        term: 'Genes and inheritance',
+        definition:
+          'Segments of DNA passed from parents to offspring that determine inherited traits.',
+      },
+      {
+        term: 'The respiratory system',
+        definition:
+          'The lungs and airways that bring in oxygen and expel carbon dioxide from the blood.',
       },
     ],
   },
   {
-    id: 'ux-design',
-    name: 'Design & UX',
-    description: 'Principles behind interfaces that feel right.',
-    tag: 'design',
+    id: 'vocabulary-builder',
+    name: 'Vocabulary Builder',
+    description: 'Useful words that sharpen your reading and writing.',
+    tag: 'vocabulary',
     cards: [
       {
-        term: 'Affordance',
-        definition:
-          'A property that signals how an object can be used — a button that looks pressable invites a click.',
+        term: 'Ubiquitous',
+        definition: 'Present or found everywhere.',
+        details: 'Smartphones have become ubiquitous.',
       },
       {
-        term: 'Hick’s Law',
-        definition:
-          'The time to make a decision grows with the number and complexity of choices offered.',
+        term: 'Ephemeral',
+        definition: 'Lasting for a very short time.',
       },
       {
-        term: 'Fitts’s Law',
-        definition:
-          'The time to reach a target depends on its distance and size — bigger, closer targets are faster to hit.',
+        term: 'Pragmatic',
+        definition: 'Dealing with things practically rather than by theory or ideals.',
       },
       {
-        term: 'Visual hierarchy',
-        definition:
-          'Arranging elements by size, color, and placement so the eye is guided to what matters most first.',
+        term: 'Ambivalent',
+        definition: 'Having mixed or contradictory feelings about something.',
       },
       {
-        term: 'Contrast (accessibility)',
-        definition:
-          'Sufficient difference between text and background luminance so content is legible; WCAG sets minimum ratios.',
+        term: 'Meticulous',
+        definition: 'Showing great attention to detail; very careful and precise.',
       },
       {
-        term: 'Consistency',
-        definition:
-          'Reusing patterns, wording, and controls so users can transfer what they learned across the product.',
+        term: 'Candid',
+        definition: 'Truthful and straightforward; frank.',
       },
       {
-        term: 'Feedback',
-        definition:
-          'Immediate, clear responses to user actions so people know a system received and understood their input.',
+        term: 'Resilient',
+        definition: 'Able to recover quickly from difficulties; tough and adaptable.',
       },
       {
-        term: 'Progressive disclosure',
-        definition:
-          'Showing only what’s needed now and revealing advanced options on demand to reduce overwhelm.',
+        term: 'Scrutinize',
+        definition: 'To examine or inspect closely and thoroughly.',
       },
       {
-        term: 'White space',
-        definition:
-          'Empty space around elements that improves readability, grouping, and focus — not wasted space.',
+        term: 'Nuance',
+        definition: 'A subtle difference in meaning, expression, or shade.',
       },
       {
-        term: 'Gestalt proximity',
-        definition: 'People perceive elements placed close together as a related group.',
+        term: 'Tenacious',
+        definition: 'Holding firmly to a purpose; persistent and determined.',
+      },
+    ],
+  },
+  {
+    id: 'literary-devices',
+    name: 'Literary Devices',
+    description: 'Tools writers use — essential for English class.',
+    tag: 'literature',
+    cards: [
+      {
+        term: 'Metaphor',
+        definition:
+          'A direct comparison saying one thing is another, without "like" or "as" (e.g. "time is a thief").',
+      },
+      {
+        term: 'Simile',
+        definition: 'A comparison using "like" or "as" (e.g. "brave as a lion").',
+      },
+      {
+        term: 'Personification',
+        definition: 'Giving human qualities to non-human things (e.g. "the wind whispered").',
+      },
+      {
+        term: 'Alliteration',
+        definition:
+          'The repetition of the same initial consonant sound in nearby words (e.g. "wild and windy").',
+      },
+      {
+        term: 'Hyperbole',
+        definition:
+          'Deliberate exaggeration for emphasis, not meant literally (e.g. "I’ve told you a million times").',
+      },
+      {
+        term: 'Irony',
+        definition:
+          'A contrast between expectation and reality — what is said or happens differs from what is meant or expected.',
+      },
+      {
+        term: 'Foreshadowing',
+        definition: 'Hints or clues an author plants about what will happen later in a story.',
+      },
+      {
+        term: 'Symbolism',
+        definition:
+          'Using an object, color, or figure to represent a larger idea (e.g. a dove for peace).',
+      },
+      {
+        term: 'Imagery',
+        definition:
+          'Descriptive language that appeals to the senses to create vivid mental pictures.',
+      },
+      {
+        term: 'Theme',
+        definition:
+          'The central idea or underlying message a work explores (e.g. love, justice, loss).',
+      },
+    ],
+  },
+  {
+    id: 'space-astronomy',
+    name: 'Space & Astronomy',
+    description: 'The planets, stars, and how the universe works.',
+    tag: 'astronomy',
+    cards: [
+      {
+        term: 'The Solar System',
+        definition:
+          'The Sun and everything bound to it by gravity: eight planets, moons, asteroids, and comets.',
+      },
+      {
+        term: 'Star',
+        definition:
+          'A massive ball of gas that produces light and heat through nuclear fusion in its core; the Sun is our star.',
+      },
+      {
+        term: 'Galaxy',
+        definition:
+          'A vast system of stars, gas, and dust bound by gravity; we live in the Milky Way.',
+      },
+      {
+        term: 'Black hole',
+        definition:
+          'A region of space where gravity is so strong that not even light can escape it.',
+      },
+      {
+        term: 'Light-year',
+        definition:
+          'The distance light travels in one year (~9.46 trillion km) — a measure of distance, not time.',
+      },
+      {
+        term: 'Orbit',
+        definition:
+          'The curved path an object takes around another due to gravity, like Earth around the Sun.',
+      },
+      {
+        term: 'The Big Bang',
+        definition:
+          'The leading theory that the universe began ~13.8 billion years ago from an extremely hot, dense state and has expanded since.',
+      },
+      {
+        term: 'Phases of the Moon',
+        definition:
+          'The changing lit portion of the Moon we see as it orbits Earth, from new moon to full moon and back.',
+      },
+      {
+        term: 'Comet vs asteroid',
+        definition:
+          'Comets are icy bodies that grow tails near the Sun; asteroids are rocky or metallic objects, mostly between Mars and Jupiter.',
+      },
+      {
+        term: 'Gravity',
+        definition:
+          'The force by which masses attract one another; it holds planets in orbit and keeps us on the ground.',
+      },
+    ],
+  },
+  {
+    id: 'grammar-writing',
+    name: 'Grammar & Writing',
+    description: 'Building blocks of clear, correct writing.',
+    tag: 'writing',
+    cards: [
+      {
+        term: 'Noun, verb, adjective, adverb',
+        definition:
+          'A noun names a thing, a verb shows action, an adjective describes a noun, and an adverb describes a verb or adjective.',
+      },
+      {
+        term: 'Subject and predicate',
+        definition:
+          'The subject is who or what the sentence is about; the predicate says what the subject does or is.',
+      },
+      {
+        term: 'Their / there / they’re',
+        definition:
+          '"Their" shows possession, "there" refers to a place, and "they’re" is short for "they are".',
+      },
+      {
+        term: 'Your vs you’re',
+        definition: '"Your" shows possession; "you’re" is a contraction of "you are".',
+      },
+      {
+        term: 'Its vs it’s',
+        definition: '"Its" is possessive; "it’s" means "it is" or "it has".',
+      },
+      {
+        term: 'Active vs passive voice',
+        definition:
+          'Active: the subject does the action ("the dog chased the ball"). Passive: it receives it ("the ball was chased").',
+      },
+      {
+        term: 'Comma splice',
+        definition:
+          'The error of joining two complete sentences with only a comma; fix it with a period, semicolon, or conjunction.',
+      },
+      {
+        term: 'Apostrophe',
+        definition:
+          'A mark used for contractions ("don’t") and possession ("Sam’s"), but not for ordinary plurals.',
+      },
+      {
+        term: 'Synonym vs antonym',
+        definition: 'A synonym means the same as another word; an antonym means the opposite.',
+      },
+      {
+        term: 'Topic sentence',
+        definition:
+          'The sentence, usually first, that states the main idea a paragraph will develop.',
       },
     ],
   },
