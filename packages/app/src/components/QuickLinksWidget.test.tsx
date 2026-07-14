@@ -1,5 +1,5 @@
 import { createSelectorMock } from '@cuewise/test-utils';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useQuickLinksStore } from '../stores/quick-links-store';
 import { QuickLinksWidget } from './QuickLinksWidget';
@@ -91,8 +91,13 @@ describe('QuickLinksWidget', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: 'Add' }));
 
-    await vi.waitFor(() => {
+    // RTL's waitFor act-wraps; also wait for the form to close so the post-await
+    // state updates settle instead of being flagged as outside act().
+    await waitFor(() => {
       expect(state.addQuickLink).toHaveBeenCalledWith('', 'example.com');
+    });
+    await waitFor(() => {
+      expect(screen.queryByPlaceholderText('example.com')).not.toBeInTheDocument();
     });
   });
 
