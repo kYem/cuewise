@@ -33,7 +33,7 @@ describe('createSyncEngine', () => {
     // rather than e.g. constructing it with a hardcoded or empty one. The call after it
     // (getRecoveryEnvelope) fails against this stub's canned body, so the overall call
     // rejects — irrelevant to what this test is verifying.
-    await expect(engine.enableSync('dev-cred', 'Test Device')).rejects.toThrow();
+    await expect(engine.enableSync('dev', 'dev-cred', 'Test Device')).rejects.toThrow();
     expect(calls[0]).toBe('https://sync.example.test/v1/auth/token');
   });
 

@@ -15,6 +15,7 @@ export {
   type EngineApiClient,
   SyncEngine,
   type SyncEngineDeps,
+  type SyncSignInProvider,
   type SyncStatus,
 } from './engine';
 

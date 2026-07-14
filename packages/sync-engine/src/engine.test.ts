@@ -53,7 +53,7 @@ describe('SyncEngine.enableSync', () => {
     const goal = goalFactory.build({ id: 'g1' });
     await setGoals([goal]);
 
-    await device.engine.enableSync('cred-a', 'Device A');
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
 
     expect(device.engine.getStatus()).toBe('active');
     expect(device.onStatus.mock.calls.map((call) => call[0])).toEqual([
@@ -69,19 +69,33 @@ describe('SyncEngine.enableSync', () => {
     expect(uploaded).toBe(true);
   });
 
+  it('exchanges the token with the given sign-in provider', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+
+    await device.engine.enableSync('google', 'google-id-token', 'Device A');
+
+    expect(device.apiClient.lastExchangeRequest).toEqual({
+      provider: 'google',
+      credential: 'google-id-token',
+      deviceName: 'Device A',
+    });
+  });
+
   it('downloads existing server data into a fresh device enrolling with the recovery code', async () => {
     const server = new FakeSyncServer();
     const deviceA = createDevice(server);
     useStorage(deviceA);
     const goal = goalFactory.build({ id: 'g1' });
     await setGoals([goal]);
-    await deviceA.engine.enableSync('cred-a', 'Device A');
+    await deviceA.engine.enableSync('dev', 'cred-a', 'Device A');
     const recoveryCode = deviceA.onRecoveryCode.mock.calls[0][0] as string;
 
     const deviceB = createDevice(server);
     useStorage(deviceB);
 
-    await deviceB.engine.enableSync('cred-b', 'Device B', recoveryCode);
+    await deviceB.engine.enableSync('dev', 'cred-b', 'Device B', recoveryCode);
 
     expect(deviceB.engine.getStatus()).toBe('active');
     const goals = await getGoals();
@@ -93,14 +107,14 @@ describe('SyncEngine.enableSync', () => {
     const deviceA = createDevice(server);
     useStorage(deviceA);
     await setGoals([goalFactory.build({ id: 'g-a' })]);
-    await deviceA.engine.enableSync('cred-a', 'Device A');
+    await deviceA.engine.enableSync('dev', 'cred-a', 'Device A');
     const recoveryCode = deviceA.onRecoveryCode.mock.calls[0][0] as string;
 
     const deviceB = createDevice(server);
     useStorage(deviceB);
     await setGoals([goalFactory.build({ id: 'g-b' })]);
 
-    await deviceB.engine.enableSync('cred-b', 'Device B', recoveryCode);
+    await deviceB.engine.enableSync('dev', 'cred-b', 'Device B', recoveryCode);
 
     const goals = await getGoals();
     expect(goals.map((g) => g.id).sort()).toEqual(['g-a', 'g-b']);
@@ -111,12 +125,12 @@ describe('SyncEngine.enableSync', () => {
     const deviceA = createDevice(server);
     useStorage(deviceA);
     await setGoals([goalFactory.build({ id: 'g1' })]);
-    await deviceA.engine.enableSync('cred-a', 'Device A');
+    await deviceA.engine.enableSync('dev', 'cred-a', 'Device A');
     const recoveryCode = deviceA.onRecoveryCode.mock.calls[0][0] as string;
 
     const deviceB = createDevice(server);
     useStorage(deviceB);
-    await deviceB.engine.enableSync('cred-b', 'Device B', recoveryCode);
+    await deviceB.engine.enableSync('dev', 'cred-b', 'Device B', recoveryCode);
 
     const statuses = deviceB.onStatus.mock.calls.map((call) => call[0]);
     expect(statuses).toContain('enrolling');
@@ -131,7 +145,7 @@ describe('SyncEngine.enableSync', () => {
     await setGoals([goal]);
     device.apiClient.rejectExchangeWith401 = true;
 
-    await device.engine.enableSync('cred-a', 'Device A');
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
 
     expect(device.engine.getStatus()).toBe('signed_out');
     expect(await getGoals()).toEqual([goal]);
@@ -144,7 +158,7 @@ describe('SyncEngine.enableSync', () => {
     useStorage(device);
     await setGoals([goalFactory.build({ id: 'g1' })]);
 
-    await device.engine.enableSync('cred-a', 'Device A');
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
 
     expect(device.scheduler.scheduled.some((s) => s.id === SYNC_PULL_WAKE_ID)).toBe(true);
   });
@@ -157,7 +171,7 @@ describe('SyncEngine.enableSync', () => {
     // Key init persists the DK, then the initial-sync pull 401s — the guard must return early.
     device.apiClient.rejectNextGetChangesWith401 = true;
 
-    await device.engine.enableSync('cred-a', 'Device A');
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
 
     expect(device.engine.getStatus()).toBe('signed_out');
     expect(await device.kv.get(CLOUD_SYNC_ENABLED_KEY, 'local')).not.toBe(true);
@@ -169,12 +183,12 @@ describe('SyncEngine.enableSync', () => {
     const deviceA = createDevice(server);
     useStorage(deviceA);
     await setGoals([goalFactory.build({ id: 'g1' })]);
-    await deviceA.engine.enableSync('cred-a', 'Device A');
+    await deviceA.engine.enableSync('dev', 'cred-a', 'Device A');
 
     const deviceB = createDevice(server);
     useStorage(deviceB);
 
-    await expect(deviceB.engine.enableSync('cred-b', 'Device B')).rejects.toThrow(
+    await expect(deviceB.engine.enableSync('dev', 'cred-b', 'Device B')).rejects.toThrow(
       RecoveryCodeRequiredError
     );
 
@@ -189,7 +203,7 @@ describe('SyncEngine.syncNow', () => {
     const device = createDevice(server);
     useStorage(device);
     await setGoals([goalFactory.build({ id: 'g1' })]);
-    await device.engine.enableSync('cred-a', 'Device A');
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
     await device.engine.markMutated('goals', 'g1');
     device.apiClient.callOrder.length = 0;
 
@@ -204,7 +218,7 @@ describe('SyncEngine.syncNow', () => {
     useStorage(device);
     const goal = goalFactory.build({ id: 'g1' });
     await setGoals([goal]);
-    await device.engine.enableSync('cred-a', 'Device A');
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
     expect(device.engine.getStatus()).toBe('active');
 
     device.apiClient.rejectAllWith401 = true;
@@ -233,7 +247,7 @@ describe('SyncEngine.disableSync', () => {
     useStorage(device);
     const goal = goalFactory.build({ id: 'g1' });
     await setGoals([goal]);
-    await device.engine.enableSync('cred-a', 'Device A');
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
 
     await device.engine.disableSync();
 
@@ -261,7 +275,7 @@ describe('SyncEngine.start / stop', () => {
     const device = createDevice(server);
     useStorage(device);
     await setGoals([goalFactory.build({ id: 'g1' })]);
-    await device.engine.enableSync('cred-a', 'Device A');
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
 
     // Simulate an app restart: a fresh SyncEngine over the same persisted keyStore.
     const restartedScheduler = new FakeScheduler();
@@ -283,7 +297,7 @@ describe('SyncEngine.start / stop', () => {
     const device = createDevice(server);
     useStorage(device);
     await setGoals([goalFactory.build({ id: 'g1' })]);
-    await device.engine.enableSync('cred-a', 'Device A');
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
 
     const restartedScheduler = new FakeScheduler();
     const restarted = new SyncEngine({
@@ -317,7 +331,7 @@ describe('SyncEngine.handlePullWake', () => {
     const device = createDevice(server);
     useStorage(device);
     await setGoals([goalFactory.build({ id: 'g1' })]);
-    await device.engine.enableSync('cred-a', 'Device A');
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
     device.apiClient.rejectNextGetChangesWithNetworkError = true;
 
     await expect(device.engine.handlePullWake()).resolves.toBeUndefined();
@@ -337,7 +351,7 @@ describe('SyncEngine.handlePullWake', () => {
     const device = createDevice(server);
     useStorage(device);
     await setGoals([goalFactory.build({ id: 'g1' })]);
-    await device.engine.enableSync('cred-a', 'Device A');
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
     device.apiClient.rejectAllWith401 = true;
     device.scheduler.cancelled.length = 0;
     // enableSync itself arms the loop (E1) — reset so this only observes the wake's own behavior.
@@ -393,7 +407,7 @@ describe('SyncEngine backfillDirty (first-enable migration)', () => {
     const bulkSpy = vi.spyOn(MutationTracker.prototype, 'markMutatedBulk');
     const singleSpy = vi.spyOn(MutationTracker.prototype, 'markMutated');
 
-    await device.engine.enableSync('cred-a', 'Device A');
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
 
     // Batched, not per-entity: backfill never falls back to the single-id path.
     expect(singleSpy).not.toHaveBeenCalled();
@@ -414,7 +428,7 @@ describe('SyncEngine backfillDirty (first-enable migration)', () => {
     useStorage(device);
     const bulkSpy = vi.spyOn(MutationTracker.prototype, 'markMutatedBulk');
 
-    await device.engine.enableSync('cred-a', 'Device A');
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
 
     const emptyCalls = bulkSpy.mock.calls.filter(([, entityIds]) => entityIds.length === 0);
     expect(emptyCalls).toEqual([]);
@@ -427,7 +441,7 @@ describe('SyncEngine.regenerateRecoveryCode', () => {
     const device = createDevice(server);
     useStorage(device);
     await setGoals([goalFactory.build({ id: 'g1' })]);
-    await device.engine.enableSync('cred-a', 'Device A');
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
     const oldCode = device.onRecoveryCode.mock.calls[0][0] as string;
 
     const newCode = await device.engine.regenerateRecoveryCode();

@@ -338,7 +338,7 @@ describe('createDirectSyncController: reconnect()', () => {
 
     const result = await controller.reconnect();
 
-    expect(enableSyncSpy).toHaveBeenCalledWith('cred-a', 'Device A', undefined);
+    expect(enableSyncSpy).toHaveBeenCalledWith('dev', 'cred-a', 'Device A', undefined);
     expect(result).toEqual({ ok: true, recoveryCode: undefined });
     expect(engine.getStatus()).toBe('active');
   });

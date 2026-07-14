@@ -22,7 +22,8 @@ async function doEnable(
 ): Promise<SyncControlResponse> {
   deps.takeRecoveryCode(); // drain any stale value before this attempt
   try {
-    await engine.enableSync(accountId, deviceName, recoveryCode);
+    // dev provider for now; Google (id-token) sign-in is threaded through in a follow-up increment.
+    await engine.enableSync('dev', accountId, deviceName, recoveryCode);
   } catch (err) {
     if (err instanceof RecoveryCodeRequiredError) {
       return { ok: false, reason: 'needs-code' };

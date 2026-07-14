@@ -78,11 +78,14 @@ export class FakeApiClient implements EngineApiClient {
   /** One-shot: throws a 401 on the next getChanges (pull) call only, then clears itself. */
   rejectNextGetChangesWith401 = false;
   readonly callOrder: string[] = [];
+  /** The request from the most recent exchangeToken call, for asserting the sign-in provider. */
+  lastExchangeRequest: ExchangeTokenRequest | null = null;
   private tokenCounter = 0;
 
   constructor(private readonly server: FakeSyncServer) {}
 
-  async exchangeToken(_req: ExchangeTokenRequest): Promise<{ token: string }> {
+  async exchangeToken(req: ExchangeTokenRequest): Promise<{ token: string }> {
+    this.lastExchangeRequest = req;
     if (this.rejectExchangeWith401) {
       throw new ApiError('invalid_credential', 401);
     }

@@ -93,6 +93,7 @@ describe('handleSyncControlMessage: enable', () => {
     );
 
     expect(engine.enableSync).toHaveBeenCalledWith(
+      'dev',
       'cred-a',
       'Device A',
       'CW1-AAAAA-AAAAA-AAAAA-AAAAA-AAAAA-AAAAA'
@@ -245,7 +246,7 @@ describe('handleSyncControlMessage: reconnect', () => {
       deps
     );
 
-    expect(engine.enableSync).toHaveBeenCalledWith('cred-a', 'Device A', undefined);
+    expect(engine.enableSync).toHaveBeenCalledWith('dev', 'cred-a', 'Device A', undefined);
   });
 
   it('returns an error result without calling the engine when creds are absent', async () => {
@@ -332,14 +333,14 @@ describe('handleSyncControlMessage: concurrency', () => {
     const events: string[] = [];
     let resolveFirst: (() => void) | undefined;
     const engine = fakeEngine({
-      enableSync: vi.fn().mockImplementation(async (accountId: string) => {
-        events.push(`start-${accountId}`);
-        if (accountId === 'cred-a') {
+      enableSync: vi.fn().mockImplementation(async (_provider: string, credential: string) => {
+        events.push(`start-${credential}`);
+        if (credential === 'cred-a') {
           await new Promise<void>((resolve) => {
             resolveFirst = resolve;
           });
         }
-        events.push(`end-${accountId}`);
+        events.push(`end-${credential}`);
       }),
     });
     const deps = fakeDeps();

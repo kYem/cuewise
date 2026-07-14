@@ -34,6 +34,10 @@ export const CLOUD_SYNC_ENABLED_KEY = 'cloudSyncEnabled';
 // The periodic pull backstop cadence (spec §3: "~5 min"); foreground opens trigger sooner via syncNow.
 const PULL_REARM_MINUTES = 5;
 
+// Auth providers the enable flow can exchange for a session. Apple (server-bounce + codeVerifier)
+// isn't wired through enableSync yet — it needs the separate PKCE/deep-link dance.
+export type SyncSignInProvider = 'dev' | 'google';
+
 export type SyncStatus =
   | 'disabled'
   | 'signing_in'
@@ -93,11 +97,16 @@ export class SyncEngine {
   }
 
   /** DISABLED → SIGNING_IN → KEY_INIT/ENROLLING → INITIAL_SYNC → ACTIVE (spec §4). */
-  async enableSync(credential: string, deviceName: string, recoveryCode?: string): Promise<void> {
+  async enableSync(
+    provider: SyncSignInProvider,
+    credential: string,
+    deviceName: string,
+    recoveryCode?: string
+  ): Promise<void> {
     try {
       this.setStatus('signing_in');
       const { token } = await this.deps.apiClient.exchangeToken({
-        provider: 'dev',
+        provider,
         credential,
         deviceName,
       });
