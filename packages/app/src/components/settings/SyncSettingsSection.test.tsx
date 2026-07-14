@@ -303,6 +303,21 @@ describe('SyncSettingsSectionComponent', () => {
     expect(controller.calls.some((c) => c.method === 'syncNow')).toBe(false);
   });
 
+  it('retries via reconnect (not enable with an empty account) when it mounts straight into error', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    // A persisted error hydrated on mount — no in-session failure set failedAction, and there is
+    // no form account id, so retrying enable would send an empty account. Reconnect is the fallback.
+    controller.setStatus('error');
+    controller.scriptReconnect({ ok: true });
+    renderSection(controller);
+
+    await user.click(screen.getByRole('button', { name: 'Try again' }));
+
+    await waitFor(() => expect(controller.calls.some((c) => c.method === 'reconnect')).toBe(true));
+    expect(controller.calls.some((c) => c.method === 'enable')).toBe(false);
+  });
+
   it('re-runs reconnect (never syncNow) when Try again is clicked after a failed reconnect', async () => {
     const user = userEvent.setup();
     const controller = new FakeSyncController();

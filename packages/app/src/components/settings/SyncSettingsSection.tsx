@@ -184,9 +184,11 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     }
   };
 
-  // The error status only follows a failed enable/reconnect — retry that same action.
+  // The error status only follows a failed enable/reconnect — retry that same action. An enable
+  // retry needs the form's account id; without it (e.g. the UI mounted straight into a persisted
+  // error after a reload) fall back to reconnect, which recovers from persisted creds.
   const handleRetry = async () => {
-    if (failedAction === 'reconnect') {
+    if (failedAction === 'reconnect' || accountId.trim().length === 0) {
       await handleReconnect();
       return;
     }
