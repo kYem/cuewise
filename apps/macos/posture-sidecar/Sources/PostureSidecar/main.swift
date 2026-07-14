@@ -45,14 +45,33 @@ func registerForSystemSleep() {
       log("system sleeping — camera released")
       IOAllowPowerChange(powerRootPort, Int(bitPattern: argument))
     case messageSystemHasPoweredOn:
-      camera?.resume()
-      log("system woke — camera resumed")
+      // startRunning blocks (seconds when the capture stack is wedged) — keep it
+      // off the power queue so a quick re-sleep's CanSystemSleep ack never starves.
+      DispatchQueue.global(qos: .userInitiated).async {
+        guard let camera else {
+          return
+        }
+        if camera.resume() {
+          log("system woke — camera resumed")
+        } else {
+          // Exit so the parent reports the loss immediately with accurate copy,
+          // instead of a delayed "stalled" reap claiming the camera was released.
+          log("camera did not resume after wake; exiting")
+          exit(1)
+        }
+      }
     default:
       break
     }
   }
   powerRootPort = IORegisterForSystemPower(nil, &notifyPort, callback, &notifier)
   guard powerRootPort != 0, let notifyPort else {
+    if powerRootPort != 0 {
+      // A half-registered client that can never ack would delay every sleep.
+      IODeregisterForSystemPower(&notifier)
+      IOServiceClose(powerRootPort)
+      powerRootPort = 0
+    }
     log("failed to register for system power notifications — camera will span sleep")
     return
   }
