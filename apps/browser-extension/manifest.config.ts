@@ -14,8 +14,12 @@ export default defineManifest(async (env) => {
 
   // Cloud-sync "Sign in with Google": a separate Web-app OAuth client via launchWebAuthFlow
   // (opens a tab, no CSP fetch) — shares only the `identity` optional permission with calendar.
+  // Requires BOTH the client id AND the sync base URL: without the base URL main.tsx never builds
+  // the sync controller, so the Sign in with Google flow is unreachable — declaring `identity`
+  // then would be a dead permission. This keeps the client id inert until sync is actually enabled.
   const googleSyncClientId = viteEnv.VITE_GOOGLE_SYNC_CLIENT_ID ?? '';
-  const googleSyncEnabled = googleSyncClientId !== '';
+  const syncEnabled = (viteEnv.VITE_SYNC_API_BASE_URL ?? '') !== '';
+  const googleSyncEnabled = googleSyncClientId !== '' && syncEnabled;
 
   // Pinned extension key (base64 public key) for LOCAL unpacked builds only:
   // forces the same extension ID as the Web Store item, so chrome.identity OAuth
