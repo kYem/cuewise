@@ -115,11 +115,15 @@ export function useGoalEditing({
     }
     setEditingGoalId(null);
     setEditText('');
+    // Unmounting the controlled picker never fires onOpenChange — clear it here
+    // or a picker left open on Enter springs back open on the next edit.
+    setLinkPickerOpenFor(null);
   };
 
   const cancelEdit = () => {
     setEditingGoalId(null);
     setEditText('');
+    setLinkPickerOpenFor(null);
   };
 
   const clearEditing = () => {
@@ -155,7 +159,12 @@ export function useGoalEditing({
   };
 
   const handleLinkToGoal = async (taskId: string, goalId: string | null) => {
-    await linkTaskToGoal(taskId, goalId);
+    const success = await linkTaskToGoal(taskId, goalId);
+    if (!success) {
+      // The store already toasted "try again" — keep the picker and edit mode
+      // open so retrying is actually possible (mirrors saveEdit's contract).
+      return;
+    }
     setLinkPickerOpenFor(null);
     setEditingGoalId(null);
   };

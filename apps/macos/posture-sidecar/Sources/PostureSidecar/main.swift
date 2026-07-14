@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import IOKit.pwr_mgt
 import PostureKit
 
 // Headless posture sidecar for the Cuewise macOS app. Runs the reused PostureKit
@@ -20,12 +21,72 @@ let stderr = FileHandle.standardError
 // Held for the process lifetime so the capture session isn't deallocated.
 var camera: CameraSession?
 
-func emit(_ sample: PostureSample) {
-  guard var line = try? encoder.encode(sample) else {
+// Global because the C power callback below cannot capture context.
+var powerRootPort: io_connect_t = 0
+
+// IOMessage.h's kIOMessage* macros don't import into Swift — these are the
+// canonical literals (sys_iokit | sub_iokit_common | code).
+let messageCanSystemSleep: UInt32 = 0xE000_0270
+let messageSystemWillSleep: UInt32 = 0xE000_0280
+let messageSystemHasPoweredOn: UInt32 = 0xE000_0300
+
+// Release the camera across system sleep and re-acquire it on wake, so the
+// capture session never spans a sleep. Every CanSystemSleep/WillSleep message
+// MUST be acknowledged via IOAllowPowerChange or the system delays sleeping.
+func registerForSystemSleep() {
+  var notifyPort: IONotificationPortRef?
+  var notifier: io_object_t = 0
+  let callback: IOServiceInterestCallback = { _, _, messageType, argument in
+    switch messageType {
+    case messageCanSystemSleep:
+      IOAllowPowerChange(powerRootPort, Int(bitPattern: argument))
+    case messageSystemWillSleep:
+      camera?.stop()
+      log("system sleeping — camera released")
+      IOAllowPowerChange(powerRootPort, Int(bitPattern: argument))
+    case messageSystemHasPoweredOn:
+      // startRunning blocks (seconds when the capture stack is wedged) — keep it
+      // off the power queue so a quick re-sleep's CanSystemSleep ack never starves.
+      DispatchQueue.global(qos: .userInitiated).async {
+        guard let camera else {
+          return
+        }
+        if camera.resume() {
+          log("system woke — camera resumed")
+        } else {
+          // Exit so the parent reports the loss immediately with accurate copy,
+          // instead of a delayed "stalled" reap claiming the camera was released.
+          log("camera did not resume after wake; exiting")
+          exit(1)
+        }
+      }
+    default:
+      break
+    }
+  }
+  powerRootPort = IORegisterForSystemPower(nil, &notifyPort, callback, &notifier)
+  guard powerRootPort != 0, let notifyPort else {
+    if powerRootPort != 0 {
+      // A half-registered client that can never ack would delay every sleep.
+      IODeregisterForSystemPower(&notifier)
+      IOServiceClose(powerRootPort)
+      powerRootPort = 0
+    }
+    log("failed to register for system power notifications — camera will span sleep")
     return
   }
-  line.append(0x0A) // newline-delimited JSON
-  stdout.write(line)
+  IONotificationPortSetDispatchQueue(notifyPort, DispatchQueue.main)
+}
+
+func emit(_ sample: PostureSample) {
+  do {
+    var line = try encoder.encode(sample)
+    line.append(0x0A) // newline-delimited JSON
+    stdout.write(line)
+  } catch {
+    // A silent encode failure starves stdout and reads as a camera stall upstream.
+    log("failed to encode sample: \(error)")
+  }
 }
 
 func log(_ message: String) {
@@ -88,4 +149,5 @@ AVCaptureDevice.requestAccess(for: .video) { granted in
 }
 
 listenForCommands()
+registerForSystemSleep()
 RunLoop.main.run()

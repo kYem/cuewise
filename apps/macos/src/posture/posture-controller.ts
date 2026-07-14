@@ -256,14 +256,23 @@ async function attachListeners(): Promise<void> {
   });
   let onStopped: UnlistenFn;
   try {
-    onStopped = await listen('posture://stopped', () => {
+    onStopped = await listen<string>('posture://stopped', (event) => {
       // Reached only for an *unexpected* stop (stopPosture detaches first), so surface
-      // the camera/permission failure even with Settings closed. The pref is kept — the
-      // camera may be transiently busy — so tracking can still auto-resume next boot.
+      // the failure even with Settings closed. The pref is kept — the camera may be
+      // transiently busy — so tracking can still auto-resume next boot.
       hideGlowIfActive();
       detachListeners();
       resetDerivation();
-      const message = 'Posture tracking stopped — camera unavailable or permission denied.';
+      // "stalled" = the watchdog killed a sidecar whose readings dried up (e.g. the
+      // camera stream was interrupted) — blaming permissions would misdirect. The
+      // camera copy fits the rest: "exited", and "mute" (reaped before any frame).
+      if (event.payload !== 'stalled' && event.payload !== 'exited' && event.payload !== 'mute') {
+        logger.warn('Unrecognized posture stop cause', { cause: event.payload });
+      }
+      const message =
+        event.payload === 'stalled'
+          ? 'Posture readings stalled — tracking stopped to release the camera. Start it again to resume.'
+          : 'Posture tracking stopped — camera unavailable or permission denied.';
       setState({ tracking: false, sample: null, steadyStatus: null, error: message });
       useToastStore.getState().error(message);
     });
@@ -337,7 +346,11 @@ export function stopPosture(): void {
   hideGlowIfActive();
   invoke('stop_posture').catch((error) => {
     logCommandFailure('Failed to stop posture tracking', error);
-    useToastStore.getState().error("Couldn't stop posture tracking — the camera may still be on.");
+    const message = "Couldn't stop posture tracking — the camera may still be on.";
+    // Also mirror into state: a tray-initiated stop has no visible webview, and
+    // the tray's ⚠️ line is the only surface that can contradict "tracking off".
+    setState({ error: message });
+    useToastStore.getState().error(message);
   });
   detachListeners();
   resetDerivation();

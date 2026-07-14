@@ -1,3 +1,4 @@
+import { logger } from '@cuewise/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   countInvokes,
@@ -15,14 +16,16 @@ import {
   resetPostureMocks,
   SAVE_FAILED_WARNING,
   SENSITIVITY_APPLY_FAILED_WARNING,
+  STALLED_ERROR,
   START_FAILED_ERROR,
+  STOP_FAILED_ERROR,
   STOPPED_ERROR,
   toastErrorMock,
   toastWarningMock,
   UNREADABLE_ERROR,
   unlistenSpies,
 } from './__fixtures__/posture-controller.fixtures';
-import { chipPresentation } from './chip-presentation';
+import { chipPlacement, chipPresentation, chipVisibleOnSurface } from './chip-presentation';
 import {
   getPostureState,
   initPosture,
@@ -126,6 +129,61 @@ describe('posture controller lifecycle', () => {
     for (const unlisten of unlistenSpies) {
       expect(unlisten).toHaveBeenCalled();
     }
+  });
+
+  it('a liveness stall reports its own cause instead of blaming permissions', async () => {
+    await startTracking();
+    await glowUp();
+    vi.mocked(logger.warn).mockClear();
+
+    emitStopped('stalled');
+
+    expect(getPostureState().tracking).toBe(false);
+    expect(getPostureState().error).toBe(STALLED_ERROR);
+    expect(toastErrorMock).toHaveBeenCalledWith(STALLED_ERROR);
+    expect(logger.warn).not.toHaveBeenCalled();
+    // The shared teardown must run for a stall too — glow down, listeners detached.
+    expect(countInvokes('hide_glow')).toBe(1);
+    for (const unlisten of unlistenSpies) {
+      expect(unlisten).toHaveBeenCalled();
+    }
+    // A stall is transient — the opt-in survives so tracking auto-resumes next boot.
+    expect(localStorageStub.getItem(ENABLED_KEY)).toBe('1');
+  });
+
+  it('a mute reap is a recognized cause using the camera copy', async () => {
+    await startTracking();
+    vi.mocked(logger.warn).mockClear();
+
+    emitStopped('mute');
+
+    expect(getPostureState().error).toBe(STOPPED_ERROR);
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('an unknown stop cause falls back to the camera copy, leaving a trace', async () => {
+    await startTracking();
+
+    emitStopped('rebooted');
+
+    expect(getPostureState().error).toBe(STOPPED_ERROR);
+    expect(logger.warn).toHaveBeenCalledWith('Unrecognized posture stop cause', {
+      cause: 'rebooted',
+    });
+  });
+
+  it('a failed stop surfaces on the tray via state, not just the hidden toast', async () => {
+    await startTracking();
+    invokeMock.mockRejectedValueOnce(new Error('kill failed'));
+
+    stopPosture();
+    await flushChain();
+
+    // Tray-initiated stops have no visible webview — the ⚠️ error line is the
+    // only surface that can contradict a menu now claiming tracking is off.
+    expect(getPostureState().tracking).toBe(false);
+    expect(getPostureState().error).toBe(STOP_FAILED_ERROR);
+    expect(toastErrorMock).toHaveBeenCalledWith(STOP_FAILED_ERROR);
   });
 
   it('a manual stop clears a stale error so the tray warning does not linger', async () => {
@@ -912,6 +970,68 @@ describe('quiet hours', () => {
       dot: 'bg-tertiary',
       label: `Quiet hours until ${end}`,
     });
+  });
+});
+
+describe('chip surface visibility', () => {
+  it('hides on the full-page library surfaces', () => {
+    expect(chipVisibleOnSurface('#insights', false)).toBe(false);
+    expect(chipVisibleOnSurface('#quotes', false)).toBe(false);
+    expect(chipVisibleOnSurface('#goals', false)).toBe(false);
+    expect(chipVisibleOnSurface('#concepts', false)).toBe(false);
+  });
+
+  it('shows on home, pomodoro, and modal-only hashes', () => {
+    expect(chipVisibleOnSurface('', false)).toBe(true);
+    expect(chipVisibleOnSurface('#', false)).toBe(true);
+    expect(chipVisibleOnSurface('#pomodoro', false)).toBe(true);
+    // The #settings deep-link opens a modal over home and clears its hash via
+    // replaceState (no hashchange) — unknown hashes must behave like home.
+    expect(chipVisibleOnSurface('#settings', false)).toBe(true);
+  });
+
+  it('focus mode keeps the chip on any surface', () => {
+    expect(chipVisibleOnSurface('#insights', true)).toBe(true);
+  });
+});
+
+describe('chip placement', () => {
+  function surface(overrides: Partial<Parameters<typeof chipPlacement>[0]> = {}) {
+    return {
+      hash: '',
+      focusModeActive: false,
+      reminderPanelPinned: false,
+      showThemeSwitcher: false,
+      ...overrides,
+    };
+  }
+
+  it('sits above the bell by default, mirroring the theme-switcher shift', () => {
+    expect(chipPlacement(surface())).toBe('bottom-[4.75rem] right-4 z-30');
+    expect(chipPlacement(surface({ showThemeSwitcher: true }))).toBe(
+      'bottom-[4.75rem] right-[340px] z-30'
+    );
+  });
+
+  it('moves beside the bell when the pinned panel owns the space above', () => {
+    expect(chipPlacement(surface({ reminderPanelPinned: true }))).toBe(
+      'bottom-[1.5625rem] right-[4.5rem] z-30'
+    );
+    expect(chipPlacement(surface({ reminderPanelPinned: true, showThemeSwitcher: true }))).toBe(
+      'bottom-[1.5625rem] right-[396px] z-30'
+    );
+  });
+
+  it('ignores the pinned offset on pomodoro, where no bell renders', () => {
+    expect(chipPlacement(surface({ hash: '#pomodoro', reminderPanelPinned: true }))).toBe(
+      'bottom-[4.75rem] right-4 z-30'
+    );
+  });
+
+  it('outranks the focus-mode overlay (a body portal at z-50)', () => {
+    expect(chipPlacement(surface({ focusModeActive: true, reminderPanelPinned: true }))).toBe(
+      'bottom-[4.75rem] right-4 z-[60]'
+    );
   });
 });
 
