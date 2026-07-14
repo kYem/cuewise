@@ -175,6 +175,14 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
     enable(accountId, deviceName, recoveryCode): Promise<EnableResult> {
       return serialize(() => doEnable('dev', accountId, deviceName, recoveryCode));
     },
+    // Deep-link OAuth for macOS is a separate follow-up (ENG-43); Google sign-in is Chrome-only for now.
+    async enableWithGoogle(_deviceName: string, _recoveryCode?: string): Promise<EnableResult> {
+      return {
+        ok: false,
+        reason: 'error',
+        detail: 'Google sign-in on macOS is not available yet',
+      };
+    },
     reconnect(recoveryCode?: string): Promise<EnableResult> {
       return serialize(async () => {
         const creds = await loadCreds();

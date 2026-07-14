@@ -417,3 +417,28 @@ describe('createDirectSyncController: disable() / syncNow() error propagation', 
     expect(seen[seen.length - 1]).toBe('error');
   });
 });
+
+describe('createDirectSyncController: enableWithGoogle() stub', () => {
+  it('returns a not-yet-available error without calling the engine', async () => {
+    const engine: SyncEngineControlSurface = {
+      enableSync: vi.fn().mockResolvedValue(undefined),
+      disableSync: vi.fn().mockResolvedValue(undefined),
+      regenerateRecoveryCode: vi.fn().mockResolvedValue('unused'),
+      syncNow: vi.fn().mockResolvedValue(undefined),
+      getStatus: vi.fn().mockReturnValue('disabled' as SyncStatus),
+    };
+    const { controller } = buildDirectSyncController<SyncEngineControlSurface>({
+      keyStore: new FakeKvStore(),
+      buildEngine: () => engine,
+    });
+
+    const result = await controller.enableWithGoogle('MacBook');
+
+    expect(result).toEqual({
+      ok: false,
+      reason: 'error',
+      detail: 'Google sign-in on macOS is not available yet',
+    });
+    expect(engine.enableSync).not.toHaveBeenCalled();
+  });
+});

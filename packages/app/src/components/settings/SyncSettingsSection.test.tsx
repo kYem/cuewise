@@ -3,6 +3,7 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeSyncController } from '../../sync/__fixtures__/fake-sync-controller';
+import type { EnableResult } from '../../sync/sync-controller';
 import { SyncControllerContext } from '../../sync/sync-controller';
 import { SyncSettingsSectionComponent } from './SyncSettingsSection';
 import type { SettingsSectionProps } from './settings-types';
@@ -83,6 +84,102 @@ describe('SyncSettingsSectionComponent', () => {
     expect(screen.getByLabelText('Account ID')).toBeInTheDocument();
     const deviceNameInput = screen.getByLabelText('Device name') as HTMLInputElement;
     expect(deviceNameInput.value.length).toBeGreaterThan(0);
+  });
+
+  it('shows the Sign in with Google button after toggling the switch on', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    renderSection(controller);
+
+    await user.click(cloudSyncSwitch());
+
+    expect(screen.getByRole('button', { name: 'Sign in with Google' })).toBeInTheDocument();
+  });
+
+  it('calls controller.enableWithGoogle with the device name when Sign in with Google is clicked', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    renderSection(controller);
+
+    await user.click(cloudSyncSwitch());
+    const deviceNameInput = screen.getByLabelText('Device name') as HTMLInputElement;
+    await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
+
+    await waitFor(() =>
+      expect(controller.calls).toContainEqual({
+        method: 'enableWithGoogle',
+        args: [deviceNameInput.value, undefined],
+      })
+    );
+  });
+
+  it('opens RecoveryCodeModal with the returned code when Google sign-in succeeds with a recovery code', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptEnableWithGoogle({ ok: true, recoveryCode: CODE });
+    renderSection(controller);
+
+    await user.click(cloudSyncSwitch());
+    await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
+
+    expect(await screen.findByText('Save your recovery code')).toBeInTheDocument();
+    for (const group of CODE.split('-')) {
+      expect(screen.getByText(group)).toBeInTheDocument();
+    }
+  });
+
+  it('shows a toast error when Google sign-in fails', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptEnableWithGoogle({ ok: false, reason: 'auth' });
+    renderSection(controller);
+
+    await user.click(cloudSyncSwitch());
+    await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
+
+    await waitFor(() => expect(toastError).toHaveBeenCalledTimes(1));
+  });
+
+  it('shows a spinner and disables the button while Google sign-in is pending', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    let resolveGoogle: ((result: EnableResult) => void) | undefined;
+    controller.enableWithGoogle = vi.fn(
+      () =>
+        new Promise<EnableResult>((resolve) => {
+          resolveGoogle = resolve;
+        })
+    );
+    renderSection(controller);
+
+    await user.click(cloudSyncSwitch());
+    await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
+
+    const pendingButton = await screen.findByRole('button', { name: /signing in/i });
+    expect(pendingButton).toBeDisabled();
+
+    if (resolveGoogle === undefined) {
+      throw new Error('expected enableWithGoogle to be pending');
+    }
+    act(() => resolveGoogle?.({ ok: true }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: /signing in/i })).not.toBeInTheDocument()
+    );
+  });
+
+  it('only renders the dev-only Account ID enable path in dev builds', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    renderSection(controller);
+
+    await user.click(cloudSyncSwitch());
+
+    if (import.meta.env.DEV) {
+      expect(screen.getByLabelText('Account ID')).toBeInTheDocument();
+    } else {
+      expect(screen.queryByLabelText('Account ID')).not.toBeInTheDocument();
+    }
   });
 
   it('opens RecoveryCodeModal with the returned code when enable succeeds with a recovery code', async () => {

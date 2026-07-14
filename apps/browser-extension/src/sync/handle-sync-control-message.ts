@@ -3,6 +3,7 @@ import {
   RecoveryCodeError,
   RecoveryCodeRequiredError,
   type SyncEngineControlSurface,
+  type SyncSignInProvider,
 } from '@cuewise/sync-engine';
 import type { SyncControlMessage, SyncControlResponse } from './sync-control-messages';
 
@@ -15,15 +16,15 @@ export interface SyncControlDeps {
 // initial sync sets signed_out and returns rather than throws (mirrors macOS's error map).
 async function doEnable(
   engine: SyncEngineControlSurface,
-  accountId: string,
+  provider: SyncSignInProvider,
+  credential: string,
   deviceName: string,
   recoveryCode: string | undefined,
   deps: SyncControlDeps
 ): Promise<SyncControlResponse> {
   deps.takeRecoveryCode(); // drain any stale value before this attempt
   try {
-    // dev provider for now; Google (id-token) sign-in is threaded through in a follow-up increment.
-    await engine.enableSync('dev', accountId, deviceName, recoveryCode);
+    await engine.enableSync(provider, credential, deviceName, recoveryCode);
   } catch (err) {
     if (err instanceof RecoveryCodeRequiredError) {
       return { ok: false, reason: 'needs-code' };
@@ -48,13 +49,23 @@ async function runOp(
   msg: SyncControlMessage,
   deps: SyncControlDeps
 ): Promise<SyncControlResponse> {
-  // The bridge already resolves reconnect's persisted creds into accountId/deviceName before
-  // sending; no code = silent re-auth, a code enrolls this device after reconnect.
-  if (msg.op === 'enable' || msg.op === 'reconnect') {
+  if (msg.op === 'enable') {
+    if (
+      msg.provider === undefined ||
+      msg.credential === undefined ||
+      msg.deviceName === undefined
+    ) {
+      return { ok: false, reason: 'error' };
+    }
+    return doEnable(engine, msg.provider, msg.credential, msg.deviceName, msg.recoveryCode, deps);
+  }
+  // Reconnect stays dev-only (Google reconnect is a follow-up); the bridge already resolves
+  // persisted creds into accountId/deviceName — no code = silent re-auth, a code enrolls.
+  if (msg.op === 'reconnect') {
     if (msg.accountId === undefined || msg.deviceName === undefined) {
       return { ok: false, reason: 'error' };
     }
-    return doEnable(engine, msg.accountId, msg.deviceName, msg.recoveryCode, deps);
+    return doEnable(engine, 'dev', msg.accountId, msg.deviceName, msg.recoveryCode, deps);
   }
   // disable/regenerate/syncNow have no enroll control-flow — a throw is a plain error result.
   try {

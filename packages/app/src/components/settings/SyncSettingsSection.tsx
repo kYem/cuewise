@@ -15,6 +15,28 @@ import type { SettingsSectionProps } from './settings-types';
 
 const SEARCH_TERMS = 'cloud sync encrypted end-to-end recovery code account device backup';
 
+/** The standard four-color "G" mark — kept local since lucide-react has no brand icons. */
+const GoogleGlyph: React.FC = () => (
+  <svg viewBox="0 0 18 18" className="h-4 w-4" aria-hidden="true">
+    <path
+      fill="#4285F4"
+      d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.874 2.684-6.616z"
+    />
+    <path
+      fill="#34A853"
+      d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"
+    />
+    <path
+      fill="#FBBC05"
+      d="M3.964 10.706A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.706V4.962H.957A9.001 9.001 0 0 0 0 9c0 1.452.348 2.827.957 4.038l3.007-2.332z"
+    />
+    <path
+      fill="#EA4335"
+      d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.962L3.964 7.294C4.672 5.167 6.656 3.58 9 3.58z"
+    />
+  </svg>
+);
+
 // Only the "on" statuses get a pill; off/needs_reauth/error render their own dedicated UI below.
 const STATUS_PILL_LABEL: Partial<Record<SyncUiStatus, string>> = {
   connecting: 'Connecting…',
@@ -69,6 +91,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   const [accountId, setAccountId] = useState('');
   const [deviceName, setDeviceName] = useState(deriveDeviceName);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGoogleSigningIn, setIsGoogleSigningIn] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [isDisabling, setIsDisabling] = useState(false);
   const [recoveryCode, setRecoveryCode] = useState<string | null>(null);
@@ -125,6 +148,19 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       useToastStore.getState().error('Something went wrong enabling sync — please try again.');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setIsGoogleSigningIn(true);
+    try {
+      const result = await controller.enableWithGoogle(deviceName);
+      routeEnableResult(result, 'enable');
+    } catch (error) {
+      logger.error('Google sign-in for cloud sync failed', error);
+      useToastStore.getState().error('Something went wrong enabling sync — please try again.');
+    } finally {
+      setIsGoogleSigningIn(false);
     }
   };
 
@@ -233,6 +269,8 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   const switchChecked = status === 'off' ? enabling : true;
   const pillLabel = STATUS_PILL_LABEL[status];
 
+  // The enable step's sign-in-options div groups Google today; a "Sign in with Apple"
+  // button drops in next to it later.
   return (
     <div>
       <SettingRow
@@ -263,20 +301,6 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
         <SettingSubgroup>
           <div className="flex flex-col gap-3 py-2">
             <div className="space-y-1.5">
-              <label htmlFor="sync-account-id" className="block text-sm font-medium text-primary">
-                Account ID
-              </label>
-              <input
-                id="sync-account-id"
-                type="text"
-                value={accountId}
-                onChange={(e) => setAccountId(e.target.value)}
-                autoComplete="off"
-                spellCheck={false}
-                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-primary placeholder:text-tertiary focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
-              />
-            </div>
-            <div className="space-y-1.5">
               <label htmlFor="sync-device-name" className="block text-sm font-medium text-primary">
                 Device name
               </label>
@@ -290,15 +314,52 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
                 className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-primary placeholder:text-tertiary focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
               />
             </div>
-            <button
-              type="button"
-              onClick={handleEnable}
-              disabled={isSubmitting || accountId.trim().length === 0}
-              className="flex w-fit items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
-              {isSubmitting ? 'Enabling…' : 'Enable'}
-            </button>
+
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={handleGoogleSignIn}
+                disabled={isGoogleSigningIn}
+                className="flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-surface px-4 py-2.5 text-sm font-medium text-primary shadow-sm transition-colors hover:bg-surface-variant disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isGoogleSigningIn ? <Loader2 className="h-4 w-4 animate-spin" /> : <GoogleGlyph />}
+                {isGoogleSigningIn ? 'Signing in…' : 'Sign in with Google'}
+              </button>
+            </div>
+
+            {import.meta.env.DEV && (
+              <div className="flex flex-col gap-3 border-t border-border pt-3">
+                <p className="text-xs font-medium text-tertiary">
+                  Dev only — sign in by account ID
+                </p>
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="sync-account-id"
+                    className="block text-sm font-medium text-primary"
+                  >
+                    Account ID
+                  </label>
+                  <input
+                    id="sync-account-id"
+                    type="text"
+                    value={accountId}
+                    onChange={(e) => setAccountId(e.target.value)}
+                    autoComplete="off"
+                    spellCheck={false}
+                    className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-primary placeholder:text-tertiary focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleEnable}
+                  disabled={isSubmitting || accountId.trim().length === 0}
+                  className="flex w-fit items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+                  {isSubmitting ? 'Enabling…' : 'Enable'}
+                </button>
+              </div>
+            )}
           </div>
         </SettingSubgroup>
       )}

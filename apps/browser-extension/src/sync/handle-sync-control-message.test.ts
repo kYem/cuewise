@@ -31,7 +31,8 @@ function enableMessage(overrides: Partial<SyncControlMessage> = {}): SyncControl
   return {
     kind: 'cuewise-sync-control',
     op: 'enable',
-    accountId: 'cred-a',
+    provider: 'dev',
+    credential: 'cred-a',
     deviceName: 'Device A',
     ...overrides,
   };
@@ -122,13 +123,27 @@ describe('handleSyncControlMessage: enable', () => {
     expect(result).toEqual({ ok: true, recoveryCode: undefined });
   });
 
-  it('returns an error result without calling the engine when accountId is missing', async () => {
+  it('returns an error result without calling the engine when provider is missing', async () => {
     const engine = fakeEngine();
     const deps = fakeDeps();
 
     const result = await handleSyncControlMessage(
       engine,
-      enableMessage({ accountId: undefined }),
+      enableMessage({ provider: undefined }),
+      deps
+    );
+
+    expect(engine.enableSync).not.toHaveBeenCalled();
+    expect(result).toEqual({ ok: false, reason: 'error' });
+  });
+
+  it('returns an error result without calling the engine when credential is missing', async () => {
+    const engine = fakeEngine();
+    const deps = fakeDeps();
+
+    const result = await handleSyncControlMessage(
+      engine,
+      enableMessage({ credential: undefined }),
       deps
     );
 
@@ -148,6 +163,24 @@ describe('handleSyncControlMessage: enable', () => {
 
     expect(engine.enableSync).not.toHaveBeenCalled();
     expect(result).toEqual({ ok: false, reason: 'error' });
+  });
+
+  it('calls engine.enableSync with provider "google" and the id-token credential', async () => {
+    const engine = fakeEngine();
+    const deps = fakeDeps();
+
+    await handleSyncControlMessage(
+      engine,
+      enableMessage({ provider: 'google', credential: 'fake.jwt.token' }),
+      deps
+    );
+
+    expect(engine.enableSync).toHaveBeenCalledWith(
+      'google',
+      'fake.jwt.token',
+      'Device A',
+      undefined
+    );
   });
 
   it('maps a thrown RecoveryCodeRequiredError to needs-code', async () => {
@@ -347,14 +380,14 @@ describe('handleSyncControlMessage: concurrency', () => {
 
     const firstPromise = handleSyncControlMessage(
       engine,
-      enableMessage({ accountId: 'cred-a' }),
+      enableMessage({ credential: 'cred-a' }),
       deps
     );
     await Promise.resolve();
     await Promise.resolve();
     const secondPromise = handleSyncControlMessage(
       engine,
-      enableMessage({ accountId: 'cred-b' }),
+      enableMessage({ credential: 'cred-b' }),
       deps
     );
     await Promise.resolve();

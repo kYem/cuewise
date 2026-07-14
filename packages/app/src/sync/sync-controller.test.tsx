@@ -91,6 +91,26 @@ describe('FakeSyncController', () => {
     expect(result).toEqual({ ok: true });
   });
 
+  it('records enableWithGoogle() calls and resolves with the scripted result', async () => {
+    const controller = new FakeSyncController();
+    controller.scriptEnableWithGoogle({ ok: true, recoveryCode: 'ABC-123' });
+
+    const result = await controller.enableWithGoogle('MacBook', 'recovery-code');
+
+    expect(result).toEqual({ ok: true, recoveryCode: 'ABC-123' });
+    expect(controller.calls).toEqual([
+      { method: 'enableWithGoogle', args: ['MacBook', 'recovery-code'] },
+    ]);
+  });
+
+  it('falls back to an ok result for enableWithGoogle when no script was queued', async () => {
+    const controller = new FakeSyncController();
+
+    const result = await controller.enableWithGoogle('MacBook');
+
+    expect(result).toEqual({ ok: true });
+  });
+
   it('records disable, regenerateRecoveryCode, and syncNow calls', async () => {
     const controller = new FakeSyncController();
 

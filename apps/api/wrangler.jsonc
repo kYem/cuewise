@@ -16,7 +16,7 @@
     }
   ],
   "vars": {
-    "GOOGLE_CLIENT_IDS": "",
+    "GOOGLE_CLIENT_IDS": "534651491221-09btdvkrf1ard9pspbsac988b0bmojgp.apps.googleusercontent.com",
     "APPLE_CLIENT_ID": "",
     "PUBLIC_BASE_URL": "http://localhost:8787",
     "ALLOWED_RETURN_URIS": "cuewise://auth",

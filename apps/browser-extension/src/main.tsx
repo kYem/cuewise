@@ -26,6 +26,7 @@ if (syncApiBaseUrl) {
   // Task 11: the enable-sync UI's control seam, relaying to the SW's handleSyncControlMessage.
   syncController = new BridgeSyncController({
     toast: (message) => useToastStore.getState().warning(message),
+    googleClientId: import.meta.env.VITE_GOOGLE_SYNC_CLIENT_ID,
   });
 }
 

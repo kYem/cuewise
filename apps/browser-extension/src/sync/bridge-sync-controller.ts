@@ -20,6 +20,8 @@ export interface BridgeSyncControllerOptions {
   /** Fires on quarantine (never the recovery code/credential/token — those are secrets). */
   toast?: (message: string) => void;
   timeoutMs?: number;
+  /** OAuth client id for chrome.identity.launchWebAuthFlow; unset disables enableWithGoogle. */
+  googleClientId?: string;
 }
 
 /**
@@ -31,10 +33,12 @@ export class BridgeSyncController implements SyncController {
   private readonly subscribers = new Set<(status: SyncUiStatus) => void>();
   private readonly toast?: (message: string) => void;
   private readonly timeoutMs: number;
+  private readonly googleClientId?: string;
 
   constructor(opts: BridgeSyncControllerOptions = {}) {
     this.toast = opts.toast;
     this.timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    this.googleClientId = opts.googleClientId;
     this.registerStorageListener();
     void this.hydrate();
   }
@@ -60,7 +64,8 @@ export class BridgeSyncController implements SyncController {
       response = await this.send({
         kind: 'cuewise-sync-control',
         op: 'enable',
-        accountId,
+        provider: 'dev',
+        credential: accountId,
         deviceName,
         recoveryCode,
       });
@@ -78,6 +83,54 @@ export class BridgeSyncController implements SyncController {
       }
     }
     return response;
+  }
+
+  // NEVER logs/persists the id token — it rides straight into the relayed message.
+  // Reconnect-for-Google (persisting these creds) is a documented follow-up.
+  async enableWithGoogle(deviceName: string, recoveryCode?: string): Promise<EnableResult> {
+    if (this.googleClientId === undefined) {
+      logger.error('enableWithGoogle called without a configured googleClientId');
+      return { ok: false, reason: 'error', detail: 'Google sign-in is not configured' };
+    }
+
+    const granted = await chrome.permissions.request({ permissions: ['identity'] });
+    if (!granted) {
+      return { ok: false, reason: 'auth' };
+    }
+
+    const redirectUri = chrome.identity.getRedirectURL();
+    const nonce = crypto.randomUUID();
+    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(this.googleClientId)}&response_type=id_token&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent('openid email')}&nonce=${encodeURIComponent(nonce)}&prompt=select_account`;
+
+    let redirect: string | undefined;
+    try {
+      redirect = await chrome.identity.launchWebAuthFlow({ url: authUrl, interactive: true });
+    } catch {
+      logger.warn('Google sign-in auth flow was cancelled or failed');
+      return { ok: false, reason: 'auth' };
+    }
+    if (redirect === undefined) {
+      return { ok: false, reason: 'auth' };
+    }
+
+    const idToken = new URLSearchParams(new URL(redirect).hash.slice(1)).get('id_token');
+    if (idToken === null) {
+      return { ok: false, reason: 'auth' };
+    }
+
+    try {
+      return await this.send({
+        kind: 'cuewise-sync-control',
+        op: 'enable',
+        provider: 'google',
+        credential: idToken,
+        deviceName,
+        recoveryCode,
+      });
+    } catch (error) {
+      logger.error('Sync enableWithGoogle control message failed', error);
+      return { ok: false, reason: 'error' };
+    }
   }
 
   async reconnect(recoveryCode?: string): Promise<EnableResult> {
