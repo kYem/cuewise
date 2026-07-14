@@ -24,7 +24,7 @@ import {
   UNREADABLE_ERROR,
   unlistenSpies,
 } from './__fixtures__/posture-controller.fixtures';
-import { chipPresentation, chipVisibleOnSurface } from './chip-presentation';
+import { chipPlacement, chipPresentation, chipVisibleOnSurface } from './chip-presentation';
 import {
   getPostureState,
   initPosture,
@@ -977,6 +977,46 @@ describe('chip surface visibility', () => {
 
   it('focus mode keeps the chip on any surface', () => {
     expect(chipVisibleOnSurface('#insights', true)).toBe(true);
+  });
+});
+
+describe('chip placement', () => {
+  function surface(overrides: Partial<Parameters<typeof chipPlacement>[0]> = {}) {
+    return {
+      hash: '',
+      focusModeActive: false,
+      reminderPanelPinned: false,
+      showThemeSwitcher: false,
+      ...overrides,
+    };
+  }
+
+  it('sits above the bell by default, mirroring the theme-switcher shift', () => {
+    expect(chipPlacement(surface())).toBe('bottom-[4.75rem] right-4 z-30');
+    expect(chipPlacement(surface({ showThemeSwitcher: true }))).toBe(
+      'bottom-[4.75rem] right-[340px] z-30'
+    );
+  });
+
+  it('moves beside the bell when the pinned panel owns the space above', () => {
+    expect(chipPlacement(surface({ reminderPanelPinned: true }))).toBe(
+      'bottom-[1.5625rem] right-[4.5rem] z-30'
+    );
+    expect(chipPlacement(surface({ reminderPanelPinned: true, showThemeSwitcher: true }))).toBe(
+      'bottom-[1.5625rem] right-[396px] z-30'
+    );
+  });
+
+  it('ignores the pinned offset on pomodoro, where no bell renders', () => {
+    expect(chipPlacement(surface({ hash: '#pomodoro', reminderPanelPinned: true }))).toBe(
+      'bottom-[4.75rem] right-4 z-30'
+    );
+  });
+
+  it('outranks the focus-mode overlay (a body portal at z-50)', () => {
+    expect(chipPlacement(surface({ focusModeActive: true, reminderPanelPinned: true }))).toBe(
+      'bottom-[4.75rem] right-4 z-[60]'
+    );
   });
 });
 

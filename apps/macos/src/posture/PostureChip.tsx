@@ -2,7 +2,7 @@ import { useFocusModeStore, useSettingsStore } from '@cuewise/app';
 import { cn } from '@cuewise/ui';
 import type React from 'react';
 import { useEffect, useState } from 'react';
-import { chipPresentation, chipVisibleOnSurface } from './chip-presentation';
+import { chipPlacement, chipPresentation, chipVisibleOnSurface } from './chip-presentation';
 import { usePosture } from './posture-controller';
 
 /**
@@ -11,9 +11,8 @@ import { usePosture } from './posture-controller';
  */
 export function PostureChip(): React.JSX.Element | null {
   const presentation = chipPresentation(usePosture());
-  // Stacks above the reminder bell (bottom-4, ~48px tall) and mirrors its
-  // theme-switcher shift, so the corner cluster moves and reads as one.
   const showThemeSwitcher = useSettingsStore((state) => state.settings.showThemeSwitcher);
+  const reminderPanelPinned = useSettingsStore((state) => state.settings.reminderPanelPinned);
   const focusModeActive = useFocusModeStore((state) => state.isActive);
   const [hash, setHash] = useState(() => window.location.hash);
   useEffect(() => {
@@ -26,13 +25,18 @@ export function PostureChip(): React.JSX.Element | null {
   if (presentation === null || !chipVisibleOnSurface(hash, focusModeActive)) {
     return null;
   }
-  const rightPosition = showThemeSwitcher ? 'right-[340px]' : 'right-4';
+  const placement = chipPlacement({
+    hash,
+    focusModeActive,
+    reminderPanelPinned,
+    showThemeSwitcher,
+  });
 
   return (
     <output
       className={cn(
-        'fixed bottom-[4.75rem] z-30 inline-flex items-center gap-2 rounded-full border border-border bg-surface/80 px-3 py-1.5 text-xs font-medium text-secondary shadow-sm backdrop-blur',
-        rightPosition
+        'fixed inline-flex items-center gap-2 rounded-full border border-border bg-surface/80 px-3 py-1.5 text-xs font-medium text-secondary shadow-sm backdrop-blur',
+        placement
       )}
       aria-label={`Posture: ${presentation.label}`}
     >
