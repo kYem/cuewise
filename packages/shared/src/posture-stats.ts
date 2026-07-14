@@ -10,7 +10,7 @@ import { formatDateString } from './utils';
 export const POSTURE_STATS_RETENTION_DAYS = 90;
 
 export interface PostureSummary {
-  todayPercent: number | null; // null = nothing tracked today
+  todayPercent: number | null; // null = no present samples today (absent-only counts too)
   sevenDayPercent: number | null; // last 7 days including today
   trackedHoursToday: number; // time present at the screen, in hours
 }
@@ -36,10 +36,17 @@ export function addPostureSample(
   );
 }
 
-/** Drop rollups older than the retention window (pure). */
+// Drop rollups past retention and normalize each day's counts (pure). Runs on
+// every load and flush, so it doubles as the shape guard for persisted blobs:
+// version skew or corruption would otherwise surface as NaN on the card.
 export function prunePostureStats(stats: PostureDailyStat[], today: string): PostureDailyStat[] {
+  if (!Array.isArray(stats)) {
+    return [];
+  }
   const cutoff = formatDateString(subDays(parseISO(today), POSTURE_STATS_RETENTION_DAYS));
-  return stats.filter((stat) => stat.date >= cutoff);
+  return stats
+    .filter((stat) => stat.date >= cutoff)
+    .map((stat) => ({ date: stat.date, counts: { ...emptyCounts(), ...stat.counts } }));
 }
 
 // Upright = good + mild over present time: the nudge only fires on 'poor', so the

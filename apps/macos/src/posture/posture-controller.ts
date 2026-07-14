@@ -175,8 +175,8 @@ async function loadPostureStats(): Promise<void> {
   }
 }
 
-// Every flush rewrites the whole array, so one failed write is healed by the
-// next successful one; only failures on the final write before quit lose counts.
+// A flush rewrites the whole array, so the next success heals a failed write.
+// Quit never flushes — the ≤1-minute tail since the last flush is accepted loss.
 function flushPostureStats(): void {
   if (unflushedSamples === 0 && !statsDirty) {
     return;

@@ -55,13 +55,15 @@ describe('summarizePosture', () => {
 
   it('pools the seven-day window by time and ignores older days', () => {
     const stats = [
-      stat('2026-07-14', { good: 100 }), // today: 100%
-      stat('2026-07-08', { poor: 100 }), // 6 days ago: still in window
+      stat('2026-07-14', { good: 100 }), // today: 100% over 100 samples
+      stat('2026-07-08', { poor: 300 }), // 6 days ago: 0% over 300 samples
       stat('2026-07-07', { poor: 400 }), // 7 days ago: outside
     ];
     const summary = summarizePosture(stats, '2026-07-14');
 
-    expect(summary.sevenDayPercent).toBe(50);
+    // 100 upright of 400 present = 25%. A plain mean of daily percentages would
+    // say 50% — the long day must outweigh the short one.
+    expect(summary.sevenDayPercent).toBe(25);
   });
 });
 
@@ -76,5 +78,21 @@ describe('prunePostureStats', () => {
     const pruned = prunePostureStats(stats, '2026-07-14');
 
     expect(pruned.map((s) => s.date)).toEqual(['2026-07-14', '2026-04-16']);
+  });
+
+  it('fills in count keys missing from a persisted blob (version skew)', () => {
+    const skewed = [{ date: '2026-07-14', counts: { good: 5 } }] as unknown as PostureDailyStat[];
+
+    const pruned = prunePostureStats(skewed, '2026-07-14');
+
+    expect(pruned[0]).toEqual(stat('2026-07-14', { good: 5 }));
+    // The healed counts must be safe for the arithmetic downstream — no NaN.
+    expect(summarizePosture(pruned, '2026-07-14').todayPercent).toBe(100);
+  });
+
+  it('treats a non-array blob as no data instead of throwing', () => {
+    const garbage = { not: 'an array' } as unknown as PostureDailyStat[];
+
+    expect(prunePostureStats(garbage, '2026-07-14')).toEqual([]);
   });
 });

@@ -1004,6 +1004,13 @@ describe('posture stats rollup', () => {
     expect(setPostureStatsMock).toHaveBeenCalledWith([
       expect.objectContaining({ counts: expect.objectContaining({ poor: 29, good: 1 }) }),
     ]);
+
+    // The flush must reset the throttle: without it, every sample from here on
+    // would write storage — a write every 2s for the rest of a tray session.
+    emitPoorFrames(29);
+    expect(setPostureStatsMock).toHaveBeenCalledOnce();
+    emitPoorFrames(1);
+    expect(setPostureStatsMock).toHaveBeenCalledTimes(2);
   });
 
   it('flushes the remainder when tracking stops', async () => {
@@ -1108,18 +1115,33 @@ describe('posture stats rollup', () => {
     );
     initPosture();
     await startTracking();
-    // Counting these onto a not-yet-loaded array would let a flush overwrite
-    // the stored history — the guard drops them instead.
-    emitPoorFrames(3);
+    // A full throttle window while the load is pending: without the gate this
+    // fires a flush that overwrites the stored history with today-only counts.
+    emitPoorFrames(30);
+    expect(setPostureStatsMock).not.toHaveBeenCalled();
 
     resolveLoad([]);
     await flushChain();
     emitPoorFrames(2);
     stopPosture();
 
+    expect(setPostureStatsMock).toHaveBeenCalledOnce();
     expect(setPostureStatsMock).toHaveBeenCalledWith([
       expect.objectContaining({ counts: expect.objectContaining({ poor: 2 }) }),
     ]);
+  });
+
+  it('a failed history read disables rollups so no flush can wipe storage', async () => {
+    getPostureStatsMock.mockRejectedValueOnce(new Error('read failed'));
+    initPosture();
+    await flushChain();
+    expect(logger.error).toHaveBeenCalledWith('Failed to load posture stats', expect.any(Error));
+
+    await startTracking();
+    emitPoorFrames(30);
+    stopPosture();
+
+    expect(setPostureStatsMock).not.toHaveBeenCalled();
   });
 });
 

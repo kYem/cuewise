@@ -221,10 +221,10 @@ export const InsightsPage: React.FC = () => {
               {postureSummary && (
                 <div className="bg-surface rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow">
                   <div className="flex items-center justify-between mb-4">
-                    <div className="p-3 bg-emerald-100 rounded-lg">
-                      <PersonStanding className="w-6 h-6 text-emerald-600" />
+                    <div className="p-3 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg">
+                      <PersonStanding className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
                     </div>
-                    <span className="text-3xl font-bold text-emerald-600">
+                    <span className="text-3xl font-bold text-emerald-600 dark:text-emerald-400">
                       {postureSummary.todayPercent !== null
                         ? `${postureSummary.todayPercent}%`
                         : '—'}
