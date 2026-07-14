@@ -1,6 +1,8 @@
 import { logger } from '@cuewise/shared';
 import { Hono } from 'hono';
+import { cors } from 'hono/cors';
 import { type AuthVars, requireSession } from './auth-middleware';
+import { resolveAllowedOrigin } from './cors';
 import { D1SyncStore } from './d1-store';
 import type { Env } from './env';
 import { ipRateLimit } from './ip-rate-limit';
@@ -29,6 +31,19 @@ export function createApp(deps: AppDeps = {}): Hono<{ Bindings: Env } & AuthVars
     appleVerifier: deps.appleVerifier ?? verifyAppleIdToken,
   };
   const app = new Hono<{ Bindings: Env } & AuthVars>();
+
+  // CORS first: a preflight OPTIONS carries no Authorization, so this must answer it
+  // before the auth/rate-limit middleware below would 401/429 it. Origin is echoed from
+  // an allowlist (never `*`); the extension and Tauri clients don't rely on this at all.
+  app.use(
+    '/v1/*',
+    cors({
+      origin: (origin, c) => resolveAllowedOrigin(origin, c.env),
+      allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      allowHeaders: ['Authorization', 'Content-Type'],
+      maxAge: 86_400,
+    })
+  );
 
   app.get('/v1/health', (c) => {
     return c.json({ status: 'ok' });

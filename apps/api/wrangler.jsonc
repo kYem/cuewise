@@ -20,6 +20,10 @@
     "APPLE_CLIENT_ID": "",
     "PUBLIC_BASE_URL": "http://localhost:8787",
     "ALLOWED_RETURN_URIS": "cuewise://auth",
+    // Comma-separated browser origins allowed CORS access (e.g. https://app.cuewise.app once
+    // the web app ships). Empty by default — the extension and Tauri clients need no CORS.
+    // localhost origins are auto-allowed only when DEV_FAKE_AUTH is on.
+    "ALLOWED_ORIGINS": "",
     // Empty on purpose so an unprovisioned deploy fails closed (see requireStateSigningKey).
     // Production: `wrangler secret put STATE_SIGNING_KEY`. Local dev: `.dev.vars`.
     "STATE_SIGNING_KEY": ""
