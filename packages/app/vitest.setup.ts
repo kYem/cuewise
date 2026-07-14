@@ -1,8 +1,12 @@
-import { configurePlatform } from '@cuewise/shared';
+import { configureLogger, configurePlatform } from '@cuewise/shared';
 import { installChromeStorageMock } from '@cuewise/test-utils/mocks';
 import { cleanup } from '@testing-library/react';
 import { afterEach, beforeEach, vi } from 'vitest';
 import '@testing-library/jest-dom';
+
+// Expected-error paths log through the shared logger; silence it so failures
+// stand out. Suites that assert on logging vi.mock @cuewise/shared instead.
+configureLogger({ enabled: false });
 
 // Incidental consumers (page components embedding EmptyState/celebration) must not
 // run the real lottie SVG renderer in jsdom. Dedicated lottie tests override this
