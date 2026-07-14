@@ -66,6 +66,7 @@ export const DEFAULT_SETTINGS: Settings = {
   focusModeEnabled: true, // Enable by default
   focusModeImageCategory: 'nature', // Nature photos by default
   focusModeShowQuote: true, // Show quote overlay
+  focusModeShowGoal: true, // "Focusing on" line under the timer
   focusModeAutoEnter: false, // Don't auto-enter (user choice)
   // Goal View Mode
   goalViewMode: 'full', // Full view by default

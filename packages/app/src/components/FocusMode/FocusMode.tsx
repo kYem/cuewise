@@ -5,6 +5,7 @@ import { useSettingsStore } from '../../stores/settings-store';
 import { SoundsMiniPlayer } from '../sounds';
 import { BackgroundImage } from './BackgroundImage';
 import { FocusModeControls } from './FocusModeControls';
+import { FocusModeGoal } from './FocusModeGoal';
 import { FocusModeQuote } from './FocusModeQuote';
 import { FocusModeTimer } from './FocusModeTimer';
 
@@ -57,6 +58,9 @@ export function FocusMode() {
       <div className="relative z-10 h-full flex flex-col items-center justify-center">
         {/* Timer */}
         <FocusModeTimer />
+
+        {/* Current goal (optional) */}
+        {settings.focusModeShowGoal && <FocusModeGoal />}
 
         {/* Quote (optional) */}
         {settings.focusModeShowQuote && <FocusModeQuote />}

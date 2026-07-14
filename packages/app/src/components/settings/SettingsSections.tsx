@@ -374,6 +374,18 @@ function FocusSection({ s, set, filter }: SettingsSectionProps) {
             />
           </SettingRow>
           <SettingRow
+            label="Show current goal"
+            filter={filter}
+            help="Your next task under the timer — tick it off without leaving focus."
+            keywords="goal task focusing progress complete"
+          >
+            <Switch
+              label="Show current goal"
+              checked={s.focusModeShowGoal}
+              onChange={(v) => set({ focusModeShowGoal: v })}
+            />
+          </SettingRow>
+          <SettingRow
             label="Auto-enter on start"
             filter={filter}
             help="Enter focus mode whenever a work session starts"

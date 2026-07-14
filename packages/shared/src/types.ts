@@ -326,6 +326,7 @@ export interface Settings {
   focusModeEnabled: boolean; // Enable focus mode feature (default true)
   focusModeImageCategory: FocusImageCategory; // Background image category (default 'nature')
   focusModeShowQuote: boolean; // Show motivational quote overlay (default true)
+  focusModeShowGoal: boolean; // Show the current goal under the timer (default true)
   focusModeAutoEnter: boolean; // Auto-enter focus mode when timer starts (default false)
   // Goal View Mode
   goalViewMode: GoalViewMode; // View mode for Today's Focus section (default 'full')
