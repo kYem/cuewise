@@ -1,15 +1,15 @@
 import { CONCEPT_TEMPLATES, type ConceptTemplate } from '@cuewise/shared';
 import {
+  Binary,
   Brain,
   BrainCog,
+  Cpu,
   Dna,
   Globe,
   GraduationCap,
   Landmark,
-  Languages,
   Pencil,
   PiggyBank,
-  Rocket,
   Sparkles,
   Type as TypeIcon,
 } from 'lucide-react';
@@ -25,9 +25,9 @@ const TEMPLATE_ICONS: Record<string, React.FC<{ className?: string }>> = {
   'world-geography': Globe,
   'world-history': Landmark,
   'human-biology': Dna,
-  'vocabulary-builder': Languages,
+  'computer-science': Binary,
+  'machine-learning': Cpu,
   'literary-devices': TypeIcon,
-  'space-astronomy': Rocket,
   'grammar-writing': Pencil,
 };
 

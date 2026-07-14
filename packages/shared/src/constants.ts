@@ -778,55 +778,6 @@ export const CONCEPT_TEMPLATES: ConceptTemplate[] = [
     ],
   },
   {
-    id: 'vocabulary-builder',
-    name: 'Vocabulary Builder',
-    description: 'Useful words that sharpen your reading and writing.',
-    tag: 'vocabulary',
-    cards: [
-      {
-        term: 'Ubiquitous',
-        definition: 'Present or found everywhere.',
-        details: 'Smartphones have become ubiquitous.',
-      },
-      {
-        term: 'Ephemeral',
-        definition: 'Lasting for a very short time.',
-      },
-      {
-        term: 'Pragmatic',
-        definition: 'Dealing with things practically rather than by theory or ideals.',
-      },
-      {
-        term: 'Ambivalent',
-        definition: 'Having mixed or contradictory feelings about something.',
-      },
-      {
-        term: 'Meticulous',
-        definition: 'Showing great attention to detail; very careful and precise.',
-      },
-      {
-        term: 'Candid',
-        definition: 'Truthful and straightforward; frank.',
-      },
-      {
-        term: 'Resilient',
-        definition: 'Able to recover quickly from difficulties; tough and adaptable.',
-      },
-      {
-        term: 'Scrutinize',
-        definition: 'To examine or inspect closely and thoroughly.',
-      },
-      {
-        term: 'Nuance',
-        definition: 'A subtle difference in meaning, expression, or shade.',
-      },
-      {
-        term: 'Tenacious',
-        definition: 'Holding firmly to a purpose; persistent and determined.',
-      },
-    ],
-  },
-  {
     id: 'literary-devices',
     name: 'Literary Devices',
     description: 'Tools writers use — essential for English class.',
@@ -882,60 +833,117 @@ export const CONCEPT_TEMPLATES: ConceptTemplate[] = [
     ],
   },
   {
-    id: 'space-astronomy',
-    name: 'Space & Astronomy',
-    description: 'The planets, stars, and how the universe works.',
-    tag: 'astronomy',
+    id: 'computer-science',
+    name: 'Computer Science Basics',
+    description: 'Core ideas behind how software and computers work.',
+    tag: 'computer-science',
     cards: [
       {
-        term: 'The Solar System',
+        term: 'Algorithm',
         definition:
-          'The Sun and everything bound to it by gravity: eight planets, moons, asteroids, and comets.',
+          'A step-by-step set of instructions for solving a problem or completing a task.',
       },
       {
-        term: 'Star',
+        term: 'Data structure',
         definition:
-          'A massive ball of gas that produces light and heat through nuclear fusion in its core; the Sun is our star.',
+          'A way of organizing data so it can be accessed and modified efficiently, e.g. arrays, lists, and trees.',
       },
       {
-        term: 'Galaxy',
+        term: 'Binary',
         definition:
-          'A vast system of stars, gas, and dust bound by gravity; we live in the Milky Way.',
+          'The base-2 number system of 0s and 1s that computers use to represent all data at the lowest level.',
       },
       {
-        term: 'Black hole',
+        term: 'Big-O notation',
         definition:
-          'A region of space where gravity is so strong that not even light can escape it.',
+          'A way to describe how an algorithm’s running time or memory grows as the input size increases.',
+        details: 'O(n) grows linearly; O(n²) grows much faster.',
       },
       {
-        term: 'Light-year',
-        definition:
-          'The distance light travels in one year (~9.46 trillion km) — a measure of distance, not time.',
+        term: 'Variable',
+        definition: 'A named container that stores a value a program can read and change.',
       },
       {
-        term: 'Orbit',
+        term: 'Function',
         definition:
-          'The curved path an object takes around another due to gravity, like Earth around the Sun.',
+          'A reusable block of code that performs a task, optionally taking inputs and returning a result.',
       },
       {
-        term: 'The Big Bang',
+        term: 'Boolean logic',
         definition:
-          'The leading theory that the universe began ~13.8 billion years ago from an extremely hot, dense state and has expanded since.',
+          'Logic based on true/false values combined with AND, OR, and NOT — the foundation of decisions in code.',
       },
       {
-        term: 'Phases of the Moon',
+        term: 'Recursion',
         definition:
-          'The changing lit portion of the Moon we see as it orbits Earth, from new moon to full moon and back.',
+          'A technique where a function calls itself to solve smaller instances of the same problem.',
       },
       {
-        term: 'Comet vs asteroid',
+        term: 'Compiler vs interpreter',
         definition:
-          'Comets are icy bodies that grow tails near the Sun; asteroids are rocky or metallic objects, mostly between Mars and Jupiter.',
+          'A compiler translates whole programs to machine code ahead of time; an interpreter runs code line by line.',
       },
       {
-        term: 'Gravity',
+        term: 'Bug vs debugging',
         definition:
-          'The force by which masses attract one another; it holds planets in orbit and keeps us on the ground.',
+          'A bug is an error in a program; debugging is the process of finding and fixing it.',
+      },
+    ],
+  },
+  {
+    id: 'machine-learning',
+    name: 'AI & Machine Learning',
+    description: 'Foundational ideas behind AI models.',
+    tag: 'machine-learning',
+    cards: [
+      {
+        term: 'Machine learning',
+        definition:
+          'A field where computers learn patterns from data to make predictions or decisions, rather than being explicitly programmed.',
+      },
+      {
+        term: 'Supervised vs unsupervised learning',
+        definition:
+          'Supervised learning trains on labeled examples; unsupervised learning finds structure in unlabeled data.',
+      },
+      {
+        term: 'Training vs test data',
+        definition:
+          'The training set fits the model; the held-out test set estimates how well it generalizes to unseen data.',
+      },
+      {
+        term: 'Overfitting vs underfitting',
+        definition:
+          'Overfitting memorizes noise and fails on new data; underfitting is too simple to capture the real pattern.',
+      },
+      {
+        term: 'Neural network',
+        definition:
+          'A model of layered interconnected nodes that learns weighted transformations of its inputs.',
+      },
+      {
+        term: 'Gradient descent',
+        definition:
+          'An optimization method that iteratively adjusts parameters in the direction that most reduces error.',
+      },
+      {
+        term: 'Feature',
+        definition: 'An individual measurable input variable the model uses to make predictions.',
+      },
+      {
+        term: 'Classification vs regression',
+        definition:
+          'Classification predicts discrete categories; regression predicts continuous numeric values.',
+      },
+      {
+        term: 'Large language model (LLM)',
+        definition:
+          'An AI model trained on vast text to predict the next word, enabling it to generate and understand language.',
+      },
+      {
+        term: 'Bias in AI',
+        definition:
+          'When a model produces systematically unfair results because its training data or design reflected human or sampling bias.',
       },
     ],
   },
