@@ -1,5 +1,23 @@
 # @cuewise/browser-extension
 
+## 1.16.0
+
+### Minor Changes
+
+- feat(focus): a "Focusing on" line under the focus-mode timer shows your next Today's Focus task with a progress count ("2 of 3"), and ticking its circle completes the task and advances to the next — no need to leave focus. Hidden when there's nothing to do; toggleable via the new "Show current goal" setting next to "Show quote".
+- 3b6ddd3: feat(pomodoro): pop the timer out into a floating, always-on-top mini window that stays visible while you work in other tabs. A pop-out button on the active-timer pill and the Pomodoro page opens a compact Document Picture-in-Picture float showing the session type, countdown, and pause/resume — it keeps ticking and shares state with the app, and survives navigating between Cuewise's own pages. The button is hidden on browsers without the Document PiP API.
+
+### Patch Changes
+
+- 2d2aede: fix(background): the glass-theme daily background now recovers from a removed/404 Unsplash image instead of getting stuck on the dark fallback. The daily background is verified to load before it's cached or persisted, and a dead stored image is replaced with a fresh working one. Also drops an aurora photo Unsplash has removed.
+- fix(goals): editing-row link picker fixes — the picker no longer springs open uninvited the next time you edit a task after committing with Enter while it was open, a failed link now keeps the picker open so you can retry (instead of closing while the toast says "try again"), and the edit inputs gained accessible names.
+- fix(pomodoro): the timer now reconciles against the wall clock instead of counting ticks, so backgrounded/throttled tabs no longer run the timer slow.
+- 17e5eac: fix(reminders): wrap long habit-pill text instead of overflowing — the label now wraps within the pill (which grows to fit) while the cadence/paused tag stays fixed, so long reminder names are no longer clipped.
+- fix(sounds): YouTube playback recovers from per-track errors instead of stalling — a playlist track that can't be embedded (owner disabled it, removed, or private) auto-skips to the next track.
+- Updated dependencies [c81b692]
+  - @cuewise/ui@1.16.0
+  - @cuewise/app@1.15.1
+
 ## 1.15.0
 
 ### Minor Changes
