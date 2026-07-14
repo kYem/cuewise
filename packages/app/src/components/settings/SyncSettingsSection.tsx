@@ -77,6 +77,9 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   const [enrollSource, setEnrollSource] = useState<'enable' | 'reconnect'>('enable');
   const [confirmDisableOpen, setConfirmDisableOpen] = useState(false);
   const [unsavedCode, setUnsavedCode] = useState(false);
+  // The error status only ever comes from a failed enable/reconnect, so the error state's
+  // "Try again" retries that action — syncNow can't recover it and would falsely report success.
+  const [failedAction, setFailedAction] = useState<'enable' | 'reconnect'>('enable');
 
   useEffect(() => {
     if (!controller) {
@@ -108,6 +111,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       setEnrollOpen(true);
       return;
     }
+    setFailedAction(source);
     useToastStore.getState().error(enableFailureMessage(result));
   };
 
@@ -178,6 +182,15 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       logger.error('Cloud sync sync-now failed', error);
       useToastStore.getState().error("Couldn't sync right now — please try again.");
     }
+  };
+
+  // The error status only follows a failed enable/reconnect — retry that same action.
+  const handleRetry = async () => {
+    if (failedAction === 'reconnect') {
+      await handleReconnect();
+      return;
+    }
+    await handleEnable();
   };
 
   const handleToggle = (checked: boolean) => {
@@ -339,10 +352,10 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       {status === 'error' && (
         <SettingSubgroup>
           <div className="flex flex-col gap-2 py-2">
-            <p className="text-xs text-error">Something went wrong syncing your data.</p>
+            <p className="text-xs text-error">Couldn't turn on Cloud Sync — please try again.</p>
             <button
               type="button"
-              onClick={handleSyncNow}
+              onClick={handleRetry}
               className="flex w-fit items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-xs font-medium text-primary transition-colors hover:bg-surface-variant"
             >
               <RefreshCw className="h-3.5 w-3.5" />

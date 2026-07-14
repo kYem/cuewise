@@ -283,15 +283,43 @@ describe('SyncSettingsSectionComponent', () => {
     await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith('Synced'));
   });
 
-  it('calls controller.syncNow() when Try again is clicked in the error state', async () => {
+  it('re-runs enable (never syncNow) when Try again is clicked after a failed enable', async () => {
     const user = userEvent.setup();
     const controller = new FakeSyncController();
+    controller.scriptEnable({ ok: false, reason: 'error' });
     renderSection(controller);
+
+    await enterEnableStep(user, 'retry-acct');
+    await user.click(screen.getByRole('button', { name: 'Enable' }));
+    // The engine surfaces the enable failure as the error status.
     act(() => controller.setStatus('error'));
 
+    controller.scriptEnable({ ok: true });
     await user.click(screen.getByRole('button', { name: 'Try again' }));
 
-    await waitFor(() => expect(controller.calls).toContainEqual({ method: 'syncNow', args: [] }));
+    await waitFor(() =>
+      expect(controller.calls.filter((c) => c.method === 'enable')).toHaveLength(2)
+    );
+    expect(controller.calls.some((c) => c.method === 'syncNow')).toBe(false);
+  });
+
+  it('re-runs reconnect (never syncNow) when Try again is clicked after a failed reconnect', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptReconnect({ ok: false, reason: 'error' });
+    renderSection(controller);
+    act(() => controller.setStatus('needs_reauth'));
+
+    await user.click(screen.getByRole('button', { name: 'Reconnect' }));
+    act(() => controller.setStatus('error'));
+
+    controller.scriptReconnect({ ok: true });
+    await user.click(screen.getByRole('button', { name: 'Try again' }));
+
+    await waitFor(() =>
+      expect(controller.calls.filter((c) => c.method === 'reconnect')).toHaveLength(2)
+    );
+    expect(controller.calls.some((c) => c.method === 'syncNow')).toBe(false);
   });
 
   it('regenerates the recovery code and reopens RecoveryCodeModal with the new code', async () => {
