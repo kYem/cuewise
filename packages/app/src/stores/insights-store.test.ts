@@ -1,4 +1,4 @@
-import type { Goal, Quote } from '@cuewise/shared';
+import type { Goal, PostureDailyStat, Quote } from '@cuewise/shared';
 import * as shared from '@cuewise/shared';
 import * as storage from '@cuewise/storage';
 import { goalFactory, pomodoroFactory, quoteFactory } from '@cuewise/test-utils/factories';
@@ -323,6 +323,16 @@ describe('Insights Store - posture summary wiring', () => {
 
     expect(useInsightsStore.getState().postureSummary).toBeNull();
     expect(useInsightsStore.getState().error).toBeNull();
+  });
+
+  it('heals a version-skewed blob on read instead of surfacing NaN', async () => {
+    const today = shared.getTodayDateString();
+    const skewed = [{ date: today, counts: { good: 5 } }] as unknown as PostureDailyStat[];
+    mockStorageWithData({ postureStats: skewed });
+
+    await useInsightsStore.getState().initialize();
+
+    expect(useInsightsStore.getState().postureSummary).toMatchObject({ todayPercent: 100 });
   });
 
   it('refresh recomputes the summary from freshly loaded stats', async () => {

@@ -1,4 +1,5 @@
 import { parseISO, subDays } from 'date-fns';
+import { logger } from './logger';
 import {
   POSTURE_SAMPLE_INTERVAL_SECONDS,
   type PostureDailyStat,
@@ -36,11 +37,11 @@ export function addPostureSample(
   );
 }
 
-// Drop rollups past retention and normalize each day's counts (pure). Runs on
-// every load and flush, so it doubles as the shape guard for persisted blobs:
-// version skew or corruption would otherwise surface as NaN on the card.
+// Drop rollups past retention and heal count keys missing from persisted blobs
+// (version skew) — without it a missing key surfaces as NaN on the card.
 export function prunePostureStats(stats: PostureDailyStat[], today: string): PostureDailyStat[] {
   if (!Array.isArray(stats)) {
+    logger.warn('Posture stats blob was not an array; resetting');
     return [];
   }
   const cutoff = formatDateString(subDays(parseISO(today), POSTURE_STATS_RETENTION_DAYS));

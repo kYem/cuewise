@@ -20,6 +20,7 @@ import {
   type PomodoroSession,
   type PostureSummary,
   parseImportData,
+  prunePostureStats,
   type Quote,
   summarizePosture,
 } from '@cuewise/shared';
@@ -107,12 +108,15 @@ export const useInsightsStore = create<InsightsStore>((set, get) => ({
       set({ isLoading: true, error: null });
 
       // Load all data needed for insights
-      const [quotes, goals, pomodoroSessions, postureStats] = await Promise.all([
+      const [quotes, goals, pomodoroSessions, rawPostureStats] = await Promise.all([
         getQuotes(),
         getGoals(),
         getPomodoroSessions(),
         getPostureStats(),
       ]);
+      // Read through the same shape guard the controller flushes through, so a
+      // skewed persisted blob can't reach the card as NaN or a thrown summary.
+      const postureStats = prunePostureStats(rawPostureStats, getTodayDateString());
 
       // Calculate insights and analytics
       const insights = calculateInsights(quotes, goals, pomodoroSessions);
@@ -142,12 +146,15 @@ export const useInsightsStore = create<InsightsStore>((set, get) => ({
       set({ error: null });
 
       // Reload data and recalculate insights
-      const [quotes, goals, pomodoroSessions, postureStats] = await Promise.all([
+      const [quotes, goals, pomodoroSessions, rawPostureStats] = await Promise.all([
         getQuotes(),
         getGoals(),
         getPomodoroSessions(),
         getPostureStats(),
       ]);
+      // Read through the same shape guard the controller flushes through, so a
+      // skewed persisted blob can't reach the card as NaN or a thrown summary.
+      const postureStats = prunePostureStats(rawPostureStats, getTodayDateString());
 
       const insights = calculateInsights(quotes, goals, pomodoroSessions);
       const analytics = calculateAdvancedAnalytics(goals, pomodoroSessions);

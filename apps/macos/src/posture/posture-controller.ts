@@ -176,7 +176,7 @@ async function loadPostureStats(): Promise<void> {
 }
 
 // A flush rewrites the whole array, so the next success heals a failed write.
-// Quit never flushes — the ≤1-minute tail since the last flush is accepted loss.
+// Quit never flushes — the tail since the last successful write is accepted loss.
 function flushPostureStats(): void {
   if (unflushedSamples === 0 && !statsDirty) {
     return;
