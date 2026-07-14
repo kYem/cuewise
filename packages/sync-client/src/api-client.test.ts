@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { problemResponse, stubFetch } from './__fixtures__/fetch.fixtures';
 import { ApiClient } from './api-client';
 import type { PushRecord } from './types';
@@ -43,6 +43,37 @@ describe('ApiClient', () => {
     expect(calls[0].url).toBe(`${BASE_URL}/v1/changes`);
     expect(calls[0].init.method).toBe('POST');
     expect(JSON.parse(calls[0].init.body as string)).toEqual({ records: [pushRecordFixture] });
+  });
+
+  // Regression: the extension service worker (WorkerGlobalScope) rejects fetch called with any
+  // receiver but the global, so the default fetchFn must be bound to globalThis.
+  describe('default fetch binding', () => {
+    let originalFetch: typeof fetch;
+    beforeEach(() => {
+      originalFetch = globalThis.fetch;
+    });
+    afterEach(() => {
+      globalThis.fetch = originalFetch;
+    });
+
+    it('binds the default fetch to the global scope so a worker realm accepts it', async () => {
+      const guardedFetch = function (this: unknown): Promise<Response> {
+        if (this !== globalThis) {
+          return Promise.reject(new TypeError("Failed to execute 'fetch': Illegal invocation"));
+        }
+        return Promise.resolve(new Response(JSON.stringify({ token: 'ok' }), { status: 200 }));
+      };
+      globalThis.fetch = guardedFetch as typeof fetch;
+      const client = new ApiClient({
+        baseUrl: BASE_URL,
+        getToken: async () => null,
+        sleep: async () => undefined,
+      });
+
+      await expect(
+        client.exchangeToken({ provider: 'google', credential: 'id-token', deviceName: 'Device A' })
+      ).resolves.toEqual({ token: 'ok' });
+    });
   });
 
   it('rejects with a non-retryable ApiError when the server returns 422 invalid_record', async () => {

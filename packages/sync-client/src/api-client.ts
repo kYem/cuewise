@@ -23,7 +23,10 @@ export class ApiClient {
 
   constructor(opts: ApiClientOptions) {
     this.opts = opts;
-    this.fetchFn = opts.fetchFn ?? fetch;
+    // Bind to the global scope: calling the bare `fetch` reference as `this.fetchFn(...)` sets its
+    // receiver to this ApiClient, which a WorkerGlobalScope (the extension service worker) rejects
+    // with "Illegal invocation". A caller-supplied fetchFn is used as-is.
+    this.fetchFn = opts.fetchFn ?? fetch.bind(globalThis);
     this.sleep = opts.sleep ?? defaultSleep;
   }
 
