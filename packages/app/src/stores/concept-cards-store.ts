@@ -41,8 +41,9 @@ interface ConceptCardsStore {
   initialize: () => Promise<void>;
   addCard: (term: string, definition: string, extras?: ConceptCardExtras) => Promise<boolean>;
   // Bulk-add (e.g. a starter template pack). Skips blanks and terms already in
-  // the deck (case-insensitive), persists once, and resolves to the count added.
-  addCards: (inputs: ConceptCardInput[]) => Promise<number>;
+  // the deck (case-insensitive), persists once, and resolves to the count added
+  // — 0 means nothing new; null means the save failed (already reported here).
+  addCards: (inputs: ConceptCardInput[]) => Promise<number | null>;
   updateCard: (id: string, updates: ConceptCardUpdates) => Promise<boolean>;
   deleteCard: (id: string) => Promise<boolean>;
   reviewCard: (id: string, grade: ConceptGrade) => Promise<boolean>;
@@ -139,7 +140,6 @@ export const useConceptCardsStore = create<ConceptCardsStore>((set, get) => ({
     // Case-insensitive dedup against the deck and within the incoming batch.
     const seen = new Set(existing.map((card) => card.term.trim().toLowerCase()));
     const now = new Date();
-    const schedule = newConceptSchedule(now);
     const createdAt = now.toISOString();
 
     const newCards: ConceptCard[] = [];
@@ -162,7 +162,9 @@ export const useConceptCardsStore = create<ConceptCardsStore>((set, get) => ({
         tags: input.extras?.tags,
         source: input.extras?.source?.trim() || undefined,
         createdAt,
-        schedule,
+        // Fresh per card (like addCard) — a shared reference would advance every
+        // sibling's review schedule at once if anything ever mutated in place.
+        schedule: newConceptSchedule(now),
       });
     }
 
@@ -175,7 +177,7 @@ export const useConceptCardsStore = create<ConceptCardsStore>((set, get) => ({
       const result = await saveConceptCards(updatedCards);
       if (result?.success === false) {
         reportError(set, SAVE_ERROR_MESSAGE);
-        return 0;
+        return null;
       }
 
       set({ cards: updatedCards, error: null });
@@ -183,7 +185,7 @@ export const useConceptCardsStore = create<ConceptCardsStore>((set, get) => ({
     } catch (error) {
       logger.error('Error adding concept cards', error);
       reportError(set, SAVE_ERROR_MESSAGE);
-      return 0;
+      return null;
     }
   },
 

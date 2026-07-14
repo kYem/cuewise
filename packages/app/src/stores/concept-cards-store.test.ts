@@ -92,7 +92,23 @@ describe('Concept Cards Store', () => {
       expect(cards).toHaveLength(2);
       expect(cards[0].tags).toEqual(['system-design']);
       expect(cards[0].schedule.repetitions).toBe(0);
+      // Distinct ids: delete/update/review all key on id — a shared one would
+      // make deleting one imported card silently delete the whole pack.
+      expect(new Set(cards.map((card) => card.id)).size).toBe(cards.length);
       expect(storage.setConceptCards).toHaveBeenCalledOnce();
+    });
+
+    it('reviewing one imported card leaves its batch siblings unscheduled', async () => {
+      await useConceptCardsStore.getState().addCards([
+        { term: 'Load balancer', definition: 'Spreads load.' },
+        { term: 'Caching', definition: 'Stores results.' },
+      ]);
+      const [first, second] = useConceptCardsStore.getState().cards;
+
+      await useConceptCardsStore.getState().reviewCard(first.id, 'good');
+
+      const sibling = useConceptCardsStore.getState().cards.find((c) => c.id === second.id);
+      expect(sibling?.schedule.repetitions).toBe(0);
     });
 
     it('skips blanks and terms already in the deck (case-insensitive)', async () => {
@@ -128,14 +144,14 @@ describe('Concept Cards Store', () => {
       expect(storage.setConceptCards).not.toHaveBeenCalled();
     });
 
-    it('returns 0 and reports on a failed persist', async () => {
+    it('returns null and reports on a failed persist — distinct from nothing-to-add', async () => {
       vi.mocked(storage.setConceptCards).mockResolvedValue(storageFailure('write failed'));
 
       const added = await useConceptCardsStore
         .getState()
         .addCards([{ term: 'Sharding', definition: 'Splits data.' }]);
 
-      expect(added).toBe(0);
+      expect(added).toBeNull();
       expect(useConceptCardsStore.getState().cards).toHaveLength(0);
       expect(toastError).toHaveBeenCalled();
     });

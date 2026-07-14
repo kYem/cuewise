@@ -55,6 +55,10 @@ export const ConceptTemplateGrid: React.FC<ConceptTemplateGridProps> = ({ onAdde
       }))
     );
 
+    if (added === null) {
+      // The save failed and the store already toasted — don't contradict it.
+      return;
+    }
     if (added === 0) {
       useToastStore.getState().warning(`All of “${template.name}” is already in your deck.`);
       return;
