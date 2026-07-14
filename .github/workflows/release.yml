@@ -86,13 +86,20 @@ jobs:
           # set, the build provisions the Google Calendar integration; empty ->
           # the companion stays hidden. Set as a repo variable, not a secret.
           VITE_GOOGLE_OAUTH_CLIENT_ID: ${{ vars.VITE_GOOGLE_OAUTH_CLIENT_ID }}
+          # Cloud sync (ENG-43): public repo variables, not secrets. Setting the base URL
+          # enables the Cloud Sync UI + points at the backend; the sync client id powers the
+          # Sign in with Google flow. Both empty -> cloud sync stays hidden in the release.
+          VITE_SYNC_API_BASE_URL: ${{ vars.VITE_SYNC_API_BASE_URL }}
+          VITE_GOOGLE_SYNC_CLIENT_ID: ${{ vars.VITE_GOOGLE_SYNC_CLIENT_ID }}
 
       - name: Build extension zip
         run: pnpm release:extension
         env:
-          # release:extension rebuilds the extension (build:store), so the id
-          # must be present here too — this is the build that gets zipped.
+          # release:extension rebuilds the extension (build:store), so these must
+          # be present here too — this is the build that gets zipped.
           VITE_GOOGLE_OAUTH_CLIENT_ID: ${{ vars.VITE_GOOGLE_OAUTH_CLIENT_ID }}
+          VITE_SYNC_API_BASE_URL: ${{ vars.VITE_SYNC_API_BASE_URL }}
+          VITE_GOOGLE_SYNC_CLIENT_ID: ${{ vars.VITE_GOOGLE_SYNC_CLIENT_ID }}
 
       - name: Get version from package.json
         id: version
