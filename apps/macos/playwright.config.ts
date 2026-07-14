@@ -10,7 +10,7 @@ import { defineConfig, devices } from '@playwright/test';
 // Reuses a running `pnpm dev` server if one is up, else starts vite itself.
 // CAUTION: reuse trusts whatever squats on the port — a stale dev server from
 // another checkout/worktree silently makes this suite test the wrong code. Set
-// E2E_PORT to sidestep a occupied 1420 (e.g. parallel sessions).
+// E2E_PORT to sidestep an occupied 1420 (e.g. parallel sessions).
 const port = Number(process.env.E2E_PORT ?? 1420);
 
 export default defineConfig({
