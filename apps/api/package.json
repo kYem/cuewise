@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
+    "deploy:prod": "wrangler deploy --var PUBLIC_BASE_URL:https://api.cuewise.app",
     "cf-typegen": "wrangler types",
     "type-check": "tsc --noEmit",
     "test": "vitest run",
