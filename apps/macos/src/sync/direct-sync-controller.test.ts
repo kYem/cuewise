@@ -378,3 +378,42 @@ describe('createDirectSyncController: enable() concurrency', () => {
     expect(withCode).toHaveLength(1);
   });
 });
+
+describe('createDirectSyncController: disable() / syncNow() error propagation', () => {
+  it('rejects disable() when engine.disableSync() rejects, rather than swallowing it', async () => {
+    const engine: SyncEngineControlSurface = {
+      enableSync: vi.fn().mockResolvedValue(undefined),
+      disableSync: vi.fn().mockRejectedValue(new Error('disable failed')),
+      regenerateRecoveryCode: vi.fn().mockResolvedValue('unused'),
+      syncNow: vi.fn().mockResolvedValue(undefined),
+      getStatus: vi.fn().mockReturnValue('active' as SyncStatus),
+    };
+    const { controller } = buildDirectSyncController<SyncEngineControlSurface>({
+      keyStore: new FakeKvStore(),
+      buildEngine: () => engine,
+    });
+
+    await expect(controller.disable()).rejects.toThrow('disable failed');
+  });
+
+  it('rejects syncNow() when engine.syncNow() rejects, and still reconciles status via finally', async () => {
+    const engine: SyncEngineControlSurface = {
+      enableSync: vi.fn().mockResolvedValue(undefined),
+      disableSync: vi.fn().mockResolvedValue(undefined),
+      regenerateRecoveryCode: vi.fn().mockResolvedValue('unused'),
+      syncNow: vi.fn().mockRejectedValue(new Error('sync failed')),
+      getStatus: vi.fn().mockReturnValue('error' as SyncStatus),
+    };
+    const { controller } = buildDirectSyncController<SyncEngineControlSurface>({
+      keyStore: new FakeKvStore(),
+      buildEngine: () => engine,
+    });
+    const seen: string[] = [];
+    controller.subscribe((status) => seen.push(status));
+
+    await expect(controller.syncNow()).rejects.toThrow('sync failed');
+
+    expect(seen[0]).toBe('syncing');
+    expect(seen[seen.length - 1]).toBe('error');
+  });
+});
