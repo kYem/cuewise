@@ -145,8 +145,17 @@ let pendingCount = 0;
 const STATS_FLUSH_EVERY_SAMPLES = 30;
 let postureStats: PostureDailyStat[] = [];
 let unflushedSamples = 0;
+// Gates recording on the stored history being in memory: counting onto (then
+// flushing) an unloaded array would overwrite the 90-day history.
+let statsLoaded = false;
+// A failed flush marks the array dirty so the next flush (next ~minute or stop)
+// retries, instead of the zeroed counter reading as "storage is current".
+let statsDirty = false;
 
 function recordSampleForStats(status: PostureStatus): void {
+  if (!statsLoaded) {
+    return;
+  }
   postureStats = addPostureSample(postureStats, getTodayDateString(), status);
   unflushedSamples += 1;
   if (unflushedSamples >= STATS_FLUSH_EVERY_SAMPLES) {
@@ -154,25 +163,40 @@ function recordSampleForStats(status: PostureStatus): void {
   }
 }
 
-// Resolves long before the sidecar's first frame (a spawn takes seconds), so
-// overwriting the in-memory array is safe; prunes past-retention days on load.
 async function loadPostureStats(): Promise<void> {
+  statsLoaded = false;
   try {
     postureStats = prunePostureStats(await getPostureStats(), getTodayDateString());
+    statsLoaded = true;
   } catch (error) {
+    // Rollups stay off for the session — recording after a failed read would
+    // end with a flush replacing the stored history with a near-empty array.
     logger.error('Failed to load posture stats', error);
   }
 }
 
-// Fire-and-forget: a failed write only costs up to a minute of rollup counts.
+// Every flush rewrites the whole array, so one failed write is healed by the
+// next successful one; only failures on the final write before quit lose counts.
 function flushPostureStats(): void {
-  if (unflushedSamples === 0) {
+  if (unflushedSamples === 0 && !statsDirty) {
     return;
   }
   unflushedSamples = 0;
-  setPostureStats(postureStats).catch((error) => {
-    logger.error('Failed to persist posture stats', error);
-  });
+  // Prune here too: the app lives in the tray for months, so launch-only
+  // pruning would let the array grow past retention until the next relaunch.
+  postureStats = prunePostureStats(postureStats, getTodayDateString());
+  setPostureStats(postureStats)
+    .then((result) => {
+      // The registered backends resolve {success: false} instead of rejecting.
+      statsDirty = result.success === false;
+      if (result.success === false) {
+        logger.error('Failed to persist posture stats', result.error);
+      }
+    })
+    .catch((error) => {
+      statsDirty = true;
+      logger.error('Failed to persist posture stats', error);
+    });
 }
 
 // Persist the opt-in preferences (macOS-local) so the toggles stick across launches.
@@ -366,6 +390,9 @@ export function startPosture(): void {
       // A frame that raced in before the rejection may have bumped the counters —
       // clear them, or the leftovers (e.g. poorStreak) taint the next session.
       resetDerivation();
+      // Frames that raced in were also counted — flush them like every other
+      // teardown path does, or they sit unpersisted until the next session.
+      flushPostureStats();
       logCommandFailure('Failed to start posture tracking', error);
       // If the user asked to stop mid-start, the failure is moot — don't surface a
       // start-error toast for a session they already turned off.

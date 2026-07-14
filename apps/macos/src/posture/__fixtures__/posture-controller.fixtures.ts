@@ -1,4 +1,4 @@
-import type { PostureDailyStat } from '@cuewise/shared';
+import type { PostureDailyStat, StorageResult } from '@cuewise/shared';
 import { vi } from 'vitest';
 
 // Mock plumbing for posture-controller tests: shared spies handed to the
@@ -15,9 +15,9 @@ export const toastErrorMock = vi.fn();
 export const toastWarningMock = vi.fn();
 // @cuewise/storage stand-ins for the posture daily rollups (ENG-38).
 export const getPostureStatsMock = vi.fn(async (): Promise<PostureDailyStat[]> => []);
-export const setPostureStatsMock = vi.fn(async (_stats: PostureDailyStat[]) => ({
-  success: true,
-}));
+export const setPostureStatsMock = vi.fn(
+  async (_stats: PostureDailyStat[]): Promise<StorageResult> => ({ success: true })
+);
 
 /** Mutable stand-ins for the pomodoro / focus-mode store snapshots (Smart Pause). */
 export const pomodoroStateMock = { status: 'idle', sessionType: 'work' };

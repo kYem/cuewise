@@ -1,11 +1,12 @@
-import { format, subDays } from 'date-fns';
+import { parseISO, subDays } from 'date-fns';
 import {
   POSTURE_SAMPLE_INTERVAL_SECONDS,
   type PostureDailyStat,
   type PostureStatus,
 } from './types';
+import { formatDateString } from './utils';
 
-/** Daily rollups older than this are pruned — mirrors the sync retention. */
+/** Daily rollups older than this are pruned (on load and on each flush). */
 export const POSTURE_STATS_RETENTION_DAYS = 90;
 
 export interface PostureSummary {
@@ -37,16 +38,12 @@ export function addPostureSample(
 
 /** Drop rollups older than the retention window (pure). */
 export function prunePostureStats(stats: PostureDailyStat[], today: string): PostureDailyStat[] {
-  const cutoff = format(
-    subDays(new Date(`${today}T00:00:00`), POSTURE_STATS_RETENTION_DAYS),
-    'yyyy-MM-dd'
-  );
+  const cutoff = formatDateString(subDays(parseISO(today), POSTURE_STATS_RETENTION_DAYS));
   return stats.filter((stat) => stat.date >= cutoff);
 }
 
-// Upright = not slouching (good + mild): mirrors the nudge threshold, which only
-// fires on 'poor' — so the score and the glow agree on what counts. Absent
-// (away from the screen) is excluded entirely.
+// Upright = good + mild over present time: the nudge only fires on 'poor', so the
+// score and the glow agree on what counts. Absent (away) is excluded entirely.
 function uprightPercent(stats: PostureDailyStat[]): number | null {
   let upright = 0;
   let present = 0;
@@ -63,7 +60,9 @@ function uprightPercent(stats: PostureDailyStat[]): number | null {
 /** Insights-card summary for a stats list; `today` is the local YYYY-MM-DD. */
 export function summarizePosture(stats: PostureDailyStat[], today: string): PostureSummary {
   const todayStats = stats.filter((stat) => stat.date === today);
-  const weekCutoff = format(subDays(new Date(`${today}T00:00:00`), 6), 'yyyy-MM-dd');
+  // The week figure pools raw counts (time-weighted): a full workday counts for
+  // more than a ten-minute session, unlike a plain mean of daily percentages.
+  const weekCutoff = formatDateString(subDays(parseISO(today), 6));
   const weekStats = stats.filter((stat) => stat.date >= weekCutoff && stat.date <= today);
 
   const presentToday = todayStats.reduce(

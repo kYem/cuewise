@@ -1,4 +1,4 @@
-import { logger } from '@cuewise/shared';
+import { logger, type PostureDailyStat } from '@cuewise/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   countInvokes,
@@ -1026,6 +1026,100 @@ describe('posture stats rollup', () => {
     stopPosture();
 
     expect(setPostureStatsMock).not.toHaveBeenCalled();
+  });
+
+  it('an unexpected sidecar stop flushes the rollup', async () => {
+    await startTracking();
+    emitPoorFrames(5);
+
+    emitStopped();
+
+    expect(setPostureStatsMock).toHaveBeenCalledOnce();
+    expect(setPostureStatsMock).toHaveBeenCalledWith([
+      expect.objectContaining({ counts: expect.objectContaining({ poor: 5 }) }),
+    ]);
+  });
+
+  it('a flush preserves loaded history and drops days past retention', async () => {
+    const counts = { good: 3, mild: 0, poor: 0, absent: 0 };
+    const yesterday = new Date(Date.now() - 24 * 60 * 60_000).toLocaleDateString('en-CA');
+    getPostureStatsMock.mockResolvedValueOnce([
+      { date: '2020-01-01', counts: { ...counts } },
+      { date: yesterday, counts: { ...counts } },
+    ]);
+    initPosture();
+    await flushChain();
+    await startTracking();
+    emitPoorFrames(5);
+
+    stopPosture();
+
+    expect(setPostureStatsMock).toHaveBeenCalledOnce();
+    expect(setPostureStatsMock).toHaveBeenCalledWith([
+      expect.objectContaining({ date: yesterday }),
+      expect.objectContaining({ counts: expect.objectContaining({ poor: 5 }) }),
+    ]);
+  });
+
+  it('samples crossing midnight land on their own days', async () => {
+    await startTracking();
+    const dayOne = new Date().toLocaleDateString('en-CA');
+    emitPoorFrames(5);
+    vi.setSystemTime(Date.now() + 24 * 60 * 60_000);
+    emitPoorFrames(3);
+
+    stopPosture();
+
+    expect(setPostureStatsMock).toHaveBeenCalledWith([
+      expect.objectContaining({ date: dayOne, counts: expect.objectContaining({ poor: 5 }) }),
+      expect.objectContaining({ counts: expect.objectContaining({ poor: 3 }) }),
+    ]);
+  });
+
+  it('a failed write is logged and retried by the next flush', async () => {
+    setPostureStatsMock.mockResolvedValueOnce({
+      success: false,
+      error: { type: 'unknown', message: 'quota' },
+    });
+    await startTracking();
+    emitPoorFrames(30);
+    await flushChain();
+    expect(logger.error).toHaveBeenCalledWith(
+      'Failed to persist posture stats',
+      expect.objectContaining({ message: 'quota' })
+    );
+
+    stopPosture();
+    await flushChain();
+
+    expect(setPostureStatsMock).toHaveBeenCalledTimes(2);
+    expect(setPostureStatsMock).toHaveBeenLastCalledWith([
+      expect.objectContaining({ counts: expect.objectContaining({ poor: 30 }) }),
+    ]);
+  });
+
+  it('samples arriving before the stored history loads are dropped, not counted', async () => {
+    let resolveLoad: (stats: PostureDailyStat[]) => void = () => {};
+    getPostureStatsMock.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveLoad = resolve;
+        })
+    );
+    initPosture();
+    await startTracking();
+    // Counting these onto a not-yet-loaded array would let a flush overwrite
+    // the stored history — the guard drops them instead.
+    emitPoorFrames(3);
+
+    resolveLoad([]);
+    await flushChain();
+    emitPoorFrames(2);
+    stopPosture();
+
+    expect(setPostureStatsMock).toHaveBeenCalledWith([
+      expect.objectContaining({ counts: expect.objectContaining({ poor: 2 }) }),
+    ]);
   });
 });
 

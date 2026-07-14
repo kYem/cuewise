@@ -53,7 +53,7 @@ describe('summarizePosture', () => {
     expect(summary.trackedHoursToday).toBe(0.1);
   });
 
-  it('averages the seven-day window and ignores older days', () => {
+  it('pools the seven-day window by time and ignores older days', () => {
     const stats = [
       stat('2026-07-14', { good: 100 }), // today: 100%
       stat('2026-07-08', { poor: 100 }), // 6 days ago: still in window

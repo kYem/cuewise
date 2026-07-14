@@ -63,7 +63,7 @@ function mergeImport<T extends { id: string }>(
 interface InsightsStore {
   insights: InsightsData | null;
   analytics: AdvancedAnalytics | null;
-  // Null when nothing was ever tracked (e.g. the extension, which has no camera).
+  // Null when nothing was ever tracked (e.g. the extension, which has no posture tracking).
   postureSummary: PostureSummary | null;
   isLoading: boolean;
   error: string | null;

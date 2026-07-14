@@ -26,6 +26,9 @@ vi.mock('@cuewise/storage', () => ({
   setQuotes: vi.fn(),
   getPomodoroSessions: vi.fn(),
   setPomodoroSessions: vi.fn(),
+  // Defaults to empty so refresh-after-import paths don't error on posture reads.
+  getPostureStats: vi.fn(async () => []),
+  setPostureStats: vi.fn(),
 }));
 
 vi.mock('../utils/file-utils', () => ({
@@ -61,6 +64,7 @@ describe('Insights Store - Import Methods', () => {
       pomodoroSessions: [],
       insights: null,
       analytics: null,
+      postureSummary: null,
       isLoading: false,
       error: null,
     });
@@ -292,5 +296,43 @@ describe('Insights Store - Import Methods', () => {
       expect(useInsightsStore.getState().importValidation).toBeNull();
       expect(useInsightsStore.getState().isImporting).toBe(false);
     });
+  });
+});
+
+describe('Insights Store - posture summary wiring', () => {
+  beforeEach(() => {
+    useInsightsStore.setState({ postureSummary: null, insights: null, error: null });
+    vi.clearAllMocks();
+  });
+
+  it('initialize computes the summary when posture stats exist', async () => {
+    const today = shared.getTodayDateString();
+    mockStorageWithData({
+      postureStats: [{ date: today, counts: { good: 60, mild: 20, poor: 20, absent: 0 } }],
+    });
+
+    await useInsightsStore.getState().initialize();
+
+    expect(useInsightsStore.getState().postureSummary).toMatchObject({ todayPercent: 80 });
+  });
+
+  it('initialize leaves the summary null when nothing was tracked (extension)', async () => {
+    mockStorageWithData();
+
+    await useInsightsStore.getState().initialize();
+
+    expect(useInsightsStore.getState().postureSummary).toBeNull();
+    expect(useInsightsStore.getState().error).toBeNull();
+  });
+
+  it('refresh recomputes the summary from freshly loaded stats', async () => {
+    const today = shared.getTodayDateString();
+    mockStorageWithData({
+      postureStats: [{ date: today, counts: { good: 50, mild: 0, poor: 50, absent: 0 } }],
+    });
+
+    await useInsightsStore.getState().refresh();
+
+    expect(useInsightsStore.getState().postureSummary).toMatchObject({ todayPercent: 50 });
   });
 });
