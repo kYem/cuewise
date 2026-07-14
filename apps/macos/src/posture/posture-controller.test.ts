@@ -1,4 +1,4 @@
-import { logger } from '@cuewise/shared';
+import { logger, type PostureDailyStat } from '@cuewise/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   countInvokes,
@@ -8,6 +8,7 @@ import {
   emitSampleFrame,
   emitStopped,
   focusModeStateMock,
+  getPostureStatsMock,
   hhmmFromNow,
   invokeMock,
   NUDGES_PAUSED_KEY,
@@ -20,6 +21,7 @@ import {
   START_FAILED_ERROR,
   STOP_FAILED_ERROR,
   STOPPED_ERROR,
+  setPostureStatsMock,
   toastErrorMock,
   toastWarningMock,
   UNREADABLE_ERROR,
@@ -67,9 +69,18 @@ vi.mock('@cuewise/app', async () => {
   };
 });
 
-vi.mock('@cuewise/shared', () => ({
+vi.mock('@cuewise/shared', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@cuewise/shared')>()),
   logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
 }));
+
+vi.mock('@cuewise/storage', async () => {
+  const fixtures = await import('./__fixtures__/posture-controller.fixtures');
+  return {
+    getPostureStats: fixtures.getPostureStatsMock,
+    setPostureStats: fixtures.setPostureStatsMock,
+  };
+});
 
 let localStorageStub: ReturnType<typeof createLocalStorageStub>;
 // The clock jump gives each test fresh, distinct timestamps; pause windows are
@@ -970,6 +981,167 @@ describe('quiet hours', () => {
       dot: 'bg-tertiary',
       label: `Quiet hours until ${end}`,
     });
+  });
+});
+
+describe('posture stats rollup', () => {
+  beforeEach(async () => {
+    // Reload from the (empty) mocked store so the module-level rollups reset.
+    initPosture();
+    await flushChain();
+    getPostureStatsMock.mockClear();
+    setPostureStatsMock.mockClear();
+  });
+
+  it('flushes a rollup of accepted samples once the throttle fills', async () => {
+    await startTracking();
+    emitPoorFrames(29);
+    expect(setPostureStatsMock).not.toHaveBeenCalled();
+
+    emitSampleFrame(JSON.stringify({ status: 'good' }));
+
+    expect(setPostureStatsMock).toHaveBeenCalledOnce();
+    expect(setPostureStatsMock).toHaveBeenCalledWith([
+      expect.objectContaining({ counts: expect.objectContaining({ poor: 29, good: 1 }) }),
+    ]);
+
+    // The flush must reset the throttle: without it, every sample from here on
+    // would write storage — a write every 2s for the rest of a tray session.
+    emitPoorFrames(29);
+    expect(setPostureStatsMock).toHaveBeenCalledOnce();
+    emitPoorFrames(1);
+    expect(setPostureStatsMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('flushes the remainder when tracking stops', async () => {
+    await startTracking();
+    emitPoorFrames(5);
+    expect(setPostureStatsMock).not.toHaveBeenCalled();
+
+    stopPosture();
+
+    expect(setPostureStatsMock).toHaveBeenCalledOnce();
+    expect(setPostureStatsMock).toHaveBeenCalledWith([
+      expect.objectContaining({ counts: expect.objectContaining({ poor: 5 }) }),
+    ]);
+  });
+
+  it('unreadable frames never reach the rollup', async () => {
+    await startTracking();
+    emitSampleFrame('not json');
+
+    stopPosture();
+
+    expect(setPostureStatsMock).not.toHaveBeenCalled();
+  });
+
+  it('an unexpected sidecar stop flushes the rollup', async () => {
+    await startTracking();
+    emitPoorFrames(5);
+
+    emitStopped();
+
+    expect(setPostureStatsMock).toHaveBeenCalledOnce();
+    expect(setPostureStatsMock).toHaveBeenCalledWith([
+      expect.objectContaining({ counts: expect.objectContaining({ poor: 5 }) }),
+    ]);
+  });
+
+  it('a flush preserves loaded history and drops days past retention', async () => {
+    const counts = { good: 3, mild: 0, poor: 0, absent: 0 };
+    const yesterday = new Date(Date.now() - 24 * 60 * 60_000).toLocaleDateString('en-CA');
+    getPostureStatsMock.mockResolvedValueOnce([
+      { date: '2020-01-01', counts: { ...counts } },
+      { date: yesterday, counts: { ...counts } },
+    ]);
+    initPosture();
+    await flushChain();
+    await startTracking();
+    emitPoorFrames(5);
+
+    stopPosture();
+
+    expect(setPostureStatsMock).toHaveBeenCalledOnce();
+    expect(setPostureStatsMock).toHaveBeenCalledWith([
+      expect.objectContaining({ date: yesterday }),
+      expect.objectContaining({ counts: expect.objectContaining({ poor: 5 }) }),
+    ]);
+  });
+
+  it('samples crossing midnight land on their own days', async () => {
+    await startTracking();
+    const dayOne = new Date().toLocaleDateString('en-CA');
+    emitPoorFrames(5);
+    vi.setSystemTime(Date.now() + 24 * 60 * 60_000);
+    emitPoorFrames(3);
+
+    stopPosture();
+
+    expect(setPostureStatsMock).toHaveBeenCalledWith([
+      expect.objectContaining({ date: dayOne, counts: expect.objectContaining({ poor: 5 }) }),
+      expect.objectContaining({ counts: expect.objectContaining({ poor: 3 }) }),
+    ]);
+  });
+
+  it('a failed write is logged and retried by the next flush', async () => {
+    setPostureStatsMock.mockResolvedValueOnce({
+      success: false,
+      error: { type: 'unknown', message: 'quota' },
+    });
+    await startTracking();
+    emitPoorFrames(30);
+    await flushChain();
+    expect(logger.error).toHaveBeenCalledWith(
+      'Failed to persist posture stats',
+      expect.objectContaining({ message: 'quota' })
+    );
+
+    stopPosture();
+    await flushChain();
+
+    expect(setPostureStatsMock).toHaveBeenCalledTimes(2);
+    expect(setPostureStatsMock).toHaveBeenLastCalledWith([
+      expect.objectContaining({ counts: expect.objectContaining({ poor: 30 }) }),
+    ]);
+  });
+
+  it('samples arriving before the stored history loads are dropped, not counted', async () => {
+    let resolveLoad: (stats: PostureDailyStat[]) => void = () => {};
+    getPostureStatsMock.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveLoad = resolve;
+        })
+    );
+    initPosture();
+    await startTracking();
+    // A full throttle window while the load is pending: without the gate this
+    // fires a flush that overwrites the stored history with today-only counts.
+    emitPoorFrames(30);
+    expect(setPostureStatsMock).not.toHaveBeenCalled();
+
+    resolveLoad([]);
+    await flushChain();
+    emitPoorFrames(2);
+    stopPosture();
+
+    expect(setPostureStatsMock).toHaveBeenCalledOnce();
+    expect(setPostureStatsMock).toHaveBeenCalledWith([
+      expect.objectContaining({ counts: expect.objectContaining({ poor: 2 }) }),
+    ]);
+  });
+
+  it('a failed history read disables rollups so no flush can wipe storage', async () => {
+    getPostureStatsMock.mockRejectedValueOnce(new Error('read failed'));
+    initPosture();
+    await flushChain();
+    expect(logger.error).toHaveBeenCalledWith('Failed to load posture stats', expect.any(Error));
+
+    await startTracking();
+    emitPoorFrames(30);
+    stopPosture();
+
+    expect(setPostureStatsMock).not.toHaveBeenCalled();
   });
 });
 

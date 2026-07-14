@@ -142,6 +142,17 @@ export interface PostureSample {
   headTiltDegrees?: number; // Head roll; chronic lean
 }
 
+// The sidecar's sample cadence — converts stat counts into tracked time. Keep
+// in sync with `sampleInterval` (posture-sidecar main.swift), the real source.
+export const POSTURE_SAMPLE_INTERVAL_SECONDS = 2;
+
+// One local calendar day of posture tracking, rolled up by status. Raw samples
+// are never persisted — they arrive every 2s, up to ~43k/day.
+export interface PostureDailyStat {
+  date: string; // YYYY-MM-DD (local)
+  counts: Record<PostureStatus, number>;
+}
+
 // Customization types
 export type ColorTheme = 'purple' | 'forest' | 'rose' | 'glass';
 export type LayoutDensity = 'compact' | 'comfortable' | 'spacious';
@@ -401,6 +412,7 @@ export const STORAGE_KEYS = {
   QUICK_LINKS: 'quickLinks', // Pinned shortcut tiles on the new tab
   CONCEPT_CARDS: 'conceptCards', // Spaced-repetition concept/definition cards
   CALENDAR: 'calendar', // Google Calendar connection + cached events
+  POSTURE_STATS: 'postureStats', // Daily posture rollups (macOS tracking)
 } as const;
 
 // Daily background image data (persisted to change only once per day)
