@@ -111,8 +111,9 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   const [isDisabling, setIsDisabling] = useState(false);
   const [recoveryCode, setRecoveryCode] = useState<string | null>(null);
   const [enrollOpen, setEnrollOpen] = useState(false);
-  // Which flow opened EnrollCodeModal — reconnect reuses persisted creds, enable uses form inputs.
-  const [enrollSource, setEnrollSource] = useState<'enable' | 'reconnect'>('enable');
+  // Which flow opened EnrollCodeModal — reconnect reuses persisted creds; enable/google re-run
+  // that same sign-in with the entered code (google re-auths for a fresh id token).
+  const [enrollSource, setEnrollSource] = useState<'enable' | 'google' | 'reconnect'>('enable');
   const [confirmDisableOpen, setConfirmDisableOpen] = useState(false);
   const [unsavedCode, setUnsavedCode] = useState(false);
   // The error state's "Try again" retries the exact action that failed (enable / google /
@@ -145,15 +146,15 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       return;
     }
     if (result.reason === 'needs-code') {
-      // Google device-#2 enrollment isn't wired yet (follow-up); route its code entry through the
-      // enable path — a brand-new Google sign-in (device #1) never needs a code.
-      setEnrollSource(source === 'reconnect' ? 'reconnect' : 'enable');
+      // Device #2 of an existing account: EnrollCodeModal collects the recovery code and re-runs
+      // this same sign-in method with it. A brand-new account (device #1) never needs a code.
+      setEnrollSource(source);
       setEnrollOpen(true);
       return;
     }
     setFailedAction(source);
-    // Format the cause into the message: a plain object logs as "[object Object]" in Chrome's
-    // extension Errors panel and log aggregators, even though the console expands it.
+    // Log the cause as a string, not an object arg: string-coercing surfaces (Chrome's extension
+    // Errors panel, log aggregators) render an object as "[object Object]".
     logger.error(
       `Cloud sync ${source} failed — reason=${result.reason}, detail=${result.detail ?? 'none'}`
     );
@@ -210,10 +211,13 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   const handleEnrollSubmit = async (code: string): Promise<EnableResult> => {
     let result: EnableResult;
     try {
-      result =
-        enrollSource === 'reconnect'
-          ? await controller.reconnect(code)
-          : await controller.enable(accountId, deviceName, code);
+      if (enrollSource === 'reconnect') {
+        result = await controller.reconnect(code);
+      } else if (enrollSource === 'google') {
+        result = await controller.enableWithGoogle(deviceName, code);
+      } else {
+        result = await controller.enable(accountId, deviceName, code);
+      }
     } catch (error) {
       logger.error('Enroll submit failed', error);
       return { ok: false, reason: 'error' };

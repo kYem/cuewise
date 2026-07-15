@@ -139,6 +139,8 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
         return { ok: false, reason: 'auth' };
       }
       const detail = err instanceof Error ? err.message : String(err);
+      // Surface the real cause in the message text (parity with the extension's handler).
+      logger.error(`Cloud sync enable failed: ${detail}`, err);
       return { ok: false, reason: 'error', detail };
     }
     if (engine.getStatus() === 'signed_out') {

@@ -18,7 +18,8 @@ configureChromePlatform();
 // ENG-45 option B: the page realm has no SyncEngine of its own (MV3 page and service
 // worker are separate JS module states), so store mutations here (hideQuote, addTask,
 // etc.) relay to the background over chrome.runtime messaging instead — background.ts
-// is the single sync owner and marks them dirty. Same enable gate as background.ts.
+// is the single sync owner and marks them dirty. Same base-URL dev flag as background.ts, but
+// the page realm additionally requires the extension APIs to be present (see hasExtensionApis).
 const syncApiBaseUrl = import.meta.env.VITE_SYNC_API_BASE_URL;
 // The bridge relays mutations + control ops to the service worker over chrome.runtime and
 // hydrates status from chrome.storage. Outside an extension page (e.g. the localhost dev

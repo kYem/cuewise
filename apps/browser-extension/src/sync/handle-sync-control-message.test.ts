@@ -165,6 +165,16 @@ describe('handleSyncControlMessage: enable', () => {
     expect(result).toEqual({ ok: false, reason: 'error' });
   });
 
+  it('returns an error result without calling the engine when credential is an empty string', async () => {
+    const engine = fakeEngine();
+    const deps = fakeDeps();
+
+    const result = await handleSyncControlMessage(engine, enableMessage({ credential: '' }), deps);
+
+    expect(engine.enableSync).not.toHaveBeenCalled();
+    expect(result).toEqual({ ok: false, reason: 'error' });
+  });
+
   it('calls engine.enableSync with provider "google" and the id-token credential', async () => {
     const engine = fakeEngine();
     const deps = fakeDeps();

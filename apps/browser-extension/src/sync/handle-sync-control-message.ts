@@ -54,11 +54,16 @@ async function runOp(
   deps: SyncControlDeps
 ): Promise<SyncControlResponse> {
   if (msg.op === 'enable') {
+    // Runtime guard (the wire is untyped): reject an unknown provider or an empty credential/
+    // device name, not just `undefined`. Log so a caller regression isn't a bare, detail-less error.
     if (
-      msg.provider === undefined ||
-      msg.credential === undefined ||
-      msg.deviceName === undefined
+      (msg.provider !== 'dev' && msg.provider !== 'google') ||
+      !msg.credential ||
+      !msg.deviceName
     ) {
+      logger.error(
+        `Cloud sync enable rejected: malformed control message (provider=${msg.provider})`
+      );
       return { ok: false, reason: 'error' };
     }
     return doEnable(engine, msg.provider, msg.credential, msg.deviceName, msg.recoveryCode, deps);
@@ -66,7 +71,8 @@ async function runOp(
   // Reconnect stays dev-only (Google reconnect is a follow-up); the bridge already resolves
   // persisted creds into accountId/deviceName — no code = silent re-auth, a code enrolls.
   if (msg.op === 'reconnect') {
-    if (msg.accountId === undefined || msg.deviceName === undefined) {
+    if (!msg.accountId || !msg.deviceName) {
+      logger.error('Cloud sync reconnect rejected: malformed control message');
       return { ok: false, reason: 'error' };
     }
     return doEnable(engine, 'dev', msg.accountId, msg.deviceName, msg.recoveryCode, deps);

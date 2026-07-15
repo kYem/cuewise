@@ -88,12 +88,21 @@ export class BridgeSyncController implements SyncController {
   // NEVER logs/persists the id token — it rides straight into the relayed message.
   // Reconnect-for-Google (persisting these creds) is a documented follow-up.
   async enableWithGoogle(deviceName: string, recoveryCode?: string): Promise<EnableResult> {
-    if (this.googleClientId === undefined) {
+    // Empty string is the "unset" value of the Vite env var (matches manifest.config.ts), so a
+    // truthy check — not `=== undefined` — is what actually gates an unconfigured build.
+    if (!this.googleClientId) {
       logger.error('enableWithGoogle called without a configured googleClientId');
       return { ok: false, reason: 'error', detail: 'Google sign-in is not configured' };
     }
 
-    const granted = await chrome.permissions.request({ permissions: ['identity'] });
+    let granted: boolean;
+    try {
+      granted = await chrome.permissions.request({ permissions: ['identity'] });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      logger.warn(`Failed to request the identity permission for Google sign-in: ${detail}`);
+      return { ok: false, reason: 'auth' };
+    }
     if (!granted) {
       return { ok: false, reason: 'auth' };
     }
@@ -105,16 +114,21 @@ export class BridgeSyncController implements SyncController {
     let redirect: string | undefined;
     try {
       redirect = await chrome.identity.launchWebAuthFlow({ url: authUrl, interactive: true });
-    } catch {
-      logger.warn('Google sign-in auth flow was cancelled or failed');
+    } catch (error) {
+      // Cancel, network failure, redirect-URI mismatch, and a bad client id all land here — log the
+      // real error (no token exists yet) so a misconfig isn't indistinguishable from a user cancel.
+      const detail = error instanceof Error ? error.message : String(error);
+      logger.warn(`Google sign-in auth flow was cancelled or failed: ${detail}`);
       return { ok: false, reason: 'auth' };
     }
     if (redirect === undefined) {
+      logger.warn('Google sign-in returned no redirect URL');
       return { ok: false, reason: 'auth' };
     }
 
     const idToken = new URLSearchParams(new URL(redirect).hash.slice(1)).get('id_token');
     if (idToken === null) {
+      logger.warn('Google sign-in redirect carried no id_token');
       return { ok: false, reason: 'auth' };
     }
 

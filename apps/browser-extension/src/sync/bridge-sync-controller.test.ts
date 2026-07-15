@@ -295,6 +295,31 @@ describe('BridgeSyncController: enableWithGoogle', () => {
     expect(runtime.sendMessage).not.toHaveBeenCalled();
   });
 
+  it('treats an empty-string googleClientId as unset (the Vite/CI unset value)', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const controller = new BridgeSyncController({ googleClientId: '' });
+
+    const result = await controller.enableWithGoogle('Device A');
+
+    expect(result).toEqual({
+      ok: false,
+      reason: 'error',
+      detail: 'Google sign-in is not configured',
+    });
+    expect(permissions.request).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
+  it('returns an auth error when requesting the identity permission throws', async () => {
+    permissions.request.mockRejectedValueOnce(new Error('user gesture required'));
+    const controller = new BridgeSyncController({ googleClientId: 'client-id' });
+
+    const result = await controller.enableWithGoogle('Device A');
+
+    expect(result).toEqual({ ok: false, reason: 'auth' });
+    expect(identity.launchWebAuthFlow).not.toHaveBeenCalled();
+  });
+
   it('returns an auth error when the user cancels the auth flow', async () => {
     const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
     identity.launchWebAuthFlow.mockRejectedValueOnce(new Error('user did not approve access'));

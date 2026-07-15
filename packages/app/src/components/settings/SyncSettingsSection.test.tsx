@@ -348,6 +348,30 @@ describe('SyncSettingsSectionComponent', () => {
     expect(controller.calls.some((call) => call.method === 'enable')).toBe(false);
   });
 
+  it('routes the google→needs-code enroll submit through enableWithGoogle(code), never enable', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptEnableWithGoogle({ ok: false, reason: 'needs-code' });
+    controller.scriptEnableWithGoogle({ ok: true });
+    renderSection(controller);
+
+    await user.click(cloudSyncSwitch());
+    const deviceName = (screen.getByLabelText('Device name') as HTMLInputElement).value;
+    await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
+    await screen.findByText('Enter recovery code');
+    await user.type(screen.getByLabelText(/recovery code/i), CODE);
+    await user.click(screen.getByRole('button', { name: 'Enroll' }));
+
+    await waitFor(() =>
+      expect(controller.calls).toContainEqual({
+        method: 'enableWithGoogle',
+        args: [deviceName, CODE],
+      })
+    );
+    expect(controller.calls.some((call) => call.method === 'enable')).toBe(false);
+    expect(controller.calls.some((call) => call.method === 'reconnect')).toBe(false);
+  });
+
   it('shows the confirm dialog with the recovery-code warning when the on-state switch is toggled off', async () => {
     const user = userEvent.setup();
     const controller = new FakeSyncController();
