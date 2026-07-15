@@ -1,5 +1,5 @@
 import { recurringReminderFactory, reminderFactory } from '@cuewise/test-utils/factories';
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { getRemindersMock, setRemindersMock } = vi.hoisted(() => ({
   getRemindersMock: vi.fn(),
@@ -44,12 +44,20 @@ let fireClick: ClickListener;
 
 beforeAll(async () => {
   global.chrome = chromeMock as unknown as typeof chrome;
+  // Force cloud sync off for this reminder-focused test regardless of a local .env that sets
+  // VITE_SYNC_API_BASE_URL — otherwise background.ts wires the sync engine (getStorage()) and
+  // throws, since @cuewise/storage is mocked here. CI has no such .env, so this only bit locally.
+  vi.stubEnv('VITE_SYNC_API_BASE_URL', '');
   // Registers the alarm/notification listeners against chromeMock.
   await import('./background');
   fireAlarm = chromeMock.alarms.onAlarm.addListener.mock.calls[0][0] as AlarmListener;
   fireButton = chromeMock.notifications.onButtonClicked.addListener.mock
     .calls[0][0] as ButtonListener;
   fireClick = chromeMock.notifications.onClicked.addListener.mock.calls[0][0] as ClickListener;
+});
+
+afterAll(() => {
+  vi.unstubAllEnvs();
 });
 
 beforeEach(async () => {
