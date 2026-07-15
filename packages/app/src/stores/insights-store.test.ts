@@ -220,6 +220,47 @@ describe('Insights Store - Import Methods', () => {
       );
     });
 
+    it('surfaces a resolved write failure instead of a phantom success', async () => {
+      mockStorageWithData();
+      // The real quota shape: adapters resolve {success: false}, never reject.
+      vi.mocked(storage.setGoals).mockResolvedValue({
+        success: false,
+        error: { type: 'quota_exceeded', message: 'goals quota exceeded' },
+      });
+      useInsightsStore.setState({
+        importValidation: createValidImportValidation({ goals: [goalFactory.build()] }),
+      });
+
+      const result = await useInsightsStore.getState().executeImport(DEFAULT_IMPORT_OPTIONS);
+
+      expect(result.success).toBe(false);
+      expect(result.imported.goals).toBe(0);
+      expect(toastSuccess).not.toHaveBeenCalled();
+      expect(useInsightsStore.getState().error).toBe(
+        'Storage space is full. Please clear some data and try again.'
+      );
+    });
+
+    it('reports partial progress when a later write resolves a failure', async () => {
+      mockStorageWithData();
+      vi.mocked(storage.setQuotes).mockResolvedValue({
+        success: false,
+        error: { type: 'unknown', message: 'write failed' },
+      });
+      useInsightsStore.setState({
+        importValidation: createValidImportValidation({
+          goals: [goalFactory.build()],
+          quotes: [quoteFactory.build()],
+        }),
+      });
+
+      const result = await useInsightsStore.getState().executeImport(DEFAULT_IMPORT_OPTIONS);
+
+      expect(result.success).toBe(false);
+      expect(result.imported.goals).toBe(1);
+      expect(result.imported.quotes).toBe(0);
+    });
+
     it('should report partial progress when failure occurs mid-import', async () => {
       vi.mocked(storage.getGoals).mockResolvedValue([]);
       vi.mocked(storage.setGoals).mockResolvedValue({ success: true });

@@ -1,5 +1,6 @@
 import {
   addSubtaskToGoal,
+  assertPersisted,
   DEFAULT_SETTINGS,
   duplicateGoal as duplicateGoalUtil,
   type Goal,
@@ -88,10 +89,7 @@ function filterTodayTasks(goals: Goal[]): Goal[] {
 // saveAllGoals resolves {success: false} (e.g. quota) instead of rejecting —
 // normalize to a throw so every writer's catch covers both failure channels.
 async function persistGoals(updatedGoals: Goal[]): Promise<void> {
-  const result = await saveAllGoals(updatedGoals);
-  if (result?.success === false) {
-    throw new Error(result.error.message);
-  }
+  assertPersisted(await saveAllGoals(updatedGoals));
 }
 
 export const useGoalStore = create<GoalStore>((set, get) => ({
