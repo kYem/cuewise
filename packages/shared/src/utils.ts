@@ -521,14 +521,14 @@ export function getRecentIncompleteTasks(goals: Goal[], daysBack = 14): Goal[] {
   return goals.filter((g) => isTask(g) && !g.completed && g.date !== today && g.date >= cutoff);
 }
 
+/** rolledIds: the tasks whose date moved — never empty; always a subset of goals. */
 export interface RolledDueTasks {
   goals: Goal[];
   rolledIds: string[];
 }
 
-// Move stale incomplete tasks whose deadline arrived (dueDate ≤ today) into today;
-// null when nothing rolls, so callers can skip the write. Tasks scheduled ahead
-// (date > today, e.g. transferred to tomorrow) are a user decision — left alone.
+// Roll stale incomplete tasks whose deadline arrived (dueDate ≤ today) into today;
+// null when nothing rolls. Tasks scheduled ahead (date > today) are a user choice — left alone.
 export function rollDueTasksToToday(goals: Goal[], today: string): RolledDueTasks | null {
   const rolledIds: string[] = [];
   const updated = goals.map((goal) => {

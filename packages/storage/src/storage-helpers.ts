@@ -5,6 +5,7 @@
 import {
   type CalendarState,
   type ConceptCard,
+  DAY_IN_MS,
   type DailyBackground,
   DEFAULT_SETTINGS,
   type FocusImageCategory,
@@ -268,6 +269,12 @@ export async function getSettings(): Promise<Settings> {
   return settings ?? DEFAULT_SETTINGS;
 }
 
+// Raw settings blob: null when never stored OR unreadable (the port conflates
+// the two). For destructive automation that must fail closed — not for rendering.
+export async function getStoredSettings(): Promise<Settings | null> {
+  return await getFromStorage<Settings>(STORAGE_KEYS.SETTINGS, 'local');
+}
+
 export async function setSettings(settings: Settings): Promise<StorageResult> {
   return setInStorage(STORAGE_KEYS.SETTINGS, settings, 'local');
 }
@@ -389,7 +396,7 @@ export async function migrateStorageData(
 
 // YouTube Progress (timestamp memory)
 // Note: Progress is stored in local storage only (not synced)
-const PROGRESS_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days in milliseconds
+const PROGRESS_MAX_AGE_MS = 30 * DAY_IN_MS;
 
 /**
  * Get all YouTube playlist progress data

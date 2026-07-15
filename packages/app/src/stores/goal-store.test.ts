@@ -19,7 +19,7 @@ import { useGoalStore } from './goal-store';
 vi.mock('@cuewise/storage', () => ({
   getGoals: vi.fn(),
   setGoals: vi.fn(),
-  getSettings: vi.fn(),
+  getStoredSettings: vi.fn(),
 }));
 
 // Mock toast store with module-level fns so each level is inspectable across getState() calls.
@@ -911,7 +911,7 @@ describe('sync sink wiring', () => {
     markMutated.mockClear();
     markMutatedBulk.mockClear();
     markDeleted.mockClear();
-    vi.mocked(storage.getSettings).mockResolvedValue(DEFAULT_SETTINGS);
+    vi.mocked(storage.getStoredSettings).mockResolvedValue(DEFAULT_SETTINGS);
     vi.mocked(storage.setGoals).mockResolvedValue({ success: true });
     configurePlatform({ syncSink: fakeSink });
   });
@@ -953,7 +953,7 @@ describe('rollDueTasks', () => {
 
   beforeEach(() => {
     useGoalStore.setState({ goals: [], todayTasks: [], isLoading: false, error: null });
-    vi.mocked(storage.getSettings).mockResolvedValue(DEFAULT_SETTINGS);
+    vi.mocked(storage.getStoredSettings).mockResolvedValue(DEFAULT_SETTINGS);
     vi.mocked(storage.setGoals).mockClear();
   });
 
@@ -975,7 +975,7 @@ describe('rollDueTasks', () => {
   });
 
   it('does nothing when the persisted auto-roll setting is off', async () => {
-    vi.mocked(storage.getSettings).mockResolvedValue({
+    vi.mocked(storage.getStoredSettings).mockResolvedValue({
       ...DEFAULT_SETTINGS,
       autoRollDueTasks: false,
     });
@@ -1010,10 +1010,22 @@ describe('rollDueTasks', () => {
     expect(useGoalStore.getState().todayTasks).toEqual([]);
   });
 
+  it('fails closed when settings are unreadable or never stored', async () => {
+    vi.mocked(storage.getStoredSettings).mockResolvedValue(null);
+    const overdue = goalFactory.build({ date: '2025-01-01', dueDate: '2025-01-02' });
+    useGoalStore.setState({ goals: [overdue] });
+
+    const result = await useGoalStore.getState().rollDueTasks();
+
+    // A failed read must not re-enable automation the user may have turned off.
+    expect(result).toBe(false);
+    expect(storage.setGoals).not.toHaveBeenCalled();
+  });
+
   it('treats a legacy settings blob without the key as enabled (the default)', async () => {
     const legacy = { ...DEFAULT_SETTINGS };
     delete (legacy as Partial<typeof legacy>).autoRollDueTasks;
-    vi.mocked(storage.getSettings).mockResolvedValue(legacy);
+    vi.mocked(storage.getStoredSettings).mockResolvedValue(legacy);
     vi.mocked(storage.setGoals).mockResolvedValue({ success: true });
     const overdue = goalFactory.build({ date: '2025-01-01', dueDate: '2025-01-02' });
     useGoalStore.setState({ goals: [overdue] });
@@ -1027,7 +1039,7 @@ describe('rollDueTasks', () => {
 describe('initialize triggers the roll', () => {
   beforeEach(() => {
     useGoalStore.setState({ goals: [], todayTasks: [], isLoading: true, error: null });
-    vi.mocked(storage.getSettings).mockResolvedValue(DEFAULT_SETTINGS);
+    vi.mocked(storage.getStoredSettings).mockResolvedValue(DEFAULT_SETTINGS);
     vi.mocked(storage.setGoals).mockClear().mockResolvedValue({ success: true });
   });
 
@@ -1045,7 +1057,7 @@ describe('initialize triggers the roll', () => {
   });
 
   it('honors the persisted opt-out even though the settings store never hydrated', async () => {
-    vi.mocked(storage.getSettings).mockResolvedValue({
+    vi.mocked(storage.getStoredSettings).mockResolvedValue({
       ...DEFAULT_SETTINGS,
       autoRollDueTasks: false,
     });
@@ -1062,7 +1074,7 @@ describe('initialize triggers the roll', () => {
 describe('handleDayRollover', () => {
   beforeEach(() => {
     useGoalStore.setState({ goals: [], todayTasks: [], isLoading: false, error: null });
-    vi.mocked(storage.getSettings).mockResolvedValue(DEFAULT_SETTINGS);
+    vi.mocked(storage.getStoredSettings).mockResolvedValue(DEFAULT_SETTINGS);
     vi.mocked(storage.setGoals).mockClear();
   });
 
@@ -1082,7 +1094,7 @@ describe('handleDayRollover', () => {
   });
 
   it('still refreshes today tasks when auto-roll is disabled', async () => {
-    vi.mocked(storage.getSettings).mockResolvedValue({
+    vi.mocked(storage.getStoredSettings).mockResolvedValue({
       ...DEFAULT_SETTINGS,
       autoRollDueTasks: false,
     });

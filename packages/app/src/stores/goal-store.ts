@@ -25,7 +25,7 @@ import {
 } from '@cuewise/shared';
 import {
   getGoals as loadAllGoals,
-  getSettings as loadSettings,
+  getStoredSettings as loadStoredSettings,
   setGoals as saveAllGoals,
 } from '@cuewise/storage';
 import { create } from 'zustand';
@@ -319,7 +319,13 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       // Gate on the persisted setting, not the settings store: goal hydration
       // races settings hydration (and #goals never hydrates it), so the store
       // can still hold the default when the roll fires on load.
-      const settings = await loadSettings();
+      const settings = await loadStoredSettings();
+      // Fail closed on null (unreadable OR never stored): a read failure must
+      // not re-enable automation the user turned off. Pre-onboarding users have
+      // no blob yet — and no overdue tasks either, so nothing is lost.
+      if (settings === null) {
+        return false;
+      }
       if ((settings.autoRollDueTasks ?? DEFAULT_SETTINGS.autoRollDueTasks) === false) {
         return false;
       }

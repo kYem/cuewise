@@ -26,6 +26,7 @@ export {
   getReminders,
   getSettings,
   getStorageUsage,
+  getStoredSettings,
   getYoutubeProgress,
   migrateStorageData,
   setCalendarState,

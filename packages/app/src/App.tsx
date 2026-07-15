@@ -44,9 +44,7 @@ function App({ extraSections, syncController }: AppProps = {}) {
   const hideContent = showBackgroundImage && !imageLoaded;
 
   // Goals are day-scoped: refresh Today and roll newly due tasks at midnight.
-  useDayChange(() => {
-    void useGoalStore.getState().handleDayRollover();
-  });
+  useDayChange(() => useGoalStore.getState().handleDayRollover());
 
   useEffect(() => {
     const handleHashChange = () => {
