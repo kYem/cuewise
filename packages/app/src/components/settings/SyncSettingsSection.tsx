@@ -2,6 +2,7 @@ import { logger } from '@cuewise/shared';
 import { AlertTriangle, CloudUpload, KeyRound, Loader2, RefreshCw } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useState } from 'react';
+import { useSettingsStore } from '../../stores/settings-store';
 import { useToastStore } from '../../stores/toast-store';
 import type { EnableResult, SyncUiStatus } from '../../sync/sync-controller';
 import { useSyncController } from '../../sync/sync-controller';
@@ -84,6 +85,20 @@ function pillClass(status: SyncUiStatus): string {
   return 'inline-flex w-fit items-center gap-1.5 rounded-full bg-surface-variant px-2.5 py-1 text-xs font-medium text-secondary';
 }
 
+// Cloud Sync and legacy Chrome sync must never both replicate the same data. Enabling Cloud Sync
+// takes over: turn Chrome sync off — migrating any chrome.storage.sync data back to local — so the
+// engine reads/writes local from its first sync. Returns false only if that migration failed, in
+// which case the caller must not enable Cloud Sync (both would run). A no-op when Chrome sync is
+// already off (the default, and always on local-only hosts like macOS).
+async function takeOverFromChromeSync(): Promise<boolean> {
+  const store = useSettingsStore.getState();
+  if (!store.settings.syncEnabled) {
+    return true;
+  }
+  await store.updateSettings({ syncEnabled: false });
+  return useSettingsStore.getState().settings.syncEnabled === false;
+}
+
 export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ filter }) => {
   const controller = useSyncController();
   const [status, setStatus] = useState<SyncUiStatus>(() => controller?.getStatus() ?? 'off');
@@ -148,6 +163,9 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   const handleEnable = async () => {
     setIsSubmitting(true);
     try {
+      if (!(await takeOverFromChromeSync())) {
+        return;
+      }
       const result = await controller.enable(accountId, deviceName);
       routeEnableResult(result, 'enable');
     } catch (error) {
@@ -161,6 +179,9 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   const handleGoogleSignIn = async () => {
     setIsGoogleSigningIn(true);
     try {
+      if (!(await takeOverFromChromeSync())) {
+        return;
+      }
       const result = await controller.enableWithGoogle(deviceName);
       routeEnableResult(result, 'google');
     } catch (error) {

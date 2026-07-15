@@ -16,6 +16,16 @@ vi.mock('../../stores/toast-store', () => ({
   },
 }));
 
+const settingsMock = vi.hoisted(() => ({ syncEnabled: false, updateSettings: vi.fn() }));
+vi.mock('../../stores/settings-store', () => ({
+  useSettingsStore: {
+    getState: () => ({
+      settings: { syncEnabled: settingsMock.syncEnabled },
+      updateSettings: settingsMock.updateSettings,
+    }),
+  },
+}));
+
 const CODE = 'CW1-MWWJH-3K3QQ-R4RNB-JW1PV-8TRQT-PC14A-R5G5V';
 const DISABLE_MESSAGE = 'Re-enabling on this device will need your recovery code.';
 
@@ -55,6 +65,14 @@ const enterEnableStep = async (user: ReturnType<typeof userEvent.setup>, account
 describe('SyncSettingsSectionComponent', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    settingsMock.syncEnabled = false;
+    settingsMock.updateSettings.mockImplementation(
+      async (partial: Partial<{ syncEnabled: boolean }>) => {
+        if (partial.syncEnabled !== undefined) {
+          settingsMock.syncEnabled = partial.syncEnabled;
+        }
+      }
+    );
   });
 
   it('renders nothing when there is no controller in context', () => {
@@ -138,6 +156,50 @@ describe('SyncSettingsSectionComponent', () => {
     await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
 
     await waitFor(() => expect(toastError).toHaveBeenCalledTimes(1));
+  });
+
+  it('turns Chrome sync off (migrating to local) before enabling Cloud Sync', async () => {
+    const user = userEvent.setup();
+    settingsMock.syncEnabled = true;
+    const controller = new FakeSyncController();
+    controller.scriptEnable({ ok: true });
+    renderSection(controller);
+
+    await enterEnableStep(user, 'acct');
+    await user.click(screen.getByRole('button', { name: 'Enable' }));
+
+    await waitFor(() =>
+      expect(settingsMock.updateSettings).toHaveBeenCalledWith({ syncEnabled: false })
+    );
+    expect(controller.calls.some((c) => c.method === 'enable')).toBe(true);
+  });
+
+  it('does not migrate when Chrome sync is already off', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptEnable({ ok: true });
+    renderSection(controller);
+
+    await enterEnableStep(user, 'acct');
+    await user.click(screen.getByRole('button', { name: 'Enable' }));
+
+    await waitFor(() => expect(controller.calls.some((c) => c.method === 'enable')).toBe(true));
+    expect(settingsMock.updateSettings).not.toHaveBeenCalled();
+  });
+
+  it('does not enable Cloud Sync when turning Chrome sync off fails', async () => {
+    const user = userEvent.setup();
+    settingsMock.syncEnabled = true;
+    // Migration fails: syncEnabled stays true (mirrors a quota failure inside updateSettings).
+    settingsMock.updateSettings.mockImplementation(async () => undefined);
+    const controller = new FakeSyncController();
+    renderSection(controller);
+
+    await enterEnableStep(user, 'acct');
+    await user.click(screen.getByRole('button', { name: 'Enable' }));
+
+    await waitFor(() => expect(settingsMock.updateSettings).toHaveBeenCalled());
+    expect(controller.calls.some((c) => c.method === 'enable')).toBe(false);
   });
 
   it('shows a spinner and disables the button while Google sign-in is pending', async () => {
