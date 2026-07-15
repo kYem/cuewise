@@ -85,18 +85,16 @@ function pillClass(status: SyncUiStatus): string {
   return 'inline-flex w-fit items-center gap-1.5 rounded-full bg-surface-variant px-2.5 py-1 text-xs font-medium text-secondary';
 }
 
-// Cloud Sync and legacy Chrome sync must never both replicate the same data. Enabling Cloud Sync
-// takes over: turn Chrome sync off — migrating any chrome.storage.sync data back to local — so the
-// engine reads/writes local from its first sync. Returns false only if that migration failed, in
-// which case the caller must not enable Cloud Sync (both would run). A no-op when Chrome sync is
-// already off (the default, and always on local-only hosts like macOS).
-async function takeOverFromChromeSync(): Promise<boolean> {
+// Cloud Sync and legacy Chrome sync must never both replicate the same data, so activating Cloud
+// Sync hands off from Chrome sync: turn it off, migrating any chrome.storage.sync data back to
+// local. Called only AFTER a sign-in succeeds, so a cancelled/failed attempt leaves Chrome sync
+// untouched; the engine keeps its metadata in local regardless, so this post-success migration is
+// consistent. A no-op when Chrome sync is already off (the default, and on local-only hosts).
+async function takeOverFromChromeSync(): Promise<void> {
   const store = useSettingsStore.getState();
-  if (!store.settings.syncEnabled) {
-    return true;
+  if (store.settings.syncEnabled) {
+    await store.updateSettings({ syncEnabled: false });
   }
-  await store.updateSettings({ syncEnabled: false });
-  return useSettingsStore.getState().settings.syncEnabled === false;
 }
 
 export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ filter }) => {
@@ -137,8 +135,13 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
 
   // Shared by the initial enable() and the reconnect() flows — both surface the same shape.
   // source records which flow needs a code, so the EnrollCodeModal submit routes back correctly.
-  const routeEnableResult = (result: EnableResult, source: 'enable' | 'google' | 'reconnect') => {
+  const routeEnableResult = async (
+    result: EnableResult,
+    source: 'enable' | 'google' | 'reconnect'
+  ) => {
     if (result.ok) {
+      // Cloud Sync is now active — hand off from legacy Chrome sync (see takeOverFromChromeSync).
+      await takeOverFromChromeSync();
       setEnabling(false);
       if (result.recoveryCode) {
         setRecoveryCode(result.recoveryCode);
@@ -164,11 +167,8 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   const handleEnable = async () => {
     setIsSubmitting(true);
     try {
-      if (!(await takeOverFromChromeSync())) {
-        return;
-      }
       const result = await controller.enable(accountId, deviceName);
-      routeEnableResult(result, 'enable');
+      await routeEnableResult(result, 'enable');
     } catch (error) {
       logger.error('Cloud sync enable failed', error);
       useToastStore.getState().error('Something went wrong enabling sync — please try again.');
@@ -180,11 +180,8 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   const handleGoogleSignIn = async () => {
     setIsGoogleSigningIn(true);
     try {
-      if (!(await takeOverFromChromeSync())) {
-        return;
-      }
       const result = await controller.enableWithGoogle(deviceName);
-      routeEnableResult(result, 'google');
+      await routeEnableResult(result, 'google');
     } catch (error) {
       logger.error('Google sign-in for cloud sync failed', error);
       useToastStore.getState().error('Something went wrong enabling sync — please try again.');
@@ -197,7 +194,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     setIsReconnecting(true);
     try {
       const result = await controller.reconnect();
-      routeEnableResult(result, 'reconnect');
+      await routeEnableResult(result, 'reconnect');
     } catch (error) {
       logger.error('Cloud sync reconnect failed', error);
       useToastStore.getState().error("Couldn't reconnect sync — please try again.");
@@ -223,6 +220,8 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       return { ok: false, reason: 'error' };
     }
     if (result.ok) {
+      // Enrolled successfully — hand off from Chrome sync (see takeOverFromChromeSync).
+      await takeOverFromChromeSync();
       setEnabling(false);
       if (result.recoveryCode) {
         setRecoveryCode(result.recoveryCode);

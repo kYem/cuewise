@@ -104,6 +104,7 @@ export class BridgeSyncController implements SyncController {
       return { ok: false, reason: 'auth' };
     }
     if (!granted) {
+      logger.warn('Google sign-in aborted: the identity permission was denied');
       return { ok: false, reason: 'auth' };
     }
 
@@ -152,6 +153,9 @@ export class BridgeSyncController implements SyncController {
       const stored = await chrome.storage.local.get(LAST_SYNC_CREDS_KEY);
       const creds = stored[LAST_SYNC_CREDS_KEY] as LastSyncCreds | undefined;
       if (creds === undefined) {
+        // No persisted creds: this session wasn't a dev enable (e.g. Google — persisting its creds
+        // for reconnect is a documented follow-up), so silent re-auth can't proceed here.
+        logger.warn('Cloud sync reconnect has no persisted credentials');
         return { ok: false, reason: 'error' };
       }
       // No code = silent re-auth via the persisted DK (E2); a code enrolls this device after reconnect.
