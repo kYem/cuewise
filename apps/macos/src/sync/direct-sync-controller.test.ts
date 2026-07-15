@@ -441,4 +441,13 @@ describe('createDirectSyncController: enableWithGoogle() stub', () => {
     });
     expect(engine.enableSync).not.toHaveBeenCalled();
   });
+
+  it('reports canEnableWithGoogle() as false so the UI hides the button', () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    const { controller } = buildRealController(device);
+
+    expect(controller.canEnableWithGoogle()).toBe(false);
+  });
 });

@@ -10,12 +10,12 @@ const DEFAULT_TIMEOUT_MS = 30000;
 const GOOGLE_AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_OAUTH_SCOPE = 'openid email';
 
-interface LastSyncCreds {
-  provider: SyncSignInProvider;
-  // Only the dev provider stores a reusable credential; Google re-auths via a fresh OAuth flow.
-  accountId?: string;
-  deviceName: string;
-}
+// Persisted per successful enable so reconnect can re-auth: dev keeps its reusable credential,
+// Google re-auths via a fresh OAuth flow. Written with this exact shape; reconnect() reads it
+// loosely because records written before `provider` existed lack that field (treated as dev).
+type LastSyncCreds =
+  | { provider: 'dev'; accountId: string; deviceName: string }
+  | { provider: 'google'; deviceName: string };
 
 export interface BridgeSyncControllerOptions {
   /** Fires on quarantine (never the recovery code/credential/token — those are secrets). */
@@ -128,7 +128,16 @@ export class BridgeSyncController implements SyncController {
       return { ok: false, reason: 'auth' };
     }
 
-    const idToken = new URLSearchParams(new URL(redirect).hash.slice(1)).get('id_token');
+    let idToken: string | null;
+    try {
+      idToken = new URLSearchParams(new URL(redirect).hash.slice(1)).get('id_token');
+    } catch (error) {
+      // Keep enableWithGoogle from ever throwing (reconnect() relays through it) — a malformed
+      // redirect URL is an auth failure, not a control-message failure.
+      const detail = error instanceof Error ? error.message : String(error);
+      logger.warn(`Google sign-in redirect URL could not be parsed: ${detail}`);
+      return { ok: false, reason: 'auth' };
+    }
     if (idToken === null) {
       logger.warn('Google sign-in redirect carried no id_token');
       return { ok: false, reason: 'auth' };
@@ -166,8 +175,11 @@ export class BridgeSyncController implements SyncController {
   async reconnect(recoveryCode?: string): Promise<EnableResult> {
     try {
       const stored = await chrome.storage.local.get(LAST_SYNC_CREDS_KEY);
-      const creds = stored[LAST_SYNC_CREDS_KEY] as LastSyncCreds | undefined;
-      if (creds === undefined) {
+      // Read loosely: storage is untyped, and records written before `provider` existed lack it.
+      const creds = stored[LAST_SYNC_CREDS_KEY] as
+        | { provider?: SyncSignInProvider; accountId?: string; deviceName?: string }
+        | undefined;
+      if (creds?.deviceName === undefined) {
         logger.warn('Cloud sync reconnect has no persisted credentials');
         return { ok: false, reason: 'error' };
       }
@@ -176,6 +188,7 @@ export class BridgeSyncController implements SyncController {
         // device, so no code is needed; a supplied code re-enrolls after reconnect.
         return await this.enableWithGoogle(creds.deviceName, recoveryCode);
       }
+      // provider 'dev' or absent (a pre-`provider` record): silent re-auth needs the stored id.
       if (creds.accountId === undefined) {
         logger.warn('Cloud sync reconnect: dev credentials are missing an account id');
         return { ok: false, reason: 'error' };

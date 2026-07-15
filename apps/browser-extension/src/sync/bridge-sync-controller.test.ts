@@ -292,6 +292,14 @@ describe('BridgeSyncController: enableWithGoogle', () => {
     errorSpy.mockRestore();
   });
 
+  it('canEnableWithGoogle reflects whether a googleClientId is configured', () => {
+    expect(new BridgeSyncController({ googleClientId: 'client-id' }).canEnableWithGoogle()).toBe(
+      true
+    );
+    expect(new BridgeSyncController({ googleClientId: '' }).canEnableWithGoogle()).toBe(false);
+    expect(new BridgeSyncController().canEnableWithGoogle()).toBe(false);
+  });
+
   it('returns an auth error without launching the flow when the identity permission is denied', async () => {
     permissions.request.mockResolvedValueOnce(false);
     const controller = new BridgeSyncController({ googleClientId: 'client-id' });
@@ -362,7 +370,9 @@ describe('BridgeSyncController: reconnect', () => {
     expect(runtime.sendMessage).not.toHaveBeenCalled();
   });
 
-  it('replays the persisted accountId/deviceName with no recovery code', async () => {
+  // Backward compat: a record written before `provider` existed (no provider field) still
+  // reconnects via the dev path.
+  it('replays a pre-provider dev record (no provider field) with no recovery code', async () => {
     storageMock.data[LAST_SYNC_CREDS_KEY] = { accountId: 'acc-1', deviceName: 'Device A' };
     const controller = new BridgeSyncController();
 
@@ -403,6 +413,27 @@ describe('BridgeSyncController: reconnect', () => {
       expect.objectContaining({ op: 'reconnect' })
     );
     expect(result).toEqual({ ok: true });
+  });
+
+  it('forwards a supplied recovery code through the Google re-auth on reconnect', async () => {
+    storageMock.data[LAST_SYNC_CREDS_KEY] = { provider: 'google', deviceName: 'Device A' };
+    const controller = new BridgeSyncController({ googleClientId: 'client-id' });
+
+    await controller.reconnect('CW1-CODE');
+
+    expect(runtime.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ op: 'enable', provider: 'google', recoveryCode: 'CW1-CODE' })
+    );
+  });
+
+  it('rejects a dev-provider reconnect whose persisted creds lack an account id', async () => {
+    storageMock.data[LAST_SYNC_CREDS_KEY] = { provider: 'dev', deviceName: 'Device A' };
+    const controller = new BridgeSyncController();
+
+    const result = await controller.reconnect();
+
+    expect(result).toEqual({ ok: false, reason: 'error' });
+    expect(runtime.sendMessage).not.toHaveBeenCalled();
   });
 });
 
