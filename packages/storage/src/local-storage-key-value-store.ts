@@ -9,6 +9,19 @@ import {
 
 const LOCALSTORAGE_QUOTA_BYTES = 5242880; // 5MB (dev fallback estimate)
 
+// localStorage signals a full store with a DOMException named QuotaExceededError
+// (legacy WebKit: code 22; old Firefox: NS_ERROR_DOM_QUOTA_REACHED).
+function isQuotaError(error: unknown): boolean {
+  if (error instanceof DOMException) {
+    return (
+      error.name === 'QuotaExceededError' ||
+      error.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
+      error.code === 22
+    );
+  }
+  return false;
+}
+
 /**
  * KeyValueStore for dev/web contexts without chrome.storage. There is a single
  * backend, so the area argument is ignored.
@@ -27,12 +40,25 @@ export class LocalStorageKeyValueStore implements KeyValueStore {
     }
   }
 
-  async set<T>(key: string, value: T, _area: StorageArea): Promise<StorageResult> {
+  async set<T>(key: string, value: T, area: StorageArea): Promise<StorageResult> {
     try {
       localStorage.setItem(key, JSON.stringify(value));
       return { success: true };
     } catch (error) {
       logger.error(`Error saving ${key} to storage`, error);
+      // Classify quota distinctly so callers can warn precisely ("storage is
+      // full") instead of offering a retry that can never succeed.
+      if (isQuotaError(error)) {
+        return {
+          success: false,
+          error: {
+            type: 'quota_exceeded',
+            message: `Storage is full — could not save ${key}. Clear some data to continue.`,
+            key,
+            area,
+          },
+        };
+      }
       return storageFailure(`Error saving ${key} to storage`);
     }
   }
