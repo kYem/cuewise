@@ -5,6 +5,7 @@
 import {
   type CalendarState,
   type ConceptCard,
+  DAY_IN_MS,
   type DailyBackground,
   DEFAULT_SETTINGS,
   type FocusImageCategory,
@@ -14,6 +15,7 @@ import {
   logger,
   type PlaylistProgress,
   type PomodoroSession,
+  type PostureDailyStat,
   type QuickLink,
   type Quote,
   type QuoteCollection,
@@ -213,6 +215,16 @@ export async function setConceptCards(cards: ConceptCard[]): Promise<StorageResu
   return setInStorage(STORAGE_KEYS.CONCEPT_CARDS, cards, area);
 }
 
+// Posture daily rollups (macOS tracking; always local — device-specific data)
+export async function getPostureStats(): Promise<PostureDailyStat[]> {
+  const stats = await getFromStorage<PostureDailyStat[]>(STORAGE_KEYS.POSTURE_STATS, 'local');
+  return stats ?? [];
+}
+
+export async function setPostureStats(stats: PostureDailyStat[]): Promise<StorageResult> {
+  return setInStorage(STORAGE_KEYS.POSTURE_STATS, stats, 'local');
+}
+
 // Google Calendar (connection + cached events; always local)
 export async function getCalendarState(): Promise<CalendarState | null> {
   return getFromStorage<CalendarState>(STORAGE_KEYS.CALENDAR, 'local');
@@ -255,6 +267,12 @@ export async function setCustomYoutubePlaylists(
 export async function getSettings(): Promise<Settings> {
   const settings = await getFromStorage<Settings>(STORAGE_KEYS.SETTINGS, 'local');
   return settings ?? DEFAULT_SETTINGS;
+}
+
+// Raw settings blob: null when never stored OR unreadable (the port conflates
+// the two). For destructive automation that must fail closed — not for rendering.
+export async function getStoredSettings(): Promise<Settings | null> {
+  return await getFromStorage<Settings>(STORAGE_KEYS.SETTINGS, 'local');
 }
 
 export async function setSettings(settings: Settings): Promise<StorageResult> {
@@ -378,7 +396,7 @@ export async function migrateStorageData(
 
 // YouTube Progress (timestamp memory)
 // Note: Progress is stored in local storage only (not synced)
-const PROGRESS_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days in milliseconds
+const PROGRESS_MAX_AGE_MS = 30 * DAY_IN_MS;
 
 /**
  * Get all YouTube playlist progress data

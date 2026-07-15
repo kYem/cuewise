@@ -1,4 +1,4 @@
-import type { ExportData, ImportOptions } from '@cuewise/shared';
+import type { ExportData, ImportOptions, PostureDailyStat } from '@cuewise/shared';
 import * as storage from '@cuewise/storage';
 import { goalFactory, pomodoroFactory, quoteFactory } from '@cuewise/test-utils/factories';
 import { vi } from 'vitest';
@@ -47,6 +47,7 @@ export function mockEmptyStorage() {
   vi.mocked(storage.getGoals).mockResolvedValue([]);
   vi.mocked(storage.getQuotes).mockResolvedValue([]);
   vi.mocked(storage.getPomodoroSessions).mockResolvedValue([]);
+  vi.mocked(storage.getPostureStats).mockResolvedValue([]);
 }
 
 export function mockStorageWithData(
@@ -54,6 +55,7 @@ export function mockStorageWithData(
     goals?: ReturnType<typeof goalFactory.build>[];
     quotes?: ReturnType<typeof quoteFactory.build>[];
     sessions?: ReturnType<typeof pomodoroFactory.build>[];
+    postureStats?: PostureDailyStat[];
   } = {}
 ) {
   vi.mocked(storage.getGoals).mockResolvedValue(options.goals ?? []);
@@ -62,6 +64,7 @@ export function mockStorageWithData(
   vi.mocked(storage.setQuotes).mockResolvedValue({ success: true });
   vi.mocked(storage.getPomodoroSessions).mockResolvedValue(options.sessions ?? []);
   vi.mocked(storage.setPomodoroSessions).mockResolvedValue({ success: true });
+  vi.mocked(storage.getPostureStats).mockResolvedValue(options.postureStats ?? []);
 }
 
 export function mockStorageError(operation: 'goals' | 'quotes' | 'sessions', error: Error) {

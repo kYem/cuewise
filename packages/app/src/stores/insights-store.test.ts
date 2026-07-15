@@ -1,4 +1,4 @@
-import type { Goal, Quote } from '@cuewise/shared';
+import type { Goal, PostureDailyStat, Quote } from '@cuewise/shared';
 import * as shared from '@cuewise/shared';
 import * as storage from '@cuewise/storage';
 import { goalFactory, pomodoroFactory, quoteFactory } from '@cuewise/test-utils/factories';
@@ -26,6 +26,9 @@ vi.mock('@cuewise/storage', () => ({
   setQuotes: vi.fn(),
   getPomodoroSessions: vi.fn(),
   setPomodoroSessions: vi.fn(),
+  // Defaults to empty so refresh-after-import paths don't error on posture reads.
+  getPostureStats: vi.fn(async () => []),
+  setPostureStats: vi.fn(),
 }));
 
 vi.mock('../utils/file-utils', () => ({
@@ -61,6 +64,7 @@ describe('Insights Store - Import Methods', () => {
       pomodoroSessions: [],
       insights: null,
       analytics: null,
+      postureSummary: null,
       isLoading: false,
       error: null,
     });
@@ -216,6 +220,47 @@ describe('Insights Store - Import Methods', () => {
       );
     });
 
+    it('surfaces a resolved write failure instead of a phantom success', async () => {
+      mockStorageWithData();
+      // The real quota shape: adapters resolve {success: false}, never reject.
+      vi.mocked(storage.setGoals).mockResolvedValue({
+        success: false,
+        error: { type: 'quota_exceeded', message: 'goals quota exceeded' },
+      });
+      useInsightsStore.setState({
+        importValidation: createValidImportValidation({ goals: [goalFactory.build()] }),
+      });
+
+      const result = await useInsightsStore.getState().executeImport(DEFAULT_IMPORT_OPTIONS);
+
+      expect(result.success).toBe(false);
+      expect(result.imported.goals).toBe(0);
+      expect(toastSuccess).not.toHaveBeenCalled();
+      expect(useInsightsStore.getState().error).toBe(
+        'Storage space is full. Please clear some data and try again.'
+      );
+    });
+
+    it('reports partial progress when a later write resolves a failure', async () => {
+      mockStorageWithData();
+      vi.mocked(storage.setQuotes).mockResolvedValue({
+        success: false,
+        error: { type: 'unknown', message: 'write failed' },
+      });
+      useInsightsStore.setState({
+        importValidation: createValidImportValidation({
+          goals: [goalFactory.build()],
+          quotes: [quoteFactory.build()],
+        }),
+      });
+
+      const result = await useInsightsStore.getState().executeImport(DEFAULT_IMPORT_OPTIONS);
+
+      expect(result.success).toBe(false);
+      expect(result.imported.goals).toBe(1);
+      expect(result.imported.quotes).toBe(0);
+    });
+
     it('should report partial progress when failure occurs mid-import', async () => {
       vi.mocked(storage.getGoals).mockResolvedValue([]);
       vi.mocked(storage.setGoals).mockResolvedValue({ success: true });
@@ -292,5 +337,53 @@ describe('Insights Store - Import Methods', () => {
       expect(useInsightsStore.getState().importValidation).toBeNull();
       expect(useInsightsStore.getState().isImporting).toBe(false);
     });
+  });
+});
+
+describe('Insights Store - posture summary wiring', () => {
+  beforeEach(() => {
+    useInsightsStore.setState({ postureSummary: null, insights: null, error: null });
+    vi.clearAllMocks();
+  });
+
+  it('initialize computes the summary when posture stats exist', async () => {
+    const today = shared.getTodayDateString();
+    mockStorageWithData({
+      postureStats: [{ date: today, counts: { good: 60, mild: 20, poor: 20, absent: 0 } }],
+    });
+
+    await useInsightsStore.getState().initialize();
+
+    expect(useInsightsStore.getState().postureSummary).toMatchObject({ todayPercent: 80 });
+  });
+
+  it('initialize leaves the summary null when nothing was tracked (extension)', async () => {
+    mockStorageWithData();
+
+    await useInsightsStore.getState().initialize();
+
+    expect(useInsightsStore.getState().postureSummary).toBeNull();
+    expect(useInsightsStore.getState().error).toBeNull();
+  });
+
+  it('heals a version-skewed blob on read instead of surfacing NaN', async () => {
+    const today = shared.getTodayDateString();
+    const skewed = [{ date: today, counts: { good: 5 } }] as unknown as PostureDailyStat[];
+    mockStorageWithData({ postureStats: skewed });
+
+    await useInsightsStore.getState().initialize();
+
+    expect(useInsightsStore.getState().postureSummary).toMatchObject({ todayPercent: 100 });
+  });
+
+  it('refresh recomputes the summary from freshly loaded stats', async () => {
+    const today = shared.getTodayDateString();
+    mockStorageWithData({
+      postureStats: [{ date: today, counts: { good: 50, mild: 0, poor: 50, absent: 0 } }],
+    });
+
+    await useInsightsStore.getState().refresh();
+
+    expect(useInsightsStore.getState().postureSummary).toMatchObject({ todayPercent: 50 });
   });
 });

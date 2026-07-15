@@ -29,9 +29,12 @@ jobs:
         with:
           egress-policy: block
           disable-sudo: true
+          # The last two endpoints are the actions/cache service (turbo cache).
           allowed-endpoints: >
             github.com:443
             registry.npmjs.org:443
+            results-receiver.actions.githubusercontent.com:443
+            *.blob.core.windows.net:443
 
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -50,6 +53,16 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      # Warm Turbo's local cache across runs: re-pushes to a PR and dependent
+      # packages whose inputs didn't change replay instead of re-verifying.
+      - name: Cache turbo
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: node_modules/.cache/turbo
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-
 
       - name: Run lint
         # Biome checks the whole tree in ~300ms — no point scoping it.
@@ -98,7 +111,11 @@ jobs:
           else
             echo "native=false" >> "$GITHUB_OUTPUT"
           fi
-          if grep -qE '^(apps/macos/|\.github/workflows/ci\.yml)' <<< "$CHANGED"; then
+          # packages/ is included because the macOS webview renders the shared
+          # packages (@cuewise/app etc.) — a packages-only diff used to skip the
+          # E2E that tests exactly that code. pnpm-lock.yaml covers dependency
+          # bumps that can break the webview the same way.
+          if grep -qE '^(apps/macos/|packages/|pnpm-lock\.yaml|\.github/workflows/ci\.yml)' <<< "$CHANGED"; then
             echo "macos_app=true" >> "$GITHUB_OUTPUT"
           else
             echo "macos_app=false" >> "$GITHUB_OUTPUT"

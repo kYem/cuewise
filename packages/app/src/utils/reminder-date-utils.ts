@@ -1,4 +1,4 @@
-import { formatClockTime } from '@cuewise/shared';
+import { DAY_IN_MS, formatClockTime } from '@cuewise/shared';
 import {
   differenceInMinutes,
   differenceInSeconds,
@@ -33,7 +33,7 @@ export function dayLabel(dueDate: string): string {
   if (date.toDateString() === tomorrow.toDateString()) {
     return 'TMRW';
   }
-  const days = Math.round((date.getTime() - Date.now()) / 86_400_000);
+  const days = Math.round((date.getTime() - Date.now()) / DAY_IN_MS);
   if (days >= 0 && days < 7) {
     return date.toLocaleDateString(undefined, { weekday: 'short' }).toUpperCase();
   }

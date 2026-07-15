@@ -112,6 +112,8 @@ function clearAcked(meta: SyncMeta, batch: DirtyRecord[]): void {
 /** Pulls remote changes in seq order, resolves each via the strategy, and applies the winners. */
 export async function pullOnce(deps: CycleDeps): Promise<void> {
   const meta = await deps.meta.load();
+  // Once per collection per pull — a page of unknown records is one line, not N.
+  const warnedUnknownCollections = new Set<string>();
 
   let pageSize = PULL_PAGE;
   while (pageSize === PULL_PAGE) {
@@ -129,7 +131,7 @@ export async function pullOnce(deps: CycleDeps): Promise<void> {
     pageSize = result.records.length;
 
     for (const rec of result.records) {
-      const applied = await applyPulledRecord(deps, meta, rec);
+      const applied = await applyPulledRecord(deps, meta, rec, warnedUnknownCollections);
       if (!applied) {
         // Apply-before-advance: the write failed, so stop here and leave the cursor before it.
         await deps.meta.save(meta);
@@ -145,7 +147,8 @@ export async function pullOnce(deps: CycleDeps): Promise<void> {
 async function applyPulledRecord(
   deps: CycleDeps,
   meta: SyncMeta,
-  rec: SyncRecord
+  rec: SyncRecord,
+  warnedUnknownCollections: Set<string>
 ): Promise<boolean> {
   const key = SyncMetadataStore.entityKey(rec.collection, rec.entityId);
 
@@ -177,7 +180,12 @@ async function applyPulledRecord(
 
   const binding = deps.bindings.find((b) => b.name === rec.collection);
   if (binding === undefined) {
-    logger.warn('Skipping pulled record for unknown collection', { collection: rec.collection });
+    if (!warnedUnknownCollections.has(rec.collection)) {
+      warnedUnknownCollections.add(rec.collection);
+      logger.warn('Skipping pulled records for unknown collection', {
+        collection: rec.collection,
+      });
+    }
     advanceCursor(meta, rec.seq);
     return true;
   }

@@ -1,5 +1,7 @@
 import {
   addSubtaskToGoal,
+  assertPersisted,
+  DEFAULT_SETTINGS,
   duplicateGoal as duplicateGoalUtil,
   type Goal,
   type GoalProgress,
@@ -16,11 +18,17 @@ import {
   logger,
   notifyDeleted,
   notifyMutated,
+  notifyMutatedBulk,
   removeSubtaskFromGoal,
   reorderGoals as reorderGoalsUtil,
+  rollDueTasksToToday,
   toggleSubtaskInGoal,
 } from '@cuewise/shared';
-import { getGoals as loadAllGoals, setGoals as saveAllGoals } from '@cuewise/storage';
+import {
+  getGoals as loadAllGoals,
+  getStoredSettings as loadStoredSettings,
+  setGoals as saveAllGoals,
+} from '@cuewise/storage';
 import { create } from 'zustand';
 import { useToastStore } from './toast-store';
 
@@ -42,6 +50,8 @@ interface GoalStore {
   clearCompleted: () => Promise<boolean>;
   transferTaskToNextDay: (goalId: string) => Promise<boolean>;
   moveTaskToToday: (goalId: string) => Promise<boolean>;
+  rollDueTasks: () => Promise<boolean>;
+  handleDayRollover: () => Promise<void>;
   setCompletionFilter: (filter: CompletionFilter) => void;
   getFilteredTasksByDate: () => Array<{ date: string; goals: Goal[] }>;
 
@@ -76,6 +86,12 @@ function filterTodayTasks(goals: Goal[]): Goal[] {
     .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
 }
 
+// saveAllGoals resolves {success: false} (e.g. quota) instead of rejecting —
+// normalize to a throw so every writer's catch covers both failure channels.
+async function persistGoals(updatedGoals: Goal[]): Promise<void> {
+  assertPersisted(await saveAllGoals(updatedGoals));
+}
+
 export const useGoalStore = create<GoalStore>((set, get) => ({
   goals: [],
   todayTasks: [],
@@ -96,6 +112,9 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       set({ error: errorMessage, isLoading: false });
       useToastStore.getState().error(errorMessage);
     }
+    // Outside the try: the roll handles its own failures, and a roll problem
+    // must never masquerade as the "Failed to load goals" toast.
+    await get().rollDueTasks();
   },
 
   addTask: async (text: string, parentId?: string) => {
@@ -117,7 +136,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       const { goals } = get();
       const updatedGoals = [...goals, newGoal];
 
-      await saveAllGoals(updatedGoals);
+      await persistGoals(updatedGoals);
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
       notifyMutated('goals', newGoal.id);
@@ -143,7 +162,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
         goal.id === goalId ? { ...goal, text: text.trim() } : goal
       );
 
-      await saveAllGoals(updatedGoals);
+      await persistGoals(updatedGoals);
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
       notifyMutated('goals', goalId);
@@ -165,16 +184,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
         goal.id === goalId ? { ...goal, completed: !goal.completed } : goal
       );
 
-      const result = await saveAllGoals(updatedGoals);
-      // Honor the persist result rather than optimistically marking the toggle
-      // saved: a failed write (e.g. quota) resolves {success:false} instead of
-      // throwing, and silently "succeeding" would revert on reload.
-      if (result?.success === false) {
-        const errorMessage = 'Failed to update goal. Please try again.';
-        set({ error: errorMessage });
-        useToastStore.getState().error(errorMessage);
-        return false;
-      }
+      await persistGoals(updatedGoals);
 
       const updatedTodayTasks = filterTodayTasks(updatedGoals);
       set({ goals: updatedGoals, todayTasks: updatedTodayTasks });
@@ -196,7 +206,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
 
       const updatedGoals = goals.filter((goal) => goal.id !== goalId);
 
-      await saveAllGoals(updatedGoals);
+      await persistGoals(updatedGoals);
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
       notifyDeleted('goals', goalId);
@@ -222,7 +232,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       const removedIdSet = new Set(removedIds);
       const updatedGoals = goals.filter((goal) => !removedIdSet.has(goal.id));
 
-      await saveAllGoals(updatedGoals);
+      await persistGoals(updatedGoals);
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
       for (const id of removedIds) {
@@ -254,7 +264,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
         return goal;
       });
 
-      await saveAllGoals(updatedGoals);
+      await persistGoals(updatedGoals);
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
       notifyMutated('goals', goalId);
@@ -286,7 +296,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
         return goal;
       });
 
-      await saveAllGoals(updatedGoals);
+      await persistGoals(updatedGoals);
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
       notifyMutated('goals', goalId);
@@ -300,6 +310,55 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       useToastStore.getState().error(errorMessage);
       return false;
     }
+  },
+
+  rollDueTasks: async () => {
+    try {
+      // Gate on the persisted setting, not the settings store: goal hydration
+      // races settings hydration (and #goals never hydrates it), so the store
+      // can still hold the default when the roll fires on load.
+      const settings = await loadStoredSettings();
+      // Fail closed on null (unreadable OR never stored): a read failure must
+      // not re-enable automation the user turned off. Pre-onboarding users have
+      // no blob yet — and no overdue tasks either, so nothing is lost.
+      if (settings === null) {
+        return false;
+      }
+      if ((settings.autoRollDueTasks ?? DEFAULT_SETTINGS.autoRollDueTasks) === false) {
+        return false;
+      }
+
+      const { goals } = get();
+      const rolled = rollDueTasksToToday(goals, getTodayDateString());
+      if (rolled === null) {
+        return false;
+      }
+
+      const result = await saveAllGoals(rolled.goals);
+      // No toast on failure: this is background automation the user didn't
+      // initiate, it retries on the next load/rollover, and the log suffices.
+      if (result?.success === false) {
+        logger.error('Failed to persist auto-rolled due tasks', {
+          result,
+          rolledIds: rolled.rolledIds,
+        });
+        return false;
+      }
+
+      set({ goals: rolled.goals, todayTasks: filterTodayTasks(rolled.goals) });
+      notifyMutatedBulk('goals', rolled.rolledIds);
+      return true;
+    } catch (error) {
+      logger.error('Error rolling due tasks into today', error);
+      return false;
+    }
+  },
+
+  handleDayRollover: async () => {
+    // todayTasks was computed against the previous day — refresh it for the new
+    // one regardless of the auto-roll setting, then pull in newly due tasks.
+    set({ todayTasks: filterTodayTasks(get().goals) });
+    await get().rollDueTasks();
   },
 
   setCompletionFilter: (filter: CompletionFilter) => {
@@ -341,7 +400,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       const copy = duplicateGoalUtil(goal);
       const updatedGoals = [...goals, copy];
 
-      await saveAllGoals(updatedGoals);
+      await persistGoals(updatedGoals);
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
       notifyMutated('goals', copy.id);
@@ -376,7 +435,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
         return goal;
       });
 
-      await saveAllGoals(updatedGoals);
+      await persistGoals(updatedGoals);
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
       notifyMutated('goals', goalId);
@@ -410,7 +469,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
         return goal;
       });
 
-      await saveAllGoals(updatedGoals);
+      await persistGoals(updatedGoals);
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
       notifyMutated('goals', goalId);
@@ -440,7 +499,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
         return goal;
       });
 
-      await saveAllGoals(updatedGoals);
+      await persistGoals(updatedGoals);
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
       notifyMutated('goals', goalId);
@@ -470,7 +529,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
         return goal;
       });
 
-      await saveAllGoals(updatedGoals);
+      await persistGoals(updatedGoals);
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
       notifyMutated('goals', goalId);
@@ -505,7 +564,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
         return goal;
       });
 
-      await saveAllGoals(updatedGoals);
+      await persistGoals(updatedGoals);
 
       set({ goals: updatedGoals, todayTasks: reorderedTodayTasks });
       for (const task of reorderedTodayTasks) {
@@ -544,7 +603,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       const { goals } = get();
       const updatedGoals = [...goals, newGoal];
 
-      await saveAllGoals(updatedGoals);
+      await persistGoals(updatedGoals);
       set({ goals: updatedGoals });
       notifyMutated('goals', newGoal.id);
 
@@ -579,7 +638,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
         return goal;
       });
 
-      await saveAllGoals(updatedGoals);
+      await persistGoals(updatedGoals);
       set({ goals: updatedGoals });
       notifyMutated('goals', goalId);
 
@@ -617,7 +676,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
           return goal;
         });
 
-      await saveAllGoals(updatedGoals);
+      await persistGoals(updatedGoals);
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
       notifyDeleted('goals', goalId);
@@ -652,7 +711,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
         return goal;
       });
 
-      await saveAllGoals(updatedGoals);
+      await persistGoals(updatedGoals);
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
       notifyMutated('goals', taskId);

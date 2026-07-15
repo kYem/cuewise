@@ -1,5 +1,6 @@
 import {
   type AdvancedAnalytics,
+  assertPersisted,
   calculateAdvancedAnalytics,
   calculateInsights,
   downloadFile,
@@ -18,12 +19,17 @@ import {
   type InsightsData,
   logger,
   type PomodoroSession,
+  type PostureSummary,
   parseImportData,
+  prunePostureStats,
   type Quote,
+  type StorageError,
+  summarizePosture,
 } from '@cuewise/shared';
 import {
   getGoals,
   getPomodoroSessions,
+  getPostureStats,
   getQuotes,
   setGoals,
   setPomodoroSessions,
@@ -60,6 +66,8 @@ function mergeImport<T extends { id: string }>(
 interface InsightsStore {
   insights: InsightsData | null;
   analytics: AdvancedAnalytics | null;
+  // Null when nothing was ever tracked (e.g. the extension, which has no posture tracking).
+  postureSummary: PostureSummary | null;
   isLoading: boolean;
   error: string | null;
 
@@ -88,6 +96,7 @@ interface InsightsStore {
 export const useInsightsStore = create<InsightsStore>((set, get) => ({
   insights: null,
   analytics: null,
+  postureSummary: null,
   isLoading: true,
   error: null,
   quotes: [],
@@ -101,17 +110,31 @@ export const useInsightsStore = create<InsightsStore>((set, get) => ({
       set({ isLoading: true, error: null });
 
       // Load all data needed for insights
-      const [quotes, goals, pomodoroSessions] = await Promise.all([
+      const [quotes, goals, pomodoroSessions, rawPostureStats] = await Promise.all([
         getQuotes(),
         getGoals(),
         getPomodoroSessions(),
+        getPostureStats(),
       ]);
+      // Read through the same shape guard the controller flushes through, so a
+      // skewed persisted blob can't reach the card as NaN or a thrown summary.
+      const postureStats = prunePostureStats(rawPostureStats, getTodayDateString());
 
       // Calculate insights and analytics
       const insights = calculateInsights(quotes, goals, pomodoroSessions);
       const analytics = calculateAdvancedAnalytics(goals, pomodoroSessions);
+      const postureSummary =
+        postureStats.length > 0 ? summarizePosture(postureStats, getTodayDateString()) : null;
 
-      set({ insights, analytics, quotes, goals, pomodoroSessions, isLoading: false });
+      set({
+        insights,
+        analytics,
+        postureSummary,
+        quotes,
+        goals,
+        pomodoroSessions,
+        isLoading: false,
+      });
     } catch (error) {
       logger.error('Error initializing insights store', error);
       const errorMessage = 'Failed to load insights. Please refresh the page.';
@@ -125,16 +148,22 @@ export const useInsightsStore = create<InsightsStore>((set, get) => ({
       set({ error: null });
 
       // Reload data and recalculate insights
-      const [quotes, goals, pomodoroSessions] = await Promise.all([
+      const [quotes, goals, pomodoroSessions, rawPostureStats] = await Promise.all([
         getQuotes(),
         getGoals(),
         getPomodoroSessions(),
+        getPostureStats(),
       ]);
+      // Read through the same shape guard the controller flushes through, so a
+      // skewed persisted blob can't reach the card as NaN or a thrown summary.
+      const postureStats = prunePostureStats(rawPostureStats, getTodayDateString());
 
       const insights = calculateInsights(quotes, goals, pomodoroSessions);
       const analytics = calculateAdvancedAnalytics(goals, pomodoroSessions);
+      const postureSummary =
+        postureStats.length > 0 ? summarizePosture(postureStats, getTodayDateString()) : null;
 
-      set({ insights, analytics, quotes, goals, pomodoroSessions });
+      set({ insights, analytics, postureSummary, quotes, goals, pomodoroSessions });
     } catch (error) {
       logger.error('Error refreshing insights', error);
       const errorMessage = 'Failed to refresh insights. Please try again.';
@@ -311,11 +340,11 @@ export const useInsightsStore = create<InsightsStore>((set, get) => ({
           data.goals,
           options.skipDuplicates === true
         );
+        if (importedCount > 0) {
+          assertPersisted(await setGoals(merged));
+        }
         result.imported.goals = importedCount;
         result.skipped.goals = skippedCount;
-        if (importedCount > 0) {
-          await setGoals(merged);
-        }
       }
 
       // Import quotes (mark as custom to distinguish from seed quotes)
@@ -328,11 +357,11 @@ export const useInsightsStore = create<InsightsStore>((set, get) => ({
           quotesToProcess,
           options.skipDuplicates === true
         );
+        if (importedCount > 0) {
+          assertPersisted(await setQuotes(merged));
+        }
         result.imported.quotes = importedCount;
         result.skipped.quotes = skippedCount;
-        if (importedCount > 0) {
-          await setQuotes(merged);
-        }
       }
 
       // Import pomodoro sessions
@@ -343,11 +372,11 @@ export const useInsightsStore = create<InsightsStore>((set, get) => ({
           data.pomodoroSessions,
           options.skipDuplicates === true
         );
+        if (importedCount > 0) {
+          assertPersisted(await setPomodoroSessions(merged));
+        }
         result.imported.pomodoroSessions = importedCount;
         result.skipped.pomodoroSessions = skippedCount;
-        if (importedCount > 0) {
-          await setPomodoroSessions(merged);
-        }
       }
 
       // Refresh insights after import
@@ -371,7 +400,15 @@ export const useInsightsStore = create<InsightsStore>((set, get) => ({
         error instanceof Error ? error.message : 'Import failed unexpectedly';
 
       if (error instanceof Error) {
-        if (error.name === 'QuotaExceededError' || error.message.includes('quota')) {
+        // assertPersisted carries the structured StorageError as cause; the
+        // name/message sniffs remain for errors thrown outside the storage port.
+        const cause = error.cause as Partial<StorageError> | undefined;
+        if (
+          cause?.type === 'quota_exceeded' ||
+          cause?.type === 'per_item_quota_exceeded' ||
+          error.name === 'QuotaExceededError' ||
+          error.message.includes('quota')
+        ) {
           userMessage = 'Storage space is full. Please clear some data and try again.';
         }
       }

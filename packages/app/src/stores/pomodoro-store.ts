@@ -20,6 +20,9 @@ import { useToastStore } from './toast-store';
 
 const logger = createLogger({
   prefix: '[PomodoroStore]',
+  // Private instance — the global configureLogger() the test setup silences
+  // doesn't reach it, so gate it off under vitest directly.
+  enabled: !import.meta.env.TEST,
   minLevel: import.meta.env.DEV ? LogLevel.DEBUG : LogLevel.WARN,
   includeTimestamp: false,
 });

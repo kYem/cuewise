@@ -345,7 +345,9 @@ mod tests {
             });
             // The loop's stdout arm re-derives the deadline from now — a frame that
             // lands inside the fresh window must still be delivered, not reaped.
-            let result = next_sidecar_event(&mut rx, Instant::now() + CAP).await;
+            // The window is deliberately huge: racing the 15ms send against a tight
+            // deadline flaked on loaded CI runners (main went red on 2026-07-14).
+            let result = next_sidecar_event(&mut rx, Instant::now() + CAP * 20).await;
             assert_eq!(result.expect("inside the rolled window"), Some(9));
         });
     }

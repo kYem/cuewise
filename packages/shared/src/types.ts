@@ -142,6 +142,17 @@ export interface PostureSample {
   headTiltDegrees?: number; // Head roll; chronic lean
 }
 
+// The sidecar's sample cadence — converts stat counts into tracked time. Keep
+// in sync with `sampleInterval` (posture-sidecar main.swift), the real source.
+export const POSTURE_SAMPLE_INTERVAL_SECONDS = 2;
+
+// One local calendar day of posture tracking, rolled up by status. Raw samples
+// are never persisted — they arrive every 2s, up to ~43k/day.
+export interface PostureDailyStat {
+  date: string; // YYYY-MM-DD (local)
+  counts: Record<PostureStatus, number>;
+}
+
 // Customization types
 export type ColorTheme = 'purple' | 'forest' | 'rose' | 'glass';
 export type LayoutDensity = 'compact' | 'comfortable' | 'spacious';
@@ -253,6 +264,24 @@ export type ConceptFraming = 'ambient' | 'queue';
 // A card's difficulty bucket for the deck UI (derived by getConceptDifficulty)
 export type ConceptDifficulty = 'new' | 'struggling' | 'solid' | 'strong';
 
+// One card inside a starter template pack — just the content; the id, createdAt,
+// and review schedule are minted when the user adds the pack to their deck.
+export interface ConceptTemplateCard {
+  term: string;
+  definition: string;
+  details?: string; // optional "how it works" / example
+}
+
+// A curated topic pack (~10 cards) for one-click deck seeding, e.g. "System
+// Design". Every card in the pack is tagged with `tag` on import.
+export interface ConceptTemplate {
+  id: string;
+  name: string; // display name, e.g. "System Design"
+  description: string; // one-line summary of the pack
+  tag: string; // learning-topic tag applied to every card on import
+  cards: ConceptTemplateCard[];
+}
+
 // Google Calendar (read-only) — shown beside the Pomodoro timer.
 // Discriminated on `allDay` so the two time representations can't be confused:
 // timed events carry full ISO datetimes (safe for `new Date(...)`), all-day
@@ -318,6 +347,7 @@ export interface Settings {
   // Goal Transfer
   enableGoalTransfer: boolean; // Enable goal transfer feature (default true)
   goalTransferTime: number; // Hour (0-23) when transfer button appears (default 20 for 8 PM)
+  autoRollDueTasks: boolean; // Move incomplete tasks into Today when their due date arrives (default true)
   // Debug
   logLevel: SettingsLogLevel; // Console log level (default 'error')
   // Onboarding
@@ -326,6 +356,7 @@ export interface Settings {
   focusModeEnabled: boolean; // Enable focus mode feature (default true)
   focusModeImageCategory: FocusImageCategory; // Background image category (default 'nature')
   focusModeShowQuote: boolean; // Show motivational quote overlay (default true)
+  focusModeShowGoal: boolean; // Show the current goal under the timer (default true)
   focusModeAutoEnter: boolean; // Auto-enter focus mode when timer starts (default false)
   // Goal View Mode
   goalViewMode: GoalViewMode; // View mode for Today's Focus section (default 'full')
@@ -382,6 +413,7 @@ export const STORAGE_KEYS = {
   QUICK_LINKS: 'quickLinks', // Pinned shortcut tiles on the new tab
   CONCEPT_CARDS: 'conceptCards', // Spaced-repetition concept/definition cards
   CALENDAR: 'calendar', // Google Calendar connection + cached events
+  POSTURE_STATS: 'postureStats', // Daily posture rollups (macOS tracking)
 } as const;
 
 // Daily background image data (persisted to change only once per day)

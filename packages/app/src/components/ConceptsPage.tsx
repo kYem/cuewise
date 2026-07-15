@@ -4,13 +4,14 @@ import {
   matchesSearchQuery,
   uniqueSorted,
 } from '@cuewise/shared';
-import { ArrowLeft, Brain, Plus } from 'lucide-react';
+import { ArrowLeft, Brain, Plus, Sparkles } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { useConceptCardsStore } from '../stores/concept-cards-store';
 import { ConceptCardRow } from './ConceptCardRow';
 import { ConceptDeckToolbar } from './ConceptDeckToolbar';
 import { ConceptForm } from './ConceptForm';
+import { ConceptTemplateGrid } from './ConceptTemplateGrid';
 import { Modal } from './Modal';
 
 export const ConceptsPage: React.FC = () => {
@@ -20,6 +21,7 @@ export const ConceptsPage: React.FC = () => {
   const deleteCard = useConceptCardsStore((state) => state.deleteCard);
 
   const [isAdding, setIsAdding] = useState(false);
+  const [isBrowsingTemplates, setIsBrowsingTemplates] = useState(false);
   const [editingCard, setEditingCard] = useState<ConceptCard | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
@@ -79,13 +81,22 @@ export const ConceptsPage: React.FC = () => {
               </div>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => setIsAdding(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-all font-medium shadow-sm"
-          >
-            <Plus className="w-4 h-4" /> Add concept
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsBrowsingTemplates(true)}
+              className="inline-flex items-center gap-2 px-3 py-2 border-2 border-border text-secondary rounded-lg hover:border-primary-500 hover:text-primary transition-all font-medium"
+            >
+              <Sparkles className="w-4 h-4" /> Starter packs
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsAdding(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-all font-medium shadow-sm"
+            >
+              <Plus className="w-4 h-4" /> Add concept
+            </button>
+          </div>
         </div>
       </header>
 
@@ -98,13 +109,22 @@ export const ConceptsPage: React.FC = () => {
               Save a term and its definition — Cuewise resurfaces it on a spaced schedule so it
               actually sticks.
             </p>
-            <button
-              type="button"
-              onClick={() => setIsAdding(true)}
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium shadow-sm"
-            >
-              <Plus className="w-4 h-4" /> Add your first concept
-            </button>
+            <div className="flex items-center justify-center gap-3">
+              <button
+                type="button"
+                onClick={() => setIsAdding(true)}
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium shadow-sm"
+              >
+                <Plus className="w-4 h-4" /> Add your first concept
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsBrowsingTemplates(true)}
+                className="inline-flex items-center gap-2 px-5 py-2.5 border-2 border-border text-secondary rounded-lg hover:border-primary-500 hover:text-primary font-medium"
+              >
+                <Sparkles className="w-4 h-4" /> Browse starter packs
+              </button>
+            </div>
           </div>
         ) : (
           <>
@@ -140,6 +160,14 @@ export const ConceptsPage: React.FC = () => {
 
       <Modal isOpen={isAdding} onClose={() => setIsAdding(false)} title="Add a concept" size="2xl">
         <ConceptForm onSuccess={() => setIsAdding(false)} onCancel={() => setIsAdding(false)} />
+      </Modal>
+      <Modal
+        isOpen={isBrowsingTemplates}
+        onClose={() => setIsBrowsingTemplates(false)}
+        title="Starter packs"
+        size="2xl"
+      >
+        <ConceptTemplateGrid onAdded={() => setIsBrowsingTemplates(false)} />
       </Modal>
       <Modal
         isOpen={editingCard !== null}
