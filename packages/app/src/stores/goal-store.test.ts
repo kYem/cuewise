@@ -1116,70 +1116,212 @@ describe('resolved write failures are honored across writers', () => {
     vi.mocked(storage.setGoals).mockReset().mockResolvedValue(storageFailure('quota exceeded'));
   });
 
-  it('updateTask reports failure and keeps the original text', async () => {
-    const task = goalFactory.build({ text: 'original' });
-    useGoalStore.setState({ goals: [task] });
+  // One row per persistGoals writer: seed state, act, then prove the optimistic
+  // change was NOT kept. rollDueTasks is exercised separately — its failure
+  // handling deliberately differs (no toast, background retry).
+  const store = () => useGoalStore.getState();
+  const today = getTodayDateString();
 
-    const result = await useGoalStore.getState().updateTask(task.id, 'edited');
+  const writerCases: Array<{
+    name: string;
+    prepare: () => { act: () => Promise<boolean>; verify: () => void };
+  }> = [
+    {
+      name: 'addTask',
+      prepare: () => ({
+        act: () => store().addTask('new task'),
+        verify: () => expect(store().goals).toEqual([]),
+      }),
+    },
+    {
+      name: 'updateTask',
+      prepare: () => {
+        const task = goalFactory.build({ text: 'original' });
+        useGoalStore.setState({ goals: [task] });
+        return {
+          act: () => store().updateTask(task.id, 'edited'),
+          verify: () => expect(store().goals[0]).toMatchObject({ text: 'original' }),
+        };
+      },
+    },
+    {
+      name: 'toggleTask',
+      prepare: () => {
+        const task = goalFactory.build({ completed: false });
+        useGoalStore.setState({ goals: [task] });
+        return {
+          act: () => store().toggleTask(task.id),
+          verify: () => expect(store().goals[0]).toMatchObject({ completed: false }),
+        };
+      },
+    },
+    {
+      name: 'deleteTask',
+      prepare: () => {
+        const task = goalFactory.build();
+        useGoalStore.setState({ goals: [task] });
+        return {
+          act: () => store().deleteTask(task.id),
+          verify: () => expect(store().goals).toHaveLength(1),
+        };
+      },
+    },
+    {
+      name: 'clearCompleted',
+      prepare: () => {
+        const done = completedGoalFactory.build({ date: today });
+        useGoalStore.setState({ goals: [done] });
+        return {
+          act: () => store().clearCompleted(),
+          verify: () => expect(store().goals).toHaveLength(1),
+        };
+      },
+    },
+    {
+      name: 'transferTaskToNextDay',
+      prepare: () => {
+        const task = goalFactory.build({ date: today });
+        useGoalStore.setState({ goals: [task], todayTasks: [task] });
+        return {
+          act: () => store().transferTaskToNextDay(task.id),
+          verify: () => expect(store().goals[0]).toMatchObject({ date: today }),
+        };
+      },
+    },
+    {
+      name: 'moveTaskToToday',
+      prepare: () => {
+        const task = goalFactory.build({ date: '2025-01-01' });
+        useGoalStore.setState({ goals: [task] });
+        return {
+          act: () => store().moveTaskToToday(task.id),
+          verify: () => expect(store().goals[0]).toMatchObject({ date: '2025-01-01' }),
+        };
+      },
+    },
+    {
+      name: 'duplicateTask',
+      prepare: () => {
+        const task = goalFactory.build();
+        useGoalStore.setState({ goals: [task] });
+        return {
+          act: () => store().duplicateTask(task.id),
+          verify: () => expect(store().goals).toHaveLength(1),
+        };
+      },
+    },
+    {
+      name: 'setTaskDueDate',
+      prepare: () => {
+        const task = goalFactory.build();
+        useGoalStore.setState({ goals: [task] });
+        return {
+          act: () => store().setTaskDueDate(task.id, '2030-01-01'),
+          verify: () => {
+            const stored = store().goals.find((goal) => goal.id === task.id);
+            expect(stored?.dueDate).toBeUndefined();
+          },
+        };
+      },
+    },
+    {
+      name: 'addSubtask',
+      prepare: () => {
+        const task = goalFactory.build();
+        useGoalStore.setState({ goals: [task] });
+        return {
+          act: () => store().addSubtask(task.id, 'sub'),
+          verify: () => expect(store().goals[0].subtasks).toBeUndefined(),
+        };
+      },
+    },
+    {
+      name: 'toggleSubtask',
+      prepare: () => {
+        const task = taskWithSubtasksFactory.build();
+        useGoalStore.setState({ goals: [task] });
+        return {
+          act: () => store().toggleSubtask(task.id, 'sub-1'),
+          verify: () => expect(store().goals[0].subtasks?.[0]).toMatchObject({ completed: false }),
+        };
+      },
+    },
+    {
+      name: 'removeSubtask',
+      prepare: () => {
+        const task = taskWithSubtasksFactory.build();
+        useGoalStore.setState({ goals: [task] });
+        return {
+          act: () => store().removeSubtask(task.id, 'sub-1'),
+          verify: () => expect(store().goals[0].subtasks).toHaveLength(2),
+        };
+      },
+    },
+    {
+      name: 'reorderTasks',
+      prepare: () => {
+        const first = goalFactory.build({ date: today, sortOrder: 0 });
+        const second = goalFactory.build({ date: today, sortOrder: 1 });
+        useGoalStore.setState({ goals: [first, second], todayTasks: [first, second] });
+        return {
+          act: () => store().reorderTasks(0, 1),
+          verify: () => expect(store().todayTasks[0]).toMatchObject({ id: first.id }),
+        };
+      },
+    },
+    {
+      name: 'addGoal',
+      prepare: () => ({
+        act: () => store().addGoal('new objective', '2030-01-01'),
+        verify: () => expect(store().goals).toEqual([]),
+      }),
+    },
+    {
+      name: 'updateGoal',
+      prepare: () => {
+        const objective = objectiveFactory.build({ text: 'original' });
+        useGoalStore.setState({ goals: [objective] });
+        return {
+          act: () => store().updateGoal(objective.id, { text: 'edited' }),
+          verify: () => expect(store().goals[0]).toMatchObject({ text: 'original' }),
+        };
+      },
+    },
+    {
+      name: 'deleteGoal',
+      prepare: () => {
+        const objective = objectiveFactory.build();
+        useGoalStore.setState({ goals: [objective] });
+        return {
+          act: () => store().deleteGoal(objective.id),
+          verify: () => expect(store().goals).toHaveLength(1),
+        };
+      },
+    },
+    {
+      name: 'linkTaskToGoal',
+      prepare: () => {
+        const objective = objectiveFactory.build();
+        const task = goalFactory.build();
+        useGoalStore.setState({ goals: [objective, task] });
+        return {
+          act: () => store().linkTaskToGoal(task.id, objective.id),
+          verify: () => {
+            const linked = store().goals.find((goal) => goal.id === task.id);
+            expect(linked?.parentId).toBeUndefined();
+          },
+        };
+      },
+    },
+  ];
+
+  it.each(writerCases)('$name reports failure and keeps prior state', async ({ prepare }) => {
+    const { act, verify } = prepare();
+
+    const result = await act();
 
     expect(result).toBe(false);
-    expect(useGoalStore.getState().goals[0]).toMatchObject({ text: 'original' });
-    expect(toastError).toHaveBeenCalledOnce();
-  });
-
-  it('linkTaskToGoal reports failure and keeps the task unlinked', async () => {
-    const objective = objectiveFactory.build();
-    const task = goalFactory.build();
-    useGoalStore.setState({ goals: [objective, task] });
-
-    const result = await useGoalStore.getState().linkTaskToGoal(task.id, objective.id);
-
-    expect(result).toBe(false);
-    const linked = useGoalStore.getState().goals.find((goal) => goal.id === task.id);
-    expect(linked?.parentId).toBeUndefined();
-    expect(toastError).toHaveBeenCalledOnce();
-  });
-
-  it('addTask reports failure and does not append the phantom task', async () => {
-    const result = await useGoalStore.getState().addTask('new task');
-
-    expect(result).toBe(false);
-    expect(useGoalStore.getState().goals).toEqual([]);
-    expect(toastError).toHaveBeenCalledOnce();
-  });
-
-  it('deleteTask reports failure and keeps the task', async () => {
-    const task = goalFactory.build();
-    useGoalStore.setState({ goals: [task] });
-
-    const result = await useGoalStore.getState().deleteTask(task.id);
-
-    expect(result).toBe(false);
-    expect(useGoalStore.getState().goals).toEqual([task]);
-    expect(toastError).toHaveBeenCalledOnce();
-  });
-
-  it('transferTaskToNextDay reports failure and keeps the date', async () => {
-    const today = getTodayDateString();
-    const task = goalFactory.build({ date: today });
-    useGoalStore.setState({ goals: [task], todayTasks: [task] });
-
-    const result = await useGoalStore.getState().transferTaskToNextDay(task.id);
-
-    expect(result).toBe(false);
-    expect(useGoalStore.getState().goals[0]).toMatchObject({ date: today });
-    expect(toastError).toHaveBeenCalledOnce();
-  });
-
-  it('setTaskDueDate reports failure and keeps the due date absent', async () => {
-    const task = goalFactory.build();
-    useGoalStore.setState({ goals: [task] });
-
-    const result = await useGoalStore.getState().setTaskDueDate(task.id, '2030-01-01');
-
-    expect(result).toBe(false);
-    const stored = useGoalStore.getState().goals.find((goal) => goal.id === task.id);
-    expect(stored?.dueDate).toBeUndefined();
+    verify();
     expect(toastError).toHaveBeenCalledOnce();
   });
 });
