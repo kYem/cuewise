@@ -8,6 +8,9 @@ interface ImportMetaEnv {
   // default; when set it enables the Cloud Sync settings section and self-heals/resumes
   // a session enabled some other way (e.g. devtools). Never set in production.
   readonly VITE_SYNC_API_BASE_URL?: string;
+  // Web-application OAuth client id for "Sign in with Google" (cloud sync) — a separate client
+  // from the calendar's Chrome-Extension one. Unset disables Google sign-in + its `identity` perm.
+  readonly VITE_GOOGLE_SYNC_CLIENT_ID?: string;
 }
 
 declare const __APP_VERSION__: string;

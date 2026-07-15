@@ -1,4 +1,5 @@
 import type { EnableResult } from '@cuewise/app';
+import type { SyncSignInProvider } from '@cuewise/sync-engine';
 
 // One source of truth for the op list and its type, so the runtime guard can't desync from the union.
 export const SYNC_CONTROL_OPS = [
@@ -18,6 +19,10 @@ export type SyncControlOp = (typeof SYNC_CONTROL_OPS)[number];
 export interface SyncControlMessage {
   kind: 'cuewise-sync-control';
   op: SyncControlOp;
+  // enable-only: the sign-in provider and the credential to exchange for a session.
+  provider?: SyncSignInProvider;
+  credential?: string;
+  // reconnect-only (dev-only in this change): replays the persisted account id.
   accountId?: string;
   deviceName?: string;
   recoveryCode?: string;

@@ -1,12 +1,10 @@
 import { logger } from '@cuewise/shared';
+import { CLOUD_SYNC_ENABLED_KEY } from '@cuewise/sync-engine';
 import { createChromeStorageMock, type MockChromeStorage } from '@cuewise/test-utils/mocks';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { BridgeSyncController, LAST_SYNC_CREDS_KEY } from './bridge-sync-controller';
+import { BridgeSyncController } from './bridge-sync-controller';
 import type { SyncControlResponse } from './sync-control-messages';
-
-const STATUS_KEY = 'cuewise.sync.status';
-const QUARANTINE_KEY = 'cuewise.sync.lastQuarantineAt';
-const CLOUD_SYNC_ENABLED_KEY = 'cloudSyncEnabled';
+import { LAST_SYNC_CREDS_KEY, QUARANTINE_KEY, STATUS_KEY } from './sync-storage-keys';
 
 type StorageChangeMap = { [key: string]: chrome.storage.StorageChange };
 type StorageChangeListener = (changes: StorageChangeMap, area: string) => void;
@@ -21,6 +19,19 @@ const onChanged = {
   addListener: vi.fn((listener: StorageChangeListener) => {
     changeListener = listener;
   }),
+};
+
+const REDIRECT_URI = 'https://abjkbnhoepcnmbabflkedbapbldnpkbf.chromiumapp.org/';
+
+const identity = {
+  getRedirectURL: vi.fn(() => REDIRECT_URI),
+  launchWebAuthFlow: vi.fn(
+    (): Promise<string | undefined> => Promise.resolve(`${REDIRECT_URI}#id_token=fake.jwt.token`)
+  ),
+};
+
+const permissions = {
+  request: vi.fn((): Promise<boolean> => Promise.resolve(true)),
 };
 
 let storageMock: MockChromeStorage;
@@ -42,7 +53,15 @@ beforeEach(() => {
   runtime.sendMessage.mockReset();
   runtime.sendMessage.mockImplementation(() => Promise.resolve({ ok: true }));
   onChanged.addListener.mockClear();
+  identity.getRedirectURL.mockReset();
+  identity.getRedirectURL.mockReturnValue(REDIRECT_URI);
+  identity.launchWebAuthFlow.mockReset();
+  identity.launchWebAuthFlow.mockResolvedValue(`${REDIRECT_URI}#id_token=fake.jwt.token`);
+  permissions.request.mockReset();
+  permissions.request.mockResolvedValue(true);
   (chrome as unknown as { runtime: typeof runtime }).runtime = runtime;
+  (chrome as unknown as { identity: typeof identity }).identity = identity;
+  (chrome as unknown as { permissions: typeof permissions }).permissions = permissions;
   (
     chrome as unknown as {
       storage: { local: MockChromeStorage; onChanged: typeof onChanged };
@@ -148,7 +167,7 @@ describe('BridgeSyncController: storage change listener', () => {
 });
 
 describe('BridgeSyncController: enable', () => {
-  it('sends the enable control message with accountId/deviceName/recoveryCode', async () => {
+  it('sends the enable control message with provider "dev", credential, deviceName, recoveryCode', async () => {
     const controller = new BridgeSyncController();
 
     await controller.enable('acc-1', 'Device A', 'CW1-CODE');
@@ -156,7 +175,8 @@ describe('BridgeSyncController: enable', () => {
     expect(runtime.sendMessage).toHaveBeenCalledWith({
       kind: 'cuewise-sync-control',
       op: 'enable',
-      accountId: 'acc-1',
+      provider: 'dev',
+      credential: 'acc-1',
       deviceName: 'Device A',
       recoveryCode: 'CW1-CODE',
     });
@@ -209,6 +229,116 @@ describe('BridgeSyncController: enable', () => {
     expect(result).toEqual({ ok: false, reason: 'error' });
     expect(storageMock.set).not.toHaveBeenCalled();
     errorSpy.mockRestore();
+  });
+});
+
+describe('BridgeSyncController: enableWithGoogle', () => {
+  it('requests the identity permission, launches the auth flow, and relays the id token', async () => {
+    runtime.sendMessage.mockResolvedValueOnce({ ok: true, recoveryCode: 'NEWCODE' });
+    const controller = new BridgeSyncController({
+      googleClientId: 'client-id.apps.googleusercontent.com',
+    });
+
+    const result = await controller.enableWithGoogle('Device A', 'CW1-CODE');
+
+    expect(permissions.request).toHaveBeenCalledWith({ permissions: ['identity'] });
+    expect(identity.launchWebAuthFlow).toHaveBeenCalledWith(
+      expect.objectContaining({ interactive: true })
+    );
+    expect(runtime.sendMessage).toHaveBeenCalledWith({
+      kind: 'cuewise-sync-control',
+      op: 'enable',
+      provider: 'google',
+      credential: 'fake.jwt.token',
+      deviceName: 'Device A',
+      recoveryCode: 'CW1-CODE',
+    });
+    expect(result).toEqual({ ok: true, recoveryCode: 'NEWCODE' });
+  });
+
+  it('never writes the id token to chrome.storage', async () => {
+    const controller = new BridgeSyncController({ googleClientId: 'client-id' });
+
+    await controller.enableWithGoogle('Device A');
+
+    for (const call of storageMock.set.mock.calls) {
+      expect(JSON.stringify(call)).not.toContain('fake.jwt.token');
+    }
+  });
+
+  it('returns a configuration error without touching permissions when googleClientId is unset', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const controller = new BridgeSyncController();
+
+    const result = await controller.enableWithGoogle('Device A');
+
+    expect(result).toEqual({
+      ok: false,
+      reason: 'error',
+      detail: 'Google sign-in is not configured',
+    });
+    expect(permissions.request).not.toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
+  it('returns an auth error without launching the flow when the identity permission is denied', async () => {
+    permissions.request.mockResolvedValueOnce(false);
+    const controller = new BridgeSyncController({ googleClientId: 'client-id' });
+
+    const result = await controller.enableWithGoogle('Device A');
+
+    expect(result).toEqual({ ok: false, reason: 'auth' });
+    expect(identity.launchWebAuthFlow).not.toHaveBeenCalled();
+    expect(runtime.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it('treats an empty-string googleClientId as unset (the Vite/CI unset value)', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const controller = new BridgeSyncController({ googleClientId: '' });
+
+    const result = await controller.enableWithGoogle('Device A');
+
+    expect(result).toEqual({
+      ok: false,
+      reason: 'error',
+      detail: 'Google sign-in is not configured',
+    });
+    expect(permissions.request).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
+  it('returns an auth error when requesting the identity permission throws', async () => {
+    permissions.request.mockRejectedValueOnce(new Error('user gesture required'));
+    const controller = new BridgeSyncController({ googleClientId: 'client-id' });
+
+    const result = await controller.enableWithGoogle('Device A');
+
+    expect(result).toEqual({ ok: false, reason: 'auth' });
+    expect(identity.launchWebAuthFlow).not.toHaveBeenCalled();
+  });
+
+  it('returns an auth error when the user cancels the auth flow', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    identity.launchWebAuthFlow.mockRejectedValueOnce(new Error('user did not approve access'));
+    const controller = new BridgeSyncController({ googleClientId: 'client-id' });
+
+    const result = await controller.enableWithGoogle('Device A');
+
+    expect(result).toEqual({ ok: false, reason: 'auth' });
+    expect(runtime.sendMessage).not.toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it('returns an auth error when the redirect has no id_token fragment', async () => {
+    identity.launchWebAuthFlow.mockResolvedValueOnce(REDIRECT_URI);
+    const controller = new BridgeSyncController({ googleClientId: 'client-id' });
+
+    const result = await controller.enableWithGoogle('Device A');
+
+    expect(result).toEqual({ ok: false, reason: 'auth' });
+    expect(runtime.sendMessage).not.toHaveBeenCalled();
   });
 });
 

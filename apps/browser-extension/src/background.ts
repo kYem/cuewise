@@ -19,6 +19,7 @@ import { configureChromePlatform } from './platform';
 import { handleSyncControlMessage } from './sync/handle-sync-control-message';
 import { handleSyncMessage } from './sync/handle-sync-message';
 import { isSyncControlMessage } from './sync/sync-control-messages';
+import { QUARANTINE_KEY, STATUS_KEY } from './sync/sync-storage-keys';
 
 const { scheduler, notifier } = configureChromePlatform();
 
@@ -70,12 +71,12 @@ if (syncApiBaseUrl) {
     scheduler,
     onStatus: (status) => {
       chrome.storage.local
-        .set({ 'cuewise.sync.status': mapToUi(status) })
+        .set({ [STATUS_KEY]: mapToUi(status) })
         .catch((error) => logger.error('Failed to persist sync status', error));
     },
     onQuarantine: () => {
       chrome.storage.local
-        .set({ 'cuewise.sync.lastQuarantineAt': Date.now() })
+        .set({ [QUARANTINE_KEY]: Date.now() })
         .catch((error) => logger.error('Failed to persist sync quarantine timestamp', error));
     },
     onRecoveryCode: (code) => {

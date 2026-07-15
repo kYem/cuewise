@@ -31,7 +31,8 @@ function enableMessage(overrides: Partial<SyncControlMessage> = {}): SyncControl
   return {
     kind: 'cuewise-sync-control',
     op: 'enable',
-    accountId: 'cred-a',
+    provider: 'dev',
+    credential: 'cred-a',
     deviceName: 'Device A',
     ...overrides,
   };
@@ -93,6 +94,7 @@ describe('handleSyncControlMessage: enable', () => {
     );
 
     expect(engine.enableSync).toHaveBeenCalledWith(
+      'dev',
       'cred-a',
       'Device A',
       'CW1-AAAAA-AAAAA-AAAAA-AAAAA-AAAAA-AAAAA'
@@ -121,13 +123,27 @@ describe('handleSyncControlMessage: enable', () => {
     expect(result).toEqual({ ok: true, recoveryCode: undefined });
   });
 
-  it('returns an error result without calling the engine when accountId is missing', async () => {
+  it('returns an error result without calling the engine when provider is missing', async () => {
     const engine = fakeEngine();
     const deps = fakeDeps();
 
     const result = await handleSyncControlMessage(
       engine,
-      enableMessage({ accountId: undefined }),
+      enableMessage({ provider: undefined }),
+      deps
+    );
+
+    expect(engine.enableSync).not.toHaveBeenCalled();
+    expect(result).toEqual({ ok: false, reason: 'error' });
+  });
+
+  it('returns an error result without calling the engine when credential is missing', async () => {
+    const engine = fakeEngine();
+    const deps = fakeDeps();
+
+    const result = await handleSyncControlMessage(
+      engine,
+      enableMessage({ credential: undefined }),
       deps
     );
 
@@ -147,6 +163,34 @@ describe('handleSyncControlMessage: enable', () => {
 
     expect(engine.enableSync).not.toHaveBeenCalled();
     expect(result).toEqual({ ok: false, reason: 'error' });
+  });
+
+  it('returns an error result without calling the engine when credential is an empty string', async () => {
+    const engine = fakeEngine();
+    const deps = fakeDeps();
+
+    const result = await handleSyncControlMessage(engine, enableMessage({ credential: '' }), deps);
+
+    expect(engine.enableSync).not.toHaveBeenCalled();
+    expect(result).toEqual({ ok: false, reason: 'error' });
+  });
+
+  it('calls engine.enableSync with provider "google" and the id-token credential', async () => {
+    const engine = fakeEngine();
+    const deps = fakeDeps();
+
+    await handleSyncControlMessage(
+      engine,
+      enableMessage({ provider: 'google', credential: 'fake.jwt.token' }),
+      deps
+    );
+
+    expect(engine.enableSync).toHaveBeenCalledWith(
+      'google',
+      'fake.jwt.token',
+      'Device A',
+      undefined
+    );
   });
 
   it('maps a thrown RecoveryCodeRequiredError to needs-code', async () => {
@@ -245,7 +289,7 @@ describe('handleSyncControlMessage: reconnect', () => {
       deps
     );
 
-    expect(engine.enableSync).toHaveBeenCalledWith('cred-a', 'Device A', undefined);
+    expect(engine.enableSync).toHaveBeenCalledWith('dev', 'cred-a', 'Device A', undefined);
   });
 
   it('returns an error result without calling the engine when creds are absent', async () => {
@@ -332,28 +376,28 @@ describe('handleSyncControlMessage: concurrency', () => {
     const events: string[] = [];
     let resolveFirst: (() => void) | undefined;
     const engine = fakeEngine({
-      enableSync: vi.fn().mockImplementation(async (accountId: string) => {
-        events.push(`start-${accountId}`);
-        if (accountId === 'cred-a') {
+      enableSync: vi.fn().mockImplementation(async (_provider: string, credential: string) => {
+        events.push(`start-${credential}`);
+        if (credential === 'cred-a') {
           await new Promise<void>((resolve) => {
             resolveFirst = resolve;
           });
         }
-        events.push(`end-${accountId}`);
+        events.push(`end-${credential}`);
       }),
     });
     const deps = fakeDeps();
 
     const firstPromise = handleSyncControlMessage(
       engine,
-      enableMessage({ accountId: 'cred-a' }),
+      enableMessage({ credential: 'cred-a' }),
       deps
     );
     await Promise.resolve();
     await Promise.resolve();
     const secondPromise = handleSyncControlMessage(
       engine,
-      enableMessage({ accountId: 'cred-b' }),
+      enableMessage({ credential: 'cred-b' }),
       deps
     );
     await Promise.resolve();

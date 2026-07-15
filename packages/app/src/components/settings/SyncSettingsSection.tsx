@@ -2,6 +2,7 @@ import { logger } from '@cuewise/shared';
 import { AlertTriangle, CloudUpload, KeyRound, Loader2, RefreshCw } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useState } from 'react';
+import { useSettingsStore } from '../../stores/settings-store';
 import { useToastStore } from '../../stores/toast-store';
 import type { EnableResult, SyncUiStatus } from '../../sync/sync-controller';
 import { useSyncController } from '../../sync/sync-controller';
@@ -14,6 +15,28 @@ import { settingsMatch } from './settings-match';
 import type { SettingsSectionProps } from './settings-types';
 
 const SEARCH_TERMS = 'cloud sync encrypted end-to-end recovery code account device backup';
+
+/** The standard four-color "G" mark — kept local since lucide-react has no brand icons. */
+const GoogleGlyph: React.FC = () => (
+  <svg viewBox="0 0 18 18" className="h-4 w-4" aria-hidden="true">
+    <path
+      fill="#4285F4"
+      d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.874 2.684-6.616z"
+    />
+    <path
+      fill="#34A853"
+      d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"
+    />
+    <path
+      fill="#FBBC05"
+      d="M3.964 10.706A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.706V4.962H.957A9.001 9.001 0 0 0 0 9c0 1.452.348 2.827.957 4.038l3.007-2.332z"
+    />
+    <path
+      fill="#EA4335"
+      d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.962L3.964 7.294C4.672 5.167 6.656 3.58 9 3.58z"
+    />
+  </svg>
+);
 
 // Only the "on" statuses get a pill; off/needs_reauth/error render their own dedicated UI below.
 const STATUS_PILL_LABEL: Partial<Record<SyncUiStatus, string>> = {
@@ -62,6 +85,18 @@ function pillClass(status: SyncUiStatus): string {
   return 'inline-flex w-fit items-center gap-1.5 rounded-full bg-surface-variant px-2.5 py-1 text-xs font-medium text-secondary';
 }
 
+// Cloud Sync and legacy Chrome sync must never both replicate the same data, so activating Cloud
+// Sync hands off from Chrome sync: turn it off, migrating any chrome.storage.sync data back to
+// local. Called only AFTER a sign-in succeeds, so a cancelled/failed attempt leaves Chrome sync
+// untouched; the engine keeps its metadata in local regardless, so this post-success migration is
+// consistent. A no-op when Chrome sync is already off (the default, and on local-only hosts).
+async function takeOverFromChromeSync(): Promise<void> {
+  const store = useSettingsStore.getState();
+  if (store.settings.syncEnabled) {
+    await store.updateSettings({ syncEnabled: false });
+  }
+}
+
 export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ filter }) => {
   const controller = useSyncController();
   const [status, setStatus] = useState<SyncUiStatus>(() => controller?.getStatus() ?? 'off');
@@ -69,17 +104,19 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   const [accountId, setAccountId] = useState('');
   const [deviceName, setDeviceName] = useState(deriveDeviceName);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGoogleSigningIn, setIsGoogleSigningIn] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [isDisabling, setIsDisabling] = useState(false);
   const [recoveryCode, setRecoveryCode] = useState<string | null>(null);
   const [enrollOpen, setEnrollOpen] = useState(false);
-  // Which flow opened EnrollCodeModal — reconnect reuses persisted creds, enable uses form inputs.
-  const [enrollSource, setEnrollSource] = useState<'enable' | 'reconnect'>('enable');
+  // Which flow opened EnrollCodeModal — reconnect reuses persisted creds; enable/google re-run
+  // that same sign-in with the entered code (google re-auths for a fresh id token).
+  const [enrollSource, setEnrollSource] = useState<'enable' | 'google' | 'reconnect'>('enable');
   const [confirmDisableOpen, setConfirmDisableOpen] = useState(false);
   const [unsavedCode, setUnsavedCode] = useState(false);
-  // The error status only ever comes from a failed enable/reconnect, so the error state's
-  // "Try again" retries that action — syncNow can't recover it and would falsely report success.
-  const [failedAction, setFailedAction] = useState<'enable' | 'reconnect'>('enable');
+  // The error state's "Try again" retries the exact action that failed (enable / google /
+  // reconnect) — syncNow can't recover it and would falsely report success.
+  const [failedAction, setFailedAction] = useState<'enable' | 'google' | 'reconnect'>('enable');
 
   useEffect(() => {
     if (!controller) {
@@ -98,8 +135,13 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
 
   // Shared by the initial enable() and the reconnect() flows — both surface the same shape.
   // source records which flow needs a code, so the EnrollCodeModal submit routes back correctly.
-  const routeEnableResult = (result: EnableResult, source: 'enable' | 'reconnect') => {
+  const routeEnableResult = async (
+    result: EnableResult,
+    source: 'enable' | 'google' | 'reconnect'
+  ) => {
     if (result.ok) {
+      // Cloud Sync is now active — hand off from legacy Chrome sync (see takeOverFromChromeSync).
+      await takeOverFromChromeSync();
       setEnabling(false);
       if (result.recoveryCode) {
         setRecoveryCode(result.recoveryCode);
@@ -107,11 +149,18 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       return;
     }
     if (result.reason === 'needs-code') {
+      // Device #2 of an existing account: EnrollCodeModal collects the recovery code and re-runs
+      // this same sign-in method with it. A brand-new account (device #1) never needs a code.
       setEnrollSource(source);
       setEnrollOpen(true);
       return;
     }
     setFailedAction(source);
+    // Log the cause as a string, not an object arg: string-coercing surfaces (Chrome's extension
+    // Errors panel, log aggregators) render an object as "[object Object]".
+    logger.error(
+      `Cloud sync ${source} failed — reason=${result.reason}, detail=${result.detail ?? 'none'}`
+    );
     useToastStore.getState().error(enableFailureMessage(result));
   };
 
@@ -119,7 +168,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     setIsSubmitting(true);
     try {
       const result = await controller.enable(accountId, deviceName);
-      routeEnableResult(result, 'enable');
+      await routeEnableResult(result, 'enable');
     } catch (error) {
       logger.error('Cloud sync enable failed', error);
       useToastStore.getState().error('Something went wrong enabling sync — please try again.');
@@ -128,11 +177,24 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     }
   };
 
+  const handleGoogleSignIn = async () => {
+    setIsGoogleSigningIn(true);
+    try {
+      const result = await controller.enableWithGoogle(deviceName);
+      await routeEnableResult(result, 'google');
+    } catch (error) {
+      logger.error('Google sign-in for cloud sync failed', error);
+      useToastStore.getState().error('Something went wrong enabling sync — please try again.');
+    } finally {
+      setIsGoogleSigningIn(false);
+    }
+  };
+
   const handleReconnect = async () => {
     setIsReconnecting(true);
     try {
       const result = await controller.reconnect();
-      routeEnableResult(result, 'reconnect');
+      await routeEnableResult(result, 'reconnect');
     } catch (error) {
       logger.error('Cloud sync reconnect failed', error);
       useToastStore.getState().error("Couldn't reconnect sync — please try again.");
@@ -146,15 +208,20 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   const handleEnrollSubmit = async (code: string): Promise<EnableResult> => {
     let result: EnableResult;
     try {
-      result =
-        enrollSource === 'reconnect'
-          ? await controller.reconnect(code)
-          : await controller.enable(accountId, deviceName, code);
+      if (enrollSource === 'reconnect') {
+        result = await controller.reconnect(code);
+      } else if (enrollSource === 'google') {
+        result = await controller.enableWithGoogle(deviceName, code);
+      } else {
+        result = await controller.enable(accountId, deviceName, code);
+      }
     } catch (error) {
       logger.error('Enroll submit failed', error);
       return { ok: false, reason: 'error' };
     }
     if (result.ok) {
+      // Enrolled successfully — hand off from Chrome sync (see takeOverFromChromeSync).
+      await takeOverFromChromeSync();
       setEnabling(false);
       if (result.recoveryCode) {
         setRecoveryCode(result.recoveryCode);
@@ -184,10 +251,14 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     }
   };
 
-  // The error status only follows a failed enable/reconnect — retry that same action. An enable
-  // retry needs the form's account id; without it (e.g. the UI mounted straight into a persisted
-  // error after a reload) fall back to reconnect, which recovers from persisted creds.
+  // Retry the exact action that failed. A dev-enable retry needs the form's account id; without it
+  // (e.g. the UI mounted straight into a persisted error after a reload) fall back to reconnect,
+  // which recovers from persisted creds. Google carries no account id, so it retries directly.
   const handleRetry = async () => {
+    if (failedAction === 'google') {
+      await handleGoogleSignIn();
+      return;
+    }
     if (failedAction === 'reconnect' || accountId.trim().length === 0) {
       await handleReconnect();
       return;
@@ -233,6 +304,8 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   const switchChecked = status === 'off' ? enabling : true;
   const pillLabel = STATUS_PILL_LABEL[status];
 
+  // The enable step's sign-in-options div groups Google today; a "Sign in with Apple"
+  // button drops in next to it later.
   return (
     <div>
       <SettingRow
@@ -263,20 +336,6 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
         <SettingSubgroup>
           <div className="flex flex-col gap-3 py-2">
             <div className="space-y-1.5">
-              <label htmlFor="sync-account-id" className="block text-sm font-medium text-primary">
-                Account ID
-              </label>
-              <input
-                id="sync-account-id"
-                type="text"
-                value={accountId}
-                onChange={(e) => setAccountId(e.target.value)}
-                autoComplete="off"
-                spellCheck={false}
-                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-primary placeholder:text-tertiary focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
-              />
-            </div>
-            <div className="space-y-1.5">
               <label htmlFor="sync-device-name" className="block text-sm font-medium text-primary">
                 Device name
               </label>
@@ -290,15 +349,52 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
                 className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-primary placeholder:text-tertiary focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
               />
             </div>
-            <button
-              type="button"
-              onClick={handleEnable}
-              disabled={isSubmitting || accountId.trim().length === 0}
-              className="flex w-fit items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
-              {isSubmitting ? 'Enabling…' : 'Enable'}
-            </button>
+
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={handleGoogleSignIn}
+                disabled={isGoogleSigningIn}
+                className="flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-surface px-4 py-2.5 text-sm font-medium text-primary shadow-sm transition-colors hover:bg-surface-variant disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isGoogleSigningIn ? <Loader2 className="h-4 w-4 animate-spin" /> : <GoogleGlyph />}
+                {isGoogleSigningIn ? 'Signing in…' : 'Sign in with Google'}
+              </button>
+            </div>
+
+            {import.meta.env.DEV && (
+              <div className="flex flex-col gap-3 border-t border-border pt-3">
+                <p className="text-xs font-medium text-tertiary">
+                  Dev only — sign in by account ID
+                </p>
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="sync-account-id"
+                    className="block text-sm font-medium text-primary"
+                  >
+                    Account ID
+                  </label>
+                  <input
+                    id="sync-account-id"
+                    type="text"
+                    value={accountId}
+                    onChange={(e) => setAccountId(e.target.value)}
+                    autoComplete="off"
+                    spellCheck={false}
+                    className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-primary placeholder:text-tertiary focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleEnable}
+                  disabled={isSubmitting || accountId.trim().length === 0}
+                  className="flex w-fit items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+                  {isSubmitting ? 'Enabling…' : 'Enable'}
+                </button>
+              </div>
+            )}
           </div>
         </SettingSubgroup>
       )}

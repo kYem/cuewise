@@ -12,6 +12,15 @@ export default defineManifest(async (env) => {
   const oauthClientId = viteEnv.VITE_GOOGLE_OAUTH_CLIENT_ID ?? '';
   const calendarEnabled = oauthClientId !== '';
 
+  // Cloud-sync "Sign in with Google": a separate Web-app OAuth client via launchWebAuthFlow
+  // (opens a tab, no CSP fetch) — shares only the `identity` optional permission with calendar.
+  // Requires BOTH the client id AND the sync base URL: without the base URL main.tsx never builds
+  // the sync controller, so the Sign in with Google flow is unreachable — declaring `identity`
+  // then would be a dead permission. This keeps the client id inert until sync is actually enabled.
+  const googleSyncClientId = viteEnv.VITE_GOOGLE_SYNC_CLIENT_ID ?? '';
+  const syncEnabled = (viteEnv.VITE_SYNC_API_BASE_URL ?? '') !== '';
+  const googleSyncEnabled = googleSyncClientId !== '' && syncEnabled;
+
   // Pinned extension key (base64 public key) for LOCAL unpacked builds only:
   // forces the same extension ID as the Web Store item, so chrome.identity OAuth
   // (which is bound to that ID) works in dev instead of failing with
@@ -43,8 +52,11 @@ export default defineManifest(async (env) => {
   // per user, but it isn't itself a user-facing grant.
   const optionalPermissions: string[] = [];
   const optionalHostPermissions: string[] = [];
-  if (calendarEnabled) {
+  const identityNeeded = calendarEnabled || googleSyncEnabled;
+  if (identityNeeded) {
     optionalPermissions.push('identity');
+  }
+  if (calendarEnabled) {
     optionalHostPermissions.push('https://www.googleapis.com/*', 'https://oauth2.googleapis.com/*');
   }
 
@@ -91,10 +103,16 @@ export default defineManifest(async (env) => {
     },
     permissions,
     host_permissions: hostPermissions,
-    ...(calendarEnabled
+    ...(identityNeeded
       ? {
           optional_permissions: optionalPermissions,
-          optional_host_permissions: optionalHostPermissions,
+          ...(optionalHostPermissions.length > 0
+            ? { optional_host_permissions: optionalHostPermissions }
+            : {}),
+        }
+      : {}),
+    ...(calendarEnabled
+      ? {
           oauth2: {
             client_id: oauthClientId,
             scopes: ['https://www.googleapis.com/auth/calendar.readonly'],

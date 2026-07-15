@@ -91,7 +91,7 @@ describe('golden path: two devices converge through one shared fake server', () 
     await setGoals([seedGoal]);
     await setQuotes([seedQuote]);
 
-    await deviceA.engine.enableSync('devA-cred', 'Device A');
+    await deviceA.engine.enableSync('dev', 'devA-cred', 'Device A');
 
     expect(deviceA.engine.getStatus()).toBe('active');
     expect(deviceA.onRecoveryCode).toHaveBeenCalledTimes(1);
@@ -104,7 +104,7 @@ describe('golden path: two devices converge through one shared fake server', () 
     const deviceB = createDevice(server, makeClock(5_000_000));
     useStorage(deviceB);
 
-    await deviceB.engine.enableSync('devB-cred', 'Device B', recoveryCode);
+    await deviceB.engine.enableSync('dev', 'devB-cred', 'Device B', recoveryCode);
     await deviceB.engine.syncNow();
 
     expect(deviceB.engine.getStatus()).toBe('active');
@@ -188,13 +188,13 @@ describe('swappability guard: ConflictStrategy is the only conflict decision poi
     const deviceA = createDevice(server, makeClock(5_000_000));
     useStorage(deviceA);
     await setGoals([goalFactory.build({ id: 'g1', text: 'A original' })]);
-    await deviceA.engine.enableSync('devA-cred', 'Device A');
+    await deviceA.engine.enableSync('dev', 'devA-cred', 'Device A');
     const recoveryCode = deviceA.onRecoveryCode.mock.calls[0][0] as string;
 
     const deviceB = createDevice(server, makeClock(1_000_000), strategyOverride);
     useStorage(deviceB);
     await setGoals([goalFactory.build({ id: 'g1', text: 'B local — must never be overwritten' })]);
-    await deviceB.engine.enableSync('devB-cred', 'Device B', recoveryCode);
+    await deviceB.engine.enableSync('dev', 'devB-cred', 'Device B', recoveryCode);
     await deviceB.engine.syncNow();
 
     const bGoals = await getGoals();
@@ -223,12 +223,12 @@ describe('settings: per-key sync round-trips a shared key but excludes device-lo
     // to) anything A sends, including its later theme edit.
     const deviceA = createDevice(server, makeClock(5_000_000));
     useStorage(deviceA);
-    await deviceA.engine.enableSync('devA-cred', 'Device A');
+    await deviceA.engine.enableSync('dev', 'devA-cred', 'Device A');
     const recoveryCode = deviceA.onRecoveryCode.mock.calls[0][0] as string;
 
     const deviceB = createDevice(server, makeClock(1_000_000));
     useStorage(deviceB);
-    await deviceB.engine.enableSync('devB-cred', 'Device B', recoveryCode);
+    await deviceB.engine.enableSync('dev', 'devB-cred', 'Device B', recoveryCode);
     await deviceB.engine.syncNow();
 
     // A changes a shared setting and syncs; B must adopt the new value.

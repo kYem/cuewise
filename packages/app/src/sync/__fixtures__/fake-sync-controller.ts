@@ -5,7 +5,13 @@ interface RecordedCall {
   args: unknown[];
 }
 
-type FailableMethod = 'enable' | 'reconnect' | 'disable' | 'regenerateRecoveryCode' | 'syncNow';
+type FailableMethod =
+  | 'enable'
+  | 'enableWithGoogle'
+  | 'reconnect'
+  | 'disable'
+  | 'regenerateRecoveryCode'
+  | 'syncNow';
 
 const DEFAULT_ENABLE_RESULT: EnableResult = { ok: true };
 const DEFAULT_RECOVERY_CODE = 'FAKE-RECOVERY-CODE';
@@ -17,6 +23,7 @@ export class FakeSyncController implements SyncController {
   private status: SyncUiStatus = 'off';
   private readonly subscribers = new Set<(status: SyncUiStatus) => void>();
   private readonly enableResults: EnableResult[] = [];
+  private readonly enableWithGoogleResults: EnableResult[] = [];
   private readonly reconnectResults: EnableResult[] = [];
   private readonly failingMethods = new Set<FailableMethod>();
   private deferredDisable = false;
@@ -72,6 +79,11 @@ export class FakeSyncController implements SyncController {
     this.enableResults.push(result);
   }
 
+  /** Queues the result the next `enableWithGoogle()` call resolves to. */
+  scriptEnableWithGoogle(result: EnableResult): void {
+    this.enableWithGoogleResults.push(result);
+  }
+
   /** Queues the result the next `reconnect()` call resolves to. */
   scriptReconnect(result: EnableResult): void {
     this.reconnectResults.push(result);
@@ -85,6 +97,16 @@ export class FakeSyncController implements SyncController {
     this.calls.push({ method: 'enable', args: [accountId, deviceName, recoveryCode] });
     this.maybeFail('enable');
     const next = this.enableResults.shift();
+    if (next !== undefined) {
+      return next;
+    }
+    return DEFAULT_ENABLE_RESULT;
+  }
+
+  async enableWithGoogle(deviceName: string, recoveryCode?: string): Promise<EnableResult> {
+    this.calls.push({ method: 'enableWithGoogle', args: [deviceName, recoveryCode] });
+    this.maybeFail('enableWithGoogle');
+    const next = this.enableWithGoogleResults.shift();
     if (next !== undefined) {
       return next;
     }

@@ -7,6 +7,7 @@ import {
   RecoveryCodeRequiredError,
   type SyncEngine,
   type SyncEngineControlSurface,
+  type SyncSignInProvider,
   type SyncStatus,
 } from '@cuewise/sync-engine';
 
@@ -119,13 +120,14 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
   // enable()/reconnect() build EnableResult from the thrown error AND the post-call status
   // (spec §4/§0-E4) — a 401 during initial sync returns rather than throws.
   async function doEnable(
-    accountId: string,
+    provider: SyncSignInProvider,
+    credential: string,
     deviceName: string,
     recoveryCode?: string
   ): Promise<EnableResult> {
     capturedRecoveryCode = undefined;
     try {
-      await engine.enableSync(accountId, deviceName, recoveryCode);
+      await engine.enableSync(provider, credential, deviceName, recoveryCode);
     } catch (err) {
       if (err instanceof RecoveryCodeRequiredError) {
         return { ok: false, reason: 'needs-code' };
@@ -137,12 +139,14 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
         return { ok: false, reason: 'auth' };
       }
       const detail = err instanceof Error ? err.message : String(err);
+      // Surface the real cause in the message text (parity with the extension's handler).
+      logger.error(`Cloud sync enable failed: ${detail}`, err);
       return { ok: false, reason: 'error', detail };
     }
     if (engine.getStatus() === 'signed_out') {
       return { ok: false, reason: 'auth' };
     }
-    await persistCreds({ accountId, deviceName });
+    await persistCreds({ accountId: credential, deviceName });
     const capturedCode = capturedRecoveryCode;
     capturedRecoveryCode = undefined;
     return { ok: true, recoveryCode: capturedCode };
@@ -171,7 +175,15 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
       };
     },
     enable(accountId, deviceName, recoveryCode): Promise<EnableResult> {
-      return serialize(() => doEnable(accountId, deviceName, recoveryCode));
+      return serialize(() => doEnable('dev', accountId, deviceName, recoveryCode));
+    },
+    // Deep-link OAuth for macOS is a separate follow-up (ENG-43); Google sign-in is Chrome-only for now.
+    async enableWithGoogle(_deviceName: string, _recoveryCode?: string): Promise<EnableResult> {
+      return {
+        ok: false,
+        reason: 'error',
+        detail: 'Google sign-in on macOS is not available yet',
+      };
     },
     reconnect(recoveryCode?: string): Promise<EnableResult> {
       return serialize(async () => {
@@ -180,7 +192,7 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
           return { ok: false, reason: 'error' };
         }
         // No code = silent re-auth via persisted DK (E2); a code enrolls this device after reconnect.
-        return doEnable(creds.accountId, creds.deviceName, recoveryCode);
+        return doEnable('dev', creds.accountId, creds.deviceName, recoveryCode);
       });
     },
     async disable(): Promise<void> {

@@ -2,14 +2,13 @@ import type { EnableResult, SyncController, SyncUiStatus } from '@cuewise/app';
 import { logger } from '@cuewise/shared';
 import { CLOUD_SYNC_ENABLED_KEY } from '@cuewise/sync-engine';
 import type { SyncControlMessage, SyncControlResponse } from './sync-control-messages';
-
-// Raw (unnamespaced) chrome.storage.local keys the background writes — see background.ts.
-const STATUS_KEY = 'cuewise.sync.status';
-const QUARANTINE_KEY = 'cuewise.sync.lastQuarantineAt';
-/** Exported so tests can assert against it without duplicating the literal (mirrors macOS's DirectSyncController). */
-export const LAST_SYNC_CREDS_KEY = 'cuewise.sync.lastCreds';
+import { LAST_SYNC_CREDS_KEY, QUARANTINE_KEY, STATUS_KEY } from './sync-storage-keys';
 
 const DEFAULT_TIMEOUT_MS = 30000;
+
+// Google OAuth 2.0 authorization endpoint + the OpenID scope for the implicit id_token flow.
+const GOOGLE_AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth';
+const GOOGLE_OAUTH_SCOPE = 'openid email';
 
 interface LastSyncCreds {
   accountId: string;
@@ -20,6 +19,8 @@ export interface BridgeSyncControllerOptions {
   /** Fires on quarantine (never the recovery code/credential/token — those are secrets). */
   toast?: (message: string) => void;
   timeoutMs?: number;
+  /** OAuth client id for chrome.identity.launchWebAuthFlow; unset disables enableWithGoogle. */
+  googleClientId?: string;
 }
 
 /**
@@ -31,10 +32,12 @@ export class BridgeSyncController implements SyncController {
   private readonly subscribers = new Set<(status: SyncUiStatus) => void>();
   private readonly toast?: (message: string) => void;
   private readonly timeoutMs: number;
+  private readonly googleClientId?: string;
 
   constructor(opts: BridgeSyncControllerOptions = {}) {
     this.toast = opts.toast;
     this.timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    this.googleClientId = opts.googleClientId;
     this.registerStorageListener();
     void this.hydrate();
   }
@@ -60,7 +63,8 @@ export class BridgeSyncController implements SyncController {
       response = await this.send({
         kind: 'cuewise-sync-control',
         op: 'enable',
-        accountId,
+        provider: 'dev',
+        credential: accountId,
         deviceName,
         recoveryCode,
       });
@@ -80,11 +84,77 @@ export class BridgeSyncController implements SyncController {
     return response;
   }
 
+  // NEVER logs/persists the id token — it rides straight into the relayed message.
+  // Reconnect-for-Google (persisting these creds) is a documented follow-up.
+  async enableWithGoogle(deviceName: string, recoveryCode?: string): Promise<EnableResult> {
+    // Empty string is the "unset" value of the Vite env var (matches manifest.config.ts), so a
+    // truthy check — not `=== undefined` — is what actually gates an unconfigured build.
+    if (!this.googleClientId) {
+      logger.error('enableWithGoogle called without a configured googleClientId');
+      return { ok: false, reason: 'error', detail: 'Google sign-in is not configured' };
+    }
+
+    let granted: boolean;
+    try {
+      granted = await chrome.permissions.request({ permissions: ['identity'] });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      logger.warn(`Failed to request the identity permission for Google sign-in: ${detail}`);
+      return { ok: false, reason: 'auth' };
+    }
+    if (!granted) {
+      logger.warn('Google sign-in aborted: the identity permission was denied');
+      return { ok: false, reason: 'auth' };
+    }
+
+    const redirectUri = chrome.identity.getRedirectURL();
+    const nonce = crypto.randomUUID();
+    const authUrl = `${GOOGLE_AUTH_ENDPOINT}?client_id=${encodeURIComponent(this.googleClientId)}&response_type=id_token&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(GOOGLE_OAUTH_SCOPE)}&nonce=${encodeURIComponent(nonce)}&prompt=select_account`;
+
+    let redirect: string | undefined;
+    try {
+      redirect = await chrome.identity.launchWebAuthFlow({ url: authUrl, interactive: true });
+    } catch (error) {
+      // Cancel, network failure, redirect-URI mismatch, and a bad client id all land here — log the
+      // real error (no token exists yet) so a misconfig isn't indistinguishable from a user cancel.
+      const detail = error instanceof Error ? error.message : String(error);
+      logger.warn(`Google sign-in auth flow was cancelled or failed: ${detail}`);
+      return { ok: false, reason: 'auth' };
+    }
+    if (redirect === undefined) {
+      logger.warn('Google sign-in returned no redirect URL');
+      return { ok: false, reason: 'auth' };
+    }
+
+    const idToken = new URLSearchParams(new URL(redirect).hash.slice(1)).get('id_token');
+    if (idToken === null) {
+      logger.warn('Google sign-in redirect carried no id_token');
+      return { ok: false, reason: 'auth' };
+    }
+
+    try {
+      return await this.send({
+        kind: 'cuewise-sync-control',
+        op: 'enable',
+        provider: 'google',
+        credential: idToken,
+        deviceName,
+        recoveryCode,
+      });
+    } catch (error) {
+      logger.error('Sync enableWithGoogle control message failed', error);
+      return { ok: false, reason: 'error' };
+    }
+  }
+
   async reconnect(recoveryCode?: string): Promise<EnableResult> {
     try {
       const stored = await chrome.storage.local.get(LAST_SYNC_CREDS_KEY);
       const creds = stored[LAST_SYNC_CREDS_KEY] as LastSyncCreds | undefined;
       if (creds === undefined) {
+        // No persisted creds: this session wasn't a dev enable (e.g. Google — persisting its creds
+        // for reconnect is a documented follow-up), so silent re-auth can't proceed here.
+        logger.warn('Cloud sync reconnect has no persisted credentials');
         return { ok: false, reason: 'error' };
       }
       // No code = silent re-auth via the persisted DK (E2); a code enrolls this device after reconnect.
