@@ -185,6 +185,9 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
         detail: 'Google sign-in on macOS is not available yet',
       };
     },
+    canEnableWithGoogle(): boolean {
+      return false;
+    },
     reconnect(recoveryCode?: string): Promise<EnableResult> {
       return serialize(async () => {
         const creds = await loadCreds();

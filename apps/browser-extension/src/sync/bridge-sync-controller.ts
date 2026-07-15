@@ -1,6 +1,6 @@
 import type { EnableResult, SyncController, SyncUiStatus } from '@cuewise/app';
 import { logger } from '@cuewise/shared';
-import { CLOUD_SYNC_ENABLED_KEY } from '@cuewise/sync-engine';
+import { CLOUD_SYNC_ENABLED_KEY, type SyncSignInProvider } from '@cuewise/sync-engine';
 import type { SyncControlMessage, SyncControlResponse } from './sync-control-messages';
 import { LAST_SYNC_CREDS_KEY, QUARANTINE_KEY, STATUS_KEY } from './sync-storage-keys';
 
@@ -11,7 +11,9 @@ const GOOGLE_AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_OAUTH_SCOPE = 'openid email';
 
 interface LastSyncCreds {
-  accountId: string;
+  provider: SyncSignInProvider;
+  // Only the dev provider stores a reusable credential; Google re-auths via a fresh OAuth flow.
+  accountId?: string;
   deviceName: string;
 }
 
@@ -76,7 +78,7 @@ export class BridgeSyncController implements SyncController {
       // Persist inside a guard: a storage failure must not turn a successful enroll into a
       // rejection or lose the one-shot recovery code — log and still return the ok response.
       try {
-        await this.persistCreds({ accountId, deviceName });
+        await this.persistCreds({ provider: 'dev', accountId, deviceName });
       } catch (error) {
         logger.error('Failed to persist sync credentials for reconnect', error);
       }
@@ -84,8 +86,8 @@ export class BridgeSyncController implements SyncController {
     return response;
   }
 
-  // NEVER logs/persists the id token — it rides straight into the relayed message.
-  // Reconnect-for-Google (persisting these creds) is a documented follow-up.
+  // NEVER logs/persists the id token — it rides straight into the relayed message. On success the
+  // provider (not the token) is persisted so reconnect can re-auth via Google.
   async enableWithGoogle(deviceName: string, recoveryCode?: string): Promise<EnableResult> {
     // Empty string is the "unset" value of the Vite env var (matches manifest.config.ts), so a
     // truthy check — not `=== undefined` — is what actually gates an unconfigured build.
@@ -132,8 +134,9 @@ export class BridgeSyncController implements SyncController {
       return { ok: false, reason: 'auth' };
     }
 
+    let response: SyncControlResponse;
     try {
-      return await this.send({
+      response = await this.send({
         kind: 'cuewise-sync-control',
         op: 'enable',
         provider: 'google',
@@ -145,6 +148,19 @@ export class BridgeSyncController implements SyncController {
       logger.error('Sync enableWithGoogle control message failed', error);
       return { ok: false, reason: 'error' };
     }
+    if (response.ok) {
+      // Persist the provider (never the id token) so reconnect knows to re-auth via Google.
+      try {
+        await this.persistCreds({ provider: 'google', deviceName });
+      } catch (error) {
+        logger.error('Failed to persist sync credentials for reconnect', error);
+      }
+    }
+    return response;
+  }
+
+  canEnableWithGoogle(): boolean {
+    return Boolean(this.googleClientId);
   }
 
   async reconnect(recoveryCode?: string): Promise<EnableResult> {
@@ -152,9 +168,16 @@ export class BridgeSyncController implements SyncController {
       const stored = await chrome.storage.local.get(LAST_SYNC_CREDS_KEY);
       const creds = stored[LAST_SYNC_CREDS_KEY] as LastSyncCreds | undefined;
       if (creds === undefined) {
-        // No persisted creds: this session wasn't a dev enable (e.g. Google — persisting its creds
-        // for reconnect is a documented follow-up), so silent re-auth can't proceed here.
         logger.warn('Cloud sync reconnect has no persisted credentials');
+        return { ok: false, reason: 'error' };
+      }
+      if (creds.provider === 'google') {
+        // Google can't silently re-auth — re-run the OAuth flow. The data key is already on this
+        // device, so no code is needed; a supplied code re-enrolls after reconnect.
+        return await this.enableWithGoogle(creds.deviceName, recoveryCode);
+      }
+      if (creds.accountId === undefined) {
+        logger.warn('Cloud sync reconnect: dev credentials are missing an account id');
         return { ok: false, reason: 'error' };
       }
       // No code = silent re-auth via the persisted DK (E2); a code enrolls this device after reconnect.

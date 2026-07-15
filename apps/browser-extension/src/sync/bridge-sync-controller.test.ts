@@ -190,7 +190,7 @@ describe('BridgeSyncController: enable', () => {
 
     expect(result).toEqual({ ok: true, recoveryCode: 'NEWCODE' });
     expect(storageMock.set).toHaveBeenCalledWith({
-      [LAST_SYNC_CREDS_KEY]: { accountId: 'acc-1', deviceName: 'Device A' },
+      [LAST_SYNC_CREDS_KEY]: { provider: 'dev', accountId: 'acc-1', deviceName: 'Device A' },
     });
   });
 
@@ -264,6 +264,16 @@ describe('BridgeSyncController: enableWithGoogle', () => {
     for (const call of storageMock.set.mock.calls) {
       expect(JSON.stringify(call)).not.toContain('fake.jwt.token');
     }
+  });
+
+  it('persists { provider: "google", deviceName } on success so reconnect can re-auth', async () => {
+    const controller = new BridgeSyncController({ googleClientId: 'client-id' });
+
+    await controller.enableWithGoogle('Device A');
+
+    expect(storageMock.set).toHaveBeenCalledWith({
+      [LAST_SYNC_CREDS_KEY]: { provider: 'google', deviceName: 'Device A' },
+    });
   });
 
   it('returns a configuration error without touching permissions when googleClientId is unset', async () => {
@@ -377,6 +387,22 @@ describe('BridgeSyncController: reconnect', () => {
 
     expect(result).toEqual({ ok: false, reason: 'error' });
     errorSpy.mockRestore();
+  });
+
+  it('re-runs the Google OAuth flow (never a reconnect op) when the persisted provider is google', async () => {
+    storageMock.data[LAST_SYNC_CREDS_KEY] = { provider: 'google', deviceName: 'Device A' };
+    const controller = new BridgeSyncController({ googleClientId: 'client-id' });
+
+    const result = await controller.reconnect();
+
+    expect(identity.launchWebAuthFlow).toHaveBeenCalled();
+    expect(runtime.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ op: 'enable', provider: 'google', credential: 'fake.jwt.token' })
+    );
+    expect(runtime.sendMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ op: 'reconnect' })
+    );
+    expect(result).toEqual({ ok: true });
   });
 });
 

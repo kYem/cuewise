@@ -114,6 +114,18 @@ describe('SyncSettingsSectionComponent', () => {
     expect(screen.getByRole('button', { name: 'Sign in with Google' })).toBeInTheDocument();
   });
 
+  it('hides the Sign in with Google button when the controller reports it unavailable', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.googleAvailable = false;
+    renderSection(controller);
+
+    await user.click(cloudSyncSwitch());
+
+    expect(screen.queryByRole('button', { name: 'Sign in with Google' })).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Device name')).toBeInTheDocument();
+  });
+
   it('calls controller.enableWithGoogle with the device name when Sign in with Google is clicked', async () => {
     const user = userEvent.setup();
     const controller = new FakeSyncController();

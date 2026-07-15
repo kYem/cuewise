@@ -17,6 +17,8 @@ export interface SyncController {
   enable(accountId: string, deviceName: string, recoveryCode?: string): Promise<EnableResult>;
   /** Google OAuth sign-in; the host adapter owns the OAuth flow and exchanges an id token. */
   enableWithGoogle(deviceName: string, recoveryCode?: string): Promise<EnableResult>;
+  /** Whether Google sign-in is available on this host/build; the UI hides the button when false. */
+  canEnableWithGoogle(): boolean;
   reconnect(recoveryCode?: string): Promise<EnableResult>;
   disable(): Promise<void>;
   regenerateRecoveryCode(): Promise<string>;
