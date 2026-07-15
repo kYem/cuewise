@@ -85,6 +85,15 @@ function filterTodayTasks(goals: Goal[]): Goal[] {
     .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
 }
 
+// saveAllGoals resolves {success: false} (e.g. quota) instead of rejecting —
+// normalize to a throw so every writer's catch covers both failure channels.
+async function persistGoals(updatedGoals: Goal[]): Promise<void> {
+  const result = await saveAllGoals(updatedGoals);
+  if (result?.success === false) {
+    throw new Error(result.error.message);
+  }
+}
+
 export const useGoalStore = create<GoalStore>((set, get) => ({
   goals: [],
   todayTasks: [],
@@ -129,7 +138,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       const { goals } = get();
       const updatedGoals = [...goals, newGoal];
 
-      await saveAllGoals(updatedGoals);
+      await persistGoals(updatedGoals);
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
       notifyMutated('goals', newGoal.id);
@@ -155,7 +164,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
         goal.id === goalId ? { ...goal, text: text.trim() } : goal
       );
 
-      await saveAllGoals(updatedGoals);
+      await persistGoals(updatedGoals);
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
       notifyMutated('goals', goalId);
@@ -177,16 +186,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
         goal.id === goalId ? { ...goal, completed: !goal.completed } : goal
       );
 
-      const result = await saveAllGoals(updatedGoals);
-      // Honor the persist result rather than optimistically marking the toggle
-      // saved: a failed write (e.g. quota) resolves {success:false} instead of
-      // throwing, and silently "succeeding" would revert on reload.
-      if (result?.success === false) {
-        const errorMessage = 'Failed to update goal. Please try again.';
-        set({ error: errorMessage });
-        useToastStore.getState().error(errorMessage);
-        return false;
-      }
+      await persistGoals(updatedGoals);
 
       const updatedTodayTasks = filterTodayTasks(updatedGoals);
       set({ goals: updatedGoals, todayTasks: updatedTodayTasks });
@@ -208,7 +208,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
 
       const updatedGoals = goals.filter((goal) => goal.id !== goalId);
 
-      await saveAllGoals(updatedGoals);
+      await persistGoals(updatedGoals);
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
       notifyDeleted('goals', goalId);
@@ -234,7 +234,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       const removedIdSet = new Set(removedIds);
       const updatedGoals = goals.filter((goal) => !removedIdSet.has(goal.id));
 
-      await saveAllGoals(updatedGoals);
+      await persistGoals(updatedGoals);
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
       for (const id of removedIds) {
@@ -266,7 +266,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
         return goal;
       });
 
-      await saveAllGoals(updatedGoals);
+      await persistGoals(updatedGoals);
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
       notifyMutated('goals', goalId);
@@ -298,7 +298,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
         return goal;
       });
 
-      await saveAllGoals(updatedGoals);
+      await persistGoals(updatedGoals);
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
       notifyMutated('goals', goalId);
@@ -402,7 +402,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       const copy = duplicateGoalUtil(goal);
       const updatedGoals = [...goals, copy];
 
-      await saveAllGoals(updatedGoals);
+      await persistGoals(updatedGoals);
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
       notifyMutated('goals', copy.id);
@@ -437,7 +437,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
         return goal;
       });
 
-      await saveAllGoals(updatedGoals);
+      await persistGoals(updatedGoals);
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
       notifyMutated('goals', goalId);
@@ -471,7 +471,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
         return goal;
       });
 
-      await saveAllGoals(updatedGoals);
+      await persistGoals(updatedGoals);
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
       notifyMutated('goals', goalId);
@@ -501,7 +501,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
         return goal;
       });
 
-      await saveAllGoals(updatedGoals);
+      await persistGoals(updatedGoals);
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
       notifyMutated('goals', goalId);
@@ -531,7 +531,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
         return goal;
       });
 
-      await saveAllGoals(updatedGoals);
+      await persistGoals(updatedGoals);
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
       notifyMutated('goals', goalId);
@@ -566,7 +566,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
         return goal;
       });
 
-      await saveAllGoals(updatedGoals);
+      await persistGoals(updatedGoals);
 
       set({ goals: updatedGoals, todayTasks: reorderedTodayTasks });
       for (const task of reorderedTodayTasks) {
@@ -605,7 +605,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       const { goals } = get();
       const updatedGoals = [...goals, newGoal];
 
-      await saveAllGoals(updatedGoals);
+      await persistGoals(updatedGoals);
       set({ goals: updatedGoals });
       notifyMutated('goals', newGoal.id);
 
@@ -640,7 +640,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
         return goal;
       });
 
-      await saveAllGoals(updatedGoals);
+      await persistGoals(updatedGoals);
       set({ goals: updatedGoals });
       notifyMutated('goals', goalId);
 
@@ -678,7 +678,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
           return goal;
         });
 
-      await saveAllGoals(updatedGoals);
+      await persistGoals(updatedGoals);
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
       notifyDeleted('goals', goalId);
@@ -713,7 +713,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
         return goal;
       });
 
-      await saveAllGoals(updatedGoals);
+      await persistGoals(updatedGoals);
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
       notifyMutated('goals', taskId);
