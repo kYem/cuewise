@@ -1,5 +1,6 @@
 import {
   addSubtaskToGoal,
+  DEFAULT_SETTINGS,
   duplicateGoal as duplicateGoalUtil,
   type Goal,
   type GoalProgress,
@@ -16,11 +17,17 @@ import {
   logger,
   notifyDeleted,
   notifyMutated,
+  notifyMutatedBulk,
   removeSubtaskFromGoal,
   reorderGoals as reorderGoalsUtil,
+  rollDueTasksToToday,
   toggleSubtaskInGoal,
 } from '@cuewise/shared';
-import { getGoals as loadAllGoals, setGoals as saveAllGoals } from '@cuewise/storage';
+import {
+  getGoals as loadAllGoals,
+  getStoredSettings as loadStoredSettings,
+  setGoals as saveAllGoals,
+} from '@cuewise/storage';
 import { create } from 'zustand';
 import { useToastStore } from './toast-store';
 
@@ -42,6 +49,8 @@ interface GoalStore {
   clearCompleted: () => Promise<boolean>;
   transferTaskToNextDay: (goalId: string) => Promise<boolean>;
   moveTaskToToday: (goalId: string) => Promise<boolean>;
+  rollDueTasks: () => Promise<boolean>;
+  handleDayRollover: () => Promise<void>;
   setCompletionFilter: (filter: CompletionFilter) => void;
   getFilteredTasksByDate: () => Array<{ date: string; goals: Goal[] }>;
 
@@ -96,6 +105,9 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       set({ error: errorMessage, isLoading: false });
       useToastStore.getState().error(errorMessage);
     }
+    // Outside the try: the roll handles its own failures, and a roll problem
+    // must never masquerade as the "Failed to load goals" toast.
+    await get().rollDueTasks();
   },
 
   addTask: async (text: string, parentId?: string) => {
@@ -300,6 +312,55 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       useToastStore.getState().error(errorMessage);
       return false;
     }
+  },
+
+  rollDueTasks: async () => {
+    try {
+      // Gate on the persisted setting, not the settings store: goal hydration
+      // races settings hydration (and #goals never hydrates it), so the store
+      // can still hold the default when the roll fires on load.
+      const settings = await loadStoredSettings();
+      // Fail closed on null (unreadable OR never stored): a read failure must
+      // not re-enable automation the user turned off. Pre-onboarding users have
+      // no blob yet — and no overdue tasks either, so nothing is lost.
+      if (settings === null) {
+        return false;
+      }
+      if ((settings.autoRollDueTasks ?? DEFAULT_SETTINGS.autoRollDueTasks) === false) {
+        return false;
+      }
+
+      const { goals } = get();
+      const rolled = rollDueTasksToToday(goals, getTodayDateString());
+      if (rolled === null) {
+        return false;
+      }
+
+      const result = await saveAllGoals(rolled.goals);
+      // No toast on failure: this is background automation the user didn't
+      // initiate, it retries on the next load/rollover, and the log suffices.
+      if (result?.success === false) {
+        logger.error('Failed to persist auto-rolled due tasks', {
+          result,
+          rolledIds: rolled.rolledIds,
+        });
+        return false;
+      }
+
+      set({ goals: rolled.goals, todayTasks: filterTodayTasks(rolled.goals) });
+      notifyMutatedBulk('goals', rolled.rolledIds);
+      return true;
+    } catch (error) {
+      logger.error('Error rolling due tasks into today', error);
+      return false;
+    }
+  },
+
+  handleDayRollover: async () => {
+    // todayTasks was computed against the previous day — refresh it for the new
+    // one regardless of the auto-roll setting, then pull in newly due tasks.
+    set({ todayTasks: filterTodayTasks(get().goals) });
+    await get().rollDueTasks();
   },
 
   setCompletionFilter: (filter: CompletionFilter) => {

@@ -1,4 +1,4 @@
-import { logger } from '@cuewise/shared';
+import { DAY_IN_MS, logger } from '@cuewise/shared';
 import {
   hashSessionToken,
   type RawSessionToken,
@@ -18,7 +18,7 @@ import {
   type SyncStore,
 } from './store';
 
-export const SESSION_TTL_MS = 90 * 24 * 60 * 60 * 1000;
+export const SESSION_TTL_MS = 90 * DAY_IN_MS;
 export const AUTH_CODE_TTL_MS = 60_000;
 // Caps one pull/export query so a large account can't force the worker to buffer an unbounded
 // result set into memory (OOM) — the caller pages by re-pulling from the returned cursor.

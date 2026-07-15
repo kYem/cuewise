@@ -1,5 +1,6 @@
 import {
   configurePlatform,
+  DEFAULT_SETTINGS,
   getTodayDateString,
   type SyncMutationSink,
   storageFailure,
@@ -18,6 +19,7 @@ import { useGoalStore } from './goal-store';
 vi.mock('@cuewise/storage', () => ({
   getGoals: vi.fn(),
   setGoals: vi.fn(),
+  getStoredSettings: vi.fn(),
 }));
 
 // Mock toast store with module-level fns so each level is inspectable across getState() calls.
@@ -901,18 +903,30 @@ describe('toggleTask persistence', () => {
 
 describe('sync sink wiring', () => {
   const markMutated = vi.fn();
+  const markMutatedBulk = vi.fn();
   const markDeleted = vi.fn();
-  const fakeSink: SyncMutationSink = { markMutated, markDeleted };
+  const fakeSink: SyncMutationSink = { markMutated, markMutatedBulk, markDeleted };
 
   beforeEach(() => {
     markMutated.mockClear();
+    markMutatedBulk.mockClear();
     markDeleted.mockClear();
+    vi.mocked(storage.getStoredSettings).mockResolvedValue(DEFAULT_SETTINGS);
     vi.mocked(storage.setGoals).mockResolvedValue({ success: true });
     configurePlatform({ syncSink: fakeSink });
   });
 
   afterEach(() => {
     configurePlatform({ syncSink: null });
+  });
+
+  it('notifies markMutatedBulk with the rolled ids after an auto-roll persists', async () => {
+    const overdue = goalFactory.build({ date: '2025-01-01', dueDate: '2025-01-02' });
+    useGoalStore.setState({ goals: [overdue] });
+
+    await useGoalStore.getState().rollDueTasks();
+
+    expect(markMutatedBulk).toHaveBeenCalledWith('goals', [overdue.id]);
   });
 
   it('notifies markMutated with the new task id after addTask persists', async () => {
@@ -931,5 +945,166 @@ describe('sync sink wiring', () => {
     await useGoalStore.getState().deleteTask(task.id);
 
     expect(markDeleted).toHaveBeenCalledWith('goals', task.id);
+  });
+});
+
+describe('rollDueTasks', () => {
+  const today = getTodayDateString();
+
+  beforeEach(() => {
+    useGoalStore.setState({ goals: [], todayTasks: [], isLoading: false, error: null });
+    vi.mocked(storage.getStoredSettings).mockResolvedValue(DEFAULT_SETTINGS);
+    vi.mocked(storage.setGoals).mockClear();
+  });
+
+  it('moves due and overdue incomplete tasks into today and persists once', async () => {
+    vi.mocked(storage.setGoals).mockResolvedValue({ success: true });
+    const overdue = goalFactory.build({ date: '2025-01-01', dueDate: '2025-01-02' });
+    const untouched = goalFactory.build({ date: '2025-01-01' });
+    useGoalStore.setState({ goals: [overdue, untouched] });
+
+    const result = await useGoalStore.getState().rollDueTasks();
+
+    expect(result).toBe(true);
+    expect(storage.setGoals).toHaveBeenCalledOnce();
+    const state = useGoalStore.getState();
+    expect(state.todayTasks).toEqual([expect.objectContaining({ id: overdue.id, date: today })]);
+    expect(state.goals).toContainEqual(
+      expect.objectContaining({ id: untouched.id, date: '2025-01-01' })
+    );
+  });
+
+  it('does nothing when the persisted auto-roll setting is off', async () => {
+    vi.mocked(storage.getStoredSettings).mockResolvedValue({
+      ...DEFAULT_SETTINGS,
+      autoRollDueTasks: false,
+    });
+    const overdue = goalFactory.build({ date: '2025-01-01', dueDate: '2025-01-02' });
+    useGoalStore.setState({ goals: [overdue] });
+
+    const result = await useGoalStore.getState().rollDueTasks();
+
+    expect(result).toBe(false);
+    expect(storage.setGoals).not.toHaveBeenCalled();
+  });
+
+  it('skips the write entirely when nothing is due', async () => {
+    useGoalStore.setState({ goals: goalFactory.buildList(2, { date: today }) });
+
+    const result = await useGoalStore.getState().rollDueTasks();
+
+    expect(result).toBe(false);
+    expect(storage.setGoals).not.toHaveBeenCalled();
+  });
+
+  it('keeps prior state when the save resolves a failure', async () => {
+    vi.mocked(storage.setGoals).mockResolvedValue(storageFailure('write failed'));
+    const overdue = goalFactory.build({ date: '2025-01-01', dueDate: '2025-01-02' });
+    useGoalStore.setState({ goals: [overdue], todayTasks: [] });
+
+    const result = await useGoalStore.getState().rollDueTasks();
+
+    expect(result).toBe(false);
+    // The in-memory list must not claim a move that storage rejected.
+    expect(useGoalStore.getState().goals).toEqual([overdue]);
+    expect(useGoalStore.getState().todayTasks).toEqual([]);
+  });
+
+  it('fails closed when settings are unreadable or never stored', async () => {
+    vi.mocked(storage.getStoredSettings).mockResolvedValue(null);
+    const overdue = goalFactory.build({ date: '2025-01-01', dueDate: '2025-01-02' });
+    useGoalStore.setState({ goals: [overdue] });
+
+    const result = await useGoalStore.getState().rollDueTasks();
+
+    // A failed read must not re-enable automation the user may have turned off.
+    expect(result).toBe(false);
+    expect(storage.setGoals).not.toHaveBeenCalled();
+  });
+
+  it('treats a legacy settings blob without the key as enabled (the default)', async () => {
+    const legacy = { ...DEFAULT_SETTINGS };
+    delete (legacy as Partial<typeof legacy>).autoRollDueTasks;
+    vi.mocked(storage.getStoredSettings).mockResolvedValue(legacy);
+    vi.mocked(storage.setGoals).mockResolvedValue({ success: true });
+    const overdue = goalFactory.build({ date: '2025-01-01', dueDate: '2025-01-02' });
+    useGoalStore.setState({ goals: [overdue] });
+
+    const result = await useGoalStore.getState().rollDueTasks();
+
+    expect(result).toBe(true);
+  });
+});
+
+describe('initialize triggers the roll', () => {
+  beforeEach(() => {
+    useGoalStore.setState({ goals: [], todayTasks: [], isLoading: true, error: null });
+    vi.mocked(storage.getStoredSettings).mockResolvedValue(DEFAULT_SETTINGS);
+    vi.mocked(storage.setGoals).mockClear().mockResolvedValue({ success: true });
+  });
+
+  it('rolls an overdue due task into today as part of load', async () => {
+    const today = getTodayDateString();
+    const overdue = goalFactory.build({ date: '2025-01-01', dueDate: '2025-01-02' });
+    vi.mocked(storage.getGoals).mockResolvedValue([overdue]);
+
+    await useGoalStore.getState().initialize();
+
+    expect(storage.setGoals).toHaveBeenCalledOnce();
+    expect(useGoalStore.getState().todayTasks).toEqual([
+      expect.objectContaining({ id: overdue.id, date: today }),
+    ]);
+  });
+
+  it('honors the persisted opt-out even though the settings store never hydrated', async () => {
+    vi.mocked(storage.getStoredSettings).mockResolvedValue({
+      ...DEFAULT_SETTINGS,
+      autoRollDueTasks: false,
+    });
+    const overdue = goalFactory.build({ date: '2025-01-01', dueDate: '2025-01-02' });
+    vi.mocked(storage.getGoals).mockResolvedValue([overdue]);
+
+    await useGoalStore.getState().initialize();
+
+    expect(storage.setGoals).not.toHaveBeenCalled();
+    expect(useGoalStore.getState().todayTasks).toEqual([]);
+  });
+});
+
+describe('handleDayRollover', () => {
+  beforeEach(() => {
+    useGoalStore.setState({ goals: [], todayTasks: [], isLoading: false, error: null });
+    vi.mocked(storage.getStoredSettings).mockResolvedValue(DEFAULT_SETTINGS);
+    vi.mocked(storage.setGoals).mockClear();
+  });
+
+  it('recomputes today tasks for the new day and rolls newly due tasks', async () => {
+    vi.mocked(storage.setGoals).mockResolvedValue({ success: true });
+    const today = getTodayDateString();
+    const scheduledToday = goalFactory.build({ date: today });
+    const dueToday = goalFactory.build({ date: '2025-01-01', dueDate: today });
+    // Simulate a stale post-midnight snapshot: state still holds yesterday's view.
+    useGoalStore.setState({ goals: [scheduledToday, dueToday], todayTasks: [] });
+
+    await useGoalStore.getState().handleDayRollover();
+
+    const ids = useGoalStore.getState().todayTasks.map((goal) => goal.id);
+    expect(ids).toContain(scheduledToday.id);
+    expect(ids).toContain(dueToday.id);
+  });
+
+  it('still refreshes today tasks when auto-roll is disabled', async () => {
+    vi.mocked(storage.getStoredSettings).mockResolvedValue({
+      ...DEFAULT_SETTINGS,
+      autoRollDueTasks: false,
+    });
+    const today = getTodayDateString();
+    const scheduledToday = goalFactory.build({ date: today });
+    useGoalStore.setState({ goals: [scheduledToday], todayTasks: [] });
+
+    await useGoalStore.getState().handleDayRollover();
+
+    expect(useGoalStore.getState().todayTasks).toEqual([scheduledToday]);
+    expect(storage.setGoals).not.toHaveBeenCalled();
   });
 });

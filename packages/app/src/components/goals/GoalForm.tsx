@@ -1,4 +1,5 @@
 import {
+  DAY_IN_MS,
   formatDate,
   type Goal,
   getDateStringDaysFromNow,
@@ -39,9 +40,8 @@ const DUE_PRESETS: { label: string; value: () => string }[] = [
 
 // Relative descriptor for the preview: "today" / "tomorrow" / "in 9 days" / "in 2 weeks" / "overdue".
 function relativeDue(dueDate: string): string {
-  const dayMs = 86_400_000;
   const startOfDay = (value: string): number => new Date(`${value}T00:00:00`).getTime();
-  const diff = Math.round((startOfDay(dueDate) - startOfDay(getTodayDateString())) / dayMs);
+  const diff = Math.round((startOfDay(dueDate) - startOfDay(getTodayDateString())) / DAY_IN_MS);
   if (diff < 0) {
     return 'overdue';
   }

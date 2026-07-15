@@ -1,3 +1,4 @@
+import { DAY_IN_MS } from '@cuewise/shared';
 import { requireNonEmptyString, type ValidationIssue } from './problem-details';
 import type { PushRecord } from './store';
 
@@ -6,7 +7,7 @@ export const MAX_CIPHERTEXT_BYTES = 65536;
 export const MAX_COLLECTION_LENGTH = 64;
 export const MAX_ENTITY_ID_LENGTH = 128;
 // Catches a device with a wildly-wrong clock before its bad HLC pollutes other devices.
-export const MAX_CLOCK_DRIFT_MS = 24 * 60 * 60 * 1000;
+export const MAX_CLOCK_DRIFT_MS = DAY_IN_MS;
 
 type PushBodyProblem = {
   problemCode: 'invalid_request' | 'batch_too_large' | 'invalid_record';

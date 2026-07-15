@@ -12,6 +12,8 @@ import { QuoteManagementPage } from './components/QuoteManagementPage';
 import type { SettingsSection } from './components/settings/SettingsSections';
 import { syncSettingsSection } from './components/settings/SyncSettingsSection';
 import { ThemeSwitcher } from './components/ThemeSwitcher';
+import { useDayChange } from './hooks/useDayChange';
+import { useGoalStore } from './stores/goal-store';
 import { useSettingsStore } from './stores/settings-store';
 import { useToastStore } from './stores/toast-store';
 import { type SyncController, SyncControllerContext } from './sync/sync-controller';
@@ -40,6 +42,9 @@ function App({ extraSections, syncController }: AppProps = {}) {
   // Only hide content while glass theme background loads (not during settings load)
   // This allows the default theme to show while waiting for the background image
   const hideContent = showBackgroundImage && !imageLoaded;
+
+  // Goals are day-scoped: refresh Today and roll newly due tasks at midnight.
+  useDayChange(() => useGoalStore.getState().handleDayRollover());
 
   useEffect(() => {
     const handleHashChange = () => {

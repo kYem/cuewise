@@ -1,10 +1,10 @@
-import type { Reminder } from '@cuewise/shared';
+import { DAY_IN_MS, type Reminder } from '@cuewise/shared';
 import { Factory } from 'fishery';
 
 export const reminderFactory = Factory.define<Reminder>(({ sequence }) => ({
   id: `reminder-${sequence}`,
   text: `Test reminder ${sequence}`,
-  dueDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // Tomorrow
+  dueDate: new Date(Date.now() + DAY_IN_MS).toISOString(), // Tomorrow
   completed: false,
   notified: false,
   recurring: undefined,
