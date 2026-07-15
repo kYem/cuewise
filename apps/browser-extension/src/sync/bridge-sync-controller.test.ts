@@ -1,12 +1,10 @@
 import { logger } from '@cuewise/shared';
+import { CLOUD_SYNC_ENABLED_KEY } from '@cuewise/sync-engine';
 import { createChromeStorageMock, type MockChromeStorage } from '@cuewise/test-utils/mocks';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { BridgeSyncController, LAST_SYNC_CREDS_KEY } from './bridge-sync-controller';
+import { BridgeSyncController } from './bridge-sync-controller';
 import type { SyncControlResponse } from './sync-control-messages';
-
-const STATUS_KEY = 'cuewise.sync.status';
-const QUARANTINE_KEY = 'cuewise.sync.lastQuarantineAt';
-const CLOUD_SYNC_ENABLED_KEY = 'cloudSyncEnabled';
+import { LAST_SYNC_CREDS_KEY, QUARANTINE_KEY, STATUS_KEY } from './sync-storage-keys';
 
 type StorageChangeMap = { [key: string]: chrome.storage.StorageChange };
 type StorageChangeListener = (changes: StorageChangeMap, area: string) => void;

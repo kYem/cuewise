@@ -2,14 +2,13 @@ import type { EnableResult, SyncController, SyncUiStatus } from '@cuewise/app';
 import { logger } from '@cuewise/shared';
 import { CLOUD_SYNC_ENABLED_KEY } from '@cuewise/sync-engine';
 import type { SyncControlMessage, SyncControlResponse } from './sync-control-messages';
-
-// Raw (unnamespaced) chrome.storage.local keys the background writes — see background.ts.
-const STATUS_KEY = 'cuewise.sync.status';
-const QUARANTINE_KEY = 'cuewise.sync.lastQuarantineAt';
-/** Exported so tests can assert against it without duplicating the literal (mirrors macOS's DirectSyncController). */
-export const LAST_SYNC_CREDS_KEY = 'cuewise.sync.lastCreds';
+import { LAST_SYNC_CREDS_KEY, QUARANTINE_KEY, STATUS_KEY } from './sync-storage-keys';
 
 const DEFAULT_TIMEOUT_MS = 30000;
+
+// Google OAuth 2.0 authorization endpoint + the OpenID scope for the implicit id_token flow.
+const GOOGLE_AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth';
+const GOOGLE_OAUTH_SCOPE = 'openid email';
 
 interface LastSyncCreds {
   accountId: string;
@@ -110,7 +109,7 @@ export class BridgeSyncController implements SyncController {
 
     const redirectUri = chrome.identity.getRedirectURL();
     const nonce = crypto.randomUUID();
-    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(this.googleClientId)}&response_type=id_token&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent('openid email')}&nonce=${encodeURIComponent(nonce)}&prompt=select_account`;
+    const authUrl = `${GOOGLE_AUTH_ENDPOINT}?client_id=${encodeURIComponent(this.googleClientId)}&response_type=id_token&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(GOOGLE_OAUTH_SCOPE)}&nonce=${encodeURIComponent(nonce)}&prompt=select_account`;
 
     let redirect: string | undefined;
     try {
