@@ -11,6 +11,9 @@ import type {
   YoutubePlaylist,
 } from './types';
 
+/** One local day in milliseconds — the single source for day arithmetic. */
+export const DAY_IN_MS = 24 * 60 * 60 * 1000;
+
 // Quote categories with display names
 export const QUOTE_CATEGORIES: Record<QuoteCategory, string> = {
   inspiration: 'Inspiration',

@@ -1,3 +1,5 @@
+import { DAY_IN_MS } from './constants';
+
 // Hybrid Logical Clock: physical wall time + a monotonic counter + a device id tiebreak.
 // Encoded as a lexicographically-sortable string so string compare == hlc compare.
 export interface Hlc {
@@ -6,7 +8,7 @@ export interface Hlc {
   node: string;
 }
 
-export const HLC_MAX_DRIFT_MS = 24 * 60 * 60 * 1000;
+export const HLC_MAX_DRIFT_MS = DAY_IN_MS;
 
 export function hlcInit(node: string): Hlc {
   return { physical: 0, counter: 0, node };

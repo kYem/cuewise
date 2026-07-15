@@ -18,6 +18,7 @@ import {
   subWeeks,
 } from 'date-fns';
 import {
+  DAY_IN_MS,
   DEFAULT_REMINDER_INTERVAL_MINUTES,
   POMODORO_DURATION_BOUNDS,
   REMINDER_INTERVAL_MAX,
@@ -497,7 +498,7 @@ export function reorderGoals(goals: Goal[], fromIndex: number, toIndex: number):
  */
 export function getUpcomingTasks(goals: Goal[], daysAhead = 14): (Goal & { dueDate: string })[] {
   const today = getTodayDateString();
-  const cutoff = format(new Date(Date.now() + daysAhead * 24 * 60 * 60 * 1000), 'yyyy-MM-dd');
+  const cutoff = format(new Date(Date.now() + daysAhead * DAY_IN_MS), 'yyyy-MM-dd');
 
   return goals.filter((g): g is Goal & { dueDate: string } => {
     if (!isTask(g) || !g.dueDate) {
@@ -515,7 +516,7 @@ export function getUpcomingTasks(goals: Goal[], daysAhead = 14): (Goal & { dueDa
  */
 export function getRecentIncompleteTasks(goals: Goal[], daysBack = 14): Goal[] {
   const today = getTodayDateString();
-  const cutoff = format(new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000), 'yyyy-MM-dd');
+  const cutoff = format(new Date(Date.now() - daysBack * DAY_IN_MS), 'yyyy-MM-dd');
 
   return goals.filter((g) => isTask(g) && !g.completed && g.date !== today && g.date >= cutoff);
 }

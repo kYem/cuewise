@@ -1,8 +1,7 @@
+import { DAY_IN_MS } from '@cuewise/shared';
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useDayChange } from './useDayChange';
-
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 describe('useDayChange', () => {
   beforeEach(() => {
@@ -43,7 +42,7 @@ describe('useDayChange', () => {
 
     act(() => {
       // Backgrounded laptop: no interval ticks, the clock just jumps a day.
-      vi.setSystemTime(Date.now() + DAY_MS);
+      vi.setSystemTime(Date.now() + DAY_IN_MS);
       document.dispatchEvent(new Event('visibilitychange'));
     });
 
@@ -56,7 +55,7 @@ describe('useDayChange', () => {
 
     unmount();
     act(() => {
-      vi.setSystemTime(Date.now() + DAY_MS);
+      vi.setSystemTime(Date.now() + DAY_IN_MS);
       vi.advanceTimersByTime(120_000);
       document.dispatchEvent(new Event('visibilitychange'));
     });
