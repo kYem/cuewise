@@ -101,7 +101,9 @@ export class BridgeSyncController implements SyncController {
       granted = await chrome.permissions.request({ permissions: ['identity'] });
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
-      logger.warn(`Failed to request the identity permission for Google sign-in: ${detail}`);
+      logger.warn(`Failed to request the identity permission for Google sign-in: ${detail}`, {
+        error,
+      });
       return { ok: false, reason: 'auth' };
     }
     if (!granted) {
@@ -118,9 +120,10 @@ export class BridgeSyncController implements SyncController {
       redirect = await chrome.identity.launchWebAuthFlow({ url: authUrl, interactive: true });
     } catch (error) {
       // Cancel, network failure, redirect-URI mismatch, and a bad client id all land here — log the
-      // real error (no token exists yet) so a misconfig isn't indistinguishable from a user cancel.
+      // message + the Error object (no token exists yet) so a misconfig isn't indistinguishable
+      // from a user cancel and the stack/cause is preserved.
       const detail = error instanceof Error ? error.message : String(error);
-      logger.warn(`Google sign-in auth flow was cancelled or failed: ${detail}`);
+      logger.warn(`Google sign-in auth flow was cancelled or failed: ${detail}`, { error });
       return { ok: false, reason: 'auth' };
     }
     if (redirect === undefined) {
@@ -135,7 +138,7 @@ export class BridgeSyncController implements SyncController {
       // Keep enableWithGoogle from ever throwing (reconnect() relays through it) — a malformed
       // redirect URL is an auth failure, not a control-message failure.
       const detail = error instanceof Error ? error.message : String(error);
-      logger.warn(`Google sign-in redirect URL could not be parsed: ${detail}`);
+      logger.warn(`Google sign-in redirect URL could not be parsed: ${detail}`, { error });
       return { ok: false, reason: 'auth' };
     }
     if (idToken === null) {
