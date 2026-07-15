@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LocalStorageKeyValueStore } from './local-storage-key-value-store';
 
 const store = new LocalStorageKeyValueStore();
@@ -30,5 +30,39 @@ describe('LocalStorageKeyValueStore', () => {
     localStorage.setItem('k', 'v');
 
     await expect(store.getUsage('local')).resolves.toEqual({ bytesInUse: 2, quota: 5242880 });
+  });
+
+  describe('write failure classification', () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('classifies a QuotaExceededError as quota_exceeded with key and area', async () => {
+      vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+        throw new DOMException('the quota has been exceeded', 'QuotaExceededError');
+      });
+
+      const result = await store.set('goals', ['data'], 'local');
+
+      expect(result).toEqual({
+        success: false,
+        error: {
+          type: 'quota_exceeded',
+          message: 'Storage is full — could not save goals. Clear some data to continue.',
+          key: 'goals',
+          area: 'local',
+        },
+      });
+    });
+
+    it('keeps non-quota write failures as unknown', async () => {
+      vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+        throw new Error('security error');
+      });
+
+      const result = await store.set('goals', ['data'], 'local');
+
+      expect(result).toMatchObject({ success: false, error: { type: 'unknown' } });
+    });
   });
 });
