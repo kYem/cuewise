@@ -1,4 +1,4 @@
-import { getTodayDateString } from '@cuewise/shared';
+import { getTodayDateString, logger } from '@cuewise/shared';
 import { useEffect, useRef } from 'react';
 
 /**
@@ -17,7 +17,13 @@ export function useDayChange(onDayChange: () => void): void {
       const next = getTodayDateString();
       if (next !== day) {
         day = next;
-        callbackRef.current();
+        try {
+          callbackRef.current();
+        } catch (error) {
+          // The day marker already advanced — swallowing keeps a bad callback
+          // from escaping into the interval/event handler unlogged.
+          logger.error('Day-change callback failed', error);
+        }
       }
     };
 

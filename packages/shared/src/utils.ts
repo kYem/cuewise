@@ -526,13 +526,13 @@ export interface RolledDueTasks {
   rolledIds: string[];
 }
 
-// Move incomplete tasks whose deadline has arrived (dueDate ≤ today) into today's
-// list; null when nothing rolls, so callers can skip the write entirely.
-// transferCount counts manual next-day pushes, so auto-rolls leave it untouched.
+// Move stale incomplete tasks whose deadline arrived (dueDate ≤ today) into today;
+// null when nothing rolls, so callers can skip the write. Tasks scheduled ahead
+// (date > today, e.g. transferred to tomorrow) are a user decision — left alone.
 export function rollDueTasksToToday(goals: Goal[], today: string): RolledDueTasks | null {
   const rolledIds: string[] = [];
   const updated = goals.map((goal) => {
-    if (!isTask(goal) || goal.completed || goal.date === today) {
+    if (!isTask(goal) || goal.completed || goal.date >= today) {
       return goal;
     }
     if (goal.dueDate === undefined || goal.dueDate > today) {

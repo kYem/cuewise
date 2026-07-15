@@ -1,5 +1,6 @@
 import {
   addSubtaskToGoal,
+  DEFAULT_SETTINGS,
   duplicateGoal as duplicateGoalUtil,
   type Goal,
   type GoalProgress,
@@ -22,9 +23,12 @@ import {
   rollDueTasksToToday,
   toggleSubtaskInGoal,
 } from '@cuewise/shared';
-import { getGoals as loadAllGoals, setGoals as saveAllGoals } from '@cuewise/storage';
+import {
+  getGoals as loadAllGoals,
+  getSettings as loadSettings,
+  setGoals as saveAllGoals,
+} from '@cuewise/storage';
 import { create } from 'zustand';
-import { useSettingsStore } from './settings-store';
 import { useToastStore } from './toast-store';
 
 export type CompletionFilter = 'all' | 'completed' | 'incomplete';
@@ -95,13 +99,15 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       const allGoals = await loadAllGoals();
 
       set({ goals: allGoals, todayTasks: filterTodayTasks(allGoals), isLoading: false });
-      await get().rollDueTasks();
     } catch (error) {
       logger.error('Error initializing goal store', error);
       const errorMessage = 'Failed to load goals. Please refresh the page.';
       set({ error: errorMessage, isLoading: false });
       useToastStore.getState().error(errorMessage);
     }
+    // Outside the try: the roll handles its own failures, and a roll problem
+    // must never masquerade as the "Failed to load goals" toast.
+    await get().rollDueTasks();
   },
 
   addTask: async (text: string, parentId?: string) => {
@@ -309,10 +315,15 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
   },
 
   rollDueTasks: async () => {
-    if (!useSettingsStore.getState().settings.autoRollDueTasks) {
-      return false;
-    }
     try {
+      // Gate on the persisted setting, not the settings store: goal hydration
+      // races settings hydration (and #goals never hydrates it), so the store
+      // can still hold the default when the roll fires on load.
+      const settings = await loadSettings();
+      if ((settings.autoRollDueTasks ?? DEFAULT_SETTINGS.autoRollDueTasks) === false) {
+        return false;
+      }
+
       const { goals } = get();
       const rolled = rollDueTasksToToday(goals, getTodayDateString());
       if (rolled === null) {
@@ -323,7 +334,10 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       // No toast on failure: this is background automation the user didn't
       // initiate, it retries on the next load/rollover, and the log suffices.
       if (result?.success === false) {
-        logger.error('Failed to persist auto-rolled due tasks', result);
+        logger.error('Failed to persist auto-rolled due tasks', {
+          result,
+          rolledIds: rolled.rolledIds,
+        });
         return false;
       }
 

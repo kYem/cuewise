@@ -316,13 +316,12 @@ describe('Due Date Utilities', () => {
       expect(rollDueTasksToToday(goals, '2026-07-15')).toBeNull();
     });
 
-    it('pulls forward a task scheduled for later whose deadline arrived', () => {
-      // Deliberately scheduled ahead, but the deadline wins: due means due.
+    it('leaves tasks deliberately scheduled ahead alone, even when due', () => {
+      // A future date is a user decision (e.g. "transfer to tomorrow") — rolling
+      // it back would silently undo that choice minutes later.
       const goals = [createTestTask({ id: 'ahead', date: '2026-07-20', dueDate: '2026-07-15' })];
 
-      const rolled = rollDueTasksToToday(goals, '2026-07-15');
-
-      expect(rolled?.rolledIds).toEqual(['ahead']);
+      expect(rollDueTasksToToday(goals, '2026-07-15')).toBeNull();
     });
 
     it('preserves transferCount and does not mutate its input', () => {
