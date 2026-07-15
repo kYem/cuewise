@@ -1,5 +1,11 @@
 import { generateDataKey, sealRecord as sealCiphertext } from '@cuewise/crypto';
-import { configurePlatform, hlcEncode, type SyncRecord, storageFailure } from '@cuewise/shared';
+import {
+  configurePlatform,
+  hlcEncode,
+  logger,
+  type SyncRecord,
+  storageFailure,
+} from '@cuewise/shared';
 import { getGoals, setGoals } from '@cuewise/storage';
 import { ApiError } from '@cuewise/sync-client';
 import { goalFactory } from '@cuewise/test-utils/factories';
@@ -156,6 +162,7 @@ describe('pullOnce', () => {
   });
 
   it('stops before advancing the cursor when a write fails, so the record retries next cycle', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
     const goal = goalFactory.build({ id: 'g1' });
     const rec = await sealRecord(dk, 'goals', 'g1', { entity: goal, hlc: NEWER_HLC }, 1);
     transport.pullRecords = [rec];
@@ -169,6 +176,17 @@ describe('pullOnce', () => {
     const saved = await metaStore.load();
     expect(saved.cursor).toBe(0);
     expect(saved.hlcs['goals/g1']).toBeUndefined();
+    // The stall must be diagnosable: the log names the record and the error.
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Pull-cycle write failed; stopping before advancing the cursor',
+      expect.objectContaining({
+        collection: 'goals',
+        entityId: 'g1',
+        seq: 1,
+        error: expect.objectContaining({ message: 'quota exceeded' }),
+      })
+    );
+    errorSpy.mockRestore();
   });
 
   it('fetches a second page when the first getChanges call returns a full page', async () => {

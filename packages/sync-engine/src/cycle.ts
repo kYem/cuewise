@@ -202,6 +202,14 @@ async function applyPulledRecord(
   if (resolution.winner === 'incoming') {
     const res = await binding.writeOne(rec.entityId, resolution.body.entity);
     if (!res.success) {
+      // Without this, a wedged pull (e.g. persistent quota) is undiagnosable —
+      // nothing else connects "cursor stalled at seq N" to the failing write.
+      logger.error('Pull-cycle write failed; stopping before advancing the cursor', {
+        collection: rec.collection,
+        entityId: rec.entityId,
+        seq: rec.seq,
+        error: res.error,
+      });
       return false;
     }
     meta.hlcs[key] = resolution.body.hlc;
