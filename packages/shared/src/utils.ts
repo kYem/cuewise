@@ -520,6 +520,32 @@ export function getRecentIncompleteTasks(goals: Goal[], daysBack = 14): Goal[] {
   return goals.filter((g) => isTask(g) && !g.completed && g.date !== today && g.date >= cutoff);
 }
 
+export interface RolledDueTasks {
+  goals: Goal[];
+  rolledIds: string[];
+}
+
+// Move incomplete tasks whose deadline has arrived (dueDate ≤ today) into today's
+// list; null when nothing rolls, so callers can skip the write entirely.
+// transferCount counts manual next-day pushes, so auto-rolls leave it untouched.
+export function rollDueTasksToToday(goals: Goal[], today: string): RolledDueTasks | null {
+  const rolledIds: string[] = [];
+  const updated = goals.map((goal) => {
+    if (!isTask(goal) || goal.completed || goal.date === today) {
+      return goal;
+    }
+    if (goal.dueDate === undefined || goal.dueDate > today) {
+      return goal;
+    }
+    rolledIds.push(goal.id);
+    return { ...goal, date: today };
+  });
+  if (rolledIds.length === 0) {
+    return null;
+  }
+  return { goals: updated, rolledIds };
+}
+
 export interface NudgeShowState {
   dismissed: boolean;
   count: number;

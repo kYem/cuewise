@@ -61,6 +61,7 @@ export const DEFAULT_SETTINGS: Settings = {
   showQuickLinks: true, // Quick-link tiles shown by default
   enableGoalTransfer: true,
   goalTransferTime: 20, // 8 PM (20:00)
+  autoRollDueTasks: true,
   logLevel: 'error', // Only show errors by default
   hasSeenOnboarding: false, // Show welcome modal on first visit
   // Focus Mode defaults

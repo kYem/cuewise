@@ -713,6 +713,19 @@ function GoalsSection({ s, set, filter }: SettingsSectionProps) {
           </SettingRow>
         </SettingSubgroup>
       )}
+      <SettingDivider />
+      <SettingRow
+        label="Auto-roll due tasks"
+        filter={filter}
+        help="Move incomplete tasks into Today when their due date arrives"
+        keywords="due date deadline overdue roll today automatic"
+      >
+        <Switch
+          label="Auto-roll due tasks"
+          checked={s.autoRollDueTasks}
+          onChange={(v) => set({ autoRollDueTasks: v })}
+        />
+      </SettingRow>
     </div>
   );
 }

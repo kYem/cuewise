@@ -347,6 +347,7 @@ export interface Settings {
   // Goal Transfer
   enableGoalTransfer: boolean; // Enable goal transfer feature (default true)
   goalTransferTime: number; // Hour (0-23) when transfer button appears (default 20 for 8 PM)
+  autoRollDueTasks: boolean; // Move incomplete tasks into Today when their due date arrives (default true)
   // Debug
   logLevel: SettingsLogLevel; // Console log level (default 'error')
   // Onboarding

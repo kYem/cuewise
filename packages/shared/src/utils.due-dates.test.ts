@@ -10,6 +10,7 @@ import {
   getTodayDateString,
   getUpcomingTasks,
   getYesterdayDateString,
+  rollDueTasksToToday,
   shouldShowReviewPrompt,
 } from './utils';
 
@@ -279,6 +280,60 @@ describe('Due Date Utilities', () => {
 
     it('matches getTodayDateString for the current date', () => {
       expect(formatDateString(new Date())).toBe(getTodayDateString());
+    });
+  });
+
+  describe('rollDueTasksToToday', () => {
+    it('rolls incomplete tasks whose due date has arrived into today', () => {
+      const goals = [
+        createTestTask({ id: 'overdue', date: '2026-07-10', dueDate: '2026-07-12' }),
+        createTestTask({ id: 'due-today', date: '2026-07-14', dueDate: '2026-07-15' }),
+      ];
+
+      const rolled = rollDueTasksToToday(goals, '2026-07-15');
+
+      expect(rolled).not.toBeNull();
+      expect(rolled?.rolledIds).toEqual(['overdue', 'due-today']);
+      expect(rolled?.goals.every((goal) => goal.date === '2026-07-15')).toBe(true);
+    });
+
+    it('returns null when nothing is due, so callers can skip the write', () => {
+      const goals = [
+        createTestTask({ id: 'future', date: '2026-07-10', dueDate: '2026-07-20' }),
+        createTestTask({ id: 'no-due', date: '2026-07-10' }),
+      ];
+
+      expect(rollDueTasksToToday(goals, '2026-07-15')).toBeNull();
+    });
+
+    it('skips completed tasks, objectives, and tasks already in today', () => {
+      const goals = [
+        createTestTask({ id: 'done', date: '2026-07-10', dueDate: '2026-07-12', completed: true }),
+        createTestTask({ id: 'obj', type: 'objective', date: '2026-07-10', dueDate: '2026-07-12' }),
+        createTestTask({ id: 'already', date: '2026-07-15', dueDate: '2026-07-12' }),
+      ];
+
+      expect(rollDueTasksToToday(goals, '2026-07-15')).toBeNull();
+    });
+
+    it('pulls forward a task scheduled for later whose deadline arrived', () => {
+      // Deliberately scheduled ahead, but the deadline wins: due means due.
+      const goals = [createTestTask({ id: 'ahead', date: '2026-07-20', dueDate: '2026-07-15' })];
+
+      const rolled = rollDueTasksToToday(goals, '2026-07-15');
+
+      expect(rolled?.rolledIds).toEqual(['ahead']);
+    });
+
+    it('preserves transferCount and does not mutate its input', () => {
+      const goals = [
+        createTestTask({ id: 'a', date: '2026-07-10', dueDate: '2026-07-12', transferCount: 3 }),
+      ];
+
+      const rolled = rollDueTasksToToday(goals, '2026-07-15');
+
+      expect(rolled?.goals[0]).toMatchObject({ transferCount: 3, dueDate: '2026-07-12' });
+      expect(goals[0]).toMatchObject({ date: '2026-07-10' });
     });
   });
 });

@@ -16,12 +16,15 @@ import {
   logger,
   notifyDeleted,
   notifyMutated,
+  notifyMutatedBulk,
   removeSubtaskFromGoal,
   reorderGoals as reorderGoalsUtil,
+  rollDueTasksToToday,
   toggleSubtaskInGoal,
 } from '@cuewise/shared';
 import { getGoals as loadAllGoals, setGoals as saveAllGoals } from '@cuewise/storage';
 import { create } from 'zustand';
+import { useSettingsStore } from './settings-store';
 import { useToastStore } from './toast-store';
 
 export type CompletionFilter = 'all' | 'completed' | 'incomplete';
@@ -42,6 +45,8 @@ interface GoalStore {
   clearCompleted: () => Promise<boolean>;
   transferTaskToNextDay: (goalId: string) => Promise<boolean>;
   moveTaskToToday: (goalId: string) => Promise<boolean>;
+  rollDueTasks: () => Promise<boolean>;
+  handleDayRollover: () => Promise<void>;
   setCompletionFilter: (filter: CompletionFilter) => void;
   getFilteredTasksByDate: () => Array<{ date: string; goals: Goal[] }>;
 
@@ -90,6 +95,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       const allGoals = await loadAllGoals();
 
       set({ goals: allGoals, todayTasks: filterTodayTasks(allGoals), isLoading: false });
+      await get().rollDueTasks();
     } catch (error) {
       logger.error('Error initializing goal store', error);
       const errorMessage = 'Failed to load goals. Please refresh the page.';
@@ -300,6 +306,41 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       useToastStore.getState().error(errorMessage);
       return false;
     }
+  },
+
+  rollDueTasks: async () => {
+    if (!useSettingsStore.getState().settings.autoRollDueTasks) {
+      return false;
+    }
+    try {
+      const { goals } = get();
+      const rolled = rollDueTasksToToday(goals, getTodayDateString());
+      if (rolled === null) {
+        return false;
+      }
+
+      const result = await saveAllGoals(rolled.goals);
+      // No toast on failure: this is background automation the user didn't
+      // initiate, it retries on the next load/rollover, and the log suffices.
+      if (result?.success === false) {
+        logger.error('Failed to persist auto-rolled due tasks', result);
+        return false;
+      }
+
+      set({ goals: rolled.goals, todayTasks: filterTodayTasks(rolled.goals) });
+      notifyMutatedBulk('goals', rolled.rolledIds);
+      return true;
+    } catch (error) {
+      logger.error('Error rolling due tasks into today', error);
+      return false;
+    }
+  },
+
+  handleDayRollover: async () => {
+    // todayTasks was computed against the previous day — refresh it for the new
+    // one regardless of the auto-roll setting, then pull in newly due tasks.
+    set({ todayTasks: filterTodayTasks(get().goals) });
+    await get().rollDueTasks();
   },
 
   setCompletionFilter: (filter: CompletionFilter) => {
