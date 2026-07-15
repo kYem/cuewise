@@ -19,6 +19,8 @@ const DEFAULT_RECOVERY_CODE = 'FAKE-RECOVERY-CODE';
 /** Scriptable SyncController fake for UI tests: settable status, queued enable/reconnect results, recorded calls. */
 export class FakeSyncController implements SyncController {
   readonly calls: RecordedCall[] = [];
+  /** Test-settable: whether canEnableWithGoogle() reports Google sign-in as available. */
+  googleAvailable = true;
 
   private status: SyncUiStatus = 'off';
   private readonly subscribers = new Set<(status: SyncUiStatus) => void>();
@@ -111,6 +113,10 @@ export class FakeSyncController implements SyncController {
       return next;
     }
     return DEFAULT_ENABLE_RESULT;
+  }
+
+  canEnableWithGoogle(): boolean {
+    return this.googleAvailable;
   }
 
   async reconnect(recoveryCode?: string): Promise<EnableResult> {

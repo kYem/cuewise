@@ -350,17 +350,23 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
               />
             </div>
 
-            <div className="flex flex-col gap-2">
-              <button
-                type="button"
-                onClick={handleGoogleSignIn}
-                disabled={isGoogleSigningIn}
-                className="flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-surface px-4 py-2.5 text-sm font-medium text-primary shadow-sm transition-colors hover:bg-surface-variant disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {isGoogleSigningIn ? <Loader2 className="h-4 w-4 animate-spin" /> : <GoogleGlyph />}
-                {isGoogleSigningIn ? 'Signing in…' : 'Sign in with Google'}
-              </button>
-            </div>
+            {controller.canEnableWithGoogle() && (
+              <div className="flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={handleGoogleSignIn}
+                  disabled={isGoogleSigningIn}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-surface px-4 py-2.5 text-sm font-medium text-primary shadow-sm transition-colors hover:bg-surface-variant disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isGoogleSigningIn ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <GoogleGlyph />
+                  )}
+                  {isGoogleSigningIn ? 'Signing in…' : 'Sign in with Google'}
+                </button>
+              </div>
+            )}
 
             {import.meta.env.DEV && (
               <div className="flex flex-col gap-3 border-t border-border pt-3">
