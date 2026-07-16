@@ -1,8 +1,19 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EnableResult } from '../../sync/sync-controller';
 import { EnrollCodeModal } from './EnrollCodeModal';
+
+const toastError = vi.fn();
+vi.mock('../../stores/toast-store', () => ({
+  useToastStore: {
+    getState: () => ({ error: toastError }),
+  },
+}));
+
+beforeEach(() => {
+  toastError.mockClear();
+});
 
 const CODE = 'CW1-MWWJH-3K3QQ-R4RNB-JW1PV-8TRQT-PC14A-R5G5V';
 
@@ -158,6 +169,46 @@ describe('EnrollCodeModal', () => {
 
     expect(await screen.findByRole('alert')).toBeInTheDocument();
     expect(h.onClose).not.toHaveBeenCalled();
+  });
+
+  it('stays open with no error line or toast when the re-auth is cancelled', async () => {
+    const user = userEvent.setup();
+    const h = handlers(async () => ({ ok: false, reason: 'auth', detail: 'cancelled' }));
+    render(<EnrollCodeModal isOpen {...h} />);
+
+    await typeCode(user, CODE);
+    await user.click(screen.getByRole('button', { name: 'Enroll' }));
+
+    expect(await screen.findByRole('button', { name: 'Enroll' })).toBeEnabled();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(toastError).not.toHaveBeenCalled();
+    expect(h.onClose).not.toHaveBeenCalled();
+  });
+
+  it('surfaces a late failure as a toast when the modal was dismissed mid-submit', async () => {
+    // A google-source submit runs a minutes-long OAuth dance; the user may Escape the modal
+    // meanwhile. The failure must not vanish with the error line's render target.
+    const user = userEvent.setup();
+    const { promise, resolve } = deferred<EnableResult>();
+    const h = handlers(() => promise);
+    const { rerender } = render(<EnrollCodeModal isOpen {...h} />);
+
+    await typeCode(user, CODE);
+    await user.click(screen.getByRole('button', { name: 'Enroll' }));
+    rerender(<EnrollCodeModal isOpen={false} {...h} />);
+    resolve({ ok: false, reason: 'auth' });
+
+    await waitFor(() => expect(toastError).toHaveBeenCalledTimes(1));
+  });
+
+  it('disables Enroll while the code is empty, so a blank submit never runs the flow', async () => {
+    const user = userEvent.setup();
+    const h = handlers(async () => ({ ok: true }));
+    render(<EnrollCodeModal isOpen {...h} />);
+
+    expect(screen.getByRole('button', { name: 'Enroll' })).toBeDisabled();
+    await typeCode(user, CODE);
+    expect(screen.getByRole('button', { name: 'Enroll' })).toBeEnabled();
   });
 
   it('clears a stale error message on a new submit attempt', async () => {

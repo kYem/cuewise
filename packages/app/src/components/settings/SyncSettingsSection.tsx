@@ -232,6 +232,13 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       if (result.recoveryCode) {
         setRecoveryCode(result.recoveryCode);
       }
+    } else if (result.reason === 'auth' && result.detail === AUTH_CANCELLED_DETAIL) {
+      logger.info('Cloud sync enroll re-auth was cancelled by the user');
+    } else {
+      // The modal renders the message; this is the default-visible trace of what failed.
+      logger.error(
+        `Cloud sync enroll failed — reason=${result.reason}, detail=${result.detail ?? 'none'}`
+      );
     }
     return result;
   };

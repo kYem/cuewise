@@ -1,6 +1,7 @@
 import { logger } from '@cuewise/shared';
 import type React from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useToastStore } from '../../stores/toast-store';
 import type { EnableResult } from '../../sync/sync-controller';
 import { AUTH_CANCELLED_DETAIL } from '../../sync/sync-controller';
 import { Modal } from '../Modal';
@@ -38,9 +39,14 @@ export const EnrollCodeModal: React.FC<EnrollCodeModalProps> = ({ isOpen, onSubm
   const [code, setCode] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // A google-source submit can run a minutes-long OAuth dance; the user may dismiss the modal
+  // meanwhile. The ref lets the late resolution route its error to a toast instead of a
+  // no-longer-rendered error line.
+  const isOpenRef = useRef(isOpen);
 
   // Reset each time the modal opens, so a stale code/error from a prior attempt can't linger.
   useEffect(() => {
+    isOpenRef.current = isOpen;
     if (isOpen) {
       setCode('');
       setErrorMessage(null);
@@ -57,12 +63,21 @@ export const EnrollCodeModal: React.FC<EnrollCodeModalProps> = ({ isOpen, onSubm
         return;
       }
       const message = messageFor(result);
-      if (message !== null) {
+      if (message === null) {
+        return;
+      }
+      if (isOpenRef.current) {
         setErrorMessage(message);
+      } else {
+        useToastStore.getState().error(message);
       }
     } catch (error) {
       logger.error('Enroll submit failed', error);
-      setErrorMessage(GENERIC_FAILURE_MESSAGE);
+      if (isOpenRef.current) {
+        setErrorMessage(GENERIC_FAILURE_MESSAGE);
+      } else {
+        useToastStore.getState().error(GENERIC_FAILURE_MESSAGE);
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -100,7 +115,7 @@ export const EnrollCodeModal: React.FC<EnrollCodeModalProps> = ({ isOpen, onSubm
         <button
           type="button"
           onClick={handleSubmit}
-          disabled={isSubmitting}
+          disabled={isSubmitting || code.trim() === ''}
           className="w-full rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isSubmitting ? (

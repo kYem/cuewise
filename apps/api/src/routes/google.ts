@@ -230,7 +230,12 @@ export function registerGoogleRoutes(
         logger.error(`Google authorize endpoint reported a transient fault (${oauthError})`);
         return redirectWithError(c, decoded.returnUri, 'server_error');
       }
-      if (oauthError !== 'access_denied') {
+      if (oauthError === 'access_denied') {
+        // Not exclusively a user cancel: Google also emits access_denied for policy denials
+        // (unverified app + non-tester, Workspace-blocked). The app goes quiet on it, so this
+        // line is the only signal — a spike here means a verification/policy incident.
+        logger.info('Google callback relayed access_denied (user cancel or policy denial)');
+      } else {
         // Enum-classified message only — the raw value is attacker-shapeable, never echoed.
         logger.warn('Google callback carried a non-cancel OAuth error (collapsed to auth_failed)');
       }
