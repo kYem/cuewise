@@ -83,6 +83,21 @@ describe('SyncEngine.enableSync', () => {
     });
   });
 
+  it('forwards a codeVerifier on google exchanges so bounced codes stay PKCE-bound', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+
+    await device.engine.enableSync('google', 'bounced-code', 'Device A', undefined, 'verifier-x');
+
+    expect(device.apiClient.lastExchangeRequest).toEqual({
+      provider: 'google',
+      credential: 'bounced-code',
+      deviceName: 'Device A',
+      codeVerifier: 'verifier-x',
+    });
+  });
+
   it('downloads existing server data into a fresh device enrolling with the recovery code', async () => {
     const server = new FakeSyncServer();
     const deviceA = createDevice(server);

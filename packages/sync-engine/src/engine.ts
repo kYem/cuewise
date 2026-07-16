@@ -9,6 +9,7 @@ import { type KeyValueStore, logger, type Scheduler } from '@cuewise/shared';
 import {
   ApiError,
   armSyncPull,
+  type ExchangeTokenRequest,
   type ApiClient as RealApiClient,
   type SessionManager,
   SYNC_PULL_WAKE_ID,
@@ -101,15 +102,18 @@ export class SyncEngine {
     provider: SyncSignInProvider,
     credential: string,
     deviceName: string,
-    recoveryCode?: string
+    recoveryCode?: string,
+    codeVerifier?: string
   ): Promise<void> {
     try {
       this.setStatus('signing_in');
-      const { token } = await this.deps.apiClient.exchangeToken({
-        provider,
-        credential,
-        deviceName,
-      });
+      // A codeVerifier marks a bounced one-time code (macOS deep-link flow) rather than an
+      // id token; only the google arm of the wire type carries it.
+      const request: ExchangeTokenRequest =
+        provider === 'google' && codeVerifier !== undefined
+          ? { provider, credential, deviceName, codeVerifier }
+          : { provider, credential, deviceName };
+      const { token } = await this.deps.apiClient.exchangeToken(request);
       const saved = await this.deps.sessionManager.saveToken(token);
       if (!saved.success) {
         throw new Error(`failed to persist sync session: ${saved.error.message}`);
