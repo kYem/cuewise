@@ -352,3 +352,118 @@ describe('GET /v1/auth/google/callback', () => {
     expect(res.headers.get('Location')).toBeNull();
   });
 });
+
+/** Runs the full start → callback flow and returns the minted one-time code. */
+async function mintCode(sub: string): Promise<string> {
+  const { state, idToken } = await arrangeCallback(sub);
+  const res = await getCallback(exchangerReturning(idToken), { code: 'google-auth-code', state });
+  const location = requireHeader(res, 'Location');
+  const code = new URL(location).searchParams.get('code');
+  if (code === null) {
+    throw new Error('Expected a code query param on the /v1/auth/google/callback redirect');
+  }
+  return code;
+}
+
+async function exchangeCode(provider: 'google' | 'apple', code: string, codeVerifier?: string) {
+  const body: Record<string, unknown> = { provider, credential: code, deviceName: 'Mac' };
+  if (codeVerifier !== undefined) {
+    body.codeVerifier = codeVerifier;
+  }
+  return appWith(exchangerReturning('unused')).request(
+    '/v1/auth/token',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+    testEnv()
+  );
+}
+
+describe('POST /v1/auth/token with a google bounced code', () => {
+  it('exchanges the minted code for a session token exactly once', async () => {
+    const code = await mintCode('google-sub-redeem');
+
+    const firstExchange = await exchangeCode('google', code, CODE_VERIFIER);
+    expect(firstExchange.status).toBe(200);
+    const tokenBody = await firstExchange.json<{ token: string }>();
+    expect(tokenBody.token.length).toBeGreaterThan(20);
+
+    const secondExchange = await exchangeCode('google', code, CODE_VERIFIER);
+    expect(secondExchange.status).toBe(401);
+    const secondBody = await secondExchange.json<{ code: string }>();
+    expect(secondBody.code).toBe('invalid_token');
+  });
+
+  it('rejects a wrong codeVerifier and burns the code so a retry also fails', async () => {
+    const code = await mintCode('google-sub-pkce');
+
+    const wrongExchange = await exchangeCode('google', code, 'b'.repeat(43));
+    expect(wrongExchange.status).toBe(401);
+    const wrongBody = await wrongExchange.json<{ code: string }>();
+    expect(wrongBody.code).toBe('invalid_token');
+
+    const retryExchange = await exchangeCode('google', code, CODE_VERIFIER);
+    expect(retryExchange.status).toBe(401);
+    const retryBody = await retryExchange.json<{ code: string }>();
+    expect(retryBody.code).toBe('invalid_token');
+  });
+
+  it('rejects a google-minted code redeemed under provider apple (cross-provider confusion)', async () => {
+    const code = await mintCode('google-sub-cross');
+
+    const res = await exchangeCode('apple', code, CODE_VERIFIER);
+
+    expect(res.status).toBe(401);
+    const body = await res.json<{ code: string }>();
+    expect(body.code).toBe('invalid_token');
+  });
+
+  it('treats a google exchange without codeVerifier as an id_token exchange (extension path)', async () => {
+    // A bounced code is not a JWT, so the id_token verifier must 401 it rather than redeem it.
+    const code = await mintCode('google-sub-no-verifier');
+
+    const res = await exchangeCode('google', code);
+
+    expect(res.status).toBe(401);
+    const body = await res.json<{ code: string }>();
+    expect(body.code).toBe('invalid_token');
+  });
+
+  it('rejects a codeVerifier on a dev exchange as invalid_request', async () => {
+    const res = await appWith(exchangerReturning('unused')).request(
+      '/v1/auth/token',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: 'dev',
+          credential: 'dev-account',
+          deviceName: 'Mac',
+          codeVerifier: CODE_VERIFIER,
+        }),
+      },
+      { ...testEnv(), DEV_FAKE_AUTH: '1' }
+    );
+
+    expect(res.status).toBe(400);
+    const body = await res.json<{ code: string; errors: { pointer?: string }[] }>();
+    expect(body.code).toBe('invalid_request');
+    expect(body.errors.some((e) => e.pointer === '/codeVerifier')).toBe(true);
+  });
+
+  it('rejects a malformed codeVerifier on a google exchange without burning the code', async () => {
+    const code = await mintCode('google-sub-malformed-verifier');
+
+    const res = await exchangeCode('google', code, 'too-short');
+    expect(res.status).toBe(400);
+    const body = await res.json<{ code: string; errors: { pointer?: string }[] }>();
+    expect(body.code).toBe('invalid_request');
+    expect(body.errors.some((e) => e.pointer === '/codeVerifier')).toBe(true);
+
+    // Proves parseTokenRequest rejected it before consumeAuthCode ran: the code is still live.
+    const retryExchange = await exchangeCode('google', code, CODE_VERIFIER);
+    expect(retryExchange.status).toBe(200);
+  });
+});
