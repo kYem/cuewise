@@ -1,5 +1,12 @@
 # @cuewise/ui
 
+## 1.17.0
+
+### Patch Changes
+
+- Updated dependencies [374d7a8]
+  - @cuewise/shared@1.17.0
+
 ## 1.16.0
 
 ### Patch Changes
