@@ -10,9 +10,10 @@ import type { SettingsSectionProps } from './settings-types';
 
 const toastError = vi.fn();
 const toastSuccess = vi.fn();
+const toastWarning = vi.fn();
 vi.mock('../../stores/toast-store', () => ({
   useToastStore: {
-    getState: () => ({ error: toastError, success: toastSuccess }),
+    getState: () => ({ error: toastError, success: toastSuccess, warning: toastWarning }),
   },
 }));
 
@@ -196,6 +197,32 @@ describe('SyncSettingsSectionComponent', () => {
     await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
 
     await waitFor(() => expect(toastError).toHaveBeenCalledTimes(1));
+  });
+
+  it('routes a recovery code that resolves after unmount to a warning toast, never dropping it', async () => {
+    // Settings can close during the minutes-long macOS browser dance; the show-once code must
+    // surface SOMEWHERE — as a global toast telling the user to regenerate one.
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    let resolveGoogle: ((result: EnableResult) => void) | undefined;
+    controller.enableWithGoogle = vi.fn(
+      () =>
+        new Promise<EnableResult>((resolve) => {
+          resolveGoogle = resolve;
+        })
+    );
+    const { unmount } = renderSection(controller);
+
+    await user.click(cloudSyncSwitch());
+    await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
+    unmount();
+    if (resolveGoogle === undefined) {
+      throw new Error('expected enableWithGoogle to be pending');
+    }
+    act(() => resolveGoogle?.({ ok: true, recoveryCode: CODE }));
+
+    await waitFor(() => expect(toastWarning).toHaveBeenCalledTimes(1));
+    expect(toastError).not.toHaveBeenCalled();
   });
 
   it('treats a cancelled reconnect as a non-error: no toast, Reconnect stays available', async () => {

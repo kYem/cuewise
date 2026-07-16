@@ -201,6 +201,22 @@ describe('EnrollCodeModal', () => {
     await waitFor(() => expect(toastError).toHaveBeenCalledTimes(1));
   });
 
+  it('surfaces a late failure as a toast when the whole modal UNMOUNTED mid-submit', async () => {
+    // Escape can unmount the settings tree without ever rendering isOpen=false — the unmount
+    // cleanup must flip the ref so the failure still reaches the global toast.
+    const user = userEvent.setup();
+    const { promise, resolve } = deferred<EnableResult>();
+    const h = handlers(() => promise);
+    const { unmount } = render(<EnrollCodeModal isOpen {...h} />);
+
+    await typeCode(user, CODE);
+    await user.click(screen.getByRole('button', { name: 'Enroll' }));
+    unmount();
+    resolve({ ok: false, reason: 'auth' });
+
+    await waitFor(() => expect(toastError).toHaveBeenCalledTimes(1));
+  });
+
   it('disables Enroll while the code is empty, so a blank submit never runs the flow', async () => {
     const user = userEvent.setup();
     const h = handlers(async () => ({ ok: true }));

@@ -53,6 +53,14 @@ export const EnrollCodeModal: React.FC<EnrollCodeModalProps> = ({ isOpen, onSubm
     }
   }, [isOpen]);
 
+  // Escape can unmount the whole settings tree without an isOpen=false render (SettingsModal
+  // and Modal both handle it) — treat unmount as dismissed so a late failure still toasts.
+  useEffect(() => {
+    return () => {
+      isOpenRef.current = false;
+    };
+  }, []);
+
   const handleSubmit = async () => {
     setIsSubmitting(true);
     setErrorMessage(null);

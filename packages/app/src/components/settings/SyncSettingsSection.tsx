@@ -1,7 +1,7 @@
 import { logger } from '@cuewise/shared';
 import { AlertTriangle, CloudUpload, KeyRound, Loader2, RefreshCw } from 'lucide-react';
 import type React from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSettingsStore } from '../../stores/settings-store';
 import { useToastStore } from '../../stores/toast-store';
 import type { EnableResult, SyncUiStatus } from '../../sync/sync-controller';
@@ -117,6 +117,16 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   // The error state's "Try again" retries the exact action that failed (enable / google /
   // reconnect) — syncNow can't recover it and would falsely report success.
   const [failedAction, setFailedAction] = useState<'enable' | 'google' | 'reconnect'>('enable');
+  // The macOS google flow can take minutes; if Settings closes meanwhile, a late recovery code
+  // has no modal to render into — the ref routes it to a global toast instead of vanishing.
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!controller) {
@@ -133,6 +143,20 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     return null;
   }
 
+  // A show-once recovery code must never vanish: if Settings closed during a slow OAuth flow,
+  // the modal has no mount — tell the user (globally) to regenerate one instead. Recoverable:
+  // the code grants nothing by itself and Regenerate mints a fresh one.
+  const surfaceRecoveryCode = (code: string) => {
+    if (mountedRef.current) {
+      setRecoveryCode(code);
+      return;
+    }
+    logger.error('Cloud sync enabled after Settings closed — the recovery code had no surface');
+    useToastStore
+      .getState()
+      .warning('Cloud sync is on — open Settings → Cloud sync and regenerate your recovery code.');
+  };
+
   // Shared by the initial enable() and the reconnect() flows — both surface the same shape.
   // source records which flow needs a code, so the EnrollCodeModal submit routes back correctly.
   const routeEnableResult = async (
@@ -144,7 +168,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       await takeOverFromChromeSync();
       setEnabling(false);
       if (result.recoveryCode) {
-        setRecoveryCode(result.recoveryCode);
+        surfaceRecoveryCode(result.recoveryCode);
       }
       return;
     }
@@ -230,7 +254,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       await takeOverFromChromeSync();
       setEnabling(false);
       if (result.recoveryCode) {
-        setRecoveryCode(result.recoveryCode);
+        surfaceRecoveryCode(result.recoveryCode);
       }
     } else if (result.reason === 'auth' && result.detail === AUTH_CANCELLED_DETAIL) {
       logger.info('Cloud sync enroll re-auth was cancelled by the user');
