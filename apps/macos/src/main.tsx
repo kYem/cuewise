@@ -10,6 +10,7 @@ import ReactDOM from 'react-dom/client';
 import { AppWrapper } from './AppWrapper';
 import { GlowOverlay } from './glow/GlowOverlay';
 import { NoopScheduler, TauriNotifier, TauriScheduler, WebNotifier } from './platform';
+import { createTauriOAuthDriver } from './platform/oauth-driver';
 import { initPosture } from './posture/posture-controller';
 import { createDirectSyncController } from './sync/direct-sync-controller';
 import { TrayStatusBridge } from './tray/TrayStatusBridge';
@@ -59,6 +60,7 @@ if (window.location.hash === '#glow') {
       baseUrl: syncApiBaseUrl,
       keyStore: storage,
       scheduler,
+      oauthDriver: createTauriOAuthDriver(),
       toast: (message) => useToastStore.getState().warning(message),
     });
     syncController = controller;

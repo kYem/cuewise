@@ -10,14 +10,20 @@ import {
   type SyncSignInProvider,
   type SyncStatus,
 } from '@cuewise/sync-engine';
+import type { OAuthDriver } from '../platform/oauth-driver';
+import { computeCodeChallenge, generateCodeVerifier } from './pkce';
 
 /** Exported so tests can assert against it without duplicating the literal. */
 export const LAST_SYNC_CREDS_KEY = 'cuewise.sync.lastCreds';
 
-interface LastSyncCreds {
-  accountId: string;
-  deviceName: string;
-}
+/** Must exactly match an ALLOWED_RETURN_URIS entry on the server. Exported for tests. */
+export const GOOGLE_RETURN_URI = 'cuewise://auth';
+
+// Discriminated on provider so reconnect knows how to re-auth; records persisted before the
+// google flow existed lack the field and are read as dev. Never a credential/token/code.
+type LastSyncCreds =
+  | { provider?: 'dev'; accountId: string; deviceName: string }
+  | { provider: 'google'; deviceName: string };
 
 /** Trampoline callbacks handed to the engine at construction (E4) — never post-hoc attached. */
 interface EngineTrampolines {
@@ -30,6 +36,8 @@ export interface CreateDirectSyncControllerOptions {
   baseUrl: string;
   keyStore: KeyValueStore;
   scheduler: Scheduler;
+  /** Runs the system-browser Google OAuth round-trip (production: createTauriOAuthDriver). */
+  oauthDriver: OAuthDriver;
   /** Fires on quarantine (never the recovery code/credential/token — those are secrets). */
   toast?: (message: string) => void;
 }
@@ -67,7 +75,9 @@ function mapStatus(status: SyncStatus): SyncUiStatus {
 }
 
 interface BuildDirectSyncControllerDeps<E extends SyncEngineControlSurface> {
+  baseUrl: string;
   keyStore: KeyValueStore;
+  oauthDriver: OAuthDriver;
   toast?: (message: string) => void;
   /** Constructs the engine WITH the trampolines (E4) — production wires createSyncEngine, tests wire a real SyncEngine over fakes. */
   buildEngine: (trampolines: EngineTrampolines) => E;
@@ -123,11 +133,12 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
     provider: SyncSignInProvider,
     credential: string,
     deviceName: string,
-    recoveryCode?: string
+    recoveryCode?: string,
+    codeVerifier?: string
   ): Promise<EnableResult> {
     capturedRecoveryCode = undefined;
     try {
-      await engine.enableSync(provider, credential, deviceName, recoveryCode);
+      await engine.enableSync(provider, credential, deviceName, recoveryCode, codeVerifier);
     } catch (err) {
       if (err instanceof RecoveryCodeRequiredError) {
         return { ok: false, reason: 'needs-code' };
@@ -146,10 +157,50 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
     if (engine.getStatus() === 'signed_out') {
       return { ok: false, reason: 'auth' };
     }
-    await persistCreds({ accountId: credential, deviceName });
+    // A google credential is a burned one-time code — worthless for reconnect, so only the
+    // provider marker is persisted; reconnect re-runs the OAuth flow instead.
+    if (provider === 'google') {
+      await persistCreds({ provider: 'google', deviceName });
+    } else {
+      await persistCreds({ provider: 'dev', accountId: credential, deviceName });
+    }
     const capturedCode = capturedRecoveryCode;
     capturedRecoveryCode = undefined;
     return { ok: true, recoveryCode: capturedCode };
+  }
+
+  // NOT serialize()-wrapped: called from inside already-serialized entry points
+  // (enableWithGoogle, reconnect) — the promise-chain mutex would deadlock if nested.
+  async function googleFlow(deviceName: string, recoveryCode?: string): Promise<EnableResult> {
+    const codeVerifier = generateCodeVerifier();
+    const codeChallenge = await computeCodeChallenge(codeVerifier);
+    const startUrl =
+      `${deps.baseUrl}/v1/auth/google/start` +
+      `?return_uri=${encodeURIComponent(GOOGLE_RETURN_URI)}&code_challenge=${codeChallenge}`;
+    let callbackUrl: string;
+    try {
+      callbackUrl = await deps.oauthDriver.authorize(startUrl);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      logger.error(`Google sign-in flow failed: ${detail}`, err);
+      return { ok: false, reason: 'error', detail };
+    }
+    let params: URLSearchParams;
+    try {
+      params = new URL(callbackUrl).searchParams;
+    } catch {
+      logger.error('Google sign-in returned an unparseable callback URL');
+      return { ok: false, reason: 'error', detail: 'Malformed sign-in callback' };
+    }
+    // The server relays a user cancel/denial as ?error= (sanitized) instead of a code.
+    if (params.get('error') !== null) {
+      return { ok: false, reason: 'auth' };
+    }
+    const code = params.get('code');
+    if (code === null || code === '') {
+      return { ok: false, reason: 'error', detail: 'Sign-in callback did not include a code' };
+    }
+    return doEnable('google', code, deviceName, recoveryCode, codeVerifier);
   }
 
   // Promise-chain mutex: enable()/reconnect() share the one capture slot above, so two
@@ -177,22 +228,22 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
     enable(accountId, deviceName, recoveryCode): Promise<EnableResult> {
       return serialize(() => doEnable('dev', accountId, deviceName, recoveryCode));
     },
-    // Deep-link OAuth for macOS is a separate follow-up (ENG-43); Google sign-in is Chrome-only for now.
-    async enableWithGoogle(_deviceName: string, _recoveryCode?: string): Promise<EnableResult> {
-      return {
-        ok: false,
-        reason: 'error',
-        detail: 'Google sign-in on macOS is not available yet',
-      };
+    enableWithGoogle(deviceName: string, recoveryCode?: string): Promise<EnableResult> {
+      return serialize(() => googleFlow(deviceName, recoveryCode));
     },
     canEnableWithGoogle(): boolean {
-      return false;
+      // The controller only exists when sync is enabled, and deep-link support is compiled in.
+      return true;
     },
     reconnect(recoveryCode?: string): Promise<EnableResult> {
       return serialize(async () => {
         const creds = await loadCreds();
         if (creds === null) {
           return { ok: false, reason: 'error' };
+        }
+        if (creds.provider === 'google') {
+          // Google can't silently re-auth; the DK is already on device, so a fresh OAuth suffices.
+          return googleFlow(creds.deviceName, recoveryCode);
         }
         // No code = silent re-auth via persisted DK (E2); a code enrolls this device after reconnect.
         return doEnable('dev', creds.accountId, creds.deviceName, recoveryCode);
@@ -226,7 +277,9 @@ export function createDirectSyncController(
   opts: CreateDirectSyncControllerOptions
 ): DirectSyncControllerHandle<SyncEngine> {
   return buildDirectSyncController<SyncEngine>({
+    baseUrl: opts.baseUrl,
     keyStore: opts.keyStore,
+    oauthDriver: opts.oauthDriver,
     toast: opts.toast,
     buildEngine: (trampolines) =>
       createSyncEngine({

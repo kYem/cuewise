@@ -8,7 +8,15 @@ import {
 import { FakeKvStore } from '@cuewise/sync-engine/src/__fixtures__/fake-kv-store';
 import { FakeScheduler } from '@cuewise/sync-engine/src/__fixtures__/fake-scheduler';
 import { describe, expect, it, vi } from 'vitest';
-import { buildDirectSyncController, LAST_SYNC_CREDS_KEY } from './direct-sync-controller';
+import type { OAuthDriver } from '../platform/oauth-driver';
+import {
+  buildDirectSyncController,
+  GOOGLE_RETURN_URI,
+  LAST_SYNC_CREDS_KEY,
+} from './direct-sync-controller';
+import { computeCodeChallenge } from './pkce';
+
+const BASE_URL = 'https://api.test';
 
 interface Device {
   kv: FakeKvStore;
@@ -30,11 +38,44 @@ function useStorage(device: Pick<Device, 'kv'>): void {
   configurePlatform({ storage: device.kv });
 }
 
+/** Default driver: tests that never sign in with Google fail loudly if the flow runs anyway. */
+function unusedDriver(): OAuthDriver {
+  return {
+    async authorize(): Promise<string> {
+      throw new Error('no OAuth flow expected in this test');
+    },
+  };
+}
+
+interface FakeOAuthDriver {
+  driver: OAuthDriver;
+  /** Every startUrl authorize() was asked to open, in order. */
+  calls: string[];
+}
+
+/** Scriptable driver: resolves every authorize() with `outcome`, or rejects if it's an Error. */
+function fakeOAuthDriver(outcome: string | Error): FakeOAuthDriver {
+  const calls: string[] = [];
+  return {
+    calls,
+    driver: {
+      async authorize(startUrl: string): Promise<string> {
+        calls.push(startUrl);
+        if (outcome instanceof Error) {
+          throw outcome;
+        }
+        return outcome;
+      },
+    },
+  };
+}
+
 /** Builds a controller wired to a REAL SyncEngine over fakes (no createSyncEngine/HTTP involved). */
-function buildRealController(device: Device, toast?: (msg: string) => void) {
+function buildRealController(device: Device, oauthDriver: OAuthDriver = unusedDriver()) {
   return buildDirectSyncController<SyncEngine>({
+    baseUrl: BASE_URL,
     keyStore: device.kv,
-    toast,
+    oauthDriver,
     buildEngine: (trampolines) =>
       new SyncEngine({
         apiClient: device.apiClient,
@@ -189,7 +230,9 @@ describe('createDirectSyncController: enable()', () => {
       getStatus: vi.fn().mockReturnValue('error' as SyncStatus),
     };
     const { controller } = buildDirectSyncController<SyncEngineControlSurface>({
+      baseUrl: BASE_URL,
       keyStore: new FakeKvStore(),
+      oauthDriver: unusedDriver(),
       buildEngine: () => engine,
     });
 
@@ -219,6 +262,7 @@ describe('createDirectSyncController: enable()', () => {
     await controller.enable('cred-a', 'Device A');
 
     expect(await device.kv.get(LAST_SYNC_CREDS_KEY, 'local')).toEqual({
+      provider: 'dev',
       accountId: 'cred-a',
       deviceName: 'Device A',
     });
@@ -245,7 +289,9 @@ describe('createDirectSyncController: enable()', () => {
     // The engine (real or fake) invokes onQuarantine from inside its own construction-time
     // trampolines — calling it here from buildEngine exercises that exact wiring.
     buildDirectSyncController<SyncEngineControlSurface>({
+      baseUrl: BASE_URL,
       keyStore: new FakeKvStore(),
+      oauthDriver: unusedDriver(),
       toast,
       buildEngine: (trampolines) => {
         trampolines.onQuarantine('goals/g1');
@@ -338,9 +384,28 @@ describe('createDirectSyncController: reconnect()', () => {
 
     const result = await controller.reconnect();
 
-    expect(enableSyncSpy).toHaveBeenCalledWith('dev', 'cred-a', 'Device A', undefined);
+    expect(enableSyncSpy).toHaveBeenCalledWith('dev', 'cred-a', 'Device A', undefined, undefined);
     expect(result).toEqual({ ok: true, recoveryCode: undefined });
     expect(engine.getStatus()).toBe('active');
+  });
+
+  it('routes legacy creds persisted without a provider through the silent dev path', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    const { controller, engine } = buildRealController(device);
+    // A record persisted before the google flow existed: no provider field.
+    await device.kv.set(
+      LAST_SYNC_CREDS_KEY,
+      { accountId: 'cred-a', deviceName: 'Device A' },
+      'local'
+    );
+    const enableSyncSpy = vi.spyOn(engine, 'enableSync');
+
+    const result = await controller.reconnect();
+
+    expect(enableSyncSpy).toHaveBeenCalledWith('dev', 'cred-a', 'Device A', undefined, undefined);
+    expect(result.ok).toBe(true);
   });
 
   it('returns an error result when no creds were ever persisted', async () => {
@@ -389,7 +454,9 @@ describe('createDirectSyncController: disable() / syncNow() error propagation', 
       getStatus: vi.fn().mockReturnValue('active' as SyncStatus),
     };
     const { controller } = buildDirectSyncController<SyncEngineControlSurface>({
+      baseUrl: BASE_URL,
       keyStore: new FakeKvStore(),
+      oauthDriver: unusedDriver(),
       buildEngine: () => engine,
     });
 
@@ -405,7 +472,9 @@ describe('createDirectSyncController: disable() / syncNow() error propagation', 
       getStatus: vi.fn().mockReturnValue('error' as SyncStatus),
     };
     const { controller } = buildDirectSyncController<SyncEngineControlSurface>({
+      baseUrl: BASE_URL,
       keyStore: new FakeKvStore(),
+      oauthDriver: unusedDriver(),
       buildEngine: () => engine,
     });
     const seen: string[] = [];
@@ -418,36 +487,120 @@ describe('createDirectSyncController: disable() / syncNow() error propagation', 
   });
 });
 
-describe('createDirectSyncController: enableWithGoogle() stub', () => {
-  it('returns a not-yet-available error without calling the engine', async () => {
-    const engine: SyncEngineControlSurface = {
-      enableSync: vi.fn().mockResolvedValue(undefined),
-      disableSync: vi.fn().mockResolvedValue(undefined),
-      regenerateRecoveryCode: vi.fn().mockResolvedValue('unused'),
-      syncNow: vi.fn().mockResolvedValue(undefined),
-      getStatus: vi.fn().mockReturnValue('disabled' as SyncStatus),
-    };
-    const { controller } = buildDirectSyncController<SyncEngineControlSurface>({
-      keyStore: new FakeKvStore(),
-      buildEngine: () => engine,
+describe('createDirectSyncController: enableWithGoogle()', () => {
+  it('runs the full bounce: PKCE start URL → callback code → google exchange with the verifier', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    const { driver, calls } = fakeOAuthDriver(`${GOOGLE_RETURN_URI}?code=one-time-x`);
+    const { controller } = buildRealController(device, driver);
+
+    const result = await controller.enableWithGoogle('MacBook');
+
+    expect(result.ok).toBe(true);
+    // The start URL targets our server bounce with the constant return_uri.
+    expect(calls).toHaveLength(1);
+    const startUrl = new URL(calls[0]);
+    expect(`${startUrl.origin}${startUrl.pathname}`).toBe(`${BASE_URL}/v1/auth/google/start`);
+    expect(startUrl.searchParams.get('return_uri')).toBe(GOOGLE_RETURN_URI);
+    // The exchange carried the bounced code and a verifier whose S256 matches the start URL's
+    // challenge — the whole PKCE chain, end to end.
+    const exchange = device.apiClient.lastExchangeRequest;
+    if (exchange === null || exchange.provider !== 'google' || !('codeVerifier' in exchange)) {
+      throw new Error('expected a google exchange carrying a codeVerifier');
+    }
+    expect(exchange.credential).toBe('one-time-x');
+    expect(exchange.deviceName).toBe('MacBook');
+    await expect(computeCodeChallenge(exchange.codeVerifier)).resolves.toBe(
+      startUrl.searchParams.get('code_challenge')
+    );
+  });
+
+  it('persists only the provider marker and device name — never the burned code', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    const { driver } = fakeOAuthDriver(`${GOOGLE_RETURN_URI}?code=one-time-x`);
+    const { controller } = buildRealController(device, driver);
+
+    await controller.enableWithGoogle('MacBook');
+
+    expect(await device.kv.get(LAST_SYNC_CREDS_KEY, 'local')).toEqual({
+      provider: 'google',
+      deviceName: 'MacBook',
     });
+  });
+
+  it('maps a driver failure (timeout, browser refusal) to error without exchanging', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    const { driver } = fakeOAuthDriver(new Error('Timed out waiting for the sign-in callback'));
+    const { controller } = buildRealController(device, driver);
 
     const result = await controller.enableWithGoogle('MacBook');
 
     expect(result).toEqual({
       ok: false,
       reason: 'error',
-      detail: 'Google sign-in on macOS is not available yet',
+      detail: 'Timed out waiting for the sign-in callback',
     });
-    expect(engine.enableSync).not.toHaveBeenCalled();
+    expect(device.apiClient.lastExchangeRequest).toBeNull();
   });
 
-  it('reports canEnableWithGoogle() as false so the UI hides the button', () => {
+  it('maps a server-relayed OAuth error (user cancelled at Google) to auth', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    const { driver } = fakeOAuthDriver(`${GOOGLE_RETURN_URI}?error=access_denied`);
+    const { controller } = buildRealController(device, driver);
+
+    const result = await controller.enableWithGoogle('MacBook');
+
+    expect(result).toEqual({ ok: false, reason: 'auth' });
+    expect(device.apiClient.lastExchangeRequest).toBeNull();
+  });
+
+  it('maps a callback with neither code nor error to error', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    const { driver } = fakeOAuthDriver(GOOGLE_RETURN_URI);
+    const { controller } = buildRealController(device, driver);
+
+    const result = await controller.enableWithGoogle('MacBook');
+
+    expect(result).toEqual({
+      ok: false,
+      reason: 'error',
+      detail: 'Sign-in callback did not include a code',
+    });
+    expect(device.apiClient.lastExchangeRequest).toBeNull();
+  });
+
+  it('reports canEnableWithGoogle() as true so the UI shows the button', () => {
     const server = new FakeSyncServer();
     const device = createDevice(server);
     useStorage(device);
     const { controller } = buildRealController(device);
 
-    expect(controller.canEnableWithGoogle()).toBe(false);
+    expect(controller.canEnableWithGoogle()).toBe(true);
+  });
+
+  it('reconnect() after a google enable re-runs the OAuth flow with a fresh challenge', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    const { driver, calls } = fakeOAuthDriver(`${GOOGLE_RETURN_URI}?code=one-time-x`);
+    const { controller } = buildRealController(device, driver);
+    await controller.enableWithGoogle('MacBook');
+
+    const result = await controller.reconnect();
+
+    expect(result.ok).toBe(true);
+    expect(calls).toHaveLength(2);
+    const firstChallenge = new URL(calls[0]).searchParams.get('code_challenge');
+    const secondChallenge = new URL(calls[1]).searchParams.get('code_challenge');
+    expect(secondChallenge).not.toBe(firstChallenge);
   });
 });
