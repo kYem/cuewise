@@ -23,7 +23,11 @@ export type GoogleCodeExchangeResult =
   // from the user's perspective once the server side is fixed.
   | { ok: false; kind: 'token_fault' | 'transient' };
 
-/** Trades a Google authorization code for an id_token; the DI seam route tests fake. */
+/**
+ * Trades a Google authorization code for an id_token; the DI seam route tests fake.
+ * Implementations must never reject — failures are returned as data (GoogleCodeExchangeResult),
+ * since a rejection past state verification would strand the app on a problem+json page.
+ */
 export type GoogleCodeExchanger = (code: string, env: Env) => Promise<GoogleCodeExchangeResult>;
 
 // OAuth error codes that mean OUR client config is broken (secret, redirect URI), not the

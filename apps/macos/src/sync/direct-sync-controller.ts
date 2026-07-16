@@ -188,6 +188,9 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
       return { ok: false, reason: 'error', detail };
     }
     if (engine.getStatus() === 'signed_out') {
+      // The engine swallows 401s into signed_out rather than rethrowing — this is the LIVE
+      // trace for a google one-time code that burned/expired after a successful browser dance.
+      logger.warn(`Cloud sync sign-in rejected (401) for provider ${provider}`);
       return { ok: false, reason: 'auth' };
     }
     // A google credential is a burned one-time code — worthless for reconnect, so only the

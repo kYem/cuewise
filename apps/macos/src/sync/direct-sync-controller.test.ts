@@ -1,4 +1,4 @@
-import { configurePlatform } from '@cuewise/shared';
+import { configurePlatform, logger } from '@cuewise/shared';
 import { ApiError, SessionManager } from '@cuewise/sync-client';
 import { SyncEngine, type SyncEngineControlSurface, type SyncStatus } from '@cuewise/sync-engine';
 import {
@@ -209,16 +209,20 @@ describe('createDirectSyncController: enable()', () => {
     expect(result).toEqual({ ok: false, reason: 'bad-code', detail: 'checksum' });
   });
 
-  it('maps a post-call signed_out status (401 during initial sign-in) to auth', async () => {
+  it('maps a post-call signed_out status (401 during initial sign-in) to auth, with a trace', async () => {
     const server = new FakeSyncServer();
     const device = createDevice(server);
     useStorage(device);
     device.apiClient.rejectExchangeWith401 = true;
     const { controller } = buildRealController(device);
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
 
     const result = await controller.enable('cred-a', 'Device A');
 
     expect(result).toEqual({ ok: false, reason: 'auth' });
+    // The engine swallows the 401 into signed_out — this branch is the only client-side trace.
+    expect(warnSpy).toHaveBeenCalledWith('Cloud sync sign-in rejected (401) for provider dev');
+    warnSpy.mockRestore();
   });
 
   it('maps a thrown ApiError(401) to auth', async () => {
