@@ -6,42 +6,12 @@ import type { Env } from '../env';
 import type { AppDepsResolved } from '../index';
 import { problem, type ValidationIssue } from '../problem-details';
 import { verifyOrProblem } from '../verifiers';
-
-// S256 PKCE challenges are always exactly 43 base64url characters (a 32-byte SHA-256 digest).
-const CODE_CHALLENGE_RE = /^[A-Za-z0-9_-]{43}$/;
-
-interface AppleState {
-  returnUri: string;
-  codeChallenge: string;
-  nonce: string;
-}
-
-/** Narrows a verified-but-untyped `state` payload; shape only, signature already checked. */
-function toAppleState(parsed: unknown): AppleState | null {
-  if (
-    parsed !== null &&
-    typeof parsed === 'object' &&
-    typeof (parsed as { returnUri?: unknown }).returnUri === 'string' &&
-    typeof (parsed as { codeChallenge?: unknown }).codeChallenge === 'string' &&
-    typeof (parsed as { nonce?: unknown }).nonce === 'string'
-  ) {
-    return parsed as AppleState;
-  }
-  return null;
-}
-
-function isAllowedReturnUri(uri: string, env: Env): boolean {
-  return env.ALLOWED_RETURN_URIS.split(',').some((allowed) => uri === allowed.trim());
-}
-
-/** Fails closed on a missing signing key; the key itself is never logged. */
-function requireStateSigningKey(env: Env): string | null {
-  if (!env.STATE_SIGNING_KEY) {
-    logger.error('STATE_SIGNING_KEY is not configured');
-    return null;
-  }
-  return env.STATE_SIGNING_KEY;
-}
+import {
+  CODE_CHALLENGE_RE,
+  isAllowedReturnUri,
+  requireStateSigningKey,
+  toBounceState,
+} from './bounce-shared';
 
 export function registerAppleRoutes(
   app: Hono<{ Bindings: Env } & AuthVars>,
@@ -100,7 +70,7 @@ export function registerAppleRoutes(
       }
       return problem('invalid_request', { detail: 'Bad state.' });
     }
-    const decoded = toAppleState(verifyResult.payload);
+    const decoded = toBounceState(verifyResult.payload);
     if (decoded === null || !isAllowedReturnUri(decoded.returnUri, c.env)) {
       return problem('invalid_request', { detail: 'Bad state.' });
     }
