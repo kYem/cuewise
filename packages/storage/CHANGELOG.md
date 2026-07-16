@@ -1,5 +1,13 @@
 # @cuewise/storage
 
+## 1.17.0
+
+### Patch Changes
+
+- 2169ac2: Storage-full errors are now recognized on the macOS app (and any localStorage-backed context): a quota failure surfaces as "storage is full" guidance instead of a generic retry suggestion that could never succeed.
+- Updated dependencies [374d7a8]
+  - @cuewise/shared@1.17.0
+
 ## 1.15.0
 
 ### Patch Changes
