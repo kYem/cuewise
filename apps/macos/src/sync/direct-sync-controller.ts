@@ -1,4 +1,5 @@
 import type { EnableResult, SyncController, SyncUiStatus } from '@cuewise/app';
+import { AUTH_CANCELLED_DETAIL } from '@cuewise/app';
 import { type KeyValueStore, logger, type Scheduler } from '@cuewise/shared';
 import { ApiError } from '@cuewise/sync-client';
 import {
@@ -241,7 +242,7 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
       logger.warn(
         `Google sign-in did not complete (${cancelled ? 'cancelled at Google' : 'auth failed'})`
       );
-      return { ok: false, reason: 'auth', detail: cancelled ? 'cancelled' : undefined };
+      return { ok: false, reason: 'auth', detail: cancelled ? AUTH_CANCELLED_DETAIL : undefined };
     }
     const code = params.get('code');
     if (code === null || code === '') {

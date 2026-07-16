@@ -26,6 +26,10 @@ export { useToastStore } from './stores/toast-store';
 // Sync seam: platform-agnostic controller interface + context the enable-sync UI
 // drives; host adapters (macOS/extension) implement SyncController and provide it.
 export type { EnableResult, SyncController, SyncUiStatus } from './sync/sync-controller';
-export { SyncControllerContext, useSyncController } from './sync/sync-controller';
+export {
+  AUTH_CANCELLED_DETAIL,
+  SyncControllerContext,
+  useSyncController,
+} from './sync/sync-controller';
 export type { SessionType } from './utils/pomodoro-styles';
 export { getSessionLabel } from './utils/pomodoro-styles';

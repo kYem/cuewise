@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { useSettingsStore } from '../../stores/settings-store';
 import { useToastStore } from '../../stores/toast-store';
 import type { EnableResult, SyncUiStatus } from '../../sync/sync-controller';
-import { useSyncController } from '../../sync/sync-controller';
+import { AUTH_CANCELLED_DETAIL, useSyncController } from '../../sync/sync-controller';
 import { ConfirmationDialog } from '../ConfirmationDialog';
 import { EnrollCodeModal } from './EnrollCodeModal';
 import { RecoveryCodeModal } from './RecoveryCodeModal';
@@ -155,7 +155,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       setEnrollOpen(true);
       return;
     }
-    if (result.reason === 'auth' && result.detail === 'cancelled') {
+    if (result.reason === 'auth' && result.detail === AUTH_CANCELLED_DETAIL) {
       // A deliberate user cancel (closing Google's consent screen) isn't a failure — no error
       // state, no toast; the form stays open for another attempt.
       logger.info(`Cloud sync ${source} sign-in was cancelled by the user`);

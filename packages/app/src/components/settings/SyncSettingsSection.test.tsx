@@ -184,6 +184,52 @@ describe('SyncSettingsSectionComponent', () => {
     expect(toastError).not.toHaveBeenCalled();
   });
 
+  it('still toasts an auth failure that carries a non-cancel detail', async () => {
+    // Pins the exact-match: loosening `detail === 'cancelled'` to a truthy check would
+    // silently swallow real auth failures the moment a producer attaches a diagnostic detail.
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptEnableWithGoogle({ ok: false, reason: 'auth', detail: 'token-expired' });
+    renderSection(controller);
+
+    await user.click(cloudSyncSwitch());
+    await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
+
+    await waitFor(() => expect(toastError).toHaveBeenCalledTimes(1));
+  });
+
+  it('treats a cancelled reconnect as a non-error: no toast, Reconnect stays available', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptReconnect({ ok: false, reason: 'auth', detail: 'cancelled' });
+    renderSection(controller);
+    act(() => controller.setStatus('needs_reauth'));
+
+    await user.click(screen.getByRole('button', { name: 'Reconnect' }));
+
+    expect(await screen.findByRole('button', { name: 'Reconnect' })).toBeEnabled();
+    expect(toastError).not.toHaveBeenCalled();
+  });
+
+  it('keeps the enroll modal open with no error line when the re-auth is cancelled', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptEnableWithGoogle({ ok: false, reason: 'needs-code' });
+    controller.scriptEnableWithGoogle({ ok: false, reason: 'auth', detail: 'cancelled' });
+    renderSection(controller);
+
+    await user.click(cloudSyncSwitch());
+    await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
+    await screen.findByText('Enter recovery code');
+    await user.type(screen.getByLabelText(/recovery code/i), CODE);
+    await user.click(screen.getByRole('button', { name: 'Enroll' }));
+
+    // Modal stays open for another attempt; a deliberate cancel shows no failure message.
+    expect(await screen.findByRole('button', { name: 'Enroll' })).toBeEnabled();
+    expect(screen.getByText('Enter recovery code')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
   it('turns Chrome sync off (migrating to local) after a successful enable', async () => {
     const user = userEvent.setup();
     settingsMock.syncEnabled = true;

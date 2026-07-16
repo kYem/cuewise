@@ -10,6 +10,14 @@ export type EnableResult =
   | { ok: true; recoveryCode?: string }
   | { ok: false; reason: 'needs-code' | 'bad-code' | 'auth' | 'error'; detail?: string };
 
+/**
+ * EnableResult.detail marker for a deliberate user cancel; the UI goes quiet on it (no toast,
+ * no error state). Hosts must only emit it when the cancel signal is trustworthy — macOS's
+ * server-sanitized access_denied qualifies; the extension's window-close message does NOT
+ * (Chromium reports closing a Google-side error page the same way).
+ */
+export const AUTH_CANCELLED_DETAIL = 'cancelled';
+
 /** Platform-agnostic seam the enable-sync UI drives; host adapters (macOS/extension) implement it. */
 export interface SyncController {
   getStatus(): SyncUiStatus;
