@@ -588,6 +588,19 @@ describe('createDirectSyncController: enableWithGoogle()', () => {
     expect(device.apiClient.lastExchangeRequest).toBeNull();
   });
 
+  it('maps a server-relayed auth_failed (verification failure) to auth without a cancel detail', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    const { driver } = fakeOAuthDriver(`${GOOGLE_RETURN_URI}?error=auth_failed`);
+    const { controller } = buildRealController(device, driver);
+
+    const result = await controller.enableWithGoogle('MacBook');
+
+    expect(result).toEqual({ ok: false, reason: 'auth', detail: undefined });
+    expect(device.apiClient.lastExchangeRequest).toBeNull();
+  });
+
   it('maps a server-relayed server_error to error with a retryable detail', async () => {
     const server = new FakeSyncServer();
     const device = createDevice(server);

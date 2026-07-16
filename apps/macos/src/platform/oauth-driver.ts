@@ -67,7 +67,13 @@ export function createTauriOAuthDriver(): OAuthDriver {
           .then((stop) => {
             if (settled) {
               // The flow already ended (timeout / open failure) — don't leak the subscription.
-              stop();
+              try {
+                stop();
+              } catch (err) {
+                logger.warn(
+                  `Deep-link unlisten failed after the flow settled: ${toError(err).message}`
+                );
+              }
               return;
             }
             unlisten = stop;

@@ -4,6 +4,7 @@ import { createTestIdp, type TestIdp } from '../__fixtures__/jwks.fixtures';
 import { spyOnLoggerError } from '../__fixtures__/logger.fixtures';
 import { base64UrlEncodeString, sha256Base64Url, signState } from '../crypto-utils';
 import { createApp } from '../index';
+import type { SyncStore } from '../store';
 import { exchangeGoogleCode, type GoogleCodeExchanger } from './google';
 
 const GOOGLE_ISS = 'https://accounts.google.com';
@@ -59,6 +60,16 @@ function requireHeader(res: Response, name: string): string {
     throw new Error(`Expected a ${name} header on response with status ${res.status}`);
   }
   return value;
+}
+
+/** Asserts a sanitized error relay: 302 to the cuewise://auth return URI, never a code. */
+function expectErrorRedirect(res: Response, error: string): void {
+  expect(res.status).toBe(302);
+  const location = requireHeader(res, 'Location');
+  expect(location.startsWith('cuewise://auth?')).toBe(true);
+  const url = new URL(location);
+  expect(url.searchParams.get('error')).toBe(error);
+  expect(url.searchParams.get('code')).toBeNull();
 }
 
 async function getStart(
@@ -163,28 +174,21 @@ describe('GET /v1/auth/google/start', () => {
   it('relays server_error to the return_uri when STATE_SIGNING_KEY is unset', async () => {
     const errorSpy = spyOnLoggerError();
     const res = await getStart('cuewise://auth', CODE_CHALLENGE, { STATE_SIGNING_KEY: '' });
-    expect(res.status).toBe(302);
-    const url = new URL(requireHeader(res, 'Location'));
-    expect(url.searchParams.get('error')).toBe('server_error');
-    expect(url.searchParams.get('code')).toBeNull();
+    expectErrorRedirect(res, 'server_error');
     expect(errorSpy).toHaveBeenCalledTimes(1);
   });
 
   it('relays server_error when GOOGLE_OAUTH_CLIENT_ID is unset (fails closed, loudly)', async () => {
     const errorSpy = spyOnLoggerError();
     const res = await getStart('cuewise://auth', CODE_CHALLENGE, { GOOGLE_OAUTH_CLIENT_ID: '' });
-    expect(res.status).toBe(302);
-    const url = new URL(requireHeader(res, 'Location'));
-    expect(url.searchParams.get('error')).toBe('server_error');
+    expectErrorRedirect(res, 'server_error');
     expect(errorSpy).toHaveBeenCalledTimes(1);
   });
 
   it('relays server_error when GOOGLE_CLIENT_SECRET is unset — before any consent dance', async () => {
     const errorSpy = spyOnLoggerError();
     const res = await getStart('cuewise://auth', CODE_CHALLENGE, { GOOGLE_CLIENT_SECRET: '' });
-    expect(res.status).toBe(302);
-    const url = new URL(requireHeader(res, 'Location'));
-    expect(url.searchParams.get('error')).toBe('server_error');
+    expectErrorRedirect(res, 'server_error');
     expect(errorSpy).toHaveBeenCalledTimes(1);
   });
 
@@ -218,10 +222,7 @@ describe('GET /v1/auth/google/callback', () => {
     // token endpoint with our client secret.
     const res = await getCallback(exchanger, { error: 'access_denied', code: 'x', state });
 
-    expect(res.status).toBe(302);
-    const url = new URL(requireHeader(res, 'Location'));
-    expect(url.searchParams.get('error')).toBe('access_denied');
-    expect(url.searchParams.get('code')).toBeNull();
+    expectErrorRedirect(res, 'access_denied');
     expect(exchanger).not.toHaveBeenCalled();
   });
 
@@ -229,13 +230,50 @@ describe('GET /v1/auth/google/callback', () => {
     const state = await fetchStartState('cuewise://auth');
 
     const res = await getCallback(exchangerReturning('unused'), {
-      error: 'temporarily_unavailable"><script>alert(1)</script>',
+      error: 'admin_policy_enforced"><script>alert(1)</script>',
       state,
     });
 
-    expect(res.status).toBe(302);
-    const url = new URL(requireHeader(res, 'Location'));
-    expect(url.searchParams.get('error')).toBe('auth_failed');
+    expectErrorRedirect(res, 'auth_failed');
+  });
+
+  it('relays an authorize-endpoint transient fault as server_error, loudly', async () => {
+    // Google's own authorize endpoint faulting is a retryable server incident (RFC 6749
+    // §4.1.2.1), not a sign-in failure — a mis-map would tell the user their auth failed.
+    const errorSpy = spyOnLoggerError();
+    const state = await fetchStartState('cuewise://auth');
+
+    const res = await getCallback(exchangerReturning('unused'), {
+      error: 'temporarily_unavailable',
+      state,
+    });
+
+    expectErrorRedirect(res, 'server_error');
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('relays server_error when minting the one-time code throws (D1 fault at the last step)', async () => {
+    const errorSpy = spyOnLoggerError();
+    const { state, idToken } = await arrangeCallback('google-sub-mint-fault');
+    const app = createApp({
+      googleVerifier: idp.verifier({ issuer: GOOGLE_ISS }),
+      googleCodeExchanger: exchangerReturning(idToken),
+      storeFactory: () =>
+        ({
+          mintAuthCode: async () => {
+            throw new Error('D1 write failed');
+          },
+        }) as unknown as SyncStore,
+    });
+
+    const res = await app.request(
+      `/v1/auth/google/callback?${new URLSearchParams({ code: 'x', state }).toString()}`,
+      { method: 'GET' },
+      testEnv()
+    );
+
+    expectErrorRedirect(res, 'server_error');
+    expect(errorSpy).toHaveBeenCalledTimes(1);
   });
 
   it('rejects an error leg whose state is forged — no redirect for an unproven flow', async () => {
@@ -262,10 +300,7 @@ describe('GET /v1/auth/google/callback', () => {
   it('relays auth_failed when neither code nor error arrives with a valid state', async () => {
     const state = await fetchStartState('cuewise://auth');
     const res = await getCallback(exchangerReturning('unused'), { state });
-    expect(res.status).toBe(302);
-    const url = new URL(requireHeader(res, 'Location'));
-    expect(url.searchParams.get('error')).toBe('auth_failed');
-    expect(url.searchParams.get('code')).toBeNull();
+    expectErrorRedirect(res, 'auth_failed');
   });
 
   it('rejects a state signed with the wrong key', async () => {
@@ -293,10 +328,7 @@ describe('GET /v1/auth/google/callback', () => {
       { GOOGLE_CLIENT_SECRET: '' }
     );
 
-    expect(res.status).toBe(302);
-    const url = new URL(requireHeader(res, 'Location'));
-    expect(url.searchParams.get('error')).toBe('server_error');
-    expect(url.searchParams.get('code')).toBeNull();
+    expectErrorRedirect(res, 'server_error');
     expect(exchanger).not.toHaveBeenCalled();
     expect(errorSpy).toHaveBeenCalledTimes(1);
   });
@@ -307,10 +339,7 @@ describe('GET /v1/auth/google/callback', () => {
 
     const res = await getCallback(exchanger, { code: 'bad-code', state });
 
-    expect(res.status).toBe(302);
-    const url = new URL(requireHeader(res, 'Location'));
-    expect(url.searchParams.get('error')).toBe('auth_failed');
-    expect(url.searchParams.get('code')).toBeNull();
+    expectErrorRedirect(res, 'auth_failed');
   });
 
   it('relays server_error when the code exchange reports a transient fault', async () => {
@@ -319,10 +348,7 @@ describe('GET /v1/auth/google/callback', () => {
 
     const res = await getCallback(exchanger, { code: 'whatever', state });
 
-    expect(res.status).toBe(302);
-    const url = new URL(requireHeader(res, 'Location'));
-    expect(url.searchParams.get('error')).toBe('server_error');
-    expect(url.searchParams.get('code')).toBeNull();
+    expectErrorRedirect(res, 'server_error');
   });
 
   it('relays auth_failed for an ID token whose nonce does not match the state nonce', async () => {
@@ -336,10 +362,7 @@ describe('GET /v1/auth/google/callback', () => {
 
     const res = await getCallback(exchangerReturning(idToken), { code: 'whatever', state });
 
-    expect(res.status).toBe(302);
-    const url = new URL(requireHeader(res, 'Location'));
-    expect(url.searchParams.get('error')).toBe('auth_failed');
-    expect(url.searchParams.get('code')).toBeNull();
+    expectErrorRedirect(res, 'auth_failed');
   });
 
   it('relays auth_failed for an ID token that carries no nonce claim at all', async () => {
@@ -352,10 +375,7 @@ describe('GET /v1/auth/google/callback', () => {
 
     const res = await getCallback(exchangerReturning(idToken), { code: 'whatever', state });
 
-    expect(res.status).toBe(302);
-    const url = new URL(requireHeader(res, 'Location'));
-    expect(url.searchParams.get('error')).toBe('auth_failed');
-    expect(url.searchParams.get('code')).toBeNull();
+    expectErrorRedirect(res, 'auth_failed');
   });
 
   it('relays auth_failed for a bad-audience ID token, never a code', async () => {
@@ -369,10 +389,7 @@ describe('GET /v1/auth/google/callback', () => {
 
     const res = await getCallback(exchangerReturning(idToken), { code: 'whatever', state });
 
-    expect(res.status).toBe(302);
-    const url = new URL(requireHeader(res, 'Location'));
-    expect(url.searchParams.get('error')).toBe('auth_failed');
-    expect(url.searchParams.get('code')).toBeNull();
+    expectErrorRedirect(res, 'auth_failed');
   });
 
   it('relays server_error (not auth_failed) when the JWKS lookup itself fails', async () => {
@@ -391,10 +408,7 @@ describe('GET /v1/auth/google/callback', () => {
       testEnv()
     );
 
-    expect(res.status).toBe(302);
-    const url = new URL(requireHeader(res, 'Location'));
-    expect(url.searchParams.get('error')).toBe('server_error');
-    expect(url.searchParams.get('code')).toBeNull();
+    expectErrorRedirect(res, 'server_error');
   });
 });
 
@@ -458,6 +472,14 @@ describe('exchangeGoogleCode (default exchanger)', () => {
 
   it('classifies a 2xx missing the id_token as transient — a Google anomaly, not a user fault', async () => {
     stubFetchOnce(new Response(JSON.stringify({ access_token: 'only' }), { status: 200 }));
+    await expect(exchangeGoogleCode('code', testEnv())).resolves.toEqual({
+      ok: false,
+      kind: 'transient',
+    });
+  });
+
+  it('classifies a 2xx with an unparseable body as transient', async () => {
+    stubFetchOnce(new Response('not json', { status: 200 }));
     await expect(exchangeGoogleCode('code', testEnv())).resolves.toEqual({
       ok: false,
       kind: 'transient',

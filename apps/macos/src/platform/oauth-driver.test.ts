@@ -92,6 +92,21 @@ describe('createTauriOAuthDriver', () => {
     expect(listener.stop).toHaveBeenCalledTimes(1);
   });
 
+  it('still resolves when unlisten throws during settle — the promise must never hang', async () => {
+    // Regression guard for the settle() try/catch: a throwing stop() after `settled` latches
+    // would otherwise leave authorize() unsettled and deadlock the controller mutex forever.
+    const listener = armListener();
+    listener.stop.mockImplementation(() => {
+      throw new Error('plugin torn down');
+    });
+    const authorize = createTauriOAuthDriver().authorize(START_URL);
+    await flush();
+
+    listener.emit(['cuewise://auth?code=x']);
+
+    await expect(authorize).resolves.toBe('cuewise://auth?code=x');
+  });
+
   it('rejects after the callback timeout and unsubscribes the listener', async () => {
     const listener = armListener();
     const authorize = createTauriOAuthDriver().authorize(START_URL);

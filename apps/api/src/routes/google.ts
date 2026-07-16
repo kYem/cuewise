@@ -41,7 +41,9 @@ const CONFIG_FAULT_ERRORS = new Set([
 async function readOAuthErrorCode(res: Response): Promise<string | null> {
   try {
     const body = (await res.json()) as { error?: unknown };
-    if (typeof body.error === 'string' && body.error !== '') {
+    // Enum-shaped values only — anything else is not an RFC 6749 error code and never
+    // reaches a log line.
+    if (typeof body.error === 'string' && /^[a-z_]{1,64}$/.test(body.error)) {
       return body.error;
     }
     return null;
@@ -180,7 +182,14 @@ export function registerGoogleRoutes(
     url.searchParams.set('scope', 'openid email');
     url.searchParams.set('nonce', nonce);
     url.searchParams.set('prompt', 'select_account');
-    const state = await signState({ returnUri, codeChallenge, nonce }, signingKey);
+    let state: string;
+    try {
+      state = await signState({ returnUri, codeChallenge, nonce }, signingKey);
+    } catch (err) {
+      // A WebCrypto fault here is the last throwable step — relay it rather than strand the app.
+      logger.error('Failed to sign the Google bounce state', err);
+      return redirectWithError(c, returnUri, 'server_error');
+    }
     url.searchParams.set('state', state);
     return c.redirect(url.toString(), 302);
   });
@@ -211,6 +220,16 @@ export function registerGoogleRoutes(
     // so every failure redirects back to the app (see redirectWithError).
     const oauthError = c.req.query('error') ?? '';
     if (oauthError !== '') {
+      // Google's authorize endpoint can itself fault (RFC 6749 §4.1.2.1) — that's a retryable
+      // server-side incident, not a sign-in failure, and it must be loud in our logs.
+      if (oauthError === 'server_error' || oauthError === 'temporarily_unavailable') {
+        logger.error(`Google authorize endpoint reported a transient fault (${oauthError})`);
+        return redirectWithError(c, decoded.returnUri, 'server_error');
+      }
+      if (oauthError !== 'access_denied') {
+        // Enum-classified message only — the raw value is attacker-shapeable, never echoed.
+        logger.warn('Google callback carried a non-cancel OAuth error (collapsed to auth_failed)');
+      }
       return redirectWithError(c, decoded.returnUri, sanitizeOAuthError(oauthError));
     }
     const code = c.req.query('code') ?? '';
@@ -244,14 +263,21 @@ export function registerGoogleRoutes(
       logger.warn('Google callback ID token nonce did not match the state nonce');
       return redirectWithError(c, decoded.returnUri, 'auth_failed');
     }
-    const authCode = await deps.storeFactory(c.env.DB).mintAuthCode(
-      {
-        provider: 'google',
-        providerSub: verified.providerSub,
-        email: verified.email,
-      },
-      decoded.codeChallenge
-    );
+    let authCode: string;
+    try {
+      authCode = await deps.storeFactory(c.env.DB).mintAuthCode(
+        {
+          provider: 'google',
+          providerSub: verified.providerSub,
+          email: verified.email,
+        },
+        decoded.codeChallenge
+      );
+    } catch (err) {
+      // A D1 blip at the very last step must relay too, not strand the app on a JSON page.
+      logger.error('Google callback failed to mint the auth code', err);
+      return redirectWithError(c, decoded.returnUri, 'server_error');
+    }
     const target = new URL(decoded.returnUri);
     target.searchParams.set('code', authCode);
     return c.redirect(target.toString(), 302);

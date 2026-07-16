@@ -147,7 +147,14 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
   }
 
   async function loadCreds(): Promise<LastSyncCreds | null> {
-    return toLastSyncCreds(await deps.keyStore.get<unknown>(LAST_SYNC_CREDS_KEY, 'local'));
+    const raw = await deps.keyStore.get<unknown>(LAST_SYNC_CREDS_KEY, 'local');
+    const creds = toLastSyncCreds(raw);
+    if (raw !== null && raw !== undefined && creds === null) {
+      // Present-but-rejected is worth a trace ("reconnect says no account" debugging);
+      // metadata only — the record can carry dev's accountId credential.
+      logger.warn('Saved sync credentials record was malformed; treating it as absent');
+    }
+    return creds;
   }
 
   // enable()/reconnect() build EnableResult from the thrown error AND the post-call status
@@ -170,6 +177,9 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
         return { ok: false, reason: 'bad-code', detail: err.kind };
       }
       if (err instanceof ApiError && err.status === 401) {
+        // For google this means the one-time code burned/expired/PKCE-failed AFTER a
+        // successful browser dance — confusing without a trace. Metadata only.
+        logger.warn(`Cloud sync sign-in rejected (401) for provider ${provider}`);
         return { ok: false, reason: 'auth' };
       }
       const detail = err instanceof Error ? err.message : String(err);
@@ -232,6 +242,8 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
     }
     const code = params.get('code');
     if (code === null || code === '') {
+      // A forged/truncated deep link during a pending flow lands exactly here.
+      logger.warn('Google sign-in callback carried neither code nor error');
       return { ok: false, reason: 'error', detail: 'Sign-in callback did not include a code' };
     }
     return doEnable('google', code, deviceName, recoveryCode, codeVerifier);
