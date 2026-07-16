@@ -35,7 +35,7 @@ function isDevAuthEnabled(env: Env): boolean {
 }
 
 const MAX_DEVICE_NAME_LENGTH = 100;
-// Real ID tokens run 1-2 KB and Apple's one-time code is 43 chars; this just caps abuse.
+// Real ID tokens run 1-2 KB and the bounce one-time codes are 43 chars; this just caps abuse.
 const MAX_CREDENTIAL_LENGTH = 8192;
 // RFC 7636 §4.1: a PKCE code_verifier is 43-128 characters from the unreserved set
 // [A-Za-z0-9._~-]. ASCII-only, so byte length and character length are provably identical.
@@ -109,6 +109,9 @@ async function redeemBouncedCode(
 ): Promise<Identity | Response> {
   const consumed = await store.consumeAuthCode(credential);
   if (consumed === null) {
+    // Unknown, expired, or ALREADY-BURNED — a replay of a burned code is the interception
+    // signal burn-before-verify exists to catch, so it must be visible. Metadata only.
+    logger.warn(`${provider} auth-code exchange with an unknown, expired, or already-used code`);
     return problem('invalid_token');
   }
   // The code is already burned here; a verifier mismatch fails closed rather than

@@ -49,6 +49,18 @@ async function getAppleStart(app: App, ip: string): Promise<Response> {
   );
 }
 
+async function getGoogleStart(app: App, ip: string): Promise<Response> {
+  const params = new URLSearchParams({
+    return_uri: 'cuewise://auth',
+    code_challenge: 'a'.repeat(43),
+  });
+  return app.request(
+    `/v1/auth/google/start?${params.toString()}`,
+    { headers: { 'CF-Connecting-IP': ip } },
+    { ...appleTestEnv(), GOOGLE_OAUTH_CLIENT_ID: 'google-client', GOOGLE_CLIENT_SECRET: 's' }
+  );
+}
+
 async function postTokenWithoutIpHeader(app: App): Promise<Response> {
   return app.request(
     '/v1/auth/token',
@@ -139,6 +151,25 @@ describe('IP rate limiting on the auth surface', () => {
     expect(last.status).toBe(302);
 
     const blocked = await getAppleStart(app, ip);
+    expect(blocked.status).toBe(429);
+    const body = await blocked.json<{ code: string }>();
+    expect(body.code).toBe('rate_limited');
+  });
+
+  it('blocks the 31st GET /v1/auth/google/start from one IP with 429', async () => {
+    const app = createApp();
+    const ip = '203.0.113.31';
+
+    let last: Response | undefined;
+    for (let i = 1; i <= 30; i++) {
+      last = await getGoogleStart(app, ip);
+    }
+    if (last === undefined) {
+      throw new Error('expected a response from the loop');
+    }
+    expect(last.status).toBe(302);
+
+    const blocked = await getGoogleStart(app, ip);
     expect(blocked.status).toBe(429);
     const body = await blocked.json<{ code: string }>();
     expect(body.code).toBe('rate_limited');

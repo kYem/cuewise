@@ -6,7 +6,8 @@ import { problem } from './problem-details';
 export interface VerifiedIdentity {
   providerSub: string;
   email?: string;
-  // Only Apple's flow sets/checks this; Google's OAuth flow doesn't send a nonce.
+  // Checked by the server-bounce callbacks (Apple, Google) against the state's nonce; the
+  // extension's implicit Google flow sends one too, but only the client can verify it there.
   nonce?: string;
 }
 

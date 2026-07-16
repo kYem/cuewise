@@ -1,10 +1,10 @@
 import { env } from 'cloudflare:test';
-import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createTestIdp, type TestIdp } from '../__fixtures__/jwks.fixtures';
 import { spyOnLoggerError } from '../__fixtures__/logger.fixtures';
 import { base64UrlEncodeString, sha256Base64Url, signState } from '../crypto-utils';
 import { createApp } from '../index';
-import type { GoogleCodeExchanger } from './google';
+import { exchangeGoogleCode, type GoogleCodeExchanger } from './google';
 
 const GOOGLE_ISS = 'https://accounts.google.com';
 const GOOGLE_CLIENT = 'google-client';
@@ -158,22 +158,41 @@ describe('GET /v1/auth/google/start', () => {
     expect(body.errors.some((e) => e.pointer === '/code_challenge')).toBe(true);
   });
 
-  it('returns 500 internal when STATE_SIGNING_KEY is unset', async () => {
+  // Config faults after input validation redirect the (allowlisted) return_uri with
+  // error=server_error, so the app's pending flow settles instead of waiting out its timeout.
+  it('relays server_error to the return_uri when STATE_SIGNING_KEY is unset', async () => {
+    const errorSpy = spyOnLoggerError();
     const res = await getStart('cuewise://auth', CODE_CHALLENGE, { STATE_SIGNING_KEY: '' });
-    expect(res.status).toBe(500);
-    const body = await res.json<{ code: string }>();
-    expect(body.code).toBe('internal');
-    expect(res.headers.get('Location')).toBeNull();
+    expect(res.status).toBe(302);
+    const url = new URL(requireHeader(res, 'Location'));
+    expect(url.searchParams.get('error')).toBe('server_error');
+    expect(url.searchParams.get('code')).toBeNull();
+    expect(errorSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('returns 500 internal when GOOGLE_OAUTH_CLIENT_ID is unset (fails closed)', async () => {
+  it('relays server_error when GOOGLE_OAUTH_CLIENT_ID is unset (fails closed, loudly)', async () => {
     const errorSpy = spyOnLoggerError();
     const res = await getStart('cuewise://auth', CODE_CHALLENGE, { GOOGLE_OAUTH_CLIENT_ID: '' });
-    expect(res.status).toBe(500);
-    const body = await res.json<{ code: string }>();
-    expect(body.code).toBe('internal');
-    expect(res.headers.get('Location')).toBeNull();
+    expect(res.status).toBe(302);
+    const url = new URL(requireHeader(res, 'Location'));
+    expect(url.searchParams.get('error')).toBe('server_error');
     expect(errorSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('relays server_error when GOOGLE_CLIENT_SECRET is unset — before any consent dance', async () => {
+    const errorSpy = spyOnLoggerError();
+    const res = await getStart('cuewise://auth', CODE_CHALLENGE, { GOOGLE_CLIENT_SECRET: '' });
+    expect(res.status).toBe(302);
+    const url = new URL(requireHeader(res, 'Location'));
+    expect(url.searchParams.get('error')).toBe('server_error');
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps problem+json for an unallowlisted return_uri even when config is also broken', async () => {
+    // An unvalidated return_uri must never receive a redirect, no matter what else is wrong.
+    const res = await getStart('https://evil.example', CODE_CHALLENGE, { STATE_SIGNING_KEY: '' });
+    expect(res.status).toBe(400);
+    expect(res.headers.get('Location')).toBeNull();
   });
 });
 
@@ -191,11 +210,13 @@ describe('GET /v1/auth/google/callback', () => {
     expect(exchanger).toHaveBeenCalledWith('google-auth-code', expect.anything());
   });
 
-  it('relays a user cancel as error=access_denied on the returnUri without exchanging', async () => {
+  it('relays a user cancel as error=access_denied without exchanging, even when a code rides along', async () => {
     const state = await fetchStartState('cuewise://auth');
     const exchanger = vi.fn(exchangerReturning('unused'));
 
-    const res = await getCallback(exchanger, { error: 'access_denied', state });
+    // code + error together: the error must win — an errored flow never reaches Google's
+    // token endpoint with our client secret.
+    const res = await getCallback(exchanger, { error: 'access_denied', code: 'x', state });
 
     expect(res.status).toBe(302);
     const url = new URL(requireHeader(res, 'Location'));
@@ -238,12 +259,13 @@ describe('GET /v1/auth/google/callback', () => {
     expect(body.code).toBe('invalid_request');
   });
 
-  it('rejects a missing code when no error is present', async () => {
+  it('relays auth_failed when neither code nor error arrives with a valid state', async () => {
     const state = await fetchStartState('cuewise://auth');
     const res = await getCallback(exchangerReturning('unused'), { state });
-    expect(res.status).toBe(400);
-    const body = await res.json<{ code: string }>();
-    expect(body.code).toBe('invalid_request');
+    expect(res.status).toBe(302);
+    const url = new URL(requireHeader(res, 'Location'));
+    expect(url.searchParams.get('error')).toBe('auth_failed');
+    expect(url.searchParams.get('code')).toBeNull();
   });
 
   it('rejects a state signed with the wrong key', async () => {
@@ -260,7 +282,7 @@ describe('GET /v1/auth/google/callback', () => {
     expect(res.headers.get('Location')).toBeNull();
   });
 
-  it('returns 500 internal without exchanging when GOOGLE_CLIENT_SECRET is unset', async () => {
+  it('relays server_error without exchanging when GOOGLE_CLIENT_SECRET is unset', async () => {
     const errorSpy = spyOnLoggerError();
     const state = await fetchStartState('cuewise://auth');
     const exchanger = vi.fn(exchangerReturning('unused'));
@@ -271,38 +293,39 @@ describe('GET /v1/auth/google/callback', () => {
       { GOOGLE_CLIENT_SECRET: '' }
     );
 
-    expect(res.status).toBe(500);
-    const body = await res.json<{ code: string }>();
-    expect(body.code).toBe('internal');
+    expect(res.status).toBe(302);
+    const url = new URL(requireHeader(res, 'Location'));
+    expect(url.searchParams.get('error')).toBe('server_error');
+    expect(url.searchParams.get('code')).toBeNull();
     expect(exchanger).not.toHaveBeenCalled();
     expect(errorSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('answers 401 invalid_token when the code exchange reports a token fault', async () => {
+  it('relays auth_failed when the code exchange reports a token fault', async () => {
     const state = await fetchStartState('cuewise://auth');
     const exchanger: GoogleCodeExchanger = async () => ({ ok: false, kind: 'token_fault' });
 
     const res = await getCallback(exchanger, { code: 'bad-code', state });
 
-    expect(res.status).toBe(401);
-    const body = await res.json<{ code: string }>();
-    expect(body.code).toBe('invalid_token');
-    expect(res.headers.get('Location')).toBeNull();
+    expect(res.status).toBe(302);
+    const url = new URL(requireHeader(res, 'Location'));
+    expect(url.searchParams.get('error')).toBe('auth_failed');
+    expect(url.searchParams.get('code')).toBeNull();
   });
 
-  it('answers 500 internal when the code exchange reports a transient fault', async () => {
+  it('relays server_error when the code exchange reports a transient fault', async () => {
     const state = await fetchStartState('cuewise://auth');
     const exchanger: GoogleCodeExchanger = async () => ({ ok: false, kind: 'transient' });
 
     const res = await getCallback(exchanger, { code: 'whatever', state });
 
-    expect(res.status).toBe(500);
-    const body = await res.json<{ code: string }>();
-    expect(body.code).toBe('internal');
-    expect(res.headers.get('Location')).toBeNull();
+    expect(res.status).toBe(302);
+    const url = new URL(requireHeader(res, 'Location'));
+    expect(url.searchParams.get('error')).toBe('server_error');
+    expect(url.searchParams.get('code')).toBeNull();
   });
 
-  it('rejects an ID token whose nonce does not match the state nonce', async () => {
+  it('relays auth_failed for an ID token whose nonce does not match the state nonce', async () => {
     const state = await fetchStartState('cuewise://auth');
     const idToken = await idp.sign({
       iss: GOOGLE_ISS,
@@ -313,13 +336,13 @@ describe('GET /v1/auth/google/callback', () => {
 
     const res = await getCallback(exchangerReturning(idToken), { code: 'whatever', state });
 
-    expect(res.status).toBe(401);
-    const body = await res.json<{ code: string }>();
-    expect(body.code).toBe('invalid_token');
-    expect(res.headers.get('Location')).toBeNull();
+    expect(res.status).toBe(302);
+    const url = new URL(requireHeader(res, 'Location'));
+    expect(url.searchParams.get('error')).toBe('auth_failed');
+    expect(url.searchParams.get('code')).toBeNull();
   });
 
-  it('rejects an ID token that carries no nonce claim at all', async () => {
+  it('relays auth_failed for an ID token that carries no nonce claim at all', async () => {
     const state = await fetchStartState('cuewise://auth');
     const idToken = await idp.sign({
       iss: GOOGLE_ISS,
@@ -329,13 +352,13 @@ describe('GET /v1/auth/google/callback', () => {
 
     const res = await getCallback(exchangerReturning(idToken), { code: 'whatever', state });
 
-    expect(res.status).toBe(401);
-    const body = await res.json<{ code: string }>();
-    expect(body.code).toBe('invalid_token');
-    expect(res.headers.get('Location')).toBeNull();
+    expect(res.status).toBe(302);
+    const url = new URL(requireHeader(res, 'Location'));
+    expect(url.searchParams.get('error')).toBe('auth_failed');
+    expect(url.searchParams.get('code')).toBeNull();
   });
 
-  it('rejects a bad-audience ID token without redirecting with a code', async () => {
+  it('relays auth_failed for a bad-audience ID token, never a code', async () => {
     const state = await fetchStartState('cuewise://auth');
     const idToken = await idp.sign({
       iss: GOOGLE_ISS,
@@ -346,10 +369,113 @@ describe('GET /v1/auth/google/callback', () => {
 
     const res = await getCallback(exchangerReturning(idToken), { code: 'whatever', state });
 
-    expect(res.status).toBe(401);
-    const body = await res.json<{ code: string }>();
-    expect(body.code).toBe('invalid_token');
-    expect(res.headers.get('Location')).toBeNull();
+    expect(res.status).toBe(302);
+    const url = new URL(requireHeader(res, 'Location'));
+    expect(url.searchParams.get('error')).toBe('auth_failed');
+    expect(url.searchParams.get('code')).toBeNull();
+  });
+
+  it('relays server_error (not auth_failed) when the JWKS lookup itself fails', async () => {
+    const state = await fetchStartState('cuewise://auth');
+    const { errors } = await import('jose');
+    const app = createApp({
+      googleVerifier: async () => {
+        throw new errors.JWKSTimeout();
+      },
+      googleCodeExchanger: exchangerReturning('any-token'),
+    });
+
+    const res = await app.request(
+      `/v1/auth/google/callback?${new URLSearchParams({ code: 'x', state }).toString()}`,
+      { method: 'GET' },
+      testEnv()
+    );
+
+    expect(res.status).toBe(302);
+    const url = new URL(requireHeader(res, 'Location'));
+    expect(url.searchParams.get('error')).toBe('server_error');
+    expect(url.searchParams.get('code')).toBeNull();
+  });
+});
+
+describe('exchangeGoogleCode (default exchanger)', () => {
+  function stubFetchOnce(response: Response | Error): ReturnType<typeof vi.fn> {
+    const fetchStub = vi.fn(async () => {
+      if (response instanceof Error) {
+        throw response;
+      }
+      return response;
+    });
+    vi.stubGlobal('fetch', fetchStub);
+    return fetchStub;
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('returns the id_token on a well-formed 2xx', async () => {
+    stubFetchOnce(new Response(JSON.stringify({ id_token: 'jwt-here' }), { status: 200 }));
+    await expect(exchangeGoogleCode('code', testEnv())).resolves.toEqual({
+      ok: true,
+      idToken: 'jwt-here',
+    });
+  });
+
+  it('classifies a client-config OAuth error (invalid_client) as transient and logs an error', async () => {
+    const errorSpy = spyOnLoggerError();
+    stubFetchOnce(new Response(JSON.stringify({ error: 'invalid_client' }), { status: 401 }));
+    await expect(exchangeGoogleCode('code', testEnv())).resolves.toEqual({
+      ok: false,
+      kind: 'transient',
+    });
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('classifies invalid_grant (a bad/replayed code) as token_fault', async () => {
+    stubFetchOnce(new Response(JSON.stringify({ error: 'invalid_grant' }), { status: 400 }));
+    await expect(exchangeGoogleCode('code', testEnv())).resolves.toEqual({
+      ok: false,
+      kind: 'token_fault',
+    });
+  });
+
+  it('classifies a Google 5xx as transient', async () => {
+    stubFetchOnce(new Response('bad gateway', { status: 502 }));
+    await expect(exchangeGoogleCode('code', testEnv())).resolves.toEqual({
+      ok: false,
+      kind: 'transient',
+    });
+  });
+
+  it('classifies a rejected fetch (network) as transient', async () => {
+    stubFetchOnce(new Error('connection reset'));
+    await expect(exchangeGoogleCode('code', testEnv())).resolves.toEqual({
+      ok: false,
+      kind: 'transient',
+    });
+  });
+
+  it('classifies a 2xx missing the id_token as transient — a Google anomaly, not a user fault', async () => {
+    stubFetchOnce(new Response(JSON.stringify({ access_token: 'only' }), { status: 200 }));
+    await expect(exchangeGoogleCode('code', testEnv())).resolves.toEqual({
+      ok: false,
+      kind: 'transient',
+    });
+  });
+
+  it('sends the code, client credentials, and redirect_uri as form params', async () => {
+    const fetchStub = stubFetchOnce(
+      new Response(JSON.stringify({ id_token: 'jwt' }), { status: 200 })
+    );
+    await exchangeGoogleCode('the-auth-code', testEnv());
+    const [url, init] = fetchStub.mock.calls[0] as [string, { body: URLSearchParams }];
+    expect(url).toBe('https://oauth2.googleapis.com/token');
+    expect(init.body.get('code')).toBe('the-auth-code');
+    expect(init.body.get('grant_type')).toBe('authorization_code');
+    expect(init.body.get('client_id')).toBe(GOOGLE_CLIENT);
+    expect(init.body.get('client_secret')).toBe('google-test-client-secret');
+    expect(init.body.get('redirect_uri')).toBe(`${env.PUBLIC_BASE_URL}/v1/auth/google/callback`);
   });
 });
 

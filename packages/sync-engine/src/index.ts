@@ -12,6 +12,7 @@ export { type CreateSyncEngineOptions, createSyncEngine } from './create-engine'
 export { type CycleDeps, pullOnce, pushOnce, type SyncTransport } from './cycle';
 export {
   CLOUD_SYNC_ENABLED_KEY,
+  type EnableSyncOptions,
   type EngineApiClient,
   SyncEngine,
   type SyncEngineDeps,

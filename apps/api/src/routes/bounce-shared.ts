@@ -4,7 +4,7 @@ import type { Env } from '../env';
 // S256 PKCE challenges are always exactly 43 base64url characters (a 32-byte SHA-256 digest).
 export const CODE_CHALLENGE_RE = /^[A-Za-z0-9_-]{43}$/;
 
-/** The HMAC-signed `state` payload every server-bounce provider (Apple, Google) signs. */
+/** The payload the server HMAC-signs into `state` for every bounce flow (Apple, Google). */
 export interface BounceState {
   returnUri: string;
   codeChallenge: string;

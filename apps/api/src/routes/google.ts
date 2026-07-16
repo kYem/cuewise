@@ -1,5 +1,5 @@
 import { logger } from '@cuewise/shared';
-import type { Hono } from 'hono';
+import type { Context, Hono } from 'hono';
 import type { AuthVars } from '../auth-middleware';
 import { randomToken, signState, verifyState } from '../crypto-utils';
 import type { Env } from '../env';
@@ -18,16 +18,41 @@ const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 
 export type GoogleCodeExchangeResult =
   | { ok: true; idToken: string }
-  // token_fault: this grant is provably bad (Google 4xx / no id_token) → 401.
-  // transient: Google outage or network failure → 500, retryable client-side.
+  // token_fault: this grant is provably bad (replayed/expired/forged code).
+  // transient: Google outage, network failure, or our own client config rejected — retryable
+  // from the user's perspective once the server side is fixed.
   | { ok: false; kind: 'token_fault' | 'transient' };
 
 /** Trades a Google authorization code for an id_token; the DI seam route tests fake. */
 export type GoogleCodeExchanger = (code: string, env: Env) => Promise<GoogleCodeExchangeResult>;
 
+// OAuth error codes that mean OUR client config is broken (secret, redirect URI), not the
+// grant — must surface as a loud server fault, never as a user-visible "bad token".
+const CONFIG_FAULT_ERRORS = new Set([
+  'invalid_client',
+  'unauthorized_client',
+  'redirect_uri_mismatch',
+]);
+
+/**
+ * Reads only the OAuth `error` enum from a token-endpoint failure body. Never the body itself
+ * and never `error_description` — both can echo request inputs, which are never logged.
+ */
+async function readOAuthErrorCode(res: Response): Promise<string | null> {
+  try {
+    const body = (await res.json()) as { error?: unknown };
+    if (typeof body.error === 'string' && body.error !== '') {
+      return body.error;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Default exchanger: the confidential-client leg Apple's form_post flow doesn't need.
- * Logs statuses only — the response body can echo the code, so it is never logged.
+ * Logs statuses and the error enum only — the response body can echo the code.
  */
 export const exchangeGoogleCode: GoogleCodeExchanger = async (code, env) => {
   let res: Response;
@@ -48,33 +73,67 @@ export const exchangeGoogleCode: GoogleCodeExchanger = async (code, env) => {
     return { ok: false, kind: 'transient' };
   }
   if (!res.ok) {
+    const errorCode = await readOAuthErrorCode(res);
+    if (errorCode !== null && CONFIG_FAULT_ERRORS.has(errorCode)) {
+      // A rotated/mistyped secret or unregistered redirect URI fails every sign-in fleet-wide;
+      // it must be loud and 500-shaped, not blend in with bad-code replay noise.
+      logger.error(
+        `Google code exchange rejected as a client-config fault (${errorCode}, status ${res.status})`
+      );
+      return { ok: false, kind: 'transient' };
+    }
     if (res.status >= 400 && res.status < 500) {
-      logger.warn(`Google code exchange rejected (status ${res.status})`);
+      logger.warn(
+        `Google code exchange rejected (status ${res.status}${errorCode === null ? '' : `, ${errorCode}`})`
+      );
       return { ok: false, kind: 'token_fault' };
     }
     logger.error(`Google token endpoint error (status ${res.status})`);
     return { ok: false, kind: 'transient' };
   }
+  // A 2xx with an unparseable body or no id_token proves nothing about the grant — that's a
+  // Google-side anomaly (retryable), not a user fault.
   let idToken: unknown;
   try {
     idToken = ((await res.json()) as { id_token?: unknown }).id_token;
   } catch {
-    logger.warn('Google token endpoint returned a 2xx with an unparseable body');
-    return { ok: false, kind: 'token_fault' };
+    logger.error('Google token endpoint returned a 2xx with an unparseable body');
+    return { ok: false, kind: 'transient' };
   }
   if (typeof idToken !== 'string' || idToken === '') {
-    logger.warn('Google token endpoint response carried no id_token');
-    return { ok: false, kind: 'token_fault' };
+    logger.error('Google token endpoint response carried no id_token');
+    return { ok: false, kind: 'transient' };
   }
   return { ok: true, idToken };
 };
 
-/** Only OAuth error values the app reacts to pass through to the deep link; the rest collapse. */
-function sanitizeOAuthError(error: string): string {
+/**
+ * Everything the deep link can carry back. The app maps access_denied to a user cancel,
+ * auth_failed to a failed verification, server_error to a retryable server-side fault.
+ */
+type SanitizedOAuthError = 'access_denied' | 'auth_failed' | 'server_error';
+
+/** Google's error values collapse to the app's vocabulary; nothing attacker-shaped rides the deep link. */
+function sanitizeOAuthError(error: string): SanitizedOAuthError {
   if (error === 'access_denied') {
     return 'access_denied';
   }
   return 'auth_failed';
+}
+
+/**
+ * Failures after the return URI is proven ours (allowlisted at /start, or HMAC-verified at the
+ * callback) ride back to the app so its pending flow settles immediately — a problem+json page
+ * in the browser would strand the app until its callback timeout.
+ */
+function redirectWithError(
+  c: Context<{ Bindings: Env } & AuthVars>,
+  returnUri: string,
+  error: SanitizedOAuthError
+): Response {
+  const target = new URL(returnUri);
+  target.searchParams.set('error', error);
+  return c.redirect(target.toString(), 302);
 }
 
 /**
@@ -87,14 +146,6 @@ export function registerGoogleRoutes(
   deps: AppDepsResolved
 ): void {
   app.get('/v1/auth/google/start', async (c) => {
-    const signingKey = requireStateSigningKey(c.env);
-    if (signingKey === null) {
-      return problem('internal');
-    }
-    if (!c.env.GOOGLE_OAUTH_CLIENT_ID) {
-      logger.error('GOOGLE_OAUTH_CLIENT_ID is not configured');
-      return problem('internal');
-    }
     const returnUri = c.req.query('return_uri') ?? '';
     const codeChallenge = c.req.query('code_challenge') ?? '';
     const issues: ValidationIssue[] = [];
@@ -109,6 +160,17 @@ export function registerGoogleRoutes(
     }
     if (issues.length > 0) {
       return problem('invalid_request', { errors: issues });
+    }
+    // Config faults are checked only after the return URI is proven allowlisted, so they can
+    // ride back to the app (fail closed, but without stranding the pending flow). The secret
+    // is required here too — better than failing after the user completes the consent dance.
+    const signingKey = requireStateSigningKey(c.env);
+    if (signingKey === null) {
+      return redirectWithError(c, returnUri, 'server_error');
+    }
+    if (!c.env.GOOGLE_OAUTH_CLIENT_ID || !c.env.GOOGLE_CLIENT_SECRET) {
+      logger.error('Google OAuth client credentials are not configured');
+      return redirectWithError(c, returnUri, 'server_error');
     }
     const nonce = randomToken();
     const url = new URL(GOOGLE_AUTHORIZE_URL);
@@ -145,38 +207,42 @@ export function registerGoogleRoutes(
     if (decoded === null || !isAllowedReturnUri(decoded.returnUri, c.env)) {
       return problem('invalid_request', { detail: 'Bad state.' });
     }
-    // A user cancel/denial at Google arrives as ?error= — relayed only after the state
-    // proved this flow was ours, and sanitized so no attacker-shaped string rides the deep link.
+    // From here the state's HMAC proves this flow is ours and the return URI is allowlisted,
+    // so every failure redirects back to the app (see redirectWithError).
     const oauthError = c.req.query('error') ?? '';
     if (oauthError !== '') {
-      const target = new URL(decoded.returnUri);
-      target.searchParams.set('error', sanitizeOAuthError(oauthError));
-      return c.redirect(target.toString(), 302);
+      return redirectWithError(c, decoded.returnUri, sanitizeOAuthError(oauthError));
     }
     const code = c.req.query('code') ?? '';
     if (code === '') {
-      return problem('invalid_request', { detail: 'code is required.' });
+      logger.warn('Google callback arrived with neither code nor error');
+      return redirectWithError(c, decoded.returnUri, 'auth_failed');
     }
     if (!c.env.GOOGLE_OAUTH_CLIENT_ID || !c.env.GOOGLE_CLIENT_SECRET) {
       logger.error('Google OAuth client credentials are not configured');
-      return problem('internal');
+      return redirectWithError(c, decoded.returnUri, 'server_error');
     }
     const exchanged = await deps.googleCodeExchanger(code, c.env);
     if (!exchanged.ok) {
       if (exchanged.kind === 'token_fault') {
-        return problem('invalid_token');
+        return redirectWithError(c, decoded.returnUri, 'auth_failed');
       }
-      return problem('internal');
+      return redirectWithError(c, decoded.returnUri, 'server_error');
     }
     const verified = await verifyOrProblem(deps.googleVerifier, exchanged.idToken, c.env, 'Google');
     if (verified instanceof Response) {
-      return verified;
+      // verifyOrProblem already classified + logged: 5xx-shaped means our upstream/config
+      // failed (retryable), anything else means the token itself didn't verify.
+      if (verified.status >= 500) {
+        return redirectWithError(c, decoded.returnUri, 'server_error');
+      }
+      return redirectWithError(c, decoded.returnUri, 'auth_failed');
     }
     // The state is HMAC-signed, so a matching nonce proves this ID token was minted
     // for a flow this server started — not forged or replayed from elsewhere.
     if (verified.nonce === undefined || verified.nonce !== decoded.nonce) {
       logger.warn('Google callback ID token nonce did not match the state nonce');
-      return problem('invalid_token');
+      return redirectWithError(c, decoded.returnUri, 'auth_failed');
     }
     const authCode = await deps.storeFactory(c.env.DB).mintAuthCode(
       {

@@ -70,7 +70,7 @@ export async function sha256Base64Url(value: string): Promise<string> {
 let cachedKey: { raw: string; key: Promise<CryptoKey> } | null = null;
 
 // STATE_SIGNING_KEY is effectively constant per isolate; caching avoids re-importing the
-// same HMAC key on every signState/verifyState call (every Apple /start and /callback).
+// same HMAC key on every signState/verifyState call (every bounce /start and /callback).
 function importHmacKey(key: string): Promise<CryptoKey> {
   if (cachedKey !== null && cachedKey.raw === key) {
     return cachedKey.key;

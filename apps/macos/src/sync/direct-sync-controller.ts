@@ -20,10 +20,30 @@ export const LAST_SYNC_CREDS_KEY = 'cuewise.sync.lastCreds';
 export const GOOGLE_RETURN_URI = 'cuewise://auth';
 
 // Discriminated on provider so reconnect knows how to re-auth; records persisted before the
-// google flow existed lack the field and are read as dev. Never a credential/token/code.
+// google flow existed lack the field and are read as dev. Never a Google credential/token/
+// one-time code — dev's accountId doubles as its fake-auth credential (localhost-only bypass).
 type LastSyncCreds =
   | { provider?: 'dev'; accountId: string; deviceName: string }
   | { provider: 'google'; deviceName: string };
+
+/** Narrows a stored creds record so a corrupted/foreign one fails at load, not mid-OAuth-flow. */
+function toLastSyncCreds(parsed: unknown): LastSyncCreds | null {
+  if (parsed === null || typeof parsed !== 'object') {
+    return null;
+  }
+  const record = parsed as { provider?: unknown; accountId?: unknown; deviceName?: unknown };
+  if (typeof record.deviceName !== 'string') {
+    return null;
+  }
+  if (record.provider === 'google') {
+    return { provider: 'google', deviceName: record.deviceName };
+  }
+  const isDevShape = record.provider === 'dev' || record.provider === undefined;
+  if (isDevShape && typeof record.accountId === 'string') {
+    return { provider: 'dev', accountId: record.accountId, deviceName: record.deviceName };
+  }
+  return null;
+}
 
 /** Trampoline callbacks handed to the engine at construction (E4) — never post-hoc attached. */
 interface EngineTrampolines {
@@ -119,12 +139,15 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
   async function persistCreds(creds: LastSyncCreds): Promise<void> {
     const result = await deps.keyStore.set(LAST_SYNC_CREDS_KEY, creds, 'local');
     if (!result.success) {
-      logger.error('Failed to persist sync credentials for reconnect', result.error);
+      logger.error(
+        `Failed to persist sync credentials for reconnect: ${result.error.message}`,
+        result.error
+      );
     }
   }
 
   async function loadCreds(): Promise<LastSyncCreds | null> {
-    return deps.keyStore.get<LastSyncCreds>(LAST_SYNC_CREDS_KEY, 'local');
+    return toLastSyncCreds(await deps.keyStore.get<unknown>(LAST_SYNC_CREDS_KEY, 'local'));
   }
 
   // enable()/reconnect() build EnableResult from the thrown error AND the post-call status
@@ -138,7 +161,7 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
   ): Promise<EnableResult> {
     capturedRecoveryCode = undefined;
     try {
-      await engine.enableSync(provider, credential, deviceName, recoveryCode, codeVerifier);
+      await engine.enableSync(provider, credential, deviceName, { recoveryCode, codeVerifier });
     } catch (err) {
       if (err instanceof RecoveryCodeRequiredError) {
         return { ok: false, reason: 'needs-code' };
@@ -192,9 +215,20 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
       logger.error('Google sign-in returned an unparseable callback URL');
       return { ok: false, reason: 'error', detail: 'Malformed sign-in callback' };
     }
-    // The server relays a user cancel/denial as ?error= (sanitized) instead of a code.
-    if (params.get('error') !== null) {
-      return { ok: false, reason: 'auth' };
+    // The server relays failures as a sanitized ?error= instead of a code: access_denied
+    // (user cancelled), auth_failed (verification failed), server_error (retryable fault).
+    const oauthError = params.get('error');
+    if (oauthError !== null) {
+      if (oauthError === 'server_error') {
+        logger.error('Google sign-in relayed a server-side failure');
+        return { ok: false, reason: 'error', detail: 'Sign-in failed on the server' };
+      }
+      const cancelled = oauthError === 'access_denied';
+      // The deep-link URL is attacker-shapeable; never echo its raw values into logs/results.
+      logger.warn(
+        `Google sign-in did not complete (${cancelled ? 'cancelled at Google' : 'auth failed'})`
+      );
+      return { ok: false, reason: 'auth', detail: cancelled ? 'cancelled' : undefined };
     }
     const code = params.get('code');
     if (code === null || code === '') {
@@ -232,14 +266,16 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
       return serialize(() => googleFlow(deviceName, recoveryCode));
     },
     canEnableWithGoogle(): boolean {
-      // The controller only exists when sync is enabled, and deep-link support is compiled in.
+      // Exists whenever the sync feature is configured (VITE_SYNC_API_BASE_URL). The Tauri
+      // build compiles in deep-link support; non-Tauri (browser/e2e) fails at authorize()
+      // rather than hiding the button.
       return true;
     },
     reconnect(recoveryCode?: string): Promise<EnableResult> {
       return serialize(async () => {
         const creds = await loadCreds();
         if (creds === null) {
-          return { ok: false, reason: 'error' };
+          return { ok: false, reason: 'error', detail: 'No saved sync account on this device' };
         }
         if (creds.provider === 'google') {
           // Google can't silently re-auth; the DK is already on device, so a fresh OAuth suffices.

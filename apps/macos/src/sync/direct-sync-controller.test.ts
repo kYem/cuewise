@@ -384,7 +384,10 @@ describe('createDirectSyncController: reconnect()', () => {
 
     const result = await controller.reconnect();
 
-    expect(enableSyncSpy).toHaveBeenCalledWith('dev', 'cred-a', 'Device A', undefined, undefined);
+    expect(enableSyncSpy).toHaveBeenCalledWith('dev', 'cred-a', 'Device A', {
+      recoveryCode: undefined,
+      codeVerifier: undefined,
+    });
     expect(result).toEqual({ ok: true, recoveryCode: undefined });
     expect(engine.getStatus()).toBe('active');
   });
@@ -404,8 +407,28 @@ describe('createDirectSyncController: reconnect()', () => {
 
     const result = await controller.reconnect();
 
-    expect(enableSyncSpy).toHaveBeenCalledWith('dev', 'cred-a', 'Device A', undefined, undefined);
+    expect(enableSyncSpy).toHaveBeenCalledWith('dev', 'cred-a', 'Device A', {
+      recoveryCode: undefined,
+      codeVerifier: undefined,
+    });
     expect(result.ok).toBe(true);
+  });
+
+  it('treats a malformed persisted creds record as no creds instead of launching a broken flow', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    const { controller } = buildRealController(device);
+    // A google record missing deviceName (corrupted / future-version): must fail at load.
+    await device.kv.set(LAST_SYNC_CREDS_KEY, { provider: 'google' }, 'local');
+
+    const result = await controller.reconnect();
+
+    expect(result).toEqual({
+      ok: false,
+      reason: 'error',
+      detail: 'No saved sync account on this device',
+    });
   });
 
   it('returns an error result when no creds were ever persisted', async () => {
@@ -416,7 +439,11 @@ describe('createDirectSyncController: reconnect()', () => {
 
     const result = await controller.reconnect();
 
-    expect(result).toEqual({ ok: false, reason: 'error' });
+    expect(result).toEqual({
+      ok: false,
+      reason: 'error',
+      detail: 'No saved sync account on this device',
+    });
   });
 });
 
@@ -557,7 +584,24 @@ describe('createDirectSyncController: enableWithGoogle()', () => {
 
     const result = await controller.enableWithGoogle('MacBook');
 
-    expect(result).toEqual({ ok: false, reason: 'auth' });
+    expect(result).toEqual({ ok: false, reason: 'auth', detail: 'cancelled' });
+    expect(device.apiClient.lastExchangeRequest).toBeNull();
+  });
+
+  it('maps a server-relayed server_error to error with a retryable detail', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    const { driver } = fakeOAuthDriver(`${GOOGLE_RETURN_URI}?error=server_error`);
+    const { controller } = buildRealController(device, driver);
+
+    const result = await controller.enableWithGoogle('MacBook');
+
+    expect(result).toEqual({
+      ok: false,
+      reason: 'error',
+      detail: 'Sign-in failed on the server',
+    });
     expect(device.apiClient.lastExchangeRequest).toBeNull();
   });
 
