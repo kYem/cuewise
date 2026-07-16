@@ -170,6 +170,20 @@ describe('SyncSettingsSectionComponent', () => {
     await waitFor(() => expect(toastError).toHaveBeenCalledTimes(1));
   });
 
+  it('treats a cancelled Google sign-in as a non-error: no toast, form stays open', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptEnableWithGoogle({ ok: false, reason: 'auth', detail: 'cancelled' });
+    renderSection(controller);
+
+    await user.click(cloudSyncSwitch());
+    await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
+
+    // The button settles back to idle for another attempt, with no error surfaced.
+    expect(await screen.findByRole('button', { name: 'Sign in with Google' })).toBeEnabled();
+    expect(toastError).not.toHaveBeenCalled();
+  });
+
   it('turns Chrome sync off (migrating to local) after a successful enable', async () => {
     const user = userEvent.setup();
     settingsMock.syncEnabled = true;

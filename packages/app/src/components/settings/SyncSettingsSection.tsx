@@ -155,6 +155,12 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       setEnrollOpen(true);
       return;
     }
+    if (result.reason === 'auth' && result.detail === 'cancelled') {
+      // A deliberate user cancel (closing Google's consent screen) isn't a failure — no error
+      // state, no toast; the form stays open for another attempt.
+      logger.info(`Cloud sync ${source} sign-in was cancelled by the user`);
+      return;
+    }
     setFailedAction(source);
     // Log the cause as a string, not an object arg: string-coercing surfaces (Chrome's extension
     // Errors panel, log aggregators) render an object as "[object Object]".
