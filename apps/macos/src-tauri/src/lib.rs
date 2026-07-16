@@ -30,6 +30,9 @@ fn reveal(app: &AppHandle, hash: Option<&str>) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // Registers the cuewise:// scheme (tauri.conf.json > plugins > deep-link) so the
+        // Google sign-in server bounce can return into the app.
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_shell::init())
         .manage(scheduler::SchedulerState::default())

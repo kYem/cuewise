@@ -24,7 +24,9 @@
     "@cuewise/sync-engine": "workspace:*",
     "@cuewise/ui": "workspace:*",
     "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-deep-link": "^2",
     "@tauri-apps/plugin-notification": "^2",
+    "@tauri-apps/plugin-shell": "^2",
     "lucide-react": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:"
