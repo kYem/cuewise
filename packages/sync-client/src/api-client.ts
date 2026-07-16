@@ -30,8 +30,9 @@ export class ApiClient {
     this.sleep = opts.sleep ?? defaultSleep;
   }
 
-  // Only Apple's credential is a one-time server-burned code; retrying after a lost response
-  // or a post-burn 5xx would replay it. Google/dev exchanges are idempotent and keep retrying.
+  // A codeVerifier marks the credential as a one-time server-burned bounce code (apple, or
+  // google via the macOS deep-link flow); retrying after a lost response or a post-burn 5xx
+  // would replay it. Id-token/dev exchanges are idempotent and keep retrying.
   async exchangeToken(req: ExchangeTokenRequest): Promise<{ token: string }> {
     const res = await this.request(
       '/v1/auth/token',
@@ -40,7 +41,7 @@ export class ApiClient {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(req),
       },
-      { auth: false, retry: req.provider !== 'apple' }
+      { auth: false, retry: !('codeVerifier' in req) }
     );
     return this.parseSuccessBody<{ token: string }>(res);
   }

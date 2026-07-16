@@ -198,6 +198,21 @@ describe('ApiClient', () => {
     expect(calls).toHaveLength(2);
   });
 
+  it('exchangeToken for google with a codeVerifier (bounced code) never retries a 500', async () => {
+    const { fetchFn, calls } = stubFetch([problemResponse('internal', 500)]);
+    const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
+
+    await expect(
+      client.exchangeToken({
+        provider: 'google',
+        credential: 'bounced-code',
+        deviceName: 'd',
+        codeVerifier: 'verifier',
+      })
+    ).rejects.toMatchObject({ code: 'internal' });
+    expect(calls).toHaveLength(1);
+  });
+
   it('retries through two network-level rejections and resolves on the third attempt', async () => {
     const { fetchFn, calls } = stubFetch([
       { reject: true },
