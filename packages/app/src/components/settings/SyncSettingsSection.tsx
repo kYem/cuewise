@@ -154,7 +154,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     logger.error('Cloud sync enabled after Settings closed — the recovery code had no surface');
     useToastStore
       .getState()
-      .warning('Cloud sync is on — open Settings → Cloud sync and regenerate your recovery code.');
+      .warning('Cloud sync is on — open Settings → Cloud Sync and regenerate your recovery code.');
   };
 
   // Shared by the initial enable() and the reconnect() flows — both surface the same shape.
