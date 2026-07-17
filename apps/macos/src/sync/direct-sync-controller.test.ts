@@ -1,99 +1,24 @@
-import { configurePlatform, logger } from '@cuewise/shared';
-import { ApiError, SessionManager } from '@cuewise/sync-client';
-import { SyncEngine, type SyncEngineControlSurface, type SyncStatus } from '@cuewise/sync-engine';
-import {
-  FakeApiClient,
-  FakeSyncServer,
-} from '@cuewise/sync-engine/src/__fixtures__/fake-api-client';
+import { logger } from '@cuewise/shared';
+import { ApiError } from '@cuewise/sync-client';
+import type { SyncEngineControlSurface, SyncStatus } from '@cuewise/sync-engine';
+import { FakeSyncServer } from '@cuewise/sync-engine/src/__fixtures__/fake-api-client';
 import { FakeKvStore } from '@cuewise/sync-engine/src/__fixtures__/fake-kv-store';
-import { FakeScheduler } from '@cuewise/sync-engine/src/__fixtures__/fake-scheduler';
 import { describe, expect, it, vi } from 'vitest';
-import type { OAuthDriver } from '../platform/oauth-driver';
+import {
+  BASE_URL,
+  buildRealController,
+  corruptChecksum,
+  createDevice,
+  fakeOAuthDriver,
+  unusedDriver,
+  useStorage,
+} from './__fixtures__/direct-sync-controller.fixtures';
 import {
   buildDirectSyncController,
   GOOGLE_RETURN_URI,
   LAST_SYNC_CREDS_KEY,
 } from './direct-sync-controller';
 import { computeCodeChallenge } from './pkce';
-
-const BASE_URL = 'https://api.test';
-
-interface Device {
-  kv: FakeKvStore;
-  apiClient: FakeApiClient;
-  scheduler: FakeScheduler;
-}
-
-/** One "device": its own storage/scheduler, sharing the given fake server. Mirrors engine.test.ts. */
-function createDevice(server: FakeSyncServer): Device {
-  return {
-    kv: new FakeKvStore(),
-    apiClient: new FakeApiClient(server),
-    scheduler: new FakeScheduler(),
-  };
-}
-
-/** Points @cuewise/storage's helpers (used by SyncEngine.backfillDirty) at this device's kv. */
-function useStorage(device: Pick<Device, 'kv'>): void {
-  configurePlatform({ storage: device.kv });
-}
-
-/** Default driver: tests that never sign in with Google fail loudly if the flow runs anyway. */
-function unusedDriver(): OAuthDriver {
-  return {
-    async authorize(): Promise<string> {
-      throw new Error('no OAuth flow expected in this test');
-    },
-  };
-}
-
-interface FakeOAuthDriver {
-  driver: OAuthDriver;
-  /** Every startUrl authorize() was asked to open, in order. */
-  calls: string[];
-}
-
-/** Scriptable driver: resolves every authorize() with `outcome`, or rejects if it's an Error. */
-function fakeOAuthDriver(outcome: string | Error): FakeOAuthDriver {
-  const calls: string[] = [];
-  return {
-    calls,
-    driver: {
-      async authorize(startUrl: string): Promise<string> {
-        calls.push(startUrl);
-        if (outcome instanceof Error) {
-          throw outcome;
-        }
-        return outcome;
-      },
-    },
-  };
-}
-
-/** Builds a controller wired to a REAL SyncEngine over fakes (no createSyncEngine/HTTP involved). */
-function buildRealController(device: Device, oauthDriver: OAuthDriver = unusedDriver()) {
-  return buildDirectSyncController<SyncEngine>({
-    baseUrl: BASE_URL,
-    keyStore: device.kv,
-    oauthDriver,
-    buildEngine: (trampolines) =>
-      new SyncEngine({
-        apiClient: device.apiClient,
-        sessionManager: new SessionManager(device.kv),
-        keyStore: device.kv,
-        scheduler: device.scheduler,
-        ...trampolines,
-      }),
-  });
-}
-
-// Corrupts only the checksum tail so length/alphabet/version stay valid but parseRecoveryCode
-// recomputes a different checksum — avoids needing @cuewise/crypto as a direct test dependency.
-function corruptChecksum(code: string): string {
-  const last = code[code.length - 1];
-  const replacement = last === '0' ? '1' : '0';
-  return `${code.slice(0, -1)}${replacement}`;
-}
 
 describe('createDirectSyncController: enable()', () => {
   it('returns the captured one-shot recovery code for a brand-new account', async () => {

@@ -30,6 +30,8 @@ export class FakeSyncController implements SyncController {
   private readonly failingMethods = new Set<FailableMethod>();
   private deferredDisable = false;
   private pendingDisable: (() => void) | null = null;
+  private deferredGoogle = false;
+  private pendingGoogle: ((result: EnableResult) => void) | null = null;
 
   /** Makes the next call to `method` reject with an Error instead of resolving; clears after firing once. */
   failNext(method: FailableMethod): void {
@@ -48,6 +50,20 @@ export class FakeSyncController implements SyncController {
     }
     this.pendingDisable();
     this.pendingDisable = null;
+  }
+
+  /** Makes the next enableWithGoogle() hang until resolveEnableWithGoogle() — for asserting pending UI (spinner, unmount-mid-flow). */
+  deferNextEnableWithGoogle(): void {
+    this.deferredGoogle = true;
+  }
+
+  /** Releases an enableWithGoogle() call armed via deferNextEnableWithGoogle(). */
+  resolveEnableWithGoogle(result: EnableResult): void {
+    if (this.pendingGoogle === null) {
+      throw new Error('FakeSyncController: no pending enableWithGoogle() to resolve');
+    }
+    this.pendingGoogle(result);
+    this.pendingGoogle = null;
   }
 
   /** Records the call, then throws if `method` was armed via failNext (clearing the arm). */
@@ -108,6 +124,12 @@ export class FakeSyncController implements SyncController {
   async enableWithGoogle(deviceName: string, recoveryCode?: string): Promise<EnableResult> {
     this.calls.push({ method: 'enableWithGoogle', args: [deviceName, recoveryCode] });
     this.maybeFail('enableWithGoogle');
+    if (this.deferredGoogle) {
+      this.deferredGoogle = false;
+      return new Promise((resolve) => {
+        this.pendingGoogle = resolve;
+      });
+    }
     const next = this.enableWithGoogleResults.shift();
     if (next !== undefined) {
       return next;

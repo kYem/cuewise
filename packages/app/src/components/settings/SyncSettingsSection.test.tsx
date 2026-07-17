@@ -3,7 +3,6 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeSyncController } from '../../sync/__fixtures__/fake-sync-controller';
-import type { EnableResult } from '../../sync/sync-controller';
 import { SyncControllerContext } from '../../sync/sync-controller';
 import { SyncSettingsSectionComponent } from './SyncSettingsSection';
 import type { SettingsSectionProps } from './settings-types';
@@ -204,22 +203,13 @@ describe('SyncSettingsSectionComponent', () => {
     // surface SOMEWHERE — as a global toast telling the user to regenerate one.
     const user = userEvent.setup();
     const controller = new FakeSyncController();
-    let resolveGoogle: ((result: EnableResult) => void) | undefined;
-    controller.enableWithGoogle = vi.fn(
-      () =>
-        new Promise<EnableResult>((resolve) => {
-          resolveGoogle = resolve;
-        })
-    );
+    controller.deferNextEnableWithGoogle();
     const { unmount } = renderSection(controller);
 
     await user.click(cloudSyncSwitch());
     await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
     unmount();
-    if (resolveGoogle === undefined) {
-      throw new Error('expected enableWithGoogle to be pending');
-    }
-    act(() => resolveGoogle?.({ ok: true, recoveryCode: CODE }));
+    act(() => controller.resolveEnableWithGoogle({ ok: true, recoveryCode: CODE }));
 
     await waitFor(() => expect(toastWarning).toHaveBeenCalledTimes(1));
     expect(toastError).not.toHaveBeenCalled();
@@ -303,13 +293,7 @@ describe('SyncSettingsSectionComponent', () => {
   it('shows a spinner and disables the button while Google sign-in is pending', async () => {
     const user = userEvent.setup();
     const controller = new FakeSyncController();
-    let resolveGoogle: ((result: EnableResult) => void) | undefined;
-    controller.enableWithGoogle = vi.fn(
-      () =>
-        new Promise<EnableResult>((resolve) => {
-          resolveGoogle = resolve;
-        })
-    );
+    controller.deferNextEnableWithGoogle();
     renderSection(controller);
 
     await user.click(cloudSyncSwitch());
@@ -318,10 +302,7 @@ describe('SyncSettingsSectionComponent', () => {
     const pendingButton = await screen.findByRole('button', { name: /signing in/i });
     expect(pendingButton).toBeDisabled();
 
-    if (resolveGoogle === undefined) {
-      throw new Error('expected enableWithGoogle to be pending');
-    }
-    act(() => resolveGoogle?.({ ok: true }));
+    act(() => controller.resolveEnableWithGoogle({ ok: true }));
 
     await waitFor(() =>
       expect(screen.queryByRole('button', { name: /signing in/i })).not.toBeInTheDocument()

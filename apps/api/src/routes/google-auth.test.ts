@@ -1,5 +1,10 @@
 import { env } from 'cloudflare:test';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import {
+  TEST_CODE_VERIFIER as CODE_VERIFIER,
+  decodeState,
+  requireHeader,
+} from '../__fixtures__/bounce.fixtures';
 import { createTestIdp, type TestIdp } from '../__fixtures__/jwks.fixtures';
 import { spyOnLoggerError } from '../__fixtures__/logger.fixtures';
 import { base64UrlEncodeString, sha256Base64Url, signState } from '../crypto-utils';
@@ -9,8 +14,6 @@ import { exchangeGoogleCode, type GoogleCodeExchanger } from './google';
 
 const GOOGLE_ISS = 'https://accounts.google.com';
 const GOOGLE_CLIENT = 'google-client';
-// Fixed 43-char base64url verifier; no randomness needed for PKCE binding tests.
-const CODE_VERIFIER = 'a'.repeat(43);
 let idp: TestIdp;
 let CODE_CHALLENGE: string;
 
@@ -40,26 +43,6 @@ function appWith(exchanger: GoogleCodeExchanger) {
     googleVerifier: idp.verifier({ issuer: GOOGLE_ISS }),
     googleCodeExchanger: exchanger,
   });
-}
-
-interface DecodedGoogleState {
-  returnUri: string;
-  codeChallenge: string;
-  nonce: string;
-}
-
-/** Reads the plaintext payload of a `signState` output; does not verify the signature. */
-function decodeState(state: string): DecodedGoogleState {
-  const body = state.slice(0, state.lastIndexOf('.'));
-  return JSON.parse(atob(body.replace(/-/g, '+').replace(/_/g, '/')));
-}
-
-function requireHeader(res: Response, name: string): string {
-  const value = res.headers.get(name);
-  if (value === null) {
-    throw new Error(`Expected a ${name} header on response with status ${res.status}`);
-  }
-  return value;
 }
 
 /** Asserts a sanitized error relay: 302 to the cuewise://auth return URI, never a code. */

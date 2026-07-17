@@ -1,15 +1,18 @@
 import { env } from 'cloudflare:test';
 import { errors } from 'jose';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
+import {
+  TEST_CODE_VERIFIER as CODE_VERIFIER,
+  decodeState,
+  requireHeader,
+  WRONG_CODE_VERIFIER,
+} from '../__fixtures__/bounce.fixtures';
 import { createTestIdp, type TestIdp } from '../__fixtures__/jwks.fixtures';
 import { spyOnLoggerError } from '../__fixtures__/logger.fixtures';
 import { base64UrlEncodeString, sha256Base64Url, signState } from '../crypto-utils';
 import { createApp } from '../index';
 
 const APPLE_ISS = 'https://appleid.apple.com';
-// Fixed 43-char base64url verifier; no randomness needed for PKCE binding tests.
-const CODE_VERIFIER = 'a'.repeat(43);
-const WRONG_CODE_VERIFIER = 'b'.repeat(43);
 let idp: TestIdp;
 let CODE_CHALLENGE: string;
 
@@ -31,26 +34,6 @@ function appWithIdp() {
   return createApp({
     appleVerifier: idp.verifier({ issuer: APPLE_ISS, audience: (e) => e.APPLE_CLIENT_ID }),
   });
-}
-
-interface DecodedAppleState {
-  returnUri: string;
-  codeChallenge: string;
-  nonce: string;
-}
-
-/** Reads the plaintext payload of a `signState` output; does not verify the signature. */
-function decodeState(state: string): DecodedAppleState {
-  const body = state.slice(0, state.lastIndexOf('.'));
-  return JSON.parse(atob(body.replace(/-/g, '+').replace(/_/g, '/')));
-}
-
-function requireHeader(res: Response, name: string): string {
-  const value = res.headers.get(name);
-  if (value === null) {
-    throw new Error(`Expected a ${name} header on response with status ${res.status}`);
-  }
-  return value;
 }
 
 async function getStart(returnUri: string, codeChallenge: string | null = CODE_CHALLENGE) {
