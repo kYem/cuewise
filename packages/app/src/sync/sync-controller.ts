@@ -44,10 +44,11 @@ export function buildSyncDetails(
 /**
  * Platform-agnostic seam the enable-sync UI drives; host adapters (macOS/extension) implement it.
  *
- * Capability convention: a capability that can vary at runtime within one host is a required
- * `canX(): boolean` (e.g. canEnableWithGoogle — Google availability tracks googleClientId even in
- * the extension). A capability that is fixed per host is an optional method the UI feature-detects
- * by presence (cancelEnableWithGoogle?, enrollWithCode?).
+ * Capability convention: a capability every host can answer, but whose answer depends on build/env
+ * config, is a required `canX(): boolean` (canEnableWithGoogle — the extension's answer tracks its
+ * googleClientId env var). A capability that is a property of the adapter itself — some hosts
+ * simply cannot do it at all — is an optional method the UI feature-detects by presence
+ * (cancelEnableWithGoogle?, enrollWithCode?).
  */
 export interface SyncController {
   getStatus(): SyncUiStatus;

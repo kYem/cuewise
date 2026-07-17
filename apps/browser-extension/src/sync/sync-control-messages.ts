@@ -34,8 +34,10 @@ export type SyncControlResponse = EnableResult;
 
 /**
  * Response to the 'details' op — kept OUT of SyncControlResponse so EnableResult narrowing stays
- * intact. `kind` discriminates it from EnableResult's own {ok:true} success, so the two success
- * shapes are mutually exclusive and can't be silently cross-assigned (ok alone isn't enough).
+ * intact. `kind` is a RUNTIME tag for the untyped SW↔page wire: it lets the bridge reject a skewed
+ * SW's {ok:true} that carries no details. It buys nothing at compile time — this type is still
+ * structurally assignable to EnableResult (excess properties only trip the checker on fresh object
+ * literals). The per-op compile-time typing comes from SyncOpResponse + send<O>, not from this tag.
  */
 export interface SyncDetailsResponse {
   ok: true;

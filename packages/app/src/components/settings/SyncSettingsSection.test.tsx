@@ -1,9 +1,9 @@
+import { logger } from '@cuewise/shared';
 import { defaultSettings } from '@cuewise/test-utils';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeSyncController } from '../../sync/__fixtures__/fake-sync-controller';
-import type { SyncDetails } from '../../sync/sync-controller';
 import { SyncControllerContext } from '../../sync/sync-controller';
 import { SyncSettingsSectionComponent } from './SyncSettingsSection';
 import type { SettingsSectionProps } from './settings-types';
@@ -234,19 +234,10 @@ describe('SyncSettingsSectionComponent', () => {
     // A slow getDetails for account A must not clobber the display after a disable → re-enable.
     const user = userEvent.setup();
     const controller = new FakeSyncController();
-    let resolveA: ((d: SyncDetails | null) => void) | undefined;
-    let call = 0;
-    controller.getDetails = vi.fn(() => {
-      call += 1;
-      if (call === 1) {
-        return new Promise<SyncDetails | null>((resolve) => {
-          resolveA = resolve;
-        });
-      }
-      return Promise.resolve({ accountEmail: 'b@example.com', accountId: 'b', lastSyncedAt: null });
-    });
+    controller.deferNextDetails(); // fetch A hangs
+    controller.scriptDetails({ accountEmail: 'b@example.com', accountId: 'b', lastSyncedAt: null });
     renderSection(controller);
-    act(() => controller.setStatus('active')); // fetch A starts (hangs)
+    act(() => controller.setStatus('active'));
 
     // Disable, then re-enable → fetch B resolves with account B.
     await user.click(cloudSyncSwitch());
@@ -255,8 +246,16 @@ describe('SyncSettingsSectionComponent', () => {
     act(() => controller.setStatus('active'));
     expect(await screen.findByText('Signed in as b@example.com')).toBeInTheDocument();
 
-    // Now the stale account-A fetch finally resolves — it must be dropped, not painted.
-    act(() => resolveA?.({ accountEmail: 'a@example.com', accountId: 'a', lastSyncedAt: null }));
+    // Now the stale account-A fetch finally resolves — it must be dropped, not painted. `await
+    // act(async)` so the resolution's microtask actually runs before the assertions (a sync act()
+    // would leave the handler unrun, passing even with the generation guard deleted).
+    await act(async () => {
+      controller.resolveDetails({
+        accountEmail: 'a@example.com',
+        accountId: 'a',
+        lastSyncedAt: null,
+      });
+    });
     expect(screen.getByText('Signed in as b@example.com')).toBeInTheDocument();
     expect(screen.queryByText('Signed in as a@example.com')).not.toBeInTheDocument();
   });
@@ -741,33 +740,52 @@ describe('SyncSettingsSectionComponent', () => {
     // refresh must win, and the late mount fetch must be dropped rather than painting stale data.
     const user = userEvent.setup();
     const controller = new FakeSyncController();
-    let resolveMount: ((d: SyncDetails | null) => void) | undefined;
-    let call = 0;
-    controller.getDetails = vi.fn(() => {
-      call += 1;
-      if (call === 1) {
-        return new Promise<SyncDetails | null>((resolve) => {
-          resolveMount = resolve;
-        });
-      }
-      return Promise.resolve({
-        accountEmail: 'fresh@example.com',
-        accountId: 'user-1',
-        lastSyncedAt: Date.now(),
-      });
+    controller.deferNextDetails(); // the mount fetch hangs
+    controller.scriptDetails({
+      accountEmail: 'fresh@example.com',
+      accountId: 'user-1',
+      lastSyncedAt: Date.now(),
     });
     renderSection(controller);
-    act(() => controller.setStatus('active')); // mount fetch starts (hangs)
+    act(() => controller.setStatus('active'));
 
     await user.click(screen.getByRole('button', { name: 'Sync now' }));
     expect(await screen.findByText('Signed in as fresh@example.com')).toBeInTheDocument();
 
-    // The stale mount fetch finally resolves — the generation guard must drop it.
-    act(() =>
-      resolveMount?.({ accountEmail: 'stale@example.com', accountId: 'user-1', lastSyncedAt: null })
-    );
+    // The stale mount fetch finally resolves — the generation guard must drop it. `await act(async)`
+    // is required: a sync act() only queues the .then microtask, so the guard would never run and
+    // this test would pass even with the guard deleted.
+    await act(async () => {
+      controller.resolveDetails({
+        accountEmail: 'stale@example.com',
+        accountId: 'user-1',
+        lastSyncedAt: null,
+      });
+    });
     expect(screen.getByText('Signed in as fresh@example.com')).toBeInTheDocument();
     expect(screen.queryByText('Signed in as stale@example.com')).not.toBeInTheDocument();
+  });
+
+  it('re-arms the details latch when getDetails rejects, so a later transition retries', async () => {
+    // getDetails is contracted never to reject; a host that breaks the contract must not latch the
+    // account line off for the rest of the mount.
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    const controller = new FakeSyncController();
+    controller.failNext('getDetails');
+    controller.scriptDetails({
+      accountEmail: 'kes@example.com',
+      accountId: 'user-1',
+      lastSyncedAt: null,
+    });
+    renderSection(controller);
+
+    act(() => controller.setStatus('active'));
+    await waitFor(() => expect(warnSpy).toHaveBeenCalled());
+    expect(screen.queryByTestId('sync-account-label')).not.toBeInTheDocument();
+
+    act(() => controller.setStatus('syncing'));
+    expect(await screen.findByText('Signed in as kes@example.com')).toBeInTheDocument();
+    warnSpy.mockRestore();
   });
 
   it('calls controller.syncNow() when Sync now is clicked', async () => {

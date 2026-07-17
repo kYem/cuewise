@@ -261,14 +261,16 @@ export class SyncEngine {
   /**
    * Stamped only after a full successful cycle. A persistence failure is non-fatal by design: the
    * cycle already succeeded, and the in-memory stamp above is what the UI reads this session — only
-   * next-launch hydration of "Last synced" is lost. Warn (shown at the default level) and carry the
-   * error object so a recurring persist fault is diagnosable rather than a bare message.
+   * next-launch hydration of "Last synced" is lost. The cause goes in the message text so it
+   * survives string-coercing surfaces (Chrome's Errors panel); the error object carries the stack.
    */
   private async stampLastSynced(): Promise<void> {
     this.lastSyncedAt = this.now();
     const result = await this.deps.keyStore.set(LAST_SYNCED_AT_KEY, this.lastSyncedAt, 'local');
     if (!result.success) {
-      logger.warn('Failed to persist lastSyncedAt', { error: result.error });
+      logger.warn(`Failed to persist lastSyncedAt: ${result.error.message}`, {
+        error: result.error,
+      });
     }
   }
 

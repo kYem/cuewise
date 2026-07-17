@@ -302,18 +302,19 @@ export class BridgeSyncController implements SyncController {
   async getDetails(): Promise<SyncDetails | null> {
     try {
       // The response type is {ok:true, kind:'details', details}, but the SW↔page wire is untyped —
-      // don't delete these guards. A skewed/legacy SW can return undefined (op guard rejected it,
-      // no responder), {ok:false} (router's error fallback → fails the ok guard), or a {ok:true}
-      // shape without the details kind (pre-details SW → fails the kind guard). This call is purely
-      // informational, so any of those is "unavailable", not an error.
+      // don't delete these guards. A skewed SW can return undefined (a pre-details SW's op guard
+      // rejects the message outright, so nothing responds), {ok:false} (the router's error fallback
+      // → fails the ok guard), or {ok:true, details} with no kind (a pre-kind SW → fails the kind
+      // guard). This call is purely informational, so any of those is "unavailable", not an error.
       const response = await this.send({ kind: 'cuewise-sync-control', op: 'details' });
       if (response?.ok && response.kind === 'details') {
         return response.details;
       }
-      // Info (not debug) so it's visible at the default level — sync is already active by the time
-      // getDetails runs, so an unavailable response means a version-skewed/absent SW responder, and
-      // "the account line never appears" would otherwise be traceless in every realm.
-      logger.info('Sync details unavailable (no responder or error fallback)');
+      // Warn, not debug: sync is already active here, so no usable response means a version-skewed
+      // or absent SW responder, not a routine miss. Note the app's default logLevel is 'error', so
+      // this needs logLevel >= warn to print — it is deliberately not an error (the UI degrades to
+      // hiding one line, and a reload self-heals).
+      logger.warn('Sync details unavailable (no responder or error fallback)');
       return null;
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);

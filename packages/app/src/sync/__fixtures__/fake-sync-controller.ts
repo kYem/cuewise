@@ -12,7 +12,8 @@ type FailableMethod =
   | 'reconnect'
   | 'disable'
   | 'regenerateRecoveryCode'
-  | 'syncNow';
+  | 'syncNow'
+  | 'getDetails';
 
 const DEFAULT_ENABLE_RESULT: EnableResult = { ok: true };
 const DEFAULT_RECOVERY_CODE = 'FAKE-RECOVERY-CODE';
@@ -35,6 +36,8 @@ export class FakeSyncController implements SyncController {
   private pendingDisable: (() => void) | null = null;
   private deferredGoogle = false;
   private pendingGoogle: ((result: EnableResult) => void) | null = null;
+  private deferredDetails = false;
+  private pendingDetails: ((details: SyncDetails | null) => void) | null = null;
 
   /** Makes the next call to `method` reject with an Error instead of resolving; clears after firing once. */
   failNext(method: FailableMethod): void {
@@ -67,6 +70,20 @@ export class FakeSyncController implements SyncController {
     }
     this.pendingGoogle(result);
     this.pendingGoogle = null;
+  }
+
+  /** Makes the next getDetails() hang until resolveDetails() releases it — for asserting fetch races. */
+  deferNextDetails(): void {
+    this.deferredDetails = true;
+  }
+
+  /** Releases a getDetails() call armed via deferNextDetails(). */
+  resolveDetails(details: SyncDetails | null): void {
+    if (this.pendingDetails === null) {
+      throw new Error('FakeSyncController: no pending getDetails() to resolve');
+    }
+    this.pendingDetails(details);
+    this.pendingDetails = null;
   }
 
   /** Records the call, then throws if `method` was armed via failNext (clearing the arm). */
@@ -183,6 +200,13 @@ export class FakeSyncController implements SyncController {
 
   async getDetails(): Promise<SyncDetails | null> {
     this.calls.push({ method: 'getDetails', args: [] });
+    this.maybeFail('getDetails');
+    if (this.deferredDetails) {
+      this.deferredDetails = false;
+      return new Promise((resolve) => {
+        this.pendingDetails = resolve;
+      });
+    }
     const next = this.detailsResults.shift();
     if (next !== undefined) {
       return next;

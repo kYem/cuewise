@@ -205,16 +205,17 @@ describe('BridgeSyncController: getDetails', () => {
     await expect(controller.getDetails()).resolves.toBeNull();
   });
 
-  it('resolves null (and logs at info) when a skewed SW answers ok without the details kind', async () => {
-    // The kind discriminant is what rejects this: an {ok:true} shape from a pre-details SW is not
-    // a details response, and the unavailability must be visible at the default log level.
-    const infoSpy = vi.spyOn(logger, 'info').mockImplementation(() => {});
-    runtime.sendMessage.mockResolvedValueOnce({ ok: true } as never);
+  it('resolves null when a pre-kind SW answers with details but no kind tag', async () => {
+    // This is the input the kind guard actually buys: the old `'details' in response` check would
+    // have returned these stale details. Also pins the warn (a skew must not be traceless).
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    const details = { accountEmail: 'stale@example.com', accountId: 'u1', lastSyncedAt: 1 };
+    runtime.sendMessage.mockResolvedValueOnce({ ok: true, details } as never);
     const controller = new BridgeSyncController();
 
     await expect(controller.getDetails()).resolves.toBeNull();
-    expect(infoSpy).toHaveBeenCalled();
-    infoSpy.mockRestore();
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
   });
 });
 
