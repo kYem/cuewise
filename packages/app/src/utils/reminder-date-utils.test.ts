@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatReminderClock, formatTimeAgo } from './reminder-date-utils';
+import { formatMillisAgo, formatReminderClock, formatTimeAgo } from './reminder-date-utils';
 
 /** ISO timestamp `ms` in the past relative to now. */
 function agoIso(ms: number): string {
@@ -39,8 +39,14 @@ describe('formatTimeAgo', () => {
   it('returns "Nd ago" for days', () => {
     expect(formatTimeAgo(agoIso(2 * 24 * 60 * 60 * 1000))).toBe('2d ago');
   });
+});
 
+describe('formatMillisAgo', () => {
   it('accepts epoch millis directly (the lastSyncedAt domain)', () => {
-    expect(formatTimeAgo(Date.now() - 26 * 60 * 1000)).toBe('26 min ago');
+    expect(formatMillisAgo(Date.now() - 26 * 60 * 1000)).toBe('26 min ago');
+  });
+
+  it('returns "Just now" for under a minute', () => {
+    expect(formatMillisAgo(Date.now() - 30 * 1000)).toBe('Just now');
   });
 });

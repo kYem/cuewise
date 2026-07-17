@@ -38,6 +38,7 @@ describe('handleSyncControlMessage: details', () => {
 
     expect(result).toEqual({
       ok: true,
+      kind: 'details',
       details: {
         accountEmail: 'kes@example.com',
         accountId: 'u1',
@@ -53,7 +54,7 @@ describe('handleSyncControlMessage: details', () => {
       fakeDeps()
     );
 
-    expect(result).toEqual({ ok: true, details: null });
+    expect(result).toEqual({ ok: true, kind: 'details', details: null });
   });
 });
 

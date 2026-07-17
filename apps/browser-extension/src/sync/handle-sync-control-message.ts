@@ -59,6 +59,7 @@ async function runDetails(engine: SyncEngineControlSurface): Promise<SyncDetails
   // Informational for the settings UI; engine.getAccount never throws (null on any failure).
   return {
     ok: true,
+    kind: 'details',
     details: buildSyncDetails(await engine.getAccount(), engine.getLastSyncedAt()),
   };
 }

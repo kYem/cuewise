@@ -169,7 +169,7 @@ describe('BridgeSyncController: storage change listener', () => {
 describe('BridgeSyncController: getDetails', () => {
   it('sends the details op and returns the relayed details', async () => {
     const details = { accountEmail: 'kes@example.com', accountId: 'u1', lastSyncedAt: 123 };
-    runtime.sendMessage.mockResolvedValueOnce({ ok: true, details });
+    runtime.sendMessage.mockResolvedValueOnce({ ok: true, kind: 'details', details });
     const controller = new BridgeSyncController();
 
     await expect(controller.getDetails()).resolves.toEqual(details);
@@ -203,6 +203,18 @@ describe('BridgeSyncController: getDetails', () => {
     const controller = new BridgeSyncController();
 
     await expect(controller.getDetails()).resolves.toBeNull();
+  });
+
+  it('resolves null (and logs at info) when a skewed SW answers ok without the details kind', async () => {
+    // The kind discriminant is what rejects this: an {ok:true} shape from a pre-details SW is not
+    // a details response, and the unavailability must be visible at the default log level.
+    const infoSpy = vi.spyOn(logger, 'info').mockImplementation(() => {});
+    runtime.sendMessage.mockResolvedValueOnce({ ok: true } as never);
+    const controller = new BridgeSyncController();
+
+    await expect(controller.getDetails()).resolves.toBeNull();
+    expect(infoSpy).toHaveBeenCalled();
+    infoSpy.mockRestore();
   });
 });
 

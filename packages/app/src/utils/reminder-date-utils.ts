@@ -87,9 +87,8 @@ export function formatDueDate(dueDate: string, timeFormat: '12h' | '24h' = '12h'
   };
 }
 
-/** Compact "time since": "Just now", "26 min ago", "3h ago", "2d ago". Accepts an ISO string or millis. */
-export function formatTimeAgo(timestamp: string | number): string {
-  const millis = typeof timestamp === 'number' ? timestamp : parseISO(timestamp).getTime();
+/** Compact "time since" for an absolute instant in epoch millis: "Just now", "26 min ago", "3h ago", "2d ago". */
+export function formatMillisAgo(millis: number): string {
   const seconds = Math.round((Date.now() - millis) / 1000);
   if (seconds < 60) {
     return 'Just now';
@@ -104,6 +103,11 @@ export function formatTimeAgo(timestamp: string | number): string {
   }
   const days = Math.round(hours / 24);
   return `${days}d ago`;
+}
+
+/** Same compact "time since" for an ISO-8601 timestamp string (reminder timestamps are ISO strings). */
+export function formatTimeAgo(timestamp: string): string {
+  return formatMillisAgo(parseISO(timestamp).getTime());
 }
 
 /**

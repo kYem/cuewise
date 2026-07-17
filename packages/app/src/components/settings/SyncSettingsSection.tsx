@@ -6,7 +6,7 @@ import { useSettingsStore } from '../../stores/settings-store';
 import { useToastStore } from '../../stores/toast-store';
 import type { EnableResult, SyncDetails, SyncUiStatus } from '../../sync/sync-controller';
 import { AUTH_CANCELLED_DETAIL, useSyncController } from '../../sync/sync-controller';
-import { formatTimeAgo } from '../../utils/reminder-date-utils';
+import { formatMillisAgo } from '../../utils/reminder-date-utils';
 import { ConfirmationDialog } from '../ConfirmationDialog';
 import { EnrollCodeModal } from './EnrollCodeModal';
 import { RecoveryCodeModal } from './RecoveryCodeModal';
@@ -547,7 +547,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
             <div data-testid="sync-device-label" className="text-xs text-tertiary">
               Device: {deviceName}
               {details !== null && details.lastSyncedAt !== null
-                ? ` · Last synced ${formatTimeAgo(details.lastSyncedAt)}`
+                ? ` · Last synced ${formatMillisAgo(details.lastSyncedAt)}`
                 : ''}
             </div>
             <div className="flex flex-wrap gap-2">

@@ -301,18 +301,19 @@ export class BridgeSyncController implements SyncController {
 
   async getDetails(): Promise<SyncDetails | null> {
     try {
-      // The response type is {ok:true, details}, but the SW↔page wire is untyped — don't delete
-      // these guards. A skewed/legacy SW can return undefined (op guard rejected it, no
-      // responder), {ok:false} (router's error fallback → fails the ok guard), or {ok:true}
-      // without details (pre-details SW → fails the 'details' guard). This call is purely
+      // The response type is {ok:true, kind:'details', details}, but the SW↔page wire is untyped —
+      // don't delete these guards. A skewed/legacy SW can return undefined (op guard rejected it,
+      // no responder), {ok:false} (router's error fallback → fails the ok guard), or a {ok:true}
+      // shape without the details kind (pre-details SW → fails the kind guard). This call is purely
       // informational, so any of those is "unavailable", not an error.
       const response = await this.send({ kind: 'cuewise-sync-control', op: 'details' });
-      if (response?.ok && 'details' in response) {
+      if (response?.ok && response.kind === 'details') {
         return response.details;
       }
-      // Quiet by default, but greppable when debug logging is on — otherwise a version-skewed
-      // SW (undefined response) leaves "the account line never appears" traceless in every realm.
-      logger.debug('Sync details unavailable (no responder or error fallback)');
+      // Info (not debug) so it's visible at the default level — sync is already active by the time
+      // getDetails runs, so an unavailable response means a version-skewed/absent SW responder, and
+      // "the account line never appears" would otherwise be traceless in every realm.
+      logger.info('Sync details unavailable (no responder or error fallback)');
       return null;
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);

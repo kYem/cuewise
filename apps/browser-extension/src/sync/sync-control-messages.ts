@@ -32,9 +32,14 @@ export interface SyncControlMessage {
 // Character-identical to the app's EnableResult — reuse it so the two can't drift.
 export type SyncControlResponse = EnableResult;
 
-/** Response to the 'details' op — kept OUT of SyncControlResponse so EnableResult narrowing stays intact. */
+/**
+ * Response to the 'details' op — kept OUT of SyncControlResponse so EnableResult narrowing stays
+ * intact. `kind` discriminates it from EnableResult's own {ok:true} success, so the two success
+ * shapes are mutually exclusive and can't be silently cross-assigned (ok alone isn't enough).
+ */
 export interface SyncDetailsResponse {
   ok: true;
+  kind: 'details';
   details: SyncDetails | null;
 }
 
