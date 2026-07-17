@@ -666,15 +666,23 @@ describe('SyncSettingsSectionComponent', () => {
     expect(screen.getByTestId('sync-device-label')).not.toHaveTextContent('Last synced');
   });
 
-  it('renders no account line when details are unavailable', async () => {
+  it('fetches details once per mount, not on every active/syncing flip', async () => {
+    // Status flips active → syncing → active on every sync cycle; without the once-per-mount latch
+    // each cycle would cost extra SW round-trips. (An unavailable result re-arms it — see below.)
     const controller = new FakeSyncController();
+    controller.scriptDetails({
+      accountEmail: 'kes@example.com',
+      accountId: 'user-1',
+      lastSyncedAt: null,
+    });
     renderSection(controller);
     act(() => controller.setStatus('active'));
+    await screen.findByText('Signed in as kes@example.com');
 
-    await waitFor(() =>
-      expect(controller.calls).toContainEqual({ method: 'getDetails', args: [] })
-    );
-    expect(screen.queryByTestId('sync-account-label')).not.toBeInTheDocument();
+    act(() => controller.setStatus('syncing'));
+    act(() => controller.setStatus('active'));
+
+    expect(controller.calls.filter((c) => c.method === 'getDetails')).toHaveLength(1);
   });
 
   it('re-fetches details on the next status change after an unavailable result', async () => {
@@ -712,8 +720,8 @@ describe('SyncSettingsSectionComponent', () => {
     await user.click(screen.getByRole('button', { name: 'Disable' }));
     act(() => controller.setStatus('off'));
 
-    // Re-enable with account B's fetch still in flight. This is the only window that proves the
-    // disable dropped the identity: at 'off' the whole subgroup is unrendered, so asserting the
+    // Re-enable with account B's fetch still in flight. The assertion has to land here, not at
+    // 'off': the whole subgroup is unrendered at 'off' (STATUS_PILL_LABEL has no entry), so the
     // label's absence there holds even if the old details were kept.
     controller.deferNextDetails();
     act(() => controller.setStatus('active'));

@@ -221,7 +221,9 @@ describe('BridgeSyncController: getDetails', () => {
     const controller = new BridgeSyncController();
 
     await expect(controller.getDetails()).resolves.toBeNull();
-    expect(warnSpy).toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Sync details unavailable (no responder or error fallback)'
+    );
     warnSpy.mockRestore();
   });
 });

@@ -263,7 +263,7 @@ export class SyncEngine {
    * cycle already succeeded, and the in-memory stamp above is what the UI reads this session — only
    * next-launch hydration of "Last synced" is lost. The cause goes in the message text so it
    * survives string-coercing surfaces (Chrome's Errors panel); the context carries the structured
-   * type/key/area (StorageError is plain data — there is no stack to keep).
+   * StorageError (plain data — there is no stack to keep).
    */
   private async stampLastSynced(): Promise<void> {
     this.lastSyncedAt = this.now();
