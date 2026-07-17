@@ -246,11 +246,13 @@ export class SyncEngine {
    * or on any fetch failure (including 401 — no auth-loss side effects), never throws.
    */
   async getAccount(): Promise<{ userId: string; email: string | null } | null> {
-    const token = await this.deps.sessionManager.getToken();
-    if (token === null) {
-      return null;
-    }
+    // The token read sits inside the try so the never-throws contract holds by construction,
+    // not by the current storage adapters happening to swallow their own errors.
     try {
+      const token = await this.deps.sessionManager.getToken();
+      if (token === null) {
+        return null;
+      }
       return await this.deps.apiClient.getAccount();
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);

@@ -308,6 +308,9 @@ export class BridgeSyncController implements SyncController {
       if (response?.ok && 'details' in response) {
         return response.details;
       }
+      // Quiet by default, but greppable when debug logging is on — otherwise a version-skewed
+      // SW (undefined response) leaves "the account line never appears" traceless in every realm.
+      logger.debug('Sync details unavailable (no responder or error fallback)');
       return null;
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);

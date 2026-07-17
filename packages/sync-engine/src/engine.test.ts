@@ -148,7 +148,6 @@ describe('SyncEngine.enableSync', () => {
     await device.engine.syncNow();
 
     expect(device.engine.getLastSyncedAt()).toBe(8_000);
-    device.kv.failSetsForKey = null;
   });
 
   it('never stamps lastSyncedAt on the DK-less no-op path, and disableSync clears it', async () => {

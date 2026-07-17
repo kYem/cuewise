@@ -320,7 +320,12 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     // Refresh "Last synced" OUTSIDE the try — the sync-now error surface belongs to syncNow
     // alone (the catch keeps even a contract-violating host from rejecting the click handler).
     // Keep the last known details on a transient null: a stale line beats a vanishing one.
-    const next = await controller.getDetails().catch(() => null);
+    const next = await controller.getDetails().catch((error) => {
+      logger.warn(
+        `Cloud sync details refresh failed: ${error instanceof Error ? error.message : String(error)}`
+      );
+      return null;
+    });
     if (next !== null) {
       setDetails(next);
     }
