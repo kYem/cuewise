@@ -155,6 +155,8 @@ describe('createDirectSyncController: enable()', () => {
       enableSync: vi.fn().mockRejectedValue(new ApiError('invalid_token', 401)),
       disableSync: vi.fn().mockResolvedValue(undefined),
       regenerateRecoveryCode: vi.fn().mockResolvedValue('unused'),
+      getAccount: vi.fn().mockResolvedValue(null),
+      getLastSyncedAt: vi.fn().mockReturnValue(null),
       syncNow: vi.fn().mockResolvedValue(undefined),
       getStatus: vi.fn().mockReturnValue('error' as SyncStatus),
     };
@@ -228,6 +230,8 @@ describe('createDirectSyncController: enable()', () => {
           enableSync: vi.fn().mockResolvedValue(undefined),
           disableSync: vi.fn().mockResolvedValue(undefined),
           regenerateRecoveryCode: vi.fn().mockResolvedValue('unused'),
+          getAccount: vi.fn().mockResolvedValue(null),
+          getLastSyncedAt: vi.fn().mockReturnValue(null),
           syncNow: vi.fn().mockResolvedValue(undefined),
           getStatus: vi.fn().mockReturnValue('active' as SyncStatus),
         };
@@ -406,6 +410,8 @@ describe('createDirectSyncController: disable() / syncNow() error propagation', 
       enableSync: vi.fn().mockResolvedValue(undefined),
       disableSync: vi.fn().mockRejectedValue(new Error('disable failed')),
       regenerateRecoveryCode: vi.fn().mockResolvedValue('unused'),
+      getAccount: vi.fn().mockResolvedValue(null),
+      getLastSyncedAt: vi.fn().mockReturnValue(null),
       syncNow: vi.fn().mockResolvedValue(undefined),
       getStatus: vi.fn().mockReturnValue('active' as SyncStatus),
     };
@@ -424,6 +430,8 @@ describe('createDirectSyncController: disable() / syncNow() error propagation', 
       enableSync: vi.fn().mockResolvedValue(undefined),
       disableSync: vi.fn().mockResolvedValue(undefined),
       regenerateRecoveryCode: vi.fn().mockResolvedValue('unused'),
+      getAccount: vi.fn().mockResolvedValue(null),
+      getLastSyncedAt: vi.fn().mockReturnValue(null),
       syncNow: vi.fn().mockRejectedValue(new Error('sync failed')),
       getStatus: vi.fn().mockReturnValue('error' as SyncStatus),
     };
@@ -440,6 +448,35 @@ describe('createDirectSyncController: disable() / syncNow() error propagation', 
 
     expect(seen[0]).toBe('syncing');
     expect(seen[seen.length - 1]).toBe('error');
+  });
+});
+
+describe('createDirectSyncController: getDetails()', () => {
+  it('maps the engine account + lastSyncedAt into SyncDetails after an enable', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    device.apiClient.accountResult = { userId: 'user-1', email: 'kes@example.com' };
+    const { controller } = buildRealController(device);
+    await controller.enable('cred-a', 'Device A');
+
+    const details = await controller.getDetails();
+
+    if (details === null) {
+      throw new Error('expected details after a successful enable');
+    }
+    expect(details.accountEmail).toBe('kes@example.com');
+    expect(details.accountId).toBe('user-1');
+    expect(details.lastSyncedAt).not.toBeNull();
+  });
+
+  it('resolves null when the engine has no session', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    const { controller } = buildRealController(device);
+
+    await expect(controller.getDetails()).resolves.toBeNull();
   });
 });
 

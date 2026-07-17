@@ -1,4 +1,4 @@
-import type { EnableResult, SyncController, SyncUiStatus } from '@cuewise/app';
+import type { EnableResult, SyncController, SyncDetails, SyncUiStatus } from '@cuewise/app';
 import { AUTH_CANCELLED_DETAIL } from '@cuewise/app';
 import { type KeyValueStore, logger, type Scheduler } from '@cuewise/shared';
 import { ApiError } from '@cuewise/sync-client';
@@ -320,6 +320,17 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
       } finally {
         emit(mapStatus(engine.getStatus()));
       }
+    },
+    async getDetails(): Promise<SyncDetails | null> {
+      const account = await engine.getAccount();
+      if (account === null) {
+        return null;
+      }
+      return {
+        accountEmail: account.email,
+        accountId: account.userId,
+        lastSyncedAt: engine.getLastSyncedAt(),
+      };
     },
   };
 
