@@ -48,6 +48,12 @@ export interface SyncController {
    * shows a Cancel affordance only when present — the extension's popup is user-closable.
    */
   cancelEnableWithGoogle?(): void;
+  /**
+   * Finishes a device-#2 enroll that stopped at needs-code by supplying the recovery code
+   * against the STILL-LIVE session, with no second browser bounce. Hosts whose sign-in re-auth
+   * is cheap (the extension popup) may omit it; the UI falls back to the full re-auth path.
+   */
+  enrollWithCode?(deviceName: string, recoveryCode: string): Promise<EnableResult>;
 }
 
 export const SyncControllerContext = createContext<SyncController | null>(null);

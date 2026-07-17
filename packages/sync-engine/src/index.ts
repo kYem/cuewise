@@ -25,6 +25,7 @@ export {
 export type SyncEngineControlSurface = Pick<
   SyncEngine,
   | 'enableSync'
+  | 'resumeEnrollWithCode'
   | 'disableSync'
   | 'regenerateRecoveryCode'
   | 'syncNow'

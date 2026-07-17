@@ -272,7 +272,11 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       if (enrollSource === 'reconnect') {
         result = await controller.reconnect(code);
       } else if (enrollSource === 'google') {
-        result = await controller.enableWithGoogle(deviceName, code);
+        // ENG-65: finish the enroll against the still-live session where the host supports it,
+        // avoiding a second browser bounce; fall back to full re-auth otherwise.
+        result = controller.enrollWithCode
+          ? await controller.enrollWithCode(deviceName, code)
+          : await controller.enableWithGoogle(deviceName, code);
       } else {
         result = await controller.enable(accountId, deviceName, code);
       }

@@ -156,6 +156,7 @@ describe('createDirectSyncController: enable()', () => {
       enableSync: vi.fn().mockRejectedValue(new ApiError('invalid_token', 401)),
       disableSync: vi.fn().mockResolvedValue(undefined),
       regenerateRecoveryCode: vi.fn().mockResolvedValue('unused'),
+      resumeEnrollWithCode: vi.fn().mockResolvedValue(undefined),
       getAccount: vi.fn().mockResolvedValue(null),
       getLastSyncedAt: vi.fn().mockReturnValue(null),
       syncNow: vi.fn().mockResolvedValue(undefined),
@@ -231,6 +232,7 @@ describe('createDirectSyncController: enable()', () => {
           enableSync: vi.fn().mockResolvedValue(undefined),
           disableSync: vi.fn().mockResolvedValue(undefined),
           regenerateRecoveryCode: vi.fn().mockResolvedValue('unused'),
+          resumeEnrollWithCode: vi.fn().mockResolvedValue(undefined),
           getAccount: vi.fn().mockResolvedValue(null),
           getLastSyncedAt: vi.fn().mockReturnValue(null),
           syncNow: vi.fn().mockResolvedValue(undefined),
@@ -411,6 +413,7 @@ describe('createDirectSyncController: disable() / syncNow() error propagation', 
       enableSync: vi.fn().mockResolvedValue(undefined),
       disableSync: vi.fn().mockRejectedValue(new Error('disable failed')),
       regenerateRecoveryCode: vi.fn().mockResolvedValue('unused'),
+      resumeEnrollWithCode: vi.fn().mockResolvedValue(undefined),
       getAccount: vi.fn().mockResolvedValue(null),
       getLastSyncedAt: vi.fn().mockReturnValue(null),
       syncNow: vi.fn().mockResolvedValue(undefined),
@@ -431,6 +434,7 @@ describe('createDirectSyncController: disable() / syncNow() error propagation', 
       enableSync: vi.fn().mockResolvedValue(undefined),
       disableSync: vi.fn().mockResolvedValue(undefined),
       regenerateRecoveryCode: vi.fn().mockResolvedValue('unused'),
+      resumeEnrollWithCode: vi.fn().mockResolvedValue(undefined),
       getAccount: vi.fn().mockResolvedValue(null),
       getLastSyncedAt: vi.fn().mockReturnValue(null),
       syncNow: vi.fn().mockRejectedValue(new Error('sync failed')),
@@ -608,6 +612,36 @@ describe('createDirectSyncController: enableWithGoogle()', () => {
     const { controller } = buildRealController(device);
 
     expect(controller.canEnableWithGoogle()).toBe(true);
+  });
+
+  it('enrollWithCode() finishes a google enroll on the live session without a second bounce', async () => {
+    const server = new FakeSyncServer();
+    const deviceA = createDevice(server);
+    useStorage(deviceA);
+    const enableA = await buildRealController(deviceA).controller.enable('cred-a', 'Device A');
+    if (!enableA.ok || enableA.recoveryCode === undefined) {
+      throw new Error('expected device A to receive a recovery code');
+    }
+
+    // Device B: a first google sign-in returns needs-code but leaves the session saved.
+    const deviceB = createDevice(server);
+    useStorage(deviceB);
+    const { driver, calls } = fakeOAuthDriver(`${GOOGLE_RETURN_URI}?code=one-time-x`);
+    const { controller } = buildRealController(deviceB, driver);
+    const first = await controller.enableWithGoogle('MacBook');
+    expect(first).toEqual({ ok: false, reason: 'needs-code' });
+    const exchangesAfterSignIn = deviceB.apiClient.exchangeCount;
+
+    const result = await controller.enrollWithCode?.('MacBook', enableA.recoveryCode);
+
+    expect(result).toEqual({ ok: true, recoveryCode: undefined });
+    // No second browser bounce (authorize called once, for the sign-in) and no second exchange.
+    expect(calls).toHaveLength(1);
+    expect(deviceB.apiClient.exchangeCount).toBe(exchangesAfterSignIn);
+    expect(await deviceB.kv.get(LAST_SYNC_CREDS_KEY, 'local')).toEqual({
+      provider: 'google',
+      deviceName: 'MacBook',
+    });
   });
 
   it('cancelEnableWithGoogle() settles a pending flow as a quiet cancel, never exchanging', async () => {

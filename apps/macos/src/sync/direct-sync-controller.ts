@@ -163,52 +163,80 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
     return creds;
   }
 
-  // enable()/reconnect() build EnableResult from the thrown error AND the post-call status
-  // (spec §4/§0-E4) — a 401 during initial sync returns rather than throws.
-  async function doEnable(
+  // Maps a thrown enable/enroll error to its EnableResult; `trace` labels the 401 log line.
+  function mapEnableError(err: unknown, trace: string): Extract<EnableResult, { ok: false }> {
+    if (err instanceof RecoveryCodeRequiredError) {
+      return { ok: false, reason: 'needs-code' };
+    }
+    if (err instanceof RecoveryCodeError) {
+      return { ok: false, reason: 'bad-code', detail: err.kind };
+    }
+    if (err instanceof ApiError && err.status === 401) {
+      logger.warn(`Cloud sync sign-in rejected (401) ${trace}`);
+      return { ok: false, reason: 'auth' };
+    }
+    const detail = err instanceof Error ? err.message : String(err);
+    // Surface the real cause in the message text (parity with the extension's handler).
+    logger.error(`Cloud sync enable failed: ${detail}`, err);
+    return { ok: false, reason: 'error', detail };
+  }
+
+  // Runs an enable/enroll engine op, then builds the EnableResult from the post-call status and
+  // persists creds on success (spec §4/§0-E4). A 401 during initial sync returns rather than throws.
+  async function runEnable(
+    op: () => Promise<void>,
+    creds: LastSyncCreds,
+    trace: string
+  ): Promise<EnableResult> {
+    capturedRecoveryCode = undefined;
+    try {
+      await op();
+    } catch (err) {
+      return mapEnableError(err, trace);
+    }
+    if (engine.getStatus() === 'signed_out') {
+      // The engine swallows 401s into signed_out rather than rethrowing — this is the LIVE
+      // trace for a google one-time code that burned/expired after a successful browser dance.
+      logger.warn(`Cloud sync sign-in rejected (401) ${trace}`);
+      return { ok: false, reason: 'auth' };
+    }
+    await persistCreds(creds);
+    const capturedCode = capturedRecoveryCode;
+    capturedRecoveryCode = undefined;
+    return { ok: true, recoveryCode: capturedCode };
+  }
+
+  function doEnable(
     provider: SyncSignInProvider,
     credential: string,
     deviceName: string,
     recoveryCode?: string,
     codeVerifier?: string
   ): Promise<EnableResult> {
-    capturedRecoveryCode = undefined;
-    try {
-      await engine.enableSync(provider, credential, deviceName, { recoveryCode, codeVerifier });
-    } catch (err) {
-      if (err instanceof RecoveryCodeRequiredError) {
-        return { ok: false, reason: 'needs-code' };
-      }
-      if (err instanceof RecoveryCodeError) {
-        return { ok: false, reason: 'bad-code', detail: err.kind };
-      }
-      if (err instanceof ApiError && err.status === 401) {
-        // For google this means the one-time code burned/expired/PKCE-failed AFTER a
-        // successful browser dance — confusing without a trace. Metadata only.
-        logger.warn(`Cloud sync sign-in rejected (401) for provider ${provider}`);
-        return { ok: false, reason: 'auth' };
-      }
-      const detail = err instanceof Error ? err.message : String(err);
-      // Surface the real cause in the message text (parity with the extension's handler).
-      logger.error(`Cloud sync enable failed: ${detail}`, err);
-      return { ok: false, reason: 'error', detail };
-    }
-    if (engine.getStatus() === 'signed_out') {
-      // The engine swallows 401s into signed_out rather than rethrowing — this is the LIVE
-      // trace for a google one-time code that burned/expired after a successful browser dance.
-      logger.warn(`Cloud sync sign-in rejected (401) for provider ${provider}`);
-      return { ok: false, reason: 'auth' };
-    }
     // A google credential is a burned one-time code — worthless for reconnect, so only the
     // provider marker is persisted; reconnect re-runs the OAuth flow instead.
-    if (provider === 'google') {
-      await persistCreds({ provider: 'google', deviceName });
-    } else {
-      await persistCreds({ provider: 'dev', accountId: credential, deviceName });
-    }
-    const capturedCode = capturedRecoveryCode;
-    capturedRecoveryCode = undefined;
-    return { ok: true, recoveryCode: capturedCode };
+    const creds: LastSyncCreds =
+      provider === 'google'
+        ? { provider: 'google', deviceName }
+        : { provider: 'dev', accountId: credential, deviceName };
+    return runEnable(
+      () => engine.enableSync(provider, credential, deviceName, { recoveryCode, codeVerifier }),
+      creds,
+      `for provider ${provider}`
+    );
+  }
+
+  // ENG-65: device-#2 enroll that reuses the live session from a needs-code sign-in — no
+  // second browser bounce. Only the google enroll path needs it (dev re-enable is free).
+  function enrollExistingGoogleSession(
+    deviceName: string,
+    recoveryCode: string
+  ): Promise<EnableResult> {
+    return runEnable(
+      () => engine.resumeEnrollWithCode(recoveryCode),
+      { provider: 'google', deviceName },
+      'resuming a google enroll'
+    );
   }
 
   // NOT serialize()-wrapped: called from inside already-serialized entry points
@@ -299,6 +327,9 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
     },
     cancelEnableWithGoogle(): void {
       deps.oauthDriver.cancel();
+    },
+    enrollWithCode(deviceName: string, recoveryCode: string): Promise<EnableResult> {
+      return serialize(() => enrollExistingGoogleSession(deviceName, recoveryCode));
     },
     reconnect(recoveryCode?: string): Promise<EnableResult> {
       return serialize(async () => {

@@ -247,7 +247,7 @@ describe('SyncSettingsSectionComponent', () => {
     const user = userEvent.setup();
     const controller = new FakeSyncController();
     controller.scriptEnableWithGoogle({ ok: false, reason: 'needs-code' });
-    controller.scriptEnableWithGoogle({ ok: false, reason: 'auth', detail: 'cancelled' });
+    controller.scriptEnrollWithCode({ ok: false, reason: 'auth', detail: 'cancelled' });
     renderSection(controller);
 
     await user.click(cloudSyncSwitch());
@@ -442,11 +442,11 @@ describe('SyncSettingsSectionComponent', () => {
     expect(controller.calls.some((call) => call.method === 'enable')).toBe(false);
   });
 
-  it('routes the google→needs-code enroll submit through enableWithGoogle(code), never enable', async () => {
+  it('routes the google→needs-code enroll submit through enrollWithCode (no second bounce), never enable', async () => {
     const user = userEvent.setup();
     const controller = new FakeSyncController();
     controller.scriptEnableWithGoogle({ ok: false, reason: 'needs-code' });
-    controller.scriptEnableWithGoogle({ ok: true });
+    controller.scriptEnrollWithCode({ ok: true });
     renderSection(controller);
 
     await user.click(cloudSyncSwitch());
@@ -458,10 +458,12 @@ describe('SyncSettingsSectionComponent', () => {
 
     await waitFor(() =>
       expect(controller.calls).toContainEqual({
-        method: 'enableWithGoogle',
+        method: 'enrollWithCode',
         args: [deviceName, CODE],
       })
     );
+    // The needs-code enroll must NOT re-run the browser bounce, enable, or reconnect.
+    expect(controller.calls.filter((call) => call.method === 'enableWithGoogle')).toHaveLength(1);
     expect(controller.calls.some((call) => call.method === 'enable')).toBe(false);
     expect(controller.calls.some((call) => call.method === 'reconnect')).toBe(false);
   });

@@ -84,6 +84,8 @@ export class FakeApiClient implements EngineApiClient {
   accountResult: { userId: string; email: string | null } = { userId: 'fake-user', email: null };
   /** One-shot: throws a 401 on the next getAccount call, then clears itself. */
   rejectNextGetAccountWith401 = false;
+  /** Total successful token exchanges — proves resumeEnrollWithCode doesn't re-exchange. */
+  exchangeCount = 0;
   private tokenCounter = 0;
 
   constructor(private readonly server: FakeSyncServer) {}
@@ -94,6 +96,7 @@ export class FakeApiClient implements EngineApiClient {
       throw new ApiError('invalid_credential', 401);
     }
     this.tokenCounter += 1;
+    this.exchangeCount += 1;
     return { token: `fake-token-${this.tokenCounter}` };
   }
 

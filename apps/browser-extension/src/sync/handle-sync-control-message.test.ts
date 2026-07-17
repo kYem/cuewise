@@ -15,6 +15,7 @@ function fakeEngine(overrides: Partial<SyncEngineControlSurface> = {}): SyncEngi
     disableSync: vi.fn().mockResolvedValue(undefined),
     syncNow: vi.fn().mockResolvedValue(undefined),
     regenerateRecoveryCode: vi.fn().mockResolvedValue('CW1-NEW00-00000-00000-00000-00000-00000'),
+    resumeEnrollWithCode: vi.fn().mockResolvedValue(undefined),
     getStatus: vi.fn().mockReturnValue('active' as SyncStatus),
     getAccount: vi.fn().mockResolvedValue(null),
     getLastSyncedAt: vi.fn().mockReturnValue(null),

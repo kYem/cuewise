@@ -135,43 +135,71 @@ export class SyncEngine {
       if (!saved.success) {
         throw new Error(`failed to persist sync session: ${saved.error.message}`);
       }
-
-      // A code is only passed when enrolling an additional device; brand-new enable passes none.
-      this.setStatus(recoveryCode ? 'enrolling' : 'key_init');
-      const enrolled = await initOrEnrollKey(this.keyDeps(), recoveryCode);
-      this.dk = enrolled.dk;
-      this.keyId = enrolled.keyId;
-      if (enrolled.recoveryCodeToShow !== undefined) {
-        this.deps.onRecoveryCode?.(enrolled.recoveryCodeToShow);
-      }
-
-      this.setStatus('initial_sync');
-      await this.backfillDirty();
-      await this.syncNow();
-      if (this.status === 'signed_out') {
-        // syncNow already ran handleAuthLoss (dropped the session, kept the DK) — enable didn't finish.
-        return;
-      }
-
-      const enabledResult = await this.deps.keyStore.set(CLOUD_SYNC_ENABLED_KEY, true, 'local');
-      if (!enabledResult.success) {
-        throw new Error(`failed to persist cloudSyncEnabled: ${enabledResult.error.message}`);
-      }
-      this.setStatus('active');
-      await this.armPullLoopUnlessSignedOut();
+      await this.enrollAndActivate(recoveryCode);
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) {
-        await this.handleAuthLoss();
-        return;
-      }
-      if (err instanceof RecoveryCodeRequiredError || err instanceof RecoveryCodeError) {
-        // Expected enroll control-flow, not a failure — don't poison the persisted status other tabs read.
-        this.setStatus('disabled');
-        throw err;
-      }
-      this.setStatus('error');
+      await this.handleEnableError(err);
+    }
+  }
+
+  /**
+   * Finishes an enroll that stopped at needs-code WITHOUT re-authenticating (ENG-65): the
+   * session from the interrupted enableSync is still live, so device #2 just supplies the
+   * recovery code — no second browser bounce. No-ops to signed_out if that session has since
+   * been lost (the caller must then re-authenticate).
+   */
+  async resumeEnrollWithCode(recoveryCode: string): Promise<void> {
+    const token = await this.deps.sessionManager.getToken();
+    if (token === null) {
+      await this.handleAuthLoss();
+      return;
+    }
+    try {
+      await this.enrollAndActivate(recoveryCode);
+    } catch (err) {
+      await this.handleEnableError(err);
+    }
+  }
+
+  /** The enroll → initial-sync → activate tail shared by enableSync and resumeEnrollWithCode. */
+  private async enrollAndActivate(recoveryCode: string | undefined): Promise<void> {
+    // A code is only passed when enrolling an additional device; brand-new enable passes none.
+    this.setStatus(recoveryCode ? 'enrolling' : 'key_init');
+    const enrolled = await initOrEnrollKey(this.keyDeps(), recoveryCode);
+    this.dk = enrolled.dk;
+    this.keyId = enrolled.keyId;
+    if (enrolled.recoveryCodeToShow !== undefined) {
+      this.deps.onRecoveryCode?.(enrolled.recoveryCodeToShow);
+    }
+
+    this.setStatus('initial_sync');
+    await this.backfillDirty();
+    await this.syncNow();
+    if (this.status === 'signed_out') {
+      // syncNow already ran handleAuthLoss (dropped the session, kept the DK) — enable didn't finish.
+      return;
+    }
+
+    const enabledResult = await this.deps.keyStore.set(CLOUD_SYNC_ENABLED_KEY, true, 'local');
+    if (!enabledResult.success) {
+      throw new Error(`failed to persist cloudSyncEnabled: ${enabledResult.error.message}`);
+    }
+    this.setStatus('active');
+    await this.armPullLoopUnlessSignedOut();
+  }
+
+  /** Shared enable/enroll error mapping: 401 → auth loss; recovery-code control-flow → disabled+rethrow. */
+  private async handleEnableError(err: unknown): Promise<void> {
+    if (err instanceof ApiError && err.status === 401) {
+      await this.handleAuthLoss();
+      return;
+    }
+    if (err instanceof RecoveryCodeRequiredError || err instanceof RecoveryCodeError) {
+      // Expected enroll control-flow, not a failure — don't poison the persisted status other tabs read.
+      this.setStatus('disabled');
       throw err;
     }
+    this.setStatus('error');
+    throw err;
   }
 
   /** Clears session + DK + the enabled flag + sync bookkeeping. Local domain data is untouched. */

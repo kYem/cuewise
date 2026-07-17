@@ -8,6 +8,7 @@ interface RecordedCall {
 type FailableMethod =
   | 'enable'
   | 'enableWithGoogle'
+  | 'enrollWithCode'
   | 'reconnect'
   | 'disable'
   | 'regenerateRecoveryCode'
@@ -27,6 +28,7 @@ export class FakeSyncController implements SyncController {
   private readonly enableResults: EnableResult[] = [];
   private readonly enableWithGoogleResults: EnableResult[] = [];
   private readonly reconnectResults: EnableResult[] = [];
+  private readonly enrollWithCodeResults: EnableResult[] = [];
   private readonly detailsResults: (SyncDetails | null)[] = [];
   private readonly failingMethods = new Set<FailableMethod>();
   private deferredDisable = false;
@@ -195,5 +197,20 @@ export class FakeSyncController implements SyncController {
       this.pendingGoogle({ ok: false, reason: 'auth', detail: 'cancelled' });
       this.pendingGoogle = null;
     }
+  }
+
+  async enrollWithCode(deviceName: string, recoveryCode: string): Promise<EnableResult> {
+    this.calls.push({ method: 'enrollWithCode', args: [deviceName, recoveryCode] });
+    this.maybeFail('enrollWithCode');
+    const next = this.enrollWithCodeResults.shift();
+    if (next !== undefined) {
+      return next;
+    }
+    return DEFAULT_ENABLE_RESULT;
+  }
+
+  /** Queues the result the next `enrollWithCode()` call resolves to. */
+  scriptEnrollWithCode(result: EnableResult): void {
+    this.enrollWithCodeResults.push(result);
   }
 }

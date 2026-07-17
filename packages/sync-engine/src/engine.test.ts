@@ -1,4 +1,10 @@
-import { DecryptError, deriveMasterKey, parseRecoveryCode, unwrapDataKey } from '@cuewise/crypto';
+import {
+  DecryptError,
+  deriveMasterKey,
+  parseRecoveryCode,
+  RecoveryCodeError,
+  unwrapDataKey,
+} from '@cuewise/crypto';
 import { configurePlatform } from '@cuewise/shared';
 import { getGoals, setGoals } from '@cuewise/storage';
 import { SessionManager, SYNC_PULL_WAKE_ID } from '@cuewise/sync-client';
@@ -189,6 +195,57 @@ describe('SyncEngine.enableSync', () => {
     // Informational call: the session and status must be untouched, and a retry succeeds.
     expect(device.engine.getStatus()).toBe('active');
     expect(await device.engine.getAccount()).not.toBeNull();
+  });
+
+  it('resumeEnrollWithCode finishes a needs-code enroll on the live session, no re-exchange', async () => {
+    const server = new FakeSyncServer();
+    const deviceA = createDevice(server);
+    useStorage(deviceA);
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    await deviceA.engine.enableSync('dev', 'cred-a', 'Device A');
+    const recoveryCode = deviceA.onRecoveryCode.mock.calls[0][0] as string;
+
+    const deviceB = createDevice(server);
+    useStorage(deviceB);
+    // A first enable with no code lands at needs-code but leaves the session saved.
+    await expect(deviceB.engine.enableSync('dev', 'cred-b', 'Device B')).rejects.toBeInstanceOf(
+      RecoveryCodeRequiredError
+    );
+    const exchangesBefore = deviceB.apiClient.exchangeCount;
+
+    await deviceB.engine.resumeEnrollWithCode(recoveryCode);
+
+    expect(deviceB.engine.getStatus()).toBe('active');
+    expect(deviceB.apiClient.exchangeCount).toBe(exchangesBefore); // no second token exchange
+    expect((await getGoals()).map((g) => g.id)).toContain('g1');
+  });
+
+  it('resumeEnrollWithCode maps a bad code to RecoveryCodeError and stays disabled', async () => {
+    const server = new FakeSyncServer();
+    const deviceA = createDevice(server);
+    useStorage(deviceA);
+    await deviceA.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    const deviceB = createDevice(server);
+    useStorage(deviceB);
+    await expect(deviceB.engine.enableSync('dev', 'cred-b', 'Device B')).rejects.toBeInstanceOf(
+      RecoveryCodeRequiredError
+    );
+
+    await expect(
+      deviceB.engine.resumeEnrollWithCode('CW1-00000-00000-00000-00000-00000-00000')
+    ).rejects.toBeInstanceOf(RecoveryCodeError);
+    expect(deviceB.engine.getStatus()).toBe('disabled');
+  });
+
+  it('resumeEnrollWithCode without a saved session lands signed_out', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+
+    await device.engine.resumeEnrollWithCode('CW1-00000-00000-00000-00000-00000-00000');
+
+    expect(device.engine.getStatus()).toBe('signed_out');
   });
 
   it('downloads existing server data into a fresh device enrolling with the recovery code', async () => {
