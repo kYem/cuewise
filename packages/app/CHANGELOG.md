@@ -1,5 +1,14 @@
 # @cuewise/app
 
+## 1.16.1
+
+### Patch Changes
+
+- Updated dependencies
+  - @cuewise/shared@1.17.1
+  - @cuewise/storage@1.17.1
+  - @cuewise/ui@1.17.1
+
 ## 1.16.0
 
 ### Minor Changes
