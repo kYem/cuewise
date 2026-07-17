@@ -1,3 +1,4 @@
+import { buildSyncDetails } from '@cuewise/app';
 import { logger } from '@cuewise/shared';
 import { ApiError } from '@cuewise/sync-client';
 import {
@@ -56,17 +57,9 @@ async function doEnable(
 /** Read-only details lookup — deliberately NOT serialized (see handleSyncControlMessage). */
 async function runDetails(engine: SyncEngineControlSurface): Promise<SyncDetailsResponse> {
   // Informational for the settings UI; engine.getAccount never throws (null on any failure).
-  const account = await engine.getAccount();
-  if (account === null) {
-    return { ok: true, details: null };
-  }
   return {
     ok: true,
-    details: {
-      accountEmail: account.email,
-      accountId: account.userId,
-      lastSyncedAt: engine.getLastSyncedAt(),
-    },
+    details: buildSyncDetails(await engine.getAccount(), engine.getLastSyncedAt()),
   };
 }
 

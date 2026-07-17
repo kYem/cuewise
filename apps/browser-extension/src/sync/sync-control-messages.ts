@@ -38,8 +38,6 @@ export interface SyncDetailsResponse {
   details: SyncDetails | null;
 }
 
-export type SyncControlAnyResponse = SyncControlResponse | SyncDetailsResponse;
-
 /**
  * Ties each op to the response shape its SW handler produces, so the bridge's send<O> can't
  * silently mis-assume one (adding an op without an entry here is a compile error at send).
@@ -52,6 +50,9 @@ export interface SyncOpResponse {
   syncNow: SyncControlResponse;
   details: SyncDetailsResponse;
 }
+
+/** Any op's response — derived from the map so the two never drift. */
+export type SyncControlAnyResponse = SyncOpResponse[SyncControlOp];
 
 export function isSyncControlMessage(msg: unknown): msg is SyncControlMessage {
   if (typeof msg !== 'object' || msg === null) {

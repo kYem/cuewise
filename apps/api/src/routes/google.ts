@@ -147,6 +147,9 @@ function respondWithDeepLink(target: URL, message: string): Response {
   const href = target.toString();
   // <-escape closes the </script> breakout hole even though href can't contain '<'.
   const jsHref = JSON.stringify(href).replaceAll('<', '\\u003c');
+  // Per-response nonce so the CSP admits only THIS inline script — a future markup mistake that
+  // echoes a request value can't execute, and can't exfiltrate the ?code= that's in scope here.
+  const nonce = randomToken();
   const html = `<!doctype html>
 <html lang="en">
 <head>
@@ -156,15 +159,19 @@ function respondWithDeepLink(target: URL, message: string): Response {
 </head>
 <body style="font-family: system-ui, sans-serif; display: grid; place-items: center; min-height: 90vh; text-align: center;">
 <p>${escapeHtml(message)} You can close this tab.<br><a href="${escapeHtml(href)}">Open Cuewise</a> if it doesn't happen automatically.</p>
-<script>location.replace(${jsHref});</script>
+<script nonce="${nonce}">location.replace(${jsHref});</script>
 </body>
 </html>`;
   return new Response(html, {
     status: 200,
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
-      // The success page embeds the one-time code — never cache it.
+      // The page embeds the one-time code — never cache it, never leak it via Referer, and
+      // don't let the browser sniff it into another content type.
       'Cache-Control': 'no-store',
+      'Content-Security-Policy': `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'unsafe-inline'`,
+      'Referrer-Policy': 'no-referrer',
+      'X-Content-Type-Options': 'nosniff',
     },
   });
 }

@@ -52,8 +52,19 @@ function appWith(exchanger: GoogleCodeExchanger) {
 async function deepLinkTarget(res: Response): Promise<URL> {
   expect(res.status).toBe(200);
   expect(res.headers.get('Content-Type')).toContain('text/html');
+  // Credential-bearing page: no caching, no referrer leak, no sniffing, and a nonce'd CSP so
+  // only this exact inline script can run (ENG-66 hardening).
   expect(res.headers.get('Cache-Control')).toBe('no-store');
+  expect(res.headers.get('Referrer-Policy')).toBe('no-referrer');
+  expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff');
   const html = await res.text();
+  const csp = res.headers.get('Content-Security-Policy') ?? '';
+  const nonceMatch = csp.match(/script-src 'nonce-([A-Za-z0-9_-]+)'/);
+  if (nonceMatch === null) {
+    throw new Error('expected a nonce-based script-src in the CSP');
+  }
+  // The CSP nonce must match the one on the inline script, or the browser blocks it.
+  expect(html).toContain(`<script nonce="${nonceMatch[1]}">`);
   const match = html.match(/location\.replace\((".*?")\);/);
   if (match === null) {
     throw new Error('expected a location.replace deep link in the interstitial page');

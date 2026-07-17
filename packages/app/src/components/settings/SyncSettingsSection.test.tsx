@@ -3,6 +3,7 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeSyncController } from '../../sync/__fixtures__/fake-sync-controller';
+import type { SyncDetails } from '../../sync/sync-controller';
 import { SyncControllerContext } from '../../sync/sync-controller';
 import { SyncSettingsSectionComponent } from './SyncSettingsSection';
 import type { SettingsSectionProps } from './settings-types';
@@ -211,6 +212,37 @@ describe('SyncSettingsSectionComponent', () => {
     await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
 
     await waitFor(() => expect(toastError).toHaveBeenCalledTimes(1));
+  });
+
+  it('ignores a stale details fetch that resolves after disable, never showing the old account', async () => {
+    // A slow getDetails for account A must not clobber the display after a disable → re-enable.
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    let resolveA: ((d: SyncDetails | null) => void) | undefined;
+    let call = 0;
+    controller.getDetails = vi.fn(() => {
+      call += 1;
+      if (call === 1) {
+        return new Promise<SyncDetails | null>((resolve) => {
+          resolveA = resolve;
+        });
+      }
+      return Promise.resolve({ accountEmail: 'b@example.com', accountId: 'b', lastSyncedAt: null });
+    });
+    renderSection(controller);
+    act(() => controller.setStatus('active')); // fetch A starts (hangs)
+
+    // Disable, then re-enable → fetch B resolves with account B.
+    await user.click(cloudSyncSwitch());
+    await user.click(screen.getByRole('button', { name: 'Disable' }));
+    act(() => controller.setStatus('off'));
+    act(() => controller.setStatus('active'));
+    expect(await screen.findByText('Signed in as b@example.com')).toBeInTheDocument();
+
+    // Now the stale account-A fetch finally resolves — it must be dropped, not painted.
+    act(() => resolveA?.({ accountEmail: 'a@example.com', accountId: 'a', lastSyncedAt: null }));
+    expect(screen.getByText('Signed in as b@example.com')).toBeInTheDocument();
+    expect(screen.queryByText('Signed in as a@example.com')).not.toBeInTheDocument();
   });
 
   it('routes a recovery code that resolves after unmount to a warning toast, never dropping it', async () => {

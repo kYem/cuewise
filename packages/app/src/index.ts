@@ -33,6 +33,7 @@ export type {
 } from './sync/sync-controller';
 export {
   AUTH_CANCELLED_DETAIL,
+  buildSyncDetails,
   SyncControllerContext,
   useSyncController,
 } from './sync/sync-controller';

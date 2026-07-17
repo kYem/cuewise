@@ -27,6 +27,20 @@ export interface SyncDetails {
   readonly lastSyncedAt: number | null;
 }
 
+/**
+ * Maps an engine account + last-synced timestamp into SyncDetails (null account ⇒ null), so both
+ * host adapters (macOS in-process, extension SW) build the identical shape from one definition.
+ */
+export function buildSyncDetails(
+  account: { userId: string; email: string | null } | null,
+  lastSyncedAt: number | null
+): SyncDetails | null {
+  if (account === null) {
+    return null;
+  }
+  return { accountEmail: account.email, accountId: account.userId, lastSyncedAt };
+}
+
 /** Platform-agnostic seam the enable-sync UI drives; host adapters (macOS/extension) implement it. */
 export interface SyncController {
   getStatus(): SyncUiStatus;
