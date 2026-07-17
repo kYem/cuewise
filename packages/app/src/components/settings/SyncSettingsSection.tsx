@@ -449,6 +449,15 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
                   )}
                   {isGoogleSigningIn ? 'Signing in…' : 'Sign in with Google'}
                 </button>
+                {isGoogleSigningIn && controller.cancelEnableWithGoogle && (
+                  <button
+                    type="button"
+                    onClick={() => controller.cancelEnableWithGoogle?.()}
+                    className="w-full rounded-lg px-4 py-1.5 text-xs font-medium text-secondary transition-colors hover:text-primary"
+                  >
+                    Cancel sign-in
+                  </button>
+                )}
               </div>
             )}
 

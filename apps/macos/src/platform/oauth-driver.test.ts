@@ -11,7 +11,7 @@ vi.mock('@tauri-apps/plugin-deep-link', () => ({
   onOpenUrl: (cb: (urls: string[]) => void) => onOpenUrlMock(cb),
 }));
 
-import { createTauriOAuthDriver } from './oauth-driver';
+import { createTauriOAuthDriver, OAuthCancelledError } from './oauth-driver';
 
 const START_URL = 'https://api.test/v1/auth/google/start?return_uri=cuewise%3A%2F%2Fauth';
 
@@ -104,6 +104,32 @@ describe('createTauriOAuthDriver', () => {
 
     listener.emit(['cuewise://auth?code=x']);
 
+    await expect(authorize).resolves.toBe('cuewise://auth?code=x');
+  });
+
+  it('cancel() rejects the pending flow with OAuthCancelledError and unsubscribes', async () => {
+    const listener = armListener();
+    const driver = createTauriOAuthDriver();
+    const authorize = driver.authorize(START_URL);
+    await flush();
+
+    driver.cancel();
+
+    await expect(authorize).rejects.toBeInstanceOf(OAuthCancelledError);
+    expect(listener.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it('cancel() is a no-op with no pending flow and after the flow settled', async () => {
+    const listener = armListener();
+    const driver = createTauriOAuthDriver();
+    driver.cancel();
+
+    const authorize = driver.authorize(START_URL);
+    await flush();
+    listener.emit(['cuewise://auth?code=x']);
+    await expect(authorize).resolves.toBe('cuewise://auth?code=x');
+
+    driver.cancel();
     await expect(authorize).resolves.toBe('cuewise://auth?code=x');
   });
 

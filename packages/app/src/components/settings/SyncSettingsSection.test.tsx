@@ -170,6 +170,21 @@ describe('SyncSettingsSectionComponent', () => {
     await waitFor(() => expect(toastError).toHaveBeenCalledTimes(1));
   });
 
+  it('offers Cancel while Google sign-in is pending, settling it as a quiet cancel', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.deferNextEnableWithGoogle();
+    renderSection(controller);
+
+    await user.click(cloudSyncSwitch());
+    await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
+    await user.click(await screen.findByRole('button', { name: 'Cancel sign-in' }));
+
+    expect(await screen.findByRole('button', { name: 'Sign in with Google' })).toBeEnabled();
+    expect(controller.calls).toContainEqual({ method: 'cancelEnableWithGoogle', args: [] });
+    expect(toastError).not.toHaveBeenCalled();
+  });
+
   it('treats a cancelled Google sign-in as a non-error: no toast, form stays open', async () => {
     const user = userEvent.setup();
     const controller = new FakeSyncController();

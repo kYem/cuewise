@@ -11,7 +11,7 @@ import {
   type SyncSignInProvider,
   type SyncStatus,
 } from '@cuewise/sync-engine';
-import type { OAuthDriver } from '../platform/oauth-driver';
+import { OAuthCancelledError, type OAuthDriver } from '../platform/oauth-driver';
 import { computeCodeChallenge, generateCodeVerifier } from './pkce';
 
 /** Exported so tests can assert against it without duplicating the literal. */
@@ -223,6 +223,11 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
     try {
       callbackUrl = await deps.oauthDriver.authorize(startUrl);
     } catch (err) {
+      if (err instanceof OAuthCancelledError) {
+        // The user aborted from the app — same quiet non-error as cancelling at Google.
+        logger.info('Google sign-in cancelled from the app');
+        return { ok: false, reason: 'auth', detail: AUTH_CANCELLED_DETAIL };
+      }
       const detail = err instanceof Error ? err.message : String(err);
       logger.error(`Google sign-in flow failed: ${detail}`, err);
       return { ok: false, reason: 'error', detail };
@@ -291,6 +296,9 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
       // build compiles in deep-link support; non-Tauri (browser/e2e) fails at authorize()
       // rather than hiding the button.
       return true;
+    },
+    cancelEnableWithGoogle(): void {
+      deps.oauthDriver.cancel();
     },
     reconnect(recoveryCode?: string): Promise<EnableResult> {
       return serialize(async () => {

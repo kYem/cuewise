@@ -10,6 +10,7 @@ import {
   corruptChecksum,
   createDevice,
   fakeOAuthDriver,
+  hangingOAuthDriver,
   unusedDriver,
   useStorage,
 } from './__fixtures__/direct-sync-controller.fixtures';
@@ -607,6 +608,21 @@ describe('createDirectSyncController: enableWithGoogle()', () => {
     const { controller } = buildRealController(device);
 
     expect(controller.canEnableWithGoogle()).toBe(true);
+  });
+
+  it('cancelEnableWithGoogle() settles a pending flow as a quiet cancel, never exchanging', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    const driver = hangingOAuthDriver();
+    const { controller } = buildRealController(device, driver);
+
+    const pending = controller.enableWithGoogle('MacBook');
+    await driver.waitForPending();
+    controller.cancelEnableWithGoogle?.();
+
+    await expect(pending).resolves.toEqual({ ok: false, reason: 'auth', detail: 'cancelled' });
+    expect(device.apiClient.lastExchangeRequest).toBeNull();
   });
 
   it('reconnect() after a google enable re-runs the OAuth flow with a fresh challenge', async () => {

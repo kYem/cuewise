@@ -42,6 +42,12 @@ export interface SyncController {
   syncNow(): Promise<void>;
   /** Informational: resolves null when unavailable (signed out, offline, legacy host); never throws. */
   getDetails(): Promise<SyncDetails | null>;
+  /**
+   * Aborts a pending enableWithGoogle flow (the pending result resolves as a quiet cancel).
+   * Only hosts whose OAuth flow can be aborted implement it (macOS system-browser); the UI
+   * shows a Cancel affordance only when present — the extension's popup is user-closable.
+   */
+  cancelEnableWithGoogle?(): void;
 }
 
 export const SyncControllerContext = createContext<SyncController | null>(null);
