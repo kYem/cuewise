@@ -32,6 +32,9 @@ import { type ConflictStrategy, LwwHlcStrategy } from './strategy';
 
 export const CLOUD_SYNC_ENABLED_KEY = 'cloudSyncEnabled';
 
+/** Millis timestamp of the last successful sync cycle; survives restarts for the details UI. */
+export const LAST_SYNCED_AT_KEY = 'cuewise.sync.lastSyncedAt';
+
 // The periodic pull backstop cadence (spec §3: "~5 min"); foreground opens trigger sooner via syncNow.
 const PULL_REARM_MINUTES = 5;
 
@@ -63,7 +66,12 @@ export type SyncStatus =
  */
 export type EngineApiClient = Pick<
   RealApiClient,
-  'exchangeToken' | 'getChanges' | 'pushChanges' | 'getRecoveryEnvelope' | 'putRecoveryEnvelope'
+  | 'exchangeToken'
+  | 'getChanges'
+  | 'pushChanges'
+  | 'getRecoveryEnvelope'
+  | 'putRecoveryEnvelope'
+  | 'getAccount'
 >;
 
 export interface SyncEngineDeps {
@@ -92,6 +100,7 @@ export class SyncEngine {
   private status: SyncStatus = 'disabled';
   private dk: DataKey | null = null;
   private keyId: string | null = null;
+  private lastSyncedAt: number | null = null;
 
   constructor(private readonly deps: SyncEngineDeps) {
     this.now = deps.now ?? Date.now;
@@ -171,9 +180,11 @@ export class SyncEngine {
     await this.deps.sessionManager.clear();
     await this.deps.keyStore.remove(SYNC_DATA_KEY, 'local');
     await this.deps.keyStore.remove(CLOUD_SYNC_ENABLED_KEY, 'local');
+    await this.deps.keyStore.remove(LAST_SYNCED_AT_KEY, 'local');
     await this.resetMeta();
     this.dk = null;
     this.keyId = null;
+    this.lastSyncedAt = null;
     this.setStatus('disabled');
   }
 
@@ -214,6 +225,38 @@ export class SyncEngine {
       }
       throw err;
     }
+    await this.stampLastSynced();
+  }
+
+  /** Stamped only after a full successful cycle; a persistence failure is log-only. */
+  private async stampLastSynced(): Promise<void> {
+    this.lastSyncedAt = this.now();
+    const result = await this.deps.keyStore.set(LAST_SYNCED_AT_KEY, this.lastSyncedAt, 'local');
+    if (!result.success) {
+      logger.warn(`Failed to persist lastSyncedAt: ${result.error.message}`);
+    }
+  }
+
+  getLastSyncedAt(): number | null {
+    return this.lastSyncedAt;
+  }
+
+  /**
+   * Account details for the settings UI. Informational only: resolves null when signed out
+   * or on any fetch failure (including 401 — no auth-loss side effects), never throws.
+   */
+  async getAccount(): Promise<{ userId: string; email: string | null } | null> {
+    const token = await this.deps.sessionManager.getToken();
+    if (token === null) {
+      return null;
+    }
+    try {
+      return await this.deps.apiClient.getAccount();
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      logger.warn(`Failed to fetch sync account details: ${detail}`);
+      return null;
+    }
   }
 
   /** Self-heal, then hold the DK and arm the pull loop. No-op if sync was never enabled here. */
@@ -221,6 +264,12 @@ export class SyncEngine {
     const enabled = await this.deps.keyStore.get<boolean>(CLOUD_SYNC_ENABLED_KEY, 'local');
     if (enabled !== true) {
       return;
+    }
+
+    // Hydrate the details-UI timestamp so a restart shows the last real sync, not a blank.
+    const persistedLastSynced = await this.deps.keyStore.get<number>(LAST_SYNCED_AT_KEY, 'local');
+    if (typeof persistedLastSynced === 'number') {
+      this.lastSyncedAt = persistedLastSynced;
     }
 
     try {
