@@ -35,12 +35,17 @@ const chromeMock = {
     create: vi.fn(() => Promise.resolve()),
   },
   windows: { update: vi.fn(() => Promise.resolve()) },
-  runtime: { getURL: (path: string) => path },
+  runtime: {
+    getURL: (path: string) => path,
+    getManifest: vi.fn().mockReturnValue({ version: '9.9.9' }),
+    setUninstallURL: vi.fn().mockResolvedValue(undefined),
+  },
 };
 
 let fireAlarm: AlarmListener;
 let fireButton: ButtonListener;
 let fireClick: ClickListener;
+let uninstallUrl: string | undefined;
 
 beforeAll(async () => {
   global.chrome = chromeMock as unknown as typeof chrome;
@@ -50,6 +55,9 @@ beforeAll(async () => {
   vi.stubEnv('VITE_SYNC_API_BASE_URL', '');
   // Registers the alarm/notification listeners against chromeMock.
   await import('./background');
+  // setUninstallURL fires once at module load, before the first beforeEach's
+  // clearAllMocks() — capture it now like fireAlarm/fireButton/fireClick below.
+  uninstallUrl = chromeMock.runtime.setUninstallURL.mock.calls[0]?.[0];
   fireAlarm = chromeMock.alarms.onAlarm.addListener.mock.calls[0][0] as AlarmListener;
   fireButton = chromeMock.notifications.onButtonClicked.addListener.mock
     .calls[0][0] as ButtonListener;
@@ -215,4 +223,8 @@ describe('background: notification click', () => {
 
     expect(chromeMock.notifications.clear).not.toHaveBeenCalled();
   });
+});
+
+it('points the uninstall url at the feedback page with the manifest version', () => {
+  expect(uninstallUrl).toBe('https://cuewise.app/uninstall?v=9.9.9');
 });
