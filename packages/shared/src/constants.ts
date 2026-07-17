@@ -199,11 +199,12 @@ export type NotificationSoundType = keyof typeof NOTIFICATION_SOUNDS;
 // Each playlist includes a firstVideoId for proper embed support
 export const DEFAULT_YOUTUBE_PLAYLISTS: YoutubePlaylist[] = [
   {
-    id: 'lofi-hip-hop',
-    name: 'Lofi Hip Hop',
-    playlistId: 'PLOzDu-MXXLliO9fBNZOQTBDddoA3FzZUo',
-    thumbnailUrl: 'https://i.ytimg.com/vi/jfKfPfyJRdk/hqdefault.jpg',
-    firstVideoId: 'jfKfPfyJRdk',
+    // Owned by the CueWise App channel (@cuewiseapp) — safe from third-party deletion
+    id: 'deep-focus',
+    name: 'Deep Focus',
+    playlistId: 'PLen5pjse9Mb8',
+    thumbnailUrl: 'https://i.ytimg.com/vi/oPVte6aMprI/hqdefault.jpg',
+    firstVideoId: 'oPVte6aMprI',
     isCustom: false,
   },
   {
@@ -228,14 +229,6 @@ export const DEFAULT_YOUTUBE_PLAYLISTS: YoutubePlaylist[] = [
     playlistId: 'PLgzTt0k8mXzEpH7-dOCHqRZOsakqXmzmG',
     thumbnailUrl: 'https://i.ytimg.com/vi/fEvM-OUbaKs/hqdefault.jpg',
     firstVideoId: 'fEvM-OUbaKs',
-    isCustom: false,
-  },
-  {
-    id: 'deep-focus',
-    name: 'Deep Focus',
-    playlistId: 'PLNIOIzEHtNJbXCOTAlbxazG1MwruX0Rg5',
-    thumbnailUrl: 'https://i.ytimg.com/vi/1x_x3hC1e04/hqdefault.jpg',
-    firstVideoId: '1x_x3hC1e04',
     isCustom: false,
   },
   {
