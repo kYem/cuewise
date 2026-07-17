@@ -1,5 +1,18 @@
 # @cuewise/browser-extension
 
+## 1.17.1
+
+### Patch Changes
+
+- The seeded Pomodoro-music playlists now lead with a CueWise-owned Deep Focus playlist, replacing the broken third-party Lofi Hip Hop default whose first video was removed (grey tile, dead embed). The old third-party Deep Focus entry is gone too; a saved Deep Focus selection rolls onto the new playlist automatically.
+- Updated dependencies
+  - @cuewise/shared@1.17.1
+  - @cuewise/app@1.16.1
+  - @cuewise/storage@1.17.1
+  - @cuewise/sync-client@0.1.2
+  - @cuewise/sync-engine@0.1.2
+  - @cuewise/ui@1.17.1
+
 ## 1.17.0
 
 ### Minor Changes
