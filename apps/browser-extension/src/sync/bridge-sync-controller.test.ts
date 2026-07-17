@@ -3,7 +3,7 @@ import { CLOUD_SYNC_ENABLED_KEY } from '@cuewise/sync-engine';
 import { createChromeStorageMock, type MockChromeStorage } from '@cuewise/test-utils/mocks';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BridgeSyncController } from './bridge-sync-controller';
-import type { SyncControlResponse } from './sync-control-messages';
+import type { SyncControlAnyResponse } from './sync-control-messages';
 import { LAST_SYNC_CREDS_KEY, QUARANTINE_KEY, STATUS_KEY } from './sync-storage-keys';
 
 type StorageChangeMap = { [key: string]: chrome.storage.StorageChange };
@@ -11,7 +11,7 @@ type StorageChangeListener = (changes: StorageChangeMap, area: string) => void;
 
 const runtime = {
   sendMessage: vi.fn(
-    (_message: unknown): Promise<SyncControlResponse> => Promise.resolve({ ok: true })
+    (_message: unknown): Promise<SyncControlAnyResponse> => Promise.resolve({ ok: true })
   ),
 };
 
@@ -163,6 +163,37 @@ describe('BridgeSyncController: storage change listener', () => {
     await flush();
 
     expect(() => emitChange({ [QUARANTINE_KEY]: { newValue: Date.now() } })).not.toThrow();
+  });
+});
+
+describe('BridgeSyncController: getDetails', () => {
+  it('sends the details op and returns the relayed details', async () => {
+    const details = { accountEmail: 'kes@example.com', accountId: 'u1', lastSyncedAt: 123 };
+    runtime.sendMessage.mockResolvedValueOnce({ ok: true, details });
+    const controller = new BridgeSyncController();
+
+    await expect(controller.getDetails()).resolves.toEqual(details);
+    expect(runtime.sendMessage).toHaveBeenCalledWith({
+      kind: 'cuewise-sync-control',
+      op: 'details',
+    });
+  });
+
+  it('resolves null when messaging fails, without throwing', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    runtime.sendMessage.mockRejectedValueOnce(new Error('no SW'));
+    const controller = new BridgeSyncController();
+
+    await expect(controller.getDetails()).resolves.toBeNull();
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it('resolves null when a legacy SW answers without a details field', async () => {
+    runtime.sendMessage.mockResolvedValueOnce({ ok: false, reason: 'error' });
+    const controller = new BridgeSyncController();
+
+    await expect(controller.getDetails()).resolves.toBeNull();
   });
 });
 

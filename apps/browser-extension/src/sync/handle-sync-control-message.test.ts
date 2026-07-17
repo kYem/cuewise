@@ -16,9 +16,45 @@ function fakeEngine(overrides: Partial<SyncEngineControlSurface> = {}): SyncEngi
     syncNow: vi.fn().mockResolvedValue(undefined),
     regenerateRecoveryCode: vi.fn().mockResolvedValue('CW1-NEW00-00000-00000-00000-00000-00000'),
     getStatus: vi.fn().mockReturnValue('active' as SyncStatus),
+    getAccount: vi.fn().mockResolvedValue(null),
+    getLastSyncedAt: vi.fn().mockReturnValue(null),
     ...overrides,
   };
 }
+
+describe('handleSyncControlMessage: details', () => {
+  it('maps the engine account + lastSyncedAt into a details response', async () => {
+    const engine = fakeEngine({
+      getAccount: vi.fn().mockResolvedValue({ userId: 'u1', email: 'kes@example.com' }),
+      getLastSyncedAt: vi.fn().mockReturnValue(1_700_000_000_000),
+    });
+
+    const result = await handleSyncControlMessage(
+      engine,
+      { kind: 'cuewise-sync-control', op: 'details' },
+      fakeDeps()
+    );
+
+    expect(result).toEqual({
+      ok: true,
+      details: {
+        accountEmail: 'kes@example.com',
+        accountId: 'u1',
+        lastSyncedAt: 1_700_000_000_000,
+      },
+    });
+  });
+
+  it('answers details null when the engine has no account', async () => {
+    const result = await handleSyncControlMessage(
+      fakeEngine(),
+      { kind: 'cuewise-sync-control', op: 'details' },
+      fakeDeps()
+    );
+
+    expect(result).toEqual({ ok: true, details: null });
+  });
+});
 
 function fakeDeps(overrides: Partial<SyncControlDeps> = {}): SyncControlDeps {
   return {

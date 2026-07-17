@@ -1,7 +1,12 @@
-import type { EnableResult, SyncController, SyncUiStatus } from '@cuewise/app';
+import type { EnableResult, SyncController, SyncDetails, SyncUiStatus } from '@cuewise/app';
 import { logger } from '@cuewise/shared';
 import { CLOUD_SYNC_ENABLED_KEY, type SyncSignInProvider } from '@cuewise/sync-engine';
-import type { SyncControlMessage, SyncControlResponse } from './sync-control-messages';
+import type {
+  SyncControlAnyResponse,
+  SyncControlMessage,
+  SyncControlResponse,
+  SyncDetailsResponse,
+} from './sync-control-messages';
 import { LAST_SYNC_CREDS_KEY, QUARANTINE_KEY, STATUS_KEY } from './sync-storage-keys';
 
 const DEFAULT_TIMEOUT_MS = 30000;
@@ -294,13 +299,35 @@ export class BridgeSyncController implements SyncController {
     );
   }
 
+  async getDetails(): Promise<SyncDetails | null> {
+    try {
+      const response = await this.send<SyncDetailsResponse>({
+        kind: 'cuewise-sync-control',
+        op: 'details',
+      });
+      // A legacy SW (or the router's error fallback) answers without a details field — treat as
+      // unavailable rather than an error; this call is purely informational.
+      if (response.ok && 'details' in response) {
+        return response.details;
+      }
+      return null;
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      logger.warn(`Sync details control message failed: ${detail}`);
+      return null;
+    }
+  }
+
   private async persistCreds(creds: LastSyncCreds): Promise<void> {
     await chrome.storage.local.set({ [LAST_SYNC_CREDS_KEY]: creds });
   }
 
   // Races the control response against timeoutMs so a dead/asleep SW rejects instead of
-  // hanging the UI forever; clears the timer on either settling path.
-  private send(msg: SyncControlMessage): Promise<SyncControlResponse> {
+  // hanging the UI forever; clears the timer on either settling path. The wire is untyped,
+  // so R only names which response shape the caller's op is defined to produce.
+  private send<R extends SyncControlAnyResponse = SyncControlResponse>(
+    msg: SyncControlMessage
+  ): Promise<R> {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<never>((_resolve, reject) => {
       timer = setTimeout(() => {
@@ -308,9 +335,9 @@ export class BridgeSyncController implements SyncController {
       }, this.timeoutMs);
     });
 
-    let response: Promise<SyncControlResponse>;
+    let response: Promise<R>;
     try {
-      response = Promise.resolve(chrome.runtime.sendMessage(msg)) as Promise<SyncControlResponse>;
+      response = Promise.resolve(chrome.runtime.sendMessage(msg)) as Promise<R>;
     } catch (error) {
       response = Promise.reject(error);
     }

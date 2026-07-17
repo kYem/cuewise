@@ -1,4 +1,4 @@
-import type { EnableResult } from '@cuewise/app';
+import type { EnableResult, SyncDetails } from '@cuewise/app';
 import type { SyncSignInProvider } from '@cuewise/sync-engine';
 
 // One source of truth for the op list and its type, so the runtime guard can't desync from the union.
@@ -8,6 +8,7 @@ export const SYNC_CONTROL_OPS = [
   'disable',
   'regenerate',
   'syncNow',
+  'details',
 ] as const;
 export type SyncControlOp = (typeof SYNC_CONTROL_OPS)[number];
 
@@ -30,6 +31,14 @@ export interface SyncControlMessage {
 
 // Character-identical to the app's EnableResult — reuse it so the two can't drift.
 export type SyncControlResponse = EnableResult;
+
+/** Response to the 'details' op — kept OUT of SyncControlResponse so EnableResult narrowing stays intact. */
+export interface SyncDetailsResponse {
+  ok: true;
+  details: SyncDetails | null;
+}
+
+export type SyncControlAnyResponse = SyncControlResponse | SyncDetailsResponse;
 
 export function isSyncControlMessage(msg: unknown): msg is SyncControlMessage {
   if (typeof msg !== 'object' || msg === null) {

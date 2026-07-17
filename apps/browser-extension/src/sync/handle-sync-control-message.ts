@@ -6,7 +6,11 @@ import {
   type SyncEngineControlSurface,
   type SyncSignInProvider,
 } from '@cuewise/sync-engine';
-import type { SyncControlMessage, SyncControlResponse } from './sync-control-messages';
+import type {
+  SyncControlAnyResponse,
+  SyncControlMessage,
+  SyncControlResponse,
+} from './sync-control-messages';
 
 export interface SyncControlDeps {
   /** Reads and clears the one-shot recovery-code capture slot owned by background.ts. */
@@ -52,7 +56,22 @@ async function runOp(
   engine: SyncEngineControlSurface,
   msg: SyncControlMessage,
   deps: SyncControlDeps
-): Promise<SyncControlResponse> {
+): Promise<SyncControlAnyResponse> {
+  if (msg.op === 'details') {
+    // Informational for the settings UI; engine.getAccount never throws (null on any failure).
+    const account = await engine.getAccount();
+    if (account === null) {
+      return { ok: true, details: null };
+    }
+    return {
+      ok: true,
+      details: {
+        accountEmail: account.email,
+        accountId: account.userId,
+        lastSyncedAt: engine.getLastSyncedAt(),
+      },
+    };
+  }
   if (msg.op === 'enable') {
     // Runtime guard (the wire is untyped): reject an unknown provider or an empty credential/
     // device name, not just `undefined`. Log so a caller regression isn't a bare, detail-less error.
@@ -114,6 +133,6 @@ export async function handleSyncControlMessage(
   engine: SyncEngineControlSurface,
   msg: SyncControlMessage,
   deps: SyncControlDeps
-): Promise<SyncControlResponse> {
+): Promise<SyncControlAnyResponse> {
   return serialize(() => runOp(engine, msg, deps));
 }
