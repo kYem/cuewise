@@ -63,6 +63,23 @@ describe('google sign-in deep-link prerequisites', () => {
     expect(capabilities.permissions).toContain('deep-link:default');
     expect(capabilities.permissions).toContain('shell:allow-open');
   });
+
+  // The sync ApiClient rides the NATIVE http plugin (webview fetch is blocked by the
+  // production CSP connect-src + the API's CORS policy) — losing this scope kills sync
+  // in built apps only, invisible to every JS test.
+  it('grants native http access to the sync API', () => {
+    const httpScope = capabilities.permissions.find(
+      (p: unknown) =>
+        typeof p === 'object' &&
+        p !== null &&
+        (p as { identifier?: unknown }).identifier === 'http:default'
+    );
+    if (httpScope === undefined) {
+      throw new Error('expected an http:default permission entry in capabilities/default.json');
+    }
+    const urls = (httpScope as { allow: { url: string }[] }).allow.map((a) => a.url);
+    expect(urls).toContain('https://api.cuewise.app/*');
+  });
 });
 
 // Regression guard for ENG-40: without macOSPrivateApi (and the matching cargo
