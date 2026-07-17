@@ -1,0 +1,157 @@
+---
+import Base from '../layouts/Base.astro';
+import { SITE } from '../lib/site';
+
+const reasons = [
+  { value: 'missing-feature', label: 'Missing a feature I need' },
+  { value: 'cluttered', label: 'Too cluttered or distracting' },
+  { value: 'performance', label: 'Slow or buggy' },
+  { value: 'switched', label: 'Switched to another extension' },
+  { value: 'trying', label: 'Was just trying it out' },
+  { value: 'other', label: 'Something else' },
+];
+---
+
+<Base
+  title="Sorry to see you go - Cuewise"
+  description="Tell us why you uninstalled Cuewise — one question, fully anonymous."
+>
+  <meta name="robots" content="noindex" slot="head" />
+  <main>
+    <section class="page-hero">
+      <div class="wrap">
+        <h1>Sorry to see you go</h1>
+        <p class="hero-sub">
+          One quick, anonymous question — your answer directly shapes what gets built next.
+        </p>
+      </div>
+    </section>
+
+    <section class="section-pad" style="padding-top:0;">
+      <div class="wrap">
+        <div class="content-card glass reveal" id="feedback-card">
+          <form id="uninstall-form">
+            <h2>What made you uninstall?</h2>
+            <div class="reason-list">
+              {
+                reasons.map((r) => (
+                  <label class="reason-option">
+                    <input type="radio" name="reason" value={r.value} required />
+                    <span>{r.label}</span>
+                  </label>
+                ))
+              }
+            </div>
+            <label class="details-label" for="details">
+              Anything you'd like to add? <span class="optional">(optional)</span>
+            </label>
+            <textarea
+              id="details"
+              name="details"
+              maxlength="2000"
+              rows="4"
+              placeholder="The feature that was missing, the extension you switched to…"
+            ></textarea>
+            <input
+              type="text"
+              name="website"
+              tabindex="-1"
+              autocomplete="off"
+              class="hp-field"
+              aria-hidden="true"
+            />
+            <button class="btn btn-primary" type="submit" id="submit-btn">Send feedback</button>
+            <p class="form-error text-error" id="form-error" hidden>
+              Couldn't send — please email us instead at
+              <a href={`mailto:${SITE.supportEmail}`}>{SITE.supportEmail}</a>.
+            </p>
+          </form>
+
+          <div id="thanks" hidden>
+            <h2>Thank you — that genuinely helps.</h2>
+            <p>If there's something you wish Cuewise did, tell us and we might build it:</p>
+            <div class="thanks-links">
+              <a
+                class="btn btn-primary"
+                href={SITE.githubDiscussionsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Request a feature
+              </a>
+              <a class="btn btn-ghost" href={SITE.storeUrl} target="_blank" rel="noopener noreferrer">
+                Changed your mind? Reinstall
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+</Base>
+
+<style>
+  .reason-list {
+    display: grid;
+    gap: 10px;
+    margin: 18px 0 22px;
+  }
+  .reason-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    border: 1px solid var(--glass-hairline);
+    border-radius: 12px;
+    cursor: pointer;
+    transition:
+      border-color 0.15s ease,
+      background 0.15s ease;
+  }
+  .reason-option:hover {
+    border-color: rgba(139, 92, 246, 0.6);
+  }
+  .reason-option:has(input:checked) {
+    border-color: #8b5cf6;
+    background: rgba(139, 92, 246, 0.08);
+  }
+  .details-label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 500;
+  }
+  .optional {
+    opacity: 0.6;
+    font-weight: 400;
+  }
+  textarea {
+    width: 100%;
+    padding: 12px 14px;
+    border: 1px solid var(--glass-hairline);
+    border-radius: 12px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    margin-bottom: 18px;
+    resize: vertical;
+  }
+  .hp-field {
+    position: absolute;
+    left: -9999px;
+    height: 0;
+    width: 0;
+    opacity: 0;
+  }
+  .form-error {
+    margin-top: 12px;
+  }
+  .thanks-links {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 18px;
+  }
+</style>
+
+<!-- Static file (not Astro-bundled) so CSP script-src stays 'self' with no hashes. -->
+<script src="/scripts/uninstall-form.js" is:inline></script>
