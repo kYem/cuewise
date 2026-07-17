@@ -23,6 +23,11 @@ describe('handleUninstallFeedback', () => {
     expect(response.status).toBe(400);
   });
 
+  it('returns 400 for a JSON body that is not an object', async () => {
+    const response = await handleUninstallFeedback(makeFeedbackRequest('null'), testEnv);
+    expect(response.status).toBe(400);
+  });
+
   it('returns 400 for an unknown reason', async () => {
     const response = await handleUninstallFeedback(
       makeFeedbackRequest({ reason: 'aliens' }),

@@ -26,39 +26,48 @@ export async function handleUninstallFeedback(request: Request, env: Env): Promi
     return json(500, { error: 'Feedback is temporarily unavailable' });
   }
 
-  let payload: FeedbackPayload;
+  let payload: unknown;
   try {
-    payload = (await request.json()) as FeedbackPayload;
+    payload = await request.json();
   } catch {
     return json(400, { error: 'Invalid request body' });
   }
 
-  if (typeof payload.website === 'string' && payload.website.length > 0) {
+  if (typeof payload !== 'object' || payload === null) {
+    return json(400, { error: 'Invalid request body' });
+  }
+
+  const feedbackPayload = payload as FeedbackPayload;
+
+  if (typeof feedbackPayload.website === 'string' && feedbackPayload.website.length > 0) {
     // Honeypot field was filled by a bot — report success so it learns nothing.
     return json(200, { success: true });
   }
 
-  if (typeof payload.reason !== 'string' || !REASONS.includes(payload.reason)) {
+  if (typeof feedbackPayload.reason !== 'string' || !REASONS.includes(feedbackPayload.reason)) {
     return json(400, { error: 'Invalid feedback' });
   }
 
-  if (payload.details !== undefined) {
-    if (typeof payload.details !== 'string' || payload.details.length > DETAILS_MAX_LENGTH) {
+  if (feedbackPayload.details !== undefined) {
+    if (
+      typeof feedbackPayload.details !== 'string' ||
+      feedbackPayload.details.length > DETAILS_MAX_LENGTH
+    ) {
       return json(400, { error: 'Invalid feedback' });
     }
   }
 
   // Version rides in from a query param the extension set — sanitize, never reject.
   const version =
-    typeof payload.version === 'string' && VERSION_PATTERN.test(payload.version)
-      ? payload.version
+    typeof feedbackPayload.version === 'string' && VERSION_PATTERN.test(feedbackPayload.version)
+      ? feedbackPayload.version
       : 'unknown';
 
   const lines = [
-    `Reason: ${payload.reason}`,
+    `Reason: ${feedbackPayload.reason}`,
     `Version: ${version}`,
     '',
-    payload.details ? String(payload.details) : '(no details given)',
+    feedbackPayload.details ? String(feedbackPayload.details) : '(no details given)',
   ];
 
   try {
@@ -71,7 +80,7 @@ export async function handleUninstallFeedback(request: Request, env: Env): Promi
       body: JSON.stringify({
         from: 'Cuewise Feedback <feedback@cuewise.app>',
         to: ['support@cuewise.app'],
-        subject: `Uninstall feedback: ${payload.reason}`,
+        subject: `Uninstall feedback: ${feedbackPayload.reason}`,
         text: lines.join('\n'),
       }),
     });
