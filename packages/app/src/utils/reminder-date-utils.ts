@@ -88,9 +88,9 @@ export function formatDueDate(dueDate: string, timeFormat: '12h' | '24h' = '12h'
 }
 
 /** Compact "time since": "Just now", "26 min ago", "3h ago", "2d ago". Accepts an ISO string or millis. */
-export function formatTimeAgo(dueDate: string | number): string {
-  const dueMs = typeof dueDate === 'number' ? dueDate : parseISO(dueDate).getTime();
-  const seconds = Math.round((Date.now() - dueMs) / 1000);
+export function formatTimeAgo(timestamp: string | number): string {
+  const millis = typeof timestamp === 'number' ? timestamp : parseISO(timestamp).getTime();
+  const seconds = Math.round((Date.now() - millis) / 1000);
   if (seconds < 60) {
     return 'Just now';
   }

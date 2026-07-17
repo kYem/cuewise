@@ -2,10 +2,10 @@ import type { EnableResult, SyncController, SyncDetails, SyncUiStatus } from '@c
 import { logger } from '@cuewise/shared';
 import { CLOUD_SYNC_ENABLED_KEY, type SyncSignInProvider } from '@cuewise/sync-engine';
 import type {
-  SyncControlAnyResponse,
   SyncControlMessage,
+  SyncControlOp,
   SyncControlResponse,
-  SyncDetailsResponse,
+  SyncOpResponse,
 } from './sync-control-messages';
 import { LAST_SYNC_CREDS_KEY, QUARANTINE_KEY, STATUS_KEY } from './sync-storage-keys';
 
@@ -301,13 +301,11 @@ export class BridgeSyncController implements SyncController {
 
   async getDetails(): Promise<SyncDetails | null> {
     try {
-      const response = await this.send<SyncDetailsResponse>({
-        kind: 'cuewise-sync-control',
-        op: 'details',
-      });
-      // A legacy SW (or the router's error fallback) answers without a details field — treat as
-      // unavailable rather than an error; this call is purely informational.
-      if (response.ok && 'details' in response) {
+      const response = await this.send({ kind: 'cuewise-sync-control', op: 'details' });
+      // Unavailable rather than an error — this call is purely informational. undefined = a
+      // legacy SW whose op guard rejected the message (no responder); ok-without-details = the
+      // router's generic error fallback.
+      if (response?.ok && 'details' in response) {
         return response.details;
       }
       return null;
@@ -323,11 +321,12 @@ export class BridgeSyncController implements SyncController {
   }
 
   // Races the control response against timeoutMs so a dead/asleep SW rejects instead of
-  // hanging the UI forever; clears the timer on either settling path. The wire is untyped,
-  // so R only names which response shape the caller's op is defined to produce.
-  private send<R extends SyncControlAnyResponse = SyncControlResponse>(
-    msg: SyncControlMessage
-  ): Promise<R> {
+  // hanging the UI forever; clears the timer on either settling path. The wire is untyped —
+  // the mapped type only ties the assumed response shape to the op actually being sent, so a
+  // caller can't silently read a details response as an EnableResult (or vice versa).
+  private send<O extends SyncControlOp>(
+    msg: SyncControlMessage & { op: O }
+  ): Promise<SyncOpResponse[O]> {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<never>((_resolve, reject) => {
       timer = setTimeout(() => {
@@ -335,9 +334,9 @@ export class BridgeSyncController implements SyncController {
       }, this.timeoutMs);
     });
 
-    let response: Promise<R>;
+    let response: Promise<SyncOpResponse[O]>;
     try {
-      response = Promise.resolve(chrome.runtime.sendMessage(msg)) as Promise<R>;
+      response = Promise.resolve(chrome.runtime.sendMessage(msg)) as Promise<SyncOpResponse[O]>;
     } catch (error) {
       response = Promise.reject(error);
     }

@@ -7,7 +7,12 @@ import { describe, expect, it, vi } from 'vitest';
 import { FakeApiClient, FakeSyncServer } from './__fixtures__/fake-api-client';
 import { FakeKvStore } from './__fixtures__/fake-kv-store';
 import { FakeScheduler } from './__fixtures__/fake-scheduler';
-import { CLOUD_SYNC_ENABLED_KEY, SyncEngine, type SyncEngineDeps } from './engine';
+import {
+  CLOUD_SYNC_ENABLED_KEY,
+  LAST_SYNCED_AT_KEY,
+  SyncEngine,
+  type SyncEngineDeps,
+} from './engine';
 import { loadPersistedDataKey, RecoveryCodeRequiredError, SYNC_DATA_KEY } from './key-lifecycle';
 import { SyncMetadataStore } from './metadata-store';
 import { MutationTracker } from './mutation-tracker';
@@ -127,6 +132,23 @@ describe('SyncEngine.enableSync', () => {
     });
     await restarted.start();
     expect(restarted.getLastSyncedAt()).toBe(5_000);
+  });
+
+  it('a lastSyncedAt persistence failure is log-only: the sync still succeeds, memory updates', async () => {
+    // Guards against a refactor routing stampLastSynced through throwIfFailed — that would
+    // reject every successful sync cycle after the data already synced.
+    let t = 7_000;
+    const server = new FakeSyncServer();
+    const device = createDevice(server, { now: () => t });
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    t = 8_000;
+    device.kv.failSetsForKey = LAST_SYNCED_AT_KEY;
+    await device.engine.syncNow();
+
+    expect(device.engine.getLastSyncedAt()).toBe(8_000);
+    device.kv.failSetsForKey = null;
   });
 
   it('never stamps lastSyncedAt on the DK-less no-op path, and disableSync clears it', async () => {

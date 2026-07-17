@@ -564,6 +564,25 @@ describe('SyncSettingsSectionComponent', () => {
     expect(screen.queryByTestId('sync-account-label')).not.toBeInTheDocument();
   });
 
+  it('drops the shown identity on disable so a re-enable fetches fresh details', async () => {
+    // Same mount, different account: the section must never keep showing the previous owner.
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptDetails({ accountEmail: 'a@example.com', accountId: 'a', lastSyncedAt: null });
+    controller.scriptDetails({ accountEmail: 'b@example.com', accountId: 'b', lastSyncedAt: null });
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+    await screen.findByText('Signed in as a@example.com');
+
+    await user.click(cloudSyncSwitch());
+    await user.click(screen.getByRole('button', { name: 'Disable' }));
+    act(() => controller.setStatus('off'));
+    await waitFor(() => expect(screen.queryByTestId('sync-account-label')).not.toBeInTheDocument());
+    act(() => controller.setStatus('active'));
+
+    expect(await screen.findByText('Signed in as b@example.com')).toBeInTheDocument();
+  });
+
   it('refreshes the last-synced time after Sync now', async () => {
     const user = userEvent.setup();
     const controller = new FakeSyncController();

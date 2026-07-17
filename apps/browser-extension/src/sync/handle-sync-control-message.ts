@@ -10,6 +10,7 @@ import type {
   SyncControlAnyResponse,
   SyncControlMessage,
   SyncControlResponse,
+  SyncDetailsResponse,
 } from './sync-control-messages';
 
 export interface SyncControlDeps {
@@ -52,26 +53,28 @@ async function doEnable(
   return { ok: true, recoveryCode: deps.takeRecoveryCode() };
 }
 
+/** Read-only details lookup — deliberately NOT serialized (see handleSyncControlMessage). */
+async function runDetails(engine: SyncEngineControlSurface): Promise<SyncDetailsResponse> {
+  // Informational for the settings UI; engine.getAccount never throws (null on any failure).
+  const account = await engine.getAccount();
+  if (account === null) {
+    return { ok: true, details: null };
+  }
+  return {
+    ok: true,
+    details: {
+      accountEmail: account.email,
+      accountId: account.userId,
+      lastSyncedAt: engine.getLastSyncedAt(),
+    },
+  };
+}
+
 async function runOp(
   engine: SyncEngineControlSurface,
-  msg: SyncControlMessage,
+  msg: SyncControlMessage & { op: Exclude<SyncControlMessage['op'], 'details'> },
   deps: SyncControlDeps
-): Promise<SyncControlAnyResponse> {
-  if (msg.op === 'details') {
-    // Informational for the settings UI; engine.getAccount never throws (null on any failure).
-    const account = await engine.getAccount();
-    if (account === null) {
-      return { ok: true, details: null };
-    }
-    return {
-      ok: true,
-      details: {
-        accountEmail: account.email,
-        accountId: account.userId,
-        lastSyncedAt: engine.getLastSyncedAt(),
-      },
-    };
-  }
+): Promise<SyncControlResponse> {
   if (msg.op === 'enable') {
     // Runtime guard (the wire is untyped): reject an unknown provider or an empty credential/
     // device name, not just `undefined`. Log so a caller regression isn't a bare, detail-less error.
@@ -98,15 +101,23 @@ async function runOp(
   }
   // disable/regenerate/syncNow have no enroll control-flow — a throw is a plain error result.
   try {
-    if (msg.op === 'disable') {
-      await engine.disableSync();
-      return { ok: true };
+    switch (msg.op) {
+      case 'disable':
+        await engine.disableSync();
+        return { ok: true };
+      case 'regenerate':
+        return { ok: true, recoveryCode: await engine.regenerateRecoveryCode() };
+      case 'syncNow':
+        await engine.syncNow();
+        return { ok: true };
+      default: {
+        // Exhaustiveness: a new SYNC_CONTROL_OPS entry is a compile error here — never a
+        // silent fallthrough into some other operation.
+        const exhaustive: never = msg.op;
+        logger.error(`Cloud sync control op '${String(exhaustive)}' has no handler`);
+        return { ok: false, reason: 'error' };
+      }
     }
-    if (msg.op === 'regenerate') {
-      return { ok: true, recoveryCode: await engine.regenerateRecoveryCode() };
-    }
-    await engine.syncNow();
-    return { ok: true };
   } catch (err) {
     logger.error(`Cloud sync control op '${msg.op}' failed`, err);
     return { ok: false, reason: 'error', detail: err instanceof Error ? err.message : undefined };
@@ -134,5 +145,11 @@ export async function handleSyncControlMessage(
   msg: SyncControlMessage,
   deps: SyncControlDeps
 ): Promise<SyncControlAnyResponse> {
-  return serialize(() => runOp(engine, msg, deps));
+  const { op } = msg;
+  if (op === 'details') {
+    // Read-only and side-effect-free — bypasses the mutex so a slow account fetch can never
+    // delay a queued user action (e.g. a disable click) behind it.
+    return runDetails(engine);
+  }
+  return serialize(() => runOp(engine, { ...msg, op }, deps));
 }

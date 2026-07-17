@@ -21,10 +21,10 @@ export const AUTH_CANCELLED_DETAIL = 'cancelled';
 /** Account + freshness info for the settings UI ("Signed in as … · Last synced …"). */
 export interface SyncDetails {
   /** Provider-verified email, or null when none exists (e.g. the dev provider). */
-  accountEmail: string | null;
-  accountId: string;
+  readonly accountEmail: string | null;
+  readonly accountId: string;
   /** Millis of the last successful sync cycle; null before the first one is known. */
-  lastSyncedAt: number | null;
+  readonly lastSyncedAt: number | null;
 }
 
 /** Platform-agnostic seam the enable-sync UI drives; host adapters (macOS/extension) implement it. */

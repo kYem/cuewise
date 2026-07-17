@@ -40,6 +40,19 @@ export interface SyncDetailsResponse {
 
 export type SyncControlAnyResponse = SyncControlResponse | SyncDetailsResponse;
 
+/**
+ * Ties each op to the response shape its SW handler produces, so the bridge's send<O> can't
+ * silently mis-assume one (adding an op without an entry here is a compile error at send).
+ */
+export interface SyncOpResponse {
+  enable: SyncControlResponse;
+  reconnect: SyncControlResponse;
+  disable: SyncControlResponse;
+  regenerate: SyncControlResponse;
+  syncNow: SyncControlResponse;
+  details: SyncDetailsResponse;
+}
+
 export function isSyncControlMessage(msg: unknown): msg is SyncControlMessage {
   if (typeof msg !== 'object' || msg === null) {
     return false;

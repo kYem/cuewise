@@ -140,12 +140,23 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       return;
     }
     detailsRequestedRef.current = true;
-    controller.getDetails().then(setDetails, (error) => {
-      // Purely informational — render today's UI rather than surfacing anything.
-      logger.warn(
-        `Cloud sync details unavailable: ${error instanceof Error ? error.message : String(error)}`
-      );
-    });
+    controller.getDetails().then(
+      (result) => {
+        if (result === null) {
+          // Transient miss (e.g. the fetch queued behind a long initial sync and timed out) —
+          // re-arm so the next status transition retries instead of blanking the whole mount.
+          detailsRequestedRef.current = false;
+          return;
+        }
+        setDetails(result);
+      },
+      (error) => {
+        // Purely informational — render today's UI rather than surfacing anything.
+        logger.warn(
+          `Cloud sync details unavailable: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    );
   }, [controller, status]);
 
   useEffect(() => {
@@ -302,11 +313,16 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     try {
       await controller.syncNow();
       useToastStore.getState().success('Synced');
-      // Refresh "Last synced" (getDetails never throws — it resolves null on failure).
-      setDetails(await controller.getDetails());
     } catch (error) {
       logger.error('Cloud sync sync-now failed', error);
       useToastStore.getState().error("Couldn't sync right now — please try again.");
+    }
+    // Refresh "Last synced" OUTSIDE the try — the sync-now error surface belongs to syncNow
+    // alone (the catch keeps even a contract-violating host from rejecting the click handler).
+    // Keep the last known details on a transient null: a stale line beats a vanishing one.
+    const next = await controller.getDetails().catch(() => null);
+    if (next !== null) {
+      setDetails(next);
     }
   };
 
@@ -341,6 +357,10 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     try {
       await controller.disable();
       setEnabling(false);
+      // A re-enable in this same mount may be a DIFFERENT account — drop the shown identity
+      // and re-arm the once-per-mount fetch so it can't display the previous owner's details.
+      setDetails(null);
+      detailsRequestedRef.current = false;
     } catch (error) {
       logger.error('Cloud sync disable failed', error);
       useToastStore.getState().error("Couldn't disable sync — please try again.");

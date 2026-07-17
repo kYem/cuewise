@@ -195,6 +195,15 @@ describe('BridgeSyncController: getDetails', () => {
 
     await expect(controller.getDetails()).resolves.toBeNull();
   });
+
+  it('resolves null when no listener responds at all (undefined response)', async () => {
+    // A truly-legacy SW rejects the unknown op in its message guard, so sendMessage
+    // resolves undefined — must be handled explicitly, not via an accidental TypeError.
+    runtime.sendMessage.mockResolvedValueOnce(undefined as never);
+    const controller = new BridgeSyncController();
+
+    await expect(controller.getDetails()).resolves.toBeNull();
+  });
 });
 
 describe('BridgeSyncController: enable', () => {

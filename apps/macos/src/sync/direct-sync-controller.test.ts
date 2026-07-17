@@ -462,12 +462,11 @@ describe('createDirectSyncController: getDetails()', () => {
 
     const details = await controller.getDetails();
 
-    if (details === null) {
-      throw new Error('expected details after a successful enable');
-    }
-    expect(details.accountEmail).toBe('kes@example.com');
-    expect(details.accountId).toBe('user-1');
-    expect(details.lastSyncedAt).not.toBeNull();
+    expect(details).toEqual({
+      accountEmail: 'kes@example.com',
+      accountId: 'user-1',
+      lastSyncedAt: expect.any(Number),
+    });
   });
 
   it('resolves null when the engine has no session', async () => {

@@ -85,6 +85,7 @@ describe('ApiClient', () => {
 
     expect(result).toEqual(body);
     expect(calls[0].url).toBe(`${BASE_URL}/v1/account`);
+    expect(calls[0].init.method).toBe('GET');
     const headers = new Headers(calls[0].init.headers);
     expect(headers.get('Authorization')).toBe(`Bearer ${TOKEN}`);
   });

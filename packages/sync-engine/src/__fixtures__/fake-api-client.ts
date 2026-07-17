@@ -80,6 +80,10 @@ export class FakeApiClient implements EngineApiClient {
   readonly callOrder: string[] = [];
   /** The request from the most recent exchangeToken call, for asserting the sign-in provider. */
   lastExchangeRequest: ExchangeTokenRequest | null = null;
+  /** Scriptable result for the account-details path (see SyncEngine.getAccount). */
+  accountResult: { userId: string; email: string | null } = { userId: 'fake-user', email: null };
+  /** One-shot: throws a 401 on the next getAccount call, then clears itself. */
+  rejectNextGetAccountWith401 = false;
   private tokenCounter = 0;
 
   constructor(private readonly server: FakeSyncServer) {}
@@ -93,17 +97,12 @@ export class FakeApiClient implements EngineApiClient {
     return { token: `fake-token-${this.tokenCounter}` };
   }
 
-  /** Scriptable result for the account-details path (see SyncEngine.getAccount). */
-  accountResult: { userId: string; email: string | null } = { userId: 'fake-user', email: null };
-  /** One-shot: throws a 401 on the next getAccount call, then clears itself. */
-  rejectNextGetAccountWith401 = false;
-
   async getAccount(): Promise<{ userId: string; email: string | null }> {
+    this.assertAuthorized();
     if (this.rejectNextGetAccountWith401) {
       this.rejectNextGetAccountWith401 = false;
       throw new ApiError('invalid_token', 401);
     }
-    this.assertAuthorized();
     return this.accountResult;
   }
 
