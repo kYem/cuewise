@@ -66,6 +66,7 @@ const enterEnableStep = async (user: ReturnType<typeof userEvent.setup>, account
 describe('SyncSettingsSectionComponent', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
     settingsMock.syncEnabled = false;
     settingsMock.updateSettings.mockImplementation(
       async (partial: Partial<{ syncEnabled: boolean }>) => {
@@ -371,18 +372,19 @@ describe('SyncSettingsSectionComponent', () => {
     );
   });
 
-  it('only renders the dev-only Account ID enable path in dev builds', async () => {
+  it('hides the dev-only Account ID enable path in production builds', async () => {
+    // Stub the flag rather than branching on it: Vitest always runs with DEV=true, so an
+    // `if (import.meta.env.DEV)` here would only ever assert the dev case and the production
+    // guard would be pinned by nothing — letting the account-id sign-in path ship.
+    vi.stubEnv('DEV', false);
     const user = userEvent.setup();
     const controller = new FakeSyncController();
     renderSection(controller);
 
     await user.click(cloudSyncSwitch());
 
-    if (import.meta.env.DEV) {
-      expect(screen.getByLabelText('Account ID')).toBeInTheDocument();
-    } else {
-      expect(screen.queryByLabelText('Account ID')).not.toBeInTheDocument();
-    }
+    expect(screen.queryByLabelText('Account ID')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sign in with Google' })).toBeInTheDocument();
   });
 
   it('opens RecoveryCodeModal with the returned code when enable succeeds with a recovery code', async () => {
@@ -667,8 +669,10 @@ describe('SyncSettingsSectionComponent', () => {
   });
 
   it('fetches details once per mount, not on every active/syncing flip', async () => {
-    // Status flips active → syncing → active on every sync cycle; without the once-per-mount latch
-    // each cycle would cost extra SW round-trips. (An unavailable result re-arms it — see below.)
+    // A "Sync now" click flips active → syncing → active on hosts that report 'syncing' (macOS
+    // only — the engine has no such status; the extension's mapToUi never emits it). Without the
+    // latch that flip re-fires the effect and duplicates the getDetails handleSyncNow already
+    // issues. (An unavailable result deliberately re-arms it — see below.)
     const controller = new FakeSyncController();
     controller.scriptDetails({
       accountEmail: 'kes@example.com',
