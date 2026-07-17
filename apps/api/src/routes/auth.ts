@@ -91,8 +91,8 @@ function parseTokenRequest(body: unknown): ExchangeTokenRequest | ValidationIssu
   if (provider === 'apple') {
     return { provider, ...base, codeVerifier: codeVerifier as string };
   }
-  if (provider === 'google' && codeVerifier !== undefined) {
-    return { provider, ...base, codeVerifier: codeVerifier as string };
+  if (provider === 'google' && typeof codeVerifier === 'string') {
+    return { provider, ...base, codeVerifier };
   }
   return { provider: provider as 'google' | 'dev', ...base };
 }
