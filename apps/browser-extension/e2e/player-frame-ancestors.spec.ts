@@ -2,8 +2,13 @@ import { execFileSync } from 'node:child_process';
 import type { Server } from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+// Default-import + destructure: Playwright's loader compiles the workspace
+// package to CJS, so named ESM imports from it fail at runtime.
+import shared from '@cuewise/shared';
 import { type BrowserContext, chromium, expect, test } from '@playwright/test';
 import { startSite } from '../../website/e2e/static-server';
+
+const { DEFAULT_YOUTUBE_PLAYLISTS } = shared;
 
 // ENG-48: does Chrome actually honor `chrome-extension://<id>` in the player's
 // `frame-ancestors`? Drives the REAL built extension (Playwright loads unpacked
@@ -89,7 +94,7 @@ test('allowlisted extension id: the player iframe loads', async () => {
   await page.getByRole('button', { name: 'Get Started' }).click();
   await page.goto(`chrome-extension://${extensionId}/index.html#pomodoro`);
   await page.getByRole('button', { name: 'Open sounds panel' }).click();
-  await page.getByRole('button', { name: 'Lofi Hip Hop' }).click();
+  await page.getByRole('button', { name: DEFAULT_YOUTUBE_PLAYLISTS[0].name }).click();
   await expect(page.locator('#youtube-player-iframe')).toHaveAttribute(
     'src',
     new RegExp(`^${PLAYER_ORIGIN}/player`)
@@ -114,7 +119,7 @@ test('a NOT-allowlisted extension id: the player iframe is blocked', async () =>
   await page.getByRole('button', { name: 'Get Started' }).click();
   await page.goto(`chrome-extension://${extensionId}/index.html#pomodoro`);
   await page.getByRole('button', { name: 'Open sounds panel' }).click();
-  await page.getByRole('button', { name: 'Lofi Hip Hop' }).click();
+  await page.getByRole('button', { name: DEFAULT_YOUTUBE_PLAYLISTS[0].name }).click();
   await expect(page.locator('#youtube-player-iframe')).toHaveAttribute(
     'src',
     new RegExp(`^${PLAYER_ORIGIN}/player`)

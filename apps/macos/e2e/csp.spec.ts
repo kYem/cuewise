@@ -3,10 +3,15 @@ import { readFileSync } from 'node:fs';
 import type { Server } from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+// Default-import + destructure: Playwright's loader compiles the workspace
+// package to CJS, so named ESM imports from it fail at runtime.
+import shared from '@cuewise/shared';
 import { expect, test } from '@playwright/test';
 import { buildCspHeader, startCspServer } from './csp-static-server';
 import { assertGlowSurfaceRenders } from './glow-surface';
 import { stubThirdPartyRequests, watchForRealNetworkEscapes } from './network-stub';
+
+const { DEFAULT_YOUTUBE_PLAYLISTS } = shared;
 
 // Verifies the PRODUCTION CSP (tauri.conf.json `app.security.csp`) against the
 // real `vite build` output, served with the policy as a genuine
@@ -111,7 +116,7 @@ test('production build reports zero CSP violations across every surface (WebKit)
   await test.step('sounds panel: a seeded playlist creates the YouTube iframe', async () => {
     await page.goto(`${BASE_URL}/#pomodoro`);
     await page.getByRole('button', { name: 'Open sounds panel' }).click();
-    await page.getByRole('button', { name: 'Lofi Hip Hop' }).click();
+    await page.getByRole('button', { name: DEFAULT_YOUTUBE_PLAYLISTS[0].name }).click();
     await expect(page.locator('#youtube-player-iframe')).toHaveAttribute(
       'src',
       /cuewise\.app\/player/
