@@ -103,6 +103,14 @@ export class D1SyncStore implements SyncStore {
     return userId;
   }
 
+  async getUserEmail(userId: string): Promise<string | null> {
+    const row = await this.db
+      .prepare('SELECT email FROM users WHERE id = ?')
+      .bind(userId)
+      .first<{ email: string | null }>();
+    return row?.email ?? null;
+  }
+
   async createSession(userId: string, deviceName: string): Promise<RawSessionToken> {
     const token = randomSessionToken();
     const ts = this.now();

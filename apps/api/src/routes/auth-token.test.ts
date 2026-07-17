@@ -191,7 +191,12 @@ describe('POST /v1/auth/token (google)', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ provider: 'dev', credential: 'dev-user-1', deviceName: 'e2e' }),
     };
-    const off = await appInstance.request('/v1/auth/token', req, testEnv());
+    // Explicitly cleared: the workers pool loads a local .dev.vars (which sets
+    // DEV_FAKE_AUTH=1 for `wrangler dev`) into `env`, so spreading it isn't "off".
+    const off = await appInstance.request('/v1/auth/token', req, {
+      ...testEnv(),
+      DEV_FAKE_AUTH: undefined,
+    });
     expect(off.status).toBe(400);
     const on = await appInstance.request('/v1/auth/token', req, {
       ...testEnv(),

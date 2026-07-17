@@ -12,6 +12,14 @@ export function registerAccountRoutes(
     return c.json(await store.exportUser(c.get('userId')));
   });
 
+  // Account details for the sync-settings UI ("Signed in as …"). Auth + per-token rate
+  // limiting are registered on /v1/account in index.ts and cover every method here.
+  app.get('/v1/account', async (c) => {
+    const userId = c.get('userId');
+    const email = await deps.storeFactory(c.env.DB).getUserEmail(userId);
+    return c.json({ userId, email });
+  });
+
   app.delete('/v1/account', async (c) => {
     const store = deps.storeFactory(c.env.DB);
     await store.deleteUser(c.get('userId'));

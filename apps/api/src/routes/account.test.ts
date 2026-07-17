@@ -71,6 +71,48 @@ describe('DELETE /v1/account', () => {
   });
 });
 
+describe('GET /v1/account', () => {
+  it('returns the userId and the provider-verified email', async () => {
+    const store = new D1SyncStore(env.DB);
+    const userId = await store.findOrCreateUser({
+      provider: 'google',
+      providerSub: 'account-details-sub',
+      email: 'kes@example.com',
+    });
+    const token = await store.createSession(userId, 'Mac');
+
+    const res = await app.request(
+      '/v1/account',
+      { headers: { Authorization: `Bearer ${token}` } },
+      env
+    );
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ userId, email: 'kes@example.com' });
+  });
+
+  it('returns email null when the provider never verified one', async () => {
+    // Dev-provider identities carry no email, so the users row stores none.
+    const { token, userId } = await signedInToken();
+
+    const res = await app.request(
+      '/v1/account',
+      { headers: { Authorization: `Bearer ${token}` } },
+      env
+    );
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ userId, email: null });
+  });
+
+  it('returns 401 unauthorized with no Authorization header', async () => {
+    const res = await app.request('/v1/account', {}, env);
+    expect(res.status).toBe(401);
+    const body = await res.json<{ code: string }>();
+    expect(body.code).toBe('unauthorized');
+  });
+});
+
 describe('per-user isolation across the full HTTP stack', () => {
   it('one user never sees another user changes via GET /v1/changes or /v1/export', async () => {
     const a = await signedInToken();
