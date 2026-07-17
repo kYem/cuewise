@@ -83,6 +83,23 @@ describe('SyncEngine.enableSync', () => {
     });
   });
 
+  it('forwards a codeVerifier on google exchanges so bounced codes stay PKCE-bound', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+
+    await device.engine.enableSync('google', 'bounced-code', 'Device A', {
+      codeVerifier: 'verifier-x',
+    });
+
+    expect(device.apiClient.lastExchangeRequest).toEqual({
+      provider: 'google',
+      credential: 'bounced-code',
+      deviceName: 'Device A',
+      codeVerifier: 'verifier-x',
+    });
+  });
+
   it('downloads existing server data into a fresh device enrolling with the recovery code', async () => {
     const server = new FakeSyncServer();
     const deviceA = createDevice(server);
@@ -95,7 +112,7 @@ describe('SyncEngine.enableSync', () => {
     const deviceB = createDevice(server);
     useStorage(deviceB);
 
-    await deviceB.engine.enableSync('dev', 'cred-b', 'Device B', recoveryCode);
+    await deviceB.engine.enableSync('dev', 'cred-b', 'Device B', { recoveryCode });
 
     expect(deviceB.engine.getStatus()).toBe('active');
     const goals = await getGoals();
@@ -114,7 +131,7 @@ describe('SyncEngine.enableSync', () => {
     useStorage(deviceB);
     await setGoals([goalFactory.build({ id: 'g-b' })]);
 
-    await deviceB.engine.enableSync('dev', 'cred-b', 'Device B', recoveryCode);
+    await deviceB.engine.enableSync('dev', 'cred-b', 'Device B', { recoveryCode });
 
     const goals = await getGoals();
     expect(goals.map((g) => g.id).sort()).toEqual(['g-a', 'g-b']);
@@ -130,7 +147,7 @@ describe('SyncEngine.enableSync', () => {
 
     const deviceB = createDevice(server);
     useStorage(deviceB);
-    await deviceB.engine.enableSync('dev', 'cred-b', 'Device B', recoveryCode);
+    await deviceB.engine.enableSync('dev', 'cred-b', 'Device B', { recoveryCode });
 
     const statuses = deviceB.onStatus.mock.calls.map((call) => call[0]);
     expect(statuses).toContain('enrolling');

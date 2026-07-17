@@ -93,12 +93,9 @@ describe('handleSyncControlMessage: enable', () => {
       deps
     );
 
-    expect(engine.enableSync).toHaveBeenCalledWith(
-      'dev',
-      'cred-a',
-      'Device A',
-      'CW1-AAAAA-AAAAA-AAAAA-AAAAA-AAAAA-AAAAA'
-    );
+    expect(engine.enableSync).toHaveBeenCalledWith('dev', 'cred-a', 'Device A', {
+      recoveryCode: 'CW1-AAAAA-AAAAA-AAAAA-AAAAA-AAAAA-AAAAA',
+    });
   });
 
   it('returns the one-shot recovery code from deps on success', async () => {
@@ -185,12 +182,9 @@ describe('handleSyncControlMessage: enable', () => {
       deps
     );
 
-    expect(engine.enableSync).toHaveBeenCalledWith(
-      'google',
-      'fake.jwt.token',
-      'Device A',
-      undefined
-    );
+    expect(engine.enableSync).toHaveBeenCalledWith('google', 'fake.jwt.token', 'Device A', {
+      recoveryCode: undefined,
+    });
   });
 
   it('maps a thrown RecoveryCodeRequiredError to needs-code', async () => {
@@ -289,7 +283,9 @@ describe('handleSyncControlMessage: reconnect', () => {
       deps
     );
 
-    expect(engine.enableSync).toHaveBeenCalledWith('dev', 'cred-a', 'Device A', undefined);
+    expect(engine.enableSync).toHaveBeenCalledWith('dev', 'cred-a', 'Device A', {
+      recoveryCode: undefined,
+    });
   });
 
   it('returns an error result without calling the engine when creds are absent', async () => {

@@ -45,6 +45,26 @@ describe('tauri.conf.json CSP allows Tauri IPC', () => {
   });
 });
 
+// Regression guard for ENG-43: the Google sign-in bounce returns via cuewise:// —
+// registered by the deep-link plugin config (which injects CFBundleURLTypes at build
+// time) and permitted by the capabilities file. Losing any of these makes every
+// sign-in hang until its callback timeout while the whole JS suite stays green.
+describe('google sign-in deep-link prerequisites', () => {
+  const config = JSON.parse(readFileSync(CONFIG_PATH, 'utf-8'));
+  const capabilities = JSON.parse(
+    readFileSync(path.join(__dirname, 'capabilities', 'default.json'), 'utf-8')
+  );
+
+  it('registers the cuewise scheme with the deep-link plugin', () => {
+    expect(config.plugins['deep-link'].desktop.schemes).toContain('cuewise');
+  });
+
+  it('grants the deep-link and shell-open capabilities', () => {
+    expect(capabilities.permissions).toContain('deep-link:default');
+    expect(capabilities.permissions).toContain('shell:allow-open');
+  });
+});
+
 // Regression guard for ENG-40: without macOSPrivateApi (and the matching cargo
 // feature) `transparent(true)` silently stops applying on macOS, and every glow
 // nudge renders as an OPAQUE full-screen sheet on every monitor — a plausible

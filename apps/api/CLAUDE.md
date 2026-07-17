@@ -36,7 +36,7 @@ D1 tables (`migrations/0001_init.sql`, plus later numbered migrations):
 | `users` | `id`, `email`, `last_seq`, `created_at` | `last_seq` is the per-user sync cursor — bumped once per push, never per-row. |
 | `identities` | `(provider, provider_sub)` → `user_id`, `email`, `created_at` | Composite PK. One row per linked provider — makes linking Google + Apple to one account additive, no schema change. |
 | `tokens` | `token_hash` (PK), `user_id`, `device_name`, `expires_at`, `revoked_at`, `last_used_at`, `window_start`/`window_count`, `created_at` | The raw session token is never stored, only its SHA-256. Rate-limit counters live on the token's own row, so per-token limiting needs no separate table. |
-| `auth_codes` | `code_hash` (PK), `payload` (JSON), `expires_at`, `used_at`, `code_challenge` | Apple's one-time exchange code (also hash-only). 60s TTL; `code_challenge` binds it to a PKCE verifier. `consumeAuthCode` DELETEs the row (single-use + PII gone at once), so `used_at` is now vestigial. |
+| `auth_codes` | `code_hash` (PK), `payload` (JSON), `expires_at`, `used_at`, `code_challenge` | The server-bounce one-time exchange codes (Apple and Google, also hash-only; `payload.provider` records which). 60s TTL; `code_challenge` binds it to a PKCE verifier. `consumeAuthCode` DELETEs the row (single-use + PII gone at once), so `used_at` is now vestigial. |
 | `records` | `(user_id, collection, entity_id)` (PK), `seq`, `ciphertext`, `deleted`, `client_updated_at`, `server_received_at` | See below. |
 | `key_envelopes` | `(user_id, kind)` (PK), `envelope`, `updated_at` | ENG-44 E2E key material, client-wrapped — `envelope` is opaque, the server never reads it. |
 
@@ -63,6 +63,8 @@ All endpoints are under `/v1`.
 | `POST` | `/v1/auth/token` | Exchange a provider credential for a session token | No |
 | `GET` | `/v1/auth/apple/start` | Begin the Apple server-bounce flow | No |
 | `POST` | `/v1/auth/apple/callback` | Apple's redirect target; mints a one-time code | No |
+| `GET` | `/v1/auth/google/start` | Begin the Google server-bounce flow (macOS deep-link sign-in) | No |
+| `GET` | `/v1/auth/google/callback` | Google's redirect target (GET — Apple's is a form_post); exchanges the auth code server-side, then mints a one-time code | No |
 | `POST` | `/v1/auth/logout` | Revoke the presented session token | Yes |
 | `GET` | `/v1/changes?since=<seq>` | Incremental pull, ≤500 records/page (`since=0` = fresh-device bootstrap). A full page means pull again from the returned `cursor`. 409 `resync_required` if `since` predates the purged-tombstone watermark — the client must resync from `since=0`. | Yes |
 | `POST` | `/v1/changes` | Atomic batch push, ≤100 records, ≤64 KB ciphertext/record | Yes |
@@ -73,9 +75,11 @@ All endpoints are under `/v1`.
 
 ## Auth Flows
 
-### Google
+### Google — two paths
 
-`POST /v1/auth/token` with `{provider: 'google', credential: <Google ID token>, deviceName}`. `verifyGoogleIdToken` (`verifiers.ts`) checks the signature against Google's live JWKS (`https://www.googleapis.com/oauth2/v3/certs`), `iss ∈ {accounts.google.com, https://accounts.google.com}`, and `aud ∈ GOOGLE_CLIENT_IDS` (comma-separated env var, split by `parseClientIds`). On success: `findOrCreateUser` + `createSession`.
+**ID token (extension)**: `POST /v1/auth/token` with `{provider: 'google', credential: <Google ID token>, deviceName}`. `verifyGoogleIdToken` (`verifiers.ts`) checks the signature against Google's live JWKS (`https://www.googleapis.com/oauth2/v3/certs`), `iss ∈ {accounts.google.com, https://accounts.google.com}`, and `aud ∈ GOOGLE_CLIENT_IDS` (comma-separated env var, split by `parseClientIds`). On success: `findOrCreateUser` + `createSession`.
+
+**Server bounce (macOS deep-link sign-in)**: mirrors the Apple flow below (`routes/google.ts`, shared helpers in `routes/bounce-shared.ts`) with two divergences. First, Google's server flow needs a confidential-client **authorization-code exchange** at the callback — `GoogleCodeExchanger` POSTs the code + `GOOGLE_OAUTH_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` (a Worker secret) to Google's token endpoint and gets the id_token back (Apple's `response_type=code id_token` avoids this). The exchanger classifies failures: `invalid_client`/`unauthorized_client`/`redirect_uri_mismatch` are loud config faults, `invalid_grant` is a bad code. Second, once the callback's `state` verifies (HMAC + allowlist), **failures redirect back to the `return_uri` with a sanitized `?error=`** (`access_denied` | `auth_failed` | `server_error`) instead of rendering problem+json — a JSON page in the browser would strand the native app until its callback timeout. The bounced code is then redeemed at `POST /v1/auth/token` with `{provider: 'google', credential: <code>, codeVerifier, deviceName}` — `codeVerifier` present ⇒ bounced-code redemption (`redeemBouncedCode`), absent ⇒ id-token verification. Redemption cross-checks the request's provider against the minted payload's provider.
 
 ### Apple (server bounce)
 
@@ -91,8 +95,8 @@ Apple only redirects to registered **https** URLs, so the Worker sits in the mid
 
 **Client-side contract** — anyone wiring a new client to this flow must:
 - Generate `code_verifier` on-device and never let it leave the device until the final `/v1/auth/token` call. Send only `code_challenge` (the S256 hash) to `/start`.
-- Never call `/v1/auth/token` with an Apple `code` from a flow this device didn't itself initiate via `/start`.
-- Never retry `exchangeToken` for `provider: 'apple'` — the code is single-use and already burned server-side by the time you'd know to retry (`packages/sync-client`'s `ApiClient` already encodes this; a hand-rolled caller must too).
+- Never call `/v1/auth/token` with a bounce `code` from a flow this device didn't itself initiate via `/start`.
+- Never retry a bounced-code `exchangeToken` (any request carrying `codeVerifier` — Apple always, Google via the macOS bounce) — the code is single-use and already burned server-side by the time you'd know to retry (`packages/sync-client`'s `ApiClient` keys `retry: false` on `codeVerifier` presence; a hand-rolled caller must too).
 
 ### Sessions
 
@@ -136,7 +140,7 @@ Body: `type` (`https://cuewise.app/problems/<code-with-dashes>`), `title`, `stat
 | Scope | Applies to | Limit | Window |
 |---|---|---|---|
 | Per-token, fixed window (`rate-limit.ts`) | `/v1/changes/*`, `/v1/keys/*`, `/v1/export`, `/v1/account` | 60 req | 60s — counter anchored on the token's own D1 row, no extra infra |
-| Per-IP, fixed window, isolate-local (`ip-rate-limit.ts`) | `/v1/auth/token`, `/v1/auth/apple/start`, `/v1/auth/apple/callback` | 30 req (default) | 60s — in-memory `Map`, resets on isolate recycle; defense-in-depth, production also fronts these with WAF rules |
+| Per-IP, fixed window, isolate-local (`ip-rate-limit.ts`) | `/v1/auth/token`, `/v1/auth/{apple,google}/start`, `/v1/auth/{apple,google}/callback` | 30 req (default) | 60s — in-memory `Map`, resets on isolate recycle; defense-in-depth, production also fronts these with WAF rules |
 
 Both emit `Retry-After`. `/v1/auth/logout` requires a Bearer token but isn't covered by either limiter. The IP limiter is bounded to 20,000 tracked IPs and skips entirely when `CF-Connecting-IP` is absent (a non-edge invocation).
 
@@ -169,8 +173,9 @@ npx wrangler d1 create cuewise-sync
 # paste the returned database_id into wrangler.jsonc, replacing the 00000000... placeholder
 npx wrangler d1 migrations apply cuewise-sync --remote
 npx wrangler secret put STATE_SIGNING_KEY
-# also fill in GOOGLE_CLIENT_IDS / APPLE_CLIENT_ID / PUBLIC_BASE_URL / ALLOWED_RETURN_URIS
-# as plain `vars` in wrangler.jsonc
+npx wrangler secret put GOOGLE_CLIENT_SECRET   # pairs with the GOOGLE_OAUTH_CLIENT_ID var
+# also fill in GOOGLE_CLIENT_IDS / GOOGLE_OAUTH_CLIENT_ID / APPLE_CLIENT_ID / PUBLIC_BASE_URL /
+# ALLOWED_RETURN_URIS as plain `vars` in wrangler.jsonc
 npx wrangler deploy
 # route api.cuewise.app to this Worker in the Cloudflare zone
 ```
@@ -181,7 +186,7 @@ npx wrangler deploy
 
 1. **Middleware registration order matters.** Hono runs `app.use(...)` in registration order and silently skips middleware registered after a matching route already exists. Every `app.use(...)` in `index.ts` is registered before the `register*Routes()` calls — keep it that way.
 2. **`/v1/changes/*` already matches the bare `/v1/changes`.** Hono's wildcard matches the prefix with no trailing segment too, which is why `index.ts` registers middleware once at `/v1/changes/*` rather than at both that and `/v1/changes` — registering both would double-invoke the middleware per request.
-3. **Empty `STATE_SIGNING_KEY` ⇒ Apple routes fail closed with 500**, by design (`requireStateSigningKey`). That's not a bug to work around — provision the secret.
-4. **The `state` blob is trustworthy only because it's HMAC-signed.** Anything you add to `AppleState` inherits that guarantee automatically; anything you read from an unsigned source (a query param, a header) doesn't, no matter how it's later combined with `state`.
+3. **Empty `STATE_SIGNING_KEY` ⇒ the bounce routes fail closed**, by design (`requireStateSigningKey`): Apple answers 500; Google's routes relay `?error=server_error` to the already-allowlisted return URI where they can (see `routes/google.ts`), 500 where they can't. That's not a bug to work around — provision the secret (and `GOOGLE_CLIENT_SECRET` / `GOOGLE_OAUTH_CLIENT_ID` for Google).
+4. **The `state` blob is trustworthy only because it's HMAC-signed.** Anything you add to `BounceState` (`routes/bounce-shared.ts`, shared by Apple and Google) inherits that guarantee automatically; anything you read from an unsigned source (a query param, a header) doesn't, no matter how it's later combined with `state`.
 5. **Never log payloads, credentials, tokens, codes, verifiers, or the signing key.** Metadata only (see `verifyOrProblem`'s `logger.warn` — it logs `err.code`, never the token).
 6. **Schema changes are additive migrations.** A new table/column is a new numbered file in `migrations/` — the test harness and `wrangler d1 migrations apply` both apply every migration in order, so there's no "edit an old migration" path.

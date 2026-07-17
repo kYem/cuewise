@@ -1,4 +1,5 @@
 import type { EnableResult, SyncController, SyncUiStatus } from '@cuewise/app';
+import { AUTH_CANCELLED_DETAIL } from '@cuewise/app';
 import { type KeyValueStore, logger, type Scheduler } from '@cuewise/shared';
 import { ApiError } from '@cuewise/sync-client';
 import {
@@ -10,13 +11,39 @@ import {
   type SyncSignInProvider,
   type SyncStatus,
 } from '@cuewise/sync-engine';
+import type { OAuthDriver } from '../platform/oauth-driver';
+import { computeCodeChallenge, generateCodeVerifier } from './pkce';
 
 /** Exported so tests can assert against it without duplicating the literal. */
 export const LAST_SYNC_CREDS_KEY = 'cuewise.sync.lastCreds';
 
-interface LastSyncCreds {
-  accountId: string;
-  deviceName: string;
+/** Must exactly match an ALLOWED_RETURN_URIS entry on the server. Exported for tests. */
+export const GOOGLE_RETURN_URI = 'cuewise://auth';
+
+// Discriminated on provider so reconnect knows how to re-auth; records persisted before the
+// google flow existed lack the field and are read as dev. Never a Google credential/token/
+// one-time code — dev's accountId doubles as its fake-auth credential (localhost-only bypass).
+type LastSyncCreds =
+  | { provider?: 'dev'; accountId: string; deviceName: string }
+  | { provider: 'google'; deviceName: string };
+
+/** Narrows a stored creds record so a corrupted/foreign one fails at load, not mid-OAuth-flow. */
+function toLastSyncCreds(parsed: unknown): LastSyncCreds | null {
+  if (parsed === null || typeof parsed !== 'object') {
+    return null;
+  }
+  const record = parsed as { provider?: unknown; accountId?: unknown; deviceName?: unknown };
+  if (typeof record.deviceName !== 'string') {
+    return null;
+  }
+  if (record.provider === 'google') {
+    return { provider: 'google', deviceName: record.deviceName };
+  }
+  const isDevShape = record.provider === 'dev' || record.provider === undefined;
+  if (isDevShape && typeof record.accountId === 'string') {
+    return { provider: 'dev', accountId: record.accountId, deviceName: record.deviceName };
+  }
+  return null;
 }
 
 /** Trampoline callbacks handed to the engine at construction (E4) — never post-hoc attached. */
@@ -30,6 +57,8 @@ export interface CreateDirectSyncControllerOptions {
   baseUrl: string;
   keyStore: KeyValueStore;
   scheduler: Scheduler;
+  /** Runs the system-browser Google OAuth round-trip (production: createTauriOAuthDriver). */
+  oauthDriver: OAuthDriver;
   /** Fires on quarantine (never the recovery code/credential/token — those are secrets). */
   toast?: (message: string) => void;
 }
@@ -67,7 +96,9 @@ function mapStatus(status: SyncStatus): SyncUiStatus {
 }
 
 interface BuildDirectSyncControllerDeps<E extends SyncEngineControlSurface> {
+  baseUrl: string;
   keyStore: KeyValueStore;
+  oauthDriver: OAuthDriver;
   toast?: (message: string) => void;
   /** Constructs the engine WITH the trampolines (E4) — production wires createSyncEngine, tests wire a real SyncEngine over fakes. */
   buildEngine: (trampolines: EngineTrampolines) => E;
@@ -109,12 +140,22 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
   async function persistCreds(creds: LastSyncCreds): Promise<void> {
     const result = await deps.keyStore.set(LAST_SYNC_CREDS_KEY, creds, 'local');
     if (!result.success) {
-      logger.error('Failed to persist sync credentials for reconnect', result.error);
+      logger.error(
+        `Failed to persist sync credentials for reconnect: ${result.error.message}`,
+        result.error
+      );
     }
   }
 
   async function loadCreds(): Promise<LastSyncCreds | null> {
-    return deps.keyStore.get<LastSyncCreds>(LAST_SYNC_CREDS_KEY, 'local');
+    const raw = await deps.keyStore.get<unknown>(LAST_SYNC_CREDS_KEY, 'local');
+    const creds = toLastSyncCreds(raw);
+    if (raw !== null && raw !== undefined && creds === null) {
+      // Present-but-rejected is worth a trace ("reconnect says no account" debugging);
+      // metadata only — the record can carry dev's accountId credential.
+      logger.warn('Saved sync credentials record was malformed; treating it as absent');
+    }
+    return creds;
   }
 
   // enable()/reconnect() build EnableResult from the thrown error AND the post-call status
@@ -123,11 +164,12 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
     provider: SyncSignInProvider,
     credential: string,
     deviceName: string,
-    recoveryCode?: string
+    recoveryCode?: string,
+    codeVerifier?: string
   ): Promise<EnableResult> {
     capturedRecoveryCode = undefined;
     try {
-      await engine.enableSync(provider, credential, deviceName, recoveryCode);
+      await engine.enableSync(provider, credential, deviceName, { recoveryCode, codeVerifier });
     } catch (err) {
       if (err instanceof RecoveryCodeRequiredError) {
         return { ok: false, reason: 'needs-code' };
@@ -136,6 +178,9 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
         return { ok: false, reason: 'bad-code', detail: err.kind };
       }
       if (err instanceof ApiError && err.status === 401) {
+        // For google this means the one-time code burned/expired/PKCE-failed AFTER a
+        // successful browser dance — confusing without a trace. Metadata only.
+        logger.warn(`Cloud sync sign-in rejected (401) for provider ${provider}`);
         return { ok: false, reason: 'auth' };
       }
       const detail = err instanceof Error ? err.message : String(err);
@@ -144,12 +189,68 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
       return { ok: false, reason: 'error', detail };
     }
     if (engine.getStatus() === 'signed_out') {
+      // The engine swallows 401s into signed_out rather than rethrowing — this is the LIVE
+      // trace for a google one-time code that burned/expired after a successful browser dance.
+      logger.warn(`Cloud sync sign-in rejected (401) for provider ${provider}`);
       return { ok: false, reason: 'auth' };
     }
-    await persistCreds({ accountId: credential, deviceName });
+    // A google credential is a burned one-time code — worthless for reconnect, so only the
+    // provider marker is persisted; reconnect re-runs the OAuth flow instead.
+    if (provider === 'google') {
+      await persistCreds({ provider: 'google', deviceName });
+    } else {
+      await persistCreds({ provider: 'dev', accountId: credential, deviceName });
+    }
     const capturedCode = capturedRecoveryCode;
     capturedRecoveryCode = undefined;
     return { ok: true, recoveryCode: capturedCode };
+  }
+
+  // NOT serialize()-wrapped: called from inside already-serialized entry points
+  // (enableWithGoogle, reconnect) — the promise-chain mutex would deadlock if nested.
+  async function googleFlow(deviceName: string, recoveryCode?: string): Promise<EnableResult> {
+    const codeVerifier = generateCodeVerifier();
+    const codeChallenge = await computeCodeChallenge(codeVerifier);
+    const startUrl =
+      `${deps.baseUrl}/v1/auth/google/start` +
+      `?return_uri=${encodeURIComponent(GOOGLE_RETURN_URI)}&code_challenge=${codeChallenge}`;
+    let callbackUrl: string;
+    try {
+      callbackUrl = await deps.oauthDriver.authorize(startUrl);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      logger.error(`Google sign-in flow failed: ${detail}`, err);
+      return { ok: false, reason: 'error', detail };
+    }
+    let params: URLSearchParams;
+    try {
+      params = new URL(callbackUrl).searchParams;
+    } catch {
+      logger.error('Google sign-in returned an unparseable callback URL');
+      return { ok: false, reason: 'error', detail: 'Malformed sign-in callback' };
+    }
+    // The server relays failures as a sanitized ?error= instead of a code: access_denied
+    // (user cancelled), auth_failed (verification failed), server_error (retryable fault).
+    const oauthError = params.get('error');
+    if (oauthError !== null) {
+      if (oauthError === 'server_error') {
+        logger.error('Google sign-in relayed a server-side failure');
+        return { ok: false, reason: 'error', detail: 'Sign-in failed on the server' };
+      }
+      const cancelled = oauthError === 'access_denied';
+      // The deep-link URL is attacker-shapeable; never echo its raw values into logs/results.
+      logger.warn(
+        `Google sign-in did not complete (${cancelled ? 'cancelled at Google' : 'auth failed'})`
+      );
+      return { ok: false, reason: 'auth', detail: cancelled ? AUTH_CANCELLED_DETAIL : undefined };
+    }
+    const code = params.get('code');
+    if (code === null || code === '') {
+      // A forged/truncated deep link during a pending flow lands exactly here.
+      logger.warn('Google sign-in callback carried neither code nor error');
+      return { ok: false, reason: 'error', detail: 'Sign-in callback did not include a code' };
+    }
+    return doEnable('google', code, deviceName, recoveryCode, codeVerifier);
   }
 
   // Promise-chain mutex: enable()/reconnect() share the one capture slot above, so two
@@ -177,22 +278,24 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
     enable(accountId, deviceName, recoveryCode): Promise<EnableResult> {
       return serialize(() => doEnable('dev', accountId, deviceName, recoveryCode));
     },
-    // Deep-link OAuth for macOS is a separate follow-up (ENG-43); Google sign-in is Chrome-only for now.
-    async enableWithGoogle(_deviceName: string, _recoveryCode?: string): Promise<EnableResult> {
-      return {
-        ok: false,
-        reason: 'error',
-        detail: 'Google sign-in on macOS is not available yet',
-      };
+    enableWithGoogle(deviceName: string, recoveryCode?: string): Promise<EnableResult> {
+      return serialize(() => googleFlow(deviceName, recoveryCode));
     },
     canEnableWithGoogle(): boolean {
-      return false;
+      // Exists whenever the sync feature is configured (VITE_SYNC_API_BASE_URL). The Tauri
+      // build compiles in deep-link support; non-Tauri (browser/e2e) fails at authorize()
+      // rather than hiding the button.
+      return true;
     },
     reconnect(recoveryCode?: string): Promise<EnableResult> {
       return serialize(async () => {
         const creds = await loadCreds();
         if (creds === null) {
-          return { ok: false, reason: 'error' };
+          return { ok: false, reason: 'error', detail: 'No saved sync account on this device' };
+        }
+        if (creds.provider === 'google') {
+          // Google can't silently re-auth; the DK is already on device, so a fresh OAuth suffices.
+          return googleFlow(creds.deviceName, recoveryCode);
         }
         // No code = silent re-auth via persisted DK (E2); a code enrolls this device after reconnect.
         return doEnable('dev', creds.accountId, creds.deviceName, recoveryCode);
@@ -226,7 +329,9 @@ export function createDirectSyncController(
   opts: CreateDirectSyncControllerOptions
 ): DirectSyncControllerHandle<SyncEngine> {
   return buildDirectSyncController<SyncEngine>({
+    baseUrl: opts.baseUrl,
     keyStore: opts.keyStore,
+    oauthDriver: opts.oauthDriver,
     toast: opts.toast,
     buildEngine: (trampolines) =>
       createSyncEngine({

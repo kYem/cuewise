@@ -24,7 +24,7 @@ Host apps should construct through this factory rather than hand-assembling `Api
 
 ## `SyncEngine` (`engine.ts`)
 
-The one class apps construct. Public surface: `enableSync(credential, deviceName, recoveryCode?)`, `disableSync()`, `syncNow()` (pull-then-push), `start()`/`stop()` (arms/cancels the periodic pull wake), `markMutated`/`markDeleted` (delegate to `MutationTracker`), `getStatus()`. Status walks `disabled → signing_in → key_init/enrolling → initial_sync → active`, or `signed_out`/`error` on failure; every transition calls `deps.onStatus?.(status)`.
+The one class apps construct. Public surface: `enableSync(provider, credential, deviceName, {recoveryCode?, codeVerifier?})`, `disableSync()`, `syncNow()` (pull-then-push), `start()`/`stop()` (arms/cancels the periodic pull wake), `markMutated`/`markDeleted` (delegate to `MutationTracker`), `getStatus()`. Status walks `disabled → signing_in → key_init/enrolling → initial_sync → active`, or `signed_out`/`error` on failure; every transition calls `deps.onStatus?.(status)`.
 
 `SyncEngineDeps.apiClient` is typed as `EngineApiClient` — a `Pick<ApiClient, ...>` structural subset (auth + pull/push + key-envelope calls), not the concrete `ApiClient` class. A real `ApiClient` instance satisfies it directly (structural typing); tests substitute an in-memory fake. `sessionManager`/`keyStore`/`scheduler` take the real `SessionManager` class / `KeyValueStore` / `Scheduler` ports directly — construct `SessionManager` over a fake `KeyValueStore` in tests instead of hand-rolling a fake session manager.
 

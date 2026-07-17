@@ -336,7 +336,7 @@ describe('BridgeSyncController: enableWithGoogle', () => {
     expect(identity.launchWebAuthFlow).not.toHaveBeenCalled();
   });
 
-  it('returns an auth error when the user cancels the auth flow', async () => {
+  it('returns an auth error when the auth flow fails or is cancelled', async () => {
     const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
     identity.launchWebAuthFlow.mockRejectedValueOnce(new Error('user did not approve access'));
     const controller = new BridgeSyncController({ googleClientId: 'client-id' });
@@ -346,6 +346,21 @@ describe('BridgeSyncController: enableWithGoogle', () => {
     expect(result).toEqual({ ok: false, reason: 'auth' });
     expect(runtime.sendMessage).not.toHaveBeenCalled();
     expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it("never claims a quiet cancel for Chromium's window-closed message", async () => {
+    // Chromium emits this exact message for ANY auth-window close — including the user closing
+    // a Google-side ERROR page (misconfig). Mapping it to detail:'cancelled' would let the UI
+    // silence real failures, so the result must stay a plain (toasting) auth error.
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    identity.launchWebAuthFlow.mockRejectedValueOnce(new Error('The user did not approve access.'));
+    const controller = new BridgeSyncController({ googleClientId: 'client-id' });
+
+    const result = await controller.enableWithGoogle('Device A');
+
+    expect(result).toEqual({ ok: false, reason: 'auth' });
+    expect(runtime.sendMessage).not.toHaveBeenCalled();
     warnSpy.mockRestore();
   });
 

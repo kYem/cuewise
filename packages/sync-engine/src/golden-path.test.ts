@@ -104,7 +104,7 @@ describe('golden path: two devices converge through one shared fake server', () 
     const deviceB = createDevice(server, makeClock(5_000_000));
     useStorage(deviceB);
 
-    await deviceB.engine.enableSync('dev', 'devB-cred', 'Device B', recoveryCode);
+    await deviceB.engine.enableSync('dev', 'devB-cred', 'Device B', { recoveryCode });
     await deviceB.engine.syncNow();
 
     expect(deviceB.engine.getStatus()).toBe('active');
@@ -194,7 +194,7 @@ describe('swappability guard: ConflictStrategy is the only conflict decision poi
     const deviceB = createDevice(server, makeClock(1_000_000), strategyOverride);
     useStorage(deviceB);
     await setGoals([goalFactory.build({ id: 'g1', text: 'B local — must never be overwritten' })]);
-    await deviceB.engine.enableSync('dev', 'devB-cred', 'Device B', recoveryCode);
+    await deviceB.engine.enableSync('dev', 'devB-cred', 'Device B', { recoveryCode });
     await deviceB.engine.syncNow();
 
     const bGoals = await getGoals();
@@ -228,7 +228,7 @@ describe('settings: per-key sync round-trips a shared key but excludes device-lo
 
     const deviceB = createDevice(server, makeClock(1_000_000));
     useStorage(deviceB);
-    await deviceB.engine.enableSync('dev', 'devB-cred', 'Device B', recoveryCode);
+    await deviceB.engine.enableSync('dev', 'devB-cred', 'Device B', { recoveryCode });
     await deviceB.engine.syncNow();
 
     // A changes a shared setting and syncs; B must adopt the new value.

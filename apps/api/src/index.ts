@@ -12,6 +12,11 @@ import { registerAccountRoutes } from './routes/account';
 import { registerAppleRoutes } from './routes/apple';
 import { registerAuthRoutes } from './routes/auth';
 import { registerChangesRoutes } from './routes/changes';
+import {
+  exchangeGoogleCode,
+  type GoogleCodeExchanger,
+  registerGoogleRoutes,
+} from './routes/google';
 import { registerKeysRoutes } from './routes/keys';
 import type { SyncStore } from './store';
 import { type IdTokenVerifier, verifyAppleIdToken, verifyGoogleIdToken } from './verifiers';
@@ -20,6 +25,7 @@ export type AppDeps = {
   storeFactory?: (db: D1Database) => SyncStore;
   googleVerifier?: IdTokenVerifier;
   appleVerifier?: IdTokenVerifier;
+  googleCodeExchanger?: GoogleCodeExchanger;
 };
 
 export type AppDepsResolved = Required<AppDeps>;
@@ -29,6 +35,7 @@ export function createApp(deps: AppDeps = {}): Hono<{ Bindings: Env } & AuthVars
     storeFactory: deps.storeFactory ?? ((db) => new D1SyncStore(db)),
     googleVerifier: deps.googleVerifier ?? verifyGoogleIdToken,
     appleVerifier: deps.appleVerifier ?? verifyAppleIdToken,
+    googleCodeExchanger: deps.googleCodeExchanger ?? exchangeGoogleCode,
   };
   const app = new Hono<{ Bindings: Env } & AuthVars>();
 
@@ -74,9 +81,12 @@ export function createApp(deps: AppDeps = {}): Hono<{ Bindings: Env } & AuthVars
   app.use('/v1/auth/token', authSurfaceRateLimit);
   app.use('/v1/auth/apple/start', authSurfaceRateLimit);
   app.use('/v1/auth/apple/callback', authSurfaceRateLimit);
+  app.use('/v1/auth/google/start', authSurfaceRateLimit);
+  app.use('/v1/auth/google/callback', authSurfaceRateLimit);
 
   registerAuthRoutes(app, resolved);
   registerAppleRoutes(app, resolved);
+  registerGoogleRoutes(app, resolved);
   registerChangesRoutes(app, resolved);
   registerKeysRoutes(app, resolved);
   registerAccountRoutes(app, resolved);

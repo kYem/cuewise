@@ -25,7 +25,7 @@ async function doEnable(
 ): Promise<SyncControlResponse> {
   deps.takeRecoveryCode(); // drain any stale value before this attempt
   try {
-    await engine.enableSync(provider, credential, deviceName, recoveryCode);
+    await engine.enableSync(provider, credential, deviceName, { recoveryCode });
   } catch (err) {
     if (err instanceof RecoveryCodeRequiredError) {
       return { ok: false, reason: 'needs-code' };

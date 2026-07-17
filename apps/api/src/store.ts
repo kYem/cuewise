@@ -15,7 +15,7 @@ export interface Session {
 }
 
 export interface AuthCodePayload {
-  provider: 'apple';
+  provider: 'apple' | 'google';
   providerSub: string;
   email?: string;
 }

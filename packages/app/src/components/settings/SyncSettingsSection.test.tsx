@@ -3,16 +3,16 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeSyncController } from '../../sync/__fixtures__/fake-sync-controller';
-import type { EnableResult } from '../../sync/sync-controller';
 import { SyncControllerContext } from '../../sync/sync-controller';
 import { SyncSettingsSectionComponent } from './SyncSettingsSection';
 import type { SettingsSectionProps } from './settings-types';
 
 const toastError = vi.fn();
 const toastSuccess = vi.fn();
+const toastWarning = vi.fn();
 vi.mock('../../stores/toast-store', () => ({
   useToastStore: {
-    getState: () => ({ error: toastError, success: toastSuccess }),
+    getState: () => ({ error: toastError, success: toastSuccess, warning: toastWarning }),
   },
 }));
 
@@ -170,6 +170,83 @@ describe('SyncSettingsSectionComponent', () => {
     await waitFor(() => expect(toastError).toHaveBeenCalledTimes(1));
   });
 
+  it('treats a cancelled Google sign-in as a non-error: no toast, form stays open', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptEnableWithGoogle({ ok: false, reason: 'auth', detail: 'cancelled' });
+    renderSection(controller);
+
+    await user.click(cloudSyncSwitch());
+    await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
+
+    // The button settles back to idle for another attempt, with no error surfaced.
+    expect(await screen.findByRole('button', { name: 'Sign in with Google' })).toBeEnabled();
+    expect(toastError).not.toHaveBeenCalled();
+  });
+
+  it('still toasts an auth failure that carries a non-cancel detail', async () => {
+    // Pins the exact-match: loosening `detail === 'cancelled'` to a truthy check would
+    // silently swallow real auth failures the moment a producer attaches a diagnostic detail.
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptEnableWithGoogle({ ok: false, reason: 'auth', detail: 'token-expired' });
+    renderSection(controller);
+
+    await user.click(cloudSyncSwitch());
+    await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
+
+    await waitFor(() => expect(toastError).toHaveBeenCalledTimes(1));
+  });
+
+  it('routes a recovery code that resolves after unmount to a warning toast, never dropping it', async () => {
+    // Settings can close during the minutes-long macOS browser dance; the show-once code must
+    // surface SOMEWHERE — as a global toast telling the user to regenerate one.
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.deferNextEnableWithGoogle();
+    const { unmount } = renderSection(controller);
+
+    await user.click(cloudSyncSwitch());
+    await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
+    unmount();
+    act(() => controller.resolveEnableWithGoogle({ ok: true, recoveryCode: CODE }));
+
+    await waitFor(() => expect(toastWarning).toHaveBeenCalledTimes(1));
+    expect(toastError).not.toHaveBeenCalled();
+  });
+
+  it('treats a cancelled reconnect as a non-error: no toast, Reconnect stays available', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptReconnect({ ok: false, reason: 'auth', detail: 'cancelled' });
+    renderSection(controller);
+    act(() => controller.setStatus('needs_reauth'));
+
+    await user.click(screen.getByRole('button', { name: 'Reconnect' }));
+
+    expect(await screen.findByRole('button', { name: 'Reconnect' })).toBeEnabled();
+    expect(toastError).not.toHaveBeenCalled();
+  });
+
+  it('keeps the enroll modal open with no error line when the re-auth is cancelled', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptEnableWithGoogle({ ok: false, reason: 'needs-code' });
+    controller.scriptEnableWithGoogle({ ok: false, reason: 'auth', detail: 'cancelled' });
+    renderSection(controller);
+
+    await user.click(cloudSyncSwitch());
+    await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
+    await screen.findByText('Enter recovery code');
+    await user.type(screen.getByLabelText(/recovery code/i), CODE);
+    await user.click(screen.getByRole('button', { name: 'Enroll' }));
+
+    // Modal stays open for another attempt; a deliberate cancel shows no failure message.
+    expect(await screen.findByRole('button', { name: 'Enroll' })).toBeEnabled();
+    expect(screen.getByText('Enter recovery code')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
   it('turns Chrome sync off (migrating to local) after a successful enable', async () => {
     const user = userEvent.setup();
     settingsMock.syncEnabled = true;
@@ -216,13 +293,7 @@ describe('SyncSettingsSectionComponent', () => {
   it('shows a spinner and disables the button while Google sign-in is pending', async () => {
     const user = userEvent.setup();
     const controller = new FakeSyncController();
-    let resolveGoogle: ((result: EnableResult) => void) | undefined;
-    controller.enableWithGoogle = vi.fn(
-      () =>
-        new Promise<EnableResult>((resolve) => {
-          resolveGoogle = resolve;
-        })
-    );
+    controller.deferNextEnableWithGoogle();
     renderSection(controller);
 
     await user.click(cloudSyncSwitch());
@@ -231,10 +302,7 @@ describe('SyncSettingsSectionComponent', () => {
     const pendingButton = await screen.findByRole('button', { name: /signing in/i });
     expect(pendingButton).toBeDisabled();
 
-    if (resolveGoogle === undefined) {
-      throw new Error('expected enableWithGoogle to be pending');
-    }
-    act(() => resolveGoogle?.({ ok: true }));
+    act(() => controller.resolveEnableWithGoogle({ ok: true }));
 
     await waitFor(() =>
       expect(screen.queryByRole('button', { name: /signing in/i })).not.toBeInTheDocument()

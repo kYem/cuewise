@@ -119,9 +119,11 @@ export class BridgeSyncController implements SyncController {
     try {
       redirect = await chrome.identity.launchWebAuthFlow({ url: authUrl, interactive: true });
     } catch (error) {
-      // Cancel, network failure, redirect-URI mismatch, and a bad client id all land here — log the
-      // message + the Error object (no token exists yet) so a misconfig isn't indistinguishable
-      // from a user cancel and the stack/cause is preserved.
+      // Cancel, network failure, redirect-URI mismatch, and a bad client id all land here — log
+      // the message + the Error object (no token exists yet). Deliberately NOT mapped to a quiet
+      // detail:'cancelled': Chromium reports ANY auth-window close as its user-cancel message,
+      // including the user closing a Google-side ERROR page (misconfig) — going quiet on that
+      // would silence real failures. Only macOS's server-sanitized access_denied is trustworthy.
       const detail = error instanceof Error ? error.message : String(error);
       logger.warn(`Google sign-in auth flow was cancelled or failed: ${detail}`, { error });
       return { ok: false, reason: 'auth' };

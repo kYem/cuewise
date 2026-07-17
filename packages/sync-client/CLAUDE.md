@@ -23,7 +23,7 @@ A **platform-agnostic** client for the ENG-43 cloud-sync API (`apps/api`) — no
 
 **The 404 exception**: `getRecoveryEnvelope` resolves to `null` on a 404 instead of throwing — "signed in but E2E keys never initialized" is a valid state callers branch on, not an error. Every other non-2xx still throws `ApiError` as usual.
 
-**The Apple exception**: `exchangeToken` passes `retry: false` internally whenever `req.provider === 'apple'`. Apple's `credential` is the one-time code from the server bounce (see `apps/api/CLAUDE.md` → Auth flows) — it's burned the instant the server reads it, so retrying a lost or ambiguous response would replay an already-consumed code and turn a would-be-successful sign-in into a guaranteed 401. Google and dev exchanges are idempotent and keep retrying normally.
+**The bounced-code exception**: `exchangeToken` passes `retry: false` internally whenever the request carries a `codeVerifier` — i.e. the `credential` is a one-time code from a server bounce (Apple always; Google on the macOS deep-link flow — see `apps/api/CLAUDE.md` → Auth flows). The code is burned the instant the server reads it, so retrying a lost or ambiguous response would replay an already-consumed code and turn a would-be-successful sign-in into a guaranteed 401. Id-token (extension Google) and dev exchanges are idempotent and keep retrying normally.
 
 **`ApiError`** (`api-error.ts`) normalizes every failure — a non-2xx response or a thrown network error — into one shape: `code`, `status`, `retryable`, `retryAfter?`, `errors?`. `ApiError.fromResponse()` parses the server's problem+json body; if the body isn't valid JSON (e.g. an upstream 502 HTML page), it logs a warning and falls back to `code: 'internal'` rather than throwing while it's building an error.
 
@@ -39,7 +39,7 @@ Wraps one `KeyValueStore` key, `SYNC_SESSION_KEY`, always in the **`'local'`** s
 
 ## Wire Types (`types.ts`)
 
-`PushRecord`/`SyncRecord`/`ExchangeTokenRequest` are **re-exported, not redeclared**, from `@cuewise/shared` (`packages/shared/src/types.ts`) — the single source of truth also used by the server's `SyncStore` interface (`apps/api/src/store.ts`) and `parseTokenRequest` (`apps/api/src/routes/auth.ts`). Don't add a second definition here. `ExchangeTokenRequest` is a discriminated union on `provider` so `codeVerifier` is only required (and only typed) on the `'apple'` arm; the server still re-validates it at runtime since the wire is never trusted. `ProblemBody` mirrors the server's RFC 9457 shape and lives only in this package, since the server doesn't publish a shared client type for it.
+`PushRecord`/`SyncRecord`/`ExchangeTokenRequest` are **re-exported, not redeclared**, from `@cuewise/shared` (`packages/shared/src/types.ts`) — the single source of truth also used by the server's `SyncStore` interface (`apps/api/src/store.ts`) and `parseTokenRequest` (`apps/api/src/routes/auth.ts`). Don't add a second definition here. `ExchangeTokenRequest` is a two-arm union whose real discriminant is the *presence of `codeVerifier`* (bounced one-time code) — `apple` only ever takes that arm, `google` appears in both (id token from the extension, bounced code from macOS), `dev` never does; the server still re-validates at runtime since the wire is never trusted. `ProblemBody` mirrors the server's RFC 9457 shape and lives only in this package, since the server doesn't publish a shared client type for it.
 
 ## What's NOT Here
 

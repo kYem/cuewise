@@ -1,7 +1,9 @@
 import { logger } from '@cuewise/shared';
 import type React from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useToastStore } from '../../stores/toast-store';
 import type { EnableResult } from '../../sync/sync-controller';
+import { AUTH_CANCELLED_DETAIL } from '../../sync/sync-controller';
 import { Modal } from '../Modal';
 
 export interface EnrollCodeModalProps {
@@ -19,7 +21,11 @@ const BAD_CODE_MESSAGES: Record<string, string> = {
 const GENERIC_BAD_CODE_MESSAGE = "That recovery code didn't work — please check it and try again";
 const GENERIC_FAILURE_MESSAGE = "Couldn't enroll this device — please try again";
 
-function messageFor(result: Extract<EnableResult, { ok: false }>): string {
+/** null = quiet outcome: a deliberate re-auth cancel keeps the modal open with no error line. */
+function messageFor(result: Extract<EnableResult, { ok: false }>): string | null {
+  if (result.reason === 'auth' && result.detail === AUTH_CANCELLED_DETAIL) {
+    return null;
+  }
   if (result.reason === 'bad-code') {
     if (result.detail !== undefined && result.detail in BAD_CODE_MESSAGES) {
       return BAD_CODE_MESSAGES[result.detail] as string;
@@ -33,14 +39,27 @@ export const EnrollCodeModal: React.FC<EnrollCodeModalProps> = ({ isOpen, onSubm
   const [code, setCode] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // A google-source submit can run a minutes-long OAuth dance; the user may dismiss the modal
+  // meanwhile. The ref lets the late resolution route its error to a toast instead of a
+  // no-longer-rendered error line.
+  const isOpenRef = useRef(isOpen);
 
   // Reset each time the modal opens, so a stale code/error from a prior attempt can't linger.
   useEffect(() => {
+    isOpenRef.current = isOpen;
     if (isOpen) {
       setCode('');
       setErrorMessage(null);
     }
   }, [isOpen]);
+
+  // Escape can unmount the whole settings tree without an isOpen=false render (SettingsModal
+  // and Modal both handle it) — treat unmount as dismissed so a late failure still toasts.
+  useEffect(() => {
+    return () => {
+      isOpenRef.current = false;
+    };
+  }, []);
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
@@ -51,10 +70,22 @@ export const EnrollCodeModal: React.FC<EnrollCodeModalProps> = ({ isOpen, onSubm
         onClose();
         return;
       }
-      setErrorMessage(messageFor(result));
+      const message = messageFor(result);
+      if (message === null) {
+        return;
+      }
+      if (isOpenRef.current) {
+        setErrorMessage(message);
+      } else {
+        useToastStore.getState().error(message);
+      }
     } catch (error) {
       logger.error('Enroll submit failed', error);
-      setErrorMessage(GENERIC_FAILURE_MESSAGE);
+      if (isOpenRef.current) {
+        setErrorMessage(GENERIC_FAILURE_MESSAGE);
+      } else {
+        useToastStore.getState().error(GENERIC_FAILURE_MESSAGE);
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -92,7 +123,7 @@ export const EnrollCodeModal: React.FC<EnrollCodeModalProps> = ({ isOpen, onSubm
         <button
           type="button"
           onClick={handleSubmit}
-          disabled={isSubmitting}
+          disabled={isSubmitting || code.trim() === ''}
           className="w-full rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isSubmitting ? (

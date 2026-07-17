@@ -8,6 +8,24 @@ export interface ApiErrorOptions {
   cause?: unknown;
 }
 
+/**
+ * Folds a validation errors[] array into one bounded line, so err.message stays diagnostic
+ * when the body carries pointers but no top-level detail (e.g. "/codeVerifier must be…").
+ */
+function summarizeIssues(errors: ProblemBody['errors']): string | undefined {
+  if (errors === undefined || errors.length === 0) {
+    return undefined;
+  }
+  const shown = errors
+    .slice(0, 3)
+    .map((issue) => [issue.pointer, issue.detail].filter(Boolean).join(' '))
+    .join('; ');
+  if (errors.length > 3) {
+    return `${shown} (+${errors.length - 3} more)`;
+  }
+  return shown;
+}
+
 /** Reads a positive numeric (seconds) Retry-After header; ignores the HTTP-date form and non-positive values. */
 function retryAfterFromHeader(res: Response): number | undefined {
   const header = res.headers.get('Retry-After');
@@ -60,7 +78,7 @@ export class ApiError extends Error {
     const retryAfter =
       typeof body.retryAfter === 'number' ? body.retryAfter : retryAfterFromHeader(res);
     return new ApiError(code, res.status, {
-      detail: body.detail,
+      detail: body.detail ?? summarizeIssues(body.errors),
       retryAfter,
       errors: body.errors,
     });

@@ -603,7 +603,10 @@ export interface KeyEnvelopeRecord {
   updatedAt: number;
 }
 
-/** codeVerifier is required for apple (PKCE); google/dev exchanges don't use it. */
+/**
+ * codeVerifier (PKCE): required for apple, present for google bounced-code exchanges (the
+ * macOS deep-link flow), absent for google id_token exchanges (extension) and dev.
+ */
 export type ExchangeTokenRequest =
   | { provider: 'google' | 'dev'; credential: string; deviceName: string }
-  | { provider: 'apple'; credential: string; deviceName: string; codeVerifier: string };
+  | { provider: 'apple' | 'google'; credential: string; deviceName: string; codeVerifier: string };

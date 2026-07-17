@@ -7,7 +7,7 @@ import type { Env } from '../env';
 import { parseJsonBody } from '../http';
 import type { AppDepsResolved } from '../index';
 import { problem, requireNonEmptyString, type ValidationIssue } from '../problem-details';
-import type { Identity } from '../store';
+import type { Identity, SyncStore } from '../store';
 import { verifyOrProblem } from '../verifiers';
 
 /** localhost/loopback hosts, the only places the dev auth bypass may run. */
@@ -35,7 +35,7 @@ function isDevAuthEnabled(env: Env): boolean {
 }
 
 const MAX_DEVICE_NAME_LENGTH = 100;
-// Real ID tokens run 1-2 KB and Apple's one-time code is 43 chars; this just caps abuse.
+// Real ID tokens run 1-2 KB and the bounce one-time codes are 43 chars; this just caps abuse.
 const MAX_CREDENTIAL_LENGTH = 8192;
 // RFC 7636 §4.1: a PKCE code_verifier is 43-128 characters from the unreserved set
 // [A-Za-z0-9._~-]. ASCII-only, so byte length and character length are provably identical.
@@ -72,11 +72,15 @@ function parseTokenRequest(body: unknown): ExchangeTokenRequest | ValidationIssu
   }
   requireNonEmptyString(credential, '/credential', issues, { maxLength: MAX_CREDENTIAL_LENGTH });
   requireNonEmptyString(deviceName, '/deviceName', issues, { maxLength: MAX_DEVICE_NAME_LENGTH });
-  if (provider === 'apple') {
+  // codeVerifier: required for apple, optional for google (present = bounced-code exchange),
+  // meaningless for dev — rejected there so a typo'd request can't silently no-op.
+  if (provider === 'apple' || (provider === 'google' && codeVerifier !== undefined)) {
     // Bounded (length + charset) before consumeAuthCode ever runs, so malformed input can't burn the code.
     if (typeof codeVerifier !== 'string' || !CODE_VERIFIER_RE.test(codeVerifier)) {
       issues.push(codeVerifierIssue(codeVerifier));
     }
+  } else if (provider === 'dev' && codeVerifier !== undefined) {
+    issues.push({ pointer: '/codeVerifier', detail: "not allowed for provider 'dev'" });
   }
   if (issues.length > 0) {
     return issues;
@@ -87,7 +91,49 @@ function parseTokenRequest(body: unknown): ExchangeTokenRequest | ValidationIssu
   if (provider === 'apple') {
     return { provider, ...base, codeVerifier: codeVerifier as string };
   }
+  if (provider === 'google' && typeof codeVerifier === 'string') {
+    return { provider, ...base, codeVerifier };
+  }
   return { provider: provider as 'google' | 'dev', ...base };
+}
+
+/**
+ * Redeems a server-bounce one-time code: atomic burn, then the PKCE check, then a
+ * provider cross-check so a code minted for one provider can't be redeemed as another.
+ */
+async function redeemBouncedCode(
+  store: SyncStore,
+  provider: 'apple' | 'google',
+  credential: string,
+  codeVerifier: string
+): Promise<Identity | Response> {
+  const consumed = await store.consumeAuthCode(credential);
+  if (consumed === null) {
+    // Unknown, expired, or ALREADY-BURNED — a replay of a burned code is the interception
+    // signal burn-before-verify exists to catch, so it must be visible. Metadata only.
+    logger.warn(`${provider} auth-code exchange with an unknown, expired, or already-used code`);
+    return problem('invalid_token');
+  }
+  // The code is already burned here; a verifier mismatch fails closed rather than
+  // leaving the code redeemable for a retry.
+  const computedChallenge = await sha256Base64Url(codeVerifier);
+  if (computedChallenge !== consumed.codeChallenge) {
+    // A redeemed code with the wrong verifier is the exact attack PKCE exists to stop; the
+    // code is already burned, so this is the only record it ever happened. Metadata only.
+    logger.warn(`${provider} auth-code exchange failed PKCE verifier check`);
+    return problem('invalid_token');
+  }
+  if (consumed.payload.provider !== provider) {
+    logger.warn(
+      `auth-code exchange provider mismatch: request said ${provider}, code was minted for ${consumed.payload.provider}`
+    );
+    return problem('invalid_token');
+  }
+  return {
+    provider: consumed.payload.provider,
+    providerSub: consumed.payload.providerSub,
+    email: consumed.payload.email,
+  };
 }
 
 export function registerAuthRoutes(
@@ -105,7 +151,19 @@ export function registerAuthRoutes(
     }
     const store = deps.storeFactory(c.env.DB);
     let identity: Identity;
-    if (parsed.provider === 'google') {
+    if ('codeVerifier' in parsed) {
+      // apple always, google when the credential is a bounced one-time code (macOS deep-link flow).
+      const redeemed = await redeemBouncedCode(
+        store,
+        parsed.provider,
+        parsed.credential,
+        parsed.codeVerifier
+      );
+      if (redeemed instanceof Response) {
+        return redeemed;
+      }
+      identity = redeemed;
+    } else if (parsed.provider === 'google') {
       const verified = await verifyOrProblem(
         deps.googleVerifier,
         parsed.credential,
@@ -121,25 +179,6 @@ export function registerAuthRoutes(
         return problem('invalid_request', { detail: 'Unknown provider.' });
       }
       identity = { provider: 'dev', providerSub: parsed.credential };
-    } else if (parsed.provider === 'apple') {
-      const consumed = await store.consumeAuthCode(parsed.credential);
-      if (consumed === null) {
-        return problem('invalid_token');
-      }
-      // The code is already burned here; a verifier mismatch fails closed rather than
-      // leaving the code redeemable for a retry.
-      const computedChallenge = await sha256Base64Url(parsed.codeVerifier);
-      if (computedChallenge !== consumed.codeChallenge) {
-        // A redeemed code with the wrong verifier is the exact attack PKCE exists to stop; the
-        // code is already burned, so this is the only record it ever happened. Metadata only.
-        logger.warn('Apple auth-code exchange failed PKCE verifier check');
-        return problem('invalid_token');
-      }
-      identity = {
-        provider: 'apple',
-        providerSub: consumed.payload.providerSub,
-        email: consumed.payload.email,
-      };
     } else {
       // Unreachable: parseTokenRequest already rejects any provider outside this set.
       return problem('invalid_request', { detail: 'Unknown provider.' });

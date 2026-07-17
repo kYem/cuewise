@@ -9,6 +9,7 @@ import { type KeyValueStore, logger, type Scheduler } from '@cuewise/shared';
 import {
   ApiError,
   armSyncPull,
+  type ExchangeTokenRequest,
   type ApiClient as RealApiClient,
   type SessionManager,
   SYNC_PULL_WAKE_ID,
@@ -34,9 +35,17 @@ export const CLOUD_SYNC_ENABLED_KEY = 'cloudSyncEnabled';
 // The periodic pull backstop cadence (spec §3: "~5 min"); foreground opens trigger sooner via syncNow.
 const PULL_REARM_MINUTES = 5;
 
-// Auth providers the enable flow can exchange for a session. Apple (server-bounce + codeVerifier)
-// isn't wired through enableSync yet — it needs the separate PKCE/deep-link dance.
+// Auth providers the enable flow can exchange for a session. Apple isn't in the type yet only
+// because no client-side Apple bounce driver exists — the enableSync/codeVerifier plumbing it
+// needs is already in place (the macOS google flow uses it).
 export type SyncSignInProvider = 'dev' | 'google';
+
+export interface EnableSyncOptions {
+  /** Enrolls this device with an existing account's recovery code (device #2+). */
+  recoveryCode?: string;
+  /** PKCE verifier when the credential is a bounced one-time code (macOS google deep-link flow). */
+  codeVerifier?: string;
+}
 
 export type SyncStatus =
   | 'disabled'
@@ -101,15 +110,18 @@ export class SyncEngine {
     provider: SyncSignInProvider,
     credential: string,
     deviceName: string,
-    recoveryCode?: string
+    opts: EnableSyncOptions = {}
   ): Promise<void> {
+    const { recoveryCode, codeVerifier } = opts;
     try {
       this.setStatus('signing_in');
-      const { token } = await this.deps.apiClient.exchangeToken({
-        provider,
-        credential,
-        deviceName,
-      });
+      // A codeVerifier marks a bounced one-time code rather than an id token; of the providers
+      // this engine accepts, only google has a bounce flow (dev never carries one).
+      const request: ExchangeTokenRequest =
+        provider === 'google' && codeVerifier !== undefined
+          ? { provider, credential, deviceName, codeVerifier }
+          : { provider, credential, deviceName };
+      const { token } = await this.deps.apiClient.exchangeToken(request);
       const saved = await this.deps.sessionManager.saveToken(token);
       if (!saved.success) {
         throw new Error(`failed to persist sync session: ${saved.error.message}`);
