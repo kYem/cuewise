@@ -226,5 +226,5 @@ describe('background: notification click', () => {
 });
 
 it('points the uninstall url at the feedback page with the manifest version', () => {
-  expect(uninstallUrl).toBe('https://cuewise.app/uninstall?v=9.9.9');
+  expect(uninstallUrl).toBe('https://cuewise.app/uninstall/?v=9.9.9');
 });

@@ -30,7 +30,7 @@ scheduler.onFire(handleReminderFire);
 
 // Uninstall feedback (spec 2026-07-17): ask departing users why. Only the
 // extension version rides the URL — no user data.
-const uninstallUrl = `https://cuewise.app/uninstall?v=${chrome.runtime.getManifest().version}`;
+const uninstallUrl = `https://cuewise.app/uninstall/?v=${chrome.runtime.getManifest().version}`;
 chrome.runtime.setUninstallURL(uninstallUrl).catch((error: unknown) => {
   logger.warn('Failed to set uninstall URL', { error });
 });

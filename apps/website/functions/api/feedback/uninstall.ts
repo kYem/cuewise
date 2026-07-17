@@ -57,7 +57,8 @@ export async function handleUninstallFeedback(request: Request, env: Env): Promi
     }
   }
 
-  // Version rides in from a query param the extension set — sanitize, never reject.
+  // Version arrives in the JSON body (the page forwarded its query param) —
+  // sanitize, never reject.
   const version =
     typeof feedbackPayload.version === 'string' && VERSION_PATTERN.test(feedbackPayload.version)
       ? feedbackPayload.version

@@ -5,5 +5,5 @@ export default defineConfig({
   site: 'https://cuewise.app',
   output: 'static',
   trailingSlash: 'always',
-  integrations: [sitemap()],
+  integrations: [sitemap({ filter: (page) => !page.includes('/uninstall/') })],
 });
