@@ -13,14 +13,21 @@ export interface BounceState {
 
 /** Narrows a verified-but-untyped `state` payload; shape only, signature already checked. */
 export function toBounceState(parsed: unknown): BounceState | null {
+  if (parsed === null || typeof parsed !== 'object') {
+    return null;
+  }
+  const record = parsed as { returnUri?: unknown; codeChallenge?: unknown; nonce?: unknown };
   if (
-    parsed !== null &&
-    typeof parsed === 'object' &&
-    typeof (parsed as { returnUri?: unknown }).returnUri === 'string' &&
-    typeof (parsed as { codeChallenge?: unknown }).codeChallenge === 'string' &&
-    typeof (parsed as { nonce?: unknown }).nonce === 'string'
+    typeof record.returnUri === 'string' &&
+    typeof record.codeChallenge === 'string' &&
+    typeof record.nonce === 'string'
   ) {
-    return parsed as BounceState;
+    // Built fresh from the narrowed reads (no result cast), so nothing extra rides along.
+    return {
+      returnUri: record.returnUri,
+      codeChallenge: record.codeChallenge,
+      nonce: record.nonce,
+    };
   }
   return null;
 }
