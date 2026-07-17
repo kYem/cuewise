@@ -41,7 +41,14 @@ export function buildSyncDetails(
   return { accountEmail: account.email, accountId: account.userId, lastSyncedAt };
 }
 
-/** Platform-agnostic seam the enable-sync UI drives; host adapters (macOS/extension) implement it. */
+/**
+ * Platform-agnostic seam the enable-sync UI drives; host adapters (macOS/extension) implement it.
+ *
+ * Capability convention: a capability that can vary at runtime within one host is a required
+ * `canX(): boolean` (e.g. canEnableWithGoogle — Google availability tracks googleClientId even in
+ * the extension). A capability that is fixed per host is an optional method the UI feature-detects
+ * by presence (cancelEnableWithGoogle?, enrollWithCode?).
+ */
 export interface SyncController {
   getStatus(): SyncUiStatus;
   subscribe(cb: (status: SyncUiStatus) => void): () => void;

@@ -191,12 +191,18 @@ export class FakeSyncController implements SyncController {
   }
 
   /** Resolves a deferred enableWithGoogle as a quiet cancel, mirroring the macOS driver. */
-  cancelEnableWithGoogle(): void {
+  cancelEnableWithGoogle?: () => void = () => {
     this.calls.push({ method: 'cancelEnableWithGoogle', args: [] });
     if (this.pendingGoogle !== null) {
       this.pendingGoogle({ ok: false, reason: 'auth', detail: 'cancelled' });
       this.pendingGoogle = null;
     }
+  };
+
+  /** Test helper: drop the optional cancelEnableWithGoogle capability to model a host without it (extension popup). */
+  withoutHostCancel(): this {
+    this.cancelEnableWithGoogle = undefined;
+    return this;
   }
 
   enrollWithCode?: (deviceName: string, recoveryCode: string) => Promise<EnableResult> = async (

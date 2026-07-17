@@ -59,6 +59,10 @@ async function deepLinkTarget(res: Response): Promise<URL> {
   expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff');
   const html = await res.text();
   const csp = res.headers.get('Content-Security-Policy') ?? '';
+  // Locked-down default plus explicit anti-framing/base pins (neither inherits from default-src).
+  expect(csp).toContain("default-src 'none'");
+  expect(csp).toContain("frame-ancestors 'none'");
+  expect(csp).toContain("base-uri 'none'");
   const nonceMatch = csp.match(/script-src 'nonce-([A-Za-z0-9_-]+)'/);
   if (nonceMatch === null) {
     throw new Error('expected a nonce-based script-src in the CSP');

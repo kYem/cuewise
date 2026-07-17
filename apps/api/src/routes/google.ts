@@ -169,7 +169,9 @@ function respondWithDeepLink(target: URL, message: string): Response {
       // The page embeds the one-time code — never cache it, never leak it via Referer, and
       // don't let the browser sniff it into another content type.
       'Cache-Control': 'no-store',
-      'Content-Security-Policy': `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'unsafe-inline'`,
+      // frame-ancestors/base-uri aren't covered by default-src; pin them so this credential-
+      // bearing page can't be framed for clickjacking or have its <base> rewritten.
+      'Content-Security-Policy': `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'`,
       'Referrer-Policy': 'no-referrer',
       'X-Content-Type-Options': 'nosniff',
     },

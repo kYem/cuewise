@@ -39,4 +39,8 @@ describe('formatTimeAgo', () => {
   it('returns "Nd ago" for days', () => {
     expect(formatTimeAgo(agoIso(2 * 24 * 60 * 60 * 1000))).toBe('2d ago');
   });
+
+  it('accepts epoch millis directly (the lastSyncedAt domain)', () => {
+    expect(formatTimeAgo(Date.now() - 26 * 60 * 1000)).toBe('26 min ago');
+  });
 });

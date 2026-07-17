@@ -186,6 +186,22 @@ describe('SyncSettingsSectionComponent', () => {
     expect(toastError).not.toHaveBeenCalled();
   });
 
+  it('hides Cancel on a host that cannot abort sign-in (extension popup is user-closable)', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController().withoutHostCancel();
+    controller.deferNextEnableWithGoogle();
+    renderSection(controller);
+
+    await user.click(cloudSyncSwitch());
+    await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
+
+    // Sign-in is pending, but with no cancelEnableWithGoogle the UI must not offer a dead button.
+    await waitFor(() =>
+      expect(controller.calls.some((c) => c.method === 'enableWithGoogle')).toBe(true)
+    );
+    expect(screen.queryByRole('button', { name: 'Cancel sign-in' })).not.toBeInTheDocument();
+  });
+
   it('treats a cancelled Google sign-in as a non-error: no toast, form stays open', async () => {
     const user = userEvent.setup();
     const controller = new FakeSyncController();
@@ -662,6 +678,28 @@ describe('SyncSettingsSectionComponent', () => {
     expect(screen.queryByTestId('sync-account-label')).not.toBeInTheDocument();
   });
 
+  it('re-fetches details on the next status change after an unavailable result', async () => {
+    // A transient null must not latch the account line off for the whole mount — the next status
+    // transition has to retry, so a fetch that queued behind a long initial sync eventually paints.
+    const controller = new FakeSyncController();
+    controller.scriptDetails(null);
+    controller.scriptDetails({
+      accountEmail: 'kes@example.com',
+      accountId: 'user-1',
+      lastSyncedAt: null,
+    });
+    renderSection(controller);
+
+    act(() => controller.setStatus('active'));
+    await waitFor(() =>
+      expect(controller.calls.filter((c) => c.method === 'getDetails')).toHaveLength(1)
+    );
+    expect(screen.queryByTestId('sync-account-label')).not.toBeInTheDocument();
+
+    act(() => controller.setStatus('syncing'));
+    expect(await screen.findByText('Signed in as kes@example.com')).toBeInTheDocument();
+  });
+
   it('drops the shown identity on disable so a re-enable fetches fresh details', async () => {
     // Same mount, different account: the section must never keep showing the previous owner.
     const user = userEvent.setup();
@@ -696,6 +734,40 @@ describe('SyncSettingsSectionComponent', () => {
     await waitFor(() =>
       expect(screen.getByTestId('sync-device-label')).toHaveTextContent(/Last synced Just now/)
     );
+  });
+
+  it('keeps the Sync now refresh when a slow mount fetch resolves afterward', async () => {
+    // The mount details fetch is still in flight when Sync now fires its own refresh; the newer
+    // refresh must win, and the late mount fetch must be dropped rather than painting stale data.
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    let resolveMount: ((d: SyncDetails | null) => void) | undefined;
+    let call = 0;
+    controller.getDetails = vi.fn(() => {
+      call += 1;
+      if (call === 1) {
+        return new Promise<SyncDetails | null>((resolve) => {
+          resolveMount = resolve;
+        });
+      }
+      return Promise.resolve({
+        accountEmail: 'fresh@example.com',
+        accountId: 'user-1',
+        lastSyncedAt: Date.now(),
+      });
+    });
+    renderSection(controller);
+    act(() => controller.setStatus('active')); // mount fetch starts (hangs)
+
+    await user.click(screen.getByRole('button', { name: 'Sync now' }));
+    expect(await screen.findByText('Signed in as fresh@example.com')).toBeInTheDocument();
+
+    // The stale mount fetch finally resolves — the generation guard must drop it.
+    act(() =>
+      resolveMount?.({ accountEmail: 'stale@example.com', accountId: 'user-1', lastSyncedAt: null })
+    );
+    expect(screen.getByText('Signed in as fresh@example.com')).toBeInTheDocument();
+    expect(screen.queryByText('Signed in as stale@example.com')).not.toBeInTheDocument();
   });
 
   it('calls controller.syncNow() when Sync now is clicked', async () => {

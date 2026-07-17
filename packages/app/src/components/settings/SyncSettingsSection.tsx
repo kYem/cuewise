@@ -161,10 +161,15 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
         setDetails(result);
       },
       (error) => {
-        // Purely informational — render today's UI rather than surfacing anything.
+        // getDetails is contracted never to reject; if a host adapter breaks that, treat it as
+        // the null branch — log, and (when still current) re-arm so a later transition retries
+        // rather than latching details off for the whole mount.
         logger.warn(
           `Cloud sync details unavailable: ${error instanceof Error ? error.message : String(error)}`
         );
+        if (detailsGenRef.current === gen) {
+          detailsRequestedRef.current = false;
+        }
       }
     );
   }, [controller, status]);
@@ -282,20 +287,19 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       if (enrollSource === 'reconnect') {
         result = await controller.reconnect(code);
       } else if (enrollSource === 'google') {
-        // ENG-65: finish the enroll against the still-live session where the host supports it,
-        // avoiding a second browser bounce; fall back to full re-auth otherwise.
-        result = controller.enrollWithCode
-          ? await controller.enrollWithCode(deviceName, code)
-          : await controller.enableWithGoogle(deviceName, code);
-        // The session-resume path can find the session already gone (revoked/expired while the
-        // user hunted for the code) → reason:'auth'. Retrying resume is then hopeless, so fall
-        // back to a full re-auth, which re-establishes the session (the code is already typed).
-        if (
-          controller.enrollWithCode &&
-          !result.ok &&
-          result.reason === 'auth' &&
-          result.detail !== AUTH_CANCELLED_DETAIL
-        ) {
+        if (controller.enrollWithCode) {
+          // ENG-65: finish the enroll against the still-live session — no second browser bounce.
+          result = await controller.enrollWithCode(deviceName, code);
+          // enrollWithCode's presence is load-bearing: it also means "we attempted a resume", so
+          // only this branch runs the re-auth fallback. Making enrollWithCode required (e.g.
+          // aliasing enableWithGoogle on the extension) would fire this on every host and sign in
+          // twice. The resume can find the session already gone (revoked/expired while the user
+          // hunted for the code) → reason:'auth'; retrying resume is hopeless, so fall back to a
+          // full re-auth, which re-establishes the session (the code is already typed).
+          if (!result.ok && result.reason === 'auth' && result.detail !== AUTH_CANCELLED_DETAIL) {
+            result = await controller.enableWithGoogle(deviceName, code);
+          }
+        } else {
           result = await controller.enableWithGoogle(deviceName, code);
         }
       } else {

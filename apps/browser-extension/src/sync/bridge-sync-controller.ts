@@ -301,10 +301,12 @@ export class BridgeSyncController implements SyncController {
 
   async getDetails(): Promise<SyncDetails | null> {
     try {
+      // The response type is {ok:true, details}, but the SW↔page wire is untyped — don't delete
+      // these guards. A skewed/legacy SW can return undefined (op guard rejected it, no
+      // responder), {ok:false} (router's error fallback → fails the ok guard), or {ok:true}
+      // without details (pre-details SW → fails the 'details' guard). This call is purely
+      // informational, so any of those is "unavailable", not an error.
       const response = await this.send({ kind: 'cuewise-sync-control', op: 'details' });
-      // Unavailable rather than an error — this call is purely informational. undefined = a
-      // legacy SW whose op guard rejected the message (no responder); ok-without-details = the
-      // router's generic error fallback.
       if (response?.ok && 'details' in response) {
         return response.details;
       }
