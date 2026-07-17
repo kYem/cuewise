@@ -76,6 +76,19 @@ describe('ApiClient', () => {
     });
   });
 
+  it('getAccount performs an authed GET /v1/account and returns the parsed body', async () => {
+    const body = { userId: 'user-1', email: 'kes@example.com' };
+    const { fetchFn, calls } = stubFetch([{ status: 200, body }]);
+    const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
+
+    const result = await client.getAccount();
+
+    expect(result).toEqual(body);
+    expect(calls[0].url).toBe(`${BASE_URL}/v1/account`);
+    const headers = new Headers(calls[0].init.headers);
+    expect(headers.get('Authorization')).toBe(`Bearer ${TOKEN}`);
+  });
+
   it('folds a detail-less errors[] body into the message so logs stay diagnostic', async () => {
     const { fetchFn } = stubFetch([
       problemResponse('invalid_request', 400, {

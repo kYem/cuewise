@@ -68,6 +68,12 @@ export class ApiClient {
     await this.request('/v1/auth/logout', { method: 'POST' }, { auth: true });
   }
 
+  /** Account details for the sync-settings UI; email is null when the provider never verified one. */
+  async getAccount(): Promise<{ userId: string; email: string | null }> {
+    const res = await this.request('/v1/account', { method: 'GET' }, { auth: true });
+    return this.parseSuccessBody<{ userId: string; email: string | null }>(res);
+  }
+
   async exportData(): Promise<{ records: SyncRecord[] }> {
     const res = await this.request('/v1/export', { method: 'GET' }, { auth: true });
     return this.parseSuccessBody<{ records: SyncRecord[] }>(res);
