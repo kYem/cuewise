@@ -148,12 +148,14 @@ export class SyncEngine {
    * been lost (the caller must then re-authenticate).
    */
   async resumeEnrollWithCode(recoveryCode: string): Promise<void> {
-    const token = await this.deps.sessionManager.getToken();
-    if (token === null) {
-      await this.handleAuthLoss();
-      return;
-    }
     try {
+      // Inside the try so a storage fault reading the token routes through handleEnableError
+      // (status → error) like every other enroll failure, not out as a raw rejection.
+      const token = await this.deps.sessionManager.getToken();
+      if (token === null) {
+        await this.handleAuthLoss();
+        return;
+      }
       await this.enrollAndActivate(recoveryCode);
     } catch (err) {
       await this.handleEnableError(err);

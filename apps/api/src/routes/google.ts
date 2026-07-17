@@ -154,8 +154,8 @@ function respondWithDeepLink(target: URL, message: string): Response {
 <meta http-equiv="refresh" content="0;url=${escapeHtml(href)}">
 <title>Cuewise</title>
 </head>
-<body style="font-family: system-ui, sans-serif; display: grid; place-items: center; min-height: 90vh;">
-<p>${escapeHtml(message)} You can close this tab.</p>
+<body style="font-family: system-ui, sans-serif; display: grid; place-items: center; min-height: 90vh; text-align: center;">
+<p>${escapeHtml(message)} You can close this tab.<br><a href="${escapeHtml(href)}">Open Cuewise</a> if it doesn't happen automatically.</p>
 <script>location.replace(${jsHref});</script>
 </body>
 </html>`;
@@ -327,6 +327,6 @@ export function registerGoogleRoutes(
     }
     const target = new URL(decoded.returnUri);
     target.searchParams.set('code', authCode);
-    return respondWithDeepLink(target, "You're signed in — return to Cuewise.");
+    return respondWithDeepLink(target, 'Returning you to Cuewise…');
   });
 }

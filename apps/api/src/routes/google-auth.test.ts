@@ -58,7 +58,26 @@ async function deepLinkTarget(res: Response): Promise<URL> {
   if (match === null) {
     throw new Error('expected a location.replace deep link in the interstitial page');
   }
-  return new URL(JSON.parse(match[1]));
+  const scriptTarget = new URL(JSON.parse(match[1]));
+  // The no-JS fallbacks (meta-refresh + manual link) must point at the same target.
+  const metaMatch = html.match(/content="0;url=(.*?)"/);
+  if (metaMatch === null) {
+    throw new Error('expected a meta-refresh fallback in the interstitial page');
+  }
+  const metaTarget = new URL(unescapeHtml(metaMatch[1]));
+  expect(metaTarget.toString()).toBe(scriptTarget.toString());
+  expect(html).toContain(`<a href="${metaMatch[1]}">Open Cuewise</a>`);
+  return scriptTarget;
+}
+
+/** Reverses the route's escapeHtml, so the test compares real URLs not escaped ones. */
+function unescapeHtml(value: string): string {
+  return value
+    .replaceAll('&lt;', '<')
+    .replaceAll('&gt;', '>')
+    .replaceAll('&quot;', '"')
+    .replaceAll('&#39;', "'")
+    .replaceAll('&amp;', '&');
 }
 
 /** Asserts a sanitized error relay: an interstitial to the cuewise://auth URI, never a code. */
@@ -230,6 +249,10 @@ describe('GET /v1/auth/google/callback', () => {
       state,
     });
 
+    // The raw attacker payload must never reach the page markup — only the sanitized enum.
+    const html = await res.clone().text();
+    expect(html).not.toContain('alert(1)');
+    expect(html).not.toContain('admin_policy_enforced');
     await expectErrorRelay(res, 'auth_failed');
   });
 

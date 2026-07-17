@@ -468,6 +468,55 @@ describe('SyncSettingsSectionComponent', () => {
     expect(controller.calls.some((call) => call.method === 'reconnect')).toBe(false);
   });
 
+  it('falls back to enableWithGoogle for enroll when the host lacks enrollWithCode (extension)', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController().withoutHostEnroll();
+    controller.scriptEnableWithGoogle({ ok: false, reason: 'needs-code' });
+    controller.scriptEnableWithGoogle({ ok: true });
+    renderSection(controller);
+
+    await user.click(cloudSyncSwitch());
+    const deviceName = (screen.getByLabelText('Device name') as HTMLInputElement).value;
+    await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
+    await screen.findByText('Enter recovery code');
+    await user.type(screen.getByLabelText(/recovery code/i), CODE);
+    await user.click(screen.getByRole('button', { name: 'Enroll' }));
+
+    await waitFor(() =>
+      expect(controller.calls).toContainEqual({
+        method: 'enableWithGoogle',
+        args: [deviceName, CODE],
+      })
+    );
+    expect(controller.calls.some((call) => call.method === 'enrollWithCode')).toBe(false);
+  });
+
+  it('falls back to full re-auth when enrollWithCode reports the session is gone', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptEnableWithGoogle({ ok: false, reason: 'needs-code' });
+    controller.scriptEnrollWithCode({ ok: false, reason: 'auth' }); // session died mid-enroll
+    controller.scriptEnableWithGoogle({ ok: true }); // the re-auth succeeds
+    renderSection(controller);
+
+    await user.click(cloudSyncSwitch());
+    const deviceName = (screen.getByLabelText('Device name') as HTMLInputElement).value;
+    await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
+    await screen.findByText('Enter recovery code');
+    await user.type(screen.getByLabelText(/recovery code/i), CODE);
+    await user.click(screen.getByRole('button', { name: 'Enroll' }));
+
+    // Resume was tried once, then the full re-auth carried the enroll through — no dead-end.
+    await waitFor(() =>
+      expect(controller.calls).toContainEqual({
+        method: 'enableWithGoogle',
+        args: [deviceName, CODE],
+      })
+    );
+    expect(controller.calls.filter((c) => c.method === 'enrollWithCode')).toHaveLength(1);
+    expect(toastError).not.toHaveBeenCalled();
+  });
+
   it('shows the confirm dialog with the recovery-code warning when the on-state switch is toggled off', async () => {
     const user = userEvent.setup();
     const controller = new FakeSyncController();

@@ -277,6 +277,17 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
         result = controller.enrollWithCode
           ? await controller.enrollWithCode(deviceName, code)
           : await controller.enableWithGoogle(deviceName, code);
+        // The session-resume path can find the session already gone (revoked/expired while the
+        // user hunted for the code) → reason:'auth'. Retrying resume is then hopeless, so fall
+        // back to a full re-auth, which re-establishes the session (the code is already typed).
+        if (
+          controller.enrollWithCode &&
+          !result.ok &&
+          result.reason === 'auth' &&
+          result.detail !== AUTH_CANCELLED_DETAIL
+        ) {
+          result = await controller.enableWithGoogle(deviceName, code);
+        }
       } else {
         result = await controller.enable(accountId, deviceName, code);
       }

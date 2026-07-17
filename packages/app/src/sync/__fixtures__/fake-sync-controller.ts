@@ -199,7 +199,10 @@ export class FakeSyncController implements SyncController {
     }
   }
 
-  async enrollWithCode(deviceName: string, recoveryCode: string): Promise<EnableResult> {
+  enrollWithCode?: (deviceName: string, recoveryCode: string) => Promise<EnableResult> = async (
+    deviceName,
+    recoveryCode
+  ) => {
     this.calls.push({ method: 'enrollWithCode', args: [deviceName, recoveryCode] });
     this.maybeFail('enrollWithCode');
     const next = this.enrollWithCodeResults.shift();
@@ -207,6 +210,12 @@ export class FakeSyncController implements SyncController {
       return next;
     }
     return DEFAULT_ENABLE_RESULT;
+  };
+
+  /** Test helper: drop the optional enrollWithCode capability to model a host without it (extension). */
+  withoutHostEnroll(): this {
+    this.enrollWithCode = undefined;
+    return this;
   }
 
   /** Queues the result the next `enrollWithCode()` call resolves to. */

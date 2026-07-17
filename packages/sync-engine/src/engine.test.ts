@@ -246,6 +246,26 @@ describe('SyncEngine.enableSync', () => {
     await device.engine.resumeEnrollWithCode('CW1-00000-00000-00000-00000-00000-00000');
 
     expect(device.engine.getStatus()).toBe('signed_out');
+    expect(device.apiClient.exchangeCount).toBe(0);
+  });
+
+  it('resumeEnrollWithCode lands signed_out (no throw) when the live-looking session 401s mid-enroll', async () => {
+    const server = new FakeSyncServer();
+    const deviceA = createDevice(server);
+    useStorage(deviceA);
+    await deviceA.engine.enableSync('dev', 'cred-a', 'Device A');
+    const recoveryCode = deviceA.onRecoveryCode.mock.calls[0][0] as string;
+
+    const deviceB = createDevice(server);
+    useStorage(deviceB);
+    await expect(deviceB.engine.enableSync('dev', 'cred-b', 'Device B')).rejects.toBeInstanceOf(
+      RecoveryCodeRequiredError
+    );
+    // The session passes the local token guard but the server has since revoked it.
+    deviceB.apiClient.rejectAllWith401 = true;
+
+    await expect(deviceB.engine.resumeEnrollWithCode(recoveryCode)).resolves.toBeUndefined();
+    expect(deviceB.engine.getStatus()).toBe('signed_out');
   });
 
   it('downloads existing server data into a fresh device enrolling with the recovery code', async () => {

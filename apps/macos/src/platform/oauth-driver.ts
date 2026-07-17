@@ -39,8 +39,10 @@ function toError(err: unknown): Error {
  * dropped on the floor — and the PKCE verifier for it died with that flow anyway.
  */
 export function createTauriOAuthDriver(): OAuthDriver {
-  // The serialize() mutex in DirectSyncController guarantees at most one flow at a time,
-  // so a single slot is enough; settle-once makes a stale cancel harmless.
+  // The serialize() mutex in DirectSyncController guarantees at most one flow at a time, so a
+  // single slot is enough; settle-once makes a stale/double cancel a harmless no-op. (A cancel
+  // in the sub-millisecond gap before authorize() registers is not closed here — the UI only
+  // renders Cancel during a pending flow, and the user can click it again once the browser opens.)
   let cancelCurrent: (() => void) | null = null;
   return {
     cancel(): void {

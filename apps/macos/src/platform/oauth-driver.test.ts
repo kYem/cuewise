@@ -119,18 +119,21 @@ describe('createTauriOAuthDriver', () => {
     expect(listener.stop).toHaveBeenCalledTimes(1);
   });
 
-  it('cancel() is a no-op with no pending flow and after the flow settled', async () => {
+  it('a stale cancel() after a settled flow does not poison the next authorize()', async () => {
     const listener = armListener();
     const driver = createTauriOAuthDriver();
-    driver.cancel();
 
-    const authorize = driver.authorize(START_URL);
+    const first = driver.authorize(START_URL);
     await flush();
-    listener.emit(['cuewise://auth?code=x']);
-    await expect(authorize).resolves.toBe('cuewise://auth?code=x');
+    listener.emit(['cuewise://auth?code=first']);
+    await expect(first).resolves.toBe('cuewise://auth?code=first');
 
-    driver.cancel();
-    await expect(authorize).resolves.toBe('cuewise://auth?code=x');
+    driver.cancel(); // stale — flow 1 already settled
+
+    const second = driver.authorize(START_URL);
+    await flush();
+    listener.emit(['cuewise://auth?code=second']);
+    await expect(second).resolves.toBe('cuewise://auth?code=second');
   });
 
   it('rejects after the callback timeout and unsubscribes the listener', async () => {
