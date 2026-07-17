@@ -4,8 +4,9 @@ import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useSettingsStore } from '../../stores/settings-store';
 import { useToastStore } from '../../stores/toast-store';
-import type { EnableResult, SyncUiStatus } from '../../sync/sync-controller';
+import type { EnableResult, SyncDetails, SyncUiStatus } from '../../sync/sync-controller';
 import { AUTH_CANCELLED_DETAIL, useSyncController } from '../../sync/sync-controller';
+import { formatTimeAgo } from '../../utils/reminder-date-utils';
 import { ConfirmationDialog } from '../ConfirmationDialog';
 import { EnrollCodeModal } from './EnrollCodeModal';
 import { RecoveryCodeModal } from './RecoveryCodeModal';
@@ -120,6 +121,9 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   // The macOS google flow can take minutes; if Settings closes meanwhile, a late recovery code
   // has no modal to render into — the ref routes it to a global toast instead of vanishing.
   const mountedRef = useRef(true);
+  // "Signed in as … · Last synced …" — fetched once per mount when sync is first seen running.
+  const [details, setDetails] = useState<SyncDetails | null>(null);
+  const detailsRequestedRef = useRef(false);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -127,6 +131,22 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       mountedRef.current = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!controller || detailsRequestedRef.current) {
+      return;
+    }
+    if (status !== 'active' && status !== 'syncing') {
+      return;
+    }
+    detailsRequestedRef.current = true;
+    controller.getDetails().then(setDetails, (error) => {
+      // Purely informational — render today's UI rather than surfacing anything.
+      logger.warn(
+        `Cloud sync details unavailable: ${error instanceof Error ? error.message : String(error)}`
+      );
+    });
+  }, [controller, status]);
 
   useEffect(() => {
     if (!controller) {
@@ -282,6 +302,8 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     try {
       await controller.syncNow();
       useToastStore.getState().success('Synced');
+      // Refresh "Last synced" (getDetails never throws — it resolves null on failure).
+      setDetails(await controller.getDetails());
     } catch (error) {
       logger.error('Cloud sync sync-now failed', error);
       useToastStore.getState().error("Couldn't sync right now — please try again.");
@@ -448,8 +470,18 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
             <span data-testid="sync-status-pill" className={pillClass(status)}>
               {pillLabel}
             </span>
+            {details && (
+              <div data-testid="sync-account-label" className="text-xs text-tertiary">
+                {details.accountEmail !== null
+                  ? `Signed in as ${details.accountEmail}`
+                  : `Account: ${details.accountId.slice(0, 8)}…`}
+              </div>
+            )}
             <div data-testid="sync-device-label" className="text-xs text-tertiary">
               Device: {deviceName}
+              {details !== null && details.lastSyncedAt !== null
+                ? ` · Last synced ${formatTimeAgo(details.lastSyncedAt)}`
+                : ''}
             </div>
             <div className="flex flex-wrap gap-2">
               <button

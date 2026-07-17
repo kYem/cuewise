@@ -18,6 +18,15 @@ export type EnableResult =
  */
 export const AUTH_CANCELLED_DETAIL = 'cancelled';
 
+/** Account + freshness info for the settings UI ("Signed in as … · Last synced …"). */
+export interface SyncDetails {
+  /** Provider-verified email, or null when none exists (e.g. the dev provider). */
+  accountEmail: string | null;
+  accountId: string;
+  /** Millis of the last successful sync cycle; null before the first one is known. */
+  lastSyncedAt: number | null;
+}
+
 /** Platform-agnostic seam the enable-sync UI drives; host adapters (macOS/extension) implement it. */
 export interface SyncController {
   getStatus(): SyncUiStatus;
@@ -31,6 +40,8 @@ export interface SyncController {
   disable(): Promise<void>;
   regenerateRecoveryCode(): Promise<string>;
   syncNow(): Promise<void>;
+  /** Informational: resolves null when unavailable (signed out, offline, legacy host); never throws. */
+  getDetails(): Promise<SyncDetails | null>;
 }
 
 export const SyncControllerContext = createContext<SyncController | null>(null);

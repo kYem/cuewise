@@ -1,4 +1,4 @@
-import type { EnableResult, SyncController, SyncUiStatus } from '../sync-controller';
+import type { EnableResult, SyncController, SyncDetails, SyncUiStatus } from '../sync-controller';
 
 interface RecordedCall {
   method: string;
@@ -27,6 +27,7 @@ export class FakeSyncController implements SyncController {
   private readonly enableResults: EnableResult[] = [];
   private readonly enableWithGoogleResults: EnableResult[] = [];
   private readonly reconnectResults: EnableResult[] = [];
+  private readonly detailsResults: (SyncDetails | null)[] = [];
   private readonly failingMethods = new Set<FailableMethod>();
   private deferredDisable = false;
   private pendingDisable: (() => void) | null = null;
@@ -107,6 +108,11 @@ export class FakeSyncController implements SyncController {
     this.reconnectResults.push(result);
   }
 
+  /** Queues the result the next `getDetails()` call resolves to (unscripted calls resolve null). */
+  scriptDetails(details: SyncDetails | null): void {
+    this.detailsResults.push(details);
+  }
+
   async enable(
     accountId: string,
     deviceName: string,
@@ -171,5 +177,14 @@ export class FakeSyncController implements SyncController {
   async syncNow(): Promise<void> {
     this.calls.push({ method: 'syncNow', args: [] });
     this.maybeFail('syncNow');
+  }
+
+  async getDetails(): Promise<SyncDetails | null> {
+    this.calls.push({ method: 'getDetails', args: [] });
+    const next = this.detailsResults.shift();
+    if (next !== undefined) {
+      return next;
+    }
+    return null;
   }
 }

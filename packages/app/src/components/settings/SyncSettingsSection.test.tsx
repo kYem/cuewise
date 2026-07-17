@@ -523,6 +523,64 @@ describe('SyncSettingsSectionComponent', () => {
     expect(screen.getByTestId('sync-status-pill')).toHaveTextContent('Active');
   });
 
+  it('shows the account email and last-synced time once the section is active', async () => {
+    const controller = new FakeSyncController();
+    controller.scriptDetails({
+      accountEmail: 'kes@example.com',
+      accountId: 'user-1',
+      lastSyncedAt: Date.now() - 2 * 60_000,
+    });
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+
+    expect(await screen.findByTestId('sync-account-label')).toHaveTextContent(
+      'Signed in as kes@example.com'
+    );
+    expect(screen.getByTestId('sync-device-label')).toHaveTextContent(/Last synced 2 min ago/);
+  });
+
+  it('falls back to a short account id when no email is verified', async () => {
+    const controller = new FakeSyncController();
+    controller.scriptDetails({
+      accountEmail: null,
+      accountId: '1b0dc90d-f95f-4ba8',
+      lastSyncedAt: null,
+    });
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+
+    expect(await screen.findByTestId('sync-account-label')).toHaveTextContent('Account: 1b0dc90d…');
+    expect(screen.getByTestId('sync-device-label')).not.toHaveTextContent('Last synced');
+  });
+
+  it('renders no account line when details are unavailable', async () => {
+    const controller = new FakeSyncController();
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+
+    await waitFor(() =>
+      expect(controller.calls).toContainEqual({ method: 'getDetails', args: [] })
+    );
+    expect(screen.queryByTestId('sync-account-label')).not.toBeInTheDocument();
+  });
+
+  it('refreshes the last-synced time after Sync now', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    const details = { accountEmail: 'kes@example.com', accountId: 'user-1' };
+    controller.scriptDetails({ ...details, lastSyncedAt: Date.now() - 3 * 60 * 60_000 });
+    controller.scriptDetails({ ...details, lastSyncedAt: Date.now() });
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+    await screen.findByTestId('sync-account-label');
+
+    await user.click(screen.getByRole('button', { name: 'Sync now' }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('sync-device-label')).toHaveTextContent(/Last synced Just now/)
+    );
+  });
+
   it('calls controller.syncNow() when Sync now is clicked', async () => {
     const user = userEvent.setup();
     const controller = new FakeSyncController();
