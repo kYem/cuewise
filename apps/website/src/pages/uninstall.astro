@@ -61,7 +61,7 @@ const reasons = [
               aria-hidden="true"
             />
             <button class="btn btn-primary" type="submit" id="submit-btn">Send feedback</button>
-            <p class="form-error text-error" id="form-error" hidden>
+            <p class="form-error text-error" id="form-error" role="status" aria-live="polite" hidden>
               Couldn't send — please email us instead at
               <a href={`mailto:${SITE.supportEmail}`}>{SITE.supportEmail}</a>.
             </p>
@@ -87,6 +87,9 @@ const reasons = [
         </div>
       </div>
     </section>
+
+    <!-- Static file (not Astro-bundled) so CSP script-src stays 'self' with no hashes. -->
+    <script src="/scripts/uninstall-form.js" is:inline></script>
   </main>
 </Base>
 
@@ -152,6 +155,3 @@ const reasons = [
     margin-top: 18px;
   }
 </style>
-
-<!-- Static file (not Astro-bundled) so CSP script-src stays 'self' with no hashes. -->
-<script src="/scripts/uninstall-form.js" is:inline></script>
