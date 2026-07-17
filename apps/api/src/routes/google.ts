@@ -1,5 +1,5 @@
 import { logger } from '@cuewise/shared';
-import type { Context, Hono } from 'hono';
+import type { Hono } from 'hono';
 import type { AuthVars } from '../auth-middleware';
 import { randomToken, signState, verifyState } from '../crypto-utils';
 import type { Env } from '../env';
@@ -127,19 +127,57 @@ function sanitizeOAuthError(error: string): SanitizedOAuthError {
   return 'auth_failed';
 }
 
+/** HTML-escapes an embedded value; deep-link URLs are server-built, but escape regardless. */
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+/**
+ * Returns to the app via an interstitial page instead of a bare 302 (ENG-66): a cross-scheme
+ * redirect can't close or repaint the tab it happens in, which read as "stuck on Google" in
+ * live testing. The page fires the deep link (script + meta-refresh fallback) and tells the
+ * user the tab is done.
+ */
+function respondWithDeepLink(target: URL, message: string): Response {
+  const href = target.toString();
+  // <-escape closes the </script> breakout hole even though href can't contain '<'.
+  const jsHref = JSON.stringify(href).replaceAll('<', '\\u003c');
+  const html = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="refresh" content="0;url=${escapeHtml(href)}">
+<title>Cuewise</title>
+</head>
+<body style="font-family: system-ui, sans-serif; display: grid; place-items: center; min-height: 90vh;">
+<p>${escapeHtml(message)} You can close this tab.</p>
+<script>location.replace(${jsHref});</script>
+</body>
+</html>`;
+  return new Response(html, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      // The success page embeds the one-time code — never cache it.
+      'Cache-Control': 'no-store',
+    },
+  });
+}
+
 /**
  * Failures after the return URI is proven ours (allowlisted at /start, or HMAC-verified at the
  * callback) ride back to the app so its pending flow settles immediately — a problem+json page
  * in the browser would strand the app until its callback timeout.
  */
-function redirectWithError(
-  c: Context<{ Bindings: Env } & AuthVars>,
-  returnUri: string,
-  error: SanitizedOAuthError
-): Response {
+function redirectWithError(returnUri: string, error: SanitizedOAuthError): Response {
   const target = new URL(returnUri);
   target.searchParams.set('error', error);
-  return c.redirect(target.toString(), 302);
+  return respondWithDeepLink(target, "Sign-in didn't complete — return to Cuewise to try again.");
 }
 
 /**
@@ -172,11 +210,11 @@ export function registerGoogleRoutes(
     // is required here too — better than failing after the user completes the consent dance.
     const signingKey = requireStateSigningKey(c.env);
     if (signingKey === null) {
-      return redirectWithError(c, returnUri, 'server_error');
+      return redirectWithError(returnUri, 'server_error');
     }
     if (!c.env.GOOGLE_OAUTH_CLIENT_ID || !c.env.GOOGLE_CLIENT_SECRET) {
       logger.error('Google OAuth client credentials are not configured');
-      return redirectWithError(c, returnUri, 'server_error');
+      return redirectWithError(returnUri, 'server_error');
     }
     const nonce = randomToken();
     const url = new URL(GOOGLE_AUTHORIZE_URL);
@@ -192,7 +230,7 @@ export function registerGoogleRoutes(
     } catch (err) {
       // A WebCrypto fault here is the last throwable step — relay it rather than strand the app.
       logger.error('Failed to sign the Google bounce state', err);
-      return redirectWithError(c, returnUri, 'server_error');
+      return redirectWithError(returnUri, 'server_error');
     }
     url.searchParams.set('state', state);
     return c.redirect(url.toString(), 302);
@@ -228,7 +266,7 @@ export function registerGoogleRoutes(
       // server-side incident, not a sign-in failure, and it must be loud in our logs.
       if (oauthError === 'server_error' || oauthError === 'temporarily_unavailable') {
         logger.error(`Google authorize endpoint reported a transient fault (${oauthError})`);
-        return redirectWithError(c, decoded.returnUri, 'server_error');
+        return redirectWithError(decoded.returnUri, 'server_error');
       }
       if (oauthError === 'access_denied') {
         // Not exclusively a user cancel: Google also emits access_denied for policy denials
@@ -239,38 +277,38 @@ export function registerGoogleRoutes(
         // Enum-classified message only — the raw value is attacker-shapeable, never echoed.
         logger.warn('Google callback carried a non-cancel OAuth error (collapsed to auth_failed)');
       }
-      return redirectWithError(c, decoded.returnUri, sanitizeOAuthError(oauthError));
+      return redirectWithError(decoded.returnUri, sanitizeOAuthError(oauthError));
     }
     const code = c.req.query('code') ?? '';
     if (code === '') {
       logger.warn('Google callback arrived with neither code nor error');
-      return redirectWithError(c, decoded.returnUri, 'auth_failed');
+      return redirectWithError(decoded.returnUri, 'auth_failed');
     }
     if (!c.env.GOOGLE_OAUTH_CLIENT_ID || !c.env.GOOGLE_CLIENT_SECRET) {
       logger.error('Google OAuth client credentials are not configured');
-      return redirectWithError(c, decoded.returnUri, 'server_error');
+      return redirectWithError(decoded.returnUri, 'server_error');
     }
     const exchanged = await deps.googleCodeExchanger(code, c.env);
     if (!exchanged.ok) {
       if (exchanged.kind === 'token_fault') {
-        return redirectWithError(c, decoded.returnUri, 'auth_failed');
+        return redirectWithError(decoded.returnUri, 'auth_failed');
       }
-      return redirectWithError(c, decoded.returnUri, 'server_error');
+      return redirectWithError(decoded.returnUri, 'server_error');
     }
     const verified = await verifyOrProblem(deps.googleVerifier, exchanged.idToken, c.env, 'Google');
     if (verified instanceof Response) {
       // verifyOrProblem already classified + logged: 5xx-shaped means our upstream/config
       // failed (retryable), anything else means the token itself didn't verify.
       if (verified.status >= 500) {
-        return redirectWithError(c, decoded.returnUri, 'server_error');
+        return redirectWithError(decoded.returnUri, 'server_error');
       }
-      return redirectWithError(c, decoded.returnUri, 'auth_failed');
+      return redirectWithError(decoded.returnUri, 'auth_failed');
     }
     // The state is HMAC-signed, so a matching nonce proves this ID token was minted
     // for a flow this server started — not forged or replayed from elsewhere.
     if (verified.nonce === undefined || verified.nonce !== decoded.nonce) {
       logger.warn('Google callback ID token nonce did not match the state nonce');
-      return redirectWithError(c, decoded.returnUri, 'auth_failed');
+      return redirectWithError(decoded.returnUri, 'auth_failed');
     }
     let authCode: string;
     try {
@@ -285,10 +323,10 @@ export function registerGoogleRoutes(
     } catch (err) {
       // A D1 blip at the very last step must relay too, not strand the app on a JSON page.
       logger.error('Google callback failed to mint the auth code', err);
-      return redirectWithError(c, decoded.returnUri, 'server_error');
+      return redirectWithError(decoded.returnUri, 'server_error');
     }
     const target = new URL(decoded.returnUri);
     target.searchParams.set('code', authCode);
-    return c.redirect(target.toString(), 302);
+    return respondWithDeepLink(target, "You're signed in — return to Cuewise.");
   });
 }
