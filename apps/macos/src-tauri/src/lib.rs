@@ -33,6 +33,9 @@ pub fn run() {
         // Registers the cuewise:// scheme (tauri.conf.json > plugins > deep-link) so the
         // Google sign-in server bounce can return into the app.
         .plugin(tauri_plugin_deep_link::init())
+        // Native (Rust) HTTP for the sync ApiClient: the webview's fetch is blocked by the
+        // production CSP connect-src and the API's CORS policy; native requests are immune.
+        .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_shell::init())
         .manage(scheduler::SchedulerState::default())

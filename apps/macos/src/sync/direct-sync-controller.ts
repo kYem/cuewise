@@ -59,6 +59,11 @@ export interface CreateDirectSyncControllerOptions {
   scheduler: Scheduler;
   /** Runs the system-browser Google OAuth round-trip (production: createTauriOAuthDriver). */
   oauthDriver: OAuthDriver;
+  /**
+   * HTTP transport for the sync ApiClient. In Tauri this must be the native http-plugin
+   * fetch: the production CSP connect-src and the API's CORS policy both block webview fetch.
+   */
+  fetchFn?: typeof fetch;
   /** Fires on quarantine (never the recovery code/credential/token — those are secrets). */
   toast?: (message: string) => void;
 }
@@ -338,6 +343,7 @@ export function createDirectSyncController(
         baseUrl: opts.baseUrl,
         keyStore: opts.keyStore,
         scheduler: opts.scheduler,
+        fetchFn: opts.fetchFn,
         ...trampolines,
       }),
   });

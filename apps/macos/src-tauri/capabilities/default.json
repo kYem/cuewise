@@ -2,5 +2,14 @@
   "identifier": "default",
   "description": "Core capabilities for the main Cuewise window.",
   "windows": ["main"],
-  "permissions": ["core:default", "notification:default", "deep-link:default", "shell:allow-open"]
+  "permissions": [
+    "core:default",
+    "notification:default",
+    "deep-link:default",
+    "shell:allow-open",
+    {
+      "identifier": "http:default",
+      "allow": [{ "url": "https://api.cuewise.app/*" }, { "url": "http://localhost:8787/*" }]
+    }
+  ]
 }

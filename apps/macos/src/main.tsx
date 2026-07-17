@@ -5,6 +5,7 @@ import '@cuewise/app/styles.css';
 import { configurePlatform, logger } from '@cuewise/shared';
 import { LocalStorageKeyValueStore } from '@cuewise/storage';
 import { SYNC_PULL_WAKE_ID } from '@cuewise/sync-client';
+import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { AppWrapper } from './AppWrapper';
@@ -61,6 +62,8 @@ if (window.location.hash === '#glow') {
       keyStore: storage,
       scheduler,
       oauthDriver: createTauriOAuthDriver(),
+      // Native HTTP inside Tauri — webview fetch is blocked by the production CSP + API CORS.
+      fetchFn: inTauri ? tauriFetch : undefined,
       toast: (message) => useToastStore.getState().warning(message),
     });
     syncController = controller;
