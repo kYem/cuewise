@@ -227,14 +227,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, e
               })}
             </nav>
             <div className="mt-auto px-3 py-1.5 text-[11.5px] text-tertiary">
-              {__APP_NAME__}{' '}
+              <div>
+                {__APP_NAME__}{' '}
+                <a
+                  href="https://github.com/kYem/cuewise/blob/main/apps/browser-extension/CHANGELOG.md"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary transition-colors hover:underline"
+                >
+                  v{__APP_VERSION__}
+                </a>
+              </div>
               <a
-                href="https://github.com/kYem/cuewise/blob/main/apps/browser-extension/CHANGELOG.md"
+                href="https://github.com/kYem/cuewise/discussions"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-primary transition-colors hover:underline"
               >
-                v{__APP_VERSION__}
+                Request a feature
               </a>
             </div>
           </aside>
