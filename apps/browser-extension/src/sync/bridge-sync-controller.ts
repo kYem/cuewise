@@ -312,8 +312,8 @@ export class BridgeSyncController implements SyncController {
       }
       // Warn, not debug: sync is already active here, so no usable response means a version-skewed
       // or absent SW responder, not a routine miss. Note the app's default logLevel is 'error', so
-      // this needs logLevel >= warn to print — it is deliberately not an error (the UI degrades to
-      // hiding one line, and a reload self-heals).
+      // this only prints once logLevel is set to 'warn' or more verbose — deliberately not an error
+      // (the UI degrades to hiding one line, and a reload self-heals).
       logger.warn('Sync details unavailable (no responder or error fallback)');
       return null;
     } catch (error) {

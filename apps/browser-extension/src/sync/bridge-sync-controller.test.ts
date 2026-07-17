@@ -197,12 +197,19 @@ describe('BridgeSyncController: getDetails', () => {
   });
 
   it('resolves null when no listener responds at all (undefined response)', async () => {
-    // A truly-legacy SW rejects the unknown op in its message guard, so sendMessage
-    // resolves undefined — must be handled explicitly, not via an accidental TypeError.
+    // A truly-legacy SW rejects the unknown op in its message guard, so sendMessage resolves
+    // undefined. Assert the *unavailable* message specifically: dropping the `?.` would throw a
+    // TypeError that the catch turns into the same null, so `resolves.toBeNull()` alone cannot
+    // tell the explicit guard apart from an accidental throw.
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
     runtime.sendMessage.mockResolvedValueOnce(undefined as never);
     const controller = new BridgeSyncController();
 
     await expect(controller.getDetails()).resolves.toBeNull();
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Sync details unavailable (no responder or error fallback)'
+    );
+    warnSpy.mockRestore();
   });
 
   it('resolves null when a pre-kind SW answers with details but no kind tag', async () => {

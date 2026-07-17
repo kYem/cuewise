@@ -704,7 +704,6 @@ describe('SyncSettingsSectionComponent', () => {
     const user = userEvent.setup();
     const controller = new FakeSyncController();
     controller.scriptDetails({ accountEmail: 'a@example.com', accountId: 'a', lastSyncedAt: null });
-    controller.scriptDetails({ accountEmail: 'b@example.com', accountId: 'b', lastSyncedAt: null });
     renderSection(controller);
     act(() => controller.setStatus('active'));
     await screen.findByText('Signed in as a@example.com');
@@ -712,10 +711,23 @@ describe('SyncSettingsSectionComponent', () => {
     await user.click(cloudSyncSwitch());
     await user.click(screen.getByRole('button', { name: 'Disable' }));
     act(() => controller.setStatus('off'));
-    await waitFor(() => expect(screen.queryByTestId('sync-account-label')).not.toBeInTheDocument());
-    act(() => controller.setStatus('active'));
 
-    expect(await screen.findByText('Signed in as b@example.com')).toBeInTheDocument();
+    // Re-enable with account B's fetch still in flight. This is the only window that proves the
+    // disable dropped the identity: at 'off' the whole subgroup is unrendered, so asserting the
+    // label's absence there holds even if the old details were kept.
+    controller.deferNextDetails();
+    act(() => controller.setStatus('active'));
+    expect(screen.getByTestId('sync-status-pill')).toBeInTheDocument();
+    expect(screen.queryByText('Signed in as a@example.com')).not.toBeInTheDocument();
+
+    await act(async () => {
+      controller.resolveDetails({
+        accountEmail: 'b@example.com',
+        accountId: 'b',
+        lastSyncedAt: null,
+      });
+    });
+    expect(screen.getByText('Signed in as b@example.com')).toBeInTheDocument();
   });
 
   it('refreshes the last-synced time after Sync now', async () => {
@@ -786,6 +798,59 @@ describe('SyncSettingsSectionComponent', () => {
     act(() => controller.setStatus('syncing'));
     expect(await screen.findByText('Signed in as kes@example.com')).toBeInTheDocument();
     warnSpy.mockRestore();
+  });
+
+  it('keeps the last known details when the Sync now refresh returns null', async () => {
+    // A stale line beats a vanishing one — a transient refresh miss must not blank the account.
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptDetails({
+      accountEmail: 'kes@example.com',
+      accountId: 'user-1',
+      lastSyncedAt: null,
+    });
+    controller.scriptDetails(null); // the Sync now refresh misses
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+    await screen.findByText('Signed in as kes@example.com');
+
+    await user.click(screen.getByRole('button', { name: 'Sync now' }));
+
+    await waitFor(() =>
+      expect(controller.calls.filter((c) => c.method === 'getDetails')).toHaveLength(2)
+    );
+    expect(screen.getByText('Signed in as kes@example.com')).toBeInTheDocument();
+  });
+
+  it('drops a Sync now refresh that lands after a disable, never repainting the old account', async () => {
+    // handleDisable clears the shown identity; a refresh already in flight must not undo that in
+    // the window before the controller's status flips (status stays 'active' here, so the pill —
+    // and therefore the account line — would render if the stale refresh repainted).
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptDetails({ accountEmail: 'a@example.com', accountId: 'a', lastSyncedAt: null });
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+    await screen.findByText('Signed in as a@example.com');
+
+    controller.deferNextDetails(); // the Sync now refresh hangs
+    await user.click(screen.getByRole('button', { name: 'Sync now' }));
+    await waitFor(() =>
+      expect(controller.calls.filter((c) => c.method === 'getDetails')).toHaveLength(2)
+    );
+
+    await user.click(cloudSyncSwitch());
+    await user.click(screen.getByRole('button', { name: 'Disable' }));
+    expect(screen.queryByTestId('sync-account-label')).not.toBeInTheDocument();
+
+    await act(async () => {
+      controller.resolveDetails({
+        accountEmail: 'a@example.com',
+        accountId: 'a',
+        lastSyncedAt: null,
+      });
+    });
+    expect(screen.queryByText('Signed in as a@example.com')).not.toBeInTheDocument();
   });
 
   it('calls controller.syncNow() when Sync now is clicked', async () => {

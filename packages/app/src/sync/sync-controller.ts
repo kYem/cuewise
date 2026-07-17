@@ -46,9 +46,10 @@ export function buildSyncDetails(
  *
  * Capability convention: a capability every host can answer, but whose answer depends on build/env
  * config, is a required `canX(): boolean` (canEnableWithGoogle — the extension's answer tracks its
- * googleClientId env var). A capability that is a property of the adapter itself — some hosts
- * simply cannot do it at all — is an optional method the UI feature-detects by presence
- * (cancelEnableWithGoogle?, enrollWithCode?).
+ * googleClientId env var). A capability that not every host provides is an optional method the UI
+ * feature-detects by presence — either because the host cannot (cancelEnableWithGoogle: the
+ * extension's popup flow has no abort seam) or because it deliberately declines as unnecessary
+ * (enrollWithCode: the extension's re-auth is cheap enough that the fallback path suffices).
  */
 export interface SyncController {
   getStatus(): SyncUiStatus;
