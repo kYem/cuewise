@@ -76,6 +76,26 @@ describe('ApiClient', () => {
     });
   });
 
+  it('folds a detail-less errors[] body into the message so logs stay diagnostic', async () => {
+    const { fetchFn } = stubFetch([
+      problemResponse('invalid_request', 400, {
+        errors: [
+          { pointer: '/codeVerifier', detail: 'must be at least 43 characters' },
+          { pointer: '/deviceName', detail: 'required non-empty string' },
+        ],
+      }),
+    ]);
+    const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
+
+    await expect(
+      client.exchangeToken({ provider: 'google', credential: 'id-token', deviceName: 'd' })
+    ).rejects.toMatchObject({
+      code: 'invalid_request',
+      message:
+        '/codeVerifier must be at least 43 characters; /deviceName required non-empty string',
+    });
+  });
+
   it('rejects with a non-retryable ApiError when the server returns 422 invalid_record', async () => {
     const errors = [
       { index: 0, pointer: '/records/0/collection', detail: 'required non-empty string' },
