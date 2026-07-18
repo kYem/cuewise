@@ -28,6 +28,13 @@ const { scheduler, notifier } = configureChromePlatform();
 // behave identically.
 scheduler.onFire(handleReminderFire);
 
+// Uninstall feedback (spec 2026-07-17): ask departing users why. Only the
+// extension version rides the URL — no user data.
+const uninstallUrl = `https://cuewise.app/uninstall/?v=${chrome.runtime.getManifest().version}`;
+chrome.runtime.setUninstallURL(uninstallUrl).catch((error: unknown) => {
+  logger.warn('Failed to set uninstall URL', { error });
+});
+
 // Engine SyncStatus -> UI-facing SyncUiStatus; adapters own this mapping per host.
 // Exported for unit testing.
 export function mapToUi(status: SyncStatus): SyncUiStatus {
