@@ -96,11 +96,32 @@ describe('BridgeSyncController: hydrate/reconcile', () => {
     expect(controller.getStatus()).toBe('active');
   });
 
-  it('defaults to "off" when neither the status key nor cloudSyncEnabled is set', async () => {
+  it('defaults to "off" and notifies when neither the status key nor cloudSyncEnabled is set', async () => {
     const controller = new BridgeSyncController();
+    const cb = vi.fn();
+    controller.subscribe(cb);
+
     await flush();
 
+    // getStatus() alone is 'off' from the field initializer, so it can't tell whether hydrate ran.
+    // The subscriber call is what pins hydrate's setStatus('off') default fallback.
     expect(controller.getStatus()).toBe('off');
+    expect(cb).toHaveBeenCalledWith('off');
+  });
+
+  it('falls back to "off" (logged, no throw) when reading storage rejects', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    storageMock.get.mockRejectedValueOnce(new Error('storage boom'));
+    const controller = new BridgeSyncController();
+    const cb = vi.fn();
+    controller.subscribe(cb);
+
+    await flush();
+
+    expect(errorSpy).toHaveBeenCalledWith('Failed to hydrate sync status', expect.any(Error));
+    expect(controller.getStatus()).toBe('off');
+    expect(cb).toHaveBeenCalledWith('off');
+    errorSpy.mockRestore();
   });
 
   it('fires subscribers once hydration completes', async () => {

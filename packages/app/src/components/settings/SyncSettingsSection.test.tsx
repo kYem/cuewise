@@ -2,7 +2,7 @@ import { logger } from '@cuewise/shared';
 import { defaultSettings } from '@cuewise/test-utils';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeSyncController } from '../../sync/__fixtures__/fake-sync-controller';
 import { SyncControllerContext } from '../../sync/sync-controller';
 import { SyncSettingsSectionComponent } from './SyncSettingsSection';
@@ -66,7 +66,6 @@ const enterEnableStep = async (user: ReturnType<typeof userEvent.setup>, account
 describe('SyncSettingsSectionComponent', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.unstubAllEnvs();
     settingsMock.syncEnabled = false;
     settingsMock.updateSettings.mockImplementation(
       async (partial: Partial<{ syncEnabled: boolean }>) => {
@@ -75,6 +74,11 @@ describe('SyncSettingsSectionComponent', () => {
         }
       }
     );
+  });
+
+  // afterEach (not beforeEach) so a DEV stub can't outlive its test even if it were the file's last.
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it('renders nothing when there is no controller in context', () => {
@@ -942,13 +946,16 @@ describe('SyncSettingsSectionComponent', () => {
     expect(controller.calls.some((c) => c.method === 'enable')).toBe(false);
   });
 
-  it('re-runs reconnect (never syncNow) when Try again is clicked after a failed reconnect', async () => {
+  it('retries reconnect on failedAction even with a typed account id (never enable/syncNow)', async () => {
     const user = userEvent.setup();
     const controller = new FakeSyncController();
     controller.scriptReconnect({ ok: false, reason: 'error' });
     renderSection(controller);
-    act(() => controller.setStatus('needs_reauth'));
 
+    // Type an account id, THEN drive a reconnect flow. The retry must route on failedAction, not
+    // on "the account id is empty" — otherwise this non-empty id would wrongly retry enable().
+    await enterEnableStep(user, 'typed-acct');
+    act(() => controller.setStatus('needs_reauth'));
     await user.click(screen.getByRole('button', { name: 'Reconnect' }));
     act(() => controller.setStatus('error'));
 
@@ -958,6 +965,7 @@ describe('SyncSettingsSectionComponent', () => {
     await waitFor(() =>
       expect(controller.calls.filter((c) => c.method === 'reconnect')).toHaveLength(2)
     );
+    expect(controller.calls.some((c) => c.method === 'enable')).toBe(false);
     expect(controller.calls.some((c) => c.method === 'syncNow')).toBe(false);
   });
 
