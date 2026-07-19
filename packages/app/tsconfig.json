@@ -21,7 +21,7 @@
     "noFallthroughCasesInSwitch": true,
 
     /* Shared UI still references the chrome global via guarded adapters */
-    "types": ["chrome", "vite/client", "@testing-library/jest-dom", "vitest/globals"]
+    "types": ["chrome", "node", "vite/client", "@testing-library/jest-dom", "vitest/globals"]
   },
   "include": ["src"]
 }

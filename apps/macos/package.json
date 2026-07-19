@@ -37,6 +37,7 @@
     "@tailwindcss/postcss": "catalog:",
     "@tauri-apps/cli": "^2",
     "@types/chrome": "catalog:",
+    "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "catalog:",

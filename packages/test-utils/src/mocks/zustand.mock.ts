@@ -1,5 +1,5 @@
 import type { Settings } from '@cuewise/shared';
-import { vi } from 'vitest';
+import { type Mock, vi } from 'vitest';
 import { defaultSettings } from '../fixtures';
 
 /**
@@ -20,8 +20,8 @@ export function createSelectorMock<S>(state: S) {
  * pass an `updateSettings` spy via overrides when a test needs to assert on it.
  */
 export function createSettingsStoreMock(
-  overrides: Partial<Settings> & { updateSettings?: ReturnType<typeof vi.fn> } = {}
-) {
+  overrides: Partial<Settings> & { updateSettings?: Mock } = {}
+): ReturnType<typeof createSelectorMock<{ settings: Settings; updateSettings: Mock }>> {
   const { updateSettings, ...settingsOverrides } = overrides;
   return createSelectorMock({
     settings: { ...defaultSettings, ...settingsOverrides },

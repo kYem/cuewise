@@ -17,6 +17,7 @@
   "devDependencies": {
     "@cuewise/test-utils": "workspace:*",
     "@types/chrome": "catalog:",
+    "@types/node": "catalog:",
     "jsdom": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

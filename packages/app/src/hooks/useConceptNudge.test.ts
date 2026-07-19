@@ -10,7 +10,9 @@ interface Params {
   dismissed: boolean;
   count: number;
   lastShownAt: string | null;
-  updateSettings: ReturnType<typeof vi.fn>;
+  // Plain fn (not ReturnType<typeof vi.fn>): vitest 4's Mock type isn't assignable to the hook's
+  // (patch) => void param. A vi.fn() still satisfies this, and expect(...) still sees the spy.
+  updateSettings: (patch: unknown) => void;
 }
 
 function baseParams(overrides: Partial<Params> = {}): Params {
