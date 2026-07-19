@@ -1,4 +1,4 @@
-import type { EnableResult, SyncController, SyncUiStatus } from '../sync-controller';
+import type { EnableResult, SyncController, SyncDetails, SyncUiStatus } from '../sync-controller';
 
 interface RecordedCall {
   method: string;
@@ -8,10 +8,12 @@ interface RecordedCall {
 type FailableMethod =
   | 'enable'
   | 'enableWithGoogle'
+  | 'enrollWithCode'
   | 'reconnect'
   | 'disable'
   | 'regenerateRecoveryCode'
-  | 'syncNow';
+  | 'syncNow'
+  | 'getDetails';
 
 const DEFAULT_ENABLE_RESULT: EnableResult = { ok: true };
 const DEFAULT_RECOVERY_CODE = 'FAKE-RECOVERY-CODE';
@@ -27,11 +29,15 @@ export class FakeSyncController implements SyncController {
   private readonly enableResults: EnableResult[] = [];
   private readonly enableWithGoogleResults: EnableResult[] = [];
   private readonly reconnectResults: EnableResult[] = [];
+  private readonly enrollWithCodeResults: EnableResult[] = [];
+  private readonly detailsResults: (SyncDetails | null)[] = [];
   private readonly failingMethods = new Set<FailableMethod>();
   private deferredDisable = false;
   private pendingDisable: (() => void) | null = null;
   private deferredGoogle = false;
   private pendingGoogle: ((result: EnableResult) => void) | null = null;
+  private deferredDetails = false;
+  private pendingDetails: ((details: SyncDetails | null) => void) | null = null;
 
   /** Makes the next call to `method` reject with an Error instead of resolving; clears after firing once. */
   failNext(method: FailableMethod): void {
@@ -64,6 +70,20 @@ export class FakeSyncController implements SyncController {
     }
     this.pendingGoogle(result);
     this.pendingGoogle = null;
+  }
+
+  /** Makes the next getDetails() hang until resolveDetails() releases it — for asserting fetch races. */
+  deferNextDetails(): void {
+    this.deferredDetails = true;
+  }
+
+  /** Releases a getDetails() call armed via deferNextDetails(). */
+  resolveDetails(details: SyncDetails | null): void {
+    if (this.pendingDetails === null) {
+      throw new Error('FakeSyncController: no pending getDetails() to resolve');
+    }
+    this.pendingDetails(details);
+    this.pendingDetails = null;
   }
 
   /** Records the call, then throws if `method` was armed via failNext (clearing the arm). */
@@ -105,6 +125,11 @@ export class FakeSyncController implements SyncController {
   /** Queues the result the next `reconnect()` call resolves to. */
   scriptReconnect(result: EnableResult): void {
     this.reconnectResults.push(result);
+  }
+
+  /** Queues the result the next `getDetails()` call resolves to (unscripted calls resolve null). */
+  scriptDetails(details: SyncDetails | null): void {
+    this.detailsResults.push(details);
   }
 
   async enable(
@@ -171,5 +196,60 @@ export class FakeSyncController implements SyncController {
   async syncNow(): Promise<void> {
     this.calls.push({ method: 'syncNow', args: [] });
     this.maybeFail('syncNow');
+  }
+
+  async getDetails(): Promise<SyncDetails | null> {
+    this.calls.push({ method: 'getDetails', args: [] });
+    this.maybeFail('getDetails');
+    if (this.deferredDetails) {
+      this.deferredDetails = false;
+      return new Promise((resolve) => {
+        this.pendingDetails = resolve;
+      });
+    }
+    const next = this.detailsResults.shift();
+    if (next !== undefined) {
+      return next;
+    }
+    return null;
+  }
+
+  /** Resolves a deferred enableWithGoogle as a quiet cancel, mirroring the macOS driver. */
+  cancelEnableWithGoogle?: () => void = () => {
+    this.calls.push({ method: 'cancelEnableWithGoogle', args: [] });
+    if (this.pendingGoogle !== null) {
+      this.pendingGoogle({ ok: false, reason: 'auth', detail: 'cancelled' });
+      this.pendingGoogle = null;
+    }
+  };
+
+  /** Test helper: drop the optional cancelEnableWithGoogle capability to model a host without it (extension popup). */
+  withoutHostCancel(): this {
+    this.cancelEnableWithGoogle = undefined;
+    return this;
+  }
+
+  enrollWithCode?: (deviceName: string, recoveryCode: string) => Promise<EnableResult> = async (
+    deviceName,
+    recoveryCode
+  ) => {
+    this.calls.push({ method: 'enrollWithCode', args: [deviceName, recoveryCode] });
+    this.maybeFail('enrollWithCode');
+    const next = this.enrollWithCodeResults.shift();
+    if (next !== undefined) {
+      return next;
+    }
+    return DEFAULT_ENABLE_RESULT;
+  };
+
+  /** Test helper: drop the optional enrollWithCode capability to model a host without it (extension). */
+  withoutHostEnroll(): this {
+    this.enrollWithCode = undefined;
+    return this;
+  }
+
+  /** Queues the result the next `enrollWithCode()` call resolves to. */
+  scriptEnrollWithCode(result: EnableResult): void {
+    this.enrollWithCodeResults.push(result);
   }
 }

@@ -25,9 +25,15 @@ export { useSettingsStore } from './stores/settings-store';
 export { useToastStore } from './stores/toast-store';
 // Sync seam: platform-agnostic controller interface + context the enable-sync UI
 // drives; host adapters (macOS/extension) implement SyncController and provide it.
-export type { EnableResult, SyncController, SyncUiStatus } from './sync/sync-controller';
+export type {
+  EnableResult,
+  SyncController,
+  SyncDetails,
+  SyncUiStatus,
+} from './sync/sync-controller';
 export {
   AUTH_CANCELLED_DETAIL,
+  buildSyncDetails,
   SyncControllerContext,
   useSyncController,
 } from './sync/sync-controller';

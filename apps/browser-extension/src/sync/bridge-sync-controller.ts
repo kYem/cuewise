@@ -1,7 +1,12 @@
-import type { EnableResult, SyncController, SyncUiStatus } from '@cuewise/app';
+import type { EnableResult, SyncController, SyncDetails, SyncUiStatus } from '@cuewise/app';
 import { logger } from '@cuewise/shared';
 import { CLOUD_SYNC_ENABLED_KEY, type SyncSignInProvider } from '@cuewise/sync-engine';
-import type { SyncControlMessage, SyncControlResponse } from './sync-control-messages';
+import type {
+  SyncControlMessage,
+  SyncControlOp,
+  SyncControlResponse,
+  SyncOpResponse,
+} from './sync-control-messages';
 import { LAST_SYNC_CREDS_KEY, QUARANTINE_KEY, STATUS_KEY } from './sync-storage-keys';
 
 const DEFAULT_TIMEOUT_MS = 30000;
@@ -294,13 +299,41 @@ export class BridgeSyncController implements SyncController {
     );
   }
 
+  async getDetails(): Promise<SyncDetails | null> {
+    try {
+      // The response type is {ok:true, kind:'details', details}, but the SW↔page wire is untyped —
+      // don't delete these guards. A skewed SW can return undefined (a pre-details SW's op guard
+      // rejects the message outright, so nothing responds), {ok:false} (the router's error fallback
+      // → fails the ok guard), or {ok:true, details} with no kind (a pre-kind SW → fails the kind
+      // guard). This call is purely informational, so any of those is "unavailable", not an error.
+      const response = await this.send({ kind: 'cuewise-sync-control', op: 'details' });
+      if (response?.ok && response.kind === 'details') {
+        return response.details;
+      }
+      // Warn, not debug: sync is already active here, so no usable response means a version-skewed
+      // or absent SW responder, not a routine miss. Note the app's default logLevel is 'error', so
+      // this only prints once logLevel is set to 'warn' or more verbose — deliberately not an error
+      // (the UI degrades to hiding one line, and a reload self-heals).
+      logger.warn('Sync details unavailable (no responder or error fallback)');
+      return null;
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      logger.warn(`Sync details control message failed: ${detail}`);
+      return null;
+    }
+  }
+
   private async persistCreds(creds: LastSyncCreds): Promise<void> {
     await chrome.storage.local.set({ [LAST_SYNC_CREDS_KEY]: creds });
   }
 
   // Races the control response against timeoutMs so a dead/asleep SW rejects instead of
-  // hanging the UI forever; clears the timer on either settling path.
-  private send(msg: SyncControlMessage): Promise<SyncControlResponse> {
+  // hanging the UI forever; clears the timer on either settling path. The wire is untyped —
+  // the mapped type only ties the assumed response shape to the op actually being sent, so a
+  // caller can't silently read a details response as an EnableResult (or vice versa).
+  private send<O extends SyncControlOp>(
+    msg: SyncControlMessage & { op: O }
+  ): Promise<SyncOpResponse[O]> {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<never>((_resolve, reject) => {
       timer = setTimeout(() => {
@@ -308,9 +341,9 @@ export class BridgeSyncController implements SyncController {
       }, this.timeoutMs);
     });
 
-    let response: Promise<SyncControlResponse>;
+    let response: Promise<SyncOpResponse[O]>;
     try {
-      response = Promise.resolve(chrome.runtime.sendMessage(msg)) as Promise<SyncControlResponse>;
+      response = Promise.resolve(chrome.runtime.sendMessage(msg)) as Promise<SyncOpResponse[O]>;
     } catch (error) {
       response = Promise.reject(error);
     }

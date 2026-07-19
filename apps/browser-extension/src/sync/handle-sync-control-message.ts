@@ -1,3 +1,4 @@
+import { buildSyncDetails } from '@cuewise/app';
 import { logger } from '@cuewise/shared';
 import { ApiError } from '@cuewise/sync-client';
 import {
@@ -6,7 +7,12 @@ import {
   type SyncEngineControlSurface,
   type SyncSignInProvider,
 } from '@cuewise/sync-engine';
-import type { SyncControlMessage, SyncControlResponse } from './sync-control-messages';
+import type {
+  SyncControlAnyResponse,
+  SyncControlMessage,
+  SyncControlResponse,
+  SyncDetailsResponse,
+} from './sync-control-messages';
 
 export interface SyncControlDeps {
   /** Reads and clears the one-shot recovery-code capture slot owned by background.ts. */
@@ -48,9 +54,19 @@ async function doEnable(
   return { ok: true, recoveryCode: deps.takeRecoveryCode() };
 }
 
+/** Read-only details lookup — deliberately NOT serialized (see handleSyncControlMessage). */
+async function runDetails(engine: SyncEngineControlSurface): Promise<SyncDetailsResponse> {
+  // Informational for the settings UI; engine.getAccount never throws (null on any failure).
+  return {
+    ok: true,
+    kind: 'details',
+    details: buildSyncDetails(await engine.getAccount(), engine.getLastSyncedAt()),
+  };
+}
+
 async function runOp(
   engine: SyncEngineControlSurface,
-  msg: SyncControlMessage,
+  msg: SyncControlMessage & { op: Exclude<SyncControlMessage['op'], 'details'> },
   deps: SyncControlDeps
 ): Promise<SyncControlResponse> {
   if (msg.op === 'enable') {
@@ -79,15 +95,23 @@ async function runOp(
   }
   // disable/regenerate/syncNow have no enroll control-flow — a throw is a plain error result.
   try {
-    if (msg.op === 'disable') {
-      await engine.disableSync();
-      return { ok: true };
+    switch (msg.op) {
+      case 'disable':
+        await engine.disableSync();
+        return { ok: true };
+      case 'regenerate':
+        return { ok: true, recoveryCode: await engine.regenerateRecoveryCode() };
+      case 'syncNow':
+        await engine.syncNow();
+        return { ok: true };
+      default: {
+        // Exhaustiveness: a new SYNC_CONTROL_OPS entry is a compile error here — never a
+        // silent fallthrough into some other operation.
+        const exhaustive: never = msg.op;
+        logger.error(`Cloud sync control op '${String(exhaustive)}' has no handler`);
+        return { ok: false, reason: 'error' };
+      }
     }
-    if (msg.op === 'regenerate') {
-      return { ok: true, recoveryCode: await engine.regenerateRecoveryCode() };
-    }
-    await engine.syncNow();
-    return { ok: true };
   } catch (err) {
     logger.error(`Cloud sync control op '${msg.op}' failed`, err);
     return { ok: false, reason: 'error', detail: err instanceof Error ? err.message : undefined };
@@ -114,6 +138,12 @@ export async function handleSyncControlMessage(
   engine: SyncEngineControlSurface,
   msg: SyncControlMessage,
   deps: SyncControlDeps
-): Promise<SyncControlResponse> {
-  return serialize(() => runOp(engine, msg, deps));
+): Promise<SyncControlAnyResponse> {
+  const { op } = msg;
+  if (op === 'details') {
+    // Read-only and side-effect-free — bypasses the mutex so a slow account fetch can never
+    // delay a queued user action (e.g. a disable click) behind it.
+    return runDetails(engine);
+  }
+  return serialize(() => runOp(engine, { ...msg, op }, deps));
 }

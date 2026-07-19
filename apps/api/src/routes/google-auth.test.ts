@@ -45,12 +45,60 @@ function appWith(exchanger: GoogleCodeExchanger) {
   });
 }
 
-/** Asserts a sanitized error relay: 302 to the cuewise://auth return URI, never a code. */
-function expectErrorRedirect(res: Response, error: string): void {
-  expect(res.status).toBe(302);
-  const location = requireHeader(res, 'Location');
-  expect(location.startsWith('cuewise://auth?')).toBe(true);
-  const url = new URL(location);
+/**
+ * Extracts the deep-link target from an interstitial page (ENG-66: a 200 HTML page fires the
+ * cuewise:// link instead of a bare 302, so the tab isn't left "stuck on Google").
+ */
+async function deepLinkTarget(res: Response): Promise<URL> {
+  expect(res.status).toBe(200);
+  expect(res.headers.get('Content-Type')).toContain('text/html');
+  // Credential-bearing page: no caching, no referrer leak, no sniffing, and a nonce'd CSP so
+  // only this exact inline script can run (ENG-66 hardening).
+  expect(res.headers.get('Cache-Control')).toBe('no-store');
+  expect(res.headers.get('Referrer-Policy')).toBe('no-referrer');
+  expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff');
+  const html = await res.text();
+  const csp = res.headers.get('Content-Security-Policy') ?? '';
+  // Locked-down default plus explicit anti-framing/base pins (neither inherits from default-src).
+  expect(csp).toContain("default-src 'none'");
+  expect(csp).toContain("frame-ancestors 'none'");
+  expect(csp).toContain("base-uri 'none'");
+  const nonceMatch = csp.match(/script-src 'nonce-([A-Za-z0-9_-]+)'/);
+  if (nonceMatch === null) {
+    throw new Error('expected a nonce-based script-src in the CSP');
+  }
+  // The CSP nonce must match the one on the inline script, or the browser blocks it.
+  expect(html).toContain(`<script nonce="${nonceMatch[1]}">`);
+  const match = html.match(/location\.replace\((".*?")\);/);
+  if (match === null) {
+    throw new Error('expected a location.replace deep link in the interstitial page');
+  }
+  const scriptTarget = new URL(JSON.parse(match[1]));
+  // The no-JS fallbacks (meta-refresh + manual link) must point at the same target.
+  const metaMatch = html.match(/content="0;url=(.*?)"/);
+  if (metaMatch === null) {
+    throw new Error('expected a meta-refresh fallback in the interstitial page');
+  }
+  const metaTarget = new URL(unescapeHtml(metaMatch[1]));
+  expect(metaTarget.toString()).toBe(scriptTarget.toString());
+  expect(html).toContain(`<a href="${metaMatch[1]}">Open Cuewise</a>`);
+  return scriptTarget;
+}
+
+/** Reverses the route's escapeHtml, so the test compares real URLs not escaped ones. */
+function unescapeHtml(value: string): string {
+  return value
+    .replaceAll('&lt;', '<')
+    .replaceAll('&gt;', '>')
+    .replaceAll('&quot;', '"')
+    .replaceAll('&#39;', "'")
+    .replaceAll('&amp;', '&');
+}
+
+/** Asserts a sanitized error relay: an interstitial to the cuewise://auth URI, never a code. */
+async function expectErrorRelay(res: Response, error: string): Promise<void> {
+  const url = await deepLinkTarget(res);
+  expect(url.toString().startsWith('cuewise://auth?')).toBe(true);
   expect(url.searchParams.get('error')).toBe(error);
   expect(url.searchParams.get('code')).toBeNull();
 }
@@ -157,21 +205,21 @@ describe('GET /v1/auth/google/start', () => {
   it('relays server_error to the return_uri when STATE_SIGNING_KEY is unset', async () => {
     const errorSpy = spyOnLoggerError();
     const res = await getStart('cuewise://auth', CODE_CHALLENGE, { STATE_SIGNING_KEY: '' });
-    expectErrorRedirect(res, 'server_error');
+    await expectErrorRelay(res, 'server_error');
     expect(errorSpy).toHaveBeenCalledTimes(1);
   });
 
   it('relays server_error when GOOGLE_OAUTH_CLIENT_ID is unset (fails closed, loudly)', async () => {
     const errorSpy = spyOnLoggerError();
     const res = await getStart('cuewise://auth', CODE_CHALLENGE, { GOOGLE_OAUTH_CLIENT_ID: '' });
-    expectErrorRedirect(res, 'server_error');
+    await expectErrorRelay(res, 'server_error');
     expect(errorSpy).toHaveBeenCalledTimes(1);
   });
 
   it('relays server_error when GOOGLE_CLIENT_SECRET is unset — before any consent dance', async () => {
     const errorSpy = spyOnLoggerError();
     const res = await getStart('cuewise://auth', CODE_CHALLENGE, { GOOGLE_CLIENT_SECRET: '' });
-    expectErrorRedirect(res, 'server_error');
+    await expectErrorRelay(res, 'server_error');
     expect(errorSpy).toHaveBeenCalledTimes(1);
   });
 
@@ -184,16 +232,15 @@ describe('GET /v1/auth/google/start', () => {
 });
 
 describe('GET /v1/auth/google/callback', () => {
-  it('redirects to returnUri with a code param on a successful exchange + verification', async () => {
+  it('serves a signed-in interstitial carrying the code on a successful exchange + verification', async () => {
     const { state, idToken } = await arrangeCallback('google-sub-happy');
     const exchanger = vi.fn(exchangerReturning(idToken));
 
     const res = await getCallback(exchanger, { code: 'google-auth-code', state });
 
-    expect(res.status).toBe(302);
-    const location = requireHeader(res, 'Location');
-    expect(location.startsWith('cuewise://auth?')).toBe(true);
-    expect(new URL(location).searchParams.get('code')).not.toBeNull();
+    const url = await deepLinkTarget(res);
+    expect(url.toString().startsWith('cuewise://auth?')).toBe(true);
+    expect(url.searchParams.get('code')).not.toBeNull();
     expect(exchanger).toHaveBeenCalledWith('google-auth-code', expect.anything());
   });
 
@@ -205,7 +252,7 @@ describe('GET /v1/auth/google/callback', () => {
     // token endpoint with our client secret.
     const res = await getCallback(exchanger, { error: 'access_denied', code: 'x', state });
 
-    expectErrorRedirect(res, 'access_denied');
+    await expectErrorRelay(res, 'access_denied');
     expect(exchanger).not.toHaveBeenCalled();
   });
 
@@ -217,7 +264,11 @@ describe('GET /v1/auth/google/callback', () => {
       state,
     });
 
-    expectErrorRedirect(res, 'auth_failed');
+    // The raw attacker payload must never reach the page markup — only the sanitized enum.
+    const html = await res.clone().text();
+    expect(html).not.toContain('alert(1)');
+    expect(html).not.toContain('admin_policy_enforced');
+    await expectErrorRelay(res, 'auth_failed');
   });
 
   it('relays an authorize-endpoint transient fault as server_error, loudly', async () => {
@@ -231,7 +282,7 @@ describe('GET /v1/auth/google/callback', () => {
       state,
     });
 
-    expectErrorRedirect(res, 'server_error');
+    await expectErrorRelay(res, 'server_error');
     expect(errorSpy).toHaveBeenCalledTimes(1);
   });
 
@@ -255,7 +306,7 @@ describe('GET /v1/auth/google/callback', () => {
       testEnv()
     );
 
-    expectErrorRedirect(res, 'server_error');
+    await expectErrorRelay(res, 'server_error');
     expect(errorSpy).toHaveBeenCalledTimes(1);
   });
 
@@ -283,7 +334,7 @@ describe('GET /v1/auth/google/callback', () => {
   it('relays auth_failed when neither code nor error arrives with a valid state', async () => {
     const state = await fetchStartState('cuewise://auth');
     const res = await getCallback(exchangerReturning('unused'), { state });
-    expectErrorRedirect(res, 'auth_failed');
+    await expectErrorRelay(res, 'auth_failed');
   });
 
   it('rejects a state signed with the wrong key', async () => {
@@ -311,7 +362,7 @@ describe('GET /v1/auth/google/callback', () => {
       { GOOGLE_CLIENT_SECRET: '' }
     );
 
-    expectErrorRedirect(res, 'server_error');
+    await expectErrorRelay(res, 'server_error');
     expect(exchanger).not.toHaveBeenCalled();
     expect(errorSpy).toHaveBeenCalledTimes(1);
   });
@@ -322,7 +373,7 @@ describe('GET /v1/auth/google/callback', () => {
 
     const res = await getCallback(exchanger, { code: 'bad-code', state });
 
-    expectErrorRedirect(res, 'auth_failed');
+    await expectErrorRelay(res, 'auth_failed');
   });
 
   it('relays server_error when the code exchange reports a transient fault', async () => {
@@ -331,7 +382,7 @@ describe('GET /v1/auth/google/callback', () => {
 
     const res = await getCallback(exchanger, { code: 'whatever', state });
 
-    expectErrorRedirect(res, 'server_error');
+    await expectErrorRelay(res, 'server_error');
   });
 
   it('relays auth_failed for an ID token whose nonce does not match the state nonce', async () => {
@@ -345,7 +396,7 @@ describe('GET /v1/auth/google/callback', () => {
 
     const res = await getCallback(exchangerReturning(idToken), { code: 'whatever', state });
 
-    expectErrorRedirect(res, 'auth_failed');
+    await expectErrorRelay(res, 'auth_failed');
   });
 
   it('relays auth_failed for an ID token that carries no nonce claim at all', async () => {
@@ -358,7 +409,7 @@ describe('GET /v1/auth/google/callback', () => {
 
     const res = await getCallback(exchangerReturning(idToken), { code: 'whatever', state });
 
-    expectErrorRedirect(res, 'auth_failed');
+    await expectErrorRelay(res, 'auth_failed');
   });
 
   it('relays auth_failed for a bad-audience ID token, never a code', async () => {
@@ -372,7 +423,7 @@ describe('GET /v1/auth/google/callback', () => {
 
     const res = await getCallback(exchangerReturning(idToken), { code: 'whatever', state });
 
-    expectErrorRedirect(res, 'auth_failed');
+    await expectErrorRelay(res, 'auth_failed');
   });
 
   it('relays server_error (not auth_failed) when the JWKS lookup itself fails', async () => {
@@ -391,7 +442,7 @@ describe('GET /v1/auth/google/callback', () => {
       testEnv()
     );
 
-    expectErrorRedirect(res, 'server_error');
+    await expectErrorRelay(res, 'server_error');
   });
 });
 
@@ -488,10 +539,9 @@ describe('exchangeGoogleCode (default exchanger)', () => {
 async function mintCode(sub: string): Promise<string> {
   const { state, idToken } = await arrangeCallback(sub);
   const res = await getCallback(exchangerReturning(idToken), { code: 'google-auth-code', state });
-  const location = requireHeader(res, 'Location');
-  const code = new URL(location).searchParams.get('code');
+  const code = (await deepLinkTarget(res)).searchParams.get('code');
   if (code === null) {
-    throw new Error('Expected a code query param on the /v1/auth/google/callback redirect');
+    throw new Error('Expected a code param on the /v1/auth/google/callback interstitial');
   }
   return code;
 }

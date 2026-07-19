@@ -1,4 +1,4 @@
-import type { EnableResult } from '@cuewise/app';
+import type { EnableResult, SyncDetails } from '@cuewise/app';
 import type { SyncSignInProvider } from '@cuewise/sync-engine';
 
 // One source of truth for the op list and its type, so the runtime guard can't desync from the union.
@@ -8,6 +8,7 @@ export const SYNC_CONTROL_OPS = [
   'disable',
   'regenerate',
   'syncNow',
+  'details',
 ] as const;
 export type SyncControlOp = (typeof SYNC_CONTROL_OPS)[number];
 
@@ -30,6 +31,35 @@ export interface SyncControlMessage {
 
 // Character-identical to the app's EnableResult — reuse it so the two can't drift.
 export type SyncControlResponse = EnableResult;
+
+/**
+ * Response to the 'details' op — kept OUT of SyncControlResponse so EnableResult narrowing stays
+ * intact. `kind` is a RUNTIME tag for the untyped SW↔page wire: it lets the bridge reject a skewed
+ * SW's {ok:true} that carries no details. It buys nothing at compile time — this type is still
+ * structurally assignable to EnableResult (excess properties only trip the checker on fresh object
+ * literals). The per-op compile-time typing comes from SyncOpResponse + send<O>, not from this tag.
+ */
+export interface SyncDetailsResponse {
+  ok: true;
+  kind: 'details';
+  details: SyncDetails | null;
+}
+
+/**
+ * Ties each op to the response shape its SW handler produces, so the bridge's send<O> can't
+ * silently mis-assume one (adding an op without an entry here is a compile error at send).
+ */
+export interface SyncOpResponse {
+  enable: SyncControlResponse;
+  reconnect: SyncControlResponse;
+  disable: SyncControlResponse;
+  regenerate: SyncControlResponse;
+  syncNow: SyncControlResponse;
+  details: SyncDetailsResponse;
+}
+
+/** Any op's response — derived from the map so the two never drift. */
+export type SyncControlAnyResponse = SyncOpResponse[SyncControlOp];
 
 export function isSyncControlMessage(msg: unknown): msg is SyncControlMessage {
   if (typeof msg !== 'object' || msg === null) {

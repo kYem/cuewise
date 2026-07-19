@@ -11,6 +11,8 @@ export class FakeKvStore implements KeyValueStore {
   // Single Map backend, area ignored — matches LocalStorageKeyValueStore's `false`, not chrome.storage.
   readonly supportsSync = false;
   failNextSet = false;
+  /** While set, every write to exactly this key fails — for targeting one write among many. */
+  failSetsForKey: string | null = null;
   private readonly data = new Map<string, unknown>();
 
   async get<T>(key: string, _area: StorageArea): Promise<T | null> {
@@ -21,6 +23,9 @@ export class FakeKvStore implements KeyValueStore {
   async set<T>(key: string, value: T, _area: StorageArea): Promise<StorageResult> {
     if (this.failNextSet) {
       this.failNextSet = false;
+      return storageFailure('quota exceeded');
+    }
+    if (this.failSetsForKey === key) {
       return storageFailure('quota exceeded');
     }
     this.data.set(key, structuredClone(value));

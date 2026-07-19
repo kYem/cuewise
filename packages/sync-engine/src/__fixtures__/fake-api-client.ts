@@ -80,6 +80,12 @@ export class FakeApiClient implements EngineApiClient {
   readonly callOrder: string[] = [];
   /** The request from the most recent exchangeToken call, for asserting the sign-in provider. */
   lastExchangeRequest: ExchangeTokenRequest | null = null;
+  /** Scriptable result for the account-details path (see SyncEngine.getAccount). */
+  accountResult: { userId: string; email: string | null } = { userId: 'fake-user', email: null };
+  /** One-shot: throws a 401 on the next getAccount call, then clears itself. */
+  rejectNextGetAccountWith401 = false;
+  /** Total successful token exchanges — proves resumeEnrollWithCode doesn't re-exchange. */
+  exchangeCount = 0;
   private tokenCounter = 0;
 
   constructor(private readonly server: FakeSyncServer) {}
@@ -90,7 +96,17 @@ export class FakeApiClient implements EngineApiClient {
       throw new ApiError('invalid_credential', 401);
     }
     this.tokenCounter += 1;
+    this.exchangeCount += 1;
     return { token: `fake-token-${this.tokenCounter}` };
+  }
+
+  async getAccount(): Promise<{ userId: string; email: string | null }> {
+    this.assertAuthorized();
+    if (this.rejectNextGetAccountWith401) {
+      this.rejectNextGetAccountWith401 = false;
+      throw new ApiError('invalid_token', 401);
+    }
+    return this.accountResult;
   }
 
   async getRecoveryEnvelope(): Promise<KeyEnvelopeRecord | null> {

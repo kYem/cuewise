@@ -3,7 +3,7 @@ import { CLOUD_SYNC_ENABLED_KEY } from '@cuewise/sync-engine';
 import { createChromeStorageMock, type MockChromeStorage } from '@cuewise/test-utils/mocks';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BridgeSyncController } from './bridge-sync-controller';
-import type { SyncControlResponse } from './sync-control-messages';
+import type { SyncControlAnyResponse } from './sync-control-messages';
 import { LAST_SYNC_CREDS_KEY, QUARANTINE_KEY, STATUS_KEY } from './sync-storage-keys';
 
 type StorageChangeMap = { [key: string]: chrome.storage.StorageChange };
@@ -11,7 +11,7 @@ type StorageChangeListener = (changes: StorageChangeMap, area: string) => void;
 
 const runtime = {
   sendMessage: vi.fn(
-    (_message: unknown): Promise<SyncControlResponse> => Promise.resolve({ ok: true })
+    (_message: unknown): Promise<SyncControlAnyResponse> => Promise.resolve({ ok: true })
   ),
 };
 
@@ -96,11 +96,32 @@ describe('BridgeSyncController: hydrate/reconcile', () => {
     expect(controller.getStatus()).toBe('active');
   });
 
-  it('defaults to "off" when neither the status key nor cloudSyncEnabled is set', async () => {
+  it('defaults to "off" and notifies when neither the status key nor cloudSyncEnabled is set', async () => {
     const controller = new BridgeSyncController();
+    const cb = vi.fn();
+    controller.subscribe(cb);
+
     await flush();
 
+    // getStatus() alone is 'off' from the field initializer, so it can't tell whether hydrate ran.
+    // The subscriber call is what pins hydrate's setStatus('off') default fallback.
     expect(controller.getStatus()).toBe('off');
+    expect(cb).toHaveBeenCalledWith('off');
+  });
+
+  it('falls back to "off" (logged, no throw) when reading storage rejects', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    storageMock.get.mockRejectedValueOnce(new Error('storage boom'));
+    const controller = new BridgeSyncController();
+    const cb = vi.fn();
+    controller.subscribe(cb);
+
+    await flush();
+
+    expect(errorSpy).toHaveBeenCalledWith('Failed to hydrate sync status', expect.any(Error));
+    expect(controller.getStatus()).toBe('off');
+    expect(cb).toHaveBeenCalledWith('off');
+    errorSpy.mockRestore();
   });
 
   it('fires subscribers once hydration completes', async () => {
@@ -163,6 +184,68 @@ describe('BridgeSyncController: storage change listener', () => {
     await flush();
 
     expect(() => emitChange({ [QUARANTINE_KEY]: { newValue: Date.now() } })).not.toThrow();
+  });
+});
+
+describe('BridgeSyncController: getDetails', () => {
+  it('sends the details op and returns the relayed details', async () => {
+    const details = { accountEmail: 'kes@example.com', accountId: 'u1', lastSyncedAt: 123 };
+    runtime.sendMessage.mockResolvedValueOnce({ ok: true, kind: 'details', details });
+    const controller = new BridgeSyncController();
+
+    await expect(controller.getDetails()).resolves.toEqual(details);
+    expect(runtime.sendMessage).toHaveBeenCalledWith({
+      kind: 'cuewise-sync-control',
+      op: 'details',
+    });
+  });
+
+  it('resolves null when messaging fails, without throwing', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    runtime.sendMessage.mockRejectedValueOnce(new Error('no SW'));
+    const controller = new BridgeSyncController();
+
+    await expect(controller.getDetails()).resolves.toBeNull();
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it('resolves null when a legacy SW answers without a details field', async () => {
+    runtime.sendMessage.mockResolvedValueOnce({ ok: false, reason: 'error' });
+    const controller = new BridgeSyncController();
+
+    await expect(controller.getDetails()).resolves.toBeNull();
+  });
+
+  it('resolves null when no listener responds at all (undefined response)', async () => {
+    // A truly-legacy SW rejects the unknown op in its message guard, so sendMessage resolves
+    // undefined. Assert the *unavailable* message specifically: dropping the `?.` would throw a
+    // TypeError that the catch turns into the same null, so `resolves.toBeNull()` alone cannot
+    // tell the explicit guard apart from an accidental throw.
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    runtime.sendMessage.mockResolvedValueOnce(undefined as never);
+    const controller = new BridgeSyncController();
+
+    await expect(controller.getDetails()).resolves.toBeNull();
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Sync details unavailable (no responder or error fallback)'
+    );
+    warnSpy.mockRestore();
+  });
+
+  it('resolves null when a pre-kind SW answers with details but no kind tag', async () => {
+    // This is the input the kind guard actually buys: the old `'details' in response` check would
+    // have returned these stale details. Also pins the warn (a skew must not be traceless).
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    const details = { accountEmail: 'stale@example.com', accountId: 'u1', lastSyncedAt: 1 };
+    runtime.sendMessage.mockResolvedValueOnce({ ok: true, details } as never);
+    const controller = new BridgeSyncController();
+
+    await expect(controller.getDetails()).resolves.toBeNull();
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Sync details unavailable (no responder or error fallback)'
+    );
+    warnSpy.mockRestore();
   });
 });
 

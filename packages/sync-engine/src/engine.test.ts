@@ -1,4 +1,10 @@
-import { DecryptError, deriveMasterKey, parseRecoveryCode, unwrapDataKey } from '@cuewise/crypto';
+import {
+  DecryptError,
+  deriveMasterKey,
+  parseRecoveryCode,
+  RecoveryCodeError,
+  unwrapDataKey,
+} from '@cuewise/crypto';
 import { configurePlatform } from '@cuewise/shared';
 import { getGoals, setGoals } from '@cuewise/storage';
 import { SessionManager, SYNC_PULL_WAKE_ID } from '@cuewise/sync-client';
@@ -7,7 +13,12 @@ import { describe, expect, it, vi } from 'vitest';
 import { FakeApiClient, FakeSyncServer } from './__fixtures__/fake-api-client';
 import { FakeKvStore } from './__fixtures__/fake-kv-store';
 import { FakeScheduler } from './__fixtures__/fake-scheduler';
-import { CLOUD_SYNC_ENABLED_KEY, SyncEngine, type SyncEngineDeps } from './engine';
+import {
+  CLOUD_SYNC_ENABLED_KEY,
+  LAST_SYNCED_AT_KEY,
+  SyncEngine,
+  type SyncEngineDeps,
+} from './engine';
 import { loadPersistedDataKey, RecoveryCodeRequiredError, SYNC_DATA_KEY } from './key-lifecycle';
 import { SyncMetadataStore } from './metadata-store';
 import { MutationTracker } from './mutation-tracker';
@@ -98,6 +109,163 @@ describe('SyncEngine.enableSync', () => {
       deviceName: 'Device A',
       codeVerifier: 'verifier-x',
     });
+  });
+
+  it('stamps lastSyncedAt on success, skips it on failure, and hydrates it on restart', async () => {
+    let t = 5_000;
+    const server = new FakeSyncServer();
+    const device = createDevice(server, { now: () => t });
+    useStorage(device);
+
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    expect(device.engine.getLastSyncedAt()).toBe(5_000);
+
+    // A failed cycle must not move the stamp.
+    t = 6_000;
+    device.apiClient.rejectNextGetChangesWithNetworkError = true;
+    await expect(device.engine.syncNow()).rejects.toMatchObject({ code: 'network_error' });
+    expect(device.engine.getLastSyncedAt()).toBe(5_000);
+
+    // A restarted engine hydrates the persisted stamp (its own fresh sync is made to fail,
+    // so the value can only have come from storage).
+    device.apiClient.rejectNextGetChangesWithNetworkError = true;
+    const restarted = new SyncEngine({
+      apiClient: device.apiClient,
+      sessionManager: new SessionManager(device.kv),
+      keyStore: device.kv,
+      scheduler: device.scheduler,
+      now: () => 9_999,
+    });
+    await restarted.start();
+    expect(restarted.getLastSyncedAt()).toBe(5_000);
+  });
+
+  it('a lastSyncedAt persistence failure is log-only: the sync still succeeds, memory updates', async () => {
+    // Guards against a refactor routing stampLastSynced through throwIfFailed — that would
+    // reject every successful sync cycle after the data already synced.
+    let t = 7_000;
+    const server = new FakeSyncServer();
+    const device = createDevice(server, { now: () => t });
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    t = 8_000;
+    device.kv.failSetsForKey = LAST_SYNCED_AT_KEY;
+    await device.engine.syncNow();
+
+    expect(device.engine.getLastSyncedAt()).toBe(8_000);
+  });
+
+  it('never stamps lastSyncedAt on the DK-less no-op path, and disableSync clears it', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+
+    await device.engine.syncNow();
+    expect(device.engine.getLastSyncedAt()).toBeNull();
+
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    expect(device.engine.getLastSyncedAt()).not.toBeNull();
+
+    await device.engine.disableSync();
+    expect(device.engine.getLastSyncedAt()).toBeNull();
+  });
+
+  it('getAccount returns the api result with a session and null when signed out', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    device.apiClient.accountResult = { userId: 'u1', email: 'kes@example.com' };
+
+    expect(await device.engine.getAccount()).toBeNull();
+
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    expect(await device.engine.getAccount()).toEqual({ userId: 'u1', email: 'kes@example.com' });
+  });
+
+  it('getAccount resolves null on a 401 without auth-loss side effects', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    device.apiClient.rejectNextGetAccountWith401 = true;
+    expect(await device.engine.getAccount()).toBeNull();
+
+    // Informational call: the session and status must be untouched, and a retry succeeds.
+    expect(device.engine.getStatus()).toBe('active');
+    expect(await device.engine.getAccount()).not.toBeNull();
+  });
+
+  it('resumeEnrollWithCode finishes a needs-code enroll on the live session, no re-exchange', async () => {
+    const server = new FakeSyncServer();
+    const deviceA = createDevice(server);
+    useStorage(deviceA);
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    await deviceA.engine.enableSync('dev', 'cred-a', 'Device A');
+    const recoveryCode = deviceA.onRecoveryCode.mock.calls[0][0] as string;
+
+    const deviceB = createDevice(server);
+    useStorage(deviceB);
+    // A first enable with no code lands at needs-code but leaves the session saved.
+    await expect(deviceB.engine.enableSync('dev', 'cred-b', 'Device B')).rejects.toBeInstanceOf(
+      RecoveryCodeRequiredError
+    );
+    const exchangesBefore = deviceB.apiClient.exchangeCount;
+
+    await deviceB.engine.resumeEnrollWithCode(recoveryCode);
+
+    expect(deviceB.engine.getStatus()).toBe('active');
+    expect(deviceB.apiClient.exchangeCount).toBe(exchangesBefore); // no second token exchange
+    expect((await getGoals()).map((g) => g.id)).toContain('g1');
+  });
+
+  it('resumeEnrollWithCode maps a bad code to RecoveryCodeError and stays disabled', async () => {
+    const server = new FakeSyncServer();
+    const deviceA = createDevice(server);
+    useStorage(deviceA);
+    await deviceA.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    const deviceB = createDevice(server);
+    useStorage(deviceB);
+    await expect(deviceB.engine.enableSync('dev', 'cred-b', 'Device B')).rejects.toBeInstanceOf(
+      RecoveryCodeRequiredError
+    );
+
+    await expect(
+      deviceB.engine.resumeEnrollWithCode('CW1-00000-00000-00000-00000-00000-00000')
+    ).rejects.toBeInstanceOf(RecoveryCodeError);
+    expect(deviceB.engine.getStatus()).toBe('disabled');
+  });
+
+  it('resumeEnrollWithCode without a saved session lands signed_out', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+
+    await device.engine.resumeEnrollWithCode('CW1-00000-00000-00000-00000-00000-00000');
+
+    expect(device.engine.getStatus()).toBe('signed_out');
+    expect(device.apiClient.exchangeCount).toBe(0);
+  });
+
+  it('resumeEnrollWithCode lands signed_out (no throw) when the live-looking session 401s mid-enroll', async () => {
+    const server = new FakeSyncServer();
+    const deviceA = createDevice(server);
+    useStorage(deviceA);
+    await deviceA.engine.enableSync('dev', 'cred-a', 'Device A');
+    const recoveryCode = deviceA.onRecoveryCode.mock.calls[0][0] as string;
+
+    const deviceB = createDevice(server);
+    useStorage(deviceB);
+    await expect(deviceB.engine.enableSync('dev', 'cred-b', 'Device B')).rejects.toBeInstanceOf(
+      RecoveryCodeRequiredError
+    );
+    // The session passes the local token guard but the server has since revoked it.
+    deviceB.apiClient.rejectAllWith401 = true;
+
+    await expect(deviceB.engine.resumeEnrollWithCode(recoveryCode)).resolves.toBeUndefined();
+    expect(deviceB.engine.getStatus()).toBe('signed_out');
   });
 
   it('downloads existing server data into a fresh device enrolling with the recovery code', async () => {

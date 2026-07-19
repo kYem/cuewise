@@ -10,6 +10,7 @@ import {
   corruptChecksum,
   createDevice,
   fakeOAuthDriver,
+  hangingOAuthDriver,
   unusedDriver,
   useStorage,
 } from './__fixtures__/direct-sync-controller.fixtures';
@@ -155,6 +156,9 @@ describe('createDirectSyncController: enable()', () => {
       enableSync: vi.fn().mockRejectedValue(new ApiError('invalid_token', 401)),
       disableSync: vi.fn().mockResolvedValue(undefined),
       regenerateRecoveryCode: vi.fn().mockResolvedValue('unused'),
+      resumeEnrollWithCode: vi.fn().mockResolvedValue(undefined),
+      getAccount: vi.fn().mockResolvedValue(null),
+      getLastSyncedAt: vi.fn().mockReturnValue(null),
       syncNow: vi.fn().mockResolvedValue(undefined),
       getStatus: vi.fn().mockReturnValue('error' as SyncStatus),
     };
@@ -228,6 +232,9 @@ describe('createDirectSyncController: enable()', () => {
           enableSync: vi.fn().mockResolvedValue(undefined),
           disableSync: vi.fn().mockResolvedValue(undefined),
           regenerateRecoveryCode: vi.fn().mockResolvedValue('unused'),
+          resumeEnrollWithCode: vi.fn().mockResolvedValue(undefined),
+          getAccount: vi.fn().mockResolvedValue(null),
+          getLastSyncedAt: vi.fn().mockReturnValue(null),
           syncNow: vi.fn().mockResolvedValue(undefined),
           getStatus: vi.fn().mockReturnValue('active' as SyncStatus),
         };
@@ -406,6 +413,9 @@ describe('createDirectSyncController: disable() / syncNow() error propagation', 
       enableSync: vi.fn().mockResolvedValue(undefined),
       disableSync: vi.fn().mockRejectedValue(new Error('disable failed')),
       regenerateRecoveryCode: vi.fn().mockResolvedValue('unused'),
+      resumeEnrollWithCode: vi.fn().mockResolvedValue(undefined),
+      getAccount: vi.fn().mockResolvedValue(null),
+      getLastSyncedAt: vi.fn().mockReturnValue(null),
       syncNow: vi.fn().mockResolvedValue(undefined),
       getStatus: vi.fn().mockReturnValue('active' as SyncStatus),
     };
@@ -424,6 +434,9 @@ describe('createDirectSyncController: disable() / syncNow() error propagation', 
       enableSync: vi.fn().mockResolvedValue(undefined),
       disableSync: vi.fn().mockResolvedValue(undefined),
       regenerateRecoveryCode: vi.fn().mockResolvedValue('unused'),
+      resumeEnrollWithCode: vi.fn().mockResolvedValue(undefined),
+      getAccount: vi.fn().mockResolvedValue(null),
+      getLastSyncedAt: vi.fn().mockReturnValue(null),
       syncNow: vi.fn().mockRejectedValue(new Error('sync failed')),
       getStatus: vi.fn().mockReturnValue('error' as SyncStatus),
     };
@@ -440,6 +453,34 @@ describe('createDirectSyncController: disable() / syncNow() error propagation', 
 
     expect(seen[0]).toBe('syncing');
     expect(seen[seen.length - 1]).toBe('error');
+  });
+});
+
+describe('createDirectSyncController: getDetails()', () => {
+  it('maps the engine account + lastSyncedAt into SyncDetails after an enable', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    device.apiClient.accountResult = { userId: 'user-1', email: 'kes@example.com' };
+    const { controller } = buildRealController(device);
+    await controller.enable('cred-a', 'Device A');
+
+    const details = await controller.getDetails();
+
+    expect(details).toEqual({
+      accountEmail: 'kes@example.com',
+      accountId: 'user-1',
+      lastSyncedAt: expect.any(Number),
+    });
+  });
+
+  it('resolves null when the engine has no session', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    const { controller } = buildRealController(device);
+
+    await expect(controller.getDetails()).resolves.toBeNull();
   });
 });
 
@@ -571,6 +612,51 @@ describe('createDirectSyncController: enableWithGoogle()', () => {
     const { controller } = buildRealController(device);
 
     expect(controller.canEnableWithGoogle()).toBe(true);
+  });
+
+  it('enrollWithCode() finishes a google enroll on the live session without a second bounce', async () => {
+    const server = new FakeSyncServer();
+    const deviceA = createDevice(server);
+    useStorage(deviceA);
+    const enableA = await buildRealController(deviceA).controller.enable('cred-a', 'Device A');
+    if (!enableA.ok || enableA.recoveryCode === undefined) {
+      throw new Error('expected device A to receive a recovery code');
+    }
+
+    // Device B: a first google sign-in returns needs-code but leaves the session saved.
+    const deviceB = createDevice(server);
+    useStorage(deviceB);
+    const { driver, calls } = fakeOAuthDriver(`${GOOGLE_RETURN_URI}?code=one-time-x`);
+    const { controller } = buildRealController(deviceB, driver);
+    const first = await controller.enableWithGoogle('MacBook');
+    expect(first).toEqual({ ok: false, reason: 'needs-code' });
+    const exchangesAfterSignIn = deviceB.apiClient.exchangeCount;
+
+    const result = await controller.enrollWithCode?.('MacBook', enableA.recoveryCode);
+
+    expect(result).toEqual({ ok: true, recoveryCode: undefined });
+    // No second browser bounce (authorize called once, for the sign-in) and no second exchange.
+    expect(calls).toHaveLength(1);
+    expect(deviceB.apiClient.exchangeCount).toBe(exchangesAfterSignIn);
+    expect(await deviceB.kv.get(LAST_SYNC_CREDS_KEY, 'local')).toEqual({
+      provider: 'google',
+      deviceName: 'MacBook',
+    });
+  });
+
+  it('cancelEnableWithGoogle() settles a pending flow as a quiet cancel, never exchanging', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    const driver = hangingOAuthDriver();
+    const { controller } = buildRealController(device, driver);
+
+    const pending = controller.enableWithGoogle('MacBook');
+    await driver.waitForPending();
+    controller.cancelEnableWithGoogle?.();
+
+    await expect(pending).resolves.toEqual({ ok: false, reason: 'auth', detail: 'cancelled' });
+    expect(device.apiClient.lastExchangeRequest).toBeNull();
   });
 
   it('reconnect() after a google enable re-runs the OAuth flow with a fresh challenge', async () => {

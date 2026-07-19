@@ -45,6 +45,16 @@ describe('tauri.conf.json CSP allows Tauri IPC', () => {
   });
 });
 
+// Regression guard for ENG-68: the bundle version must track package.json (changesets bumps
+// it there); a hardcoded version here silently ships stale bundle/DMG version numbers.
+describe('bundle version tracks the package version', () => {
+  const config = JSON.parse(readFileSync(CONFIG_PATH, 'utf-8'));
+
+  it('references package.json instead of hardcoding a version', () => {
+    expect(config.version).toBe('../package.json');
+  });
+});
+
 // Regression guard for ENG-43: the Google sign-in bounce returns via cuewise:// —
 // registered by the deep-link plugin config (which injects CFBundleURLTypes at build
 // time) and permitted by the capabilities file. Losing any of these makes every

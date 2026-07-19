@@ -1,7 +1,8 @@
+import { logger } from '@cuewise/shared';
 import { defaultSettings } from '@cuewise/test-utils';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeSyncController } from '../../sync/__fixtures__/fake-sync-controller';
 import { SyncControllerContext } from '../../sync/sync-controller';
 import { SyncSettingsSectionComponent } from './SyncSettingsSection';
@@ -73,6 +74,11 @@ describe('SyncSettingsSectionComponent', () => {
         }
       }
     );
+  });
+
+  // afterEach (not beforeEach) so a DEV stub can't outlive its test even if it were the file's last.
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it('renders nothing when there is no controller in context', () => {
@@ -170,6 +176,37 @@ describe('SyncSettingsSectionComponent', () => {
     await waitFor(() => expect(toastError).toHaveBeenCalledTimes(1));
   });
 
+  it('offers Cancel while Google sign-in is pending, settling it as a quiet cancel', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.deferNextEnableWithGoogle();
+    renderSection(controller);
+
+    await user.click(cloudSyncSwitch());
+    await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
+    await user.click(await screen.findByRole('button', { name: 'Cancel sign-in' }));
+
+    expect(await screen.findByRole('button', { name: 'Sign in with Google' })).toBeEnabled();
+    expect(controller.calls).toContainEqual({ method: 'cancelEnableWithGoogle', args: [] });
+    expect(toastError).not.toHaveBeenCalled();
+  });
+
+  it('hides Cancel on a host that cannot abort sign-in (extension popup is user-closable)', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController().withoutHostCancel();
+    controller.deferNextEnableWithGoogle();
+    renderSection(controller);
+
+    await user.click(cloudSyncSwitch());
+    await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
+
+    // Sign-in is pending, but with no cancelEnableWithGoogle the UI must not offer a dead button.
+    await waitFor(() =>
+      expect(controller.calls.some((c) => c.method === 'enableWithGoogle')).toBe(true)
+    );
+    expect(screen.queryByRole('button', { name: 'Cancel sign-in' })).not.toBeInTheDocument();
+  });
+
   it('treats a cancelled Google sign-in as a non-error: no toast, form stays open', async () => {
     const user = userEvent.setup();
     const controller = new FakeSyncController();
@@ -196,6 +233,36 @@ describe('SyncSettingsSectionComponent', () => {
     await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
 
     await waitFor(() => expect(toastError).toHaveBeenCalledTimes(1));
+  });
+
+  it('ignores a stale details fetch that resolves after disable, never showing the old account', async () => {
+    // A slow getDetails for account A must not clobber the display after a disable → re-enable.
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.deferNextDetails(); // fetch A hangs
+    controller.scriptDetails({ accountEmail: 'b@example.com', accountId: 'b', lastSyncedAt: null });
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+
+    // Disable, then re-enable → fetch B resolves with account B.
+    await user.click(cloudSyncSwitch());
+    await user.click(screen.getByRole('button', { name: 'Disable' }));
+    act(() => controller.setStatus('off'));
+    act(() => controller.setStatus('active'));
+    expect(await screen.findByText('Signed in as b@example.com')).toBeInTheDocument();
+
+    // Now the stale account-A fetch finally resolves — it must be dropped, not painted. `await
+    // act(async)` so the resolution's microtask actually runs before the assertions (a sync act()
+    // would leave the handler unrun, passing even with the generation guard deleted).
+    await act(async () => {
+      controller.resolveDetails({
+        accountEmail: 'a@example.com',
+        accountId: 'a',
+        lastSyncedAt: null,
+      });
+    });
+    expect(screen.getByText('Signed in as b@example.com')).toBeInTheDocument();
+    expect(screen.queryByText('Signed in as a@example.com')).not.toBeInTheDocument();
   });
 
   it('routes a recovery code that resolves after unmount to a warning toast, never dropping it', async () => {
@@ -232,7 +299,7 @@ describe('SyncSettingsSectionComponent', () => {
     const user = userEvent.setup();
     const controller = new FakeSyncController();
     controller.scriptEnableWithGoogle({ ok: false, reason: 'needs-code' });
-    controller.scriptEnableWithGoogle({ ok: false, reason: 'auth', detail: 'cancelled' });
+    controller.scriptEnrollWithCode({ ok: false, reason: 'auth', detail: 'cancelled' });
     renderSection(controller);
 
     await user.click(cloudSyncSwitch());
@@ -309,18 +376,19 @@ describe('SyncSettingsSectionComponent', () => {
     );
   });
 
-  it('only renders the dev-only Account ID enable path in dev builds', async () => {
+  it('hides the dev-only Account ID enable path in production builds', async () => {
+    // Stub the flag rather than branching on it: Vitest always runs with DEV=true, so an
+    // `if (import.meta.env.DEV)` here would only ever assert the dev case and the production
+    // guard would be pinned by nothing — letting the account-id sign-in path ship.
+    vi.stubEnv('DEV', false);
     const user = userEvent.setup();
     const controller = new FakeSyncController();
     renderSection(controller);
 
     await user.click(cloudSyncSwitch());
 
-    if (import.meta.env.DEV) {
-      expect(screen.getByLabelText('Account ID')).toBeInTheDocument();
-    } else {
-      expect(screen.queryByLabelText('Account ID')).not.toBeInTheDocument();
-    }
+    expect(screen.queryByLabelText('Account ID')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sign in with Google' })).toBeInTheDocument();
   });
 
   it('opens RecoveryCodeModal with the returned code when enable succeeds with a recovery code', async () => {
@@ -427,9 +495,35 @@ describe('SyncSettingsSectionComponent', () => {
     expect(controller.calls.some((call) => call.method === 'enable')).toBe(false);
   });
 
-  it('routes the google→needs-code enroll submit through enableWithGoogle(code), never enable', async () => {
+  it('routes the google→needs-code enroll submit through enrollWithCode (no second bounce), never enable', async () => {
     const user = userEvent.setup();
     const controller = new FakeSyncController();
+    controller.scriptEnableWithGoogle({ ok: false, reason: 'needs-code' });
+    controller.scriptEnrollWithCode({ ok: true });
+    renderSection(controller);
+
+    await user.click(cloudSyncSwitch());
+    const deviceName = (screen.getByLabelText('Device name') as HTMLInputElement).value;
+    await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
+    await screen.findByText('Enter recovery code');
+    await user.type(screen.getByLabelText(/recovery code/i), CODE);
+    await user.click(screen.getByRole('button', { name: 'Enroll' }));
+
+    await waitFor(() =>
+      expect(controller.calls).toContainEqual({
+        method: 'enrollWithCode',
+        args: [deviceName, CODE],
+      })
+    );
+    // The needs-code enroll must NOT re-run the browser bounce, enable, or reconnect.
+    expect(controller.calls.filter((call) => call.method === 'enableWithGoogle')).toHaveLength(1);
+    expect(controller.calls.some((call) => call.method === 'enable')).toBe(false);
+    expect(controller.calls.some((call) => call.method === 'reconnect')).toBe(false);
+  });
+
+  it('falls back to enableWithGoogle for enroll when the host lacks enrollWithCode (extension)', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController().withoutHostEnroll();
     controller.scriptEnableWithGoogle({ ok: false, reason: 'needs-code' });
     controller.scriptEnableWithGoogle({ ok: true });
     renderSection(controller);
@@ -447,8 +541,33 @@ describe('SyncSettingsSectionComponent', () => {
         args: [deviceName, CODE],
       })
     );
-    expect(controller.calls.some((call) => call.method === 'enable')).toBe(false);
-    expect(controller.calls.some((call) => call.method === 'reconnect')).toBe(false);
+    expect(controller.calls.some((call) => call.method === 'enrollWithCode')).toBe(false);
+  });
+
+  it('falls back to full re-auth when enrollWithCode reports the session is gone', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptEnableWithGoogle({ ok: false, reason: 'needs-code' });
+    controller.scriptEnrollWithCode({ ok: false, reason: 'auth' }); // session died mid-enroll
+    controller.scriptEnableWithGoogle({ ok: true }); // the re-auth succeeds
+    renderSection(controller);
+
+    await user.click(cloudSyncSwitch());
+    const deviceName = (screen.getByLabelText('Device name') as HTMLInputElement).value;
+    await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
+    await screen.findByText('Enter recovery code');
+    await user.type(screen.getByLabelText(/recovery code/i), CODE);
+    await user.click(screen.getByRole('button', { name: 'Enroll' }));
+
+    // Resume was tried once, then the full re-auth carried the enroll through — no dead-end.
+    await waitFor(() =>
+      expect(controller.calls).toContainEqual({
+        method: 'enableWithGoogle',
+        args: [deviceName, CODE],
+      })
+    );
+    expect(controller.calls.filter((c) => c.method === 'enrollWithCode')).toHaveLength(1);
+    expect(toastError).not.toHaveBeenCalled();
   });
 
   it('shows the confirm dialog with the recovery-code warning when the on-state switch is toggled off', async () => {
@@ -521,6 +640,233 @@ describe('SyncSettingsSectionComponent', () => {
 
     act(() => controller.setStatus('active'));
     expect(screen.getByTestId('sync-status-pill')).toHaveTextContent('Active');
+  });
+
+  it('shows the account email and last-synced time once the section is active', async () => {
+    const controller = new FakeSyncController();
+    controller.scriptDetails({
+      accountEmail: 'kes@example.com',
+      accountId: 'user-1',
+      lastSyncedAt: Date.now() - 2 * 60_000,
+    });
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+
+    expect(await screen.findByTestId('sync-account-label')).toHaveTextContent(
+      'Signed in as kes@example.com'
+    );
+    expect(screen.getByTestId('sync-device-label')).toHaveTextContent(/Last synced 2 min ago/);
+  });
+
+  it('falls back to a short account id when no email is verified', async () => {
+    const controller = new FakeSyncController();
+    controller.scriptDetails({
+      accountEmail: null,
+      accountId: '1b0dc90d-f95f-4ba8',
+      lastSyncedAt: null,
+    });
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+
+    expect(await screen.findByTestId('sync-account-label')).toHaveTextContent('Account: 1b0dc90d…');
+    expect(screen.getByTestId('sync-device-label')).not.toHaveTextContent('Last synced');
+  });
+
+  it('fetches details once per mount, not on every active/syncing flip', async () => {
+    // A "Sync now" click flips active → syncing → active on hosts that report 'syncing' (macOS
+    // only — the engine has no such status; the extension's mapToUi never emits it). Without the
+    // latch that flip re-fires the effect and duplicates the getDetails handleSyncNow already
+    // issues. (An unavailable result deliberately re-arms it — see below.)
+    const controller = new FakeSyncController();
+    controller.scriptDetails({
+      accountEmail: 'kes@example.com',
+      accountId: 'user-1',
+      lastSyncedAt: null,
+    });
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+    await screen.findByText('Signed in as kes@example.com');
+
+    act(() => controller.setStatus('syncing'));
+    act(() => controller.setStatus('active'));
+
+    expect(controller.calls.filter((c) => c.method === 'getDetails')).toHaveLength(1);
+  });
+
+  it('re-fetches details on the next status change after an unavailable result', async () => {
+    // A transient null must not latch the account line off for the whole mount — the next status
+    // transition has to retry, so a fetch that queued behind a long initial sync eventually paints.
+    const controller = new FakeSyncController();
+    controller.scriptDetails(null);
+    controller.scriptDetails({
+      accountEmail: 'kes@example.com',
+      accountId: 'user-1',
+      lastSyncedAt: null,
+    });
+    renderSection(controller);
+
+    act(() => controller.setStatus('active'));
+    await waitFor(() =>
+      expect(controller.calls.filter((c) => c.method === 'getDetails')).toHaveLength(1)
+    );
+    expect(screen.queryByTestId('sync-account-label')).not.toBeInTheDocument();
+
+    act(() => controller.setStatus('syncing'));
+    expect(await screen.findByText('Signed in as kes@example.com')).toBeInTheDocument();
+  });
+
+  it('drops the shown identity on disable so a re-enable fetches fresh details', async () => {
+    // Same mount, different account: the section must never keep showing the previous owner.
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptDetails({ accountEmail: 'a@example.com', accountId: 'a', lastSyncedAt: null });
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+    await screen.findByText('Signed in as a@example.com');
+
+    await user.click(cloudSyncSwitch());
+    await user.click(screen.getByRole('button', { name: 'Disable' }));
+    act(() => controller.setStatus('off'));
+
+    // Re-enable with account B's fetch still in flight. The assertion has to land here, not at
+    // 'off': the whole subgroup is unrendered at 'off' (STATUS_PILL_LABEL has no entry), so the
+    // label's absence there holds even if the old details were kept.
+    controller.deferNextDetails();
+    act(() => controller.setStatus('active'));
+    expect(screen.getByTestId('sync-status-pill')).toBeInTheDocument();
+    expect(screen.queryByText('Signed in as a@example.com')).not.toBeInTheDocument();
+
+    await act(async () => {
+      controller.resolveDetails({
+        accountEmail: 'b@example.com',
+        accountId: 'b',
+        lastSyncedAt: null,
+      });
+    });
+    expect(screen.getByText('Signed in as b@example.com')).toBeInTheDocument();
+  });
+
+  it('refreshes the last-synced time after Sync now', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    const details = { accountEmail: 'kes@example.com', accountId: 'user-1' };
+    controller.scriptDetails({ ...details, lastSyncedAt: Date.now() - 3 * 60 * 60_000 });
+    controller.scriptDetails({ ...details, lastSyncedAt: Date.now() });
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+    await screen.findByTestId('sync-account-label');
+
+    await user.click(screen.getByRole('button', { name: 'Sync now' }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('sync-device-label')).toHaveTextContent(/Last synced Just now/)
+    );
+  });
+
+  it('keeps the Sync now refresh when a slow mount fetch resolves afterward', async () => {
+    // The mount details fetch is still in flight when Sync now fires its own refresh; the newer
+    // refresh must win, and the late mount fetch must be dropped rather than painting stale data.
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.deferNextDetails(); // the mount fetch hangs
+    controller.scriptDetails({
+      accountEmail: 'fresh@example.com',
+      accountId: 'user-1',
+      lastSyncedAt: Date.now(),
+    });
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+
+    await user.click(screen.getByRole('button', { name: 'Sync now' }));
+    expect(await screen.findByText('Signed in as fresh@example.com')).toBeInTheDocument();
+
+    // The stale mount fetch finally resolves — the generation guard must drop it. `await act(async)`
+    // is required: a sync act() only queues the .then microtask, so the guard would never run and
+    // this test would pass even with the guard deleted.
+    await act(async () => {
+      controller.resolveDetails({
+        accountEmail: 'stale@example.com',
+        accountId: 'user-1',
+        lastSyncedAt: null,
+      });
+    });
+    expect(screen.getByText('Signed in as fresh@example.com')).toBeInTheDocument();
+    expect(screen.queryByText('Signed in as stale@example.com')).not.toBeInTheDocument();
+  });
+
+  it('re-arms the details latch when getDetails rejects, so a later transition retries', async () => {
+    // getDetails is contracted never to reject; a host that breaks the contract must not latch the
+    // account line off for the rest of the mount.
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    const controller = new FakeSyncController();
+    controller.failNext('getDetails');
+    controller.scriptDetails({
+      accountEmail: 'kes@example.com',
+      accountId: 'user-1',
+      lastSyncedAt: null,
+    });
+    renderSection(controller);
+
+    act(() => controller.setStatus('active'));
+    await waitFor(() => expect(warnSpy).toHaveBeenCalled());
+    expect(screen.queryByTestId('sync-account-label')).not.toBeInTheDocument();
+
+    act(() => controller.setStatus('syncing'));
+    expect(await screen.findByText('Signed in as kes@example.com')).toBeInTheDocument();
+    warnSpy.mockRestore();
+  });
+
+  it('keeps the last known details when the Sync now refresh returns null', async () => {
+    // A stale line beats a vanishing one — a transient refresh miss must not blank the account.
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptDetails({
+      accountEmail: 'kes@example.com',
+      accountId: 'user-1',
+      lastSyncedAt: null,
+    });
+    controller.scriptDetails(null); // the Sync now refresh misses
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+    await screen.findByText('Signed in as kes@example.com');
+
+    await user.click(screen.getByRole('button', { name: 'Sync now' }));
+
+    await waitFor(() =>
+      expect(controller.calls.filter((c) => c.method === 'getDetails')).toHaveLength(2)
+    );
+    expect(screen.getByText('Signed in as kes@example.com')).toBeInTheDocument();
+  });
+
+  it('drops a Sync now refresh that lands after a disable, never repainting the old account', async () => {
+    // handleDisable clears the shown identity; a refresh already in flight must not undo that in
+    // the window before the controller's status flips (status stays 'active' here, so the pill —
+    // and therefore the account line — would render if the stale refresh repainted).
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptDetails({ accountEmail: 'a@example.com', accountId: 'a', lastSyncedAt: null });
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+    await screen.findByText('Signed in as a@example.com');
+
+    controller.deferNextDetails(); // the Sync now refresh hangs
+    await user.click(screen.getByRole('button', { name: 'Sync now' }));
+    await waitFor(() =>
+      expect(controller.calls.filter((c) => c.method === 'getDetails')).toHaveLength(2)
+    );
+
+    await user.click(cloudSyncSwitch());
+    await user.click(screen.getByRole('button', { name: 'Disable' }));
+    expect(screen.queryByTestId('sync-account-label')).not.toBeInTheDocument();
+
+    await act(async () => {
+      controller.resolveDetails({
+        accountEmail: 'a@example.com',
+        accountId: 'a',
+        lastSyncedAt: null,
+      });
+    });
+    expect(screen.queryByText('Signed in as a@example.com')).not.toBeInTheDocument();
   });
 
   it('calls controller.syncNow() when Sync now is clicked', async () => {
@@ -600,13 +946,16 @@ describe('SyncSettingsSectionComponent', () => {
     expect(controller.calls.some((c) => c.method === 'enable')).toBe(false);
   });
 
-  it('re-runs reconnect (never syncNow) when Try again is clicked after a failed reconnect', async () => {
+  it('retries reconnect on failedAction even with a typed account id (never enable/syncNow)', async () => {
     const user = userEvent.setup();
     const controller = new FakeSyncController();
     controller.scriptReconnect({ ok: false, reason: 'error' });
     renderSection(controller);
-    act(() => controller.setStatus('needs_reauth'));
 
+    // Type an account id, THEN drive a reconnect flow. The retry must route on failedAction, not
+    // on "the account id is empty" — otherwise this non-empty id would wrongly retry enable().
+    await enterEnableStep(user, 'typed-acct');
+    act(() => controller.setStatus('needs_reauth'));
     await user.click(screen.getByRole('button', { name: 'Reconnect' }));
     act(() => controller.setStatus('error'));
 
@@ -616,6 +965,7 @@ describe('SyncSettingsSectionComponent', () => {
     await waitFor(() =>
       expect(controller.calls.filter((c) => c.method === 'reconnect')).toHaveLength(2)
     );
+    expect(controller.calls.some((c) => c.method === 'enable')).toBe(false);
     expect(controller.calls.some((c) => c.method === 'syncNow')).toBe(false);
   });
 

@@ -18,7 +18,39 @@ export type EnableResult =
  */
 export const AUTH_CANCELLED_DETAIL = 'cancelled';
 
-/** Platform-agnostic seam the enable-sync UI drives; host adapters (macOS/extension) implement it. */
+/** Account + freshness info for the settings UI ("Signed in as … · Last synced …"). */
+export interface SyncDetails {
+  /** Provider-verified email, or null when none exists (e.g. the dev provider). */
+  readonly accountEmail: string | null;
+  readonly accountId: string;
+  /** Millis of the last successful sync cycle; null before the first one is known. */
+  readonly lastSyncedAt: number | null;
+}
+
+/**
+ * Maps an engine account + last-synced timestamp into SyncDetails (null account ⇒ null), so both
+ * host adapters (macOS in-process, extension SW) build the identical shape from one definition.
+ */
+export function buildSyncDetails(
+  account: { userId: string; email: string | null } | null,
+  lastSyncedAt: number | null
+): SyncDetails | null {
+  if (account === null) {
+    return null;
+  }
+  return { accountEmail: account.email, accountId: account.userId, lastSyncedAt };
+}
+
+/**
+ * Platform-agnostic seam the enable-sync UI drives; host adapters (macOS/extension) implement it.
+ *
+ * Capability convention: a capability every host can answer, but whose answer depends on build/env
+ * config, is a required `canX(): boolean` (canEnableWithGoogle — the extension's answer tracks its
+ * googleClientId env var). A capability that not every host provides is an optional method the UI
+ * feature-detects by presence — either because the host cannot (cancelEnableWithGoogle: the
+ * extension's popup flow has no abort seam) or because it deliberately declines as unnecessary
+ * (enrollWithCode: the extension's re-auth is cheap enough that the fallback path suffices).
+ */
 export interface SyncController {
   getStatus(): SyncUiStatus;
   subscribe(cb: (status: SyncUiStatus) => void): () => void;
@@ -31,6 +63,20 @@ export interface SyncController {
   disable(): Promise<void>;
   regenerateRecoveryCode(): Promise<string>;
   syncNow(): Promise<void>;
+  /** Informational: resolves null when unavailable (signed out, offline, legacy host); never throws. */
+  getDetails(): Promise<SyncDetails | null>;
+  /**
+   * Aborts a pending enableWithGoogle flow (the pending result resolves as a quiet cancel).
+   * Only hosts whose OAuth flow can be aborted implement it (macOS system-browser); the UI
+   * shows a Cancel affordance only when present — the extension's popup is user-closable.
+   */
+  cancelEnableWithGoogle?(): void;
+  /**
+   * Finishes a device-#2 enroll that stopped at needs-code by supplying the recovery code
+   * against the STILL-LIVE session, with no second browser bounce. Hosts whose sign-in re-auth
+   * is cheap (the extension popup) may omit it; the UI falls back to the full re-auth path.
+   */
+  enrollWithCode?(deviceName: string, recoveryCode: string): Promise<EnableResult>;
 }
 
 export const SyncControllerContext = createContext<SyncController | null>(null);

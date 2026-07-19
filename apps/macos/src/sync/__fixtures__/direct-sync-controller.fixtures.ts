@@ -7,7 +7,7 @@ import {
 } from '@cuewise/sync-engine/src/__fixtures__/fake-api-client';
 import { FakeKvStore } from '@cuewise/sync-engine/src/__fixtures__/fake-kv-store';
 import { FakeScheduler } from '@cuewise/sync-engine/src/__fixtures__/fake-scheduler';
-import type { OAuthDriver } from '../../platform/oauth-driver';
+import { OAuthCancelledError, type OAuthDriver } from '../../platform/oauth-driver';
 import { buildDirectSyncController } from '../direct-sync-controller';
 
 export const BASE_URL = 'https://api.test';
@@ -38,6 +38,7 @@ export function unusedDriver(): OAuthDriver {
     async authorize(): Promise<string> {
       throw new Error('no OAuth flow expected in this test');
     },
+    cancel(): void {},
   };
 }
 
@@ -60,6 +61,35 @@ export function fakeOAuthDriver(outcome: string | Error): FakeOAuthDriver {
         }
         return outcome;
       },
+      cancel(): void {},
+    },
+  };
+}
+
+/**
+ * A driver whose authorize() hangs until cancel() rejects it — for exercising the cancel path.
+ * Await `waitForPending()` before cancelling: the controller runs PKCE before authorize(), so
+ * an immediate cancel would fire into the pre-authorize gap and no-op.
+ */
+export function hangingOAuthDriver(): OAuthDriver & { waitForPending: () => Promise<void> } {
+  let rejectPending: ((err: Error) => void) | null = null;
+  let notifyPending: () => void = () => {};
+  const pending = new Promise<void>((resolve) => {
+    notifyPending = resolve;
+  });
+  return {
+    waitForPending: () => pending,
+    authorize(): Promise<string> {
+      return new Promise<string>((_resolve, reject) => {
+        rejectPending = reject;
+        notifyPending();
+      });
+    },
+    cancel(): void {
+      if (rejectPending !== null) {
+        rejectPending(new OAuthCancelledError());
+        rejectPending = null;
+      }
     },
   };
 }

@@ -4,8 +4,9 @@ import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useSettingsStore } from '../../stores/settings-store';
 import { useToastStore } from '../../stores/toast-store';
-import type { EnableResult, SyncUiStatus } from '../../sync/sync-controller';
+import type { EnableResult, SyncDetails, SyncUiStatus } from '../../sync/sync-controller';
 import { AUTH_CANCELLED_DETAIL, useSyncController } from '../../sync/sync-controller';
+import { formatMillisAgo } from '../../utils/reminder-date-utils';
 import { ConfirmationDialog } from '../ConfirmationDialog';
 import { EnrollCodeModal } from './EnrollCodeModal';
 import { RecoveryCodeModal } from './RecoveryCodeModal';
@@ -120,6 +121,13 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   // The macOS google flow can take minutes; if Settings closes meanwhile, a late recovery code
   // has no modal to render into — the ref routes it to a global toast instead of vanishing.
   const mountedRef = useRef(true);
+  // "Signed in as … · Last synced …" — fetched once per mount when sync is first seen running.
+  const [details, setDetails] = useState<SyncDetails | null>(null);
+  const detailsRequestedRef = useRef(false);
+  // Bumped whenever a details fetch starts or is invalidated (disable). A resolution whose
+  // generation is stale is dropped, so a slow fetch for a prior account can't clobber a newer
+  // one after disable→re-enable, and syncNow's refresh can't lose a race with the mount fetch.
+  const detailsGenRef = useRef(0);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -127,6 +135,44 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       mountedRef.current = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!controller || detailsRequestedRef.current) {
+      return;
+    }
+    if (status !== 'active' && status !== 'syncing') {
+      return;
+    }
+    detailsRequestedRef.current = true;
+    detailsGenRef.current += 1;
+    const gen = detailsGenRef.current;
+    controller.getDetails().then(
+      (result) => {
+        if (detailsGenRef.current !== gen) {
+          // Superseded by a disable or a newer fetch — this account is no longer current.
+          return;
+        }
+        if (result === null) {
+          // Transient miss (e.g. the fetch queued behind a long initial sync and timed out) —
+          // re-arm so the next status transition retries instead of blanking the whole mount.
+          detailsRequestedRef.current = false;
+          return;
+        }
+        setDetails(result);
+      },
+      (error) => {
+        // getDetails is contracted never to reject; if a host adapter breaks that, treat it as
+        // the null branch — log, and (when still current) re-arm so a later transition retries
+        // rather than latching details off for the whole mount.
+        logger.warn(
+          `Cloud sync details unavailable: ${error instanceof Error ? error.message : String(error)}`
+        );
+        if (detailsGenRef.current === gen) {
+          detailsRequestedRef.current = false;
+        }
+      }
+    );
+  }, [controller, status]);
 
   useEffect(() => {
     if (!controller) {
@@ -241,7 +287,21 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       if (enrollSource === 'reconnect') {
         result = await controller.reconnect(code);
       } else if (enrollSource === 'google') {
-        result = await controller.enableWithGoogle(deviceName, code);
+        if (controller.enrollWithCode) {
+          // ENG-65: finish the enroll against the still-live session — no second browser bounce.
+          result = await controller.enrollWithCode(deviceName, code);
+          // enrollWithCode's presence is load-bearing: it also means "we attempted a resume", so
+          // only this branch runs the re-auth fallback. Making enrollWithCode required (e.g.
+          // aliasing enableWithGoogle on the extension) would fire this on every host and sign in
+          // twice. The resume can find the session already gone (revoked/expired while the user
+          // hunted for the code) → reason:'auth'; retrying resume is hopeless, so fall back to a
+          // full re-auth, which re-establishes the session (the code is already typed).
+          if (!result.ok && result.reason === 'auth' && result.detail !== AUTH_CANCELLED_DETAIL) {
+            result = await controller.enableWithGoogle(deviceName, code);
+          }
+        } else {
+          result = await controller.enableWithGoogle(deviceName, code);
+        }
       } else {
         result = await controller.enable(accountId, deviceName, code);
       }
@@ -286,6 +346,20 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       logger.error('Cloud sync sync-now failed', error);
       useToastStore.getState().error("Couldn't sync right now — please try again.");
     }
+    // Refresh "Last synced" OUTSIDE the try — the sync-now error surface belongs to syncNow
+    // alone (the catch keeps even a contract-violating host from rejecting the click handler).
+    // Keep the last known details on a transient null: a stale line beats a vanishing one.
+    detailsGenRef.current += 1;
+    const gen = detailsGenRef.current;
+    const next = await controller.getDetails().catch((error) => {
+      logger.warn(
+        `Cloud sync details refresh failed: ${error instanceof Error ? error.message : String(error)}`
+      );
+      return null;
+    });
+    if (detailsGenRef.current === gen && next !== null) {
+      setDetails(next);
+    }
   };
 
   // Retry the exact action that failed. A dev-enable retry needs the form's account id; without it
@@ -319,6 +393,12 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     try {
       await controller.disable();
       setEnabling(false);
+      // A re-enable in this same mount may be a DIFFERENT account — drop the shown identity,
+      // re-arm the once-per-mount fetch, and invalidate any in-flight fetch for the old account
+      // so its late resolution can't paint the previous owner's details.
+      setDetails(null);
+      detailsRequestedRef.current = false;
+      detailsGenRef.current += 1;
     } catch (error) {
       logger.error('Cloud sync disable failed', error);
       useToastStore.getState().error("Couldn't disable sync — please try again.");
@@ -402,6 +482,15 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
                   )}
                   {isGoogleSigningIn ? 'Signing in…' : 'Sign in with Google'}
                 </button>
+                {isGoogleSigningIn && controller.cancelEnableWithGoogle && (
+                  <button
+                    type="button"
+                    onClick={() => controller.cancelEnableWithGoogle?.()}
+                    className="w-full rounded-lg px-4 py-1.5 text-xs font-medium text-secondary transition-colors hover:text-primary"
+                  >
+                    Cancel sign-in
+                  </button>
+                )}
               </div>
             )}
 
@@ -448,8 +537,18 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
             <span data-testid="sync-status-pill" className={pillClass(status)}>
               {pillLabel}
             </span>
+            {details && (
+              <div data-testid="sync-account-label" className="text-xs text-tertiary">
+                {details.accountEmail !== null
+                  ? `Signed in as ${details.accountEmail}`
+                  : `Account: ${details.accountId.slice(0, 8)}…`}
+              </div>
+            )}
             <div data-testid="sync-device-label" className="text-xs text-tertiary">
               Device: {deviceName}
+              {details !== null && details.lastSyncedAt !== null
+                ? ` · Last synced ${formatMillisAgo(details.lastSyncedAt)}`
+                : ''}
             </div>
             <div className="flex flex-wrap gap-2">
               <button

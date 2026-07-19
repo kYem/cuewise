@@ -32,6 +32,9 @@ import { type ConflictStrategy, LwwHlcStrategy } from './strategy';
 
 export const CLOUD_SYNC_ENABLED_KEY = 'cloudSyncEnabled';
 
+/** Millis timestamp of the last successful sync cycle; survives restarts for the details UI. */
+export const LAST_SYNCED_AT_KEY = 'cuewise.sync.lastSyncedAt';
+
 // The periodic pull backstop cadence (spec §3: "~5 min"); foreground opens trigger sooner via syncNow.
 const PULL_REARM_MINUTES = 5;
 
@@ -63,7 +66,12 @@ export type SyncStatus =
  */
 export type EngineApiClient = Pick<
   RealApiClient,
-  'exchangeToken' | 'getChanges' | 'pushChanges' | 'getRecoveryEnvelope' | 'putRecoveryEnvelope'
+  | 'exchangeToken'
+  | 'getChanges'
+  | 'pushChanges'
+  | 'getRecoveryEnvelope'
+  | 'putRecoveryEnvelope'
+  | 'getAccount'
 >;
 
 export interface SyncEngineDeps {
@@ -92,6 +100,7 @@ export class SyncEngine {
   private status: SyncStatus = 'disabled';
   private dk: DataKey | null = null;
   private keyId: string | null = null;
+  private lastSyncedAt: number | null = null;
 
   constructor(private readonly deps: SyncEngineDeps) {
     this.now = deps.now ?? Date.now;
@@ -126,43 +135,73 @@ export class SyncEngine {
       if (!saved.success) {
         throw new Error(`failed to persist sync session: ${saved.error.message}`);
       }
-
-      // A code is only passed when enrolling an additional device; brand-new enable passes none.
-      this.setStatus(recoveryCode ? 'enrolling' : 'key_init');
-      const enrolled = await initOrEnrollKey(this.keyDeps(), recoveryCode);
-      this.dk = enrolled.dk;
-      this.keyId = enrolled.keyId;
-      if (enrolled.recoveryCodeToShow !== undefined) {
-        this.deps.onRecoveryCode?.(enrolled.recoveryCodeToShow);
-      }
-
-      this.setStatus('initial_sync');
-      await this.backfillDirty();
-      await this.syncNow();
-      if (this.status === 'signed_out') {
-        // syncNow already ran handleAuthLoss (dropped the session, kept the DK) — enable didn't finish.
-        return;
-      }
-
-      const enabledResult = await this.deps.keyStore.set(CLOUD_SYNC_ENABLED_KEY, true, 'local');
-      if (!enabledResult.success) {
-        throw new Error(`failed to persist cloudSyncEnabled: ${enabledResult.error.message}`);
-      }
-      this.setStatus('active');
-      await this.armPullLoopUnlessSignedOut();
+      await this.enrollAndActivate(recoveryCode);
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) {
+      await this.handleEnableError(err);
+    }
+  }
+
+  /**
+   * Finishes an enroll that stopped at needs-code WITHOUT re-authenticating (ENG-65): the
+   * session from the interrupted enableSync is still live, so device #2 just supplies the
+   * recovery code — no second browser bounce. No-ops to signed_out if that session has since
+   * been lost (the caller must then re-authenticate).
+   */
+  async resumeEnrollWithCode(recoveryCode: string): Promise<void> {
+    try {
+      // Inside the try so a storage fault reading the token routes through handleEnableError
+      // (status → error) like every other enroll failure, not out as a raw rejection.
+      const token = await this.deps.sessionManager.getToken();
+      if (token === null) {
         await this.handleAuthLoss();
         return;
       }
-      if (err instanceof RecoveryCodeRequiredError || err instanceof RecoveryCodeError) {
-        // Expected enroll control-flow, not a failure — don't poison the persisted status other tabs read.
-        this.setStatus('disabled');
-        throw err;
-      }
-      this.setStatus('error');
+      await this.enrollAndActivate(recoveryCode);
+    } catch (err) {
+      await this.handleEnableError(err);
+    }
+  }
+
+  /** The enroll → initial-sync → activate tail shared by enableSync and resumeEnrollWithCode. */
+  private async enrollAndActivate(recoveryCode: string | undefined): Promise<void> {
+    // A code is only passed when enrolling an additional device; brand-new enable passes none.
+    this.setStatus(recoveryCode ? 'enrolling' : 'key_init');
+    const enrolled = await initOrEnrollKey(this.keyDeps(), recoveryCode);
+    this.dk = enrolled.dk;
+    this.keyId = enrolled.keyId;
+    if (enrolled.recoveryCodeToShow !== undefined) {
+      this.deps.onRecoveryCode?.(enrolled.recoveryCodeToShow);
+    }
+
+    this.setStatus('initial_sync');
+    await this.backfillDirty();
+    await this.syncNow();
+    if (this.status === 'signed_out') {
+      // syncNow already ran handleAuthLoss (dropped the session, kept the DK) — enable didn't finish.
+      return;
+    }
+
+    const enabledResult = await this.deps.keyStore.set(CLOUD_SYNC_ENABLED_KEY, true, 'local');
+    if (!enabledResult.success) {
+      throw new Error(`failed to persist cloudSyncEnabled: ${enabledResult.error.message}`);
+    }
+    this.setStatus('active');
+    await this.armPullLoopUnlessSignedOut();
+  }
+
+  /** Shared enable/enroll error mapping: 401 → auth loss; recovery-code control-flow → disabled+rethrow. */
+  private async handleEnableError(err: unknown): Promise<void> {
+    if (err instanceof ApiError && err.status === 401) {
+      await this.handleAuthLoss();
+      return;
+    }
+    if (err instanceof RecoveryCodeRequiredError || err instanceof RecoveryCodeError) {
+      // Expected enroll control-flow, not a failure — don't poison the persisted status other tabs read.
+      this.setStatus('disabled');
       throw err;
     }
+    this.setStatus('error');
+    throw err;
   }
 
   /** Clears session + DK + the enabled flag + sync bookkeeping. Local domain data is untouched. */
@@ -171,9 +210,11 @@ export class SyncEngine {
     await this.deps.sessionManager.clear();
     await this.deps.keyStore.remove(SYNC_DATA_KEY, 'local');
     await this.deps.keyStore.remove(CLOUD_SYNC_ENABLED_KEY, 'local');
+    await this.deps.keyStore.remove(LAST_SYNCED_AT_KEY, 'local');
     await this.resetMeta();
     this.dk = null;
     this.keyId = null;
+    this.lastSyncedAt = null;
     this.setStatus('disabled');
   }
 
@@ -214,6 +255,48 @@ export class SyncEngine {
       }
       throw err;
     }
+    await this.stampLastSynced();
+  }
+
+  /**
+   * Stamped only after a full successful cycle. A persistence failure is non-fatal by design: the
+   * cycle already succeeded, and the in-memory stamp above is what the UI reads this session — only
+   * next-launch hydration of "Last synced" is lost. The cause goes in the message text so it
+   * survives string-coercing surfaces (Chrome's Errors panel); the context carries the structured
+   * StorageError (plain data — there is no stack to keep).
+   */
+  private async stampLastSynced(): Promise<void> {
+    this.lastSyncedAt = this.now();
+    const result = await this.deps.keyStore.set(LAST_SYNCED_AT_KEY, this.lastSyncedAt, 'local');
+    if (!result.success) {
+      logger.warn(`Failed to persist lastSyncedAt: ${result.error.message}`, {
+        error: result.error,
+      });
+    }
+  }
+
+  getLastSyncedAt(): number | null {
+    return this.lastSyncedAt;
+  }
+
+  /**
+   * Account details for the settings UI. Informational only: resolves null when signed out
+   * or on any fetch failure (including 401 — no auth-loss side effects), never throws.
+   */
+  async getAccount(): Promise<{ userId: string; email: string | null } | null> {
+    // The token read sits inside the try so the never-throws contract holds by construction,
+    // not by the current storage adapters happening to swallow their own errors.
+    try {
+      const token = await this.deps.sessionManager.getToken();
+      if (token === null) {
+        return null;
+      }
+      return await this.deps.apiClient.getAccount();
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      logger.warn(`Failed to fetch sync account details: ${detail}`);
+      return null;
+    }
   }
 
   /** Self-heal, then hold the DK and arm the pull loop. No-op if sync was never enabled here. */
@@ -221,6 +304,12 @@ export class SyncEngine {
     const enabled = await this.deps.keyStore.get<boolean>(CLOUD_SYNC_ENABLED_KEY, 'local');
     if (enabled !== true) {
       return;
+    }
+
+    // Hydrate the details-UI timestamp so a restart shows the last real sync, not a blank.
+    const persistedLastSynced = await this.deps.keyStore.get<number>(LAST_SYNCED_AT_KEY, 'local');
+    if (typeof persistedLastSynced === 'number') {
+      this.lastSyncedAt = persistedLastSynced;
     }
 
     try {

@@ -14,6 +14,7 @@ export {
   CLOUD_SYNC_ENABLED_KEY,
   type EnableSyncOptions,
   type EngineApiClient,
+  LAST_SYNCED_AT_KEY,
   SyncEngine,
   type SyncEngineDeps,
   type SyncSignInProvider,
@@ -23,7 +24,14 @@ export {
 /** Structural subset of SyncEngine that host control surfaces (SW/macOS) drive. */
 export type SyncEngineControlSurface = Pick<
   SyncEngine,
-  'enableSync' | 'disableSync' | 'regenerateRecoveryCode' | 'syncNow' | 'getStatus'
+  | 'enableSync'
+  | 'resumeEnrollWithCode'
+  | 'disableSync'
+  | 'regenerateRecoveryCode'
+  | 'syncNow'
+  | 'getStatus'
+  | 'getAccount'
+  | 'getLastSyncedAt'
 >;
 export {
   initOrEnrollKey,

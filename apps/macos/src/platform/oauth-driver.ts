@@ -2,6 +2,14 @@ import { logger } from '@cuewise/shared';
 import { onOpenUrl } from '@tauri-apps/plugin-deep-link';
 import { open } from '@tauri-apps/plugin-shell';
 
+/** Thrown into a pending authorize() when the user cancels from the app (ENG-67). */
+export class OAuthCancelledError extends Error {
+  constructor() {
+    super('Sign-in cancelled');
+    this.name = 'OAuthCancelledError';
+  }
+}
+
 /** Runs one system-browser OAuth round-trip; the seam DirectSyncController tests fake. */
 export interface OAuthDriver {
   /**
@@ -9,6 +17,8 @@ export interface OAuthDriver {
    * callback URL delivered to the app. Rejects on timeout or if the browser can't open.
    */
   authorize(startUrl: string): Promise<string>;
+  /** Rejects the pending authorize() with OAuthCancelledError; a no-op when none is pending. */
+  cancel(): void;
 }
 
 // Only the auth callback path counts; stray deep links to other cuewise:// paths are ignored.
@@ -29,11 +39,24 @@ function toError(err: unknown): Error {
  * dropped on the floor — and the PKCE verifier for it died with that flow anyway.
  */
 export function createTauriOAuthDriver(): OAuthDriver {
+  // The serialize() mutex in DirectSyncController guarantees at most one flow at a time, so a
+  // single slot is enough; settle-once makes a stale/double cancel a harmless no-op. (A cancel
+  // in the sub-millisecond gap before authorize() registers is not closed here — the UI only
+  // renders Cancel during a pending flow, and the user can click it again once the browser opens.)
+  let cancelCurrent: (() => void) | null = null;
   return {
+    cancel(): void {
+      if (cancelCurrent !== null) {
+        cancelCurrent();
+      }
+    },
     authorize(startUrl: string): Promise<string> {
       return new Promise<string>((resolve, reject) => {
         let settled = false;
         let unlisten: (() => void) | null = null;
+        cancelCurrent = () => {
+          settle(() => reject(new OAuthCancelledError()));
+        };
 
         // complete() must be unreachable-proof: settled latches first, and a throwing
         // unlisten() must never leave the promise (and the controller mutex) hanging.

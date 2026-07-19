@@ -30,6 +30,9 @@ export class StorageQuotaExceededError extends Error {
 
 export interface SyncStore {
   findOrCreateUser(identity: Identity): Promise<string>;
+  // The provider-verified email for the account-details UI; null when none was ever verified
+  // (or the user row no longer exists — a deleted account racing a live session).
+  getUserEmail(userId: string): Promise<string | null>;
   createSession(userId: string, deviceName: string): Promise<RawSessionToken>;
   lookupSession(rawToken: RawSessionToken): Promise<Session | null>;
   revokeSession(rawToken: RawSessionToken): Promise<void>;
