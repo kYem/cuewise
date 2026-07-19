@@ -1,0 +1,351 @@
+---
+import FinalCta from '../components/FinalCta.astro';
+import Base from '../layouts/Base.astro';
+import { SITE } from '../lib/site';
+
+const faqs = [
+  {
+    q: 'What is the best free Momentum alternative?',
+    a: 'It depends on what you use Momentum for. For goals, a Pomodoro timer and productivity tracking, Cuewise is the most complete free option. For a beautiful minimalist start page, Bonjourr is hard to beat. If your new tab is mostly for reading developer news, daily.dev is built for exactly that. All three have fully usable free versions.',
+  },
+  {
+    q: 'Is Tabliss still maintained?',
+    a: "Not actively. The Chrome and Firefox store builds have not been updated since April 2022, and the last code change on GitHub was January 2024. The extension still works today, but don't expect new features or fixes.",
+  },
+  {
+    q: 'Which alternatives work without creating an account?',
+    a: 'Cuewise, Tabliss, Bonjourr and Mue all work fully without any account. Cuewise only asks you to sign in if you opt into its end-to-end encrypted sync. Infinity New Tab needs an account for sync, and daily.dev needs one for voting and commenting.',
+  },
+  {
+    q: 'Do any Momentum alternatives work in Safari?',
+    a: 'Bonjourr is the standout — it ships a real Safari extension alongside Chrome, Firefox and Edge. Momentum itself also supports Safari. Cuewise, Tabliss, Mue and daily.dev are Chromium and/or Firefox only today.',
+  },
+];
+
+const faqJsonLd = JSON.stringify({
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  mainEntity: faqs.map(({ q, a }) => ({
+    '@type': 'Question',
+    name: q,
+    acceptedAnswer: { '@type': 'Answer', text: a },
+  })),
+}).replace(/</g, '\\u003c');
+---
+
+<Base
+  title="6 Best Momentum Alternatives in 2026 — Free & Open Source"
+  description="Honest roundup of the best Momentum alternatives: Cuewise, Bonjourr, Tabliss, Mue, Infinity New Tab and daily.dev — pricing, privacy, maintenance status and who each one is really for."
+>
+  <script type="application/ld+json" set:html={faqJsonLd} slot="head" />
+  <main>
+
+    <!-- 1. Page Hero -->
+    <section class="page-hero">
+      <div class="wrap">
+        <div class="eyebrow">
+          <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+          </svg>
+          An honest roundup
+        </div>
+        <h1>The 6 Best Momentum Alternatives in 2026</h1>
+        <p class="hero-sub">
+          Momentum's free tier gives you a daily photo, a quote and a simple to-do — but the Pomodoro timer,
+          integrations, sounds and customization sit behind Plus at roughly $40/year. If that deal doesn't fit,
+          these six alternatives cover every reason people go looking.
+        </p>
+        <p class="hero-sub">
+          Full disclosure: <strong>Cuewise is our product.</strong> It's marked clearly below, every claim about
+          the others is verifiable, and we say plainly who each tool is best for — including when it isn't us.
+        </p>
+      </div>
+    </section>
+
+    <!-- 2. Quick picks -->
+    <section class="section-pad">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <p class="kicker">TL;DR</p>
+          <h2 class="section-title">Quick picks</h2>
+        </div>
+        <div class="feat-grid">
+
+          <div class="feat glass reveal">
+            <div class="feat-icon" style="background:linear-gradient(135deg,#8B5CF6,#6d28d9)">
+              <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/></svg>
+            </div>
+            <h3>Best free all-rounder</h3>
+            <p><strong>Cuewise</strong> (ours) — goals with subtasks, a full Pomodoro with heatmaps, curated quotes and insights. Everything free, open source, local-first.</p>
+          </div>
+
+          <div class="feat glass reveal">
+            <div class="feat-icon" style="background:linear-gradient(135deg,#10B981,#059669)">
+              <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="M3 12h18"/></svg>
+            </div>
+            <h3>Best minimalist design</h3>
+            <p><strong>Bonjourr</strong> — an iOS-inspired start page that's genuinely lovely, actively maintained, and the rare option with real Safari support.</p>
+          </div>
+
+          <div class="feat glass reveal">
+            <div class="feat-icon" style="background:linear-gradient(135deg,#06B6D4,#0891b2)">
+              <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+            </div>
+            <h3>Best for developers</h3>
+            <p><strong>daily.dev</strong> — turns the new tab into a personalized developer-news feed. A different job than Momentum, done extremely well.</p>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. Comparison table -->
+    <section class="section-pad" style="padding-top:0;">
+      <div class="wrap">
+        <div class="content-card glass reveal">
+          <h2>At a glance</h2>
+          <div class="vs-table-wrap">
+            <table class="vs-table">
+              <thead>
+                <tr>
+                  <th>Extension</th>
+                  <th>Price</th>
+                  <th>Open source</th>
+                  <th>Account</th>
+                  <th>Browsers</th>
+                  <th>Maintained</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Cuewise (ours)</td>
+                  <td><span class="vs-win">Free — every feature</span></td>
+                  <td><span class="vs-win">MIT</span></td>
+                  <td>Only for optional sync</td>
+                  <td>Chrome, Edge, Brave</td>
+                  <td><span class="vs-win">Yes</span></td>
+                </tr>
+                <tr>
+                  <td>Bonjourr</td>
+                  <td><span class="vs-win">Free (donations)</span></td>
+                  <td><span class="vs-win">GPL-3.0</span></td>
+                  <td><span class="vs-win">None</span></td>
+                  <td><span class="vs-win">Chrome, Firefox, Safari, Edge</span></td>
+                  <td><span class="vs-win">Yes</span></td>
+                </tr>
+                <tr>
+                  <td>Tabliss</td>
+                  <td><span class="vs-win">Free</span></td>
+                  <td><span class="vs-win">GPL-3.0</span></td>
+                  <td><span class="vs-win">None</span></td>
+                  <td>Chrome, Firefox, Edge</td>
+                  <td>Dormant since 2022</td>
+                </tr>
+                <tr>
+                  <td>Mue</td>
+                  <td><span class="vs-win">Free</span></td>
+                  <td><span class="vs-win">BSD-3</span></td>
+                  <td><span class="vs-win">None</span></td>
+                  <td>Chrome, Edge, Firefox</td>
+                  <td><span class="vs-win">Yes</span></td>
+                </tr>
+                <tr>
+                  <td>Infinity New Tab</td>
+                  <td>Free + Pro tier</td>
+                  <td>Proprietary</td>
+                  <td>Needed for sync</td>
+                  <td>Chrome, Edge, Firefox</td>
+                  <td><span class="vs-win">Yes</span></td>
+                </tr>
+                <tr>
+                  <td>daily.dev</td>
+                  <td>Free + paid Plus</td>
+                  <td><span class="vs-win">AGPL-3.0</span></td>
+                  <td>For community features</td>
+                  <td>Chrome, Edge</td>
+                  <td><span class="vs-win">Yes</span></td>
+                </tr>
+                <tr>
+                  <td>Momentum</td>
+                  <td>Free tier + Plus ~$40/yr</td>
+                  <td>Proprietary</td>
+                  <td>For sync and Plus</td>
+                  <td><span class="vs-win">Chrome, Firefox, Edge, Safari</span></td>
+                  <td><span class="vs-win">Yes</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. The alternatives in depth -->
+    <section class="section-pad" style="padding-top:0;">
+      <div class="wrap">
+
+        <div class="content-card glass reveal">
+          <h2>1. Cuewise — the free all-round replacement (ours)</h2>
+          <p>
+            Cuewise is the option on this list we make, so judge this entry accordingly — but the facts are easy to check.
+            Every feature is free with no premium tier: goals with objectives and subtasks, a full Pomodoro timer with
+            history and heatmaps, a quote library you curate across ten categories, ambient soundscapes and focus music,
+            and productivity insights with streaks and charts. It's MIT-licensed with the
+            <a href={SITE.githubUrl} target="_blank" rel="noopener noreferrer">code on GitHub</a>.
+          </p>
+          <p>
+            It's also local-first: your data stays on your device by default, with no account and no tracking.
+            If you want your setup on multiple machines, the optional sync is end-to-end encrypted — the server
+            only ever stores ciphertext it cannot read.
+          </p>
+          <p>
+            <strong>Honest limitations:</strong> Chromium browsers only today (Chrome, Edge, Brave — Firefox is on the
+            roadmap), and there are deliberately no third-party integrations, so if you need Todoist or your calendar
+            on the new tab, Momentum Plus still serves that better. For the full head-to-head, see
+            <a href="/cuewise-vs-momentum/">Cuewise vs Momentum</a>.
+          </p>
+        </div>
+
+        <div class="content-card glass reveal">
+          <h2>2. Bonjourr — the beautiful minimalist</h2>
+          <p>
+            Bonjourr is an iOS-inspired start page made by two independent developers, and it shows in the design:
+            clean typography, dynamic backgrounds that follow the time of day, and just enough widgets — clock,
+            weather, quick links, markdown notes, a simple pomodoro. It's GPL-3.0 open source, donation-funded,
+            needs no account, and is the rare alternative with a real Safari extension alongside Chrome, Firefox and Edge.
+            It's actively maintained, with releases as recent as this month.
+          </p>
+          <p>
+            <strong>Honest limitations:</strong> minimalism is the point. There's no goal history, no analytics,
+            no task integrations — if you want a productivity system rather than a calm start page, it will feel sparse.
+          </p>
+        </div>
+
+        <div class="content-card glass reveal">
+          <h2>3. Tabliss — the classic, now dormant</h2>
+          <p>
+            Tabliss has been the default "free Momentum alternative" recommendation for years, and it earned it:
+            fully free, GPL-3.0, no account, no data collection, and it famously requests <em>zero</em> extension
+            permissions. Backgrounds from Unsplash or your own images, plus widgets for weather, quotes, to-dos and links.
+          </p>
+          <p>
+            <strong>The honest caveat:</strong> it appears dormant. The Chrome and Firefox store builds haven't been
+            updated since April 2022 and the last code change was January 2024. It still works fine today — but you're
+            adopting software that isn't moving, which matters whenever browsers change something underneath it.
+          </p>
+        </div>
+
+        <div class="content-card glass reveal">
+          <h2>4. Mue — the open-source Momentum lookalike</h2>
+          <p>
+            Of the open-source options, Mue is the closest to Momentum's actual shape: a daily photo, a greeting,
+            a quote, and widgets — plus a community marketplace of photo and quote packs. It's BSD-licensed,
+            fully free, needs no account, states that all data stays on your device, and shipped a new release
+            this year. It runs on Chrome, Edge and Firefox.
+          </p>
+          <p>
+            <strong>Honest limitations:</strong> it's a small volunteer project with a small user base, so polish
+            and pace are modest — closer to a labor of love than a product with a team behind it.
+          </p>
+        </div>
+
+        <div class="content-card glass reveal">
+          <h2>5. Infinity New Tab — the widget grid</h2>
+          <p>
+            Infinity New Tab replaces the new tab with a speed-dial grid: bookmark tiles, weather, notes, to-dos,
+            wallpapers and search-engine switching, all in one place. It has around 400,000 users, is actively
+            updated, and its free tier is generous; a Pro tier and optional account-based sync sit on top.
+          </p>
+          <p>
+            <strong>Worth knowing before installing:</strong> it's proprietary, the developer is based in China with
+            the privacy policy hosted on a third-party extension-distribution platform, and its Pro listing discloses
+            that some built-in shortcut tiles are affiliate links that earn the developer commissions. None of that is
+            disqualifying — but it's a different privacy posture than the open-source options here, so read its policy
+            and decide with open eyes.
+          </p>
+        </div>
+
+        <div class="content-card glass reveal">
+          <h2>6. daily.dev — for developers, a different job entirely</h2>
+          <p>
+            daily.dev doesn't try to be a dashboard — it turns the new tab into a personalized feed of developer
+            news from over 2,000 sources, ranked by an active community. The core feed is free and the code is
+            AGPL-3.0 open source; a paid Plus tier adds AI summaries and filtering. You can browse without an
+            account, though voting and commenting require one.
+          </p>
+          <p>
+            <strong>Honest limitations:</strong> it replaces Momentum's calm with a stream. There's no clock, no goals,
+            no focus timer — and a feed on every new tab is the opposite of distraction-free. Brilliant if reading dev
+            news is what you actually do with new tabs; wrong tool if you're trying to focus.
+          </p>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- 5. How to choose -->
+    <section class="section-pad" style="padding-top:0;">
+      <div class="wrap">
+        <div class="content-card glass reveal">
+          <h2>How to choose</h2>
+          <p>
+            Start from why you're leaving. If it's the <strong>Plus paywall</strong> — you want the productivity
+            features Momentum charges for — Cuewise gives you the deepest free toolset, and Mue the closest free
+            recreation of Momentum's look. If it's <strong>simplicity</strong> you're after, Bonjourr is the most
+            polished minimal option and Tabliss the classic one (dormancy noted). If your new tab is really a
+            <strong>reading habit</strong>, daily.dev is the only one built for that. And if you want
+            <strong>maximum widgets</strong> in one grid, Infinity New Tab does the most — just read its privacy
+            policy first.
+          </p>
+          <p>
+            Every option here except Infinity New Tab and Momentum itself is open source, and four of the six
+            work with no account at all. Whatever you pick, you can try it in minutes and switch back just as fast.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 6. FAQ -->
+    <section class="section-pad" style="padding-top:0;" id="faq">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <p class="kicker">FAQ</p>
+          <h2 class="section-title">Common questions</h2>
+        </div>
+
+        <details class="faq-item glass reveal">
+          <summary>What is the best free Momentum alternative?</summary>
+          <div class="faq-body">
+            <p>It depends on what you use Momentum for. For goals, a Pomodoro timer and productivity tracking, Cuewise is the most complete free option. For a beautiful minimalist start page, Bonjourr is hard to beat. If your new tab is mostly for reading developer news, daily.dev is built for exactly that. All three have fully usable free versions.</p>
+          </div>
+        </details>
+
+        <details class="faq-item glass reveal">
+          <summary>Is Tabliss still maintained?</summary>
+          <div class="faq-body">
+            <p>Not actively. The Chrome and Firefox store builds have not been updated since April 2022, and the last code change on GitHub was January 2024. The extension still works today, but don't expect new features or fixes.</p>
+          </div>
+        </details>
+
+        <details class="faq-item glass reveal">
+          <summary>Which alternatives work without creating an account?</summary>
+          <div class="faq-body">
+            <p>Cuewise, Tabliss, Bonjourr and Mue all work fully without any account. Cuewise only asks you to sign in if you opt into its end-to-end encrypted sync. Infinity New Tab needs an account for sync, and daily.dev needs one for voting and commenting.</p>
+          </div>
+        </details>
+
+        <details class="faq-item glass reveal">
+          <summary>Do any Momentum alternatives work in Safari?</summary>
+          <div class="faq-body">
+            <p>Bonjourr is the standout — it ships a real Safari extension alongside Chrome, Firefox and Edge. Momentum itself also supports Safari. Cuewise, Tabliss, Mue and daily.dev are Chromium and/or Firefox only today.</p>
+          </div>
+        </details>
+
+      </div>
+    </section>
+
+    <!-- 7. Final CTA -->
+    <FinalCta />
+
+  </main>
+</Base>
