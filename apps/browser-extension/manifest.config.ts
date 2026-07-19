@@ -95,7 +95,7 @@ export default defineManifest(async (env) => {
     short_name: 'Cuewise',
     version: pkg.version,
     description:
-      'Beautiful new tab page with daily motivational quotes, to-do goals, Pomodoro timer, focus mode & insights. Free and private.',
+      'Beautiful new tab with motivational quotes, goals, Pomodoro timer, insights & optional encrypted sync. Free and private.',
     icons: {
       16: 'icons/icon-16.png',
       48: 'icons/icon-48.png',

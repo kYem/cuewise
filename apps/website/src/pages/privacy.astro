@@ -5,7 +5,7 @@ import { SITE } from '../lib/site';
 
 <Base
   title="Privacy Policy - Cuewise"
-  description="Cuewise privacy policy — all your data stays local on your device. No tracking, no analytics, no selling."
+  description="Cuewise privacy policy — local-first: your data stays on your device by default, with optional end-to-end encrypted sync. No tracking, no analytics, no selling."
 >
   <main>
 
@@ -20,7 +20,7 @@ import { SITE } from '../lib/site';
         </div>
         <h1>Privacy Policy</h1>
         <p class="hero-sub">Your data is yours. This page explains, in plain terms, exactly what Cuewise does — and doesn't do — with it.</p>
-        <p class="last-updated">Last Updated: June 28, 2026</p>
+        <p class="last-updated">Last Updated: July 19, 2026</p>
       </div>
     </section>
 
@@ -37,7 +37,7 @@ import { SITE } from '../lib/site';
             Our Commitment
           </h2>
           <p>Cuewise is built privacy-first. Your productivity is personal, and your data should stay yours alone — so we designed the extension to keep it that way.</p>
-          <p><strong>We do not collect, store, or share any of your personal information on our servers.</strong></p>
+          <p><strong>By default, we do not collect, store, or share any of your personal information on our servers.</strong> If you choose to turn on the optional Cloud Sync, your data is end-to-end encrypted on your device before it is sent — our servers store only ciphertext they cannot read (see the Cloud Sync section below).</p>
         </div>
 
         <!-- Card 2: What Data We Collect -->
@@ -79,12 +79,12 @@ import { SITE } from '../lib/site';
             How We Store Your Data
           </h2>
           <div>
-            <h3>Local Storage Only:</h3>
-            <p>All your goals, tasks, and productivity data are stored exclusively on your device using your browser's local storage. This means:</p>
+            <h3>Local-First Storage:</h3>
+            <p>By default, all your goals, tasks, and productivity data are stored exclusively on your device using your browser's local storage. This means:</p>
             <ul>
               <li>We never see your personal data</li>
-              <li>Your data never leaves your device</li>
-              <li>No servers store your productivity information</li>
+              <li>Your data doesn't leave your device unless you turn on the optional, end-to-end encrypted Cloud Sync</li>
+              <li>No servers store your productivity information in readable form — with sync off, they store nothing at all</li>
               <li>You have complete control over your data</li>
             </ul>
           </div>
@@ -141,6 +141,40 @@ import { SITE } from '../lib/site';
           </div>
         </div>
 
+        <!-- Card: Cloud Sync -->
+        <div class="content-card glass reveal">
+          <h2>
+            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>
+            </svg>
+            Cloud Sync (Optional)
+          </h2>
+          <p>Cuewise offers an <strong>optional, opt-in</strong> Cloud Sync so your goals, quotes, and reminders follow you across devices. It is off by default and only activates when you sign in from the Cloud Sync settings. With sync off, nothing in this section applies — Cuewise works fully offline.</p>
+          <div>
+            <h3>End-to-end encrypted — we cannot read your data:</h3>
+            <ul>
+              <li>Your synced data (goals, quotes, collections, reminders, and settings) is encrypted <strong>on your device</strong> with AES-256-GCM before it is sent. Our servers store and relay only that ciphertext — they never see, parse, index, or log its contents.</li>
+              <li>The encryption key is created on your device and never sent to us in a readable form. It is protected by a recovery code that only you hold — which also means <strong>we cannot recover your synced data for you</strong> if you lose the recovery code and all of your devices.</li>
+            </ul>
+          </div>
+          <div>
+            <h3>What our servers do store:</h3>
+            <ul>
+              <li><strong>Account:</strong> the email address from your sign-in provider (e.g. Google), used only to identify your account.</li>
+              <li><strong>Devices:</strong> a name for each signed-in device and its session, so you can recognize them.</li>
+              <li><strong>Sync metadata:</strong> timestamps and sequence counters needed to order changes. None of this reveals the content of your data.</li>
+            </ul>
+          </div>
+          <div>
+            <h3>Your controls:</h3>
+            <ul>
+              <li><strong>Turn it off any time:</strong> disabling sync stops all syncing immediately; your local data is unaffected.</li>
+              <li><strong>Export:</strong> you can export everything your account has stored.</li>
+              <li><strong>Delete:</strong> deleting your account removes your user record, sessions, key material, and every synced record from our servers.</li>
+            </ul>
+          </div>
+        </div>
+
         <!-- Card 4: What We Don't Do -->
         <div class="content-card glass reveal">
           <h2>
@@ -184,8 +218,8 @@ import { SITE } from '../lib/site';
           <p>You have complete control over your data:</p>
           <ul>
             <li><strong>Access:</strong> All your data is stored locally and accessible to you at any time</li>
-            <li><strong>Delete:</strong> You can delete your data by clearing your browser's local storage or uninstalling the extension</li>
-            <li><strong>Export:</strong> Your data is stored in standard browser storage format</li>
+            <li><strong>Delete:</strong> You can delete your local data by clearing your browser's local storage or uninstalling the extension; if you used Cloud Sync, deleting your account removes everything from our servers too</li>
+            <li><strong>Export:</strong> Your data is stored in standard browser storage format, and synced data can be exported from your account</li>
             <li><strong>Unsubscribe:</strong> You can unsubscribe from our newsletter at any time using the link in any email</li>
           </ul>
         </div>
