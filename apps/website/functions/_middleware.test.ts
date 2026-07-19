@@ -143,4 +143,45 @@ describe('onRequest', () => {
     expect(csp).toContain('chrome-extension://abjkbnhoepcnmbabflkedbapbldnpkbf');
     expect(csp).toContain('tauri://localhost');
   });
+
+  it('301-redirects a www host to its bare host, preserving path and query', async () => {
+    const response = await onRequest({
+      request: new Request('https://www.cuewise.app/privacy/?ref=newsletter'),
+      next: () => Promise.resolve(makeUpstreamResponse()),
+    });
+    expect(response.status).toBe(301);
+    expect(response.headers.get('Location')).toBe('https://cuewise.app/privacy/?ref=newsletter');
+  });
+
+  it('never renders the mirrored page when redirecting www', async () => {
+    let originInvoked = false;
+    const response = await onRequest({
+      request: new Request('https://www.cuewise.app/'),
+      next: () => {
+        originInvoked = true;
+        return Promise.resolve(makeUpstreamResponse());
+      },
+    });
+    expect(response.status).toBe(301);
+    expect(originInvoked).toBe(false);
+  });
+
+  it('keeps HSTS on the www redirect so the preload contract holds on both hosts', async () => {
+    const response = await onRequest({
+      request: new Request('https://www.cuewise.app/'),
+      next: () => Promise.resolve(makeUpstreamResponse()),
+    });
+    expect(response.headers.get('Strict-Transport-Security')).toBe(
+      'max-age=63072000; includeSubDomains; preload'
+    );
+  });
+
+  it('serves the apex host without redirecting', async () => {
+    const response = await onRequest({
+      request: new Request('https://cuewise.app/privacy/'),
+      next: () => Promise.resolve(makeUpstreamResponse()),
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Location')).toBeNull();
+  });
 });
