@@ -19,7 +19,6 @@
       "dependsOn": ["^type-check"]
     },
     "test": {
-      "dependsOn": ["^build"],
       "outputs": ["coverage/**"],
       "cache": true
     },
@@ -28,7 +27,6 @@
       "persistent": true
     },
     "test:coverage": {
-      "dependsOn": ["^build"],
       "outputs": ["coverage/**"],
       "cache": true
     },
