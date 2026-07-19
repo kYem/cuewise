@@ -6,6 +6,8 @@ AI-assistant guide for the ENG-43 cloud-sync backend. Read the root [`CLAUDE.md`
 
 `apps/api` is Cuewise's **opt-in** cloud-sync backend: a Cloudflare Worker (Hono) with a D1 (SQLite) database, deployed independently of the marketing site and the extension. It lets a signed-in user sync goals/quotes/reminders/etc. across the Chrome extension, the Tauri macOS app, and future web/mobile clients.
 
+**License**: AGPL-3.0-only (`LICENSE` here), unlike the rest of the repo (MIT). Anyone hosting a modified copy must publish their source; our own deployment satisfies that by tracking this public repo. Clients are unaffected — they interact over HTTP, which AGPL does not reach.
+
 **The one guardrail that shapes everything below**: the server stores **ciphertext only**. It never parses, indexes, decrypts, or logs a record's payload — `ciphertext` is an opaque string all the way through `validate-changes.ts`, `d1-store.ts`, and the `records` table. (The real encryption envelope is ENG-44's deliverable; until it lands, callers pass a stub plaintext envelope through the same opaque field — the server code is identical either way.) This is why there's no server-side search or analytics on record contents, and why `GET /export` / `DELETE /account` exist from v1 — they're the privacy exit hatch a ciphertext-only server owes its users.
 
 Stack: Hono (routing) + D1 (`DB` binding) + `jose` (JWT/JWKS verification for Google/Apple ID tokens) + Vitest via `@cloudflare/vitest-pool-workers` (tests run inside a real Workers runtime, not a Node shim).

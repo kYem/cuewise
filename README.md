@@ -253,7 +253,9 @@ pnpm build
 
 ## 📄 License
 
-MIT License - See LICENSE file for details
+MIT License - See LICENSE file for details.
+
+**Exception**: the cloud-sync server (`apps/api/`) is licensed under AGPL-3.0-only — see `apps/api/LICENSE`. The extension and apps only talk to it over HTTP, so this changes nothing for them; it means anyone who runs a modified copy of the sync server as a service must publish their source.
 
 ---
 
