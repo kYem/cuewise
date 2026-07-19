@@ -93,7 +93,16 @@ interface MiddlewareContext {
 }
 
 export async function onRequest(context: MiddlewareContext): Promise<Response> {
+  const url = new URL(context.request.url);
+
+  // Any www.* host is a mirror of its bare host; 301 it away so search engines and
+  // users see one canonical host. Runs before next() — the mirror is never rendered.
+  if (url.hostname.startsWith('www.')) {
+    url.hostname = url.hostname.slice(4);
+    const redirect = new Response(null, { status: 301, headers: { Location: url.toString() } });
+    return applySecurityHeaders(url.pathname, redirect);
+  }
+
   const response = await context.next();
-  const { pathname, host } = new URL(context.request.url);
-  return applySecurityHeaders(pathname, response, undefined, isLocalhostHost(host));
+  return applySecurityHeaders(url.pathname, response, undefined, isLocalhostHost(url.host));
 }
