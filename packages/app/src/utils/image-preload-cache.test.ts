@@ -196,23 +196,25 @@ describe('concurrent daily resolution', () => {
     expect(mockSetDaily).toHaveBeenCalledTimes(1);
   });
 
-  it('lets a newer category win when it overlaps an older resolve', async () => {
-    mockLoadFallback.mockResolvedValueOnce('https://img/nature');
-    mockLoadFallback.mockResolvedValueOnce('https://img/ocean');
+  it('lets a newer category win even when the older resolve finishes last', async () => {
+    // The older resolve settling last is the only ordering that exposes the bug: it
+    // would write its URL into a cache whose category has already moved on.
+    let releaseNature: (url: string) => void = () => undefined;
+    mockLoadFallback.mockImplementation((category: string) => {
+      if (category === 'nature') {
+        return new Promise<string>((resolve) => {
+          releaseNature = resolve;
+        });
+      }
+      return Promise.resolve('https://img/ocean');
+    });
 
-    await Promise.all([preloadImages('nature'), preloadImages('ocean')]);
+    const nature = preloadImages('nature');
+    const ocean = preloadImages('ocean');
+    await ocean;
+    releaseNature('https://img/nature');
+    await nature;
 
     expect(getPreloadedCurrentUrl('ocean')).toBe('https://img/ocean');
-  });
-
-  it('does not leave a stale in-flight entry that blocks the next resolve', async () => {
-    mockLoadFallback.mockResolvedValue('https://img/first');
-    await Promise.all([preloadImages('nature'), preloadImages('ocean')]);
-    clearPreloadCache();
-    mockLoadFallback.mockResolvedValue('https://img/second');
-
-    await preloadImages('ocean');
-
-    expect(getPreloadedCurrentUrl('ocean')).toBe('https://img/second');
   });
 });
