@@ -10,12 +10,14 @@ export { LocalStorageKeyValueStore } from './local-storage-key-value-store';
 export type { PlaylistResumeInfo, StorageUsageInfo } from './storage-helpers';
 // Typed storage helpers
 export {
+  clearCustomBackground,
   formatBytes,
   getCalendarState,
   getCollections,
   getConceptCards,
   getCurrentQuote,
   getCurrentVideoForPlaylist,
+  getCustomBackground,
   getCustomYoutubePlaylists,
   getDailyBackground,
   getGoals,
@@ -33,6 +35,7 @@ export {
   setCollections,
   setConceptCards,
   setCurrentQuote,
+  setCustomBackground,
   setCustomYoutubePlaylists,
   setDailyBackground,
   setGoals,

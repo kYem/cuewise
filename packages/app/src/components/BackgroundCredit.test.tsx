@@ -50,4 +50,18 @@ describe('BackgroundCredit', () => {
 
     expect(container).toBeEmptyDOMElement();
   });
+
+  it('credits nobody for an image the user supplied themselves', () => {
+    const { container } = render(
+      <BackgroundCredit imageUrl="data:image/jpeg;base64,abc123" onRefresh={vi.fn()} />
+    );
+
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('offers no refresh control for a user-supplied image', () => {
+    render(<BackgroundCredit imageUrl="data:image/jpeg;base64,abc123" onRefresh={vi.fn()} />);
+
+    expect(screen.queryByRole('button', { name: /new background/i })).not.toBeInTheDocument();
+  });
 });

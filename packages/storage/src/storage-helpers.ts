@@ -553,3 +553,36 @@ export async function setDailyBackground(
     return storageFailure('Error setting daily background');
   }
 }
+
+/**
+ * The user's own background image as a data URL, or null when they haven't set one.
+ * Kept out of the settings object: an image is orders of magnitude larger than every
+ * other setting combined, and would make each settings write carry it.
+ */
+export async function getCustomBackground(): Promise<string | null> {
+  try {
+    return await getFromStorage<string>(STORAGE_KEYS.CUSTOM_BACKGROUND, 'local');
+  } catch (error) {
+    logger.error('Error getting custom background', error);
+    return null;
+  }
+}
+
+/** Stores the image. Always check `success` — a large image can exceed the quota. */
+export async function setCustomBackground(dataUrl: string): Promise<StorageResult> {
+  try {
+    return await setInStorage(STORAGE_KEYS.CUSTOM_BACKGROUND, dataUrl, 'local');
+  } catch (error) {
+    logger.error('Error setting custom background', error);
+    return storageFailure('Error setting custom background');
+  }
+}
+
+export async function clearCustomBackground(): Promise<boolean> {
+  try {
+    return await removeFromStorage(STORAGE_KEYS.CUSTOM_BACKGROUND, 'local');
+  } catch (error) {
+    logger.error('Error clearing custom background', error);
+    return false;
+  }
+}

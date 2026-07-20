@@ -30,9 +30,11 @@ import {
 } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useState } from 'react';
+import { useBackgroundStore } from '../../stores/background-store';
 import { type SyncUiStatus, useSyncController } from '../../sync/sync-controller';
 import { isCalendarFeatureEnabled } from '../../utils/google-calendar';
 import { previewSound } from '../../utils/sounds';
+import { CustomBackgroundPicker } from './CustomBackgroundPicker';
 import { PresetGrid } from './PresetGrid';
 import {
   Segmented,
@@ -362,6 +364,15 @@ function FocusSection({ s, set, filter }: SettingsSectionProps) {
             value={s.focusModeImageCategory}
             onChange={(v: FocusImageCategory) => set({ focusModeImageCategory: v })}
           />
+        </SettingRow>
+        <SettingRow
+          stack
+          label="Your own image"
+          filter={filter}
+          help="Use a picture of your own instead. It's stored on this device and never uploaded."
+          keywords="custom background wallpaper upload own photo picture personal image"
+        >
+          <CustomBackgroundPicker onChange={useBackgroundStore.getState().setCustomBackground} />
         </SettingRow>
       </SettingSubgroup>
       {s.focusModeEnabled && (

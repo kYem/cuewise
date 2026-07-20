@@ -116,6 +116,11 @@ export interface PhotoCredit {
  */
 const PHOTO_CREDITS: Record<string, PhotoCreditEntry> = {};
 
+/** Whether this image came from Unsplash — false for a user's own picture, which we must not credit. */
+export function isUnsplashUrl(url: string): boolean {
+  return url.startsWith('https://images.unsplash.com/');
+}
+
 /** Extracts the `photo-…` CDN id from an Unsplash image URL; null if it isn't one. */
 function extractPhotoId(url: string): string | null {
   return /\/(photo-[^/?]+)/.exec(url)?.[1] ?? null;
