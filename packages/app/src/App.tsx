@@ -1,6 +1,7 @@
 import { ToastContainer } from '@cuewise/ui';
 import { Coffee } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { BackgroundCredit } from './components/BackgroundCredit';
 import { ConceptsPage } from './components/ConceptsPage';
 import { CelebrationOverlay } from './components/celebration/CelebrationOverlay';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -17,7 +18,11 @@ import { useGoalStore } from './stores/goal-store';
 import { useSettingsStore } from './stores/settings-store';
 import { useToastStore } from './stores/toast-store';
 import { type SyncController, SyncControllerContext } from './sync/sync-controller';
-import { getPreloadedCurrentUrl, preloadImages } from './utils/image-preload-cache';
+import {
+  getPreloadedCurrentUrl,
+  preloadImages,
+  refreshBackground,
+} from './utils/image-preload-cache';
 import { loadImageWithFallback } from './utils/unsplash';
 
 type Page = 'home' | 'pomodoro' | 'insights' | 'quotes' | 'goals' | 'concepts';
@@ -35,6 +40,7 @@ function App({ extraSections, syncController }: AppProps = {}) {
   const { settings } = useSettingsStore();
   const [backgroundImage, setBackgroundImage] = useState<string | null>(null);
   const [imageLoaded, setImageLoaded] = useState(false);
+  const [isRefreshingBackground, setIsRefreshingBackground] = useState(false);
 
   // Show background image only when glass theme is selected
   const showBackgroundImage = settings.colorTheme === 'glass';
@@ -142,6 +148,16 @@ function App({ extraSections, syncController }: AppProps = {}) {
     };
   }, [showBackgroundImage, settings.focusModeImageCategory]);
 
+  const handleRefreshBackground = async () => {
+    setIsRefreshingBackground(true);
+    const url = await refreshBackground(settings.focusModeImageCategory);
+    // A null url means nothing fresh loaded — leave the current background in place.
+    if (url !== null) {
+      setBackgroundImage(url);
+    }
+    setIsRefreshingBackground(false);
+  };
+
   // Inject the Cloud Sync section only when a host actually wires a controller in.
   const effectiveExtraSections = syncController
     ? [syncSettingsSection, ...(extraSections ?? [])]
@@ -186,6 +202,14 @@ function App({ extraSections, syncController }: AppProps = {}) {
               currentPage === 'quotes' ||
               currentPage === 'insights' ||
               currentPage === 'concepts') && <div className="fixed inset-0 bg-black/25" />}
+
+            {imageLoaded && (
+              <BackgroundCredit
+                imageUrl={backgroundImage}
+                onRefresh={handleRefreshBackground}
+                isRefreshing={isRefreshingBackground}
+              />
+            )}
 
             {/* Loading indicator - shown while image loads */}
             {!imageLoaded && (

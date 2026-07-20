@@ -11,7 +11,12 @@ vi.mock('./unsplash', () => ({
 }));
 
 import { getDailyBackground, setDailyBackground } from '@cuewise/storage';
-import { clearPreloadCache, getPreloadedCurrentUrl, preloadImages } from './image-preload-cache';
+import {
+  clearPreloadCache,
+  getPreloadedCurrentUrl,
+  preloadImages,
+  refreshBackground,
+} from './image-preload-cache';
 import { loadImageWithFallback, preloadImage } from './unsplash';
 
 const mockGetDaily = getDailyBackground as unknown as Mock;
@@ -79,6 +84,49 @@ describe('preloadImages daily background', () => {
     await preloadImages('nature');
 
     expect(getPreloadedCurrentUrl('nature')).toBeNull();
+    expect(mockSetDaily).not.toHaveBeenCalled();
+  });
+});
+
+describe('refreshBackground', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clearPreloadCache();
+    mockSetDaily.mockResolvedValue({ success: true });
+  });
+
+  it('replaces the stored background with a freshly validated image', async () => {
+    mockGetDaily.mockResolvedValue({ url: 'https://img/today', category: 'nature', date: 'today' });
+    mockPreload.mockResolvedValue('https://img/today');
+    await preloadImages('nature');
+    mockLoadFallback.mockResolvedValue('https://img/chosen');
+
+    const url = await refreshBackground('nature');
+
+    expect(url).toBe('https://img/chosen');
+    expect(getPreloadedCurrentUrl('nature')).toBe('https://img/chosen');
+    expect(mockSetDaily).toHaveBeenCalledWith('https://img/chosen', 'nature');
+  });
+
+  it('ignores the persisted background instead of revalidating it', async () => {
+    mockLoadFallback.mockResolvedValue('https://img/chosen');
+
+    await refreshBackground('nature');
+
+    expect(mockGetDaily).not.toHaveBeenCalled();
+  });
+
+  it('keeps the current background when no fresh image can be loaded', async () => {
+    mockGetDaily.mockResolvedValue({ url: 'https://img/today', category: 'nature', date: 'today' });
+    mockPreload.mockResolvedValue('https://img/today');
+    await preloadImages('nature');
+    vi.clearAllMocks();
+    mockLoadFallback.mockRejectedValue(new Error('all failed'));
+
+    const url = await refreshBackground('nature');
+
+    expect(url).toBeNull();
+    expect(getPreloadedCurrentUrl('nature')).toBe('https://img/today');
     expect(mockSetDaily).not.toHaveBeenCalled();
   });
 });

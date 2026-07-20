@@ -67,6 +67,26 @@ export async function preloadImages(category: FocusImageCategory): Promise<void>
 }
 
 /**
+ * Pick a fresh background on demand, replacing today's. Unlike preloadImages this
+ * skips the persisted image entirely — the point is to move past it. The current
+ * background is left untouched if nothing new loads, so a refresh can't blank the page.
+ * @returns The new URL, or null if no fresh image could be loaded.
+ */
+export async function refreshBackground(category: FocusImageCategory): Promise<string | null> {
+  try {
+    const url = await loadImageWithFallback(category);
+    await setDailyBackground(url, category);
+    cache.category = category;
+    cache.currentUrl = url;
+    cache.isInitialized = true;
+    return url;
+  } catch (error) {
+    logger.warn('Could not load a new background; keeping the current one', { error });
+    return null;
+  }
+}
+
+/**
  * Get the resolved daily background URL.
  * Returns null if not resolved or the category doesn't match.
  */
