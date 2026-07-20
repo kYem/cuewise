@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { computeScaledDimensions, MAX_BACKGROUND_DIMENSION } from './custom-background';
+import {
+  BackgroundImageError,
+  computeScaledDimensions,
+  fileToBackgroundDataUrl,
+  MAX_BACKGROUND_DIMENSION,
+} from './custom-background';
 
 describe('computeScaledDimensions', () => {
   it('leaves an image already within the limit untouched', () => {
@@ -41,5 +46,25 @@ describe('computeScaledDimensions', () => {
 
   it('floors a sub-pixel dimension that is already inside the bound', () => {
     expect(computeScaledDimensions(0.4, 800, 1920)).toEqual({ width: 1, height: 800 });
+  });
+});
+
+describe('fileToBackgroundDataUrl guards', () => {
+  function file(type: string, size = 10): File {
+    const f = new File(['x'], 'pic', { type });
+    Object.defineProperty(f, 'size', { value: size });
+    return f;
+  }
+
+  it('rejects a file that is definitely not an image', async () => {
+    await expect(fileToBackgroundDataUrl(file('application/pdf'))).rejects.toThrow(
+      BackgroundImageError
+    );
+  });
+
+  it('rejects a file too large to process before reading it into memory', async () => {
+    await expect(fileToBackgroundDataUrl(file('image/jpeg', 40 * 1024 * 1024))).rejects.toThrow(
+      /under 25 MB/
+    );
   });
 });

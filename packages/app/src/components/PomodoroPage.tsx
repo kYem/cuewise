@@ -6,7 +6,7 @@ import { useFocusModeStore } from '../stores/focus-mode-store';
 import { useQuoteStore } from '../stores/quote-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { resolvePomodoroCompanion } from '../utils/calendar-visibility';
-import { getPreloadedCurrentUrl } from '../utils/image-preload-cache';
+import { getPreloadedCurrentUrl, preloadImages } from '../utils/image-preload-cache';
 import { loadImageWithFallback } from '../utils/unsplash';
 import { CalendarStrip } from './CalendarStrip';
 import { FocusMode } from './FocusMode';
@@ -58,7 +58,13 @@ export const PomodoroPage: React.FC = () => {
     let cancelled = false;
 
     const loadBackground = async () => {
-      // Check if we have a preloaded image from hovering on the button
+      // Resolve today's background first; without this a cold cache (e.g. right after
+      // removing a custom image) falls through to a random photo instead of today's.
+      await preloadImages(focusModeImageCategory);
+      if (cancelled) {
+        return;
+      }
+
       const preloadedUrl = getPreloadedCurrentUrl(focusModeImageCategory);
       if (preloadedUrl) {
         setBackgroundImage(preloadedUrl);

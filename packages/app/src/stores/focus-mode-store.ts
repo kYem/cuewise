@@ -1,6 +1,6 @@
 import { logger } from '@cuewise/shared';
 import { create } from 'zustand';
-import { getPreloadedCurrentUrl } from '../utils/image-preload-cache';
+import { getCustomBackgroundOverride, getPreloadedCurrentUrl } from '../utils/image-preload-cache';
 import { loadImageWithFallback } from '../utils/unsplash';
 import { useSettingsStore } from './settings-store';
 
@@ -98,6 +98,13 @@ export const useFocusModeStore = create<FocusModeStore>((set, get) => ({
       return;
     }
 
+    // The background is the user's own image; swapping in a curated photo would discard it.
+    const override = getCustomBackgroundOverride();
+    if (override !== null) {
+      set({ currentImageUrl: override, nextImageUrl: null, isImageLoading: false });
+      return;
+    }
+
     set({ isImageLoading: true, imageError: null });
 
     const { settings } = useSettingsStore.getState();
@@ -136,6 +143,12 @@ export const useFocusModeStore = create<FocusModeStore>((set, get) => ({
   },
 
   preloadNextImage: async () => {
+    // Nothing to rotate to while the user's own image is showing — and fetching one
+    // would only give loadNextImage something to replace it with.
+    if (getCustomBackgroundOverride() !== null) {
+      return;
+    }
+
     const { settings } = useSettingsStore.getState();
     const category = settings.focusModeImageCategory;
 

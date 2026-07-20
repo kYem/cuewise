@@ -55,12 +55,15 @@ export const CustomBackgroundPicker: React.FC = () => {
   const handleRemove = async () => {
     setError(null);
     setIsBusy(true);
-    const result = await removeCustomBackground();
-    if (!result.success) {
-      logger.error('Could not remove the custom background', { error: result.error });
-      setError(REMOVE_FAILED);
+    try {
+      const result = await removeCustomBackground();
+      if (!result.success) {
+        logger.error('Could not remove the custom background', { error: result.error });
+        setError(REMOVE_FAILED);
+      }
+    } finally {
+      setIsBusy(false);
     }
-    setIsBusy(false);
   };
 
   return (

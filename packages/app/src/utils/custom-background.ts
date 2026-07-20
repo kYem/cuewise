@@ -8,6 +8,16 @@ const MAX_FILE_BYTES = 25 * 1024 * 1024;
 
 const JPEG_QUALITY = 0.85;
 
+/** A stalled read (network drive, cloud placeholder) settles neither handler; bound the wait. */
+const CONVERT_TIMEOUT_MS = 30_000;
+
+function withTimeout<T>(work: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new BackgroundImageError(message)), ms);
+    work.then(resolve, reject).finally(() => clearTimeout(timer));
+  });
+}
+
 /** Carries a message written for users; anything else is a bug and must not reach the UI. */
 export class BackgroundImageError extends Error {
   constructor(message: string, options?: ErrorOptions) {
@@ -84,15 +94,28 @@ export async function fileToBackgroundDataUrl(
   file: File,
   maxDimension = MAX_BACKGROUND_DIMENSION
 ): Promise<string> {
-  if (!file.type.startsWith('image/')) {
+  // An empty type means the OS didn't resolve it, not that it isn't an image — let the decoder judge.
+  if (file.type !== '' && !file.type.startsWith('image/')) {
     throw new BackgroundImageError('That file is not an image.');
   }
   if (file.size > MAX_FILE_BYTES) {
     throw new BackgroundImageError('That image is too big to process. Try one under 25 MB.');
   }
 
+  return withTimeout(
+    convert(file, maxDimension),
+    CONVERT_TIMEOUT_MS,
+    'That image took too long to process. Try a different one.'
+  );
+}
+
+async function convert(file: File, maxDimension: number): Promise<string> {
   const sourceDataUrl = await readAsDataUrl(file);
   const img = await loadImage(sourceDataUrl);
+  if (img.naturalWidth === 0 || img.naturalHeight === 0) {
+    // An SVG with no intrinsic size; scaling it would save a 1×1 smear as the background.
+    throw new BackgroundImageError('That image has no fixed size. Try a JPEG, PNG, or WebP.');
+  }
   const { width, height } = computeScaledDimensions(
     img.naturalWidth,
     img.naturalHeight,

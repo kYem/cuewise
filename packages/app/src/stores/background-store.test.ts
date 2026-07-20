@@ -90,3 +90,23 @@ describe('background store', () => {
     expect(useBackgroundStore.getState().customBackground).toBe(IMAGE);
   });
 });
+
+describe('background store load safety', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useBackgroundStore.setState({ customBackground: null, isLoaded: false });
+  });
+
+  it('releases the page when the storage read never settles', async () => {
+    vi.useFakeTimers();
+    mockGet.mockReturnValue(new Promise(() => undefined));
+
+    const load = useBackgroundStore.getState().loadCustomBackground();
+    await vi.advanceTimersByTimeAsync(3000);
+    await load;
+
+    // Pages hide their content until isLoaded; a hung read must not blank the app forever.
+    expect(useBackgroundStore.getState().isLoaded).toBe(true);
+    vi.useRealTimers();
+  });
+});

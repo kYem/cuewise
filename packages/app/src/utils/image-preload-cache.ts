@@ -27,6 +27,11 @@ export function setCustomBackgroundOverride(dataUrl: string | null): void {
   customOverride = dataUrl;
 }
 
+/** The user's own image, or null when the curated rotation is in charge. */
+export function getCustomBackgroundOverride(): string | null {
+  return customOverride;
+}
+
 const cache: PreloadCache = {
   currentUrl: null,
   category: null,

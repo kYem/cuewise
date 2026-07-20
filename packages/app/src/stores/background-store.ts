@@ -3,6 +3,8 @@ import { clearCustomBackground, getCustomBackground, setCustomBackground } from 
 import { create } from 'zustand';
 import { setCustomBackgroundOverride } from '../utils/image-preload-cache';
 
+const LOAD_TIMEOUT_MS = 3000;
+
 interface BackgroundState {
   /** The user's own background as a data URL; null means use the curated rotation. */
   customBackground: string | null;
@@ -20,11 +22,15 @@ export const useBackgroundStore = create<BackgroundState>((set) => ({
 
   loadCustomBackground: async () => {
     try {
-      const stored = await getCustomBackground();
+      // Bounded: pages hide their content until isLoaded, so a read that never settles
+      // (invalidated extension context) would leave the app permanently blank.
+      const stored = await Promise.race([
+        getCustomBackground(),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), LOAD_TIMEOUT_MS)),
+      ]);
       setCustomBackgroundOverride(stored);
       set({ customBackground: stored, isLoaded: true });
     } catch (error) {
-      // Always land isLoaded — the page gates rendering on it and would stay blank forever.
       logger.error('Could not load the custom background; using the curated rotation', error);
       setCustomBackgroundOverride(null);
       set({ customBackground: null, isLoaded: true });
