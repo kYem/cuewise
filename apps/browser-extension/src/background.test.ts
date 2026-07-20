@@ -62,7 +62,12 @@ beforeAll(async () => {
   fireButton = chromeMock.notifications.onButtonClicked.addListener.mock
     .calls[0][0] as ButtonListener;
   fireClick = chromeMock.notifications.onClicked.addListener.mock.calls[0][0] as ClickListener;
-});
+  // 30s (vs the 10s default): the dynamic import above cold-transpiles the whole sync-engine
+  // graph. Don't "restore the default" — that was tried on vite 8/rolldown (#241) and main's
+  // full-verify run still timed out at 10062ms. Rolldown cut the transpile a lot (this file runs
+  // ~2.5s uncontended), but it isn't enough when Turbo runs every package's suite in parallel on
+  // a 4-vCPU runner. The ceiling costs nothing; the flake costs a red main.
+}, 30_000);
 
 afterAll(() => {
   vi.unstubAllEnvs();
