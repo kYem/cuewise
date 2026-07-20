@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { loadImageWithFallback, preloadImage } from './unsplash';
+import { getPhotoCredit, loadImageWithFallback, preloadImage } from './unsplash';
 
 // Controllable Image stand-in: jsdom never fires load events, so tests trigger
 // onload/onerror on the created instance themselves.
@@ -50,6 +50,49 @@ describe('preloadImage', () => {
     const expectation = expect(promise).rejects.toThrow('Image load timeout');
     await vi.advanceTimersByTimeAsync(5000);
     await expectation;
+  });
+});
+
+describe('getPhotoCredit', () => {
+  it('credits Unsplash as the source for a curated image', () => {
+    const credit = getPhotoCredit(
+      'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=1920'
+    );
+    expect(credit.sourceUrl).toContain('https://unsplash.com');
+  });
+
+  it('carries the referral params Unsplash asks attribution links to use', () => {
+    const credit = getPhotoCredit(
+      'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=1920'
+    );
+    expect(credit.sourceUrl).toContain('utm_source=cuewise');
+    expect(credit.sourceUrl).toContain('utm_medium=referral');
+  });
+
+  it('reports an unknown photographer rather than inventing one', () => {
+    const credit = getPhotoCredit(
+      'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=1920'
+    );
+    expect(credit.photographer).toBeNull();
+    expect(credit.photographerUrl).toBeNull();
+  });
+
+  it('names the photographer once the credit is known', () => {
+    const credit = getPhotoCredit(
+      'https://images.unsplash.com/photo-test-credited?w=1920',
+      // Injected registry keeps the test independent of which real photos we've researched.
+      { 'photo-test-credited': { photographer: 'Ansel Adams', username: 'ansel' } }
+    );
+    expect(credit.photographer).toBe('Ansel Adams');
+    expect(credit.photographerUrl).toBe(
+      'https://unsplash.com/@ansel?utm_source=cuewise&utm_medium=referral'
+    );
+  });
+
+  it('still credits Unsplash for a url it cannot parse a photo id from', () => {
+    const credit = getPhotoCredit('https://example.com/not-unsplash.jpg');
+    expect(credit.photographer).toBeNull();
+    expect(credit.sourceUrl).toContain('https://unsplash.com');
   });
 });
 

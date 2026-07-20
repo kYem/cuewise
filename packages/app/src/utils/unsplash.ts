@@ -91,6 +91,57 @@ const lastUsedIndex: Record<FocusImageCategory, number> = {
   dark: -1,
 };
 
+// Unsplash asks attribution links to carry these referral params.
+const REFERRAL_PARAMS = 'utm_source=cuewise&utm_medium=referral';
+const UNSPLASH_URL = `https://unsplash.com?${REFERRAL_PARAMS}`;
+
+export interface PhotoCreditEntry {
+  photographer: string;
+  username: string;
+}
+
+export interface PhotoCredit {
+  /** Null when we don't know who shot it — never guess, an invented name is worse than none. */
+  photographer: string | null;
+  photographerUrl: string | null;
+  sourceUrl: string;
+}
+
+/**
+ * Photographer per curated photo id, keyed by the CDN id in the image URL.
+ *
+ * Deliberately incomplete: the hardcoded ids are CDN filenames, and Unsplash exposes no
+ * photographer for them without an API key, so entries are filled in as they're researched.
+ * A missing entry degrades to a plain "from Unsplash" credit rather than a wrong name.
+ */
+const PHOTO_CREDITS: Record<string, PhotoCreditEntry> = {};
+
+/** Extracts the `photo-…` CDN id from an Unsplash image URL; null if it isn't one. */
+function extractPhotoId(url: string): string | null {
+  return /\/(photo-[^/?]+)/.exec(url)?.[1] ?? null;
+}
+
+/**
+ * Attribution for a background image. Always credits Unsplash; names the photographer
+ * only when PHOTO_CREDITS actually knows them.
+ * @param credits - Override registry, for tests.
+ */
+export function getPhotoCredit(
+  url: string,
+  credits: Record<string, PhotoCreditEntry> = PHOTO_CREDITS
+): PhotoCredit {
+  const photoId = extractPhotoId(url);
+  const entry = photoId === null ? undefined : credits[photoId];
+  if (entry === undefined) {
+    return { photographer: null, photographerUrl: null, sourceUrl: UNSPLASH_URL };
+  }
+  return {
+    photographer: entry.photographer,
+    photographerUrl: `https://unsplash.com/@${entry.username}?${REFERRAL_PARAMS}`,
+    sourceUrl: UNSPLASH_URL,
+  };
+}
+
 /**
  * Get a random image URL for the given category.
  * Uses curated fallback images from images.unsplash.com (direct CDN).
