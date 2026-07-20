@@ -5,4 +5,4 @@
 '@cuewise/ui': patch
 ---
 
-Use your own picture as the background — stored on your device, never uploaded. Free, where Momentum charges for it.
+Use your own picture as the background — stored on your device, never uploaded.
