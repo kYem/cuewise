@@ -8,7 +8,7 @@ const MAX_FILE_BYTES = 25 * 1024 * 1024;
 
 const JPEG_QUALITY = 0.85;
 
-/** A stalled read (network drive, cloud placeholder) settles neither handler; bound the wait. */
+/** Backstop for a read or decode that stalls without firing any handler at all. */
 const CONVERT_TIMEOUT_MS = 30_000;
 
 function withTimeout<T>(work: Promise<T>, ms: number, message: string): Promise<T> {
@@ -40,8 +40,7 @@ export function computeScaledDimensions(
   height: number,
   maxDimension: number
 ): ScaledDimensions {
-  // Floor before branching: a 0-dimension source (an SVG with no intrinsic size) would
-  // otherwise pass straight through and produce an empty canvas.
+  // Never return a 0 dimension — callers pass these straight to canvas.width/height.
   const safeWidth = Math.max(1, Math.round(width));
   const safeHeight = Math.max(1, Math.round(height));
   const longest = Math.max(safeWidth, safeHeight);
@@ -66,8 +65,7 @@ function readAsDataUrl(file: File): Promise<string> {
       resolve(reader.result);
     };
     reader.onerror = () => reject(new BackgroundImageError('Could not read the image file.'));
-    // Fires instead of onerror when the file goes away mid-read (unplugged drive, cloud
-    // placeholder that never hydrates); without it the promise never settles.
+    // Fires instead of onerror when the file goes away mid-read (unplugged drive).
     reader.onabort = () =>
       reject(new BackgroundImageError('Reading the image was interrupted. Please try again.'));
     reader.readAsDataURL(file);
@@ -85,10 +83,8 @@ function loadImage(dataUrl: string): Promise<HTMLImageElement> {
 }
 
 /**
- * Turn a picked file into a downscaled JPEG data URL suitable for storage.
- * Re-encoding is the point: a modern phone photo is many megabytes, far past the
- * per-item storage quota, and nothing on screen needs that resolution.
- * Throws BackgroundImageError rather than ever returning an un-downscaled image.
+ * Re-encode a picked file to a bounded JPEG data URL; never passes the original through.
+ * On timeout the caller sees a rejection but the underlying decode keeps running.
  */
 export async function fileToBackgroundDataUrl(
   file: File,
@@ -127,8 +123,7 @@ async function convert(file: File, maxDimension: number): Promise<string> {
   canvas.height = height;
   const ctx = canvas.getContext('2d');
   if (ctx === null) {
-    // Returning the original would store the multi-megabyte payload this function exists
-    // to avoid, then fail the quota check and blame the user's file.
+    // Fail loudly: silently storing the original would blow the quota and blame their file.
     logger.error('Canvas 2D context unavailable; cannot downscale background image', {
       width,
       height,

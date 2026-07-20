@@ -101,12 +101,59 @@ describe('background store load safety', () => {
     vi.useFakeTimers();
     mockGet.mockReturnValue(new Promise(() => undefined));
 
-    const load = useBackgroundStore.getState().loadCustomBackground();
+    useBackgroundStore.getState().loadCustomBackground();
     await vi.advanceTimersByTimeAsync(3000);
-    await load;
 
     // Pages hide their content until isLoaded; a hung read must not blank the app forever.
     expect(useBackgroundStore.getState().isLoaded).toBe(true);
+    vi.useRealTimers();
+  });
+
+  it('says the read failed rather than implying no image was ever set', async () => {
+    vi.useFakeTimers();
+    mockGet.mockReturnValue(new Promise(() => undefined));
+
+    useBackgroundStore.getState().loadCustomBackground();
+    await vi.advanceTimersByTimeAsync(3000);
+
+    expect(useBackgroundStore.getState().loadFailed).toBe(true);
+    vi.useRealTimers();
+  });
+
+  it('still applies a slow read once it lands', async () => {
+    vi.useFakeTimers();
+    let settle: (value: string) => void = () => undefined;
+    mockGet.mockReturnValue(
+      new Promise<string>((r) => {
+        settle = r;
+      })
+    );
+
+    useBackgroundStore.getState().loadCustomBackground();
+    await vi.advanceTimersByTimeAsync(3000);
+    settle(IMAGE);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(useBackgroundStore.getState().customBackground).toBe(IMAGE);
+    expect(useBackgroundStore.getState().loadFailed).toBe(false);
+    vi.useRealTimers();
+  });
+
+  it('does not let a slow read undo an image the user saved meanwhile', async () => {
+    vi.useFakeTimers();
+    let settle: (value: string | null) => void = () => undefined;
+    mockGet.mockReturnValue(
+      new Promise<string | null>((r) => {
+        settle = r;
+      })
+    );
+
+    useBackgroundStore.getState().loadCustomBackground();
+    await useBackgroundStore.getState().saveCustomBackground(IMAGE);
+    settle(null);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(useBackgroundStore.getState().customBackground).toBe(IMAGE);
     vi.useRealTimers();
   });
 });

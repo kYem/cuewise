@@ -48,7 +48,6 @@ export const PomodoroPage: React.FC = () => {
     }
   }, [companionMode, initCalendar]);
 
-  // Load background image (use preloaded if available)
   useEffect(() => {
     // Wait for storage: resolving now would fetch a curated photo the user has overridden.
     if (!isCustomBackgroundLoaded) {

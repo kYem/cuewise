@@ -68,8 +68,11 @@ export const useFocusModeStore = create<FocusModeStore>((set, get) => ({
       // Load a new image from our curated collection
       const loadedUrl = await loadImageWithFallback(category);
 
+      // The user's image may have loaded while we were fetching; it wins, or the curated
+      // photo would stick for the whole session (auto-enter races the storage read).
+      const override = getCustomBackgroundOverride();
       set({
-        currentImageUrl: loadedUrl,
+        currentImageUrl: override ?? loadedUrl,
         isImageLoading: false,
       });
 
@@ -135,6 +138,7 @@ export const useFocusModeStore = create<FocusModeStore>((set, get) => ({
       get().preloadNextImage();
     } catch (error) {
       logger.error('Failed to load next focus mode image', error);
+
       set({
         isImageLoading: false,
         imageError: 'Failed to load background image',
@@ -143,8 +147,7 @@ export const useFocusModeStore = create<FocusModeStore>((set, get) => ({
   },
 
   preloadNextImage: async () => {
-    // Nothing to rotate to while the user's own image is showing — and fetching one
-    // would only give loadNextImage something to replace it with.
+    // Nothing to rotate to while the user's own image is showing.
     if (getCustomBackgroundOverride() !== null) {
       return;
     }

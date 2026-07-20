@@ -1,11 +1,13 @@
 import { createSelectorMock } from '@cuewise/test-utils';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { useBackgroundStore } from '../stores/background-store';
 import { useCalendarStore } from '../stores/calendar-store';
 import { useFocusModeStore } from '../stores/focus-mode-store';
 import { useQuoteStore } from '../stores/quote-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { isCalendarFeatureEnabled } from '../utils/google-calendar';
+import { preloadImages } from '../utils/image-preload-cache';
 import { PomodoroPage } from './PomodoroPage';
 
 vi.mock('../stores/quote-store', () => ({ useQuoteStore: vi.fn() }));
@@ -13,8 +15,13 @@ vi.mock('../stores/settings-store', () => ({ useSettingsStore: vi.fn() }));
 vi.mock('../stores/calendar-store', () => ({ useCalendarStore: vi.fn() }));
 vi.mock('../stores/focus-mode-store', () => ({ useFocusModeStore: vi.fn() }));
 vi.mock('../utils/google-calendar', () => ({ isCalendarFeatureEnabled: vi.fn() }));
-// Preloaded URL keeps the background effect synchronous (no async setState).
-vi.mock('../utils/image-preload-cache', () => ({ getPreloadedCurrentUrl: () => 'preloaded.jpg' }));
+// The background effect resolves today's image before reading the cache; both are stubbed
+// so the effect actually runs (a missing preloadImages would throw once isLoaded is true).
+vi.mock('../utils/image-preload-cache', () => ({
+  getPreloadedCurrentUrl: () => 'preloaded.jpg',
+  preloadImages: vi.fn(() => Promise.resolve()),
+}));
+vi.mock('../stores/background-store', () => ({ useBackgroundStore: vi.fn() }));
 vi.mock('../utils/unsplash', () => ({ loadImageWithFallback: () => Promise.resolve('img.jpg') }));
 
 // Stub heavy children so the test isolates the companion-selection logic.
@@ -53,6 +60,10 @@ function setup(companion: 'quote' | 'calendar' | 'both', calendarEnabled: boolea
   );
   vi.mocked(useCalendarStore).mockImplementation(createSelectorMock({ initialize: initCalendar }));
   vi.mocked(useFocusModeStore).mockImplementation(createSelectorMock({ isActive: false }));
+  // isLoaded true so the background effect runs instead of early-returning.
+  vi.mocked(useBackgroundStore).mockImplementation(
+    createSelectorMock({ customBackground: null, isLoaded: true })
+  );
 }
 
 beforeEach(() => {
@@ -114,5 +125,15 @@ describe('PomodoroPage - companion selection', () => {
     expect(screen.getByTestId('quote-display')).toBeInTheDocument();
     expect(screen.queryByTestId('calendar-strip')).not.toBeInTheDocument();
     expect(initCalendar).not.toHaveBeenCalled();
+  });
+});
+
+describe('background resolution', () => {
+  it("resolves today's background before reading the cache", async () => {
+    setup('quote', false);
+
+    render(<PomodoroPage />);
+
+    await waitFor(() => expect(vi.mocked(preloadImages)).toHaveBeenCalledWith('nature'));
   });
 });

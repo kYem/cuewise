@@ -1,9 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  imageFile,
+  stubCanvas,
+  stubCanvasWithoutContext,
+  stubImage,
+} from './__fixtures__/custom-background.fixtures';
 import {
   BackgroundImageError,
   computeScaledDimensions,
   fileToBackgroundDataUrl,
-  MAX_BACKGROUND_DIMENSION,
 } from './custom-background';
 
 describe('computeScaledDimensions', () => {
@@ -35,10 +40,6 @@ describe('computeScaledDimensions', () => {
     expect(height).toBeGreaterThanOrEqual(1);
   });
 
-  it('defaults to a bound that covers common displays without bloating storage', () => {
-    expect(MAX_BACKGROUND_DIMENSION).toBe(1920);
-  });
-
   it('never yields a zero dimension for an image reporting no intrinsic size', () => {
     // An SVG without width/height reports naturalWidth 0; a 0-wide canvas encodes to "data:,".
     expect(computeScaledDimensions(0, 0, 1920)).toEqual({ width: 1, height: 1 });
@@ -66,5 +67,49 @@ describe('fileToBackgroundDataUrl guards', () => {
     await expect(fileToBackgroundDataUrl(file('image/jpeg', 40 * 1024 * 1024))).rejects.toThrow(
       /under 25 MB/
     );
+  });
+});
+
+describe('fileToBackgroundDataUrl conversion', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('re-encodes an oversized photo to a bounded JPEG', async () => {
+    stubImage({ width: 4000, height: 3000 });
+    stubCanvas('data:image/jpeg;base64,small');
+
+    await expect(fileToBackgroundDataUrl(imageFile())).resolves.toBe(
+      'data:image/jpeg;base64,small'
+    );
+  });
+
+  it('refuses an image reporting no intrinsic size instead of saving a smear', async () => {
+    stubImage({ width: 0, height: 0 });
+    stubCanvas('data:image/jpeg;base64,small');
+
+    await expect(fileToBackgroundDataUrl(imageFile())).rejects.toThrow(/no fixed size/);
+  });
+
+  it('fails loudly when the canvas has no 2D context, rather than storing the original', async () => {
+    stubImage();
+    stubCanvasWithoutContext();
+
+    await expect(fileToBackgroundDataUrl(imageFile())).rejects.toThrow(BackgroundImageError);
+  });
+
+  it('rejects when the canvas encodes nothing', async () => {
+    stubImage();
+    // toDataURL yields "data:," rather than throwing when encoding fails.
+    stubCanvas('data:,');
+
+    await expect(fileToBackgroundDataUrl(imageFile())).rejects.toThrow(/could not be processed/);
+  });
+
+  it('explains an undecodable file rather than leaking a decoder error', async () => {
+    stubImage(undefined, true);
+
+    await expect(fileToBackgroundDataUrl(imageFile())).rejects.toThrow(/JPEG, PNG, or WebP/);
   });
 });

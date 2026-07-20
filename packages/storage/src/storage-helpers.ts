@@ -554,7 +554,7 @@ export async function setDailyBackground(
   }
 }
 
-/** The user's own background as a data URL; null when unset. */
+/** The user's own background as a data URL; null when unset or unreadable. */
 export async function getCustomBackground(): Promise<string | null> {
   try {
     return await getFromStorage<string>(STORAGE_KEYS.CUSTOM_BACKGROUND, 'local');

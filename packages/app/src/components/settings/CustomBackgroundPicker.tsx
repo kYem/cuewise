@@ -9,6 +9,7 @@ const TOO_LARGE =
 const SAVE_FAILED = 'Your image could not be saved. Reload the page and try again.';
 const REMOVE_FAILED =
   'Your image could not be removed and is still saved on this device. Reload the page and try again.';
+const LOAD_FAILED = "We couldn't check for a saved image. Reload the page to try again.";
 
 function isQuota(error: StorageError): boolean {
   return error.type === 'quota_exceeded' || error.type === 'per_item_quota_exceeded';
@@ -16,10 +17,14 @@ function isQuota(error: StorageError): boolean {
 
 export const CustomBackgroundPicker: React.FC = () => {
   const current = useBackgroundStore((s) => s.customBackground);
+  const loadFailed = useBackgroundStore((s) => s.loadFailed);
   const saveCustomBackground = useBackgroundStore((s) => s.saveCustomBackground);
   const removeCustomBackground = useBackgroundStore((s) => s.removeCustomBackground);
   const [error, setError] = useState<string | null>(null);
   const [isBusy, setIsBusy] = useState(false);
+
+  // Without this the empty state is indistinguishable from never having set an image.
+  const message = error ?? (loadFailed ? LOAD_FAILED : null);
 
   const handleFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -61,6 +66,9 @@ export const CustomBackgroundPicker: React.FC = () => {
         logger.error('Could not remove the custom background', { error: result.error });
         setError(REMOVE_FAILED);
       }
+    } catch (err) {
+      logger.error('Could not remove the custom background', err);
+      setError(REMOVE_FAILED);
     } finally {
       setIsBusy(false);
     }
@@ -102,9 +110,9 @@ export const CustomBackgroundPicker: React.FC = () => {
           </>
         )}
       </div>
-      {error !== null && (
+      {message !== null && (
         <p role="alert" className="text-xs text-error">
-          {error}
+          {message}
         </p>
       )}
     </div>

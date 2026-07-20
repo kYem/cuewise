@@ -18,8 +18,8 @@ interface PreloadCache {
   isInitialized: boolean;
 }
 
-// The user's own image, when set. Held here because every surface that shows a background
-// (new tab, focus mode, Pomodoro) already reads through getPreloadedCurrentUrl.
+// The user's own image. Readers get it via getPreloadedCurrentUrl, but rotation paths
+// (focus mode's next-image) must check getCustomBackgroundOverride themselves.
 let customOverride: string | null = null;
 
 /** Set by the background store; null restores the curated rotation. */
@@ -31,6 +31,9 @@ export function setCustomBackgroundOverride(dataUrl: string | null): void {
 export function getCustomBackgroundOverride(): string | null {
   return customOverride;
 }
+
+let inFlight: Promise<string | null> | null = null;
+let inFlightCategory: FocusImageCategory | null = null;
 
 const cache: PreloadCache = {
   currentUrl: null,
@@ -75,14 +78,27 @@ export async function preloadImages(category: FocusImageCategory): Promise<void>
     return;
   }
 
-  // Skip if already resolved for this category.
   if (cache.isInitialized && cache.category === category && cache.currentUrl) {
     return;
   }
 
-  cache.category = category;
-  cache.currentUrl = await resolveDailyBackground(category);
-  cache.isInitialized = true;
+  // Concurrent callers (the page and its background layer both resolve on mount) would
+  // otherwise each pick and persist a different photo, and render different backgrounds.
+  if (inFlight !== null && inFlightCategory === category) {
+    await inFlight;
+    return;
+  }
+
+  inFlightCategory = category;
+  inFlight = resolveDailyBackground(category);
+  try {
+    cache.category = category;
+    cache.currentUrl = await inFlight;
+    cache.isInitialized = true;
+  } finally {
+    inFlight = null;
+    inFlightCategory = null;
+  }
 }
 
 /**
@@ -92,6 +108,12 @@ export async function preloadImages(category: FocusImageCategory): Promise<void>
  * @returns The new URL, or null if no fresh image could be loaded.
  */
 export async function refreshBackground(category: FocusImageCategory): Promise<string | null> {
+  // The UI hides the refresh control over a custom image; guard here too so the
+  // rotation can't overwrite it if another caller ever appears.
+  if (customOverride !== null) {
+    return null;
+  }
+
   try {
     const url = await loadImageWithFallback(category);
     await setDailyBackground(url, category);
@@ -119,11 +141,11 @@ export function getPreloadedCurrentUrl(category: FocusImageCategory): string | n
   return null;
 }
 
-/**
- * Clear the cache (e.g., when the category changes).
- */
+/** Leaves the custom override alone — that belongs to the background store. */
 export function clearPreloadCache(): void {
   cache.currentUrl = null;
   cache.category = null;
   cache.isInitialized = false;
+  inFlight = null;
+  inFlightCategory = null;
 }
