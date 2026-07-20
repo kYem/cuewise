@@ -62,9 +62,7 @@ beforeAll(async () => {
   fireButton = chromeMock.notifications.onButtonClicked.addListener.mock
     .calls[0][0] as ButtonListener;
   fireClick = chromeMock.notifications.onClicked.addListener.mock.calls[0][0] as ClickListener;
-  // 30s (vs the 10s default): the dynamic import above loads the whole sync-engine graph, which
-  // can exceed 10s on a cold CI runner when Turbo runs every affected package's suite in parallel.
-}, 30_000);
+});
 
 afterAll(() => {
   vi.unstubAllEnvs();
