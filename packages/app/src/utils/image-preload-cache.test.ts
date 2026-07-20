@@ -222,24 +222,23 @@ describe('concurrent daily resolution', () => {
     // If the finished owner clears the shared slot, the next caller for the still-pending
     // category stops deduping and fetches a second photo for the same day.
     let releaseOcean: (url: string) => void = () => undefined;
-    mockLoadFallback.mockImplementation((category: string) => {
-      if (category === 'ocean') {
-        return new Promise<string>((resolve) => {
-          releaseOcean = resolve;
-        });
-      }
-      return Promise.resolve('https://img/nature');
+    // One shared promise for every ocean call: a duplicate resolve then shows up as an
+    // extra call rather than orphaning a promise and hanging the test.
+    const oceanPhoto = new Promise<string>((resolve) => {
+      releaseOcean = resolve;
     });
+    mockLoadFallback.mockImplementation((category: string) =>
+      category === 'ocean' ? oceanPhoto : Promise.resolve('https://img/nature')
+    );
 
     const nature = preloadImages('nature');
     const ocean = preloadImages('ocean');
     await nature;
 
-    mockLoadFallback.mockClear();
     const joiner = preloadImages('ocean');
     releaseOcean('https://img/ocean');
     await Promise.all([ocean, joiner]);
 
-    expect(mockLoadFallback).not.toHaveBeenCalled();
+    expect(mockLoadFallback).toHaveBeenCalledTimes(2);
   });
 });

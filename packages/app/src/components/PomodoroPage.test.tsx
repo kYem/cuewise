@@ -136,4 +136,16 @@ describe('background resolution', () => {
 
     await waitFor(() => expect(vi.mocked(preloadImages)).toHaveBeenCalledWith('nature'));
   });
+
+  it('waits for storage before resolving, so a curated photo cannot flash over a custom one', async () => {
+    setup('quote', false);
+    vi.mocked(useBackgroundStore).mockImplementation(
+      createSelectorMock({ customBackground: null, isLoaded: false })
+    );
+
+    render(<PomodoroPage />);
+
+    await waitFor(() => expect(screen.queryByTestId('quote-display')).toBeInTheDocument());
+    expect(vi.mocked(preloadImages)).not.toHaveBeenCalled();
+  });
 });

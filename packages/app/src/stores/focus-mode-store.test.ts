@@ -68,4 +68,32 @@ describe('focus mode with a custom background', () => {
       'https://images.unsplash.com/photo-curated'
     );
   });
+
+  it('adopts the image that arrived while focus mode was opening', async () => {
+    // Auto-enter races the storage read: the override lands mid-fetch, and without the
+    // post-fetch re-check the curated photo sticks for the whole session.
+    useFocusModeStore.setState({ isActive: false, currentImageUrl: null, nextImageUrl: null });
+    mockPreloaded.mockReturnValue(null);
+    mockOverride.mockReturnValue(null);
+    mockLoadFallback.mockImplementation(() => {
+      mockOverride.mockReturnValue(MINE);
+      return Promise.resolve('https://images.unsplash.com/photo-curated');
+    });
+
+    await useFocusModeStore.getState().enterFocusMode();
+
+    expect(useFocusModeStore.getState().currentImageUrl).toBe(MINE);
+  });
+
+  it('shows the curated photo when no custom image arrives', async () => {
+    useFocusModeStore.setState({ isActive: false, currentImageUrl: null, nextImageUrl: null });
+    mockPreloaded.mockReturnValue(null);
+    mockOverride.mockReturnValue(null);
+
+    await useFocusModeStore.getState().enterFocusMode();
+
+    expect(useFocusModeStore.getState().currentImageUrl).toBe(
+      'https://images.unsplash.com/photo-curated'
+    );
+  });
 });

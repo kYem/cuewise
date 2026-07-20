@@ -78,11 +78,16 @@ describe('fileToBackgroundDataUrl conversion', () => {
 
   it('re-encodes an oversized photo to a bounded JPEG', async () => {
     stubImage({ width: 4000, height: 3000 });
-    stubCanvas('data:image/jpeg;base64,small');
+    const canvas = stubCanvas('data:image/jpeg;base64,small');
 
     await expect(fileToBackgroundDataUrl(imageFile())).resolves.toBe(
       'data:image/jpeg;base64,small'
     );
+    // Proves the scaling maths is actually wired to the canvas, not just unit-tested beside it.
+    expect(canvas.width).toBe(1920);
+    expect(canvas.height).toBe(1440);
+    expect(canvas.drawImage).toHaveBeenCalledWith(expect.anything(), 0, 0, 1920, 1440);
+    expect(canvas.toDataURL).toHaveBeenCalledWith('image/jpeg', 0.85);
   });
 
   it('refuses an image reporting no intrinsic size instead of saving a smear', async () => {

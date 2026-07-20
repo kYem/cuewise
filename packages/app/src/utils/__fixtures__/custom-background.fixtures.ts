@@ -35,19 +35,47 @@ export function stubImage(size = { width: 3000, height: 2000 }, shouldFail = fal
   vi.stubGlobal('Image', FakeImage);
 }
 
-/** A canvas whose 2D context is available, encoding to the given data URL. */
-export function stubCanvas(dataUrl: string): void {
+export interface FakeCanvas {
+  width: number;
+  height: number;
+  drawImage: ReturnType<typeof vi.fn>;
+  toDataURL: ReturnType<typeof vi.fn>;
+}
+
+/**
+ * A canvas whose 2D context is available, encoding to the given data URL.
+ * Returned so tests can assert the conversion actually sized and encoded it.
+ */
+export function stubCanvas(dataUrl: string): FakeCanvas {
+  const drawImage = vi.fn();
+  const canvas: FakeCanvas = {
+    width: 0,
+    height: 0,
+    drawImage,
+    toDataURL: vi.fn(() => dataUrl),
+  };
   vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
     if (tag !== 'canvas') {
       return Object.create(HTMLElement.prototype);
     }
     return {
-      width: 0,
-      height: 0,
-      getContext: () => ({ drawImage: vi.fn() }),
-      toDataURL: () => dataUrl,
+      get width() {
+        return canvas.width;
+      },
+      set width(value: number) {
+        canvas.width = value;
+      },
+      get height() {
+        return canvas.height;
+      },
+      set height(value: number) {
+        canvas.height = value;
+      },
+      getContext: () => ({ drawImage }),
+      toDataURL: canvas.toDataURL,
     } as unknown as HTMLCanvasElement;
   });
+  return canvas;
 }
 
 /** A canvas with no 2D context — what a GPU crash or fingerprint blocker produces. */
