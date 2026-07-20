@@ -14,7 +14,10 @@ interface BackgroundState {
   customBackground: string | null;
   /** False until storage has been read, so the page doesn't flash the wrong background. */
   isLoaded: boolean;
-  /** True when the read failed — distinct from "no image set", which looks identical. */
+  /**
+   * True when the read timed out. A read that *errors* can't set this: the storage
+   * adapter returns null for failures, so it is indistinguishable from "no image set".
+   */
   loadFailed: boolean;
   loadCustomBackground: () => Promise<void>;
   saveCustomBackground: (dataUrl: string) => Promise<StorageResult>;

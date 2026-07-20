@@ -176,3 +176,43 @@ describe('custom background override', () => {
     expect(getPreloadedCurrentUrl('nature')).toBe('https://img/daily');
   });
 });
+
+describe('concurrent daily resolution', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clearPreloadCache();
+    setCustomBackgroundOverride(null);
+    mockSetDaily.mockResolvedValue({ success: true });
+    mockGetDaily.mockResolvedValue(null);
+  });
+
+  it('resolves once when two callers ask for the same category at the same time', async () => {
+    mockLoadFallback.mockResolvedValue('https://img/one');
+
+    await Promise.all([preloadImages('nature'), preloadImages('nature')]);
+
+    // Two resolves would persist two different photos and render different backgrounds.
+    expect(mockLoadFallback).toHaveBeenCalledTimes(1);
+    expect(mockSetDaily).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets a newer category win when it overlaps an older resolve', async () => {
+    mockLoadFallback.mockResolvedValueOnce('https://img/nature');
+    mockLoadFallback.mockResolvedValueOnce('https://img/ocean');
+
+    await Promise.all([preloadImages('nature'), preloadImages('ocean')]);
+
+    expect(getPreloadedCurrentUrl('ocean')).toBe('https://img/ocean');
+  });
+
+  it('does not leave a stale in-flight entry that blocks the next resolve', async () => {
+    mockLoadFallback.mockResolvedValue('https://img/first');
+    await Promise.all([preloadImages('nature'), preloadImages('ocean')]);
+    clearPreloadCache();
+    mockLoadFallback.mockResolvedValue('https://img/second');
+
+    await preloadImages('ocean');
+
+    expect(getPreloadedCurrentUrl('ocean')).toBe('https://img/second');
+  });
+});

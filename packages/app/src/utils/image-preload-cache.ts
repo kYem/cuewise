@@ -84,20 +84,30 @@ export async function preloadImages(category: FocusImageCategory): Promise<void>
 
   // Concurrent callers (the page and its background layer both resolve on mount) would
   // otherwise each pick and persist a different photo, and render different backgrounds.
+  // The owner writes the cache before any waiter resumes, so waiters just await.
   if (inFlight !== null && inFlightCategory === category) {
     await inFlight;
     return;
   }
 
+  const pending = resolveDailyBackground(category);
+  inFlight = pending;
   inFlightCategory = category;
-  inFlight = resolveDailyBackground(category);
   try {
+    const url = await pending;
+    // A newer category superseded this resolve; its result is the stale one.
+    if (inFlight !== pending) {
+      return;
+    }
     cache.category = category;
-    cache.currentUrl = await inFlight;
+    cache.currentUrl = url;
     cache.isInitialized = true;
   } finally {
-    inFlight = null;
-    inFlightCategory = null;
+    // Only the owner clears, or a slower resolve would unregister a newer one.
+    if (inFlight === pending) {
+      inFlight = null;
+      inFlightCategory = null;
+    }
   }
 }
 
@@ -122,7 +132,8 @@ export async function refreshBackground(category: FocusImageCategory): Promise<s
     cache.isInitialized = true;
     return url;
   } catch (error) {
-    logger.warn('Could not load a new background; keeping the current one', { error });
+    // error, not warn: this is a user-initiated click, and warn is invisible by default.
+    logger.error('Could not load a new background; keeping the current one', error);
     return null;
   }
 }

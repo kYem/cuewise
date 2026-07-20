@@ -44,7 +44,9 @@ describe('background store', () => {
     expect(useBackgroundStore.getState().customBackground).toBeNull();
   });
 
-  it('still releases the page when storage cannot be read', async () => {
+  it('still releases the page if the read throws', async () => {
+    // Defensive only: the storage adapter catches its own errors and resolves null,
+    // so a read failure reaches us as "no image" — see loadFailed's doc comment.
     mockGet.mockRejectedValue(new Error('storage unavailable'));
 
     await useBackgroundStore.getState().loadCustomBackground();
