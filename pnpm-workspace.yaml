@@ -19,14 +19,14 @@ minimumReleaseAgeExclude:
 # so unrelated majors are untouched. All targets are >14 days old, so they clear
 # the minimumReleaseAge cooldown above.
 overrides:
-  undici@7: 7.24.0
-  ws@8: 8.20.1
-  lodash@4: 4.18.0
-  minimatch@5: 5.1.8
-  minimatch@9: 9.0.7
+  undici@7: 7.28.0
+  ws@8: 8.21.0
+  yaml@2: 2.9.0
+  js-yaml@3: 3.15.0
+  js-yaml@4: 4.3.0
+  esbuild@0.27: 0.28.1
   flatted@3: 3.4.2
   fast-uri@3: 3.1.2
-  brace-expansion@2: 2.0.3
   picomatch@4: 4.0.4
 
 allowBuilds:
