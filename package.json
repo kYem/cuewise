@@ -27,6 +27,7 @@
     "@changesets/cli": "^2.29.8",
     "@commitlint/cli": "^20.2.0",
     "@commitlint/config-conventional": "^20.2.0",
+    "@types/node": "catalog:",
     "husky": "^9.1.7",
     "tsx": "^4.21.0",
     "turbo": "^2.9.15",

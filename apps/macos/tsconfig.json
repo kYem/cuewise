@@ -16,7 +16,7 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     // chrome types: @cuewise/storage's source references the chrome global
-    "types": ["chrome", "vite/client"]
+    "types": ["chrome", "node", "vite/client"]
   },
   "include": ["src"]
 }
