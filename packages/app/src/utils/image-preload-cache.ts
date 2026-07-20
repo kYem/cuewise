@@ -32,8 +32,12 @@ export function getCustomBackgroundOverride(): string | null {
   return customOverride;
 }
 
-let inFlight: Promise<string | null> | null = null;
-let inFlightCategory: FocusImageCategory | null = null;
+let inFlight: { category: FocusImageCategory; promise: Promise<string | null> } | null = null;
+
+/** The newest resolve owns the cache; an older one landing later must not write or unregister. */
+function ownsResolve(promise: Promise<string | null>): boolean {
+  return inFlight?.promise === promise;
+}
 
 const cache: PreloadCache = {
   currentUrl: null,
@@ -82,31 +86,26 @@ export async function preloadImages(category: FocusImageCategory): Promise<void>
     return;
   }
 
-  // Concurrent callers (the page and its background layer both resolve on mount) would
-  // otherwise each pick and persist a different photo, and render different backgrounds.
+  // Concurrent callers would otherwise each pick and persist a different photo.
   // The owner writes the cache before any waiter resumes, so waiters just await.
-  if (inFlight !== null && inFlightCategory === category) {
-    await inFlight;
+  if (inFlight !== null && inFlight.category === category) {
+    await inFlight.promise;
     return;
   }
 
-  const pending = resolveDailyBackground(category);
-  inFlight = pending;
-  inFlightCategory = category;
+  const promise = resolveDailyBackground(category);
+  inFlight = { category, promise };
   try {
-    const url = await pending;
-    // A newer category superseded this resolve; its result is the stale one.
-    if (inFlight !== pending) {
+    const url = await promise;
+    if (!ownsResolve(promise)) {
       return;
     }
     cache.category = category;
     cache.currentUrl = url;
     cache.isInitialized = true;
   } finally {
-    // Only the owner clears, or a slower resolve would unregister a newer one.
-    if (inFlight === pending) {
+    if (ownsResolve(promise)) {
       inFlight = null;
-      inFlightCategory = null;
     }
   }
 }
@@ -158,5 +157,4 @@ export function clearPreloadCache(): void {
   cache.category = null;
   cache.isInitialized = false;
   inFlight = null;
-  inFlightCategory = null;
 }

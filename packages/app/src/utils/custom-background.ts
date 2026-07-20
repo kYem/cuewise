@@ -4,7 +4,8 @@ import { logger } from '@cuewise/shared';
 export const MAX_BACKGROUND_DIMENSION = 1920;
 
 /** Refuse before reading: base64 inflates ~33%, and decoding a huge file can hang the tab. */
-const MAX_FILE_BYTES = 25 * 1024 * 1024;
+const MAX_FILE_MB = 25;
+const MAX_FILE_BYTES = MAX_FILE_MB * 1024 * 1024;
 
 const JPEG_QUALITY = 0.85;
 
@@ -95,7 +96,9 @@ export async function fileToBackgroundDataUrl(
     throw new BackgroundImageError('That file is not an image.');
   }
   if (file.size > MAX_FILE_BYTES) {
-    throw new BackgroundImageError('That image is too big to process. Try one under 25 MB.');
+    throw new BackgroundImageError(
+      `That image is too big to process. Try one under ${MAX_FILE_MB} MB.`
+    );
   }
 
   return withTimeout(

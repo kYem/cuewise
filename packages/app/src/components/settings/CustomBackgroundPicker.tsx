@@ -21,9 +21,10 @@ export const CustomBackgroundPicker: React.FC = () => {
   const saveCustomBackground = useBackgroundStore((s) => s.saveCustomBackground);
   const removeCustomBackground = useBackgroundStore((s) => s.removeCustomBackground);
   const [error, setError] = useState<string | null>(null);
-  const [isBusy, setIsBusy] = useState(false);
+  const [busy, setBusy] = useState<'save' | 'remove' | null>(null);
+  const isBusy = busy !== null;
 
-  // Without this the empty state is indistinguishable from never having set an image.
+  // A fresh action error wins: it's about what the user just did, not a stale load failure.
   const message = error ?? (loadFailed ? LOAD_FAILED : null);
 
   const handleFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -35,7 +36,7 @@ export const CustomBackgroundPicker: React.FC = () => {
     }
 
     setError(null);
-    setIsBusy(true);
+    setBusy('save');
     try {
       const dataUrl = await fileToBackgroundDataUrl(file);
       const result = await saveCustomBackground(dataUrl);
@@ -53,13 +54,13 @@ export const CustomBackgroundPicker: React.FC = () => {
       // Only our own errors carry text written for users; anything else is a bug.
       setError(err instanceof BackgroundImageError ? err.message : SAVE_FAILED);
     } finally {
-      setIsBusy(false);
+      setBusy(null);
     }
   };
 
   const handleRemove = async () => {
     setError(null);
-    setIsBusy(true);
+    setBusy('remove');
     try {
       const result = await removeCustomBackground();
       if (!result.success) {
@@ -70,7 +71,7 @@ export const CustomBackgroundPicker: React.FC = () => {
       logger.error('Could not remove the custom background', err);
       setError(REMOVE_FAILED);
     } finally {
-      setIsBusy(false);
+      setBusy(null);
     }
   };
 
@@ -82,7 +83,7 @@ export const CustomBackgroundPicker: React.FC = () => {
             isBusy ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer hover:bg-primary-700'
           }`}
         >
-          {isBusy ? 'Saving…' : 'Choose image'}
+          {busy === 'save' ? 'Saving…' : 'Choose image'}
           <input
             type="file"
             accept="image/*"

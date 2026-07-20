@@ -14,14 +14,21 @@ interface BackgroundState {
   customBackground: string | null;
   /** False until storage has been read, so the page doesn't flash the wrong background. */
   isLoaded: boolean;
-  /**
-   * True when the read timed out. A read that *errors* can't set this: the storage
-   * adapter returns null for failures, so it is indistinguishable from "no image set".
-   */
+  /** Set when the read timed out or threw — in practice only timeouts, since the adapter returns null on failure. */
   loadFailed: boolean;
   loadCustomBackground: () => Promise<void>;
   saveCustomBackground: (dataUrl: string) => Promise<StorageResult>;
   removeCustomBackground: () => Promise<StorageResult>;
+}
+
+/** A user write is the truth: bumping the generation stops a pending read undoing it. */
+function applyUserWrite(
+  set: (partial: Partial<BackgroundState>) => void,
+  dataUrl: string | null
+): void {
+  writeGeneration += 1;
+  setCustomBackgroundOverride(dataUrl);
+  set({ customBackground: dataUrl, isLoaded: true, loadFailed: false });
 }
 
 /** Every write goes through here, so memory mirrors storage rather than drifting per caller. */
@@ -60,9 +67,7 @@ export const useBackgroundStore = create<BackgroundState>((set, get) => ({
   saveCustomBackground: async (dataUrl) => {
     const result = await setCustomBackground(dataUrl);
     if (result.success) {
-      writeGeneration += 1;
-      setCustomBackgroundOverride(dataUrl);
-      set({ customBackground: dataUrl, isLoaded: true, loadFailed: false });
+      applyUserWrite(set, dataUrl);
     }
     return result;
   },
@@ -70,9 +75,7 @@ export const useBackgroundStore = create<BackgroundState>((set, get) => ({
   removeCustomBackground: async () => {
     const result = await clearCustomBackground();
     if (result.success) {
-      writeGeneration += 1;
-      setCustomBackgroundOverride(null);
-      set({ customBackground: null, isLoaded: true, loadFailed: false });
+      applyUserWrite(set, null);
     }
     return result;
   },

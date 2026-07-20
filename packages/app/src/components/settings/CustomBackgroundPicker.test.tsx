@@ -126,6 +126,19 @@ describe('CustomBackgroundPicker', () => {
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/still saved/i));
   });
 
+  it('does not label a removal as saving', async () => {
+    stubStore({
+      customBackground: DATA_URL,
+      removeCustomBackground: vi.fn(() => new Promise<StorageResult>(() => undefined)),
+    });
+    render(<CustomBackgroundPicker />);
+
+    fireEvent.click(screen.getByRole('button', { name: /remove/i }));
+
+    await waitFor(() => expect(screen.getByLabelText(/choose image/i)).toBeDisabled());
+    expect(screen.queryByText(/saving/i)).not.toBeInTheDocument();
+  });
+
   it('blocks a second pick while one is already being saved', async () => {
     // Never resolves, so the component stays in its in-flight state for the assertion.
     stubStore({ saveCustomBackground: vi.fn(() => new Promise<StorageResult>(() => undefined)) });
