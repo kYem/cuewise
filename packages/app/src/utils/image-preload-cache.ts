@@ -18,6 +18,15 @@ interface PreloadCache {
   isInitialized: boolean;
 }
 
+// The user's own image, when set. Held here because every surface that shows a background
+// (new tab, focus mode, Pomodoro) already reads through getPreloadedCurrentUrl.
+let customOverride: string | null = null;
+
+/** Set by the background store; null restores the curated rotation. */
+export function setCustomBackgroundOverride(dataUrl: string | null): void {
+  customOverride = dataUrl;
+}
+
 const cache: PreloadCache = {
   currentUrl: null,
   category: null,
@@ -56,6 +65,11 @@ async function resolveDailyBackground(category: FocusImageCategory): Promise<str
  * missing or no longer loads.
  */
 export async function preloadImages(category: FocusImageCategory): Promise<void> {
+  // The user's own image is showing — don't fetch a curated photo nobody will see.
+  if (customOverride !== null) {
+    return;
+  }
+
   // Skip if already resolved for this category.
   if (cache.isInitialized && cache.category === category && cache.currentUrl) {
     return;
@@ -87,10 +101,13 @@ export async function refreshBackground(category: FocusImageCategory): Promise<s
 }
 
 /**
- * Get the resolved daily background URL.
+ * Get the background URL to show: the user's own image wins over the daily rotation.
  * Returns null if not resolved or the category doesn't match.
  */
 export function getPreloadedCurrentUrl(category: FocusImageCategory): string | null {
+  if (customOverride !== null) {
+    return customOverride;
+  }
   if (cache.category === category && cache.currentUrl) {
     return cache.currentUrl;
   }

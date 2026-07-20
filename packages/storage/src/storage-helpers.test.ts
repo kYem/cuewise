@@ -96,8 +96,18 @@ describe('custom background', () => {
     configurePlatform({ storage: store });
     await setCustomBackground('data:image/jpeg;base64,abc');
 
-    await clearCustomBackground();
+    const result = await clearCustomBackground();
 
+    expect(result.success).toBe(true);
     await expect(getCustomBackground()).resolves.toBeNull();
+  });
+
+  it('reports a failed delete instead of implying the image is gone', async () => {
+    const { store } = recordingStore();
+    configurePlatform({ storage: { ...store, remove: async () => false } });
+
+    const result = await clearCustomBackground();
+
+    expect(result.success).toBe(false);
   });
 });

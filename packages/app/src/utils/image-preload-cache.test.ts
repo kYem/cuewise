@@ -16,6 +16,7 @@ import {
   getPreloadedCurrentUrl,
   preloadImages,
   refreshBackground,
+  setCustomBackgroundOverride,
 } from './image-preload-cache';
 import { loadImageWithFallback, preloadImage } from './unsplash';
 
@@ -128,5 +129,50 @@ describe('refreshBackground', () => {
     expect(url).toBeNull();
     expect(getPreloadedCurrentUrl('nature')).toBe('https://img/today');
     expect(mockSetDaily).not.toHaveBeenCalled();
+  });
+});
+
+describe('custom background override', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clearPreloadCache();
+    setCustomBackgroundOverride(null);
+    mockSetDaily.mockResolvedValue({ success: true });
+  });
+
+  it("shows the user's own image instead of the curated photo", async () => {
+    mockGetDaily.mockResolvedValue({ url: 'https://img/daily', category: 'nature', date: 'today' });
+    mockPreload.mockResolvedValue('https://img/daily');
+    await preloadImages('nature');
+    setCustomBackgroundOverride('data:image/jpeg;base64,mine');
+
+    expect(getPreloadedCurrentUrl('nature')).toBe('data:image/jpeg;base64,mine');
+  });
+
+  it('applies to every category, since a custom image is not category-specific', () => {
+    setCustomBackgroundOverride('data:image/jpeg;base64,mine');
+
+    expect(getPreloadedCurrentUrl('ocean')).toBe('data:image/jpeg;base64,mine');
+    expect(getPreloadedCurrentUrl('dark')).toBe('data:image/jpeg;base64,mine');
+  });
+
+  it('fetches no curated photo while the override is set', async () => {
+    setCustomBackgroundOverride('data:image/jpeg;base64,mine');
+
+    await preloadImages('nature');
+
+    expect(mockGetDaily).not.toHaveBeenCalled();
+    expect(mockLoadFallback).not.toHaveBeenCalled();
+  });
+
+  it('restores the curated rotation once the override is cleared', async () => {
+    mockGetDaily.mockResolvedValue({ url: 'https://img/daily', category: 'nature', date: 'today' });
+    mockPreload.mockResolvedValue('https://img/daily');
+    await preloadImages('nature');
+    setCustomBackgroundOverride('data:image/jpeg;base64,mine');
+
+    setCustomBackgroundOverride(null);
+
+    expect(getPreloadedCurrentUrl('nature')).toBe('https://img/daily');
   });
 });

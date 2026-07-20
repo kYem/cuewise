@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeScaledDimensions, MAX_BACKGROUND_WIDTH } from './custom-background';
+import { computeScaledDimensions, MAX_BACKGROUND_DIMENSION } from './custom-background';
 
 describe('computeScaledDimensions', () => {
   it('leaves an image already within the limit untouched', () => {
@@ -30,7 +30,16 @@ describe('computeScaledDimensions', () => {
     expect(height).toBeGreaterThanOrEqual(1);
   });
 
-  it('defaults to a width that covers common displays without bloating storage', () => {
-    expect(MAX_BACKGROUND_WIDTH).toBe(1920);
+  it('defaults to a bound that covers common displays without bloating storage', () => {
+    expect(MAX_BACKGROUND_DIMENSION).toBe(1920);
+  });
+
+  it('never yields a zero dimension for an image reporting no intrinsic size', () => {
+    // An SVG without width/height reports naturalWidth 0; a 0-wide canvas encodes to "data:,".
+    expect(computeScaledDimensions(0, 0, 1920)).toEqual({ width: 1, height: 1 });
+  });
+
+  it('floors a sub-pixel dimension that is already inside the bound', () => {
+    expect(computeScaledDimensions(0.4, 800, 1920)).toEqual({ width: 1, height: 800 });
   });
 });

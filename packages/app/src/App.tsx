@@ -102,12 +102,6 @@ function App({ extraSections, syncController }: AppProps = {}) {
       return;
     }
 
-    if (customBackground !== null) {
-      setBackgroundImage(customBackground);
-      setImageLoaded(true);
-      return;
-    }
-
     let cancelled = false;
 
     const loadBackground = async () => {

@@ -1,33 +1,25 @@
-import { logger } from '@cuewise/shared';
-import { clearCustomBackground, getCustomBackground, setCustomBackground } from '@cuewise/storage';
+import { logger, type StorageError } from '@cuewise/shared';
 import type React from 'react';
-import { useEffect, useState } from 'react';
-import { fileToBackgroundDataUrl } from '../../utils/custom-background';
-
-interface CustomBackgroundPickerProps {
-  /** Fires with the new data URL, or null when the image is removed. */
-  onChange: (dataUrl: string | null) => void;
-}
+import { useState } from 'react';
+import { useBackgroundStore } from '../../stores/background-store';
+import { BackgroundImageError, fileToBackgroundDataUrl } from '../../utils/custom-background';
 
 const TOO_LARGE =
   'That image is too large to save. Try a smaller one, or a screenshot rather than the original photo.';
+const SAVE_FAILED = 'Your image could not be saved. Reload the page and try again.';
+const REMOVE_FAILED =
+  'Your image could not be removed and is still saved on this device. Reload the page and try again.';
 
-export const CustomBackgroundPicker: React.FC<CustomBackgroundPickerProps> = ({ onChange }) => {
-  const [current, setCurrent] = useState<string | null>(null);
+function isQuota(error: StorageError): boolean {
+  return error.type === 'quota_exceeded' || error.type === 'per_item_quota_exceeded';
+}
+
+export const CustomBackgroundPicker: React.FC = () => {
+  const current = useBackgroundStore((s) => s.customBackground);
+  const saveCustomBackground = useBackgroundStore((s) => s.saveCustomBackground);
+  const removeCustomBackground = useBackgroundStore((s) => s.removeCustomBackground);
   const [error, setError] = useState<string | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    getCustomBackground().then((stored) => {
-      if (!cancelled) {
-        setCurrent(stored);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const [isBusy, setIsBusy] = useState(false);
 
   const handleFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -38,41 +30,54 @@ export const CustomBackgroundPicker: React.FC<CustomBackgroundPickerProps> = ({ 
     }
 
     setError(null);
-    setIsSaving(true);
+    setIsBusy(true);
     try {
       const dataUrl = await fileToBackgroundDataUrl(file);
-      const result = await setCustomBackground(dataUrl);
+      const result = await saveCustomBackground(dataUrl);
       if (!result.success) {
-        setError(TOO_LARGE);
-        return;
+        logger.error('Could not store the custom background', {
+          error: result.error,
+          fileSize: file.size,
+          fileType: file.type,
+          dataUrlLength: dataUrl.length,
+        });
+        setError(isQuota(result.error) ? TOO_LARGE : SAVE_FAILED);
       }
-      setCurrent(dataUrl);
-      onChange(dataUrl);
     } catch (err) {
       logger.error('Could not use the chosen background image', err);
-      setError(err instanceof Error ? err.message : 'That image could not be used.');
+      // Only our own errors carry text written for users; anything else is a bug.
+      setError(err instanceof BackgroundImageError ? err.message : SAVE_FAILED);
     } finally {
-      setIsSaving(false);
+      setIsBusy(false);
     }
   };
 
   const handleRemove = async () => {
-    await clearCustomBackground();
-    setCurrent(null);
     setError(null);
-    onChange(null);
+    setIsBusy(true);
+    const result = await removeCustomBackground();
+    if (!result.success) {
+      logger.error('Could not remove the custom background', { error: result.error });
+      setError(REMOVE_FAILED);
+    }
+    setIsBusy(false);
   };
 
   return (
     <div className="flex flex-col gap-2 w-full">
       <div className="flex items-center gap-3">
-        <label className="px-3 py-1.5 text-sm rounded-md bg-primary-600 text-white cursor-pointer hover:bg-primary-700 transition-colors">
-          {isSaving ? 'Saving…' : 'Choose image'}
+        <label
+          className={`px-3 py-1.5 text-sm rounded-md bg-primary-600 text-white transition-colors ${
+            isBusy ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer hover:bg-primary-700'
+          }`}
+        >
+          {isBusy ? 'Saving…' : 'Choose image'}
           <input
             type="file"
             accept="image/*"
             aria-label="Choose image"
             className="sr-only"
+            disabled={isBusy}
             onChange={handleFile}
           />
         </label>
@@ -86,7 +91,8 @@ export const CustomBackgroundPicker: React.FC<CustomBackgroundPickerProps> = ({ 
             <button
               type="button"
               onClick={handleRemove}
-              className="px-3 py-1.5 text-sm rounded-md border border-border hover:bg-surface transition-colors"
+              disabled={isBusy}
+              className="px-3 py-1.5 text-sm rounded-md border border-border hover:bg-surface disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
             >
               Remove
             </button>
