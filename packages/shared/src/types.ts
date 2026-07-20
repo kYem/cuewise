@@ -409,6 +409,7 @@ export const STORAGE_KEYS = {
   CUSTOM_YOUTUBE_PLAYLISTS: 'customYoutubePlaylists', // User-added YouTube playlists
   YOUTUBE_PROGRESS: 'youtubeProgress', // YouTube playback progress (timestamps per video)
   DAILY_BACKGROUND: 'dailyBackground', // Daily background image (changes once per day)
+  CUSTOM_BACKGROUND: 'customBackground', // User's own background image, as a data URL
   COLLECTIONS: 'collections', // Quote collections
   QUICK_LINKS: 'quickLinks', // Pinned shortcut tiles on the new tab
   CONCEPT_CARDS: 'conceptCards', // Spaced-repetition concept/definition cards

@@ -18,6 +18,27 @@ interface PreloadCache {
   isInitialized: boolean;
 }
 
+// The user's own image. Readers get it via getPreloadedCurrentUrl, but rotation paths
+// (focus mode's next-image) must check getCustomBackgroundOverride themselves.
+let customOverride: string | null = null;
+
+/** Set by the background store; null restores the curated rotation. */
+export function setCustomBackgroundOverride(dataUrl: string | null): void {
+  customOverride = dataUrl;
+}
+
+/** The user's own image, or null when the curated rotation is in charge. */
+export function getCustomBackgroundOverride(): string | null {
+  return customOverride;
+}
+
+let inFlight: { category: FocusImageCategory; promise: Promise<string | null> } | null = null;
+
+/** The newest resolve owns the cache; an older one landing later must not write or unregister. */
+function ownsResolve(promise: Promise<string | null>): boolean {
+  return inFlight?.promise === promise;
+}
+
 const cache: PreloadCache = {
   currentUrl: null,
   category: null,
@@ -56,14 +77,37 @@ async function resolveDailyBackground(category: FocusImageCategory): Promise<str
  * missing or no longer loads.
  */
 export async function preloadImages(category: FocusImageCategory): Promise<void> {
-  // Skip if already resolved for this category.
+  // The user's own image is showing — don't fetch a curated photo nobody will see.
+  if (customOverride !== null) {
+    return;
+  }
+
   if (cache.isInitialized && cache.category === category && cache.currentUrl) {
     return;
   }
 
-  cache.category = category;
-  cache.currentUrl = await resolveDailyBackground(category);
-  cache.isInitialized = true;
+  // Concurrent callers would otherwise each pick and persist a different photo.
+  // The owner writes the cache before any waiter resumes, so waiters just await.
+  if (inFlight !== null && inFlight.category === category) {
+    await inFlight.promise;
+    return;
+  }
+
+  const promise = resolveDailyBackground(category);
+  inFlight = { category, promise };
+  try {
+    const url = await promise;
+    if (!ownsResolve(promise)) {
+      return;
+    }
+    cache.category = category;
+    cache.currentUrl = url;
+    cache.isInitialized = true;
+  } finally {
+    if (ownsResolve(promise)) {
+      inFlight = null;
+    }
+  }
 }
 
 /**
@@ -73,6 +117,12 @@ export async function preloadImages(category: FocusImageCategory): Promise<void>
  * @returns The new URL, or null if no fresh image could be loaded.
  */
 export async function refreshBackground(category: FocusImageCategory): Promise<string | null> {
+  // The UI hides the refresh control over a custom image; guard here too so the
+  // rotation can't overwrite it if another caller ever appears.
+  if (customOverride !== null) {
+    return null;
+  }
+
   try {
     const url = await loadImageWithFallback(category);
     await setDailyBackground(url, category);
@@ -81,27 +131,30 @@ export async function refreshBackground(category: FocusImageCategory): Promise<s
     cache.isInitialized = true;
     return url;
   } catch (error) {
-    logger.warn('Could not load a new background; keeping the current one', { error });
+    // error, not warn: this is a user-initiated click, and warn is invisible by default.
+    logger.error('Could not load a new background; keeping the current one', error);
     return null;
   }
 }
 
 /**
- * Get the resolved daily background URL.
+ * Get the background URL to show: the user's own image wins over the daily rotation.
  * Returns null if not resolved or the category doesn't match.
  */
 export function getPreloadedCurrentUrl(category: FocusImageCategory): string | null {
+  if (customOverride !== null) {
+    return customOverride;
+  }
   if (cache.category === category && cache.currentUrl) {
     return cache.currentUrl;
   }
   return null;
 }
 
-/**
- * Clear the cache (e.g., when the category changes).
- */
+/** Leaves the custom override alone — that belongs to the background store. */
 export function clearPreloadCache(): void {
   cache.currentUrl = null;
   cache.category = null;
   cache.isInitialized = false;
+  inFlight = null;
 }

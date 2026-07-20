@@ -1,6 +1,11 @@
 import { configurePlatform, type KeyValueStore, type StorageUsage } from '@cuewise/shared';
 import { describe, expect, it } from 'vitest';
-import { getStorageUsage } from './storage-helpers';
+import {
+  clearCustomBackground,
+  getCustomBackground,
+  getStorageUsage,
+  setCustomBackground,
+} from './storage-helpers';
 
 // Fake store: no settings stored (→ syncEnabled false → 'local' area), fixed usage.
 function fakeStore(usage: StorageUsage): KeyValueStore {
@@ -30,5 +35,79 @@ describe('getStorageUsage', () => {
     const info = await getStorageUsage();
 
     expect(info.isCritical).toBe(true);
+  });
+});
+
+// Records what was written so tests can assert round-trips through the real helpers.
+function recordingStore(initial: Record<string, unknown> = {}) {
+  const data: Record<string, unknown> = { ...initial };
+  const store: KeyValueStore = {
+    supportsSync: true,
+    get: async <T>(key: string) => (data[key] ?? null) as T | null,
+    set: async <T>(key: string, value: T) => {
+      data[key] = value;
+      return { success: true } as const;
+    },
+    remove: async (key: string) => {
+      delete data[key];
+      return true;
+    },
+    getUsage: async () => ({ bytesInUse: 0, quota: 10_000_000 }),
+  };
+  return { store, data };
+}
+
+describe('custom background', () => {
+  it('returns null when the user has not set one', async () => {
+    const { store } = recordingStore();
+    configurePlatform({ storage: store });
+
+    await expect(getCustomBackground()).resolves.toBeNull();
+  });
+
+  it('round-trips a stored image', async () => {
+    const { store } = recordingStore();
+    configurePlatform({ storage: store });
+
+    await setCustomBackground('data:image/jpeg;base64,abc');
+
+    await expect(getCustomBackground()).resolves.toBe('data:image/jpeg;base64,abc');
+  });
+
+  it('reports the failure when the image is too large to store', async () => {
+    const { store } = recordingStore();
+    configurePlatform({
+      storage: {
+        ...store,
+        set: async () => ({
+          success: false as const,
+          error: { type: 'quota_exceeded' as const, message: 'Image too large' },
+        }),
+      },
+    });
+
+    const result = await setCustomBackground('data:image/jpeg;base64,huge');
+
+    expect(result.success).toBe(false);
+  });
+
+  it('forgets the image once cleared', async () => {
+    const { store } = recordingStore();
+    configurePlatform({ storage: store });
+    await setCustomBackground('data:image/jpeg;base64,abc');
+
+    const result = await clearCustomBackground();
+
+    expect(result.success).toBe(true);
+    await expect(getCustomBackground()).resolves.toBeNull();
+  });
+
+  it('reports a failed delete instead of implying the image is gone', async () => {
+    const { store } = recordingStore();
+    configurePlatform({ storage: { ...store, remove: async () => false } });
+
+    const result = await clearCustomBackground();
+
+    expect(result.success).toBe(false);
   });
 });

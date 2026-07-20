@@ -14,6 +14,7 @@ import type { SettingsSection } from './components/settings/SettingsSections';
 import { syncSettingsSection } from './components/settings/SyncSettingsSection';
 import { ThemeSwitcher } from './components/ThemeSwitcher';
 import { useDayChange } from './hooks/useDayChange';
+import { useBackgroundStore } from './stores/background-store';
 import { useGoalStore } from './stores/goal-store';
 import { useSettingsStore } from './stores/settings-store';
 import { useToastStore } from './stores/toast-store';
@@ -41,6 +42,9 @@ function App({ extraSections, syncController }: AppProps = {}) {
   const [backgroundImage, setBackgroundImage] = useState<string | null>(null);
   const [imageLoaded, setImageLoaded] = useState(false);
   const [isRefreshingBackground, setIsRefreshingBackground] = useState(false);
+  const customBackground = useBackgroundStore((s) => s.customBackground);
+  const isCustomBackgroundLoaded = useBackgroundStore((s) => s.isLoaded);
+  const loadCustomBackground = useBackgroundStore((s) => s.loadCustomBackground);
 
   // Show background image only when glass theme is selected
   const showBackgroundImage = settings.colorTheme === 'glass';
@@ -81,11 +85,20 @@ function App({ extraSections, syncController }: AppProps = {}) {
     };
   }, []);
 
+  useEffect(() => {
+    loadCustomBackground();
+  }, [loadCustomBackground]);
+
   // Load background image when glass theme is selected
   useEffect(() => {
     if (!showBackgroundImage) {
       setBackgroundImage(null);
       setImageLoaded(false);
+      return;
+    }
+
+    // Wait for storage rather than flashing a curated photo over the user's own image.
+    if (!isCustomBackgroundLoaded) {
       return;
     }
 
@@ -146,7 +159,12 @@ function App({ extraSections, syncController }: AppProps = {}) {
     return () => {
       cancelled = true;
     };
-  }, [showBackgroundImage, settings.focusModeImageCategory]);
+  }, [
+    showBackgroundImage,
+    settings.focusModeImageCategory,
+    customBackground,
+    isCustomBackgroundLoaded,
+  ]);
 
   const handleRefreshBackground = async () => {
     setIsRefreshingBackground(true);

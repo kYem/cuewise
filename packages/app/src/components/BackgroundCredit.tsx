@@ -1,6 +1,6 @@
 import { RefreshCw } from 'lucide-react';
 import type React from 'react';
-import { getPhotoCredit } from '../utils/unsplash';
+import { getPhotoCredit, isUnsplashUrl } from '../utils/unsplash';
 
 interface BackgroundCreditProps {
   imageUrl: string | null;
@@ -19,7 +19,8 @@ export const BackgroundCredit: React.FC<BackgroundCreditProps> = ({
   onRefresh,
   isRefreshing = false,
 }) => {
-  if (imageUrl === null) {
+  // A user's own image gets no credit line and no refresh — neither belongs to us to offer.
+  if (imageUrl === null || !isUnsplashUrl(imageUrl)) {
     return null;
   }
 

@@ -1,11 +1,12 @@
 import type React from 'react';
 import { useEffect, useState } from 'react';
+import { useBackgroundStore } from '../stores/background-store';
 import { useCalendarStore } from '../stores/calendar-store';
 import { useFocusModeStore } from '../stores/focus-mode-store';
 import { useQuoteStore } from '../stores/quote-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { resolvePomodoroCompanion } from '../utils/calendar-visibility';
-import { getPreloadedCurrentUrl } from '../utils/image-preload-cache';
+import { getPreloadedCurrentUrl, preloadImages } from '../utils/image-preload-cache';
 import { loadImageWithFallback } from '../utils/unsplash';
 import { CalendarStrip } from './CalendarStrip';
 import { FocusMode } from './FocusMode';
@@ -20,6 +21,8 @@ export const PomodoroPage: React.FC = () => {
   const initializeSettings = useSettingsStore((state) => state.initialize);
   const quoteChangeInterval = useSettingsStore((state) => state.settings.quoteChangeInterval);
   const focusModeImageCategory = useSettingsStore((state) => state.settings.focusModeImageCategory);
+  const customBackground = useBackgroundStore((state) => state.customBackground);
+  const isCustomBackgroundLoaded = useBackgroundStore((state) => state.isLoaded);
   const pomodoroMusicEnabled = useSettingsStore((state) => state.settings.pomodoroMusicEnabled);
   const pomodoroCompanion = useSettingsStore((state) => state.settings.pomodoroCompanion);
   const initCalendar = useCalendarStore((state) => state.initialize);
@@ -45,12 +48,22 @@ export const PomodoroPage: React.FC = () => {
     }
   }, [companionMode, initCalendar]);
 
-  // Load background image (use preloaded if available)
   useEffect(() => {
+    // Wait for storage: resolving now would fetch a curated photo the user has overridden.
+    if (!isCustomBackgroundLoaded) {
+      return;
+    }
+
     let cancelled = false;
 
     const loadBackground = async () => {
-      // Check if we have a preloaded image from hovering on the button
+      // Resolve today's background first; without this a cold cache (e.g. right after
+      // removing a custom image) falls through to a random photo instead of today's.
+      await preloadImages(focusModeImageCategory);
+      if (cancelled) {
+        return;
+      }
+
       const preloadedUrl = getPreloadedCurrentUrl(focusModeImageCategory);
       if (preloadedUrl) {
         setBackgroundImage(preloadedUrl);
@@ -78,7 +91,7 @@ export const PomodoroPage: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [focusModeImageCategory]);
+  }, [focusModeImageCategory, isCustomBackgroundLoaded, customBackground]);
 
   // Auto-refresh quotes based on interval setting
   useEffect(() => {

@@ -16,6 +16,7 @@ import {
   getPreloadedCurrentUrl,
   preloadImages,
   refreshBackground,
+  setCustomBackgroundOverride,
 } from './image-preload-cache';
 import { loadImageWithFallback, preloadImage } from './unsplash';
 
@@ -128,5 +129,116 @@ describe('refreshBackground', () => {
     expect(url).toBeNull();
     expect(getPreloadedCurrentUrl('nature')).toBe('https://img/today');
     expect(mockSetDaily).not.toHaveBeenCalled();
+  });
+});
+
+describe('custom background override', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clearPreloadCache();
+    setCustomBackgroundOverride(null);
+    mockSetDaily.mockResolvedValue({ success: true });
+  });
+
+  it("shows the user's own image instead of the curated photo", async () => {
+    mockGetDaily.mockResolvedValue({ url: 'https://img/daily', category: 'nature', date: 'today' });
+    mockPreload.mockResolvedValue('https://img/daily');
+    await preloadImages('nature');
+    setCustomBackgroundOverride('data:image/jpeg;base64,mine');
+
+    expect(getPreloadedCurrentUrl('nature')).toBe('data:image/jpeg;base64,mine');
+  });
+
+  it('applies to every category, since a custom image is not category-specific', () => {
+    setCustomBackgroundOverride('data:image/jpeg;base64,mine');
+
+    expect(getPreloadedCurrentUrl('ocean')).toBe('data:image/jpeg;base64,mine');
+    expect(getPreloadedCurrentUrl('dark')).toBe('data:image/jpeg;base64,mine');
+  });
+
+  it('fetches no curated photo while the override is set', async () => {
+    setCustomBackgroundOverride('data:image/jpeg;base64,mine');
+
+    await preloadImages('nature');
+
+    expect(mockGetDaily).not.toHaveBeenCalled();
+    expect(mockLoadFallback).not.toHaveBeenCalled();
+  });
+
+  it('restores the curated rotation once the override is cleared', async () => {
+    mockGetDaily.mockResolvedValue({ url: 'https://img/daily', category: 'nature', date: 'today' });
+    mockPreload.mockResolvedValue('https://img/daily');
+    await preloadImages('nature');
+    setCustomBackgroundOverride('data:image/jpeg;base64,mine');
+
+    setCustomBackgroundOverride(null);
+
+    expect(getPreloadedCurrentUrl('nature')).toBe('https://img/daily');
+  });
+});
+
+describe('concurrent daily resolution', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clearPreloadCache();
+    setCustomBackgroundOverride(null);
+    mockSetDaily.mockResolvedValue({ success: true });
+    mockGetDaily.mockResolvedValue(null);
+  });
+
+  it('resolves once when two callers ask for the same category at the same time', async () => {
+    mockLoadFallback.mockResolvedValue('https://img/one');
+
+    await Promise.all([preloadImages('nature'), preloadImages('nature')]);
+
+    // Two resolves would persist two different photos and render different backgrounds.
+    expect(mockLoadFallback).toHaveBeenCalledTimes(1);
+    expect(mockSetDaily).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets a newer category win even when the older resolve finishes last', async () => {
+    // The older resolve settling last is the only ordering that exposes the bug: it
+    // would write its URL into a cache whose category has already moved on.
+    let releaseNature: (url: string) => void = () => undefined;
+    mockLoadFallback.mockImplementation((category: string) => {
+      if (category === 'nature') {
+        return new Promise<string>((resolve) => {
+          releaseNature = resolve;
+        });
+      }
+      return Promise.resolve('https://img/ocean');
+    });
+
+    const nature = preloadImages('nature');
+    const ocean = preloadImages('ocean');
+    await ocean;
+    releaseNature('https://img/nature');
+    await nature;
+
+    expect(getPreloadedCurrentUrl('ocean')).toBe('https://img/ocean');
+  });
+
+  it('does not let a finished resolve unregister a newer one still in flight', async () => {
+    // If the finished owner clears the shared slot, the next caller for the still-pending
+    // category stops deduping and fetches a second photo for the same day.
+    let releaseOcean: (url: string) => void = () => undefined;
+    // One shared promise for every ocean call: a duplicate resolve then shows up as an
+    // extra call rather than orphaning a promise and hanging the test.
+    const oceanPhoto = new Promise<string>((resolve) => {
+      releaseOcean = resolve;
+    });
+    mockLoadFallback.mockImplementation((category: string) =>
+      category === 'ocean' ? oceanPhoto : Promise.resolve('https://img/nature')
+    );
+
+    const nature = preloadImages('nature');
+    const ocean = preloadImages('ocean');
+    await nature;
+
+    const joiner = preloadImages('ocean');
+    releaseOcean('https://img/ocean');
+    await Promise.all([ocean, joiner]);
+
+    expect(mockLoadFallback).toHaveBeenCalledTimes(2);
   });
 });
