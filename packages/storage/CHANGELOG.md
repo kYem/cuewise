@@ -1,5 +1,20 @@
 # @cuewise/storage
 
+## 1.18.0
+
+### Minor Changes
+
+- Optional Cloud Sync is now available: sign in to sync your goals, quotes, reminders, and settings across devices. Your data is end-to-end encrypted on your device before it leaves — the server only ever stores ciphertext it cannot read. Off by default; Cuewise stays fully local until you turn it on.
+
+### Patch Changes
+
+- 0559dd2: Credit the Unsplash photo behind the glass theme and add a "New background" control to swap it without waiting for tomorrow
+- 328ff4a: Use your own picture as the background — stored on your device, never uploaded.
+- Updated dependencies [0559dd2]
+- Updated dependencies
+- Updated dependencies [328ff4a]
+  - @cuewise/shared@1.18.0
+
 ## 1.17.1
 
 ### Patch Changes
