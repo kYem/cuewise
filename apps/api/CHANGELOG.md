@@ -1,5 +1,14 @@
 # @cuewise/api
 
+## 0.1.3
+
+### Patch Changes
+
+- Updated dependencies [0559dd2]
+- Updated dependencies
+- Updated dependencies [328ff4a]
+  - @cuewise/shared@1.18.0
+
 ## 0.1.2
 
 ### Patch Changes

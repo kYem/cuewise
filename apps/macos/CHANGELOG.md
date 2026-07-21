@@ -1,5 +1,19 @@
 # @cuewise/macos
 
+## 0.2.2
+
+### Patch Changes
+
+- Updated dependencies [0559dd2]
+- Updated dependencies
+- Updated dependencies [328ff4a]
+  - @cuewise/shared@1.18.0
+  - @cuewise/storage@1.18.0
+  - @cuewise/ui@1.18.0
+  - @cuewise/app@1.16.2
+  - @cuewise/sync-client@0.1.3
+  - @cuewise/sync-engine@0.1.3
+
 ## 0.2.1
 
 ### Patch Changes
