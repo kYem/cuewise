@@ -34,6 +34,9 @@ const BACKGROUND_LOAD_TIMEOUT_MS = 5000;
 
 type Page = 'home' | 'pomodoro' | 'insights' | 'quotes' | 'goals' | 'concepts';
 
+/** Pages whose own content is the point — the photo is dimmed and its chrome stays out of the way. */
+const CONTENT_HEAVY_PAGES: ReadonlySet<Page> = new Set(['goals', 'quotes', 'insights', 'concepts']);
+
 interface AppProps {
   /** Platform-specific settings sections injected by the host (macOS Posture). */
   extraSections?: SettingsSection[];
@@ -54,6 +57,7 @@ function App({ extraSections, syncController }: AppProps = {}) {
 
   // Show background image only when glass theme is selected
   const showBackgroundImage = settings.colorTheme === 'glass';
+  const isContentHeavyPage = CONTENT_HEAVY_PAGES.has(currentPage);
 
   // Glass gates content on its background; bounded by BACKGROUND_REVEAL_DEADLINE_MS so it can't stick.
   const hideContent = showBackgroundImage && !imageLoaded;
@@ -219,12 +223,10 @@ function App({ extraSections, syncController }: AppProps = {}) {
             )}
 
             {/* Dark overlay for better readability on content-heavy pages (not home/pomodoro) */}
-            {(currentPage === 'goals' ||
-              currentPage === 'quotes' ||
-              currentPage === 'insights' ||
-              currentPage === 'concepts') && <div className="fixed inset-0 bg-black/25" />}
+            {isContentHeavyPage && <div className="fixed inset-0 bg-black/25" />}
 
-            {imageLoaded && (
+            {/* Credit and its refresh sit in the bottom-left, where content pages need the room. */}
+            {imageLoaded && !isContentHeavyPage && (
               <BackgroundCredit
                 imageUrl={backgroundImage}
                 onRefresh={handleRefreshBackground}
