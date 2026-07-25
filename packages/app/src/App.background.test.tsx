@@ -81,16 +81,18 @@ describe('App background gate', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   it('reveals the app even when the background image never loads', async () => {
     // Deterministic clock: shouldAdvanceTime would let real elapsed time under full-suite
-    // load fire the deadline before the "still hidden" assertion, making this flaky.
+    // load fire the deadline before the "still hidden" assertion. Must precede render —
+    // reinstalling the clock discards pending timers — and waitFor can't be used after it.
     vi.useFakeTimers();
     render(<App />);
 
-    // Two-sided on purpose: asserting only the reveal would let the deadline be raised
-    // far past 1500ms unnoticed, which is the regression this file exists to prevent.
+    // The two advances total exactly REVEAL_DEADLINE_MS, so the reveal assertion catches the
+    // deadline being raised; the precondition below catches it being removed or dropped to ~0.
     await vi.advanceTimersByTimeAsync(REVEAL_DEADLINE_MS - 100);
     expect(contentWrapper().className).toContain('opacity-0');
     expect(screen.getByText(/Brewing your view/i)).toBeInTheDocument();
@@ -118,6 +120,7 @@ describe('App background gate', () => {
   });
 
   it('stops showing the loading spinner once the deadline passes', async () => {
+    // Manual clock, before render — see the note in the reveal test above.
     vi.useFakeTimers();
     render(<App />);
 
