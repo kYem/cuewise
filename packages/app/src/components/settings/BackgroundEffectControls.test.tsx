@@ -1,3 +1,4 @@
+import type { StorageResult } from '@cuewise/shared';
 import * as storage from '@cuewise/storage';
 import { defaultSettings } from '@cuewise/test-utils/fixtures';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -107,7 +108,7 @@ describe('BackgroundEffectControls', () => {
     expect(storage.setSettings).not.toHaveBeenCalled();
   });
 
-  it('a drag that returns to its starting value clears the preview without persisting', () => {
+  it('a drag that returns to its starting value persists it and clears the preview', async () => {
     render(<BackgroundEffectControls />);
     const dimSlider = screen.getByRole('slider', { name: 'Dim background' });
 
@@ -115,8 +116,39 @@ describe('BackgroundEffectControls', () => {
     fireEvent.change(dimSlider, { target: { value: '0' } });
     fireEvent.pointerUp(dimSlider);
 
-    expect(useSettingsStore.getState().preview).toBeNull();
-    expect(storage.setSettings).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(storage.setSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ backgroundDim: 0, backgroundBlur: 0 })
+      );
+    });
+    await waitFor(() => {
+      expect(useSettingsStore.getState().preview).toBeNull();
+    });
+  });
+
+  it('a gesture landing on the pre-write value still persists while a commit is in flight', async () => {
+    let resolveFirstWrite: (result: StorageResult) => void = () => {};
+    vi.mocked(storage.setSettings)
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveFirstWrite = resolve;
+        })
+      )
+      .mockResolvedValue({ success: true });
+    render(<BackgroundEffectControls />);
+    const dimSlider = screen.getByRole('slider', { name: 'Dim background' });
+
+    fireEvent.change(dimSlider, { target: { value: '1' } });
+    fireEvent.keyUp(dimSlider, { key: 'ArrowRight' });
+    fireEvent.change(dimSlider, { target: { value: '0' } });
+    fireEvent.keyUp(dimSlider, { key: 'ArrowLeft' });
+    resolveFirstWrite({ success: true });
+
+    await waitFor(() => {
+      expect(storage.setSettings).toHaveBeenLastCalledWith(
+        expect.objectContaining({ backgroundDim: 0 })
+      );
+    });
   });
 
   it('discards an uncommitted preview when the controls unmount mid-drag', () => {

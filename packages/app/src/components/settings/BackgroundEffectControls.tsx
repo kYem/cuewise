@@ -64,7 +64,7 @@ function EffectSlider({
 export function BackgroundEffectControls() {
   const dim = useSettingsStore(selectBackgroundDim);
   const blur = useSettingsStore(selectBackgroundBlur);
-  const settings = useSettingsStore((s) => s.settings);
+  const preview = useSettingsStore((s) => s.preview);
   const previewSettings = useSettingsStore((s) => s.previewSettings);
   const updateSettings = useSettingsStore((s) => s.updateSettings);
   const clearPreview = useSettingsStore((s) => s.clearPreview);
@@ -81,9 +81,10 @@ export function BackgroundEffectControls() {
     dim === DEFAULT_SETTINGS.backgroundDim && blur === DEFAULT_SETTINGS.backgroundBlur;
 
   const commit = () => {
-    if (dim === settings.backgroundDim && blur === settings.backgroundBlur) {
-      // Nothing to persist, but a round-trip drag may have left an overlay behind.
-      clearPreview();
+    // No overlay means no gesture (focus passing through) — nothing to persist.
+    // Comparing against persisted settings instead would race an in-flight write
+    // and could swallow a gesture that lands back on the pre-write value.
+    if (preview === null) {
       return;
     }
     void updateSettings({ backgroundDim: dim, backgroundBlur: blur });
