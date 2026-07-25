@@ -75,6 +75,29 @@ describe('units changes', () => {
 
     expect(store.refresh).not.toHaveBeenCalled();
   });
+
+  // Every success replaces the snapshot and re-runs the effect, so a reply that never
+  // matches must not turn into an unbounded retry against our own proxy.
+  it('asks only once when the reply keeps coming back in the wrong units', () => {
+    mockSettings({ showWeather: true, weatherUnits: 'imperial' });
+    const store = mockWeatherStore();
+
+    const { rerender } = render(<WeatherWidget />);
+    mockWeatherStore({ snapshot: snapshot(LONDON, { units: 'metric' }) });
+    rerender(<WeatherWidget />);
+    rerender(<WeatherWidget />);
+
+    expect(store.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('announces the scale the number is actually in, not the pending preference', () => {
+    mockSettings({ showWeather: true, weatherUnits: 'imperial' });
+    mockWeatherStore({ snapshot: snapshot(LONDON, { units: 'metric' }) });
+
+    render(<WeatherWidget />);
+
+    expect(screen.getByText('Celsius')).toBeInTheDocument();
+  });
 });
 
 describe('the chip', () => {

@@ -6,6 +6,7 @@ import {
   toLocalIso,
   type WeatherConditionKind,
   type WeatherSnapshot,
+  type WeatherUnits,
 } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
 import {
@@ -167,6 +168,7 @@ export const WeatherWidget: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const unitsRef = useRef(unitsPreference);
+  const requestedUnitsRef = useRef<WeatherUnits | null>(null);
 
   useEffect(() => {
     unitsRef.current = unitsPreference;
@@ -181,11 +183,16 @@ export const WeatherWidget: React.FC = () => {
   }, [showWeather, initialize]);
 
   // A reading is stored in whatever units it was fetched in, so changing the setting has
-  // to refetch or the chip keeps showing the old scale.
+  // to refetch or the chip keeps showing the old scale. Each success replaces `snapshot`,
+  // which re-runs this effect — so remember what was asked for, or a reply that doesn't
+  // match (a proxy or provider fault) would refetch forever.
   useEffect(() => {
-    if (snapshot !== null && snapshot.units !== resolveWeatherUnits(unitsPreference)) {
-      refresh({ silent: true, unitsPreference });
+    const wanted = resolveWeatherUnits(unitsPreference);
+    if (snapshot === null || snapshot.units === wanted || requestedUnitsRef.current === wanted) {
+      return;
     }
+    requestedUnitsRef.current = wanted;
+    refresh({ silent: true, unitsPreference });
   }, [snapshot, unitsPreference, refresh]);
 
   useEffect(() => {
@@ -227,7 +234,9 @@ export const WeatherWidget: React.FC = () => {
     );
   }
 
-  const units = resolveWeatherUnits(unitsPreference);
+  // Read off the snapshot, not the preference: between a units change and its refetch
+  // the two disagree, and the announced scale must match the number on screen.
+  const units = snapshot.units;
   const Icon = conditionIcon(snapshot.current.condition, snapshot.current.isDay);
   const temperature = formatTemperature(snapshot.current.temperature);
 
