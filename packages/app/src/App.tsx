@@ -16,9 +16,14 @@ import { ThemeSwitcher } from './components/ThemeSwitcher';
 import { useDayChange } from './hooks/useDayChange';
 import { useBackgroundStore } from './stores/background-store';
 import { useGoalStore } from './stores/goal-store';
-import { useSettingsStore } from './stores/settings-store';
+import {
+  selectBackgroundBlur,
+  selectBackgroundDim,
+  useSettingsStore,
+} from './stores/settings-store';
 import { useToastStore } from './stores/toast-store';
 import { type SyncController, SyncControllerContext } from './sync/sync-controller';
+import { getBackgroundFilterStyle } from './utils/background-filter';
 import {
   getPreloadedCurrentUrl,
   preloadImages,
@@ -39,6 +44,8 @@ function App({ extraSections, syncController }: AppProps = {}) {
   const [currentPage, setCurrentPage] = useState<Page>('home');
   const { toasts, removeToast } = useToastStore();
   const { settings } = useSettingsStore();
+  const backgroundDim = useSettingsStore(selectBackgroundDim);
+  const backgroundBlur = useSettingsStore(selectBackgroundBlur);
   const [backgroundImage, setBackgroundImage] = useState<string | null>(null);
   const [imageLoaded, setImageLoaded] = useState(false);
   const [isRefreshingBackground, setIsRefreshingBackground] = useState(false);
@@ -205,6 +212,7 @@ function App({ extraSections, syncController }: AppProps = {}) {
               }`}
               style={{
                 backgroundImage: backgroundImage ? `url(${backgroundImage})` : undefined,
+                ...getBackgroundFilterStyle(backgroundDim, backgroundBlur),
               }}
             />
 

@@ -58,6 +58,8 @@ export const DEFAULT_SETTINGS: Settings = {
   syncEnabled: false, // Disabled by default for privacy
   colorTheme: 'glass',
   glassEnhanced: false,
+  backgroundDim: 0,
+  backgroundBlur: 0,
   layoutDensity: 'comfortable',
   showThemeSwitcher: false,
   showClock: false, // Clock hidden by default for simpler UI

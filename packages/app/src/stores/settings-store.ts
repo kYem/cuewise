@@ -14,14 +14,18 @@ import { getSettings, migrateStorageData, setSettings } from '@cuewise/storage';
 import { create } from 'zustand';
 import { useToastStore } from './toast-store';
 
-interface SettingsStore {
+export interface SettingsStore {
   // State
   settings: Settings;
+  // Ephemeral overlay for live slider previews; never persisted, cleared on commit.
+  // Kept out of `settings` so updateSettings still diffs against persisted truth.
+  preview: Partial<Settings> | null;
   isLoading: boolean;
   error: string | null;
 
   // Actions
   initialize: () => Promise<void>;
+  previewSettings: (settings: Partial<Settings>) => void;
   updateTheme: (theme: Settings['theme']) => Promise<void>;
   updateNotifications: (enabled: boolean) => Promise<void>;
   updateQuoteChangeInterval: (interval: Settings['quoteChangeInterval']) => Promise<void>;
@@ -34,8 +38,14 @@ interface SettingsStore {
 export const useSettingsStore = create<SettingsStore>((set, get) => ({
   // Initial state
   settings: DEFAULT_SETTINGS,
+  preview: null,
   isLoading: true,
   error: null,
+
+  previewSettings: (partialSettings: Partial<Settings>) => {
+    const { preview } = get();
+    set({ preview: { ...preview, ...partialSettings } });
+  },
 
   initialize: async () => {
     try {
@@ -202,7 +212,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       }
 
       await setSettings(updatedSettings);
-      set({ settings: updatedSettings });
+      set({ settings: updatedSettings, preview: null });
 
       // Sync every changed key that isn't device-local (each setting syncs per-key, spec §2).
       for (const key of Object.keys(clampedPartial)) {
@@ -233,7 +243,8 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     } catch (error) {
       logger.error('Error updating settings', error);
       const errorMessage = 'Failed to update settings. Please try again.';
-      set({ error: errorMessage });
+      // Drop any preview too, so the visible state snaps back to persisted truth.
+      set({ error: errorMessage, preview: null });
       useToastStore.getState().error(errorMessage);
     }
   },
@@ -260,6 +271,15 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     }
   },
 }));
+
+// Preview-aware selectors: background layers render the in-progress drag, if any.
+export function selectBackgroundDim(state: SettingsStore): number {
+  return state.preview?.backgroundDim ?? state.settings.backgroundDim;
+}
+
+export function selectBackgroundBlur(state: SettingsStore): number {
+  return state.preview?.backgroundBlur ?? state.settings.backgroundBlur;
+}
 
 /**
  * Apply theme to the document

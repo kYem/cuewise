@@ -340,6 +340,8 @@ export interface Settings {
   // Customization
   colorTheme: ColorTheme;
   glassEnhanced: boolean; // Opt-in richer Glass surfaces: saturation, lit edges, legibility scrim (default false)
+  backgroundDim: number; // Darken the background image, 0-100 (default 0 = unchanged)
+  backgroundBlur: number; // Blur the background image in px, 0-20 (default 0 = unchanged)
   layoutDensity: LayoutDensity;
   showThemeSwitcher: boolean; // Show live theme switcher sidebar
   showClock: boolean; // Show clock and date on home page (default false)
