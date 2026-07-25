@@ -47,10 +47,13 @@ function contentWrapper(): HTMLElement {
   return screen.getByTestId('app-content');
 }
 
-function photoLayer(): HTMLElement | undefined {
-  return [...document.querySelectorAll('div')].find((d) =>
-    (d.getAttribute('style') ?? '').includes('images.unsplash.com')
-  );
+/** True once a photo is actually applied — the layer always renders, styled or not. */
+function hasPhotoApplied(): boolean {
+  return (screen.getByTestId('background-photo').getAttribute('style') ?? '').includes('url(');
+}
+
+function photoLayer(): HTMLElement {
+  return screen.getByTestId('background-photo');
 }
 
 // These tests assume glass is the default theme (DEFAULT_SETTINGS.colorTheme); without it
@@ -141,7 +144,7 @@ describe('App background gate', () => {
     await vi.advanceTimersByTimeAsync(100);
     await waitFor(() => expect(contentWrapper().className).toContain('opacity-100'));
     // Applied AND visible — a layer stuck at opacity-0 renders the photo invisible.
-    await waitFor(() => expect(photoLayer()?.className).toContain('opacity-100'));
+    await waitFor(() => expect(photoLayer().className).toContain('opacity-100'));
     expect(vi.mocked(preloadImage)).toHaveBeenCalledWith(PHOTO, 5000);
   });
 
@@ -167,7 +170,7 @@ describe('App background gate', () => {
 
     await vi.advanceTimersByTimeAsync(100);
     await waitFor(() => expect(contentWrapper().className).toContain('opacity-100'));
-    expect(photoLayer()).toBeUndefined();
+    expect(hasPhotoApplied()).toBe(false);
     // Asserting the log is what stops this catch quietly regressing to `catch {}`.
     await waitFor(() =>
       expect(warn).toHaveBeenCalledWith(
@@ -213,6 +216,6 @@ describe('App background gate', () => {
     releasePhoto();
     await vi.advanceTimersByTimeAsync(50);
 
-    await waitFor(() => expect(photoLayer()).toBeDefined());
+    await waitFor(() => expect(hasPhotoApplied()).toBe(true));
   });
 });
