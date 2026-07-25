@@ -57,12 +57,26 @@ function parseUnits(raw: string | undefined): WeatherUnits {
   return raw === 'imperial' ? 'imperial' : 'metric';
 }
 
-/** Null on any failure; callers turn that into `upstream_unavailable`. */
-async function fetchUpstream(doFetch: UpstreamFetch, url: string): Promise<unknown | null> {
+/**
+ * Null on any failure; callers turn that into `upstream_unavailable`.
+ *
+ * `cacheTtl` is what actually gets the edge caching: Cloudflare does not cache a Worker's
+ * own JSON response by default, so the `Cache-Control` we return only reaches the browser.
+ * Caching the *subrequest* keys on the rounded-coordinate URL instead, which is what lets
+ * nearby users share one upstream call.
+ */
+async function fetchUpstream(
+  doFetch: UpstreamFetch,
+  url: string,
+  cacheSeconds: number
+): Promise<unknown | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
   try {
-    const response = await doFetch(url, { signal: controller.signal });
+    const response = await doFetch(url, {
+      signal: controller.signal,
+      cf: { cacheEverything: true, cacheTtl: cacheSeconds },
+    });
     if (!response.ok) {
       logger.warn('Weather upstream returned a non-OK status', { status: response.status });
       return null;
@@ -236,7 +250,7 @@ export function registerWeatherRoutes(
       url.searchParams.set('temperature_unit', 'fahrenheit');
     }
 
-    const raw = await fetchUpstream(deps.weatherUpstream, url.toString());
+    const raw = await fetchUpstream(deps.weatherUpstream, url.toString(), FORECAST_CACHE_SECONDS);
     if (raw === null) {
       return problem('upstream_unavailable', {
         detail: 'The weather provider is unavailable; try again shortly.',
@@ -265,7 +279,7 @@ export function registerWeatherRoutes(
     url.searchParams.set('language', 'en');
     url.searchParams.set('format', 'json');
 
-    const raw = await fetchUpstream(deps.weatherUpstream, url.toString());
+    const raw = await fetchUpstream(deps.weatherUpstream, url.toString(), GEOCODING_CACHE_SECONDS);
     if (raw === null) {
       return problem('upstream_unavailable', {
         detail: 'The geocoding provider is unavailable; try again shortly.',
@@ -274,7 +288,10 @@ export function registerWeatherRoutes(
     // Open-Meteo omits `results` entirely for a no-match query — an empty list, not an error.
     const results = (raw as { results?: unknown }).results;
     const places = Array.isArray(results)
-      ? results.map(normalizePlace).filter((place): place is WeatherLocation => place !== null)
+      ? results
+          .map(normalizePlace)
+          .filter((place): place is WeatherLocation => place !== null)
+          .slice(0, MAX_SEARCH_RESULTS)
       : [];
     return cached({ results: places }, GEOCODING_CACHE_SECONDS);
   });

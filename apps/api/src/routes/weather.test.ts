@@ -38,17 +38,20 @@ const GEOCODING_PAYLOAD = {
   ],
 };
 
-/** Records every upstream URL so tests can assert on what actually left the worker. */
+/** Records every upstream call so tests can assert on what actually left the worker. */
 function stubUpstream(
   payload: unknown,
   init: { ok?: boolean } = {}
 ): {
   fetch: UpstreamFetch;
   urls: string[];
+  inits: (RequestInit | undefined)[];
 } {
   const urls: string[] = [];
-  const fetchFn: UpstreamFetch = async (url) => {
+  const inits: (RequestInit | undefined)[] = [];
+  const fetchFn: UpstreamFetch = async (url, requestInit) => {
     urls.push(url);
+    inits.push(requestInit);
     if (init.ok === false) {
       return new Response('upstream exploded', { status: 502 });
     }
@@ -57,7 +60,7 @@ function stubUpstream(
       headers: { 'Content-Type': 'application/json' },
     });
   };
-  return { fetch: fetchFn, urls };
+  return { fetch: fetchFn, urls, inits };
 }
 
 function failingUpstream(error: Error): UpstreamFetch {
@@ -124,13 +127,24 @@ describe('GET /v1/weather', () => {
     expect(await res.json()).toMatchObject({ units: 'imperial' });
   });
 
-  it('sets a cache-control header so the edge absorbs repeat requests', async () => {
+  it('sets a cache-control header so a repeat tab hits the browser cache', async () => {
     const upstream = stubUpstream(FORECAST_PAYLOAD);
     const app = createApp({ weatherUpstream: upstream.fetch });
 
     const res = await app.request('/v1/weather?lat=51.5&lon=-0.13', {}, env);
 
     expect(res.headers.get('Cache-Control')).toBe('public, max-age=600');
+  });
+
+  // Cloudflare will not cache the worker's own JSON response, so the cross-user dedup
+  // has to come from caching the subrequest on its rounded-coordinate URL.
+  it('asks the edge to cache the upstream call', async () => {
+    const upstream = stubUpstream(FORECAST_PAYLOAD);
+    const app = createApp({ weatherUpstream: upstream.fetch });
+
+    await app.request('/v1/weather?lat=51.5&lon=-0.13', {}, env);
+
+    expect(upstream.inits[0]?.cf).toEqual({ cacheEverything: true, cacheTtl: 600 });
   });
 
   it.each([
@@ -287,11 +301,28 @@ describe('GET /v1/weather/search', () => {
   });
 
   it('caches place lookups for far longer than forecasts', async () => {
-    const app = createApp({ weatherUpstream: stubUpstream(GEOCODING_PAYLOAD).fetch });
+    const upstream = stubUpstream(GEOCODING_PAYLOAD);
+    const app = createApp({ weatherUpstream: upstream.fetch });
 
     const res = await app.request('/v1/weather/search?q=vilni', {}, env);
 
     expect(res.headers.get('Cache-Control')).toBe('public, max-age=86400');
+    expect(upstream.inits[0]?.cf).toEqual({ cacheEverything: true, cacheTtl: 86_400 });
+  });
+
+  it('caps the list even if the provider ignores the requested count', async () => {
+    const many = {
+      results: Array.from({ length: 12 }, (_, i) => ({
+        ...GEOCODING_PAYLOAD.results[0],
+        id: 1000 + i,
+      })),
+    };
+    const app = createApp({ weatherUpstream: stubUpstream(many).fetch });
+
+    const res = await app.request('/v1/weather/search?q=vilni', {}, env);
+
+    const body = (await res.json()) as { results: unknown[] };
+    expect(body.results).toHaveLength(5);
   });
 });
 
