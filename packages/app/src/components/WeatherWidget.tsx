@@ -144,7 +144,7 @@ const WeatherPopover: React.FC<{ snapshot: WeatherSnapshot; alignRight: boolean 
 
       {(age !== null || error !== null) && (
         <div className="mt-3 pt-2 border-t border-divider text-[10px] text-secondary">
-          {error === null ? age : error}
+          {error ?? age}
         </div>
       )}
     </div>

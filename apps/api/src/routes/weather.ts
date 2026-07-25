@@ -137,6 +137,14 @@ function normalizeHours(hourly: OpenMeteoForecast['hourly']): WeatherHour[] {
   return hours;
 }
 
+/** Null for an empty day — `Math.max()` of nothing is -Infinity, not a temperature. */
+function hourlyExtreme(hours: WeatherHour[], pick: (...values: number[]) => number): number | null {
+  if (hours.length === 0) {
+    return null;
+  }
+  return pick(...hours.map((hour) => hour.temperature));
+}
+
 /**
  * Null when the payload is unusable, so a provider changing shape surfaces as
  * `upstream_unavailable` rather than a half-rendered chip.
@@ -151,15 +159,10 @@ function normalizeForecast(raw: unknown, units: WeatherUnits): WeatherForecast |
     return null;
   }
   const hours = normalizeHours(payload.hourly);
-  const hourTemperatures = hours.map((hour) => hour.temperature);
   // Deriving from the hourly range is fine; falling back to the current temperature is
   // not — H === L === now is fabricated weather that reads as measured.
-  const high =
-    firstNumber(payload.daily?.temperature_2m_max) ??
-    (hourTemperatures.length > 0 ? Math.max(...hourTemperatures) : null);
-  const low =
-    firstNumber(payload.daily?.temperature_2m_min) ??
-    (hourTemperatures.length > 0 ? Math.min(...hourTemperatures) : null);
+  const high = firstNumber(payload.daily?.temperature_2m_max) ?? hourlyExtreme(hours, Math.max);
+  const low = firstNumber(payload.daily?.temperature_2m_min) ?? hourlyExtreme(hours, Math.min);
   if (high === null || low === null) {
     return null;
   }

@@ -1,7 +1,7 @@
 import type { WeatherLocation } from '@cuewise/shared';
 import { Loader2, MapPin, Search, X } from 'lucide-react';
 import type React from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSettingsStore } from '../../stores/settings-store';
 import { useWeatherStore } from '../../stores/weather-store';
 import { describeLocation, MIN_SEARCH_QUERY_LENGTH } from '../../utils/weather';
@@ -24,7 +24,6 @@ export const WeatherLocationPicker: React.FC = () => {
   const unitsPreference = useSettingsStore((state) => state.settings.weatherUnits);
 
   const [query, setQuery] = useState('');
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const trimmed = query.trim();
@@ -32,13 +31,11 @@ export const WeatherLocationPicker: React.FC = () => {
       clearSearch();
       return;
     }
-    timerRef.current = setTimeout(() => {
+    const timer = setTimeout(() => {
       search(trimmed);
     }, DEBOUNCE_MS);
     return () => {
-      if (timerRef.current !== null) {
-        clearTimeout(timerRef.current);
-      }
+      clearTimeout(timer);
     };
   }, [query, search, clearSearch]);
 

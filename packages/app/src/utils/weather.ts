@@ -116,6 +116,20 @@ function isForecast(value: unknown): value is WeatherForecast {
   );
 }
 
+function isLocation(value: unknown): value is WeatherLocation {
+  if (value === null || typeof value !== 'object') {
+    return false;
+  }
+  const place = value as Partial<WeatherLocation>;
+  return (
+    typeof place.id === 'string' &&
+    typeof place.name === 'string' &&
+    typeof place.latitude === 'number' &&
+    typeof place.longitude === 'number' &&
+    typeof place.timezone === 'string'
+  );
+}
+
 export async function fetchForecast(
   location: WeatherLocation,
   units: WeatherUnits
@@ -143,20 +157,6 @@ export async function searchLocations(query: string): Promise<WeatherLocation[]>
     throw new WeatherRequestError('The weather service returned an unexpected response');
   }
   return results.filter(isLocation);
-}
-
-function isLocation(value: unknown): value is WeatherLocation {
-  if (value === null || typeof value !== 'object') {
-    return false;
-  }
-  const place = value as Partial<WeatherLocation>;
-  return (
-    typeof place.id === 'string' &&
-    typeof place.name === 'string' &&
-    typeof place.latitude === 'number' &&
-    typeof place.longitude === 'number' &&
-    typeof place.timezone === 'string'
-  );
 }
 
 /** "Vilnius, Vilnius County, Lithuania" — skips parts the provider didn't supply. */
