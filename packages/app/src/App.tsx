@@ -29,7 +29,7 @@ import { preloadImage } from './utils/unsplash';
 
 /** Show the app over the gradient fallback rather than wait on a decorative photo. */
 const BACKGROUND_REVEAL_DEADLINE_MS = 1500;
-/** Bounds this load; the retries underneath can stack to ~32s before they give up. */
+/** Bounds one image load; the gradient is a fine outcome, so don't wait the 10s default. */
 const BACKGROUND_LOAD_TIMEOUT_MS = 5000;
 
 type Page = 'home' | 'pomodoro' | 'insights' | 'quotes' | 'goals' | 'concepts';
@@ -121,6 +121,8 @@ function App({ extraSections, syncController }: AppProps = {}) {
     let cancelled = false;
 
     const loadBackground = async () => {
+      // Unbounded from here: its own retries can stack to ~32s, which is what the
+      // reveal deadline above exists to survive.
       await preloadImages(settings.focusModeImageCategory);
 
       if (cancelled) {
@@ -246,6 +248,7 @@ function App({ extraSections, syncController }: AppProps = {}) {
 
         {/* Hide content while settings load or glass theme background loads */}
         <div
+          data-testid="app-content"
           className={`flex h-full w-full relative transition-opacity duration-500 ${
             hideContent ? 'opacity-0' : 'opacity-100'
           }`}

@@ -43,15 +43,7 @@ const realLoadCustomBackground = useBackgroundStore.getState().loadCustomBackgro
 
 /** The wrapper gating the main content + theme switcher (App.tsx `hideContent`). */
 function contentWrapper(): HTMLElement {
-  const el = [...document.querySelectorAll('div')].find(
-    (d) =>
-      typeof d.className === 'string' &&
-      d.className.includes('flex h-full w-full relative transition-opacity')
-  );
-  if (el === undefined) {
-    throw new Error('content wrapper not found');
-  }
-  return el;
+  return screen.getByTestId('app-content');
 }
 
 function photoLayer(): HTMLElement | undefined {
@@ -92,11 +84,14 @@ describe('App background gate', () => {
   it('reveals the app even when the background image never loads', async () => {
     render(<App />);
 
-    await waitFor(() => expect(contentWrapper().className).toContain('opacity-0'));
+    // Two-sided on purpose: asserting only the reveal would let the deadline be raised
+    // far past 1500ms unnoticed, which is the regression this file exists to prevent.
+    await vi.advanceTimersByTimeAsync(REVEAL_DEADLINE_MS - 100);
+    expect(contentWrapper().className).toContain('opacity-0');
+    expect(screen.getByText(/Brewing your view/i)).toBeInTheDocument();
 
-    await vi.advanceTimersByTimeAsync(REVEAL_DEADLINE_MS * 2);
-
-    await waitFor(() => expect(contentWrapper().className).toContain('opacity-100'));
+    await vi.advanceTimersByTimeAsync(100);
+    expect(contentWrapper().className).toContain('opacity-100');
   });
 
   it('reveals even while the custom-background read is still outstanding', async () => {
@@ -120,9 +115,12 @@ describe('App background gate', () => {
   it('stops showing the loading spinner once the deadline passes', async () => {
     render(<App />);
 
-    await vi.advanceTimersByTimeAsync(REVEAL_DEADLINE_MS * 2);
+    // Positive precondition first, or this can't tell "dismissed" from "never rendered".
+    await vi.advanceTimersByTimeAsync(REVEAL_DEADLINE_MS - 100);
+    expect(screen.getByText(/Brewing your view/i)).toBeInTheDocument();
 
-    await waitFor(() => expect(screen.queryByText(/Brewing your view/i)).not.toBeInTheDocument());
+    await vi.advanceTimersByTimeAsync(100);
+    expect(screen.queryByText(/Brewing your view/i)).not.toBeInTheDocument();
   });
 
   it('shows the photo when it does load, without waiting for the deadline', async () => {
@@ -136,6 +134,30 @@ describe('App background gate', () => {
     // Applied AND visible — a layer stuck at opacity-0 renders the photo invisible.
     await waitFor(() => expect(photoLayer()?.className).toContain('opacity-100'));
     expect(vi.mocked(preloadImage)).toHaveBeenCalledWith(PHOTO, 5000);
+  });
+
+  it('reveals immediately when no image resolves, without waiting out the deadline', async () => {
+    // The blocked-CDN case: preloadImages gives up and returns nothing.
+    vi.mocked(preloadImages).mockResolvedValue(undefined);
+    vi.mocked(getPreloadedCurrentUrl).mockReturnValue(null);
+
+    render(<App />);
+
+    await vi.advanceTimersByTimeAsync(100);
+    await waitFor(() => expect(contentWrapper().className).toContain('opacity-100'));
+  });
+
+  it('reveals over the gradient when the image rejects', async () => {
+    // A custom background reaches preloadImage unvalidated, so a rejection is reachable.
+    vi.mocked(preloadImages).mockResolvedValue(undefined);
+    vi.mocked(getPreloadedCurrentUrl).mockReturnValue(PHOTO);
+    vi.mocked(preloadImage).mockRejectedValue(new Error('Failed to load image'));
+
+    render(<App />);
+
+    await vi.advanceTimersByTimeAsync(100);
+    await waitFor(() => expect(contentWrapper().className).toContain('opacity-100'));
+    expect(photoLayer()).toBeUndefined();
   });
 
   it('still shows the photo when it arrives after the deadline', async () => {
