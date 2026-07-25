@@ -26,6 +26,7 @@ import { ReminderWidget } from './ReminderWidget';
 import { ReviewPromptModal } from './ReviewPromptModal';
 import { SettingsModal } from './SettingsModal';
 import type { SettingsSection } from './settings/SettingsSections';
+import { WeatherWidget } from './WeatherWidget';
 import { WelcomeModal } from './WelcomeModal';
 
 interface NewTabPageProps {
@@ -42,6 +43,7 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({ extraSections }) => {
   const showThemeSwitcher = useSettingsStore((state) => state.settings.showThemeSwitcher);
   const showClock = useSettingsStore((state) => state.settings.showClock);
   const showQuickLinks = useSettingsStore((state) => state.settings.showQuickLinks);
+  const weatherPosition = useSettingsStore((state) => state.settings.weatherPosition);
   const conceptCardsEnabled = useSettingsStore((state) => state.settings.conceptCardsEnabled);
   const conceptNudgeDismissed = useSettingsStore((state) => state.settings.conceptNudgeDismissed);
   const conceptNudgeCount = useSettingsStore((state) => state.settings.conceptNudgeCount);
@@ -415,6 +417,7 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({ extraSections }) => {
           <div className="flex items-center gap-density-sm">
             <GoalButton />
             {showQuickLinks && <QuickLinksWidget />}
+            {weatherPosition === 'left' && <WeatherWidget />}
           </div>
         </div>
 
@@ -425,6 +428,7 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({ extraSections }) => {
             showStickyHeader ? 'opacity-0 pointer-events-none' : 'opacity-100'
           }`}
         >
+          {weatherPosition === 'right' && <WeatherWidget />}
           {renderNavControls(floatingMenuRef)}
         </nav>
 

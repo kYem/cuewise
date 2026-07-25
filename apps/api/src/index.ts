@@ -18,6 +18,7 @@ import {
   registerGoogleRoutes,
 } from './routes/google';
 import { registerKeysRoutes } from './routes/keys';
+import { registerWeatherRoutes, type UpstreamFetch } from './routes/weather';
 import type { SyncStore } from './store';
 import { type IdTokenVerifier, verifyAppleIdToken, verifyGoogleIdToken } from './verifiers';
 
@@ -26,6 +27,7 @@ export type AppDeps = {
   googleVerifier?: IdTokenVerifier;
   appleVerifier?: IdTokenVerifier;
   googleCodeExchanger?: GoogleCodeExchanger;
+  weatherUpstream?: UpstreamFetch;
 };
 
 export type AppDepsResolved = Required<AppDeps>;
@@ -36,6 +38,7 @@ export function createApp(deps: AppDeps = {}): Hono<{ Bindings: Env } & AuthVars
     googleVerifier: deps.googleVerifier ?? verifyGoogleIdToken,
     appleVerifier: deps.appleVerifier ?? verifyAppleIdToken,
     googleCodeExchanger: deps.googleCodeExchanger ?? exchangeGoogleCode,
+    weatherUpstream: deps.weatherUpstream ?? ((url, init) => fetch(url, init)),
   };
   const app = new Hono<{ Bindings: Env } & AuthVars>();
 
@@ -83,6 +86,9 @@ export function createApp(deps: AppDeps = {}): Hono<{ Bindings: Env } & AuthVars
   app.use('/v1/auth/apple/callback', authSurfaceRateLimit);
   app.use('/v1/auth/google/start', authSurfaceRateLimit);
   app.use('/v1/auth/google/callback', authSurfaceRateLimit);
+  // Its own limiter instance so a burst of location searches can't consume the sign-in
+  // budget; counters are per-middleware. The wildcard also covers the bare /v1/weather.
+  app.use('/v1/weather/*', ipRateLimit());
 
   registerAuthRoutes(app, resolved);
   registerAppleRoutes(app, resolved);
@@ -90,6 +96,7 @@ export function createApp(deps: AppDeps = {}): Hono<{ Bindings: Env } & AuthVars
   registerChangesRoutes(app, resolved);
   registerKeysRoutes(app, resolved);
   registerAccountRoutes(app, resolved);
+  registerWeatherRoutes(app, resolved);
 
   app.notFound(() => {
     return problem('not_found');

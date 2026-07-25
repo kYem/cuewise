@@ -29,6 +29,7 @@ export {
   getSettings,
   getStorageUsage,
   getStoredSettings,
+  getWeatherState,
   getYoutubeProgress,
   migrateStorageData,
   setCalendarState,
@@ -45,5 +46,6 @@ export {
   setQuotes,
   setReminders,
   setSettings,
+  setWeatherState,
   updateVideoProgress,
 } from './storage-helpers';

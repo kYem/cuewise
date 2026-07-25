@@ -13,6 +13,9 @@ const PROBLEM_DEFS = {
   resync_required: { status: 409, title: 'Resync required' },
   not_found: { status: 404, title: 'Not found' },
   internal: { status: 500, title: 'Internal error' },
+  // Distinct from `internal` so a client can tell "provider is down, retry later" from
+  // "we're broken".
+  upstream_unavailable: { status: 503, title: 'Upstream service unavailable' },
 } as const;
 
 export type ProblemCode = keyof typeof PROBLEM_DEFS;

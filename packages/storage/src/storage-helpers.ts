@@ -23,6 +23,7 @@ import {
   type Settings,
   STORAGE_KEYS,
   storageFailure,
+  type WeatherState,
   type YoutubePlaylist,
 } from '@cuewise/shared';
 import {
@@ -232,6 +233,16 @@ export async function getCalendarState(): Promise<CalendarState | null> {
 
 export async function setCalendarState(state: CalendarState): Promise<StorageResult> {
   return setInStorage(STORAGE_KEYS.CALENDAR, state, 'local');
+}
+
+// Always local, which is what makes the location per-device: a travelling laptop shows
+// where it actually is.
+export async function getWeatherState(): Promise<WeatherState | null> {
+  return getFromStorage<WeatherState>(STORAGE_KEYS.WEATHER, 'local');
+}
+
+export async function setWeatherState(state: WeatherState): Promise<StorageResult> {
+  return setInStorage(STORAGE_KEYS.WEATHER, state, 'local');
 }
 
 // Pomodoro Sessions

@@ -18,6 +18,8 @@ export function configureChromePlatform(): { scheduler: SchedulerHost; notifier:
     hasChrome && chrome.alarms ? new ChromeScheduler() : new NoopScheduler();
   const notifier: NotifierHost =
     hasChrome && chrome.notifications ? new ChromeNotifier() : new WebNotifier();
-  configurePlatform({ scheduler, notifier });
+  // Extension pages reach api.cuewise.app directly under host_permissions, so the global
+  // works here. Registered explicitly so a missing registration fails at startup.
+  configurePlatform({ scheduler, notifier, httpFetch: (url, init) => fetch(url, init) });
   return { scheduler, notifier };
 }
