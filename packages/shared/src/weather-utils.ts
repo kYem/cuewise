@@ -86,7 +86,6 @@ function readRegion(tag: string): string | null {
     const parsed = new Intl.Locale(tag).maximize();
     return parsed.region ?? null;
   } catch {
-    // Intl.Locale rejects malformed tags; fall back to the `xx-REGION` shape.
     const match = /^[A-Za-z]{2,3}[-_]([A-Za-z]{2})(?:[-_]|$)/.exec(tag);
     if (match === null) {
       return null;
@@ -110,8 +109,7 @@ export function sampleForecastHours(
   if (max <= 0) {
     return [];
   }
-  // Same-zone, same-format stamps, so lexicographic order is chronological — no Date
-  // parsing and no DST traps.
+  // Same-zone, same-format stamps, so string order is chronological — no DST traps.
   const remaining = hours.filter((hour) => hour.time > nowLocalIso);
   if (remaining.length <= max) {
     return remaining;
@@ -186,6 +184,7 @@ export function toLocalIso(instant: Date, timeZone: string): string {
   };
   // hour12:false yields "24" at midnight in some engines, which would sort after every
   // real hour and silently empty the forecast.
-  const hour = get('hour') === '24' ? '00' : get('hour');
+  const rawHour = get('hour');
+  const hour = rawHour === '24' ? '00' : rawHour;
   return `${get('year')}-${get('month')}-${get('day')}T${hour}:${get('minute')}`;
 }

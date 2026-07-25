@@ -120,7 +120,6 @@ describe('fetchForecast', () => {
     await expect(fetchForecast(LONDON, 'metric')).rejects.toBeInstanceOf(WeatherRequestError);
   });
 
-  // A shape change upstream must fail loudly, not render a chip with undefined in it.
   it('rejects a well-formed response missing the fields the widget needs', async () => {
     fetchMock.mockResolvedValue(jsonResponse({ units: 'metric', timezone: 'UTC' }));
 
@@ -149,7 +148,6 @@ describe('searchLocations', () => {
     expect(new URL(fetchMock.mock.calls[0][0]).searchParams.get('q')).toBe('lond');
   });
 
-  // Spending rate-limit budget on a query the worker rejects outright helps nobody.
   it('short-circuits a query below the minimum length without calling the proxy', async () => {
     await expect(searchLocations('a')).resolves.toEqual([]);
 
@@ -182,7 +180,6 @@ describe('searchLocations', () => {
 });
 
 describe('the http fetch port', () => {
-  // The whole point of the port: on macOS the global fetch cannot reach the API at all.
   it('fails loudly when no platform fetch is registered', async () => {
     resetPlatform();
 

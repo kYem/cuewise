@@ -134,7 +134,6 @@ export async function fetchForecast(
 
 export async function searchLocations(query: string): Promise<WeatherLocation[]> {
   const trimmed = query.trim();
-  // Guarded here too, so no caller spends rate-limit budget on a query the worker rejects.
   if (trimmed.length < MIN_SEARCH_QUERY_LENGTH) {
     return [];
   }

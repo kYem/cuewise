@@ -29,7 +29,6 @@ interface WeatherStore {
   isLoading: boolean;
   error: string | null;
   lastFetch: string | null;
-  // Its own sub-state so a slow lookup never blocks or clobbers the reading.
   searchResults: WeatherLocation[];
   isSearching: boolean;
   searchError: string | null;
@@ -99,7 +98,6 @@ export const useWeatherStore = create<WeatherStore>((set, get) => ({
       const isStale =
         stored.lastFetch === null || Date.now() - Date.parse(stored.lastFetch) > WEATHER_STALE_MS;
       if (isStale) {
-        // Silent: nobody who just opened a tab should be toasted at.
         await get().refresh({ silent: true });
       }
     } catch (error) {
@@ -113,8 +111,6 @@ export const useWeatherStore = create<WeatherStore>((set, get) => ({
     set({
       location,
       epoch,
-      // Showing the old city's temperature under the new name, even for a frame, is worse
-      // than a skeleton.
       snapshot: null,
       lastFetch: null,
       error: null,
@@ -143,7 +139,6 @@ export const useWeatherStore = create<WeatherStore>((set, get) => ({
     if (location === null) {
       return;
     }
-    // Fires from mount, settings and the manual control; skip so they don't stack.
     if (get().isLoading) {
       return;
     }
@@ -167,8 +162,7 @@ export const useWeatherStore = create<WeatherStore>((set, get) => ({
         set({ isLoading: false });
         return;
       }
-      // The cached snapshot deliberately survives: a 40-minute-old reading beats an error,
-      // and the popover shows how old it is.
+      // The cached snapshot deliberately survives; the popover shows how old it is.
       set({ isLoading: false, error: messageFor(error) });
       if (!silent) {
         useToastStore.getState().error(messageFor(error));
@@ -201,7 +195,6 @@ export const useWeatherStore = create<WeatherStore>((set, get) => ({
   },
 
   clearSearch: () => {
-    // Invalidates any in-flight lookup, so closing the picker can't repopulate it.
     searchGeneration += 1;
     set({ searchResults: [], isSearching: false, searchError: null });
   },

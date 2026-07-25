@@ -102,7 +102,6 @@ describe('initialize', () => {
     expect(fetchForecastMock).not.toHaveBeenCalled();
   });
 
-  // Someone opening a new tab must never be toasted at for a background failure.
   it('never toasts when the mount refresh fails', async () => {
     getWeatherStateMock.mockResolvedValue(staleState());
     fetchForecastMock.mockRejectedValue(new weatherApi.WeatherUnavailableError());
@@ -130,8 +129,6 @@ describe('setLocation', () => {
     expect(useWeatherStore.getState().snapshot).not.toBeNull();
   });
 
-  // Showing the old city's temperature under the new city's name, even briefly, is worse
-  // than showing a skeleton.
   it('drops the previous reading immediately rather than showing it under the new place', async () => {
     useWeatherStore.setState({ location: LONDON, snapshot: snapshot(LONDON) });
     const pending = deferred<ReturnType<typeof forecast>>();
@@ -210,7 +207,6 @@ describe('refresh', () => {
     expect(errorToastMock).not.toHaveBeenCalled();
   });
 
-  // A reading from 40 minutes ago beats an error; the popover shows how old it is.
   it('keeps the cached reading when a refresh fails', async () => {
     const cached = snapshot();
     useWeatherStore.setState({ location: LONDON, snapshot: cached, lastFetch: 'earlier' });
@@ -239,7 +235,6 @@ describe('refresh', () => {
     expect(useWeatherStore.getState().error).toBeNull();
   });
 
-  // The epoch guard: a reading for the place the user just left must not land.
   it('discards a response whose location changed while it was in flight', async () => {
     useWeatherStore.setState({ location: LONDON });
     const pending = deferred<ReturnType<typeof forecast>>();
@@ -309,7 +304,6 @@ describe('search', () => {
     expect(useWeatherStore.getState().snapshot).toBe(cached);
   });
 
-  // Typing "lond" fires overlapping lookups; the slower earlier one must not win.
   it('ignores a slow earlier search that resolves after a newer one', async () => {
     const slow = deferred<(typeof LONDON)[]>();
     searchLocationsMock.mockReturnValueOnce(slow.promise);

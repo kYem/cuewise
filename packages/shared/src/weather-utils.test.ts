@@ -37,7 +37,6 @@ describe('mapWmoCode', () => {
     expect(mapWmoCode(86)).toBe('snow');
   });
 
-  // A provider adding a code must render as neutral, never as a confidently wrong icon.
   it('falls back to unknown for unrecognised or non-numeric codes', () => {
     expect(mapWmoCode(4)).toBe('unknown');
     expect(mapWmoCode(999)).toBe('unknown');
@@ -70,7 +69,6 @@ describe('resolveWeatherUnits', () => {
     expect(resolveWeatherUnits('auto', '')).toBe('metric');
   });
 
-  // en-US maximizes to en-Latn-US, so a region-less tag must still resolve correctly.
   it('infers the region from a language-only tag via maximize', () => {
     expect(resolveWeatherUnits('auto', 'en')).toBe('imperial');
   });
@@ -103,7 +101,6 @@ describe('sampleForecastHours', () => {
     ]);
   });
 
-  // Late in the day the section legitimately shrinks; it must not pad or repeat.
   it('returns fewer than the maximum late in the day', () => {
     const picked = sampleForecastHours(dayOfHours(), '2026-07-25T22:00');
     expect(picked.map((hour) => hour.time)).toEqual(['2026-07-25T23:00']);
@@ -129,7 +126,6 @@ describe('sampleForecastHours', () => {
 });
 
 describe('toLocalIso', () => {
-  // The location's zone, never the device's — a location abroad must show its own today.
   it('renders an instant in the requested zone, matching the provider hourly format', () => {
     const instant = new Date('2026-07-25T12:30:00Z');
     expect(toLocalIso(instant, 'UTC')).toBe('2026-07-25T12:30');
@@ -142,7 +138,6 @@ describe('toLocalIso', () => {
     expect(toLocalIso(instant, 'Asia/Tokyo')).toBe('2026-07-26T08:30');
   });
 
-  // "24:00" would sort after every real hour and silently empty the forecast.
   it('normalises a midnight hour to 00 so string ordering stays chronological', () => {
     const instant = new Date('2026-07-25T00:15:00Z');
     expect(toLocalIso(instant, 'UTC')).toBe('2026-07-25T00:15');
@@ -162,7 +157,6 @@ describe('formatTemperature', () => {
     expect(formatTemperature(-3.5)).toBe('-3°');
   });
 
-  // Math.round(-0.4) is -0; a chip reading "-0°" would look like a bug to the user.
   it('renders a near-zero negative as 0, not -0', () => {
     expect(formatTemperature(-0.4)).toBe('0°');
   });
@@ -209,7 +203,6 @@ describe('formatWeatherAge', () => {
     expect(at('2026-07-24T12:00:00Z')).toBe('Updated yesterday');
   });
 
-  // Clock skew between devices must not produce "Updated -3 min ago".
   it('treats a future timestamp as just now', () => {
     expect(at('2026-07-25T12:30:00Z')).toBe('Updated just now');
   });

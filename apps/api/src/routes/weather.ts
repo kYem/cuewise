@@ -149,8 +149,7 @@ function normalizeForecast(raw: unknown, units: WeatherUnits): WeatherForecast |
       condition: mapWmoCode(payload.current?.weather_code),
       isDay: payload.current?.is_day !== 0,
     },
-    // Fall back to the hourly range when the daily block is missing, so the popover shows
-    // a sensible high/low instead of the current temperature twice.
+    // Fall back to the hourly range when the daily block is missing.
     high: high ?? (hourTemperatures.length > 0 ? Math.max(...hourTemperatures) : temperature),
     low: low ?? (hourTemperatures.length > 0 ? Math.min(...hourTemperatures) : temperature),
     hours,

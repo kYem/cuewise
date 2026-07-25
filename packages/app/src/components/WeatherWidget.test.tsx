@@ -22,7 +22,6 @@ describe('visibility', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  // A chip with no place behind it is a broken chip; better to show none at all.
   it('renders nothing when no location has been chosen', () => {
     mockWeatherStore({ location: null, snapshot: null });
 
@@ -66,7 +65,6 @@ describe('the chip', () => {
     expect(screen.getByText('London')).toBeInTheDocument();
   });
 
-  // The Pomodoro button already sheds its label this way; the clusters cannot reflow.
   it('hides the city name below the sm breakpoint', () => {
     render(<WeatherWidget />);
 
@@ -120,7 +118,6 @@ describe('the popover', () => {
     expect(screen.getByText('Updated 8 min ago')).toBeInTheDocument();
   });
 
-  // Honesty over reassurance: an outage says so rather than showing a stale timestamp.
   it('shows the error in place of the age when a refresh failed', () => {
     mockWeatherStore({ error: 'The weather service is unavailable right now' });
 
@@ -185,7 +182,6 @@ describe('the popover', () => {
     expect(screen.getByText(/feels like/i).closest('div.absolute')).toHaveClass('left-0');
   });
 
-  // Late in the day there is nothing left to show; the row is omitted, not padded.
   it('omits the hourly row once the day is over', () => {
     const past = snapshot(LONDON, {
       hours: [{ time: '1999-01-01T01:00', temperature: 5, condition: 'clear' }],

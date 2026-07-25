@@ -97,7 +97,6 @@ describe('GET /v1/weather', () => {
     });
   });
 
-  // The privacy argument for proxying at all rests on sending less than we receive.
   it('rounds coordinates to 2dp before they leave the worker', async () => {
     const upstream = stubUpstream(FORECAST_PAYLOAD);
     const app = createApp({ weatherUpstream: upstream.fetch });
@@ -173,7 +172,6 @@ describe('GET /v1/weather', () => {
     expect(res.status).toBe(503);
   });
 
-  // A provider changing shape must degrade to "unavailable", never to a half-rendered chip.
   it('answers 503 when the provider payload is unusable', async () => {
     const app = createApp({ weatherUpstream: stubUpstream({ current: {} }).fetch });
 
@@ -242,7 +240,6 @@ describe('GET /v1/weather/search', () => {
     });
   });
 
-  // Open-Meteo omits `results` entirely for a no-match query — an empty list, not a failure.
   it('returns an empty list when the provider omits results', async () => {
     const app = createApp({ weatherUpstream: stubUpstream({}).fetch });
 
@@ -298,8 +295,6 @@ describe('GET /v1/weather/search', () => {
   });
 });
 
-// The whole privacy argument for proxying rests on this. A proxy that logs locations is
-// worse than no proxy at all, so it is asserted rather than left to a code comment.
 describe('weather routes never log what the user asked about', () => {
   function captureLogs(): string[] {
     const captured: string[] = [];
