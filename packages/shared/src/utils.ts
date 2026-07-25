@@ -1790,9 +1790,9 @@ export function clampPomodoroDurations(patch: Partial<Settings>): Partial<Settin
 }
 
 /**
- * Clamp background dim/blur on the settings write path, so imports, presets, and
- * inbound sync payloads can't persist an out-of-range value (render clamps too,
- * but stored data must honor the BACKGROUND_EFFECT_BOUNDS contract).
+ * Clamp background dim/blur on the UI settings write path, so presets and a future
+ * settings import can't persist an out-of-range value (render clamps too, but
+ * stored data should honor the BACKGROUND_EFFECT_BOUNDS contract).
  */
 export function clampBackgroundEffects(patch: Partial<Settings>): Partial<Settings> {
   const clamp = (value: number, min: number, max: number): number => {

@@ -11,7 +11,10 @@ import { preloadImages } from '../utils/image-preload-cache';
 import { PomodoroPage } from './PomodoroPage';
 
 vi.mock('../stores/quote-store', () => ({ useQuoteStore: vi.fn() }));
-vi.mock('../stores/settings-store', () => ({ useSettingsStore: vi.fn() }));
+vi.mock('../stores/settings-store', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../stores/settings-store')>()),
+  useSettingsStore: vi.fn(),
+}));
 vi.mock('../stores/calendar-store', () => ({ useCalendarStore: vi.fn() }));
 vi.mock('../stores/focus-mode-store', () => ({ useFocusModeStore: vi.fn() }));
 vi.mock('../utils/google-calendar', () => ({ isCalendarFeatureEnabled: vi.fn() }));
@@ -52,7 +55,10 @@ function setup(companion: 'quote' | 'calendar' | 'both', calendarEnabled: boolea
         focusModeImageCategory: 'nature',
         pomodoroMusicEnabled: false,
         pomodoroCompanion: companion,
+        backgroundDim: 0,
+        backgroundBlur: 0,
       },
+      preview: null,
     })
   );
   vi.mocked(useQuoteStore).mockImplementation(

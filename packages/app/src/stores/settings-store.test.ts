@@ -120,8 +120,9 @@ describe('background preview lifecycle', () => {
 
   it('updateSettings persists, notifies sync, and clears the preview on commit', async () => {
     useSettingsStore.getState().previewSettings({ backgroundDim: 40 });
-    await useSettingsStore.getState().updateSettings({ backgroundDim: 40 });
+    const persisted = await useSettingsStore.getState().updateSettings({ backgroundDim: 40 });
 
+    expect(persisted).toBe(true);
     expect(storage.setSettings).toHaveBeenCalledWith(
       expect.objectContaining({ backgroundDim: 40 })
     );
@@ -144,9 +145,10 @@ describe('background preview lifecycle', () => {
     });
     useSettingsStore.getState().previewSettings({ backgroundDim: 40 });
 
-    await useSettingsStore.getState().updateSettings({ backgroundDim: 40 });
+    const persisted = await useSettingsStore.getState().updateSettings({ backgroundDim: 40 });
 
     const state = useSettingsStore.getState();
+    expect(persisted).toBe(false);
     expect(state.preview).toBeNull();
     expect(state.error).toBe('Failed to update settings. Please try again.');
     expect(state.settings.backgroundDim).toBe(0);
@@ -175,6 +177,7 @@ describe('background preview lifecycle', () => {
     await useSettingsStore.getState().updateSettings({ syncEnabled: true });
 
     expect(useSettingsStore.getState().preview).toBeNull();
+    expect(useSettingsStore.getState().error).toContain('Cannot enable sync');
     expect(useSettingsStore.getState().settings.syncEnabled).toBe(defaultSettings.syncEnabled);
   });
 
@@ -192,9 +195,10 @@ describe('background preview lifecycle', () => {
     });
     useSettingsStore.setState({ settings: { ...defaultSettings, backgroundDim: 30 } });
 
-    await useSettingsStore.getState().resetToDefaults();
+    const persisted = await useSettingsStore.getState().resetToDefaults();
 
     const state = useSettingsStore.getState();
+    expect(persisted).toBe(false);
     expect(state.error).toBe('Failed to reset settings. Please try again.');
     expect(state.settings.backgroundDim).toBe(30);
     expect(markMutated).not.toHaveBeenCalled();

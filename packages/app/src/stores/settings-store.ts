@@ -36,8 +36,11 @@ export interface SettingsStore {
   updateQuoteChangeInterval: (interval: Settings['quoteChangeInterval']) => Promise<void>;
   updateColorTheme: (colorTheme: ColorTheme) => Promise<void>;
   updateLayoutDensity: (density: LayoutDensity) => Promise<void>;
-  updateSettings: (settings: Partial<Settings>) => Promise<void>;
-  resetToDefaults: () => Promise<void>;
+  // Both resolve true only when the write actually persisted, so callers can
+  // gate "saved" affordances — the storage adapters report failure via the
+  // result object rather than throwing.
+  updateSettings: (settings: Partial<Settings>) => Promise<boolean>;
+  resetToDefaults: () => Promise<boolean>;
 }
 
 export const useSettingsStore = create<SettingsStore>((set, get) => ({
@@ -217,7 +220,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
 
           set({ error: errorMessage, preview: null });
           useToastStore.getState().error(errorMessage);
-          return;
+          return false;
         }
       }
 
@@ -229,7 +232,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
         const errorMessage = 'Failed to update settings. Please try again.';
         set({ error: errorMessage, preview: null });
         useToastStore.getState().error(errorMessage);
-        return;
+        return false;
       }
       set({ settings: updatedSettings, preview: null });
 
@@ -259,12 +262,14 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       if (partialSettings.logLevel !== undefined) {
         applyLogLevel(partialSettings.logLevel);
       }
+      return true;
     } catch (error) {
       logger.error('Error updating settings', error);
       const errorMessage = 'Failed to update settings. Please try again.';
       // Drop any preview too, so the visible state snaps back to persisted truth.
       set({ error: errorMessage, preview: null });
       useToastStore.getState().error(errorMessage);
+      return false;
     }
   },
 
@@ -276,7 +281,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
         const errorMessage = 'Failed to reset settings. Please try again.';
         set({ error: errorMessage, preview: null });
         useToastStore.getState().error(errorMessage);
-        return;
+        return false;
       }
       set({ settings: DEFAULT_SETTINGS, preview: null });
       for (const key of Object.keys(DEFAULT_SETTINGS)) {
@@ -289,11 +294,13 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       applyGlassEnhanced(DEFAULT_SETTINGS.glassEnhanced);
       applyLayoutDensity(DEFAULT_SETTINGS.layoutDensity);
       applyLogLevel(DEFAULT_SETTINGS.logLevel);
+      return true;
     } catch (error) {
       logger.error('Error resetting settings', error);
       const errorMessage = 'Failed to reset settings. Please try again.';
-      set({ error: errorMessage });
+      set({ error: errorMessage, preview: null });
       useToastStore.getState().error(errorMessage);
+      return false;
     }
   },
 }));
