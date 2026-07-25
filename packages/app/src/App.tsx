@@ -24,7 +24,12 @@ import {
   preloadImages,
   refreshBackground,
 } from './utils/image-preload-cache';
-import { loadImageWithFallback } from './utils/unsplash';
+import { preloadImage } from './utils/unsplash';
+
+/** Show the app over the gradient fallback rather than wait indefinitely on a decorative photo. */
+const BACKGROUND_REVEAL_DEADLINE_MS = 1500;
+/** Bounds the decode itself; a stalled request fires neither load nor error. */
+const BACKGROUND_DECODE_TIMEOUT_MS = 5000;
 
 type Page = 'home' | 'pomodoro' | 'insights' | 'quotes' | 'goals' | 'concepts';
 
@@ -104,6 +109,14 @@ function App({ extraSections, syncController }: AppProps = {}) {
 
     let cancelled = false;
 
+    // The background is decorative, so it must never hold the app hostage. A filtering
+    // proxy that black-holes the CDN stalls every fetch below without ever erroring.
+    const revealTimer = setTimeout(() => {
+      if (!cancelled) {
+        setImageLoaded(true);
+      }
+    }, BACKGROUND_REVEAL_DEADLINE_MS);
+
     const loadBackground = async () => {
       // Preload images first (loads from storage or gets new image)
       // This persists the daily background so it only changes once per day
@@ -113,51 +126,34 @@ function App({ extraSections, syncController }: AppProps = {}) {
         return;
       }
 
-      // Get the image URL (either preloaded or fetch new one)
-      let imageUrl: string | null = null;
-
-      // Check if we have a preloaded image from the cache
-      const preloadedUrl = getPreloadedCurrentUrl(settings.focusModeImageCategory);
-      if (preloadedUrl) {
-        imageUrl = preloadedUrl;
-      } else {
-        // Fall back to fetching a new image URL
-        try {
-          imageUrl = await loadImageWithFallback(settings.focusModeImageCategory);
-        } catch {
-          // Failed to get image URL, show content without background
-          if (!cancelled) {
-            setImageLoaded(true);
-          }
-          return;
-        }
-      }
-
-      if (cancelled || !imageUrl) {
+      // preloadImages has already exhausted its own retries; re-running the fallback here
+      // would double the wait for no new information.
+      const imageUrl = getPreloadedCurrentUrl(settings.focusModeImageCategory);
+      if (!imageUrl) {
+        setImageLoaded(true);
         return;
       }
 
-      // Wait for the actual image to load in the browser
-      const img = new Image();
-      img.onload = () => {
+      // Decode before swapping it in, so the fade-in never shows a half-painted image.
+      try {
+        await preloadImage(imageUrl, BACKGROUND_DECODE_TIMEOUT_MS);
         if (!cancelled) {
           setBackgroundImage(imageUrl);
-          setImageLoaded(true);
         }
-      };
-      img.onerror = () => {
-        // Image failed to load, still show content
-        if (!cancelled) {
-          setImageLoaded(true);
-        }
-      };
-      img.src = imageUrl;
+      } catch {
+        // Unreachable in the happy path (preloadImages already validated it), but a cold
+        // HTTP cache or a network that drops between the two loads lands here.
+      }
+      if (!cancelled) {
+        setImageLoaded(true);
+      }
     };
 
     loadBackground();
 
     return () => {
       cancelled = true;
+      clearTimeout(revealTimer);
     };
   }, [
     showBackgroundImage,
