@@ -158,9 +158,29 @@ describe('background preview lifecycle', () => {
     const state = useSettingsStore.getState();
     expect(persisted).toBe(false);
     expect(state.preview).toBeNull();
-    expect(state.error).toBe('Failed to update settings. Please try again.');
+    expect(state.error).toBe(
+      'Storage is full — could not save settings. Clear some data to continue.'
+    );
     expect(state.settings.backgroundDim).toBe(0);
     expect(markMutated).not.toHaveBeenCalled();
+  });
+
+  it('a successful unrelated write leaves a live background preview untouched', async () => {
+    useSettingsStore.getState().previewSettings({ backgroundDim: 55 });
+
+    await useSettingsStore.getState().updateSettings({ showClock: true });
+
+    expect(useSettingsStore.getState().preview).toEqual({ backgroundDim: 55 });
+  });
+
+  it('a resolving commit keeps a newer preview made while it was in flight', async () => {
+    useSettingsStore.getState().previewSettings({ backgroundDim: 1 });
+    const pending = useSettingsStore.getState().updateSettings({ backgroundDim: 1 });
+    useSettingsStore.getState().previewSettings({ backgroundDim: 2 });
+
+    await pending;
+
+    expect(useSettingsStore.getState().preview).toEqual({ backgroundDim: 2 });
   });
 
   it('updateSettings clamps background values to their bounds before persisting', async () => {

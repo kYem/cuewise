@@ -10,6 +10,7 @@ import {
   logger,
   notifyMutated,
   type Settings,
+  type StorageError,
 } from '@cuewise/shared';
 import { getSettings, migrateStorageData, setSettings } from '@cuewise/storage';
 import { create } from 'zustand';
@@ -18,10 +19,39 @@ import { useToastStore } from './toast-store';
 // Exactly the keys with preview-aware selectors; widen only alongside a new selector.
 export type PreviewableSettings = Pick<Settings, 'backgroundDim' | 'backgroundBlur'>;
 
+/** Quota failures get actionable copy; anything else keeps the generic retry message. */
+function settingsWriteErrorMessage(error: StorageError, fallback: string): string {
+  if (error.type === 'quota_exceeded' || error.type === 'per_item_quota_exceeded') {
+    return 'Storage is full — could not save settings. Clear some data to continue.';
+  }
+  return fallback;
+}
+
+/**
+ * Overlay entries that differ from what a resolving write just persisted belong to a
+ * newer gesture that started while the write was in flight — keep those, drop the rest.
+ */
+function reconcilePreview(
+  preview: Partial<PreviewableSettings> | null,
+  persisted: Settings
+): Partial<PreviewableSettings> | null {
+  if (preview === null) {
+    return null;
+  }
+  const remaining = Object.fromEntries(
+    Object.entries(preview).filter(([key, value]) => persisted[key as keyof Settings] !== value)
+  ) as Partial<PreviewableSettings>;
+  if (Object.keys(remaining).length === 0) {
+    return null;
+  }
+  return remaining;
+}
+
 export interface SettingsStore {
   // State
   settings: Settings;
-  // Ephemeral overlay for live slider previews; never persisted, cleared on commit.
+  // Ephemeral overlay for live slider previews; never persisted. A commit drops the
+  // entries it persisted (newer in-flight gestures survive); failures drop it whole.
   // Kept out of `settings` so updateSettings still diffs against persisted truth.
   preview: Partial<PreviewableSettings> | null;
   isLoading: boolean;
@@ -229,12 +259,15 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       const writeResult = await setSettings(updatedSettings);
       if (!writeResult.success) {
         logger.error('Error persisting settings', writeResult.error);
-        const errorMessage = 'Failed to update settings. Please try again.';
+        const errorMessage = settingsWriteErrorMessage(
+          writeResult.error,
+          'Failed to update settings. Please try again.'
+        );
         set({ error: errorMessage, preview: null });
         useToastStore.getState().error(errorMessage);
         return false;
       }
-      set({ settings: updatedSettings, preview: null });
+      set({ settings: updatedSettings, preview: reconcilePreview(get().preview, updatedSettings) });
 
       // Sync every changed key that isn't device-local (each setting syncs per-key, spec §2).
       for (const key of Object.keys(clampedPartial)) {
@@ -278,7 +311,10 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       const writeResult = await setSettings(DEFAULT_SETTINGS);
       if (!writeResult.success) {
         logger.error('Error persisting settings reset', writeResult.error);
-        const errorMessage = 'Failed to reset settings. Please try again.';
+        const errorMessage = settingsWriteErrorMessage(
+          writeResult.error,
+          'Failed to reset settings. Please try again.'
+        );
         set({ error: errorMessage, preview: null });
         useToastStore.getState().error(errorMessage);
         return false;
