@@ -19,6 +19,7 @@ minimumReleaseAgeExclude:
 # so unrelated majors are untouched. All targets are >14 days old, so they clear
 # the minimumReleaseAge cooldown above.
 overrides:
+  brace-expansion@5: 5.0.7
   undici@7: 7.28.0
   ws@8: 8.21.0
   yaml@2: 2.9.0
@@ -51,7 +52,9 @@ catalog:
   '@types/react-dom': ^18.3.7
   '@vitejs/plugin-react': ^6.0.3
   '@vitest/ui': 4.1.9
-  astro: 6.4.6
+  # 7.1.0 (fixes GHSA-4g3v-8h47-v7g6) is inside the release cooldown until 2026-07-30;
+  # 7.0.7 is the newest mature release and clears the other two astro advisories.
+  astro: 7.0.7
   autoprefixer: ^10.4.23
   clsx: ^2.1.1
   date-fns: ^4.4.0
