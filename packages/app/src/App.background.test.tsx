@@ -23,21 +23,19 @@ vi.mock('./utils/unsplash', () => ({
   isUnsplashUrl: vi.fn(() => true),
 }));
 
+import {
+  hasPhotoApplied,
+  installAppRenderStubs,
+  UNSPLASH_PHOTO_URL as PHOTO,
+  photoLayer,
+} from './__fixtures__/app-render.fixtures';
 import App from './App';
-import { setReducedMotion } from './components/__fixtures__/motion.fixtures';
 import { useBackgroundStore } from './stores/background-store';
 import { getPreloadedCurrentUrl, preloadImages } from './utils/image-preload-cache';
 import { isUnsplashUrl, preloadImage } from './utils/unsplash';
 
 /** Mirrors BACKGROUND_REVEAL_DEADLINE_MS in App.tsx; raising it there must fail these. */
 const REVEAL_DEADLINE_MS = 1500;
-const PHOTO = 'https://images.unsplash.com/photo-ok';
-
-class StubIntersectionObserver {
-  observe(): void {}
-  unobserve(): void {}
-  disconnect(): void {}
-}
 
 /** Captured before any test stubs it, so replacing the action can't leak between tests. */
 const realLoadCustomBackground = useBackgroundStore.getState().loadCustomBackground;
@@ -47,26 +45,11 @@ function contentWrapper(): HTMLElement {
   return screen.getByTestId('app-content');
 }
 
-/** True once a photo is actually applied — the layer always renders, styled or not. */
-function hasPhotoApplied(): boolean {
-  return (screen.getByTestId('background-photo').getAttribute('style') ?? '').includes('url(');
-}
-
-function photoLayer(): HTMLElement {
-  return screen.getByTestId('background-photo');
-}
-
 // These tests assume glass is the default theme (DEFAULT_SETTINGS.colorTheme); without it
 // nothing is gated and the spinner assertions would pass vacuously.
 describe('App background gate', () => {
   beforeEach(() => {
-    setReducedMotion(false);
-    window.IntersectionObserver =
-      StubIntersectionObserver as unknown as typeof IntersectionObserver;
-    (chrome.storage as unknown as Record<string, unknown>).onChanged = {
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-    };
+    installAppRenderStubs();
     // Re-established per test: a leaked happy-path stub would let the app reveal via the
     // image and silently disarm the deadline tests, whatever order they run in.
     vi.mocked(preloadImages).mockImplementation(() => new Promise<void>(() => undefined));
