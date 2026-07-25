@@ -107,6 +107,18 @@ describe('BackgroundEffectControls', () => {
     expect(storage.setSettings).not.toHaveBeenCalled();
   });
 
+  it('a drag that returns to its starting value clears the preview without persisting', () => {
+    render(<BackgroundEffectControls />);
+    const dimSlider = screen.getByRole('slider', { name: 'Dim background' });
+
+    fireEvent.change(dimSlider, { target: { value: '40' } });
+    fireEvent.change(dimSlider, { target: { value: '0' } });
+    fireEvent.pointerUp(dimSlider);
+
+    expect(useSettingsStore.getState().preview).toBeNull();
+    expect(storage.setSettings).not.toHaveBeenCalled();
+  });
+
   it('discards an uncommitted preview when the controls unmount mid-drag', () => {
     const { unmount } = render(<BackgroundEffectControls />);
 

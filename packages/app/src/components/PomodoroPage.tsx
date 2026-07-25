@@ -136,15 +136,17 @@ export const PomodoroPage: React.FC = () => {
   return (
     <div className="min-h-screen w-full relative">
       {/* Background Image */}
-      <div
-        className={`absolute inset-0 bg-cover bg-center bg-no-repeat transition-opacity duration-1000 ${
-          imageLoaded && backgroundImage ? 'opacity-100' : 'opacity-0'
-        }`}
-        style={{
-          backgroundImage: backgroundImage ? `url(${backgroundImage})` : undefined,
-          ...getBackgroundFilterStyle(backgroundDim, backgroundBlur),
-        }}
-      />
+      <div className="absolute inset-0 overflow-hidden">
+        <div
+          className={`absolute inset-0 bg-cover bg-center bg-no-repeat transition-opacity duration-1000 ${
+            imageLoaded && backgroundImage ? 'opacity-100' : 'opacity-0'
+          }`}
+          style={{
+            backgroundImage: backgroundImage ? `url(${backgroundImage})` : undefined,
+            ...getBackgroundFilterStyle(backgroundDim, backgroundBlur),
+          }}
+        />
+      </div>
 
       {/* Content */}
       <div className="relative z-10">

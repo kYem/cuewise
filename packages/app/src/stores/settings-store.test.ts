@@ -86,6 +86,7 @@ describe('background preview lifecycle', () => {
     });
     vi.clearAllMocks();
     vi.mocked(storage.setSettings).mockResolvedValue({ success: true });
+    vi.mocked(storage.migrateStorageData).mockResolvedValue({ success: true });
     configurePlatform({ syncSink: fakeSink });
   });
 
@@ -108,6 +109,13 @@ describe('background preview lifecycle', () => {
     const state = useSettingsStore.getState();
     expect(selectBackgroundBlur(state)).toBe(12);
     expect(selectBackgroundDim(state)).toBe(0);
+  });
+
+  it('selectors honor a preview of zero over a nonzero persisted value', () => {
+    useSettingsStore.setState({ settings: { ...defaultSettings, backgroundDim: 30 } });
+    useSettingsStore.getState().previewSettings({ backgroundDim: 0 });
+
+    expect(selectBackgroundDim(useSettingsStore.getState())).toBe(0);
   });
 
   it('updateSettings persists, notifies sync, and clears the preview on commit', async () => {
@@ -146,11 +154,28 @@ describe('background preview lifecycle', () => {
   });
 
   it('updateSettings clamps background values to their bounds before persisting', async () => {
-    await useSettingsStore.getState().updateSettings({ backgroundDim: 500, backgroundBlur: -3 });
+    await useSettingsStore.getState().updateSettings({
+      backgroundDim: 500,
+      backgroundBlur: -3,
+      pomodoroWorkDuration: 999,
+    });
 
     expect(storage.setSettings).toHaveBeenCalledWith(
-      expect.objectContaining({ backgroundDim: 100, backgroundBlur: 0 })
+      expect.objectContaining({ backgroundDim: 100, backgroundBlur: 0, pomodoroWorkDuration: 60 })
     );
+  });
+
+  it('a failed sync migration clears the preview alongside surfacing the error', async () => {
+    vi.mocked(storage.migrateStorageData).mockResolvedValue({
+      success: false,
+      error: { type: 'quota_exceeded', message: 'quota exceeded' },
+    });
+    useSettingsStore.getState().previewSettings({ backgroundDim: 40 });
+
+    await useSettingsStore.getState().updateSettings({ syncEnabled: true });
+
+    expect(useSettingsStore.getState().preview).toBeNull();
+    expect(useSettingsStore.getState().settings.syncEnabled).toBe(defaultSettings.syncEnabled);
   });
 
   it('resetToDefaults clears a lingering preview', async () => {
@@ -158,5 +183,20 @@ describe('background preview lifecycle', () => {
     await useSettingsStore.getState().resetToDefaults();
 
     expect(useSettingsStore.getState().preview).toBeNull();
+  });
+
+  it('a failed reset write surfaces the error instead of claiming defaults', async () => {
+    vi.mocked(storage.setSettings).mockResolvedValue({
+      success: false,
+      error: { type: 'unknown', message: 'write failed' },
+    });
+    useSettingsStore.setState({ settings: { ...defaultSettings, backgroundDim: 30 } });
+
+    await useSettingsStore.getState().resetToDefaults();
+
+    const state = useSettingsStore.getState();
+    expect(state.error).toBe('Failed to reset settings. Please try again.');
+    expect(state.settings.backgroundDim).toBe(30);
+    expect(markMutated).not.toHaveBeenCalled();
   });
 });

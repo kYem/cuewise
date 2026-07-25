@@ -34,6 +34,8 @@ export function getBackgroundFilterStyle(dim: number, blur: number): CSSProperti
     // Bleed the layer past every edge by 2× the blur radius (≈2σ of the Gaussian),
     // so the blurred edge falloff lands off-screen instead of showing as a halo band.
     // The layers pin all four inset-0 edges, so negative margin expands them outward.
+    // Consumers must be position:fixed or sit inside a clipping (overflow-hidden)
+    // parent, or the bleed extends the nearest scroll container's scrollable area.
     style.margin = `-${2 * clampedBlur}px`;
   }
   return style;

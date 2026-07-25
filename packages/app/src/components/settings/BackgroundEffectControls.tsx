@@ -82,6 +82,8 @@ export function BackgroundEffectControls() {
 
   const commit = () => {
     if (dim === settings.backgroundDim && blur === settings.backgroundBlur) {
+      // Nothing to persist, but a round-trip drag may have left an overlay behind.
+      clearPreview();
       return;
     }
     void updateSettings({ backgroundDim: dim, backgroundBlur: blur });

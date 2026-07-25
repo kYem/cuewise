@@ -66,6 +66,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
 
       set({
         settings,
+        preview: null,
         isLoading: false,
       });
 
@@ -269,7 +270,14 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
 
   resetToDefaults: async () => {
     try {
-      await setSettings(DEFAULT_SETTINGS);
+      const writeResult = await setSettings(DEFAULT_SETTINGS);
+      if (!writeResult.success) {
+        logger.error('Error persisting settings reset', writeResult.error);
+        const errorMessage = 'Failed to reset settings. Please try again.';
+        set({ error: errorMessage, preview: null });
+        useToastStore.getState().error(errorMessage);
+        return;
+      }
       set({ settings: DEFAULT_SETTINGS, preview: null });
       for (const key of Object.keys(DEFAULT_SETTINGS)) {
         if (!DEVICE_LOCAL_SETTINGS_KEYS.includes(key)) {
