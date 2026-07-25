@@ -18,6 +18,7 @@ import {
   subWeeks,
 } from 'date-fns';
 import {
+  BACKGROUND_EFFECT_BOUNDS,
   DAY_IN_MS,
   DEFAULT_REMINDER_INTERVAL_MINUTES,
   POMODORO_DURATION_BOUNDS,
@@ -1784,6 +1785,32 @@ export function clampPomodoroDurations(patch: Partial<Settings>): Partial<Settin
       b.pomodoroLongBreakInterval.min,
       b.pomodoroLongBreakInterval.max
     );
+  }
+  return out;
+}
+
+/**
+ * Clamp background dim/blur on the UI settings write path, so presets and a future
+ * settings import can't persist an out-of-range value (render clamps too, but
+ * stored data should honor the BACKGROUND_EFFECT_BOUNDS contract).
+ */
+export function clampBackgroundEffects(patch: Partial<Settings>): Partial<Settings> {
+  const clamp = (value: number, min: number, max: number): number => {
+    const rounded = Math.round(value);
+    if (Number.isNaN(rounded)) {
+      // NaN isn't out-of-range, it's a corruption signal; heal it with a breadcrumb.
+      logger.warn('clampBackgroundEffects: coercing a NaN effect value to its minimum', { min });
+      return min;
+    }
+    return Math.min(max, Math.max(min, rounded));
+  };
+  const out: Partial<Settings> = { ...patch };
+  const b = BACKGROUND_EFFECT_BOUNDS;
+  if (typeof out.backgroundDim === 'number') {
+    out.backgroundDim = clamp(out.backgroundDim, b.backgroundDim.min, b.backgroundDim.max);
+  }
+  if (typeof out.backgroundBlur === 'number') {
+    out.backgroundBlur = clamp(out.backgroundBlur, b.backgroundBlur.min, b.backgroundBlur.max);
   }
   return out;
 }

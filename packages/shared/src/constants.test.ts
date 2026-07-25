@@ -17,6 +17,11 @@ describe('DEFAULT_SETTINGS', () => {
   it('keeps the Glass enhancement opt-in (off by default)', () => {
     expect(DEFAULT_SETTINGS.glassEnhanced).toBe(false);
   });
+
+  it('defaults background dim and blur to zero so existing rendering is unchanged', () => {
+    expect(DEFAULT_SETTINGS.backgroundDim).toBe(0);
+    expect(DEFAULT_SETTINGS.backgroundBlur).toBe(0);
+  });
 });
 
 // The import path silently skips blanks and duplicate terms, so a bad pack edit

@@ -33,6 +33,7 @@ import { useEffect, useState } from 'react';
 import { type SyncUiStatus, useSyncController } from '../../sync/sync-controller';
 import { isCalendarFeatureEnabled } from '../../utils/google-calendar';
 import { previewSound } from '../../utils/sounds';
+import { BackgroundEffectControls } from './BackgroundEffectControls';
 import { CustomBackgroundPicker } from './CustomBackgroundPicker';
 import { PresetGrid } from './PresetGrid';
 import {
@@ -372,6 +373,15 @@ function FocusSection({ s, set, filter }: SettingsSectionProps) {
           keywords="custom background wallpaper upload own photo picture personal image"
         >
           <CustomBackgroundPicker />
+        </SettingRow>
+        <SettingRow
+          stack
+          label="Readability"
+          filter={filter}
+          help="Dim or blur the background so your quote and goals stay easy to read over any photo."
+          keywords="dim brightness blur darken readability contrast background image effects"
+        >
+          <BackgroundEffectControls />
         </SettingRow>
       </SettingSubgroup>
       {s.focusModeEnabled && (

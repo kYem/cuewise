@@ -58,6 +58,8 @@ export const DEFAULT_SETTINGS: Settings = {
   syncEnabled: false, // Disabled by default for privacy
   colorTheme: 'glass',
   glassEnhanced: false,
+  backgroundDim: 0,
+  backgroundBlur: 0,
   layoutDensity: 'comfortable',
   showThemeSwitcher: false,
   showClock: false, // Clock hidden by default for simpler UI
@@ -146,6 +148,13 @@ export const POMODORO_DURATION_BOUNDS = {
   pomodoroLongBreakDuration: { min: 10, max: 60 },
   pomodoroLongBreakInterval: { min: 2, max: 10 },
 } as const satisfies Record<NumericPomodoroKey, { min: number; max: number }>;
+
+// Single source of truth for the background readability ranges: the settings write
+// path clamps against these, and the render-time filter derives its maxima from them.
+export const BACKGROUND_EFFECT_BOUNDS = {
+  backgroundDim: { min: 0, max: 100 },
+  backgroundBlur: { min: 0, max: 20 },
+} as const;
 
 // Category colors (for UI)
 export const CATEGORY_COLORS: Record<QuoteCategory, string> = {
