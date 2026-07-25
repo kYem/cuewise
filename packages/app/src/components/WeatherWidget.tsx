@@ -163,14 +163,30 @@ export const WeatherWidget: React.FC = () => {
   const location = useWeatherStore((state) => state.location);
   const snapshot = useWeatherStore((state) => state.snapshot);
   const initialize = useWeatherStore((state) => state.initialize);
+  const refresh = useWeatherStore((state) => state.refresh);
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const unitsRef = useRef(unitsPreference);
 
   useEffect(() => {
+    unitsRef.current = unitsPreference;
+  }, [unitsPreference]);
+
+  // Reads the preference off a ref so changing units doesn't re-run the storage load;
+  // the effect below owns that case.
+  useEffect(() => {
     if (showWeather) {
-      initialize();
+      initialize(unitsRef.current);
     }
   }, [showWeather, initialize]);
+
+  // A reading is stored in whatever units it was fetched in, so changing the setting has
+  // to refetch or the chip keeps showing the old scale.
+  useEffect(() => {
+    if (snapshot !== null && snapshot.units !== resolveWeatherUnits(unitsPreference)) {
+      refresh({ silent: true, unitsPreference });
+    }
+  }, [snapshot, unitsPreference, refresh]);
 
   useEffect(() => {
     if (!isOpen) {

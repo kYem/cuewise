@@ -1,4 +1,9 @@
-import { DEFAULT_SETTINGS, type Settings, type WeatherSnapshot } from '@cuewise/shared';
+import {
+  DEFAULT_SETTINGS,
+  type Settings,
+  type WeatherLocation,
+  type WeatherSnapshot,
+} from '@cuewise/shared';
 import { createSelectorMock } from '@cuewise/test-utils';
 import { vi } from 'vitest';
 import { LONDON, snapshot } from '../../stores/__fixtures__/weather-store.fixtures';
@@ -6,11 +11,14 @@ import { useSettingsStore } from '../../stores/settings-store';
 import { useWeatherStore } from '../../stores/weather-store';
 
 export interface WeatherStoreOverrides {
-  location?: typeof LONDON | null;
+  location?: WeatherLocation | null;
   snapshot?: WeatherSnapshot | null;
   isLoading?: boolean;
   error?: string | null;
   lastFetch?: string | null;
+  searchResults?: WeatherLocation[];
+  isSearching?: boolean;
+  searchError?: string | null;
 }
 
 export function mockWeatherStore(overrides: WeatherStoreOverrides = {}) {
@@ -20,10 +28,11 @@ export function mockWeatherStore(overrides: WeatherStoreOverrides = {}) {
     isLoading: overrides.isLoading ?? false,
     error: overrides.error ?? null,
     lastFetch: overrides.lastFetch ?? new Date().toISOString(),
-    searchResults: [],
-    isSearching: false,
-    searchError: null,
+    searchResults: overrides.searchResults ?? [],
+    isSearching: overrides.isSearching ?? false,
+    searchError: overrides.searchError ?? null,
     epoch: 0,
+    loadingEpoch: null,
     initialize: vi.fn(),
     setLocation: vi.fn(),
     clearLocation: vi.fn(),

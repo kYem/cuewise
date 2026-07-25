@@ -27,6 +27,10 @@ interface WeatherStore {
   location: WeatherLocation | null;
   snapshot: WeatherSnapshot | null;
   isLoading: boolean;
+  // Which epoch's fetch is running, so the in-flight guard can tell "already fetching
+  // this place" from "still fetching the place the user just left". A plain boolean let
+  // setLocation's fetch be swallowed, stranding the chip on a skeleton.
+  loadingEpoch: number | null;
   error: string | null;
   lastFetch: string | null;
   searchResults: WeatherLocation[];
@@ -37,8 +41,11 @@ interface WeatherStore {
   epoch: number;
 
   // Actions
-  initialize: () => Promise<void>;
-  setLocation: (location: WeatherLocation) => Promise<void>;
+  initialize: (unitsPreference?: WeatherUnitsPreference) => Promise<void>;
+  setLocation: (
+    location: WeatherLocation,
+    unitsPreference?: WeatherUnitsPreference
+  ) => Promise<void>;
   clearLocation: () => Promise<void>;
   refresh: (options?: {
     silent?: boolean;
@@ -74,6 +81,7 @@ export const useWeatherStore = create<WeatherStore>((set, get) => ({
   location: null,
   snapshot: null,
   isLoading: false,
+  loadingEpoch: null,
   error: null,
   lastFetch: null,
   searchResults: [],
@@ -81,7 +89,7 @@ export const useWeatherStore = create<WeatherStore>((set, get) => ({
   searchError: null,
   epoch: 0,
 
-  initialize: async () => {
+  initialize: async (unitsPreference) => {
     try {
       const stored = await getWeatherState();
       if (stored === null) {
@@ -98,14 +106,14 @@ export const useWeatherStore = create<WeatherStore>((set, get) => ({
       const isStale =
         stored.lastFetch === null || Date.now() - Date.parse(stored.lastFetch) > WEATHER_STALE_MS;
       if (isStale) {
-        await get().refresh({ silent: true });
+        await get().refresh({ silent: true, unitsPreference });
       }
     } catch (error) {
       logger.error('Failed to load weather state', error);
     }
   },
 
-  setLocation: async (location) => {
+  setLocation: async (location, unitsPreference) => {
     // Bump first so any refresh already in flight for the previous place skips its commit.
     const epoch = get().epoch + 1;
     set({
@@ -118,7 +126,7 @@ export const useWeatherStore = create<WeatherStore>((set, get) => ({
       searchError: null,
     });
     await persist({ location, snapshot: null, lastFetch: null });
-    await get().refresh();
+    await get().refresh({ unitsPreference });
   },
 
   clearLocation: async () => {
@@ -139,33 +147,37 @@ export const useWeatherStore = create<WeatherStore>((set, get) => ({
     if (location === null) {
       return;
     }
-    if (get().isLoading) {
+    const epoch = get().epoch;
+    if (get().loadingEpoch === epoch) {
       return;
     }
     const silent = options?.silent === true;
-    const epoch = get().epoch;
     const units = resolveWeatherUnits(options?.unitsPreference ?? 'auto');
-    set({ isLoading: true, error: null });
+    set({ isLoading: true, loadingEpoch: epoch, error: null });
     try {
       const forecast = await fetchForecast(location, units);
       if (get().epoch !== epoch) {
-        set({ isLoading: false });
         return;
       }
       const snapshot: WeatherSnapshot = { ...forecast, location };
       const lastFetch = new Date().toISOString();
-      set({ snapshot, lastFetch, isLoading: false });
+      set({ snapshot, lastFetch });
       await persist({ location, snapshot, lastFetch });
     } catch (error) {
       logger.error('Failed to refresh weather', error);
       if (get().epoch !== epoch) {
-        set({ isLoading: false });
         return;
       }
       // The cached snapshot deliberately survives; the popover shows how old it is.
-      set({ isLoading: false, error: messageFor(error) });
+      set({ error: messageFor(error) });
       if (!silent) {
         useToastStore.getState().error(messageFor(error));
+      }
+    } finally {
+      // Only the request still owning the slot may release it — a superseded one must
+      // not clear the newer request's loading state.
+      if (get().loadingEpoch === epoch) {
+        set({ isLoading: false, loadingEpoch: null });
       }
     }
   },

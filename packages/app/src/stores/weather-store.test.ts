@@ -43,6 +43,7 @@ function resetStore(): void {
     location: null,
     snapshot: null,
     isLoading: false,
+    loadingEpoch: null,
     error: null,
     lastFetch: null,
     searchResults: [],
@@ -92,6 +93,16 @@ describe('initialize', () => {
     await useWeatherStore.getState().initialize();
 
     expect(fetchForecastMock).toHaveBeenCalledTimes(1);
+  });
+
+  // The mount refresh used to hardcode 'auto', so an explicit °F setting silently
+  // fetched °C on every new tab.
+  it('honours the units preference on the mount refresh', async () => {
+    getWeatherStateMock.mockResolvedValue(staleState());
+
+    await useWeatherStore.getState().initialize('imperial');
+
+    expect(fetchForecastMock).toHaveBeenCalledWith(LONDON, 'imperial');
   });
 
   it('does not fetch when a location was never chosen', async () => {
@@ -148,6 +159,29 @@ describe('setLocation', () => {
 
     expect(useWeatherStore.getState().searchResults).toEqual([]);
   });
+
+  // Without this the in-flight guard eats the new location's fetch and the chip is
+  // stuck on a skeleton until a reload.
+  it('fetches the new place even while the previous one is still in flight', async () => {
+    useWeatherStore.setState({ location: LONDON });
+    const pending = deferred<ReturnType<typeof forecast>>();
+    fetchForecastMock.mockReturnValueOnce(pending.promise);
+    const stale = useWeatherStore.getState().refresh();
+
+    await useWeatherStore.getState().setLocation(VILNIUS);
+    pending.release(forecast());
+    await stale;
+
+    expect(fetchForecastMock).toHaveBeenCalledTimes(2);
+    expect(fetchForecastMock).toHaveBeenLastCalledWith(VILNIUS, 'metric');
+    expect(useWeatherStore.getState().snapshot).not.toBeNull();
+  });
+
+  it('carries the units preference into the fetch it triggers', async () => {
+    await useWeatherStore.getState().setLocation(VILNIUS, 'imperial');
+
+    expect(fetchForecastMock).toHaveBeenCalledWith(VILNIUS, 'imperial');
+  });
 });
 
 describe('clearLocation', () => {
@@ -173,8 +207,8 @@ describe('refresh', () => {
     expect(fetchForecastMock).not.toHaveBeenCalled();
   });
 
-  it('skips when a refresh is already in flight', async () => {
-    useWeatherStore.setState({ location: LONDON, isLoading: true });
+  it('skips when a refresh for the same place is already in flight', async () => {
+    useWeatherStore.setState({ location: LONDON, isLoading: true, loadingEpoch: 0, epoch: 0 });
 
     await useWeatherStore.getState().refresh();
 

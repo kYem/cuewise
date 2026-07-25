@@ -46,6 +46,35 @@ describe('visibility', () => {
 
     expect(store.initialize).toHaveBeenCalledTimes(1);
   });
+
+  it('passes the units preference into initialize', () => {
+    mockSettings({ showWeather: true, weatherUnits: 'imperial' });
+    const store = mockWeatherStore();
+
+    render(<WeatherWidget />);
+
+    expect(store.initialize).toHaveBeenCalledWith('imperial');
+  });
+});
+
+describe('units changes', () => {
+  it('refetches when the setting no longer matches the cached reading', () => {
+    mockSettings({ showWeather: true, weatherUnits: 'imperial' });
+    const store = mockWeatherStore();
+
+    render(<WeatherWidget />);
+
+    expect(store.refresh).toHaveBeenCalledWith({ silent: true, unitsPreference: 'imperial' });
+  });
+
+  it('does not refetch when the reading already uses the chosen units', () => {
+    mockSettings({ showWeather: true, weatherUnits: 'metric' });
+    const store = mockWeatherStore();
+
+    render(<WeatherWidget />);
+
+    expect(store.refresh).not.toHaveBeenCalled();
+  });
 });
 
 describe('the chip', () => {
