@@ -14,6 +14,7 @@ import {
   CloudDrizzle,
   CloudFog,
   CloudLightning,
+  CloudOff,
   CloudRain,
   CloudSnow,
   CloudSun,
@@ -73,14 +74,14 @@ const WeatherPopover: React.FC<{ snapshot: WeatherSnapshot; alignRight: boolean 
   alignRight,
 }) => {
   const lastFetch = useWeatherStore((state) => state.lastFetch);
-  const isLoading = useWeatherStore((state) => state.isLoading);
+  const isLoading = useWeatherStore((state) => state.inFlight !== null);
   const error = useWeatherStore((state) => state.error);
   const refresh = useWeatherStore((state) => state.refresh);
   const unitsPreference = useSettingsStore((state) => state.settings.weatherUnits);
 
   const { location, current } = snapshot;
   const Icon = conditionIcon(current.condition, current.isDay);
-  const hours = sampleForecastHours(snapshot.hours, toLocalIso(new Date(), location.timezone));
+  const hours = sampleForecastHours(snapshot.hours, toLocalIso(new Date(), snapshot.timezone));
   const age = formatWeatherAge(lastFetch);
 
   return (
@@ -163,6 +164,8 @@ export const WeatherWidget: React.FC = () => {
   const position = useSettingsStore((state) => state.settings.weatherPosition);
   const location = useWeatherStore((state) => state.location);
   const snapshot = useWeatherStore((state) => state.snapshot);
+  const error = useWeatherStore((state) => state.error);
+  const isFetching = useWeatherStore((state) => state.inFlight !== null);
   const initialize = useWeatherStore((state) => state.initialize);
   const refresh = useWeatherStore((state) => state.refresh);
   const [isOpen, setIsOpen] = useState(false);
@@ -225,6 +228,23 @@ export const WeatherWidget: React.FC = () => {
   }
 
   if (snapshot === null) {
+    // With nothing cached there is no popover to open, so the chip itself has to carry
+    // the failure and the retry — otherwise a first fetch that fails leaves a pulsing
+    // skeleton with no explanation, on every new tab, forever.
+    if (error !== null && !isFetching) {
+      return (
+        <button
+          type="button"
+          onClick={() => refresh({ unitsPreference })}
+          aria-label={`Weather unavailable: ${error}. Select to retry.`}
+          title={error}
+          className={CHIP_CLASS}
+        >
+          <CloudOff className="w-5 h-5 text-secondary" />
+          <span className="text-sm font-medium text-secondary">Retry</span>
+        </button>
+      );
+    }
     return (
       <div
         className={cn(CHIP_CLASS, 'animate-pulse')}

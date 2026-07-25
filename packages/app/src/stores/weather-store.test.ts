@@ -42,8 +42,7 @@ function resetStore(): void {
   useWeatherStore.setState({
     location: null,
     snapshot: null,
-    isLoading: false,
-    loadingEpoch: null,
+    inFlight: null,
     error: null,
     lastFetch: null,
     searchResults: [],
@@ -133,7 +132,7 @@ describe('initialize', () => {
 
 describe('setLocation', () => {
   it('stores the location and fetches a reading for it', async () => {
-    await useWeatherStore.getState().setLocation(LONDON);
+    await useWeatherStore.getState().setLocation(LONDON, 'metric');
 
     expect(useWeatherStore.getState().location).toEqual(LONDON);
     expect(fetchForecastMock).toHaveBeenCalledWith(LONDON, 'metric');
@@ -166,9 +165,9 @@ describe('setLocation', () => {
     useWeatherStore.setState({ location: LONDON });
     const pending = deferred<ReturnType<typeof forecast>>();
     fetchForecastMock.mockReturnValueOnce(pending.promise);
-    const stale = useWeatherStore.getState().refresh();
+    const stale = useWeatherStore.getState().refresh({ unitsPreference: 'metric' });
 
-    await useWeatherStore.getState().setLocation(VILNIUS);
+    await useWeatherStore.getState().setLocation(VILNIUS, 'metric');
     pending.release(forecast());
     await stale;
 
@@ -208,9 +207,13 @@ describe('refresh', () => {
   });
 
   it('skips when a refresh for the same place is already in flight', async () => {
-    useWeatherStore.setState({ location: LONDON, isLoading: true, loadingEpoch: 0, epoch: 0 });
+    useWeatherStore.setState({
+      location: LONDON,
+      epoch: 0,
+      inFlight: { id: 1, epoch: 0, units: 'metric' },
+    });
 
-    await useWeatherStore.getState().refresh();
+    await useWeatherStore.getState().refresh({ unitsPreference: 'metric' });
 
     expect(fetchForecastMock).not.toHaveBeenCalled();
   });

@@ -329,8 +329,16 @@ describe('GET /v1/weather/search', () => {
 describe('weather routes never log what the user asked about', () => {
   function captureLogs(): string[] {
     const captured: string[] = [];
+    // Error.message and .stack are non-enumerable, so JSON.stringify(err) is '{}' — the
+    // exact shape a URL-bearing fetch error arrives in. Flatten them explicitly.
+    const flatten = (arg: unknown): string => {
+      if (arg instanceof Error) {
+        return `${arg.name} ${arg.message} ${arg.stack ?? ''}`;
+      }
+      return JSON.stringify(arg) ?? String(arg);
+    };
     const record = (...args: unknown[]): void => {
-      captured.push(args.map((arg) => JSON.stringify(arg) ?? String(arg)).join(' '));
+      captured.push(args.map(flatten).join(' '));
     };
     vi.spyOn(logger, 'error').mockImplementation(record);
     vi.spyOn(logger, 'warn').mockImplementation(record);

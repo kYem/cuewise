@@ -13,7 +13,7 @@ import { useWeatherStore } from '../../stores/weather-store';
 export interface WeatherStoreOverrides {
   location?: WeatherLocation | null;
   snapshot?: WeatherSnapshot | null;
-  isLoading?: boolean;
+  isFetching?: boolean;
   error?: string | null;
   lastFetch?: string | null;
   searchResults?: WeatherLocation[];
@@ -25,14 +25,13 @@ export function mockWeatherStore(overrides: WeatherStoreOverrides = {}) {
   const state = {
     location: overrides.location === undefined ? LONDON : overrides.location,
     snapshot: overrides.snapshot === undefined ? snapshot() : overrides.snapshot,
-    isLoading: overrides.isLoading ?? false,
+    inFlight: overrides.isFetching === true ? { id: 1, epoch: 0, units: 'metric' as const } : null,
     error: overrides.error ?? null,
     lastFetch: overrides.lastFetch ?? new Date().toISOString(),
     searchResults: overrides.searchResults ?? [],
     isSearching: overrides.isSearching ?? false,
     searchError: overrides.searchError ?? null,
     epoch: 0,
-    loadingEpoch: null,
     initialize: vi.fn(),
     setLocation: vi.fn(),
     clearLocation: vi.fn(),

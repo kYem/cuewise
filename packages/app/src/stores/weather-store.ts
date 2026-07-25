@@ -3,6 +3,7 @@ import {
   resolveWeatherUnits,
   type WeatherLocation,
   type WeatherSnapshot,
+  type WeatherUnits,
   type WeatherUnitsPreference,
 } from '@cuewise/shared';
 import { getWeatherState, setWeatherState } from '@cuewise/storage';
@@ -11,6 +12,7 @@ import {
   fetchForecast,
   searchLocations,
   WeatherRateLimitedError,
+  WeatherRequestError,
   WeatherUnavailableError,
 } from '../utils/weather';
 import { useToastStore } from './toast-store';
@@ -22,15 +24,18 @@ export const WEATHER_STALE_MS = 30 * 60 * 1000;
 // of the newer results.
 let searchGeneration = 0;
 
+// Monotonic, so a superseded fetch can be told apart from the one that replaced it even
+// when both belong to the same location.
+let requestCounter = 0;
+
 interface WeatherStore {
   // State
   location: WeatherLocation | null;
   snapshot: WeatherSnapshot | null;
-  isLoading: boolean;
-  // Which epoch's fetch is running, so the in-flight guard can tell "already fetching
-  // this place" from "still fetching the place the user just left". A plain boolean let
-  // setLocation's fetch be swallowed, stranding the chip on a skeleton.
-  loadingEpoch: number | null;
+  // The request in progress, or null. Keyed by place AND units, because both can change
+  // mid-flight: a boolean swallowed setLocation's fetch, and keying on place alone
+  // swallowed a units change, pinning the chip to the old scale until remount.
+  inFlight: { id: number; epoch: number; units: WeatherUnits } | null;
   error: string | null;
   lastFetch: string | null;
   searchResults: WeatherLocation[];
@@ -55,33 +60,55 @@ interface WeatherStore {
   clearSearch: () => void;
 }
 
-/** Logs but never toasts a write failure — the in-memory reading still works. */
-async function persist(state: {
+interface PersistedWeather {
   location: WeatherLocation | null;
   snapshot: WeatherSnapshot | null;
   lastFetch: string | null;
-}): Promise<void> {
+}
+
+/** A lost cache entry only costs one extra fetch, so log and move on. */
+async function persistReading(state: PersistedWeather): Promise<void> {
   const result = await setWeatherState(state);
   if (!result.success) {
-    logger.error('Failed to persist weather state', result.error);
+    logger.error('Failed to persist weather reading', result.error);
   }
 }
 
-function messageFor(error: unknown): string {
+/**
+ * The user asked for this, so a failed write must not look like it succeeded — otherwise
+ * removing a location appears to work while the city stays on disk and returns next tab.
+ */
+async function persistLocation(state: PersistedWeather): Promise<void> {
+  const result = await setWeatherState(state);
+  if (!result.success) {
+    logger.error('Failed to persist weather location', result.error);
+    useToastStore
+      .getState()
+      .error('Could not save your weather location; it may be forgotten when you close this tab');
+  }
+}
+
+/** A failed city lookup must not be reported as a failed weather reading. */
+function messageFor(error: unknown, context: 'forecast' | 'search'): string {
   if (error instanceof WeatherRateLimitedError) {
-    return 'Too many weather requests; try again in a moment';
+    return 'Too many requests; try again in a moment';
   }
   if (error instanceof WeatherUnavailableError) {
-    return 'The weather service is unavailable right now';
+    return context === 'search'
+      ? 'The location service is unavailable right now'
+      : 'The weather service is unavailable right now';
   }
-  return 'Could not update the weather';
+  // Already phrased for a person — throwing it away loses the useful part.
+  if (error instanceof WeatherRequestError) {
+    return error.message;
+  }
+  return context === 'search' ? 'Could not search for places' : 'Could not update the weather';
 }
 
 export const useWeatherStore = create<WeatherStore>((set, get) => ({
   location: null,
   snapshot: null,
-  isLoading: false,
-  loadingEpoch: null,
+  inFlight: null,
   error: null,
   lastFetch: null,
   searchResults: [],
@@ -125,7 +152,7 @@ export const useWeatherStore = create<WeatherStore>((set, get) => ({
       searchResults: [],
       searchError: null,
     });
-    await persist({ location, snapshot: null, lastFetch: null });
+    await persistLocation({ location, snapshot: null, lastFetch: null });
     await get().refresh({ unitsPreference });
   },
 
@@ -139,7 +166,7 @@ export const useWeatherStore = create<WeatherStore>((set, get) => ({
       searchResults: [],
       searchError: null,
     });
-    await persist({ location: null, snapshot: null, lastFetch: null });
+    await persistLocation({ location: null, snapshot: null, lastFetch: null });
   },
 
   refresh: async (options) => {
@@ -148,36 +175,41 @@ export const useWeatherStore = create<WeatherStore>((set, get) => ({
       return;
     }
     const epoch = get().epoch;
-    if (get().loadingEpoch === epoch) {
-      return;
-    }
     const silent = options?.silent === true;
     const units = resolveWeatherUnits(options?.unitsPreference ?? 'auto');
-    set({ isLoading: true, loadingEpoch: epoch, error: null });
+    const running = get().inFlight;
+    // Only the identical request is redundant; a different place or scale must proceed.
+    if (running !== null && running.epoch === epoch && running.units === units) {
+      return;
+    }
+    requestCounter += 1;
+    const id = requestCounter;
+    set({ inFlight: { id, epoch, units }, error: null });
     try {
       const forecast = await fetchForecast(location, units);
-      if (get().epoch !== epoch) {
+      // A newer request owns the result now, whether the place or the scale changed.
+      if (get().epoch !== epoch || get().inFlight?.id !== id) {
         return;
       }
       const snapshot: WeatherSnapshot = { ...forecast, location };
       const lastFetch = new Date().toISOString();
       set({ snapshot, lastFetch });
-      await persist({ location, snapshot, lastFetch });
+      await persistReading({ location, snapshot, lastFetch });
     } catch (error) {
       logger.error('Failed to refresh weather', error);
-      if (get().epoch !== epoch) {
+      if (get().epoch !== epoch || get().inFlight?.id !== id) {
         return;
       }
       // The cached snapshot deliberately survives; the popover shows how old it is.
-      set({ error: messageFor(error) });
+      set({ error: messageFor(error, 'forecast') });
       if (!silent) {
-        useToastStore.getState().error(messageFor(error));
+        useToastStore.getState().error(messageFor(error, 'forecast'));
       }
     } finally {
       // Only the request still owning the slot may release it — a superseded one must
       // not clear the newer request's loading state.
-      if (get().loadingEpoch === epoch) {
-        set({ isLoading: false, loadingEpoch: null });
+      if (get().inFlight?.id === id) {
+        set({ inFlight: null });
       }
     }
   },
@@ -202,7 +234,7 @@ export const useWeatherStore = create<WeatherStore>((set, get) => ({
       if (generation !== searchGeneration) {
         return;
       }
-      set({ searchResults: [], isSearching: false, searchError: messageFor(error) });
+      set({ searchResults: [], isSearching: false, searchError: messageFor(error, 'search') });
     }
   },
 

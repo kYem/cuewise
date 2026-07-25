@@ -80,11 +80,12 @@ describe('units changes', () => {
   // matches must not turn into an unbounded retry against our own proxy.
   it('asks only once when the reply keeps coming back in the wrong units', () => {
     mockSettings({ showWeather: true, weatherUnits: 'imperial' });
-    const store = mockWeatherStore();
+    const store = mockWeatherStore({ snapshot: snapshot(LONDON, { units: 'metric' }) });
 
     const { rerender } = render(<WeatherWidget />);
-    mockWeatherStore({ snapshot: snapshot(LONDON, { units: 'metric' }) });
+    store.snapshot = snapshot(LONDON, { units: 'metric' });
     rerender(<WeatherWidget />);
+    store.snapshot = snapshot(LONDON, { units: 'metric' });
     rerender(<WeatherWidget />);
 
     expect(store.refresh).toHaveBeenCalledTimes(1);
@@ -190,6 +191,9 @@ describe('the popover', () => {
   });
 
   it('refreshes on demand', () => {
+    // Pin the scale: under an en-US locale 'auto' resolves imperial and the units effect
+    // would fire a second, unrelated refresh.
+    mockSettings({ showWeather: true, weatherUnits: 'metric' });
     const store = mockWeatherStore();
 
     render(<WeatherWidget />);
@@ -200,7 +204,7 @@ describe('the popover', () => {
   });
 
   it('disables the refresh control while a fetch is running', () => {
-    mockWeatherStore({ isLoading: true });
+    mockWeatherStore({ isFetching: true });
 
     render(<WeatherWidget />);
     open();
