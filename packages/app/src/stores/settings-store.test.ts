@@ -20,6 +20,14 @@ vi.mock('./toast-store', () => ({
   },
 }));
 
+// jsdom has no matchMedia; resetToDefaults applies the default 'auto' theme, which reads it.
+vi.stubGlobal(
+  'matchMedia',
+  vi
+    .fn()
+    .mockReturnValue({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })
+);
+
 describe('sync sink wiring', () => {
   const markMutated = vi.fn();
   const fakeSink: SyncMutationSink = { markMutated, markDeleted: vi.fn() };
@@ -174,8 +182,9 @@ describe('background preview lifecycle', () => {
     });
     useSettingsStore.getState().previewSettings({ backgroundDim: 40 });
 
-    await useSettingsStore.getState().updateSettings({ syncEnabled: true });
+    const persisted = await useSettingsStore.getState().updateSettings({ syncEnabled: true });
 
+    expect(persisted).toBe(false);
     expect(useSettingsStore.getState().preview).toBeNull();
     expect(useSettingsStore.getState().error).toContain('Cannot enable sync');
     expect(useSettingsStore.getState().settings.syncEnabled).toBe(defaultSettings.syncEnabled);
@@ -183,8 +192,9 @@ describe('background preview lifecycle', () => {
 
   it('resetToDefaults clears a lingering preview', async () => {
     useSettingsStore.getState().previewSettings({ backgroundDim: 40 });
-    await useSettingsStore.getState().resetToDefaults();
+    const persisted = await useSettingsStore.getState().resetToDefaults();
 
+    expect(persisted).toBe(true);
     expect(useSettingsStore.getState().preview).toBeNull();
   });
 
