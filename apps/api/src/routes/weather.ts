@@ -245,6 +245,8 @@ export function registerWeatherRoutes(
     url.searchParams.set('hourly', 'temperature_2m,weather_code');
     url.searchParams.set('daily', 'temperature_2m_max,temperature_2m_min');
     url.searchParams.set('forecast_days', '1');
+    // Safe to cache: the provider resolves `auto` from the coordinates, not the caller's
+    // IP, so one cached body is correct for everyone asking about this place.
     url.searchParams.set('timezone', 'auto');
     if (units === 'imperial') {
       url.searchParams.set('temperature_unit', 'fahrenheit');
