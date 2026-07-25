@@ -1,3 +1,4 @@
+import { logger } from '@cuewise/shared';
 import { render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -26,7 +27,7 @@ import App from './App';
 import { setReducedMotion } from './components/__fixtures__/motion.fixtures';
 import { useBackgroundStore } from './stores/background-store';
 import { getPreloadedCurrentUrl, preloadImages } from './utils/image-preload-cache';
-import { preloadImage } from './utils/unsplash';
+import { isUnsplashUrl, preloadImage } from './utils/unsplash';
 
 /** Mirrors BACKGROUND_REVEAL_DEADLINE_MS in App.tsx; raising it there must fail these. */
 const REVEAL_DEADLINE_MS = 1500;
@@ -68,6 +69,7 @@ describe('App background gate', () => {
     vi.mocked(preloadImages).mockImplementation(() => new Promise<void>(() => undefined));
     vi.mocked(getPreloadedCurrentUrl).mockReturnValue(null);
     vi.mocked(preloadImage).mockImplementation((url: string) => Promise.resolve(url));
+    vi.mocked(isUnsplashUrl).mockReturnValue(true);
     useBackgroundStore.setState({
       customBackground: null,
       isLoaded: false,
@@ -82,6 +84,9 @@ describe('App background gate', () => {
   });
 
   it('reveals the app even when the background image never loads', async () => {
+    // Deterministic clock: shouldAdvanceTime would let real elapsed time under full-suite
+    // load fire the deadline before the "still hidden" assertion, making this flaky.
+    vi.useFakeTimers();
     render(<App />);
 
     // Two-sided on purpose: asserting only the reveal would let the deadline be raised
@@ -113,6 +118,7 @@ describe('App background gate', () => {
   });
 
   it('stops showing the loading spinner once the deadline passes', async () => {
+    vi.useFakeTimers();
     render(<App />);
 
     // Positive precondition first, or this can't tell "dismissed" from "never rendered".
@@ -152,12 +158,39 @@ describe('App background gate', () => {
     vi.mocked(preloadImages).mockResolvedValue(undefined);
     vi.mocked(getPreloadedCurrentUrl).mockReturnValue(PHOTO);
     vi.mocked(preloadImage).mockRejectedValue(new Error('Failed to load image'));
+    const warn = vi.spyOn(logger, 'warn');
 
     render(<App />);
 
     await vi.advanceTimersByTimeAsync(100);
     await waitFor(() => expect(contentWrapper().className).toContain('opacity-100'));
     expect(photoLayer()).toBeUndefined();
+    // Asserting the log is what stops this catch quietly regressing to `catch {}`.
+    await waitFor(() =>
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('Background image failed to load'),
+        expect.objectContaining({ source: PHOTO })
+      )
+    );
+  });
+
+  it("never logs a custom background, which is a data URL of the user's own picture", async () => {
+    const ownPhoto = 'data:image/jpeg;base64,secret';
+    vi.mocked(preloadImages).mockResolvedValue(undefined);
+    vi.mocked(getPreloadedCurrentUrl).mockReturnValue(ownPhoto);
+    vi.mocked(isUnsplashUrl).mockReturnValue(false);
+    vi.mocked(preloadImage).mockRejectedValue(new Error('Failed to load image'));
+    const warn = vi.spyOn(logger, 'warn');
+
+    render(<App />);
+
+    await vi.advanceTimersByTimeAsync(100);
+    await waitFor(() => expect(warn).toHaveBeenCalled());
+    expect(warn).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ source: 'custom-background' })
+    );
+    expect(JSON.stringify(warn.mock.calls)).not.toContain('secret');
   });
 
   it('still shows the photo when it arrives after the deadline', async () => {

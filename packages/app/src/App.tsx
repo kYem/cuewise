@@ -25,7 +25,7 @@ import {
   preloadImages,
   refreshBackground,
 } from './utils/image-preload-cache';
-import { preloadImage } from './utils/unsplash';
+import { isUnsplashUrl, preloadImage } from './utils/unsplash';
 
 /** Show the app over the gradient fallback rather than wait on a decorative photo. */
 const BACKGROUND_REVEAL_DEADLINE_MS = 1500;
@@ -145,7 +145,11 @@ function App({ extraSections, syncController }: AppProps = {}) {
         }
       } catch (error) {
         // Decorative, so no toast — but warn, since a custom image reaches here unvalidated.
-        logger.warn('Background image failed to load; keeping the gradient', { error });
+        // Never log a custom background: it's a data URL of the user's own picture.
+        logger.warn('Background image failed to load; keeping the gradient', {
+          error,
+          source: isUnsplashUrl(imageUrl) ? imageUrl : 'custom-background',
+        });
       }
       if (!cancelled) {
         setImageLoaded(true);
