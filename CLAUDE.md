@@ -500,6 +500,14 @@ pnpm --filter @cuewise/browser-extension dev
   - `docs: update CLAUDE.md`
   - `refactor: extract storage adapter pattern`
 
+### Working on Linear Tickets
+
+When picking up a Linear ticket (ENG-x), make the work traceable before writing code:
+
+1. Move the ticket to **In Progress** and add a comment identifying who has it (e.g. "Claude Code session on <machine/branch>") — ad-hoc sessions are invisible to Linear otherwise
+2. Prefer the ticket's suggested branch name (`gitBranchName` from the Linear API, e.g. `kes/eng-77-...`); if using a `claude/...` branch, the PR description must include the issue ID (e.g. `Fixes ENG-77`) so the PR links back to the ticket
+3. On opening the PR, attach it to the ticket if the GitHub integration hasn't done so automatically
+
 ## Additional Resources
 
 - [README.md](./README.md) - User-facing documentation
