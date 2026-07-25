@@ -1,3 +1,4 @@
+import { logger } from '@cuewise/shared';
 import { ToastContainer } from '@cuewise/ui';
 import { Coffee } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -26,10 +27,10 @@ import {
 } from './utils/image-preload-cache';
 import { preloadImage } from './utils/unsplash';
 
-/** Show the app over the gradient fallback rather than wait indefinitely on a decorative photo. */
+/** Show the app over the gradient fallback rather than wait on a decorative photo. */
 const BACKGROUND_REVEAL_DEADLINE_MS = 1500;
-/** Bounds the decode itself; a stalled request fires neither load nor error. */
-const BACKGROUND_DECODE_TIMEOUT_MS = 5000;
+/** Bounds this load; the retries underneath can stack to ~32s before they give up. */
+const BACKGROUND_LOAD_TIMEOUT_MS = 5000;
 
 type Page = 'home' | 'pomodoro' | 'insights' | 'quotes' | 'goals' | 'concepts';
 
@@ -54,8 +55,7 @@ function App({ extraSections, syncController }: AppProps = {}) {
   // Show background image only when glass theme is selected
   const showBackgroundImage = settings.colorTheme === 'glass';
 
-  // Only hide content while glass theme background loads (not during settings load)
-  // This allows the default theme to show while waiting for the background image
+  // Glass gates content on its background; bounded by BACKGROUND_REVEAL_DEADLINE_MS so it can't stick.
   const hideContent = showBackgroundImage && !imageLoaded;
 
   // Goals are day-scoped: refresh Today and roll newly due tasks at midnight.
@@ -94,6 +94,17 @@ function App({ extraSections, syncController }: AppProps = {}) {
     loadCustomBackground();
   }, [loadCustomBackground]);
 
+  // Anchored to mount, not to the load below: that effect waits on the custom-background
+  // read first, so arming the timer there would stack this deadline behind it.
+  // Deliberately does not cancel the load — a late photo still fades in behind the app.
+  useEffect(() => {
+    if (!showBackgroundImage) {
+      return;
+    }
+    const revealTimer = setTimeout(() => setImageLoaded(true), BACKGROUND_REVEAL_DEADLINE_MS);
+    return () => clearTimeout(revealTimer);
+  }, [showBackgroundImage]);
+
   // Load background image when glass theme is selected
   useEffect(() => {
     if (!showBackgroundImage) {
@@ -109,40 +120,30 @@ function App({ extraSections, syncController }: AppProps = {}) {
 
     let cancelled = false;
 
-    // The background is decorative, so it must never hold the app hostage. A filtering
-    // proxy that black-holes the CDN stalls every fetch below without ever erroring.
-    const revealTimer = setTimeout(() => {
-      if (!cancelled) {
-        setImageLoaded(true);
-      }
-    }, BACKGROUND_REVEAL_DEADLINE_MS);
-
     const loadBackground = async () => {
-      // Preload images first (loads from storage or gets new image)
-      // This persists the daily background so it only changes once per day
       await preloadImages(settings.focusModeImageCategory);
 
       if (cancelled) {
         return;
       }
 
-      // preloadImages has already exhausted its own retries; re-running the fallback here
-      // would double the wait for no new information.
+      // preloadImages has already spent the retry budget; re-running the fallback here
+      // would stack another ~24s onto a failure that is usually a blocked CDN.
       const imageUrl = getPreloadedCurrentUrl(settings.focusModeImageCategory);
       if (!imageUrl) {
         setImageLoaded(true);
         return;
       }
 
-      // Decode before swapping it in, so the fade-in never shows a half-painted image.
+      // Load fully before swapping in, so the fade-in never shows a half-painted image.
       try {
-        await preloadImage(imageUrl, BACKGROUND_DECODE_TIMEOUT_MS);
+        await preloadImage(imageUrl, BACKGROUND_LOAD_TIMEOUT_MS);
         if (!cancelled) {
           setBackgroundImage(imageUrl);
         }
-      } catch {
-        // Unreachable in the happy path (preloadImages already validated it), but a cold
-        // HTTP cache or a network that drops between the two loads lands here.
+      } catch (error) {
+        // Decorative, so no toast — but warn, since a custom image reaches here unvalidated.
+        logger.warn('Background image failed to load; keeping the gradient', { error });
       }
       if (!cancelled) {
         setImageLoaded(true);
@@ -153,7 +154,6 @@ function App({ extraSections, syncController }: AppProps = {}) {
 
     return () => {
       cancelled = true;
-      clearTimeout(revealTimer);
     };
   }, [
     showBackgroundImage,

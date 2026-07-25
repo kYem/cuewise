@@ -1,18 +1,18 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// A stalled CDN (a filtering proxy that black-holes requests) never settles: no load, no error.
-// The whole app is gated on the glass background, so nothing here may hang forever.
+// A blocked CDN takes ~32s to exhaust the retries below — far too long to gate the app on.
+// A never-settling promise stands in for that wait.
 vi.mock('./utils/image-preload-cache', () => ({
-  preloadImages: vi.fn(() => new Promise<void>(() => undefined)),
-  getPreloadedCurrentUrl: vi.fn(() => null),
+  preloadImages: vi.fn(),
+  getPreloadedCurrentUrl: vi.fn(),
   refreshBackground: vi.fn(() => Promise.resolve(null)),
   setCustomBackgroundOverride: vi.fn(),
   getCustomBackgroundOverride: vi.fn(() => null),
 }));
 vi.mock('./utils/unsplash', () => ({
   loadImageWithFallback: vi.fn(() => new Promise<string>(() => undefined)),
-  // App.tsx decodes through this; without it the happy path throws "not a function".
+  // App.tsx loads through this; without it the happy path throws "not a function".
   preloadImage: vi.fn((url: string) => Promise.resolve(url)),
   getPhotoCredit: vi.fn(() => ({
     photographer: null,
@@ -24,6 +24,13 @@ vi.mock('./utils/unsplash', () => ({
 
 import App from './App';
 import { setReducedMotion } from './components/__fixtures__/motion.fixtures';
+import { useBackgroundStore } from './stores/background-store';
+import { getPreloadedCurrentUrl, preloadImages } from './utils/image-preload-cache';
+import { preloadImage } from './utils/unsplash';
+
+/** Mirrors BACKGROUND_REVEAL_DEADLINE_MS in App.tsx; raising it there must fail these. */
+const REVEAL_DEADLINE_MS = 1500;
+const PHOTO = 'https://images.unsplash.com/photo-ok';
 
 class StubIntersectionObserver {
   observe(): void {}
@@ -31,7 +38,10 @@ class StubIntersectionObserver {
   disconnect(): void {}
 }
 
-/** The wrapper whose opacity gates every pixel of the app (App.tsx `hideContent`). */
+/** Captured before any test stubs it, so replacing the action can't leak between tests. */
+const realLoadCustomBackground = useBackgroundStore.getState().loadCustomBackground;
+
+/** The wrapper gating the main content + theme switcher (App.tsx `hideContent`). */
 function contentWrapper(): HTMLElement {
   const el = [...document.querySelectorAll('div')].find(
     (d) =>
@@ -44,6 +54,14 @@ function contentWrapper(): HTMLElement {
   return el;
 }
 
+function photoLayer(): HTMLElement | undefined {
+  return [...document.querySelectorAll('div')].find((d) =>
+    (d.getAttribute('style') ?? '').includes('images.unsplash.com')
+  );
+}
+
+// These tests assume glass is the default theme (DEFAULT_SETTINGS.colorTheme); without it
+// nothing is gated and the spinner assertions would pass vacuously.
 describe('App background gate', () => {
   beforeEach(() => {
     setReducedMotion(false);
@@ -53,6 +71,17 @@ describe('App background gate', () => {
       addListener: vi.fn(),
       removeListener: vi.fn(),
     };
+    // Re-established per test: a leaked happy-path stub would let the app reveal via the
+    // image and silently disarm the deadline tests, whatever order they run in.
+    vi.mocked(preloadImages).mockImplementation(() => new Promise<void>(() => undefined));
+    vi.mocked(getPreloadedCurrentUrl).mockReturnValue(null);
+    vi.mocked(preloadImage).mockImplementation((url: string) => Promise.resolve(url));
+    useBackgroundStore.setState({
+      customBackground: null,
+      isLoaded: false,
+      loadFailed: false,
+      loadCustomBackground: realLoadCustomBackground,
+    });
     vi.useFakeTimers({ shouldAdvanceTime: true });
   });
 
@@ -63,37 +92,69 @@ describe('App background gate', () => {
   it('reveals the app even when the background image never loads', async () => {
     render(<App />);
 
-    // Gate is up initially — that's intended, it prevents a flash of unstyled background.
     await waitFor(() => expect(contentWrapper().className).toContain('opacity-0'));
 
-    await vi.advanceTimersByTimeAsync(3000);
+    await vi.advanceTimersByTimeAsync(REVEAL_DEADLINE_MS * 2);
 
-    // A decorative photo must never hold the product hostage.
+    await waitFor(() => expect(contentWrapper().className).toContain('opacity-100'));
+  });
+
+  it('reveals even while the custom-background read is still outstanding', async () => {
+    // The load effect returns early until the store settles, so the deadline must be armed
+    // independently — otherwise it stacks behind the store's own 3s timeout. Replacing the
+    // action keeps isLoaded false for the whole test; setState alone would be overwritten.
+    useBackgroundStore.setState({
+      isLoaded: false,
+      customBackground: null,
+      loadFailed: false,
+      loadCustomBackground: () => new Promise<void>(() => undefined),
+    });
+
+    render(<App />);
+
+    await vi.advanceTimersByTimeAsync(REVEAL_DEADLINE_MS * 2);
+
     await waitFor(() => expect(contentWrapper().className).toContain('opacity-100'));
   });
 
   it('stops showing the loading spinner once the deadline passes', async () => {
     render(<App />);
 
-    await vi.advanceTimersByTimeAsync(3000);
+    await vi.advanceTimersByTimeAsync(REVEAL_DEADLINE_MS * 2);
 
     await waitFor(() => expect(screen.queryByText(/Brewing your view/i)).not.toBeInTheDocument());
   });
 
   it('shows the photo when it does load, without waiting for the deadline', async () => {
-    const { getPreloadedCurrentUrl } = await import('./utils/image-preload-cache');
-    vi.mocked(getPreloadedCurrentUrl).mockReturnValue('https://images.unsplash.com/photo-ok');
-    const { preloadImages } = await import('./utils/image-preload-cache');
     vi.mocked(preloadImages).mockResolvedValue(undefined);
+    vi.mocked(getPreloadedCurrentUrl).mockReturnValue(PHOTO);
 
     render(<App />);
 
-    // Revealed by the image resolving, well before BACKGROUND_REVEAL_DEADLINE_MS.
     await vi.advanceTimersByTimeAsync(100);
     await waitFor(() => expect(contentWrapper().className).toContain('opacity-100'));
-    const layer = [...document.querySelectorAll('div')].find((d) =>
-      (d.getAttribute('style') ?? '').includes('images.unsplash.com')
+    // Applied AND visible — a layer stuck at opacity-0 renders the photo invisible.
+    await waitFor(() => expect(photoLayer()?.className).toContain('opacity-100'));
+    expect(vi.mocked(preloadImage)).toHaveBeenCalledWith(PHOTO, 5000);
+  });
+
+  it('still shows the photo when it arrives after the deadline', async () => {
+    let releasePhoto: () => void = () => undefined;
+    vi.mocked(preloadImages).mockReturnValue(
+      new Promise<void>((resolve) => {
+        releasePhoto = resolve;
+      })
     );
-    expect(layer).toBeDefined();
+    vi.mocked(getPreloadedCurrentUrl).mockReturnValue(PHOTO);
+
+    render(<App />);
+    await vi.advanceTimersByTimeAsync(REVEAL_DEADLINE_MS * 2);
+    await waitFor(() => expect(contentWrapper().className).toContain('opacity-100'));
+
+    // The deadline reveals the app but must not abandon the load.
+    releasePhoto();
+    await vi.advanceTimersByTimeAsync(50);
+
+    await waitFor(() => expect(photoLayer()).toBeDefined());
   });
 });
