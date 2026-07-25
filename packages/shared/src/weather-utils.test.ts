@@ -8,7 +8,6 @@ import {
   resolveWeatherUnits,
   sampleForecastHours,
   toLocalIso,
-  weatherUnitSymbol,
 } from './weather-utils';
 
 /** A whole local day of hours, 00:00–23:00, so sampling can be exercised at any point in it. */
@@ -120,6 +119,12 @@ describe('sampleForecastHours', () => {
     expect(new Set(times).size).toBe(times.length);
   });
 
+  it('returns a single real hour when asked for one', () => {
+    const picked = sampleForecastHours(dayOfHours(), '2026-07-25T06:00', 1);
+    expect(picked).toHaveLength(1);
+    expect(picked[0]).toBeDefined();
+  });
+
   it('returns nothing when asked for a non-positive count', () => {
     expect(sampleForecastHours(dayOfHours(), '2026-07-25T06:00', 0)).toEqual([]);
   });
@@ -143,6 +148,13 @@ describe('toLocalIso', () => {
     expect(toLocalIso(instant, 'UTC')).toBe('2026-07-25T00:15');
   });
 
+  // An unknown zone used to throw during render, taking the whole new tab down with it.
+  it('degrades to UTC rather than throwing on a zone this engine does not know', () => {
+    const instant = new Date('2026-07-25T12:30:00Z');
+    expect(() => toLocalIso(instant, 'Mars/Olympus_Mons')).not.toThrow();
+    expect(toLocalIso(instant, 'Mars/Olympus_Mons')).toBe('2026-07-25T12:30');
+  });
+
   it('produces a value directly comparable with provider hour stamps', () => {
     const now = toLocalIso(new Date('2026-07-25T05:30:00Z'), 'UTC');
     const picked = sampleForecastHours(dayOfHours(), now);
@@ -164,13 +176,6 @@ describe('formatTemperature', () => {
   it('renders a dash for a non-finite reading rather than NaN', () => {
     expect(formatTemperature(Number.NaN)).toBe('—');
     expect(formatTemperature(Number.POSITIVE_INFINITY)).toBe('—');
-  });
-});
-
-describe('weatherUnitSymbol', () => {
-  it('names the unit system', () => {
-    expect(weatherUnitSymbol('metric')).toBe('°C');
-    expect(weatherUnitSymbol('imperial')).toBe('°F');
   });
 });
 

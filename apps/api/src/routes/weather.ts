@@ -151,9 +151,18 @@ function normalizeForecast(raw: unknown, units: WeatherUnits): WeatherForecast |
     return null;
   }
   const hours = normalizeHours(payload.hourly);
-  const high = firstNumber(payload.daily?.temperature_2m_max);
-  const low = firstNumber(payload.daily?.temperature_2m_min);
   const hourTemperatures = hours.map((hour) => hour.temperature);
+  // Deriving from the hourly range is fine; falling back to the current temperature is
+  // not — H === L === now is fabricated weather that reads as measured.
+  const high =
+    firstNumber(payload.daily?.temperature_2m_max) ??
+    (hourTemperatures.length > 0 ? Math.max(...hourTemperatures) : null);
+  const low =
+    firstNumber(payload.daily?.temperature_2m_min) ??
+    (hourTemperatures.length > 0 ? Math.min(...hourTemperatures) : null);
+  if (high === null || low === null) {
+    return null;
+  }
   return {
     units,
     timezone: typeof payload.timezone === 'string' ? payload.timezone : 'UTC',
@@ -163,9 +172,8 @@ function normalizeForecast(raw: unknown, units: WeatherUnits): WeatherForecast |
       condition: mapWmoCode(payload.current?.weather_code),
       isDay: payload.current?.is_day !== 0,
     },
-    // Fall back to the hourly range when the daily block is missing.
-    high: high ?? (hourTemperatures.length > 0 ? Math.max(...hourTemperatures) : temperature),
-    low: low ?? (hourTemperatures.length > 0 ? Math.min(...hourTemperatures) : temperature),
+    high,
+    low,
     hours,
   };
 }
@@ -188,7 +196,11 @@ function normalizePlace(raw: unknown): WeatherLocation | null {
   const place = raw as OpenMeteoPlace;
   const latitude = readNumber(place.latitude);
   const longitude = readNumber(place.longitude);
+  // timezone drives every "today" comparison, so a place without one is unusable.
   if (typeof place.name !== 'string' || latitude === null || longitude === null) {
+    return null;
+  }
+  if (typeof place.timezone !== 'string' || place.timezone === '') {
     return null;
   }
   return {
@@ -199,7 +211,7 @@ function normalizePlace(raw: unknown): WeatherLocation | null {
     countryCode: typeof place.country_code === 'string' ? place.country_code : '',
     latitude,
     longitude,
-    timezone: typeof place.timezone === 'string' ? place.timezone : 'UTC',
+    timezone: place.timezone,
   };
 }
 

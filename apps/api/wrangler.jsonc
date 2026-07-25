@@ -37,7 +37,9 @@
   },
   // Hand-authored config skips the dashboard default; without this, logger.error/warn never
   // reach Workers Logs in production.
-  "observability": { "enabled": true },
+  // invocation_logs off: they record the request URL, and /v1/weather carries lat/lon/q
+  // there. logger.* output still reaches Workers Logs.
+  "observability": { "enabled": true, "logs": { "invocation_logs": false } },
   // Recommended for Workers that make several round trips to D1 plus outbound JWKS fetches.
   "placement": { "mode": "smart" }
 }

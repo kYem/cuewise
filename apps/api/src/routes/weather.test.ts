@@ -204,6 +204,25 @@ describe('GET /v1/weather', () => {
     expect(await res.json()).toMatchObject({ high: 14.1, low: 13.2 });
   });
 
+  // H === L === current is fabricated weather that reads exactly like a measurement.
+  it('answers 503 rather than inventing a high and low from the current temperature', async () => {
+    const { daily: _d, hourly: _h, ...bare } = FORECAST_PAYLOAD;
+    const app = createApp({ weatherUpstream: stubUpstream(bare).fetch });
+
+    const res = await app.request('/v1/weather?lat=51.5&lon=-0.13', {}, env);
+
+    expect(res.status).toBe(503);
+  });
+
+  it('drops a place the geocoder gave no timezone for, since every hour depends on it', async () => {
+    const { timezone: _tz, ...noZone } = GEOCODING_PAYLOAD.results[0];
+    const app = createApp({ weatherUpstream: stubUpstream({ results: [noZone] }).fetch });
+
+    const res = await app.request('/v1/weather/search?q=vilni', {}, env);
+
+    expect(await res.json()).toEqual({ results: [] });
+  });
+
   it('drops hourly slots the provider left incomplete', async () => {
     const ragged = {
       ...FORECAST_PAYLOAD,

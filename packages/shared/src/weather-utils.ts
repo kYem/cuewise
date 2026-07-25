@@ -114,6 +114,9 @@ export function sampleForecastHours(
   if (remaining.length <= max) {
     return remaining;
   }
+  if (max === 1) {
+    return [remaining[remaining.length - 1]];
+  }
   const step = (remaining.length - 1) / (max - 1);
   const picked: WeatherHour[] = [];
   for (let i = 0; i < max; i++) {
@@ -130,10 +133,6 @@ export function formatTemperature(value: number): string {
   return `${Math.round(value)}°`;
 }
 
-export function weatherUnitSymbol(units: WeatherUnits): string {
-  return units === 'imperial' ? '°F' : '°C';
-}
-
 /**
  * How old a reading is, in words. The popover shows this instead of hiding staleness,
  * so a cached reading during an outage still reads as honest.
@@ -147,9 +146,6 @@ export function formatWeatherAge(lastFetch: string | null, now: Date = new Date(
     return null;
   }
   const minutes = Math.floor((now.getTime() - then) / 60_000);
-  if (minutes < 0) {
-    return 'Updated just now';
-  }
   if (minutes < 1) {
     return 'Updated just now';
   }
@@ -164,20 +160,33 @@ export function formatWeatherAge(lastFetch: string | null, now: Date = new Date(
   return days === 1 ? 'Updated yesterday' : `Updated ${days} days ago`;
 }
 
+function formatZonedParts(instant: Date, timeZone: string): Intl.DateTimeFormatPart[] | null {
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone,
+      hour12: false,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).formatToParts(instant);
+  } catch {
+    return null;
+  }
+}
+
 /**
  * "now" in the given IANA zone, in the provider's hourly `time` format
  * (`YYYY-MM-DDTHH:mm`) so the two compare as strings.
  */
 export function toLocalIso(instant: Date, timeZone: string): string {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone,
-    hour12: false,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).formatToParts(instant);
+  // A zone this engine's ICU doesn't know throws during render, and the app-wide
+  // ErrorBoundary would take the whole new tab down over an opt-in chip. Degrade instead.
+  const parts = formatZonedParts(instant, timeZone) ?? formatZonedParts(instant, 'UTC');
+  if (parts === null) {
+    return '';
+  }
   const get = (type: Intl.DateTimeFormatPartTypes): string => {
     const found = parts.find((part) => part.type === type);
     return found === undefined ? '00' : found.value;
