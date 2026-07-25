@@ -90,6 +90,16 @@ describe('units changes', () => {
     expect(store.refresh).toHaveBeenCalledTimes(1);
   });
 
+  // The widget is opt-in, so a units mismatch must not reach the network while it is off.
+  it('does not refetch while weather is switched off', () => {
+    mockSettings({ showWeather: false, weatherUnits: 'imperial' });
+    const store = mockWeatherStore({ snapshot: snapshot(LONDON, { units: 'metric' }) });
+
+    render(<WeatherWidget />);
+
+    expect(store.refresh).not.toHaveBeenCalled();
+  });
+
   it('announces the scale the number is actually in, not the pending preference', () => {
     mockSettings({ showWeather: true, weatherUnits: 'imperial' });
     mockWeatherStore({ snapshot: snapshot(LONDON, { units: 'metric' }) });

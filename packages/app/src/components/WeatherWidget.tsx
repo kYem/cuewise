@@ -188,12 +188,15 @@ export const WeatherWidget: React.FC = () => {
   // match (a proxy or provider fault) would refetch forever.
   useEffect(() => {
     const wanted = resolveWeatherUnits(unitsPreference);
-    if (snapshot === null || snapshot.units === wanted || requestedUnitsRef.current === wanted) {
+    if (!showWeather || snapshot === null || snapshot.units === wanted) {
+      return;
+    }
+    if (requestedUnitsRef.current === wanted) {
       return;
     }
     requestedUnitsRef.current = wanted;
     refresh({ silent: true, unitsPreference });
-  }, [snapshot, unitsPreference, refresh]);
+  }, [showWeather, snapshot, unitsPreference, refresh]);
 
   useEffect(() => {
     if (!isOpen) {
