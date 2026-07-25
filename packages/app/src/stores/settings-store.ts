@@ -1,5 +1,6 @@
 import {
   type ColorTheme,
+  clampBackgroundEffects,
   clampPomodoroDurations,
   configureLogger,
   DEFAULT_SETTINGS,
@@ -14,18 +15,22 @@ import { getSettings, migrateStorageData, setSettings } from '@cuewise/storage';
 import { create } from 'zustand';
 import { useToastStore } from './toast-store';
 
+// Exactly the keys with preview-aware selectors; widen only alongside a new selector.
+export type PreviewableSettings = Pick<Settings, 'backgroundDim' | 'backgroundBlur'>;
+
 export interface SettingsStore {
   // State
   settings: Settings;
   // Ephemeral overlay for live slider previews; never persisted, cleared on commit.
   // Kept out of `settings` so updateSettings still diffs against persisted truth.
-  preview: Partial<Settings> | null;
+  preview: Partial<PreviewableSettings> | null;
   isLoading: boolean;
   error: string | null;
 
   // Actions
   initialize: () => Promise<void>;
-  previewSettings: (settings: Partial<Settings>) => void;
+  previewSettings: (settings: Partial<PreviewableSettings>) => void;
+  clearPreview: () => void;
   updateTheme: (theme: Settings['theme']) => Promise<void>;
   updateNotifications: (enabled: boolean) => Promise<void>;
   updateQuoteChangeInterval: (interval: Settings['quoteChangeInterval']) => Promise<void>;
@@ -42,9 +47,13 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   isLoading: true,
   error: null,
 
-  previewSettings: (partialSettings: Partial<Settings>) => {
+  previewSettings: (partialSettings: Partial<PreviewableSettings>) => {
     const { preview } = get();
     set({ preview: { ...preview, ...partialSettings } });
+  },
+
+  clearPreview: () => {
+    set({ preview: null });
   },
 
   initialize: async () => {
@@ -175,10 +184,10 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     const { settings } = get();
 
     try {
-      // Clamp pomodoro durations here — the settings write path the UI uses — so
+      // Clamp ranged values here — the settings write path the UI uses — so
       // presets/steppers (and a future settings import) can't persist an out-of-range
       // value. Inside the try so a future throwing clamp is caught here.
-      const clampedPartial = clampPomodoroDurations(partialSettings);
+      const clampedPartial = clampBackgroundEffects(clampPomodoroDurations(partialSettings));
       const updatedSettings = { ...settings, ...clampedPartial };
 
       // Check if syncEnabled changed
@@ -205,13 +214,22 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
               'Cannot enable sync: Your data exceeds the 100KB sync storage limit. Try clearing old data first.';
           }
 
-          set({ error: errorMessage });
+          set({ error: errorMessage, preview: null });
           useToastStore.getState().error(errorMessage);
           return;
         }
       }
 
-      await setSettings(updatedSettings);
+      // The storage adapters never throw — failures come back as a result object,
+      // so an unchecked write would silently claim success on e.g. quota exhaustion.
+      const writeResult = await setSettings(updatedSettings);
+      if (!writeResult.success) {
+        logger.error('Error persisting settings', writeResult.error);
+        const errorMessage = 'Failed to update settings. Please try again.';
+        set({ error: errorMessage, preview: null });
+        useToastStore.getState().error(errorMessage);
+        return;
+      }
       set({ settings: updatedSettings, preview: null });
 
       // Sync every changed key that isn't device-local (each setting syncs per-key, spec §2).
@@ -252,7 +270,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   resetToDefaults: async () => {
     try {
       await setSettings(DEFAULT_SETTINGS);
-      set({ settings: DEFAULT_SETTINGS });
+      set({ settings: DEFAULT_SETTINGS, preview: null });
       for (const key of Object.keys(DEFAULT_SETTINGS)) {
         if (!DEVICE_LOCAL_SETTINGS_KEYS.includes(key)) {
           notifyMutated('settings', key);
@@ -272,7 +290,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   },
 }));
 
-// Preview-aware selectors: background layers render the in-progress drag, if any.
+// Preview-aware selectors: consumers see the in-progress drag, falling back to persisted settings.
 export function selectBackgroundDim(state: SettingsStore): number {
   return state.preview?.backgroundDim ?? state.settings.backgroundDim;
 }

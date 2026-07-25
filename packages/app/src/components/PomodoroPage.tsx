@@ -4,7 +4,12 @@ import { useBackgroundStore } from '../stores/background-store';
 import { useCalendarStore } from '../stores/calendar-store';
 import { useFocusModeStore } from '../stores/focus-mode-store';
 import { useQuoteStore } from '../stores/quote-store';
-import { useSettingsStore } from '../stores/settings-store';
+import {
+  selectBackgroundBlur,
+  selectBackgroundDim,
+  useSettingsStore,
+} from '../stores/settings-store';
+import { getBackgroundFilterStyle } from '../utils/background-filter';
 import { resolvePomodoroCompanion } from '../utils/calendar-visibility';
 import { getPreloadedCurrentUrl, preloadImages } from '../utils/image-preload-cache';
 import { loadImageWithFallback } from '../utils/unsplash';
@@ -24,6 +29,8 @@ export const PomodoroPage: React.FC = () => {
   const customBackground = useBackgroundStore((state) => state.customBackground);
   const isCustomBackgroundLoaded = useBackgroundStore((state) => state.isLoaded);
   const pomodoroMusicEnabled = useSettingsStore((state) => state.settings.pomodoroMusicEnabled);
+  const backgroundDim = useSettingsStore(selectBackgroundDim);
+  const backgroundBlur = useSettingsStore(selectBackgroundBlur);
   const pomodoroCompanion = useSettingsStore((state) => state.settings.pomodoroCompanion);
   const initCalendar = useCalendarStore((state) => state.initialize);
   const isFocusModeActive = useFocusModeStore((state) => state.isActive);
@@ -135,6 +142,7 @@ export const PomodoroPage: React.FC = () => {
         }`}
         style={{
           backgroundImage: backgroundImage ? `url(${backgroundImage})` : undefined,
+          ...getBackgroundFilterStyle(backgroundDim, backgroundBlur),
         }}
       />
 

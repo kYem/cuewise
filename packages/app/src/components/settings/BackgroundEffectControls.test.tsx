@@ -69,6 +69,56 @@ describe('BackgroundEffectControls', () => {
     });
   });
 
+  it('persists a keyboard-adjusted value on key release', async () => {
+    render(<BackgroundEffectControls />);
+    const dimSlider = screen.getByRole('slider', { name: 'Dim background' });
+
+    fireEvent.change(dimSlider, { target: { value: '15' } });
+    fireEvent.keyUp(dimSlider, { key: 'ArrowRight' });
+
+    await waitFor(() => {
+      expect(storage.setSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ backgroundDim: 15 })
+      );
+    });
+  });
+
+  it('persists the previewed value when a touch gesture is cancelled', async () => {
+    render(<BackgroundEffectControls />);
+    const dimSlider = screen.getByRole('slider', { name: 'Dim background' });
+
+    fireEvent.change(dimSlider, { target: { value: '25' } });
+    fireEvent.pointerCancel(dimSlider);
+
+    await waitFor(() => {
+      expect(storage.setSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ backgroundDim: 25 })
+      );
+    });
+  });
+
+  it('does not write anything when focus passes through without a change', () => {
+    render(<BackgroundEffectControls />);
+    const dimSlider = screen.getByRole('slider', { name: 'Dim background' });
+
+    fireEvent.keyUp(dimSlider, { key: 'Tab' });
+    fireEvent.blur(dimSlider);
+
+    expect(storage.setSettings).not.toHaveBeenCalled();
+  });
+
+  it('discards an uncommitted preview when the controls unmount mid-drag', () => {
+    const { unmount } = render(<BackgroundEffectControls />);
+
+    fireEvent.change(screen.getByRole('slider', { name: 'Dim background' }), {
+      target: { value: '60' },
+    });
+    unmount();
+
+    expect(useSettingsStore.getState().preview).toBeNull();
+    expect(storage.setSettings).not.toHaveBeenCalled();
+  });
+
   it('hides the reset button at the defaults', () => {
     render(<BackgroundEffectControls />);
 

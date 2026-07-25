@@ -149,6 +149,13 @@ export const POMODORO_DURATION_BOUNDS = {
   pomodoroLongBreakInterval: { min: 2, max: 10 },
 } as const satisfies Record<NumericPomodoroKey, { min: number; max: number }>;
 
+// Single source of truth for the background readability ranges: the settings write
+// path clamps against these, and the render-time filter derives its maxima from them.
+export const BACKGROUND_EFFECT_BOUNDS = {
+  backgroundDim: { min: 0, max: 100 },
+  backgroundBlur: { min: 0, max: 20 },
+} as const;
+
 // Category colors (for UI)
 export const CATEGORY_COLORS: Record<QuoteCategory, string> = {
   inspiration: '#8B5CF6', // purple

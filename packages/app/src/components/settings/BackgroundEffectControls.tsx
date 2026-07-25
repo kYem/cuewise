@@ -1,6 +1,7 @@
 import { DEFAULT_SETTINGS } from '@cuewise/shared';
 import { RotateCcw } from 'lucide-react';
 import type React from 'react';
+import { useEffect } from 'react';
 import {
   selectBackgroundBlur,
   selectBackgroundDim,
@@ -46,6 +47,7 @@ function EffectSlider({
           onPreview(Number(e.target.value));
         }}
         onPointerUp={onCommit}
+        onPointerCancel={onCommit}
         onKeyUp={onCommit}
         onBlur={onCommit}
         className={SLIDER_CLASS}
@@ -56,18 +58,32 @@ function EffectSlider({
 
 /**
  * Dim/blur sliders for the background image. Dragging previews in memory only;
- * the value persists once per gesture (release/blur), keeping sync-area writes rare.
+ * the value persists on gesture end (pointer/key release, blur), keeping storage
+ * writes and cloud-sync pushes rare.
  */
 export function BackgroundEffectControls() {
   const dim = useSettingsStore(selectBackgroundDim);
   const blur = useSettingsStore(selectBackgroundBlur);
+  const settings = useSettingsStore((s) => s.settings);
   const previewSettings = useSettingsStore((s) => s.previewSettings);
   const updateSettings = useSettingsStore((s) => s.updateSettings);
+  const clearPreview = useSettingsStore((s) => s.clearPreview);
+
+  // A preview that never commits (Escape mid-drag unmounts the settings tree) must
+  // not outlive the sliders — it would keep overriding the background unpersisted.
+  useEffect(() => {
+    return () => {
+      clearPreview();
+    };
+  }, [clearPreview]);
 
   const isDefault =
     dim === DEFAULT_SETTINGS.backgroundDim && blur === DEFAULT_SETTINGS.backgroundBlur;
 
   const commit = () => {
+    if (dim === settings.backgroundDim && blur === settings.backgroundBlur) {
+      return;
+    }
     void updateSettings({ backgroundDim: dim, backgroundBlur: blur });
   };
 

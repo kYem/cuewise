@@ -10,17 +10,17 @@ describe('getBackgroundFilterStyle', () => {
     expect(getBackgroundFilterStyle(40, 0)).toEqual({ filter: 'brightness(0.6)' });
   });
 
-  it('maps blur to a blur filter and oversizes the layer to hide edge halo', () => {
+  it('maps blur to a blur filter and bleeds the layer past the edges to hide the halo', () => {
     expect(getBackgroundFilterStyle(0, 8)).toEqual({
       filter: 'blur(8px)',
-      transform: 'scale(1.05)',
+      margin: '-16px',
     });
   });
 
   it('combines dim and blur into a single filter declaration', () => {
     expect(getBackgroundFilterStyle(40, 8)).toEqual({
       filter: 'brightness(0.6) blur(8px)',
-      transform: 'scale(1.05)',
+      margin: '-16px',
     });
   });
 
@@ -36,7 +36,7 @@ describe('getBackgroundFilterStyle', () => {
   it('clamps blur to the 0-20 range', () => {
     expect(getBackgroundFilterStyle(0, 50)).toEqual({
       filter: 'blur(20px)',
-      transform: 'scale(1.05)',
+      margin: '-40px',
     });
     expect(getBackgroundFilterStyle(0, -5)).toEqual({});
   });

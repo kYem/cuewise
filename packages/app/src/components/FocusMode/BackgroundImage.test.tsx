@@ -17,7 +17,7 @@ describe('BackgroundImage', () => {
 
     const layer = await screen.findByRole('img', { name: 'Focus mode background' });
     expect(layer.style.filter).toBe('');
-    expect(layer.style.transform).toBe('');
+    expect(layer.style.margin).toBe('');
   });
 
   it('applies the readability filter to the image layer when dim and blur are set', async () => {
@@ -25,6 +25,6 @@ describe('BackgroundImage', () => {
 
     const layer = await screen.findByRole('img', { name: 'Focus mode background' });
     expect(layer.style.filter).toBe('brightness(0.6) blur(8px)');
-    expect(layer.style.transform).toBe('scale(1.05)');
+    expect(layer.style.margin).toBe('-16px');
   });
 });

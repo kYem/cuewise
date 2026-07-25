@@ -1,10 +1,8 @@
+import { BACKGROUND_EFFECT_BOUNDS } from '@cuewise/shared';
 import type { CSSProperties } from 'react';
 
-export const MAX_BACKGROUND_DIM = 100;
-export const MAX_BACKGROUND_BLUR_PX = 20;
-
-/** Oversize the blurred layer so its soft edges bleed off-screen instead of haloing. */
-const BLUR_EDGE_SCALE = 'scale(1.05)';
+export const MAX_BACKGROUND_DIM = BACKGROUND_EFFECT_BOUNDS.backgroundDim.max;
+export const MAX_BACKGROUND_BLUR_PX = BACKGROUND_EFFECT_BOUNDS.backgroundBlur.max;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -33,7 +31,10 @@ export function getBackgroundFilterStyle(dim: number, blur: number): CSSProperti
 
   const style: CSSProperties = { filter: filters.join(' ') };
   if (clampedBlur > 0) {
-    style.transform = BLUR_EDGE_SCALE;
+    // Bleed the layer past every edge by 2× the blur radius (≈2σ of the Gaussian),
+    // so the blurred edge falloff lands off-screen instead of showing as a halo band.
+    // The layers pin all four inset-0 edges, so negative margin expands them outward.
+    style.margin = `-${2 * clampedBlur}px`;
   }
   return style;
 }

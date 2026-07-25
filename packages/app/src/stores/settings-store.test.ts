@@ -71,6 +71,27 @@ describe('sync sink wiring', () => {
 
     expect(markMutated).toHaveBeenCalledWith('settings', 'theme');
   });
+});
+
+describe('background preview lifecycle', () => {
+  const markMutated = vi.fn();
+  const fakeSink: SyncMutationSink = { markMutated, markDeleted: vi.fn() };
+
+  beforeEach(() => {
+    useSettingsStore.setState({
+      settings: defaultSettings,
+      preview: null,
+      isLoading: false,
+      error: null,
+    });
+    vi.clearAllMocks();
+    vi.mocked(storage.setSettings).mockResolvedValue({ success: true });
+    configurePlatform({ syncSink: fakeSink });
+  });
+
+  afterEach(() => {
+    configurePlatform({ syncSink: null });
+  });
 
   it('previewSettings overlays values without touching persisted settings or sync', () => {
     useSettingsStore.getState().previewSettings({ backgroundDim: 40, backgroundBlur: 8 });
@@ -97,6 +118,45 @@ describe('sync sink wiring', () => {
       expect.objectContaining({ backgroundDim: 40 })
     );
     expect(markMutated).toHaveBeenCalledWith('settings', 'backgroundDim');
+    expect(useSettingsStore.getState().preview).toBeNull();
+  });
+
+  it('clearPreview discards the overlay without persisting anything', () => {
+    useSettingsStore.getState().previewSettings({ backgroundDim: 40 });
+    useSettingsStore.getState().clearPreview();
+
+    expect(useSettingsStore.getState().preview).toBeNull();
+    expect(storage.setSettings).not.toHaveBeenCalled();
+  });
+
+  it('a failed persist surfaces the error, keeps persisted truth, and clears the preview', async () => {
+    vi.mocked(storage.setSettings).mockResolvedValue({
+      success: false,
+      error: { type: 'quota_exceeded', message: 'quota exceeded' },
+    });
+    useSettingsStore.getState().previewSettings({ backgroundDim: 40 });
+
+    await useSettingsStore.getState().updateSettings({ backgroundDim: 40 });
+
+    const state = useSettingsStore.getState();
+    expect(state.preview).toBeNull();
+    expect(state.error).toBe('Failed to update settings. Please try again.');
+    expect(state.settings.backgroundDim).toBe(0);
+    expect(markMutated).not.toHaveBeenCalled();
+  });
+
+  it('updateSettings clamps background values to their bounds before persisting', async () => {
+    await useSettingsStore.getState().updateSettings({ backgroundDim: 500, backgroundBlur: -3 });
+
+    expect(storage.setSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ backgroundDim: 100, backgroundBlur: 0 })
+    );
+  });
+
+  it('resetToDefaults clears a lingering preview', async () => {
+    useSettingsStore.getState().previewSettings({ backgroundDim: 40 });
+    await useSettingsStore.getState().resetToDefaults();
+
     expect(useSettingsStore.getState().preview).toBeNull();
   });
 });
