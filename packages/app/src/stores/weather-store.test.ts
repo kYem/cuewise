@@ -1,3 +1,4 @@
+import { logger } from '@cuewise/shared';
 import * as storage from '@cuewise/storage';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as weatherApi from '../utils/weather';
@@ -416,5 +417,108 @@ describe('a stored reading that no longer matches the shape', () => {
     await useWeatherStore.getState().initialize();
 
     expect(useWeatherStore.getState().snapshot).not.toBeNull();
+  });
+});
+
+// Every one of these was a green mutation before it existed: the mechanism could be
+// deleted outright and the suite stayed passing.
+describe('what a refresh actually persists', () => {
+  it('writes the reading, so the next tab does not refetch it', async () => {
+    useWeatherStore.setState({ location: LONDON });
+
+    await useWeatherStore.getState().refresh({ unitsPreference: 'metric' });
+
+    expect(setWeatherStateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        location: LONDON,
+        snapshot: expect.objectContaining({ units: 'metric' }),
+      })
+    );
+  });
+
+  it('stamps the reading with the time it landed', async () => {
+    useWeatherStore.setState({ location: LONDON });
+
+    await useWeatherStore.getState().refresh({ unitsPreference: 'metric' });
+
+    expect(useWeatherStore.getState().lastFetch).not.toBeNull();
+  });
+
+  it('warns rather than pretending a failed write succeeded', async () => {
+    const quotaError = { type: 'quota_exceeded' as const, message: 'Storage is full' };
+    setWeatherStateMock.mockResolvedValue({ success: false, error: quotaError });
+    useWeatherStore.setState({ location: LONDON });
+    const logged = vi.spyOn(logger, 'error');
+
+    await useWeatherStore.getState().refresh({ unitsPreference: 'metric' });
+
+    expect(logged).toHaveBeenCalledWith('Failed to persist weather reading', quotaError);
+  });
+
+  // Silently losing this write means the city returns after the user removed it.
+  it('tells the user when the location itself could not be saved', async () => {
+    setWeatherStateMock.mockResolvedValue({
+      success: false,
+      error: { type: 'quota_exceeded', message: 'Storage is full' },
+    });
+
+    await useWeatherStore.getState().clearLocation();
+
+    expect(errorToastMock).toHaveBeenCalledWith(expect.stringContaining('Could not save'));
+  });
+});
+
+describe('overlapping refreshes', () => {
+  it('lets a units change through while a fetch for the same place is running', async () => {
+    useWeatherStore.setState({ location: LONDON, inFlight: { id: 99, epoch: 0, units: 'metric' } });
+
+    await useWeatherStore.getState().refresh({ unitsPreference: 'imperial' });
+
+    expect(fetchForecastMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not let a superseded fetch clear the live one loading state', async () => {
+    const first = deferred<ReturnType<typeof forecast>>();
+    const second = deferred<ReturnType<typeof forecast>>();
+    fetchForecastMock.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    useWeatherStore.setState({ location: LONDON });
+
+    const a = useWeatherStore.getState().refresh({ unitsPreference: 'metric' });
+    const b = useWeatherStore.getState().refresh({ unitsPreference: 'imperial' });
+    first.release(forecast());
+    await a;
+
+    expect(useWeatherStore.getState().inFlight).not.toBeNull();
+    second.release(forecast({ units: 'imperial' }));
+    await b;
+  });
+
+  // The earlier request is still real data; discarding it left a dead-end error chip with
+  // nothing to retrigger it.
+  it('keeps a reading that lands after a later request already failed', async () => {
+    const slow = deferred<ReturnType<typeof forecast>>();
+    fetchForecastMock
+      .mockReturnValueOnce(slow.promise)
+      .mockRejectedValueOnce(new Error('rate limited'));
+    useWeatherStore.setState({ location: LONDON });
+
+    const a = useWeatherStore.getState().refresh({ unitsPreference: 'metric' });
+    await useWeatherStore.getState().refresh({ silent: true, unitsPreference: 'imperial' });
+    slow.release(forecast());
+    await a;
+
+    expect(useWeatherStore.getState().snapshot).not.toBeNull();
+  });
+});
+
+describe('a stored timestamp that cannot be read', () => {
+  // Date.parse(NaN) makes every staleness comparison false, so the reading would be pinned
+  // forever — the same permanent-skeleton failure the shape guards exist to prevent.
+  it('is treated as no timestamp at all, so the reading refreshes', async () => {
+    getWeatherStateMock.mockResolvedValue({ ...freshState(), lastFetch: 'whenever' } as never);
+
+    await useWeatherStore.getState().initialize();
+
+    expect(fetchForecastMock).toHaveBeenCalledTimes(1);
   });
 });

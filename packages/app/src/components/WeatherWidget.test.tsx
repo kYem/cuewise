@@ -250,7 +250,7 @@ describe('the popover', () => {
 
   it('omits the hourly row once the day is over', () => {
     const past = snapshot(LONDON, {
-      hours: [{ time: '1999-01-01T01:00', temperature: 5, condition: 'clear' }],
+      hours: [{ time: '1999-01-01T01:00', temperature: 5, condition: 'clear', isDay: false }],
     });
     mockWeatherStore({ snapshot: past });
 
@@ -284,7 +284,12 @@ describe('a scale whose refetch failed', () => {
 
 describe('the forecast strip', () => {
   // Far enough ahead that the "rest of today" filter keeps it whenever the suite runs.
-  const FUTURE_HOUR = { time: '2099-01-01T15:00', temperature: 18, condition: 'clear' } as const;
+  const FUTURE_HOUR = {
+    time: '2099-01-01T15:00',
+    temperature: 18,
+    condition: 'clear',
+    isDay: true,
+  } as const;
 
   it('labels hours in the 12-hour clock by default', () => {
     mockSettings({ showWeather: true, timeFormat: '12h' });
@@ -318,5 +323,54 @@ describe('an incomplete reading', () => {
     fireEvent.click(screen.getByRole('button'));
 
     expect(screen.queryByText(/feels like/)).not.toBeInTheDocument();
+  });
+});
+
+// This whole branch could be deleted with the suite green, and it is the branch that
+// stops a failed first fetch leaving a pulsing skeleton on every new tab forever.
+describe('a first reading that never arrived', () => {
+  it('offers a retry instead of an endless skeleton', () => {
+    mockWeatherStore({ snapshot: null, error: 'The weather service is unavailable right now' });
+
+    render(<WeatherWidget />);
+
+    expect(screen.getByRole('button', { name: /weather unavailable/i })).toBeInTheDocument();
+    expect(screen.queryByTestId('weather-skeleton')).not.toBeInTheDocument();
+  });
+
+  it('retries when that control is used', () => {
+    mockSettings({ showWeather: true, weatherUnits: 'metric' });
+    const store = mockWeatherStore({ snapshot: null, error: 'Could not update the weather' });
+
+    render(<WeatherWidget />);
+    fireEvent.click(screen.getByRole('button', { name: /weather unavailable/i }));
+
+    expect(store.refresh).toHaveBeenCalledWith({ unitsPreference: 'metric' });
+  });
+
+  // While a retry is running there is nothing to report yet, so the skeleton is right.
+  it('shows the skeleton again while the retry is in flight', () => {
+    mockWeatherStore({ snapshot: null, error: 'Could not update the weather', isFetching: true });
+
+    render(<WeatherWidget />);
+
+    expect(screen.getByTestId('weather-skeleton')).toBeInTheDocument();
+  });
+});
+
+describe('the hourly icons', () => {
+  it('draw night hours as night, not as a sun after sunset', () => {
+    const night = {
+      time: '2099-01-01T22:00',
+      temperature: 12,
+      condition: 'clear' as const,
+      isDay: false,
+    };
+    mockWeatherStore({ snapshot: snapshot(LONDON, { hours: [night] }) });
+
+    render(<WeatherWidget />);
+    fireEvent.click(screen.getByRole('button', { name: /weather in london/i }));
+
+    expect(screen.getByTestId('hour-icon-moon')).toBeInTheDocument();
   });
 });

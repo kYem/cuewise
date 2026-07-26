@@ -17,6 +17,7 @@ function dayOfHours(date = '2026-07-25'): WeatherHour[] {
     time: `${date}T${String(hour).padStart(2, '0')}:00`,
     temperature: 10 + hour,
     condition: 'clear' as const,
+    isDay: hour >= 6 && hour < 21,
   }));
 }
 
@@ -237,5 +238,37 @@ describe('formatForecastHour', () => {
     ['an out-of-range hour', '2026-07-25T99:00', '99'],
   ])('passes %s through untouched', (_label, time, expected) => {
     expect(formatForecastHour(time, '12h')).toBe(expected);
+  });
+});
+
+describe('formatWeatherAge boundaries', () => {
+  const now = new Date('2026-07-25T12:00:00.000Z');
+
+  it.each([
+    ['exactly an hour', 60, 'Updated 1 h ago'],
+    ['a minute under an hour', 59, 'Updated 59 min ago'],
+    ['exactly a day', 24 * 60, 'Updated yesterday'],
+    ['an hour under a day', 23 * 60, 'Updated 23 h ago'],
+  ])('rolls over at %s', (_label, minutesAgo, expected) => {
+    const then = new Date(now.getTime() - minutesAgo * 60_000).toISOString();
+
+    expect(formatWeatherAge(then, now)).toBe(expected);
+  });
+});
+
+// The comment on sampleForecastHours claims string order is chronological "no DST traps".
+// On a fall-back day the provider repeats an hour, and the popover keys its rows on `time`.
+describe('sampleForecastHours across a DST fall-back day', () => {
+  it('never returns the same stamp twice, which would collide as React keys', () => {
+    const repeated: WeatherHour[] = [
+      { time: '2026-11-01T00:00', temperature: 9, condition: 'clear', isDay: false },
+      { time: '2026-11-01T01:00', temperature: 8, condition: 'clear', isDay: false },
+      { time: '2026-11-01T01:00', temperature: 8, condition: 'clear', isDay: false },
+      { time: '2026-11-01T02:00', temperature: 7, condition: 'clear', isDay: false },
+    ];
+
+    const picked = sampleForecastHours(repeated, '2026-11-01T00:30', 3);
+
+    expect(new Set(picked.map((hour) => hour.time)).size).toBe(picked.length);
   });
 });

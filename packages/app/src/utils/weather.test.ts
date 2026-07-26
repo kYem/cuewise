@@ -17,7 +17,7 @@ const FORECAST = {
   current: { temperature: 17, apparentTemperature: 15, condition: 'clear', isDay: true },
   high: 21,
   low: 11,
-  hours: [{ time: '2026-07-25T10:00', temperature: 16, condition: 'clear' }],
+  hours: [{ time: '2026-07-25T10:00', temperature: 16, condition: 'clear', isDay: true }],
 };
 
 function jsonResponse(body: unknown, status = 200, headers: Record<string, string> = {}): Response {
@@ -215,5 +215,48 @@ describe('describeLocation', () => {
 
   it('skips an empty country', () => {
     expect(describeLocation({ ...LONDON, admin1: null, country: '' })).toBe('London');
+  });
+});
+
+describe('the request deadline', () => {
+  // The timer used to be cleared as soon as the headers arrived, so a body that stalled
+  // mid-stream never settled — and a fetch that never settles never releases the store's
+  // in-flight slot: no error, no retry, no spinner ending, until the tab is reloaded.
+  it('still applies once the headers have arrived and the body is being read', async () => {
+    const abort = new Error('aborted');
+    abort.name = 'AbortError';
+    fetchMock.mockResolvedValue({
+      status: 200,
+      ok: true,
+      headers: new Headers(),
+      json: () => Promise.reject(abort),
+    });
+
+    await expect(fetchForecast(LONDON, 'metric')).rejects.toThrow(/timed out/i);
+  });
+
+  it('reports a stalled body as a weather error, never as a raw abort', async () => {
+    const abort = new Error('aborted');
+    abort.name = 'AbortError';
+    fetchMock.mockResolvedValue({
+      status: 200,
+      ok: true,
+      headers: new Headers(),
+      json: () => Promise.reject(abort),
+    });
+
+    await expect(fetchForecast(LONDON, 'metric')).rejects.toBeInstanceOf(WeatherError);
+  });
+});
+
+describe('a failing status', () => {
+  // "The weather request failed" alone cannot tell a 404 (routes not deployed) from a 500
+  // (handler broken), and that string is all the support report would contain.
+  it('is carried on the error so the log can name it', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({}, 404));
+
+    const error = await fetchForecast(LONDON, 'metric').catch((caught: unknown) => caught);
+
+    expect(error).toMatchObject({ status: 404 });
   });
 });

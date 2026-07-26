@@ -19,6 +19,7 @@ export interface WeatherStoreOverrides {
   searchResults?: WeatherLocation[];
   isSearching?: boolean;
   searchError?: string | null;
+  searchedFor?: string | null;
 }
 
 export function mockWeatherStore(overrides: WeatherStoreOverrides = {}) {
@@ -31,6 +32,7 @@ export function mockWeatherStore(overrides: WeatherStoreOverrides = {}) {
     searchResults: overrides.searchResults ?? [],
     isSearching: overrides.isSearching ?? false,
     searchError: overrides.searchError ?? null,
+    searchedFor: overrides.searchedFor ?? null,
     epoch: 0,
     initialize: vi.fn(),
     setLocation: vi.fn(),

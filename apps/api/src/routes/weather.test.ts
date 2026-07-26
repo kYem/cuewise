@@ -102,9 +102,9 @@ describe('GET /v1/weather', () => {
       high: 21.4,
       low: 11.2,
       hours: [
-        { time: '2026-07-25T00:00', temperature: 14.1, condition: 'clear' },
-        { time: '2026-07-25T01:00', temperature: 13.8, condition: 'partly-cloudy' },
-        { time: '2026-07-25T02:00', temperature: 13.2, condition: 'rain' },
+        { time: '2026-07-25T00:00', temperature: 14.1, condition: 'clear', isDay: true },
+        { time: '2026-07-25T01:00', temperature: 13.8, condition: 'partly-cloudy', isDay: true },
+        { time: '2026-07-25T02:00', temperature: 13.2, condition: 'rain', isDay: true },
       ],
     });
   });
@@ -234,11 +234,27 @@ describe('GET /v1/weather', () => {
 
   it('drops a place the geocoder gave no timezone for, since every hour depends on it', async () => {
     const { timezone: _tz, ...noZone } = GEOCODING_PAYLOAD.results[0];
+    const mixed = {
+      results: [noZone, { ...GEOCODING_PAYLOAD.results[0], id: 42, name: 'Vilnia' }],
+    };
+    const app = createApp({ weatherUpstream: stubUpstream(mixed).fetch });
+
+    const res = await app.request('/v1/weather/search', post({ q: 'vilni' }), env);
+
+    const body = (await res.json()) as { results: { name: string }[] };
+    expect(body.results.map((place) => place.name)).toEqual(['Vilnia']);
+  });
+
+  // An empty list here would tell the user their city does not exist, which is a different
+  // claim from "we could not read the provider's answer" and leaves them no way forward.
+  it('refuses rather than passing off unreadable matches as no matches', async () => {
+    const { timezone: _tz, ...noZone } = GEOCODING_PAYLOAD.results[0];
     const app = createApp({ weatherUpstream: stubUpstream({ results: [noZone] }).fetch });
 
     const res = await app.request('/v1/weather/search', post({ q: 'vilni' }), env);
 
-    expect(await res.json()).toEqual({ results: [] });
+    expect(res.status).toBe(503);
+    expect(await res.json()).toMatchObject({ code: 'upstream_unavailable' });
   });
 
   it('drops hourly slots the provider left incomplete', async () => {
@@ -489,4 +505,149 @@ it('reports no apparent temperature rather than repeating the current one', asyn
 
   const body = (await res.json()) as { current: { apparentTemperature: number | null } };
   expect(body.current.apparentTemperature).toBeNull();
+});
+
+describe('daylight', () => {
+  const WITH_SUN = {
+    ...FORECAST_PAYLOAD,
+    hourly: {
+      time: ['2026-07-25T05:00', '2026-07-25T12:00', '2026-07-25T22:00'],
+      temperature_2m: [11, 20, 13],
+      weather_code: [0, 0, 0],
+    },
+    daily: {
+      ...FORECAST_PAYLOAD.daily,
+      sunrise: ['2026-07-25T05:12'],
+      sunset: ['2026-07-25T21:03'],
+    },
+  };
+
+  // Without this the strip draws a sun beside every clear night hour, every evening.
+  it('marks each hour against the day sunrise and sunset', async () => {
+    const app = createApp({ weatherUpstream: stubUpstream(WITH_SUN).fetch });
+
+    const res = await app.request('/v1/weather', post({ lat: '51.5', lon: '-0.13' }), env);
+
+    const body = (await res.json()) as { hours: { time: string; isDay: boolean }[] };
+    expect(body.hours.map((hour) => hour.isDay)).toEqual([false, true, false]);
+  });
+
+  it('asks the provider for the sun times it needs to do that', async () => {
+    const upstream = stubUpstream(WITH_SUN);
+    const app = createApp({ weatherUpstream: upstream.fetch });
+
+    await app.request('/v1/weather', post({ lat: '51.5', lon: '-0.13' }), env);
+
+    expect(new URL(upstream.urls[0]).searchParams.get('daily')).toContain('sunrise,sunset');
+  });
+
+  it('treats hours as daylight when the provider sends no sun times', async () => {
+    const app = createApp({ weatherUpstream: stubUpstream(FORECAST_PAYLOAD).fetch });
+
+    const res = await app.request('/v1/weather', post({ lat: '51.5', lon: '-0.13' }), env);
+
+    const body = (await res.json()) as { hours: { isDay: boolean }[] };
+    expect(body.hours.every((hour) => hour.isDay)).toBe(true);
+  });
+
+  // `!== 0` called a missing flag and the string "0" daylight alike — an invented icon.
+  it('reads the current day flag strictly rather than treating anything non-zero as day', async () => {
+    const stringFlag = {
+      ...WITH_SUN,
+      current: { ...WITH_SUN.current, is_day: '0' },
+    };
+    const app = createApp({ weatherUpstream: stubUpstream(stringFlag).fetch });
+
+    const res = await app.request('/v1/weather', post({ lat: '51.5', lon: '-0.13' }), env);
+
+    // Unreadable, so it falls back to the sun window rather than asserting daylight.
+    const body = (await res.json()) as { current: { isDay: boolean } };
+    expect(typeof body.current.isDay).toBe('boolean');
+  });
+});
+
+describe('diagnosability', () => {
+  function captureWarnings(): string[] {
+    const lines: string[] = [];
+    vi.spyOn(logger, 'warn').mockImplementation((...args: unknown[]) => {
+      lines.push(args.map((arg) => JSON.stringify(arg)).join(' '));
+    });
+    return lines;
+  }
+
+  // The one failure meaning "our normalizer no longer matches the provider" must not be
+  // the only one that logs nothing, or a 503 spike looks like a provider outage.
+  it('logs the payload shape when the forecast cannot be normalized', async () => {
+    const warnings = captureWarnings();
+    const app = createApp({ weatherUpstream: stubUpstream({ current: {} }).fetch });
+
+    await app.request('/v1/weather', post({ lat: '51.5', lon: '-0.13' }), env);
+
+    expect(warnings.join('\n')).toContain('hasCurrent');
+  });
+
+  it('keeps the coordinates out of that log', async () => {
+    const warnings = captureWarnings();
+    const app = createApp({ weatherUpstream: stubUpstream({ current: {} }).fetch });
+
+    await app.request('/v1/weather', post({ lat: '51.5', lon: '-0.13' }), env);
+
+    expect(warnings.join('\n')).not.toContain('51.5');
+  });
+
+  it('logs how many geocoding matches were unreadable', async () => {
+    const warnings = captureWarnings();
+    const { timezone: _tz, ...noZone } = GEOCODING_PAYLOAD.results[0];
+    const app = createApp({ weatherUpstream: stubUpstream({ results: [noZone] }).fetch });
+
+    await app.request('/v1/weather/search', post({ q: 'vilni' }), env);
+
+    expect(warnings.join('\n')).toContain('received');
+  });
+});
+
+describe('request bodies', () => {
+  it('answers 400 rather than 500 when the body is not JSON at all', async () => {
+    const app = createApp({ weatherUpstream: stubUpstream(FORECAST_PAYLOAD).fetch });
+
+    const res = await app.request(
+      '/v1/weather',
+      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: 'not json' },
+      env
+    );
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ code: 'invalid_request' });
+  });
+
+  it('accepts coordinates sent as JSON numbers, not only as strings', async () => {
+    const upstream = stubUpstream(FORECAST_PAYLOAD);
+    const app = createApp({ weatherUpstream: upstream.fetch });
+
+    const res = await app.request('/v1/weather', post({ lat: 51.5, lon: -0.13 }), env);
+
+    expect(res.status).toBe(200);
+    expect(new URL(upstream.urls[0]).searchParams.get('latitude')).toBe('51.5');
+  });
+
+  it.each([
+    ['the north pole', { lat: '90', lon: '0' }],
+    ['the antimeridian', { lat: '0', lon: '180' }],
+  ])('accepts %s, which is a real place at the bound', async (_label, body) => {
+    const app = createApp({ weatherUpstream: stubUpstream(FORECAST_PAYLOAD).fetch });
+
+    const res = await app.request('/v1/weather', post(body), env);
+
+    expect(res.status).toBe(200);
+  });
+
+  it('falls back to coordinates for a place the geocoder gave no id', async () => {
+    const { id: _id, ...noId } = GEOCODING_PAYLOAD.results[0];
+    const app = createApp({ weatherUpstream: stubUpstream({ results: [noId] }).fetch });
+
+    const res = await app.request('/v1/weather/search', post({ q: 'vilni' }), env);
+
+    const body = (await res.json()) as { results: { id: string }[] };
+    expect(body.results[0].id).toBe('54.68916,25.2798');
+  });
 });

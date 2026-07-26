@@ -315,7 +315,10 @@ export interface CalendarState {
 
 // Weather (ENG-18). 'auto' is resolved client-side, so the server never guesses units
 // from request headers.
-export type WeatherUnits = 'metric' | 'imperial';
+// Listed as values, not a bare union, so runtime validators can check membership instead
+// of asserting a narrowing they never verified.
+export const WEATHER_UNITS = ['metric', 'imperial'] as const;
+export type WeatherUnits = (typeof WEATHER_UNITS)[number];
 export type WeatherUnitsPreference = 'auto' | WeatherUnits;
 
 // Which floating cluster the chip joins on the new tab.
@@ -335,21 +338,26 @@ export interface WeatherLocation {
 }
 
 // The proxy maps WMO codes onto these so a provider swap never reaches client code.
-export type WeatherConditionKind =
-  | 'clear'
-  | 'partly-cloudy'
-  | 'cloudy'
-  | 'fog'
-  | 'drizzle'
-  | 'rain'
-  | 'snow'
-  | 'thunderstorm'
-  | 'unknown';
+export const WEATHER_CONDITION_KINDS = [
+  'clear',
+  'partly-cloudy',
+  'cloudy',
+  'fog',
+  'drizzle',
+  'rain',
+  'snow',
+  'thunderstorm',
+  'unknown',
+] as const;
+export type WeatherConditionKind = (typeof WEATHER_CONDITION_KINDS)[number];
 
 export interface WeatherHour {
   time: string; // ISO local time in the location's zone, no offset suffix
   temperature: number;
   condition: WeatherConditionKind;
+  // Per-hour, from the day's sunrise/sunset: the strip would otherwise draw a sun beside
+  // every clear night hour.
+  isDay: boolean;
 }
 
 export interface WeatherCurrent {

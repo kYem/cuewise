@@ -15,8 +15,8 @@ export const MAX_FORECAST_HOURS = 5;
 /**
  * ~1km. Open-Meteo snaps to its own model grid regardless (51.51,-0.13 returns 51.5,-0.25),
  * so this costs no accuracy. Shared rather than duplicated: the client rounds so precise
- * coordinates never leave the device, and the proxy rounds again so a hand-made request
- * gets the same treatment. Both must agree, or they would key different cache entries.
+ * coordinates never leave the device, and the proxy rounds again so a request arriving by
+ * any other path gets the same treatment.
  */
 export const WEATHER_COORD_DECIMALS = 2;
 
@@ -123,8 +123,17 @@ export function sampleForecastHours(
   if (max <= 0) {
     return [];
   }
-  // Same-zone, same-format stamps, so string order is chronological — no DST traps.
-  const remaining = hours.filter((hour) => hour.time > nowLocalIso);
+  // Same-zone, same-format stamps, so string order is chronological. The one DST trap is
+  // the fall-back day, where the provider repeats a local hour: the popover keys its rows
+  // on this stamp, so a duplicate would collide. Keep the first of each.
+  const seen = new Set<string>();
+  const remaining = hours.filter((hour) => {
+    if (hour.time <= nowLocalIso || seen.has(hour.time)) {
+      return false;
+    }
+    seen.add(hour.time);
+    return true;
+  });
   if (remaining.length <= max) {
     return remaining;
   }
@@ -168,8 +177,8 @@ export function formatTemperature(value: number): string {
 }
 
 /**
- * How old a reading is, in words. The popover shows this instead of hiding staleness,
- * so a cached reading during an outage still reads as honest.
+ * How old a reading is, in words. The popover shows it whenever there is no error to show
+ * in its place, so a cached reading is never passed off as current.
  */
 export function formatWeatherAge(lastFetch: string | null, now: Date = new Date()): string | null {
   if (lastFetch === null) {

@@ -33,6 +33,8 @@ export function hours(date = '2026-07-25'): WeatherHour[] {
     time: `${date}T${String(hour).padStart(2, '0')}:00`,
     temperature: 10 + hour * 0.5,
     condition: 'clear' as const,
+    // London-ish daylight window, so the strip's day/night icons have something real to read.
+    isDay: hour >= 6 && hour < 21,
   }));
 }
 

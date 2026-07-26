@@ -61,7 +61,8 @@ export function getStorage(): KeyValueStore {
 
 /**
  * Throws rather than defaulting to `globalThis.fetch`: a silent default would turn a
- * missing macOS registration into a runtime CSP error instead of a startup crash.
+ * missing macOS registration into an opaque CSP error at the first request, instead of
+ * naming the port that was never configured.
  */
 export function getHttpFetch(): HttpFetch {
   if (httpFetch === null) {

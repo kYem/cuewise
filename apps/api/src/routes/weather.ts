@@ -2,6 +2,7 @@ import {
   logger,
   mapWmoCode,
   roundCoordinate,
+  toLocalIso,
   type WeatherForecast,
   type WeatherHour,
   type WeatherLocation,
@@ -89,7 +90,12 @@ interface OpenMeteoForecast {
     is_day?: unknown;
   };
   hourly?: { time?: unknown; temperature_2m?: unknown; weather_code?: unknown };
-  daily?: { temperature_2m_max?: unknown; temperature_2m_min?: unknown };
+  daily?: {
+    temperature_2m_max?: unknown;
+    temperature_2m_min?: unknown;
+    sunrise?: unknown;
+    sunset?: unknown;
+  };
 }
 
 function readNumber(value: unknown): number | null {
@@ -100,14 +106,38 @@ function firstNumber(value: unknown): number | null {
   return Array.isArray(value) ? readNumber(value[0]) : null;
 }
 
+function firstString(value: unknown): string | null {
+  if (!Array.isArray(value) || typeof value[0] !== 'string') {
+    return null;
+  }
+  return value[0];
+}
+
+/**
+ * Daylight for one hourly stamp. Every stamp here is local to the same place and in the
+ * same format, so string comparison is the whole calculation. Unknown sun times default
+ * to daylight — the strip has to draw something, and a sun is the neutral choice.
+ */
+function isDaylight(time: string, sunrise: string | null, sunset: string | null): boolean {
+  if (sunrise === null || sunset === null) {
+    return true;
+  }
+  return time >= sunrise && time < sunset;
+}
+
 /** Zips the parallel hourly arrays into records, dropping any incomplete slot. */
-function normalizeHours(hourly: OpenMeteoForecast['hourly']): WeatherHour[] {
+function normalizeHours(
+  hourly: OpenMeteoForecast['hourly'],
+  daily: OpenMeteoForecast['daily']
+): WeatherHour[] {
   const times = hourly?.time;
   const temperatures = hourly?.temperature_2m;
   const codes = hourly?.weather_code;
   if (!Array.isArray(times) || !Array.isArray(temperatures)) {
     return [];
   }
+  const sunrise = firstString(daily?.sunrise);
+  const sunset = firstString(daily?.sunset);
   const hours: WeatherHour[] = [];
   for (let i = 0; i < times.length; i++) {
     const time = times[i];
@@ -119,6 +149,7 @@ function normalizeHours(hourly: OpenMeteoForecast['hourly']): WeatherHour[] {
       time,
       temperature,
       condition: mapWmoCode(Array.isArray(codes) ? codes[i] : undefined),
+      isDay: isDaylight(time, sunrise, sunset),
     });
   }
   return hours;
@@ -145,7 +176,7 @@ function normalizeForecast(raw: unknown, units: WeatherUnits): WeatherForecast |
   if (temperature === null) {
     return null;
   }
-  const hours = normalizeHours(payload.hourly);
+  const hours = normalizeHours(payload.hourly, payload.daily);
   // Deriving from the hourly range is fine; falling back to the current temperature is
   // not — H === L === now is fabricated weather that reads as measured.
   const high = firstNumber(payload.daily?.temperature_2m_max) ?? hourlyExtreme(hours, Math.max);
@@ -153,18 +184,42 @@ function normalizeForecast(raw: unknown, units: WeatherUnits): WeatherForecast |
   if (high === null || low === null) {
     return null;
   }
+  const timezone = typeof payload.timezone === 'string' ? payload.timezone : 'UTC';
+  // Strict `=== 1`/`=== 0`: the old `!== 0` also read a missing field and the string "0"
+  // as daylight. When the flag is unreadable, the day's own sunrise/sunset window answers
+  // the question rather than a guess.
+  const dayFlag = readNumber(payload.current?.is_day);
+  const isDay =
+    dayFlag === null
+      ? isDaylight(
+          toLocalIso(new Date(), timezone),
+          firstString(payload.daily?.sunrise),
+          firstString(payload.daily?.sunset)
+        )
+      : dayFlag === 1;
   return {
     units,
-    timezone: typeof payload.timezone === 'string' ? payload.timezone : 'UTC',
+    timezone,
     current: {
       temperature,
       apparentTemperature: readNumber(payload.current?.apparent_temperature),
       condition: mapWmoCode(payload.current?.weather_code),
-      isDay: payload.current?.is_day !== 0,
+      isDay,
     },
     high,
     low,
     hours,
+  };
+}
+
+/** Which blocks the provider sent, so a shape change is diagnosable from the log alone. */
+function describeForecastShape(raw: unknown): Record<string, unknown> {
+  const payload = (raw ?? {}) as OpenMeteoForecast;
+  return {
+    hasCurrent: payload.current !== undefined,
+    hasTemperature: readNumber(payload.current?.temperature_2m) !== null,
+    hasDaily: payload.daily !== undefined,
+    hourCount: Array.isArray(payload.hourly?.time) ? payload.hourly.time.length : 0,
   };
 }
 
@@ -276,7 +331,7 @@ export function registerWeatherRoutes(
     url.searchParams.set('longitude', String(lon));
     url.searchParams.set('current', 'temperature_2m,apparent_temperature,weather_code,is_day');
     url.searchParams.set('hourly', 'temperature_2m,weather_code');
-    url.searchParams.set('daily', 'temperature_2m_max,temperature_2m_min');
+    url.searchParams.set('daily', 'temperature_2m_max,temperature_2m_min,sunrise,sunset');
     url.searchParams.set('forecast_days', '1');
     // Safe to cache: the provider resolves `auto` from the coordinates, not the caller's
     // IP, so one cached body is correct for everyone asking about this place.
@@ -293,6 +348,9 @@ export function registerWeatherRoutes(
     }
     const forecast = normalizeForecast(raw, units);
     if (forecast === null) {
+      // The one failure that means *our* normalizer no longer matches the provider, so it
+      // must not be the one that logs nothing. Shape only — no coordinates.
+      logger.warn('Weather forecast payload was unusable', describeForecastShape(raw));
       return problem('upstream_unavailable', {
         detail: 'The weather provider returned an unusable response.',
       });
@@ -325,12 +383,19 @@ export function registerWeatherRoutes(
     }
     // Open-Meteo omits `results` entirely for a no-match query — an empty list, not an error.
     const results = (raw as { results?: unknown }).results;
-    const places = Array.isArray(results)
-      ? results
-          .map(normalizePlace)
-          .filter((place): place is WeatherLocation => place !== null)
-          .slice(0, MAX_SEARCH_RESULTS)
-      : [];
+    const received = Array.isArray(results) ? results : [];
+    const places = received
+      .map(normalizePlace)
+      .filter((place): place is WeatherLocation => place !== null)
+      .slice(0, MAX_SEARCH_RESULTS);
+    // Matches we could not read are not "no such city". Returning an empty list here would
+    // tell the user their town does not exist and leave them no way to enable the widget.
+    if (received.length > 0 && places.length === 0) {
+      logger.warn('Geocoding matches were all unusable', { received: received.length });
+      return problem('upstream_unavailable', {
+        detail: 'The geocoding provider returned an unusable response.',
+      });
+    }
     return json({ results: places });
   });
 }

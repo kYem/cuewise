@@ -1,6 +1,9 @@
 import {
   getHttpFetch,
   roundCoordinate,
+  WEATHER_CONDITION_KINDS,
+  WEATHER_UNITS,
+  type WeatherConditionKind,
   type WeatherForecast,
   type WeatherHour,
   type WeatherLocation,
@@ -41,7 +44,11 @@ export class WeatherUnavailableError extends WeatherError {
 }
 
 export class WeatherRequestError extends WeatherError {
-  constructor(message = 'The weather request failed') {
+  /** Carried for the log, not the message: "failed" alone can't tell a 404 from a 500. */
+  constructor(
+    message = 'The weather request failed',
+    readonly status: number | null = null
+  ) {
     super(message);
     this.name = 'WeatherRequestError';
   }
@@ -78,57 +85,88 @@ async function requestJson(path: string, payload: Record<string, string>): Promi
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
-  let response: Response;
+  // The timer stays armed until the body is read, not just until the headers land. A
+  // response that stalls mid-body would otherwise never settle, and a fetch that never
+  // settles never releases the store's in-flight slot — no error, no retry, until reload.
   try {
-    response = await doFetch(url, {
-      method: 'POST',
-      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-      signal: controller.signal,
-    });
-  } catch (error) {
-    throw new WeatherRequestError(
-      error instanceof Error && error.name === 'AbortError'
-        ? 'The weather request timed out'
-        : 'Could not reach the weather service'
-    );
+    let response: Response;
+    try {
+      response = await doFetch(url, {
+        method: 'POST',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+    } catch (error) {
+      throw new WeatherRequestError(
+        isAbort(error) ? 'The weather request timed out' : 'Could not reach the weather service'
+      );
+    }
+
+    if (response.status === 429) {
+      throw new WeatherRateLimitedError(parseRetryAfter(response));
+    }
+    if (response.status === 503) {
+      throw new WeatherUnavailableError();
+    }
+    if (!response.ok) {
+      throw new WeatherRequestError('The weather request failed', response.status);
+    }
+    try {
+      return await response.json();
+    } catch (error) {
+      throw new WeatherRequestError(
+        isAbort(error)
+          ? 'The weather request timed out'
+          : 'The weather service returned an unreadable response',
+        response.status
+      );
+    }
   } finally {
     clearTimeout(timer);
   }
-
-  if (response.status === 429) {
-    throw new WeatherRateLimitedError(parseRetryAfter(response));
-  }
-  if (response.status === 503) {
-    throw new WeatherUnavailableError();
-  }
-  if (!response.ok) {
-    throw new WeatherRequestError();
-  }
-  try {
-    return await response.json();
-  } catch {
-    throw new WeatherRequestError('The weather service returned an unreadable response');
-  }
 }
 
-/** Every field the popover reads, since a bad element throws mid-render, not at the edge. */
+function isAbort(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError';
+}
+
+function isCondition(value: unknown): value is WeatherConditionKind {
+  return WEATHER_CONDITION_KINDS.includes(value as WeatherConditionKind);
+}
+
+/** Every field the strip renders, including the ones whose absence throws mid-render. */
 function isHour(value: unknown): value is WeatherHour {
   if (value === null || typeof value !== 'object') {
     return false;
   }
   const hour = value as Partial<WeatherHour>;
-  return typeof hour.time === 'string' && typeof hour.temperature === 'number';
+  return (
+    typeof hour.time === 'string' &&
+    typeof hour.temperature === 'number' &&
+    typeof hour.isDay === 'boolean' &&
+    isCondition(hour.condition)
+  );
 }
 
+/**
+ * Checks the string unions too, not just the numbers: `units` drives the refetch loop and
+ * the scale announced to screen readers, and `condition` is interpolated into an aria-label,
+ * so narrowing to them without verifying them is how "undefined" ends up being read aloud.
+ */
 function isForecast(value: unknown): value is WeatherForecast {
   if (value === null || typeof value !== 'object') {
     return false;
   }
   const forecast = value as Partial<WeatherForecast>;
   return (
+    WEATHER_UNITS.includes(forecast.units as WeatherUnits) &&
+    typeof forecast.timezone === 'string' &&
     typeof forecast.current?.temperature === 'number' &&
     typeof forecast.current?.isDay === 'boolean' &&
+    isCondition(forecast.current?.condition) &&
+    (forecast.current?.apparentTemperature === null ||
+      typeof forecast.current?.apparentTemperature === 'number') &&
     typeof forecast.high === 'number' &&
     typeof forecast.low === 'number' &&
     Array.isArray(forecast.hours) &&

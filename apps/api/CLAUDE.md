@@ -134,6 +134,7 @@ Every error response is `application/problem+json` (RFC 9457), built by `problem
 | `resync_required` | 409 | `GET /v1/changes`'s `since` predates the purged-tombstone watermark — client must resync from `since=0` |
 | `not_found` | 404 | No route matched |
 | `internal` | 500 | Unhandled exception, upstream (JWKS) outage, or a config fault (empty signing key / client-id) |
+| `upstream_unavailable` | 503 | Weather/geocoding provider is down, timed out, or answered with something we cannot read — retryable, and distinct from `internal` so a client can tell "they are broken" from "we are" |
 
 Body: `type` (`https://cuewise.app/problems/<code-with-dashes>`), `title`, `status`, `code`, optional `detail`, `retryAfter` (mirrored as a `Retry-After` header), `errors[]` (`{index?, pointer?, detail}`).
 

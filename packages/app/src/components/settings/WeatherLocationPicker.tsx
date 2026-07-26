@@ -17,6 +17,7 @@ export const WeatherLocationPicker: React.FC = () => {
   const results = useWeatherStore((state) => state.searchResults);
   const isSearching = useWeatherStore((state) => state.isSearching);
   const searchError = useWeatherStore((state) => state.searchError);
+  const searchedFor = useWeatherStore((state) => state.searchedFor);
   const search = useWeatherStore((state) => state.search);
   const clearSearch = useWeatherStore((state) => state.clearSearch);
   const setLocation = useWeatherStore((state) => state.setLocation);
@@ -49,10 +50,15 @@ export const WeatherLocationPicker: React.FC = () => {
     await clearLocation();
   };
 
+  // Gated on the lookup for *this* query having finished. Checking only "not searching and
+  // no results" declared the city unknown during the whole debounce, so someone typing
+  // "Vilnius" was told it does not exist for every letter of it.
+  const trimmed = query.trim();
   const showEmptyState =
-    query.trim().length >= MIN_SEARCH_QUERY_LENGTH &&
+    trimmed.length >= MIN_SEARCH_QUERY_LENGTH &&
     !isSearching &&
     searchError === null &&
+    searchedFor === trimmed &&
     results.length === 0;
 
   return (
@@ -85,11 +91,27 @@ export const WeatherLocationPicker: React.FC = () => {
           className={INPUT_CLASS}
         />
         {isSearching && (
-          <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-secondary animate-spin" />
+          <Loader2
+            data-testid="location-search-spinner"
+            className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-secondary animate-spin"
+          />
         )}
       </div>
 
-      {searchError !== null && <p className="text-xs text-error">{searchError}</p>}
+      {/* A retry, because the debounce only fires on a *change* to the query — after a
+          transient failure the text is already right and nothing would re-run. */}
+      {searchError !== null && (
+        <p className="flex items-center gap-2 text-xs text-error">
+          <span>{searchError}</span>
+          <button
+            type="button"
+            onClick={() => search(trimmed)}
+            className="underline underline-offset-2 hover:text-primary transition-colors"
+          >
+            Try again
+          </button>
+        </p>
+      )}
 
       {showEmptyState && <p className="text-xs text-secondary">No places found.</p>}
 

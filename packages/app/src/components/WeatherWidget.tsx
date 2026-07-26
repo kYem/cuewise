@@ -126,9 +126,13 @@ const WeatherPopover: React.FC<{ snapshot: WeatherSnapshot; alignRight: boolean 
       {hours.length > 0 && (
         <div className="flex justify-between pt-3">
           {hours.map((hour) => {
-            const HourIcon = conditionIcon(hour.condition, true);
+            const HourIcon = conditionIcon(hour.condition, hour.isDay);
             return (
-              <div key={hour.time} className="text-center">
+              <div
+                key={hour.time}
+                className="text-center"
+                data-testid={`hour-icon-${hour.isDay ? 'day' : 'moon'}`}
+              >
                 <div className="text-xs font-bold text-primary">
                   {formatTemperature(hour.temperature)}
                 </div>
@@ -154,9 +158,10 @@ const WeatherPopover: React.FC<{ snapshot: WeatherSnapshot; alignRight: boolean 
 /**
  * Ambient weather chip for the new tab (ENG-18).
  *
- * Renders nothing without a location, and never blocks page render: a cold cache shows a
- * skeleton and a failed refresh keeps the last reading rather than an error, because
- * weather must not become a second ENG-77.
+ * Renders nothing without a location, and never blocks page render — weather must not
+ * become a second ENG-77. Three states: a skeleton while the first reading loads, a retry
+ * chip if that first reading failed, and the last good reading kept through any later
+ * failure, with the error shown in the popover beside it.
  */
 export const WeatherWidget: React.FC = () => {
   const showWeather = useSettingsStore((state) => state.settings.showWeather);

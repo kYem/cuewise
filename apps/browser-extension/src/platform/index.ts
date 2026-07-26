@@ -19,7 +19,8 @@ export function configureChromePlatform(): { scheduler: SchedulerHost; notifier:
   const notifier: NotifierHost =
     hasChrome && chrome.notifications ? new ChromeNotifier() : new WebNotifier();
   // Extension pages reach api.cuewise.app directly under host_permissions, so the global
-  // works here. Registered explicitly so a missing registration fails at startup.
+  // works here. Registered explicitly rather than defaulted, so the port names itself when
+  // a host forgets it.
   configurePlatform({ scheduler, notifier, httpFetch: (url, init) => fetch(url, init) });
   return { scheduler, notifier };
 }

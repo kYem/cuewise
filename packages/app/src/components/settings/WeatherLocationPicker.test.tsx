@@ -153,16 +153,58 @@ describe('results', () => {
     render(<WeatherLocationPicker />);
     type('lond');
 
+    expect(screen.getByTestId('location-search-spinner')).toBeInTheDocument();
+  });
+
+  it('suppresses the empty state while a lookup is running', () => {
+    mockWeatherStore({ location: null, snapshot: null, isSearching: true });
+
+    render(<WeatherLocationPicker />);
+    type('lond');
+
     expect(screen.queryByText('No places found.')).not.toBeInTheDocument();
   });
 
   it('reports an empty result set once the lookup settles', () => {
-    mockWeatherStore({ location: null, snapshot: null, searchResults: [] });
+    // `searchedFor` is what makes this "we asked and there was nothing" rather than
+    // "nobody has asked yet" — the message is gated on the lookup for this exact query.
+    mockWeatherStore({
+      location: null,
+      snapshot: null,
+      searchResults: [],
+      searchedFor: 'zzzz',
+    });
 
     render(<WeatherLocationPicker />);
     type('zzzz');
 
     expect(screen.getByText('No places found.')).toBeInTheDocument();
+  });
+
+  // Otherwise every half-typed city name is declared unknown while the user is still typing.
+  it('stays quiet while the query is still being typed', () => {
+    mockWeatherStore({ location: null, snapshot: null, searchResults: [], searchedFor: null });
+
+    render(<WeatherLocationPicker />);
+    type('vilni');
+
+    expect(screen.queryByText('No places found.')).not.toBeInTheDocument();
+  });
+
+  it('offers a retry when the lookup failed, since the query itself has not changed', () => {
+    const store = mockWeatherStore({
+      location: null,
+      snapshot: null,
+      searchError: 'The location service is unavailable right now',
+    });
+
+    render(<WeatherLocationPicker />);
+    type('vilnius');
+    advance(300);
+    store.search.mockClear();
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+
+    expect(store.search).toHaveBeenCalledWith('vilnius');
   });
 });
 
