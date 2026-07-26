@@ -1,4 +1,10 @@
-import { configurePlatform, type SyncMutationSink } from '@cuewise/shared';
+import {
+  configurePlatform,
+  DEFAULT_SETTINGS,
+  type StorageResult,
+  type SyncMutationSink,
+  storageFailure,
+} from '@cuewise/shared';
 import * as storage from '@cuewise/storage';
 import { defaultSettings } from '@cuewise/test-utils/fixtures';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -238,5 +244,112 @@ describe('background preview lifecycle', () => {
     expect(state.error).toBe('Failed to reset settings. Please try again.');
     expect(state.settings.backgroundDim).toBe(30);
     expect(markMutated).not.toHaveBeenCalled();
+  });
+});
+
+function deferred<T>() {
+  let resolve: (value: T) => void = () => {};
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
+// setTimeout(0) drains the microtask queue; awaiting a bare Promise.resolve() only advances one tick.
+const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+describe('serialized write path', () => {
+  const markMutated = vi.fn();
+  const fakeSink: SyncMutationSink = { markMutated, markDeleted: vi.fn() };
+
+  beforeEach(() => {
+    useSettingsStore.setState({
+      settings: defaultSettings,
+      preview: null,
+      isLoading: false,
+      error: null,
+    });
+    vi.clearAllMocks();
+    vi.mocked(storage.setSettings).mockResolvedValue({ success: true });
+    vi.mocked(storage.migrateStorageData).mockResolvedValue({ success: true });
+    configurePlatform({ syncSink: fakeSink });
+  });
+
+  afterEach(() => {
+    configurePlatform({ syncSink: null });
+  });
+
+  it('keeps both patches when two writes overlap', async () => {
+    const firstWrite = deferred<StorageResult>();
+    vi.mocked(storage.setSettings).mockReturnValueOnce(firstWrite.promise);
+
+    const first = useSettingsStore.getState().updateSettings({ showClock: true });
+    const second = useSettingsStore.getState().updateSettings({ colorTheme: 'forest' });
+    firstWrite.resolve({ success: true });
+    await Promise.all([first, second]);
+
+    expect(storage.setSettings).toHaveBeenLastCalledWith(
+      expect.objectContaining({ showClock: true, colorTheme: 'forest' })
+    );
+    const { settings } = useSettingsStore.getState();
+    expect(settings.showClock).toBe(true);
+    expect(settings.colorTheme).toBe('forest');
+  });
+
+  it('does not start the next write until the in-flight one resolves', async () => {
+    const firstWrite = deferred<StorageResult>();
+    vi.mocked(storage.setSettings).mockReturnValueOnce(firstWrite.promise);
+
+    const first = useSettingsStore.getState().updateSettings({ showClock: true });
+    const second = useSettingsStore.getState().updateSettings({ colorTheme: 'forest' });
+    await flush();
+
+    expect(storage.setSettings).toHaveBeenCalledTimes(1);
+
+    firstWrite.resolve({ success: true });
+    await Promise.all([first, second]);
+
+    expect(storage.setSettings).toHaveBeenCalledTimes(2);
+  });
+
+  it('notifies each overlapping write for its own changed key', async () => {
+    const firstWrite = deferred<StorageResult>();
+    vi.mocked(storage.setSettings).mockReturnValueOnce(firstWrite.promise);
+
+    const first = useSettingsStore.getState().updateSettings({ showClock: true });
+    const second = useSettingsStore.getState().updateSettings({ colorTheme: 'forest' });
+    firstWrite.resolve({ success: true });
+    await Promise.all([first, second]);
+
+    expect(markMutated).toHaveBeenCalledWith('settings', 'showClock');
+    expect(markMutated).toHaveBeenCalledWith('settings', 'colorTheme');
+  });
+
+  it('queues resetToDefaults behind an in-flight update', async () => {
+    const firstWrite = deferred<StorageResult>();
+    vi.mocked(storage.setSettings).mockReturnValueOnce(firstWrite.promise);
+
+    const update = useSettingsStore.getState().updateSettings({ showClock: true });
+    const reset = useSettingsStore.getState().resetToDefaults();
+    await flush();
+
+    expect(storage.setSettings).toHaveBeenCalledTimes(1);
+
+    firstWrite.resolve({ success: true });
+    await Promise.all([update, reset]);
+
+    expect(storage.setSettings).toHaveBeenLastCalledWith(DEFAULT_SETTINGS);
+    expect(useSettingsStore.getState().settings.showClock).toBe(DEFAULT_SETTINGS.showClock);
+  });
+
+  it('keeps serving later writes after one fails', async () => {
+    vi.mocked(storage.setSettings).mockResolvedValueOnce(storageFailure('write failed'));
+
+    const first = useSettingsStore.getState().updateSettings({ showClock: true });
+    const second = useSettingsStore.getState().updateSettings({ colorTheme: 'forest' });
+
+    expect(await first).toBe(false);
+    expect(await second).toBe(true);
+    expect(useSettingsStore.getState().settings.colorTheme).toBe('forest');
   });
 });
