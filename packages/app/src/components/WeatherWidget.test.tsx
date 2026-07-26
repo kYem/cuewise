@@ -107,7 +107,9 @@ describe('units changes', () => {
 
     render(<WeatherWidget />);
 
-    expect(screen.getByText('Celsius')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /weather in/i })).toHaveAccessibleName(
+      expect.stringContaining('Celsius')
+    );
   });
 });
 
@@ -138,7 +140,7 @@ describe('the chip', () => {
     render(<WeatherWidget />);
 
     expect(
-      screen.getByRole('button', { name: /weather in london: 17°, clear/i })
+      screen.getByRole('button', { name: /weather in london: 17° celsius, clear/i })
     ).toBeInTheDocument();
   });
 
@@ -160,6 +162,13 @@ describe('the popover', () => {
     render(<WeatherWidget />);
 
     expect(screen.queryByText(/feels like/i)).not.toBeInTheDocument();
+  });
+
+  it('is the dialog the chip promises', () => {
+    render(<WeatherWidget />);
+    open();
+
+    expect(screen.getByRole('dialog', { name: /weather/i })).toBeInTheDocument();
   });
 
   it('shows current conditions', () => {

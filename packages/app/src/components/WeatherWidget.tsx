@@ -83,6 +83,8 @@ const WeatherPopover: React.FC<{ snapshot: WeatherSnapshot; alignRight: boolean 
 
   return (
     <div
+      role="dialog"
+      aria-label="Weather details"
       className={cn(
         'absolute top-full mt-2 z-50 w-64 rounded-2xl border border-border bg-surface-elevated shadow-xl p-4',
         alignRight ? 'right-0' : 'left-0'
@@ -295,14 +297,13 @@ export const WeatherWidget: React.FC = () => {
         onClick={() => setIsOpen((open) => !open)}
         aria-expanded={isOpen}
         aria-haspopup="dialog"
-        aria-label={`Weather in ${location.name}: ${temperature}, ${CONDITION_LABELS[snapshot.current.condition]}`}
+        aria-label={`Weather in ${location.name}: ${temperature} ${units === 'imperial' ? 'Fahrenheit' : 'Celsius'}, ${CONDITION_LABELS[snapshot.current.condition]}`}
         title={`${location.name} · ${CONDITION_LABELS[snapshot.current.condition]}`}
         className={CHIP_CLASS}
       >
         <Icon className="w-5 h-5 text-primary-600" />
         <span className="text-sm font-bold text-primary tabular-nums">{temperature}</span>
         <span className="hidden sm:inline text-xs font-medium text-secondary">{location.name}</span>
-        <span className="sr-only">{units === 'imperial' ? 'Fahrenheit' : 'Celsius'}</span>
       </button>
 
       {isOpen && <WeatherPopover snapshot={snapshot} alignRight={position === 'right'} />}
