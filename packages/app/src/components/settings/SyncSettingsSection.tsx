@@ -93,8 +93,19 @@ function pillClass(status: SyncUiStatus): string {
 // consistent. A no-op when Chrome sync is already off (the default, and on local-only hosts).
 async function takeOverFromChromeSync(): Promise<void> {
   const store = useSettingsStore.getState();
-  if (store.settings.syncEnabled) {
-    await store.updateSettings({ syncEnabled: false });
+  if (!store.settings.syncEnabled) {
+    return;
+  }
+  const persisted = await store.updateSettings({ syncEnabled: false });
+  if (!persisted) {
+    // Cloud Sync is already live by this point — the takeover is what failed, so there is nothing
+    // to roll back; the user has to finish it by hand or both backends replicate.
+    logger.error('Cloud sync enabled but Chrome sync could not be turned off — both may replicate');
+    useToastStore
+      .getState()
+      .warning(
+        'Cloud Sync is on, but Chrome sync could not be turned off — turn it off in Settings.'
+      );
   }
 }
 

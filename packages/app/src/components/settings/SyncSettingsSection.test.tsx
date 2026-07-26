@@ -72,6 +72,7 @@ describe('SyncSettingsSectionComponent', () => {
         if (partial.syncEnabled !== undefined) {
           settingsMock.syncEnabled = partial.syncEnabled;
         }
+        return true;
       }
     );
   });
@@ -355,6 +356,24 @@ describe('SyncSettingsSectionComponent', () => {
 
     await waitFor(() => expect(controller.calls.some((c) => c.method === 'enable')).toBe(true));
     expect(settingsMock.updateSettings).not.toHaveBeenCalled();
+  });
+
+  it('warns when Chrome sync could not be turned off after a successful enable', async () => {
+    const user = userEvent.setup();
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    settingsMock.syncEnabled = true;
+    settingsMock.updateSettings.mockResolvedValue(false);
+    const controller = new FakeSyncController();
+    controller.scriptEnable({ ok: true });
+    renderSection(controller);
+
+    await enterEnableStep(user, 'acct');
+    await user.click(screen.getByRole('button', { name: 'Enable' }));
+
+    await waitFor(() =>
+      expect(toastWarning).toHaveBeenCalledWith(expect.stringContaining('Chrome sync'))
+    );
+    expect(errorSpy).toHaveBeenCalled();
   });
 
   it('shows a spinner and disables the button while Google sign-in is pending', async () => {
