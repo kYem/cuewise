@@ -21,10 +21,10 @@ import {
   setCollections,
   setCurrentQuote,
   setQuotes,
-  setSettings,
 } from '@cuewise/storage';
 import { create } from 'zustand';
 import { SEED_QUOTES } from '../data/seed-quotes';
+import { useSettingsStore } from './settings-store';
 import { useToastStore } from './toast-store';
 
 /** Seed quotes not present in the given list, keyed by id. */
@@ -150,27 +150,17 @@ interface QuoteStore {
 }
 
 /**
- * Persists current filter settings to storage.
- * Called when filter state changes (categories, custom, favorites, collections).
- * Shows a warning toast if persistence fails (non-blocking - filter still works in memory).
+ * Persists current filter settings. Goes through the settings store rather than storage directly:
+ * that path is serialized against other settings writes, checks the result, surfaces its own error
+ * toast, and notifies sync for each changed key (the quoteFilter* keys are not device-local).
  */
 async function persistFilterSettings(state: QuoteStore): Promise<void> {
-  try {
-    const currentSettings = await getSettings();
-    const updatedSettings = {
-      ...currentSettings,
-      quoteFilterEnabledCategories: state.enabledCategories,
-      quoteFilterShowCustomQuotes: state.showCustomQuotes,
-      quoteFilterShowFavoritesOnly: state.showFavoritesOnly,
-      quoteFilterActiveCollectionIds: state.activeCollectionIds,
-    };
-    await setSettings(updatedSettings);
-  } catch (error) {
-    logger.error('Error persisting filter settings', error);
-    useToastStore
-      .getState()
-      .warning('Failed to save filter preferences. Your changes may not persist.');
-  }
+  await useSettingsStore.getState().updateSettings({
+    quoteFilterEnabledCategories: state.enabledCategories,
+    quoteFilterShowCustomQuotes: state.showCustomQuotes,
+    quoteFilterShowFavoritesOnly: state.showFavoritesOnly,
+    quoteFilterActiveCollectionIds: state.activeCollectionIds,
+  });
 }
 
 export const useQuoteStore = create<QuoteStore>((set, get) => ({
