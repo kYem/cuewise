@@ -21,7 +21,10 @@ export const weatherLocationSchema = z.object({
   countryCode: z.string(),
   latitude: z.number(),
   longitude: z.number(),
-  timezone: z.string(),
+  // Non-empty: every "today" comparison resolves against this zone, and an empty string
+  // sends `toLocalIso` down its UTC fallback, quietly filtering the forecast by the wrong
+  // clock. The proxy refuses such a place too, so a stored one can only be corruption.
+  timezone: z.string().check(z.minLength(1)),
 });
 assertNoDrift<z.infer<typeof weatherLocationSchema>, WeatherLocation>();
 

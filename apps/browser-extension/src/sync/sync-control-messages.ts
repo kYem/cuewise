@@ -1,5 +1,6 @@
 import type { EnableResult, SyncDetails } from '@cuewise/app';
 import type { SyncSignInProvider } from '@cuewise/sync-engine';
+import { z } from 'zod/mini';
 
 // One source of truth for the op list and its type, so the runtime guard can't desync from the union.
 export const SYNC_CONTROL_OPS = [
@@ -61,14 +62,17 @@ export interface SyncOpResponse {
 /** Any op's response — derived from the map so the two never drift. */
 export type SyncControlAnyResponse = SyncOpResponse[SyncControlOp];
 
+/**
+ * Only the two fields the background dispatches on. The optional payload fields are
+ * deliberately unchecked here — this guard's job is to decide whether a message on the
+ * shared runtime channel is ours at all, and the handlers validate what they read.
+ * `loose` keeps the rest of the message intact for them.
+ */
+const syncControlMessageSchema = z.looseObject({
+  kind: z.literal('cuewise-sync-control'),
+  op: z.enum(SYNC_CONTROL_OPS),
+});
+
 export function isSyncControlMessage(msg: unknown): msg is SyncControlMessage {
-  if (typeof msg !== 'object' || msg === null) {
-    return false;
-  }
-  const candidate = msg as Record<string, unknown>;
-  if (candidate.kind !== 'cuewise-sync-control') {
-    return false;
-  }
-  const ops: readonly string[] = SYNC_CONTROL_OPS;
-  return typeof candidate.op === 'string' && ops.includes(candidate.op);
+  return syncControlMessageSchema.safeParse(msg).success;
 }

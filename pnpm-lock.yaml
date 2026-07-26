@@ -182,6 +182,9 @@ importers:
       jose:
         specifier: 'catalog:'
         version: 6.2.3
+      zod:
+        specifier: 'catalog:'
+        version: 4.4.3
     devDependencies:
       '@cloudflare/vitest-pool-workers':
         specifier: 'catalog:'
@@ -252,6 +255,9 @@ importers:
       recharts:
         specifier: 'catalog:'
         version: 3.8.1(@types/react@18.3.26)(react-dom@18.3.1(react@18.3.1))(react-is@18.3.1)(react@18.3.1)(redux@5.0.1)
+      zod:
+        specifier: 'catalog:'
+        version: 4.4.3
       zustand:
         specifier: 'catalog:'
         version: 5.0.14(@types/react@18.3.26)(immer@11.1.8)(react@18.3.1)(use-sync-external-store@1.6.0(react@18.3.1))
@@ -477,6 +483,9 @@ importers:
       recharts:
         specifier: 'catalog:'
         version: 3.8.1(@types/react@18.3.26)(react-dom@18.3.1(react@18.3.1))(react-is@18.3.1)(react@18.3.1)(redux@5.0.1)
+      zod:
+        specifier: 'catalog:'
+        version: 4.4.3
       zustand:
         specifier: 'catalog:'
         version: 5.0.14(@types/react@18.3.26)(immer@11.1.8)(react@18.3.1)(use-sync-external-store@1.6.0(react@18.3.1))

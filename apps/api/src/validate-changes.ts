@@ -1,5 +1,6 @@
 import { DAY_IN_MS } from '@cuewise/shared';
-import { requireNonEmptyString, type ValidationIssue } from './problem-details';
+import { z } from 'zod/mini';
+import type { ValidationIssue } from './problem-details';
 import type { PushRecord } from './store';
 
 export const MAX_BATCH_SIZE = 100;
@@ -16,75 +17,91 @@ type PushBodyProblem = {
 
 const encoder = new TextEncoder();
 
-function validateRecord(
-  raw: unknown,
-  index: number,
-  issues: ValidationIssue[],
-  nowMs: number
-): void {
-  const r = (raw ?? {}) as Record<string, unknown>;
-  requireNonEmptyString(r.collection, `/records/${index}/collection`, issues, {
-    maxLength: MAX_COLLECTION_LENGTH,
-    index,
+/**
+ * Byte length, not `value.length` (UTF-16 code units), for both bounds — one metric, so a
+ * multi-byte-heavy string cannot pass a check sized for its serialized cost.
+ */
+function withinBytes(max: number) {
+  // `unknown` in, because a check also runs for a value that failed the type test above it.
+  return z.refine(
+    (value: unknown) => typeof value !== 'string' || encoder.encode(value).length <= max,
+    { error: `must not exceed ${max} bytes` }
+  );
+}
+
+function boundedString(max: number) {
+  // The message sits on the type check as well as the length check: a missing field fails
+  // `z.string()` first, and zod would otherwise answer its own "Invalid input".
+  return z
+    .string({ error: 'required non-empty string' })
+    .check(z.minLength(1, { error: 'required non-empty string' }), withinBytes(max));
+}
+
+/**
+ * The messages here are not decoration. They are copied verbatim into problem+json
+ * `errors[]`, which clients parse to tell a user which record to fix, so each one is part
+ * of the API surface — `validate-changes.test.ts` pins every string below.
+ */
+function recordSchema(nowMs: number) {
+  return z.object({
+    collection: boundedString(MAX_COLLECTION_LENGTH),
+    entityId: boundedString(MAX_ENTITY_ID_LENGTH),
+    ciphertext: z.string({ error: 'required string' }).check(withinBytes(MAX_CIPHERTEXT_BYTES)),
+    clientUpdatedAt: z.number({ error: 'required finite number' }).check(
+      z.refine((value: number) => Number.isFinite(value), { error: 'required finite number' }),
+      z.refine((value: number) => Math.abs(value - nowMs) <= MAX_CLOCK_DRIFT_MS, {
+        error: 'client clock drift too large',
+      })
+    ),
+    deleted: z.boolean({ error: 'required boolean' }),
   });
-  requireNonEmptyString(r.entityId, `/records/${index}/entityId`, issues, {
-    maxLength: MAX_ENTITY_ID_LENGTH,
-    index,
-  });
-  if (typeof r.ciphertext !== 'string') {
-    issues.push({ index, pointer: `/records/${index}/ciphertext`, detail: 'required string' });
-  } else if (encoder.encode(r.ciphertext).length > MAX_CIPHERTEXT_BYTES) {
-    issues.push({
-      index,
-      pointer: `/records/${index}/ciphertext`,
-      detail: `must not exceed ${MAX_CIPHERTEXT_BYTES} bytes`,
-    });
+}
+
+const pushBodySchema = z.looseObject({ records: z.array(z.unknown()) });
+
+/**
+ * One issue per violation, across every record — a client fixing a 20-record push should
+ * not need one round trip per mistake. zod reports every failing key by default, and only
+ * the first failing check per key, which is what keeps a non-numeric `clientUpdatedAt`
+ * from being reported as clock drift as well.
+ */
+function issuesFor(raw: unknown, index: number, nowMs: number): ValidationIssue[] {
+  const result = recordSchema(nowMs).safeParse(raw ?? {});
+  if (result.success) {
+    return [];
   }
-  if (typeof r.clientUpdatedAt !== 'number' || !Number.isFinite(r.clientUpdatedAt)) {
-    issues.push({
-      index,
-      pointer: `/records/${index}/clientUpdatedAt`,
-      detail: 'required finite number',
-    });
-  } else if (Math.abs(r.clientUpdatedAt - nowMs) > MAX_CLOCK_DRIFT_MS) {
-    issues.push({
-      index,
-      pointer: `/records/${index}/clientUpdatedAt`,
-      detail: 'client clock drift too large',
-    });
+  const seen = new Set<string>();
+  const issues: ValidationIssue[] = [];
+  for (const issue of result.error.issues) {
+    const field = issue.path.join('/');
+    if (seen.has(field)) {
+      continue;
+    }
+    seen.add(field);
+    issues.push({ index, pointer: `/records/${index}/${field}`, detail: issue.message });
   }
-  if (typeof r.deleted !== 'boolean') {
-    issues.push({ index, pointer: `/records/${index}/deleted`, detail: 'required boolean' });
-  }
+  return issues;
 }
 
 export function validatePushBody(
   body: unknown,
   nowMs: number
 ): { records: PushRecord[] } | PushBodyProblem {
-  if (body === null || typeof body !== 'object') {
+  const parsed = pushBodySchema.safeParse(body);
+  if (!parsed.success) {
     return {
       problemCode: 'invalid_request',
       issues: [{ pointer: '/records', detail: 'body must be an object with a records array' }],
     };
   }
-  const records = (body as Record<string, unknown>).records;
-  if (!Array.isArray(records)) {
-    return {
-      problemCode: 'invalid_request',
-      issues: [{ pointer: '/records', detail: 'body must be an object with a records array' }],
-    };
-  }
+  const records = parsed.data.records;
   if (records.length > MAX_BATCH_SIZE) {
     return {
       problemCode: 'batch_too_large',
       issues: [{ pointer: '/records', detail: `must not exceed ${MAX_BATCH_SIZE} records` }],
     };
   }
-  const issues: ValidationIssue[] = [];
-  records.forEach((raw, index) => {
-    validateRecord(raw, index, issues, nowMs);
-  });
+  const issues = records.flatMap((raw, index) => issuesFor(raw, index, nowMs));
   if (issues.length > 0) {
     return { problemCode: 'invalid_record', issues };
   }

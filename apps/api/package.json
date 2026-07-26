@@ -17,7 +17,8 @@
   "dependencies": {
     "@cuewise/shared": "workspace:*",
     "hono": "catalog:",
-    "jose": "catalog:"
+    "jose": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "catalog:",

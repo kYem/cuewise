@@ -165,8 +165,9 @@ describe('the push validation error contract', () => {
   });
 
   it('measures the caps in bytes, so a multi-byte string cannot slip past a length check', () => {
-    // 33 emoji = 33 UTF-16 pairs but 132 bytes, over the 64-byte collection cap.
-    const broken = at({ collection: '🙂'.repeat(33) });
+    // 20 emoji: 40 UTF-16 code units, so a naive `value.length` check would pass it, but
+    // 80 bytes, so the byte cap must not. A longer string would fail both and prove nothing.
+    const broken = at({ collection: '🙂'.repeat(20) });
 
     expect(problemFor({ records: [broken] }).issues).toEqual([
       { index: 0, pointer: '/records/0/collection', detail: 'must not exceed 64 bytes' },
