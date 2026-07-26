@@ -1,5 +1,23 @@
 # @cuewise/macos
 
+## 0.2.3
+
+### Patch Changes
+
+- 00997df: Keep the photo credit and its "new background" button on the home and Pomodoro pages, where the background is the point. Goals, Quotes, Insights and Concepts no longer have it sitting over their content in the bottom-left corner.
+- Updated dependencies [00997df]
+- Updated dependencies [62e6a93]
+- Updated dependencies [d5cd0b3]
+- Updated dependencies [ad4039b]
+- Updated dependencies
+- Updated dependencies [a89fed0]
+  - @cuewise/app@1.17.0
+  - @cuewise/shared@1.19.0
+  - @cuewise/storage@1.19.0
+  - @cuewise/ui@1.19.0
+  - @cuewise/sync-client@0.1.4
+  - @cuewise/sync-engine@0.1.4
+
 ## 0.2.2
 
 ### Patch Changes

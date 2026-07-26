@@ -1,5 +1,31 @@
 # @cuewise/browser-extension
 
+## 1.19.0
+
+### Minor Changes
+
+- Background overhaul release: instant new-tab reveal even when the photo CDN stalls, dim/blur readability sliders, a near-doubled wallpaper collection with verified photographer credits, and a location-first credit line.
+
+### Patch Changes
+
+- 00997df: Keep the photo credit and its "new background" button on the home and Pomodoro pages, where the background is the point. Goals, Quotes, Insights and Concepts no longer have it sitting over their content in the bottom-left corner.
+- 62e6a93: Dim and blur sliders for the background image, so your quote and goals stay readable over any photo — including your own.
+- d5cd0b3: Fix a new tab that could stay stuck on "Brewing your view…" indefinitely when the background image host was slow or blocked. The page now appears promptly and the photo fades in when it arrives.
+- ad4039b: The background credit now leads with where the photo was taken ("Ciucaș Peak, Romania"), with the photographer credit revealed on hover or keyboard focus; photos without a place tag keep the visible byline.
+- a89fed0: Nearly double the background wallpaper collection (115 photos, 15–20 per category), every one now crediting its photographer by name — plus removal of two dead images and one miscategorized photo that had been shipping broken.
+- Updated dependencies [00997df]
+- Updated dependencies [62e6a93]
+- Updated dependencies [d5cd0b3]
+- Updated dependencies [ad4039b]
+- Updated dependencies
+- Updated dependencies [a89fed0]
+  - @cuewise/app@1.17.0
+  - @cuewise/shared@1.19.0
+  - @cuewise/storage@1.19.0
+  - @cuewise/ui@1.19.0
+  - @cuewise/sync-client@0.1.4
+  - @cuewise/sync-engine@0.1.4
+
 ## 1.18.0
 
 ### Minor Changes
