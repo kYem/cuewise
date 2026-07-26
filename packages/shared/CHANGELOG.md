@@ -1,5 +1,11 @@
 # @cuewise/shared
 
+## 1.20.0
+
+### Minor Changes
+
+- b96a7ae: See the weather on your new tab — current conditions and the rest of today's forecast, from a city you pick yourself. Off until you turn it on, no location permission ever requested, and requests go through Cuewise's own proxy so your browser never talks to a weather company.
+
 ## 1.19.0
 
 ### Patch Changes

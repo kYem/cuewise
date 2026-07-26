@@ -1,5 +1,21 @@
 # @cuewise/macos
 
+## 0.3.0
+
+### Minor Changes
+
+- b96a7ae: See the weather on your new tab — current conditions and the rest of today's forecast, from a city you pick yourself. Off until you turn it on, no location permission ever requested, and requests go through Cuewise's own proxy so your browser never talks to a weather company.
+
+### Patch Changes
+
+- Updated dependencies [b96a7ae]
+  - @cuewise/app@1.18.0
+  - @cuewise/shared@1.20.0
+  - @cuewise/storage@1.20.0
+  - @cuewise/ui@1.20.0
+  - @cuewise/sync-client@0.1.5
+  - @cuewise/sync-engine@0.1.5
+
 ## 0.2.3
 
 ### Patch Changes
