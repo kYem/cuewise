@@ -61,11 +61,6 @@ export interface SettingsStore {
   initialize: () => Promise<void>;
   previewSettings: (settings: Partial<PreviewableSettings>) => void;
   clearPreview: () => void;
-  updateTheme: (theme: Settings['theme']) => Promise<void>;
-  updateNotifications: (enabled: boolean) => Promise<void>;
-  updateQuoteChangeInterval: (interval: Settings['quoteChangeInterval']) => Promise<void>;
-  updateColorTheme: (colorTheme: ColorTheme) => Promise<void>;
-  updateLayoutDensity: (density: LayoutDensity) => Promise<void>;
   // Both resolve true only when the write actually persisted, so callers can
   // gate "saved" affordances — the storage adapters report failure via the
   // result object rather than throwing.
@@ -113,103 +108,6 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       logger.error('Error initializing settings store', error);
       const errorMessage = 'Failed to load settings. Please refresh the page.';
       set({ error: errorMessage, isLoading: false });
-      useToastStore.getState().error(errorMessage);
-    }
-  },
-
-  updateTheme: async (theme: Settings['theme']) => {
-    const { settings } = get();
-    const updatedSettings = { ...settings, theme };
-
-    try {
-      await setSettings(updatedSettings);
-      set({ settings: updatedSettings });
-      notifyMutated('settings', 'theme');
-      applyTheme(theme);
-    } catch (error) {
-      logger.error('Error updating theme', error);
-      const errorMessage = 'Failed to update theme. Please try again.';
-      set({ error: errorMessage });
-      useToastStore.getState().error(errorMessage);
-    }
-  },
-
-  updateNotifications: async (enabled: boolean) => {
-    const { settings } = get();
-    const updatedSettings = { ...settings, enableNotifications: enabled };
-
-    try {
-      // Request notification permission if enabling
-      if (enabled && 'Notification' in window && Notification.permission === 'default') {
-        const permission = await Notification.requestPermission();
-        if (permission !== 'granted') {
-          const errorMessage =
-            'Notification permission denied. Please enable notifications in your browser settings.';
-          set({ error: errorMessage });
-          useToastStore.getState().warning(errorMessage);
-          return;
-        }
-      }
-
-      await setSettings(updatedSettings);
-      set({ settings: updatedSettings });
-      notifyMutated('settings', 'enableNotifications');
-    } catch (error) {
-      logger.error('Error updating notifications', error);
-      const errorMessage = 'Failed to update notifications. Please try again.';
-      set({ error: errorMessage });
-      useToastStore.getState().error(errorMessage);
-    }
-  },
-
-  updateQuoteChangeInterval: async (interval: number) => {
-    const { settings } = get();
-    // Validate interval: 0 for manual, or 10-3600 for auto-refresh (minimum 10 seconds)
-    const validInterval = interval === 0 ? 0 : Math.max(10, Math.min(3600, interval));
-    const updatedSettings = { ...settings, quoteChangeInterval: validInterval };
-
-    try {
-      await setSettings(updatedSettings);
-      set({ settings: updatedSettings });
-      notifyMutated('settings', 'quoteChangeInterval');
-    } catch (error) {
-      logger.error('Error updating quote interval', error);
-      const errorMessage = 'Failed to update quote interval. Please try again.';
-      set({ error: errorMessage });
-      useToastStore.getState().error(errorMessage);
-    }
-  },
-
-  updateColorTheme: async (colorTheme: ColorTheme) => {
-    const { settings } = get();
-    const updatedSettings = { ...settings, colorTheme };
-
-    try {
-      await setSettings(updatedSettings);
-      set({ settings: updatedSettings });
-      notifyMutated('settings', 'colorTheme');
-      applyColorTheme(colorTheme);
-    } catch (error) {
-      logger.error('Error updating color theme', error);
-      const errorMessage = 'Failed to update color theme. Please try again.';
-      set({ error: errorMessage });
-      useToastStore.getState().error(errorMessage);
-    }
-  },
-
-  updateLayoutDensity: async (density: LayoutDensity) => {
-    const { settings } = get();
-    const updatedSettings = { ...settings, layoutDensity: density };
-
-    try {
-      await setSettings(updatedSettings);
-      set({ settings: updatedSettings });
-      notifyMutated('settings', 'layoutDensity');
-      applyLayoutDensity(density);
-    } catch (error) {
-      logger.error('Error updating layout density', error);
-      const errorMessage = 'Failed to update layout density. Please try again.';
-      set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
     }
   },

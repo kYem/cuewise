@@ -74,10 +74,16 @@ describe('sync sink wiring', () => {
     expect(markMutated).not.toHaveBeenCalledWith('settings', 'showClock');
   });
 
-  it('notifies markMutated with "theme" after updateTheme persists', async () => {
-    await useSettingsStore.getState().updateTheme('dark');
+  it('notifies markMutated with "theme" after a theme write persists', async () => {
+    await useSettingsStore.getState().updateSettings({ theme: 'dark' });
 
     expect(markMutated).toHaveBeenCalledWith('settings', 'theme');
+  });
+
+  it('does not notify when the selected theme is already active', async () => {
+    await useSettingsStore.getState().updateSettings({ theme: defaultSettings.theme });
+
+    expect(markMutated).not.toHaveBeenCalledWith('settings', 'theme');
   });
 });
 
