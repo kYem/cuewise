@@ -66,7 +66,12 @@ const pushBodySchema = z.looseObject({ records: z.array(z.unknown()) });
  * from being reported as clock drift as well.
  */
 function issuesFor(raw: unknown, index: number, nowMs: number): ValidationIssue[] {
-  const result = recordSchema(nowMs).safeParse(raw ?? {});
+  // Anything that is not an object is reported as every field missing, the same as `{}`.
+  // Handing zod a primitive yields one issue with an empty path, which would render as the
+  // pointer `/records/0/` — naming no field — and carry zod's own message rather than the
+  // strings clients parse.
+  const record = typeof raw === 'object' && raw !== null && !Array.isArray(raw) ? raw : {};
+  const result = recordSchema(nowMs).safeParse(record);
   if (result.success) {
     return [];
   }

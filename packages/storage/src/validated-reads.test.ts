@@ -58,12 +58,15 @@ describe('a stored value that no longer matches its shape', () => {
     expect(JSON.stringify(warn.mock.calls)).not.toContain('not an object');
   });
 
-  it('falls back to defaults rather than a half-broken settings object', async () => {
+  // Settings is the exception to the discard rule, and this test used to assert the
+  // opposite: that a partial blob is thrown away wholesale. That is precisely the bug —
+  // a partial blob is what every upgrade produces, and discarding it resets the lot.
+  it('keeps the settings a partial blob does carry, and defaults the rest', async () => {
     configurePlatform({ storage: storeHolding({ settings: { theme: 'dark' } }) });
 
     const settings = await getSettings();
 
-    expect(settings.theme).toBe('auto');
+    expect(settings.theme).toBe('dark');
     expect(settings.pomodoroWorkDuration).toBe(25);
   });
 });
@@ -105,5 +108,77 @@ describe('a stored value that still matches', () => {
     configurePlatform({ storage: storeHolding({ goals }) });
 
     await expect(getGoals()).resolves.toEqual(goals);
+  });
+});
+
+// Settings is only rewritten when the user changes something, and there is no upgrade
+// migration, so a blob written by any earlier release legitimately lacks every field added
+// since. Rejecting it wholesale resets every preference — and `syncEnabled` decides the
+// storage *area*, so the user's synced goals and quotes would read as empty and the next
+// write would persist that as fact.
+describe('a settings blob written by an older release', () => {
+  const v118 = {
+    theme: 'dark',
+    colorTheme: 'forest',
+    syncEnabled: true,
+    hasSeenOnboarding: true,
+    pomodoroWorkDuration: 50,
+  };
+
+  it('keeps every choice the user actually made', async () => {
+    configurePlatform({ storage: storeHolding({ settings: v118 }) });
+
+    const settings = await getSettings();
+
+    expect(settings.theme).toBe('dark');
+    expect(settings.colorTheme).toBe('forest');
+    expect(settings.hasSeenOnboarding).toBe(true);
+    expect(settings.pomodoroWorkDuration).toBe(50);
+  });
+
+  it('fills fields it has never heard of from the defaults', async () => {
+    configurePlatform({ storage: storeHolding({ settings: v118 }) });
+
+    const settings = await getSettings();
+
+    expect(settings.showWeather).toBe(false);
+    expect(settings.backgroundDim).toBe(0);
+  });
+
+  // The worst consequence of an all-or-nothing reject: syncEnabled falls back to false,
+  // every subsequent read switches to the local area, and the synced data looks gone.
+  it('still reads the sync area, so synced data does not vanish', async () => {
+    const goals = [
+      { id: 'g1', text: 'synced', completed: false, createdAt: 'x', date: '2026-07-26' },
+    ];
+    const areas: string[] = [];
+    configurePlatform({
+      storage: {
+        supportsSync: true,
+        get: async (key: string, area: string) => {
+          areas.push(`${key}@${area}`);
+          if (key === 'settings') {
+            return v118 as never;
+          }
+          return (key === 'goals' && area === 'sync' ? goals : null) as never;
+        },
+        set: async () => ({ success: true }),
+        remove: async () => true,
+        getUsage: async () => ({ bytesInUse: 0, quota: 10_000_000 }),
+      },
+    });
+
+    await expect(getGoals()).resolves.toEqual(goals);
+    expect(areas).toContain('goals@sync');
+  });
+
+  // One unreadable field must cost that field, not the other 67.
+  it('drops only the field it cannot read', async () => {
+    configurePlatform({ storage: storeHolding({ settings: { ...v118, theme: 42 } }) });
+
+    const settings = await getSettings();
+
+    expect(settings.theme).toBe('auto');
+    expect(settings.colorTheme).toBe('forest');
   });
 });

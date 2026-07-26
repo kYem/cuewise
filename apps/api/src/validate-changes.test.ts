@@ -173,4 +173,23 @@ describe('the push validation error contract', () => {
       { index: 0, pointer: '/records/0/collection', detail: 'must not exceed 64 bytes' },
     ]);
   });
+
+  // A client with a serialization bug sends a primitive where a record belongs. Handing
+  // that straight to the object schema yields one issue with an empty path, which renders
+  // as the pointer `/records/0/` — naming no field — with zod's own message attached.
+  it.each([
+    ['a primitive', 42],
+    ['a string', 'nope'],
+    ['an array', []],
+  ])('reports %s in the records list as every field missing', (_label, element) => {
+    const issues = problemFor({ records: [element] }).issues;
+
+    expect(issues).toEqual([
+      { index: 0, pointer: '/records/0/collection', detail: 'required non-empty string' },
+      { index: 0, pointer: '/records/0/entityId', detail: 'required non-empty string' },
+      { index: 0, pointer: '/records/0/ciphertext', detail: 'required string' },
+      { index: 0, pointer: '/records/0/clientUpdatedAt', detail: 'required finite number' },
+      { index: 0, pointer: '/records/0/deleted', detail: 'required boolean' },
+    ]);
+  });
 });

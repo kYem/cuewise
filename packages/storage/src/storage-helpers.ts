@@ -42,6 +42,7 @@ import {
 } from '@cuewise/shared';
 import { z } from 'zod/mini';
 import {
+  getFromStorage,
   getValidatedFromStorage,
   removeFromStorage,
   type StorageResult,
@@ -54,12 +55,8 @@ import {
  */
 async function getStorageArea(): Promise<'local' | 'sync'> {
   // Always use local for settings to avoid circular dependency
-  const settings = await getValidatedFromStorage<Settings>(
-    STORAGE_KEYS.SETTINGS,
-    settingsSchema,
-    'local'
-  );
-  const syncEnabled = settings?.syncEnabled ?? DEFAULT_SETTINGS.syncEnabled;
+  const settings = await readStoredSettingsFields();
+  const syncEnabled = settings.syncEnabled ?? DEFAULT_SETTINGS.syncEnabled;
   return syncEnabled ? 'sync' : 'local';
 }
 
@@ -349,19 +346,59 @@ export async function setCustomYoutubePlaylists(
 
 // Settings
 // Note: Settings are always stored in local storage to avoid circular dependency
-export async function getSettings(): Promise<Settings> {
-  const settings = await getValidatedFromStorage<Settings>(
-    STORAGE_KEYS.SETTINGS,
-    settingsSchema,
-    'local'
-  );
-  return settings ?? DEFAULT_SETTINGS;
+/**
+ * Settings is the one blob that must never be validated all-or-nothing.
+ *
+ * It is only rewritten when the user changes something, and there is no upgrade migration,
+ * so a blob written by any earlier release legitimately lacks every field added since.
+ * Rejecting the whole object would reset every preference on upgrade — including
+ * `syncEnabled`, which decides the storage *area*, so the user's synced goals and quotes
+ * would read as empty and the next write would persist that as fact.
+ *
+ * So each field is checked on its own: absent or unreadable ones fall back to their
+ * default, and everything the user actually chose survives.
+ */
+async function readStoredSettingsFields(): Promise<Partial<Settings>> {
+  const raw = await getFromStorage<unknown>(STORAGE_KEYS.SETTINGS, 'local');
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    return {};
+  }
+  const stored = raw as Record<string, unknown>;
+  const kept: Record<string, unknown> = {};
+  const dropped: string[] = [];
+  for (const [key, fieldSchema] of Object.entries(settingsSchema.def.shape)) {
+    const value = stored[key];
+    if (value === undefined) {
+      continue;
+    }
+    if (fieldSchema.safeParse(value).success) {
+      kept[key] = value;
+    } else {
+      dropped.push(key);
+    }
+  }
+  if (dropped.length > 0) {
+    // Names only — a setting's value can be a goal id or a playlist the user picked.
+    logger.warn('Ignored unreadable settings fields, using their defaults', { fields: dropped });
+  }
+  return kept as Partial<Settings>;
 }
 
-// Raw settings blob: null when never stored OR unreadable (the port conflates
-// the two). For destructive automation that must fail closed — not for rendering.
+export async function getSettings(): Promise<Settings> {
+  return { ...DEFAULT_SETTINGS, ...(await readStoredSettingsFields()) };
+}
+
+/**
+ * Null when nothing was ever stored. For destructive automation that must fail closed,
+ * which is why this reports absence rather than defaults — but a blob missing only fields
+ * added since it was written is present, not absent.
+ */
 export async function getStoredSettings(): Promise<Settings | null> {
-  return await getValidatedFromStorage<Settings>(STORAGE_KEYS.SETTINGS, settingsSchema, 'local');
+  const raw = await getFromStorage<unknown>(STORAGE_KEYS.SETTINGS, 'local');
+  if (raw === null) {
+    return null;
+  }
+  return { ...DEFAULT_SETTINGS, ...(await readStoredSettingsFields()) };
 }
 
 export async function setSettings(settings: Settings): Promise<StorageResult> {
@@ -436,51 +473,23 @@ export async function migrateStorageData(
   toArea: 'local' | 'sync'
 ): Promise<StorageResult> {
   try {
-    // Get user data from source storage area
+    // Raw reads, deliberately. Migration moves bytes between areas — it never renders
+    // anything — and a validated read would turn an unreadable blob into `[]`, which the
+    // unconditional writes below would then copy over live data in the destination. The
+    // read paths still validate on the way out, so a bad blob stays quarantined, not erased.
     const customQuotes =
-      (await getValidatedFromStorage<Quote[]>(
-        STORAGE_KEYS.CUSTOM_QUOTES,
-        z.array(quoteSchema),
-        fromArea
-      )) ?? [];
-    const currentQuote = await getValidatedFromStorage<Quote>(
-      STORAGE_KEYS.CURRENT_QUOTE,
-      quoteSchema,
-      fromArea
-    );
-    const goals =
-      (await getValidatedFromStorage<Goal[]>(STORAGE_KEYS.GOALS, z.array(goalSchema), fromArea)) ??
-      [];
-    const reminders =
-      (await getValidatedFromStorage<Reminder[]>(
-        STORAGE_KEYS.REMINDERS,
-        z.array(reminderSchema),
-        fromArea
-      )) ?? [];
+      (await getFromStorage<Quote[]>(STORAGE_KEYS.CUSTOM_QUOTES, fromArea)) ?? [];
+    const currentQuote = await getFromStorage<Quote>(STORAGE_KEYS.CURRENT_QUOTE, fromArea);
+    const goals = (await getFromStorage<Goal[]>(STORAGE_KEYS.GOALS, fromArea)) ?? [];
+    const reminders = (await getFromStorage<Reminder[]>(STORAGE_KEYS.REMINDERS, fromArea)) ?? [];
     const sessions =
-      (await getValidatedFromStorage<PomodoroSession[]>(
-        STORAGE_KEYS.POMODORO_SESSIONS,
-        z.array(pomodoroSessionSchema),
-        fromArea
-      )) ?? [];
+      (await getFromStorage<PomodoroSession[]>(STORAGE_KEYS.POMODORO_SESSIONS, fromArea)) ?? [];
     const collections =
-      (await getValidatedFromStorage<QuoteCollection[]>(
-        STORAGE_KEYS.COLLECTIONS,
-        z.array(quoteCollectionSchema),
-        fromArea
-      )) ?? [];
+      (await getFromStorage<QuoteCollection[]>(STORAGE_KEYS.COLLECTIONS, fromArea)) ?? [];
     const quickLinks =
-      (await getValidatedFromStorage<QuickLink[]>(
-        STORAGE_KEYS.QUICK_LINKS,
-        z.array(quickLinkSchema),
-        fromArea
-      )) ?? [];
+      (await getFromStorage<QuickLink[]>(STORAGE_KEYS.QUICK_LINKS, fromArea)) ?? [];
     const conceptCards =
-      (await getValidatedFromStorage<ConceptCard[]>(
-        STORAGE_KEYS.CONCEPT_CARDS,
-        z.array(conceptCardSchema),
-        fromArea
-      )) ?? [];
+      (await getFromStorage<ConceptCard[]>(STORAGE_KEYS.CONCEPT_CARDS, fromArea)) ?? [];
 
     // Copy data to destination storage area
     // Note: Seed quotes are not migrated (always in local storage)
