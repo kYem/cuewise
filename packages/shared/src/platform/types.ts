@@ -99,6 +99,13 @@ export interface KeyValueStore {
 }
 
 /**
+ * Outbound HTTP. A port because the Tauri webview is blocked from api.cuewise.app by its
+ * production CSP *and* the API's CORS policy, so macOS must route through the native
+ * plugin fetch while the extension uses the global.
+ */
+export type HttpFetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+
+/**
  * Optional sink notified when a store mutates a synced entity. Unlike the ports above,
  * sync is opt-in (ENG-45): the app only configures this once cloud sync is enabled.
  */

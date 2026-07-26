@@ -37,6 +37,9 @@
   },
   // Hand-authored config skips the dashboard default; without this, logger.error/warn never
   // reach Workers Logs in production.
+  // Invocation logs stay on: they record `<Method> <URL>` plus headers, never the body, and
+  // /v1/weather* carries lat/lon/q in the body precisely so this setting can stay true for
+  // the sync and auth routes that need it.
   "observability": { "enabled": true },
   // Recommended for Workers that make several round trips to D1 plus outbound JWKS fetches.
   "placement": { "mode": "smart" }

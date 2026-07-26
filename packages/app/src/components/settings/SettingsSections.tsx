@@ -13,6 +13,8 @@ import {
   type ReminderPanelLayout,
   type SettingsLogLevel,
   type TimeFormat,
+  type WeatherPosition,
+  type WeatherUnitsPreference,
 } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
 import type { LucideIcon } from 'lucide-react';
@@ -50,6 +52,7 @@ import { settingsMatch } from './settings-match';
 import type { SettingsSectionProps } from './settings-types';
 import { ThumbPicker } from './ThumbPicker';
 import { pomodoroWorkStep } from './timer-presets';
+import { WeatherLocationPicker } from './WeatherLocationPicker';
 
 const SOUND_OPTIONS = Object.entries(NOTIFICATION_SOUNDS).map(([value, label]) => ({
   value,
@@ -80,6 +83,17 @@ const FOCUS_POSITION_OPTIONS: { value: FocusPosition; label: string }[] = [
 const TIME_FORMAT_OPTIONS: { value: TimeFormat; label: string }[] = [
   { value: '12h', label: '2:30 PM' },
   { value: '24h', label: '14:30' },
+];
+
+const WEATHER_POSITION_OPTIONS: { value: WeatherPosition; label: string }[] = [
+  { value: 'left', label: 'Left' },
+  { value: 'right', label: 'Right' },
+];
+
+const WEATHER_UNITS_OPTIONS: { value: WeatherUnitsPreference; label: string }[] = [
+  { value: 'auto', label: 'Auto' },
+  { value: 'metric', label: '°C' },
+  { value: 'imperial', label: '°F' },
 ];
 
 const REMINDER_LAYOUT_OPTIONS: { value: ReminderPanelLayout; label: string }[] = [
@@ -557,6 +571,39 @@ function HomeSection({ s, set, filter }: SettingsSectionProps) {
           onChange={(v) => set({ showQuickLinks: v })}
         />
       </SettingRow>
+      <SettingRow
+        label="Weather"
+        filter={filter}
+        help="Current conditions and today's forecast, fetched through Cuewise's own proxy"
+        keywords="weather temperature forecast rain sun location city climate"
+      >
+        <Switch label="Weather" checked={s.showWeather} onChange={(v) => set({ showWeather: v })} />
+      </SettingRow>
+      {s.showWeather && (
+        <SettingSubgroup>
+          <SettingRow
+            label="Location"
+            filter={filter}
+            keywords="weather city town place location search"
+          >
+            <WeatherLocationPicker />
+          </SettingRow>
+          <SettingRow label="Units" filter={filter} keywords="weather celsius fahrenheit units">
+            <Segmented
+              value={s.weatherUnits}
+              options={WEATHER_UNITS_OPTIONS}
+              onChange={(v) => set({ weatherUnits: v })}
+            />
+          </SettingRow>
+          <SettingRow label="Position" filter={filter} keywords="weather left right position">
+            <Segmented
+              value={s.weatherPosition}
+              options={WEATHER_POSITION_OPTIONS}
+              onChange={(v) => set({ weatherPosition: v })}
+            />
+          </SettingRow>
+        </SettingSubgroup>
+      )}
       <SettingDivider />
       <SettingRow
         label="Quote display"

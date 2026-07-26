@@ -42,6 +42,9 @@ if (window.location.hash === '#glow') {
     storage,
     notifier: inTauri ? new TauriNotifier() : new WebNotifier(),
     scheduler,
+    // Same reason sync passes `fetchFn` below — the production CSP and API CORS both
+    // block webview fetch to api.cuewise.app.
+    httpFetch: inTauri ? tauriFetch : (url, init) => fetch(url, init),
   });
 
   // The Rust core owns the timers; when one fires it emits `scheduler://fire` and

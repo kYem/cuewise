@@ -313,6 +313,86 @@ export interface CalendarState {
   lastSync: string | null; // ISO timestamp of the last fetch
 }
 
+// Weather (ENG-18). 'auto' is resolved client-side, so the server never guesses units
+// from request headers.
+// Listed as values, not a bare union, so runtime validators can check membership instead
+// of asserting a narrowing they never verified.
+export const WEATHER_UNITS = ['metric', 'imperial'] as const;
+export type WeatherUnits = (typeof WEATHER_UNITS)[number];
+export type WeatherUnitsPreference = 'auto' | WeatherUnits;
+
+// Which floating cluster the chip joins on the new tab.
+export type WeatherPosition = 'left' | 'right';
+
+// `timezone` is the location's own IANA zone — all "today" arithmetic uses it, never the
+// device's, so a location abroad shows its own day.
+export interface WeatherLocation {
+  id: string;
+  name: string;
+  admin1: string | null; // region/state, when the provider knows one
+  country: string;
+  countryCode: string;
+  latitude: number;
+  longitude: number;
+  timezone: string;
+}
+
+// The proxy maps WMO codes onto these so a provider swap never reaches client code.
+export const WEATHER_CONDITION_KINDS = [
+  'clear',
+  'partly-cloudy',
+  'cloudy',
+  'fog',
+  'drizzle',
+  'rain',
+  'snow',
+  'thunderstorm',
+  'unknown',
+] as const;
+export type WeatherConditionKind = (typeof WEATHER_CONDITION_KINDS)[number];
+
+export interface WeatherHour {
+  time: string; // ISO local time in the location's zone, no offset suffix
+  temperature: number;
+  condition: WeatherConditionKind;
+  // Per-hour, from the day's sunrise/sunset: the strip would otherwise draw a sun beside
+  // every clear night hour.
+  isDay: boolean;
+}
+
+export interface WeatherCurrent {
+  temperature: number;
+  // Null when the provider omitted it. Defaulting to `temperature` would render an
+  // invented "feels like" exactly like a measured one — the same fabrication the proxy
+  // refuses for the daily high and low.
+  apparentTemperature: number | null;
+  condition: WeatherConditionKind;
+  isDay: boolean;
+}
+
+// `hours` is the whole local day, not a sample: sampling depends on the current minute,
+// which would make every edge-cached response stale a minute after it was stored.
+export interface WeatherForecast {
+  units: WeatherUnits;
+  timezone: string; // IANA zone the provider resolved for these coordinates
+  current: WeatherCurrent;
+  high: number;
+  low: number;
+  hours: WeatherHour[];
+}
+
+export interface WeatherSnapshot extends WeatherForecast {
+  location: WeatherLocation;
+}
+
+// Its own storage key rather than a Settings field, which makes the location device-local
+// by construction (mirroring CALENDAR): a travelling laptop shows where it actually is.
+export interface WeatherState {
+  location: WeatherLocation | null;
+  snapshot: WeatherSnapshot | null;
+  lastFetch: string | null; // ISO timestamp of the last successful fetch
+}
+
 // Settings interface
 export interface Settings {
   pomodoroWorkDuration: number; // minutes (default 25)
@@ -346,6 +426,9 @@ export interface Settings {
   showThemeSwitcher: boolean; // Show live theme switcher sidebar
   showClock: boolean; // Show clock and date on home page (default false)
   showQuickLinks: boolean; // Show quick-link shortcut tiles top-left on home page (default true)
+  showWeather: boolean; // Show the weather chip on the new tab (default false)
+  weatherPosition: WeatherPosition; // Which floating cluster the chip joins (default 'left')
+  weatherUnits: WeatherUnitsPreference; // 'auto' resolves from locale (default 'auto')
   // Goal Transfer
   enableGoalTransfer: boolean; // Enable goal transfer feature (default true)
   goalTransferTime: number; // Hour (0-23) when transfer button appears (default 20 for 8 PM)
@@ -417,6 +500,7 @@ export const STORAGE_KEYS = {
   CONCEPT_CARDS: 'conceptCards', // Spaced-repetition concept/definition cards
   CALENDAR: 'calendar', // Google Calendar connection + cached events
   POSTURE_STATS: 'postureStats', // Daily posture rollups (macOS tracking)
+  WEATHER: 'weather', // Chosen location + last forecast reading (device-local)
 } as const;
 
 // Daily background image data (persisted to change only once per day)

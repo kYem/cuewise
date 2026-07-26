@@ -21,3 +21,5 @@ export * from './sync-scope';
 export * from './types';
 // Export utilities
 export * from './utils';
+// Export weather helpers (WMO mapping, hour sampling, unit resolution)
+export * from './weather-utils';

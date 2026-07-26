@@ -163,6 +163,9 @@ docs/
 # Internal feature specs (kept local, not tracked)
 /specs/
 
+# Brainstorming companion mockups (local session artifacts)
+.superpowers/
+
 # design-sync (claude.ai/design system sync) — durable inputs under .design-sync/ stay tracked
 .ds-sync/
 ds-bundle/

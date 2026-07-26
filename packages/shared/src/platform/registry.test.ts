@@ -1,13 +1,14 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   configurePlatform,
+  getHttpFetch,
   getNotifier,
   getScheduler,
   getStorage,
   getSyncSink,
   resetPlatform,
 } from './registry';
-import type { KeyValueStore, Notifier, Scheduler, SyncMutationSink } from './types';
+import type { HttpFetch, KeyValueStore, Notifier, Scheduler, SyncMutationSink } from './types';
 
 const fakeScheduler: Scheduler = {
   deliversInBackground: false,
@@ -30,6 +31,7 @@ const fakeSyncSink: SyncMutationSink = {
   markMutated: async () => {},
   markDeleted: async () => {},
 };
+const fakeHttpFetch: HttpFetch = async () => new Response('{}');
 
 describe('platform registry', () => {
   beforeEach(() => {
@@ -63,6 +65,17 @@ describe('platform registry', () => {
     expect(getStorage()).toBe(fakeStorage);
   });
 
+  // Deliberately throws rather than falling back to globalThis.fetch: a silent default
+  // would hide a missing macOS registration until a runtime CSP error.
+  it('throws when the http fetch is not configured', () => {
+    expect(() => getHttpFetch()).toThrow(/httpfetch/i);
+  });
+
+  it('returns the configured http fetch', () => {
+    configurePlatform({ httpFetch: fakeHttpFetch });
+    expect(getHttpFetch()).toBe(fakeHttpFetch);
+  });
+
   it('returns null for the sync sink when not configured, unlike the other ports', () => {
     expect(getSyncSink()).toBeNull();
   });
@@ -76,12 +89,22 @@ describe('platform registry', () => {
     configurePlatform({ scheduler: fakeScheduler });
     configurePlatform({ notifier: fakeNotifier });
     configurePlatform({ storage: fakeStorage });
+    configurePlatform({ httpFetch: fakeHttpFetch });
     configurePlatform({ syncSink: fakeSyncSink });
 
     expect(getScheduler()).toBe(fakeScheduler);
     expect(getNotifier()).toBe(fakeNotifier);
     expect(getStorage()).toBe(fakeStorage);
+    expect(getHttpFetch()).toBe(fakeHttpFetch);
     expect(getSyncSink()).toBe(fakeSyncSink);
+  });
+
+  it('resetPlatform clears the http fetch', () => {
+    configurePlatform({ httpFetch: fakeHttpFetch });
+
+    resetPlatform();
+
+    expect(() => getHttpFetch()).toThrow(/httpfetch/i);
   });
 
   it('explicitly clearing the sync sink with null does not disturb the other bindings', () => {

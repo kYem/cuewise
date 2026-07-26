@@ -22,6 +22,12 @@ describe('DEFAULT_SETTINGS', () => {
     expect(DEFAULT_SETTINGS.backgroundDim).toBe(0);
     expect(DEFAULT_SETTINGS.backgroundBlur).toBe(0);
   });
+
+  // The one widget that sends where you are off the device, so the default is the whole
+  // privacy promise: a refactor flipping it would opt in the entire installed base.
+  it('keeps weather opt-in (off by default)', () => {
+    expect(DEFAULT_SETTINGS.showWeather).toBe(false);
+  });
 });
 
 // The import path silently skips blanks and duplicate terms, so a bad pack edit

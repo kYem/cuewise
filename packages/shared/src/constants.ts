@@ -64,6 +64,9 @@ export const DEFAULT_SETTINGS: Settings = {
   showThemeSwitcher: false,
   showClock: false, // Clock hidden by default for simpler UI
   showQuickLinks: true, // Quick-link tiles shown by default
+  showWeather: false, // Opt-in: the only widget that sends where you are off the device
+  weatherPosition: 'left', // Beside goals and quick links
+  weatherUnits: 'auto', // Resolved from the device locale until the user overrides it
   enableGoalTransfer: true,
   goalTransferTime: 20, // 8 PM (20:00)
   autoRollDueTasks: true,

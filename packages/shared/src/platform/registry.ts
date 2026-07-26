@@ -1,4 +1,4 @@
-import type { KeyValueStore, Notifier, Scheduler, SyncMutationSink } from './types';
+import type { HttpFetch, KeyValueStore, Notifier, Scheduler, SyncMutationSink } from './types';
 
 /**
  * Bootstrap container for the active platform implementations. `configurePlatform`
@@ -9,12 +9,14 @@ import type { KeyValueStore, Notifier, Scheduler, SyncMutationSink } from './typ
 let scheduler: Scheduler | null = null;
 let notifier: Notifier | null = null;
 let storage: KeyValueStore | null = null;
+let httpFetch: HttpFetch | null = null;
 let syncSink: SyncMutationSink | null = null;
 
 export function configurePlatform(impls: {
   scheduler?: Scheduler;
   notifier?: Notifier;
   storage?: KeyValueStore;
+  httpFetch?: HttpFetch;
   // Passing `null` explicitly CLEARS the sink (targeted test reset); omitting the key
   // leaves it untouched, same `!== undefined` merge as the other bindings above.
   syncSink?: SyncMutationSink | null;
@@ -27,6 +29,9 @@ export function configurePlatform(impls: {
   }
   if (impls.storage !== undefined) {
     storage = impls.storage;
+  }
+  if (impls.httpFetch !== undefined) {
+    httpFetch = impls.httpFetch;
   }
   if (impls.syncSink !== undefined) {
     syncSink = impls.syncSink;
@@ -54,6 +59,18 @@ export function getStorage(): KeyValueStore {
   return storage;
 }
 
+/**
+ * Throws rather than defaulting to `globalThis.fetch`: a silent default would turn a
+ * missing macOS registration into an opaque CSP error at the first request, instead of
+ * naming the port that was never configured.
+ */
+export function getHttpFetch(): HttpFetch {
+  if (httpFetch === null) {
+    throw new Error('HttpFetch not configured. Call configurePlatform() at startup.');
+  }
+  return httpFetch;
+}
+
 /** Nullable, unlike the getters above — sync is optional, so an unconfigured sink is valid. */
 export function getSyncSink(): SyncMutationSink | null {
   return syncSink;
@@ -64,5 +81,6 @@ export function resetPlatform(): void {
   scheduler = null;
   notifier = null;
   storage = null;
+  httpFetch = null;
   syncSink = null;
 }
