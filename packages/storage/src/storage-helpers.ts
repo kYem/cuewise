@@ -4,8 +4,10 @@
 
 import {
   type CalendarState,
+  type CalendarStateEnvelope,
   type ConceptCard,
-  calendarStateSchema,
+  calendarEventSchema,
+  calendarStateEnvelopeSchema,
   conceptCardSchema,
   DAY_IN_MS,
   type DailyBackground,
@@ -36,7 +38,6 @@ import {
   settingsSchema,
   storageFailure,
   type WeatherState,
-  weatherStateSchema,
   type YoutubePlaylist,
   youtubePlaylistSchema,
 } from '@cuewise/shared';
@@ -56,7 +57,9 @@ import {
  */
 async function getStorageArea(): Promise<'local' | 'sync'> {
   // Always use local for settings to avoid circular dependency
-  const settings = await readStoredSettingsFields();
+  // Quiet: this runs on every storage helper call, so one unreadable field would otherwise
+  // warn dozens of times per page load. `getSettings` reports it once.
+  const settings = await readStoredSettingsFields({ quiet: true });
   const syncEnabled = settings.syncEnabled ?? DEFAULT_SETTINGS.syncEnabled;
   return syncEnabled ? 'sync' : 'local';
 }
@@ -281,11 +284,20 @@ export async function setPostureStats(stats: PostureDailyStat[]): Promise<Storag
 
 // Google Calendar (connection + cached events; always local)
 export async function getCalendarState(): Promise<CalendarState | null> {
-  return getValidatedFromStorage<CalendarState>(
+  const stored = await getValidatedFromStorage<CalendarStateEnvelope>(
     STORAGE_KEYS.CALENDAR,
-    calendarStateSchema,
+    calendarStateEnvelopeSchema,
     'local'
   );
+  if (stored === null) {
+    return null;
+  }
+  // Events are filtered per item: one stale cached row must not cost `connected`, which the
+  // store cannot recover without sending the user back through Google's consent screen.
+  const events = stored.events.filter(
+    (event) => calendarEventSchema.safeParse(event).success
+  ) as CalendarState['events'];
+  return { ...stored, events };
 }
 
 export async function setCalendarState(state: CalendarState): Promise<StorageResult> {
@@ -295,7 +307,11 @@ export async function setCalendarState(state: CalendarState): Promise<StorageRes
 // Always local, which is what makes the location per-device: a travelling laptop shows
 // where it actually is.
 export async function getWeatherState(): Promise<WeatherState | null> {
-  return getValidatedFromStorage<WeatherState>(STORAGE_KEYS.WEATHER, weatherStateSchema, 'local');
+  // Raw on purpose. `weather-store.initialize` validates location, snapshot and timestamp
+  // independently and keeps whichever survive — a reading this build cannot parse must not
+  // take the user's saved city with it. Validating the whole blob here returns null and
+  // makes that salvage unreachable, and re-picking a city then overwrites the loss.
+  return getFromStorage<WeatherState>(STORAGE_KEYS.WEATHER, 'local');
 }
 
 export async function setWeatherState(state: WeatherState): Promise<StorageResult> {
@@ -349,7 +365,9 @@ export async function setCustomYoutubePlaylists(
  * So each field is checked on its own: absent or unreadable ones fall back to their
  * default, and everything the user actually chose survives.
  */
-async function readStoredSettingsFields(): Promise<Partial<Settings>> {
+async function readStoredSettingsFields(
+  options: { quiet?: boolean } = {}
+): Promise<Partial<Settings>> {
   const raw = await getFromStorage<unknown>(STORAGE_KEYS.SETTINGS, 'local');
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
     return {};
@@ -375,7 +393,7 @@ async function readStoredSettingsFields(): Promise<Partial<Settings>> {
       dropped.push(key);
     }
   }
-  if (dropped.length > 0) {
+  if (dropped.length > 0 && options.quiet !== true) {
     // Names only — a setting's value can be a goal id or a playlist the user picked.
     logger.warn('Ignored unreadable settings fields, using their defaults', { fields: dropped });
   }

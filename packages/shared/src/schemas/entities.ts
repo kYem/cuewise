@@ -107,7 +107,7 @@ export const postureDailyStatSchema = z.object({
 assertNoDrift<z.infer<typeof postureDailyStatSchema>, PostureDailyStat>();
 
 /** Discriminated on `allDay`, so a timed event can never be read as an all-day one. */
-const calendarEventSchema = z.union([
+export const calendarEventSchema = z.union([
   z.object({
     id: z.string(),
     title: z.string(),
@@ -135,6 +135,18 @@ export const calendarStateSchema = z.object({
   lastSync: z.nullable(z.string()),
 });
 assertNoDrift<z.infer<typeof calendarStateSchema>, CalendarState>();
+
+/**
+ * The same state with its events left unchecked, so a reader can validate the wrapper and
+ * then filter the events per item. One stale cached row must not cost `connected` — the
+ * store cannot recover that without sending the user back through Google's consent screen.
+ */
+export const calendarStateEnvelopeSchema = z.object({
+  connected: z.boolean(),
+  events: z.array(z.unknown()),
+  lastSync: z.nullable(z.string()),
+});
+export type CalendarStateEnvelope = z.infer<typeof calendarStateEnvelopeSchema>;
 
 export const youtubePlaylistSchema = z.object({
   id: z.string(),

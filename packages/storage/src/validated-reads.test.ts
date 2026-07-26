@@ -1,6 +1,12 @@
 import { configurePlatform, type KeyValueStore, logger } from '@cuewise/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getGoals, getSettings, getWeatherState } from './storage-helpers';
+import {
+  getCalendarState,
+  getCurrentQuote,
+  getGoals,
+  getSettings,
+  getWeatherState,
+} from './storage-helpers';
 
 /** A store that hands back whatever was put on "disk", however malformed. */
 function storeHolding(values: Record<string, unknown>): KeyValueStore {
@@ -71,19 +77,29 @@ describe('a stored value that no longer matches its shape', () => {
     const warn = vi.spyOn(logger, 'warn');
     configurePlatform({
       storage: storeHolding({
-        weather: { location: null, snapshot: 'not an object', lastFetch: null },
+        currentQuote: { id: 'q1', text: 'a private note', viewCount: 'no' },
       }),
     });
 
-    await getWeatherState();
+    await getCurrentQuote();
 
     expect(warn).toHaveBeenCalledWith(
       'Discarded an unreadable stored value',
-      expect.objectContaining({ key: 'weather', paths: ['snapshot'] })
+      expect.objectContaining({ key: 'currentQuote' })
     );
-    // The blob holds the user's own quotes, goals and reminders elsewhere — the path is
-    // enough to diagnose a shape change, and the value is never anyone's business.
-    expect(JSON.stringify(warn.mock.calls)).not.toContain('not an object');
+    // The blob holds the user's own quotes, goals and reminders — the path is enough to
+    // diagnose a shape change, and the value is never anyone's business.
+    expect(JSON.stringify(warn.mock.calls)).not.toContain('a private note');
+  });
+
+  // The weather store already salvages location, snapshot and timestamp independently.
+  // Validating the whole blob in the read made that unreachable, so a reading this build
+  // could not parse took the user's saved city with it — and re-picking one overwrote it.
+  it('leaves the weather blob for the store to salvage per field', async () => {
+    const stored = { location: { id: 'l1' }, snapshot: 'unreadable', lastFetch: null };
+    configurePlatform({ storage: storeHolding({ weather: stored }) });
+
+    await expect(getWeatherState()).resolves.toEqual(stored);
   });
 
   // Settings is the exception to the discard rule, and this test used to assert the
@@ -223,5 +239,24 @@ describe('a settings blob from a newer build', () => {
 
     expect(settings.somethingAddedLater).toBe('chosen-by-the-user');
     expect(settings.theme).toBe('dark');
+  });
+});
+
+// `connected` is not recoverable from a bad cache: the store bails when it is false, so the
+// user would have to run Google's consent flow again for a connection they never lost.
+describe('a calendar cache with one unreadable event', () => {
+  it('keeps the connection and drops only that event', async () => {
+    const good = { id: 'e1', title: 'Standup', allDay: false, start: 'x', end: 'y' };
+    configurePlatform({
+      storage: storeHolding({
+        calendar: { connected: true, events: [good, { id: 'e2' }], lastSync: '2026-07-26' },
+      }),
+    });
+
+    await expect(getCalendarState()).resolves.toEqual({
+      connected: true,
+      events: [good],
+      lastSync: '2026-07-26',
+    });
   });
 });
