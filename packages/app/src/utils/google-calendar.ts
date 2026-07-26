@@ -80,7 +80,9 @@ const googleEventSchema = z.looseObject({
   ),
 });
 
-const googleEventListSchema = z.looseObject({ items: z.optional(z.array(googleEventSchema)) });
+// The list is validated per item, so one entry Google returns in a shape we cannot read
+// costs that row rather than the whole day's agenda — which is what the note above claims.
+const googleEventListSchema = z.looseObject({ items: z.optional(z.array(z.unknown())) });
 
 type GoogleEvent = z.infer<typeof googleEventSchema>;
 
@@ -251,7 +253,20 @@ export async function fetchTodayEvents(): Promise<CalendarEvent[]> {
     });
     return [];
   }
-  const data = parsed.data;
+  const readable: GoogleEvent[] = [];
+  let dropped = 0;
+  for (const item of parsed.data.items ?? []) {
+    const event = googleEventSchema.safeParse(item);
+    if (event.success) {
+      readable.push(item as GoogleEvent);
+    } else {
+      dropped += 1;
+    }
+  }
+  if (dropped > 0) {
+    logger.warn('Skipped calendar entries in an unexpected shape', { dropped });
+  }
+  const data = { items: readable };
   // Defense in depth for the all-day window: even with timeZone set, an adjacent
   // day's banner can slip in across the exclusive timeMax boundary. Keep an
   // all-day event only when today falls in its [start, end) date range (end is

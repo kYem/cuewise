@@ -29,12 +29,40 @@ describe('a stored value that no longer matches its shape', () => {
     await expect(getGoals()).resolves.toEqual([]);
   });
 
-  it('is discarded when only one item in the list is broken', async () => {
+  // This used to assert that one bad item discards the whole list, which is the behaviour
+  // the changeset promises against ("that one item is skipped... nothing else is touched").
+  // It matters because the stores reload-then-rewrite the whole array: the user's next edit
+  // would have persisted the emptiness, turning one malformed row into total loss.
+  it('costs the list one item, not all of them', async () => {
+    const good = { id: 'g1', text: 'fine', completed: false, createdAt: 'x', date: '2026-07-26' };
     const goals = [
-      { id: 'g1', text: 'fine', completed: false, createdAt: 'x', date: '2026-07-26' },
+      good,
       { id: 'g2', text: 'broken', completed: 'nope', createdAt: 'x', date: '2026-07-26' },
     ];
     configurePlatform({ storage: storeHolding({ goals }) });
+
+    await expect(getGoals()).resolves.toEqual([good]);
+  });
+
+  it('reports how many it dropped and where, never what they held', async () => {
+    const warn = vi.spyOn(logger, 'warn');
+    const goals = [
+      { id: 'g1', text: 'fine', completed: false, createdAt: 'x', date: '2026-07-26' },
+      { id: 'g2', text: 'a private goal', completed: 'nope', createdAt: 'x', date: '2026-07-26' },
+    ];
+    configurePlatform({ storage: storeHolding({ goals }) });
+
+    await getGoals();
+
+    expect(warn).toHaveBeenCalledWith(
+      'Dropped unreadable items from a stored list',
+      expect.objectContaining({ key: 'goals', dropped: 1, of: 2, at: [1] })
+    );
+    expect(JSON.stringify(warn.mock.calls)).not.toContain('a private goal');
+  });
+
+  it('discards a stored value that is not a list at all', async () => {
+    configurePlatform({ storage: storeHolding({ goals: { nope: true } }) });
 
     await expect(getGoals()).resolves.toEqual([]);
   });
@@ -180,5 +208,20 @@ describe('a settings blob written by an older release', () => {
 
     expect(settings.theme).toBe('auto');
     expect(settings.colorTheme).toBe('forest');
+  });
+});
+
+// The same rule the goals read follows: validating is a check, never an edit. Settings is
+// the blob most likely to gain fields, and the store rewrites the whole object on every
+// change, so dropping an unknown key here deletes it permanently on the next toggle.
+describe('a settings blob from a newer build', () => {
+  it('keeps the settings this build has never heard of', async () => {
+    const stored = { theme: 'dark', somethingAddedLater: 'chosen-by-the-user' };
+    configurePlatform({ storage: storeHolding({ settings: stored }) });
+
+    const settings = (await getSettings()) as unknown as Record<string, unknown>;
+
+    expect(settings.somethingAddedLater).toBe('chosen-by-the-user');
+    expect(settings.theme).toBe('dark');
   });
 });

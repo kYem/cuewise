@@ -65,6 +65,50 @@ export async function getValidatedFromStorage<T>(
   return null;
 }
 
+/**
+ * The list form, and the important difference: it drops the items it cannot read, not the
+ * list. A whole-array schema fails wholesale, so one malformed quote would empty the
+ * collection — and because the stores reload-then-rewrite the whole array, the user's next
+ * edit would persist that emptiness. One bad row must cost one row.
+ *
+ * Returns null only when nothing is stored, or when the stored value is not a list at all.
+ */
+export async function getValidatedListFromStorage<T>(
+  key: string,
+  itemSchema: ZodMiniType<T>,
+  area: StorageArea = 'local'
+): Promise<T[] | null> {
+  const raw = await getStorage().get<unknown>(key, area);
+  if (raw === null || raw === undefined) {
+    return null;
+  }
+  if (!Array.isArray(raw)) {
+    logger.warn('Discarded a stored value that should have been a list', { key, area });
+    return null;
+  }
+  const kept: T[] = [];
+  const droppedAt: number[] = [];
+  raw.forEach((item, index) => {
+    if (itemSchema.safeParse(item).success) {
+      // The original item, not the parsed copy — see the note above.
+      kept.push(item as T);
+    } else {
+      droppedAt.push(index);
+    }
+  });
+  if (droppedAt.length > 0) {
+    // Positions and counts only; the items themselves are the user's own content.
+    logger.warn('Dropped unreadable items from a stored list', {
+      key,
+      area,
+      dropped: droppedAt.length,
+      of: raw.length,
+      at: droppedAt.slice(0, 5),
+    });
+  }
+  return kept;
+}
+
 export async function setInStorage<T>(
   key: string,
   value: T,

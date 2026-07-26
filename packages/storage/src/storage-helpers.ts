@@ -44,6 +44,7 @@ import { z } from 'zod/mini';
 import {
   getFromStorage,
   getValidatedFromStorage,
+  getValidatedListFromStorage,
   removeFromStorage,
   type StorageResult,
   setInStorage,
@@ -79,14 +80,14 @@ function isCustomQuote(quote: Quote): boolean {
 async function migrateLegacyQuotes(): Promise<void> {
   try {
     // Check both storage areas for legacy quotes
-    const localQuotes = await getValidatedFromStorage<Quote[]>(
+    const localQuotes = await getValidatedListFromStorage<Quote>(
       STORAGE_KEYS.QUOTES,
-      z.array(quoteSchema),
+      quoteSchema,
       'local'
     );
-    const syncQuotes = await getValidatedFromStorage<Quote[]>(
+    const syncQuotes = await getValidatedListFromStorage<Quote>(
       STORAGE_KEYS.QUOTES,
-      z.array(quoteSchema),
+      quoteSchema,
       'sync'
     );
     const legacyQuotes = localQuotes || syncQuotes;
@@ -127,9 +128,9 @@ async function migrateLegacyQuotes(): Promise<void> {
 export async function getQuotes(): Promise<Quote[]> {
   try {
     // Check if migration is needed
-    const legacyQuotes = await getValidatedFromStorage<Quote[]>(
+    const legacyQuotes = await getValidatedListFromStorage<Quote>(
       STORAGE_KEYS.QUOTES,
-      z.array(quoteSchema),
+      quoteSchema,
       'local'
     );
     if (legacyQuotes && legacyQuotes.length > 0) {
@@ -138,20 +139,14 @@ export async function getQuotes(): Promise<Quote[]> {
 
     // Load seed quotes from local storage (always)
     const seedQuotes =
-      (await getValidatedFromStorage<Quote[]>(
-        STORAGE_KEYS.SEED_QUOTES,
-        z.array(quoteSchema),
-        'local'
-      )) ?? [];
+      (await getValidatedListFromStorage<Quote>(STORAGE_KEYS.SEED_QUOTES, quoteSchema, 'local')) ??
+      [];
 
     // Load custom quotes from appropriate storage area
     const area = await getStorageArea();
     const customQuotes =
-      (await getValidatedFromStorage<Quote[]>(
-        STORAGE_KEYS.CUSTOM_QUOTES,
-        z.array(quoteSchema),
-        area
-      )) ?? [];
+      (await getValidatedListFromStorage<Quote>(STORAGE_KEYS.CUSTOM_QUOTES, quoteSchema, area)) ??
+      [];
 
     // Merge seed and custom quotes
     return [...seedQuotes, ...customQuotes];
@@ -197,11 +192,7 @@ export async function setCurrentQuote(quote: Quote): Promise<StorageResult> {
 // Goals
 export async function getGoals(): Promise<Goal[]> {
   const area = await getStorageArea();
-  const goals = await getValidatedFromStorage<Goal[]>(
-    STORAGE_KEYS.GOALS,
-    z.array(goalSchema),
-    area
-  );
+  const goals = await getValidatedListFromStorage<Goal>(STORAGE_KEYS.GOALS, goalSchema, area);
   return goals ?? [];
 }
 
@@ -213,9 +204,9 @@ export async function setGoals(goals: Goal[]): Promise<StorageResult> {
 // Reminders
 export async function getReminders(): Promise<Reminder[]> {
   const area = await getStorageArea();
-  const reminders = await getValidatedFromStorage<Reminder[]>(
+  const reminders = await getValidatedListFromStorage<Reminder>(
     STORAGE_KEYS.REMINDERS,
-    z.array(reminderSchema),
+    reminderSchema,
     area
   );
   return reminders ?? [];
@@ -229,9 +220,9 @@ export async function setReminders(reminders: Reminder[]): Promise<StorageResult
 // Quote Collections
 export async function getCollections(): Promise<QuoteCollection[]> {
   const area = await getStorageArea();
-  const collections = await getValidatedFromStorage<QuoteCollection[]>(
+  const collections = await getValidatedListFromStorage<QuoteCollection>(
     STORAGE_KEYS.COLLECTIONS,
-    z.array(quoteCollectionSchema),
+    quoteCollectionSchema,
     area
   );
   return collections ?? [];
@@ -245,9 +236,9 @@ export async function setCollections(collections: QuoteCollection[]): Promise<St
 // Quick Links (pinned shortcut tiles on the new tab)
 export async function getQuickLinks(): Promise<QuickLink[]> {
   const area = await getStorageArea();
-  const links = await getValidatedFromStorage<QuickLink[]>(
+  const links = await getValidatedListFromStorage<QuickLink>(
     STORAGE_KEYS.QUICK_LINKS,
-    z.array(quickLinkSchema),
+    quickLinkSchema,
     area
   );
   return links ?? [];
@@ -261,9 +252,9 @@ export async function setQuickLinks(links: QuickLink[]): Promise<StorageResult> 
 // Concept Cards (spaced-repetition learning cards)
 export async function getConceptCards(): Promise<ConceptCard[]> {
   const area = await getStorageArea();
-  const cards = await getValidatedFromStorage<ConceptCard[]>(
+  const cards = await getValidatedListFromStorage<ConceptCard>(
     STORAGE_KEYS.CONCEPT_CARDS,
-    z.array(conceptCardSchema),
+    conceptCardSchema,
     area
   );
   return cards ?? [];
@@ -276,9 +267,9 @@ export async function setConceptCards(cards: ConceptCard[]): Promise<StorageResu
 
 // Posture daily rollups (macOS tracking; always local — device-specific data)
 export async function getPostureStats(): Promise<PostureDailyStat[]> {
-  const stats = await getValidatedFromStorage<PostureDailyStat[]>(
+  const stats = await getValidatedListFromStorage<PostureDailyStat>(
     STORAGE_KEYS.POSTURE_STATS,
-    z.array(postureDailyStatSchema),
+    postureDailyStatSchema,
     'local'
   );
   return stats ?? [];
@@ -314,9 +305,9 @@ export async function setWeatherState(state: WeatherState): Promise<StorageResul
 // Pomodoro Sessions
 export async function getPomodoroSessions(): Promise<PomodoroSession[]> {
   const area = await getStorageArea();
-  const sessions = await getValidatedFromStorage<PomodoroSession[]>(
+  const sessions = await getValidatedListFromStorage<PomodoroSession>(
     STORAGE_KEYS.POMODORO_SESSIONS,
-    z.array(pomodoroSessionSchema),
+    pomodoroSessionSchema,
     area
   );
   return sessions ?? [];
@@ -330,9 +321,9 @@ export async function setPomodoroSessions(sessions: PomodoroSession[]): Promise<
 // Custom YouTube Playlists (for Pomodoro music)
 // Note: Custom playlists are stored in local storage (not synced)
 export async function getCustomYoutubePlaylists(): Promise<YoutubePlaylist[]> {
-  const playlists = await getValidatedFromStorage<YoutubePlaylist[]>(
+  const playlists = await getValidatedListFromStorage<YoutubePlaylist>(
     STORAGE_KEYS.CUSTOM_YOUTUBE_PLAYLISTS,
-    z.array(youtubePlaylistSchema),
+    youtubePlaylistSchema,
     'local'
   );
   return playlists ?? [];
@@ -364,9 +355,16 @@ async function readStoredSettingsFields(): Promise<Partial<Settings>> {
     return {};
   }
   const stored = raw as Record<string, unknown>;
-  const kept: Record<string, unknown> = {};
+  const shape = settingsSchema.def.shape;
+  // Seeded with the keys this build has never heard of, so validating stays a check rather
+  // than an edit. Dropping them would delete a setting a newer build wrote, and the store
+  // rewrites the whole object on the next change — the same silent loss the read path
+  // avoids for every other blob.
+  const kept: Record<string, unknown> = Object.fromEntries(
+    Object.entries(stored).filter(([key]) => !(key in shape))
+  );
   const dropped: string[] = [];
-  for (const [key, fieldSchema] of Object.entries(settingsSchema.def.shape)) {
+  for (const [key, fieldSchema] of Object.entries(shape)) {
     const value = stored[key];
     if (value === undefined) {
       continue;
@@ -531,9 +529,9 @@ const PROGRESS_MAX_AGE_MS = 30 * DAY_IN_MS;
  * Get all YouTube playlist progress data
  */
 export async function getYoutubeProgress(): Promise<PlaylistProgress[]> {
-  const progress = await getValidatedFromStorage<PlaylistProgress[]>(
+  const progress = await getValidatedListFromStorage<PlaylistProgress>(
     STORAGE_KEYS.YOUTUBE_PROGRESS,
-    z.array(playlistProgressSchema),
+    playlistProgressSchema,
     'local'
   );
   return progress ?? [];
