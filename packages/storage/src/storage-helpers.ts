@@ -456,6 +456,15 @@ export async function getSettingsForSync(): Promise<Settings> {
   return { ...DEFAULT_SETTINGS, ...raw } as Settings;
 }
 
+export async function getPomodoroSessionsRaw(): Promise<PomodoroSession[]> {
+  return (
+    (await getFromStorage<PomodoroSession[]>(
+      STORAGE_KEYS.POMODORO_SESSIONS,
+      await getStorageArea()
+    )) ?? []
+  );
+}
+
 /** Seed plus custom, mirroring `getQuotes`, but without dropping anything. */
 export async function getQuotesRaw(): Promise<Quote[]> {
   const seed = (await getFromStorage<Quote[]>(STORAGE_KEYS.SEED_QUOTES, 'local')) ?? [];

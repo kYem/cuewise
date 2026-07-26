@@ -28,9 +28,12 @@ import {
 } from '@cuewise/shared';
 import {
   getGoals,
+  getGoalsRaw,
   getPomodoroSessions,
+  getPomodoroSessionsRaw,
   getPostureStats,
   getQuotes,
+  getQuotesRaw,
   setGoals,
   setPomodoroSessions,
   setQuotes,
@@ -85,7 +88,7 @@ interface InsightsStore {
   refresh: () => Promise<void>;
   exportAsJSON: () => void;
   exportAsCSV: (type: 'daily' | 'weekly' | 'monthly' | 'goals' | 'pomodoros') => void;
-  exportAllAsJSON: () => void;
+  exportAllAsJSON: () => Promise<void>;
 
   // Import actions
   validateImportFile: (file: File) => Promise<ImportValidation>;
@@ -255,9 +258,18 @@ export const useInsightsStore = create<InsightsStore>((set, get) => ({
     }
   },
 
-  exportAllAsJSON: () => {
+  exportAllAsJSON: async () => {
     try {
-      const { insights, analytics, quotes, goals, pomodoroSessions } = get();
+      const { insights, analytics } = get();
+      // Read raw rather than reuse the rendered state: a backup's whole contract is
+      // faithfulness, and the rendering reads hide items this build cannot parse. Exporting
+      // that view would omit them silently under a "complete export" label — and importing
+      // the file back writes the reduced set over storage, losing the device copy too.
+      const [quotes, goals, pomodoroSessions] = await Promise.all([
+        getQuotesRaw(),
+        getGoalsRaw(),
+        getPomodoroSessionsRaw(),
+      ]);
 
       // Filter to only include custom quotes (exclude default/curated quotes)
       const customQuotes = quotes.filter((quote) => quote.isCustom);

@@ -24,6 +24,7 @@ export {
   getGoals,
   getGoalsRaw,
   getPomodoroSessions,
+  getPomodoroSessionsRaw,
   getPostureStats,
   getQuickLinks,
   getQuotes,
