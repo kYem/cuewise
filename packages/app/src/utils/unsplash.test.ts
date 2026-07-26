@@ -89,12 +89,30 @@ describe('getPhotoCredit', () => {
     const credit = getPhotoCredit(
       'https://images.unsplash.com/photo-test-credited?w=1920',
       // Injected registry keeps the test independent of which real photos we've researched.
-      { 'photo-test-credited': { photographer: 'Ansel Adams', username: 'ansel' } }
+      { 'photo-test-credited': { photographer: 'Ansel Adams', username: 'ansel', location: null } }
     );
     expect(credit.photographer).toBe('Ansel Adams');
     expect(credit.photographerUrl).toBe(
       'https://unsplash.com/@ansel?utm_source=cuewise&utm_medium=referral'
     );
+  });
+
+  it('carries the location when the catalog knows it', () => {
+    const credit = getPhotoCredit('https://images.unsplash.com/photo-test-located?w=1920', {
+      'photo-test-located': {
+        photographer: 'Ansel Adams',
+        username: 'ansel',
+        location: 'Yosemite, United States',
+      },
+    });
+    expect(credit.location).toBe('Yosemite, United States');
+  });
+
+  it('returns a null location for an unknown photo', () => {
+    const credit = getPhotoCredit(
+      'https://images.unsplash.com/photo-1000000000000-000000000000?w=1920'
+    );
+    expect(credit.location).toBeNull();
   });
 
   it('still credits Unsplash for a url it cannot parse a photo id from', () => {
