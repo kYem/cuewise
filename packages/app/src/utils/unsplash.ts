@@ -24,12 +24,15 @@ const UNSPLASH_URL = `https://unsplash.com?${REFERRAL_PARAMS}`;
 export interface PhotoCreditEntry {
   photographer: string;
   username: string;
+  location: string | null;
 }
 
 export interface PhotoCredit {
   /** Null when we don't know who shot it — never guess, an invented name is worse than none. */
   photographer: string | null;
   photographerUrl: string | null;
+  /** The place the photo was taken; null when its Unsplash page carries no location tag. */
+  location: string | null;
   sourceUrl: string;
 }
 
@@ -38,7 +41,11 @@ const CREDIT_INDEX: Record<string, PhotoCreditEntry> = {};
 for (const photos of Object.values(CURATED_PHOTOS)) {
   for (const photo of photos) {
     if (photo.photographer !== null && photo.username !== null) {
-      CREDIT_INDEX[photo.id] = { photographer: photo.photographer, username: photo.username };
+      CREDIT_INDEX[photo.id] = {
+        photographer: photo.photographer,
+        username: photo.username,
+        location: photo.location,
+      };
     }
   }
 }
@@ -65,11 +72,12 @@ export function getPhotoCredit(
   const photoId = extractPhotoId(url);
   const entry = photoId === null ? undefined : credits[photoId];
   if (entry === undefined) {
-    return { photographer: null, photographerUrl: null, sourceUrl: UNSPLASH_URL };
+    return { photographer: null, photographerUrl: null, location: null, sourceUrl: UNSPLASH_URL };
   }
   return {
     photographer: entry.photographer,
     photographerUrl: `https://unsplash.com/@${entry.username}?${REFERRAL_PARAMS}`,
+    location: entry.location,
     sourceUrl: UNSPLASH_URL,
   };
 }
