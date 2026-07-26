@@ -171,7 +171,7 @@ function normalizeForecast(raw: unknown, units: WeatherUnits): WeatherForecast |
     timezone: typeof payload.timezone === 'string' ? payload.timezone : 'UTC',
     current: {
       temperature,
-      apparentTemperature: readNumber(payload.current?.apparent_temperature) ?? temperature,
+      apparentTemperature: readNumber(payload.current?.apparent_temperature),
       condition: mapWmoCode(payload.current?.weather_code),
       isDay: payload.current?.is_day !== 0,
     },

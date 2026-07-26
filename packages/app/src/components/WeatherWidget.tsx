@@ -1,4 +1,5 @@
 import {
+  formatForecastHour,
   formatTemperature,
   formatWeatherAge,
   resolveWeatherUnits,
@@ -64,11 +65,6 @@ const CONDITION_LABELS: Record<WeatherConditionKind, string> = {
 const CHIP_CLASS =
   'flex items-center gap-1.5 rounded-full bg-surface/80 backdrop-blur-sm px-3 py-2.5 shadow-md hover:shadow-lg hover:scale-105 transition-all';
 
-/** Hour label in the location's own zone, e.g. "15" from "2026-07-25T15:00". */
-function hourLabel(time: string): string {
-  return time.slice(11, 13);
-}
-
 const WeatherPopover: React.FC<{ snapshot: WeatherSnapshot; alignRight: boolean }> = ({
   snapshot,
   alignRight,
@@ -78,6 +74,7 @@ const WeatherPopover: React.FC<{ snapshot: WeatherSnapshot; alignRight: boolean 
   const error = useWeatherStore((state) => state.error);
   const refresh = useWeatherStore((state) => state.refresh);
   const unitsPreference = useSettingsStore((state) => state.settings.weatherUnits);
+  const timeFormat = useSettingsStore((state) => state.settings.timeFormat);
 
   const { location, current } = snapshot;
   const Icon = conditionIcon(current.condition, current.isDay);
@@ -115,8 +112,9 @@ const WeatherPopover: React.FC<{ snapshot: WeatherSnapshot; alignRight: boolean 
             {formatTemperature(current.temperature)}
           </div>
           <div className="text-xs text-secondary mt-1">
-            {CONDITION_LABELS[current.condition]} · feels like{' '}
-            {formatTemperature(current.apparentTemperature)}
+            {CONDITION_LABELS[current.condition]}
+            {current.apparentTemperature !== null &&
+              ` · feels like ${formatTemperature(current.apparentTemperature)}`}
           </div>
         </div>
         <div className="text-right text-xs font-medium text-primary">
@@ -135,7 +133,9 @@ const WeatherPopover: React.FC<{ snapshot: WeatherSnapshot; alignRight: boolean 
                   {formatTemperature(hour.temperature)}
                 </div>
                 <HourIcon className="w-3.5 h-3.5 mx-auto my-0.5 text-secondary" />
-                <div className="text-[10px] text-secondary">{hourLabel(hour.time)}</div>
+                <div className="text-[10px] text-secondary">
+                  {formatForecastHour(hour.time, timeFormat)}
+                </div>
               </div>
             );
           })}
@@ -191,7 +191,14 @@ export const WeatherWidget: React.FC = () => {
   // match (a proxy or provider fault) would refetch forever.
   useEffect(() => {
     const wanted = resolveWeatherUnits(unitsPreference);
-    if (!showWeather || snapshot === null || snapshot.units === wanted) {
+    if (!showWeather || snapshot === null) {
+      return;
+    }
+    if (snapshot.units === wanted) {
+      // Back in sync, so forget what was asked for: a later mismatch is the user changing
+      // their mind, not the reply-loop this guard exists to stop. Without this, a scale
+      // whose refetch once failed could never be asked for again this page.
+      requestedUnitsRef.current = null;
       return;
     }
     if (requestedUnitsRef.current === wanted) {

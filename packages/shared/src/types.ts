@@ -354,7 +354,10 @@ export interface WeatherHour {
 
 export interface WeatherCurrent {
   temperature: number;
-  apparentTemperature: number;
+  // Null when the provider omitted it. Defaulting to `temperature` would render an
+  // invented "feels like" exactly like a measured one — the same fabrication the proxy
+  // refuses for the daily high and low.
+  apparentTemperature: number | null;
   condition: WeatherConditionKind;
   isDay: boolean;
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { WeatherHour } from './types';
 import {
+  formatForecastHour,
   formatTemperature,
   formatWeatherAge,
   MAX_FORECAST_HOURS,
@@ -210,5 +211,31 @@ describe('formatWeatherAge', () => {
 
   it('treats a future timestamp as just now', () => {
     expect(at('2026-07-25T12:30:00Z')).toBe('Updated just now');
+  });
+});
+
+describe('formatForecastHour', () => {
+  it.each([
+    ['2026-07-25T00:00', '12 AM'],
+    ['2026-07-25T09:00', '9 AM'],
+    ['2026-07-25T12:00', '12 PM'],
+    ['2026-07-25T15:00', '3 PM'],
+    ['2026-07-25T23:00', '11 PM'],
+  ])('renders %s as %s on a 12-hour clock', (time, expected) => {
+    expect(formatForecastHour(time, '12h')).toBe(expected);
+  });
+
+  it('keeps the provider hour as-is on a 24-hour clock', () => {
+    expect(formatForecastHour('2026-07-25T15:00', '24h')).toBe('15');
+  });
+
+  // The label is decoration on an opt-in chip; a malformed stamp must not throw mid-render,
+  // and must not turn into a plausible-looking hour either.
+  it.each([
+    ['a truncated stamp', '2026-07-25T', ''],
+    ['a non-timestamp', 'not-a-timestamp', 'ta'],
+    ['an out-of-range hour', '2026-07-25T99:00', '99'],
+  ])('passes %s through untouched', (_label, time, expected) => {
+    expect(formatForecastHour(time, '12h')).toBe(expected);
   });
 });

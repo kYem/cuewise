@@ -1,7 +1,9 @@
 import {
   getHttpFetch,
   type WeatherForecast,
+  type WeatherHour,
   type WeatherLocation,
+  type WeatherSnapshot,
   type WeatherUnits,
 } from '@cuewise/shared';
 
@@ -103,6 +105,15 @@ async function requestJson(path: string, search: URLSearchParams): Promise<unkno
   }
 }
 
+/** Every field the popover reads, since a bad element throws mid-render, not at the edge. */
+function isHour(value: unknown): value is WeatherHour {
+  if (value === null || typeof value !== 'object') {
+    return false;
+  }
+  const hour = value as Partial<WeatherHour>;
+  return typeof hour.time === 'string' && typeof hour.temperature === 'number';
+}
+
 function isForecast(value: unknown): value is WeatherForecast {
   if (value === null || typeof value !== 'object') {
     return false;
@@ -110,9 +121,11 @@ function isForecast(value: unknown): value is WeatherForecast {
   const forecast = value as Partial<WeatherForecast>;
   return (
     typeof forecast.current?.temperature === 'number' &&
+    typeof forecast.current?.isDay === 'boolean' &&
     typeof forecast.high === 'number' &&
     typeof forecast.low === 'number' &&
-    Array.isArray(forecast.hours)
+    Array.isArray(forecast.hours) &&
+    forecast.hours.every(isHour)
   );
 }
 
@@ -128,6 +141,15 @@ function isLocation(value: unknown): value is WeatherLocation {
     typeof place.longitude === 'number' &&
     typeof place.timezone === 'string'
   );
+}
+
+/**
+ * Guards the storage read as well as the network reply. A snapshot that no longer matches
+ * this shape would throw inside the chip's render, and the app-wide ErrorBoundary would
+ * take the whole new tab down — on every open, since the same blob is read back each time.
+ */
+export function isWeatherSnapshot(value: unknown): value is WeatherSnapshot {
+  return isForecast(value) && isLocation((value as Partial<WeatherSnapshot>).location);
 }
 
 export async function fetchForecast(

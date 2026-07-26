@@ -1,4 +1,5 @@
 import type {
+  TimeFormat,
   WeatherConditionKind,
   WeatherHour,
   WeatherUnits,
@@ -123,6 +124,26 @@ export function sampleForecastHours(
     picked.push(remaining[Math.round(i * step)]);
   }
   return picked;
+}
+
+/**
+ * Forecast-strip label for a provider stamp ("2026-07-25T15:00"), in the user's clock
+ * format — every other time surface reads `settings.timeFormat`, which defaults to 12h.
+ * The stamp is already in the location's zone, so this only reformats, never converts.
+ */
+export function formatForecastHour(time: string, timeFormat: TimeFormat): string {
+  const raw = time.slice(11, 13);
+  const hour = Number(raw);
+  // Length check included: Number('') is 0, so a truncated stamp would print "12 AM".
+  if (raw.length !== 2 || !Number.isInteger(hour) || hour < 0 || hour > 23) {
+    return raw;
+  }
+  if (timeFormat === '24h') {
+    return raw;
+  }
+  const period = hour >= 12 ? 'PM' : 'AM';
+  const displayHour = hour % 12 === 0 ? 12 : hour % 12;
+  return `${displayHour} ${period}`;
 }
 
 /** Rounded temperature with a degree sign, e.g. "17°". */

@@ -400,3 +400,69 @@ describe('weather routes never log what the user asked about', () => {
     expect(logs.join('\n')).not.toContain('51.5');
   });
 });
+
+// Both routes are unauthenticated, so the per-IP limiter is the only thing standing between
+// the proxy and someone using it as a free weather API. Deleting the `app.use` line in
+// index.ts failed nothing before these existed.
+describe('weather routes are rate limited per IP', () => {
+  const IP = { 'CF-Connecting-IP': '203.0.113.7' };
+
+  async function floodForecast(app: ReturnType<typeof createApp>, times: number) {
+    let last: Response | null = null;
+    for (let i = 0; i < times; i++) {
+      last = await app.request('/v1/weather?lat=51.5&lon=-0.13', { headers: IP }, env);
+    }
+    return last;
+  }
+
+  // The middleware is registered at '/v1/weather/*', which must also cover the bare path —
+  // the forecast route is the hot one, so a wildcard that missed it would leave the endpoint
+  // that actually gets called wide open.
+  it('limits the bare forecast path, not just the sub-paths', async () => {
+    const app = createApp({ weatherUpstream: stubUpstream(FORECAST_PAYLOAD).fetch });
+
+    const allowed = await floodForecast(app, 30);
+    expect(allowed?.status).toBe(200);
+
+    const blocked = await floodForecast(app, 1);
+    expect(blocked?.status).toBe(429);
+    expect(await blocked?.json()).toMatchObject({ code: 'rate_limited' });
+  });
+
+  it('limits the search path', async () => {
+    const app = createApp({ weatherUpstream: stubUpstream(GEOCODING_PAYLOAD).fetch });
+
+    let last: Response | null = null;
+    for (let i = 0; i < 31; i++) {
+      last = await app.request('/v1/weather/search?q=Vilnius', { headers: IP }, env);
+    }
+
+    expect(last?.status).toBe(429);
+  });
+
+  // Its own counter, or a burst of weather lookups would spend the sign-in budget and lock
+  // the user out of the thing that actually matters.
+  it('does not spend the budget the sign-in routes rely on', async () => {
+    const app = createApp({ weatherUpstream: stubUpstream(FORECAST_PAYLOAD).fetch });
+
+    await floodForecast(app, 31);
+    const signIn = await app.request('/v1/auth/apple/start', { headers: IP }, env);
+
+    expect(signIn.status).not.toBe(429);
+  });
+});
+
+// Same rule as the high/low: a number the provider never sent must not render like one
+// it did. Null lets the client drop the row instead of repeating the current temperature.
+it('reports no apparent temperature rather than repeating the current one', async () => {
+  const withoutApparent = {
+    ...FORECAST_PAYLOAD,
+    current: { ...FORECAST_PAYLOAD.current, apparent_temperature: null },
+  };
+  const app = createApp({ weatherUpstream: stubUpstream(withoutApparent).fetch });
+
+  const res = await app.request('/v1/weather?lat=51.5&lon=-0.13', {}, env);
+
+  const body = (await res.json()) as { current: { apparentTemperature: number | null } };
+  expect(body.current.apparentTemperature).toBeNull();
+});

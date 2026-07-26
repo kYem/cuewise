@@ -366,3 +366,43 @@ describe('search', () => {
     expect(useWeatherStore.getState().searchResults).toEqual([]);
   });
 });
+
+// The blob is read back on every new tab, so a shape the chip can't render would not fail
+// once — it would take the whole page down through the app-wide ErrorBoundary, every open.
+describe('a stored reading that no longer matches the shape', () => {
+  it('is discarded rather than handed to the chip', async () => {
+    const broken = { ...freshState(), snapshot: { ...snapshot(), current: undefined } };
+    getWeatherStateMock.mockResolvedValue(broken as never);
+    // The discard triggers a refetch, which would otherwise land a valid reading and hide
+    // whether the stored one was ever accepted.
+    fetchForecastMock.mockRejectedValue(new Error('offline'));
+
+    await useWeatherStore.getState().initialize();
+
+    expect(useWeatherStore.getState().snapshot).toBeNull();
+    expect(useWeatherStore.getState().location).toEqual(LONDON);
+  });
+
+  it('is refetched instead of leaving a permanent skeleton', async () => {
+    const broken = { ...freshState(), snapshot: { ...snapshot(), hours: [null] } };
+    getWeatherStateMock.mockResolvedValue(broken as never);
+
+    await useWeatherStore.getState().initialize();
+
+    // freshState's timestamp would normally suppress the mount refresh.
+    expect(fetchForecastMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a reading that is merely missing an optional field', async () => {
+    const reading = snapshot();
+    const withoutApparent = {
+      ...freshState(),
+      snapshot: { ...reading, current: { ...reading.current, apparentTemperature: null } },
+    };
+    getWeatherStateMock.mockResolvedValue(withoutApparent);
+
+    await useWeatherStore.getState().initialize();
+
+    expect(useWeatherStore.getState().snapshot).not.toBeNull();
+  });
+});

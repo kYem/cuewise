@@ -260,3 +260,63 @@ describe('the popover', () => {
     expect(screen.queryByText('5°')).not.toBeInTheDocument();
   });
 });
+
+describe('a scale whose refetch failed', () => {
+  // The guard above must not outlive the mismatch it was armed for: without clearing it,
+  // one failed imperial fetch made imperial unrequestable for the life of the page.
+  it('can be asked for again after switching away and back', () => {
+    mockSettings({ showWeather: true, weatherUnits: 'imperial' });
+    const store = mockWeatherStore({ snapshot: snapshot(LONDON, { units: 'metric' }) });
+
+    const { rerender } = render(<WeatherWidget />);
+    expect(store.refresh).toHaveBeenCalledTimes(1);
+
+    // The refetch failed, so the cached reading is still metric — which the user goes back to.
+    mockSettings({ showWeather: true, weatherUnits: 'metric' });
+    rerender(<WeatherWidget />);
+
+    mockSettings({ showWeather: true, weatherUnits: 'imperial' });
+    rerender(<WeatherWidget />);
+
+    expect(store.refresh).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('the forecast strip', () => {
+  // Far enough ahead that the "rest of today" filter keeps it whenever the suite runs.
+  const FUTURE_HOUR = { time: '2099-01-01T15:00', temperature: 18, condition: 'clear' } as const;
+
+  it('labels hours in the 12-hour clock by default', () => {
+    mockSettings({ showWeather: true, timeFormat: '12h' });
+    mockWeatherStore({ snapshot: snapshot(LONDON, { hours: [FUTURE_HOUR] }) });
+
+    render(<WeatherWidget />);
+    fireEvent.click(screen.getByRole('button'));
+
+    expect(screen.getByText('3 PM')).toBeInTheDocument();
+  });
+
+  it('labels hours in the 24-hour clock when that is the setting', () => {
+    mockSettings({ showWeather: true, timeFormat: '24h' });
+    mockWeatherStore({ snapshot: snapshot(LONDON, { hours: [FUTURE_HOUR] }) });
+
+    render(<WeatherWidget />);
+    fireEvent.click(screen.getByRole('button'));
+
+    expect(screen.getByText('15')).toBeInTheDocument();
+  });
+});
+
+describe('an incomplete reading', () => {
+  it('omits "feels like" rather than repeating the current temperature', () => {
+    const reading = snapshot(LONDON);
+    mockWeatherStore({
+      snapshot: { ...reading, current: { ...reading.current, apparentTemperature: null } },
+    });
+
+    render(<WeatherWidget />);
+    fireEvent.click(screen.getByRole('button'));
+
+    expect(screen.queryByText(/feels like/)).not.toBeInTheDocument();
+  });
+});

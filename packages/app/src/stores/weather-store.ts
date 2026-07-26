@@ -11,6 +11,7 @@ import { getWeatherState, setWeatherState } from '@cuewise/storage';
 import { create } from 'zustand';
 import {
   fetchForecast,
+  isWeatherSnapshot,
   searchLocations,
   WeatherRateLimitedError,
   WeatherRequestError,
@@ -117,16 +118,19 @@ export const useWeatherStore = create<WeatherStore>((set, get) => ({
       if (stored === null) {
         return;
       }
-      set({
-        location: stored.location,
-        snapshot: stored.snapshot,
-        lastFetch: stored.lastFetch,
-      });
+      // Anything that no longer matches the shape is dropped rather than rendered. Its
+      // `lastFetch` goes with it, so the staleness check below refetches instead of
+      // leaving a permanent skeleton.
+      const snapshot = isWeatherSnapshot(stored.snapshot) ? stored.snapshot : null;
+      const lastFetch = snapshot === null ? null : stored.lastFetch;
+      if (stored.snapshot !== null && snapshot === null) {
+        logger.warn('Discarded an unreadable stored weather reading');
+      }
+      set({ location: stored.location, snapshot, lastFetch });
       if (stored.location === null) {
         return;
       }
-      const isStale =
-        stored.lastFetch === null || Date.now() - Date.parse(stored.lastFetch) > WEATHER_STALE_MS;
+      const isStale = lastFetch === null || Date.now() - Date.parse(lastFetch) > WEATHER_STALE_MS;
       if (isStale) {
         await get().refresh({ silent: true, unitsPreference });
       }
