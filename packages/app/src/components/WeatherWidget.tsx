@@ -124,15 +124,11 @@ const WeatherPopover: React.FC<{ snapshot: WeatherSnapshot; alignRight: boolean 
       </div>
 
       {hours.length > 0 && (
-        <div className="flex justify-between pt-3">
+        <div className="flex justify-between pt-3" data-testid="forecast-strip">
           {hours.map((hour) => {
             const HourIcon = conditionIcon(hour.condition, hour.isDay);
             return (
-              <div
-                key={hour.time}
-                className="text-center"
-                data-testid={`hour-icon-${hour.isDay ? 'day' : 'moon'}`}
-              >
+              <div key={hour.time} className="text-center">
                 <div className="text-xs font-bold text-primary">
                   {formatTemperature(hour.temperature)}
                 </div>

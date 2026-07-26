@@ -128,36 +128,40 @@ export const useWeatherStore = create<WeatherStore>((set, get) => ({
   epoch: 0,
 
   initialize: async (unitsPreference) => {
+    // Only the read is guarded. Both storage adapters already answer null rather than
+    // throwing, so anything caught here would be a bug of ours — and wrapping the rest
+    // would turn that bug into a widget that silently does not exist, on every tab.
+    let stored: WeatherState | null;
     try {
-      const stored = await getWeatherState();
-      if (stored === null) {
-        return;
-      }
-      // Anything that no longer matches the shape is dropped rather than rendered. The
-      // reading's `lastFetch` goes with it, so the staleness check below refetches instead
-      // of leaving a permanent skeleton.
-      const location = isWeatherLocation(stored.location) ? stored.location : null;
-      const snapshot = isWeatherSnapshot(stored.snapshot) ? stored.snapshot : null;
-      // The timestamp is validated too: an unparseable one makes every staleness check
-      // `NaN > threshold` — false — so the reading would never refresh again.
-      const lastFetch =
-        snapshot === null || !isTimestamp(stored.lastFetch) ? null : stored.lastFetch;
-      if (stored.snapshot !== null && snapshot === null) {
-        logger.warn('Discarded an unreadable stored weather reading');
-      }
-      if (stored.location !== null && location === null) {
-        logger.warn('Discarded an unreadable stored weather location');
-      }
-      set({ location, snapshot, lastFetch });
-      if (location === null) {
-        return;
-      }
-      const isStale = lastFetch === null || Date.now() - Date.parse(lastFetch) > WEATHER_STALE_MS;
-      if (isStale) {
-        await get().refresh({ silent: true, unitsPreference });
-      }
+      stored = await getWeatherState();
     } catch (error) {
       logger.error('Failed to load weather state', error);
+      return;
+    }
+    if (stored === null) {
+      return;
+    }
+    // Anything that no longer matches the shape is dropped rather than rendered. The
+    // reading's `lastFetch` goes with it, so the staleness check below refetches instead
+    // of leaving a permanent skeleton.
+    const location = isWeatherLocation(stored.location) ? stored.location : null;
+    const snapshot = isWeatherSnapshot(stored.snapshot) ? stored.snapshot : null;
+    // The timestamp is validated too: an unparseable one makes every staleness check
+    // `NaN > threshold` — false — so the reading would never refresh again.
+    const lastFetch = snapshot === null || !isTimestamp(stored.lastFetch) ? null : stored.lastFetch;
+    if (stored.snapshot !== null && snapshot === null) {
+      logger.warn('Discarded an unreadable stored weather reading');
+    }
+    if (stored.location !== null && location === null) {
+      logger.warn('Discarded an unreadable stored weather location');
+    }
+    set({ location, snapshot, lastFetch });
+    if (location === null) {
+      return;
+    }
+    const isStale = lastFetch === null || Date.now() - Date.parse(lastFetch) > WEATHER_STALE_MS;
+    if (isStale) {
+      await get().refresh({ silent: true, unitsPreference });
     }
   },
 
@@ -223,7 +227,10 @@ export const useWeatherStore = create<WeatherStore>((set, get) => ({
       lastLandedId = id;
       const snapshot: WeatherSnapshot = { ...forecast, location };
       const lastFetch = new Date().toISOString();
-      set({ snapshot, lastFetch });
+      // `error` is cleared here, not only when a request starts: a concurrent request that
+      // failed may have written one, and the popover shows it *instead of* the age — so
+      // fresh data would sit under a stale failure line with nothing to clear it.
+      set({ snapshot, lastFetch, error: null });
       await persistReading({ location, snapshot, lastFetch });
     } catch (error) {
       logger.error('Failed to refresh weather', error, {

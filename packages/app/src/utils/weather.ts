@@ -232,7 +232,13 @@ export async function searchLocations(query: string): Promise<WeatherLocation[]>
   if (!Array.isArray(results)) {
     throw new WeatherRequestError('The weather service returned an unexpected response');
   }
-  return results.filter(isWeatherLocation);
+  const places = results.filter(isWeatherLocation);
+  // The proxy refuses to pass off unreadable matches as "no such city"; dropping them
+  // silently here would reintroduce exactly that on any client/worker version drift.
+  if (results.length > 0 && places.length === 0) {
+    throw new WeatherRequestError('The weather service returned an unexpected response');
+  }
+  return places;
 }
 
 /** "Vilnius, Vilnius County, Lithuania" — skips parts the provider didn't supply. */

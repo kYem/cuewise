@@ -49,6 +49,7 @@ function resetStore(): void {
     searchResults: [],
     isSearching: false,
     searchError: null,
+    searchedFor: null,
     epoch: 0,
   });
 }
@@ -441,7 +442,9 @@ describe('what a refresh actually persists', () => {
 
     await useWeatherStore.getState().refresh({ unitsPreference: 'metric' });
 
-    expect(useWeatherStore.getState().lastFetch).not.toBeNull();
+    // Parseable, not merely present: initialize's own guard discards a stamp it cannot
+    // read, which would make every tab refetch forever.
+    expect(Date.parse(useWeatherStore.getState().lastFetch ?? '')).not.toBeNaN();
   });
 
   it('warns rather than pretending a failed write succeeded', async () => {
@@ -520,5 +523,80 @@ describe('a stored timestamp that cannot be read', () => {
     await useWeatherStore.getState().initialize();
 
     expect(fetchForecastMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('an error left behind by a concurrent request', () => {
+  // The popover shows the error *instead of* the age, so a stale failure line beside a
+  // reading fetched seconds ago reads as "this data is broken" when it is current.
+  it('is cleared by the reading that lands afterwards', async () => {
+    const slow = deferred<ReturnType<typeof forecast>>();
+    fetchForecastMock
+      .mockReturnValueOnce(slow.promise)
+      .mockRejectedValueOnce(new weatherApi.WeatherUnavailableError());
+    useWeatherStore.setState({ location: LONDON });
+
+    const a = useWeatherStore.getState().refresh({ unitsPreference: 'metric' });
+    await useWeatherStore.getState().refresh({ silent: true, unitsPreference: 'imperial' });
+    expect(useWeatherStore.getState().error).not.toBeNull();
+
+    slow.release(forecast());
+    await a;
+
+    expect(useWeatherStore.getState().error).toBeNull();
+  });
+
+  // The mirror case: a request that was superseded must not write its error over the
+  // state of the one that replaced it.
+  it('is never written by a request that has already been superseded', async () => {
+    const doomed = deferred<ReturnType<typeof forecast>>();
+    const live = deferred<ReturnType<typeof forecast>>();
+    fetchForecastMock.mockReturnValueOnce(doomed.promise).mockReturnValueOnce(live.promise);
+    useWeatherStore.setState({ location: LONDON });
+
+    const a = useWeatherStore.getState().refresh({ silent: true, unitsPreference: 'metric' });
+    const b = useWeatherStore.getState().refresh({ silent: true, unitsPreference: 'imperial' });
+    doomed.release(Promise.reject(new Error('too late')) as never);
+    await a.catch(() => undefined);
+
+    expect(useWeatherStore.getState().error).toBeNull();
+    live.release(forecast({ units: 'imperial' }));
+    await b;
+  });
+});
+
+describe('which reading wins', () => {
+  // Ordering by landing, not by issue: a stale reply that arrives last must not overwrite
+  // the newer one, or the chip silently reverts to the scale the user just left.
+  it('keeps the newer reading when an older request answers last', async () => {
+    const slow = deferred<ReturnType<typeof forecast>>();
+    const fast = deferred<ReturnType<typeof forecast>>();
+    fetchForecastMock.mockReturnValueOnce(slow.promise).mockReturnValueOnce(fast.promise);
+    useWeatherStore.setState({ location: LONDON });
+
+    const a = useWeatherStore.getState().refresh({ silent: true, unitsPreference: 'metric' });
+    const b = useWeatherStore.getState().refresh({ silent: true, unitsPreference: 'imperial' });
+    fast.release(forecast({ units: 'imperial' }));
+    await b;
+    slow.release(forecast({ units: 'metric' }));
+    await a;
+
+    expect(useWeatherStore.getState().snapshot?.units).toBe('imperial');
+  });
+});
+
+describe('search bookkeeping', () => {
+  it('records the query its results belong to', async () => {
+    await useWeatherStore.getState().search('  lond  ');
+
+    expect(useWeatherStore.getState().searchedFor).toBe('lond');
+  });
+
+  it('forgets it when the lookup fails, so no empty state is claimed', async () => {
+    searchLocationsMock.mockRejectedValue(new weatherApi.WeatherUnavailableError());
+
+    await useWeatherStore.getState().search('lond');
+
+    expect(useWeatherStore.getState().searchedFor).toBeNull();
   });
 });

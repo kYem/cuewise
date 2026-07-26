@@ -260,3 +260,64 @@ describe('a failing status', () => {
     expect(error).toMatchObject({ status: 404 });
   });
 });
+
+describe('the deadline actually fires', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  // Asserting on the message mapping alone would pass with the timer deleted entirely.
+  // This drives the real path: nothing settles until the signal aborts.
+  it('aborts a body that never arrives', async () => {
+    vi.useFakeTimers();
+    fetchMock.mockImplementation((_url: string, init: RequestInit) =>
+      Promise.resolve({
+        status: 200,
+        ok: true,
+        headers: new Headers(),
+        json: () =>
+          new Promise((_resolve, reject) => {
+            init.signal?.addEventListener('abort', () => {
+              const aborted = new Error('aborted');
+              aborted.name = 'AbortError';
+              reject(aborted);
+            });
+          }),
+      })
+    );
+
+    const pending = fetchForecast(LONDON, 'metric');
+    await vi.advanceTimersByTimeAsync(8_000);
+
+    await expect(pending).rejects.toThrow(/timed out/i);
+  });
+
+  it('passes the abort signal to the transport at all', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(FORECAST));
+
+    await fetchForecast(LONDON, 'metric');
+
+    expect(fetchMock.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal);
+  });
+});
+
+describe('shapes the widget cannot render', () => {
+  // These narrow to `WeatherUnits` and `WeatherConditionKind`; unchecked, an unknown
+  // condition is interpolated into the chip's aria-label as the word "undefined", and an
+  // unknown scale is announced as Celsius over whatever number arrived.
+  it.each([
+    ['an unknown scale', { ...FORECAST, units: 'kelvin' }],
+    ['an unknown condition', { ...FORECAST, current: { ...FORECAST.current, condition: 'sleet' } }],
+    ['an hour missing its daylight flag', { ...FORECAST, hours: [{ time: 'x', temperature: 1 }] }],
+  ])('are rejected: %s', async (_label, payload) => {
+    fetchMock.mockResolvedValue(jsonResponse(payload));
+
+    await expect(fetchForecast(LONDON, 'metric')).rejects.toBeInstanceOf(WeatherRequestError);
+  });
+
+  it('refuse to report matches that were all unreadable as no matches', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ results: [{ name: 'Nowhere' }] }));
+
+    await expect(searchLocations('lond')).rejects.toBeInstanceOf(WeatherRequestError);
+  });
+});

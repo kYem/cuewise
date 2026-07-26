@@ -551,18 +551,34 @@ describe('daylight', () => {
   });
 
   // `!== 0` called a missing flag and the string "0" daylight alike — an invented icon.
-  it('reads the current day flag strictly rather than treating anything non-zero as day', async () => {
-    const stringFlag = {
-      ...WITH_SUN,
-      current: { ...WITH_SUN.current, is_day: '0' },
-    };
+  // The clock is pinned because the fallback resolves "now" in the location's own zone.
+  it.each([
+    ['after sunset', '2026-07-25T23:00:00Z', false],
+    ['at midday', '2026-07-25T11:00:00Z', true],
+  ])('falls back to the sun window %s when the day flag is unreadable', async (_label, nowIso, expected) => {
+    vi.setSystemTime(new Date(nowIso));
+    const stringFlag = { ...WITH_SUN, current: { ...WITH_SUN.current, is_day: '0' } };
     const app = createApp({ weatherUpstream: stubUpstream(stringFlag).fetch });
 
     const res = await app.request('/v1/weather', post({ lat: '51.5', lon: '-0.13' }), env);
 
-    // Unreadable, so it falls back to the sun window rather than asserting daylight.
     const body = (await res.json()) as { current: { isDay: boolean } };
-    expect(typeof body.current.isDay).toBe('boolean');
+    expect(body.current.isDay).toBe(expected);
+    vi.useRealTimers();
+  });
+
+  it('trusts an explicit zero over the sun window', async () => {
+    vi.setSystemTime(new Date('2026-07-25T11:00:00Z'));
+    const app = createApp({
+      weatherUpstream: stubUpstream({ ...WITH_SUN, current: { ...WITH_SUN.current, is_day: 0 } })
+        .fetch,
+    });
+
+    const res = await app.request('/v1/weather', post({ lat: '51.5', lon: '-0.13' }), env);
+
+    const body = (await res.json()) as { current: { isDay: boolean } };
+    expect(body.current.isDay).toBe(false);
+    vi.useRealTimers();
   });
 });
 
@@ -649,5 +665,30 @@ describe('request bodies', () => {
 
     const body = (await res.json()) as { results: { id: string }[] };
     expect(body.results[0].id).toBe('54.68916,25.2798');
+  });
+});
+
+describe('an unreadable geocoding envelope', () => {
+  // The round-one fix guarded unreadable *entries*; a shape change one level up would
+  // still have every search answer "no such city" with nothing logged.
+  it.each([
+    ['results is not a list', { results: 'nope' }],
+    ['the payload is a bare array', []],
+    ['the payload is not an object', 'nope'],
+  ])('refuses when %s', async (_label, payload) => {
+    const app = createApp({ weatherUpstream: stubUpstream(payload).fetch });
+
+    const res = await app.request('/v1/weather/search', post({ q: 'vilni' }), env);
+
+    expect(res.status).toBe(503);
+  });
+
+  it('still treats an absent results key as a genuine no-match', async () => {
+    const app = createApp({ weatherUpstream: stubUpstream({ generationtime_ms: 0.4 }).fetch });
+
+    const res = await app.request('/v1/weather/search', post({ q: 'zzzz' }), env);
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ results: [] });
   });
 });

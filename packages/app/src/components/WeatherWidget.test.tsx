@@ -359,6 +359,13 @@ describe('a first reading that never arrived', () => {
 });
 
 describe('the hourly icons', () => {
+  // Scoped to the strip, and asserted on the icon lucide actually rendered: the chip has
+  // its own icon, and a testid derived from `hour.isDay` would pass even with the day/night
+  // choice deleted, since it reads the very input the choice consumes.
+  function stripIcons(): string {
+    return screen.getByTestId('forecast-strip').innerHTML;
+  }
+
   it('draw night hours as night, not as a sun after sunset', () => {
     const night = {
       time: '2099-01-01T22:00',
@@ -371,6 +378,23 @@ describe('the hourly icons', () => {
     render(<WeatherWidget />);
     fireEvent.click(screen.getByRole('button', { name: /weather in london/i }));
 
-    expect(screen.getByTestId('hour-icon-moon')).toBeInTheDocument();
+    expect(stripIcons()).toContain('lucide-moon');
+    expect(stripIcons()).not.toContain('lucide-sun');
+  });
+
+  it('draw daylight hours as daylight', () => {
+    const day = {
+      time: '2099-01-01T14:00',
+      temperature: 19,
+      condition: 'clear' as const,
+      isDay: true,
+    };
+    mockWeatherStore({ snapshot: snapshot(LONDON, { hours: [day] }) });
+
+    render(<WeatherWidget />);
+    fireEvent.click(screen.getByRole('button', { name: /weather in london/i }));
+
+    expect(stripIcons()).toContain('lucide-sun');
+    expect(stripIcons()).not.toContain('lucide-moon');
   });
 });

@@ -17,6 +17,12 @@ describe('DEFAULT_SETTINGS', () => {
   it('keeps the Glass enhancement opt-in (off by default)', () => {
     expect(DEFAULT_SETTINGS.glassEnhanced).toBe(false);
   });
+
+  // The one widget that sends where you are off the device, so the default is the whole
+  // privacy promise: a refactor flipping it would opt in the entire installed base.
+  it('keeps weather opt-in (off by default)', () => {
+    expect(DEFAULT_SETTINGS.showWeather).toBe(false);
+  });
 });
 
 // The import path silently skips blanks and duplicate terms, so a bad pack edit

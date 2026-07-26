@@ -191,6 +191,17 @@ describe('results', () => {
     expect(screen.queryByText('No places found.')).not.toBeInTheDocument();
   });
 
+  // The gate has to compare queries, not merely check that some lookup once happened:
+  // "vil" finding nothing says nothing about "vilni", which has not been looked up yet.
+  it('stays quiet when the last lookup was for a shorter query', () => {
+    mockWeatherStore({ location: null, snapshot: null, searchResults: [], searchedFor: 'vil' });
+
+    render(<WeatherLocationPicker />);
+    type('vilni');
+
+    expect(screen.queryByText('No places found.')).not.toBeInTheDocument();
+  });
+
   it('offers a retry when the lookup failed, since the query itself has not changed', () => {
     const store = mockWeatherStore({
       location: null,

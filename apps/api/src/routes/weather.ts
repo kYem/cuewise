@@ -381,15 +381,22 @@ export function registerWeatherRoutes(
         detail: 'The geocoding provider is unavailable; try again shortly.',
       });
     }
-    // Open-Meteo omits `results` entirely for a no-match query — an empty list, not an error.
-    const results = (raw as { results?: unknown }).results;
+    // Open-Meteo omits `results` entirely for a no-match query — an empty list, not an
+    // error. An envelope we cannot read is a different thing, and must not be reported as
+    // "no such city": that tells the user their town does not exist and leaves them stuck.
+    const results = (raw as { results?: unknown })?.results;
+    const readable = raw !== null && typeof raw === 'object' && !Array.isArray(raw);
+    if (!readable || (results !== undefined && !Array.isArray(results))) {
+      logger.warn('Geocoding envelope was unreadable', { resultsType: typeof results });
+      return problem('upstream_unavailable', {
+        detail: 'The geocoding provider returned an unusable response.',
+      });
+    }
     const received = Array.isArray(results) ? results : [];
     const places = received
       .map(normalizePlace)
       .filter((place): place is WeatherLocation => place !== null)
       .slice(0, MAX_SEARCH_RESULTS);
-    // Matches we could not read are not "no such city". Returning an empty list here would
-    // tell the user their town does not exist and leave them no way to enable the widget.
     if (received.length > 0 && places.length === 0) {
       logger.warn('Geocoding matches were all unusable', { received: received.length });
       return problem('upstream_unavailable', {
