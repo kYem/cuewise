@@ -49,7 +49,11 @@ export async function getValidatedFromStorage<T>(
   }
   const result = schema.safeParse(raw);
   if (result.success) {
-    return result.data;
+    // The original, not `result.data`: zod strips keys the schema doesn't name, so
+    // returning the parsed copy would silently delete any field a *newer* version wrote —
+    // and the next write would persist that deletion. A downgrade, or two synced devices
+    // on different versions, would quietly lose data. This validates; it does not edit.
+    return raw as T;
   }
   // The value itself is never logged: stored blobs hold the user's own quotes, goals and
   // reminders. Where it failed is enough to diagnose a shape change.

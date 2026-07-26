@@ -78,6 +78,26 @@ describe('a stored value that still matches', () => {
     await expect(getGoals()).resolves.toEqual(goals);
   });
 
+  // A newer version may have written fields this build has never heard of. Validating must
+  // not become editing: returning zod's stripped copy would delete them, and the next write
+  // would persist that deletion — silent data loss on a downgrade or across two synced
+  // devices running different versions.
+  it('preserves fields the schema does not know about', async () => {
+    const goals = [
+      {
+        id: 'g1',
+        text: 'from a newer build',
+        completed: false,
+        createdAt: 'x',
+        date: '2026-07-26',
+        somethingAddedLater: { nested: true },
+      },
+    ];
+    configurePlatform({ storage: storeHolding({ goals }) });
+
+    await expect(getGoals()).resolves.toEqual(goals);
+  });
+
   it('keeps an optional field that is simply absent', async () => {
     const goals = [
       { id: 'g1', text: 'no subtasks', completed: true, createdAt: 'x', date: '2026-07-26' },
