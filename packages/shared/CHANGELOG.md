@@ -1,5 +1,12 @@
 # @cuewise/shared
 
+## 1.19.0
+
+### Patch Changes
+
+- 62e6a93: Dim and blur sliders for the background image, so your quote and goals stay readable over any photo — including your own.
+- d5cd0b3: Fix a new tab that could stay stuck on "Brewing your view…" indefinitely when the background image host was slow or blocked. The page now appears promptly and the photo fades in when it arrives.
+
 ## 1.18.0
 
 ### Minor Changes

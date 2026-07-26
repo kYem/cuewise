@@ -1,5 +1,14 @@
 # @cuewise/ui
 
+## 1.19.0
+
+### Patch Changes
+
+- d5cd0b3: Fix a new tab that could stay stuck on "Brewing your view…" indefinitely when the background image host was slow or blocked. The page now appears promptly and the photo fades in when it arrives.
+- Updated dependencies [62e6a93]
+- Updated dependencies [d5cd0b3]
+  - @cuewise/shared@1.19.0
+
 ## 1.18.0
 
 ### Minor Changes
