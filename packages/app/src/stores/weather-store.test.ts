@@ -566,8 +566,9 @@ describe('an error left behind by a concurrent request', () => {
 });
 
 describe('which reading wins', () => {
-  // Ordering by landing, not by issue: a stale reply that arrives last must not overwrite
-  // the newer one, or the chip silently reverts to the scale the user just left.
+  // The baseline is what landed; the comparison key is issue order. A reply issued earlier
+  // but answered last must not overwrite the newer one, or the chip silently reverts to
+  // the scale the user just left.
   it('keeps the newer reading when an older request answers last', async () => {
     const slow = deferred<ReturnType<typeof forecast>>();
     const fast = deferred<ReturnType<typeof forecast>>();

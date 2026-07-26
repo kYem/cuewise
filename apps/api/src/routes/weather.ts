@@ -11,6 +11,7 @@ import {
 import type { Context, Hono } from 'hono';
 import type { AuthVars } from '../auth-middleware';
 import type { Env } from '../env';
+import { parseJsonBody } from '../http';
 import { problem } from '../problem-details';
 
 const FORECAST_ENDPOINT = 'https://api.open-meteo.com/v1/forecast';
@@ -125,6 +126,22 @@ function isDaylight(time: string, sunrise: string | null, sunset: string | null)
   return time >= sunrise && time < sunset;
 }
 
+/**
+ * Strict `=== 1`: reading anything non-zero as daylight counted a missing field and the
+ * string "0" as day. An unreadable flag defers to the day's own sun window, not a guess.
+ */
+function currentIsDaylight(payload: OpenMeteoForecast, timezone: string): boolean {
+  const flag = readNumber(payload.current?.is_day);
+  if (flag !== null) {
+    return flag === 1;
+  }
+  return isDaylight(
+    toLocalIso(new Date(), timezone),
+    firstString(payload.daily?.sunrise),
+    firstString(payload.daily?.sunset)
+  );
+}
+
 /** Zips the parallel hourly arrays into records, dropping any incomplete slot. */
 function normalizeHours(
   hourly: OpenMeteoForecast['hourly'],
@@ -185,18 +202,7 @@ function normalizeForecast(raw: unknown, units: WeatherUnits): WeatherForecast |
     return null;
   }
   const timezone = typeof payload.timezone === 'string' ? payload.timezone : 'UTC';
-  // Strict `=== 1`/`=== 0`: the old `!== 0` also read a missing field and the string "0"
-  // as daylight. When the flag is unreadable, the day's own sunrise/sunset window answers
-  // the question rather than a guess.
-  const dayFlag = readNumber(payload.current?.is_day);
-  const isDay =
-    dayFlag === null
-      ? isDaylight(
-          toLocalIso(new Date(), timezone),
-          firstString(payload.daily?.sunrise),
-          firstString(payload.daily?.sunset)
-        )
-      : dayFlag === 1;
+  const isDay = currentIsDaylight(payload, timezone);
   return {
     units,
     timezone,
@@ -271,17 +277,21 @@ function json(body: unknown): Response {
   });
 }
 
-/** Bodies are small and hand-written; anything unparseable is an `invalid_request`. */
-async function readJsonBody(c: Context): Promise<Record<string, unknown> | null> {
-  try {
-    const body: unknown = await c.req.json();
-    if (body === null || typeof body !== 'object' || Array.isArray(body)) {
-      return null;
-    }
-    return body as Record<string, unknown>;
-  } catch {
+/**
+ * Through the shared parser, which refuses an over-declared `Content-Length` with 413
+ * before buffering it — these two are the only unauthenticated JSON bodies the Worker
+ * accepts. Returns the problem Response to send, or the object, or null for a body that
+ * parsed but isn't an object.
+ */
+async function readJsonBody(c: Context): Promise<Response | Record<string, unknown> | null> {
+  const raw = await parseJsonBody(c);
+  if (raw instanceof Response) {
+    return raw;
+  }
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
     return null;
   }
+  return raw as Record<string, unknown>;
 }
 
 function readParam(value: unknown): string | undefined {
@@ -313,6 +323,9 @@ export function registerWeatherRoutes(
 ): void {
   app.post('/v1/weather', async (c) => {
     const body = await readJsonBody(c);
+    if (body instanceof Response) {
+      return body;
+    }
     const latitude = parseBoundedNumber(readParam(body?.lat), -90, 90);
     const longitude = parseBoundedNumber(readParam(body?.lon), -180, 180);
     if (latitude === null || longitude === null) {
@@ -362,6 +375,9 @@ export function registerWeatherRoutes(
   // is the other half of the location they are trying not to hand over.
   app.post('/v1/weather/search', async (c) => {
     const body = await readJsonBody(c);
+    if (body instanceof Response) {
+      return body;
+    }
     const query = readParam(body?.q)?.trim() ?? '';
     if (query.length < 2 || query.length > MAX_QUERY_LENGTH) {
       return problem('invalid_request', {
@@ -387,7 +403,10 @@ export function registerWeatherRoutes(
     const results = (raw as { results?: unknown })?.results;
     const readable = raw !== null && typeof raw === 'object' && !Array.isArray(raw);
     if (!readable || (results !== undefined && !Array.isArray(results))) {
-      logger.warn('Geocoding envelope was unreadable', { resultsType: typeof results });
+      logger.warn('Geocoding envelope was unreadable', {
+        envelopeType: Array.isArray(raw) ? 'array' : typeof raw,
+        resultsType: typeof results,
+      });
       return problem('upstream_unavailable', {
         detail: 'The geocoding provider returned an unusable response.',
       });

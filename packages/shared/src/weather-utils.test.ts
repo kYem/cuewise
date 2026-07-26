@@ -256,8 +256,8 @@ describe('formatWeatherAge boundaries', () => {
   });
 });
 
-// The comment on sampleForecastHours claims string order is chronological "no DST traps".
-// On a fall-back day the provider repeats an hour, and the popover keys its rows on `time`.
+// Fall-back days repeat a local hour, and the popover keys its rows on `time`, so a
+// duplicate would collide as a React key.
 describe('sampleForecastHours across a DST fall-back day', () => {
   it('never returns the same stamp twice, which would collide as React keys', () => {
     const repeated: WeatherHour[] = [

@@ -82,7 +82,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('GET /v1/weather', () => {
+describe('POST /v1/weather', () => {
   it('returns a normalized forecast', async () => {
     const upstream = stubUpstream(FORECAST_PAYLOAD);
     const app = createApp({ weatherUpstream: upstream.fetch });
@@ -284,7 +284,7 @@ describe('GET /v1/weather', () => {
   });
 });
 
-describe('GET /v1/weather/search', () => {
+describe('POST /v1/weather/search', () => {
   it('returns normalized places', async () => {
     const app = createApp({ weatherUpstream: stubUpstream(GEOCODING_PAYLOAD).fetch });
 

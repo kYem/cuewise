@@ -173,6 +173,7 @@ export const WeatherWidget: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const unitsRef = useRef(unitsPreference);
   const requestedUnitsRef = useRef<WeatherUnits | null>(null);
+  const previousPreferenceRef = useRef(unitsPreference);
 
   useEffect(() => {
     unitsRef.current = unitsPreference;
@@ -192,6 +193,11 @@ export const WeatherWidget: React.FC = () => {
   // match (a proxy or provider fault) would refetch forever.
   useEffect(() => {
     const wanted = resolveWeatherUnits(unitsPreference);
+    // A change the user just made is worth a toast when it fails; a mismatch that was
+    // already there on mount is not. Recorded before the early returns, so a change is
+    // still noticed when this pass has nothing to do.
+    const changedByUser = previousPreferenceRef.current !== unitsPreference;
+    previousPreferenceRef.current = unitsPreference;
     if (!showWeather || snapshot === null) {
       return;
     }
@@ -206,7 +212,7 @@ export const WeatherWidget: React.FC = () => {
       return;
     }
     requestedUnitsRef.current = wanted;
-    refresh({ silent: true, unitsPreference });
+    refresh({ silent: !changedByUser, unitsPreference });
   }, [showWeather, snapshot, unitsPreference, refresh]);
 
   useEffect(() => {

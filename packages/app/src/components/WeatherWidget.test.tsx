@@ -398,3 +398,29 @@ describe('the hourly icons', () => {
     expect(stripIcons()).not.toContain('lucide-moon');
   });
 });
+
+describe('a units change the user just made', () => {
+  // setLocation — the other action in the same settings panel — toasts on failure. A silent
+  // refetch here leaves the settings reading °F while the chip still shows °C, with the
+  // only evidence buried in a popover the user has no reason to open.
+  it('is refetched loudly, so a failure is not swallowed', () => {
+    mockSettings({ showWeather: true, weatherUnits: 'metric' });
+    const store = mockWeatherStore({ snapshot: snapshot(LONDON, { units: 'metric' }) });
+
+    const { rerender } = render(<WeatherWidget />);
+    mockSettings({ showWeather: true, weatherUnits: 'imperial' });
+    rerender(<WeatherWidget />);
+
+    expect(store.refresh).toHaveBeenCalledWith({ silent: false, unitsPreference: 'imperial' });
+  });
+
+  // A mismatch that was already on disk at mount is nobody's action, so it stays quiet.
+  it('is distinguished from a mismatch that was there on mount', () => {
+    mockSettings({ showWeather: true, weatherUnits: 'imperial' });
+    const store = mockWeatherStore({ snapshot: snapshot(LONDON, { units: 'metric' }) });
+
+    render(<WeatherWidget />);
+
+    expect(store.refresh).toHaveBeenCalledWith({ silent: true, unitsPreference: 'imperial' });
+  });
+});

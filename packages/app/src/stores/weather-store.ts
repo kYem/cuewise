@@ -27,15 +27,11 @@ export const WEATHER_STALE_MS = 30 * 60 * 1000;
 // of the newer results.
 let searchGeneration = 0;
 
-// Monotonic, so a superseded fetch can be told apart from the one that replaced it even
-// when both belong to the same location.
-let requestCounter = 0;
-
-// The newest reading that has actually landed. Readings are committed against this rather
-// than against the in-flight slot, because the slot cannot tell "a newer request replaced
-// you" from "a newer request already finished and released it" — and when the newer one
-// finished by *failing*, that difference is a valid forecast being thrown away in favour
-// of a dead-end error chip.
+// Two monotonic milestones. A failure measures itself against the newest request *started*
+// — a superseded error is noise. A reading measures itself against the newest that actually
+// *landed*: being outrun by a request that then failed is no reason to throw real data away
+// for a dead-end error chip.
+let lastStartedId = 0;
 let lastLandedId = 0;
 
 interface WeatherStore {
@@ -101,6 +97,10 @@ async function persistLocation(state: WeatherState): Promise<void> {
 /** A failed city lookup must not be reported as a failed weather reading. */
 function messageFor(error: unknown, context: 'forecast' | 'search'): string {
   if (error instanceof WeatherRateLimitedError) {
+    const wait = error.retryAfterSeconds;
+    if (wait !== null && wait > 0) {
+      return `Too many requests; try again in about ${Math.ceil(wait)}s`;
+    }
     return 'Too many requests; try again in a moment';
   }
   if (error instanceof WeatherUnavailableError) {
@@ -209,8 +209,8 @@ export const useWeatherStore = create<WeatherStore>((set, get) => ({
     if (running !== null && running.epoch === epoch && running.units === units) {
       return;
     }
-    requestCounter += 1;
-    const id = requestCounter;
+    lastStartedId += 1;
+    const id = lastStartedId;
     set({ inFlight: { id, epoch, units }, error: null });
     // The place must not have changed under this request; `clearLocation` bumps the epoch
     // without starting a fetch, so this is not implied by the id checks below.
@@ -219,8 +219,8 @@ export const useWeatherStore = create<WeatherStore>((set, get) => ({
     }
     try {
       const forecast = await fetchForecast(location, units);
-      // Landing beats ordering: only a reading that arrived *later* may override this one.
-      // A request issued first but answered last is still fresher than nothing.
+      // Dropped only if a later-issued request already landed; one issued earlier but
+      // answered last is still fresher than nothing.
       if (!samePlace() || id < lastLandedId) {
         return;
       }
@@ -235,10 +235,11 @@ export const useWeatherStore = create<WeatherStore>((set, get) => ({
     } catch (error) {
       logger.error('Failed to refresh weather', error, {
         status: error instanceof WeatherRequestError ? error.status : null,
+        cause: error instanceof WeatherRequestError ? error.cause : null,
       });
-      // A failure may not bury a reading that has already landed, in either order: the
-      // snapshot on screen is real data, and the popover shows this error beside it.
-      if (!samePlace() || get().inFlight?.id !== id) {
+      // A superseded request stays quiet: the newer one owns the outcome now, and this
+      // error would otherwise land beside its reading.
+      if (!samePlace() || id < lastStartedId) {
         return;
       }
       // The cached snapshot deliberately survives; the popover swaps its age line for this.

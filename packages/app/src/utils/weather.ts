@@ -44,10 +44,16 @@ export class WeatherUnavailableError extends WeatherError {
 }
 
 export class WeatherRequestError extends WeatherError {
-  /** Carried for the log, not the message: "failed" alone can't tell a 404 from a 500. */
+  /**
+   * Both carried for the log, not the message. A status tells a 404 (routes not deployed)
+   * from a 500; `cause` names the transport fault — offline, a CORS refusal and a Tauri
+   * capability-scope rejection are otherwise the same sentence. The name only: a transport
+   * error's *message* can embed the URL, which is the one thing that must not be logged.
+   */
   constructor(
     message = 'The weather request failed',
-    readonly status: number | null = null
+    readonly status: number | null = null,
+    readonly cause: string | null = null
   ) {
     super(message);
     this.name = 'WeatherRequestError';
@@ -99,7 +105,9 @@ async function requestJson(path: string, payload: Record<string, string>): Promi
       });
     } catch (error) {
       throw new WeatherRequestError(
-        isAbort(error) ? 'The weather request timed out' : 'Could not reach the weather service'
+        isAbort(error) ? 'The weather request timed out' : 'Could not reach the weather service',
+        null,
+        error instanceof Error ? error.name : null
       );
     }
 
@@ -149,6 +157,20 @@ function isHour(value: unknown): value is WeatherHour {
   );
 }
 
+/** The block the chip renders; `apparentTemperature` is the one field allowed to be null. */
+function isCurrentConditions(value: unknown): value is WeatherForecast['current'] {
+  if (value === null || typeof value !== 'object') {
+    return false;
+  }
+  const current = value as Partial<WeatherForecast['current']>;
+  return (
+    typeof current.temperature === 'number' &&
+    typeof current.isDay === 'boolean' &&
+    isCondition(current.condition) &&
+    (current.apparentTemperature === null || typeof current.apparentTemperature === 'number')
+  );
+}
+
 /**
  * Checks the string unions too, not just the numbers: `units` drives the refetch loop and
  * the scale announced to screen readers, and `condition` is interpolated into an aria-label,
@@ -162,11 +184,7 @@ function isForecast(value: unknown): value is WeatherForecast {
   return (
     WEATHER_UNITS.includes(forecast.units as WeatherUnits) &&
     typeof forecast.timezone === 'string' &&
-    typeof forecast.current?.temperature === 'number' &&
-    typeof forecast.current?.isDay === 'boolean' &&
-    isCondition(forecast.current?.condition) &&
-    (forecast.current?.apparentTemperature === null ||
-      typeof forecast.current?.apparentTemperature === 'number') &&
+    isCurrentConditions(forecast.current) &&
     typeof forecast.high === 'number' &&
     typeof forecast.low === 'number' &&
     Array.isArray(forecast.hours) &&
@@ -228,7 +246,8 @@ export async function searchLocations(query: string): Promise<WeatherLocation[]>
     return [];
   }
   const raw = await requestJson('/v1/weather/search', { q: trimmed });
-  const results = (raw as { results?: unknown }).results;
+  const results =
+    raw === null || typeof raw !== 'object' ? undefined : (raw as { results?: unknown }).results;
   if (!Array.isArray(results)) {
     throw new WeatherRequestError('The weather service returned an unexpected response');
   }
