@@ -27,6 +27,30 @@ describe('BackgroundCredit', () => {
     expect(container.textContent).toContain('Photo by Urban Vintage');
   });
 
+  it('leads with the location when the catalog knows it', () => {
+    const { container } = render(<BackgroundCredit imageUrl={CURATED_URL} onRefresh={vi.fn()} />);
+
+    expect(container.textContent).toContain('Ciucaș Peak, Romania');
+  });
+
+  it('keeps the photographer credit reachable when a location is shown', () => {
+    render(<BackgroundCredit imageUrl={CURATED_URL} onRefresh={vi.fn()} />);
+
+    const link = screen.getByRole('link', { name: 'Urban Vintage' });
+    expect(link).toHaveAttribute('href', expect.stringContaining('unsplash.com/@urban_vintage'));
+  });
+
+  it('falls back to the byline when the photo has no location tag', () => {
+    const { container } = render(
+      <BackgroundCredit
+        imageUrl="https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?w=1920"
+        onRefresh={vi.fn()}
+      />
+    );
+
+    expect(container.textContent).toContain('Photo by v2osk');
+  });
+
   it('offers a control to change the background', () => {
     render(<BackgroundCredit imageUrl={CURATED_URL} onRefresh={vi.fn()} />);
 
