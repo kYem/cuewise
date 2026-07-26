@@ -286,10 +286,13 @@ describe('the deadline actually fires', () => {
       })
     );
 
-    const pending = fetchForecast(LONDON, 'metric');
+    // The expectation is attached before the clock moves: advancing rejects the promise,
+    // and a handler added afterwards arrives a macrotask too late to stop Vitest recording
+    // an unhandled rejection — which fails the run while every assertion still passes.
+    const settled = expect(fetchForecast(LONDON, 'metric')).rejects.toThrow(/timed out/i);
     await vi.advanceTimersByTimeAsync(8_000);
 
-    await expect(pending).rejects.toThrow(/timed out/i);
+    await settled;
   });
 
   it('passes the abort signal to the transport at all', async () => {
@@ -308,7 +311,10 @@ describe('shapes the widget cannot render', () => {
   it.each([
     ['an unknown scale', { ...FORECAST, units: 'kelvin' }],
     ['an unknown condition', { ...FORECAST, current: { ...FORECAST.current, condition: 'sleet' } }],
-    ['an hour missing its daylight flag', { ...FORECAST, hours: [{ time: 'x', temperature: 1 }] }],
+    [
+      'an hour missing its daylight flag',
+      { ...FORECAST, hours: [{ time: 'x', temperature: 1, condition: 'clear' }] },
+    ],
   ])('are rejected: %s', async (_label, payload) => {
     fetchMock.mockResolvedValue(jsonResponse(payload));
 

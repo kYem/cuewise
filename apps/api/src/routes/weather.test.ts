@@ -508,6 +508,12 @@ it('reports no apparent temperature rather than repeating the current one', asyn
 });
 
 describe('daylight', () => {
+  // A failing assertion would otherwise skip the in-test restore and leak the pinned clock
+  // into every later test in the file.
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   const WITH_SUN = {
     ...FORECAST_PAYLOAD,
     hourly: {

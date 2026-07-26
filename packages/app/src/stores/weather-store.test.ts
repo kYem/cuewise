@@ -593,6 +593,8 @@ describe('search bookkeeping', () => {
   });
 
   it('forgets it when the lookup fails, so no empty state is claimed', async () => {
+    // Seeded, or the assertion is null-stays-null and the clearing can be deleted.
+    useWeatherStore.setState({ searchedFor: 'lon', searchResults: [LONDON] });
     searchLocationsMock.mockRejectedValue(new weatherApi.WeatherUnavailableError());
 
     await useWeatherStore.getState().search('lond');
