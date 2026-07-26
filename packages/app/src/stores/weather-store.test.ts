@@ -199,6 +199,20 @@ describe('clearLocation', () => {
       lastFetch: null,
     });
   });
+
+  it('a failed removal warns the location may come back, not that it may be forgotten', async () => {
+    useWeatherStore.setState({ location: LONDON, snapshot: snapshot(), lastFetch: 'x' });
+    setWeatherStateMock.mockResolvedValue({
+      success: false,
+      error: { type: 'unknown', message: 'write failed' },
+    });
+
+    await useWeatherStore.getState().clearLocation();
+
+    expect(errorToastMock).toHaveBeenCalledWith(
+      'Could not remove your weather location; it may come back on your next tab'
+    );
+  });
 });
 
 describe('refresh', () => {
@@ -458,14 +472,13 @@ describe('what a refresh actually persists', () => {
     expect(logged).toHaveBeenCalledWith('Failed to persist weather reading', quotaError);
   });
 
-  // Silently losing this write means the city returns after the user removed it.
   it('tells the user when the location itself could not be saved', async () => {
     setWeatherStateMock.mockResolvedValue({
       success: false,
       error: { type: 'quota_exceeded', message: 'Storage is full' },
     });
 
-    await useWeatherStore.getState().clearLocation();
+    await useWeatherStore.getState().setLocation(LONDON, 'metric');
 
     expect(errorToastMock).toHaveBeenCalledWith(expect.stringContaining('Could not save'));
   });

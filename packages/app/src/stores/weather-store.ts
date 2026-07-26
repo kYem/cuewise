@@ -88,9 +88,12 @@ async function persistLocation(state: WeatherState): Promise<void> {
   const result = await setWeatherState(state);
   if (!result.success) {
     logger.error('Failed to persist weather location', result.error);
-    useToastStore
-      .getState()
-      .error('Could not save your weather location; it may be forgotten when you close this tab');
+    // A failed removal means the old city stays on disk — the opposite of "forgotten".
+    const message =
+      state.location === null
+        ? 'Could not remove your weather location; it may come back on your next tab'
+        : 'Could not save your weather location; it may be forgotten when you close this tab';
+    useToastStore.getState().error(message);
   }
 }
 
