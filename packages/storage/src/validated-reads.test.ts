@@ -4,6 +4,9 @@ import {
   getCalendarState,
   getCurrentQuote,
   getGoals,
+  getGoalsRaw,
+  getQuotes,
+  getQuotesRaw,
   getSettings,
   getWeatherState,
 } from './storage-helpers';
@@ -258,5 +261,29 @@ describe('a calendar cache with one unreadable event', () => {
       events: [good],
       lastSync: '2026-07-26',
     });
+  });
+});
+
+// Sync moves opaque user data between devices and never renders it. If it read through the
+// validating helpers, an item this build cannot parse would be invisible to `readAll` —
+// and `writeOne` rewrites the whole array, so the next pull would delete it from disk,
+// while the cycle would read its absence as a tombstone and delete it on every other
+// device too. One device's parse failure must not become a fleet-wide erase.
+describe('the raw view sync reads through', () => {
+  const unreadable = { id: 'g2', text: 'from a newer build', completed: 'nope' };
+
+  it('still contains an item the rendering read hides', async () => {
+    const good = { id: 'g1', text: 'fine', completed: false, createdAt: 'x', date: '2026-07-26' };
+    configurePlatform({ storage: storeHolding({ goals: [good, unreadable] }) });
+
+    await expect(getGoals()).resolves.toEqual([good]);
+    await expect(getGoalsRaw()).resolves.toEqual([good, unreadable]);
+  });
+
+  it('reports it for quotes too, across both the seed and custom lists', async () => {
+    configurePlatform({ storage: storeHolding({ seedQuotes: [unreadable], customQuotes: [] }) });
+
+    await expect(getQuotes()).resolves.toEqual([]);
+    await expect(getQuotesRaw()).resolves.toEqual([unreadable]);
   });
 });

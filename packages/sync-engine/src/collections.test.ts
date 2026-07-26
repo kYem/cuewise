@@ -1,5 +1,5 @@
 import { configurePlatform, DEFAULT_SETTINGS } from '@cuewise/shared';
-import { getGoals, getSettings, setGoals } from '@cuewise/storage';
+import { getGoals, getSettings, getSettingsForSync, setGoals } from '@cuewise/storage';
 import { goalFactory } from '@cuewise/test-utils/factories';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { FakeKvStore } from './__fixtures__/fake-kv-store';
@@ -80,12 +80,26 @@ describe('settings binding', () => {
     expect(result.theme).toEqual({ key: 'theme', value: DEFAULT_SETTINGS.theme });
   });
 
+  // 'dark', not 'forest': the latter is a colorTheme, and now that reads validate per field
+  // an invalid theme is correctly refused on the way out — which would make this assert the
+  // validator rather than the binding.
   it('writeOne updates only the targeted key', async () => {
-    await settingsBinding().writeOne('theme', { key: 'theme', value: 'forest' });
+    await settingsBinding().writeOne('theme', { key: 'theme', value: 'dark' });
 
     const settings = await getSettings();
-    expect(settings.theme).toBe('forest');
+    expect(settings.theme).toBe('dark');
     expect(settings.colorTheme).toBe(DEFAULT_SETTINGS.colorTheme);
+  });
+
+  // The binding rewrites the whole settings object, so a value this build does not
+  // recognise — from a newer peer — must survive the round trip rather than being written
+  // back as our default on every device.
+  it('does not overwrite a neighbouring key it cannot interpret', async () => {
+    await settingsBinding().writeOne('colorTheme', { key: 'colorTheme', value: 'aurora' });
+    await settingsBinding().writeOne('theme', { key: 'theme', value: 'dark' });
+
+    const stored = await getSettingsForSync();
+    expect(stored.colorTheme).toBe('aurora');
   });
 
   it('writeOne is a no-op for a device-local key', async () => {

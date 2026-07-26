@@ -417,6 +417,53 @@ export async function getStoredSettings(): Promise<Settings | null> {
   return { ...DEFAULT_SETTINGS, ...(await readStoredSettingsFields()) };
 }
 
+/**
+ * Raw list reads for the sync engine.
+ *
+ * Sync moves opaque user data between devices; it never renders anything, so it must not
+ * use the rendering view. The validated readers hide items this build cannot parse — which
+ * is right for the UI and wrong here twice over: `writeOne` is a read-modify-write over the
+ * whole array, so a hidden item would be *deleted* on the next pull, and an entity absent
+ * from a read is how the cycle infers a tombstone, so it would be deleted on every other
+ * device too. Same reasoning as `migrateStorageData`: move the bytes, do not judge them.
+ */
+export async function getGoalsRaw(): Promise<Goal[]> {
+  return (await getFromStorage<Goal[]>(STORAGE_KEYS.GOALS, await getStorageArea())) ?? [];
+}
+
+export async function getRemindersRaw(): Promise<Reminder[]> {
+  return (await getFromStorage<Reminder[]>(STORAGE_KEYS.REMINDERS, await getStorageArea())) ?? [];
+}
+
+export async function getCollectionsRaw(): Promise<QuoteCollection[]> {
+  return (
+    (await getFromStorage<QuoteCollection[]>(STORAGE_KEYS.COLLECTIONS, await getStorageArea())) ??
+    []
+  );
+}
+
+/**
+ * Settings as stored, with defaults filling only what was never written — nothing dropped,
+ * nothing defaulted for being unreadable. The sync binding read-modify-writes the whole
+ * object, so reading through the validating path would persist a remote value this build
+ * does not recognise as our default, on every device.
+ */
+export async function getSettingsForSync(): Promise<Settings> {
+  const raw = await getFromStorage<Record<string, unknown>>(STORAGE_KEYS.SETTINGS, 'local');
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    return DEFAULT_SETTINGS;
+  }
+  return { ...DEFAULT_SETTINGS, ...raw } as Settings;
+}
+
+/** Seed plus custom, mirroring `getQuotes`, but without dropping anything. */
+export async function getQuotesRaw(): Promise<Quote[]> {
+  const seed = (await getFromStorage<Quote[]>(STORAGE_KEYS.SEED_QUOTES, 'local')) ?? [];
+  const area = await getStorageArea();
+  const custom = (await getFromStorage<Quote[]>(STORAGE_KEYS.CUSTOM_QUOTES, area)) ?? [];
+  return [...seed, ...custom];
+}
+
 export async function setSettings(settings: Settings): Promise<StorageResult> {
   return setInStorage(STORAGE_KEYS.SETTINGS, settings, 'local');
 }

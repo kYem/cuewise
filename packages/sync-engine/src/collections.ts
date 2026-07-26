@@ -1,10 +1,10 @@
 import { DEVICE_LOCAL_SETTINGS_KEYS, type Settings } from '@cuewise/shared';
 import {
-  getCollections,
-  getGoals,
-  getQuotes,
-  getReminders,
-  getSettings,
+  getCollectionsRaw,
+  getGoalsRaw,
+  getQuotesRaw,
+  getRemindersRaw,
+  getSettingsForSync,
   type StorageResult,
   setCollections,
   setGoals,
@@ -64,7 +64,7 @@ function settingsBinding(): CollectionBinding {
   return {
     name: 'settings',
     async readAll() {
-      const settings = await getSettings();
+      const settings = await getSettingsForSync();
       const entries = Object.entries(settings).filter(
         ([key]) => !DEVICE_LOCAL_SETTINGS_KEYS.includes(key)
       );
@@ -78,7 +78,9 @@ function settingsBinding(): CollectionBinding {
       if (DEVICE_LOCAL_SETTINGS_KEYS.includes(entityId)) {
         return { success: true };
       }
-      const settings = await getSettings();
+      // Raw, for the same reason the arrays are: this rewrites the whole object, so a
+      // value the validator would default is a value this would persist as the default.
+      const settings = await getSettingsForSync();
       const { value } = entity as SettingsEntity;
       const next: Settings = { ...settings, [entityId]: value };
       return setSettings(next);
@@ -88,10 +90,13 @@ function settingsBinding(): CollectionBinding {
 
 export function defaultBindings(): CollectionBinding[] {
   return [
-    arrayBinding('goals', getGoals, setGoals),
-    arrayBinding('quotes', getQuotes, setQuotes),
-    arrayBinding('collections', getCollections, setCollections),
-    arrayBinding('reminders', getReminders, setReminders),
+    // Raw readers: see the note on `getGoalsRaw`. An item the UI hides must not be an item
+    // sync deletes — `writeOne` rewrites the whole array, and an entity missing from a read
+    // is how the cycle infers a tombstone for every other device.
+    arrayBinding('goals', getGoalsRaw, setGoals),
+    arrayBinding('quotes', getQuotesRaw, setQuotes),
+    arrayBinding('collections', getCollectionsRaw, setCollections),
+    arrayBinding('reminders', getRemindersRaw, setReminders),
     settingsBinding(),
   ];
 }
