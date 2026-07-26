@@ -1,16 +1,19 @@
 import { cn } from '@cuewise/ui';
 import { useEffect, useState } from 'react';
+import { getBackgroundFilterStyle } from '../../utils/background-filter';
 
 interface BackgroundImageProps {
   url: string | null;
   isLoading: boolean;
+  dim: number;
+  blur: number;
 }
 
 /**
  * Background image component with smooth fade transitions.
  * Shows a loading state while image is loading, then fades in.
  */
-export function BackgroundImage({ url, isLoading }: BackgroundImageProps) {
+export function BackgroundImage({ url, isLoading, dim, blur }: BackgroundImageProps) {
   const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
   const [isTransitioning, setIsTransitioning] = useState(false);
 
@@ -52,7 +55,7 @@ export function BackgroundImage({ url, isLoading }: BackgroundImageProps) {
             'absolute inset-0 bg-cover bg-center bg-no-repeat transition-opacity duration-1000',
             isTransitioning ? 'opacity-0' : 'opacity-100'
           )}
-          style={{ backgroundImage: `url(${loadedUrl})` }}
+          style={{ backgroundImage: `url(${loadedUrl})`, ...getBackgroundFilterStyle(dim, blur) }}
           role="img"
           aria-label="Focus mode background"
         />

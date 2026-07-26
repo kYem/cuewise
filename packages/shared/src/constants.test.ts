@@ -18,6 +18,11 @@ describe('DEFAULT_SETTINGS', () => {
     expect(DEFAULT_SETTINGS.glassEnhanced).toBe(false);
   });
 
+  it('defaults background dim and blur to zero so existing rendering is unchanged', () => {
+    expect(DEFAULT_SETTINGS.backgroundDim).toBe(0);
+    expect(DEFAULT_SETTINGS.backgroundBlur).toBe(0);
+  });
+
   // The one widget that sends where you are off the device, so the default is the whole
   // privacy promise: a refactor flipping it would opt in the entire installed base.
   it('keeps weather opt-in (off by default)', () => {

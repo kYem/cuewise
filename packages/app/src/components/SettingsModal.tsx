@@ -84,8 +84,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, e
   const apply = useCallback(
     async (patch: Partial<Settings>) => {
       const prevSyncEnabled = settings.syncEnabled;
-      await updateSettings(patch);
-      setSavedTick((t) => t + 1);
+      const persisted = await updateSettings(patch);
+      if (persisted) {
+        setSavedTick((t) => t + 1);
+      }
 
       const nextSyncEnabled = useSettingsStore.getState().settings.syncEnabled;
       const effects = planSettingsSideEffects(patch, prevSyncEnabled, nextSyncEnabled);
@@ -108,9 +110,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, e
   );
 
   const handleReset = useCallback(async () => {
-    await resetToDefaults();
+    const persisted = await resetToDefaults();
     await reloadPomodoroSettings();
-    setSavedTick((t) => t + 1);
+    if (persisted) {
+      setSavedTick((t) => t + 1);
+    }
   }, [resetToDefaults, reloadPomodoroSettings]);
 
   const handleOpenSoundsPanel = useCallback(() => {

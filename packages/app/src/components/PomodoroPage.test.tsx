@@ -1,3 +1,4 @@
+import type { Settings } from '@cuewise/shared';
 import { createSelectorMock } from '@cuewise/test-utils';
 import { render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -11,7 +12,10 @@ import { preloadImages } from '../utils/image-preload-cache';
 import { PomodoroPage } from './PomodoroPage';
 
 vi.mock('../stores/quote-store', () => ({ useQuoteStore: vi.fn() }));
-vi.mock('../stores/settings-store', () => ({ useSettingsStore: vi.fn() }));
+vi.mock('../stores/settings-store', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../stores/settings-store')>()),
+  useSettingsStore: vi.fn(),
+}));
 vi.mock('../stores/calendar-store', () => ({ useCalendarStore: vi.fn() }));
 vi.mock('../stores/focus-mode-store', () => ({ useFocusModeStore: vi.fn() }));
 vi.mock('../utils/google-calendar', () => ({ isCalendarFeatureEnabled: vi.fn() }));
@@ -42,7 +46,11 @@ vi.mock('./sounds', () => ({ SoundsMiniPlayer: () => null }));
 
 const initCalendar = vi.fn();
 
-function setup(companion: 'quote' | 'calendar' | 'both', calendarEnabled: boolean) {
+function setup(
+  companion: 'quote' | 'calendar' | 'both',
+  calendarEnabled: boolean,
+  settingsOverrides: Partial<Settings> = {}
+) {
   vi.mocked(isCalendarFeatureEnabled).mockReturnValue(calendarEnabled);
   vi.mocked(useSettingsStore).mockImplementation(
     createSelectorMock({
@@ -52,7 +60,11 @@ function setup(companion: 'quote' | 'calendar' | 'both', calendarEnabled: boolea
         focusModeImageCategory: 'nature',
         pomodoroMusicEnabled: false,
         pomodoroCompanion: companion,
+        backgroundDim: 0,
+        backgroundBlur: 0,
+        ...settingsOverrides,
       },
+      preview: null,
     })
   );
   vi.mocked(useQuoteStore).mockImplementation(
@@ -147,5 +159,18 @@ describe('background resolution', () => {
 
     await waitFor(() => expect(screen.queryByTestId('quote-display')).toBeInTheDocument());
     expect(vi.mocked(preloadImages)).not.toHaveBeenCalled();
+  });
+});
+
+describe('PomodoroPage - background readability', () => {
+  it('applies the readability filter to the image layer inside a clipping wrapper', () => {
+    setup('quote', false, { backgroundDim: 40, backgroundBlur: 8 });
+
+    const { container } = render(<PomodoroPage />);
+
+    const layer = container.querySelector('div[style*="brightness"]');
+    expect(layer).not.toBeNull();
+    expect(layer).toHaveStyle({ filter: 'brightness(0.6) blur(8px)', margin: '-16px' });
+    expect(layer?.parentElement).toHaveClass('overflow-hidden');
   });
 });

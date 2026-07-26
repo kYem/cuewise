@@ -11,8 +11,9 @@ interface BackgroundCreditProps {
 const LINK_CLASS = 'underline underline-offset-2 hover:text-white transition-colors';
 
 /**
- * Credits the background photo and offers a fresh one. Names the photographer only
- * when known — an unattributed photo says just "from Unsplash" rather than guessing.
+ * Credits the background photo and offers a fresh one. Leads with the place the
+ * photo was taken when known, keeping the photographer credit in a hover/focus
+ * reveal; without a location the byline stays visible. Never guesses either.
  */
 export const BackgroundCredit: React.FC<BackgroundCreditProps> = ({
   imageUrl,
@@ -25,31 +26,47 @@ export const BackgroundCredit: React.FC<BackgroundCreditProps> = ({
   }
 
   const credit = getPhotoCredit(imageUrl);
-
-  return (
-    // Bottom-left: the reminders button owns the bottom-right corner and would eat the clicks.
-    <div className="fixed bottom-3 left-3 z-30 flex items-center gap-3 text-xs text-white/60">
-      <p>
-        {credit.photographer !== null && credit.photographerUrl !== null ? (
-          <>
-            Photo by{' '}
-            <a
-              href={credit.photographerUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={LINK_CLASS}
-            >
-              {credit.photographer}
-            </a>{' '}
-            on{' '}
-          </>
-        ) : (
-          'Photo from '
-        )}
+  const byline =
+    credit.photographer !== null && credit.photographerUrl !== null ? (
+      <>
+        Photo by{' '}
+        <a
+          href={credit.photographerUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={LINK_CLASS}
+        >
+          {credit.photographer}
+        </a>{' '}
+        on{' '}
         <a href={credit.sourceUrl} target="_blank" rel="noopener noreferrer" className={LINK_CLASS}>
           Unsplash
         </a>
-      </p>
+      </>
+    ) : (
+      <>
+        Photo from{' '}
+        <a href={credit.sourceUrl} target="_blank" rel="noopener noreferrer" className={LINK_CLASS}>
+          Unsplash
+        </a>
+      </>
+    );
+
+  return (
+    // Bottom-left: the reminders button owns the bottom-right corner and would eat the clicks.
+    // `group` drives the hover/focus reveal of the byline behind the location.
+    <div className="group fixed bottom-3 left-3 z-30 flex items-center gap-3 text-xs text-white/60">
+      {credit.location !== null ? (
+        <p>
+          <span>{credit.location}</span>
+          <span className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+            {' · '}
+            {byline}
+          </span>
+        </p>
+      ) : (
+        <p>{byline}</p>
+      )}
       <button
         type="button"
         onClick={onRefresh}

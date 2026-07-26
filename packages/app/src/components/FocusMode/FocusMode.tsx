@@ -1,7 +1,11 @@
 import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useFocusModeStore } from '../../stores/focus-mode-store';
-import { useSettingsStore } from '../../stores/settings-store';
+import {
+  selectBackgroundBlur,
+  selectBackgroundDim,
+  useSettingsStore,
+} from '../../stores/settings-store';
 import { SoundsMiniPlayer } from '../sounds';
 import { BackgroundImage } from './BackgroundImage';
 import { FocusModeControls } from './FocusModeControls';
@@ -16,6 +20,8 @@ import { FocusModeTimer } from './FocusModeTimer';
 export function FocusMode() {
   const { isActive, exitFocusMode, currentImageUrl, isImageLoading } = useFocusModeStore();
   const { settings } = useSettingsStore();
+  const backgroundDim = useSettingsStore(selectBackgroundDim);
+  const backgroundBlur = useSettingsStore(selectBackgroundBlur);
 
   // Handle escape key to exit
   useEffect(() => {
@@ -49,7 +55,12 @@ export function FocusMode() {
   const content = (
     <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="Focus mode">
       {/* Background layers */}
-      <BackgroundImage url={currentImageUrl} isLoading={isImageLoading} />
+      <BackgroundImage
+        url={currentImageUrl}
+        isLoading={isImageLoading}
+        dim={backgroundDim}
+        blur={backgroundBlur}
+      />
 
       {/* Dark overlay for better text readability */}
       <div className="absolute inset-0 bg-black/40" />

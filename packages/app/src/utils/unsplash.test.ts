@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getPhotoCredit, loadImageWithFallback, preloadImage } from './unsplash';
+import { CURATED_PHOTOS } from './unsplash-catalog';
 
 // Controllable Image stand-in: jsdom never fires load events, so tests trigger
 // onload/onerror on the created instance themselves.
@@ -71,22 +72,47 @@ describe('getPhotoCredit', () => {
 
   it('reports an unknown photographer rather than inventing one', () => {
     const credit = getPhotoCredit(
-      'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=1920'
+      'https://images.unsplash.com/photo-1000000000000-000000000000?w=1920'
     );
     expect(credit.photographer).toBeNull();
     expect(credit.photographerUrl).toBeNull();
+  });
+
+  it('credits every shipped photo, so the anonymous fallback never shows for the catalog', () => {
+    for (const photo of Object.values(CURATED_PHOTOS).flat()) {
+      const credit = getPhotoCredit(`https://images.unsplash.com/${photo.id}?w=1920`);
+      expect(credit.photographer).not.toBeNull();
+    }
   });
 
   it('names the photographer once the credit is known', () => {
     const credit = getPhotoCredit(
       'https://images.unsplash.com/photo-test-credited?w=1920',
       // Injected registry keeps the test independent of which real photos we've researched.
-      { 'photo-test-credited': { photographer: 'Ansel Adams', username: 'ansel' } }
+      { 'photo-test-credited': { photographer: 'Ansel Adams', username: 'ansel', location: null } }
     );
     expect(credit.photographer).toBe('Ansel Adams');
     expect(credit.photographerUrl).toBe(
       'https://unsplash.com/@ansel?utm_source=cuewise&utm_medium=referral'
     );
+  });
+
+  it('carries the location when the catalog knows it', () => {
+    const credit = getPhotoCredit('https://images.unsplash.com/photo-test-located?w=1920', {
+      'photo-test-located': {
+        photographer: 'Ansel Adams',
+        username: 'ansel',
+        location: 'Yosemite, United States',
+      },
+    });
+    expect(credit.location).toBe('Yosemite, United States');
+  });
+
+  it('returns a null location for an unknown photo', () => {
+    const credit = getPhotoCredit(
+      'https://images.unsplash.com/photo-1000000000000-000000000000?w=1920'
+    );
+    expect(credit.location).toBeNull();
   });
 
   it('still credits Unsplash for a url it cannot parse a photo id from', () => {
@@ -122,5 +148,34 @@ describe('loadImageWithFallback', () => {
     }
 
     await expect(promise).rejects.toThrow('All image sources failed');
+  });
+});
+
+describe('curated catalog invariants', () => {
+  const allIds = Object.values(CURATED_PHOTOS)
+    .flat()
+    .map((photo) => photo.id);
+
+  it('has no duplicate ids across categories', () => {
+    const seen = new Set(allIds);
+    expect(seen.size).toBe(allIds.length);
+  });
+
+  it('uses well-formed CDN ids only', () => {
+    for (const id of allIds) {
+      expect(id).toMatch(/^photo-\d+-[0-9a-f]+$/);
+    }
+  });
+
+  it('sets photographer and username together or not at all', () => {
+    for (const photo of Object.values(CURATED_PHOTOS).flat()) {
+      expect(photo.photographer === null).toBe(photo.username === null);
+    }
+  });
+
+  it('offers at least 15 images per category', () => {
+    for (const photos of Object.values(CURATED_PHOTOS)) {
+      expect(photos.length).toBeGreaterThanOrEqual(15);
+    }
   });
 });
