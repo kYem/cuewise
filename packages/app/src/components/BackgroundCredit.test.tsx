@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { BackgroundCredit } from './BackgroundCredit';
 
 const CURATED_URL = 'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=1920';
+const UNKNOWN_URL = 'https://images.unsplash.com/photo-1000000000000-000000000000?w=1920';
 
 describe('BackgroundCredit', () => {
   it('credits Unsplash for the current photo', () => {
@@ -14,10 +15,16 @@ describe('BackgroundCredit', () => {
 
   it('says only that the photo is from Unsplash when the photographer is unknown', () => {
     // The credit spans a text node and the link, so assert on the rendered line as read.
-    const { container } = render(<BackgroundCredit imageUrl={CURATED_URL} onRefresh={vi.fn()} />);
+    const { container } = render(<BackgroundCredit imageUrl={UNKNOWN_URL} onRefresh={vi.fn()} />);
 
     expect(container.textContent).toContain('Photo from Unsplash');
     expect(container.textContent).not.toContain('Photo by');
+  });
+
+  it('names the photographer for a credited catalog photo', () => {
+    const { container } = render(<BackgroundCredit imageUrl={CURATED_URL} onRefresh={vi.fn()} />);
+
+    expect(container.textContent).toContain('Photo by Urban Vintage');
   });
 
   it('offers a control to change the background', () => {
