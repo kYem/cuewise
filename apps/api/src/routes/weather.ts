@@ -218,6 +218,23 @@ function normalizeForecast(raw: unknown, units: WeatherUnits): WeatherForecast |
   };
 }
 
+function buildForecastUrl(lat: number, lon: number, units: WeatherUnits): string {
+  const url = new URL(FORECAST_ENDPOINT);
+  url.searchParams.set('latitude', String(lat));
+  url.searchParams.set('longitude', String(lon));
+  url.searchParams.set('current', 'temperature_2m,apparent_temperature,weather_code,is_day');
+  url.searchParams.set('hourly', 'temperature_2m,weather_code');
+  url.searchParams.set('daily', 'temperature_2m_max,temperature_2m_min,sunrise,sunset');
+  url.searchParams.set('forecast_days', '1');
+  // Safe to cache: the provider resolves `auto` from the coordinates, not the caller's IP,
+  // so one cached body is correct for everyone asking about this place.
+  url.searchParams.set('timezone', 'auto');
+  if (units === 'imperial') {
+    url.searchParams.set('temperature_unit', 'fahrenheit');
+  }
+  return url.toString();
+}
+
 /** Which blocks the provider sent, so a shape change is diagnosable from the log alone. */
 function describeForecastShape(raw: unknown): Record<string, unknown> {
   const payload = (raw ?? {}) as OpenMeteoForecast;
@@ -339,21 +356,11 @@ export function registerWeatherRoutes(
     const lat = roundCoordinate(latitude);
     const lon = roundCoordinate(longitude);
 
-    const url = new URL(FORECAST_ENDPOINT);
-    url.searchParams.set('latitude', String(lat));
-    url.searchParams.set('longitude', String(lon));
-    url.searchParams.set('current', 'temperature_2m,apparent_temperature,weather_code,is_day');
-    url.searchParams.set('hourly', 'temperature_2m,weather_code');
-    url.searchParams.set('daily', 'temperature_2m_max,temperature_2m_min,sunrise,sunset');
-    url.searchParams.set('forecast_days', '1');
-    // Safe to cache: the provider resolves `auto` from the coordinates, not the caller's
-    // IP, so one cached body is correct for everyone asking about this place.
-    url.searchParams.set('timezone', 'auto');
-    if (units === 'imperial') {
-      url.searchParams.set('temperature_unit', 'fahrenheit');
-    }
-
-    const raw = await fetchUpstream(deps.weatherUpstream, url.toString(), FORECAST_CACHE_SECONDS);
+    const raw = await fetchUpstream(
+      deps.weatherUpstream,
+      buildForecastUrl(lat, lon, units),
+      FORECAST_CACHE_SECONDS
+    );
     if (raw === null) {
       return problem('upstream_unavailable', {
         detail: 'The weather provider is unavailable; try again shortly.',

@@ -279,6 +279,9 @@ describe('a scale whose refetch failed', () => {
     rerender(<WeatherWidget />);
 
     expect(store.refresh).toHaveBeenCalledTimes(2);
+    // Still the user's doing the second time: bookkeeping that skips a pass which returned
+    // early would silently downgrade every change after the first.
+    expect(store.refresh).toHaveBeenLastCalledWith({ silent: false, unitsPreference: 'imperial' });
   });
 });
 
@@ -420,6 +423,39 @@ describe('a units change the user just made', () => {
     const store = mockWeatherStore({ snapshot: snapshot(LONDON, { units: 'metric' }) });
 
     render(<WeatherWidget />);
+
+    expect(store.refresh).toHaveBeenCalledWith({ silent: true, unitsPreference: 'imperial' });
+  });
+});
+
+describe('a units change made before any reading is on screen', () => {
+  // Choosing a city nulls the snapshot; changing the scale in the same breath must not be
+  // downgraded to silent just because the pass that saw it had nothing to do yet.
+  it('is still the users own change once the reading lands', () => {
+    mockSettings({ showWeather: true, weatherUnits: 'metric' });
+    mockWeatherStore({ snapshot: null });
+
+    const { rerender } = render(<WeatherWidget />);
+    mockSettings({ showWeather: true, weatherUnits: 'imperial' });
+    rerender(<WeatherWidget />);
+    // Captured from the call that supplies the landed reading — the earlier mock's spy is
+    // replaced, so asserting on it would pass without the widget doing anything.
+    const store = mockWeatherStore({ snapshot: snapshot(LONDON, { units: 'metric' }) });
+    rerender(<WeatherWidget />);
+
+    expect(store.refresh).toHaveBeenCalledWith({ silent: false, unitsPreference: 'imperial' });
+  });
+
+  // Settings hydration flips showWeather and the scale together on a fresh tab. Treating
+  // that as a user action would toast on every new tab whose fetch happened to fail.
+  it('does not count settings hydration as a user action', () => {
+    mockSettings({ showWeather: false, weatherUnits: 'auto' });
+    mockWeatherStore({ snapshot: null });
+
+    const { rerender } = render(<WeatherWidget />);
+    const store = mockWeatherStore({ snapshot: snapshot(LONDON, { units: 'metric' }) });
+    mockSettings({ showWeather: true, weatherUnits: 'imperial' });
+    rerender(<WeatherWidget />);
 
     expect(store.refresh).toHaveBeenCalledWith({ silent: true, unitsPreference: 'imperial' });
   });

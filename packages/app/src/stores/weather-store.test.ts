@@ -263,7 +263,7 @@ describe('refresh', () => {
 
     await useWeatherStore.getState().refresh({ silent: true });
 
-    expect(useWeatherStore.getState().error).toMatch(/too many/i);
+    expect(useWeatherStore.getState().error).toMatch(/in about 30s/);
   });
 
   it('clears a previous error after a successful refresh', async () => {

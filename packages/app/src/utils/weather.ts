@@ -45,10 +45,11 @@ export class WeatherUnavailableError extends WeatherError {
 
 export class WeatherRequestError extends WeatherError {
   /**
-   * Both carried for the log, not the message. A status tells a 404 (routes not deployed)
-   * from a 500; `cause` names the transport fault — offline, a CORS refusal and a Tauri
-   * capability-scope rejection are otherwise the same sentence. The name only: a transport
-   * error's *message* can embed the URL, which is the one thing that must not be logged.
+   * Both carried for the log, not the message: a status tells a 404 (routes not deployed)
+   * from a 500, and `cause` separates a thrown `Error` (usually `TypeError` — offline, DNS,
+   * a CORS refusal) from a rejection that is not one at all, which is how the Tauri http
+   * plugin reports a capability-scope denial. Its *name* only — a transport error's message
+   * can embed the URL, the one thing that must never be logged.
    */
   constructor(
     message = 'The weather request failed',
@@ -107,7 +108,7 @@ async function requestJson(path: string, payload: Record<string, string>): Promi
       throw new WeatherRequestError(
         isAbort(error) ? 'The weather request timed out' : 'Could not reach the weather service',
         null,
-        error instanceof Error ? error.name : null
+        error instanceof Error ? error.name : `non-error:${typeof error}`
       );
     }
 

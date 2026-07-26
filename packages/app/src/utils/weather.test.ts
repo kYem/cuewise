@@ -327,3 +327,28 @@ describe('shapes the widget cannot render', () => {
     await expect(searchLocations('lond')).rejects.toBeInstanceOf(WeatherRequestError);
   });
 });
+
+describe('what a failure carries for the log', () => {
+  it('names the transport error rather than flattening every cause into one sentence', async () => {
+    fetchMock.mockRejectedValue(new TypeError('network down'));
+
+    const error = await fetchForecast(LONDON, 'metric').catch((caught: unknown) => caught);
+
+    expect(error).toMatchObject({ cause: 'TypeError' });
+  });
+
+  // The Tauri http plugin rejects a capability-scope denial with a string, not an Error.
+  it('distinguishes a rejection that is not an Error at all', async () => {
+    fetchMock.mockRejectedValue('url not allowed on the configured scope');
+
+    const error = await fetchForecast(LONDON, 'metric').catch((caught: unknown) => caught);
+
+    expect(error).toMatchObject({ cause: 'non-error:string' });
+  });
+
+  it('reports a null body as an unexpected response, not a property-access crash', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(null));
+
+    await expect(searchLocations('lond')).rejects.toBeInstanceOf(WeatherRequestError);
+  });
+});

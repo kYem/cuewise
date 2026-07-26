@@ -174,6 +174,8 @@ export const WeatherWidget: React.FC = () => {
   const unitsRef = useRef(unitsPreference);
   const requestedUnitsRef = useRef<WeatherUnits | null>(null);
   const previousPreferenceRef = useRef(unitsPreference);
+  const wasShowingRef = useRef(showWeather);
+  const pendingUserChangeRef = useRef(false);
 
   useEffect(() => {
     unitsRef.current = unitsPreference;
@@ -193,12 +195,18 @@ export const WeatherWidget: React.FC = () => {
   // match (a proxy or provider fault) would refetch forever.
   useEffect(() => {
     const wanted = resolveWeatherUnits(unitsPreference);
-    // A change the user just made is worth a toast when it fails; a mismatch that was
-    // already there on mount is not. Recorded before the early returns, so a change is
-    // still noticed when this pass has nothing to do.
-    const changedByUser = previousPreferenceRef.current !== unitsPreference;
+    // A change the user just made deserves a toast if its refetch fails; a mismatch that
+    // was simply already there does not. It counts as theirs only if the widget was
+    // already on — settings hydration flips `showWeather` and the scale together on a
+    // fresh tab, and that is nobody's action.
+    if (previousPreferenceRef.current !== unitsPreference && wasShowingRef.current) {
+      pendingUserChangeRef.current = true;
+    }
     previousPreferenceRef.current = unitsPreference;
+    wasShowingRef.current = showWeather;
     if (!showWeather || snapshot === null) {
+      // Deliberately leaves the change pending: the refetch it wants happens on a later
+      // pass, and consuming it here is what made the second change of a session silent.
       return;
     }
     if (snapshot.units === wanted) {
@@ -206,13 +214,16 @@ export const WeatherWidget: React.FC = () => {
       // their mind, not the reply-loop this guard exists to stop. Without this, a scale
       // whose refetch once failed could never be asked for again this page.
       requestedUnitsRef.current = null;
+      pendingUserChangeRef.current = false;
       return;
     }
     if (requestedUnitsRef.current === wanted) {
       return;
     }
     requestedUnitsRef.current = wanted;
-    refresh({ silent: !changedByUser, unitsPreference });
+    const silent = !pendingUserChangeRef.current;
+    pendingUserChangeRef.current = false;
+    refresh({ silent, unitsPreference });
   }, [showWeather, snapshot, unitsPreference, refresh]);
 
   useEffect(() => {

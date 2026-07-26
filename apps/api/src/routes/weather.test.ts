@@ -678,15 +678,22 @@ describe('an unreadable geocoding envelope', () => {
   // The round-one fix guarded unreadable *entries*; a shape change one level up would
   // still have every search answer "no such city" with nothing logged.
   it.each([
-    ['results is not a list', { results: 'nope' }],
-    ['the payload is a bare array', []],
-    ['the payload is not an object', 'nope'],
-  ])('refuses when %s', async (_label, payload) => {
+    ['results is not a list', { results: 'nope' }, 'object'],
+    ['the payload is a bare array', [], 'array'],
+    ['the payload is not an object', 'nope', 'string'],
+  ])('refuses when %s, naming the shape it got', async (_label, payload, envelopeType) => {
+    const lines: string[] = [];
+    vi.spyOn(logger, 'warn').mockImplementation((...args: unknown[]) => {
+      lines.push(args.map((arg) => JSON.stringify(arg)).join(' '));
+    });
     const app = createApp({ weatherUpstream: stubUpstream(payload).fetch });
 
     const res = await app.request('/v1/weather/search', post({ q: 'vilni' }), env);
 
     expect(res.status).toBe(503);
+    // The field this replaced logged "undefined" for all three, which is what let the
+    // shape change it exists to surface go unnoticed for four review rounds.
+    expect(lines.join('\n')).toContain(envelopeType);
   });
 
   it('still treats an absent results key as a genuine no-match', async () => {
@@ -696,5 +703,30 @@ describe('an unreadable geocoding envelope', () => {
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ results: [] });
+  });
+});
+
+describe('body size', () => {
+  // These two are the only unauthenticated JSON bodies the Worker takes, so the shared
+  // 8 MB guard reaching them is the point of routing through `parseJsonBody`.
+  it.each([
+    ['the forecast route', '/v1/weather', { lat: '51.5', lon: '-0.13' }],
+    ['the search route', '/v1/weather/search', { q: 'vilni' }],
+  ])('refuses an over-declared body on %s before buffering it', async (_label, path, body) => {
+    const upstream = stubUpstream(FORECAST_PAYLOAD);
+    const app = createApp({ weatherUpstream: upstream.fetch });
+
+    const res = await app.request(
+      path,
+      {
+        ...post(body),
+        headers: { 'Content-Type': 'application/json', 'Content-Length': '9000000' },
+      },
+      env
+    );
+
+    expect(res.status).toBe(413);
+    expect(await res.json()).toMatchObject({ code: 'payload_too_large' });
+    expect(upstream.urls).toEqual([]);
   });
 });
