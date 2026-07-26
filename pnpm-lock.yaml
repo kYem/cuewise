@@ -115,6 +115,9 @@ catalogs:
     wrangler:
       specifier: ^4.20.0
       version: 4.105.0
+    zod:
+      specifier: ^4.4.3
+      version: 4.4.3
     zustand:
       specifier: 5.0.14
       version: 5.0.14
@@ -547,6 +550,9 @@ importers:
       date-fns:
         specifier: 'catalog:'
         version: 4.4.0
+      zod:
+        specifier: 'catalog:'
+        version: 4.4.3
     devDependencies:
       typescript:
         specifier: 'catalog:'
@@ -560,6 +566,9 @@ importers:
       '@cuewise/shared':
         specifier: workspace:*
         version: link:../shared
+      zod:
+        specifier: 'catalog:'
+        version: 4.4.3
     devDependencies:
       '@cuewise/test-utils':
         specifier: workspace:*

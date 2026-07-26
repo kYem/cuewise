@@ -14,6 +14,8 @@ export * from './logger';
 export * from './platform';
 // Export posture daily-rollup helpers (macOS tracking → Insights)
 export * from './posture-stats';
+// Export runtime schemas (validation for stored blobs and wire payloads)
+export * from './schemas';
 // Export text search helpers
 export * from './search';
 // Export device-local settings-sync scope

@@ -5,29 +5,44 @@
 import {
   type CalendarState,
   type ConceptCard,
+  calendarStateSchema,
+  conceptCardSchema,
   DAY_IN_MS,
   type DailyBackground,
   DEFAULT_SETTINGS,
+  dailyBackgroundSchema,
   type FocusImageCategory,
   type Goal,
   getStorage,
   getTodayDateString,
+  goalSchema,
   logger,
   type PlaylistProgress,
   type PomodoroSession,
   type PostureDailyStat,
+  playlistProgressSchema,
+  pomodoroSessionSchema,
+  postureDailyStatSchema,
   type QuickLink,
   type Quote,
   type QuoteCollection,
+  quickLinkSchema,
+  quoteCollectionSchema,
+  quoteSchema,
   type Reminder,
+  reminderSchema,
   type Settings,
   STORAGE_KEYS,
+  settingsSchema,
   storageFailure,
   type WeatherState,
+  weatherStateSchema,
   type YoutubePlaylist,
+  youtubePlaylistSchema,
 } from '@cuewise/shared';
+import { z } from 'zod/mini';
 import {
-  getFromStorage,
+  getValidatedFromStorage,
   removeFromStorage,
   type StorageResult,
   setInStorage,
@@ -39,7 +54,11 @@ import {
  */
 async function getStorageArea(): Promise<'local' | 'sync'> {
   // Always use local for settings to avoid circular dependency
-  const settings = await getFromStorage<Settings>(STORAGE_KEYS.SETTINGS, 'local');
+  const settings = await getValidatedFromStorage<Settings>(
+    STORAGE_KEYS.SETTINGS,
+    settingsSchema,
+    'local'
+  );
   const syncEnabled = settings?.syncEnabled ?? DEFAULT_SETTINGS.syncEnabled;
   return syncEnabled ? 'sync' : 'local';
 }
@@ -63,8 +82,16 @@ function isCustomQuote(quote: Quote): boolean {
 async function migrateLegacyQuotes(): Promise<void> {
   try {
     // Check both storage areas for legacy quotes
-    const localQuotes = await getFromStorage<Quote[]>(STORAGE_KEYS.QUOTES, 'local');
-    const syncQuotes = await getFromStorage<Quote[]>(STORAGE_KEYS.QUOTES, 'sync');
+    const localQuotes = await getValidatedFromStorage<Quote[]>(
+      STORAGE_KEYS.QUOTES,
+      z.array(quoteSchema),
+      'local'
+    );
+    const syncQuotes = await getValidatedFromStorage<Quote[]>(
+      STORAGE_KEYS.QUOTES,
+      z.array(quoteSchema),
+      'sync'
+    );
     const legacyQuotes = localQuotes || syncQuotes;
 
     if (!legacyQuotes || legacyQuotes.length === 0) {
@@ -103,17 +130,31 @@ async function migrateLegacyQuotes(): Promise<void> {
 export async function getQuotes(): Promise<Quote[]> {
   try {
     // Check if migration is needed
-    const legacyQuotes = await getFromStorage<Quote[]>(STORAGE_KEYS.QUOTES, 'local');
+    const legacyQuotes = await getValidatedFromStorage<Quote[]>(
+      STORAGE_KEYS.QUOTES,
+      z.array(quoteSchema),
+      'local'
+    );
     if (legacyQuotes && legacyQuotes.length > 0) {
       await migrateLegacyQuotes();
     }
 
     // Load seed quotes from local storage (always)
-    const seedQuotes = (await getFromStorage<Quote[]>(STORAGE_KEYS.SEED_QUOTES, 'local')) ?? [];
+    const seedQuotes =
+      (await getValidatedFromStorage<Quote[]>(
+        STORAGE_KEYS.SEED_QUOTES,
+        z.array(quoteSchema),
+        'local'
+      )) ?? [];
 
     // Load custom quotes from appropriate storage area
     const area = await getStorageArea();
-    const customQuotes = (await getFromStorage<Quote[]>(STORAGE_KEYS.CUSTOM_QUOTES, area)) ?? [];
+    const customQuotes =
+      (await getValidatedFromStorage<Quote[]>(
+        STORAGE_KEYS.CUSTOM_QUOTES,
+        z.array(quoteSchema),
+        area
+      )) ?? [];
 
     // Merge seed and custom quotes
     return [...seedQuotes, ...customQuotes];
@@ -148,7 +189,7 @@ export async function setQuotes(quotes: Quote[]): Promise<StorageResult> {
 
 export async function getCurrentQuote(): Promise<Quote | null> {
   const area = await getStorageArea();
-  return getFromStorage<Quote>(STORAGE_KEYS.CURRENT_QUOTE, area);
+  return getValidatedFromStorage<Quote>(STORAGE_KEYS.CURRENT_QUOTE, quoteSchema, area);
 }
 
 export async function setCurrentQuote(quote: Quote): Promise<StorageResult> {
@@ -159,7 +200,11 @@ export async function setCurrentQuote(quote: Quote): Promise<StorageResult> {
 // Goals
 export async function getGoals(): Promise<Goal[]> {
   const area = await getStorageArea();
-  const goals = await getFromStorage<Goal[]>(STORAGE_KEYS.GOALS, area);
+  const goals = await getValidatedFromStorage<Goal[]>(
+    STORAGE_KEYS.GOALS,
+    z.array(goalSchema),
+    area
+  );
   return goals ?? [];
 }
 
@@ -171,7 +216,11 @@ export async function setGoals(goals: Goal[]): Promise<StorageResult> {
 // Reminders
 export async function getReminders(): Promise<Reminder[]> {
   const area = await getStorageArea();
-  const reminders = await getFromStorage<Reminder[]>(STORAGE_KEYS.REMINDERS, area);
+  const reminders = await getValidatedFromStorage<Reminder[]>(
+    STORAGE_KEYS.REMINDERS,
+    z.array(reminderSchema),
+    area
+  );
   return reminders ?? [];
 }
 
@@ -183,7 +232,11 @@ export async function setReminders(reminders: Reminder[]): Promise<StorageResult
 // Quote Collections
 export async function getCollections(): Promise<QuoteCollection[]> {
   const area = await getStorageArea();
-  const collections = await getFromStorage<QuoteCollection[]>(STORAGE_KEYS.COLLECTIONS, area);
+  const collections = await getValidatedFromStorage<QuoteCollection[]>(
+    STORAGE_KEYS.COLLECTIONS,
+    z.array(quoteCollectionSchema),
+    area
+  );
   return collections ?? [];
 }
 
@@ -195,7 +248,11 @@ export async function setCollections(collections: QuoteCollection[]): Promise<St
 // Quick Links (pinned shortcut tiles on the new tab)
 export async function getQuickLinks(): Promise<QuickLink[]> {
   const area = await getStorageArea();
-  const links = await getFromStorage<QuickLink[]>(STORAGE_KEYS.QUICK_LINKS, area);
+  const links = await getValidatedFromStorage<QuickLink[]>(
+    STORAGE_KEYS.QUICK_LINKS,
+    z.array(quickLinkSchema),
+    area
+  );
   return links ?? [];
 }
 
@@ -207,7 +264,11 @@ export async function setQuickLinks(links: QuickLink[]): Promise<StorageResult> 
 // Concept Cards (spaced-repetition learning cards)
 export async function getConceptCards(): Promise<ConceptCard[]> {
   const area = await getStorageArea();
-  const cards = await getFromStorage<ConceptCard[]>(STORAGE_KEYS.CONCEPT_CARDS, area);
+  const cards = await getValidatedFromStorage<ConceptCard[]>(
+    STORAGE_KEYS.CONCEPT_CARDS,
+    z.array(conceptCardSchema),
+    area
+  );
   return cards ?? [];
 }
 
@@ -218,7 +279,11 @@ export async function setConceptCards(cards: ConceptCard[]): Promise<StorageResu
 
 // Posture daily rollups (macOS tracking; always local — device-specific data)
 export async function getPostureStats(): Promise<PostureDailyStat[]> {
-  const stats = await getFromStorage<PostureDailyStat[]>(STORAGE_KEYS.POSTURE_STATS, 'local');
+  const stats = await getValidatedFromStorage<PostureDailyStat[]>(
+    STORAGE_KEYS.POSTURE_STATS,
+    z.array(postureDailyStatSchema),
+    'local'
+  );
   return stats ?? [];
 }
 
@@ -228,7 +293,11 @@ export async function setPostureStats(stats: PostureDailyStat[]): Promise<Storag
 
 // Google Calendar (connection + cached events; always local)
 export async function getCalendarState(): Promise<CalendarState | null> {
-  return getFromStorage<CalendarState>(STORAGE_KEYS.CALENDAR, 'local');
+  return getValidatedFromStorage<CalendarState>(
+    STORAGE_KEYS.CALENDAR,
+    calendarStateSchema,
+    'local'
+  );
 }
 
 export async function setCalendarState(state: CalendarState): Promise<StorageResult> {
@@ -238,7 +307,7 @@ export async function setCalendarState(state: CalendarState): Promise<StorageRes
 // Always local, which is what makes the location per-device: a travelling laptop shows
 // where it actually is.
 export async function getWeatherState(): Promise<WeatherState | null> {
-  return getFromStorage<WeatherState>(STORAGE_KEYS.WEATHER, 'local');
+  return getValidatedFromStorage<WeatherState>(STORAGE_KEYS.WEATHER, weatherStateSchema, 'local');
 }
 
 export async function setWeatherState(state: WeatherState): Promise<StorageResult> {
@@ -248,7 +317,11 @@ export async function setWeatherState(state: WeatherState): Promise<StorageResul
 // Pomodoro Sessions
 export async function getPomodoroSessions(): Promise<PomodoroSession[]> {
   const area = await getStorageArea();
-  const sessions = await getFromStorage<PomodoroSession[]>(STORAGE_KEYS.POMODORO_SESSIONS, area);
+  const sessions = await getValidatedFromStorage<PomodoroSession[]>(
+    STORAGE_KEYS.POMODORO_SESSIONS,
+    z.array(pomodoroSessionSchema),
+    area
+  );
   return sessions ?? [];
 }
 
@@ -260,8 +333,9 @@ export async function setPomodoroSessions(sessions: PomodoroSession[]): Promise<
 // Custom YouTube Playlists (for Pomodoro music)
 // Note: Custom playlists are stored in local storage (not synced)
 export async function getCustomYoutubePlaylists(): Promise<YoutubePlaylist[]> {
-  const playlists = await getFromStorage<YoutubePlaylist[]>(
+  const playlists = await getValidatedFromStorage<YoutubePlaylist[]>(
     STORAGE_KEYS.CUSTOM_YOUTUBE_PLAYLISTS,
+    z.array(youtubePlaylistSchema),
     'local'
   );
   return playlists ?? [];
@@ -276,14 +350,18 @@ export async function setCustomYoutubePlaylists(
 // Settings
 // Note: Settings are always stored in local storage to avoid circular dependency
 export async function getSettings(): Promise<Settings> {
-  const settings = await getFromStorage<Settings>(STORAGE_KEYS.SETTINGS, 'local');
+  const settings = await getValidatedFromStorage<Settings>(
+    STORAGE_KEYS.SETTINGS,
+    settingsSchema,
+    'local'
+  );
   return settings ?? DEFAULT_SETTINGS;
 }
 
 // Raw settings blob: null when never stored OR unreadable (the port conflates
 // the two). For destructive automation that must fail closed — not for rendering.
 export async function getStoredSettings(): Promise<Settings | null> {
-  return await getFromStorage<Settings>(STORAGE_KEYS.SETTINGS, 'local');
+  return await getValidatedFromStorage<Settings>(STORAGE_KEYS.SETTINGS, settingsSchema, 'local');
 }
 
 export async function setSettings(settings: Settings): Promise<StorageResult> {
@@ -360,18 +438,49 @@ export async function migrateStorageData(
   try {
     // Get user data from source storage area
     const customQuotes =
-      (await getFromStorage<Quote[]>(STORAGE_KEYS.CUSTOM_QUOTES, fromArea)) ?? [];
-    const currentQuote = await getFromStorage<Quote>(STORAGE_KEYS.CURRENT_QUOTE, fromArea);
-    const goals = (await getFromStorage<Goal[]>(STORAGE_KEYS.GOALS, fromArea)) ?? [];
-    const reminders = (await getFromStorage<Reminder[]>(STORAGE_KEYS.REMINDERS, fromArea)) ?? [];
+      (await getValidatedFromStorage<Quote[]>(
+        STORAGE_KEYS.CUSTOM_QUOTES,
+        z.array(quoteSchema),
+        fromArea
+      )) ?? [];
+    const currentQuote = await getValidatedFromStorage<Quote>(
+      STORAGE_KEYS.CURRENT_QUOTE,
+      quoteSchema,
+      fromArea
+    );
+    const goals =
+      (await getValidatedFromStorage<Goal[]>(STORAGE_KEYS.GOALS, z.array(goalSchema), fromArea)) ??
+      [];
+    const reminders =
+      (await getValidatedFromStorage<Reminder[]>(
+        STORAGE_KEYS.REMINDERS,
+        z.array(reminderSchema),
+        fromArea
+      )) ?? [];
     const sessions =
-      (await getFromStorage<PomodoroSession[]>(STORAGE_KEYS.POMODORO_SESSIONS, fromArea)) ?? [];
+      (await getValidatedFromStorage<PomodoroSession[]>(
+        STORAGE_KEYS.POMODORO_SESSIONS,
+        z.array(pomodoroSessionSchema),
+        fromArea
+      )) ?? [];
     const collections =
-      (await getFromStorage<QuoteCollection[]>(STORAGE_KEYS.COLLECTIONS, fromArea)) ?? [];
+      (await getValidatedFromStorage<QuoteCollection[]>(
+        STORAGE_KEYS.COLLECTIONS,
+        z.array(quoteCollectionSchema),
+        fromArea
+      )) ?? [];
     const quickLinks =
-      (await getFromStorage<QuickLink[]>(STORAGE_KEYS.QUICK_LINKS, fromArea)) ?? [];
+      (await getValidatedFromStorage<QuickLink[]>(
+        STORAGE_KEYS.QUICK_LINKS,
+        z.array(quickLinkSchema),
+        fromArea
+      )) ?? [];
     const conceptCards =
-      (await getFromStorage<ConceptCard[]>(STORAGE_KEYS.CONCEPT_CARDS, fromArea)) ?? [];
+      (await getValidatedFromStorage<ConceptCard[]>(
+        STORAGE_KEYS.CONCEPT_CARDS,
+        z.array(conceptCardSchema),
+        fromArea
+      )) ?? [];
 
     // Copy data to destination storage area
     // Note: Seed quotes are not migrated (always in local storage)
@@ -413,7 +522,11 @@ const PROGRESS_MAX_AGE_MS = 30 * DAY_IN_MS;
  * Get all YouTube playlist progress data
  */
 export async function getYoutubeProgress(): Promise<PlaylistProgress[]> {
-  const progress = await getFromStorage<PlaylistProgress[]>(STORAGE_KEYS.YOUTUBE_PROGRESS, 'local');
+  const progress = await getValidatedFromStorage<PlaylistProgress[]>(
+    STORAGE_KEYS.YOUTUBE_PROGRESS,
+    z.array(playlistProgressSchema),
+    'local'
+  );
   return progress ?? [];
 }
 
@@ -521,8 +634,9 @@ export async function getDailyBackground(
   category: FocusImageCategory
 ): Promise<DailyBackground | null> {
   try {
-    const background = await getFromStorage<DailyBackground>(
+    const background = await getValidatedFromStorage<DailyBackground>(
       STORAGE_KEYS.DAILY_BACKGROUND,
+      dailyBackgroundSchema,
       'local'
     );
 
@@ -568,7 +682,11 @@ export async function setDailyBackground(
 /** The user's own background as a data URL; null when unset or unreadable. */
 export async function getCustomBackground(): Promise<string | null> {
   try {
-    return await getFromStorage<string>(STORAGE_KEYS.CUSTOM_BACKGROUND, 'local');
+    return await getValidatedFromStorage<string>(
+      STORAGE_KEYS.CUSTOM_BACKGROUND,
+      z.string(),
+      'local'
+    );
   } catch (error) {
     logger.error('Error getting custom background', error);
     return null;
