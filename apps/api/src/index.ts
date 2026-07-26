@@ -86,9 +86,12 @@ export function createApp(deps: AppDeps = {}): Hono<{ Bindings: Env } & AuthVars
   app.use('/v1/auth/apple/callback', authSurfaceRateLimit);
   app.use('/v1/auth/google/start', authSurfaceRateLimit);
   app.use('/v1/auth/google/callback', authSurfaceRateLimit);
-  // Its own limiter instance so a burst of location searches can't consume the sign-in
-  // budget; counters are per-middleware. The wildcard also covers the bare /v1/weather.
-  app.use('/v1/weather/*', ipRateLimit());
+  // Separate instances, because counters are per-middleware and these three surfaces fail
+  // differently: sign-in must never be locked out by weather traffic, and a forecast is
+  // fetched at most twice an hour per device while a search fires as the user types. One
+  // shared 30/min bucket would let a few colleagues behind an office NAT spend it all.
+  app.use('/v1/weather', ipRateLimit({ limit: 120, windowMs: 60_000 }));
+  app.use('/v1/weather/search', ipRateLimit({ limit: 60, windowMs: 60_000 }));
 
   registerAuthRoutes(app, resolved);
   registerAppleRoutes(app, resolved);

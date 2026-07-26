@@ -74,6 +74,10 @@ All endpoints are under `/v1`.
 | `PUT` | `/v1/keys/recovery` | Store/replace the caller's opaque recovery key envelope, ≤1024 bytes. `{ifAbsent: true}` makes it create-only — 409 `key_envelope_exists` if one is already stored, no overwrite. | Yes |
 | `GET` | `/v1/export` | Dump all of the caller's records | Yes |
 | `DELETE` | `/v1/account` | Delete user, identities, tokens, records, and key envelopes | Yes |
+| `POST` | `/v1/weather` | Forecast proxy (ENG-18), `{lat, lon, units}` | No |
+| `POST` | `/v1/weather/search` | City lookup proxy, `{q}` | No |
+
+**Why the weather routes are POST for what are plainly reads**: a Fetch invocation log records `<Method> <URL>` plus request headers — never the body. Coordinates and city names in a query string would therefore land in Workers Logs no matter how careful the route code is, and `observability.logs.invocation_logs` is a *worker-wide* switch, so the alternative was blinding the sync and auth routes too. The body is the one part of the request the platform does not capture. The cost is that responses are no longer browser-cacheable; the `cacheTtl` on the upstream subrequest is what dedups provider calls across nearby users, and it is unaffected. Both routes are stateless — no `SyncStore`, no D1 — so "the server stores ciphertext only" stays true.
 
 ## Auth Flows
 
@@ -143,6 +147,10 @@ Body: `type` (`https://cuewise.app/problems/<code-with-dashes>`), `title`, `stat
 |---|---|---|---|
 | Per-token, fixed window (`rate-limit.ts`) | `/v1/changes/*`, `/v1/keys/*`, `/v1/export`, `/v1/account` | 60 req | 60s — counter anchored on the token's own D1 row, no extra infra |
 | Per-IP, fixed window, isolate-local (`ip-rate-limit.ts`) | `/v1/auth/token`, `/v1/auth/{apple,google}/start`, `/v1/auth/{apple,google}/callback` | 30 req (default) | 60s — in-memory `Map`, resets on isolate recycle; defense-in-depth, production also fronts these with WAF rules |
+| Per-IP (own instance) | `/v1/weather` | 120 req | 60s — a device fetches ~2/hour, so the headroom is for shared office/NAT egress |
+| Per-IP (own instance) | `/v1/weather/search` | 60 req | 60s — fires as the user types, debounced at 300ms |
+
+Each `ipRateLimit()` call closes over its own counter `Map`, so these three budgets are independent: a weather burst can never lock someone out of sign-in, which is the only one of the three where exhaustion strands the user.
 
 Both emit `Retry-After`. `/v1/auth/logout` requires a Bearer token but isn't covered by either limiter. The IP limiter is bounded to 20,000 tracked IPs and skips entirely when `CF-Connecting-IP` is absent (a non-edge invocation).
 

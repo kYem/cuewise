@@ -38,6 +38,15 @@ const GEOCODING_PAYLOAD = {
   ],
 };
 
+/** Both routes are POST so the coordinates ride in the body, which Workers Logs ignore. */
+function post(body: unknown, headers: Record<string, string> = {}): RequestInit {
+  return {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...headers },
+    body: JSON.stringify(body),
+  };
+}
+
 /** Records every upstream call so tests can assert on what actually left the worker. */
 function stubUpstream(
   payload: unknown,
@@ -78,7 +87,7 @@ describe('GET /v1/weather', () => {
     const upstream = stubUpstream(FORECAST_PAYLOAD);
     const app = createApp({ weatherUpstream: upstream.fetch });
 
-    const res = await app.request('/v1/weather?lat=51.5074&lon=-0.1278', {}, env);
+    const res = await app.request('/v1/weather', post({ lat: '51.5074', lon: '-0.1278' }), env);
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
@@ -104,7 +113,7 @@ describe('GET /v1/weather', () => {
     const upstream = stubUpstream(FORECAST_PAYLOAD);
     const app = createApp({ weatherUpstream: upstream.fetch });
 
-    await app.request('/v1/weather?lat=51.50735678&lon=-0.12775432', {}, env);
+    await app.request('/v1/weather', post({ lat: '51.50735678', lon: '-0.12775432' }), env);
 
     const sent = new URL(upstream.urls[0]);
     expect(sent.searchParams.get('latitude')).toBe('51.51');
@@ -113,13 +122,17 @@ describe('GET /v1/weather', () => {
 
   it('requests fahrenheit only for imperial units', async () => {
     const metric = stubUpstream(FORECAST_PAYLOAD);
-    await createApp({ weatherUpstream: metric.fetch }).request('/v1/weather?lat=1&lon=2', {}, env);
+    await createApp({ weatherUpstream: metric.fetch }).request(
+      '/v1/weather',
+      post({ lat: '1', lon: '2' }),
+      env
+    );
     expect(new URL(metric.urls[0]).searchParams.get('temperature_unit')).toBeNull();
 
     const imperial = stubUpstream(FORECAST_PAYLOAD);
     const res = await createApp({ weatherUpstream: imperial.fetch }).request(
-      '/v1/weather?lat=1&lon=2&units=imperial',
-      {},
+      '/v1/weather',
+      post({ lat: '1', lon: '2', units: 'imperial' }),
       env
     );
 
@@ -127,13 +140,15 @@ describe('GET /v1/weather', () => {
     expect(await res.json()).toMatchObject({ units: 'imperial' });
   });
 
-  it('sets a cache-control header so a repeat tab hits the browser cache', async () => {
+  // Browsers do not cache POST responses, so a Cache-Control here would promise sharing
+  // that never happens — the honest place for it is the subrequest below.
+  it('does not advertise a cache it cannot keep', async () => {
     const upstream = stubUpstream(FORECAST_PAYLOAD);
     const app = createApp({ weatherUpstream: upstream.fetch });
 
-    const res = await app.request('/v1/weather?lat=51.5&lon=-0.13', {}, env);
+    const res = await app.request('/v1/weather', post({ lat: '51.5', lon: '-0.13' }), env);
 
-    expect(res.headers.get('Cache-Control')).toBe('public, max-age=600');
+    expect(res.headers.get('Cache-Control')).toBeNull();
   });
 
   // Cloudflare will not cache the worker's own JSON response, so the cross-user dedup
@@ -142,24 +157,27 @@ describe('GET /v1/weather', () => {
     const upstream = stubUpstream(FORECAST_PAYLOAD);
     const app = createApp({ weatherUpstream: upstream.fetch });
 
-    await app.request('/v1/weather?lat=51.5&lon=-0.13', {}, env);
+    await app.request('/v1/weather', post({ lat: '51.5', lon: '-0.13' }), env);
 
     expect(upstream.inits[0]?.cf).toEqual({ cacheEverything: true, cacheTtl: 600 });
   });
 
   it.each([
-    ['missing both', '/v1/weather'],
-    ['missing lon', '/v1/weather?lat=51.5'],
-    ['non-numeric lat', '/v1/weather?lat=abc&lon=0'],
-    ['empty lat', '/v1/weather?lat=&lon=0'],
-    ['lat out of range', '/v1/weather?lat=91&lon=0'],
-    ['lon out of range', '/v1/weather?lat=0&lon=181'],
-    ['infinite lat', '/v1/weather?lat=Infinity&lon=0'],
-  ])('rejects %s with invalid_request', async (_label, path) => {
+    ['missing both', {}],
+    ['missing lon', { lat: '51.5' }],
+    ['non-numeric lat', { lat: 'abc', lon: '0' }],
+    ['empty lat', { lat: '', lon: '0' }],
+    ['lat out of range', { lat: '91', lon: '0' }],
+    ['lon out of range', { lat: '0', lon: '181' }],
+    ['infinite lat', { lat: 'Infinity', lon: '0' }],
+    ['a null body', null],
+    ['an array body', []],
+    ['a nested object where a number belongs', { lat: { toString: 1 }, lon: '0' }],
+  ])('rejects %s with invalid_request', async (_label, body) => {
     const upstream = stubUpstream(FORECAST_PAYLOAD);
     const app = createApp({ weatherUpstream: upstream.fetch });
 
-    const res = await app.request(path, {}, env);
+    const res = await app.request('/v1/weather', post(body), env);
 
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ code: 'invalid_request' });
@@ -170,7 +188,7 @@ describe('GET /v1/weather', () => {
     const upstream = stubUpstream(FORECAST_PAYLOAD, { ok: false });
     const app = createApp({ weatherUpstream: upstream.fetch });
 
-    const res = await app.request('/v1/weather?lat=51.5&lon=-0.13', {}, env);
+    const res = await app.request('/v1/weather', post({ lat: '51.5', lon: '-0.13' }), env);
 
     expect(res.status).toBe(503);
     expect(await res.json()).toMatchObject({ code: 'upstream_unavailable' });
@@ -181,7 +199,7 @@ describe('GET /v1/weather', () => {
     abort.name = 'AbortError';
     const app = createApp({ weatherUpstream: failingUpstream(abort) });
 
-    const res = await app.request('/v1/weather?lat=51.5&lon=-0.13', {}, env);
+    const res = await app.request('/v1/weather', post({ lat: '51.5', lon: '-0.13' }), env);
 
     expect(res.status).toBe(503);
   });
@@ -189,7 +207,7 @@ describe('GET /v1/weather', () => {
   it('answers 503 when the provider payload is unusable', async () => {
     const app = createApp({ weatherUpstream: stubUpstream({ current: {} }).fetch });
 
-    const res = await app.request('/v1/weather?lat=51.5&lon=-0.13', {}, env);
+    const res = await app.request('/v1/weather', post({ lat: '51.5', lon: '-0.13' }), env);
 
     expect(res.status).toBe(503);
     expect(await res.json()).toMatchObject({ code: 'upstream_unavailable' });
@@ -199,7 +217,7 @@ describe('GET /v1/weather', () => {
     const { daily: _omitted, ...withoutDaily } = FORECAST_PAYLOAD;
     const app = createApp({ weatherUpstream: stubUpstream(withoutDaily).fetch });
 
-    const res = await app.request('/v1/weather?lat=51.5&lon=-0.13', {}, env);
+    const res = await app.request('/v1/weather', post({ lat: '51.5', lon: '-0.13' }), env);
 
     expect(await res.json()).toMatchObject({ high: 14.1, low: 13.2 });
   });
@@ -209,7 +227,7 @@ describe('GET /v1/weather', () => {
     const { daily: _d, hourly: _h, ...bare } = FORECAST_PAYLOAD;
     const app = createApp({ weatherUpstream: stubUpstream(bare).fetch });
 
-    const res = await app.request('/v1/weather?lat=51.5&lon=-0.13', {}, env);
+    const res = await app.request('/v1/weather', post({ lat: '51.5', lon: '-0.13' }), env);
 
     expect(res.status).toBe(503);
   });
@@ -218,7 +236,7 @@ describe('GET /v1/weather', () => {
     const { timezone: _tz, ...noZone } = GEOCODING_PAYLOAD.results[0];
     const app = createApp({ weatherUpstream: stubUpstream({ results: [noZone] }).fetch });
 
-    const res = await app.request('/v1/weather/search?q=vilni', {}, env);
+    const res = await app.request('/v1/weather/search', post({ q: 'vilni' }), env);
 
     expect(await res.json()).toEqual({ results: [] });
   });
@@ -234,7 +252,7 @@ describe('GET /v1/weather', () => {
     };
     const app = createApp({ weatherUpstream: stubUpstream(ragged).fetch });
 
-    const res = await app.request('/v1/weather?lat=51.5&lon=-0.13', {}, env);
+    const res = await app.request('/v1/weather', post({ lat: '51.5', lon: '-0.13' }), env);
 
     const body = (await res.json()) as { hours: unknown[] };
     expect(body.hours).toHaveLength(2);
@@ -244,7 +262,7 @@ describe('GET /v1/weather', () => {
     const night = { ...FORECAST_PAYLOAD, current: { ...FORECAST_PAYLOAD.current, is_day: 0 } };
     const app = createApp({ weatherUpstream: stubUpstream(night).fetch });
 
-    const res = await app.request('/v1/weather?lat=51.5&lon=-0.13', {}, env);
+    const res = await app.request('/v1/weather', post({ lat: '51.5', lon: '-0.13' }), env);
 
     expect(await res.json()).toMatchObject({ current: { isDay: false } });
   });
@@ -254,7 +272,7 @@ describe('GET /v1/weather/search', () => {
   it('returns normalized places', async () => {
     const app = createApp({ weatherUpstream: stubUpstream(GEOCODING_PAYLOAD).fetch });
 
-    const res = await app.request('/v1/weather/search?q=vilni', {}, env);
+    const res = await app.request('/v1/weather/search', post({ q: 'vilni' }), env);
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
@@ -276,7 +294,7 @@ describe('GET /v1/weather/search', () => {
   it('returns an empty list when the provider omits results', async () => {
     const app = createApp({ weatherUpstream: stubUpstream({}).fetch });
 
-    const res = await app.request('/v1/weather/search?q=zzzzzz', {}, env);
+    const res = await app.request('/v1/weather/search', post({ q: 'zzzzzz' }), env);
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ results: [] });
@@ -286,23 +304,23 @@ describe('GET /v1/weather/search', () => {
     const partial = { results: [{ name: 'Nowhere' }, GEOCODING_PAYLOAD.results[0]] };
     const app = createApp({ weatherUpstream: stubUpstream(partial).fetch });
 
-    const res = await app.request('/v1/weather/search?q=vilni', {}, env);
+    const res = await app.request('/v1/weather/search', post({ q: 'vilni' }), env);
 
     const body = (await res.json()) as { results: unknown[] };
     expect(body.results).toHaveLength(1);
   });
 
   it.each([
-    ['empty', '/v1/weather/search?q='],
-    ['single character', '/v1/weather/search?q=a'],
-    ['whitespace only', '/v1/weather/search?q=%20%20'],
-    ['missing', '/v1/weather/search'],
-    ['over the length cap', `/v1/weather/search?q=${'a'.repeat(81)}`],
-  ])('rejects a %s query with invalid_request', async (_label, path) => {
+    ['empty', { q: '' }],
+    ['single character', { q: 'a' }],
+    ['whitespace only', { q: '  ' }],
+    ['missing', {}],
+    ['over the length cap', { q: 'a'.repeat(81) }],
+  ])('rejects a %s query with invalid_request', async (_label, body) => {
     const upstream = stubUpstream(GEOCODING_PAYLOAD);
     const app = createApp({ weatherUpstream: upstream.fetch });
 
-    const res = await app.request(path, {}, env);
+    const res = await app.request('/v1/weather/search', post(body), env);
 
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ code: 'invalid_request' });
@@ -314,7 +332,7 @@ describe('GET /v1/weather/search', () => {
       weatherUpstream: stubUpstream(GEOCODING_PAYLOAD, { ok: false }).fetch,
     });
 
-    const res = await app.request('/v1/weather/search?q=vilni', {}, env);
+    const res = await app.request('/v1/weather/search', post({ q: 'vilni' }), env);
 
     expect(res.status).toBe(503);
   });
@@ -323,9 +341,8 @@ describe('GET /v1/weather/search', () => {
     const upstream = stubUpstream(GEOCODING_PAYLOAD);
     const app = createApp({ weatherUpstream: upstream.fetch });
 
-    const res = await app.request('/v1/weather/search?q=vilni', {}, env);
+    await app.request('/v1/weather/search', post({ q: 'vilni' }), env);
 
-    expect(res.headers.get('Cache-Control')).toBe('public, max-age=86400');
     expect(upstream.inits[0]?.cf).toEqual({ cacheEverything: true, cacheTtl: 86_400 });
   });
 
@@ -338,7 +355,7 @@ describe('GET /v1/weather/search', () => {
     };
     const app = createApp({ weatherUpstream: stubUpstream(many).fetch });
 
-    const res = await app.request('/v1/weather/search?q=vilni', {}, env);
+    const res = await app.request('/v1/weather/search', post({ q: 'vilni' }), env);
 
     const body = (await res.json()) as { results: unknown[] };
     expect(body.results).toHaveLength(5);
@@ -370,7 +387,7 @@ describe('weather routes never log what the user asked about', () => {
     const logs = captureLogs();
     const app = createApp({ weatherUpstream: stubUpstream(FORECAST_PAYLOAD, { ok: false }).fetch });
 
-    await app.request('/v1/weather?lat=51.50735678&lon=-0.12775432', {}, env);
+    await app.request('/v1/weather', post({ lat: '51.50735678', lon: '-0.12775432' }), env);
 
     const combined = logs.join('\n');
     expect(combined).not.toContain('51.5');
@@ -383,7 +400,7 @@ describe('weather routes never log what the user asked about', () => {
     const logs = captureLogs();
     const app = createApp({ weatherUpstream: failingUpstream(new Error('boom')) });
 
-    await app.request('/v1/weather/search?q=Vilnius', {}, env);
+    await app.request('/v1/weather/search', post({ q: 'Vilnius' }), env);
 
     expect(logs.join('\n')).not.toContain('Vilnius');
   });
@@ -395,7 +412,7 @@ describe('weather routes never log what the user asked about', () => {
     );
     const app = createApp({ weatherUpstream: failingUpstream(leaky) });
 
-    await app.request('/v1/weather?lat=51.5&lon=-0.13', {}, env);
+    await app.request('/v1/weather', post({ lat: '51.5', lon: '-0.13' }), env);
 
     expect(logs.join('\n')).not.toContain('51.5');
   });
@@ -406,48 +423,55 @@ describe('weather routes never log what the user asked about', () => {
 // index.ts failed nothing before these existed.
 describe('weather routes are rate limited per IP', () => {
   const IP = { 'CF-Connecting-IP': '203.0.113.7' };
+  const FORECAST_LIMIT = 120;
+  const SEARCH_LIMIT = 60;
 
-  async function floodForecast(app: ReturnType<typeof createApp>, times: number) {
+  async function flood(
+    app: ReturnType<typeof createApp>,
+    path: string,
+    body: unknown,
+    times: number
+  ) {
     let last: Response | null = null;
     for (let i = 0; i < times; i++) {
-      last = await app.request('/v1/weather?lat=51.5&lon=-0.13', { headers: IP }, env);
+      last = await app.request(path, post(body, IP), env);
     }
     return last;
   }
 
-  // The middleware is registered at '/v1/weather/*', which must also cover the bare path —
-  // the forecast route is the hot one, so a wildcard that missed it would leave the endpoint
-  // that actually gets called wide open.
-  it('limits the bare forecast path, not just the sub-paths', async () => {
+  const forecast = (app: ReturnType<typeof createApp>, times: number) =>
+    flood(app, '/v1/weather', { lat: '51.5', lon: '-0.13' }, times);
+  const search = (app: ReturnType<typeof createApp>, times: number) =>
+    flood(app, '/v1/weather/search', { q: 'Vilnius' }, times);
+
+  it('limits the forecast route once the budget is spent', async () => {
     const app = createApp({ weatherUpstream: stubUpstream(FORECAST_PAYLOAD).fetch });
 
-    const allowed = await floodForecast(app, 30);
-    expect(allowed?.status).toBe(200);
+    expect((await forecast(app, FORECAST_LIMIT))?.status).toBe(200);
 
-    const blocked = await floodForecast(app, 1);
+    const blocked = await forecast(app, 1);
     expect(blocked?.status).toBe(429);
     expect(await blocked?.json()).toMatchObject({ code: 'rate_limited' });
   });
 
-  it('limits the search path', async () => {
+  it('limits the search route on its own, tighter budget', async () => {
     const app = createApp({ weatherUpstream: stubUpstream(GEOCODING_PAYLOAD).fetch });
 
-    let last: Response | null = null;
-    for (let i = 0; i < 31; i++) {
-      last = await app.request('/v1/weather/search?q=Vilnius', { headers: IP }, env);
-    }
-
-    expect(last?.status).toBe(429);
+    expect((await search(app, SEARCH_LIMIT))?.status).toBe(200);
+    expect((await search(app, 1))?.status).toBe(429);
   });
 
-  // Its own counter, or a burst of weather lookups would spend the sign-in budget and lock
-  // the user out of the thing that actually matters.
-  it('does not spend the budget the sign-in routes rely on', async () => {
-    const app = createApp({ weatherUpstream: stubUpstream(FORECAST_PAYLOAD).fetch });
+  // Three separate counters. A search burst while typing must not cost the forecast its
+  // budget, and neither may touch sign-in — the one surface a lockout actually strands.
+  it('spends each budget separately', async () => {
+    const app = createApp({ weatherUpstream: stubUpstream(GEOCODING_PAYLOAD).fetch });
 
-    await floodForecast(app, 31);
+    await search(app, SEARCH_LIMIT + 1);
+
+    // Not 200: this app is stubbed with a geocoding payload, so the forecast route answers
+    // 503. Reaching its handler at all is the point — a shared counter would 429 first.
+    expect((await forecast(app, 1))?.status).not.toBe(429);
     const signIn = await app.request('/v1/auth/apple/start', { headers: IP }, env);
-
     expect(signIn.status).not.toBe(429);
   });
 });
@@ -461,7 +485,7 @@ it('reports no apparent temperature rather than repeating the current one', asyn
   };
   const app = createApp({ weatherUpstream: stubUpstream(withoutApparent).fetch });
 
-  const res = await app.request('/v1/weather?lat=51.5&lon=-0.13', {}, env);
+  const res = await app.request('/v1/weather', post({ lat: '51.5', lon: '-0.13' }), env);
 
   const body = (await res.json()) as { current: { apparentTemperature: number | null } };
   expect(body.current.apparentTemperature).toBeNull();

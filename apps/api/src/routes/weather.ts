@@ -1,12 +1,13 @@
 import {
   logger,
   mapWmoCode,
+  roundCoordinate,
   type WeatherForecast,
   type WeatherHour,
   type WeatherLocation,
   type WeatherUnits,
 } from '@cuewise/shared';
-import type { Hono } from 'hono';
+import type { Context, Hono } from 'hono';
 import type { AuthVars } from '../auth-middleware';
 import type { Env } from '../env';
 import { problem } from '../problem-details';
@@ -15,13 +16,6 @@ const FORECAST_ENDPOINT = 'https://api.open-meteo.com/v1/forecast';
 const GEOCODING_ENDPOINT = 'https://geocoding-api.open-meteo.com/v1/search';
 
 const UPSTREAM_TIMEOUT_MS = 5_000;
-
-/**
- * ~1km. Open-Meteo snaps to its own model grid regardless (51.51,-0.13 returns
- * 51.5,-0.25), so rounding costs no accuracy while making cache keys collide across
- * nearby users — cheaper, and less identifying.
- */
-const COORD_DECIMALS = 2;
 
 const FORECAST_CACHE_SECONDS = 600;
 const GEOCODING_CACHE_SECONDS = 86_400;
@@ -34,11 +28,6 @@ export type UpstreamFetch = (url: string, init?: RequestInit) => Promise<Respons
 
 export interface WeatherDeps {
   weatherUpstream: UpstreamFetch;
-}
-
-function roundCoord(value: number): number {
-  const factor = 10 ** COORD_DECIMALS;
-  return Math.round(value * factor) / factor;
 }
 
 /** Rejects '', NaN and Infinity as well as out-of-range values. */
@@ -60,10 +49,8 @@ function parseUnits(raw: string | undefined): WeatherUnits {
 /**
  * Null on any failure; callers turn that into `upstream_unavailable`.
  *
- * `cacheTtl` is what actually gets the edge caching: Cloudflare does not cache a Worker's
- * own JSON response by default, so the `Cache-Control` we return only reaches the browser.
- * Caching the *subrequest* keys on the rounded-coordinate URL instead, which is what lets
- * nearby users share one upstream call.
+ * `cacheTtl` is the only caching left once the routes are POST: it keys on the upstream
+ * GET's rounded-coordinate URL, which is what lets nearby users share one provider call.
  */
 async function fetchUpstream(
   doFetch: UpstreamFetch,
@@ -218,14 +205,35 @@ function normalizePlace(raw: unknown): WeatherLocation | null {
   };
 }
 
-function cached(body: unknown, seconds: number): Response {
+/**
+ * No `Cache-Control`: browsers do not cache POST responses, so advertising one would be a
+ * promise nothing keeps. Sharing happens a layer up, on the `cacheTtl` subrequest.
+ */
+function json(body: unknown): Response {
   return new Response(JSON.stringify(body), {
     status: 200,
-    headers: {
-      'Content-Type': 'application/json',
-      'Cache-Control': `public, max-age=${seconds}`,
-    },
+    headers: { 'Content-Type': 'application/json' },
   });
+}
+
+/** Bodies are small and hand-written; anything unparseable is an `invalid_request`. */
+async function readJsonBody(c: Context): Promise<Record<string, unknown> | null> {
+  try {
+    const body: unknown = await c.req.json();
+    if (body === null || typeof body !== 'object' || Array.isArray(body)) {
+      return null;
+    }
+    return body as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function readParam(value: unknown): string | undefined {
+  if (typeof value === 'string') {
+    return value;
+  }
+  return typeof value === 'number' ? String(value) : undefined;
 }
 
 /**
@@ -236,22 +244,32 @@ function cached(body: unknown, seconds: number): Response {
  *
  * Privacy invariant, enforced by `weather.test.ts`: **never log `lat`, `lon`, or `q`.**
  * A proxy that logs locations is worse than no proxy.
+ *
+ * POST, not GET, for a pair of reads: a Fetch invocation log records `<Method> <URL>` plus
+ * the request headers, so coordinates in a query string would land in Workers Logs no
+ * matter how careful this file is. A body is the one part of the request the platform does
+ * not capture, which is what lets `invocation_logs` stay on for the sync routes next door.
+ * The cost is that the responses are no longer browser-cacheable; the `cacheTtl` on the
+ * upstream subrequest is what actually dedups provider calls, and it is untouched.
  */
 export function registerWeatherRoutes(
   app: Hono<{ Bindings: Env } & AuthVars>,
   deps: WeatherDeps
 ): void {
-  app.get('/v1/weather', async (c) => {
-    const latitude = parseBoundedNumber(c.req.query('lat'), -90, 90);
-    const longitude = parseBoundedNumber(c.req.query('lon'), -180, 180);
+  app.post('/v1/weather', async (c) => {
+    const body = await readJsonBody(c);
+    const latitude = parseBoundedNumber(readParam(body?.lat), -90, 90);
+    const longitude = parseBoundedNumber(readParam(body?.lon), -180, 180);
     if (latitude === null || longitude === null) {
       return problem('invalid_request', {
         detail: 'lat and lon are required and must be finite coordinates.',
       });
     }
-    const units = parseUnits(c.req.query('units'));
-    const lat = roundCoord(latitude);
-    const lon = roundCoord(longitude);
+    const units = parseUnits(readParam(body?.units));
+    // Rounded again even though the client already does: a request that arrives by any
+    // other route must not get finer coordinates forwarded upstream than one that doesn't.
+    const lat = roundCoordinate(latitude);
+    const lon = roundCoordinate(longitude);
 
     const url = new URL(FORECAST_ENDPOINT);
     url.searchParams.set('latitude', String(lat));
@@ -279,11 +297,14 @@ export function registerWeatherRoutes(
         detail: 'The weather provider returned an unusable response.',
       });
     }
-    return cached(forecast, FORECAST_CACHE_SECONDS);
+    return json(forecast);
   });
 
-  app.get('/v1/weather/search', async (c) => {
-    const query = c.req.query('q')?.trim() ?? '';
+  // POST for the same reason as the forecast route: "which city did this person look up"
+  // is the other half of the location they are trying not to hand over.
+  app.post('/v1/weather/search', async (c) => {
+    const body = await readJsonBody(c);
+    const query = readParam(body?.q)?.trim() ?? '';
     if (query.length < 2 || query.length > MAX_QUERY_LENGTH) {
       return problem('invalid_request', {
         detail: `q must be between 2 and ${MAX_QUERY_LENGTH} characters.`,
@@ -310,6 +331,6 @@ export function registerWeatherRoutes(
           .filter((place): place is WeatherLocation => place !== null)
           .slice(0, MAX_SEARCH_RESULTS)
       : [];
-    return cached({ results: places }, GEOCODING_CACHE_SECONDS);
+    return json({ results: places });
   });
 }

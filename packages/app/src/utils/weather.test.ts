@@ -49,15 +49,28 @@ describe('fetchForecast', () => {
     expect(url.pathname).toBe('/v1/weather');
   });
 
-  it('sends the location coordinates and units', async () => {
+  // Coordinates travel in the body, not the query string: the proxy's invocation logs
+  // record the URL and headers of every request, and never the body.
+  it('sends the location coordinates and units in the request body', async () => {
     fetchMock.mockResolvedValue(jsonResponse(FORECAST));
 
     await fetchForecast(LONDON, 'imperial');
 
-    const url = new URL(fetchMock.mock.calls[0][0]);
-    expect(url.searchParams.get('lat')).toBe(String(LONDON.latitude));
-    expect(url.searchParams.get('lon')).toBe(String(LONDON.longitude));
-    expect(url.searchParams.get('units')).toBe('imperial');
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).not.toContain('lat');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body)).toEqual({ lat: '51.51', lon: '-0.13', units: 'imperial' });
+  });
+
+  // A city centroid loses nothing at ~1km, and the proxy rounds to the same 2dp, so this
+  // also keeps both sides keying the same upstream cache entry.
+  it('rounds the coordinates before they leave the device', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(FORECAST));
+
+    await fetchForecast({ ...LONDON, latitude: 51.50735678, longitude: -0.12775432 }, 'metric');
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body).toMatchObject({ lat: '51.51', lon: '-0.13' });
   });
 
   it('returns the parsed forecast', async () => {
@@ -140,12 +153,16 @@ describe('searchLocations', () => {
     await expect(searchLocations('lond')).resolves.toEqual([LONDON]);
   });
 
-  it('sends the trimmed query', async () => {
+  // Which city someone looked up is the other half of where they live, so it rides in the
+  // body for the same reason the coordinates do.
+  it('sends the trimmed query in the request body', async () => {
     fetchMock.mockResolvedValue(jsonResponse({ results: [] }));
 
     await searchLocations('  lond  ');
 
-    expect(new URL(fetchMock.mock.calls[0][0]).searchParams.get('q')).toBe('lond');
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).not.toContain('lond');
+    expect(JSON.parse(init.body)).toEqual({ q: 'lond' });
   });
 
   it('short-circuits a query below the minimum length without calling the proxy', async () => {

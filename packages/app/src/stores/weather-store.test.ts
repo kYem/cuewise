@@ -393,6 +393,18 @@ describe('a stored reading that no longer matches the shape', () => {
     expect(fetchForecastMock).toHaveBeenCalledTimes(1);
   });
 
+  // The location outlives any given reading, and the chip reads it directly, so a broken
+  // one is the same hazard: no location renders nothing, a malformed one throws.
+  it('discards a location that lost required fields', async () => {
+    const { countryCode: _dropped, ...incomplete } = LONDON;
+    getWeatherStateMock.mockResolvedValue({ ...freshState(), location: incomplete } as never);
+
+    await useWeatherStore.getState().initialize();
+
+    expect(useWeatherStore.getState().location).toBeNull();
+    expect(fetchForecastMock).not.toHaveBeenCalled();
+  });
+
   it('keeps a reading that is merely missing an optional field', async () => {
     const reading = snapshot();
     const withoutApparent = {

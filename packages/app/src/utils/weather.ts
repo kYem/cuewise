@@ -1,5 +1,6 @@
 import {
   getHttpFetch,
+  roundCoordinate,
   type WeatherForecast,
   type WeatherHour,
   type WeatherLocation,
@@ -66,17 +67,23 @@ function parseRetryAfter(response: Response): number | null {
   return seconds;
 }
 
-async function requestJson(path: string, search: URLSearchParams): Promise<unknown> {
+/**
+ * POST for what are plainly reads: the proxy's Workers Logs record the request URL and
+ * headers but never the body, so where the user lives travels in the one part of the
+ * request that is not written down. See the note on `registerWeatherRoutes`.
+ */
+async function requestJson(path: string, payload: Record<string, string>): Promise<unknown> {
   const doFetch = getHttpFetch();
-  const url = `${resolveBaseUrl()}${path}?${search.toString()}`;
+  const url = `${resolveBaseUrl()}${path}`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
   let response: Response;
   try {
     response = await doFetch(url, {
-      method: 'GET',
-      headers: { Accept: 'application/json' },
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
       signal: controller.signal,
     });
   } catch (error) {
@@ -129,7 +136,11 @@ function isForecast(value: unknown): value is WeatherForecast {
   );
 }
 
-function isLocation(value: unknown): value is WeatherLocation {
+/**
+ * Every field, not just the ones today's UI happens to read: this also guards the location
+ * restored from storage, which outlives any given version of the components.
+ */
+export function isWeatherLocation(value: unknown): value is WeatherLocation {
   if (value === null || typeof value !== 'object') {
     return false;
   }
@@ -137,9 +148,13 @@ function isLocation(value: unknown): value is WeatherLocation {
   return (
     typeof place.id === 'string' &&
     typeof place.name === 'string' &&
-    typeof place.latitude === 'number' &&
-    typeof place.longitude === 'number' &&
-    typeof place.timezone === 'string'
+    (place.admin1 === null || typeof place.admin1 === 'string') &&
+    typeof place.country === 'string' &&
+    typeof place.countryCode === 'string' &&
+    Number.isFinite(place.latitude) &&
+    Number.isFinite(place.longitude) &&
+    typeof place.timezone === 'string' &&
+    place.timezone !== ''
   );
 }
 
@@ -149,19 +164,20 @@ function isLocation(value: unknown): value is WeatherLocation {
  * take the whole new tab down — on every open, since the same blob is read back each time.
  */
 export function isWeatherSnapshot(value: unknown): value is WeatherSnapshot {
-  return isForecast(value) && isLocation((value as Partial<WeatherSnapshot>).location);
+  return isForecast(value) && isWeatherLocation((value as Partial<WeatherSnapshot>).location);
 }
 
 export async function fetchForecast(
   location: WeatherLocation,
   units: WeatherUnits
 ): Promise<WeatherForecast> {
-  const search = new URLSearchParams({
-    lat: String(location.latitude),
-    lon: String(location.longitude),
+  // Rounded here, not just at the proxy: precise coordinates should never leave the device
+  // in the first place, and a city centroid loses nothing at ~1km.
+  const raw = await requestJson('/v1/weather', {
+    lat: String(roundCoordinate(location.latitude)),
+    lon: String(roundCoordinate(location.longitude)),
     units,
   });
-  const raw = await requestJson('/v1/weather', search);
   if (!isForecast(raw)) {
     throw new WeatherRequestError('The weather service returned an unexpected response');
   }
@@ -173,12 +189,12 @@ export async function searchLocations(query: string): Promise<WeatherLocation[]>
   if (trimmed.length < MIN_SEARCH_QUERY_LENGTH) {
     return [];
   }
-  const raw = await requestJson('/v1/weather/search', new URLSearchParams({ q: trimmed }));
+  const raw = await requestJson('/v1/weather/search', { q: trimmed });
   const results = (raw as { results?: unknown }).results;
   if (!Array.isArray(results)) {
     throw new WeatherRequestError('The weather service returned an unexpected response');
   }
-  return results.filter(isLocation);
+  return results.filter(isWeatherLocation);
 }
 
 /** "Vilnius, Vilnius County, Lithuania" — skips parts the provider didn't supply. */

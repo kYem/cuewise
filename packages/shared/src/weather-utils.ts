@@ -12,6 +12,19 @@ const IMPERIAL_REGIONS = ['US', 'LR', 'MM'];
 /** More needs a scroller, which stops the popover being glanceable. */
 export const MAX_FORECAST_HOURS = 5;
 
+/**
+ * ~1km. Open-Meteo snaps to its own model grid regardless (51.51,-0.13 returns 51.5,-0.25),
+ * so this costs no accuracy. Shared rather than duplicated: the client rounds so precise
+ * coordinates never leave the device, and the proxy rounds again so a hand-made request
+ * gets the same treatment. Both must agree, or they would key different cache entries.
+ */
+export const WEATHER_COORD_DECIMALS = 2;
+
+export function roundCoordinate(value: number): number {
+  const factor = 10 ** WEATHER_COORD_DECIMALS;
+  return Math.round(value * factor) / factor;
+}
+
 /** WMO 4677 codes. Unlisted ones fall through to 'unknown' rather than guessing. */
 const WMO_CONDITIONS = new Map<number, WeatherConditionKind>([
   [0, 'clear'],
