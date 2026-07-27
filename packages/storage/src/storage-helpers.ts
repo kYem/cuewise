@@ -12,6 +12,7 @@ import {
   DAY_IN_MS,
   type DailyBackground,
   DEFAULT_SETTINGS,
+  DEVICE_LOCAL_SETTINGS_KEYS,
   dailyBackgroundSchema,
   type FocusImageCategory,
   type Goal,
@@ -64,9 +65,13 @@ import {
  */
 async function getStorageArea(): Promise<'local' | 'sync'> {
   await ensureSettingsMigrated();
-  // Quiet: this runs on every storage helper call. The loud `getSettings` still reports it.
-  const settings = await readStoredSettingsFields({ quiet: true });
-  const syncEnabled = settings.syncEnabled ?? DEFAULT_SETTINGS.syncEnabled;
+  // Single key, not the whole settings blob: this runs on nearly every storage helper call.
+  const stored = await getValidatedFromStorage<boolean>(
+    settingsStorageKey('syncEnabled'),
+    settingsSchema.def.shape.syncEnabled,
+    'local'
+  );
+  const syncEnabled = stored ?? DEFAULT_SETTINGS.syncEnabled;
   if (syncEnabled) {
     return 'sync';
   }
@@ -406,10 +411,7 @@ function settingsValueIsValid(key: string, value: unknown): boolean {
  * Field-wise, never all-or-nothing: one unreadable value must not reset every preference —
  * including `syncEnabled`, which picks the storage area, making synced data read as empty.
  */
-function keepReadableSettingsFields(
-  values: Record<string, unknown>,
-  options: { quiet?: boolean } = {}
-): Partial<Settings> {
+function keepReadableSettingsFields(values: Record<string, unknown>): Partial<Settings> {
   const kept: Record<string, unknown> = {};
   const dropped: string[] = [];
   for (const key of SETTINGS_KEYS) {
@@ -423,7 +425,7 @@ function keepReadableSettingsFields(
       dropped.push(key);
     }
   }
-  if (dropped.length > 0 && options.quiet !== true) {
+  if (dropped.length > 0) {
     // Names only — a setting's value can be a goal id or a playlist the user picked.
     logger.warn('Ignored unreadable settings fields, using their defaults', { fields: dropped });
   }
@@ -432,14 +434,12 @@ function keepReadableSettingsFields(
 
 // Nothing to seed for a key this build cannot name: it sits in its own entry, which no patch
 // rewrites.
-async function readStoredSettingsFields(
-  options: { quiet?: boolean } = {}
-): Promise<Partial<Settings>> {
+async function readStoredSettingsFields(): Promise<Partial<Settings>> {
   const stored = await getManyFromStorage(SETTINGS_KEYS.map(settingsStorageKey), 'local');
   const byKey = Object.fromEntries(
     SETTINGS_KEYS.map((key) => [key, stored[settingsStorageKey(key)]])
   );
-  return keepReadableSettingsFields(byKey, options);
+  return keepReadableSettingsFields(byKey);
 }
 
 export async function getSettings(): Promise<Settings> {
@@ -447,8 +447,12 @@ export async function getSettings(): Promise<Settings> {
   return { ...DEFAULT_SETTINGS, ...(await readStoredSettingsFields()) };
 }
 
-/** Raw bytes of the legacy blob; null when never stored or unreadable (the port conflates them). */
-async function readLegacySettingsBlob(): Promise<Record<string, unknown> | null> {
+/**
+ * Raw bytes of the legacy blob; null when never stored or unreadable (the port conflates them).
+ * Exported only for the migration tests below — production code has no reason to read the
+ * legacy shape once `migrateLegacySettings` has run.
+ */
+export async function readLegacySettingsBlob(): Promise<Record<string, unknown> | null> {
   const raw = await getFromStorage<unknown>(STORAGE_KEYS.SETTINGS, 'local');
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
     return null;
@@ -456,23 +460,17 @@ async function readLegacySettingsBlob(): Promise<Record<string, unknown> | null>
   return raw as Record<string, unknown>;
 }
 
-/** The legacy blob, read field-wise. Null when it holds nothing readable, so automation that
- *  must fail closed does nothing rather than acting on a guess. */
-export async function getStoredSettings(): Promise<Settings | null> {
-  const blob = await readLegacySettingsBlob();
-  if (blob === null) {
-    return null;
-  }
-  return { ...DEFAULT_SETTINGS, ...keepReadableSettingsFields(blob) };
-}
-
 /**
  * The unjudged write, for sync applying a value from a peer on another version: our schema is
  * not its schema, and the value costs its own key alone, which every read defaults meanwhile.
+ * Device-local keys are dropped here (not just by `collections.ts`'s caller) so any future
+ * caller of this path structurally cannot write `syncEnabled` and break area routing.
  */
 export async function setSettingsPatchRaw(patch: Partial<Settings>): Promise<StorageResult> {
   const entries = Object.fromEntries(
-    Object.entries(patch).map(([key, value]) => [settingsStorageKey(key), value])
+    Object.entries(patch)
+      .filter(([key]) => !DEVICE_LOCAL_SETTINGS_KEYS.includes(key))
+      .map(([key, value]) => [settingsStorageKey(key), value])
   );
   return setManyInStorage(entries, 'local');
 }

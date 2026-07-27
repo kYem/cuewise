@@ -42,7 +42,6 @@ export {
   getSettings,
   getSettingsForSync,
   getStorageUsage,
-  getStoredSettings,
   getWeatherState,
   getYoutubeProgress,
   migrateLegacySettings,

@@ -18,12 +18,13 @@ import {
   getGoals,
   getSettings,
   getStorageUsage,
-  getStoredSettings,
   migrateLegacySettings,
+  readLegacySettingsBlob,
   resetSettingsMigration,
   SETTINGS_KEYS,
   setCustomBackground,
   setSettingsPatch,
+  setSettingsPatchRaw,
   settingsStorageKey,
 } from './storage-helpers';
 
@@ -234,6 +235,27 @@ describe('settings', () => {
   });
 });
 
+describe('setSettingsPatchRaw', () => {
+  it('refuses a device-local key regardless of caller', async () => {
+    const { store, areas } = recordingStore();
+    configurePlatform({ storage: store });
+
+    await setSettingsPatchRaw({ syncEnabled: true });
+
+    expect(areas.local[settingsStorageKey('syncEnabled')]).toBeUndefined();
+  });
+
+  it('still writes the other keys in the same patch', async () => {
+    const { store, areas } = recordingStore();
+    configurePlatform({ storage: store });
+
+    await setSettingsPatchRaw({ syncEnabled: true, theme: 'dark' });
+
+    expect(areas.local[settingsStorageKey('syncEnabled')]).toBeUndefined();
+    expect(areas.local[settingsStorageKey('theme')]).toBe('dark');
+  });
+});
+
 describe('migrateLegacySettings', () => {
   // A prior describe block may leave the platform pointed at its own recordingStore
   // (each test there reconfigures it but nothing restores the default afterward) —
@@ -282,7 +304,7 @@ describe('migrateLegacySettings', () => {
 
     await migrateLegacySettings();
 
-    expect(await getStoredSettings()).toEqual(blob);
+    expect(await readLegacySettingsBlob()).toEqual(blob);
   });
 
   it('deletes the legacy blob once migrated', async () => {
@@ -290,7 +312,7 @@ describe('migrateLegacySettings', () => {
 
     await migrateLegacySettings();
 
-    expect(await getStoredSettings()).toBeNull();
+    expect(await readLegacySettingsBlob()).toBeNull();
   });
 
   it('does nothing when there is no legacy blob', async () => {
