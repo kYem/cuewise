@@ -1,6 +1,7 @@
 import {
   configurePlatform,
   DEFAULT_SETTINGS,
+  type Settings,
   type StorageResult,
   type SyncMutationSink,
   storageFailure,
@@ -34,6 +35,19 @@ vi.stubGlobal(
     .mockReturnValue({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })
 );
 
+// Mirrors real storage: what setSettings persists is what the next getSettings returns.
+// The merge base in updateSettings now reads storage, so tests must seed it, not just in-memory state.
+let storedSettings: Settings = defaultSettings;
+
+function seedStorage(settings: Settings = defaultSettings) {
+  storedSettings = settings;
+  vi.mocked(storage.getSettings).mockImplementation(async () => storedSettings);
+  vi.mocked(storage.setSettings).mockImplementation(async (next: Settings) => {
+    storedSettings = next;
+    return { success: true };
+  });
+}
+
 describe('sync sink wiring', () => {
   const markMutated = vi.fn();
   const fakeSink: SyncMutationSink = { markMutated, markDeleted: vi.fn() };
@@ -47,7 +61,7 @@ describe('sync sink wiring', () => {
     });
     vi.clearAllMocks();
     markMutated.mockClear();
-    vi.mocked(storage.setSettings).mockResolvedValue({ success: true });
+    seedStorage();
     vi.mocked(storage.migrateStorageData).mockResolvedValue({ success: true });
     configurePlatform({ syncSink: fakeSink });
   });
@@ -105,7 +119,7 @@ describe('background preview lifecycle', () => {
       error: null,
     });
     vi.clearAllMocks();
-    vi.mocked(storage.setSettings).mockResolvedValue({ success: true });
+    seedStorage();
     vi.mocked(storage.migrateStorageData).mockResolvedValue({ success: true });
     configurePlatform({ syncSink: fakeSink });
   });
@@ -270,7 +284,7 @@ describe('serialized write path', () => {
       error: null,
     });
     vi.clearAllMocks();
-    vi.mocked(storage.setSettings).mockResolvedValue({ success: true });
+    seedStorage();
     vi.mocked(storage.migrateStorageData).mockResolvedValue({ success: true });
     configurePlatform({ syncSink: fakeSink });
   });
@@ -281,7 +295,11 @@ describe('serialized write path', () => {
 
   it('keeps both patches when two writes overlap', async () => {
     const firstWrite = deferred<StorageResult>();
-    vi.mocked(storage.setSettings).mockReturnValueOnce(firstWrite.promise);
+    vi.mocked(storage.setSettings).mockImplementationOnce(async (next: Settings) => {
+      const result = await firstWrite.promise;
+      storedSettings = next;
+      return result;
+    });
 
     const first = useSettingsStore.getState().updateSettings({ showClock: true });
     const second = useSettingsStore.getState().updateSettings({ colorTheme: 'forest' });
@@ -298,7 +316,11 @@ describe('serialized write path', () => {
 
   it('does not start the next write until the in-flight one resolves', async () => {
     const firstWrite = deferred<StorageResult>();
-    vi.mocked(storage.setSettings).mockReturnValueOnce(firstWrite.promise);
+    vi.mocked(storage.setSettings).mockImplementationOnce(async (next: Settings) => {
+      const result = await firstWrite.promise;
+      storedSettings = next;
+      return result;
+    });
 
     const first = useSettingsStore.getState().updateSettings({ showClock: true });
     const second = useSettingsStore.getState().updateSettings({ colorTheme: 'forest' });
@@ -314,7 +336,11 @@ describe('serialized write path', () => {
 
   it('notifies each overlapping write for its own changed key', async () => {
     const firstWrite = deferred<StorageResult>();
-    vi.mocked(storage.setSettings).mockReturnValueOnce(firstWrite.promise);
+    vi.mocked(storage.setSettings).mockImplementationOnce(async (next: Settings) => {
+      const result = await firstWrite.promise;
+      storedSettings = next;
+      return result;
+    });
 
     const first = useSettingsStore.getState().updateSettings({ showClock: true });
     const second = useSettingsStore.getState().updateSettings({ colorTheme: 'forest' });
@@ -327,7 +353,11 @@ describe('serialized write path', () => {
 
   it('queues resetToDefaults behind an in-flight update', async () => {
     const firstWrite = deferred<StorageResult>();
-    vi.mocked(storage.setSettings).mockReturnValueOnce(firstWrite.promise);
+    vi.mocked(storage.setSettings).mockImplementationOnce(async (next: Settings) => {
+      const result = await firstWrite.promise;
+      storedSettings = next;
+      return result;
+    });
 
     const update = useSettingsStore.getState().updateSettings({ showClock: true });
     const reset = useSettingsStore.getState().resetToDefaults();
@@ -351,5 +381,17 @@ describe('serialized write path', () => {
     expect(await first).toBe(false);
     expect(await second).toBe(true);
     expect(useSettingsStore.getState().settings.colorTheme).toBe('forest');
+  });
+
+  it('merges onto persisted truth when the in-memory snapshot is stale', async () => {
+    seedStorage({ ...defaultSettings, showClock: true });
+    useSettingsStore.setState({ settings: defaultSettings });
+
+    await useSettingsStore.getState().updateSettings({ colorTheme: 'forest' });
+
+    expect(storage.setSettings).toHaveBeenLastCalledWith(
+      expect.objectContaining({ showClock: true, colorTheme: 'forest' })
+    );
+    expect(useSettingsStore.getState().settings.showClock).toBe(true);
   });
 });

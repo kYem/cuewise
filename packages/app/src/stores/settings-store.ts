@@ -127,9 +127,12 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
 
   updateSettings: (partialSettings: Partial<Settings>) =>
     enqueueWrite(async () => {
-      const { settings } = get();
-
       try {
+        // Merge onto persisted truth: the sync engine writes pulled settings straight to storage,
+        // and a page can accept a click before initialize() resolves. Safe to read-modify-write
+        // here only because enqueueWrite serializes the writers.
+        const settings = { ...DEFAULT_SETTINGS, ...(await getSettings()) };
+
         // Clamp ranged values here — the settings write path the UI uses — so
         // presets/steppers (and a future settings import) can't persist an out-of-range
         // value. Inside the try so a future throwing clamp is caught here.
