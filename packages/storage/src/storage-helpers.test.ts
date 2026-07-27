@@ -2,6 +2,7 @@ import {
   configurePlatform,
   DEFAULT_SETTINGS,
   type KeyValueStore,
+  logger,
   type Settings,
   STORAGE_KEYS,
   type StorageArea,
@@ -10,13 +11,15 @@ import {
 } from '@cuewise/shared';
 import { goalFactory } from '@cuewise/test-utils/factories';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getManyFromStorage, setInStorage } from './chrome-storage';
+import { getFromStorage, getManyFromStorage, setInStorage } from './chrome-storage';
 import {
   clearCustomBackground,
   clearSettings,
+  ensureSettingsMigrated,
   getCustomBackground,
   getGoals,
   getSettings,
+  getSettingsForSync,
   getStorageUsage,
   migrateLegacySettings,
   readLegacySettingsBlob,
@@ -30,6 +33,7 @@ import {
 
 // The migration memo lives at module scope, so an earlier test's run would satisfy a later one.
 beforeEach(() => {
+  vi.restoreAllMocks();
   resetSettingsMigration();
 });
 
@@ -208,6 +212,36 @@ describe('settings', () => {
     expect(settings.theme).toBe('dark');
   });
 
+  // The UI saves through this path; only the sync path may drop these.
+  it('setSettingsPatch persists the device-local keys the UI owns', async () => {
+    const { store } = recordingStore();
+    configurePlatform({ storage: store });
+
+    await setSettingsPatch({
+      syncEnabled: true,
+      logLevel: 'debug',
+      focusedGoalId: 'g1',
+      hasSeenOnboarding: true,
+    });
+
+    await expect(getSettings()).resolves.toMatchObject({
+      syncEnabled: true,
+      logLevel: 'debug',
+      focusedGoalId: 'g1',
+      hasSeenOnboarding: true,
+    });
+  });
+
+  it('setSettingsPatch stores an unknown key named after an Object.prototype member', async () => {
+    const { store, areas } = recordingStore();
+    configurePlatform({ storage: store });
+
+    const result = await setSettingsPatch({ toString: 'from-a-newer-build' } as never);
+
+    expect(result.success).toBe(true);
+    expect(areas.local[settingsStorageKey('toString')]).toBe('from-a-newer-build');
+  });
+
   it('clearSettings removes every settings key so defaults apply again', async () => {
     const { store } = recordingStore();
     configurePlatform({ storage: store });
@@ -219,6 +253,40 @@ describe('settings', () => {
     const settings = await getSettings();
     expect(settings.showClock).toBe(DEFAULT_SETTINGS.showClock);
     expect(settings.theme).toBe(DEFAULT_SETTINGS.theme);
+  });
+
+  it('clearSettings holds when the legacy blob has not migrated yet', async () => {
+    const { store } = recordingStore();
+    configurePlatform({ storage: store });
+    await setInStorage(STORAGE_KEYS.SETTINGS, legacyBlob({ theme: 'dark' }), 'local');
+
+    await clearSettings();
+
+    await expect(getSettings()).resolves.toMatchObject({ theme: DEFAULT_SETTINGS.theme });
+  });
+
+  // The migration's quota path keeps the blob on purpose, so a reset that left it there would
+  // be undone on the next reload — every reload, once the quota frees up again.
+  it('clearSettings deletes a legacy blob the migration could not clear', async () => {
+    const { store } = recordingStore();
+    configurePlatform({
+      storage: {
+        ...store,
+        setMany: async () => ({
+          success: false as const,
+          error: { type: 'quota_exceeded' as const, message: 'Storage full' },
+        }),
+      },
+    });
+    await setInStorage(STORAGE_KEYS.SETTINGS, legacyBlob({ theme: 'dark' }), 'local');
+    await getSettings();
+
+    // Space is free again, and the reset is what the user does next.
+    configurePlatform({ storage: store });
+    await clearSettings();
+    resetSettingsMigration();
+
+    await expect(getSettings()).resolves.toMatchObject({ theme: DEFAULT_SETTINGS.theme });
   });
 
   it('a changed default reaches a user who never set that key', async () => {
@@ -345,6 +413,46 @@ describe('migrateLegacySettings', () => {
     expect(stored).toEqual({ 'settings.quoteFilterActiveCollectionIds': ['c1'] });
   });
 
+  // `readLegacySettingsBlob` conflates never-stored, wrong-shape and read-failure into null,
+  // so this branch is all that stands between a transient read error and permanent deletion.
+  it('leaves a blob it could not read on disk rather than deleting it', async () => {
+    await setInStorage(STORAGE_KEYS.SETTINGS, 'not-an-object', 'local');
+
+    await migrateLegacySettings();
+
+    await expect(getFromStorage(STORAGE_KEYS.SETTINGS, 'local')).resolves.toBe('not-an-object');
+  });
+
+  it('carries a key named after an Object.prototype member without throwing', async () => {
+    const blob = { ...legacyBlob({ theme: 'dark' }), constructor: 'from-a-newer-build' };
+    await setInStorage(STORAGE_KEYS.SETTINGS, blob, 'local');
+
+    await migrateLegacySettings();
+
+    await expect(getSettings()).resolves.toMatchObject({ theme: 'dark' });
+    expect(await getManyFromStorage([settingsStorageKey('constructor')])).toEqual({
+      [settingsStorageKey('constructor')]: 'from-a-newer-build',
+    });
+  });
+
+  // The one settings path that destroys rather than shadows — names only, never the values.
+  it('names the values it discards, without logging what they held', async () => {
+    const error = vi.spyOn(logger, 'error');
+    await setInStorage(
+      STORAGE_KEYS.SETTINGS,
+      { ...legacyBlob({}), focusedGoalId: { secret: 'a private goal' } },
+      'local'
+    );
+
+    await migrateLegacySettings();
+
+    expect(error).toHaveBeenCalledWith(
+      'Dropping legacy settings values that do not match their schema',
+      { fields: ['focusedGoalId'] }
+    );
+    expect(JSON.stringify(error.mock.calls)).not.toContain('a private goal');
+  });
+
   it('marks nothing dirty for sync, even for the keys it writes', async () => {
     const markMutated = vi.fn();
     const fakeSink: SyncMutationSink = { markMutated, markDeleted: vi.fn() };
@@ -354,6 +462,57 @@ describe('migrateLegacySettings', () => {
     await migrateLegacySettings();
 
     expect(markMutated).not.toHaveBeenCalled();
+  });
+});
+
+// `getStorageArea` awaits this on nearly every storage call, so a memoized rejection would
+// fail every read and write in the realm for the rest of the session.
+describe('ensureSettingsMigrated', () => {
+  it('retries after a failure rather than poisoning every later storage call', async () => {
+    const { store } = recordingStore({
+      local: { [STORAGE_KEYS.SETTINGS]: legacyBlob({ theme: 'dark' }) },
+    });
+    let failNextRead = true;
+    configurePlatform({
+      storage: {
+        ...store,
+        get: async <T>(key: string, area: StorageArea): Promise<T | null> => {
+          if (failNextRead) {
+            failNextRead = false;
+            throw new Error('storage unavailable');
+          }
+          return store.get<T>(key, area);
+        },
+      },
+    });
+
+    await expect(ensureSettingsMigrated()).rejects.toThrow('storage unavailable');
+
+    await expect(getSettings()).resolves.toMatchObject({ theme: 'dark' });
+  });
+});
+
+describe('getSettingsForSync', () => {
+  beforeEach(() => {
+    const { store } = recordingStore();
+    configurePlatform({ storage: store });
+  });
+
+  it('runs the pending migration, so a legacy value is pushed instead of our default', async () => {
+    await setInStorage(STORAGE_KEYS.SETTINGS, legacyBlob({ theme: 'dark' }), 'local');
+
+    await expect(getSettingsForSync()).resolves.toMatchObject({ theme: 'dark' });
+  });
+
+  // Unjudged on purpose: defaulting a peer's value here would make LWW push our default over
+  // the newer value that peer actually chose.
+  it('hands sync a stored value this build cannot parse, where the read defaults it', async () => {
+    await setSettingsPatchRaw({ colorTheme: 'aurora' as never });
+
+    await expect(getSettingsForSync()).resolves.toMatchObject({ colorTheme: 'aurora' });
+    await expect(getSettings()).resolves.toMatchObject({
+      colorTheme: DEFAULT_SETTINGS.colorTheme,
+    });
   });
 });
 

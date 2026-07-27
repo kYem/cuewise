@@ -179,8 +179,10 @@ describe('a stored value that no longer matches its shape', () => {
     await expect(getGoals()).resolves.toEqual([]);
   });
 
+  // At error level, not warn: the shipped default log level is 'error', so a warning here
+  // would never reach a real user's console.
   it('says where it failed, without ever logging the value', async () => {
-    const warn = vi.spyOn(logger, 'warn');
+    const error = vi.spyOn(logger, 'error');
     configurePlatform({
       storage: storeHolding({
         currentQuote: { id: 'q1', text: 'a private note', viewCount: 'no' },
@@ -189,12 +191,12 @@ describe('a stored value that no longer matches its shape', () => {
 
     await getCurrentQuote();
 
-    expect(warn).toHaveBeenCalledWith(
+    expect(error).toHaveBeenCalledWith(
       'Discarded an unreadable stored value',
       expect.objectContaining({ key: 'currentQuote' })
     );
     // The blob holds the user's own quotes and goals; the path alone diagnoses a shape change.
-    expect(JSON.stringify(warn.mock.calls)).not.toContain('a private note');
+    expect(JSON.stringify(error.mock.calls)).not.toContain('a private note');
   });
 
   // The store salvages location, snapshot and timestamp independently; validating the

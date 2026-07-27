@@ -46,7 +46,7 @@ export async function getValidatedFromStorage<T>(
     return raw as T;
   }
   // Paths only — stored blobs hold the user's own quotes, goals and reminders.
-  logger.warn('Discarded an unreadable stored value', {
+  logger.error('Discarded an unreadable stored value', {
     key,
     area,
     paths: result.error.issues.map((issue) => issue.path.join('.')).slice(0, 5),

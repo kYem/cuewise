@@ -398,9 +398,17 @@ export const SETTINGS_KEYS = Object.keys(DEFAULT_SETTINGS) as (keyof Settings)[]
 
 const SETTINGS_FIELD_SCHEMAS = settingsSchema.def.shape as Record<string, ZodMiniType | undefined>;
 
+/** Own properties only — a stored key named `constructor` or `toString` otherwise hits Object.prototype. */
+function settingsFieldSchema(key: string): ZodMiniType | undefined {
+  if (!Object.hasOwn(SETTINGS_FIELD_SCHEMAS, key)) {
+    return undefined;
+  }
+  return SETTINGS_FIELD_SCHEMAS[key];
+}
+
 /** A key with no schema is a newer build's, so there is nothing to judge it against. */
 function settingsValueIsValid(key: string, value: unknown): boolean {
-  const fieldSchema = SETTINGS_FIELD_SCHEMAS[key];
+  const fieldSchema = settingsFieldSchema(key);
   if (fieldSchema === undefined) {
     return true;
   }
@@ -427,7 +435,7 @@ function keepReadableSettingsFields(values: Record<string, unknown>): Partial<Se
   }
   if (dropped.length > 0) {
     // Names only — a setting's value can be a goal id or a playlist the user picked.
-    logger.warn('Ignored unreadable settings fields, using their defaults', { fields: dropped });
+    logger.error('Ignored unreadable settings fields, using their defaults', { fields: dropped });
   }
   return kept as Partial<Settings>;
 }
@@ -460,6 +468,15 @@ export async function readLegacySettingsBlob(): Promise<Record<string, unknown> 
   return raw as Record<string, unknown>;
 }
 
+async function writeSettingsEntries(patch: Partial<Settings>): Promise<StorageResult> {
+  return setManyInStorage(
+    Object.fromEntries(
+      Object.entries(patch).map(([key, value]) => [settingsStorageKey(key), value])
+    ),
+    'local'
+  );
+}
+
 /**
  * The unjudged write, for sync applying a value from a peer on another version: our schema is
  * not its schema, and the value costs its own key alone, which every read defaults meanwhile.
@@ -467,17 +484,18 @@ export async function readLegacySettingsBlob(): Promise<Record<string, unknown> 
  * caller of this path structurally cannot write `syncEnabled` and break area routing.
  */
 export async function setSettingsPatchRaw(patch: Partial<Settings>): Promise<StorageResult> {
-  const entries = Object.fromEntries(
-    Object.entries(patch)
-      .filter(([key]) => !DEVICE_LOCAL_SETTINGS_KEYS.includes(key))
-      .map(([key, value]) => [settingsStorageKey(key), value])
+  const shared = Object.fromEntries(
+    Object.entries(patch).filter(([key]) => !DEVICE_LOCAL_SETTINGS_KEYS.includes(key))
   );
-  return setManyInStorage(entries, 'local');
+  return writeSettingsEntries(shared);
 }
 
 /**
  * A value that fails its schema fails the whole patch: every read would hand back the default
  * instead, so a change the user asked for would look saved and never take effect.
+ *
+ * Writes device-local keys too — this is the path the user's own UI saves through, and the
+ * raw path's filter belongs to sync alone.
  */
 export async function setSettingsPatch(patch: Partial<Settings>): Promise<StorageResult> {
   const rejected = Object.keys(patch).filter(
@@ -488,11 +506,17 @@ export async function setSettingsPatch(patch: Partial<Settings>): Promise<Storag
     logger.error('Refused a settings write that does not match its schema', { fields: rejected });
     return storageFailure(`Settings values do not match their schema: ${rejected.join(', ')}`);
   }
-  return setSettingsPatchRaw(patch);
+  return writeSettingsEntries(patch);
 }
 
 export async function clearSettings(): Promise<boolean> {
-  return removeManyFromStorage(SETTINGS_KEYS.map(settingsStorageKey), 'local');
+  // Migrate then delete the blob: the migration reads an absent per-key entry as a gap to fill,
+  // so a surviving blob would restore every cleared value on the next read.
+  await ensureSettingsMigrated();
+  return removeManyFromStorage(
+    [...SETTINGS_KEYS.map(settingsStorageKey), STORAGE_KEYS.SETTINGS],
+    'local'
+  );
 }
 
 /**
@@ -510,18 +534,20 @@ export async function migrateLegacySettings(): Promise<void> {
 
   const existing = await getManyFromStorage(Object.keys(blob).map(settingsStorageKey), 'local');
   const patch: Record<string, unknown> = {};
+  const discarded: string[] = [];
   for (const [key, value] of Object.entries(blob)) {
     const storageKey = settingsStorageKey(key);
     if (existing[storageKey] !== undefined) {
       continue;
     }
-    const fieldSchema = SETTINGS_FIELD_SCHEMAS[key];
+    const fieldSchema = settingsFieldSchema(key);
     if (fieldSchema === undefined) {
       // A key this build does not know, carried across because the blob is deleted below.
       patch[storageKey] = value;
       continue;
     }
     if (!fieldSchema.safeParse(value).success) {
+      discarded.push(key);
       continue;
     }
     // Structural compare — two settings hold arrays, which never compare equal by identity.
@@ -539,19 +565,35 @@ export async function migrateLegacySettings(): Promise<void> {
     }
   }
 
-  await removeFromStorage(STORAGE_KEYS.SETTINGS, 'local');
+  if (discarded.length > 0) {
+    // Names only — a setting's value can be a goal id or a playlist the user picked. This is
+    // the one settings path that destroys rather than shadows, so it has to leave a trace.
+    logger.error('Dropping legacy settings values that do not match their schema', {
+      fields: discarded,
+    });
+  }
+
+  const removed = await removeFromStorage(STORAGE_KEYS.SETTINGS, 'local');
+  if (!removed) {
+    logger.error('Migrated the legacy settings blob but could not delete it');
+  }
 }
 
 let settingsMigration: Promise<void> | null = null;
 
 /**
- * Runs the legacy-blob migration at most once per realm; every settings read awaits it, so no
+ * Runs the legacy-blob migration once per realm; every settings read awaits it, so no
  * caller has to order it. migrateLegacySettings must never call this — it reads and writes with
  * an explicit 'local' area rather than through getStorageArea, which keeps that from recursing.
  */
 export function ensureSettingsMigrated(): Promise<void> {
   if (settingsMigration === null) {
-    settingsMigration = migrateLegacySettings();
+    // A rejection is not memoized: getStorageArea awaits this on nearly every storage call, so
+    // caching one would fail every read and write in the realm for the rest of the session.
+    settingsMigration = migrateLegacySettings().catch((error: unknown) => {
+      settingsMigration = null;
+      throw error;
+    });
   }
   return settingsMigration;
 }

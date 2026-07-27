@@ -19,6 +19,7 @@ export type { PlaylistResumeInfo, StorageUsageInfo } from './storage-helpers';
 export {
   clearCustomBackground,
   clearSettings,
+  ensureSettingsMigrated,
   formatBytes,
   getCalendarState,
   getCollections,
