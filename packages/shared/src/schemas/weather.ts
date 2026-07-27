@@ -1,11 +1,5 @@
 import { z } from 'zod/mini';
-import type {
-  WeatherForecast,
-  WeatherHour,
-  WeatherLocation,
-  WeatherSnapshot,
-  WeatherState,
-} from '../types';
+import type { WeatherForecast, WeatherHour, WeatherLocation, WeatherSnapshot } from '../types';
 import { WEATHER_CONDITION_KINDS, WEATHER_UNITS } from '../types';
 import { assertNoDrift } from './drift';
 
@@ -56,9 +50,10 @@ export const weatherSnapshotSchema = z.extend(weatherForecastSchema, {
 });
 assertNoDrift<z.infer<typeof weatherSnapshotSchema>, WeatherSnapshot>();
 
-export const weatherStateSchema = z.object({
-  location: z.nullable(weatherLocationSchema),
-  snapshot: z.nullable(weatherSnapshotSchema),
-  lastFetch: z.nullable(z.string()),
-});
-assertNoDrift<z.infer<typeof weatherStateSchema>, WeatherState>();
+/*
+ * There is deliberately no `weatherStateSchema`. The stored blob is the one value this
+ * module must NOT validate whole: `getWeatherState` hands it back untouched so the store can
+ * salvage location, snapshot and timestamp independently, and a reading this build cannot
+ * parse would otherwise take the user's saved city with it. A schema for the wrapper would
+ * only invite someone to wire it into that read.
+ */

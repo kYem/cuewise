@@ -38,8 +38,8 @@ describe('weatherLocationSchema', () => {
 /**
  * These replaced hand-written `isForecast`/`isHour`/`isCurrentConditions` predicates whose own
  * docstring recorded what a bad snapshot cost: it threw inside the chip's render and took the
- * whole new tab down. The location half above was ported with tests; the forecast half was not,
- * and every one of its inner shapes could be widened to `unknown` with the monorepo green.
+ * whole new tab down. One row per field, because a table that only covers a few of them lets
+ * the rest widen to `unknown` unnoticed — which is exactly what happened here.
  */
 describe('weatherSnapshotSchema', () => {
   const SNAPSHOT = {
@@ -56,21 +56,41 @@ describe('weatherSnapshotSchema', () => {
     expect(weatherSnapshotSchema.safeParse(SNAPSHOT).success).toBe(true);
   });
 
+  // One field wrong per row, everything else valid. An earlier version of the first row
+  // dropped `condition` and `isDay` as well, so it was rejected for the missing fields and
+  // `temperature` could be widened to `unknown` with this file green.
+  const hour = (overrides: Record<string, unknown>) => ({
+    hours: [{ ...SNAPSHOT.hours[0], ...overrides }],
+  });
+  const current = (overrides: Record<string, unknown>) => ({
+    current: { ...SNAPSHOT.current, ...overrides },
+  });
+  const place = (overrides: Record<string, unknown>) => ({ location: { ...LONDON, ...overrides } });
+
   it.each([
-    ['a malformed hour', { hours: [{ time: '2026-07-27T10:00', temperature: 'warm' }] }],
-    [
-      'an unrecognised hour condition',
-      { hours: [{ ...SNAPSHOT.hours[0], condition: 'sharknado' }] },
-    ],
+    ['a non-numeric hour temperature', hour({ temperature: 'warm' })],
+    ['an unrecognised hour condition', hour({ condition: 'sharknado' })],
+    ['a non-string hour time', hour({ time: 1_800_000_000 })],
+    ['a non-boolean hour isDay', hour({ isDay: 'yes' })],
     ['an unrecognised units value', { units: 'kelvin' }],
-    ['a location that fails its own schema', { location: { ...LONDON, timezone: '' } }],
-    ['an unrecognised current condition', { current: { ...SNAPSHOT.current, condition: 'x' } }],
+    ['a non-string forecast timezone', { timezone: 42 }],
+    // Both are rendered in the chip, and the predicate this replaced checked them by hand.
+    ['a non-numeric high', { high: 'hot' }],
+    ['a non-numeric low', { low: null }],
+    ['an unrecognised current condition', current({ condition: 'x' })],
+    ['a non-boolean current isDay', current({ isDay: 1 })],
     [
       'a NaN temperature, which every later comparison silently fails',
-      {
-        current: { ...SNAPSHOT.current, temperature: Number.NaN },
-      },
+      current({
+        temperature: Number.NaN,
+      }),
     ],
+    ['a location that fails its own schema', place({ timezone: '' })],
+    ['a non-string location id', place({ id: 2643743 })],
+    ['a non-string location name', place({ name: null })],
+    ['a non-string location country', place({ country: 7 })],
+    ['a non-string location countryCode', place({ countryCode: false })],
+    ['a non-numeric longitude', place({ longitude: '-0.1278' })],
   ])('rejects %s', (_label, overrides) => {
     expect(weatherSnapshotSchema.safeParse({ ...SNAPSHOT, ...overrides }).success).toBe(false);
   });

@@ -16,24 +16,35 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getCalendarState,
   getCollections,
+  getCollectionsRaw,
   getConceptCards,
   getCurrentQuote,
   getCustomYoutubePlaylists,
   getGoals,
   getGoalsRaw,
   getPomodoroSessions,
+  getPomodoroSessionsRaw,
   getPostureStats,
   getQuickLinks,
   getQuotes,
   getQuotesRaw,
   getReminders,
+  getRemindersRaw,
   getSettings,
+  getSettingsForSync,
   getWeatherState,
   getYoutubeProgress,
+  setCollections,
+  setCollectionsRaw,
+  setConceptCards,
   setGoals,
   setGoalsRaw,
+  setPomodoroSessions,
+  setPomodoroSessionsRaw,
+  setQuickLinks,
   setQuotes,
   setQuotesRaw,
+  setReminders,
   setRemindersRaw,
   setSettings,
   setSettingsRaw,
@@ -68,8 +79,9 @@ function storeHolding(values: Record<string, unknown>): KeyValueStore {
  * `getStorageArea()` is total goal loss for every sync-enabled user — and a
  * reference-returning fake hid an identity comparison that can never match in production.
  *
- * There is deliberately no area-blind accessor, and every read of `disk` demands an area.
- * An assertion that cannot name the area cannot catch a write that went to the wrong one,
+ * `at` defaults to `'local'` rather than omitting the area, so an assertion that says nothing
+ * still names one; `wroteTo` always demands it. Do not add an accessor that merges areas —
+ * an assertion that cannot name the area cannot catch a write that went to the wrong one,
  * which is the entire reason this exists.
  */
 function capturingStore(initial: Record<string, unknown> = {}, seedArea: StorageArea = 'local') {
@@ -399,13 +411,17 @@ describe('a whole-list write', () => {
   const readable = { id: 'g1', text: 'fine', completed: false, createdAt: 'x', date: '2026-07-26' };
   const quarantined = { id: 'g2', text: 'from a newer build', completed: 'nope' };
 
+  // `wroteTo` before the value, here and below: the expectation is byte-identical to the
+  // seed, so "preserved through the write" and "the write never happened" look the same.
+  // Stubbing `setValidatedListInStorage` to return success immediately passed six of these.
   it('carries the items the caller never saw', async () => {
-    const { at, store } = capturingStore({ goals: [readable, quarantined] });
+    const { at, wroteTo, store } = capturingStore({ goals: [readable, quarantined] });
     configurePlatform({ storage: store });
 
     const visible = await getGoals();
     await setGoals(visible);
 
+    expect(wroteTo('goals', 'local')).toBe(true);
     expect(at('goals')).toEqual([readable, quarantined]);
   });
 
@@ -431,23 +447,25 @@ describe('who gets their hidden items back', () => {
   const idless = { text: 'no id at all', completed: 'nope' };
 
   it('gives a validated reader back what it never saw', async () => {
-    const { at, store } = capturingStore({ goals: [readable, unreadable] });
+    const { at, wroteTo, store } = capturingStore({ goals: [readable, unreadable] });
     configurePlatform({ storage: store });
 
     await setGoals(await getGoals());
 
+    expect(wroteTo('goals', 'local')).toBe(true);
     expect(at('goals')).toEqual([readable, unreadable]);
   });
 
   // Every assertion here stands alone: no test depends on state another one left behind.
   it('keeps doing so on a later edit that never re-read', async () => {
-    const { at, store } = capturingStore({ goals: [readable, unreadable] });
+    const { at, wroteTo, store } = capturingStore({ goals: [readable, unreadable] });
     configurePlatform({ storage: store });
 
     const visible = await getGoals();
     await setGoals([...visible, { ...readable, id: 'g3' }]);
     await setGoals(visible);
 
+    expect(wroteTo('goals', 'local')).toBe(true);
     expect(at('goals')).toEqual([readable, unreadable]);
   });
 
@@ -470,12 +488,13 @@ describe('who gets their hidden items back', () => {
   // it is never in `items` and the check is never consulted. Without the guard the row is
   // appended beside itself and doubles on every write until the quota stops all saving.
   it('never duplicates a row the caller already passed in', async () => {
-    const { at, store } = capturingStore({ goals: [readable, idless] });
+    const { at, wroteTo, store } = capturingStore({ goals: [readable, idless] });
     configurePlatform({ storage: store });
 
     await setGoals(await getGoalsRaw());
     await setGoals((at('goals') as (typeof readable)[]) ?? []);
 
+    expect(wroteTo('goals', 'local')).toBe(true);
     expect(at('goals')).toHaveLength(2);
   });
 
@@ -491,11 +510,15 @@ describe('who gets their hidden items back', () => {
       isHidden: false,
       viewCount: 0,
     };
-    const { at, store } = capturingStore({ seedQuotes: [], customQuotes: [goodQuote, badQuote] });
+    const { at, wroteTo, store } = capturingStore({
+      seedQuotes: [],
+      customQuotes: [goodQuote, badQuote],
+    });
     configurePlatform({ storage: store });
 
     await setQuotes(await getQuotes());
 
+    expect(wroteTo('customQuotes', 'local')).toBe(true);
     expect(at('customQuotes')).toEqual([goodQuote, badQuote]);
   });
 });
@@ -548,8 +571,10 @@ describe('setQuotesRaw', () => {
 describe('a settings value this build cannot parse', () => {
   const stored = { theme: 'dark', colorTheme: 'aurora', somethingAddedLater: 'kept' };
 
-  const settingsWritten = (at: (key: string) => unknown) =>
-    at('settings') as Record<string, unknown>;
+  // Named area, not an alias that hides it: settings must stay local no matter what the
+  // sync toggle says, since the area computation itself reads out of this very key.
+  const settingsAt = (at: (key: string, area: StorageArea) => unknown) =>
+    at('settings', 'local') as Record<string, unknown>;
 
   it('survives a write of an unrelated setting', async () => {
     const { at, store } = capturingStore({ settings: stored });
@@ -557,8 +582,8 @@ describe('a settings value this build cannot parse', () => {
 
     await setSettings({ ...(await getSettings()), theme: 'light' });
 
-    expect(settingsWritten(at).colorTheme).toBe('aurora');
-    expect(settingsWritten(at).theme).toBe('light');
+    expect(settingsAt(at).colorTheme).toBe('aurora');
+    expect(settingsAt(at).theme).toBe('light');
   });
 
   it('still yields to an explicit change of that same setting', async () => {
@@ -567,7 +592,7 @@ describe('a settings value this build cannot parse', () => {
 
     await setSettings({ ...(await getSettings()), colorTheme: 'rose' });
 
-    expect(settingsWritten(at).colorTheme).toBe('rose');
+    expect(settingsAt(at).colorTheme).toBe('rose');
   });
 });
 
@@ -617,7 +642,7 @@ describe('an unreadable setting whose default is an array', () => {
   };
 
   it('survives a caller that rebuilt the array rather than passing our reference', async () => {
-    const { at, store } = capturingStore({ settings: stored });
+    const { at, wroteTo, store } = capturingStore({ settings: stored });
     configurePlatform({ storage: store });
 
     const current = await getSettings();
@@ -627,6 +652,7 @@ describe('an unreadable setting whose default is an array', () => {
       quoteFilterActiveCollectionIds: [...current.quoteFilterActiveCollectionIds],
     });
 
+    expect(wroteTo('settings', 'local')).toBe(true);
     expect((at('settings') as Record<string, unknown>).quoteFilterActiveCollectionIds).toEqual(
       stored.quoteFilterActiveCollectionIds
     );
@@ -703,6 +729,11 @@ describe('each key is read through its own schema', () => {
 // looks identical to a correct write. For a sync-enabled user that is every goal, gone.
 describe('writes land in the area their reader uses', () => {
   const goal = { id: 'g1', text: 'synced', completed: false, createdAt: 'x', date: '2026-07-26' };
+  const reminder = reminderFactory.build();
+  const session = pomodoroFactory.build();
+  const card = conceptCardFactory.build();
+  const collection = { id: 'c1', name: 'Stoics', createdAt: '2026-07-26T00:00:00.000Z' };
+  const quickLink = { id: 'ql1', title: 'Docs', url: 'https://example.com' };
 
   it('writes goals to the sync area when sync is on', async () => {
     const { at, wroteTo, store } = capturingStore({ settings: { syncEnabled: true } });
@@ -724,20 +755,91 @@ describe('writes land in the area their reader uses', () => {
     expect(wroteTo('settings', 'sync')).toBe(false);
   });
 
-  // The raw setters are the sync write path, so an area mistake there is every synced edit
-  // landing where no reader looks. `setGoals` was pinned above and these were not, which is
-  // the same gap one function over.
+  /**
+   * Every setter and every reader, on both the validated and the raw path. Pinning one side
+   * is not enough and pinning one collection is not enough: the raw readers are the sync
+   * engine's `readAll`, and a reader pointed at the wrong area returns `[]`, which by this
+   * module's own contract is how the cycle infers a tombstone — a delete pushed for every
+   * entity to every device.
+   *
+   * Two assertions per row, and together they are airtight: the write must land in `sync`,
+   * and the read must find it there. A reader stuck on `local` fails the second even though
+   * the first passed, and a pair that agrees on the wrong area fails the first.
+   */
+  describe.each([
+    [
+      'goals',
+      'goals',
+      goal,
+      () => setGoals([goal as never]),
+      getGoals,
+      () => setGoalsRaw([goal as never]),
+      getGoalsRaw,
+    ],
+    [
+      'reminders',
+      'reminders',
+      reminder,
+      () => setReminders([reminder as never]),
+      getReminders,
+      () => setRemindersRaw([reminder as never]),
+      getRemindersRaw,
+    ],
+    [
+      'collections',
+      'collections',
+      collection,
+      () => setCollections([collection as never]),
+      getCollections,
+      () => setCollectionsRaw([collection as never]),
+      getCollectionsRaw,
+    ],
+    [
+      'pomodoro sessions',
+      'pomodoroSessions',
+      session,
+      () => setPomodoroSessions([session as never]),
+      getPomodoroSessions,
+      () => setPomodoroSessionsRaw([session as never]),
+      getPomodoroSessionsRaw,
+    ],
+  ])('%s', (_label, key, entity, setValidated, getValidated, setRaw, getRaw) => {
+    it.each([
+      ['validated', setValidated, getValidated],
+      ['raw', setRaw, getRaw],
+    ])('round-trips through the sync area on the %s path', async (_path, write, read) => {
+      const { wroteTo, store } = capturingStore({ settings: { syncEnabled: true } });
+      configurePlatform({ storage: store });
+
+      await write();
+
+      expect(wroteTo(key, 'sync')).toBe(true);
+      await expect(read()).resolves.toEqual([entity]);
+    });
+  });
+
+  // No raw counterpart — neither is synced — but both had their area line rewritten by this
+  // branch, and both are read back through `getStorageArea()` on the very next page load.
   it.each([
-    ['goals', () => setGoalsRaw([goal])],
-    ['reminders', () => setRemindersRaw([])],
-  ])('sends %s written raw to the sync area too', async (key, write) => {
+    ['quickLinks', quickLink, () => setQuickLinks([quickLink as never]), getQuickLinks],
+    ['conceptCards', card, () => setConceptCards([card as never]), getConceptCards],
+  ])('round-trips %s through the sync area', async (key, entity, write, read) => {
     const { wroteTo, store } = capturingStore({ settings: { syncEnabled: true } });
     configurePlatform({ storage: store });
 
     await write();
 
     expect(wroteTo(key, 'sync')).toBe(true);
-    expect(wroteTo(key, 'local')).toBe(false);
+    await expect(read()).resolves.toEqual([entity]);
+  });
+
+  // The whole area computation reads `syncEnabled` out of settings, so settings itself can
+  // never follow the area it decides. The writer was pinned above; this is the reader.
+  it('reads settings for sync out of the local area, never the synced one', async () => {
+    const { store } = capturingStore({ settings: { ...DEFAULT_SETTINGS, syncEnabled: true } });
+    configurePlatform({ storage: store });
+
+    await expect(getSettingsForSync()).resolves.toMatchObject({ syncEnabled: true });
   });
 
   // Quotes split across two keys and only the custom half follows the sync area; the seed

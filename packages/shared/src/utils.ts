@@ -1602,9 +1602,11 @@ function accepts(
   // item as an error would mark the whole file invalid and hide the Import button —
   // discarding every good item in it to report one bad one.
   //
-  // A backstop, not the main path: every field above is coerced or filtered per item, so
-  // nothing a JSON file can express should reach here. It exists so that a schema tightened
-  // later fails visibly rather than writing something the reader will silently drop.
+  // A backstop, not the main path: every field above is coerced or filtered per item, so a
+  // file our own export wrote never reaches here. A hand-edited one still can — `1e400`
+  // parses to `Infinity`, which is a `number` to the coercion and not one to the schema. It
+  // exists so that a schema tightened later fails visibly rather than writing something the
+  // reader will silently drop.
   warnings.push(`${field} does not match the expected shape and was skipped`);
   return false;
 }

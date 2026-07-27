@@ -59,7 +59,8 @@ import {
 async function getStorageArea(): Promise<'local' | 'sync'> {
   // Always use local for settings to avoid circular dependency
   // Quiet: this runs on every storage helper call, so one unreadable field would otherwise
-  // warn dozens of times per page load. `getSettings` reports it once.
+  // warn dozens of times per page load. The loud `getSettings` still reports it — once per
+  // call, and it has six call sites, so a few times rather than a few dozen.
   const settings = await readStoredSettingsFields({ quiet: true });
   const syncEnabled = settings.syncEnabled ?? DEFAULT_SETTINGS.syncEnabled;
   return syncEnabled ? 'sync' : 'local';

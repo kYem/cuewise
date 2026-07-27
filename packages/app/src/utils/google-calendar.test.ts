@@ -293,8 +293,18 @@ describe('fetchTodayEvents', () => {
 
   // An envelope we cannot read at all is an empty agenda, not a thrown error: the strip is
   // ambient, and it must never take the new tab down with it.
-  it('returns an empty agenda when the response shape is unusable', async () => {
-    stubFetchItems('not a list' as never);
+  //
+  // Only the object and number rows actually need the guard: delete it and those two throw
+  // on `for...of`. A string is iterable, so the loop just walked its characters and every one
+  // failed the per-event parse — which is why the original single string case proved nothing.
+  // `null` is caught by the `?? []` rather than the guard. Both are kept as documentation.
+  it.each([
+    ['an object', {}],
+    ['a number', 42],
+    ['null', null],
+    ['a string', 'not a list'],
+  ])('returns an empty agenda when items is %s', async (_label, items) => {
+    stubFetchItems(items as never);
 
     await expect(fetchTodayEvents()).resolves.toEqual([]);
   });

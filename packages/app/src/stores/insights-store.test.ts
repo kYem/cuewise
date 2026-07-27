@@ -2,7 +2,7 @@ import type { Goal, PostureDailyStat, Quote } from '@cuewise/shared';
 import * as shared from '@cuewise/shared';
 import * as storage from '@cuewise/storage';
 import { goalFactory, pomodoroFactory, quoteFactory } from '@cuewise/test-utils/factories';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as fileUtils from '../utils/file-utils';
 import {
   createQuotaError,
@@ -73,6 +73,10 @@ const originalCreateElement = document.createElement.bind(document);
  * Stubs the download path and hands back the Blob the export actually produced. Asserting on
  * which readers ran is not enough: both export paths wrap everything after the reads in a
  * `try/catch`, so emptying the payload keeps every reader assertion green.
+ *
+ * Callers must restore afterwards. This package sets no `restoreMocks`, and the suite's
+ * `beforeEach` only calls `clearAllMocks`, which keeps implementations — so without a restore
+ * every later test gets a `document.createElement` whose `.click()` does nothing.
  */
 function captureDownloadedBlob(): () => Blob {
   let captured: Blob | undefined;
@@ -106,6 +110,13 @@ describe('Insights Store - Import Methods', () => {
       error: null,
     });
     vi.clearAllMocks();
+  });
+
+  // `clearAllMocks` above resets calls but keeps implementations, and this package sets no
+  // `restoreMocks` — so the export tests' `document.createElement` spy would otherwise stay
+  // installed for every test after them, silently neutering `.click()`.
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   describe('validateImportFile', () => {
@@ -189,13 +200,17 @@ describe('Insights Store - Import Methods', () => {
     });
 
     // CSV shares the export contract and had the same gap — its raw reads were revertible.
-    it('exports the same hidden items to CSV', async () => {
+    // Both types, because they read through different helpers and only one was covered.
+    it.each([
+      ['goals', 'goals', QUARANTINED_GOAL.id],
+      ['pomodoros', 'pomodoros', QUARANTINED_SESSION.id],
+    ] as const)('exports the same hidden items to the %s CSV', async (_label, type, hiddenId) => {
       mockStorageWithData({ goals: [goalFactory.build({ id: 'g1' })] });
       const written = captureDownloadedBlob();
 
-      await useInsightsStore.getState().exportAsCSV('goals');
+      await useInsightsStore.getState().exportAsCSV(type);
 
-      expect(await written().text()).toContain(QUARANTINED_GOAL.id);
+      expect(await written().text()).toContain(hiddenId);
     });
 
     it('should skip duplicate goals when skipDuplicates is true', async () => {
