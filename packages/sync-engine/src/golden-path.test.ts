@@ -254,6 +254,12 @@ describe('settings: per-key sync round-trips a shared key but excludes device-lo
     await deviceA.engine.markMutated('settings', 'hasSeenOnboarding');
     await deviceA.engine.syncNow();
 
+    // A must still hold them locally — otherwise B's clean read below proves nothing.
+    const aSettingsAfterDeviceLocalWrite = await getSettings();
+    expect(aSettingsAfterDeviceLocalWrite.logLevel).toBe('debug');
+    expect(aSettingsAfterDeviceLocalWrite.focusedGoalId).toBe('g1');
+    expect(aSettingsAfterDeviceLocalWrite.hasSeenOnboarding).toBe(true);
+
     useStorage(deviceB);
     await deviceB.engine.syncNow();
     const bSettingsAfterDeviceLocalSync = await getSettings();

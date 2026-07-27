@@ -1,5 +1,6 @@
 import {
   configurePlatform,
+  DEFAULT_SETTINGS,
   getTodayDateString,
   type Settings,
   type SyncMutationSink,
@@ -23,6 +24,11 @@ vi.mock('@cuewise/storage', () => ({
 }));
 
 const autoRollDisabled: Settings = { ...defaultSettings, autoRollDueTasks: false };
+
+// Storage is sparse: a key the user never chose has no entry, so `getSettings` resolves it
+// from DEFAULT_SETTINGS rather than from anything on disk.
+const { autoRollDueTasks: _unset, ...autoRollAbsentFromStorage } = defaultSettings;
+const autoRollNeverStored: Settings = { ...DEFAULT_SETTINGS, ...autoRollAbsentFromStorage };
 
 // Mock toast store with module-level fns so each level is inspectable across getState() calls.
 const toastError = vi.fn();
@@ -955,7 +961,7 @@ describe('rollDueTasks', () => {
 
   beforeEach(() => {
     useGoalStore.setState({ goals: [], todayTasks: [], isLoading: false, error: null });
-    vi.mocked(storage.getSettings).mockResolvedValue(defaultSettings);
+    vi.mocked(storage.getSettings).mockClear().mockResolvedValue(defaultSettings);
     vi.mocked(storage.setGoals).mockClear();
   });
 
@@ -1010,13 +1016,14 @@ describe('rollDueTasks', () => {
   });
 
   it('reads persisted settings, which resolve the default for a key the user never set', async () => {
+    vi.mocked(storage.getSettings).mockResolvedValue(autoRollNeverStored);
     vi.mocked(storage.setGoals).mockResolvedValue({ success: true });
     const overdue = goalFactory.build({ date: '2025-01-01', dueDate: '2025-01-02' });
     useGoalStore.setState({ goals: [overdue] });
 
     const result = await useGoalStore.getState().rollDueTasks();
 
-    expect(storage.getSettings).toHaveBeenCalled();
+    expect(storage.getSettings).toHaveBeenCalledOnce();
     expect(result).toBe(true);
   });
 });
