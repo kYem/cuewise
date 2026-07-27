@@ -1,7 +1,6 @@
 import {
   addSubtaskToGoal,
   assertPersisted,
-  DEFAULT_SETTINGS,
   duplicateGoal as duplicateGoalUtil,
   type Goal,
   type GoalProgress,
@@ -24,12 +23,7 @@ import {
   rollDueTasksToToday,
   toggleSubtaskInGoal,
 } from '@cuewise/shared';
-import {
-  getFromStorage,
-  getGoals as loadAllGoals,
-  setGoals as saveAllGoals,
-  settingsStorageKey,
-} from '@cuewise/storage';
+import { getSettings, getGoals as loadAllGoals, setGoals as saveAllGoals } from '@cuewise/storage';
 import { create } from 'zustand';
 import { useToastStore } from './toast-store';
 
@@ -315,14 +309,11 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
 
   rollDueTasks: async () => {
     try {
-      // Gate on the persisted key, not the settings store: goal hydration races
+      // Gate on persisted settings, not the settings store: goal hydration races
       // settings hydration (and #goals never hydrates it), so the store can
       // still hold the default when the roll fires on load.
-      const stored = await getFromStorage<boolean>(settingsStorageKey('autoRollDueTasks'), 'local');
-      // Absent now means "never set" — indistinguishable at this port from unreadable — so the
-      // default applies; a read failure rolls rather than declining to, with no opt-out to protect.
-      const enabled = stored ?? DEFAULT_SETTINGS.autoRollDueTasks;
-      if (!enabled) {
+      const { autoRollDueTasks } = await getSettings();
+      if (!autoRollDueTasks) {
         return false;
       }
 
