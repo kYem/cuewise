@@ -1,14 +1,13 @@
 import {
   getHttpFetch,
   roundCoordinate,
-  WEATHER_CONDITION_KINDS,
-  WEATHER_UNITS,
-  type WeatherConditionKind,
   type WeatherForecast,
-  type WeatherHour,
   type WeatherLocation,
   type WeatherSnapshot,
   type WeatherUnits,
+  weatherForecastSchema,
+  weatherLocationSchema,
+  weatherSnapshotSchema,
 } from '@cuewise/shared';
 
 /**
@@ -140,88 +139,22 @@ function isAbort(error: unknown): boolean {
   return error instanceof Error && error.name === 'AbortError';
 }
 
-function isCondition(value: unknown): value is WeatherConditionKind {
-  return WEATHER_CONDITION_KINDS.includes(value as WeatherConditionKind);
-}
-
-/** Every field the strip renders, including the ones whose absence throws mid-render. */
-function isHour(value: unknown): value is WeatherHour {
-  if (value === null || typeof value !== 'object') {
-    return false;
-  }
-  const hour = value as Partial<WeatherHour>;
-  return (
-    typeof hour.time === 'string' &&
-    typeof hour.temperature === 'number' &&
-    typeof hour.isDay === 'boolean' &&
-    isCondition(hour.condition)
-  );
-}
-
-/** The block the chip renders; `apparentTemperature` is the one field allowed to be null. */
-function isCurrentConditions(value: unknown): value is WeatherForecast['current'] {
-  if (value === null || typeof value !== 'object') {
-    return false;
-  }
-  const current = value as Partial<WeatherForecast['current']>;
-  return (
-    typeof current.temperature === 'number' &&
-    typeof current.isDay === 'boolean' &&
-    isCondition(current.condition) &&
-    (current.apparentTemperature === null || typeof current.apparentTemperature === 'number')
-  );
-}
-
 /**
- * Checks the string unions too, not just the numbers: `units` drives the refetch loop and
- * the scale announced to screen readers, and `condition` is interpolated into an aria-label,
- * so narrowing to them without verifying them is how "undefined" ends up being read aloud.
- */
-function isForecast(value: unknown): value is WeatherForecast {
-  if (value === null || typeof value !== 'object') {
-    return false;
-  }
-  const forecast = value as Partial<WeatherForecast>;
-  return (
-    WEATHER_UNITS.includes(forecast.units as WeatherUnits) &&
-    typeof forecast.timezone === 'string' &&
-    isCurrentConditions(forecast.current) &&
-    typeof forecast.high === 'number' &&
-    typeof forecast.low === 'number' &&
-    Array.isArray(forecast.hours) &&
-    forecast.hours.every(isHour)
-  );
-}
-
-/**
- * Every field, not just the ones today's UI happens to read: this also guards the location
- * restored from storage, which outlives any given version of the components.
+ * The wire shapes are the same shapes the store persists, so both go through the schemas
+ * in @cuewise/shared rather than a second hand-rolled description that can drift from them.
+ * These stay predicates because the callers are a filter and a storage guard, and because
+ * returning zod's parsed copy would strip fields a newer proxy had added.
  */
 export function isWeatherLocation(value: unknown): value is WeatherLocation {
-  if (value === null || typeof value !== 'object') {
-    return false;
-  }
-  const place = value as Partial<WeatherLocation>;
-  return (
-    typeof place.id === 'string' &&
-    typeof place.name === 'string' &&
-    (place.admin1 === null || typeof place.admin1 === 'string') &&
-    typeof place.country === 'string' &&
-    typeof place.countryCode === 'string' &&
-    Number.isFinite(place.latitude) &&
-    Number.isFinite(place.longitude) &&
-    typeof place.timezone === 'string' &&
-    place.timezone !== ''
-  );
+  return weatherLocationSchema.safeParse(value).success;
 }
 
-/**
- * Guards the storage read as well as the network reply. A snapshot that no longer matches
- * this shape would throw inside the chip's render, and the app-wide ErrorBoundary would
- * take the whole new tab down — on every open, since the same blob is read back each time.
- */
 export function isWeatherSnapshot(value: unknown): value is WeatherSnapshot {
-  return isForecast(value) && isWeatherLocation((value as Partial<WeatherSnapshot>).location);
+  return weatherSnapshotSchema.safeParse(value).success;
+}
+
+function isForecast(value: unknown): value is WeatherForecast {
+  return weatherForecastSchema.safeParse(value).success;
 }
 
 export async function fetchForecast(

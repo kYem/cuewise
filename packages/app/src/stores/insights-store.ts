@@ -28,12 +28,15 @@ import {
 } from '@cuewise/shared';
 import {
   getGoals,
+  getGoalsRaw,
   getPomodoroSessions,
+  getPomodoroSessionsRaw,
   getPostureStats,
   getQuotes,
-  setGoals,
-  setPomodoroSessions,
-  setQuotes,
+  getQuotesRaw,
+  setGoalsRaw,
+  setPomodoroSessionsRaw,
+  setQuotesRaw,
 } from '@cuewise/storage';
 import { create } from 'zustand';
 import { readFileAsText } from '../utils/file-utils';
@@ -42,6 +45,13 @@ import { useToastStore } from './toast-store';
 /**
  * Merge incoming into existing by id (skipDuplicates drops existing ids, else overwrites them).
  * importedCount = items written: new ones in skip mode, all incoming (incl. overwrites) otherwise.
+ */
+/**
+ * `existing` must be the raw stored array, never the rendering view. The merge rewrites the
+ * whole collection, so an item missing from `existing` is an item this deletes — and in
+ * skip-duplicates mode it is worse than deletion: the id is absent from `existingIds`, so
+ * the incoming copy is appended and counted as imported, silently replacing what the user
+ * had rather than skipping it.
  */
 function mergeImport<T extends { id: string }>(
   existing: T[],
@@ -84,8 +94,8 @@ interface InsightsStore {
   initialize: () => Promise<void>;
   refresh: () => Promise<void>;
   exportAsJSON: () => void;
-  exportAsCSV: (type: 'daily' | 'weekly' | 'monthly' | 'goals' | 'pomodoros') => void;
-  exportAllAsJSON: () => void;
+  exportAsCSV: (type: 'daily' | 'weekly' | 'monthly' | 'goals' | 'pomodoros') => Promise<void>;
+  exportAllAsJSON: () => Promise<void>;
 
   // Import actions
   validateImportFile: (file: File) => Promise<ImportValidation>;
@@ -197,9 +207,16 @@ export const useInsightsStore = create<InsightsStore>((set, get) => ({
     }
   },
 
-  exportAsCSV: (type: 'daily' | 'weekly' | 'monthly' | 'goals' | 'pomodoros') => {
+  exportAsCSV: async (type: 'daily' | 'weekly' | 'monthly' | 'goals' | 'pomodoros') => {
     try {
-      const { analytics, goals, pomodoroSessions } = get();
+      const { analytics } = get();
+      // Raw for the two entity exports, same reason as the JSON backup: a spreadsheet of
+      // the user's goals should hold their goals, not the subset this build can render.
+      // The trend variants below are derived data and legitimately come from state.
+      const [goals, pomodoroSessions] = await Promise.all([
+        getGoalsRaw(),
+        getPomodoroSessionsRaw(),
+      ]);
 
       let csv = '';
       let filename = '';
@@ -255,9 +272,18 @@ export const useInsightsStore = create<InsightsStore>((set, get) => ({
     }
   },
 
-  exportAllAsJSON: () => {
+  exportAllAsJSON: async () => {
     try {
-      const { insights, analytics, quotes, goals, pomodoroSessions } = get();
+      const { insights, analytics } = get();
+      // Read raw rather than reuse the rendered state: a backup's whole contract is
+      // faithfulness, and the rendering reads hide items this build cannot parse. Exporting
+      // that view would omit them silently under a "complete export" label — and importing
+      // the file back writes the reduced set over storage, losing the device copy too.
+      const [quotes, goals, pomodoroSessions] = await Promise.all([
+        getQuotesRaw(),
+        getGoalsRaw(),
+        getPomodoroSessionsRaw(),
+      ]);
 
       // Filter to only include custom quotes (exclude default/curated quotes)
       const customQuotes = quotes.filter((quote) => quote.isCustom);
@@ -334,14 +360,14 @@ export const useInsightsStore = create<InsightsStore>((set, get) => ({
 
       // Import goals
       if (options.importGoals === true && data.goals.length > 0) {
-        const existingGoals = await getGoals();
+        const existingGoals = await getGoalsRaw();
         const { merged, importedCount, skippedCount } = mergeImport(
           existingGoals,
           data.goals,
           options.skipDuplicates === true
         );
         if (importedCount > 0) {
-          assertPersisted(await setGoals(merged));
+          assertPersisted(await setGoalsRaw(merged));
         }
         result.imported.goals = importedCount;
         result.skipped.goals = skippedCount;
@@ -349,7 +375,7 @@ export const useInsightsStore = create<InsightsStore>((set, get) => ({
 
       // Import quotes (mark as custom to distinguish from seed quotes)
       if (options.importQuotes === true && data.quotes.length > 0) {
-        const existingQuotes = await getQuotes();
+        const existingQuotes = await getQuotesRaw();
         // Mark all imported quotes as custom to ensure they are included in future exports
         const quotesToProcess = data.quotes.map((q) => ({ ...q, isCustom: true }));
         const { merged, importedCount, skippedCount } = mergeImport(
@@ -358,7 +384,7 @@ export const useInsightsStore = create<InsightsStore>((set, get) => ({
           options.skipDuplicates === true
         );
         if (importedCount > 0) {
-          assertPersisted(await setQuotes(merged));
+          assertPersisted(await setQuotesRaw(merged));
         }
         result.imported.quotes = importedCount;
         result.skipped.quotes = skippedCount;
@@ -366,14 +392,14 @@ export const useInsightsStore = create<InsightsStore>((set, get) => ({
 
       // Import pomodoro sessions
       if (options.importPomodoroSessions === true && data.pomodoroSessions.length > 0) {
-        const existingSessions = await getPomodoroSessions();
+        const existingSessions = await getPomodoroSessionsRaw();
         const { merged, importedCount, skippedCount } = mergeImport(
           existingSessions,
           data.pomodoroSessions,
           options.skipDuplicates === true
         );
         if (importedCount > 0) {
-          assertPersisted(await setPomodoroSessions(merged));
+          assertPersisted(await setPomodoroSessionsRaw(merged));
         }
         result.imported.pomodoroSessions = importedCount;
         result.skipped.pomodoroSessions = skippedCount;

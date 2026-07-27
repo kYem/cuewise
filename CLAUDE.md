@@ -218,6 +218,15 @@ pnpm format
 
 See [LINTING.md](./LINTING.md) for details.
 
+### Comments
+
+Default to none. Write one only when the code cannot say it: a hidden constraint, a non-obvious
+invariant, or why an obvious-looking alternative is wrong. One line, two at the very most.
+
+Never restate what the code says, narrate history ("used to be X"), or explain a fix inside the
+code — that belongs in the commit message. Needing a long comment means the code should change
+instead. This applies to tests too: the test name carries the intent.
+
 ### Type Checking
 
 ```bash

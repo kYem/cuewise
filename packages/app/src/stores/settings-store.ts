@@ -225,6 +225,8 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   resetToDefaults: () =>
     enqueueWrite(async () => {
       try {
+        // Removing the keys, not writing defaults over them: a reset means "follow the
+        // defaults again", and a stored copy would pin today's values against a later change.
         const cleared = await clearSettings();
         if (!cleared) {
           logger.error('Error clearing settings');

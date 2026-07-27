@@ -1,16 +1,16 @@
 import { DEVICE_LOCAL_SETTINGS_KEYS, type Settings } from '@cuewise/shared';
 import {
-  getCollections,
-  getGoals,
-  getQuotes,
-  getReminders,
-  getSettings,
+  getCollectionsRaw,
+  getGoalsRaw,
+  getQuotesRaw,
+  getRemindersRaw,
+  getSettingsForSync,
   type StorageResult,
-  setCollections,
-  setGoals,
-  setQuotes,
-  setReminders,
-  setSettingsPatch,
+  setCollectionsRaw,
+  setGoalsRaw,
+  setQuotesRaw,
+  setRemindersRaw,
+  setSettingsPatchRaw,
 } from '@cuewise/storage';
 
 /** One synced collection: reads all entities keyed by id, writes/deletes a single one. */
@@ -64,7 +64,7 @@ function settingsBinding(): CollectionBinding {
   return {
     name: 'settings',
     async readAll() {
-      const settings = await getSettings();
+      const settings = await getSettingsForSync();
       const entries = Object.entries(settings).filter(
         ([key]) => !DEVICE_LOCAL_SETTINGS_KEYS.includes(key)
       );
@@ -79,17 +79,22 @@ function settingsBinding(): CollectionBinding {
         return { success: true };
       }
       const { value } = entity as SettingsEntity;
-      return setSettingsPatch({ [entityId]: value } as Partial<Settings>);
+      // Raw and one key: the peer may be on a version whose values ours cannot parse, and
+      // refusing the write here would stall the pull cycle on that record forever.
+      return setSettingsPatchRaw({ [entityId]: value } as Partial<Settings>);
     },
   };
 }
 
 export function defaultBindings(): CollectionBinding[] {
   return [
-    arrayBinding('goals', getGoals, setGoals),
-    arrayBinding('quotes', getQuotes, setQuotes),
-    arrayBinding('collections', getCollections, setCollections),
-    arrayBinding('reminders', getReminders, setReminders),
+    // Raw readers: see the note on `getGoalsRaw`. An item the UI hides must not be an item
+    // sync deletes — `writeOne` rewrites the whole array, and an entity missing from a read
+    // is how the cycle infers a tombstone for every other device.
+    arrayBinding('goals', getGoalsRaw, setGoalsRaw),
+    arrayBinding('quotes', getQuotesRaw, setQuotesRaw),
+    arrayBinding('collections', getCollectionsRaw, setCollectionsRaw),
+    arrayBinding('reminders', getRemindersRaw, setRemindersRaw),
     settingsBinding(),
   ];
 }

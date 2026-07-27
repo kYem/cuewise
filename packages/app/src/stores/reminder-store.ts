@@ -461,7 +461,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
     try {
       const { reminders } = get();
       const reminder = reminders.find((r) => r.id === reminderId);
-      if (!reminder || !reminder.recurring) {
+      if (!reminder?.recurring) {
         return;
       }
 

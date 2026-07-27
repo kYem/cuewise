@@ -4,7 +4,7 @@
  * provided texts contains the trimmed query.
  */
 export function settingsMatch(filter: string, ...texts: (string | undefined)[]): boolean {
-  if (!filter || !filter.trim()) {
+  if (!filter?.trim()) {
     return true;
   }
   const query = filter.trim().toLowerCase();

@@ -27,6 +27,13 @@ import {
   REMINDER_SNOOZE_MINUTES,
 } from './constants';
 import { logger } from './logger';
+import {
+  goalSchema,
+  pomodoroSessionSchema,
+  quoteCategorySchema,
+  quoteSchema,
+  subtaskSchema,
+} from './schemas';
 import type {
   AdvancedAnalytics,
   DailyDataPoint,
@@ -1546,14 +1553,19 @@ export function parseImportData(jsonString: string): ImportValidation {
 
   // Validate individual items
   const validatedData: ExportData = {
-    version: (exportData.version as string) || 'unknown',
-    formatVersion: (exportData.formatVersion as number) || 0,
-    exportDate: (exportData.exportDate as string) || new Date().toISOString(),
+    // `typeof`, not `||`: these are rendered directly in the import preview, and `||` lets
+    // any truthy value through — an object reaching React as a child throws, and the
+    // app-wide ErrorBoundary takes the page down. This is the one input where the user
+    // points the app at a file of their choosing.
+    version: typeof exportData.version === 'string' ? exportData.version : 'unknown',
+    formatVersion: typeof exportData.formatVersion === 'number' ? exportData.formatVersion : 0,
+    exportDate:
+      typeof exportData.exportDate === 'string' ? exportData.exportDate : new Date().toISOString(),
     insights: (exportData.insights as ExportData['insights']) || null,
     analytics: (exportData.analytics as ExportData['analytics']) || null,
-    goals: validateGoals(exportData.goals as unknown[], errors),
-    quotes: validateQuotes(exportData.quotes as unknown[], errors),
-    pomodoroSessions: validatePomodoroSessions(exportData.pomodoroSessions as unknown[], errors),
+    goals: validateGoals(exportData.goals as unknown[], warnings),
+    quotes: validateQuotes(exportData.quotes as unknown[], warnings),
+    pomodoroSessions: validatePomodoroSessions(exportData.pomodoroSessions as unknown[], warnings),
   };
 
   return {
@@ -1567,34 +1579,71 @@ export function parseImportData(jsonString: string): ImportValidation {
 /**
  * Validate goals array
  */
-function validateGoals(goals: unknown[], errors: ImportValidationError[]): Goal[] {
+
+/**
+ * The last gate before an imported item reaches storage: the very schema the read path
+ * uses. Without it the two boundaries can disagree, and they did — an item the importer
+ * accepted, counted and reported as "successfully imported" would be dropped on the next
+ * read and erased by the next edit, because every store rewrites its whole array.
+ *
+ * Rejecting here costs the user one item and tells them which. Accepting costs them the
+ * item silently, later.
+ */
+function accepts(
+  schema: { safeParse: (value: unknown) => { success: boolean } },
+  candidate: unknown,
+  field: string,
+  warnings: string[]
+): boolean {
+  if (schema.safeParse(candidate).success) {
+    return true;
+  }
+  // A warning, never an error: `isValid` is `errors.length === 0`, so an error here would
+  // hide the Import button and discard every good item in the file.
+  warnings.push(`${field} does not match the expected shape and was skipped`);
+  return false;
+}
+
+function isQuoteCategory(value: unknown): value is Quote['category'] {
+  return quoteCategorySchema.safeParse(value).success;
+}
+
+/** Neither a numeric timestamp (which `||` let through) nor `''` (which `typeof` does). */
+function nonEmptyString(value: unknown): string | undefined {
+  if (typeof value !== 'string' || value === '') {
+    return undefined;
+  }
+  return value;
+}
+
+function validateGoals(goals: unknown[], warnings: string[]): Goal[] {
   const validGoals: Goal[] = [];
 
   for (let i = 0; i < goals.length; i++) {
     const goal = goals[i] as Record<string, unknown>;
 
     if (typeof goal !== 'object' || goal === null) {
-      errors.push({ field: `goals[${i}]`, message: 'Invalid goal format' });
+      warnings.push(`goals[${i}] is not an object and was skipped`);
       continue;
     }
 
     // Check required fields
     if (typeof goal.id !== 'string' || !goal.id) {
-      errors.push({ field: `goals[${i}].id`, message: 'Goal must have a valid id' });
+      warnings.push(`goals[${i}] has no usable id and was skipped`);
       continue;
     }
 
     if (typeof goal.text !== 'string') {
-      errors.push({ field: `goals[${i}].text`, message: 'Goal must have text' });
+      warnings.push(`goals[${i}] has no text and was skipped`);
       continue;
     }
 
-    validGoals.push({
+    const candidate: Goal = {
       id: goal.id,
       text: goal.text,
       completed: Boolean(goal.completed),
-      createdAt: (goal.createdAt as string) || new Date().toISOString(),
-      date: (goal.date as string) || getTodayDateString(),
+      createdAt: nonEmptyString(goal.createdAt) ?? new Date().toISOString(),
+      date: nonEmptyString(goal.date) ?? getTodayDateString(),
       // Preserve optional fields when present
       ...(goal.type === 'task' || goal.type === 'objective' ? { type: goal.type } : {}),
       ...(typeof goal.parentId === 'string' ? { parentId: goal.parentId } : {}),
@@ -1602,8 +1651,17 @@ function validateGoals(goals: unknown[], errors: ImportValidationError[]): Goal[
       ...(typeof goal.description === 'string' ? { description: goal.description } : {}),
       ...(typeof goal.dueDate === 'string' ? { dueDate: goal.dueDate } : {}),
       ...(typeof goal.sortOrder === 'number' ? { sortOrder: goal.sortOrder } : {}),
-      ...(Array.isArray(goal.subtasks) ? { subtasks: goal.subtasks as Subtask[] } : {}),
-    });
+      // Filtered per item, like every other list in this codebase: one malformed subtask
+      // costs that subtask, not the goal it belongs to.
+      ...(Array.isArray(goal.subtasks)
+        ? { subtasks: goal.subtasks.filter((s) => subtaskSchema.safeParse(s).success) as Subtask[] }
+        : {}),
+    };
+
+    if (!accepts(goalSchema, candidate, `goals[${i}]`, warnings)) {
+      continue;
+    }
+    validGoals.push(candidate);
   }
 
   return validGoals;
@@ -1612,41 +1670,53 @@ function validateGoals(goals: unknown[], errors: ImportValidationError[]): Goal[
 /**
  * Validate quotes array
  */
-function validateQuotes(quotes: unknown[], errors: ImportValidationError[]): Quote[] {
+function validateQuotes(quotes: unknown[], warnings: string[]): Quote[] {
   const validQuotes: Quote[] = [];
 
   for (let i = 0; i < quotes.length; i++) {
     const quote = quotes[i] as Record<string, unknown>;
 
     if (typeof quote !== 'object' || quote === null) {
-      errors.push({ field: `quotes[${i}]`, message: 'Invalid quote format' });
+      warnings.push(`quotes[${i}] is not an object and was skipped`);
       continue;
     }
 
     // Check required fields
     if (typeof quote.id !== 'string' || !quote.id) {
-      errors.push({ field: `quotes[${i}].id`, message: 'Quote must have a valid id' });
+      warnings.push(`quotes[${i}] has no usable id and was skipped`);
       continue;
     }
 
     if (typeof quote.text !== 'string' || !quote.text) {
-      errors.push({ field: `quotes[${i}].text`, message: 'Quote must have text' });
+      warnings.push(`quotes[${i}] has no text and was skipped`);
       continue;
     }
 
-    validQuotes.push({
+    const candidate: Quote = {
       id: quote.id,
       text: quote.text,
-      author: (quote.author as string) || 'Unknown',
-      category: (quote.category as Quote['category']) || 'inspiration',
+      author: nonEmptyString(quote.author) ?? 'Unknown',
+      // Checked against the same enum the reader uses. An unrecognised category used to be
+      // written verbatim and then dropped on the next read.
+      category: isQuoteCategory(quote.category) ? quote.category : 'inspiration',
       isCustom: true, // All imported quotes are marked as custom
       isFavorite: Boolean(quote.isFavorite),
       isHidden: Boolean(quote.isHidden),
-      viewCount: (quote.viewCount as number) || 0,
-      lastViewed: quote.lastViewed as string | undefined,
-      source: quote.source as string | undefined,
-      notes: quote.notes as string | undefined,
-    });
+      viewCount: typeof quote.viewCount === 'number' ? quote.viewCount : 0,
+      ...(typeof quote.lastViewed === 'string' ? { lastViewed: quote.lastViewed } : {}),
+      ...(typeof quote.source === 'string' ? { source: quote.source } : {}),
+      ...(typeof quote.notes === 'string' ? { notes: quote.notes } : {}),
+      // The twelfth field, and the only one this literal used to omit — so re-importing a
+      // backup silently stripped every quote's collection membership.
+      ...(Array.isArray(quote.collectionIds)
+        ? { collectionIds: quote.collectionIds.filter((id) => typeof id === 'string') }
+        : {}),
+    };
+
+    if (!accepts(quoteSchema, candidate, `quotes[${i}]`, warnings)) {
+      continue;
+    }
+    validQuotes.push(candidate);
   }
 
   return validQuotes;
@@ -1655,43 +1725,45 @@ function validateQuotes(quotes: unknown[], errors: ImportValidationError[]): Quo
 /**
  * Validate pomodoro sessions array
  */
-function validatePomodoroSessions(
-  sessions: unknown[],
-  errors: ImportValidationError[]
-): PomodoroSession[] {
+function validatePomodoroSessions(sessions: unknown[], warnings: string[]): PomodoroSession[] {
   const validSessions: PomodoroSession[] = [];
 
   for (let i = 0; i < sessions.length; i++) {
     const session = sessions[i] as Record<string, unknown>;
 
     if (typeof session !== 'object' || session === null) {
-      errors.push({ field: `pomodoroSessions[${i}]`, message: 'Invalid session format' });
+      warnings.push(`pomodoroSessions[${i}] is not an object and was skipped`);
       continue;
     }
 
     // Check required fields
     if (typeof session.id !== 'string' || !session.id) {
-      errors.push({ field: `pomodoroSessions[${i}].id`, message: 'Session must have a valid id' });
+      warnings.push(`pomodoroSessions[${i}] has no usable id and was skipped`);
       continue;
     }
 
     if (typeof session.startedAt !== 'string') {
-      errors.push({
-        field: `pomodoroSessions[${i}].startedAt`,
-        message: 'Session must have startedAt',
-      });
+      warnings.push(`pomodoroSessions[${i}] has no start time and was skipped`);
       continue;
     }
 
-    validSessions.push({
+    const sessionTypes: PomodoroSession['type'][] = ['work', 'break', 'longBreak'];
+    const candidate: PomodoroSession = {
       id: session.id,
       startedAt: session.startedAt,
-      completedAt: (session.completedAt as string) || undefined,
+      ...(typeof session.completedAt === 'string' ? { completedAt: session.completedAt } : {}),
       interrupted: Boolean(session.interrupted),
-      duration: (session.duration as number) || 25,
-      type: (session.type as PomodoroSession['type']) || 'work',
-      goalId: (session.goalId as string) || undefined,
-    });
+      duration: typeof session.duration === 'number' ? session.duration : 25,
+      type: sessionTypes.includes(session.type as PomodoroSession['type'])
+        ? (session.type as PomodoroSession['type'])
+        : 'work',
+      ...(typeof session.goalId === 'string' ? { goalId: session.goalId } : {}),
+    };
+
+    if (!accepts(pomodoroSessionSchema, candidate, `pomodoroSessions[${i}]`, warnings)) {
+      continue;
+    }
+    validSessions.push(candidate);
   }
 
   return validSessions;

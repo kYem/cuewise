@@ -1,4 +1,5 @@
 import { type CalendarEvent, getTodayDateString, logger } from '@cuewise/shared';
+import { z } from 'zod/mini';
 
 // Read-only Google Calendar access via chrome.identity. All client-side: the
 // extension talks to Google directly, no Cuewise backend ever sees the data.
@@ -52,16 +53,38 @@ const EVENT_COLORS: Record<string, string> = {
   '11': '#d50000',
 };
 
-interface GoogleEvent {
-  id: string;
-  summary?: string;
-  htmlLink?: string;
-  colorId?: string;
-  status?: string;
-  attendees?: Array<{ self?: boolean; responseStatus?: string }>;
-  start?: { dateTime?: string; date?: string };
-  end?: { dateTime?: string; date?: string };
-}
+/**
+ * Only what the mapping below reads, and everything optional but `id` — Google adds fields
+ * constantly and a strict shape would reject a whole day's agenda over one it grew. This
+ * replaced a bare `as` cast: an item that does not even have an id used to reach `mapEvent`.
+ */
+const googleEventSchema = z.looseObject({
+  id: z.string(),
+  summary: z.optional(z.string()),
+  htmlLink: z.optional(z.string()),
+  colorId: z.optional(z.string()),
+  status: z.optional(z.string()),
+  attendees: z.optional(
+    z.array(
+      z.looseObject({
+        self: z.optional(z.boolean()),
+        responseStatus: z.optional(z.string()),
+      })
+    )
+  ),
+  start: z.optional(
+    z.looseObject({ dateTime: z.optional(z.string()), date: z.optional(z.string()) })
+  ),
+  end: z.optional(
+    z.looseObject({ dateTime: z.optional(z.string()), date: z.optional(z.string()) })
+  ),
+});
+
+// The list is validated per item, so one entry Google returns in a shape we cannot read
+// costs that row rather than the whole day's agenda — which is what the note above claims.
+const googleEventListSchema = z.looseObject({ items: z.optional(z.array(z.unknown())) });
+
+type GoogleEvent = z.infer<typeof googleEventSchema>;
 
 // Hide events that shouldn't count toward "today" — a cancelled instance, or a
 // meeting the signed-in user explicitly declined — so the strip reflects the
@@ -221,7 +244,29 @@ export async function fetchTodayEvents(): Promise<CalendarEvent[]> {
   if (!response.ok) {
     throw new Error(`Calendar API: ${response.status} ${response.statusText}`);
   }
-  const data = (await response.json()) as { items?: GoogleEvent[] };
+  // An unreadable list is an empty agenda, not a crash: the strip is ambient, and a
+  // Google response we cannot parse should not take the new tab down with it.
+  const parsed = googleEventListSchema.safeParse(await response.json());
+  if (!parsed.success) {
+    logger.warn('Calendar response did not match the expected shape', {
+      paths: parsed.error.issues.map((issue) => issue.path.join('.')).slice(0, 5),
+    });
+    return [];
+  }
+  const readable: GoogleEvent[] = [];
+  let dropped = 0;
+  for (const item of parsed.data.items ?? []) {
+    const event = googleEventSchema.safeParse(item);
+    if (event.success) {
+      readable.push(item as GoogleEvent);
+    } else {
+      dropped += 1;
+    }
+  }
+  if (dropped > 0) {
+    logger.warn('Skipped calendar entries in an unexpected shape', { dropped });
+  }
+  const data = { items: readable };
   // Defense in depth for the all-day window: even with timeZone set, an adjacent
   // day's banner can slip in across the exclusive timeMax boundary. Keep an
   // all-day event only when today falls in its [start, end) date range (end is

@@ -53,7 +53,7 @@ export const AddReminderForm: React.FC<AddReminderFormProps> = ({ onSuccess }) =
 
     // Validate time format
     const timeParts = template.defaultTime?.split(':');
-    if (!timeParts || timeParts.length !== 2) {
+    if (timeParts?.length !== 2) {
       logger.error('Invalid template time format', {
         templateId: template.id,
         defaultTime: template.defaultTime,

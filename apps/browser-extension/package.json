@@ -33,6 +33,7 @@
     "react": "catalog:",
     "react-dom": "catalog:",
     "recharts": "catalog:",
+    "zod": "catalog:",
     "zustand": "catalog:"
   },
   "devDependencies": {

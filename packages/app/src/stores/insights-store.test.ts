@@ -2,7 +2,7 @@ import type { Goal, PostureDailyStat, Quote } from '@cuewise/shared';
 import * as shared from '@cuewise/shared';
 import * as storage from '@cuewise/storage';
 import { goalFactory, pomodoroFactory, quoteFactory } from '@cuewise/test-utils/factories';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as fileUtils from '../utils/file-utils';
 import {
   createQuotaError,
@@ -12,6 +12,9 @@ import {
   mockEmptyStorage,
   mockStorageError,
   mockStorageWithData,
+  QUARANTINED_GOAL,
+  QUARANTINED_QUOTE,
+  QUARANTINED_SESSION,
 } from './__fixtures__/insights-store.fixtures';
 import { useInsightsStore } from './insights-store';
 
@@ -26,6 +29,16 @@ vi.mock('@cuewise/storage', () => ({
   setQuotes: vi.fn(),
   getPomodoroSessions: vi.fn(),
   setPomodoroSessions: vi.fn(),
+  // Import and export read raw: the merge and the backup rewrite whole arrays, so starting
+  // from the rendering view would delete items it merely could not parse.
+  getGoalsRaw: vi.fn(),
+  getQuotesRaw: vi.fn(),
+  getPomodoroSessionsRaw: vi.fn(),
+  // Import merges into the raw array, so it writes raw: it saw everything, and a
+  // preserve-on-write would resurrect what it deliberately left out.
+  setGoalsRaw: vi.fn(),
+  setQuotesRaw: vi.fn(),
+  setPomodoroSessionsRaw: vi.fn(),
   // Defaults to empty so refresh-after-import paths don't error on posture reads.
   getPostureStats: vi.fn(async () => []),
   setPostureStats: vi.fn(),
@@ -54,6 +67,29 @@ vi.mock('./toast-store', () => ({
 // Tests
 // ============================================================================
 
+const originalCreateElement = document.createElement.bind(document);
+
+/**
+ * The Blob the export actually produced. Both export paths catch everything after the reads,
+ * so an emptied payload keeps every reader assertion green.
+ */
+function captureDownloadedBlob(): () => Blob {
+  let captured: Blob | undefined;
+  vi.spyOn(URL, 'createObjectURL').mockImplementation((blob: Blob | MediaSource) => {
+    captured = blob as Blob;
+    return 'blob:x';
+  });
+  vi.spyOn(document, 'createElement').mockImplementation((tag: string) =>
+    Object.assign(originalCreateElement(tag), { click: () => undefined })
+  );
+  return () => {
+    if (captured === undefined) {
+      throw new Error('no Blob was handed to URL.createObjectURL');
+    }
+    return captured;
+  };
+}
+
 describe('Insights Store - Import Methods', () => {
   beforeEach(() => {
     useInsightsStore.setState({
@@ -69,6 +105,12 @@ describe('Insights Store - Import Methods', () => {
       error: null,
     });
     vi.clearAllMocks();
+  });
+
+  // `clearAllMocks` keeps implementations and this package sets no `restoreMocks`, so the
+  // export tests' `createElement` spy would outlive them. No test needs this yet.
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   describe('validateImportFile', () => {
@@ -106,6 +148,61 @@ describe('Insights Store - Import Methods', () => {
       expect(result.errors[0].message).toBe('No valid import data available');
     });
 
+    // Import rewrites the whole array, so a validated read drops what it cannot parse — and
+    // their ids are then absent from the dedupe set, so incoming copies replace them.
+    it('keeps a stored goal only the raw read can see', async () => {
+      mockStorageWithData({ goals: [goalFactory.build({ id: 'existing-1' })] });
+      useInsightsStore.setState({
+        importValidation: createValidImportValidation({
+          goals: [goalFactory.build({ id: 'new-1' })],
+          quotes: [quoteFactory.build({ id: 'new-q' })],
+          pomodoroSessions: [pomodoroFactory.build({ id: 'new-s' })],
+        }),
+      });
+
+      await useInsightsStore.getState().executeImport(DEFAULT_IMPORT_OPTIONS);
+
+      const saved = vi.mocked(storage.setGoalsRaw).mock.calls[0][0] as Goal[];
+      expect(saved.map((goal) => goal.id)).toContain(QUARANTINED_GOAL.id);
+      const savedQuotes = vi.mocked(storage.setQuotesRaw).mock.calls[0][0] as Quote[];
+      expect(savedQuotes.map((quote) => quote.id)).toContain(QUARANTINED_QUOTE.id);
+      const savedSessions = vi.mocked(storage.setPomodoroSessionsRaw).mock.calls[0][0];
+      expect(savedSessions.map((session) => session.id)).toContain(QUARANTINED_SESSION.id);
+    });
+
+    // The backup's whole contract is faithfulness, and it was only ever mocked, never run.
+    it('exports every stored item, including the ones this build cannot render', async () => {
+      mockStorageWithData({ goals: [goalFactory.build({ id: 'g1' })] });
+      const written = captureDownloadedBlob();
+
+      await useInsightsStore.getState().exportAllAsJSON();
+
+      // The payload, not just which readers ran: three empty arrays satisfied those.
+      const payload = JSON.parse(await written().text());
+      expect(payload.goals.map((goal: Goal) => goal.id)).toContain(QUARANTINED_GOAL.id);
+      expect(payload.quotes.map((quote: Quote) => quote.id)).toContain(QUARANTINED_QUOTE.id);
+      expect(payload.pomodoroSessions.map((s: { id: string }) => s.id)).toContain(
+        QUARANTINED_SESSION.id
+      );
+      // The raw readers, not the rendering ones: a backup that omits what this build cannot
+      // parse is not a backup, and re-importing it writes the reduced set over storage.
+      expect(vi.mocked(storage.getGoals)).not.toHaveBeenCalled();
+    });
+
+    // CSV shares the export contract and had the same gap — its raw reads were revertible.
+    // Both types, because they read through different helpers and only one was covered.
+    it.each([
+      ['goals', 'goals', QUARANTINED_GOAL.id],
+      ['pomodoros', 'pomodoros', QUARANTINED_SESSION.id],
+    ] as const)('exports the same hidden items to the %s CSV', async (_label, type, hiddenId) => {
+      mockStorageWithData({ goals: [goalFactory.build({ id: 'g1' })] });
+      const written = captureDownloadedBlob();
+
+      await useInsightsStore.getState().exportAsCSV(type);
+
+      expect(await written().text()).toContain(hiddenId);
+    });
+
     it('should skip duplicate goals when skipDuplicates is true', async () => {
       const existingGoal = goalFactory.build({ id: 'existing-1' });
       const newGoal = goalFactory.build({ id: 'new-1' });
@@ -121,7 +218,7 @@ describe('Insights Store - Import Methods', () => {
       expect(result.imported.goals).toBe(1);
       expect(result.skipped.goals).toBe(1);
 
-      const savedGoals = vi.mocked(storage.setGoals).mock.calls[0][0] as Goal[];
+      const savedGoals = vi.mocked(storage.setGoalsRaw).mock.calls[0][0] as Goal[];
       expect(savedGoals.find((g) => g.id === 'existing-1')?.text).toBe(existingGoal.text);
     });
 
@@ -140,8 +237,9 @@ describe('Insights Store - Import Methods', () => {
       });
 
       expect(result.imported.goals).toBe(1);
-      const savedGoals = vi.mocked(storage.setGoals).mock.calls[0][0] as Goal[];
-      expect(savedGoals[0].text).toBe('Updated');
+      const savedGoals = vi.mocked(storage.setGoalsRaw).mock.calls[0][0] as Goal[];
+      // By id: the saved array also carries the quarantined row, so position pins ordering.
+      expect(savedGoals.find((goal) => goal.id === 'existing-1')?.text).toBe('Updated');
     });
 
     it('should mark all imported quotes as isCustom: true', async () => {
@@ -154,8 +252,9 @@ describe('Insights Store - Import Methods', () => {
 
       await useInsightsStore.getState().executeImport(DEFAULT_IMPORT_OPTIONS);
 
-      const savedQuotes = vi.mocked(storage.setQuotes).mock.calls[0][0] as Quote[];
-      expect(savedQuotes[0].isCustom).toBe(true);
+      const savedQuotes = vi.mocked(storage.setQuotesRaw).mock.calls[0][0] as Quote[];
+      // By id: the saved array leads with the quarantined row, which is already isCustom.
+      expect(savedQuotes.find((quote) => quote.id === importQuote.id)?.isCustom).toBe(true);
     });
 
     it('should return correct counts for imported and skipped items', async () => {
@@ -223,7 +322,7 @@ describe('Insights Store - Import Methods', () => {
     it('surfaces a resolved write failure instead of a phantom success', async () => {
       mockStorageWithData();
       // The real quota shape: adapters resolve {success: false}, never reject.
-      vi.mocked(storage.setGoals).mockResolvedValue({
+      vi.mocked(storage.setGoalsRaw).mockResolvedValue({
         success: false,
         error: { type: 'quota_exceeded', message: 'goals quota exceeded' },
       });
@@ -243,7 +342,7 @@ describe('Insights Store - Import Methods', () => {
 
     it('reports partial progress when a later write resolves a failure', async () => {
       mockStorageWithData();
-      vi.mocked(storage.setQuotes).mockResolvedValue({
+      vi.mocked(storage.setQuotesRaw).mockResolvedValue({
         success: false,
         error: { type: 'unknown', message: 'write failed' },
       });
@@ -262,8 +361,8 @@ describe('Insights Store - Import Methods', () => {
     });
 
     it('should report partial progress when failure occurs mid-import', async () => {
-      vi.mocked(storage.getGoals).mockResolvedValue([]);
-      vi.mocked(storage.setGoals).mockResolvedValue({ success: true });
+      vi.mocked(storage.getGoalsRaw).mockResolvedValue([]);
+      vi.mocked(storage.setGoalsRaw).mockResolvedValue({ success: true });
       mockStorageError('quotes', new Error('Quotes storage error'));
 
       useInsightsStore.setState({
