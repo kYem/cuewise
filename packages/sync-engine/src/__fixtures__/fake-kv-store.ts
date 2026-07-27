@@ -39,4 +39,37 @@ export class FakeKvStore implements KeyValueStore {
   async getUsage(_area: StorageArea): Promise<StorageUsage> {
     return { bytesInUse: 0, quota: 0 };
   }
+
+  async getMany(keys: string[], area: StorageArea): Promise<Record<string, unknown>> {
+    const result: Record<string, unknown> = {};
+    for (const key of keys) {
+      const value = await this.get(key, area);
+      if (value !== null) {
+        result[key] = value;
+      }
+    }
+    return result;
+  }
+
+  // Routes through set() so failNextSet / failSetsForKey still apply to batch writes.
+  async setMany(entries: Record<string, unknown>, area: StorageArea): Promise<StorageResult> {
+    for (const [key, value] of Object.entries(entries)) {
+      const result = await this.set(key, value, area);
+      if (!result.success) {
+        return result;
+      }
+    }
+    return { success: true };
+  }
+
+  async removeMany(keys: string[], area: StorageArea): Promise<boolean> {
+    let allRemoved = true;
+    for (const key of keys) {
+      const removed = await this.remove(key, area);
+      if (!removed) {
+        allRemoved = false;
+      }
+    }
+    return allRemoved;
+  }
 }

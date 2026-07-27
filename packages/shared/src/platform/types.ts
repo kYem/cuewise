@@ -95,6 +95,11 @@ export interface KeyValueStore {
   get<T>(key: string, area: StorageArea): Promise<T | null>;
   set<T>(key: string, value: T, area: StorageArea): Promise<StorageResult>;
   remove(key: string, area: StorageArea): Promise<boolean>;
+  /** Batch read. Absent keys are omitted from the result — absence is meaningful to callers. */
+  getMany(keys: string[], area: StorageArea): Promise<Record<string, unknown>>;
+  /** Batch write. One backend call, so the named keys land together. */
+  setMany(entries: Record<string, unknown>, area: StorageArea): Promise<StorageResult>;
+  removeMany(keys: string[], area: StorageArea): Promise<boolean>;
   getUsage(area: StorageArea): Promise<StorageUsage>;
 }
 

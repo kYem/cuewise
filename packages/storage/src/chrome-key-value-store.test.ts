@@ -96,4 +96,50 @@ describe('ChromeKeyValueStore with chrome.storage available', () => {
       quota: 102400,
     });
   });
+
+  it('getMany returns only the keys that are present', async () => {
+    const local = global.chrome.storage.local as unknown as MockChromeStorage;
+    local.data.a = 1;
+    local.data.c = 3;
+
+    const result = await store.getMany(['a', 'b', 'c'], 'local');
+
+    expect(result).toEqual({ a: 1, c: 3 });
+    expect('b' in result).toBe(false);
+  });
+
+  it('setMany writes every entry in one call', async () => {
+    const local = global.chrome.storage.local as unknown as MockChromeStorage;
+
+    const result = await store.setMany({ a: 1, b: 2 }, 'local');
+
+    expect(result).toEqual({ success: true });
+    expect(local.data.a).toBe(1);
+    expect(local.data.b).toBe(2);
+  });
+
+  it('removeMany deletes every named key and leaves others', async () => {
+    const local = global.chrome.storage.local as unknown as MockChromeStorage;
+    local.data.a = 1;
+    local.data.b = 2;
+    local.data.c = 3;
+
+    await store.removeMany(['a', 'c'], 'local');
+
+    expect(local.data.a).toBeUndefined();
+    expect(local.data.b).toBe(2);
+    expect(local.data.c).toBeUndefined();
+  });
+
+  it('setMany maps a sync quota rejection to a quota_exceeded StorageResult with no key', async () => {
+    const sync = global.chrome.storage.sync as unknown as MockChromeStorage;
+    sync.set.mockRejectedValueOnce(new Error('QUOTA_BYTES quota exceeded'));
+
+    const result = await store.setMany({ big: 'data' }, 'sync');
+
+    expect(result).toMatchObject({
+      success: false,
+      error: { type: 'quota_exceeded', area: 'sync', key: undefined },
+    });
+  });
 });

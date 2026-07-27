@@ -5,7 +5,14 @@
 export { ChromeKeyValueStore } from './chrome-key-value-store';
 export type { StorageArea, StorageError, StorageErrorType, StorageResult } from './chrome-storage';
 // Low-level storage delegators over the platform port
-export { getFromStorage, removeFromStorage, setInStorage } from './chrome-storage';
+export {
+  getFromStorage,
+  getManyFromStorage,
+  removeFromStorage,
+  removeManyFromStorage,
+  setInStorage,
+  setManyInStorage,
+} from './chrome-storage';
 export { LocalStorageKeyValueStore } from './local-storage-key-value-store';
 export type { PlaylistResumeInfo, StorageUsageInfo } from './storage-helpers';
 // Typed storage helpers

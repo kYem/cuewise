@@ -14,6 +14,9 @@ function fakeStore(usage: StorageUsage): KeyValueStore {
     get: async () => null,
     set: async () => ({ success: true }),
     remove: async () => true,
+    getMany: async () => ({}),
+    setMany: async () => ({ success: true }),
+    removeMany: async () => true,
     getUsage: async () => usage,
   };
 }
@@ -50,6 +53,25 @@ function recordingStore(initial: Record<string, unknown> = {}) {
     },
     remove: async (key: string) => {
       delete data[key];
+      return true;
+    },
+    getMany: async (keys: string[]) => {
+      const result: Record<string, unknown> = {};
+      for (const key of keys) {
+        if (key in data) {
+          result[key] = data[key];
+        }
+      }
+      return result;
+    },
+    setMany: async (entries: Record<string, unknown>) => {
+      Object.assign(data, entries);
+      return { success: true };
+    },
+    removeMany: async (keys: string[]) => {
+      for (const key of keys) {
+        delete data[key];
+      }
       return true;
     },
     getUsage: async () => ({ bytesInUse: 0, quota: 10_000_000 }),

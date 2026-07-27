@@ -43,3 +43,24 @@ export async function removeFromStorage(
 ): Promise<boolean> {
   return getStorage().remove(key, area);
 }
+
+export async function getManyFromStorage(
+  keys: string[],
+  area: StorageArea = 'local'
+): Promise<Record<string, unknown>> {
+  return getStorage().getMany(keys, area);
+}
+
+export async function setManyInStorage(
+  entries: Record<string, unknown>,
+  area: StorageArea = 'local'
+): Promise<StorageResult> {
+  return getStorage().setMany(entries, area);
+}
+
+export async function removeManyFromStorage(
+  keys: string[],
+  area: StorageArea = 'local'
+): Promise<boolean> {
+  return getStorage().removeMany(keys, area);
+}

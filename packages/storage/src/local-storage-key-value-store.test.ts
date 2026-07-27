@@ -32,6 +32,38 @@ describe('LocalStorageKeyValueStore', () => {
     await expect(store.getUsage('local')).resolves.toEqual({ bytesInUse: 2, quota: 5242880 });
   });
 
+  it('getMany returns only the keys that are present', async () => {
+    const store = new LocalStorageKeyValueStore();
+    await store.set('a', 1, 'local');
+    await store.set('c', 3, 'local');
+
+    const result = await store.getMany(['a', 'b', 'c'], 'local');
+
+    expect(result).toEqual({ a: 1, c: 3 });
+    expect('b' in result).toBe(false);
+  });
+
+  it('setMany writes every entry in one call', async () => {
+    const store = new LocalStorageKeyValueStore();
+
+    const result = await store.setMany({ a: 1, b: 2 }, 'local');
+
+    expect(result).toEqual({ success: true });
+    expect(await store.get('a', 'local')).toBe(1);
+    expect(await store.get('b', 'local')).toBe(2);
+  });
+
+  it('removeMany deletes every named key and leaves others', async () => {
+    const store = new LocalStorageKeyValueStore();
+    await store.setMany({ a: 1, b: 2, c: 3 }, 'local');
+
+    await store.removeMany(['a', 'c'], 'local');
+
+    expect(await store.get('a', 'local')).toBeNull();
+    expect(await store.get('b', 'local')).toBe(2);
+    expect(await store.get('c', 'local')).toBeNull();
+  });
+
   describe('write failure classification', () => {
     afterEach(() => {
       vi.restoreAllMocks();

@@ -29,6 +29,37 @@ export function createInMemoryKeyValueStore(
     async remove(key: string, area: StorageArea): Promise<boolean> {
       return data.delete(`${area}:${key}`);
     },
+    async getMany(keys: string[], area: StorageArea): Promise<Record<string, unknown>> {
+      const result: Record<string, unknown> = {};
+      for (const key of keys) {
+        const value = data.get(`${area}:${key}`);
+        if (value !== undefined) {
+          result[key] = value;
+        }
+      }
+      return result;
+    },
+    async setMany(entries: Record<string, unknown>, area: StorageArea) {
+      if (opts.failWrites === true) {
+        return {
+          success: false,
+          error: { type: 'quota_exceeded', message: 'simulated quota failure' },
+        } as const;
+      }
+      for (const [key, value] of Object.entries(entries)) {
+        data.set(`${area}:${key}`, value);
+      }
+      return { success: true } as const;
+    },
+    async removeMany(keys: string[], area: StorageArea): Promise<boolean> {
+      let allRemoved = true;
+      for (const key of keys) {
+        if (!data.delete(`${area}:${key}`)) {
+          allRemoved = false;
+        }
+      }
+      return allRemoved;
+    },
     async getUsage(_area: StorageArea): Promise<StorageUsage> {
       return { bytesInUse: 0, quota: 0 };
     },
