@@ -7,9 +7,11 @@ import { useSettingsStore } from '../../stores/settings-store';
 import { BackgroundEffectControls } from './BackgroundEffectControls';
 
 vi.mock('@cuewise/storage', () => ({
+  clearSettings: vi.fn(),
   getSettings: vi.fn(),
-  setSettingsPatch: vi.fn(),
+  migrateLegacySettings: vi.fn(),
   migrateStorageData: vi.fn(),
+  setSettingsPatch: vi.fn(),
 }));
 
 vi.mock('../../stores/toast-store', () => ({

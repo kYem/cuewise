@@ -8,6 +8,8 @@ const { getRemindersMock, setRemindersMock } = vi.hoisted(() => ({
 vi.mock('@cuewise/storage', () => ({
   getReminders: getRemindersMock,
   setReminders: setRemindersMock,
+  // Runs at module load now, sync or no sync — must resolve, background.ts chains off it.
+  migrateLegacySettings: vi.fn(() => Promise.resolve()),
 }));
 
 type AlarmListener = (alarm: { name: string }) => void;

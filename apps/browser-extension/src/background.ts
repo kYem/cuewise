@@ -63,6 +63,13 @@ export function mapToUi(status: SyncStatus): SyncUiStatus {
   throw new Error(`unmapped sync status: ${String(exhaustive)}`);
 }
 
+// A data migration, not a sync concern: this realm runs it whether or not sync is configured.
+// Held as a promise so the sync engine below can still gate its first storage touch on it.
+const settingsMigrated = migrateLegacySettings();
+settingsMigrated.catch((error) => {
+  logger.error('Failed to migrate legacy settings', error);
+});
+
 // ENG-45 cloud sync: off by default. Set VITE_SYNC_API_BASE_URL locally (pointed at
 // `wrangler dev`, e.g. localhost:8787) to enable the Cloud Sync settings section and
 // resume/self-heal a session that was enabled some other way (e.g. devtools).
@@ -98,7 +105,7 @@ if (syncApiBaseUrl) {
   // start() self-heals the key blob and runs the first pull, so it's the one call that must not
   // touch storage before migration — scheduler.onFire above and the onMessage listeners below
   // stay synchronous and never wait on it.
-  migrateLegacySettings()
+  settingsMigrated
     .then(() => syncEngine.start())
     .catch((error) => {
       logger.error('Sync engine failed to start', error);
