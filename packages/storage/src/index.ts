@@ -55,7 +55,6 @@ export {
   setQuickLinks,
   setQuotes,
   setReminders,
-  setSettings,
   setSettingsPatch,
   settingsStorageKey,
   setWeatherState,

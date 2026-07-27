@@ -8,7 +8,7 @@ import { BackgroundEffectControls } from './BackgroundEffectControls';
 
 vi.mock('@cuewise/storage', () => ({
   getSettings: vi.fn(),
-  setSettings: vi.fn(),
+  setSettingsPatch: vi.fn(),
   migrateStorageData: vi.fn(),
 }));
 
@@ -31,7 +31,7 @@ describe('BackgroundEffectControls', () => {
       error: null,
     });
     vi.clearAllMocks();
-    vi.mocked(storage.setSettings).mockResolvedValue({ success: true });
+    vi.mocked(storage.setSettingsPatch).mockResolvedValue({ success: true });
   });
 
   it('renders both sliders at their persisted values', () => {
@@ -53,7 +53,7 @@ describe('BackgroundEffectControls', () => {
     });
 
     expect(useSettingsStore.getState().preview).toEqual({ backgroundDim: 40 });
-    expect(storage.setSettings).not.toHaveBeenCalled();
+    expect(storage.setSettingsPatch).not.toHaveBeenCalled();
   });
 
   it('persists the dragged value when the drag is released', async () => {
@@ -64,7 +64,7 @@ describe('BackgroundEffectControls', () => {
     fireEvent.pointerUp(dimSlider);
 
     await waitFor(() => {
-      expect(storage.setSettings).toHaveBeenCalledWith(
+      expect(storage.setSettingsPatch).toHaveBeenCalledWith(
         expect.objectContaining({ backgroundDim: 40 })
       );
     });
@@ -78,7 +78,7 @@ describe('BackgroundEffectControls', () => {
     fireEvent.keyUp(dimSlider, { key: 'ArrowRight' });
 
     await waitFor(() => {
-      expect(storage.setSettings).toHaveBeenCalledWith(
+      expect(storage.setSettingsPatch).toHaveBeenCalledWith(
         expect.objectContaining({ backgroundDim: 15 })
       );
     });
@@ -92,7 +92,7 @@ describe('BackgroundEffectControls', () => {
     fireEvent.pointerCancel(dimSlider);
 
     await waitFor(() => {
-      expect(storage.setSettings).toHaveBeenCalledWith(
+      expect(storage.setSettingsPatch).toHaveBeenCalledWith(
         expect.objectContaining({ backgroundDim: 25 })
       );
     });
@@ -105,7 +105,7 @@ describe('BackgroundEffectControls', () => {
     fireEvent.keyUp(dimSlider, { key: 'Tab' });
     fireEvent.blur(dimSlider);
 
-    expect(storage.setSettings).not.toHaveBeenCalled();
+    expect(storage.setSettingsPatch).not.toHaveBeenCalled();
   });
 
   it('a drag that returns to its starting value persists it and clears the preview', async () => {
@@ -117,7 +117,7 @@ describe('BackgroundEffectControls', () => {
     fireEvent.pointerUp(dimSlider);
 
     await waitFor(() => {
-      expect(storage.setSettings).toHaveBeenCalledWith(
+      expect(storage.setSettingsPatch).toHaveBeenCalledWith(
         expect.objectContaining({ backgroundDim: 0, backgroundBlur: 0 })
       );
     });
@@ -128,7 +128,7 @@ describe('BackgroundEffectControls', () => {
 
   it('a gesture landing on the pre-write value still persists while a commit is in flight', async () => {
     let resolveFirstWrite: (result: StorageResult) => void = () => {};
-    vi.mocked(storage.setSettings)
+    vi.mocked(storage.setSettingsPatch)
       .mockReturnValueOnce(
         new Promise((resolve) => {
           resolveFirstWrite = resolve;
@@ -145,7 +145,7 @@ describe('BackgroundEffectControls', () => {
     resolveFirstWrite({ success: true });
 
     await waitFor(() => {
-      expect(storage.setSettings).toHaveBeenLastCalledWith(
+      expect(storage.setSettingsPatch).toHaveBeenLastCalledWith(
         expect.objectContaining({ backgroundDim: 0 })
       );
     });
@@ -160,7 +160,7 @@ describe('BackgroundEffectControls', () => {
     unmount();
 
     expect(useSettingsStore.getState().preview).toBeNull();
-    expect(storage.setSettings).not.toHaveBeenCalled();
+    expect(storage.setSettingsPatch).not.toHaveBeenCalled();
   });
 
   it('hides the reset button at the defaults', () => {
@@ -178,7 +178,7 @@ describe('BackgroundEffectControls', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Reset background effects' }));
 
     await waitFor(() => {
-      expect(storage.setSettings).toHaveBeenCalledWith(
+      expect(storage.setSettingsPatch).toHaveBeenCalledWith(
         expect.objectContaining({ backgroundDim: 0, backgroundBlur: 0 })
       );
     });

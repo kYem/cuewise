@@ -5,7 +5,7 @@ import {
   getSettings,
   setGoals,
   setQuotes,
-  setSettings,
+  setSettingsPatch,
 } from '@cuewise/storage';
 import { SessionManager } from '@cuewise/sync-client';
 import { goalFactory, quoteFactory } from '@cuewise/test-utils/factories';
@@ -233,8 +233,7 @@ describe('settings: per-key sync round-trips a shared key but excludes device-lo
 
     // A changes a shared setting and syncs; B must adopt the new value.
     useStorage(deviceA);
-    const aSettings = await getSettings();
-    await setSettings({ ...aSettings, theme: 'dark' });
+    await setSettingsPatch({ theme: 'dark' });
     await deviceA.engine.markMutated('settings', 'theme');
     await deviceA.engine.syncNow();
 
@@ -245,9 +244,7 @@ describe('settings: per-key sync round-trips a shared key but excludes device-lo
 
     // A changes device-local settings; none of them must ever leave A's device.
     useStorage(deviceA);
-    const aSettingsAfterTheme = await getSettings();
-    await setSettings({
-      ...aSettingsAfterTheme,
+    await setSettingsPatch({
       logLevel: 'debug',
       focusedGoalId: 'g1',
       hasSeenOnboarding: true,

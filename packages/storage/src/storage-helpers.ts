@@ -306,10 +306,6 @@ export async function getStoredSettings(): Promise<Settings | null> {
   return await getFromStorage<Settings>(STORAGE_KEYS.SETTINGS, 'local');
 }
 
-export async function setSettings(settings: Settings): Promise<StorageResult> {
-  return setInStorage(STORAGE_KEYS.SETTINGS, settings, 'local');
-}
-
 export async function setSettingsPatch(patch: Partial<Settings>): Promise<StorageResult> {
   const entries = Object.fromEntries(
     Object.entries(patch).map(([key, value]) => [settingsStorageKey(key), value])

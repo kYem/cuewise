@@ -12,7 +12,7 @@ import {
   type Settings,
   type StorageError,
 } from '@cuewise/shared';
-import { getSettings, migrateStorageData, setSettings } from '@cuewise/storage';
+import { clearSettings, getSettings, migrateStorageData, setSettingsPatch } from '@cuewise/storage';
 import { create } from 'zustand';
 import { useToastStore } from './toast-store';
 
@@ -171,7 +171,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
 
         // The storage adapters never throw — failures come back as a result object,
         // so an unchecked write would silently claim success on e.g. quota exhaustion.
-        const writeResult = await setSettings(updatedSettings);
+        const writeResult = await setSettingsPatch(clampedPartial);
         if (!writeResult.success) {
           logger.error('Error persisting settings', writeResult.error);
           const errorMessage = settingsWriteErrorMessage(
@@ -218,13 +218,10 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   resetToDefaults: () =>
     enqueueWrite(async () => {
       try {
-        const writeResult = await setSettings(DEFAULT_SETTINGS);
-        if (!writeResult.success) {
-          logger.error('Error persisting settings reset', writeResult.error);
-          const errorMessage = settingsWriteErrorMessage(
-            writeResult.error,
-            'Failed to reset settings. Please try again.'
-          );
+        const cleared = await clearSettings();
+        if (!cleared) {
+          logger.error('Error clearing settings');
+          const errorMessage = 'Failed to reset settings. Please try again.';
           set({ error: errorMessage, preview: null });
           useToastStore.getState().error(errorMessage);
           return false;

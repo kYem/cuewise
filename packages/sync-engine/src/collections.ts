@@ -10,7 +10,7 @@ import {
   setGoals,
   setQuotes,
   setReminders,
-  setSettings,
+  setSettingsPatch,
 } from '@cuewise/storage';
 
 /** One synced collection: reads all entities keyed by id, writes/deletes a single one. */
@@ -78,10 +78,8 @@ function settingsBinding(): CollectionBinding {
       if (DEVICE_LOCAL_SETTINGS_KEYS.includes(entityId)) {
         return { success: true };
       }
-      const settings = await getSettings();
       const { value } = entity as SettingsEntity;
-      const next: Settings = { ...settings, [entityId]: value };
-      return setSettings(next);
+      return setSettingsPatch({ [entityId]: value } as Partial<Settings>);
     },
   };
 }

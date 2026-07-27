@@ -1,5 +1,12 @@
 import { configurePlatform, DEFAULT_SETTINGS } from '@cuewise/shared';
-import { getGoals, getSettings, setGoals } from '@cuewise/storage';
+import {
+  getGoals,
+  getManyFromStorage,
+  getSettings,
+  SETTINGS_KEYS,
+  setGoals,
+  settingsStorageKey,
+} from '@cuewise/storage';
 import { goalFactory } from '@cuewise/test-utils/factories';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { FakeKvStore } from './__fixtures__/fake-kv-store';
@@ -80,12 +87,12 @@ describe('settings binding', () => {
     expect(result.theme).toEqual({ key: 'theme', value: DEFAULT_SETTINGS.theme });
   });
 
-  it('writeOne updates only the targeted key', async () => {
+  it('writeOne writes only its own key and leaves the others absent', async () => {
     await settingsBinding().writeOne('theme', { key: 'theme', value: 'forest' });
 
-    const settings = await getSettings();
-    expect(settings.theme).toBe('forest');
-    expect(settings.colorTheme).toBe(DEFAULT_SETTINGS.colorTheme);
+    const stored = await getManyFromStorage(SETTINGS_KEYS.map(settingsStorageKey));
+
+    expect(stored).toEqual({ 'settings.theme': 'forest' });
   });
 
   it('writeOne is a no-op for a device-local key', async () => {

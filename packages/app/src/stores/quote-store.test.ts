@@ -35,7 +35,6 @@ vi.mock('@cuewise/storage', () => ({
   getCollections: vi.fn(),
   setCollections: vi.fn(),
   getSettings: vi.fn(),
-  setSettings: vi.fn(),
 }));
 
 // Mock the settings store — filter persistence routes through its serialized updateSettings.
@@ -77,7 +76,6 @@ describe('Quote Store', () => {
     vi.mocked(storage.getCollections).mockResolvedValue([]);
     // Default mock for settings
     vi.mocked(storage.getSettings).mockResolvedValue(defaultSettings);
-    vi.mocked(storage.setSettings).mockResolvedValue({ success: true });
     settingsMock.updateSettings.mockResolvedValue(true);
   });
 
@@ -719,7 +717,6 @@ describe('Quote Store', () => {
             quoteFilterActiveCollectionIds: expect.any(Array),
           })
         );
-        expect(storage.setSettings).not.toHaveBeenCalled();
       });
 
       it('keeps the in-memory filter when the settings write fails', async () => {
