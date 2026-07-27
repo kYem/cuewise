@@ -136,9 +136,8 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   updateSettings: (partialSettings: Partial<Settings>) =>
     enqueueWrite(async () => {
       try {
-        // Merge onto persisted truth: the sync engine writes pulled settings straight to storage,
-        // and a page can accept a click before initialize() resolves. Safe to read-modify-write
-        // here only because enqueueWrite serializes the writers.
+        // Re-reads settings because a sync pull or a pre-init click can beat this write; the read
+        // feeds the merge base and changed-key diff below — the write itself is a sparse per-key patch.
         const settings = { ...DEFAULT_SETTINGS, ...(await getSettings()) };
 
         // Clamp ranged values here — the settings write path the UI uses — so
