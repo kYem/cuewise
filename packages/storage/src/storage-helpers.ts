@@ -532,8 +532,19 @@ export async function getQuotesRaw(): Promise<Quote[]> {
  * known key whose stored value this build cannot parse is replaced by its default on read,
  * and the store rewrites the whole object on the next change — so a colour theme or cadence
  * a newer build introduced would be silently reset here, and pushed back to the device that
- * chose it. The caller cannot have chosen to change what it never saw.
+ * chose it.
+ *
+ * "The caller did not change this field" is approximated by "the caller is still carrying
+ * our default", because the read handed them that default and the two are indistinguishable
+ * afterwards. The consequence is a real limitation: a caller who deliberately sets a field
+ * to this build's default does not overwrite an unparseable stored value. Callers that mean
+ * it — sync applying a remote value, a reset to defaults — use `setSettingsRaw`, which is
+ * the same raw/validated split the lists use.
  */
+export async function setSettingsRaw(settings: Settings): Promise<StorageResult> {
+  return setInStorage(STORAGE_KEYS.SETTINGS, settings, 'local');
+}
+
 export async function setSettings(settings: Settings): Promise<StorageResult> {
   const raw = await getFromStorage<Record<string, unknown>>(STORAGE_KEYS.SETTINGS, 'local');
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {

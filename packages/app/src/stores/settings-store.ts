@@ -12,7 +12,7 @@ import {
   type Settings,
   type StorageError,
 } from '@cuewise/shared';
-import { getSettings, migrateStorageData, setSettings } from '@cuewise/storage';
+import { getSettings, migrateStorageData, setSettings, setSettingsRaw } from '@cuewise/storage';
 import { create } from 'zustand';
 import { useToastStore } from './toast-store';
 
@@ -308,7 +308,10 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
 
   resetToDefaults: async () => {
     try {
-      const writeResult = await setSettings(DEFAULT_SETTINGS);
+      // Raw: a reset means every field, including the ones this build cannot read. The
+      // preserving write would keep those — it cannot tell "reset to the default" from
+      // "never saw it" — so the one action that should clear everything would not.
+      const writeResult = await setSettingsRaw(DEFAULT_SETTINGS);
       if (!writeResult.success) {
         logger.error('Error persisting settings reset', writeResult.error);
         const errorMessage = settingsWriteErrorMessage(

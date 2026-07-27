@@ -1,4 +1,4 @@
-import { configurePlatform, type KeyValueStore, logger } from '@cuewise/shared';
+import { configurePlatform, DEFAULT_SETTINGS, type KeyValueStore, logger } from '@cuewise/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getCalendarState,
@@ -14,6 +14,7 @@ import {
   setQuotes,
   setQuotesRaw,
   setSettings,
+  setSettingsRaw,
 } from './storage-helpers';
 
 /**
@@ -575,5 +576,57 @@ describe('a settings value this build cannot parse', () => {
     await setSettings({ ...(await getSettings()), colorTheme: 'rose' });
 
     expect((written.settings as Record<string, unknown>).colorTheme).toBe('rose');
+  });
+});
+
+// Settings has a raw reader, so it needs a raw writer — the same split the lists use. The
+// preserving write cannot tell "the caller reset this to the default" from "the caller
+// never saw it", so callers that mean the default use the raw setter.
+describe('a settings write that means the default', () => {
+  const stored = { theme: 'dark', colorTheme: 'aurora', somethingAddedLater: 'kept' };
+
+  function capturingSettings() {
+    const written: Record<string, unknown> = {};
+    return {
+      written,
+      store: {
+        supportsSync: true,
+        get: async (key: string) =>
+          (JSON.parse(JSON.stringify((key in written ? written[key] : stored) ?? null)) ??
+            null) as never,
+        set: async (key: string, value: unknown) => {
+          written[key] = JSON.parse(JSON.stringify(value));
+          return { success: true as const };
+        },
+        remove: async () => true,
+        getUsage: async () => ({ bytesInUse: 0, quota: 10_000_000 }),
+      },
+    };
+  }
+
+  // The one action whose entire job is to clear everything must actually clear the field
+  // this build cannot read — otherwise Reset visibly does nothing for that setting.
+  it('clears an unreadable field when written raw', async () => {
+    const { written, store } = capturingSettings();
+    configurePlatform({ storage: store });
+
+    await setSettingsRaw({ ...DEFAULT_SETTINGS });
+
+    expect((written.settings as Record<string, unknown>).colorTheme).toBe(
+      DEFAULT_SETTINGS.colorTheme
+    );
+  });
+
+  // Sync reads raw and applies a remote value; if that value happens to equal our default,
+  // the preserving write would drop it and the pull would be a silent no-op.
+  it('lands a remote value that happens to equal our default', async () => {
+    const { written, store } = capturingSettings();
+    configurePlatform({ storage: store });
+
+    await setSettingsRaw({ ...DEFAULT_SETTINGS, colorTheme: DEFAULT_SETTINGS.colorTheme });
+
+    expect((written.settings as Record<string, unknown>).colorTheme).toBe(
+      DEFAULT_SETTINGS.colorTheme
+    );
   });
 });

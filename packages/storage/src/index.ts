@@ -57,6 +57,7 @@ export {
   setReminders,
   setRemindersRaw,
   setSettings,
+  setSettingsRaw,
   setWeatherState,
   updateVideoProgress,
 } from './storage-helpers';

@@ -7,6 +7,9 @@ import { selectBackgroundBlur, selectBackgroundDim, useSettingsStore } from './s
 vi.mock('@cuewise/storage', () => ({
   getSettings: vi.fn(),
   setSettings: vi.fn(),
+  // A reset writes raw: the preserving write cannot tell "reset this to the default" from
+  // "never saw it", so it would keep the very fields a reset exists to clear.
+  setSettingsRaw: vi.fn(),
   migrateStorageData: vi.fn(),
 }));
 
@@ -42,6 +45,7 @@ describe('sync sink wiring', () => {
     vi.clearAllMocks();
     markMutated.mockClear();
     vi.mocked(storage.setSettings).mockResolvedValue({ success: true });
+    vi.mocked(storage.setSettingsRaw).mockResolvedValue({ success: true });
     vi.mocked(storage.migrateStorageData).mockResolvedValue({ success: true });
     configurePlatform({ syncSink: fakeSink });
   });
@@ -94,6 +98,7 @@ describe('background preview lifecycle', () => {
     });
     vi.clearAllMocks();
     vi.mocked(storage.setSettings).mockResolvedValue({ success: true });
+    vi.mocked(storage.setSettingsRaw).mockResolvedValue({ success: true });
     vi.mocked(storage.migrateStorageData).mockResolvedValue({ success: true });
     configurePlatform({ syncSink: fakeSink });
   });
@@ -219,7 +224,7 @@ describe('background preview lifecycle', () => {
   });
 
   it('a failed reset write surfaces the error instead of claiming defaults', async () => {
-    vi.mocked(storage.setSettings).mockResolvedValue({
+    vi.mocked(storage.setSettingsRaw).mockResolvedValue({
       success: false,
       error: { type: 'unknown', message: 'write failed' },
     });

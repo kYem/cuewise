@@ -10,7 +10,7 @@ import {
   setGoalsRaw,
   setQuotesRaw,
   setRemindersRaw,
-  setSettings,
+  setSettingsRaw,
 } from '@cuewise/storage';
 
 /** One synced collection: reads all entities keyed by id, writes/deletes a single one. */
@@ -83,7 +83,9 @@ function settingsBinding(): CollectionBinding {
       const settings = await getSettingsForSync();
       const { value } = entity as SettingsEntity;
       const next: Settings = { ...settings, [entityId]: value };
-      return setSettings(next);
+      // Raw, like the array bindings: this read everything, so the value it carries is the
+      // one that must land — including when it happens to equal our own default.
+      return setSettingsRaw(next);
     },
   };
 }
