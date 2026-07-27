@@ -394,4 +394,14 @@ describe('serialized write path', () => {
     );
     expect(useSettingsStore.getState().settings.showClock).toBe(true);
   });
+
+  it('applies a storage-only theme change that this write did not touch', async () => {
+    seedStorage({ ...defaultSettings, theme: 'dark' });
+    useSettingsStore.setState({ settings: { ...defaultSettings, theme: 'light' } });
+    document.documentElement.classList.remove('dark');
+
+    await useSettingsStore.getState().updateSettings({ showClock: true });
+
+    expect(document.documentElement.classList.contains('dark')).toBe(true);
+  });
 });

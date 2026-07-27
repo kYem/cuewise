@@ -197,22 +197,13 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
           }
         }
 
-        // Apply customizations if they were updated
-        if (partialSettings.theme) {
-          applyTheme(partialSettings.theme);
-        }
-        if (partialSettings.colorTheme) {
-          applyColorTheme(partialSettings.colorTheme);
-        }
-        if (partialSettings.glassEnhanced !== undefined) {
-          applyGlassEnhanced(partialSettings.glassEnhanced);
-        }
-        if (partialSettings.layoutDensity) {
-          applyLayoutDensity(partialSettings.layoutDensity);
-        }
-        if (partialSettings.logLevel !== undefined) {
-          applyLogLevel(partialSettings.logLevel);
-        }
+        // Drive the DOM off the merged result, not the incoming patch: a sync pull can change these
+        // keys in storage without this write touching them. All five applies are idempotent.
+        applyTheme(updatedSettings.theme);
+        applyColorTheme(updatedSettings.colorTheme);
+        applyGlassEnhanced(updatedSettings.glassEnhanced);
+        applyLayoutDensity(updatedSettings.layoutDensity);
+        applyLogLevel(updatedSettings.logLevel);
         return true;
       } catch (error) {
         logger.error('Error updating settings', error);
