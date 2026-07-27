@@ -54,7 +54,7 @@ jobs:
             tuf-repo-cdn.sigstore.dev:443
 
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -142,7 +142,7 @@ jobs:
 
       # Checkout is needed only for the CHANGELOG used as the release body.
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           sparse-checkout: apps/browser-extension/CHANGELOG.md
           sparse-checkout-cone-mode: false
@@ -230,7 +230,7 @@ jobs:
       # Only the first-party publish script is needed — no install, no tsx, so no
       # dependency code ever runs in the job that holds the secrets.
       - name: Checkout publish script
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           sparse-checkout: scripts/publish-chrome.mts
           sparse-checkout-cone-mode: false
