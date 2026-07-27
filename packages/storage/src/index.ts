@@ -39,6 +39,7 @@ export {
   getStoredSettings,
   getWeatherState,
   getYoutubeProgress,
+  migrateLegacySettings,
   migrateStorageData,
   SETTINGS_KEY_PREFIX,
   SETTINGS_KEYS,

@@ -16,6 +16,7 @@ vi.mock('@cuewise/storage', () => ({
   setSettingsPatch: vi.fn(),
   clearSettings: vi.fn(),
   migrateStorageData: vi.fn(),
+  migrateLegacySettings: vi.fn(),
 }));
 
 vi.mock('./toast-store', () => ({
@@ -69,11 +70,18 @@ describe('sync sink wiring', () => {
     markMutated.mockClear();
     seedStorage();
     vi.mocked(storage.migrateStorageData).mockResolvedValue({ success: true });
+    vi.mocked(storage.migrateLegacySettings).mockResolvedValue(undefined);
     configurePlatform({ syncSink: fakeSink });
   });
 
   afterEach(() => {
     configurePlatform({ syncSink: null });
+  });
+
+  it('initialize migrates without marking any key dirty', async () => {
+    await useSettingsStore.getState().initialize();
+
+    expect(markMutated).not.toHaveBeenCalled();
   });
 
   it('notifies markMutated for each changed, non-device-local key after updateSettings persists', async () => {

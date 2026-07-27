@@ -2,16 +2,19 @@ import {
   configurePlatform,
   DEFAULT_SETTINGS,
   type KeyValueStore,
+  STORAGE_KEYS,
   type StorageUsage,
 } from '@cuewise/shared';
-import { describe, expect, it } from 'vitest';
-import { getManyFromStorage } from './chrome-storage';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { getManyFromStorage, setInStorage } from './chrome-storage';
 import {
   clearCustomBackground,
   clearSettings,
   getCustomBackground,
   getSettings,
   getStorageUsage,
+  getStoredSettings,
+  migrateLegacySettings,
   SETTINGS_KEYS,
   setCustomBackground,
   setSettingsPatch,
@@ -207,5 +210,91 @@ describe('settings', () => {
     // showClock was never written, so it tracks DEFAULT_SETTINGS rather than a frozen copy.
     expect(settings.showClock).toBe(DEFAULT_SETTINGS.showClock);
     expect(await getManyFromStorage(['settings.showClock'])).toEqual({});
+  });
+});
+
+describe('migrateLegacySettings', () => {
+  // A prior describe block may leave the platform pointed at its own recordingStore
+  // (each test there reconfigures it but nothing restores the default afterward) —
+  // start every test here from a fresh store so runs don't depend on file order.
+  beforeEach(() => {
+    const { store } = recordingStore();
+    configurePlatform({ storage: store });
+  });
+
+  it('migrates only the keys that differ from the current default', async () => {
+    await setInStorage(STORAGE_KEYS.SETTINGS, { ...DEFAULT_SETTINGS, theme: 'dark' }, 'local');
+
+    await migrateLegacySettings();
+
+    const stored = await getManyFromStorage(SETTINGS_KEYS.map(settingsStorageKey));
+    expect(stored).toEqual({ 'settings.theme': 'dark' });
+  });
+
+  it('does not overwrite a per-key value that landed before it ran', async () => {
+    await setInStorage(STORAGE_KEYS.SETTINGS, { ...DEFAULT_SETTINGS, theme: 'dark' }, 'local');
+    await setSettingsPatch({ theme: 'light' });
+
+    await migrateLegacySettings();
+
+    const settings = await getSettings();
+    expect(settings.theme).toBe('light');
+  });
+
+  it('keeps the legacy blob when the per-key write fails', async () => {
+    const { store } = recordingStore();
+    configurePlatform({
+      storage: {
+        ...store,
+        setMany: async () => ({
+          success: false as const,
+          error: { type: 'quota_exceeded' as const, message: 'Storage full' },
+        }),
+      },
+    });
+    const blob = { ...DEFAULT_SETTINGS, theme: 'dark' as const };
+    await setInStorage(STORAGE_KEYS.SETTINGS, blob, 'local');
+
+    await migrateLegacySettings();
+
+    expect(await getStoredSettings()).toEqual(blob);
+  });
+
+  it('deletes the legacy blob once migrated', async () => {
+    await setInStorage(STORAGE_KEYS.SETTINGS, { ...DEFAULT_SETTINGS, theme: 'dark' }, 'local');
+
+    await migrateLegacySettings();
+
+    expect(await getStoredSettings()).toBeNull();
+  });
+
+  it('does nothing when there is no legacy blob', async () => {
+    await migrateLegacySettings();
+
+    const stored = await getManyFromStorage(SETTINGS_KEYS.map(settingsStorageKey));
+    expect(stored).toEqual({});
+  });
+
+  it('is idempotent across repeated runs', async () => {
+    await setInStorage(STORAGE_KEYS.SETTINGS, { ...DEFAULT_SETTINGS, theme: 'dark' }, 'local');
+
+    await migrateLegacySettings();
+    await migrateLegacySettings();
+
+    const settings = await getSettings();
+    expect(settings.theme).toBe('dark');
+  });
+
+  it('migrates array values that differ from the default', async () => {
+    await setInStorage(
+      STORAGE_KEYS.SETTINGS,
+      { ...DEFAULT_SETTINGS, quoteFilterActiveCollectionIds: ['c1'] },
+      'local'
+    );
+
+    await migrateLegacySettings();
+
+    const settings = await getSettings();
+    expect(settings.quoteFilterActiveCollectionIds).toEqual(['c1']);
   });
 });

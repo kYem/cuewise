@@ -12,7 +12,13 @@ import {
   type Settings,
   type StorageError,
 } from '@cuewise/shared';
-import { clearSettings, getSettings, migrateStorageData, setSettingsPatch } from '@cuewise/storage';
+import {
+  clearSettings,
+  getSettings,
+  migrateLegacySettings,
+  migrateStorageData,
+  setSettingsPatch,
+} from '@cuewise/storage';
 import { create } from 'zustand';
 import { useToastStore } from './toast-store';
 
@@ -100,6 +106,8 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   initialize: async () => {
     try {
       set({ isLoading: true, error: null });
+
+      await migrateLegacySettings();
 
       const storedSettings = await getSettings();
       // Merge with defaults to ensure all properties exist (for existing users)

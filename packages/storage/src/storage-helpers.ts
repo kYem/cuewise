@@ -317,6 +317,48 @@ export async function clearSettings(): Promise<boolean> {
   return removeManyFromStorage(SETTINGS_KEYS.map(settingsStorageKey), 'local');
 }
 
+/**
+ * One-time move from the legacy settings blob to per-key entries. Idempotent and safe to run in
+ * more than one realm: it fills only gaps, so a value a sync pull already wrote is never clobbered,
+ * and it writes nothing at all through the store, so no key is ever marked dirty for sync.
+ */
+export async function migrateLegacySettings(): Promise<void> {
+  // Reads the raw blob: null covers both "never stored" and "unreadable", so an unreadable blob
+  // skips the delete below rather than discarding data we could not read.
+  const blob = await getStoredSettings();
+  if (blob === null) {
+    return;
+  }
+
+  const existing = await getManyFromStorage(SETTINGS_KEYS.map(settingsStorageKey), 'local');
+  const patch: Record<string, unknown> = {};
+  for (const key of SETTINGS_KEYS) {
+    const storageKey = settingsStorageKey(key);
+    if (existing[storageKey] !== undefined) {
+      continue;
+    }
+    const value = blob[key];
+    if (value === undefined) {
+      continue;
+    }
+    // Structural compare — four settings hold arrays, which never compare equal by identity.
+    if (JSON.stringify(value) === JSON.stringify(DEFAULT_SETTINGS[key])) {
+      continue;
+    }
+    patch[storageKey] = value;
+  }
+
+  if (Object.keys(patch).length > 0) {
+    const result = await setManyInStorage(patch, 'local');
+    if (!result.success) {
+      logger.error('Settings migration write failed; keeping the legacy blob', result.error);
+      return;
+    }
+  }
+
+  await removeFromStorage(STORAGE_KEYS.SETTINGS, 'local');
+}
+
 // Storage usage tracking
 export interface StorageUsageInfo {
   bytesInUse: number;
