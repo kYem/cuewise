@@ -12,7 +12,7 @@ import {
   reminderIdFromAlarm,
   resolveReminderNotificationAction,
 } from '@cuewise/shared';
-import { getReminders, setReminders } from '@cuewise/storage';
+import { getReminders, migrateLegacySettings, setReminders } from '@cuewise/storage';
 import { SYNC_PULL_WAKE_ID } from '@cuewise/sync-client';
 import { createSyncEngine, type SyncStatus } from '@cuewise/sync-engine';
 import { configureChromePlatform } from './platform';
@@ -95,9 +95,14 @@ if (syncApiBaseUrl) {
       syncEngine.handlePullWake();
     }
   });
-  syncEngine.start().catch((error) => {
-    logger.error('Sync engine failed to start', error);
-  });
+  // start() self-heals the key blob and runs the first pull, so it's the one call that must not
+  // touch storage before migration — scheduler.onFire above and the onMessage listeners below
+  // stay synchronous and never wait on it.
+  migrateLegacySettings()
+    .then(() => syncEngine.start())
+    .catch((error) => {
+      logger.error('Sync engine failed to start', error);
+    });
 
   // ENG-45 option B: the page realm relays its store mutations here (this
   // service-worker realm is the single sync owner) instead of holding its own
