@@ -26,6 +26,11 @@ vi.mock('@cuewise/storage', () => ({
   setQuotes: vi.fn(),
   getPomodoroSessions: vi.fn(),
   setPomodoroSessions: vi.fn(),
+  // Import and export read raw: the merge and the backup rewrite whole arrays, so starting
+  // from the rendering view would delete items it merely could not parse.
+  getGoalsRaw: vi.fn(),
+  getQuotesRaw: vi.fn(),
+  getPomodoroSessionsRaw: vi.fn(),
   // Defaults to empty so refresh-after-import paths don't error on posture reads.
   getPostureStats: vi.fn(async () => []),
   setPostureStats: vi.fn(),
@@ -262,7 +267,7 @@ describe('Insights Store - Import Methods', () => {
     });
 
     it('should report partial progress when failure occurs mid-import', async () => {
-      vi.mocked(storage.getGoals).mockResolvedValue([]);
+      vi.mocked(storage.getGoalsRaw).mockResolvedValue([]);
       vi.mocked(storage.setGoals).mockResolvedValue({ success: true });
       mockStorageError('quotes', new Error('Quotes storage error'));
 

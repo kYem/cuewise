@@ -27,6 +27,7 @@ import {
   REMINDER_SNOOZE_MINUTES,
 } from './constants';
 import { logger } from './logger';
+import { goalSchema, pomodoroSessionSchema, quoteCategorySchema, quoteSchema } from './schemas';
 import type {
   AdvancedAnalytics,
   DailyDataPoint,
@@ -1567,6 +1568,33 @@ export function parseImportData(jsonString: string): ImportValidation {
 /**
  * Validate goals array
  */
+
+/**
+ * The last gate before an imported item reaches storage: the very schema the read path
+ * uses. Without it the two boundaries can disagree, and they did — an item the importer
+ * accepted, counted and reported as "successfully imported" would be dropped on the next
+ * read and erased by the next edit, because every store rewrites its whole array.
+ *
+ * Rejecting here costs the user one item and tells them which. Accepting costs them the
+ * item silently, later.
+ */
+function accepts(
+  schema: { safeParse: (value: unknown) => { success: boolean } },
+  candidate: unknown,
+  field: string,
+  errors: ImportValidationError[]
+): boolean {
+  if (schema.safeParse(candidate).success) {
+    return true;
+  }
+  errors.push({ field, message: 'Does not match the expected shape and was skipped' });
+  return false;
+}
+
+function isQuoteCategory(value: unknown): value is Quote['category'] {
+  return quoteCategorySchema.safeParse(value).success;
+}
+
 function validateGoals(goals: unknown[], errors: ImportValidationError[]): Goal[] {
   const validGoals: Goal[] = [];
 
@@ -1589,12 +1617,14 @@ function validateGoals(goals: unknown[], errors: ImportValidationError[]): Goal[
       continue;
     }
 
-    validGoals.push({
+    const candidate: Goal = {
       id: goal.id,
       text: goal.text,
       completed: Boolean(goal.completed),
-      createdAt: (goal.createdAt as string) || new Date().toISOString(),
-      date: (goal.date as string) || getTodayDateString(),
+      // `typeof`, not `||`: a numeric timestamp is truthy, so it used to pass straight
+      // through to storage and then fail the read schema — imported, then invisible.
+      createdAt: typeof goal.createdAt === 'string' ? goal.createdAt : new Date().toISOString(),
+      date: typeof goal.date === 'string' ? goal.date : getTodayDateString(),
       // Preserve optional fields when present
       ...(goal.type === 'task' || goal.type === 'objective' ? { type: goal.type } : {}),
       ...(typeof goal.parentId === 'string' ? { parentId: goal.parentId } : {}),
@@ -1603,7 +1633,12 @@ function validateGoals(goals: unknown[], errors: ImportValidationError[]): Goal[
       ...(typeof goal.dueDate === 'string' ? { dueDate: goal.dueDate } : {}),
       ...(typeof goal.sortOrder === 'number' ? { sortOrder: goal.sortOrder } : {}),
       ...(Array.isArray(goal.subtasks) ? { subtasks: goal.subtasks as Subtask[] } : {}),
-    });
+    };
+
+    if (!accepts(goalSchema, candidate, `goals[${i}]`, errors)) {
+      continue;
+    }
+    validGoals.push(candidate);
   }
 
   return validGoals;
@@ -1634,19 +1669,26 @@ function validateQuotes(quotes: unknown[], errors: ImportValidationError[]): Quo
       continue;
     }
 
-    validQuotes.push({
+    const candidate: Quote = {
       id: quote.id,
       text: quote.text,
-      author: (quote.author as string) || 'Unknown',
-      category: (quote.category as Quote['category']) || 'inspiration',
+      author: typeof quote.author === 'string' ? quote.author : 'Unknown',
+      // Checked against the same enum the reader uses. An unrecognised category used to be
+      // written verbatim and then dropped on the next read.
+      category: isQuoteCategory(quote.category) ? quote.category : 'inspiration',
       isCustom: true, // All imported quotes are marked as custom
       isFavorite: Boolean(quote.isFavorite),
       isHidden: Boolean(quote.isHidden),
-      viewCount: (quote.viewCount as number) || 0,
-      lastViewed: quote.lastViewed as string | undefined,
-      source: quote.source as string | undefined,
-      notes: quote.notes as string | undefined,
-    });
+      viewCount: typeof quote.viewCount === 'number' ? quote.viewCount : 0,
+      ...(typeof quote.lastViewed === 'string' ? { lastViewed: quote.lastViewed } : {}),
+      ...(typeof quote.source === 'string' ? { source: quote.source } : {}),
+      ...(typeof quote.notes === 'string' ? { notes: quote.notes } : {}),
+    };
+
+    if (!accepts(quoteSchema, candidate, `quotes[${i}]`, errors)) {
+      continue;
+    }
+    validQuotes.push(candidate);
   }
 
   return validQuotes;
@@ -1683,15 +1725,23 @@ function validatePomodoroSessions(
       continue;
     }
 
-    validSessions.push({
+    const sessionTypes: PomodoroSession['type'][] = ['work', 'break', 'longBreak'];
+    const candidate: PomodoroSession = {
       id: session.id,
       startedAt: session.startedAt,
-      completedAt: (session.completedAt as string) || undefined,
+      ...(typeof session.completedAt === 'string' ? { completedAt: session.completedAt } : {}),
       interrupted: Boolean(session.interrupted),
-      duration: (session.duration as number) || 25,
-      type: (session.type as PomodoroSession['type']) || 'work',
-      goalId: (session.goalId as string) || undefined,
-    });
+      duration: typeof session.duration === 'number' ? session.duration : 25,
+      type: sessionTypes.includes(session.type as PomodoroSession['type'])
+        ? (session.type as PomodoroSession['type'])
+        : 'work',
+      ...(typeof session.goalId === 'string' ? { goalId: session.goalId } : {}),
+    };
+
+    if (!accepts(pomodoroSessionSchema, candidate, `pomodoroSessions[${i}]`, errors)) {
+      continue;
+    }
+    validSessions.push(candidate);
   }
 
   return validSessions;

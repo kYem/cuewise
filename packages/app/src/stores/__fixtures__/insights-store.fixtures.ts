@@ -63,17 +63,27 @@ export function mockStorageWithData(
   vi.mocked(storage.getQuotes).mockResolvedValue(options.quotes ?? []);
   vi.mocked(storage.setQuotes).mockResolvedValue({ success: true });
   vi.mocked(storage.getPomodoroSessions).mockResolvedValue(options.sessions ?? []);
+  // Import and export read raw — they rewrite whole arrays, so starting from the rendering
+  // view would delete items it merely could not parse. Same data here; the distinction is
+  // exercised by the storage package's own tests.
+  vi.mocked(storage.getGoalsRaw).mockResolvedValue(options.goals ?? []);
+  vi.mocked(storage.getQuotesRaw).mockResolvedValue(options.quotes ?? []);
+  vi.mocked(storage.getPomodoroSessionsRaw).mockResolvedValue(options.sessions ?? []);
   vi.mocked(storage.setPomodoroSessions).mockResolvedValue({ success: true });
   vi.mocked(storage.getPostureStats).mockResolvedValue(options.postureStats ?? []);
 }
 
+/** Both readers fail together: import reads raw, the refresh that follows reads validated. */
 export function mockStorageError(operation: 'goals' | 'quotes' | 'sessions', error: Error) {
   if (operation === 'goals') {
     vi.mocked(storage.getGoals).mockRejectedValue(error);
+    vi.mocked(storage.getGoalsRaw).mockRejectedValue(error);
   } else if (operation === 'quotes') {
     vi.mocked(storage.getQuotes).mockRejectedValue(error);
+    vi.mocked(storage.getQuotesRaw).mockRejectedValue(error);
   } else {
     vi.mocked(storage.getPomodoroSessions).mockRejectedValue(error);
+    vi.mocked(storage.getPomodoroSessionsRaw).mockRejectedValue(error);
   }
 }
 

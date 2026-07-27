@@ -46,6 +46,13 @@ import { useToastStore } from './toast-store';
  * Merge incoming into existing by id (skipDuplicates drops existing ids, else overwrites them).
  * importedCount = items written: new ones in skip mode, all incoming (incl. overwrites) otherwise.
  */
+/**
+ * `existing` must be the raw stored array, never the rendering view. The merge rewrites the
+ * whole collection, so an item missing from `existing` is an item this deletes — and in
+ * skip-duplicates mode it is worse than deletion: the id is absent from `existingIds`, so
+ * the incoming copy is appended and counted as imported, silently replacing what the user
+ * had rather than skipping it.
+ */
 function mergeImport<T extends { id: string }>(
   existing: T[],
   incoming: T[],
@@ -346,7 +353,7 @@ export const useInsightsStore = create<InsightsStore>((set, get) => ({
 
       // Import goals
       if (options.importGoals === true && data.goals.length > 0) {
-        const existingGoals = await getGoals();
+        const existingGoals = await getGoalsRaw();
         const { merged, importedCount, skippedCount } = mergeImport(
           existingGoals,
           data.goals,
@@ -361,7 +368,7 @@ export const useInsightsStore = create<InsightsStore>((set, get) => ({
 
       // Import quotes (mark as custom to distinguish from seed quotes)
       if (options.importQuotes === true && data.quotes.length > 0) {
-        const existingQuotes = await getQuotes();
+        const existingQuotes = await getQuotesRaw();
         // Mark all imported quotes as custom to ensure they are included in future exports
         const quotesToProcess = data.quotes.map((q) => ({ ...q, isCustom: true }));
         const { merged, importedCount, skippedCount } = mergeImport(
@@ -378,7 +385,7 @@ export const useInsightsStore = create<InsightsStore>((set, get) => ({
 
       // Import pomodoro sessions
       if (options.importPomodoroSessions === true && data.pomodoroSessions.length > 0) {
-        const existingSessions = await getPomodoroSessions();
+        const existingSessions = await getPomodoroSessionsRaw();
         const { merged, importedCount, skippedCount } = mergeImport(
           existingSessions,
           data.pomodoroSessions,
