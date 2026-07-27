@@ -291,6 +291,42 @@ describe('fetchTodayEvents', () => {
     expect(events.map((event) => event.id)).toEqual(['t1']);
   });
 
+  // The row above pins only `id`. Each of these is otherwise mappable with exactly one
+  // optional field in a shape the schema forbids, so widening that field to `unknown` lets
+  // the row through. Two of them then reach real code: a non-array `attendees` throws inside
+  // `isDismissed` and costs the whole agenda, and an object `summary` lands in `title` and
+  // reaches React as a child.
+  //
+  // No row for `start`/`end`: widen either and the row still disappears, because the mapper
+  // needs `start.dateTime` or `start.date` and a malformed one yields neither. Their schema
+  // checks are genuinely redundant with the mapper, so no test here can discriminate.
+  it.each([
+    ['attendees that are not a list', { attendees: 'nobody' }],
+    ['a summary that is not a string', { summary: { text: 'Standup' } }],
+    ['an htmlLink that is not a string', { htmlLink: 12 }],
+    ['a colorId that is not a string', { colorId: 7 }],
+  ])('skips an entry with %s and keeps the rest of the day', async (_label, broken) => {
+    stubFetchItems([
+      {
+        id: 'bad',
+        summary: 'unreadable',
+        start: { dateTime: '2026-06-14T08:00:00Z' },
+        end: { dateTime: '2026-06-14T08:30:00Z' },
+        ...broken,
+      } as never,
+      {
+        id: 't1',
+        summary: 'Standup',
+        start: { dateTime: '2026-06-14T09:00:00Z' },
+        end: { dateTime: '2026-06-14T09:15:00Z' },
+      },
+    ]);
+
+    const events = await fetchTodayEvents();
+
+    expect(events.map((event) => event.id)).toEqual(['t1']);
+  });
+
   // An envelope we cannot read at all is an empty agenda, not a thrown error: the strip is
   // ambient, and it must never take the new tab down with it.
   //

@@ -113,8 +113,9 @@ describe('Insights Store - Import Methods', () => {
   });
 
   // `clearAllMocks` above resets calls but keeps implementations, and this package sets no
-  // `restoreMocks` — so the export tests' `document.createElement` spy would otherwise stay
-  // installed for every test after them, silently neutering `.click()`.
+  // `restoreMocks`, so the export tests' `document.createElement` spy stays installed for
+  // every test after them. Nothing downstream touches the DOM today, so deleting this breaks
+  // no test — it is here for the next one added below, which would get a dead `.click()`.
   afterEach(() => {
     vi.restoreAllMocks();
   });

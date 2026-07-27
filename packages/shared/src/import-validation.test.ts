@@ -60,6 +60,33 @@ describe('imported items always satisfy the read schemas', () => {
     expect(typeof result.data?.goals?.[0].createdAt).toBe('string');
   });
 
+  // The last gate before an imported item reaches storage, and nothing reached it: every
+  // field is coerced above, so a file our own export wrote always passes. `1e400` is the way
+  // in — JSON.parse yields `Infinity`, which the coercion sees as a `number` and the schema
+  // does not. Written as raw JSON text because no JS literal survives the round trip.
+  it('skips an item the schema still rejects after every coercion', () => {
+    const raw =
+      '{"formatVersion":1,"pomodoroSessions":[{"id":"s1","startedAt":"x","duration":1e400}]}';
+
+    const result = parseImportData(raw);
+
+    expect(result.data?.pomodoroSessions).toEqual([]);
+    expect(result.warnings.join(' ')).toContain('does not match the expected shape');
+  });
+
+  // A skip is a warning, never an error: `isValid` is `errors.length === 0`, so recording it
+  // as an error would hide the Import button and discard every good item in the file.
+  it('still lets the rest of the file import', () => {
+    const raw =
+      '{"formatVersion":1,"pomodoroSessions":[{"id":"s1","startedAt":"x","duration":1e400}],' +
+      '"goals":[{"id":"g1","text":"keep me"}]}';
+
+    const result = parseImportData(raw);
+
+    expect(result.isValid).toBe(true);
+    expect(result.data?.goals).toHaveLength(1);
+  });
+
   // The twelfth Quote field, and the last one the importer learned to carry. Dropping it is
   // invisible to a schema check — `collectionIds` is optional — so re-importing a backup
   // silently emptied every collection while reporting a clean import.

@@ -37,6 +37,7 @@ import {
   setCollections,
   setCollectionsRaw,
   setConceptCards,
+  setCurrentQuote,
   setGoals,
   setGoalsRaw,
   setPomodoroSessions,
@@ -60,10 +61,16 @@ function clone<T>(value: T): T {
   return value === undefined ? value : (JSON.parse(JSON.stringify(value)) as T);
 }
 
-function storeHolding(values: Record<string, unknown>): KeyValueStore {
+/**
+ * Seeds the `local` area only. Area-aware for the same reason `capturingStore` is: while this
+ * ignored its `area` argument, every read test built on it was blind to which area the reader
+ * asked for, and a dozen readers could be flipped to the wrong one with the monorepo green.
+ */
+function storeHolding(values: Record<string, unknown>, area: StorageArea = 'local'): KeyValueStore {
   return {
     supportsSync: true,
-    get: async (key: string) => (key in values ? (clone(values[key]) as never) : null),
+    get: async (key: string, readArea: StorageArea = 'local') =>
+      readArea === area && key in values ? (clone(values[key]) as never) : null,
     set: async () => ({ success: true }),
     remove: async () => true,
     getUsage: async () => ({ bytesInUse: 0, quota: 10_000_000 }),
@@ -371,6 +378,40 @@ describe('a calendar cache with one unreadable event', () => {
       lastSync: '2026-07-26',
     });
   });
+
+  // The envelope's whole job: `events` must be an array before the per-item filter runs.
+  // Widen it and a stored string throws a TypeError straight out of the read — which the
+  // callers do not catch, so the ambient strip takes the page with it.
+  it.each([
+    ['events is not a list', { connected: true, events: 'nope', lastSync: null }],
+    ['connected is not a boolean', { connected: 'yes', events: [], lastSync: null }],
+    ['lastSync is neither string nor null', { connected: true, events: [], lastSync: 42 }],
+  ])('discards the whole cache when %s, without throwing', async (_label, calendar) => {
+    configurePlatform({ storage: storeHolding({ calendar }) });
+
+    await expect(getCalendarState()).resolves.toBeNull();
+  });
+
+  // `allDay` is the union discriminator. This row carries the TIMED fields with the all-day
+  // flag set: only the literal keeps it out. Relax `allDay` to a plain boolean and the timed
+  // member accepts it, so an all-day entry renders on the strip at a wall-clock time.
+  it('drops an event whose allDay flag contradicts its date fields', async () => {
+    configurePlatform({
+      storage: storeHolding({
+        calendar: {
+          connected: true,
+          events: [{ id: 'e1', title: 'Offsite', allDay: true, start: 'x', end: 'y' }],
+          lastSync: null,
+        },
+      }),
+    });
+
+    await expect(getCalendarState()).resolves.toEqual({
+      connected: true,
+      events: [],
+      lastSync: null,
+    });
+  });
 });
 
 // Sync moves opaque user data between devices and never renders it. If it read through the
@@ -665,52 +706,79 @@ describe('an unreadable setting whose default is an array', () => {
  * onto `goalSchema` — left the whole monorepo green. The failure is not a type error, it is
  * a collection that reads as empty and is then persisted empty by the next whole-list write.
  *
- * Two directions per key, because one alone proves little: the right row must survive (the
- * schema is not something stricter) and a foreign row must not (it is not something looser).
- * `goal` is the foreign row everywhere except goals, which use `quickLink` instead.
+ * Three directions per key. The valid row proves the schema is not stricter than the type;
+ * the foreign row proves the key is wired to the schema it claims. The NEAR-MISS is what
+ * proves the schema still checks anything: it is the valid row with exactly one field made
+ * wrong, so widening that field to `z.unknown()` makes this row pass and the test fail.
+ * A foreign row alone cannot do that — it differs in so many fields that loosening any single
+ * one never lets it through, which is how eighteen field-level checks sat here unpinned.
  */
 describe('each key is read through its own schema', () => {
   const goal = goalFactory.build();
   const quickLink = { id: 'ql1', title: 'Docs', url: 'https://example.com' };
+  const card = conceptCardFactory.build();
+  const collection = { id: 'c1', name: 'Stoics', createdAt: '2026-07-26T00:00:00.000Z' };
+  const posture = { date: '2026-07-26', counts: { good: 1, mild: 0, poor: 0, absent: 0 } };
+  const playlist = { id: 'p1', name: 'Focus', playlistId: 'PL1', isCustom: true };
+  const progress = { playlistId: 'PL1', videoProgress: [] };
 
-  const cases: [string, string, unknown, unknown, () => Promise<unknown[]>][] = [
-    ['goals', 'goals', goal, quickLink, getGoals],
-    ['reminders', 'reminders', reminderFactory.build(), goal, getReminders],
-    ['pomodoro sessions', 'pomodoroSessions', pomodoroFactory.build(), goal, getPomodoroSessions],
-    ['custom quotes', 'customQuotes', quoteFactory.build(), goal, getQuotes],
-    ['concept cards', 'conceptCards', conceptCardFactory.build(), goal, getConceptCards],
-    ['quick links', 'quickLinks', quickLink, goal, getQuickLinks],
+  type Case = [string, string, unknown, unknown, unknown, () => Promise<unknown[]>];
+  const cases: Case[] = [
+    ['goals', 'goals', goal, quickLink, { ...goal, subtasks: 'not a list' }, getGoals],
+    [
+      'reminders',
+      'reminders',
+      reminderFactory.build(),
+      goal,
+      { ...reminderFactory.build(), recurring: 'weekly-ish' },
+      getReminders,
+    ],
+    [
+      'pomodoro sessions',
+      'pomodoroSessions',
+      pomodoroFactory.build(),
+      goal,
+      { ...pomodoroFactory.build(), type: 'meditation' },
+      getPomodoroSessions,
+    ],
+    [
+      'custom quotes',
+      'customQuotes',
+      quoteFactory.build(),
+      goal,
+      { ...quoteFactory.build(), category: 'philosophy' },
+      getQuotes,
+    ],
+    ['concept cards', 'conceptCards', card, goal, { ...card, schedule: 'soon' }, getConceptCards],
+    ['quick links', 'quickLinks', quickLink, goal, { ...quickLink, url: 42 }, getQuickLinks],
     [
       'collections',
       'collections',
-      { id: 'c1', name: 'Stoics', createdAt: '2026-07-26T00:00:00.000Z' },
+      collection,
       goal,
+      { ...collection, createdAt: 1_700_000_000 },
       getCollections,
     ],
-    [
-      'posture stats',
-      'postureStats',
-      { date: '2026-07-26', counts: { good: 1, mild: 0, poor: 0, absent: 0 } },
-      goal,
-      getPostureStats,
-    ],
+    ['posture stats', 'postureStats', posture, goal, { ...posture, counts: 4 }, getPostureStats],
     [
       'youtube playlists',
       'customYoutubePlaylists',
-      { id: 'p1', name: 'Focus', playlistId: 'PL1', isCustom: true },
+      playlist,
       goal,
+      { ...playlist, isCustom: 'yes' },
       getCustomYoutubePlaylists,
     ],
     [
       'youtube progress',
       'youtubeProgress',
-      { playlistId: 'PL1', videoProgress: [] },
+      progress,
       goal,
+      { ...progress, videoProgress: [{ videoId: 'v1', timestamp: 'start', updatedAt: 'x' }] },
       getYoutubeProgress,
     ],
   ];
 
-  it.each(cases)('keeps a valid %s row', async (_label, key, own, _foreign, read) => {
+  it.each(cases)('keeps a valid %s row', async (_label, key, own, _foreign, _near, read) => {
     configurePlatform({ storage: storeHolding({ [key]: [own] }) });
 
     await expect(read()).resolves.toEqual([own]);
@@ -718,8 +786,44 @@ describe('each key is read through its own schema', () => {
 
   it.each(
     cases
-  )('drops a foreign row stored under %s', async (_label, key, _own, foreign, read) => {
+  )('drops a foreign row stored under %s', async (_label, key, _own, foreign, _near, read) => {
     configurePlatform({ storage: storeHolding({ [key]: [foreign] }) });
+
+    await expect(read()).resolves.toEqual([]);
+  });
+
+  it.each(
+    cases
+  )('drops a %s row with one field wrong', async (_label, key, _own, _foreign, near, read) => {
+    configurePlatform({ storage: storeHolding({ [key]: [near] }) });
+
+    await expect(read()).resolves.toEqual([]);
+  });
+
+  // The rows above reach a schema's top level. These reach one level down, where the same
+  // blindness applies: a nested object or array element whose own shape nothing checks.
+  // Each is a valid parent carrying exactly one bad child.
+  it.each([
+    [
+      'a subtask that is not shaped like one',
+      'goals',
+      { ...goal, subtasks: [{ id: 's1', text: 'walk', completed: 'nope' }] },
+      getGoals,
+    ],
+    [
+      'a non-string collection id',
+      'customQuotes',
+      { ...quoteFactory.build(), collectionIds: [42] },
+      getQuotes,
+    ],
+    [
+      'one non-numeric count among three good ones',
+      'postureStats',
+      { ...posture, counts: { ...posture.counts, good: 'lots' } },
+      getPostureStats,
+    ],
+  ])('drops a row carrying %s', async (_label, key, row, read) => {
+    configurePlatform({ storage: storeHolding({ [key]: [row] }) });
 
     await expect(read()).resolves.toEqual([]);
   });
@@ -734,6 +838,39 @@ describe('writes land in the area their reader uses', () => {
   const card = conceptCardFactory.build();
   const collection = { id: 'c1', name: 'Stoics', createdAt: '2026-07-26T00:00:00.000Z' };
   const quickLink = { id: 'ql1', title: 'Docs', url: 'https://example.com' };
+  const quote = quoteFactory.build({ isCustom: true });
+
+  /**
+   * Runs the round trip with sync ON and again with it OFF. One polarity alone is not enough:
+   * with only the ON case a helper hardcoded to `'sync'` passes every assertion, and with only
+   * the OFF case one hardcoded to `'local'` does. Together, either mistake fails one of them.
+   */
+  async function expectFollowsSyncToggle(
+    key: string,
+    entity: unknown,
+    write: () => Promise<unknown>,
+    read: () => Promise<unknown>,
+    { list = true }: { list?: boolean } = {}
+  ): Promise<void> {
+    for (const syncEnabled of [true, false]) {
+      const expectedArea: StorageArea = syncEnabled ? 'sync' : 'local';
+      const otherArea: StorageArea = syncEnabled ? 'local' : 'sync';
+      const { wroteTo, store } = capturingStore({ settings: { syncEnabled } });
+      configurePlatform({ storage: store });
+
+      await write();
+
+      expect({ syncEnabled, wrote: wroteTo(key, expectedArea) }).toEqual({
+        syncEnabled,
+        wrote: true,
+      });
+      expect({ syncEnabled, wroteElsewhere: wroteTo(key, otherArea) }).toEqual({
+        syncEnabled,
+        wroteElsewhere: false,
+      });
+      await expect(read()).resolves.toEqual(list ? [entity] : entity);
+    }
+  }
 
   it('writes goals to the sync area when sync is on', async () => {
     const { at, wroteTo, store } = capturingStore({ settings: { syncEnabled: true } });
@@ -807,14 +944,8 @@ describe('writes land in the area their reader uses', () => {
     it.each([
       ['validated', setValidated, getValidated],
       ['raw', setRaw, getRaw],
-    ])('round-trips through the sync area on the %s path', async (_path, write, read) => {
-      const { wroteTo, store } = capturingStore({ settings: { syncEnabled: true } });
-      configurePlatform({ storage: store });
-
-      await write();
-
-      expect(wroteTo(key, 'sync')).toBe(true);
-      await expect(read()).resolves.toEqual([entity]);
+    ])('follows the sync toggle on the %s path', async (_path, write, read) => {
+      await expectFollowsSyncToggle(key, entity, write, read);
     });
   });
 
@@ -823,14 +954,49 @@ describe('writes land in the area their reader uses', () => {
   it.each([
     ['quickLinks', quickLink, () => setQuickLinks([quickLink as never]), getQuickLinks],
     ['conceptCards', card, () => setConceptCards([card as never]), getConceptCards],
-  ])('round-trips %s through the sync area', async (key, entity, write, read) => {
+  ])('%s follows the sync toggle', async (key, entity, write, read) => {
+    await expectFollowsSyncToggle(key, entity, write, read);
+  });
+
+  // The custom half follows the toggle; the seed half is local forever. Splitting them is
+  // what makes a hardcoded 'local' on one side and a hardcoded 'sync' on the other visible.
+  it('sends custom quotes with the toggle and pins seed quotes to local', async () => {
+    await expectFollowsSyncToggle(
+      'customQuotes',
+      quote,
+      () => setQuotes([quote as never]),
+      async () => (await getQuotes()).filter((q) => q.isCustom)
+    );
+  });
+
+  // A real seed quote in the payload, not just an empty seed list: with only a custom quote
+  // here, the seed-half READ could be flipped to `sync` and still find the nothing it
+  // expected. Both halves have to carry a row for the round trip to discriminate.
+  it.each([
+    ['raw', (q: unknown[]) => setQuotesRaw(q as never), getQuotesRaw],
+    ['validated', (q: unknown[]) => setQuotes(q as never), getQuotes],
+  ])('keeps seed quotes local on the %s path even with sync on', async (_path, write, read) => {
+    const seedQuote = quoteFactory.build({ id: 'seed-1', isCustom: false });
     const { wroteTo, store } = capturingStore({ settings: { syncEnabled: true } });
     configurePlatform({ storage: store });
 
-    await write();
+    await write([seedQuote, quote]);
 
-    expect(wroteTo(key, 'sync')).toBe(true);
-    await expect(read()).resolves.toEqual([entity]);
+    expect(wroteTo('seedQuotes', 'local')).toBe(true);
+    expect(wroteTo('seedQuotes', 'sync')).toBe(false);
+    await expect(read()).resolves.toEqual([seedQuote, quote]);
+  });
+
+  // A single value rather than a list, so it misses every table above, and it is written on
+  // every new tab open — a reader and writer that disagree lose the displayed quote.
+  it('lets currentQuote follow the sync toggle', async () => {
+    await expectFollowsSyncToggle(
+      'currentQuote',
+      quote,
+      () => setCurrentQuote(quote as never),
+      getCurrentQuote,
+      { list: false }
+    );
   });
 
   // The whole area computation reads `syncEnabled` out of settings, so settings itself can

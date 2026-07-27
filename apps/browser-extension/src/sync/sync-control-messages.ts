@@ -66,7 +66,10 @@ export type SyncControlAnyResponse = SyncOpResponse[SyncControlOp];
  * Only the two fields the background dispatches on. The optional payload fields are
  * deliberately unchecked here — this guard's job is to decide whether a message on the
  * shared runtime channel is ours at all, and the handlers validate what they read.
- * `loose` keeps the rest of the message intact for them.
+ *
+ * `loose` is documentation rather than behaviour: only `.success` is read and the caller
+ * keeps the original message, so a strict object would work identically. It says the extra
+ * fields are expected, not stray.
  */
 const syncControlMessageSchema = z.looseObject({
   kind: z.literal('cuewise-sync-control'),

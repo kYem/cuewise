@@ -85,6 +85,10 @@ describe('weatherSnapshotSchema', () => {
         temperature: Number.NaN,
       }),
     ],
+    // The nullable fields need a negative row of their own. A `keeps X nullable` test passes
+    // just as happily under `z.nullable(z.unknown())`, so the positive case cannot pin them.
+    ['a non-numeric apparentTemperature', current({ apparentTemperature: 'cold' })],
+    ['a non-string admin1', place({ admin1: 42 })],
     ['a location that fails its own schema', place({ timezone: '' })],
     ['a non-string location id', place({ id: 2643743 })],
     ['a non-string location name', place({ name: null })],
