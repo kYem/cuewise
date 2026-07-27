@@ -47,6 +47,19 @@ function reconcilePreview(
   return remaining;
 }
 
+const noop = () => {};
+
+// Settings writes are read-modify-write over one blob, so overlapping calls would each persist
+// their own merge of a stale base. Chaining makes every write read fresh state at dequeue time.
+let writeChain: Promise<unknown> = Promise.resolve();
+
+function enqueueWrite<T>(run: () => Promise<T>): Promise<T> {
+  const result = writeChain.then(run, run);
+  // Park the chain on a settled promise so one failure can't poison every later write.
+  writeChain = result.then(noop, noop);
+  return result;
+}
+
 export interface SettingsStore {
   // State
   settings: Settings;
@@ -61,11 +74,6 @@ export interface SettingsStore {
   initialize: () => Promise<void>;
   previewSettings: (settings: Partial<PreviewableSettings>) => void;
   clearPreview: () => void;
-  updateTheme: (theme: Settings['theme']) => Promise<void>;
-  updateNotifications: (enabled: boolean) => Promise<void>;
-  updateQuoteChangeInterval: (interval: Settings['quoteChangeInterval']) => Promise<void>;
-  updateColorTheme: (colorTheme: ColorTheme) => Promise<void>;
-  updateLayoutDensity: (density: LayoutDensity) => Promise<void>;
   // Both resolve true only when the write actually persisted, so callers can
   // gate "saved" affordances — the storage adapters report failure via the
   // result object rather than throwing.
@@ -117,231 +125,133 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     }
   },
 
-  updateTheme: async (theme: Settings['theme']) => {
-    const { settings } = get();
-    const updatedSettings = { ...settings, theme };
+  updateSettings: (partialSettings: Partial<Settings>) =>
+    enqueueWrite(async () => {
+      try {
+        // Merge onto persisted truth: the sync engine writes pulled settings straight to storage,
+        // and a page can accept a click before initialize() resolves. Safe to read-modify-write
+        // here only because enqueueWrite serializes the writers.
+        const settings = { ...DEFAULT_SETTINGS, ...(await getSettings()) };
 
-    try {
-      await setSettings(updatedSettings);
-      set({ settings: updatedSettings });
-      notifyMutated('settings', 'theme');
-      applyTheme(theme);
-    } catch (error) {
-      logger.error('Error updating theme', error);
-      const errorMessage = 'Failed to update theme. Please try again.';
-      set({ error: errorMessage });
-      useToastStore.getState().error(errorMessage);
-    }
-  },
+        // Clamp ranged values here — the settings write path the UI uses — so
+        // presets/steppers (and a future settings import) can't persist an out-of-range
+        // value. Inside the try so a future throwing clamp is caught here.
+        const clampedPartial = clampBackgroundEffects(clampPomodoroDurations(partialSettings));
+        const updatedSettings = { ...settings, ...clampedPartial };
 
-  updateNotifications: async (enabled: boolean) => {
-    const { settings } = get();
-    const updatedSettings = { ...settings, enableNotifications: enabled };
+        // Check if syncEnabled changed
+        const syncChanged =
+          partialSettings.syncEnabled !== undefined &&
+          partialSettings.syncEnabled !== settings.syncEnabled;
 
-    try {
-      // Request notification permission if enabling
-      if (enabled && 'Notification' in window && Notification.permission === 'default') {
-        const permission = await Notification.requestPermission();
-        if (permission !== 'granted') {
-          const errorMessage =
-            'Notification permission denied. Please enable notifications in your browser settings.';
-          set({ error: errorMessage });
-          useToastStore.getState().warning(errorMessage);
-          return;
-        }
-      }
+        // If sync setting changed, migrate data before saving settings
+        if (syncChanged) {
+          const fromArea = settings.syncEnabled ? 'sync' : 'local';
+          const toArea = partialSettings.syncEnabled ? 'sync' : 'local';
 
-      await setSettings(updatedSettings);
-      set({ settings: updatedSettings });
-      notifyMutated('settings', 'enableNotifications');
-    } catch (error) {
-      logger.error('Error updating notifications', error);
-      const errorMessage = 'Failed to update notifications. Please try again.';
-      set({ error: errorMessage });
-      useToastStore.getState().error(errorMessage);
-    }
-  },
+          useToastStore.getState().success(`Migrating data to ${toArea} storage...`);
+          const migrateResult = await migrateStorageData(fromArea, toArea);
 
-  updateQuoteChangeInterval: async (interval: number) => {
-    const { settings } = get();
-    // Validate interval: 0 for manual, or 10-3600 for auto-refresh (minimum 10 seconds)
-    const validInterval = interval === 0 ? 0 : Math.max(10, Math.min(3600, interval));
-    const updatedSettings = { ...settings, quoteChangeInterval: validInterval };
+          if (!migrateResult.success) {
+            let errorMessage = 'Failed to migrate data. Please try again.';
 
-    try {
-      await setSettings(updatedSettings);
-      set({ settings: updatedSettings });
-      notifyMutated('settings', 'quoteChangeInterval');
-    } catch (error) {
-      logger.error('Error updating quote interval', error);
-      const errorMessage = 'Failed to update quote interval. Please try again.';
-      set({ error: errorMessage });
-      useToastStore.getState().error(errorMessage);
-    }
-  },
+            // Provide specific error message for quota errors
+            if (migrateResult.error.type === 'per_item_quota_exceeded') {
+              errorMessage = `Cannot enable sync: "${migrateResult.error.key}" exceeds the 8KB per-item limit. Try clearing old data first.`;
+            } else if (migrateResult.error.type === 'quota_exceeded') {
+              errorMessage =
+                'Cannot enable sync: Your data exceeds the 100KB sync storage limit. Try clearing old data first.';
+            }
 
-  updateColorTheme: async (colorTheme: ColorTheme) => {
-    const { settings } = get();
-    const updatedSettings = { ...settings, colorTheme };
-
-    try {
-      await setSettings(updatedSettings);
-      set({ settings: updatedSettings });
-      notifyMutated('settings', 'colorTheme');
-      applyColorTheme(colorTheme);
-    } catch (error) {
-      logger.error('Error updating color theme', error);
-      const errorMessage = 'Failed to update color theme. Please try again.';
-      set({ error: errorMessage });
-      useToastStore.getState().error(errorMessage);
-    }
-  },
-
-  updateLayoutDensity: async (density: LayoutDensity) => {
-    const { settings } = get();
-    const updatedSettings = { ...settings, layoutDensity: density };
-
-    try {
-      await setSettings(updatedSettings);
-      set({ settings: updatedSettings });
-      notifyMutated('settings', 'layoutDensity');
-      applyLayoutDensity(density);
-    } catch (error) {
-      logger.error('Error updating layout density', error);
-      const errorMessage = 'Failed to update layout density. Please try again.';
-      set({ error: errorMessage });
-      useToastStore.getState().error(errorMessage);
-    }
-  },
-
-  updateSettings: async (partialSettings: Partial<Settings>) => {
-    const { settings } = get();
-
-    try {
-      // Clamp ranged values here — the settings write path the UI uses — so
-      // presets/steppers (and a future settings import) can't persist an out-of-range
-      // value. Inside the try so a future throwing clamp is caught here.
-      const clampedPartial = clampBackgroundEffects(clampPomodoroDurations(partialSettings));
-      const updatedSettings = { ...settings, ...clampedPartial };
-
-      // Check if syncEnabled changed
-      const syncChanged =
-        partialSettings.syncEnabled !== undefined &&
-        partialSettings.syncEnabled !== settings.syncEnabled;
-
-      // If sync setting changed, migrate data before saving settings
-      if (syncChanged) {
-        const fromArea = settings.syncEnabled ? 'sync' : 'local';
-        const toArea = partialSettings.syncEnabled ? 'sync' : 'local';
-
-        useToastStore.getState().success(`Migrating data to ${toArea} storage...`);
-        const migrateResult = await migrateStorageData(fromArea, toArea);
-
-        if (!migrateResult.success) {
-          let errorMessage = 'Failed to migrate data. Please try again.';
-
-          // Provide specific error message for quota errors
-          if (migrateResult.error.type === 'per_item_quota_exceeded') {
-            errorMessage = `Cannot enable sync: "${migrateResult.error.key}" exceeds the 8KB per-item limit. Try clearing old data first.`;
-          } else if (migrateResult.error.type === 'quota_exceeded') {
-            errorMessage =
-              'Cannot enable sync: Your data exceeds the 100KB sync storage limit. Try clearing old data first.';
+            set({ error: errorMessage, preview: null });
+            useToastStore.getState().error(errorMessage);
+            return false;
           }
+        }
 
+        // The storage adapters never throw — failures come back as a result object,
+        // so an unchecked write would silently claim success on e.g. quota exhaustion.
+        const writeResult = await setSettings(updatedSettings);
+        if (!writeResult.success) {
+          logger.error('Error persisting settings', writeResult.error);
+          const errorMessage = settingsWriteErrorMessage(
+            writeResult.error,
+            'Failed to update settings. Please try again.'
+          );
           set({ error: errorMessage, preview: null });
           useToastStore.getState().error(errorMessage);
           return false;
         }
-      }
+        set({
+          settings: updatedSettings,
+          preview: reconcilePreview(get().preview, updatedSettings),
+        });
 
-      // The storage adapters never throw — failures come back as a result object,
-      // so an unchecked write would silently claim success on e.g. quota exhaustion.
-      const writeResult = await setSettings(updatedSettings);
-      if (!writeResult.success) {
-        logger.error('Error persisting settings', writeResult.error);
-        const errorMessage = settingsWriteErrorMessage(
-          writeResult.error,
-          'Failed to update settings. Please try again.'
-        );
+        // Sync every changed key that isn't device-local (each setting syncs per-key, spec §2).
+        for (const key of Object.keys(clampedPartial)) {
+          if (
+            !DEVICE_LOCAL_SETTINGS_KEYS.includes(key) &&
+            updatedSettings[key as keyof Settings] !== settings[key as keyof Settings]
+          ) {
+            notifyMutated('settings', key);
+          }
+        }
+
+        // Drive the DOM off the merged result, not the incoming patch: a sync pull can change these
+        // keys in storage without this write touching them. All five applies are idempotent.
+        applyTheme(updatedSettings.theme);
+        applyColorTheme(updatedSettings.colorTheme);
+        applyGlassEnhanced(updatedSettings.glassEnhanced);
+        applyLayoutDensity(updatedSettings.layoutDensity);
+        applyLogLevel(updatedSettings.logLevel);
+        return true;
+      } catch (error) {
+        logger.error('Error updating settings', error);
+        const errorMessage = 'Failed to update settings. Please try again.';
+        // Drop any preview too, so the visible state snaps back to persisted truth.
         set({ error: errorMessage, preview: null });
         useToastStore.getState().error(errorMessage);
         return false;
       }
-      set({ settings: updatedSettings, preview: reconcilePreview(get().preview, updatedSettings) });
+    }),
 
-      // Sync every changed key that isn't device-local (each setting syncs per-key, spec §2).
-      for (const key of Object.keys(clampedPartial)) {
-        if (
-          !DEVICE_LOCAL_SETTINGS_KEYS.includes(key) &&
-          updatedSettings[key as keyof Settings] !== settings[key as keyof Settings]
-        ) {
-          notifyMutated('settings', key);
+  resetToDefaults: () =>
+    enqueueWrite(async () => {
+      try {
+        // Raw: a reset means every field, including the ones this build cannot read. The
+        // preserving write would keep those — it cannot tell "reset to the default" from
+        // "never saw it" — so the one action that should clear everything would not.
+        const writeResult = await setSettingsRaw(DEFAULT_SETTINGS);
+        if (!writeResult.success) {
+          logger.error('Error persisting settings reset', writeResult.error);
+          const errorMessage = settingsWriteErrorMessage(
+            writeResult.error,
+            'Failed to reset settings. Please try again.'
+          );
+          set({ error: errorMessage, preview: null });
+          useToastStore.getState().error(errorMessage);
+          return false;
         }
-      }
-
-      // Apply customizations if they were updated
-      if (partialSettings.theme) {
-        applyTheme(partialSettings.theme);
-      }
-      if (partialSettings.colorTheme) {
-        applyColorTheme(partialSettings.colorTheme);
-      }
-      if (partialSettings.glassEnhanced !== undefined) {
-        applyGlassEnhanced(partialSettings.glassEnhanced);
-      }
-      if (partialSettings.layoutDensity) {
-        applyLayoutDensity(partialSettings.layoutDensity);
-      }
-      if (partialSettings.logLevel !== undefined) {
-        applyLogLevel(partialSettings.logLevel);
-      }
-      return true;
-    } catch (error) {
-      logger.error('Error updating settings', error);
-      const errorMessage = 'Failed to update settings. Please try again.';
-      // Drop any preview too, so the visible state snaps back to persisted truth.
-      set({ error: errorMessage, preview: null });
-      useToastStore.getState().error(errorMessage);
-      return false;
-    }
-  },
-
-  resetToDefaults: async () => {
-    try {
-      // Raw: a reset means every field, including the ones this build cannot read. The
-      // preserving write would keep those — it cannot tell "reset to the default" from
-      // "never saw it" — so the one action that should clear everything would not.
-      const writeResult = await setSettingsRaw(DEFAULT_SETTINGS);
-      if (!writeResult.success) {
-        logger.error('Error persisting settings reset', writeResult.error);
-        const errorMessage = settingsWriteErrorMessage(
-          writeResult.error,
-          'Failed to reset settings. Please try again.'
-        );
+        set({ settings: DEFAULT_SETTINGS, preview: null });
+        for (const key of Object.keys(DEFAULT_SETTINGS)) {
+          if (!DEVICE_LOCAL_SETTINGS_KEYS.includes(key)) {
+            notifyMutated('settings', key);
+          }
+        }
+        applyTheme(DEFAULT_SETTINGS.theme);
+        applyColorTheme(DEFAULT_SETTINGS.colorTheme);
+        applyGlassEnhanced(DEFAULT_SETTINGS.glassEnhanced);
+        applyLayoutDensity(DEFAULT_SETTINGS.layoutDensity);
+        applyLogLevel(DEFAULT_SETTINGS.logLevel);
+        return true;
+      } catch (error) {
+        logger.error('Error resetting settings', error);
+        const errorMessage = 'Failed to reset settings. Please try again.';
         set({ error: errorMessage, preview: null });
         useToastStore.getState().error(errorMessage);
         return false;
       }
-      set({ settings: DEFAULT_SETTINGS, preview: null });
-      for (const key of Object.keys(DEFAULT_SETTINGS)) {
-        if (!DEVICE_LOCAL_SETTINGS_KEYS.includes(key)) {
-          notifyMutated('settings', key);
-        }
-      }
-      applyTheme(DEFAULT_SETTINGS.theme);
-      applyColorTheme(DEFAULT_SETTINGS.colorTheme);
-      applyGlassEnhanced(DEFAULT_SETTINGS.glassEnhanced);
-      applyLayoutDensity(DEFAULT_SETTINGS.layoutDensity);
-      applyLogLevel(DEFAULT_SETTINGS.logLevel);
-      return true;
-    } catch (error) {
-      logger.error('Error resetting settings', error);
-      const errorMessage = 'Failed to reset settings. Please try again.';
-      set({ error: errorMessage, preview: null });
-      useToastStore.getState().error(errorMessage);
-      return false;
-    }
-  },
+    }),
 }));
 
 // Preview-aware selectors: consumers see the in-progress drag, falling back to persisted settings.

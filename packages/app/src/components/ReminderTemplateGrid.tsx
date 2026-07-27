@@ -138,7 +138,7 @@ export const ReminderTemplateGrid: React.FC<ReminderTemplateGridProps> = ({ onSe
 
 // Helper to format time from HH:MM string to readable format
 function formatTemplateTime(time: string): string {
-  if (!time || !time.includes(':')) {
+  if (!time?.includes(':')) {
     return 'Invalid time';
   }
   const [hoursStr, minutesStr] = time.split(':');

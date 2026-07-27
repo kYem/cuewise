@@ -8,8 +8,7 @@ interface ThemeSwitcherProps {
 }
 
 export const ThemeSwitcher: React.FC<ThemeSwitcherProps> = ({ isVisible }) => {
-  const { settings, updateColorTheme, updateTheme, updateLayoutDensity, updateSettings } =
-    useSettingsStore();
+  const { settings, updateSettings } = useSettingsStore();
 
   // Theme-aware gradients that match actual theme colors
   const isDark =
@@ -79,7 +78,7 @@ export const ThemeSwitcher: React.FC<ThemeSwitcherProps> = ({ isVisible }) => {
           <div className="grid grid-cols-3 gap-2">
             <button
               type="button"
-              onClick={() => updateTheme('light')}
+              onClick={() => updateSettings({ theme: 'light' })}
               className={`p-3 rounded-lg transition-all flex flex-col items-center gap-2 ${
                 settings.theme === 'light'
                   ? 'bg-primary-600 text-white shadow-md'
@@ -91,7 +90,7 @@ export const ThemeSwitcher: React.FC<ThemeSwitcherProps> = ({ isVisible }) => {
             </button>
             <button
               type="button"
-              onClick={() => updateTheme('dark')}
+              onClick={() => updateSettings({ theme: 'dark' })}
               className={`p-3 rounded-lg transition-all flex flex-col items-center gap-2 ${
                 settings.theme === 'dark'
                   ? 'bg-primary-600 text-white shadow-md'
@@ -103,7 +102,7 @@ export const ThemeSwitcher: React.FC<ThemeSwitcherProps> = ({ isVisible }) => {
             </button>
             <button
               type="button"
-              onClick={() => updateTheme('auto')}
+              onClick={() => updateSettings({ theme: 'auto' })}
               className={`p-3 rounded-lg transition-all flex flex-col items-center gap-2 ${
                 settings.theme === 'auto'
                   ? 'bg-primary-600 text-white shadow-md'
@@ -124,7 +123,7 @@ export const ThemeSwitcher: React.FC<ThemeSwitcherProps> = ({ isVisible }) => {
               <button
                 key={theme.value}
                 type="button"
-                onClick={() => updateColorTheme(theme.value)}
+                onClick={() => updateSettings({ colorTheme: theme.value })}
                 className={`relative overflow-hidden rounded-lg transition-all ${
                   settings.colorTheme === theme.value
                     ? 'ring-4 ring-primary-500 shadow-lg scale-105'
@@ -187,7 +186,7 @@ export const ThemeSwitcher: React.FC<ThemeSwitcherProps> = ({ isVisible }) => {
                 <button
                   key={density.value}
                   type="button"
-                  onClick={() => updateLayoutDensity(density.value)}
+                  onClick={() => updateSettings({ layoutDensity: density.value })}
                   className={`p-3 rounded-lg transition-all flex flex-col items-center gap-2 ${
                     settings.layoutDensity === density.value
                       ? 'bg-primary-600 text-white shadow-md'

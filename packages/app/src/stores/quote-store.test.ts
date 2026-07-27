@@ -39,6 +39,15 @@ vi.mock('@cuewise/storage', () => ({
   setSettings: vi.fn(),
 }));
 
+// Mock the settings store — filter persistence routes through its serialized updateSettings.
+const settingsMock = vi.hoisted(() => ({ updateSettings: vi.fn() }));
+
+vi.mock('./settings-store', () => ({
+  useSettingsStore: {
+    getState: () => ({ updateSettings: settingsMock.updateSettings }),
+  },
+}));
+
 // Mock toast store with all methods
 const mockToastError = vi.fn();
 const mockToastWarning = vi.fn();
@@ -70,6 +79,7 @@ describe('Quote Store', () => {
     // Default mock for settings
     vi.mocked(storage.getSettings).mockResolvedValue(defaultSettings);
     vi.mocked(storage.setSettings).mockResolvedValue({ success: true });
+    settingsMock.updateSettings.mockResolvedValue(true);
   });
 
   describe('initialize', () => {
@@ -633,7 +643,7 @@ describe('Quote Store', () => {
       it('should persist when toggling category off', async () => {
         setupToggleState({ enabledCategories: [...ALL_QUOTE_CATEGORIES] });
         await useQuoteStore.getState().toggleCategory('inspiration');
-        expect(storage.setSettings).toHaveBeenCalledWith(
+        expect(settingsMock.updateSettings).toHaveBeenCalledWith(
           expect.objectContaining({
             quoteFilterEnabledCategories: expect.not.arrayContaining(['inspiration']),
           })
@@ -643,7 +653,7 @@ describe('Quote Store', () => {
       it('should persist when toggling category on', async () => {
         setupToggleState({ enabledCategories: ['productivity'] });
         await useQuoteStore.getState().toggleCategory('inspiration');
-        expect(storage.setSettings).toHaveBeenCalledWith(
+        expect(settingsMock.updateSettings).toHaveBeenCalledWith(
           expect.objectContaining({
             quoteFilterEnabledCategories: expect.arrayContaining(['productivity', 'inspiration']),
           })
@@ -653,7 +663,7 @@ describe('Quote Store', () => {
       it('should persist setEnabledCategories', async () => {
         setupToggleState({ enabledCategories: [...ALL_QUOTE_CATEGORIES] });
         await useQuoteStore.getState().setEnabledCategories(['inspiration', 'creativity']);
-        expect(storage.setSettings).toHaveBeenCalledWith(
+        expect(settingsMock.updateSettings).toHaveBeenCalledWith(
           expect.objectContaining({ quoteFilterEnabledCategories: ['inspiration', 'creativity'] })
         );
       });
@@ -661,7 +671,7 @@ describe('Quote Store', () => {
       it('should persist toggleCustomQuotes', async () => {
         setupToggleState({ showCustomQuotes: true });
         await useQuoteStore.getState().toggleCustomQuotes();
-        expect(storage.setSettings).toHaveBeenCalledWith(
+        expect(settingsMock.updateSettings).toHaveBeenCalledWith(
           expect.objectContaining({ quoteFilterShowCustomQuotes: false })
         );
       });
@@ -669,7 +679,7 @@ describe('Quote Store', () => {
       it('should persist toggleFavoritesOnly', async () => {
         setupToggleState({ showFavoritesOnly: false });
         await useQuoteStore.getState().toggleFavoritesOnly();
-        expect(storage.setSettings).toHaveBeenCalledWith(
+        expect(settingsMock.updateSettings).toHaveBeenCalledWith(
           expect.objectContaining({ quoteFilterShowFavoritesOnly: true })
         );
       });
@@ -677,7 +687,7 @@ describe('Quote Store', () => {
       it('should persist toggleCollection on', async () => {
         setupToggleState({ activeCollectionIds: [] });
         await useQuoteStore.getState().toggleCollection('col-1');
-        expect(storage.setSettings).toHaveBeenCalledWith(
+        expect(settingsMock.updateSettings).toHaveBeenCalledWith(
           expect.objectContaining({ quoteFilterActiveCollectionIds: ['col-1'] })
         );
       });
@@ -685,7 +695,7 @@ describe('Quote Store', () => {
       it('should persist toggleCollection off', async () => {
         setupToggleState({ activeCollectionIds: ['col-1', 'col-2'] });
         await useQuoteStore.getState().toggleCollection('col-1');
-        expect(storage.setSettings).toHaveBeenCalledWith(
+        expect(settingsMock.updateSettings).toHaveBeenCalledWith(
           expect.objectContaining({ quoteFilterActiveCollectionIds: ['col-2'] })
         );
       });
@@ -693,7 +703,7 @@ describe('Quote Store', () => {
       it('should persist setActiveCollectionIds', async () => {
         setupToggleState({ activeCollectionIds: [] });
         await useQuoteStore.getState().setActiveCollectionIds(['col-1', 'col-2']);
-        expect(storage.setSettings).toHaveBeenCalledWith(
+        expect(settingsMock.updateSettings).toHaveBeenCalledWith(
           expect.objectContaining({ quoteFilterActiveCollectionIds: ['col-1', 'col-2'] })
         );
       });
@@ -715,55 +725,36 @@ describe('Quote Store', () => {
 
         await useQuoteStore.getState().deleteCollection('col-1');
 
-        expect(storage.setSettings).toHaveBeenCalledWith(
+        expect(settingsMock.updateSettings).toHaveBeenCalledWith(
           expect.objectContaining({ quoteFilterActiveCollectionIds: ['col-2'] })
         );
       });
     });
 
-    describe('persistFilterSettings - error handling', () => {
-      it('should show warning toast when persistence fails', async () => {
-        const mockQuotes = quoteFactory.buildList(3);
-        useQuoteStore.setState({
-          quotes: mockQuotes,
-          showFavoritesOnly: false,
-          isLoading: false,
-        });
-
-        // Make setSettings fail
-        vi.mocked(storage.setSettings).mockRejectedValue(new Error('Storage error'));
-
-        await useQuoteStore.getState().toggleFavoritesOnly();
-
-        // State should still be updated in memory
-        expect(useQuoteStore.getState().showFavoritesOnly).toBe(true);
-
-        // Warning toast should be shown
-        expect(mockToastWarning).toHaveBeenCalledWith(
-          'Failed to save filter preferences. Your changes may not persist.'
-        );
-      });
-
-      it('should show warning toast when getSettings fails during persistence', async () => {
-        const mockQuotes = quoteFactory.buildList(3);
-        useQuoteStore.setState({
-          quotes: mockQuotes,
-          enabledCategories: [...ALL_QUOTE_CATEGORIES],
-          isLoading: false,
-        });
-
-        // Make getSettings fail during persistence (after initialize)
-        vi.mocked(storage.getSettings).mockRejectedValue(new Error('Cannot read settings'));
+    describe('persistFilterSettings - settings store routing', () => {
+      it('persists a filter change through the serialized settings writer', async () => {
+        setupToggleState({ enabledCategories: [...ALL_QUOTE_CATEGORIES] });
 
         await useQuoteStore.getState().toggleCategory('inspiration');
 
-        // State should still be updated in memory
-        expect(useQuoteStore.getState().enabledCategories).not.toContain('inspiration');
-
-        // Warning toast should be shown
-        expect(mockToastWarning).toHaveBeenCalledWith(
-          'Failed to save filter preferences. Your changes may not persist.'
+        expect(settingsMock.updateSettings).toHaveBeenCalledWith(
+          expect.objectContaining({
+            quoteFilterEnabledCategories: expect.any(Array),
+            quoteFilterShowCustomQuotes: expect.any(Boolean),
+            quoteFilterShowFavoritesOnly: expect.any(Boolean),
+            quoteFilterActiveCollectionIds: expect.any(Array),
+          })
         );
+        expect(storage.setSettings).not.toHaveBeenCalled();
+      });
+
+      it('keeps the in-memory filter when the settings write fails', async () => {
+        setupToggleState({ enabledCategories: [...ALL_QUOTE_CATEGORIES] });
+        settingsMock.updateSettings.mockResolvedValue(false);
+
+        await useQuoteStore.getState().toggleCategory('inspiration');
+
+        expect(useQuoteStore.getState().enabledCategories).not.toContain('inspiration');
       });
     });
   });

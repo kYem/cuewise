@@ -116,10 +116,9 @@ describe('imported items always satisfy the read schemas', () => {
     const result = importOf({ pomodoroSessions: [session] });
 
     expect(result.data?.pomodoroSessions).toHaveLength(1);
-    expect((result.data?.pomodoroSessions?.[0] as unknown as Record<string, unknown>)[field]).toBe(
-      expected
-    );
-    expect(pomodoroSessionSchema.safeParse(result.data?.pomodoroSessions?.[0]).success).toBe(true);
+    const [imported] = result.data?.pomodoroSessions ?? [];
+    expect((imported as unknown as Record<string, unknown>)[field]).toBe(expected);
+    expect(pomodoroSessionSchema.safeParse(imported).success).toBe(true);
   });
 
   it('still imports a well-formed item untouched', () => {

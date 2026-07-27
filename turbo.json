@@ -18,10 +18,7 @@
     "type-check": {
       "dependsOn": ["^type-check"]
     },
-    "test": {
-      "outputs": ["coverage/**"],
-      "cache": true
-    },
+    "test": {},
     "test:watch": {
       "cache": false,
       "persistent": true

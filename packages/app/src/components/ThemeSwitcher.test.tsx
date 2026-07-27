@@ -13,9 +13,6 @@ function mockStore(overrides: Record<string, unknown> = {}) {
   vi.mocked(useSettingsStore).mockImplementation(
     createSelectorMock({
       settings: { ...defaultSettings, ...overrides },
-      updateColorTheme: vi.fn(),
-      updateTheme: vi.fn(),
-      updateLayoutDensity: vi.fn(),
       updateSettings,
     })
   );
@@ -43,5 +40,35 @@ describe('ThemeSwitcher — Enhanced glass toggle', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Enhanced glass/ }));
     expect(updateSettings).toHaveBeenCalledWith({ glassEnhanced: true });
+  });
+});
+
+describe('ThemeSwitcher — mode, color and density write through updateSettings', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('writes the selected mode', () => {
+    const { updateSettings } = mockStore();
+    render(<ThemeSwitcher isVisible />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dark' }));
+    expect(updateSettings).toHaveBeenCalledWith({ theme: 'dark' });
+  });
+
+  it('writes the selected color theme', () => {
+    const { updateSettings } = mockStore();
+    render(<ThemeSwitcher isVisible />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Forest' }));
+    expect(updateSettings).toHaveBeenCalledWith({ colorTheme: 'forest' });
+  });
+
+  it('writes the selected density', () => {
+    const { updateSettings } = mockStore();
+    render(<ThemeSwitcher isVisible />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Compact' }));
+    expect(updateSettings).toHaveBeenCalledWith({ layoutDensity: 'compact' });
   });
 });

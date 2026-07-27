@@ -45,4 +45,4 @@ const Tooltip = ({ label, children, side = 'top', delayDuration = 200 }: Tooltip
   </TooltipProvider>
 );
 
-export { Tooltip, TooltipProvider, TooltipRoot, TooltipTrigger, TooltipContent };
+export { Tooltip, TooltipContent, TooltipProvider, TooltipRoot, TooltipTrigger };
