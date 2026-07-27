@@ -82,17 +82,11 @@ function isCustomQuote(quote: Quote): boolean {
  */
 async function migrateLegacyQuotes(): Promise<void> {
   try {
-    // Check both storage areas for legacy quotes
-    const localQuotes = await getValidatedListFromStorage<Quote>(
-      STORAGE_KEYS.QUOTES,
-      quoteSchema,
-      'local'
-    );
-    const syncQuotes = await getValidatedListFromStorage<Quote>(
-      STORAGE_KEYS.QUOTES,
-      quoteSchema,
-      'sync'
-    );
+    // Raw, and this one matters more than the other movers: the legacy key is REMOVED at
+    // the end, so a quote dropped from the copy is not quarantined anywhere — it is gone.
+    // Every other validated read leaves the bytes on disk to be salvaged later.
+    const localQuotes = await getFromStorage<Quote[]>(STORAGE_KEYS.QUOTES, 'local');
+    const syncQuotes = await getFromStorage<Quote[]>(STORAGE_KEYS.QUOTES, 'sync');
     const legacyQuotes = localQuotes || syncQuotes;
 
     if (!legacyQuotes || legacyQuotes.length === 0) {
@@ -130,12 +124,9 @@ async function migrateLegacyQuotes(): Promise<void> {
 
 export async function getQuotes(): Promise<Quote[]> {
   try {
-    // Check if migration is needed
-    const legacyQuotes = await getValidatedListFromStorage<Quote>(
-      STORAGE_KEYS.QUOTES,
-      quoteSchema,
-      'local'
-    );
+    // Raw: this only decides whether to migrate, and the migration itself must see
+    // everything that is there.
+    const legacyQuotes = await getFromStorage<Quote[]>(STORAGE_KEYS.QUOTES, 'local');
     if (legacyQuotes && legacyQuotes.length > 0) {
       await migrateLegacyQuotes();
     }

@@ -94,7 +94,7 @@ interface InsightsStore {
   initialize: () => Promise<void>;
   refresh: () => Promise<void>;
   exportAsJSON: () => void;
-  exportAsCSV: (type: 'daily' | 'weekly' | 'monthly' | 'goals' | 'pomodoros') => void;
+  exportAsCSV: (type: 'daily' | 'weekly' | 'monthly' | 'goals' | 'pomodoros') => Promise<void>;
   exportAllAsJSON: () => Promise<void>;
 
   // Import actions
@@ -207,9 +207,16 @@ export const useInsightsStore = create<InsightsStore>((set, get) => ({
     }
   },
 
-  exportAsCSV: (type: 'daily' | 'weekly' | 'monthly' | 'goals' | 'pomodoros') => {
+  exportAsCSV: async (type: 'daily' | 'weekly' | 'monthly' | 'goals' | 'pomodoros') => {
     try {
-      const { analytics, goals, pomodoroSessions } = get();
+      const { analytics } = get();
+      // Raw for the two entity exports, same reason as the JSON backup: a spreadsheet of
+      // the user's goals should hold their goals, not the subset this build can render.
+      // The trend variants below are derived data and legitimately come from state.
+      const [goals, pomodoroSessions] = await Promise.all([
+        getGoalsRaw(),
+        getPomodoroSessionsRaw(),
+      ]);
 
       let csv = '';
       let filename = '';

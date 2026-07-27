@@ -27,7 +27,13 @@ import {
   REMINDER_SNOOZE_MINUTES,
 } from './constants';
 import { logger } from './logger';
-import { goalSchema, pomodoroSessionSchema, quoteCategorySchema, quoteSchema } from './schemas';
+import {
+  goalSchema,
+  pomodoroSessionSchema,
+  quoteCategorySchema,
+  quoteSchema,
+  subtaskSchema,
+} from './schemas';
 import type {
   AdvancedAnalytics,
   DailyDataPoint,
@@ -1547,14 +1553,23 @@ export function parseImportData(jsonString: string): ImportValidation {
 
   // Validate individual items
   const validatedData: ExportData = {
-    version: (exportData.version as string) || 'unknown',
-    formatVersion: (exportData.formatVersion as number) || 0,
-    exportDate: (exportData.exportDate as string) || new Date().toISOString(),
+    // `typeof`, not `||`: these are rendered directly in the import preview, and `||` lets
+    // any truthy value through — an object reaching React as a child throws, and the
+    // app-wide ErrorBoundary takes the page down. This is the one input where the user
+    // points the app at a file of their choosing.
+    version: typeof exportData.version === 'string' ? exportData.version : 'unknown',
+    formatVersion: typeof exportData.formatVersion === 'number' ? exportData.formatVersion : 0,
+    exportDate:
+      typeof exportData.exportDate === 'string' ? exportData.exportDate : new Date().toISOString(),
     insights: (exportData.insights as ExportData['insights']) || null,
     analytics: (exportData.analytics as ExportData['analytics']) || null,
-    goals: validateGoals(exportData.goals as unknown[], errors),
-    quotes: validateQuotes(exportData.quotes as unknown[], errors),
-    pomodoroSessions: validatePomodoroSessions(exportData.pomodoroSessions as unknown[], errors),
+    goals: validateGoals(exportData.goals as unknown[], errors, warnings),
+    quotes: validateQuotes(exportData.quotes as unknown[], errors, warnings),
+    pomodoroSessions: validatePomodoroSessions(
+      exportData.pomodoroSessions as unknown[],
+      errors,
+      warnings
+    ),
   };
 
   return {
@@ -1582,12 +1597,19 @@ function accepts(
   schema: { safeParse: (value: unknown) => { success: boolean } },
   candidate: unknown,
   field: string,
-  errors: ImportValidationError[]
+  warnings: string[]
 ): boolean {
   if (schema.safeParse(candidate).success) {
     return true;
   }
-  errors.push({ field, message: 'Does not match the expected shape and was skipped' });
+  // A warning, never an error: `isValid` is `errors.length === 0`, so recording a skipped
+  // item as an error would mark the whole file invalid and hide the Import button —
+  // discarding every good item in it to report one bad one.
+  //
+  // A backstop, not the main path: every field above is coerced or filtered per item, so
+  // nothing a JSON file can express should reach here. It exists so that a schema tightened
+  // later fails visibly rather than writing something the reader will silently drop.
+  warnings.push(`${field} does not match the expected shape and was skipped`);
   return false;
 }
 
@@ -1595,7 +1617,11 @@ function isQuoteCategory(value: unknown): value is Quote['category'] {
   return quoteCategorySchema.safeParse(value).success;
 }
 
-function validateGoals(goals: unknown[], errors: ImportValidationError[]): Goal[] {
+function validateGoals(
+  goals: unknown[],
+  errors: ImportValidationError[],
+  warnings: string[]
+): Goal[] {
   const validGoals: Goal[] = [];
 
   for (let i = 0; i < goals.length; i++) {
@@ -1632,10 +1658,14 @@ function validateGoals(goals: unknown[], errors: ImportValidationError[]): Goal[
       ...(typeof goal.description === 'string' ? { description: goal.description } : {}),
       ...(typeof goal.dueDate === 'string' ? { dueDate: goal.dueDate } : {}),
       ...(typeof goal.sortOrder === 'number' ? { sortOrder: goal.sortOrder } : {}),
-      ...(Array.isArray(goal.subtasks) ? { subtasks: goal.subtasks as Subtask[] } : {}),
+      // Filtered per item, like every other list in this codebase: one malformed subtask
+      // costs that subtask, not the goal it belongs to.
+      ...(Array.isArray(goal.subtasks)
+        ? { subtasks: goal.subtasks.filter((s) => subtaskSchema.safeParse(s).success) as Subtask[] }
+        : {}),
     };
 
-    if (!accepts(goalSchema, candidate, `goals[${i}]`, errors)) {
+    if (!accepts(goalSchema, candidate, `goals[${i}]`, warnings)) {
       continue;
     }
     validGoals.push(candidate);
@@ -1647,7 +1677,11 @@ function validateGoals(goals: unknown[], errors: ImportValidationError[]): Goal[
 /**
  * Validate quotes array
  */
-function validateQuotes(quotes: unknown[], errors: ImportValidationError[]): Quote[] {
+function validateQuotes(
+  quotes: unknown[],
+  errors: ImportValidationError[],
+  warnings: string[]
+): Quote[] {
   const validQuotes: Quote[] = [];
 
   for (let i = 0; i < quotes.length; i++) {
@@ -1685,7 +1719,7 @@ function validateQuotes(quotes: unknown[], errors: ImportValidationError[]): Quo
       ...(typeof quote.notes === 'string' ? { notes: quote.notes } : {}),
     };
 
-    if (!accepts(quoteSchema, candidate, `quotes[${i}]`, errors)) {
+    if (!accepts(quoteSchema, candidate, `quotes[${i}]`, warnings)) {
       continue;
     }
     validQuotes.push(candidate);
@@ -1699,7 +1733,8 @@ function validateQuotes(quotes: unknown[], errors: ImportValidationError[]): Quo
  */
 function validatePomodoroSessions(
   sessions: unknown[],
-  errors: ImportValidationError[]
+  errors: ImportValidationError[],
+  warnings: string[]
 ): PomodoroSession[] {
   const validSessions: PomodoroSession[] = [];
 
@@ -1738,7 +1773,7 @@ function validatePomodoroSessions(
       ...(typeof session.goalId === 'string' ? { goalId: session.goalId } : {}),
     };
 
-    if (!accepts(pomodoroSessionSchema, candidate, `pomodoroSessions[${i}]`, errors)) {
+    if (!accepts(pomodoroSessionSchema, candidate, `pomodoroSessions[${i}]`, warnings)) {
       continue;
     }
     validSessions.push(candidate);

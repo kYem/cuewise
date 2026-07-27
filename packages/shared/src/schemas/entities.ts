@@ -14,7 +14,7 @@ import type {
 } from '../types';
 import { assertNoDrift } from './drift';
 
-const subtaskSchema = z.object({
+export const subtaskSchema = z.object({
   id: z.string(),
   text: z.string(),
   completed: z.boolean(),
