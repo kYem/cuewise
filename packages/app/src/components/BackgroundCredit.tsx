@@ -10,10 +10,18 @@ interface BackgroundCreditProps {
 
 const LINK_CLASS = 'underline underline-offset-2 hover:text-white transition-colors';
 
+const PANEL_CLASS = [
+  'pointer-events-none absolute bottom-full left-0 mb-2 whitespace-nowrap rounded-lg',
+  'border border-white/10 bg-black/70 px-2.5 py-1.5 text-white/80 shadow-lg backdrop-blur-md',
+  'opacity-0 transition-opacity',
+  'group-hover:pointer-events-auto group-hover:opacity-100',
+  'group-focus-within:pointer-events-auto group-focus-within:opacity-100',
+].join(' ');
+
 /**
  * Credits the background photo and offers a fresh one. Leads with the place the
  * photo was taken when known, keeping the photographer credit in a hover/focus
- * reveal; without a location the byline stays visible. Never guesses either.
+ * popover; without a location the byline stays visible. Never guesses either.
  */
 export const BackgroundCredit: React.FC<BackgroundCreditProps> = ({
   imageUrl,
@@ -57,13 +65,12 @@ export const BackgroundCredit: React.FC<BackgroundCreditProps> = ({
     // `group` drives the hover/focus reveal of the byline behind the location.
     <div className="group fixed bottom-3 left-3 z-30 flex items-center gap-3 text-xs text-white/60">
       {credit.location !== null ? (
-        <p>
-          <span>{credit.location}</span>
-          <span className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
-            {' · '}
-            {byline}
-          </span>
-        </p>
+        // The byline floats above the row rather than expanding it — revealing it inline
+        // shoved the refresh button sideways on every hover.
+        <div className="relative">
+          <p>{credit.location}</p>
+          <div className={PANEL_CLASS}>{byline}</div>
+        </div>
       ) : (
         <p>{byline}</p>
       )}

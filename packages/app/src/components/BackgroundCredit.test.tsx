@@ -51,6 +51,14 @@ describe('BackgroundCredit', () => {
     expect(container.textContent).toContain('Photo by v2osk');
   });
 
+  it('floats the byline above the credit line so revealing it cannot move the refresh control', () => {
+    render(<BackgroundCredit imageUrl={CURATED_URL} onRefresh={vi.fn()} />);
+
+    const panel = screen.getByRole('link', { name: 'Urban Vintage' }).closest('div');
+    expect(panel).not.toBeNull();
+    expect(panel?.className).toContain('absolute');
+  });
+
   it('offers a control to change the background', () => {
     render(<BackgroundCredit imageUrl={CURATED_URL} onRefresh={vi.fn()} />);
 
