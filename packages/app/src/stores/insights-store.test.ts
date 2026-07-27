@@ -13,6 +13,8 @@ import {
   mockStorageError,
   mockStorageWithData,
   QUARANTINED_GOAL,
+  QUARANTINED_QUOTE,
+  QUARANTINED_SESSION,
 } from './__fixtures__/insights-store.fixtures';
 import { useInsightsStore } from './insights-store';
 
@@ -64,6 +66,8 @@ vi.mock('./toast-store', () => ({
 // ============================================================================
 // Tests
 // ============================================================================
+
+const originalCreateElement = document.createElement.bind(document);
 
 describe('Insights Store - Import Methods', () => {
   beforeEach(() => {
@@ -126,6 +130,8 @@ describe('Insights Store - Import Methods', () => {
       useInsightsStore.setState({
         importValidation: createValidImportValidation({
           goals: [goalFactory.build({ id: 'new-1' })],
+          quotes: [quoteFactory.build({ id: 'new-q' })],
+          pomodoroSessions: [pomodoroFactory.build({ id: 'new-s' })],
         }),
       });
 
@@ -133,6 +139,28 @@ describe('Insights Store - Import Methods', () => {
 
       const saved = vi.mocked(storage.setGoalsRaw).mock.calls[0][0] as Goal[];
       expect(saved.map((goal) => goal.id)).toContain(QUARANTINED_GOAL.id);
+      const savedQuotes = vi.mocked(storage.setQuotesRaw).mock.calls[0][0] as Quote[];
+      expect(savedQuotes.map((quote) => quote.id)).toContain(QUARANTINED_QUOTE.id);
+      const savedSessions = vi.mocked(storage.setPomodoroSessionsRaw).mock.calls[0][0];
+      expect(savedSessions.map((session) => session.id)).toContain(QUARANTINED_SESSION.id);
+    });
+
+    // The backup's whole contract is faithfulness, and it was only ever mocked, never run.
+    it('exports every stored item, including the ones this build cannot render', async () => {
+      mockStorageWithData({ goals: [goalFactory.build({ id: 'g1' })] });
+      vi.spyOn(URL, 'createObjectURL').mockImplementation(() => 'blob:x');
+      vi.spyOn(document, 'createElement').mockImplementation((tag: string) =>
+        Object.assign(originalCreateElement(tag), { click: () => undefined })
+      );
+
+      await useInsightsStore.getState().exportAllAsJSON();
+
+      // The raw readers, not the rendering ones: a backup that omits what this build cannot
+      // parse is not a backup, and re-importing it writes the reduced set over storage.
+      expect(vi.mocked(storage.getGoalsRaw)).toHaveBeenCalled();
+      expect(vi.mocked(storage.getQuotesRaw)).toHaveBeenCalled();
+      expect(vi.mocked(storage.getPomodoroSessionsRaw)).toHaveBeenCalled();
+      expect(vi.mocked(storage.getGoals)).not.toHaveBeenCalled();
     });
 
     it('should skip duplicate goals when skipDuplicates is true', async () => {

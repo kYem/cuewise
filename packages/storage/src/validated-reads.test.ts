@@ -1,4 +1,10 @@
-import { configurePlatform, DEFAULT_SETTINGS, type KeyValueStore, logger } from '@cuewise/shared';
+import {
+  configurePlatform,
+  DEFAULT_SETTINGS,
+  type KeyValueStore,
+  logger,
+  type StorageArea,
+} from '@cuewise/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getCalendarState,
@@ -34,6 +40,44 @@ function storeHolding(values: Record<string, unknown>): KeyValueStore {
     set: async () => ({ success: true }),
     remove: async () => true,
     getUsage: async () => ({ bytesInUse: 0, quota: 10_000_000 }),
+  };
+}
+
+/**
+ * A store that records what was written, per AREA as well as per key, and round-trips
+ * through JSON like the real adapters.
+ *
+ * Both properties are load-bearing. A single-map fake let a write to the wrong area pass —
+ * `setGoals` to 'local' while `getGoals` reads `getStorageArea()` is total goal loss for
+ * every sync-enabled user — and a reference-returning fake hid an identity comparison that
+ * could never match in production.
+ */
+function capturingStore(initial: Record<string, unknown> = {}, area: StorageArea = 'local') {
+  const written: Record<string, unknown> = {};
+  const seedKey = (key: string) => `${area}:${key}`;
+  const disk: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(initial)) {
+    disk[seedKey(key)] = value;
+  }
+  return {
+    written,
+    /** Everything written to `local`, keyed plainly, for assertions. */
+    local: written,
+    store: {
+      supportsSync: true,
+      get: async (key: string, readArea: StorageArea = 'local') => {
+        const slot = `${readArea}:${key}`;
+        return (clone(slot in disk ? disk[slot] : null) ?? null) as never;
+      },
+      set: async (key: string, value: unknown, writeArea: StorageArea = 'local') => {
+        disk[`${writeArea}:${key}`] = clone(value);
+        written[key] = clone(value);
+        written[`${writeArea}:${key}`] = clone(value);
+        return { success: true as const };
+      },
+      remove: async () => true,
+      getUsage: async () => ({ bytesInUse: 0, quota: 10_000_000 }),
+    },
   };
 }
 
@@ -623,10 +667,78 @@ describe('a settings write that means the default', () => {
     const { written, store } = capturingSettings();
     configurePlatform({ storage: store });
 
-    await setSettingsRaw({ ...DEFAULT_SETTINGS, colorTheme: DEFAULT_SETTINGS.colorTheme });
+    await setSettingsRaw({ ...DEFAULT_SETTINGS, theme: DEFAULT_SETTINGS.theme });
 
+    expect((written.settings as Record<string, unknown>).theme).toBe(DEFAULT_SETTINGS.theme);
+    // And it does not quietly restore the neighbour it cannot read, which is the whole
+    // difference between this setter and the preserving one.
     expect((written.settings as Record<string, unknown>).colorTheme).toBe(
       DEFAULT_SETTINGS.colorTheme
     );
+  });
+});
+
+// Two settings default to arrays, and `quote-store` rebuilds one of them with `.filter()`
+// on every filter toggle — so an identity comparison against the default is always false
+// and the stored value is overwritten. The same identity-vs-value mistake the list writer
+// had, one function away.
+describe('an unreadable setting whose default is an array', () => {
+  const stored = {
+    theme: 'dark',
+    quoteFilterActiveCollectionIds: [{ id: 'c1', name: 'Stoics' }],
+  };
+
+  it('survives a caller that rebuilt the array rather than passing our reference', async () => {
+    const written: Record<string, unknown> = {};
+    configurePlatform({
+      storage: {
+        supportsSync: true,
+        get: async (key: string) =>
+          (clone(key in written ? written[key] : stored) ?? null) as never,
+        set: async (key: string, value: unknown) => {
+          written[key] = clone(value);
+          return { success: true as const };
+        },
+        remove: async () => true,
+        getUsage: async () => ({ bytesInUse: 0, quota: 10_000_000 }),
+      },
+    });
+
+    const current = await getSettings();
+    // A fresh array with the same contents as the default — what `.filter()` produces.
+    await setSettings({
+      ...current,
+      quoteFilterActiveCollectionIds: [...current.quoteFilterActiveCollectionIds],
+    });
+
+    expect((written.settings as Record<string, unknown>).quoteFilterActiveCollectionIds).toEqual(
+      stored.quoteFilterActiveCollectionIds
+    );
+  });
+});
+
+// A single-map fake cannot tell one area from another, so a write aimed at the wrong one
+// looks identical to a correct write. For a sync-enabled user that is every goal, gone.
+describe('writes land in the area their reader uses', () => {
+  const goal = { id: 'g1', text: 'synced', completed: false, createdAt: 'x', date: '2026-07-26' };
+
+  it('writes goals to the sync area when sync is on', async () => {
+    const { written, store } = capturingStore({ settings: { syncEnabled: true } }, 'local');
+    configurePlatform({ storage: store });
+
+    await setGoals([goal]);
+
+    expect(written['sync:goals']).toEqual([goal]);
+    expect(written['local:goals']).toBeUndefined();
+  });
+
+  it('keeps settings in the local area regardless', async () => {
+    const { written, store } = capturingStore({ settings: { syncEnabled: true } }, 'local');
+    configurePlatform({ storage: store });
+
+    await setSettingsRaw({ ...DEFAULT_SETTINGS, syncEnabled: true });
+
+    expect(written['local:settings']).toBeDefined();
+    expect(written['sync:settings']).toBeUndefined();
   });
 });

@@ -1705,6 +1705,11 @@ function validateQuotes(quotes: unknown[], warnings: string[]): Quote[] {
       ...(typeof quote.lastViewed === 'string' ? { lastViewed: quote.lastViewed } : {}),
       ...(typeof quote.source === 'string' ? { source: quote.source } : {}),
       ...(typeof quote.notes === 'string' ? { notes: quote.notes } : {}),
+      // The twelfth field, and the only one this literal used to omit — so re-importing a
+      // backup silently stripped every quote's collection membership.
+      ...(Array.isArray(quote.collectionIds)
+        ? { collectionIds: quote.collectionIds.filter((id) => typeof id === 'string') }
+        : {}),
     };
 
     if (!accepts(quoteSchema, candidate, `quotes[${i}]`, warnings)) {

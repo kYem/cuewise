@@ -59,6 +59,19 @@ export const QUARANTINED_GOAL = {
   date: '2026-07-26',
 } as ReturnType<typeof goalFactory.build>;
 
+/** Stands in for a stored quote only the raw read can see. */
+export const QUARANTINED_QUOTE = {
+  id: 'quarantined-quote',
+  text: 'written by a newer build',
+  isCustom: true,
+} as ReturnType<typeof quoteFactory.build>;
+
+/** Stands in for a stored session only the raw read can see. */
+export const QUARANTINED_SESSION = {
+  id: 'quarantined-session',
+  startedAt: '2026-07-26T00:00:00.000Z',
+} as ReturnType<typeof pomodoroFactory.build>;
+
 export function mockStorageWithData(
   options: {
     goals?: ReturnType<typeof goalFactory.build>[];
@@ -79,8 +92,11 @@ export function mockStorageWithData(
   // only a raw read can see. Returning identical arrays made the two readers
   // indistinguishable, so swapping a raw read for a validated one passed every test.
   vi.mocked(storage.getGoalsRaw).mockResolvedValue([...(options.goals ?? []), QUARANTINED_GOAL]);
-  vi.mocked(storage.getQuotesRaw).mockResolvedValue(options.quotes ?? []);
-  vi.mocked(storage.getPomodoroSessionsRaw).mockResolvedValue(options.sessions ?? []);
+  vi.mocked(storage.getQuotesRaw).mockResolvedValue([...(options.quotes ?? []), QUARANTINED_QUOTE]);
+  vi.mocked(storage.getPomodoroSessionsRaw).mockResolvedValue([
+    ...(options.sessions ?? []),
+    QUARANTINED_SESSION,
+  ]);
   vi.mocked(storage.setGoalsRaw).mockResolvedValue({ success: true });
   vi.mocked(storage.setQuotesRaw).mockResolvedValue({ success: true });
   vi.mocked(storage.setPomodoroSessionsRaw).mockResolvedValue({ success: true });

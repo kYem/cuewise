@@ -535,16 +535,12 @@ export async function getQuotesRaw(): Promise<Quote[]> {
  * chose it.
  *
  * "The caller did not change this field" is approximated by "the caller is still carrying
- * our default", because the read handed them that default and the two are indistinguishable
- * afterwards. The consequence is a real limitation: a caller who deliberately sets a field
- * to this build's default does not overwrite an unparseable stored value. Callers that mean
- * it — sync applying a remote value, a reset to defaults — use `setSettingsRaw`, which is
- * the same raw/validated split the lists use.
+ * our default", compared by value — the read handed them that default and the two are
+ * indistinguishable afterwards. The consequence is a real limitation: a caller who
+ * deliberately sets a field to this build's default does not overwrite an unparseable
+ * stored value. Callers that mean it — sync applying a remote value, a reset to defaults —
+ * use `setSettingsRaw`, which is the same raw/validated split the lists use.
  */
-export async function setSettingsRaw(settings: Settings): Promise<StorageResult> {
-  return setInStorage(STORAGE_KEYS.SETTINGS, settings, 'local');
-}
-
 export async function setSettings(settings: Settings): Promise<StorageResult> {
   const raw = await getFromStorage<Record<string, unknown>>(STORAGE_KEYS.SETTINGS, 'local');
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
@@ -561,7 +557,11 @@ export async function setSettings(settings: Settings): Promise<StorageResult> {
     // Unreadable on disk, so the caller was handed the default rather than this value. Only
     // put it back when the caller is still carrying that same default — an explicit change
     // to the field must win.
-    if (next[key] === DEFAULT_SETTINGS[key as keyof Settings]) {
+    // By value, not by reference. Two settings default to arrays, and `quote-store` rebuilds
+    // `quoteFilterActiveCollectionIds` with `.filter()` on every filter toggle — so `===`
+    // against the default reference is always false and the stored value was overwritten
+    // without even appearing in the warning below. Same mistake as the list writer's.
+    if (JSON.stringify(next[key]) === JSON.stringify(DEFAULT_SETTINGS[key as keyof Settings])) {
       next[key] = stored;
       preserved.push(key);
     }
@@ -570,6 +570,12 @@ export async function setSettings(settings: Settings): Promise<StorageResult> {
     logger.warn('Preserved unreadable settings fields through a write', { fields: preserved });
   }
   return setInStorage(STORAGE_KEYS.SETTINGS, next, 'local');
+}
+
+/** The plain write, for callers that saw everything: sync applying a remote value, and a
+ * reset. Preserving here would keep the very fields those two exist to overwrite. */
+export async function setSettingsRaw(settings: Settings): Promise<StorageResult> {
+  return setInStorage(STORAGE_KEYS.SETTINGS, settings, 'local');
 }
 
 // Storage usage tracking

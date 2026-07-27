@@ -1,5 +1,12 @@
 import { configurePlatform, DEFAULT_SETTINGS } from '@cuewise/shared';
-import { getGoals, getSettings, getSettingsForSync, setGoals } from '@cuewise/storage';
+import {
+  getGoals,
+  getSettings,
+  getSettingsForSync,
+  setGoals,
+  setGoalsRaw,
+  setSettingsRaw,
+} from '@cuewise/storage';
 import { goalFactory } from '@cuewise/test-utils/factories';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { FakeKvStore } from './__fixtures__/fake-kv-store';
@@ -132,5 +139,54 @@ describe('DEVICE_LOCAL_SETTINGS_KEYS', () => {
   it('includes both sync toggles', () => {
     expect(DEVICE_LOCAL_SETTINGS_KEYS).toContain('syncEnabled');
     expect(DEVICE_LOCAL_SETTINGS_KEYS).toContain('cloudSyncEnabled');
+  });
+});
+
+// The whole point of the raw readers: sync must see, and be able to delete, an item this
+// build cannot parse. Every one of these bindings could be reverted to the validated helpers
+// with the entire monorepo green — the array-binding tests above only use factory-built
+// entities, which are schema-valid, so the distinction is invisible to them.
+describe('bindings see what the UI cannot', () => {
+  const unreadable = { id: 'g-unreadable', text: 'from a newer build', completed: 'nope' };
+
+  async function seedGoals(rows: unknown[]): Promise<void> {
+    await setGoalsRaw(rows as never);
+  }
+
+  it('readAll includes a stored goal the validated read hides', async () => {
+    await seedGoals([goalFactory.build({ id: 'g1' }), unreadable]);
+
+    const all = await goalsBinding().readAll();
+
+    expect(Object.keys(all)).toContain('g-unreadable');
+  });
+
+  // Absence from readAll is how the cycle infers a tombstone, so a goal the reader hides
+  // would be pushed as a delete and removed on every other device.
+  it('writeOne can delete that same goal', async () => {
+    await seedGoals([goalFactory.build({ id: 'g1' }), unreadable]);
+
+    await goalsBinding().writeOne('g-unreadable', null);
+
+    const all = await goalsBinding().readAll();
+    expect(Object.keys(all)).not.toContain('g-unreadable');
+  });
+
+  // ...and an unrelated write must not quietly resurrect it either.
+  it('writeOne of a different goal leaves it in place', async () => {
+    await seedGoals([goalFactory.build({ id: 'g1' }), unreadable]);
+
+    await goalsBinding().writeOne('g1', goalFactory.build({ id: 'g1', text: 'edited' }));
+
+    const all = await goalsBinding().readAll();
+    expect(Object.keys(all)).toContain('g-unreadable');
+  });
+
+  it('settings readAll exposes a value this build cannot parse', async () => {
+    await setSettingsRaw({ ...DEFAULT_SETTINGS, colorTheme: 'aurora' as never });
+
+    const all = await settingsBinding().readAll();
+
+    expect((all.colorTheme as { value: unknown }).value).toBe('aurora');
   });
 });

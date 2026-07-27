@@ -8,7 +8,13 @@
  * later: add a field to the interface and its schema stops matching, and vice versa.
  */
 
-/** Mutual assignability. Catches an added, removed or retyped field in either direction. */
+/**
+ * Mutual assignability. Catches a required field added, removed or retyped in either
+ * direction. It is blind to *optional* fields — `{id: string}` and `{id: string; note?: T}`
+ * are mutually assignable — so a schema that omits an optional one still compiles. That is
+ * latent rather than dangerous here: the readers return the original value, never zod's
+ * parsed copy, so a looser schema cannot drop data. Tighten this if that ever changes.
+ */
 type Matches<Schema, Interface> = [Schema] extends [Interface]
   ? [Interface] extends [Schema]
     ? true
