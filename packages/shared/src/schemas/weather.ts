@@ -51,9 +51,6 @@ export const weatherSnapshotSchema = z.extend(weatherForecastSchema, {
 assertNoDrift<z.infer<typeof weatherSnapshotSchema>, WeatherSnapshot>();
 
 /*
- * There is deliberately no `weatherStateSchema`. The stored blob is the one value this
- * module must NOT validate whole: `getWeatherState` hands it back untouched so the store can
- * salvage location, snapshot and timestamp independently, and a reading this build cannot
- * parse would otherwise take the user's saved city with it. A schema for the wrapper would
- * only invite someone to wire it into that read.
+ * No `weatherStateSchema` on purpose: `getWeatherState` returns the blob untouched so the
+ * store can salvage its three fields independently, and a wrapper schema invites wiring in.
  */

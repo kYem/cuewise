@@ -270,8 +270,7 @@ describe('fetchTodayEvents', () => {
   // It is parsed per item now: one unreadable row costs that row, not the day's agenda.
   it('skips an entry it cannot read and keeps the rest of the day', async () => {
     stubFetchItems([
-      // Mappable in every respect except the id, so only the schema can reject it — an
-      // entry missing start/end would be dropped by the mapper regardless and prove nothing.
+      // Mappable except for the id, so only the schema can reject it.
       {
         id: 42 as unknown as string,
         summary: 'no usable id',
@@ -291,15 +290,9 @@ describe('fetchTodayEvents', () => {
     expect(events.map((event) => event.id)).toEqual(['t1']);
   });
 
-  // The row above pins only `id`. Each of these is otherwise mappable with exactly one
-  // optional field in a shape the schema forbids, so widening that field to `unknown` lets
-  // the row through. Two of them then reach real code: a non-array `attendees` throws inside
-  // `isDismissed` and costs the whole agenda, and an object `summary` lands in `title` and
-  // reaches React as a child.
-  //
-  // No row for `start`/`end`: widen either and the row still disappears, because the mapper
-  // needs `start.dateTime` or `start.date` and a malformed one yields neither. Their schema
-  // checks are genuinely redundant with the mapper, so no test here can discriminate.
+  // One forbidden optional field each. A non-array `attendees` throws inside `isDismissed`
+  // and costs the agenda; an object `summary` lands in `title` and reaches React as a child.
+  // No row for `start`/`end`: the mapper drops those rows anyway, so nothing discriminates.
   it.each([
     ['attendees that are not a list', { attendees: 'nobody' }],
     ['a summary that is not a string', { summary: { text: 'Standup' } }],
@@ -330,10 +323,8 @@ describe('fetchTodayEvents', () => {
   // An envelope we cannot read at all is an empty agenda, not a thrown error: the strip is
   // ambient, and it must never take the new tab down with it.
   //
-  // Only the object and number rows actually need the guard: delete it and those two throw
-  // on `for...of`. A string is iterable, so the loop just walked its characters and every one
-  // failed the per-event parse — which is why the original single string case proved nothing.
-  // `null` is caught by the `?? []` rather than the guard. Both are kept as documentation.
+  // Only the object and number rows need the guard — they throw on `for...of`. A string is
+  // iterable and `null` is caught by the `?? []`; both are kept as documentation.
   it.each([
     ['an object', {}],
     ['a number', 42],

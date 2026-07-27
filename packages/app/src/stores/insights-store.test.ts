@@ -70,13 +70,8 @@ vi.mock('./toast-store', () => ({
 const originalCreateElement = document.createElement.bind(document);
 
 /**
- * Stubs the download path and hands back the Blob the export actually produced. Asserting on
- * which readers ran is not enough: both export paths wrap everything after the reads in a
- * `try/catch`, so emptying the payload keeps every reader assertion green.
- *
- * Callers must restore afterwards. This package sets no `restoreMocks`, and the suite's
- * `beforeEach` only calls `clearAllMocks`, which keeps implementations — so without a restore
- * every later test gets a `document.createElement` whose `.click()` does nothing.
+ * The Blob the export actually produced. Both export paths catch everything after the reads,
+ * so an emptied payload keeps every reader assertion green.
  */
 function captureDownloadedBlob(): () => Blob {
   let captured: Blob | undefined;
@@ -112,10 +107,8 @@ describe('Insights Store - Import Methods', () => {
     vi.clearAllMocks();
   });
 
-  // `clearAllMocks` above resets calls but keeps implementations, and this package sets no
-  // `restoreMocks`, so the export tests' `document.createElement` spy stays installed for
-  // every test after them. Nothing downstream touches the DOM today, so deleting this breaks
-  // no test — it is here for the next one added below, which would get a dead `.click()`.
+  // `clearAllMocks` keeps implementations and this package sets no `restoreMocks`, so the
+  // export tests' `createElement` spy would outlive them. No test needs this yet.
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -155,10 +148,8 @@ describe('Insights Store - Import Methods', () => {
       expect(result.errors[0].message).toBe('No valid import data available');
     });
 
-    // Import merges into the array it read and writes the whole thing back, so it must read
-    // raw: starting from the rendering view drops the items this build cannot parse, and in
-    // skip-duplicates mode their ids are absent from the dedupe set, so the incoming copies
-    // are appended and counted as imported — silently replacing what the user had.
+    // Import rewrites the whole array, so a validated read drops what it cannot parse — and
+    // their ids are then absent from the dedupe set, so incoming copies replace them.
     it('keeps a stored goal only the raw read can see', async () => {
       mockStorageWithData({ goals: [goalFactory.build({ id: 'existing-1' })] });
       useInsightsStore.setState({
@@ -186,9 +177,7 @@ describe('Insights Store - Import Methods', () => {
 
       await useInsightsStore.getState().exportAllAsJSON();
 
-      // The payload, not just which readers ran. `exportAllAsJSON` catches everything after
-      // the reads, so a body of three empty arrays satisfied the reader assertions below
-      // while producing a backup of nothing.
+      // The payload, not just which readers ran: three empty arrays satisfied those.
       const payload = JSON.parse(await written().text());
       expect(payload.goals.map((goal: Goal) => goal.id)).toContain(QUARANTINED_GOAL.id);
       expect(payload.quotes.map((quote: Quote) => quote.id)).toContain(QUARANTINED_QUOTE.id);
@@ -249,9 +238,7 @@ describe('Insights Store - Import Methods', () => {
 
       expect(result.imported.goals).toBe(1);
       const savedGoals = vi.mocked(storage.setGoalsRaw).mock.calls[0][0] as Goal[];
-      // Looked up by id rather than by index: the saved array also carries the row only the
-      // raw read can see, and asserting on position would pin the merge's ordering instead
-      // of the replacement this test is named for.
+      // By id: the saved array also carries the quarantined row, so position pins ordering.
       expect(savedGoals.find((goal) => goal.id === 'existing-1')?.text).toBe('Updated');
     });
 
@@ -266,9 +253,7 @@ describe('Insights Store - Import Methods', () => {
       await useInsightsStore.getState().executeImport(DEFAULT_IMPORT_OPTIONS);
 
       const savedQuotes = vi.mocked(storage.setQuotesRaw).mock.calls[0][0] as Quote[];
-      // By id, not by index. The saved array leads with the row only the raw read can see,
-      // and that row is already `isCustom: true` — so position 0 passed whether or not the
-      // import stamped anything, and dropping the stamp entirely left this test green.
+      // By id: the saved array leads with the quarantined row, which is already isCustom.
       expect(savedQuotes.find((quote) => quote.id === importQuote.id)?.isCustom).toBe(true);
     });
 

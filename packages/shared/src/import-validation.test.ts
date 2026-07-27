@@ -3,10 +3,8 @@ import { goalSchema, pomodoroSessionSchema, quoteSchema } from './schemas';
 import { parseImportData } from './utils';
 
 /**
- * The write boundary must not admit what the read boundary deletes. Every item that
- * survives an import is checked here against the very schema the storage reader applies —
- * anything that slips through is an item the user is told they imported, which then
- * disappears on the next read and is erased by the next edit.
+ * The write boundary must not admit what the read boundary deletes: anything that slips
+ * through is reported as imported, then vanishes on the next read.
  */
 function importOf(payload: Record<string, unknown>) {
   return parseImportData(JSON.stringify({ formatVersion: 1, ...payload }));
@@ -60,10 +58,8 @@ describe('imported items always satisfy the read schemas', () => {
     expect(typeof result.data?.goals?.[0].createdAt).toBe('string');
   });
 
-  // The last gate before an imported item reaches storage, and nothing reached it: every
-  // field is coerced above, so a file our own export wrote always passes. `1e400` is the way
-  // in — JSON.parse yields `Infinity`, which the coercion sees as a `number` and the schema
-  // does not. Written as raw JSON text because no JS literal survives the round trip.
+  // Raw JSON text: `1e400` parses to `Infinity`, a `number` to the coercion and not to the
+  // schema, and no JS literal survives the round trip to get there.
   it('skips an item the schema still rejects after every coercion', () => {
     const raw =
       '{"formatVersion":1,"pomodoroSessions":[{"id":"s1","startedAt":"x","duration":1e400}]}';
@@ -74,8 +70,7 @@ describe('imported items always satisfy the read schemas', () => {
     expect(result.warnings.join(' ')).toContain('does not match the expected shape');
   });
 
-  // A skip is a warning, never an error: `isValid` is `errors.length === 0`, so recording it
-  // as an error would hide the Import button and discard every good item in the file.
+  // A skip is a warning: an error would make `isValid` false and hide the Import button.
   it('still lets the rest of the file import', () => {
     const raw =
       '{"formatVersion":1,"pomodoroSessions":[{"id":"s1","startedAt":"x","duration":1e400}],' +
@@ -87,9 +82,7 @@ describe('imported items always satisfy the read schemas', () => {
     expect(result.data?.goals).toHaveLength(1);
   });
 
-  // The twelfth Quote field, and the last one the importer learned to carry. Dropping it is
-  // invisible to a schema check — `collectionIds` is optional — so re-importing a backup
-  // silently emptied every collection while reporting a clean import.
+  // Optional, so dropping it is invisible to a schema check — and empties every collection.
   it('carries collection membership through an import', async () => {
     const result = importOf({ quotes: [{ id: 'q1', text: 't', collectionIds: ['c1', 'c2'] }] });
 
@@ -102,9 +95,7 @@ describe('imported items always satisfy the read schemas', () => {
     expect(result.data?.quotes?.[0].collectionIds).toEqual(['c1']);
   });
 
-  // Both ends of the same coercion. The schemas accept any string, so an empty one imports
-  // clean and then groups under a blank date header or shows a blank author — invisible to
-  // the round-trip checks above, which only ask whether the schema still matches.
+  // The schemas accept any string, so an empty one imports clean and then shows blank.
   it('substitutes today for an empty date rather than importing a blank one', () => {
     const result = importOf({ goals: [{ id: 'g1', text: 't', date: '', createdAt: '' }] });
 

@@ -36,10 +36,8 @@ describe('weatherLocationSchema', () => {
 });
 
 /**
- * These replaced hand-written `isForecast`/`isHour`/`isCurrentConditions` predicates whose own
- * docstring recorded what a bad snapshot cost: it threw inside the chip's render and took the
- * whole new tab down. One row per field, because a table that only covers a few of them lets
- * the rest widen to `unknown` unnoticed — which is exactly what happened here.
+ * A bad snapshot throws inside the chip's render and takes the new tab down. One row per
+ * field: a table covering only a few lets the rest widen to `unknown` unnoticed.
  */
 describe('weatherSnapshotSchema', () => {
   const SNAPSHOT = {
@@ -56,9 +54,7 @@ describe('weatherSnapshotSchema', () => {
     expect(weatherSnapshotSchema.safeParse(SNAPSHOT).success).toBe(true);
   });
 
-  // One field wrong per row, everything else valid. An earlier version of the first row
-  // dropped `condition` and `isDay` as well, so it was rejected for the missing fields and
-  // `temperature` could be widened to `unknown` with this file green.
+  // One field wrong per row: a row missing several is rejected for the wrong reason.
   const hour = (overrides: Record<string, unknown>) => ({
     hours: [{ ...SNAPSHOT.hours[0], ...overrides }],
   });
@@ -85,8 +81,7 @@ describe('weatherSnapshotSchema', () => {
         temperature: Number.NaN,
       }),
     ],
-    // The nullable fields need a negative row of their own. A `keeps X nullable` test passes
-    // just as happily under `z.nullable(z.unknown())`, so the positive case cannot pin them.
+    // Nullable fields need a negative row: `keeps X nullable` passes under `z.unknown()` too.
     ['a non-numeric apparentTemperature', current({ apparentTemperature: 'cold' })],
     ['a non-string admin1', place({ admin1: 42 })],
     ['a location that fails its own schema', place({ timezone: '' })],

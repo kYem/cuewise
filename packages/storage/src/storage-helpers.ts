@@ -57,10 +57,7 @@ import {
  * Settings are always stored in local storage to avoid circular dependency
  */
 async function getStorageArea(): Promise<'local' | 'sync'> {
-  // Always use local for settings to avoid circular dependency
-  // Quiet: this runs on every storage helper call, so one unreadable field would otherwise
-  // warn dozens of times per page load. The loud `getSettings` still reports it — once per
-  // call, and it has six call sites, so a few times rather than a few dozen.
+  // Quiet: this runs on every storage helper call. The loud `getSettings` still reports it.
   const settings = await readStoredSettingsFields({ quiet: true });
   const syncEnabled = settings.syncEnabled ?? DEFAULT_SETTINGS.syncEnabled;
   return syncEnabled ? 'sync' : 'local';
@@ -320,10 +317,8 @@ export async function setCalendarState(state: CalendarState): Promise<StorageRes
 // Always local, which is what makes the location per-device: a travelling laptop shows
 // where it actually is.
 export async function getWeatherState(): Promise<WeatherState | null> {
-  // Raw on purpose. `weather-store.initialize` validates location, snapshot and timestamp
-  // independently and keeps whichever survive — a reading this build cannot parse must not
-  // take the user's saved city with it. Validating the whole blob here returns null and
-  // makes that salvage unreachable, and re-picking a city then overwrites the loss.
+  // Raw: `weather-store.initialize` salvages location, snapshot and timestamp independently,
+  // and validating the wrapper here would take the saved city with a bad reading.
   return getFromStorage<WeatherState>(STORAGE_KEYS.WEATHER, 'local');
 }
 
@@ -377,16 +372,9 @@ export async function setCustomYoutubePlaylists(
 // Settings
 // Note: Settings are always stored in local storage to avoid circular dependency
 /**
- * Settings is the one blob that must never be validated all-or-nothing.
- *
- * It is only rewritten when the user changes something, and there is no upgrade migration,
- * so a blob written by any earlier release legitimately lacks every field added since.
- * Rejecting the whole object would reset every preference on upgrade — including
- * `syncEnabled`, which decides the storage *area*, so the user's synced goals and quotes
- * would read as empty and the next write would persist that as fact.
- *
- * So each field is checked on its own: absent or unreadable ones fall back to their
- * default, and everything the user actually chose survives.
+ * Field-wise, never all-or-nothing: there is no upgrade migration, so any older blob lacks
+ * fields added since, and rejecting it whole would reset every preference — including
+ * `syncEnabled`, which picks the storage area, making synced data read as empty.
  */
 async function readStoredSettingsFields(
   options: { quiet?: boolean } = {}
@@ -397,10 +385,7 @@ async function readStoredSettingsFields(
   }
   const stored = raw as Record<string, unknown>;
   const shape = settingsSchema.def.shape;
-  // Seeded with the keys this build has never heard of, so validating stays a check rather
-  // than an edit. Dropping them would delete a setting a newer build wrote, and the store
-  // rewrites the whole object on the next change — the same silent loss the read path
-  // avoids for every other blob.
+  // Seeded with keys this build does not know, so validating stays a check, not an edit.
   const kept: Record<string, unknown> = Object.fromEntries(
     Object.entries(stored).filter(([key]) => !(key in shape))
   );
@@ -427,11 +412,7 @@ export async function getSettings(): Promise<Settings> {
   return { ...DEFAULT_SETTINGS, ...(await readStoredSettingsFields()) };
 }
 
-/**
- * Null when nothing was ever stored. For destructive automation that must fail closed,
- * which is why this reports absence rather than defaults — but a blob missing only fields
- * added since it was written is present, not absent.
- */
+/** Null only when nothing was ever stored, for automation that must fail closed. */
 export async function getStoredSettings(): Promise<Settings | null> {
   const raw = await getFromStorage<unknown>(STORAGE_KEYS.SETTINGS, 'local');
   if (raw === null) {
@@ -441,14 +422,8 @@ export async function getStoredSettings(): Promise<Settings | null> {
 }
 
 /**
- * Raw list reads for the sync engine.
- *
- * Sync moves opaque user data between devices; it never renders anything, so it must not
- * use the rendering view. The validated readers hide items this build cannot parse — which
- * is right for the UI and wrong here twice over: `writeOne` is a read-modify-write over the
- * whole array, so a hidden item would be *deleted* on the next pull, and an entity absent
- * from a read is how the cycle infers a tombstone, so it would be deleted on every other
- * device too. Same reasoning as `migrateStorageData`: move the bytes, do not judge them.
+ * Raw list reads for the sync engine. An item hidden from `readAll` is deleted by the next
+ * `writeOne`, and its absence is how the cycle infers a tombstone for every other device.
  */
 export async function getGoalsRaw(): Promise<Goal[]> {
   return (await getFromStorage<Goal[]>(STORAGE_KEYS.GOALS, await getStorageArea())) ?? [];
@@ -465,12 +440,7 @@ export async function getCollectionsRaw(): Promise<QuoteCollection[]> {
   );
 }
 
-/**
- * Settings as stored, with defaults filling only what was never written — nothing dropped,
- * nothing defaulted for being unreadable. The sync binding read-modify-writes the whole
- * object, so reading through the validating path would persist a remote value this build
- * does not recognise as our default, on every device.
- */
+/** Defaults fill only what was never written; nothing is defaulted for being unreadable. */
 export async function getSettingsForSync(): Promise<Settings> {
   const raw = await getFromStorage<Record<string, unknown>>(STORAGE_KEYS.SETTINGS, 'local');
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
@@ -488,11 +458,7 @@ export async function getPomodoroSessionsRaw(): Promise<PomodoroSession[]> {
   );
 }
 
-/**
- * Raw writes, the counterpart to the raw reads above. A caller that saw every stored item
- * is a caller whose omissions are deliberate, so its write must not resurrect anything —
- * that is how a pulled tombstone deletes a goal this build cannot parse.
- */
+/** Counterpart to the raw reads: this caller saw everything, so its omissions must land. */
 export async function setGoalsRaw(goals: Goal[]): Promise<StorageResult> {
   return setInStorage(STORAGE_KEYS.GOALS, goals, await getStorageArea());
 }
@@ -529,18 +495,10 @@ export async function getQuotesRaw(): Promise<Quote[]> {
 }
 
 /**
- * The write counterpart to the field-wise read, for the same reason the lists have one: a
- * known key whose stored value this build cannot parse is replaced by its default on read,
- * and the store rewrites the whole object on the next change — so a colour theme or cadence
- * a newer build introduced would be silently reset here, and pushed back to the device that
- * chose it.
- *
- * "The caller did not change this field" is approximated by "the caller is still carrying
- * our default", compared by value — the read handed them that default and the two are
- * indistinguishable afterwards. The consequence is a real limitation: a caller who
- * deliberately sets a field to this build's default does not overwrite an unparseable
- * stored value. Callers that mean it — sync applying a remote value, a reset to defaults —
- * use `setSettingsRaw`, which is the same raw/validated split the lists use.
+ * "Unchanged" is approximated by "still carrying our default", compared by value — the two
+ * are indistinguishable after the read handed it over. So a caller that deliberately sets a
+ * field to this build's default cannot overwrite an unparseable stored one; those callers
+ * use `setSettingsRaw`.
  */
 export async function setSettings(settings: Settings): Promise<StorageResult> {
   const raw = await getFromStorage<Record<string, unknown>>(STORAGE_KEYS.SETTINGS, 'local');
@@ -555,13 +513,8 @@ export async function setSettings(settings: Settings): Promise<StorageResult> {
     if (stored === undefined || fieldSchema.safeParse(stored).success) {
       continue;
     }
-    // Unreadable on disk, so the caller was handed the default rather than this value. Only
-    // put it back when the caller is still carrying that same default — an explicit change
-    // to the field must win.
-    // By value, not by reference. Two settings default to arrays, and `quote-store` rebuilds
-    // `quoteFilterActiveCollectionIds` with `.filter()` on every filter toggle — so `===`
-    // against the default reference is always false and the stored value was overwritten
-    // without even appearing in the warning below. Same mistake as the list writer's.
+    // By value: two settings default to arrays and `quote-store` rebuilds one with
+    // `.filter()`, so `===` against the default reference never matches.
     if (JSON.stringify(next[key]) === JSON.stringify(DEFAULT_SETTINGS[key as keyof Settings])) {
       next[key] = stored;
       preserved.push(key);
@@ -647,10 +600,8 @@ export async function migrateStorageData(
   toArea: 'local' | 'sync'
 ): Promise<StorageResult> {
   try {
-    // Raw reads, deliberately. Migration moves bytes between areas — it never renders
-    // anything — and a validated read would turn an unreadable blob into `[]`, which the
-    // unconditional writes below would then copy over live data in the destination. The
-    // read paths still validate on the way out, so a bad blob stays quarantined, not erased.
+    // Raw: a validated read turns an unreadable blob into `[]`, which the unconditional
+    // writes below would then copy over live data in the destination area.
     const customQuotes =
       (await getFromStorage<Quote[]>(STORAGE_KEYS.CUSTOM_QUOTES, fromArea)) ?? [];
     const currentQuote = await getFromStorage<Quote>(STORAGE_KEYS.CURRENT_QUOTE, fromArea);

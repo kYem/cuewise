@@ -90,9 +90,7 @@ describe('settings binding', () => {
     expect(result.theme).toEqual({ key: 'theme', value: DEFAULT_SETTINGS.theme });
   });
 
-  // 'dark', not 'forest': the latter is a colorTheme, and now that reads validate per field
-  // an invalid theme is correctly refused on the way out — which would make this assert the
-  // validator rather than the binding.
+  // 'dark', not 'forest': the latter is a colorTheme, so it would assert the validator.
   it('writeOne updates only the targeted key', async () => {
     await settingsBinding().writeOne('theme', { key: 'theme', value: 'dark' });
 
@@ -101,9 +99,7 @@ describe('settings binding', () => {
     expect(settings.colorTheme).toBe(DEFAULT_SETTINGS.colorTheme);
   });
 
-  // The binding rewrites the whole settings object, so a value this build does not
-  // recognise — from a newer peer — must survive the round trip rather than being written
-  // back as our default on every device.
+  // The binding rewrites the whole object, so a value from a newer peer must survive it.
   it('does not overwrite a neighbouring key it cannot interpret', async () => {
     await settingsBinding().writeOne('colorTheme', { key: 'colorTheme', value: 'aurora' });
     await settingsBinding().writeOne('theme', { key: 'theme', value: 'dark' });
@@ -145,10 +141,8 @@ describe('DEVICE_LOCAL_SETTINGS_KEYS', () => {
   });
 });
 
-// The whole point of the raw readers: sync must see, and be able to delete, an item this
-// build cannot parse. Every one of these bindings could be reverted to the validated helpers
-// with the entire monorepo green — the array-binding tests above only use factory-built
-// entities, which are schema-valid, so the distinction is invisible to them.
+// The tests above build entities from factories, which are schema-valid, so the raw/validated
+// distinction is invisible to them.
 describe('bindings see what the UI cannot', () => {
   const unreadable = { id: 'g-unreadable', text: 'from a newer build', completed: 'nope' };
 
@@ -164,8 +158,7 @@ describe('bindings see what the UI cannot', () => {
     expect(Object.keys(all)).toContain('g-unreadable');
   });
 
-  // Absence from readAll is how the cycle infers a tombstone, so a goal the reader hides
-  // would be pushed as a delete and removed on every other device.
+  // Absence from readAll is how the cycle infers a tombstone.
   it('writeOne can delete that same goal', async () => {
     await seedGoals([goalFactory.build({ id: 'g1' }), unreadable]);
 
@@ -193,9 +186,7 @@ describe('bindings see what the UI cannot', () => {
     expect((all.colorTheme as { value: unknown }).value).toBe('aurora');
   });
 
-  // The preserving setter cannot tell "the peer chose our default" from "the caller never
-  // saw this field", so it drops the former — and a pull that lands nothing is a setting
-  // that stays wrong on this device forever while every other one shows the new value.
+  // The preserving setter cannot tell "the peer chose our default" from "never saw it".
   it('lands a pulled value that happens to equal our own default', async () => {
     await setSettingsRaw({ ...DEFAULT_SETTINGS, colorTheme: 'aurora' as never });
 
@@ -209,12 +200,7 @@ describe('bindings see what the UI cannot', () => {
   });
 });
 
-/**
- * The same three properties as the goals block above, across the other three array bindings.
- * Each was independently revertible to the validated helpers with the monorepo green: the
- * tests at the top of this file build their entities from factories, which are schema-valid
- * by construction, so nothing there can tell the two readers apart.
- */
+/** The same three properties as the goals block, across the other three array bindings. */
 describe.each([
   [
     'quotes',

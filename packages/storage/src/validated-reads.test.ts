@@ -51,21 +51,12 @@ import {
   setSettingsRaw,
 } from './storage-helpers';
 
-/**
- * A store that hands back whatever was put on "disk", however malformed — and round-trips
- * it through JSON first, because both real adapters mint fresh objects on every read
- * (chrome structured-clones, localStorage parses). A fake that returns the same reference
- * makes reference-identity bugs invisible, which is how one shipped into this file.
- */
+/** JSON round-trip on read, like both real adapters: a shared reference hides identity bugs. */
 function clone<T>(value: T): T {
   return value === undefined ? value : (JSON.parse(JSON.stringify(value)) as T);
 }
 
-/**
- * Seeds the `local` area only. Area-aware for the same reason `capturingStore` is: while this
- * ignored its `area` argument, every read test built on it was blind to which area the reader
- * asked for, and a dozen readers could be flipped to the wrong one with the monorepo green.
- */
+/** Seeds `local` only. Area-aware, or every read test built on it is blind to the area. */
 function storeHolding(values: Record<string, unknown>, area: StorageArea = 'local'): KeyValueStore {
   return {
     supportsSync: true,
@@ -78,18 +69,8 @@ function storeHolding(values: Record<string, unknown>, area: StorageArea = 'loca
 }
 
 /**
- * The one write-side fake. Records per AREA as well as per key, and round-trips through JSON
- * like the real adapters.
- *
- * Both properties are load-bearing, and both were learned the hard way. A single-map fake let
- * a write to the wrong area pass — `setGoals` to 'local' while `getGoals` reads
- * `getStorageArea()` is total goal loss for every sync-enabled user — and a
- * reference-returning fake hid an identity comparison that can never match in production.
- *
- * `at` defaults to `'local'` rather than omitting the area, so an assertion that says nothing
- * still names one; `wroteTo` always demands it. Do not add an accessor that merges areas —
- * an assertion that cannot name the area cannot catch a write that went to the wrong one,
- * which is the entire reason this exists.
+ * The one write-side fake, keyed per area as well as per key. Do not add an accessor that
+ * merges areas: an assertion that cannot name the area cannot catch a write to the wrong one.
  */
 function capturingStore(initial: Record<string, unknown> = {}, seedArea: StorageArea = 'local') {
   const disk = new Map<string, unknown>();
@@ -122,9 +103,7 @@ beforeEach(() => {
   vi.restoreAllMocks();
 });
 
-// The failure this exists to prevent is not one bad render. The same blob is read back on
-// every open, so a shape the UI cannot handle is a page that is broken every single time —
-// which is exactly how ENG-18 lost the whole new tab.
+// The same blob is read back on every open, so an unhandled shape breaks the page every time.
 describe('a stored value that no longer matches its shape', () => {
   it('is discarded rather than handed to the caller', async () => {
     configurePlatform({
@@ -134,10 +113,7 @@ describe('a stored value that no longer matches its shape', () => {
     await expect(getGoals()).resolves.toEqual([]);
   });
 
-  // This used to assert that one bad item discards the whole list, which is the behaviour
-  // the changeset promises against ("that one item is skipped... nothing else is touched").
-  // It matters because the stores reload-then-rewrite the whole array: the user's next edit
-  // would have persisted the emptiness, turning one malformed row into total loss.
+  // The stores reload-then-rewrite, so emptying the list makes the next edit persist that.
   it('costs the list one item, not all of them', async () => {
     const good = { id: 'g1', text: 'fine', completed: false, createdAt: 'x', date: '2026-07-26' };
     const goals = [
@@ -186,14 +162,12 @@ describe('a stored value that no longer matches its shape', () => {
       'Discarded an unreadable stored value',
       expect.objectContaining({ key: 'currentQuote' })
     );
-    // The blob holds the user's own quotes, goals and reminders — the path is enough to
-    // diagnose a shape change, and the value is never anyone's business.
+    // The blob holds the user's own quotes and goals; the path alone diagnoses a shape change.
     expect(JSON.stringify(warn.mock.calls)).not.toContain('a private note');
   });
 
-  // The weather store already salvages location, snapshot and timestamp independently.
-  // Validating the whole blob in the read made that unreachable, so a reading this build
-  // could not parse took the user's saved city with it — and re-picking one overwrote it.
+  // The store salvages location, snapshot and timestamp independently; validating the
+  // wrapper here would take the saved city with a bad reading.
   it('leaves the weather blob for the store to salvage per field', async () => {
     const stored = { location: { id: 'l1' }, snapshot: 'unreadable', lastFetch: null };
     configurePlatform({ storage: storeHolding({ weather: stored }) });
@@ -201,9 +175,7 @@ describe('a stored value that no longer matches its shape', () => {
     await expect(getWeatherState()).resolves.toEqual(stored);
   });
 
-  // Settings is the exception to the discard rule, and this test used to assert the
-  // opposite: that a partial blob is thrown away wholesale. That is precisely the bug —
-  // a partial blob is what every upgrade produces, and discarding it resets the lot.
+  // A partial blob is what every upgrade produces; discarding it resets every preference.
   it('keeps the settings a partial blob does carry, and defaults the rest', async () => {
     configurePlatform({ storage: storeHolding({ settings: { theme: 'dark' } }) });
 
@@ -379,9 +351,8 @@ describe('a calendar cache with one unreadable event', () => {
     });
   });
 
-  // The envelope's whole job: `events` must be an array before the per-item filter runs.
-  // Widen it and a stored string throws a TypeError straight out of the read — which the
-  // callers do not catch, so the ambient strip takes the page with it.
+  // `events` must be an array before the per-item filter, or the read throws a TypeError
+  // that no caller catches.
   it.each([
     ['events is not a list', { connected: true, events: 'nope', lastSync: null }],
     ['connected is not a boolean', { connected: 'yes', events: [], lastSync: null }],
@@ -392,9 +363,7 @@ describe('a calendar cache with one unreadable event', () => {
     await expect(getCalendarState()).resolves.toBeNull();
   });
 
-  // `allDay` is the union discriminator. This row carries the TIMED fields with the all-day
-  // flag set: only the literal keeps it out. Relax `allDay` to a plain boolean and the timed
-  // member accepts it, so an all-day entry renders on the strip at a wall-clock time.
+  // Timed fields with the all-day flag set: only the literal discriminator keeps it out.
   it('drops an event whose allDay flag contradicts its date fields', async () => {
     configurePlatform({
       storage: storeHolding({
@@ -414,11 +383,8 @@ describe('a calendar cache with one unreadable event', () => {
   });
 });
 
-// Sync moves opaque user data between devices and never renders it. If it read through the
-// validating helpers, an item this build cannot parse would be invisible to `readAll` —
-// and `writeOne` rewrites the whole array, so the next pull would delete it from disk,
-// while the cycle would read its absence as a tombstone and delete it on every other
-// device too. One device's parse failure must not become a fleet-wide erase.
+// One device's parse failure must not become a fleet-wide erase: an item invisible to
+// `readAll` is deleted by the next `writeOne` and read as a tombstone everywhere else.
 describe('the raw view sync reads through', () => {
   const unreadable = { id: 'g2', text: 'from a newer build', completed: 'nope' };
 
@@ -444,17 +410,14 @@ describe('the raw view sync reads through', () => {
   });
 });
 
-// The reader hides what it cannot parse, but every store reloads and writes the whole array
-// back — on the first edit, and on load via rollDueTasks and the recurring-reminder
-// advance. Without this, opening a tab was enough to erase a quarantined item, taking with
-// it the raw copy that export, sync and a future build were meant to recover from.
+// Every store reloads and writes the whole array back, on edit and on load, so without this
+// opening a tab erases a quarantined item along with the raw copy export and sync need.
 describe('a whole-list write', () => {
   const readable = { id: 'g1', text: 'fine', completed: false, createdAt: 'x', date: '2026-07-26' };
   const quarantined = { id: 'g2', text: 'from a newer build', completed: 'nope' };
 
-  // `wroteTo` before the value, here and below: the expectation is byte-identical to the
-  // seed, so "preserved through the write" and "the write never happened" look the same.
-  // Stubbing `setValidatedListInStorage` to return success immediately passed six of these.
+  // `wroteTo` first, here and below: the expectation equals the seed, so a write that never
+  // happened is indistinguishable from one that preserved everything.
   it('carries the items the caller never saw', async () => {
     const { at, wroteTo, store } = capturingStore({ goals: [readable, quarantined] });
     configurePlatform({ storage: store });
@@ -478,10 +441,8 @@ describe('a whole-list write', () => {
   });
 });
 
-// A validated reader must get back what it never saw; a raw reader must not, because its
-// omissions are deliberate. That split is expressed by which SETTER each one uses, not by
-// shared state — an earlier attempt kept a per-key map, and a per-key map cannot express a
-// per-caller property: one component's raw read disarmed the guarantee for every other.
+// The split is expressed by which SETTER the caller uses, not by shared state: a per-key map
+// cannot express a per-caller property.
 describe('who gets their hidden items back', () => {
   const readable = { id: 'g1', text: 'fine', completed: false, createdAt: 'x', date: '2026-07-26' };
   const unreadable = { id: 'g2', text: 'from a newer build', completed: 'nope' };
@@ -522,12 +483,8 @@ describe('who gets their hidden items back', () => {
     expect(at('goals')).toEqual([readable]);
   });
 
-  // The preserve step must not re-append a row the caller already passed in, or the array
-  // doubles on every write until it blows the storage quota.
-  // Driven through a MIXED caller — a raw read handed to the validated setter — because
-  // that is the only path that reaches the guard: a validated read filters the row out, so
-  // it is never in `items` and the check is never consulted. Without the guard the row is
-  // appended beside itself and doubles on every write until the quota stops all saving.
+  // Driven through a MIXED caller — raw read into the validated setter — because that is the
+  // only path reaching the guard: a validated read filters the row out of `items` entirely.
   it('never duplicates a row the caller already passed in', async () => {
     const { at, wroteTo, store } = capturingStore({ goals: [readable, idless] });
     configurePlatform({ storage: store });
@@ -605,15 +562,12 @@ describe('setQuotesRaw', () => {
   });
 });
 
-// The lists got a preserving write; settings is the same shape and had not. A known key
-// whose value this build cannot parse is defaulted on read, and the store rewrites the whole
-// object on any change — so the user's choice was replaced by our default and pushed to the
-// device that made it.
+// A key this build cannot parse is defaulted on read, and any change rewrites the whole
+// object — so the user's choice is replaced by our default and pushed to the device that made it.
 describe('a settings value this build cannot parse', () => {
   const stored = { theme: 'dark', colorTheme: 'aurora', somethingAddedLater: 'kept' };
 
-  // Named area, not an alias that hides it: settings must stay local no matter what the
-  // sync toggle says, since the area computation itself reads out of this very key.
+  // Named area, not an alias: the area computation itself reads out of this very key.
   const settingsAt = (at: (key: string, area: StorageArea) => unknown) =>
     at('settings', 'local') as Record<string, unknown>;
 
@@ -637,9 +591,8 @@ describe('a settings value this build cannot parse', () => {
   });
 });
 
-// Settings has a raw reader, so it needs a raw writer — the same split the lists use. The
-// preserving write cannot tell "the caller reset this to the default" from "the caller
-// never saw it", so callers that mean the default use the raw setter.
+// The preserving write cannot tell "reset to the default" from "never saw it", so callers
+// that mean the default use the raw setter.
 describe('a settings write that means the default', () => {
   const stored = { theme: 'dark', colorTheme: 'aurora', somethingAddedLater: 'kept' };
 
@@ -672,10 +625,8 @@ describe('a settings write that means the default', () => {
   });
 });
 
-// Two settings default to arrays, and `quote-store` rebuilds one of them with `.filter()`
-// on every filter toggle — so an identity comparison against the default is always false
-// and the stored value is overwritten. The same identity-vs-value mistake the list writer
-// had, one function away.
+// Two settings default to arrays and `quote-store` rebuilds one with `.filter()` per toggle,
+// so an identity comparison against the default never matches.
 describe('an unreadable setting whose default is an array', () => {
   const stored = {
     theme: 'dark',
@@ -701,17 +652,12 @@ describe('an unreadable setting whose default is an array', () => {
 });
 
 /**
- * Every key is wired to a schema by hand, and until this existed most of those wirings were
- * unfalsifiable: swapping `getQuickLinks` onto `conceptCardSchema` — or `getPostureStats`
- * onto `goalSchema` — left the whole monorepo green. The failure is not a type error, it is
- * a collection that reads as empty and is then persisted empty by the next whole-list write.
+ * A key on the wrong schema is not a type error — it is a collection that reads as empty and
+ * is then persisted empty by the next whole-list write.
  *
- * Three directions per key. The valid row proves the schema is not stricter than the type;
- * the foreign row proves the key is wired to the schema it claims. The NEAR-MISS is what
- * proves the schema still checks anything: it is the valid row with exactly one field made
- * wrong, so widening that field to `z.unknown()` makes this row pass and the test fail.
- * A foreign row alone cannot do that — it differs in so many fields that loosening any single
- * one never lets it through, which is how eighteen field-level checks sat here unpinned.
+ * Three directions per key. The near-miss is the load-bearing one: a foreign row differs in
+ * too many fields for any single widening to let it through, so only a row that is valid
+ * except for one field can pin what the schema still checks.
  */
 describe('each key is read through its own schema', () => {
   const goal = goalFactory.build();
@@ -800,9 +746,7 @@ describe('each key is read through its own schema', () => {
     await expect(read()).resolves.toEqual([]);
   });
 
-  // The rows above reach a schema's top level. These reach one level down, where the same
-  // blindness applies: a nested object or array element whose own shape nothing checks.
-  // Each is a valid parent carrying exactly one bad child.
+  // One level down: a valid parent carrying exactly one bad child.
   it.each([
     [
       'a subtask that is not shaped like one',
@@ -829,8 +773,7 @@ describe('each key is read through its own schema', () => {
   });
 });
 
-// A single-map fake cannot tell one area from another, so a write aimed at the wrong one
-// looks identical to a correct write. For a sync-enabled user that is every goal, gone.
+// A write aimed at the wrong area is every goal gone, for a sync-enabled user.
 describe('writes land in the area their reader uses', () => {
   const goal = { id: 'g1', text: 'synced', completed: false, createdAt: 'x', date: '2026-07-26' };
   const reminder = reminderFactory.build();
@@ -840,11 +783,7 @@ describe('writes land in the area their reader uses', () => {
   const quickLink = { id: 'ql1', title: 'Docs', url: 'https://example.com' };
   const quote = quoteFactory.build({ isCustom: true });
 
-  /**
-   * Runs the round trip with sync ON and again with it OFF. One polarity alone is not enough:
-   * with only the ON case a helper hardcoded to `'sync'` passes every assertion, and with only
-   * the OFF case one hardcoded to `'local'` does. Together, either mistake fails one of them.
-   */
+  /** Both polarities: one alone lets a helper hardcoded to the other side pass. */
   async function expectFollowsSyncToggle(
     key: string,
     entity: unknown,
@@ -893,15 +832,8 @@ describe('writes land in the area their reader uses', () => {
   });
 
   /**
-   * Every setter and every reader, on both the validated and the raw path. Pinning one side
-   * is not enough and pinning one collection is not enough: the raw readers are the sync
-   * engine's `readAll`, and a reader pointed at the wrong area returns `[]`, which by this
-   * module's own contract is how the cycle infers a tombstone — a delete pushed for every
-   * entity to every device.
-   *
-   * Two assertions per row, and together they are airtight: the write must land in `sync`,
-   * and the read must find it there. A reader stuck on `local` fails the second even though
-   * the first passed, and a pair that agrees on the wrong area fails the first.
+   * Both sides, both paths. The raw readers are the sync engine's `readAll`, and one pointed
+   * at the wrong area returns `[]` — which the cycle reads as a tombstone for every entity.
    */
   describe.each([
     [
@@ -958,8 +890,7 @@ describe('writes land in the area their reader uses', () => {
     await expectFollowsSyncToggle(key, entity, write, read);
   });
 
-  // The custom half follows the toggle; the seed half is local forever. Splitting them is
-  // what makes a hardcoded 'local' on one side and a hardcoded 'sync' on the other visible.
+  // The custom half follows the toggle; the seed half is local forever.
   it('sends custom quotes with the toggle and pins seed quotes to local', async () => {
     await expectFollowsSyncToggle(
       'customQuotes',
@@ -969,9 +900,8 @@ describe('writes land in the area their reader uses', () => {
     );
   });
 
-  // A real seed quote in the payload, not just an empty seed list: with only a custom quote
-  // here, the seed-half READ could be flipped to `sync` and still find the nothing it
-  // expected. Both halves have to carry a row for the round trip to discriminate.
+  // A real seed quote, not an empty seed list: otherwise the seed-half read can be flipped
+  // to `sync` and still find the nothing it expected.
   it.each([
     ['raw', (q: unknown[]) => setQuotesRaw(q as never), getQuotesRaw],
     ['validated', (q: unknown[]) => setQuotes(q as never), getQuotes],
@@ -987,8 +917,7 @@ describe('writes land in the area their reader uses', () => {
     await expect(read()).resolves.toEqual([seedQuote, quote]);
   });
 
-  // A single value rather than a list, so it misses every table above, and it is written on
-  // every new tab open — a reader and writer that disagree lose the displayed quote.
+  // A single value, so it misses every table above, and it is written on every new tab open.
   it('lets currentQuote follow the sync toggle', async () => {
     await expectFollowsSyncToggle(
       'currentQuote',
@@ -999,8 +928,7 @@ describe('writes land in the area their reader uses', () => {
     );
   });
 
-  // The whole area computation reads `syncEnabled` out of settings, so settings itself can
-  // never follow the area it decides. The writer was pinned above; this is the reader.
+  // Settings cannot follow the area it decides. The writer is pinned above; this is the reader.
   it('reads settings for sync out of the local area, never the synced one', async () => {
     const { store } = capturingStore({ settings: { ...DEFAULT_SETTINGS, syncEnabled: true } });
     configurePlatform({ storage: store });

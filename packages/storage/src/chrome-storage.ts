@@ -30,14 +30,7 @@ export async function getFromStorage<T>(
   return getStorage().get<T>(key, area);
 }
 
-/**
- * A read that checks what it found. Anything that no longer matches the schema is dropped
- * and logged rather than returned, because the alternative is handing a shape the UI
- * cannot render straight to React — which is not one bad render but a broken page on every
- * open, since the same blob is read back every time (ENG-18 lost a whole new tab that way).
- *
- * The caller's own "nothing stored" path then takes over: seeds, defaults, or a refetch.
- */
+/** Reads null for a value that no longer matches, so the caller's "nothing stored" path runs. */
 export async function getValidatedFromStorage<T>(
   key: string,
   schema: ZodMiniType<T>,
@@ -49,14 +42,10 @@ export async function getValidatedFromStorage<T>(
   }
   const result = schema.safeParse(raw);
   if (result.success) {
-    // The original, not `result.data`: zod strips keys the schema doesn't name, so
-    // returning the parsed copy would silently delete any field a *newer* version wrote —
-    // and the next write would persist that deletion. A downgrade, or two synced devices
-    // on different versions, would quietly lose data. This validates; it does not edit.
+    // The original, not `result.data`: zod strips fields a newer version wrote.
     return raw as T;
   }
-  // The value itself is never logged: stored blobs hold the user's own quotes, goals and
-  // reminders. Where it failed is enough to diagnose a shape change.
+  // Paths only — stored blobs hold the user's own quotes, goals and reminders.
   logger.warn('Discarded an unreadable stored value', {
     key,
     area,
@@ -66,12 +55,8 @@ export async function getValidatedFromStorage<T>(
 }
 
 /**
- * The list form, and the important difference: it drops the items it cannot read, not the
- * list. A whole-array schema fails wholesale, so one malformed quote would empty the
- * collection — and because the stores reload-then-rewrite the whole array, the user's next
- * edit would persist that emptiness. One bad row must cost one row.
- *
- * Returns null only when nothing is stored, or when the stored value is not a list at all.
+ * Per item, not per list: the stores reload-then-rewrite the whole array, so emptying it on
+ * one bad row would make the user's next edit persist that emptiness.
  */
 export async function getValidatedListFromStorage<T>(
   key: string,
@@ -110,20 +95,11 @@ export async function getValidatedListFromStorage<T>(
 }
 
 /**
- * The write counterpart to `getValidatedListFromStorage`, and the reason it exists: the
- * reader hides items it cannot parse, but every store reloads the list and writes the whole
- * thing back — on the first edit, and on load via `rollDueTasks` and the recurring-reminder
- * advance. A hidden item would therefore be erased by opening a tab, taking with it the raw
- * copy that export, sync and a future build were meant to recover from.
+ * Carries through whatever on disk this caller could not have seen, judged by the schema that
+ * hid it — otherwise the reload-then-rewrite cycle erases it on the next tab open.
  *
- * It preserves whatever is on disk right now that this caller could not have seen, judged
- * by the same schema that hid it. That is deliberately stateless: an earlier attempt
- * remembered what the last read dropped, and shared per-key state cannot express a
- * per-caller property — one component's raw read disarmed the guarantee for every other
- * component in the realm.
- *
- * The counterpart rule is that a caller who read RAW writes raw (`setGoalsRaw` and friends),
- * because it saw everything, so leaving an item out is a deliberate delete and must land.
+ * A caller that read RAW must write raw instead: it saw everything, so an omission is a
+ * deliberate delete and has to land.
  */
 export async function setValidatedListInStorage<T>(
   key: string,
@@ -135,10 +111,8 @@ export async function setValidatedListInStorage<T>(
   if (!Array.isArray(raw)) {
     return getStorage().set(key, items, area);
   }
-  // Compared by value, not by reference: both adapters mint fresh objects on every read
-  // (chrome structured-clones, localStorage `JSON.parse`s), so an identity check can never
-  // match and would leave the array doubling on every write — measured at 3, 5, 9, 17, 33 —
-  // until it exceeds the storage quota and nothing saves again.
+  // By value: both adapters mint fresh objects per read, so an identity check never matches
+  // and the array doubles on every write until it blows the quota.
   const written = new Set((items as unknown[]).map((item) => JSON.stringify(item)));
   const unreadable = raw.filter(
     (stored) => !itemSchema.safeParse(stored).success && !written.has(JSON.stringify(stored))

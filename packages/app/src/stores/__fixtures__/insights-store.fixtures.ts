@@ -85,12 +85,8 @@ export function mockStorageWithData(
   vi.mocked(storage.getQuotes).mockResolvedValue(options.quotes ?? []);
   vi.mocked(storage.setQuotesRaw).mockResolvedValue({ success: true });
   vi.mocked(storage.getPomodoroSessions).mockResolvedValue(options.sessions ?? []);
-  // Import and export read raw — they rewrite whole arrays, so starting from the rendering
-  // view would delete items it merely could not parse.
-  //
-  // The raw goals mock returns one row MORE than the validated one, standing in for an item
-  // only a raw read can see. Returning identical arrays made the two readers
-  // indistinguishable, so swapping a raw read for a validated one passed every test.
+  // One row MORE than the validated mock, standing in for an item only a raw read can see:
+  // identical arrays make the two readers indistinguishable.
   vi.mocked(storage.getGoalsRaw).mockResolvedValue([...(options.goals ?? []), QUARANTINED_GOAL]);
   vi.mocked(storage.getQuotesRaw).mockResolvedValue([...(options.quotes ?? []), QUARANTINED_QUOTE]);
   vi.mocked(storage.getPomodoroSessionsRaw).mockResolvedValue([

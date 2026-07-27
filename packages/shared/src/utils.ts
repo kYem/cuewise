@@ -1598,15 +1598,8 @@ function accepts(
   if (schema.safeParse(candidate).success) {
     return true;
   }
-  // A warning, never an error: `isValid` is `errors.length === 0`, so recording a skipped
-  // item as an error would mark the whole file invalid and hide the Import button —
-  // discarding every good item in it to report one bad one.
-  //
-  // A backstop, not the main path: every field above is coerced or filtered per item, so a
-  // file our own export wrote never reaches here. A hand-edited one still can — `1e400`
-  // parses to `Infinity`, which is a `number` to the coercion and not one to the schema. It
-  // exists so that a schema tightened later fails visibly rather than writing something the
-  // reader will silently drop.
+  // A warning, never an error: `isValid` is `errors.length === 0`, so an error here would
+  // hide the Import button and discard every good item in the file.
   warnings.push(`${field} does not match the expected shape and was skipped`);
   return false;
 }
@@ -1615,11 +1608,7 @@ function isQuoteCategory(value: unknown): value is Quote['category'] {
   return quoteCategorySchema.safeParse(value).success;
 }
 
-/**
- * What `||` used to do for the defaulted fields below, minus its hole: a numeric timestamp is
- * truthy, so `||` passed it through to storage where the read schema then hid it. Plain
- * `typeof` closes that but reopens the other end, letting `''` past as a real value.
- */
+/** Neither a numeric timestamp (which `||` let through) nor `''` (which `typeof` does). */
 function nonEmptyString(value: unknown): string | undefined {
   if (typeof value !== 'string' || value === '') {
     return undefined;

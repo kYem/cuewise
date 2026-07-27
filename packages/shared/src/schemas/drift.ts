@@ -1,19 +1,11 @@
 /**
- * Ties a schema to the interface it validates, at compile time.
- *
- * The interfaces in `types.ts` stay hand-written — they are imported in hundreds of places
- * and inferring them from schemas would churn every one — so the schema is a second
- * description of the same shape, and two descriptions drift. `assertNoDrift` makes that
- * drift a type error at the point of definition rather than a runtime surprise months
- * later: add a field to the interface and its schema stops matching, and vice versa.
+ * Ties a schema to the interface it validates, at compile time. The interfaces stay
+ * hand-written — inferring them would churn hundreds of imports — so two descriptions drift.
  */
 
 /**
- * Mutual assignability. Catches a required field added, removed or retyped in either
- * direction. It is blind to *optional* fields — `{id: string}` and `{id: string; note?: T}`
- * are mutually assignable — so a schema that omits an optional one still compiles. That is
- * latent rather than dangerous here: the readers return the original value, never zod's
- * parsed copy, so a looser schema cannot drop data. Tighten this if that ever changes.
+ * Blind to *optional* fields: `{id: string}` and `{id: string; note?: T}` are mutually
+ * assignable. Safe only because readers return the original value, never zod's parsed copy.
  */
 type Matches<Schema, Interface> = [Schema] extends [Interface]
   ? [Interface] extends [Schema]
@@ -22,11 +14,7 @@ type Matches<Schema, Interface> = [Schema] extends [Interface]
   : false;
 
 /**
- * Compiles to a no-op when the two agree. When they disagree it demands an argument that
- * cannot be produced, so the call fails with "Expected 1 arguments, but got 0".
- *
- * The mismatch has to land on a *parameter*: a function whose return type is `never` is
- * still perfectly callable, so expressing the failure as a return type catches nothing.
+ * The mismatch has to land on a *parameter*: a `never` return type is still callable.
  *
  * @example assertNoDrift<z.infer<typeof quoteSchema>, Quote>();
  */
