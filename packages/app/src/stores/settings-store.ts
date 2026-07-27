@@ -49,8 +49,8 @@ function reconcilePreview(
 
 const noop = () => {};
 
-// Settings writes are read-modify-write over one blob, so overlapping calls would each persist
-// their own merge of a stale base. Chaining makes every write read fresh state at dequeue time.
+// Storage writes are per-key now and don't race, but each write still reads fresh settings to
+// compute the in-memory merge and notify diff — chaining keeps that read/set pair atomic per write.
 let writeChain: Promise<unknown> = Promise.resolve();
 
 function enqueueWrite<T>(run: () => Promise<T>): Promise<T> {
