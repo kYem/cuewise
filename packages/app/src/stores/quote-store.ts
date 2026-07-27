@@ -21,6 +21,7 @@ import {
   setCollections,
   setCurrentQuote,
   setQuotes,
+  setQuotesRaw,
 } from '@cuewise/storage';
 import { create } from 'zustand';
 import { SEED_QUOTES } from '../data/seed-quotes';
@@ -667,7 +668,10 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         lastViewed: undefined,
       }));
 
-      await setQuotes(freshQuotes);
+      // Raw, like `resetToDefaults`: a reset means every stored quote, including one this
+      // build cannot parse. The preserving setter would carry those through and they would
+      // reappear on the next build that can read them.
+      await setQuotesRaw(freshQuotes);
       set({ quotes: freshQuotes, error: null });
 
       // Reset current quote to a random one

@@ -114,7 +114,9 @@ describe('Import Utilities', () => {
 
       const result = parseImportData(JSON.stringify(dataWithInvalidGoal));
 
-      expect(result.errors.some((e) => e.field === 'goals[0].id')).toBe(true);
+      expect(result.warnings.some((w) => w.includes('goals[0]'))).toBe(true);
+      // Reported without condemning the file: a per-item skip must not hide the Import button.
+      expect(result.isValid).toBe(true);
       expect(result.data?.goals).toHaveLength(1);
       expect(result.data?.goals[0].id).toBe('valid-1');
     });
@@ -132,7 +134,8 @@ describe('Import Utilities', () => {
 
       const result = parseImportData(JSON.stringify(dataWithInvalidQuote));
 
-      expect(result.errors.some((e) => e.field === 'quotes[0].text')).toBe(true);
+      expect(result.warnings.some((w) => w.includes('quotes[0]'))).toBe(true);
+      expect(result.isValid).toBe(true);
       expect(result.data?.quotes).toHaveLength(1);
       expect(result.data?.quotes[0].id).toBe('quote-2');
     });
@@ -150,7 +153,8 @@ describe('Import Utilities', () => {
 
       const result = parseImportData(JSON.stringify(dataWithInvalidSession));
 
-      expect(result.errors.some((e) => e.field === 'pomodoroSessions[0].startedAt')).toBe(true);
+      expect(result.warnings.some((w) => w.includes('pomodoroSessions[0]'))).toBe(true);
+      expect(result.isValid).toBe(true);
       expect(result.data?.pomodoroSessions).toHaveLength(1);
       expect(result.data?.pomodoroSessions[0].id).toBe('session-2');
     });

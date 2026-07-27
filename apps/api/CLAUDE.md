@@ -139,7 +139,7 @@ Every error response is `application/problem+json` (RFC 9457), built by `problem
 Body: `type` (`https://cuewise.app/problems/<code-with-dashes>`), `title`, `status`, `code`, optional `detail`, `retryAfter` (mirrored as a `Retry-After` header), `errors[]` (`{index?, pointer?, detail}`).
 
 - **400 vs 422**: 400 is unparseable JSON or a body that isn't even shaped right (`records` missing/not an array); 422 is well-formed but semantically invalid.
-- **422 batch validation reports everything at once.** `validatePushBody`/`validateRecord` (`validate-changes.ts`) walk the whole array and accumulate every violation into one `errors[]`, each with a `/records/<i>/<field>` pointer — a client fixing a 20-record push doesn't get one error per round-trip.
+- **422 batch validation reports everything at once.** `validatePushBody`/`issuesFor` (`validate-changes.ts`) walk the whole array and accumulate every violation into one `errors[]`, each with a `/records/<i>/<field>` pointer — a client fixing a 20-record push doesn't get one error per round-trip.
 - **Verifier failures are classified**, not blanket-401'd. `isTokenFault()` (`verifiers.ts`) distinguishes "this token is provably bad" (JOSE signature/claim/expiry errors) from anything else (e.g. a JWKS endpoint outage). Token faults → `invalid_token` (401, don't retry). Anything else is logged and answered `internal` (500, retryable client-side) — the *server's* upstream call failed, not the client's token.
 
 ## Rate Limiting

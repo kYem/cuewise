@@ -50,6 +50,28 @@ export function mockEmptyStorage() {
   vi.mocked(storage.getPostureStats).mockResolvedValue([]);
 }
 
+/** Stands in for a stored goal only the raw read can see. */
+export const QUARANTINED_GOAL = {
+  id: 'quarantined-goal',
+  text: 'written by a newer build',
+  completed: false,
+  createdAt: '2026-07-26T00:00:00.000Z',
+  date: '2026-07-26',
+} as ReturnType<typeof goalFactory.build>;
+
+/** Stands in for a stored quote only the raw read can see. */
+export const QUARANTINED_QUOTE = {
+  id: 'quarantined-quote',
+  text: 'written by a newer build',
+  isCustom: true,
+} as ReturnType<typeof quoteFactory.build>;
+
+/** Stands in for a stored session only the raw read can see. */
+export const QUARANTINED_SESSION = {
+  id: 'quarantined-session',
+  startedAt: '2026-07-26T00:00:00.000Z',
+} as ReturnType<typeof pomodoroFactory.build>;
+
 export function mockStorageWithData(
   options: {
     goals?: ReturnType<typeof goalFactory.build>[];
@@ -59,21 +81,35 @@ export function mockStorageWithData(
   } = {}
 ) {
   vi.mocked(storage.getGoals).mockResolvedValue(options.goals ?? []);
-  vi.mocked(storage.setGoals).mockResolvedValue({ success: true });
+  vi.mocked(storage.setGoalsRaw).mockResolvedValue({ success: true });
   vi.mocked(storage.getQuotes).mockResolvedValue(options.quotes ?? []);
-  vi.mocked(storage.setQuotes).mockResolvedValue({ success: true });
+  vi.mocked(storage.setQuotesRaw).mockResolvedValue({ success: true });
   vi.mocked(storage.getPomodoroSessions).mockResolvedValue(options.sessions ?? []);
-  vi.mocked(storage.setPomodoroSessions).mockResolvedValue({ success: true });
+  // One row MORE than the validated mock, standing in for an item only a raw read can see:
+  // identical arrays make the two readers indistinguishable.
+  vi.mocked(storage.getGoalsRaw).mockResolvedValue([...(options.goals ?? []), QUARANTINED_GOAL]);
+  vi.mocked(storage.getQuotesRaw).mockResolvedValue([...(options.quotes ?? []), QUARANTINED_QUOTE]);
+  vi.mocked(storage.getPomodoroSessionsRaw).mockResolvedValue([
+    ...(options.sessions ?? []),
+    QUARANTINED_SESSION,
+  ]);
+  vi.mocked(storage.setGoalsRaw).mockResolvedValue({ success: true });
+  vi.mocked(storage.setQuotesRaw).mockResolvedValue({ success: true });
+  vi.mocked(storage.setPomodoroSessionsRaw).mockResolvedValue({ success: true });
   vi.mocked(storage.getPostureStats).mockResolvedValue(options.postureStats ?? []);
 }
 
+/** Both readers fail together: import reads raw, the refresh that follows reads validated. */
 export function mockStorageError(operation: 'goals' | 'quotes' | 'sessions', error: Error) {
   if (operation === 'goals') {
     vi.mocked(storage.getGoals).mockRejectedValue(error);
+    vi.mocked(storage.getGoalsRaw).mockRejectedValue(error);
   } else if (operation === 'quotes') {
     vi.mocked(storage.getQuotes).mockRejectedValue(error);
+    vi.mocked(storage.getQuotesRaw).mockRejectedValue(error);
   } else {
     vi.mocked(storage.getPomodoroSessions).mockRejectedValue(error);
+    vi.mocked(storage.getPomodoroSessionsRaw).mockRejectedValue(error);
   }
 }
 

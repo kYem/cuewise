@@ -121,6 +121,9 @@ catalogs:
     wrangler:
       specifier: ^4.20.0
       version: 4.105.0
+    zod:
+      specifier: ^4.4.3
+      version: 4.4.3
     zustand:
       specifier: 5.0.14
       version: 5.0.14
@@ -185,6 +188,9 @@ importers:
       jose:
         specifier: 'catalog:'
         version: 6.2.3
+      zod:
+        specifier: 'catalog:'
+        version: 4.4.3
     devDependencies:
       '@cloudflare/vitest-pool-workers':
         specifier: 'catalog:'
@@ -255,6 +261,9 @@ importers:
       recharts:
         specifier: 'catalog:'
         version: 3.8.1(@types/react@18.3.26)(react-dom@18.3.1(react@18.3.1))(react-is@18.3.1)(react@18.3.1)(redux@5.0.1)
+      zod:
+        specifier: 'catalog:'
+        version: 4.4.3
       zustand:
         specifier: 'catalog:'
         version: 5.0.14(@types/react@18.3.26)(immer@11.1.8)(react@18.3.1)(use-sync-external-store@1.6.0(react@18.3.1))
@@ -480,6 +489,9 @@ importers:
       recharts:
         specifier: 'catalog:'
         version: 3.8.1(@types/react@18.3.26)(react-dom@18.3.1(react@18.3.1))(react-is@18.3.1)(react@18.3.1)(redux@5.0.1)
+      zod:
+        specifier: 'catalog:'
+        version: 4.4.3
       zustand:
         specifier: 'catalog:'
         version: 5.0.14(@types/react@18.3.26)(immer@11.1.8)(react@18.3.1)(use-sync-external-store@1.6.0(react@18.3.1))
@@ -553,6 +565,9 @@ importers:
       date-fns:
         specifier: 'catalog:'
         version: 4.4.0
+      zod:
+        specifier: 'catalog:'
+        version: 4.4.3
     devDependencies:
       typescript:
         specifier: 'catalog:'
@@ -566,6 +581,9 @@ importers:
       '@cuewise/shared':
         specifier: workspace:*
         version: link:../shared
+      zod:
+        specifier: 'catalog:'
+        version: 4.4.3
     devDependencies:
       '@cuewise/test-utils':
         specifier: workspace:*

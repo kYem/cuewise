@@ -30,6 +30,7 @@ import { useQuoteStore } from './quote-store';
 vi.mock('@cuewise/storage', () => ({
   getQuotes: vi.fn(),
   setQuotes: vi.fn(),
+  setQuotesRaw: vi.fn(),
   getCurrentQuote: vi.fn(),
   setCurrentQuote: vi.fn(),
   getCollections: vi.fn(),
@@ -487,6 +488,31 @@ describe('Quote Store', () => {
         // Should skip deleted quote and go to first quote
         expectNavigationToQuote(state, scenario.existingQuotes[0], 0);
       });
+    });
+  });
+
+  // The preserving setter re-appends every stored quote this build cannot parse, which is
+  // right for an edit and wrong for a reset: the one action that should clear everything
+  // would leave those rows on disk to reappear under a build that can read them.
+  describe('resetAllQuotes', () => {
+    beforeEach(() => {
+      vi.mocked(storage.setQuotesRaw).mockResolvedValue({ success: true });
+      vi.mocked(storage.setCurrentQuote).mockResolvedValue({ success: true });
+    });
+
+    it('writes the seed quotes through the raw setter, never the preserving one', async () => {
+      await useQuoteStore.getState().resetAllQuotes();
+
+      expect(storage.setQuotesRaw).toHaveBeenCalledTimes(1);
+      expect(storage.setQuotes).not.toHaveBeenCalled();
+    });
+
+    it('writes exactly the seed set, with view state cleared', async () => {
+      await useQuoteStore.getState().resetAllQuotes();
+
+      const written = vi.mocked(storage.setQuotesRaw).mock.calls[0][0];
+      expect(written).toHaveLength(SEED_QUOTES.length);
+      expect(written.every((q) => q.viewCount === 0 && !q.isFavorite && !q.isHidden)).toBe(true);
     });
   });
 

@@ -14,6 +14,9 @@ import { selectBackgroundBlur, selectBackgroundDim, useSettingsStore } from './s
 vi.mock('@cuewise/storage', () => ({
   getSettings: vi.fn(),
   setSettings: vi.fn(),
+  // A reset writes raw: the preserving write cannot tell "reset this to the default" from
+  // "never saw it", so it would keep the very fields a reset exists to clear.
+  setSettingsRaw: vi.fn(),
   migrateStorageData: vi.fn(),
 }));
 
@@ -43,6 +46,10 @@ function seedStorage(settings: Settings = defaultSettings) {
   storedSettings = settings;
   vi.mocked(storage.getSettings).mockImplementation(async () => storedSettings);
   vi.mocked(storage.setSettings).mockImplementation(async (next: Settings) => {
+    storedSettings = next;
+    return { success: true };
+  });
+  vi.mocked(storage.setSettingsRaw).mockImplementation(async (next: Settings) => {
     storedSettings = next;
     return { success: true };
   });
@@ -245,7 +252,7 @@ describe('background preview lifecycle', () => {
   });
 
   it('a failed reset write surfaces the error instead of claiming defaults', async () => {
-    vi.mocked(storage.setSettings).mockResolvedValue({
+    vi.mocked(storage.setSettingsRaw).mockResolvedValue({
       success: false,
       error: { type: 'unknown', message: 'write failed' },
     });
@@ -364,11 +371,12 @@ describe('serialized write path', () => {
     await flush();
 
     expect(storage.setSettings).toHaveBeenCalledTimes(1);
+    expect(storage.setSettingsRaw).not.toHaveBeenCalled();
 
     firstWrite.resolve({ success: true });
     await Promise.all([update, reset]);
 
-    expect(storage.setSettings).toHaveBeenLastCalledWith(DEFAULT_SETTINGS);
+    expect(storage.setSettingsRaw).toHaveBeenLastCalledWith(DEFAULT_SETTINGS);
     expect(useSettingsStore.getState().settings.showClock).toBe(DEFAULT_SETTINGS.showClock);
   });
 

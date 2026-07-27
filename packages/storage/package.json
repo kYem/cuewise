@@ -12,7 +12,8 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@cuewise/shared": "workspace:*"
+    "@cuewise/shared": "workspace:*",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@cuewise/test-utils": "workspace:*",

@@ -266,6 +266,76 @@ describe('fetchTodayEvents', () => {
     installIdentity({ token: 'tok', clientId: 'abc.apps.googleusercontent.com' });
   });
 
+  // The response used to be a bare `as` cast, so an entry without an id reached the mapper.
+  // It is parsed per item now: one unreadable row costs that row, not the day's agenda.
+  it('skips an entry it cannot read and keeps the rest of the day', async () => {
+    stubFetchItems([
+      // Mappable except for the id, so only the schema can reject it.
+      {
+        id: 42 as unknown as string,
+        summary: 'no usable id',
+        start: { dateTime: '2026-06-14T08:00:00Z' },
+        end: { dateTime: '2026-06-14T08:30:00Z' },
+      },
+      {
+        id: 't1',
+        summary: 'Standup',
+        start: { dateTime: '2026-06-14T09:00:00Z' },
+        end: { dateTime: '2026-06-14T09:15:00Z' },
+      },
+    ]);
+
+    const events = await fetchTodayEvents();
+
+    expect(events.map((event) => event.id)).toEqual(['t1']);
+  });
+
+  // One forbidden optional field each. A non-array `attendees` throws inside `isDismissed`
+  // and costs the agenda; an object `summary` lands in `title` and reaches React as a child.
+  // No row for `start`/`end`: the mapper drops those rows anyway, so nothing discriminates.
+  it.each([
+    ['attendees that are not a list', { attendees: 'nobody' }],
+    ['a summary that is not a string', { summary: { text: 'Standup' } }],
+    ['an htmlLink that is not a string', { htmlLink: 12 }],
+    ['a colorId that is not a string', { colorId: 7 }],
+  ])('skips an entry with %s and keeps the rest of the day', async (_label, broken) => {
+    stubFetchItems([
+      {
+        id: 'bad',
+        summary: 'unreadable',
+        start: { dateTime: '2026-06-14T08:00:00Z' },
+        end: { dateTime: '2026-06-14T08:30:00Z' },
+        ...broken,
+      } as never,
+      {
+        id: 't1',
+        summary: 'Standup',
+        start: { dateTime: '2026-06-14T09:00:00Z' },
+        end: { dateTime: '2026-06-14T09:15:00Z' },
+      },
+    ]);
+
+    const events = await fetchTodayEvents();
+
+    expect(events.map((event) => event.id)).toEqual(['t1']);
+  });
+
+  // An envelope we cannot read at all is an empty agenda, not a thrown error: the strip is
+  // ambient, and it must never take the new tab down with it.
+  //
+  // Only the object and number rows need the guard — they throw on `for...of`. A string is
+  // iterable and `null` is caught by the `?? []`; both are kept as documentation.
+  it.each([
+    ['an object', {}],
+    ['a number', 42],
+    ['null', null],
+    ['a string', 'not a list'],
+  ])('returns an empty agenda when items is %s', async (_label, items) => {
+    stubFetchItems(items as never);
+
+    await expect(fetchTodayEvents()).resolves.toEqual([]);
+  });
+
   it('maps a timed event with its color', async () => {
     stubFetchItems([
       {

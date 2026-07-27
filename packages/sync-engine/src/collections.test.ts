@@ -1,5 +1,15 @@
 import { configurePlatform, DEFAULT_SETTINGS } from '@cuewise/shared';
-import { getGoals, getSettings, setGoals } from '@cuewise/storage';
+import {
+  getGoals,
+  getSettings,
+  getSettingsForSync,
+  setCollectionsRaw,
+  setGoals,
+  setGoalsRaw,
+  setQuotesRaw,
+  setRemindersRaw,
+  setSettingsRaw,
+} from '@cuewise/storage';
 import { goalFactory } from '@cuewise/test-utils/factories';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { FakeKvStore } from './__fixtures__/fake-kv-store';
@@ -80,12 +90,22 @@ describe('settings binding', () => {
     expect(result.theme).toEqual({ key: 'theme', value: DEFAULT_SETTINGS.theme });
   });
 
+  // 'dark', not 'forest': the latter is a colorTheme, so it would assert the validator.
   it('writeOne updates only the targeted key', async () => {
-    await settingsBinding().writeOne('theme', { key: 'theme', value: 'forest' });
+    await settingsBinding().writeOne('theme', { key: 'theme', value: 'dark' });
 
     const settings = await getSettings();
-    expect(settings.theme).toBe('forest');
+    expect(settings.theme).toBe('dark');
     expect(settings.colorTheme).toBe(DEFAULT_SETTINGS.colorTheme);
+  });
+
+  // The binding rewrites the whole object, so a value from a newer peer must survive it.
+  it('does not overwrite a neighbouring key it cannot interpret', async () => {
+    await settingsBinding().writeOne('colorTheme', { key: 'colorTheme', value: 'aurora' });
+    await settingsBinding().writeOne('theme', { key: 'theme', value: 'dark' });
+
+    const stored = await getSettingsForSync();
+    expect(stored.colorTheme).toBe('aurora');
   });
 
   it('writeOne is a no-op for a device-local key', async () => {
@@ -118,5 +138,109 @@ describe('DEVICE_LOCAL_SETTINGS_KEYS', () => {
   it('includes both sync toggles', () => {
     expect(DEVICE_LOCAL_SETTINGS_KEYS).toContain('syncEnabled');
     expect(DEVICE_LOCAL_SETTINGS_KEYS).toContain('cloudSyncEnabled');
+  });
+});
+
+// The tests above build entities from factories, which are schema-valid, so the raw/validated
+// distinction is invisible to them.
+describe('bindings see what the UI cannot', () => {
+  const unreadable = { id: 'g-unreadable', text: 'from a newer build', completed: 'nope' };
+
+  async function seedGoals(rows: unknown[]): Promise<void> {
+    await setGoalsRaw(rows as never);
+  }
+
+  it('readAll includes a stored goal the validated read hides', async () => {
+    await seedGoals([goalFactory.build({ id: 'g1' }), unreadable]);
+
+    const all = await goalsBinding().readAll();
+
+    expect(Object.keys(all)).toContain('g-unreadable');
+  });
+
+  // Absence from readAll is how the cycle infers a tombstone.
+  it('writeOne can delete that same goal', async () => {
+    await seedGoals([goalFactory.build({ id: 'g1' }), unreadable]);
+
+    await goalsBinding().writeOne('g-unreadable', null);
+
+    const all = await goalsBinding().readAll();
+    expect(Object.keys(all)).not.toContain('g-unreadable');
+  });
+
+  // ...and an unrelated write must not quietly resurrect it either.
+  it('writeOne of a different goal leaves it in place', async () => {
+    await seedGoals([goalFactory.build({ id: 'g1' }), unreadable]);
+
+    await goalsBinding().writeOne('g1', goalFactory.build({ id: 'g1', text: 'edited' }));
+
+    const all = await goalsBinding().readAll();
+    expect(Object.keys(all)).toContain('g-unreadable');
+  });
+
+  it('settings readAll exposes a value this build cannot parse', async () => {
+    await setSettingsRaw({ ...DEFAULT_SETTINGS, colorTheme: 'aurora' as never });
+
+    const all = await settingsBinding().readAll();
+
+    expect((all.colorTheme as { value: unknown }).value).toBe('aurora');
+  });
+
+  // The preserving setter cannot tell "the peer chose our default" from "never saw it".
+  it('lands a pulled value that happens to equal our own default', async () => {
+    await setSettingsRaw({ ...DEFAULT_SETTINGS, colorTheme: 'aurora' as never });
+
+    await settingsBinding().writeOne('colorTheme', {
+      key: 'colorTheme',
+      value: DEFAULT_SETTINGS.colorTheme,
+    });
+
+    const stored = await getSettingsForSync();
+    expect(stored.colorTheme).toBe(DEFAULT_SETTINGS.colorTheme);
+  });
+});
+
+/** The same three properties as the goals block, across the other three array bindings. */
+describe.each([
+  [
+    'quotes',
+    setQuotesRaw,
+    { id: 'unreadable', text: 'newer build', isCustom: true, category: 'x' },
+  ],
+  ['collections', setCollectionsRaw, { id: 'unreadable', name: 'newer build', createdAt: 42 }],
+  [
+    'reminders',
+    setRemindersRaw,
+    { id: 'unreadable', text: 'newer build', dueDate: 'x', completed: 'nope' },
+  ],
+])('the %s binding sees what the UI cannot', (name, seedRaw, unreadable) => {
+  function binding() {
+    const found = defaultBindings().find((b) => b.name === name);
+    if (found === undefined) {
+      throw new Error(`${name} binding missing from defaultBindings()`);
+    }
+    return found;
+  }
+
+  beforeEach(async () => {
+    await seedRaw([unreadable] as never);
+  });
+
+  it('readAll includes it', async () => {
+    expect(Object.keys(await binding().readAll())).toContain('unreadable');
+  });
+
+  // Absence from readAll is how the cycle infers a tombstone, so a hidden entity would be
+  // pushed as a delete and removed on every other device.
+  it('writeOne can delete it', async () => {
+    await binding().writeOne('unreadable', null);
+
+    expect(Object.keys(await binding().readAll())).not.toContain('unreadable');
+  });
+
+  it('an unrelated write leaves it in place', async () => {
+    await binding().writeOne('other', { id: 'other' } as never);
+
+    expect(Object.keys(await binding().readAll())).toContain('unreadable');
   });
 });
