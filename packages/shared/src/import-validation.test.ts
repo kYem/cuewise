@@ -119,3 +119,30 @@ describe('the import preview envelope', () => {
     expect(typeof result.data?.formatVersion).toBe('number');
   });
 });
+
+// A rejected item is a per-item outcome, not a verdict on the file. `isValid` is
+// `errors.length === 0`, and a false verdict hides the Import button entirely — so one
+// null element in a backup would make every good item in it unreachable.
+describe('a backup carrying an item that cannot be read at all', () => {
+  const good = { id: 'g1', text: 'keep me', completed: false, createdAt: 'x', date: '2026-07-26' };
+
+  it.each([
+    ['a null element', null],
+    ['a numeric id', { id: 7, text: 't' }],
+    ['no text', { id: 'g2' }],
+  ])('still imports the rest when goals contain %s', (_label, bad) => {
+    const result = importOf({ goals: [good, bad] });
+
+    expect(result.isValid).toBe(true);
+    expect(result.data?.goals).toEqual([good]);
+    expect(result.warnings.join(' ')).toContain('goals[1]');
+  });
+
+  it('still imports the rest when a quote is unreadable', () => {
+    const quote = { id: 'q1', text: 'a quote' };
+    const result = importOf({ quotes: [quote, null] });
+
+    expect(result.isValid).toBe(true);
+    expect(result.data?.quotes).toHaveLength(1);
+  });
+});

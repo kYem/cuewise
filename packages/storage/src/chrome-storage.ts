@@ -109,6 +109,46 @@ export async function getValidatedListFromStorage<T>(
   return kept;
 }
 
+/**
+ * The write counterpart to `getValidatedListFromStorage`, and the reason it exists: the
+ * reader hides items it cannot parse, but every store reloads the list and writes the whole
+ * thing back — on the first edit, and in two places on load (`rollDueTasks`, the recurring
+ * reminder advance). A hidden item would therefore be erased by opening a tab, and with it
+ * the raw copy that export, sync and a future build were supposed to recover from.
+ *
+ * So a whole-list write carries the quarantined items along: anything on disk that the
+ * caller never saw, because it failed the same schema, is appended rather than dropped.
+ */
+export async function setValidatedListInStorage<T extends { id: string }>(
+  key: string,
+  items: T[],
+  itemSchema: ZodMiniType<T>,
+  area: StorageArea = 'local'
+): Promise<StorageResult> {
+  const raw = await getStorage().get<unknown>(key, area);
+  if (!Array.isArray(raw)) {
+    return getStorage().set(key, items, area);
+  }
+  const written = new Set(items.map((item) => item.id));
+  const quarantined = raw.filter((stored) => {
+    if (itemSchema.safeParse(stored).success) {
+      return false;
+    }
+    // Keyed by id where there is one, so a genuine delete still removes it. An item with no
+    // readable id can only be kept — it cannot be addressed to be deleted.
+    const id = (stored as { id?: unknown })?.id;
+    return typeof id !== 'string' || !written.has(id);
+  });
+  if (quarantined.length > 0) {
+    logger.warn('Preserved unreadable stored items through a write', {
+      key,
+      area,
+      preserved: quarantined.length,
+    });
+  }
+  return getStorage().set(key, [...items, ...quarantined], area);
+}
+
 export async function setInStorage<T>(
   key: string,
   value: T,

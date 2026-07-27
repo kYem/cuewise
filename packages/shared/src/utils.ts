@@ -1563,13 +1563,9 @@ export function parseImportData(jsonString: string): ImportValidation {
       typeof exportData.exportDate === 'string' ? exportData.exportDate : new Date().toISOString(),
     insights: (exportData.insights as ExportData['insights']) || null,
     analytics: (exportData.analytics as ExportData['analytics']) || null,
-    goals: validateGoals(exportData.goals as unknown[], errors, warnings),
-    quotes: validateQuotes(exportData.quotes as unknown[], errors, warnings),
-    pomodoroSessions: validatePomodoroSessions(
-      exportData.pomodoroSessions as unknown[],
-      errors,
-      warnings
-    ),
+    goals: validateGoals(exportData.goals as unknown[], warnings),
+    quotes: validateQuotes(exportData.quotes as unknown[], warnings),
+    pomodoroSessions: validatePomodoroSessions(exportData.pomodoroSessions as unknown[], warnings),
   };
 
   return {
@@ -1617,29 +1613,25 @@ function isQuoteCategory(value: unknown): value is Quote['category'] {
   return quoteCategorySchema.safeParse(value).success;
 }
 
-function validateGoals(
-  goals: unknown[],
-  errors: ImportValidationError[],
-  warnings: string[]
-): Goal[] {
+function validateGoals(goals: unknown[], warnings: string[]): Goal[] {
   const validGoals: Goal[] = [];
 
   for (let i = 0; i < goals.length; i++) {
     const goal = goals[i] as Record<string, unknown>;
 
     if (typeof goal !== 'object' || goal === null) {
-      errors.push({ field: `goals[${i}]`, message: 'Invalid goal format' });
+      warnings.push(`goals[${i}] is not an object and was skipped`);
       continue;
     }
 
     // Check required fields
     if (typeof goal.id !== 'string' || !goal.id) {
-      errors.push({ field: `goals[${i}].id`, message: 'Goal must have a valid id' });
+      warnings.push(`goals[${i}] has no usable id and was skipped`);
       continue;
     }
 
     if (typeof goal.text !== 'string') {
-      errors.push({ field: `goals[${i}].text`, message: 'Goal must have text' });
+      warnings.push(`goals[${i}] has no text and was skipped`);
       continue;
     }
 
@@ -1677,29 +1669,25 @@ function validateGoals(
 /**
  * Validate quotes array
  */
-function validateQuotes(
-  quotes: unknown[],
-  errors: ImportValidationError[],
-  warnings: string[]
-): Quote[] {
+function validateQuotes(quotes: unknown[], warnings: string[]): Quote[] {
   const validQuotes: Quote[] = [];
 
   for (let i = 0; i < quotes.length; i++) {
     const quote = quotes[i] as Record<string, unknown>;
 
     if (typeof quote !== 'object' || quote === null) {
-      errors.push({ field: `quotes[${i}]`, message: 'Invalid quote format' });
+      warnings.push(`quotes[${i}] is not an object and was skipped`);
       continue;
     }
 
     // Check required fields
     if (typeof quote.id !== 'string' || !quote.id) {
-      errors.push({ field: `quotes[${i}].id`, message: 'Quote must have a valid id' });
+      warnings.push(`quotes[${i}] has no usable id and was skipped`);
       continue;
     }
 
     if (typeof quote.text !== 'string' || !quote.text) {
-      errors.push({ field: `quotes[${i}].text`, message: 'Quote must have text' });
+      warnings.push(`quotes[${i}] has no text and was skipped`);
       continue;
     }
 
@@ -1731,32 +1719,25 @@ function validateQuotes(
 /**
  * Validate pomodoro sessions array
  */
-function validatePomodoroSessions(
-  sessions: unknown[],
-  errors: ImportValidationError[],
-  warnings: string[]
-): PomodoroSession[] {
+function validatePomodoroSessions(sessions: unknown[], warnings: string[]): PomodoroSession[] {
   const validSessions: PomodoroSession[] = [];
 
   for (let i = 0; i < sessions.length; i++) {
     const session = sessions[i] as Record<string, unknown>;
 
     if (typeof session !== 'object' || session === null) {
-      errors.push({ field: `pomodoroSessions[${i}]`, message: 'Invalid session format' });
+      warnings.push(`pomodoroSessions[${i}] is not an object and was skipped`);
       continue;
     }
 
     // Check required fields
     if (typeof session.id !== 'string' || !session.id) {
-      errors.push({ field: `pomodoroSessions[${i}].id`, message: 'Session must have a valid id' });
+      warnings.push(`pomodoroSessions[${i}] has no usable id and was skipped`);
       continue;
     }
 
     if (typeof session.startedAt !== 'string') {
-      errors.push({
-        field: `pomodoroSessions[${i}].startedAt`,
-        message: 'Session must have startedAt',
-      });
+      warnings.push(`pomodoroSessions[${i}] has no start time and was skipped`);
       continue;
     }
 

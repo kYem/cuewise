@@ -49,6 +49,7 @@ import {
   removeFromStorage,
   type StorageResult,
   setInStorage,
+  setValidatedListInStorage,
 } from './chrome-storage';
 
 /**
@@ -192,7 +193,7 @@ export async function getGoals(): Promise<Goal[]> {
 
 export async function setGoals(goals: Goal[]): Promise<StorageResult> {
   const area = await getStorageArea();
-  return setInStorage(STORAGE_KEYS.GOALS, goals, area);
+  return setValidatedListInStorage(STORAGE_KEYS.GOALS, goals, goalSchema, area);
 }
 
 // Reminders
@@ -208,7 +209,7 @@ export async function getReminders(): Promise<Reminder[]> {
 
 export async function setReminders(reminders: Reminder[]): Promise<StorageResult> {
   const area = await getStorageArea();
-  return setInStorage(STORAGE_KEYS.REMINDERS, reminders, area);
+  return setValidatedListInStorage(STORAGE_KEYS.REMINDERS, reminders, reminderSchema, area);
 }
 
 // Quote Collections
@@ -224,7 +225,12 @@ export async function getCollections(): Promise<QuoteCollection[]> {
 
 export async function setCollections(collections: QuoteCollection[]): Promise<StorageResult> {
   const area = await getStorageArea();
-  return setInStorage(STORAGE_KEYS.COLLECTIONS, collections, area);
+  return setValidatedListInStorage(
+    STORAGE_KEYS.COLLECTIONS,
+    collections,
+    quoteCollectionSchema,
+    area
+  );
 }
 
 // Quick Links (pinned shortcut tiles on the new tab)
@@ -240,7 +246,7 @@ export async function getQuickLinks(): Promise<QuickLink[]> {
 
 export async function setQuickLinks(links: QuickLink[]): Promise<StorageResult> {
   const area = await getStorageArea();
-  return setInStorage(STORAGE_KEYS.QUICK_LINKS, links, area);
+  return setValidatedListInStorage(STORAGE_KEYS.QUICK_LINKS, links, quickLinkSchema, area);
 }
 
 // Concept Cards (spaced-repetition learning cards)
@@ -256,7 +262,7 @@ export async function getConceptCards(): Promise<ConceptCard[]> {
 
 export async function setConceptCards(cards: ConceptCard[]): Promise<StorageResult> {
   const area = await getStorageArea();
-  return setInStorage(STORAGE_KEYS.CONCEPT_CARDS, cards, area);
+  return setValidatedListInStorage(STORAGE_KEYS.CONCEPT_CARDS, cards, conceptCardSchema, area);
 }
 
 // Posture daily rollups (macOS tracking; always local — device-specific data)
@@ -322,7 +328,12 @@ export async function getPomodoroSessions(): Promise<PomodoroSession[]> {
 
 export async function setPomodoroSessions(sessions: PomodoroSession[]): Promise<StorageResult> {
   const area = await getStorageArea();
-  return setInStorage(STORAGE_KEYS.POMODORO_SESSIONS, sessions, area);
+  return setValidatedListInStorage(
+    STORAGE_KEYS.POMODORO_SESSIONS,
+    sessions,
+    pomodoroSessionSchema,
+    area
+  );
 }
 
 // Custom YouTube Playlists (for Pomodoro music)

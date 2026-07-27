@@ -9,6 +9,7 @@ import {
   getQuotesRaw,
   getSettings,
   getWeatherState,
+  setGoals,
 } from './storage-helpers';
 
 /** A store that hands back whatever was put on "disk", however malformed. */
@@ -285,5 +286,53 @@ describe('the raw view sync reads through', () => {
 
     await expect(getQuotes()).resolves.toEqual([]);
     await expect(getQuotesRaw()).resolves.toEqual([unreadable]);
+  });
+});
+
+// The reader hides what it cannot parse, but every store reloads and writes the whole array
+// back — on the first edit, and on load via rollDueTasks and the recurring-reminder
+// advance. Without this, opening a tab was enough to erase a quarantined item, taking with
+// it the raw copy that export, sync and a future build were meant to recover from.
+describe('a whole-list write', () => {
+  const readable = { id: 'g1', text: 'fine', completed: false, createdAt: 'x', date: '2026-07-26' };
+  const quarantined = { id: 'g2', text: 'from a newer build', completed: 'nope' };
+
+  function storeCapturingWrites(initial: Record<string, unknown>) {
+    const written: Record<string, unknown> = {};
+    return {
+      written,
+      store: {
+        supportsSync: true,
+        get: async (key: string) =>
+          ((key in written ? written[key] : initial[key]) ?? null) as never,
+        set: async (key: string, value: unknown) => {
+          written[key] = value;
+          return { success: true as const };
+        },
+        remove: async () => true,
+        getUsage: async () => ({ bytesInUse: 0, quota: 10_000_000 }),
+      },
+    };
+  }
+
+  it('carries the items the caller never saw', async () => {
+    const { written, store } = storeCapturingWrites({ goals: [readable, quarantined] });
+    configurePlatform({ storage: store });
+
+    const visible = await getGoals();
+    await setGoals(visible);
+
+    expect(written.goals).toEqual([readable, quarantined]);
+  });
+
+  it('still deletes an item the caller did remove', async () => {
+    const { written, store } = storeCapturingWrites({ goals: [readable, quarantined] });
+    configurePlatform({ storage: store });
+
+    await setGoals([]);
+
+    // The readable one is gone because the caller dropped it; the unreadable one stays,
+    // since the caller could not have chosen to delete something it never saw.
+    expect(written.goals).toEqual([quarantined]);
   });
 });
