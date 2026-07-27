@@ -54,9 +54,19 @@ describe('BackgroundCredit', () => {
   it('floats the byline above the credit line so revealing it cannot move the refresh control', () => {
     render(<BackgroundCredit imageUrl={CURATED_URL} onRefresh={vi.fn()} />);
 
-    const panel = screen.getByRole('link', { name: 'Urban Vintage' }).closest('div');
+    const panel = screen.getByRole('link', { name: 'Urban Vintage' }).closest('.absolute');
     expect(panel).not.toBeNull();
-    expect(panel?.className).toContain('absolute');
+    expect(panel?.className).toContain('bottom-full');
+  });
+
+  it('bridges the gap to the credit line with padding so the pointer can reach the links', () => {
+    render(<BackgroundCredit imageUrl={CURATED_URL} onRefresh={vi.fn()} />);
+
+    // A margin gap belongs to no element, so the pointer loses :hover crossing it and the
+    // panel disappears before it can be clicked.
+    const panel = screen.getByRole('link', { name: 'Urban Vintage' }).closest('.absolute');
+    expect(panel?.className).toContain('pb-2');
+    expect(panel?.className).not.toContain('mb-');
   });
 
   it('offers a control to change the background', () => {
