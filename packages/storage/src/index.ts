@@ -18,6 +18,7 @@ export type { PlaylistResumeInfo, StorageUsageInfo } from './storage-helpers';
 // Typed storage helpers
 export {
   clearCustomBackground,
+  clearSettings,
   formatBytes,
   getCalendarState,
   getCollections,
@@ -39,6 +40,8 @@ export {
   getWeatherState,
   getYoutubeProgress,
   migrateStorageData,
+  SETTINGS_KEY_PREFIX,
+  SETTINGS_KEYS,
   setCalendarState,
   setCollections,
   setConceptCards,
@@ -53,6 +56,8 @@ export {
   setQuotes,
   setReminders,
   setSettings,
+  setSettingsPatch,
+  settingsStorageKey,
   setWeatherState,
   updateVideoProgress,
 } from './storage-helpers';

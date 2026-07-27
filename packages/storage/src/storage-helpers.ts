@@ -28,9 +28,12 @@ import {
 } from '@cuewise/shared';
 import {
   getFromStorage,
+  getManyFromStorage,
   removeFromStorage,
+  removeManyFromStorage,
   type StorageResult,
   setInStorage,
+  setManyInStorage,
 } from './chrome-storage';
 
 /**
@@ -38,10 +41,12 @@ import {
  * Settings are always stored in local storage to avoid circular dependency
  */
 async function getStorageArea(): Promise<'local' | 'sync'> {
-  // Always use local for settings to avoid circular dependency
-  const settings = await getFromStorage<Settings>(STORAGE_KEYS.SETTINGS, 'local');
-  const syncEnabled = settings?.syncEnabled ?? DEFAULT_SETTINGS.syncEnabled;
-  return syncEnabled ? 'sync' : 'local';
+  const stored = await getFromStorage<boolean>(settingsStorageKey('syncEnabled'), 'local');
+  const syncEnabled = stored ?? DEFAULT_SETTINGS.syncEnabled;
+  if (syncEnabled) {
+    return 'sync';
+  }
+  return 'local';
 }
 
 // Quotes - Hybrid Storage Strategy
@@ -273,21 +278,47 @@ export async function setCustomYoutubePlaylists(
   return setInStorage(STORAGE_KEYS.CUSTOM_YOUTUBE_PLAYLISTS, playlists, 'local');
 }
 
-// Settings
-// Note: Settings are always stored in local storage to avoid circular dependency
-export async function getSettings(): Promise<Settings> {
-  const settings = await getFromStorage<Settings>(STORAGE_KEYS.SETTINGS, 'local');
-  return settings ?? DEFAULT_SETTINGS;
+// Settings — one storage key per setting, always in the local area.
+// Sparse on purpose: an absent key means "follow the current default", so shipping a changed
+// default reaches everyone who never chose otherwise. Any explicit write stores the key even
+// when the value equals the default, so a deliberate reset still syncs.
+export const SETTINGS_KEY_PREFIX = 'settings.';
+
+export function settingsStorageKey(key: string): string {
+  return `${SETTINGS_KEY_PREFIX}${key}`;
 }
 
-// Raw settings blob: null when never stored OR unreadable (the port conflates
-// the two). For destructive automation that must fail closed — not for rendering.
+export const SETTINGS_KEYS = Object.keys(DEFAULT_SETTINGS) as (keyof Settings)[];
+
+export async function getSettings(): Promise<Settings> {
+  const stored = await getManyFromStorage(SETTINGS_KEYS.map(settingsStorageKey), 'local');
+  const present = Object.fromEntries(
+    SETTINGS_KEYS.map((key) => [key, stored[settingsStorageKey(key)]]).filter(
+      ([, value]) => value !== undefined
+    )
+  );
+  return { ...DEFAULT_SETTINGS, ...present } as Settings;
+}
+
+// Raw legacy blob: null when never stored OR unreadable (the port conflates the two).
+// Used only by the migration, which must fail closed — not for rendering.
 export async function getStoredSettings(): Promise<Settings | null> {
   return await getFromStorage<Settings>(STORAGE_KEYS.SETTINGS, 'local');
 }
 
 export async function setSettings(settings: Settings): Promise<StorageResult> {
   return setInStorage(STORAGE_KEYS.SETTINGS, settings, 'local');
+}
+
+export async function setSettingsPatch(patch: Partial<Settings>): Promise<StorageResult> {
+  const entries = Object.fromEntries(
+    Object.entries(patch).map(([key, value]) => [settingsStorageKey(key), value])
+  );
+  return setManyInStorage(entries, 'local');
+}
+
+export async function clearSettings(): Promise<boolean> {
+  return removeManyFromStorage(SETTINGS_KEYS.map(settingsStorageKey), 'local');
 }
 
 // Storage usage tracking

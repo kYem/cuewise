@@ -1,10 +1,21 @@
-import { configurePlatform, type KeyValueStore, type StorageUsage } from '@cuewise/shared';
+import {
+  configurePlatform,
+  DEFAULT_SETTINGS,
+  type KeyValueStore,
+  type StorageUsage,
+} from '@cuewise/shared';
 import { describe, expect, it } from 'vitest';
+import { getManyFromStorage } from './chrome-storage';
 import {
   clearCustomBackground,
+  clearSettings,
   getCustomBackground,
+  getSettings,
   getStorageUsage,
+  SETTINGS_KEYS,
   setCustomBackground,
+  setSettingsPatch,
+  settingsStorageKey,
 } from './storage-helpers';
 
 // Fake store: no settings stored (→ syncEnabled false → 'local' area), fixed usage.
@@ -131,5 +142,70 @@ describe('custom background', () => {
     const result = await clearCustomBackground();
 
     expect(result.success).toBe(false);
+  });
+});
+
+describe('settings', () => {
+  it('getSettings falls back to the default for absent keys', async () => {
+    const { store } = recordingStore();
+    configurePlatform({ storage: store });
+
+    await setSettingsPatch({ showClock: true });
+
+    const settings = await getSettings();
+
+    expect(settings.showClock).toBe(true);
+    expect(settings.theme).toBe(DEFAULT_SETTINGS.theme);
+    expect(settings.colorTheme).toBe(DEFAULT_SETTINGS.colorTheme);
+  });
+
+  it('setSettingsPatch writes only the keys in the patch', async () => {
+    const { store } = recordingStore();
+    configurePlatform({ storage: store });
+
+    await setSettingsPatch({ showClock: true, theme: 'dark' });
+
+    const stored = await getManyFromStorage(SETTINGS_KEYS.map(settingsStorageKey));
+
+    expect(Object.keys(stored).sort()).toEqual(['settings.showClock', 'settings.theme'].sort());
+  });
+
+  it('a later patch leaves earlier keys untouched', async () => {
+    const { store } = recordingStore();
+    configurePlatform({ storage: store });
+
+    await setSettingsPatch({ showClock: true });
+    await setSettingsPatch({ theme: 'dark' });
+
+    const settings = await getSettings();
+
+    expect(settings.showClock).toBe(true);
+    expect(settings.theme).toBe('dark');
+  });
+
+  it('clearSettings removes every settings key so defaults apply again', async () => {
+    const { store } = recordingStore();
+    configurePlatform({ storage: store });
+
+    await setSettingsPatch({ showClock: true, theme: 'dark' });
+
+    await clearSettings();
+
+    const settings = await getSettings();
+    expect(settings.showClock).toBe(DEFAULT_SETTINGS.showClock);
+    expect(settings.theme).toBe(DEFAULT_SETTINGS.theme);
+  });
+
+  it('a changed default reaches a user who never set that key', async () => {
+    const { store } = recordingStore();
+    configurePlatform({ storage: store });
+
+    await setSettingsPatch({ theme: 'dark' });
+
+    const settings = await getSettings();
+
+    // showClock was never written, so it tracks DEFAULT_SETTINGS rather than a frozen copy.
+    expect(settings.showClock).toBe(DEFAULT_SETTINGS.showClock);
+    expect(await getManyFromStorage(['settings.showClock'])).toEqual({});
   });
 });
