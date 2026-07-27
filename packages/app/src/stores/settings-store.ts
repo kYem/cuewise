@@ -14,8 +14,8 @@ import {
 } from '@cuewise/shared';
 import {
   clearSettings,
+  ensureSettingsMigrated,
   getSettings,
-  migrateLegacySettings,
   migrateStorageData,
   setSettingsPatch,
 } from '@cuewise/storage';
@@ -107,7 +107,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     try {
       set({ isLoading: true, error: null });
 
-      await migrateLegacySettings();
+      await ensureSettingsMigrated();
 
       const storedSettings = await getSettings();
       // Merge with defaults to ensure all properties exist (for existing users)

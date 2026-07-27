@@ -12,7 +12,7 @@ import {
   reminderIdFromAlarm,
   resolveReminderNotificationAction,
 } from '@cuewise/shared';
-import { getReminders, migrateLegacySettings, setReminders } from '@cuewise/storage';
+import { ensureSettingsMigrated, getReminders, setReminders } from '@cuewise/storage';
 import { SYNC_PULL_WAKE_ID } from '@cuewise/sync-client';
 import { createSyncEngine, type SyncStatus } from '@cuewise/sync-engine';
 import { configureChromePlatform } from './platform';
@@ -65,7 +65,7 @@ export function mapToUi(status: SyncStatus): SyncUiStatus {
 
 // A data migration, not a sync concern: this realm runs it whether or not sync is configured.
 // Held as a promise so the sync engine below can still gate its first storage touch on it.
-const settingsMigrated = migrateLegacySettings();
+const settingsMigrated = ensureSettingsMigrated();
 settingsMigrated.catch((error) => {
   logger.error('Failed to migrate legacy settings', error);
 });

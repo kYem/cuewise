@@ -16,7 +16,7 @@ vi.mock('@cuewise/storage', () => ({
   setSettingsPatch: vi.fn(),
   clearSettings: vi.fn(),
   migrateStorageData: vi.fn(),
-  migrateLegacySettings: vi.fn(),
+  ensureSettingsMigrated: vi.fn(),
 }));
 
 vi.mock('./toast-store', () => ({
@@ -70,7 +70,7 @@ describe('sync sink wiring', () => {
     markMutated.mockClear();
     seedStorage();
     vi.mocked(storage.migrateStorageData).mockResolvedValue({ success: true });
-    vi.mocked(storage.migrateLegacySettings).mockResolvedValue(undefined);
+    vi.mocked(storage.ensureSettingsMigrated).mockResolvedValue(undefined);
     configurePlatform({ syncSink: fakeSink });
   });
 
