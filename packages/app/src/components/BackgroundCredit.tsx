@@ -10,10 +10,28 @@ interface BackgroundCreditProps {
 
 const LINK_CLASS = 'underline underline-offset-2 hover:text-white transition-colors';
 
+// Padding, not margin, holds the panel off the credit line: the gap has to belong to a
+// hovered element or the pointer loses :hover crossing it and the links go unreachable.
+// The exit delay covers the rest — a fast diagonal out and back keeps the panel up.
+const PANEL_CLASS = [
+  'pointer-events-none absolute bottom-full left-0 pb-2',
+  'opacity-0 transition-opacity duration-150 delay-300',
+  'group-hover:pointer-events-auto group-hover:opacity-100 group-hover:delay-0',
+  // Keyboard focus only: a mouse click through to Unsplash focuses the link, and plain
+  // focus-within would leave the panel pinned open on return to the tab.
+  'group-has-[:focus-visible]:pointer-events-auto group-has-[:focus-visible]:opacity-100',
+  'group-has-[:focus-visible]:delay-0',
+].join(' ');
+
+const CHIP_CLASS = [
+  'whitespace-nowrap rounded-lg border border-white/10 bg-black/70',
+  'px-2.5 py-1.5 text-white/80 shadow-lg backdrop-blur-md',
+].join(' ');
+
 /**
  * Credits the background photo and offers a fresh one. Leads with the place the
  * photo was taken when known, keeping the photographer credit in a hover/focus
- * reveal; without a location the byline stays visible. Never guesses either.
+ * popover; without a location the byline stays visible. Never guesses either.
  */
 export const BackgroundCredit: React.FC<BackgroundCreditProps> = ({
   imageUrl,
@@ -57,13 +75,14 @@ export const BackgroundCredit: React.FC<BackgroundCreditProps> = ({
     // `group` drives the hover/focus reveal of the byline behind the location.
     <div className="group fixed bottom-3 left-3 z-30 flex items-center gap-3 text-xs text-white/60">
       {credit.location !== null ? (
-        <p>
-          <span>{credit.location}</span>
-          <span className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
-            {' · '}
-            {byline}
-          </span>
-        </p>
+        // The byline floats above the row rather than expanding it — revealing it inline
+        // shoved the refresh button sideways on every hover.
+        <div className="relative">
+          <p>{credit.location}</p>
+          <div className={PANEL_CLASS}>
+            <div className={CHIP_CLASS}>{byline}</div>
+          </div>
+        </div>
       ) : (
         <p>{byline}</p>
       )}
