@@ -135,13 +135,13 @@ export async function setValidatedListInStorage<T>(
   if (!Array.isArray(raw)) {
     return getStorage().set(key, items, area);
   }
-  const written = items as unknown[];
-  // The `includes` is defensive and, given the raw-reads-write-raw rule above, unreachable:
-  // a validated caller cannot be holding what its read hid. It stays because the failure it
-  // bounds is unbounded — the same row appended beside itself, doubling on every write until
-  // the array exceeds the storage quota and every later write fails.
+  // Compared by value, not by reference: both adapters mint fresh objects on every read
+  // (chrome structured-clones, localStorage `JSON.parse`s), so an identity check can never
+  // match and would leave the array doubling on every write — measured at 3, 5, 9, 17, 33 —
+  // until it exceeds the storage quota and nothing saves again.
+  const written = new Set((items as unknown[]).map((item) => JSON.stringify(item)));
   const unreadable = raw.filter(
-    (stored) => !itemSchema.safeParse(stored).success && !written.includes(stored)
+    (stored) => !itemSchema.safeParse(stored).success && !written.has(JSON.stringify(stored))
   );
   if (unreadable.length === 0) {
     return getStorage().set(key, items, area);

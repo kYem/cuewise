@@ -527,8 +527,38 @@ export async function getQuotesRaw(): Promise<Quote[]> {
   return [...seed, ...custom];
 }
 
+/**
+ * The write counterpart to the field-wise read, for the same reason the lists have one: a
+ * known key whose stored value this build cannot parse is replaced by its default on read,
+ * and the store rewrites the whole object on the next change — so a colour theme or cadence
+ * a newer build introduced would be silently reset here, and pushed back to the device that
+ * chose it. The caller cannot have chosen to change what it never saw.
+ */
 export async function setSettings(settings: Settings): Promise<StorageResult> {
-  return setInStorage(STORAGE_KEYS.SETTINGS, settings, 'local');
+  const raw = await getFromStorage<Record<string, unknown>>(STORAGE_KEYS.SETTINGS, 'local');
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    return setInStorage(STORAGE_KEYS.SETTINGS, settings, 'local');
+  }
+  const shape = settingsSchema.def.shape;
+  const next: Record<string, unknown> = { ...settings };
+  const preserved: string[] = [];
+  for (const [key, fieldSchema] of Object.entries(shape)) {
+    const stored = raw[key];
+    if (stored === undefined || fieldSchema.safeParse(stored).success) {
+      continue;
+    }
+    // Unreadable on disk, so the caller was handed the default rather than this value. Only
+    // put it back when the caller is still carrying that same default — an explicit change
+    // to the field must win.
+    if (next[key] === DEFAULT_SETTINGS[key as keyof Settings]) {
+      next[key] = stored;
+      preserved.push(key);
+    }
+  }
+  if (preserved.length > 0) {
+    logger.warn('Preserved unreadable settings fields through a write', { fields: preserved });
+  }
+  return setInStorage(STORAGE_KEYS.SETTINGS, next, 'local');
 }
 
 // Storage usage tracking

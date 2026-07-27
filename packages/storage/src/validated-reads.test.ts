@@ -13,13 +13,23 @@ import {
   setGoalsRaw,
   setQuotes,
   setQuotesRaw,
+  setSettings,
 } from './storage-helpers';
 
-/** A store that hands back whatever was put on "disk", however malformed. */
+/**
+ * A store that hands back whatever was put on "disk", however malformed — and round-trips
+ * it through JSON first, because both real adapters mint fresh objects on every read
+ * (chrome structured-clones, localStorage parses). A fake that returns the same reference
+ * makes reference-identity bugs invisible, which is how one shipped into this file.
+ */
+function clone<T>(value: T): T {
+  return value === undefined ? value : (JSON.parse(JSON.stringify(value)) as T);
+}
+
 function storeHolding(values: Record<string, unknown>): KeyValueStore {
   return {
     supportsSync: true,
-    get: async (key: string) => (key in values ? (values[key] as never) : null),
+    get: async (key: string) => (key in values ? (clone(values[key]) as never) : null),
     set: async () => ({ success: true }),
     remove: async () => true,
     getUsage: async () => ({ bytesInUse: 0, quota: 10_000_000 }),
@@ -333,9 +343,9 @@ describe('a whole-list write', () => {
       store: {
         supportsSync: true,
         get: async (key: string) =>
-          ((key in written ? written[key] : initial[key]) ?? null) as never,
+          (clone(key in written ? written[key] : initial[key]) ?? null) as never,
         set: async (key: string, value: unknown) => {
-          written[key] = value;
+          written[key] = clone(value);
           return { success: true as const };
         },
         remove: async () => true,
@@ -382,9 +392,9 @@ describe('who gets their hidden items back', () => {
       store: {
         supportsSync: true,
         get: async (key: string) =>
-          ((key in written ? written[key] : initial[key]) ?? null) as never,
+          (clone(key in written ? written[key] : initial[key]) ?? null) as never,
         set: async (key: string, value: unknown) => {
-          written[key] = value;
+          written[key] = clone(value);
           return { success: true as const };
         },
         remove: async () => true,
@@ -485,9 +495,9 @@ describe('setQuotesRaw', () => {
       store: {
         supportsSync: true,
         get: async (key: string) =>
-          ((key in written ? written[key] : initial[key]) ?? null) as never,
+          (clone(key in written ? written[key] : initial[key]) ?? null) as never,
         set: async (key: string, value: unknown) => {
-          written[key] = value;
+          written[key] = clone(value);
           return { success: true as const };
         },
         remove: async () => true,
@@ -519,5 +529,51 @@ describe('setQuotesRaw', () => {
 
     expect(written.customQuotes).toEqual([custom]);
     expect(written.seedQuotes).toEqual([seedish]);
+  });
+});
+
+// The lists got a preserving write; settings is the same shape and had not. A known key
+// whose value this build cannot parse is defaulted on read, and the store rewrites the whole
+// object on any change — so the user's choice was replaced by our default and pushed to the
+// device that made it.
+describe('a settings value this build cannot parse', () => {
+  const stored = { theme: 'dark', colorTheme: 'aurora', somethingAddedLater: 'kept' };
+
+  function capturingSettings() {
+    const written: Record<string, unknown> = {};
+    return {
+      written,
+      store: {
+        supportsSync: true,
+        get: async (key: string) =>
+          (JSON.parse(JSON.stringify((key in written ? written[key] : stored) ?? null)) ??
+            null) as never,
+        set: async (key: string, value: unknown) => {
+          written[key] = JSON.parse(JSON.stringify(value));
+          return { success: true as const };
+        },
+        remove: async () => true,
+        getUsage: async () => ({ bytesInUse: 0, quota: 10_000_000 }),
+      },
+    };
+  }
+
+  it('survives a write of an unrelated setting', async () => {
+    const { written, store } = capturingSettings();
+    configurePlatform({ storage: store });
+
+    await setSettings({ ...(await getSettings()), theme: 'light' });
+
+    expect((written.settings as Record<string, unknown>).colorTheme).toBe('aurora');
+    expect((written.settings as Record<string, unknown>).theme).toBe('light');
+  });
+
+  it('still yields to an explicit change of that same setting', async () => {
+    const { written, store } = capturingSettings();
+    configurePlatform({ storage: store });
+
+    await setSettings({ ...(await getSettings()), colorTheme: 'rose' });
+
+    expect((written.settings as Record<string, unknown>).colorTheme).toBe('rose');
   });
 });

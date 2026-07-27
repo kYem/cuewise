@@ -22,7 +22,9 @@ const encoder = new TextEncoder();
  * multi-byte-heavy string cannot pass a check sized for its serialized cost.
  */
 function withinBytes(max: number) {
-  // `unknown` in, because a check also runs for a value that failed the type test above it.
+  // `unknown` in so this composes onto `z.string()` without a cast. It cannot actually see a
+  // non-string — zod skips a key's checks once its *type* test fails — but typing it to the
+  // narrow case would tie the helper to that ordering.
   return z.refine(
     (value: unknown) => typeof value !== 'string' || encoder.encode(value).length <= max,
     { error: `must not exceed ${max} bytes` }
@@ -47,8 +49,9 @@ function recordSchema(nowMs: number) {
     collection: boundedString(MAX_COLLECTION_LENGTH),
     entityId: boundedString(MAX_ENTITY_ID_LENGTH),
     ciphertext: z.string({ error: 'required string' }).check(withinBytes(MAX_CIPHERTEXT_BYTES)),
+    // No separate finite check: zod 4's `z.number()` already rejects NaN and Infinity at the
+    // type level, carrying the message above, so drift is the only check that can fire here.
     clientUpdatedAt: z.number({ error: 'required finite number' }).check(
-      z.refine((value: number) => Number.isFinite(value), { error: 'required finite number' }),
       z.refine((value: number) => Math.abs(value - nowMs) <= MAX_CLOCK_DRIFT_MS, {
         error: 'client clock drift too large',
       })
@@ -61,9 +64,14 @@ const pushBodySchema = z.looseObject({ records: z.array(z.unknown()) });
 
 /**
  * One issue per violation, across every record — a client fixing a 20-record push should
- * not need one round trip per mistake. zod reports every failing key, and only the first
- * failing check per key, which is the whole reason a non-numeric `clientUpdatedAt` is
- * reported as "required finite number" and not also as clock drift.
+ * not need one round trip per mistake.
+ *
+ * Each field yields at most one issue today, but not because zod stops at a key's first
+ * failing check: it does not, and two checks on one field would emit two issues on the same
+ * pointer. It holds because no field here has two checks that can both fail — a string
+ * cannot be both empty and over its byte cap, and `z.number()` rejects NaN and Infinity at
+ * the type level, so only the drift refine can fire. Add a second failing check to any field
+ * and that field reports twice; use `abort: true` on the first if that is not wanted.
  */
 function issuesFor(raw: unknown, index: number, nowMs: number): ValidationIssue[] {
   // Anything that is not an object is reported as every field missing, the same as `{}`.
@@ -75,8 +83,8 @@ function issuesFor(raw: unknown, index: number, nowMs: number): ValidationIssue[
   if (result.success) {
     return [];
   }
-  // No per-path dedupe: zod stops at the first failing check for a key, so there is at most
-  // one issue per field already. A Set here looked like it was doing that work and was not.
+  // No per-path dedupe — see the note above for why one issue per field holds today, and
+  // what would break it.
   return result.error.issues.map((issue) => ({
     index,
     pointer: `/records/${index}/${issue.path.join('/')}`,
