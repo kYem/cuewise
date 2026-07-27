@@ -10,6 +10,7 @@ import {
   getSettings,
   getWeatherState,
   setGoals,
+  setQuotes,
 } from './storage-helpers';
 
 /** A store that hands back whatever was put on "disk", however malformed. */
@@ -334,5 +335,86 @@ describe('a whole-list write', () => {
     // The readable one is gone because the caller dropped it; the unreadable one stays,
     // since the caller could not have chosen to delete something it never saw.
     expect(written.goals).toEqual([quarantined]);
+  });
+});
+
+// The quarantine is tied to the READ that hid the item, not to the schema. That distinction
+// is what lets a sync delete land: sync reads raw, so it hid nothing, so its write carries
+// nothing extra — while a UI write, which read validated, carries what it never saw.
+describe('who gets their hidden items back', () => {
+  const readable = { id: 'g1', text: 'fine', completed: false, createdAt: 'x', date: '2026-07-26' };
+  const unreadable = { id: 'g2', text: 'from a newer build', completed: 'nope' };
+  const idless = { text: 'no id at all', completed: 'nope' };
+
+  function capturing(initial: Record<string, unknown>) {
+    const written: Record<string, unknown> = {};
+    return {
+      written,
+      store: {
+        supportsSync: true,
+        get: async (key: string) =>
+          ((key in written ? written[key] : initial[key]) ?? null) as never,
+        set: async (key: string, value: unknown) => {
+          written[key] = value;
+          return { success: true as const };
+        },
+        remove: async () => true,
+        getUsage: async () => ({ bytesInUse: 0, quota: 10_000_000 }),
+      },
+    };
+  }
+
+  it('gives a validated reader back what it never saw', async () => {
+    const { written, store } = capturing({ goals: [readable, unreadable] });
+    configurePlatform({ storage: store });
+
+    await setGoals(await getGoals());
+
+    expect(written.goals).toEqual([readable, unreadable]);
+  });
+
+  // Sync reads raw, so the item WAS in its hands; leaving it out is a deliberate delete and
+  // must land, or a pulled tombstone never applies and the goal resurrects on every device.
+  it('lets a raw reader delete the very same item', async () => {
+    const { written, store } = capturing({ goals: [readable, unreadable] });
+    configurePlatform({ storage: store });
+
+    const all = await getGoalsRaw();
+    await setGoals(all.filter((goal) => goal.id !== 'g2'));
+
+    expect(written.goals).toEqual([readable]);
+  });
+
+  // Guessing from the schema instead of the read re-appended an id-less row alongside
+  // itself, doubling it on every write until the array blew the storage quota.
+  it('never duplicates an item that has no usable id', async () => {
+    const { written, store } = capturing({ goals: [readable, idless] });
+    configurePlatform({ storage: store });
+
+    await setGoals(await getGoals());
+    configurePlatform({ storage: store });
+    await setGoals(await getGoals());
+
+    expect((written.goals as unknown[]).filter((g) => g === idless)).toHaveLength(1);
+  });
+
+  it('covers quotes too, which write two keys of their own', async () => {
+    const badQuote = { id: 'q2', text: 'newer build', category: 'philosophy' };
+    const goodQuote = {
+      id: 'q1',
+      text: 'fine',
+      author: 'A',
+      category: 'learning',
+      isCustom: true,
+      isFavorite: false,
+      isHidden: false,
+      viewCount: 0,
+    };
+    const { written, store } = capturing({ seedQuotes: [], customQuotes: [goodQuote, badQuote] });
+    configurePlatform({ storage: store });
+
+    await setQuotes(await getQuotes());
+
+    expect(written.customQuotes).toEqual([goodQuote, badQuote]);
   });
 });

@@ -73,6 +73,31 @@ export async function getValidatedFromStorage<T>(
  *
  * Returns null only when nothing is stored, or when the stored value is not a list at all.
  */
+/**
+ * What the last validated read of each key hid from its caller.
+ *
+ * Keyed by area+key, and deliberately tied to *the read*, not to the schema: the writer
+ * must re-attach exactly what its caller never saw, and nothing else. Guessing from the
+ * schema instead cannot tell "the caller deleted this" from "the caller never saw it", so
+ * a sync delete of an unreadable item would never land, and an item with no usable id
+ * would be re-appended alongside itself on every write until the array blew the quota.
+ */
+const hiddenByLastRead = new Map<string, unknown[]>();
+
+function quarantineKey(key: string, area: StorageArea): string {
+  return `${area}:${key}`;
+}
+
+/**
+ * A raw read hands the caller everything on disk, so nothing is hidden from it any more —
+ * and a later write of theirs must not resurrect what they deliberately left out. The
+ * extension keeps sync and the UI in separate realms, but the macOS app shares one, so
+ * without this a pulled tombstone would never land there.
+ */
+export function forgetHiddenItems(key: string, area: StorageArea = 'local'): void {
+  hiddenByLastRead.delete(quarantineKey(key, area));
+}
+
 export async function getValidatedListFromStorage<T>(
   key: string,
   itemSchema: ZodMiniType<T>,
@@ -96,7 +121,12 @@ export async function getValidatedListFromStorage<T>(
       droppedAt.push(index);
     }
   });
+  const slot = quarantineKey(key, area);
   if (droppedAt.length > 0) {
+    hiddenByLastRead.set(
+      slot,
+      droppedAt.map((index) => raw[index])
+    );
     // Positions and counts only; the items themselves are the user's own content.
     logger.warn('Dropped unreadable items from a stored list', {
       key,
@@ -105,6 +135,8 @@ export async function getValidatedListFromStorage<T>(
       of: raw.length,
       at: droppedAt.slice(0, 5),
     });
+  } else {
+    hiddenByLastRead.delete(slot);
   }
   return kept;
 }
@@ -112,41 +144,34 @@ export async function getValidatedListFromStorage<T>(
 /**
  * The write counterpart to `getValidatedListFromStorage`, and the reason it exists: the
  * reader hides items it cannot parse, but every store reloads the list and writes the whole
- * thing back — on the first edit, and in two places on load (`rollDueTasks`, the recurring
- * reminder advance). A hidden item would therefore be erased by opening a tab, and with it
- * the raw copy that export, sync and a future build were supposed to recover from.
+ * thing back — on the first edit, and on load via `rollDueTasks` and the recurring-reminder
+ * advance. A hidden item would therefore be erased by opening a tab, taking with it the raw
+ * copy that export, sync and a future build were meant to recover from.
  *
- * So a whole-list write carries the quarantined items along: anything on disk that the
- * caller never saw, because it failed the same schema, is appended rather than dropped.
+ * It re-attaches exactly what the last validated read of this key hid, which is the only
+ * thing the caller provably did not choose to delete. A caller that read raw — sync,
+ * export, import — hid nothing, so its writes carry nothing extra and its deletes land.
  */
-export async function setValidatedListInStorage<T extends { id: string }>(
+export async function setValidatedListInStorage<T>(
   key: string,
   items: T[],
-  itemSchema: ZodMiniType<T>,
   area: StorageArea = 'local'
 ): Promise<StorageResult> {
-  const raw = await getStorage().get<unknown>(key, area);
-  if (!Array.isArray(raw)) {
+  const hidden = hiddenByLastRead.get(quarantineKey(key, area)) ?? [];
+  // Defensive, and identity rather than id: with the quarantine tied to the read, a caller
+  // cannot be holding something that read hid, so this should never filter anything. It is
+  // here because the failure it prevents — the same row appended beside itself, doubling on
+  // every write until the array blows the quota — is unbounded rather than merely wrong.
+  const toRestore = hidden.filter((item) => !(items as unknown[]).includes(item));
+  if (toRestore.length === 0) {
     return getStorage().set(key, items, area);
   }
-  const written = new Set(items.map((item) => item.id));
-  const quarantined = raw.filter((stored) => {
-    if (itemSchema.safeParse(stored).success) {
-      return false;
-    }
-    // Keyed by id where there is one, so a genuine delete still removes it. An item with no
-    // readable id can only be kept — it cannot be addressed to be deleted.
-    const id = (stored as { id?: unknown })?.id;
-    return typeof id !== 'string' || !written.has(id);
+  logger.warn('Preserved unreadable stored items through a write', {
+    key,
+    area,
+    preserved: toRestore.length,
   });
-  if (quarantined.length > 0) {
-    logger.warn('Preserved unreadable stored items through a write', {
-      key,
-      area,
-      preserved: quarantined.length,
-    });
-  }
-  return getStorage().set(key, [...items, ...quarantined], area);
+  return getStorage().set(key, [...items, ...toRestore], area);
 }
 
 export async function setInStorage<T>(
