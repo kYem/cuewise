@@ -5,20 +5,36 @@ import {
   logger,
   type StorageArea,
 } from '@cuewise/shared';
+import {
+  conceptCardFactory,
+  goalFactory,
+  pomodoroFactory,
+  quoteFactory,
+  reminderFactory,
+} from '@cuewise/test-utils/factories';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getCalendarState,
+  getCollections,
+  getConceptCards,
   getCurrentQuote,
+  getCustomYoutubePlaylists,
   getGoals,
   getGoalsRaw,
+  getPomodoroSessions,
+  getPostureStats,
+  getQuickLinks,
   getQuotes,
   getQuotesRaw,
+  getReminders,
   getSettings,
   getWeatherState,
+  getYoutubeProgress,
   setGoals,
   setGoalsRaw,
   setQuotes,
   setQuotesRaw,
+  setRemindersRaw,
   setSettings,
   setSettingsRaw,
 } from './storage-helpers';
@@ -44,35 +60,37 @@ function storeHolding(values: Record<string, unknown>): KeyValueStore {
 }
 
 /**
- * A store that records what was written, per AREA as well as per key, and round-trips
- * through JSON like the real adapters.
+ * The one write-side fake. Records per AREA as well as per key, and round-trips through JSON
+ * like the real adapters.
  *
- * Both properties are load-bearing. A single-map fake let a write to the wrong area pass —
- * `setGoals` to 'local' while `getGoals` reads `getStorageArea()` is total goal loss for
- * every sync-enabled user — and a reference-returning fake hid an identity comparison that
- * could never match in production.
+ * Both properties are load-bearing, and both were learned the hard way. A single-map fake let
+ * a write to the wrong area pass — `setGoals` to 'local' while `getGoals` reads
+ * `getStorageArea()` is total goal loss for every sync-enabled user — and a
+ * reference-returning fake hid an identity comparison that can never match in production.
+ *
+ * There is deliberately no area-blind accessor, and every read of `disk` demands an area.
+ * An assertion that cannot name the area cannot catch a write that went to the wrong one,
+ * which is the entire reason this exists.
  */
-function capturingStore(initial: Record<string, unknown> = {}, area: StorageArea = 'local') {
-  const written: Record<string, unknown> = {};
-  const seedKey = (key: string) => `${area}:${key}`;
-  const disk: Record<string, unknown> = {};
+function capturingStore(initial: Record<string, unknown> = {}, seedArea: StorageArea = 'local') {
+  const disk = new Map<string, unknown>();
   for (const [key, value] of Object.entries(initial)) {
-    disk[seedKey(key)] = value;
+    disk.set(`${seedArea}:${key}`, value);
   }
+  const writes: { key: string; area: StorageArea }[] = [];
   return {
-    written,
-    /** Everything written to `local`, keyed plainly, for assertions. */
-    local: written,
+    /** What a reader of that exact area would find. */
+    at: (key: string, area: StorageArea = 'local') => clone(disk.get(`${area}:${key}`)),
+    /** Whether that exact area was ever written — distinct from `at`, which also sees seed. */
+    wroteTo: (key: string, area: StorageArea) =>
+      writes.some((w) => w.key === key && w.area === area),
     store: {
       supportsSync: true,
-      get: async (key: string, readArea: StorageArea = 'local') => {
-        const slot = `${readArea}:${key}`;
-        return (clone(slot in disk ? disk[slot] : null) ?? null) as never;
-      },
+      get: async (key: string, readArea: StorageArea = 'local') =>
+        (clone(disk.get(`${readArea}:${key}`)) ?? null) as never,
       set: async (key: string, value: unknown, writeArea: StorageArea = 'local') => {
-        disk[`${writeArea}:${key}`] = clone(value);
-        written[key] = clone(value);
-        written[`${writeArea}:${key}`] = clone(value);
+        disk.set(`${writeArea}:${key}`, clone(value));
+        writes.push({ key, area: writeArea });
         return { success: true as const };
       },
       remove: async () => true,
@@ -381,43 +399,25 @@ describe('a whole-list write', () => {
   const readable = { id: 'g1', text: 'fine', completed: false, createdAt: 'x', date: '2026-07-26' };
   const quarantined = { id: 'g2', text: 'from a newer build', completed: 'nope' };
 
-  function storeCapturingWrites(initial: Record<string, unknown>) {
-    const written: Record<string, unknown> = {};
-    return {
-      written,
-      store: {
-        supportsSync: true,
-        get: async (key: string) =>
-          (clone(key in written ? written[key] : initial[key]) ?? null) as never,
-        set: async (key: string, value: unknown) => {
-          written[key] = clone(value);
-          return { success: true as const };
-        },
-        remove: async () => true,
-        getUsage: async () => ({ bytesInUse: 0, quota: 10_000_000 }),
-      },
-    };
-  }
-
   it('carries the items the caller never saw', async () => {
-    const { written, store } = storeCapturingWrites({ goals: [readable, quarantined] });
+    const { at, store } = capturingStore({ goals: [readable, quarantined] });
     configurePlatform({ storage: store });
 
     const visible = await getGoals();
     await setGoals(visible);
 
-    expect(written.goals).toEqual([readable, quarantined]);
+    expect(at('goals')).toEqual([readable, quarantined]);
   });
 
   it('still deletes an item the caller did remove', async () => {
-    const { written, store } = storeCapturingWrites({ goals: [readable, quarantined] });
+    const { at, store } = capturingStore({ goals: [readable, quarantined] });
     configurePlatform({ storage: store });
 
     await setGoals([]);
 
     // The readable one is gone because the caller dropped it; the unreadable one stays,
     // since the caller could not have chosen to delete something it never saw.
-    expect(written.goals).toEqual([quarantined]);
+    expect(at('goals')).toEqual([quarantined]);
   });
 });
 
@@ -430,55 +430,37 @@ describe('who gets their hidden items back', () => {
   const unreadable = { id: 'g2', text: 'from a newer build', completed: 'nope' };
   const idless = { text: 'no id at all', completed: 'nope' };
 
-  function capturing(initial: Record<string, unknown>) {
-    const written: Record<string, unknown> = {};
-    return {
-      written,
-      store: {
-        supportsSync: true,
-        get: async (key: string) =>
-          (clone(key in written ? written[key] : initial[key]) ?? null) as never,
-        set: async (key: string, value: unknown) => {
-          written[key] = clone(value);
-          return { success: true as const };
-        },
-        remove: async () => true,
-        getUsage: async () => ({ bytesInUse: 0, quota: 10_000_000 }),
-      },
-    };
-  }
-
   it('gives a validated reader back what it never saw', async () => {
-    const { written, store } = capturing({ goals: [readable, unreadable] });
+    const { at, store } = capturingStore({ goals: [readable, unreadable] });
     configurePlatform({ storage: store });
 
     await setGoals(await getGoals());
 
-    expect(written.goals).toEqual([readable, unreadable]);
+    expect(at('goals')).toEqual([readable, unreadable]);
   });
 
   // Every assertion here stands alone: no test depends on state another one left behind.
   it('keeps doing so on a later edit that never re-read', async () => {
-    const { written, store } = capturing({ goals: [readable, unreadable] });
+    const { at, store } = capturingStore({ goals: [readable, unreadable] });
     configurePlatform({ storage: store });
 
     const visible = await getGoals();
     await setGoals([...visible, { ...readable, id: 'g3' }]);
     await setGoals(visible);
 
-    expect(written.goals).toEqual([readable, unreadable]);
+    expect(at('goals')).toEqual([readable, unreadable]);
   });
 
   // Sync reads raw, so the item was in its hands; leaving it out is a deliberate delete and
   // must land, or a pulled tombstone never applies and the goal resurrects on every device.
   it('lets a raw reader delete the very same item', async () => {
-    const { written, store } = capturing({ goals: [readable, unreadable] });
+    const { at, store } = capturingStore({ goals: [readable, unreadable] });
     configurePlatform({ storage: store });
 
     const all = await getGoalsRaw();
     await setGoalsRaw(all.filter((goal) => goal.id !== 'g2'));
 
-    expect(written.goals).toEqual([readable]);
+    expect(at('goals')).toEqual([readable]);
   });
 
   // The preserve step must not re-append a row the caller already passed in, or the array
@@ -488,13 +470,13 @@ describe('who gets their hidden items back', () => {
   // it is never in `items` and the check is never consulted. Without the guard the row is
   // appended beside itself and doubles on every write until the quota stops all saving.
   it('never duplicates a row the caller already passed in', async () => {
-    const { written, store } = capturing({ goals: [readable, idless] });
+    const { at, store } = capturingStore({ goals: [readable, idless] });
     configurePlatform({ storage: store });
 
     await setGoals(await getGoalsRaw());
-    await setGoals((written.goals as (typeof readable)[]) ?? []);
+    await setGoals((at('goals') as (typeof readable)[]) ?? []);
 
-    expect(written.goals).toHaveLength(2);
+    expect(at('goals')).toHaveLength(2);
   });
 
   it('covers quotes too, which write two keys of their own', async () => {
@@ -509,12 +491,12 @@ describe('who gets their hidden items back', () => {
       isHidden: false,
       viewCount: 0,
     };
-    const { written, store } = capturing({ seedQuotes: [], customQuotes: [goodQuote, badQuote] });
+    const { at, store } = capturingStore({ seedQuotes: [], customQuotes: [goodQuote, badQuote] });
     configurePlatform({ storage: store });
 
     await setQuotes(await getQuotes());
 
-    expect(written.customQuotes).toEqual([goodQuote, badQuote]);
+    expect(at('customQuotes')).toEqual([goodQuote, badQuote]);
   });
 });
 
@@ -533,47 +515,29 @@ describe('setQuotesRaw', () => {
   };
   const unreadable = { id: 'q2', text: 'newer build', category: 'philosophy', isCustom: true };
 
-  function capturing(initial: Record<string, unknown>) {
-    const written: Record<string, unknown> = {};
-    return {
-      written,
-      store: {
-        supportsSync: true,
-        get: async (key: string) =>
-          (clone(key in written ? written[key] : initial[key]) ?? null) as never,
-        set: async (key: string, value: unknown) => {
-          written[key] = clone(value);
-          return { success: true as const };
-        },
-        remove: async () => true,
-        getUsage: async () => ({ bytesInUse: 0, quota: 10_000_000 }),
-      },
-    };
-  }
-
   // Sync saw the unreadable quote through the raw read, so omitting it is a deliberate
   // delete. Preserving it here would resurrect a quote deleted on another device.
   it('deletes what the caller left out, on both keys', async () => {
-    const { written, store } = capturing({ seedQuotes: [], customQuotes: [custom, unreadable] });
+    const { at, store } = capturingStore({ seedQuotes: [], customQuotes: [custom, unreadable] });
     configurePlatform({ storage: store });
 
     await setQuotesRaw([custom]);
 
-    expect(written.customQuotes).toEqual([custom]);
-    expect(written.seedQuotes).toEqual([]);
+    expect(at('customQuotes')).toEqual([custom]);
+    expect(at('seedQuotes')).toEqual([]);
   });
 
   // It must route each quote to the same key `setQuotes` would, or a round trip through
   // sync would silently move quotes between the seed and custom lists.
   it('splits seed from custom the same way the validated setter does', async () => {
     const seedish = { ...custom, id: 'q3', isCustom: false, isFavorite: false, isHidden: false };
-    const { written, store } = capturing({ seedQuotes: [], customQuotes: [] });
+    const { at, store } = capturingStore({ seedQuotes: [], customQuotes: [] });
     configurePlatform({ storage: store });
 
     await setQuotesRaw([custom, seedish]);
 
-    expect(written.customQuotes).toEqual([custom]);
-    expect(written.seedQuotes).toEqual([seedish]);
+    expect(at('customQuotes')).toEqual([custom]);
+    expect(at('seedQuotes')).toEqual([seedish]);
   });
 });
 
@@ -584,42 +548,26 @@ describe('setQuotesRaw', () => {
 describe('a settings value this build cannot parse', () => {
   const stored = { theme: 'dark', colorTheme: 'aurora', somethingAddedLater: 'kept' };
 
-  function capturingSettings() {
-    const written: Record<string, unknown> = {};
-    return {
-      written,
-      store: {
-        supportsSync: true,
-        get: async (key: string) =>
-          (JSON.parse(JSON.stringify((key in written ? written[key] : stored) ?? null)) ??
-            null) as never,
-        set: async (key: string, value: unknown) => {
-          written[key] = JSON.parse(JSON.stringify(value));
-          return { success: true as const };
-        },
-        remove: async () => true,
-        getUsage: async () => ({ bytesInUse: 0, quota: 10_000_000 }),
-      },
-    };
-  }
+  const settingsWritten = (at: (key: string) => unknown) =>
+    at('settings') as Record<string, unknown>;
 
   it('survives a write of an unrelated setting', async () => {
-    const { written, store } = capturingSettings();
+    const { at, store } = capturingStore({ settings: stored });
     configurePlatform({ storage: store });
 
     await setSettings({ ...(await getSettings()), theme: 'light' });
 
-    expect((written.settings as Record<string, unknown>).colorTheme).toBe('aurora');
-    expect((written.settings as Record<string, unknown>).theme).toBe('light');
+    expect(settingsWritten(at).colorTheme).toBe('aurora');
+    expect(settingsWritten(at).theme).toBe('light');
   });
 
   it('still yields to an explicit change of that same setting', async () => {
-    const { written, store } = capturingSettings();
+    const { at, store } = capturingStore({ settings: stored });
     configurePlatform({ storage: store });
 
     await setSettings({ ...(await getSettings()), colorTheme: 'rose' });
 
-    expect((written.settings as Record<string, unknown>).colorTheme).toBe('rose');
+    expect(settingsWritten(at).colorTheme).toBe('rose');
   });
 });
 
@@ -629,34 +577,15 @@ describe('a settings value this build cannot parse', () => {
 describe('a settings write that means the default', () => {
   const stored = { theme: 'dark', colorTheme: 'aurora', somethingAddedLater: 'kept' };
 
-  function capturingSettings() {
-    const written: Record<string, unknown> = {};
-    return {
-      written,
-      store: {
-        supportsSync: true,
-        get: async (key: string) =>
-          (JSON.parse(JSON.stringify((key in written ? written[key] : stored) ?? null)) ??
-            null) as never,
-        set: async (key: string, value: unknown) => {
-          written[key] = JSON.parse(JSON.stringify(value));
-          return { success: true as const };
-        },
-        remove: async () => true,
-        getUsage: async () => ({ bytesInUse: 0, quota: 10_000_000 }),
-      },
-    };
-  }
-
   // The one action whose entire job is to clear everything must actually clear the field
   // this build cannot read — otherwise Reset visibly does nothing for that setting.
   it('clears an unreadable field when written raw', async () => {
-    const { written, store } = capturingSettings();
+    const { at, store } = capturingStore({ settings: stored });
     configurePlatform({ storage: store });
 
     await setSettingsRaw({ ...DEFAULT_SETTINGS });
 
-    expect((written.settings as Record<string, unknown>).colorTheme).toBe(
+    expect((at('settings') as Record<string, unknown>).colorTheme).toBe(
       DEFAULT_SETTINGS.colorTheme
     );
   });
@@ -664,17 +593,16 @@ describe('a settings write that means the default', () => {
   // Sync reads raw and applies a remote value; if that value happens to equal our default,
   // the preserving write would drop it and the pull would be a silent no-op.
   it('lands a remote value that happens to equal our default', async () => {
-    const { written, store } = capturingSettings();
+    const { at, store } = capturingStore({ settings: stored });
     configurePlatform({ storage: store });
 
     await setSettingsRaw({ ...DEFAULT_SETTINGS, theme: DEFAULT_SETTINGS.theme });
 
-    expect((written.settings as Record<string, unknown>).theme).toBe(DEFAULT_SETTINGS.theme);
+    const written = at('settings') as Record<string, unknown>;
+    expect(written.theme).toBe(DEFAULT_SETTINGS.theme);
     // And it does not quietly restore the neighbour it cannot read, which is the whole
     // difference between this setter and the preserving one.
-    expect((written.settings as Record<string, unknown>).colorTheme).toBe(
-      DEFAULT_SETTINGS.colorTheme
-    );
+    expect(written.colorTheme).toBe(DEFAULT_SETTINGS.colorTheme);
   });
 });
 
@@ -689,20 +617,8 @@ describe('an unreadable setting whose default is an array', () => {
   };
 
   it('survives a caller that rebuilt the array rather than passing our reference', async () => {
-    const written: Record<string, unknown> = {};
-    configurePlatform({
-      storage: {
-        supportsSync: true,
-        get: async (key: string) =>
-          (clone(key in written ? written[key] : stored) ?? null) as never,
-        set: async (key: string, value: unknown) => {
-          written[key] = clone(value);
-          return { success: true as const };
-        },
-        remove: async () => true,
-        getUsage: async () => ({ bytesInUse: 0, quota: 10_000_000 }),
-      },
-    });
+    const { at, store } = capturingStore({ settings: stored });
+    configurePlatform({ storage: store });
 
     const current = await getSettings();
     // A fresh array with the same contents as the default — what `.filter()` produces.
@@ -711,9 +627,75 @@ describe('an unreadable setting whose default is an array', () => {
       quoteFilterActiveCollectionIds: [...current.quoteFilterActiveCollectionIds],
     });
 
-    expect((written.settings as Record<string, unknown>).quoteFilterActiveCollectionIds).toEqual(
+    expect((at('settings') as Record<string, unknown>).quoteFilterActiveCollectionIds).toEqual(
       stored.quoteFilterActiveCollectionIds
     );
+  });
+});
+
+/**
+ * Every key is wired to a schema by hand, and until this existed most of those wirings were
+ * unfalsifiable: swapping `getQuickLinks` onto `conceptCardSchema` — or `getPostureStats`
+ * onto `goalSchema` — left the whole monorepo green. The failure is not a type error, it is
+ * a collection that reads as empty and is then persisted empty by the next whole-list write.
+ *
+ * Two directions per key, because one alone proves little: the right row must survive (the
+ * schema is not something stricter) and a foreign row must not (it is not something looser).
+ * `goal` is the foreign row everywhere except goals, which use `quickLink` instead.
+ */
+describe('each key is read through its own schema', () => {
+  const goal = goalFactory.build();
+  const quickLink = { id: 'ql1', title: 'Docs', url: 'https://example.com' };
+
+  const cases: [string, string, unknown, unknown, () => Promise<unknown[]>][] = [
+    ['goals', 'goals', goal, quickLink, getGoals],
+    ['reminders', 'reminders', reminderFactory.build(), goal, getReminders],
+    ['pomodoro sessions', 'pomodoroSessions', pomodoroFactory.build(), goal, getPomodoroSessions],
+    ['custom quotes', 'customQuotes', quoteFactory.build(), goal, getQuotes],
+    ['concept cards', 'conceptCards', conceptCardFactory.build(), goal, getConceptCards],
+    ['quick links', 'quickLinks', quickLink, goal, getQuickLinks],
+    [
+      'collections',
+      'collections',
+      { id: 'c1', name: 'Stoics', createdAt: '2026-07-26T00:00:00.000Z' },
+      goal,
+      getCollections,
+    ],
+    [
+      'posture stats',
+      'postureStats',
+      { date: '2026-07-26', counts: { good: 1, mild: 0, poor: 0, absent: 0 } },
+      goal,
+      getPostureStats,
+    ],
+    [
+      'youtube playlists',
+      'customYoutubePlaylists',
+      { id: 'p1', name: 'Focus', playlistId: 'PL1', isCustom: true },
+      goal,
+      getCustomYoutubePlaylists,
+    ],
+    [
+      'youtube progress',
+      'youtubeProgress',
+      { playlistId: 'PL1', videoProgress: [] },
+      goal,
+      getYoutubeProgress,
+    ],
+  ];
+
+  it.each(cases)('keeps a valid %s row', async (_label, key, own, _foreign, read) => {
+    configurePlatform({ storage: storeHolding({ [key]: [own] }) });
+
+    await expect(read()).resolves.toEqual([own]);
+  });
+
+  it.each(
+    cases
+  )('drops a foreign row stored under %s', async (_label, key, _own, foreign, read) => {
+    configurePlatform({ storage: storeHolding({ [key]: [foreign] }) });
+
+    await expect(read()).resolves.toEqual([]);
   });
 });
 
@@ -723,22 +705,70 @@ describe('writes land in the area their reader uses', () => {
   const goal = { id: 'g1', text: 'synced', completed: false, createdAt: 'x', date: '2026-07-26' };
 
   it('writes goals to the sync area when sync is on', async () => {
-    const { written, store } = capturingStore({ settings: { syncEnabled: true } }, 'local');
+    const { at, wroteTo, store } = capturingStore({ settings: { syncEnabled: true } });
     configurePlatform({ storage: store });
 
     await setGoals([goal]);
 
-    expect(written['sync:goals']).toEqual([goal]);
-    expect(written['local:goals']).toBeUndefined();
+    expect(at('goals', 'sync')).toEqual([goal]);
+    expect(wroteTo('goals', 'local')).toBe(false);
   });
 
   it('keeps settings in the local area regardless', async () => {
-    const { written, store } = capturingStore({ settings: { syncEnabled: true } }, 'local');
+    const { wroteTo, store } = capturingStore({ settings: { syncEnabled: true } });
     configurePlatform({ storage: store });
 
     await setSettingsRaw({ ...DEFAULT_SETTINGS, syncEnabled: true });
 
-    expect(written['local:settings']).toBeDefined();
-    expect(written['sync:settings']).toBeUndefined();
+    expect(wroteTo('settings', 'local')).toBe(true);
+    expect(wroteTo('settings', 'sync')).toBe(false);
+  });
+
+  // The raw setters are the sync write path, so an area mistake there is every synced edit
+  // landing where no reader looks. `setGoals` was pinned above and these were not, which is
+  // the same gap one function over.
+  it.each([
+    ['goals', () => setGoalsRaw([goal])],
+    ['reminders', () => setRemindersRaw([])],
+  ])('sends %s written raw to the sync area too', async (key, write) => {
+    const { wroteTo, store } = capturingStore({ settings: { syncEnabled: true } });
+    configurePlatform({ storage: store });
+
+    await write();
+
+    expect(wroteTo(key, 'sync')).toBe(true);
+    expect(wroteTo(key, 'local')).toBe(false);
+  });
+
+  // Quotes split across two keys and only the custom half follows the sync area; the seed
+  // half is local by design, so this pins both halves rather than just the one.
+  it('sends custom quotes raw to the sync area and keeps seed quotes local', async () => {
+    const { wroteTo, store } = capturingStore({ settings: { syncEnabled: true } });
+    configurePlatform({ storage: store });
+
+    await setQuotesRaw([]);
+
+    expect(wroteTo('customQuotes', 'sync')).toBe(true);
+    expect(wroteTo('seedQuotes', 'local')).toBe(true);
+    expect(wroteTo('seedQuotes', 'sync')).toBe(false);
+  });
+
+  it('reads custom quotes back from the area it wrote them to', async () => {
+    const quote = {
+      id: 'q1',
+      text: 'synced',
+      author: 'A',
+      category: 'learning' as const,
+      isCustom: true,
+      isFavorite: false,
+      isHidden: false,
+      viewCount: 0,
+    };
+    const { store } = capturingStore({ settings: { syncEnabled: true } });
+    configurePlatform({ storage: store });
+
+    await setQuotesRaw([quote]);
+
+    await expect(getQuotesRaw()).resolves.toEqual([quote]);
   });
 });

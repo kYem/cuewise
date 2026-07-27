@@ -69,6 +69,28 @@ vi.mock('./toast-store', () => ({
 
 const originalCreateElement = document.createElement.bind(document);
 
+/**
+ * Stubs the download path and hands back the Blob the export actually produced. Asserting on
+ * which readers ran is not enough: both export paths wrap everything after the reads in a
+ * `try/catch`, so emptying the payload keeps every reader assertion green.
+ */
+function captureDownloadedBlob(): () => Blob {
+  let captured: Blob | undefined;
+  vi.spyOn(URL, 'createObjectURL').mockImplementation((blob: Blob | MediaSource) => {
+    captured = blob as Blob;
+    return 'blob:x';
+  });
+  vi.spyOn(document, 'createElement').mockImplementation((tag: string) =>
+    Object.assign(originalCreateElement(tag), { click: () => undefined })
+  );
+  return () => {
+    if (captured === undefined) {
+      throw new Error('no Blob was handed to URL.createObjectURL');
+    }
+    return captured;
+  };
+}
+
 describe('Insights Store - Import Methods', () => {
   beforeEach(() => {
     useInsightsStore.setState({
@@ -148,19 +170,32 @@ describe('Insights Store - Import Methods', () => {
     // The backup's whole contract is faithfulness, and it was only ever mocked, never run.
     it('exports every stored item, including the ones this build cannot render', async () => {
       mockStorageWithData({ goals: [goalFactory.build({ id: 'g1' })] });
-      vi.spyOn(URL, 'createObjectURL').mockImplementation(() => 'blob:x');
-      vi.spyOn(document, 'createElement').mockImplementation((tag: string) =>
-        Object.assign(originalCreateElement(tag), { click: () => undefined })
-      );
+      const written = captureDownloadedBlob();
 
       await useInsightsStore.getState().exportAllAsJSON();
 
+      // The payload, not just which readers ran. `exportAllAsJSON` catches everything after
+      // the reads, so a body of three empty arrays satisfied the reader assertions below
+      // while producing a backup of nothing.
+      const payload = JSON.parse(await written().text());
+      expect(payload.goals.map((goal: Goal) => goal.id)).toContain(QUARANTINED_GOAL.id);
+      expect(payload.quotes.map((quote: Quote) => quote.id)).toContain(QUARANTINED_QUOTE.id);
+      expect(payload.pomodoroSessions.map((s: { id: string }) => s.id)).toContain(
+        QUARANTINED_SESSION.id
+      );
       // The raw readers, not the rendering ones: a backup that omits what this build cannot
       // parse is not a backup, and re-importing it writes the reduced set over storage.
-      expect(vi.mocked(storage.getGoalsRaw)).toHaveBeenCalled();
-      expect(vi.mocked(storage.getQuotesRaw)).toHaveBeenCalled();
-      expect(vi.mocked(storage.getPomodoroSessionsRaw)).toHaveBeenCalled();
       expect(vi.mocked(storage.getGoals)).not.toHaveBeenCalled();
+    });
+
+    // CSV shares the export contract and had the same gap — its raw reads were revertible.
+    it('exports the same hidden items to CSV', async () => {
+      mockStorageWithData({ goals: [goalFactory.build({ id: 'g1' })] });
+      const written = captureDownloadedBlob();
+
+      await useInsightsStore.getState().exportAsCSV('goals');
+
+      expect(await written().text()).toContain(QUARANTINED_GOAL.id);
     });
 
     it('should skip duplicate goals when skipDuplicates is true', async () => {
@@ -215,7 +250,10 @@ describe('Insights Store - Import Methods', () => {
       await useInsightsStore.getState().executeImport(DEFAULT_IMPORT_OPTIONS);
 
       const savedQuotes = vi.mocked(storage.setQuotesRaw).mock.calls[0][0] as Quote[];
-      expect(savedQuotes[0].isCustom).toBe(true);
+      // By id, not by index. The saved array leads with the row only the raw read can see,
+      // and that row is already `isCustom: true` — so position 0 passed whether or not the
+      // import stamped anything, and dropping the stamp entirely left this test green.
+      expect(savedQuotes.find((quote) => quote.id === importQuote.id)?.isCustom).toBe(true);
     });
 
     it('should return correct counts for imported and skipped items', async () => {

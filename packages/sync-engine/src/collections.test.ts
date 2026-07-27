@@ -3,8 +3,11 @@ import {
   getGoals,
   getSettings,
   getSettingsForSync,
+  setCollectionsRaw,
   setGoals,
   setGoalsRaw,
+  setQuotesRaw,
+  setRemindersRaw,
   setSettingsRaw,
 } from '@cuewise/storage';
 import { goalFactory } from '@cuewise/test-utils/factories';
@@ -188,5 +191,70 @@ describe('bindings see what the UI cannot', () => {
     const all = await settingsBinding().readAll();
 
     expect((all.colorTheme as { value: unknown }).value).toBe('aurora');
+  });
+
+  // The preserving setter cannot tell "the peer chose our default" from "the caller never
+  // saw this field", so it drops the former — and a pull that lands nothing is a setting
+  // that stays wrong on this device forever while every other one shows the new value.
+  it('lands a pulled value that happens to equal our own default', async () => {
+    await setSettingsRaw({ ...DEFAULT_SETTINGS, colorTheme: 'aurora' as never });
+
+    await settingsBinding().writeOne('colorTheme', {
+      key: 'colorTheme',
+      value: DEFAULT_SETTINGS.colorTheme,
+    });
+
+    const stored = await getSettingsForSync();
+    expect(stored.colorTheme).toBe(DEFAULT_SETTINGS.colorTheme);
+  });
+});
+
+/**
+ * The same three properties as the goals block above, across the other three array bindings.
+ * Each was independently revertible to the validated helpers with the monorepo green: the
+ * tests at the top of this file build their entities from factories, which are schema-valid
+ * by construction, so nothing there can tell the two readers apart.
+ */
+describe.each([
+  [
+    'quotes',
+    setQuotesRaw,
+    { id: 'unreadable', text: 'newer build', isCustom: true, category: 'x' },
+  ],
+  ['collections', setCollectionsRaw, { id: 'unreadable', name: 'newer build', createdAt: 42 }],
+  [
+    'reminders',
+    setRemindersRaw,
+    { id: 'unreadable', text: 'newer build', dueDate: 'x', completed: 'nope' },
+  ],
+])('the %s binding sees what the UI cannot', (name, seedRaw, unreadable) => {
+  function binding() {
+    const found = defaultBindings().find((b) => b.name === name);
+    if (found === undefined) {
+      throw new Error(`${name} binding missing from defaultBindings()`);
+    }
+    return found;
+  }
+
+  beforeEach(async () => {
+    await seedRaw([unreadable] as never);
+  });
+
+  it('readAll includes it', async () => {
+    expect(Object.keys(await binding().readAll())).toContain('unreadable');
+  });
+
+  // Absence from readAll is how the cycle infers a tombstone, so a hidden entity would be
+  // pushed as a delete and removed on every other device.
+  it('writeOne can delete it', async () => {
+    await binding().writeOne('unreadable', null);
+
+    expect(Object.keys(await binding().readAll())).not.toContain('unreadable');
+  });
+
+  it('an unrelated write leaves it in place', async () => {
+    await binding().writeOne('other', { id: 'other' } as never);
+
+    expect(Object.keys(await binding().readAll())).toContain('unreadable');
   });
 });

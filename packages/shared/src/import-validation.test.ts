@@ -60,6 +60,21 @@ describe('imported items always satisfy the read schemas', () => {
     expect(typeof result.data?.goals?.[0].createdAt).toBe('string');
   });
 
+  // The twelfth Quote field, and the last one the importer learned to carry. Dropping it is
+  // invisible to a schema check — `collectionIds` is optional — so re-importing a backup
+  // silently emptied every collection while reporting a clean import.
+  it('carries collection membership through an import', async () => {
+    const result = importOf({ quotes: [{ id: 'q1', text: 't', collectionIds: ['c1', 'c2'] }] });
+
+    expect(result.data?.quotes?.[0].collectionIds).toEqual(['c1', 'c2']);
+  });
+
+  it('keeps the usable ids when one member is malformed, rather than dropping the field', () => {
+    const result = importOf({ quotes: [{ id: 'q1', text: 't', collectionIds: ['c1', 42] }] });
+
+    expect(result.data?.quotes?.[0].collectionIds).toEqual(['c1']);
+  });
+
   // Both ends of the same coercion. The schemas accept any string, so an empty one imports
   // clean and then groups under a blank date header or shows a blank author — invisible to
   // the round-trip checks above, which only ask whether the schema still matches.
