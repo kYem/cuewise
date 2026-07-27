@@ -301,7 +301,7 @@ export async function getSettings(): Promise<Settings> {
 }
 
 // Raw legacy blob: null when never stored OR unreadable (the port conflates the two).
-// Used only by the migration, which must fail closed — not for rendering.
+// Exists only for migrateLegacySettings, which must fail closed — no other caller should read it.
 export async function getStoredSettings(): Promise<Settings | null> {
   return await getFromStorage<Settings>(STORAGE_KEYS.SETTINGS, 'local');
 }
@@ -341,7 +341,7 @@ export async function migrateLegacySettings(): Promise<void> {
     if (value === undefined) {
       continue;
     }
-    // Structural compare — four settings hold arrays, which never compare equal by identity.
+    // Structural compare — two settings hold arrays, which never compare equal by identity.
     if (JSON.stringify(value) === JSON.stringify(DEFAULT_SETTINGS[key])) {
       continue;
     }

@@ -5,8 +5,9 @@ import {
   type Settings,
   STORAGE_KEYS,
   type StorageUsage,
+  type SyncMutationSink,
 } from '@cuewise/shared';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getManyFromStorage, setInStorage } from './chrome-storage';
 import {
   clearCustomBackground,
@@ -223,11 +224,12 @@ describe('migrateLegacySettings', () => {
     configurePlatform({ storage: store });
   });
 
-  // structuredClone, not a spread: the fake store keeps whatever reference it's given, so a
-  // shallow spread would leave every untouched array field pointing at the exact same
-  // DEFAULT_SETTINGS array instance. Real chrome.storage always round-trips through
-  // serialization and never hands back that instance, so this reproduces the case that
-  // actually distinguishes a structural default-comparison from a reference one.
+  afterEach(() => {
+    configurePlatform({ syncSink: null });
+  });
+
+  // structuredClone, not a spread: real chrome.storage always returns a new array instance on
+  // read, and only structuredClone reproduces that — a spread would leave arrays reference-equal.
   function legacyBlob(overrides: Partial<Settings>): Settings {
     return { ...structuredClone(DEFAULT_SETTINGS), ...overrides };
   }
@@ -306,5 +308,16 @@ describe('migrateLegacySettings', () => {
 
     const stored = await getManyFromStorage(SETTINGS_KEYS.map(settingsStorageKey));
     expect(stored).toEqual({ 'settings.quoteFilterActiveCollectionIds': ['c1'] });
+  });
+
+  it('marks nothing dirty for sync, even for the keys it writes', async () => {
+    const markMutated = vi.fn();
+    const fakeSink: SyncMutationSink = { markMutated, markDeleted: vi.fn() };
+    configurePlatform({ syncSink: fakeSink });
+    await setInStorage(STORAGE_KEYS.SETTINGS, legacyBlob({ theme: 'dark' }), 'local');
+
+    await migrateLegacySettings();
+
+    expect(markMutated).not.toHaveBeenCalled();
   });
 });

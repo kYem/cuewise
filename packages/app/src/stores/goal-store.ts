@@ -25,9 +25,10 @@ import {
   toggleSubtaskInGoal,
 } from '@cuewise/shared';
 import {
+  getFromStorage,
   getGoals as loadAllGoals,
-  getStoredSettings as loadStoredSettings,
   setGoals as saveAllGoals,
+  settingsStorageKey,
 } from '@cuewise/storage';
 import { create } from 'zustand';
 import { useToastStore } from './toast-store';
@@ -314,17 +315,14 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
 
   rollDueTasks: async () => {
     try {
-      // Gate on the persisted setting, not the settings store: goal hydration
-      // races settings hydration (and #goals never hydrates it), so the store
-      // can still hold the default when the roll fires on load.
-      const settings = await loadStoredSettings();
-      // Fail closed on null (unreadable OR never stored): a read failure must
-      // not re-enable automation the user turned off. Pre-onboarding users have
-      // no blob yet — and no overdue tasks either, so nothing is lost.
-      if (settings === null) {
-        return false;
-      }
-      if ((settings.autoRollDueTasks ?? DEFAULT_SETTINGS.autoRollDueTasks) === false) {
+      // Gate on the persisted key, not the settings store: goal hydration races
+      // settings hydration (and #goals never hydrates it), so the store can
+      // still hold the default when the roll fires on load.
+      const stored = await getFromStorage<boolean>(settingsStorageKey('autoRollDueTasks'), 'local');
+      // Absent now means "never set" — indistinguishable at this port from unreadable — so the
+      // default applies; a read failure rolls rather than declining to, with no opt-out to protect.
+      const enabled = stored ?? DEFAULT_SETTINGS.autoRollDueTasks;
+      if (!enabled) {
         return false;
       }
 
