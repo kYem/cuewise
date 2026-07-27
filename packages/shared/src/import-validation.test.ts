@@ -60,6 +60,22 @@ describe('imported items always satisfy the read schemas', () => {
     expect(typeof result.data?.goals?.[0].createdAt).toBe('string');
   });
 
+  // Both ends of the same coercion. The schemas accept any string, so an empty one imports
+  // clean and then groups under a blank date header or shows a blank author — invisible to
+  // the round-trip checks above, which only ask whether the schema still matches.
+  it('substitutes today for an empty date rather than importing a blank one', () => {
+    const result = importOf({ goals: [{ id: 'g1', text: 't', date: '', createdAt: '' }] });
+
+    expect(result.data?.goals?.[0].date).not.toBe('');
+    expect(result.data?.goals?.[0].createdAt).not.toBe('');
+  });
+
+  it('substitutes Unknown for an empty author', () => {
+    const result = importOf({ quotes: [{ id: 'q1', text: 't', author: '' }] });
+
+    expect(result.data?.quotes?.[0].author).toBe('Unknown');
+  });
+
   it.each([
     ['an unrecognised type', { id: 's1', startedAt: 'x', type: 'meditation' }, 'type', 'work'],
     ['a non-numeric duration', { id: 's2', startedAt: 'x', duration: '25' }, 'duration', 25],

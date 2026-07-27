@@ -1613,6 +1613,18 @@ function isQuoteCategory(value: unknown): value is Quote['category'] {
   return quoteCategorySchema.safeParse(value).success;
 }
 
+/**
+ * What `||` used to do for the defaulted fields below, minus its hole: a numeric timestamp is
+ * truthy, so `||` passed it through to storage where the read schema then hid it. Plain
+ * `typeof` closes that but reopens the other end, letting `''` past as a real value.
+ */
+function nonEmptyString(value: unknown): string | undefined {
+  if (typeof value !== 'string' || value === '') {
+    return undefined;
+  }
+  return value;
+}
+
 function validateGoals(goals: unknown[], warnings: string[]): Goal[] {
   const validGoals: Goal[] = [];
 
@@ -1639,10 +1651,8 @@ function validateGoals(goals: unknown[], warnings: string[]): Goal[] {
       id: goal.id,
       text: goal.text,
       completed: Boolean(goal.completed),
-      // `typeof`, not `||`: a numeric timestamp is truthy, so it used to pass straight
-      // through to storage and then fail the read schema — imported, then invisible.
-      createdAt: typeof goal.createdAt === 'string' ? goal.createdAt : new Date().toISOString(),
-      date: typeof goal.date === 'string' ? goal.date : getTodayDateString(),
+      createdAt: nonEmptyString(goal.createdAt) ?? new Date().toISOString(),
+      date: nonEmptyString(goal.date) ?? getTodayDateString(),
       // Preserve optional fields when present
       ...(goal.type === 'task' || goal.type === 'objective' ? { type: goal.type } : {}),
       ...(typeof goal.parentId === 'string' ? { parentId: goal.parentId } : {}),
@@ -1694,7 +1704,7 @@ function validateQuotes(quotes: unknown[], warnings: string[]): Quote[] {
     const candidate: Quote = {
       id: quote.id,
       text: quote.text,
-      author: typeof quote.author === 'string' ? quote.author : 'Unknown',
+      author: nonEmptyString(quote.author) ?? 'Unknown',
       // Checked against the same enum the reader uses. An unrecognised category used to be
       // written verbatim and then dropped on the next read.
       category: isQuoteCategory(quote.category) ? quote.category : 'inspiration',
