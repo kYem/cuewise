@@ -39,8 +39,12 @@ import {
 /**
  * Get the storage area based on user settings
  * Settings are always stored in local storage to avoid circular dependency
+ *
+ * Awaits the migration first: until it runs, syncEnabled is absent and every collection here
+ * would resolve to 'local', reading a sync user's data as empty and then writing that back.
  */
 async function getStorageArea(): Promise<'local' | 'sync'> {
+  await ensureSettingsMigrated();
   const stored = await getFromStorage<boolean>(settingsStorageKey('syncEnabled'), 'local');
   const syncEnabled = stored ?? DEFAULT_SETTINGS.syncEnabled;
   if (syncEnabled) {
@@ -291,6 +295,7 @@ export function settingsStorageKey(key: string): string {
 export const SETTINGS_KEYS = Object.keys(DEFAULT_SETTINGS) as (keyof Settings)[];
 
 export async function getSettings(): Promise<Settings> {
+  await ensureSettingsMigrated();
   const stored = await getManyFromStorage(SETTINGS_KEYS.map(settingsStorageKey), 'local');
   const present = Object.fromEntries(
     SETTINGS_KEYS.map((key) => [key, stored[settingsStorageKey(key)]]).filter(
@@ -357,6 +362,25 @@ export async function migrateLegacySettings(): Promise<void> {
   }
 
   await removeFromStorage(STORAGE_KEYS.SETTINGS, 'local');
+}
+
+let settingsMigration: Promise<void> | null = null;
+
+/**
+ * Runs the legacy-blob migration at most once per realm; every settings read awaits it, so no
+ * caller has to order it. migrateLegacySettings must never call this — it reads and writes with
+ * an explicit 'local' area rather than through getStorageArea, which keeps that from recursing.
+ */
+export function ensureSettingsMigrated(): Promise<void> {
+  if (settingsMigration === null) {
+    settingsMigration = migrateLegacySettings();
+  }
+  return settingsMigration;
+}
+
+/** Drops the memo so the next read migrates again. For test isolation. */
+export function resetSettingsMigration(): void {
+  settingsMigration = null;
 }
 
 // Storage usage tracking

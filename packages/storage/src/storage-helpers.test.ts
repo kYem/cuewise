@@ -4,24 +4,39 @@ import {
   type KeyValueStore,
   type Settings,
   STORAGE_KEYS,
+  type StorageArea,
   type StorageUsage,
   type SyncMutationSink,
 } from '@cuewise/shared';
+import { goalFactory } from '@cuewise/test-utils/factories';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getManyFromStorage, setInStorage } from './chrome-storage';
 import {
   clearCustomBackground,
   clearSettings,
   getCustomBackground,
+  getGoals,
   getSettings,
   getStorageUsage,
   getStoredSettings,
   migrateLegacySettings,
+  resetSettingsMigration,
   SETTINGS_KEYS,
   setCustomBackground,
   setSettingsPatch,
   settingsStorageKey,
 } from './storage-helpers';
+
+// The migration memo lives at module scope, so an earlier test's run would satisfy a later one.
+beforeEach(() => {
+  resetSettingsMigration();
+});
+
+// structuredClone, not a spread: real chrome.storage always returns a new array instance on
+// read, and only structuredClone reproduces that — a spread would leave arrays reference-equal.
+function legacyBlob(overrides: Partial<Settings>): Settings {
+  return { ...structuredClone(DEFAULT_SETTINGS), ...overrides };
+}
 
 // Fake store: no settings stored (→ syncEnabled false → 'local' area), fixed usage.
 function fakeStore(usage: StorageUsage): KeyValueStore {
@@ -58,41 +73,45 @@ describe('getStorageUsage', () => {
 });
 
 // Records what was written so tests can assert round-trips through the real helpers.
-function recordingStore(initial: Record<string, unknown> = {}) {
-  const data: Record<string, unknown> = { ...initial };
+// Keeps the two areas apart, like chrome.storage does, so area routing is observable.
+function recordingStore(initial: Partial<Record<StorageArea, Record<string, unknown>>> = {}) {
+  const areas: Record<StorageArea, Record<string, unknown>> = {
+    local: { ...initial.local },
+    sync: { ...initial.sync },
+  };
   const store: KeyValueStore = {
     supportsSync: true,
-    get: async <T>(key: string) => (data[key] ?? null) as T | null,
-    set: async <T>(key: string, value: T) => {
-      data[key] = value;
+    get: async <T>(key: string, area: StorageArea) => (areas[area][key] ?? null) as T | null,
+    set: async <T>(key: string, value: T, area: StorageArea) => {
+      areas[area][key] = value;
       return { success: true } as const;
     },
-    remove: async (key: string) => {
-      delete data[key];
+    remove: async (key: string, area: StorageArea) => {
+      delete areas[area][key];
       return true;
     },
-    getMany: async (keys: string[]) => {
+    getMany: async (keys: string[], area: StorageArea) => {
       const result: Record<string, unknown> = {};
       for (const key of keys) {
-        if (key in data) {
-          result[key] = data[key];
+        if (key in areas[area]) {
+          result[key] = areas[area][key];
         }
       }
       return result;
     },
-    setMany: async (entries: Record<string, unknown>) => {
-      Object.assign(data, entries);
+    setMany: async (entries: Record<string, unknown>, area: StorageArea) => {
+      Object.assign(areas[area], entries);
       return { success: true };
     },
-    removeMany: async (keys: string[]) => {
+    removeMany: async (keys: string[], area: StorageArea) => {
       for (const key of keys) {
-        delete data[key];
+        delete areas[area][key];
       }
       return true;
     },
     getUsage: async () => ({ bytesInUse: 0, quota: 10_000_000 }),
   };
-  return { store, data };
+  return { store, areas };
 }
 
 describe('custom background', () => {
@@ -228,12 +247,6 @@ describe('migrateLegacySettings', () => {
     configurePlatform({ syncSink: null });
   });
 
-  // structuredClone, not a spread: real chrome.storage always returns a new array instance on
-  // read, and only structuredClone reproduces that — a spread would leave arrays reference-equal.
-  function legacyBlob(overrides: Partial<Settings>): Settings {
-    return { ...structuredClone(DEFAULT_SETTINGS), ...overrides };
-  }
-
   it('migrates only the keys that differ from the current default', async () => {
     await setInStorage(STORAGE_KEYS.SETTINGS, legacyBlob({ theme: 'dark' }), 'local');
 
@@ -319,5 +332,32 @@ describe('migrateLegacySettings', () => {
     await migrateLegacySettings();
 
     expect(markMutated).not.toHaveBeenCalled();
+  });
+});
+
+describe('storage area routing', () => {
+  // A sync user whose blob has not migrated yet: nothing here calls the migration, exactly like
+  // a page that loads #goals or hydrates quotes before the settings store.
+  function unmigratedSyncUser(syncData: Record<string, unknown>) {
+    return recordingStore({
+      local: { [STORAGE_KEYS.SETTINGS]: legacyBlob({ syncEnabled: true }) },
+      sync: syncData,
+    });
+  }
+
+  it('reads collections from the sync area before anything has run the migration', async () => {
+    const goals = goalFactory.buildList(2);
+    const { store } = unmigratedSyncUser({ [STORAGE_KEYS.GOALS]: goals });
+    configurePlatform({ storage: store });
+
+    await expect(getGoals()).resolves.toEqual(goals);
+  });
+
+  it('reads collections from the local area for a user who never enabled sync', async () => {
+    const goals = goalFactory.buildList(2);
+    const { store } = recordingStore({ local: { [STORAGE_KEYS.GOALS]: goals } });
+    configurePlatform({ storage: store });
+
+    await expect(getGoals()).resolves.toEqual(goals);
   });
 });
