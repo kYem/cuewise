@@ -50,6 +50,15 @@ export function mockEmptyStorage() {
   vi.mocked(storage.getPostureStats).mockResolvedValue([]);
 }
 
+/** Stands in for a stored goal only the raw read can see. */
+export const QUARANTINED_GOAL = {
+  id: 'quarantined-goal',
+  text: 'written by a newer build',
+  completed: false,
+  createdAt: '2026-07-26T00:00:00.000Z',
+  date: '2026-07-26',
+} as ReturnType<typeof goalFactory.build>;
+
 export function mockStorageWithData(
   options: {
     goals?: ReturnType<typeof goalFactory.build>[];
@@ -64,14 +73,16 @@ export function mockStorageWithData(
   vi.mocked(storage.setQuotesRaw).mockResolvedValue({ success: true });
   vi.mocked(storage.getPomodoroSessions).mockResolvedValue(options.sessions ?? []);
   // Import and export read raw — they rewrite whole arrays, so starting from the rendering
-  // view would delete items it merely could not parse. Same data here; the distinction is
-  // exercised by the storage package's own tests.
-  vi.mocked(storage.getGoalsRaw).mockResolvedValue(options.goals ?? []);
+  // view would delete items it merely could not parse.
+  //
+  // The raw goals mock returns one row MORE than the validated one, standing in for an item
+  // only a raw read can see. Returning identical arrays made the two readers
+  // indistinguishable, so swapping a raw read for a validated one passed every test.
+  vi.mocked(storage.getGoalsRaw).mockResolvedValue([...(options.goals ?? []), QUARANTINED_GOAL]);
   vi.mocked(storage.getQuotesRaw).mockResolvedValue(options.quotes ?? []);
   vi.mocked(storage.getPomodoroSessionsRaw).mockResolvedValue(options.sessions ?? []);
   vi.mocked(storage.setGoalsRaw).mockResolvedValue({ success: true });
   vi.mocked(storage.setQuotesRaw).mockResolvedValue({ success: true });
-  vi.mocked(storage.setPomodoroSessionsRaw).mockResolvedValue({ success: true });
   vi.mocked(storage.setPomodoroSessionsRaw).mockResolvedValue({ success: true });
   vi.mocked(storage.getPostureStats).mockResolvedValue(options.postureStats ?? []);
 }

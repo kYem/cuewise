@@ -12,6 +12,7 @@ import {
   setGoals,
   setGoalsRaw,
   setQuotes,
+  setQuotesRaw,
 } from './storage-helpers';
 
 /** A store that hands back whatever was put on "disk", however malformed. */
@@ -151,6 +152,26 @@ describe('a stored value that still matches', () => {
     await expect(getGoals()).resolves.toEqual(goals);
   });
 
+  // The same rule as the list read, on the single-value path: zod strips keys the schema
+  // does not name, so returning the parsed copy would delete a field a newer build wrote —
+  // and `setCurrentQuote`/`setCalendarState` rewrite the whole object, making it permanent.
+  it('preserves unknown fields on a single stored object too', async () => {
+    const stored = {
+      id: 'q1',
+      text: 'a quote',
+      author: 'A',
+      category: 'learning',
+      isCustom: true,
+      isFavorite: false,
+      isHidden: false,
+      viewCount: 0,
+      somethingAddedLater: 'from v1.21',
+    };
+    configurePlatform({ storage: storeHolding({ currentQuote: stored }) });
+
+    await expect(getCurrentQuote()).resolves.toEqual(stored);
+  });
+
   it('keeps an optional field that is simply absent', async () => {
     const goals = [
       { id: 'g1', text: 'no subtasks', completed: true, createdAt: 'x', date: '2026-07-26' },
@@ -283,11 +304,17 @@ describe('the raw view sync reads through', () => {
     await expect(getGoalsRaw()).resolves.toEqual([good, unreadable]);
   });
 
+  // Both halves, deliberately: custom quotes are the user-authored ones, and if that read
+  // regressed to validating, a quote this build cannot parse would vanish from sync's
+  // `readAll` — which infers a tombstone from absence and deletes it on every device.
   it('reports it for quotes too, across both the seed and custom lists', async () => {
-    configurePlatform({ storage: storeHolding({ seedQuotes: [unreadable], customQuotes: [] }) });
+    const unreadableCustom = { id: 'q3', text: 'user wrote this', category: 'philosophy' };
+    configurePlatform({
+      storage: storeHolding({ seedQuotes: [unreadable], customQuotes: [unreadableCustom] }),
+    });
 
     await expect(getQuotes()).resolves.toEqual([]);
-    await expect(getQuotesRaw()).resolves.toEqual([unreadable]);
+    await expect(getQuotesRaw()).resolves.toEqual([unreadable, unreadableCustom]);
   });
 });
 
@@ -401,14 +428,18 @@ describe('who gets their hidden items back', () => {
 
   // The preserve step must not re-append a row the caller already passed in, or the array
   // doubles on every write until it blows the storage quota.
-  it('never duplicates a row that has no usable id', async () => {
+  // Driven through a MIXED caller — a raw read handed to the validated setter — because
+  // that is the only path that reaches the guard: a validated read filters the row out, so
+  // it is never in `items` and the check is never consulted. Without the guard the row is
+  // appended beside itself and doubles on every write until the quota stops all saving.
+  it('never duplicates a row the caller already passed in', async () => {
     const { written, store } = capturing({ goals: [readable, idless] });
     configurePlatform({ storage: store });
 
-    await setGoals(await getGoals());
-    await setGoals(await getGoals());
+    await setGoals(await getGoalsRaw());
+    await setGoals((written.goals as (typeof readable)[]) ?? []);
 
-    expect((written.goals as unknown[]).filter((g) => g === idless)).toHaveLength(1);
+    expect(written.goals).toHaveLength(2);
   });
 
   it('covers quotes too, which write two keys of their own', async () => {
@@ -429,5 +460,64 @@ describe('who gets their hidden items back', () => {
     await setQuotes(await getQuotes());
 
     expect(written.customQuotes).toEqual([goodQuote, badQuote]);
+  });
+});
+
+// The raw setters are what make a delete land. `setQuotesRaw` duplicates `setQuotes`'s
+// seed/custom split, so the two can disagree — and it is the one that must NOT preserve.
+describe('setQuotesRaw', () => {
+  const custom = {
+    id: 'q1',
+    text: 'mine',
+    author: 'A',
+    category: 'learning' as const,
+    isCustom: true,
+    isFavorite: false,
+    isHidden: false,
+    viewCount: 0,
+  };
+  const unreadable = { id: 'q2', text: 'newer build', category: 'philosophy', isCustom: true };
+
+  function capturing(initial: Record<string, unknown>) {
+    const written: Record<string, unknown> = {};
+    return {
+      written,
+      store: {
+        supportsSync: true,
+        get: async (key: string) =>
+          ((key in written ? written[key] : initial[key]) ?? null) as never,
+        set: async (key: string, value: unknown) => {
+          written[key] = value;
+          return { success: true as const };
+        },
+        remove: async () => true,
+        getUsage: async () => ({ bytesInUse: 0, quota: 10_000_000 }),
+      },
+    };
+  }
+
+  // Sync saw the unreadable quote through the raw read, so omitting it is a deliberate
+  // delete. Preserving it here would resurrect a quote deleted on another device.
+  it('deletes what the caller left out, on both keys', async () => {
+    const { written, store } = capturing({ seedQuotes: [], customQuotes: [custom, unreadable] });
+    configurePlatform({ storage: store });
+
+    await setQuotesRaw([custom]);
+
+    expect(written.customQuotes).toEqual([custom]);
+    expect(written.seedQuotes).toEqual([]);
+  });
+
+  // It must route each quote to the same key `setQuotes` would, or a round trip through
+  // sync would silently move quotes between the seed and custom lists.
+  it('splits seed from custom the same way the validated setter does', async () => {
+    const seedish = { ...custom, id: 'q3', isCustom: false, isFavorite: false, isHidden: false };
+    const { written, store } = capturing({ seedQuotes: [], customQuotes: [] });
+    configurePlatform({ storage: store });
+
+    await setQuotesRaw([custom, seedish]);
+
+    expect(written.customQuotes).toEqual([custom]);
+    expect(written.seedQuotes).toEqual([seedish]);
   });
 });

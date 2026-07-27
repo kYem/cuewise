@@ -61,9 +61,9 @@ const pushBodySchema = z.looseObject({ records: z.array(z.unknown()) });
 
 /**
  * One issue per violation, across every record — a client fixing a 20-record push should
- * not need one round trip per mistake. zod reports every failing key by default, and only
- * the first failing check per key, which is what keeps a non-numeric `clientUpdatedAt`
- * from being reported as clock drift as well.
+ * not need one round trip per mistake. zod reports every failing key, and only the first
+ * failing check per key, which is the whole reason a non-numeric `clientUpdatedAt` is
+ * reported as "required finite number" and not also as clock drift.
  */
 function issuesFor(raw: unknown, index: number, nowMs: number): ValidationIssue[] {
   // Anything that is not an object is reported as every field missing, the same as `{}`.
@@ -75,17 +75,13 @@ function issuesFor(raw: unknown, index: number, nowMs: number): ValidationIssue[
   if (result.success) {
     return [];
   }
-  const seen = new Set<string>();
-  const issues: ValidationIssue[] = [];
-  for (const issue of result.error.issues) {
-    const field = issue.path.join('/');
-    if (seen.has(field)) {
-      continue;
-    }
-    seen.add(field);
-    issues.push({ index, pointer: `/records/${index}/${field}`, detail: issue.message });
-  }
-  return issues;
+  // No per-path dedupe: zod stops at the first failing check for a key, so there is at most
+  // one issue per field already. A Set here looked like it was doing that work and was not.
+  return result.error.issues.map((issue) => ({
+    index,
+    pointer: `/records/${index}/${issue.path.join('/')}`,
+    detail: issue.message,
+  }));
 }
 
 export function validatePushBody(

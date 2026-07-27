@@ -64,7 +64,9 @@ describe('validatePushBody clock drift clamp', () => {
     expect('records' in result).toBe(true);
   });
 
-  it('does not double-report a non-number clientUpdatedAt as drift', () => {
+  // Pins the message choice, not a dedupe: zod aborts a key after its first failing
+  // check, so drift is never evaluated for a value that is not a finite number.
+  it('reports a non-number clientUpdatedAt as a type fault, never as clock drift', () => {
     const result = validatePushBody({ records: [record({ clientUpdatedAt: Number.NaN })] }, NOW);
     if (!('problemCode' in result)) {
       throw new Error('expected a problem result');

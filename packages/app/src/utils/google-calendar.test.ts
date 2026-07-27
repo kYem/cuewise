@@ -266,6 +266,39 @@ describe('fetchTodayEvents', () => {
     installIdentity({ token: 'tok', clientId: 'abc.apps.googleusercontent.com' });
   });
 
+  // The response used to be a bare `as` cast, so an entry without an id reached the mapper.
+  // It is parsed per item now: one unreadable row costs that row, not the day's agenda.
+  it('skips an entry it cannot read and keeps the rest of the day', async () => {
+    stubFetchItems([
+      // Mappable in every respect except the id, so only the schema can reject it — an
+      // entry missing start/end would be dropped by the mapper regardless and prove nothing.
+      {
+        id: 42 as unknown as string,
+        summary: 'no usable id',
+        start: { dateTime: '2026-06-14T08:00:00Z' },
+        end: { dateTime: '2026-06-14T08:30:00Z' },
+      },
+      {
+        id: 't1',
+        summary: 'Standup',
+        start: { dateTime: '2026-06-14T09:00:00Z' },
+        end: { dateTime: '2026-06-14T09:15:00Z' },
+      },
+    ]);
+
+    const events = await fetchTodayEvents();
+
+    expect(events.map((event) => event.id)).toEqual(['t1']);
+  });
+
+  // An envelope we cannot read at all is an empty agenda, not a thrown error: the strip is
+  // ambient, and it must never take the new tab down with it.
+  it('returns an empty agenda when the response shape is unusable', async () => {
+    stubFetchItems('not a list' as never);
+
+    await expect(fetchTodayEvents()).resolves.toEqual([]);
+  });
+
   it('maps a timed event with its color', async () => {
     stubFetchItems([
       {

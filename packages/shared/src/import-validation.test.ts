@@ -17,33 +17,60 @@ describe('imported items always satisfy the read schemas', () => {
     ['an unrecognised category', { id: 'q1', text: 't', category: 'philosophy' }],
     ['a numeric viewCount as a string', { id: 'q2', text: 't', viewCount: '5' }],
     ['a numeric lastViewed', { id: 'q3', text: 't', lastViewed: 1234 }],
-  ])('normalises or rejects a quote with %s', (_label, quote) => {
+  ])('normalises a quote with %s rather than dropping it', (_label, quote) => {
     const result = importOf({ quotes: [quote] });
 
-    for (const imported of result.data?.quotes ?? []) {
-      expect(quoteSchema.safeParse(imported).success).toBe(true);
-    }
+    // The count first: iterating an empty array satisfies any conformance check, so
+    // "normalised" and "silently dropped" looked identical until this line existed.
+    expect(result.data?.quotes).toHaveLength(1);
+    expect(quoteSchema.safeParse(result.data?.quotes?.[0]).success).toBe(true);
+  });
+
+  it('normalises an unknown category to the default rather than keeping it', () => {
+    const result = importOf({ quotes: [{ id: 'q1', text: 't', category: 'philosophy' }] });
+
+    expect(result.data?.quotes?.[0].category).toBe('inspiration');
+  });
+
+  it('normalises a non-numeric viewCount to zero', () => {
+    const result = importOf({ quotes: [{ id: 'q1', text: 't', viewCount: '5' }] });
+
+    expect(result.data?.quotes?.[0].viewCount).toBe(0);
+  });
+
+  it('drops a non-string lastViewed rather than carrying it through', () => {
+    const result = importOf({ quotes: [{ id: 'q1', text: 't', lastViewed: 1234 }] });
+
+    expect(result.data?.quotes?.[0].lastViewed).toBeUndefined();
   });
 
   it.each([
     ['a numeric createdAt', { id: 'g1', text: 't', createdAt: 1700000000000 }],
     ['subtasks that are bare strings', { id: 'g2', text: 't', subtasks: ['walk the dog'] }],
-  ])('normalises or rejects a goal with %s', (_label, goal) => {
+  ])('normalises a goal with %s rather than dropping it', (_label, goal) => {
     const result = importOf({ goals: [goal] });
 
-    for (const imported of result.data?.goals ?? []) {
-      expect(goalSchema.safeParse(imported).success).toBe(true);
-    }
+    expect(result.data?.goals).toHaveLength(1);
+    expect(goalSchema.safeParse(result.data?.goals?.[0]).success).toBe(true);
   });
 
-  it('normalises or rejects a session with an unrecognised type', () => {
-    const result = importOf({
-      pomodoroSessions: [{ id: 's1', startedAt: 'x', type: 'meditation' }],
-    });
+  it('replaces a non-string createdAt rather than writing it through', () => {
+    const result = importOf({ goals: [{ id: 'g1', text: 't', createdAt: 1700000000000 }] });
 
-    for (const imported of result.data?.pomodoroSessions ?? []) {
-      expect(pomodoroSessionSchema.safeParse(imported).success).toBe(true);
-    }
+    expect(typeof result.data?.goals?.[0].createdAt).toBe('string');
+  });
+
+  it.each([
+    ['an unrecognised type', { id: 's1', startedAt: 'x', type: 'meditation' }, 'type', 'work'],
+    ['a non-numeric duration', { id: 's2', startedAt: 'x', duration: '25' }, 'duration', 25],
+  ])('normalises a session with %s', (_label, session, field, expected) => {
+    const result = importOf({ pomodoroSessions: [session] });
+
+    expect(result.data?.pomodoroSessions).toHaveLength(1);
+    expect((result.data?.pomodoroSessions?.[0] as unknown as Record<string, unknown>)[field]).toBe(
+      expected
+    );
+    expect(pomodoroSessionSchema.safeParse(result.data?.pomodoroSessions?.[0]).success).toBe(true);
   });
 
   it('still imports a well-formed item untouched', () => {

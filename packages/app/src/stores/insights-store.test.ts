@@ -12,6 +12,7 @@ import {
   mockEmptyStorage,
   mockStorageError,
   mockStorageWithData,
+  QUARANTINED_GOAL,
 } from './__fixtures__/insights-store.fixtures';
 import { useInsightsStore } from './insights-store';
 
@@ -116,6 +117,24 @@ describe('Insights Store - Import Methods', () => {
       expect(result.errors[0].message).toBe('No valid import data available');
     });
 
+    // Import merges into the array it read and writes the whole thing back, so it must read
+    // raw: starting from the rendering view drops the items this build cannot parse, and in
+    // skip-duplicates mode their ids are absent from the dedupe set, so the incoming copies
+    // are appended and counted as imported — silently replacing what the user had.
+    it('keeps a stored goal only the raw read can see', async () => {
+      mockStorageWithData({ goals: [goalFactory.build({ id: 'existing-1' })] });
+      useInsightsStore.setState({
+        importValidation: createValidImportValidation({
+          goals: [goalFactory.build({ id: 'new-1' })],
+        }),
+      });
+
+      await useInsightsStore.getState().executeImport(DEFAULT_IMPORT_OPTIONS);
+
+      const saved = vi.mocked(storage.setGoalsRaw).mock.calls[0][0] as Goal[];
+      expect(saved.map((goal) => goal.id)).toContain(QUARANTINED_GOAL.id);
+    });
+
     it('should skip duplicate goals when skipDuplicates is true', async () => {
       const existingGoal = goalFactory.build({ id: 'existing-1' });
       const newGoal = goalFactory.build({ id: 'new-1' });
@@ -151,7 +170,10 @@ describe('Insights Store - Import Methods', () => {
 
       expect(result.imported.goals).toBe(1);
       const savedGoals = vi.mocked(storage.setGoalsRaw).mock.calls[0][0] as Goal[];
-      expect(savedGoals[0].text).toBe('Updated');
+      // Looked up by id rather than by index: the saved array also carries the row only the
+      // raw read can see, and asserting on position would pin the merge's ordering instead
+      // of the replacement this test is named for.
+      expect(savedGoals.find((goal) => goal.id === 'existing-1')?.text).toBe('Updated');
     });
 
     it('should mark all imported quotes as isCustom: true', async () => {
