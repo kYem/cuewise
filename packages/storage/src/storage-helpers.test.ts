@@ -2,6 +2,7 @@ import {
   configurePlatform,
   DEFAULT_SETTINGS,
   type KeyValueStore,
+  type Settings,
   STORAGE_KEYS,
   type StorageUsage,
 } from '@cuewise/shared';
@@ -222,8 +223,17 @@ describe('migrateLegacySettings', () => {
     configurePlatform({ storage: store });
   });
 
+  // structuredClone, not a spread: the fake store keeps whatever reference it's given, so a
+  // shallow spread would leave every untouched array field pointing at the exact same
+  // DEFAULT_SETTINGS array instance. Real chrome.storage always round-trips through
+  // serialization and never hands back that instance, so this reproduces the case that
+  // actually distinguishes a structural default-comparison from a reference one.
+  function legacyBlob(overrides: Partial<Settings>): Settings {
+    return { ...structuredClone(DEFAULT_SETTINGS), ...overrides };
+  }
+
   it('migrates only the keys that differ from the current default', async () => {
-    await setInStorage(STORAGE_KEYS.SETTINGS, { ...DEFAULT_SETTINGS, theme: 'dark' }, 'local');
+    await setInStorage(STORAGE_KEYS.SETTINGS, legacyBlob({ theme: 'dark' }), 'local');
 
     await migrateLegacySettings();
 
@@ -232,7 +242,7 @@ describe('migrateLegacySettings', () => {
   });
 
   it('does not overwrite a per-key value that landed before it ran', async () => {
-    await setInStorage(STORAGE_KEYS.SETTINGS, { ...DEFAULT_SETTINGS, theme: 'dark' }, 'local');
+    await setInStorage(STORAGE_KEYS.SETTINGS, legacyBlob({ theme: 'dark' }), 'local');
     await setSettingsPatch({ theme: 'light' });
 
     await migrateLegacySettings();
@@ -252,7 +262,7 @@ describe('migrateLegacySettings', () => {
         }),
       },
     });
-    const blob = { ...DEFAULT_SETTINGS, theme: 'dark' as const };
+    const blob = legacyBlob({ theme: 'dark' });
     await setInStorage(STORAGE_KEYS.SETTINGS, blob, 'local');
 
     await migrateLegacySettings();
@@ -261,7 +271,7 @@ describe('migrateLegacySettings', () => {
   });
 
   it('deletes the legacy blob once migrated', async () => {
-    await setInStorage(STORAGE_KEYS.SETTINGS, { ...DEFAULT_SETTINGS, theme: 'dark' }, 'local');
+    await setInStorage(STORAGE_KEYS.SETTINGS, legacyBlob({ theme: 'dark' }), 'local');
 
     await migrateLegacySettings();
 
@@ -276,7 +286,7 @@ describe('migrateLegacySettings', () => {
   });
 
   it('is idempotent across repeated runs', async () => {
-    await setInStorage(STORAGE_KEYS.SETTINGS, { ...DEFAULT_SETTINGS, theme: 'dark' }, 'local');
+    await setInStorage(STORAGE_KEYS.SETTINGS, legacyBlob({ theme: 'dark' }), 'local');
 
     await migrateLegacySettings();
     await migrateLegacySettings();
@@ -285,16 +295,16 @@ describe('migrateLegacySettings', () => {
     expect(settings.theme).toBe('dark');
   });
 
-  it('migrates array values that differ from the default', async () => {
+  it('migrates array values that differ from the default, and only those', async () => {
     await setInStorage(
       STORAGE_KEYS.SETTINGS,
-      { ...DEFAULT_SETTINGS, quoteFilterActiveCollectionIds: ['c1'] },
+      legacyBlob({ quoteFilterActiveCollectionIds: ['c1'] }),
       'local'
     );
 
     await migrateLegacySettings();
 
-    const settings = await getSettings();
-    expect(settings.quoteFilterActiveCollectionIds).toEqual(['c1']);
+    const stored = await getManyFromStorage(SETTINGS_KEYS.map(settingsStorageKey));
+    expect(stored).toEqual({ 'settings.quoteFilterActiveCollectionIds': ['c1'] });
   });
 });
