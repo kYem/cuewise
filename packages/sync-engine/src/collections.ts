@@ -6,10 +6,10 @@ import {
   getRemindersRaw,
   getSettingsForSync,
   type StorageResult,
-  setCollections,
-  setGoals,
-  setQuotes,
-  setReminders,
+  setCollectionsRaw,
+  setGoalsRaw,
+  setQuotesRaw,
+  setRemindersRaw,
   setSettings,
 } from '@cuewise/storage';
 
@@ -93,10 +93,10 @@ export function defaultBindings(): CollectionBinding[] {
     // Raw readers: see the note on `getGoalsRaw`. An item the UI hides must not be an item
     // sync deletes — `writeOne` rewrites the whole array, and an entity missing from a read
     // is how the cycle infers a tombstone for every other device.
-    arrayBinding('goals', getGoalsRaw, setGoals),
-    arrayBinding('quotes', getQuotesRaw, setQuotes),
-    arrayBinding('collections', getCollectionsRaw, setCollections),
-    arrayBinding('reminders', getRemindersRaw, setReminders),
+    arrayBinding('goals', getGoalsRaw, setGoalsRaw),
+    arrayBinding('quotes', getQuotesRaw, setQuotesRaw),
+    arrayBinding('collections', getCollectionsRaw, setCollectionsRaw),
+    arrayBinding('reminders', getRemindersRaw, setRemindersRaw),
     settingsBinding(),
   ];
 }

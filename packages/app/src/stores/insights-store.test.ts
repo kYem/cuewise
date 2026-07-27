@@ -31,6 +31,11 @@ vi.mock('@cuewise/storage', () => ({
   getGoalsRaw: vi.fn(),
   getQuotesRaw: vi.fn(),
   getPomodoroSessionsRaw: vi.fn(),
+  // Import merges into the raw array, so it writes raw: it saw everything, and a
+  // preserve-on-write would resurrect what it deliberately left out.
+  setGoalsRaw: vi.fn(),
+  setQuotesRaw: vi.fn(),
+  setPomodoroSessionsRaw: vi.fn(),
   // Defaults to empty so refresh-after-import paths don't error on posture reads.
   getPostureStats: vi.fn(async () => []),
   setPostureStats: vi.fn(),
@@ -126,7 +131,7 @@ describe('Insights Store - Import Methods', () => {
       expect(result.imported.goals).toBe(1);
       expect(result.skipped.goals).toBe(1);
 
-      const savedGoals = vi.mocked(storage.setGoals).mock.calls[0][0] as Goal[];
+      const savedGoals = vi.mocked(storage.setGoalsRaw).mock.calls[0][0] as Goal[];
       expect(savedGoals.find((g) => g.id === 'existing-1')?.text).toBe(existingGoal.text);
     });
 
@@ -145,7 +150,7 @@ describe('Insights Store - Import Methods', () => {
       });
 
       expect(result.imported.goals).toBe(1);
-      const savedGoals = vi.mocked(storage.setGoals).mock.calls[0][0] as Goal[];
+      const savedGoals = vi.mocked(storage.setGoalsRaw).mock.calls[0][0] as Goal[];
       expect(savedGoals[0].text).toBe('Updated');
     });
 
@@ -159,7 +164,7 @@ describe('Insights Store - Import Methods', () => {
 
       await useInsightsStore.getState().executeImport(DEFAULT_IMPORT_OPTIONS);
 
-      const savedQuotes = vi.mocked(storage.setQuotes).mock.calls[0][0] as Quote[];
+      const savedQuotes = vi.mocked(storage.setQuotesRaw).mock.calls[0][0] as Quote[];
       expect(savedQuotes[0].isCustom).toBe(true);
     });
 
@@ -228,7 +233,7 @@ describe('Insights Store - Import Methods', () => {
     it('surfaces a resolved write failure instead of a phantom success', async () => {
       mockStorageWithData();
       // The real quota shape: adapters resolve {success: false}, never reject.
-      vi.mocked(storage.setGoals).mockResolvedValue({
+      vi.mocked(storage.setGoalsRaw).mockResolvedValue({
         success: false,
         error: { type: 'quota_exceeded', message: 'goals quota exceeded' },
       });
@@ -248,7 +253,7 @@ describe('Insights Store - Import Methods', () => {
 
     it('reports partial progress when a later write resolves a failure', async () => {
       mockStorageWithData();
-      vi.mocked(storage.setQuotes).mockResolvedValue({
+      vi.mocked(storage.setQuotesRaw).mockResolvedValue({
         success: false,
         error: { type: 'unknown', message: 'write failed' },
       });
@@ -268,7 +273,7 @@ describe('Insights Store - Import Methods', () => {
 
     it('should report partial progress when failure occurs mid-import', async () => {
       vi.mocked(storage.getGoalsRaw).mockResolvedValue([]);
-      vi.mocked(storage.setGoals).mockResolvedValue({ success: true });
+      vi.mocked(storage.setGoalsRaw).mockResolvedValue({ success: true });
       mockStorageError('quotes', new Error('Quotes storage error'));
 
       useInsightsStore.setState({

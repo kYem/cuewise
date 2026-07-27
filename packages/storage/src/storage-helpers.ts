@@ -43,7 +43,6 @@ import {
 } from '@cuewise/shared';
 import { z } from 'zod/mini';
 import {
-  forgetHiddenItems,
   getFromStorage,
   getValidatedFromStorage,
   getValidatedListFromStorage,
@@ -162,6 +161,7 @@ export async function setQuotes(quotes: Quote[]): Promise<StorageResult> {
     const seedResult = await setValidatedListInStorage(
       STORAGE_KEYS.SEED_QUOTES,
       seedQuotes,
+      quoteSchema,
       'local'
     );
     if (!seedResult.success) {
@@ -173,6 +173,7 @@ export async function setQuotes(quotes: Quote[]): Promise<StorageResult> {
     const customResult = await setValidatedListInStorage(
       STORAGE_KEYS.CUSTOM_QUOTES,
       customQuotes,
+      quoteSchema,
       area
     );
 
@@ -202,7 +203,7 @@ export async function getGoals(): Promise<Goal[]> {
 
 export async function setGoals(goals: Goal[]): Promise<StorageResult> {
   const area = await getStorageArea();
-  return setValidatedListInStorage(STORAGE_KEYS.GOALS, goals, area);
+  return setValidatedListInStorage(STORAGE_KEYS.GOALS, goals, goalSchema, area);
 }
 
 // Reminders
@@ -218,7 +219,7 @@ export async function getReminders(): Promise<Reminder[]> {
 
 export async function setReminders(reminders: Reminder[]): Promise<StorageResult> {
   const area = await getStorageArea();
-  return setValidatedListInStorage(STORAGE_KEYS.REMINDERS, reminders, area);
+  return setValidatedListInStorage(STORAGE_KEYS.REMINDERS, reminders, reminderSchema, area);
 }
 
 // Quote Collections
@@ -234,7 +235,12 @@ export async function getCollections(): Promise<QuoteCollection[]> {
 
 export async function setCollections(collections: QuoteCollection[]): Promise<StorageResult> {
   const area = await getStorageArea();
-  return setValidatedListInStorage(STORAGE_KEYS.COLLECTIONS, collections, area);
+  return setValidatedListInStorage(
+    STORAGE_KEYS.COLLECTIONS,
+    collections,
+    quoteCollectionSchema,
+    area
+  );
 }
 
 // Quick Links (pinned shortcut tiles on the new tab)
@@ -250,7 +256,7 @@ export async function getQuickLinks(): Promise<QuickLink[]> {
 
 export async function setQuickLinks(links: QuickLink[]): Promise<StorageResult> {
   const area = await getStorageArea();
-  return setValidatedListInStorage(STORAGE_KEYS.QUICK_LINKS, links, area);
+  return setValidatedListInStorage(STORAGE_KEYS.QUICK_LINKS, links, quickLinkSchema, area);
 }
 
 // Concept Cards (spaced-repetition learning cards)
@@ -266,7 +272,7 @@ export async function getConceptCards(): Promise<ConceptCard[]> {
 
 export async function setConceptCards(cards: ConceptCard[]): Promise<StorageResult> {
   const area = await getStorageArea();
-  return setValidatedListInStorage(STORAGE_KEYS.CONCEPT_CARDS, cards, area);
+  return setValidatedListInStorage(STORAGE_KEYS.CONCEPT_CARDS, cards, conceptCardSchema, area);
 }
 
 // Posture daily rollups (macOS tracking; always local — device-specific data)
@@ -280,7 +286,12 @@ export async function getPostureStats(): Promise<PostureDailyStat[]> {
 }
 
 export async function setPostureStats(stats: PostureDailyStat[]): Promise<StorageResult> {
-  return setValidatedListInStorage(STORAGE_KEYS.POSTURE_STATS, stats, 'local');
+  return setValidatedListInStorage(
+    STORAGE_KEYS.POSTURE_STATS,
+    stats,
+    postureDailyStatSchema,
+    'local'
+  );
 }
 
 // Google Calendar (connection + cached events; always local)
@@ -332,7 +343,12 @@ export async function getPomodoroSessions(): Promise<PomodoroSession[]> {
 
 export async function setPomodoroSessions(sessions: PomodoroSession[]): Promise<StorageResult> {
   const area = await getStorageArea();
-  return setValidatedListInStorage(STORAGE_KEYS.POMODORO_SESSIONS, sessions, area);
+  return setValidatedListInStorage(
+    STORAGE_KEYS.POMODORO_SESSIONS,
+    sessions,
+    pomodoroSessionSchema,
+    area
+  );
 }
 
 // Custom YouTube Playlists (for Pomodoro music)
@@ -349,7 +365,12 @@ export async function getCustomYoutubePlaylists(): Promise<YoutubePlaylist[]> {
 export async function setCustomYoutubePlaylists(
   playlists: YoutubePlaylist[]
 ): Promise<StorageResult> {
-  return setValidatedListInStorage(STORAGE_KEYS.CUSTOM_YOUTUBE_PLAYLISTS, playlists, 'local');
+  return setValidatedListInStorage(
+    STORAGE_KEYS.CUSTOM_YOUTUBE_PLAYLISTS,
+    playlists,
+    youtubePlaylistSchema,
+    'local'
+  );
 }
 
 // Settings
@@ -418,11 +439,6 @@ export async function getStoredSettings(): Promise<Settings | null> {
   return { ...DEFAULT_SETTINGS, ...(await readStoredSettingsFields()) };
 }
 
-/** A raw read supersedes whatever the last validated read of that key hid. */
-async function forgetHidden(key: string, area?: 'local' | 'sync'): Promise<void> {
-  forgetHiddenItems(key, area ?? (await getStorageArea()));
-}
-
 /**
  * Raw list reads for the sync engine.
  *
@@ -434,17 +450,14 @@ async function forgetHidden(key: string, area?: 'local' | 'sync'): Promise<void>
  * device too. Same reasoning as `migrateStorageData`: move the bytes, do not judge them.
  */
 export async function getGoalsRaw(): Promise<Goal[]> {
-  await forgetHidden(STORAGE_KEYS.GOALS);
   return (await getFromStorage<Goal[]>(STORAGE_KEYS.GOALS, await getStorageArea())) ?? [];
 }
 
 export async function getRemindersRaw(): Promise<Reminder[]> {
-  await forgetHidden(STORAGE_KEYS.REMINDERS);
   return (await getFromStorage<Reminder[]>(STORAGE_KEYS.REMINDERS, await getStorageArea())) ?? [];
 }
 
 export async function getCollectionsRaw(): Promise<QuoteCollection[]> {
-  await forgetHidden(STORAGE_KEYS.COLLECTIONS);
   return (
     (await getFromStorage<QuoteCollection[]>(STORAGE_KEYS.COLLECTIONS, await getStorageArea())) ??
     []
@@ -466,7 +479,6 @@ export async function getSettingsForSync(): Promise<Settings> {
 }
 
 export async function getPomodoroSessionsRaw(): Promise<PomodoroSession[]> {
-  await forgetHidden(STORAGE_KEYS.POMODORO_SESSIONS);
   return (
     (await getFromStorage<PomodoroSession[]>(
       STORAGE_KEYS.POMODORO_SESSIONS,
@@ -475,10 +487,40 @@ export async function getPomodoroSessionsRaw(): Promise<PomodoroSession[]> {
   );
 }
 
+/**
+ * Raw writes, the counterpart to the raw reads above. A caller that saw every stored item
+ * is a caller whose omissions are deliberate, so its write must not resurrect anything —
+ * that is how a pulled tombstone deletes a goal this build cannot parse.
+ */
+export async function setGoalsRaw(goals: Goal[]): Promise<StorageResult> {
+  return setInStorage(STORAGE_KEYS.GOALS, goals, await getStorageArea());
+}
+
+export async function setRemindersRaw(reminders: Reminder[]): Promise<StorageResult> {
+  return setInStorage(STORAGE_KEYS.REMINDERS, reminders, await getStorageArea());
+}
+
+export async function setCollectionsRaw(collections: QuoteCollection[]): Promise<StorageResult> {
+  return setInStorage(STORAGE_KEYS.COLLECTIONS, collections, await getStorageArea());
+}
+
+export async function setPomodoroSessionsRaw(sessions: PomodoroSession[]): Promise<StorageResult> {
+  return setInStorage(STORAGE_KEYS.POMODORO_SESSIONS, sessions, await getStorageArea());
+}
+
+/** Mirrors `setQuotes`'s seed/custom split, without preserving anything. */
+export async function setQuotesRaw(quotes: Quote[]): Promise<StorageResult> {
+  const seed = quotes.filter((q) => !isCustomQuote(q));
+  const custom = quotes.filter((q) => isCustomQuote(q));
+  const seedResult = await setInStorage(STORAGE_KEYS.SEED_QUOTES, seed, 'local');
+  if (!seedResult.success) {
+    return seedResult;
+  }
+  return setInStorage(STORAGE_KEYS.CUSTOM_QUOTES, custom, await getStorageArea());
+}
+
 /** Seed plus custom, mirroring `getQuotes`, but without dropping anything. */
 export async function getQuotesRaw(): Promise<Quote[]> {
-  await forgetHidden(STORAGE_KEYS.SEED_QUOTES, 'local');
-  await forgetHidden(STORAGE_KEYS.CUSTOM_QUOTES);
   const seed = (await getFromStorage<Quote[]>(STORAGE_KEYS.SEED_QUOTES, 'local')) ?? [];
   const area = await getStorageArea();
   const custom = (await getFromStorage<Quote[]>(STORAGE_KEYS.CUSTOM_QUOTES, area)) ?? [];
@@ -675,7 +717,12 @@ export async function updateVideoProgress(
     // Remove playlists with no video progress
     const cleanedProgress = allProgress.filter((p) => p.videoProgress.length > 0);
 
-    return setValidatedListInStorage(STORAGE_KEYS.YOUTUBE_PROGRESS, cleanedProgress, 'local');
+    return setValidatedListInStorage(
+      STORAGE_KEYS.YOUTUBE_PROGRESS,
+      cleanedProgress,
+      playlistProgressSchema,
+      'local'
+    );
   } catch (error) {
     logger.error('Error updating video progress', error);
     return storageFailure('Error updating video progress');

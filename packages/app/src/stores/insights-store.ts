@@ -34,9 +34,9 @@ import {
   getPostureStats,
   getQuotes,
   getQuotesRaw,
-  setGoals,
-  setPomodoroSessions,
-  setQuotes,
+  setGoalsRaw,
+  setPomodoroSessionsRaw,
+  setQuotesRaw,
 } from '@cuewise/storage';
 import { create } from 'zustand';
 import { readFileAsText } from '../utils/file-utils';
@@ -367,7 +367,7 @@ export const useInsightsStore = create<InsightsStore>((set, get) => ({
           options.skipDuplicates === true
         );
         if (importedCount > 0) {
-          assertPersisted(await setGoals(merged));
+          assertPersisted(await setGoalsRaw(merged));
         }
         result.imported.goals = importedCount;
         result.skipped.goals = skippedCount;
@@ -384,7 +384,7 @@ export const useInsightsStore = create<InsightsStore>((set, get) => ({
           options.skipDuplicates === true
         );
         if (importedCount > 0) {
-          assertPersisted(await setQuotes(merged));
+          assertPersisted(await setQuotesRaw(merged));
         }
         result.imported.quotes = importedCount;
         result.skipped.quotes = skippedCount;
@@ -399,7 +399,7 @@ export const useInsightsStore = create<InsightsStore>((set, get) => ({
           options.skipDuplicates === true
         );
         if (importedCount > 0) {
-          assertPersisted(await setPomodoroSessions(merged));
+          assertPersisted(await setPomodoroSessionsRaw(merged));
         }
         result.imported.pomodoroSessions = importedCount;
         result.skipped.pomodoroSessions = skippedCount;

@@ -10,6 +10,7 @@ import {
   getSettings,
   getWeatherState,
   setGoals,
+  setGoalsRaw,
   setQuotes,
 } from './storage-helpers';
 
@@ -338,9 +339,10 @@ describe('a whole-list write', () => {
   });
 });
 
-// The quarantine is tied to the READ that hid the item, not to the schema. That distinction
-// is what lets a sync delete land: sync reads raw, so it hid nothing, so its write carries
-// nothing extra — while a UI write, which read validated, carries what it never saw.
+// A validated reader must get back what it never saw; a raw reader must not, because its
+// omissions are deliberate. That split is expressed by which SETTER each one uses, not by
+// shared state — an earlier attempt kept a per-key map, and a per-key map cannot express a
+// per-caller property: one component's raw read disarmed the guarantee for every other.
 describe('who gets their hidden items back', () => {
   const readable = { id: 'g1', text: 'fine', completed: false, createdAt: 'x', date: '2026-07-26' };
   const unreadable = { id: 'g2', text: 'from a newer build', completed: 'nope' };
@@ -373,26 +375,37 @@ describe('who gets their hidden items back', () => {
     expect(written.goals).toEqual([readable, unreadable]);
   });
 
-  // Sync reads raw, so the item WAS in its hands; leaving it out is a deliberate delete and
+  // Every assertion here stands alone: no test depends on state another one left behind.
+  it('keeps doing so on a later edit that never re-read', async () => {
+    const { written, store } = capturing({ goals: [readable, unreadable] });
+    configurePlatform({ storage: store });
+
+    const visible = await getGoals();
+    await setGoals([...visible, { ...readable, id: 'g3' }]);
+    await setGoals(visible);
+
+    expect(written.goals).toEqual([readable, unreadable]);
+  });
+
+  // Sync reads raw, so the item was in its hands; leaving it out is a deliberate delete and
   // must land, or a pulled tombstone never applies and the goal resurrects on every device.
   it('lets a raw reader delete the very same item', async () => {
     const { written, store } = capturing({ goals: [readable, unreadable] });
     configurePlatform({ storage: store });
 
     const all = await getGoalsRaw();
-    await setGoals(all.filter((goal) => goal.id !== 'g2'));
+    await setGoalsRaw(all.filter((goal) => goal.id !== 'g2'));
 
     expect(written.goals).toEqual([readable]);
   });
 
-  // Guessing from the schema instead of the read re-appended an id-less row alongside
-  // itself, doubling it on every write until the array blew the storage quota.
-  it('never duplicates an item that has no usable id', async () => {
+  // The preserve step must not re-append a row the caller already passed in, or the array
+  // doubles on every write until it blows the storage quota.
+  it('never duplicates a row that has no usable id', async () => {
     const { written, store } = capturing({ goals: [readable, idless] });
     configurePlatform({ storage: store });
 
     await setGoals(await getGoals());
-    configurePlatform({ storage: store });
     await setGoals(await getGoals());
 
     expect((written.goals as unknown[]).filter((g) => g === idless)).toHaveLength(1);
