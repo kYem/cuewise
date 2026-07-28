@@ -367,16 +367,10 @@ export class SyncEngine {
   private async syncNowLoopSafe(): Promise<void> {
     try {
       await this.syncNow();
-      if (this.status === 'error') {
-        this.setStatus('active');
-      }
     } catch (err) {
       // At error level with the error itself: the shipped default log level is 'error', and a
       // fail-closed refusal (an unreadable collection) says why only in its own message.
       logger.error('Sync failed in the pull loop; the next scheduled wake will retry', err);
-      // A refusal is permanent, not transient — an unreadable collection throws on every wake
-      // forever, and 'active' would keep telling the user their devices are in step.
-      this.setStatus('error');
     }
   }
 

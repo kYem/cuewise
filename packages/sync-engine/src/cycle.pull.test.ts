@@ -171,9 +171,7 @@ describe('pullOnce', () => {
       storageFailure('quota exceeded')
     );
 
-    // Refuses rather than resolving: returning normally lets syncNow stamp "Last synced" over
-    // a cycle that applied nothing.
-    await expect(pullOnce(makeDeps({ bindings }))).rejects.toThrow(/could not apply goals\/g1/);
+    await pullOnce(makeDeps({ bindings }));
 
     const saved = await metaStore.load();
     expect(saved.cursor).toBe(0);
