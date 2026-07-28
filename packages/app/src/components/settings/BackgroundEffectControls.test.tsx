@@ -8,7 +8,6 @@ import { BackgroundEffectControls } from './BackgroundEffectControls';
 
 vi.mock('@cuewise/storage', () => ({
   clearSettings: vi.fn(),
-  ensureSettingsMigrated: vi.fn(),
   getSettings: vi.fn(),
   migrateStorageData: vi.fn(),
   setSettingsPatch: vi.fn(),
@@ -35,7 +34,6 @@ describe('BackgroundEffectControls', () => {
     vi.clearAllMocks();
     vi.mocked(storage.setSettingsPatch).mockResolvedValue({ success: true });
     vi.mocked(storage.clearSettings).mockResolvedValue(true);
-    vi.mocked(storage.ensureSettingsMigrated).mockResolvedValue(undefined);
   });
 
   it('renders both sliders at their persisted values', () => {

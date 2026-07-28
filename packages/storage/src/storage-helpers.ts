@@ -66,15 +66,23 @@ import {
  */
 async function getStorageArea(): Promise<'local' | 'sync'> {
   await ensureSettingsMigrated();
-  // Single key, not the whole settings blob: this runs on nearly every storage helper call.
-  const stored = await getValidatedFromStorage<boolean>(
-    settingsStorageKey('syncEnabled'),
-    settingsSchema.def.shape.syncEnabled,
+  // Two keys in one batch, not the whole settings blob: this runs on nearly every storage helper
+  // call, so reading through to the blob a failed migration left behind costs no extra round trip.
+  const stored = await getManyFromStorage(
+    [SETTINGS_SYNC_ENABLED_KEY, STORAGE_KEYS.SETTINGS],
     'local'
   );
-  const syncEnabled =
-    stored ?? unmigratedSettingsValue('syncEnabled') ?? DEFAULT_SETTINGS.syncEnabled;
-  if (syncEnabled) {
+  const perKey = stored[SETTINGS_SYNC_ENABLED_KEY];
+  let syncEnabled: unknown = DEFAULT_SETTINGS.syncEnabled;
+  if (perKey !== undefined && settingsValueIsValid('syncEnabled', perKey)) {
+    syncEnabled = perKey;
+  } else {
+    const legacy = legacySettingsField(stored[STORAGE_KEYS.SETTINGS], 'syncEnabled');
+    if (legacy !== undefined) {
+      syncEnabled = legacy;
+    }
+  }
+  if (syncEnabled === true) {
     return 'sync';
   }
   return 'local';
@@ -400,6 +408,8 @@ export const SETTINGS_KEYS = Object.keys(DEFAULT_SETTINGS) as (keyof Settings)[]
 
 const SETTINGS_STORAGE_KEYS = SETTINGS_KEYS.map(settingsStorageKey);
 
+const SETTINGS_SYNC_ENABLED_KEY = settingsStorageKey('syncEnabled');
+
 const SETTINGS_FIELD_SCHEMAS = settingsSchema.def.shape as Record<string, ZodMiniType | undefined>;
 
 /** Own properties only — a stored key named `constructor` or `toString` otherwise hits Object.prototype. */
@@ -444,15 +454,45 @@ function keepReadableSettingsFields(values: Record<string, unknown>): Partial<Se
   return kept as Partial<Settings>;
 }
 
+/**
+ * A field of the legacy blob, judged exactly as the migration judges it — a value it would have
+ * discarded must not reach `getSettingsForSync` and be pushed to every other device.
+ *
+ * Read through from disk rather than cached: the blob survives only until a migration write
+ * succeeds and deletes it, so two realms cannot disagree about what it still holds, and a reset
+ * that deletes it is visible to both at once.
+ */
+function legacySettingsField(blob: unknown, key: string): unknown {
+  if (blob === null || typeof blob !== 'object' || Array.isArray(blob)) {
+    return undefined;
+  }
+  if (!Object.hasOwn(blob, key)) {
+    return undefined;
+  }
+  const value = (blob as Record<string, unknown>)[key];
+  if (!settingsValueIsValid(key, value)) {
+    return undefined;
+  }
+  return value;
+}
+
 // Nothing to seed for a key this build cannot name: it sits in its own entry, which no patch
 // rewrites.
 async function readSettingsEntries(): Promise<Record<string, unknown>> {
   await ensureSettingsMigrated();
-  const stored = await getManyFromStorage(SETTINGS_STORAGE_KEYS, 'local');
+  const stored = await getManyFromStorage(
+    [...SETTINGS_STORAGE_KEYS, STORAGE_KEYS.SETTINGS],
+    'local'
+  );
+  const blob = stored[STORAGE_KEYS.SETTINGS];
   const byKey: Record<string, unknown> = {};
   for (const key of SETTINGS_KEYS) {
     const value = stored[settingsStorageKey(key)];
-    byKey[key] = value === undefined ? unmigratedSettings?.[key] : value;
+    if (value === undefined) {
+      byKey[key] = legacySettingsField(blob, key);
+    } else {
+      byKey[key] = value;
+    }
   }
   return byKey;
 }
@@ -523,7 +563,6 @@ export async function clearSettings(): Promise<boolean> {
   // Migrate then delete the blob: the migration reads an absent per-key entry as a gap to fill,
   // so a surviving blob would restore every cleared value on the next read.
   await ensureSettingsMigrated();
-  unmigratedSettings = null;
   return removeManyFromStorage([...SETTINGS_STORAGE_KEYS, STORAGE_KEYS.SETTINGS], 'local');
 }
 
@@ -568,14 +607,12 @@ export async function migrateLegacySettings(): Promise<void> {
   if (Object.keys(patch).length > 0) {
     const result = await setManyInStorage(patch, 'local');
     if (!result.success) {
-      // Held in memory as well as on disk: a reader that saw no per-key entry would otherwise
-      // take every setting for a gap, and `syncEnabled` decides which area the data lives in.
-      unmigratedSettings = blob;
+      // Left on disk deliberately: every settings read falls back through it until a later write
+      // succeeds, and `syncEnabled` decides which area the rest of the data lives in.
       logger.error('Settings migration write failed; keeping the legacy blob', result.error);
       return;
     }
   }
-  unmigratedSettings = null;
 
   if (discarded.length > 0) {
     // Names only — a setting's value can be a goal id or a playlist the user picked. This is
@@ -589,17 +626,6 @@ export async function migrateLegacySettings(): Promise<void> {
   if (!removed) {
     logger.error('Migrated the legacy settings blob but could not delete it');
   }
-}
-
-// The blob of a migration whose write failed: still the truth for its keys until one succeeds.
-let unmigratedSettings: Record<string, unknown> | null = null;
-
-function unmigratedSettingsValue<K extends keyof Settings>(key: K): Settings[K] | undefined {
-  const value = unmigratedSettings?.[key];
-  if (value === undefined || !settingsValueIsValid(key, value)) {
-    return undefined;
-  }
-  return value as Settings[K];
 }
 
 let settingsMigration: Promise<void> | null = null;
@@ -624,7 +650,6 @@ export function ensureSettingsMigrated(): Promise<void> {
 /** Drops the memo so the next read migrates again. For test isolation. */
 export function resetSettingsMigration(): void {
   settingsMigration = null;
-  unmigratedSettings = null;
 }
 
 /**

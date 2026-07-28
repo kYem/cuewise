@@ -133,7 +133,7 @@ export async function setValidatedListInStorage<T>(
   if (unreadable.length === 0) {
     return store.set(key, items, area);
   }
-  logger.warn('Preserved unreadable stored items through a write', {
+  logger.error('Preserved unreadable stored items through a write', {
     key,
     area,
     preserved: unreadable.length,
