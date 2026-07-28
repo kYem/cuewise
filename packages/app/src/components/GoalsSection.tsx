@@ -416,11 +416,12 @@ export const GoalsSection: React.FC = () => {
           {viewMode === 'full' && (
             <>
               {/* Storage Warning - only show if warning or critical */}
-              {storageUsage && (storageUsage.isWarning || storageUsage.isCritical) && (
-                <div className="mb-4">
-                  <StorageIndicator mode="compact" />
-                </div>
-              )}
+              {storageUsage?.available === true &&
+                (storageUsage.isWarning || storageUsage.isCritical) && (
+                  <div className="mb-4">
+                    <StorageIndicator mode="compact" />
+                  </div>
+                )}
 
               {/* Goals List (tiles + bottom add input + history + upcoming) */}
               <div className="flex-1">

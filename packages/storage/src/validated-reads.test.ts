@@ -434,10 +434,29 @@ describe('the raw view sync reads through', () => {
     await expect(getGoalsRaw()).resolves.toEqual([good, unreadable]);
   });
 
-  // Every caller iterates what this returns, so one corrupt key would throw out of `readAll`
-  // and stall the cycle for every collection at once, not just this one.
-  it('reads a corrupt list as empty rather than handing back a non-array', async () => {
+  // Empty is what the cycle reads as "every id was deleted". A stalled collection is
+  // recoverable; a tombstone pushed to every device is not.
+  it('refuses a stored list that is not an array rather than reading it as empty', async () => {
     configurePlatform({ storage: storeHolding({ goals: { nope: true } }) });
+
+    await expect(getGoalsRaw()).rejects.toThrow(/unreadable/i);
+  });
+
+  it('refuses a list whose read failed', async () => {
+    const { store } = capturingStore();
+    configurePlatform({
+      storage: {
+        ...store,
+        getMany: async (keys: string[], area: StorageArea = 'local') =>
+          keys.includes('goals') ? null : store.getMany(keys, area),
+      },
+    });
+
+    await expect(getGoalsRaw()).rejects.toThrow(/could not read/i);
+  });
+
+  it('still reads a list that was never written as empty', async () => {
+    configurePlatform({ storage: storeHolding({}) });
 
     await expect(getGoalsRaw()).resolves.toEqual([]);
   });

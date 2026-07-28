@@ -702,13 +702,22 @@ export function resetSettingsMigration(): void {
  * Raw list reads for the sync engine. An item hidden from `readAll` is deleted by the next
  * `writeOne`, and its absence is how the cycle infers a tombstone for every other device.
  *
- * Items are unjudged, but the list itself is: every caller iterates it, so a stored non-array
- * would throw out of `readAll` and wedge the cycle for every collection at once.
+ * So only a key that was never written reads as `[]`. A read that failed and a stored value this
+ * build cannot use both throw: a wedged collection is recoverable, a fleet-wide erase is not.
+ * The batch read is what separates the two — `get` answers `null` for either.
  */
 async function getListRaw<T>(key: string, area: StorageArea): Promise<T[]> {
-  const raw = await getFromStorage<unknown>(key, area);
-  if (!Array.isArray(raw)) {
+  const stored = await getManyFromStorage([key], area);
+  if (stored === null) {
+    throw new Error(`Could not read the stored ${key} list`);
+  }
+  if (!Object.hasOwn(stored, key)) {
     return [];
+  }
+  const raw = stored[key];
+  if (!Array.isArray(raw)) {
+    logger.error('Refusing to read a stored list that is not an array', { key, area });
+    throw new Error(`The stored ${key} list is unreadable`);
   }
   return raw as T[];
 }
@@ -779,14 +788,19 @@ export async function getQuotesRaw(): Promise<Quote[]> {
   return [...seed, ...(await getListRaw<Quote>(STORAGE_KEYS.CUSTOM_QUOTES, area))];
 }
 
-// Storage usage tracking
-export interface StorageUsageInfo {
-  bytesInUse: number;
-  quota: number;
-  percentageUsed: number;
-  isWarning: boolean; // > 75%
-  isCritical: boolean; // > 90%
-}
+// Storage usage tracking. `available: false` is the only honest answer when the area is unknown:
+// a sync user near the 100KB ceiling shown all-clear against 10MB loses the warning that
+// explains their next failed write.
+export type StorageUsageInfo =
+  | {
+      available: true;
+      bytesInUse: number;
+      quota: number;
+      percentageUsed: number;
+      isWarning: boolean; // > 75%
+      isCritical: boolean; // > 90%
+    }
+  | { available: false };
 
 /**
  * Storage usage (bytes + quota) from the active KeyValueStore backend for the
@@ -803,6 +817,7 @@ export async function getStorageUsage(): Promise<StorageUsageInfo> {
     }
 
     return {
+      available: true,
       bytesInUse,
       quota,
       percentageUsed,
@@ -811,14 +826,7 @@ export async function getStorageUsage(): Promise<StorageUsageInfo> {
     };
   } catch (error) {
     logger.error('Error getting storage usage', error);
-    // Return safe defaults on error (assume local storage)
-    return {
-      bytesInUse: 0,
-      quota: 10485760,
-      percentageUsed: 0,
-      isWarning: false,
-      isCritical: false,
-    };
+    return { available: false };
   }
 }
 

@@ -12,6 +12,7 @@ import {
 import { goalFactory } from '@cuewise/test-utils/factories';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getFromStorage, getManyFromStorage, setInStorage } from './chrome-storage';
+import { LocalStorageKeyValueStore } from './local-storage-key-value-store';
 import {
   clearCustomBackground,
   clearSettings,
@@ -64,9 +65,12 @@ describe('getStorageUsage', () => {
 
     const info = await getStorageUsage();
 
-    expect(info.percentageUsed).toBe(80);
-    expect(info.isWarning).toBe(true);
-    expect(info.isCritical).toBe(false);
+    expect(info).toMatchObject({
+      available: true,
+      percentageUsed: 80,
+      isWarning: true,
+      isCritical: false,
+    });
   });
 
   it('flags critical above 90%', async () => {
@@ -74,7 +78,7 @@ describe('getStorageUsage', () => {
 
     const info = await getStorageUsage();
 
-    expect(info.isCritical).toBe(true);
+    expect(info).toMatchObject({ available: true, isCritical: true });
   });
 });
 
@@ -592,6 +596,14 @@ describe('a settings read that fails', () => {
 
     await expect(getSettingsForSync()).rejects.toThrow(/settings/i);
   });
+
+  // An all-clear against a quota the user may not be on hides the warning that explains
+  // their next failed write — a sync user sits at 100KB, not 10MB.
+  it('reports storage usage as unavailable instead of inventing an empty local area', async () => {
+    configurePlatform({ storage: cannotReadSettings() });
+
+    await expect(getStorageUsage()).resolves.toEqual({ available: false });
+  });
 });
 
 // The migration reads which per-key entries exist, then writes the gaps it found. A settings
@@ -728,5 +740,26 @@ describe('storage area routing', () => {
     configurePlatform({ storage: store });
 
     await expect(getGoals()).resolves.toEqual(goals);
+  });
+});
+
+// The macOS app ships on this adapter, and getStorageArea throws rather than guess an area — so
+// a single unparseable entry failing the whole batch takes every read down, across restarts.
+describe('one unreadable settings entry on the localStorage backend', () => {
+  it('costs its own field, not every setting and not the storage area', async () => {
+    localStorage.clear();
+    configurePlatform({ storage: new LocalStorageKeyValueStore() });
+    localStorage.setItem(settingsStorageKey('theme'), '{not json');
+    localStorage.setItem(settingsStorageKey('colorTheme'), JSON.stringify('forest'));
+    localStorage.setItem(settingsStorageKey('syncEnabled'), JSON.stringify(true));
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await expect(getSettings()).resolves.toMatchObject({
+      theme: DEFAULT_SETTINGS.theme,
+      colorTheme: 'forest',
+      syncEnabled: true,
+    });
+    await expect(getStorageUsage()).resolves.toMatchObject({ available: true });
+    localStorage.clear();
   });
 });
