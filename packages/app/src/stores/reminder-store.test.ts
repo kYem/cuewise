@@ -313,6 +313,23 @@ describe('fireDueReminders', () => {
     // Nothing was due to fire, so no persistence write happened.
     expect(setRemindersMock).not.toHaveBeenCalled();
   });
+
+  // `notified` is already persisted by the time these toast, so a collapsed duplicate is a
+  // reminder the user is never told about at all.
+  it('announces both of two due reminders that share the same text', async () => {
+    const due = (id: string) =>
+      reminderFactory.build({
+        id,
+        text: 'Stretch',
+        dueDate: new Date(Date.now() - 60_000).toISOString(),
+        notified: false,
+      });
+    useReminderStore.setState({ reminders: [due('a'), due('b')] });
+
+    await useReminderStore.getState().fireDueReminders();
+
+    expect(toastWarning).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe('addReminder with an interval recurrence', () => {
