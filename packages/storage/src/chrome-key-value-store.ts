@@ -6,6 +6,8 @@ import {
   type StorageErrorType,
   type StorageResult,
   type StorageUsage,
+  type StoredValues,
+  toStoredValues,
 } from '@cuewise/shared';
 
 // Chrome storage quotas
@@ -54,12 +56,23 @@ export class ChromeKeyValueStore implements KeyValueStore {
     return { bytesInUse, quota: area === 'sync' ? SYNC_QUOTA_BYTES : LOCAL_QUOTA_BYTES };
   }
 
-  async getMany(keys: string[], area: StorageArea): Promise<Record<string, unknown> | null> {
+  // chrome.storage hands back structured values, so a key that is there is always readable —
+  // only the whole call can fail.
+  async getMany(keys: string[], area: StorageArea): Promise<StoredValues | null> {
     try {
-      const values = await areaStore(area).get(keys);
-      return values;
+      return toStoredValues(await areaStore(area).get(keys));
     } catch (error) {
       logger.error(`Error getting keys from ${area} storage`, { keys, error });
+      return null;
+    }
+  }
+
+  async keys(prefix: string, area: StorageArea): Promise<string[] | null> {
+    try {
+      const all = await areaStore(area).get(null);
+      return Object.keys(all).filter((key) => key.startsWith(prefix));
+    } catch (error) {
+      logger.error(`Error listing ${area} storage keys`, { prefix, error });
       return null;
     }
   }

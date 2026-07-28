@@ -26,6 +26,7 @@ const fakeStorage: KeyValueStore = {
   set: async () => ({ success: true }),
   remove: async () => true,
   getMany: async () => ({}),
+  keys: async () => [],
   setMany: async () => ({ success: true }),
   removeMany: async () => true,
   getUsage: async () => ({ bytesInUse: 0, quota: 0 }),

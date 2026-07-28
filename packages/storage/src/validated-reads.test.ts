@@ -5,6 +5,8 @@ import {
   logger,
   type Settings,
   type StorageArea,
+  storedValue,
+  UNREADABLE_VALUE,
 } from '@cuewise/shared';
 import {
   conceptCardFactory,
@@ -36,6 +38,7 @@ import {
   getSettingsForSync,
   getWeatherState,
   getYoutubeProgress,
+  migrateStorageData,
   resetSettingsMigration,
   setCollections,
   setCollectionsRaw,
@@ -109,8 +112,13 @@ function capturingStore(initial: Record<string, unknown> = {}, seedArea: Storage
         Object.fromEntries(
           keys
             .filter((key) => disk.has(`${readArea}:${key}`))
-            .map((key) => [key, read(key, readArea)])
+            .map((key) => [key, storedValue(read(key, readArea))])
         ),
+      keys: async (prefix: string, readArea: StorageArea = 'local') =>
+        [...disk.keys()]
+          .filter((key) => key.startsWith(`${readArea}:`))
+          .map((key) => key.slice(readArea.length + 1))
+          .filter((key) => key.startsWith(prefix)),
       setMany: async (entries: Record<string, unknown>, writeArea: StorageArea = 'local') => {
         for (const [key, value] of Object.entries(entries)) {
           write(key, value, writeArea);
@@ -447,8 +455,12 @@ describe('the raw view sync reads through', () => {
     configurePlatform({
       storage: {
         ...store,
-        getMany: async (keys: string[], area: StorageArea = 'local') =>
-          keys.includes('goals') ? null : store.getMany(keys, area),
+        getMany: async (keys: string[], area: StorageArea = 'local') => {
+          if (keys.includes('goals')) {
+            return null;
+          }
+          return store.getMany(keys, area);
+        },
       },
     });
 
@@ -472,6 +484,78 @@ describe('the raw view sync reads through', () => {
 
     await expect(getQuotes()).resolves.toEqual([]);
     await expect(getQuotesRaw()).resolves.toEqual([unreadable, unreadableCustom]);
+  });
+});
+
+// `[]` is what the quote store seeds on, and seeding rewrites both keys — so a read that
+// failed answered as empty erases every custom quote the user wrote.
+describe('getQuotes on a read it could not make', () => {
+  it('refuses rather than reporting an empty library', async () => {
+    const { store } = capturingStore({ customQuotes: [quoteFactory.build()] });
+    configurePlatform({
+      storage: {
+        ...store,
+        getMany: async (keys: string[], area: StorageArea = 'local') => {
+          if (keys.includes('customQuotes')) {
+            return null;
+          }
+          return store.getMany(keys, area);
+        },
+      },
+    });
+
+    await expect(getQuotes()).rejects.toThrow(/could not read/i);
+  });
+
+  it('refuses a stored quotes list that is not an array', async () => {
+    configurePlatform({ storage: storeHolding({ customQuotes: { nope: true } }) });
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await expect(getQuotes()).rejects.toThrow(/unreadable/i);
+  });
+
+  it('still reads a library that was never written as empty', async () => {
+    configurePlatform({ storage: storeHolding({}) });
+
+    await expect(getQuotes()).resolves.toEqual([]);
+  });
+});
+
+// The legacy key is the only copy of those quotes, so it may only be deleted once the copies
+// have provably landed.
+describe('the legacy quotes migration', () => {
+  it('keeps the legacy key when the copy cannot be written', async () => {
+    const legacy = [quoteFactory.build({ id: 'q1', isCustom: false })];
+    const { store, at } = capturingStore({ quotes: legacy });
+    configurePlatform({
+      storage: {
+        ...store,
+        set: async (key: string, value: unknown, area: StorageArea = 'local') => {
+          if (key === 'seedQuotes') {
+            return {
+              success: false as const,
+              error: { type: 'quota_exceeded' as const, message: 'Storage full' },
+            };
+          }
+          return store.set(key, value, area);
+        },
+      },
+    });
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await expect(getQuotes()).rejects.toThrow(/could not migrate/i);
+
+    expect(at('quotes')).toEqual(legacy);
+  });
+
+  it('deletes the legacy key once the copy has landed', async () => {
+    const legacy = [quoteFactory.build({ id: 'q1', isCustom: false })];
+    const { store, at } = capturingStore({ quotes: legacy });
+    configurePlatform({ storage: store });
+
+    await expect(getQuotes()).resolves.toHaveLength(1);
+
+    expect(at('quotes')).toBeUndefined();
   });
 });
 
@@ -1063,5 +1147,64 @@ describe('writes land in the area their reader uses', () => {
     await setQuotesRaw([quote]);
 
     await expect(getQuotesRaw()).resolves.toEqual([quote]);
+  });
+});
+
+// The one path that moves every collection at once, run on a sync toggle. `null` covers both
+// "the source never wrote this" and "the read failed", and the second copied emptiness across.
+describe('migrateStorageData', () => {
+  it('writes nothing when the source area cannot be read', async () => {
+    const destination = [goalFactory.build({ id: 'g1' })];
+    const { store, wroteTo } = capturingStore({ goals: destination }, 'sync');
+    configurePlatform({ storage: { ...store, getMany: async () => null } });
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    const result = await migrateStorageData('local', 'sync');
+
+    expect(result.success).toBe(false);
+    expect(wroteTo('goals', 'sync')).toBe(false);
+  });
+
+  it('refuses when a source value is stored but unreadable', async () => {
+    const { store, wroteTo } = capturingStore({ goals: [] }, 'local');
+    configurePlatform({
+      storage: {
+        ...store,
+        getMany: async (keys: string[], area: StorageArea = 'local') => {
+          const seen = await store.getMany(keys, area);
+          if (seen !== null && keys.includes('goals')) {
+            seen.goals = UNREADABLE_VALUE;
+          }
+          return seen;
+        },
+      },
+    });
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    const result = await migrateStorageData('local', 'sync');
+
+    expect(result.success).toBe(false);
+    expect(wroteTo('goals', 'sync')).toBe(false);
+  });
+
+  it('leaves a destination key alone when the source never wrote it', async () => {
+    const { store, wroteTo } = capturingStore({ customQuotes: [] }, 'local');
+    configurePlatform({ storage: store });
+
+    const result = await migrateStorageData('local', 'sync');
+
+    expect(result.success).toBe(true);
+    expect(wroteTo('customQuotes', 'sync')).toBe(true);
+    expect(wroteTo('goals', 'sync')).toBe(false);
+  });
+
+  it('copies what the source does hold', async () => {
+    const goals = goalFactory.buildList(2);
+    const { store, at } = capturingStore({ goals }, 'local');
+    configurePlatform({ storage: store });
+
+    await expect(migrateStorageData('local', 'sync')).resolves.toEqual({ success: true });
+
+    expect(at('goals', 'sync')).toEqual(goals);
   });
 });

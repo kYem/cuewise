@@ -8,7 +8,7 @@
  * override it.
  */
 
-import type { KeyValueStore, StorageArea, StorageResult } from '@cuewise/shared';
+import type { KeyValueStore, StorageArea, StorageResult, StoredValues } from '@cuewise/shared';
 import { configurePlatform, getStorage, logger } from '@cuewise/shared';
 import type { ZodMiniType } from 'zod/mini';
 import { ChromeKeyValueStore } from './chrome-key-value-store';
@@ -71,6 +71,16 @@ export async function getValidatedListFromStorage<T>(
     logger.error('Discarded a stored value that should have been a list', { key, area });
     return null;
   }
+  return keepValidListItems(raw, itemSchema, key, area);
+}
+
+/** Per-item filter shared by the validated list read and the presence-aware quote read. */
+export function keepValidListItems<T>(
+  raw: unknown[],
+  itemSchema: ZodMiniType<T>,
+  key: string,
+  area: StorageArea
+): T[] {
   const kept: T[] = [];
   const droppedAt: number[] = [];
   raw.forEach((item, index) => {
@@ -160,8 +170,16 @@ export async function removeFromStorage(
 export async function getManyFromStorage(
   keys: string[],
   area: StorageArea = 'local'
-): Promise<Record<string, unknown> | null> {
+): Promise<StoredValues | null> {
   return getStorage().getMany(keys, area);
+}
+
+/** `null` when the keys could not be enumerated — distinct from `[]`, which means none exist. */
+export async function listStorageKeys(
+  prefix: string,
+  area: StorageArea = 'local'
+): Promise<string[] | null> {
+  return getStorage().keys(prefix, area);
 }
 
 export async function setManyInStorage(

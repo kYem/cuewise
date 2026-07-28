@@ -1,4 +1,4 @@
-import { logger } from '@cuewise/shared';
+import { logger, readableOnly } from '@cuewise/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LocalStorageKeyValueStore } from './local-storage-key-value-store';
 
@@ -44,7 +44,7 @@ describe('LocalStorageKeyValueStore', () => {
 
     const result = await store.getMany(['a', 'b', 'c'], 'local');
 
-    expect(result).toEqual({ a: 1, c: 3 });
+    expect(readableOnly(result ?? {})).toEqual({ a: 1, c: 3 });
     expect(Object.keys(result ?? {})).not.toContain('b');
   });
 
@@ -56,7 +56,7 @@ describe('LocalStorageKeyValueStore', () => {
 
     const result = await store.getMany(['nulled', 'missing'], 'local');
 
-    expect(result).toEqual({ nulled: null });
+    expect(readableOnly(result ?? {})).toEqual({ nulled: null });
     expect(Object.keys(result ?? {})).toEqual(['nulled']);
   });
 
@@ -71,22 +71,21 @@ describe('LocalStorageKeyValueStore', () => {
 
     const result = await store.getMany(['a', 'corrupt', 'c'], 'local');
 
-    expect(result).toMatchObject({ a: 1, c: 3 });
+    expect(readableOnly(result ?? {})).toEqual({ a: 1, c: 3 });
     expect(logged).toHaveBeenCalledWith(expect.stringContaining('corrupt'), expect.anything());
   });
 
   // Absence means "never written" to the settings layer, and a raw list read turns it into `[]`
   // that sync would seal as a tombstone — so a value that is there but unreadable is neither.
-  it('getMany reports an unreadable value as a present key with no value', async () => {
+  it('getMany reports an unreadable value as its own arm, not as absent', async () => {
     const store = new LocalStorageKeyValueStore();
     localStorage.setItem('corrupt', '{not json');
     vi.spyOn(logger, 'error').mockImplementation(() => {});
 
     const result = await store.getMany(['corrupt', 'missing'], 'local');
 
-    expect(Object.hasOwn(result ?? {}, 'corrupt')).toBe(true);
-    expect(result?.corrupt).toBeUndefined();
-    expect(Object.hasOwn(result ?? {}, 'missing')).toBe(false);
+    expect(result?.corrupt).toEqual({ readable: false });
+    expect(result?.missing).toBeUndefined();
   });
 
   // A storage that will not answer at all (SecurityError on a locked-down origin) is a failed
@@ -154,5 +153,19 @@ describe('LocalStorageKeyValueStore', () => {
 
       expect(result).toMatchObject({ success: false, error: { type: 'unknown' } });
     });
+  });
+});
+
+// JSON.stringify(undefined) is undefined, which localStorage keeps as the string "undefined" —
+// unparseable for every later read, and reported to the caller as a successful write.
+describe('LocalStorageKeyValueStore.set with no value', () => {
+  it('refuses it instead of poisoning the key', async () => {
+    const store = new LocalStorageKeyValueStore();
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    const result = await store.set('poisoned', undefined, 'local');
+
+    expect(result.success).toBe(false);
+    expect(localStorage.getItem('poisoned')).toBeNull();
   });
 });

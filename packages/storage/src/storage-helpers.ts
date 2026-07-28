@@ -48,6 +48,8 @@ import {
   getManyFromStorage,
   getValidatedFromStorage,
   getValidatedListFromStorage,
+  keepValidListItems,
+  listStorageKeys,
   removeFromStorage,
   removeManyFromStorage,
   type StorageArea,
@@ -82,11 +84,19 @@ async function getStorageArea(): Promise<'local' | 'sync'> {
     throw new Error('Could not determine the storage area: the settings read failed');
   }
   const perKey = stored[SETTINGS_SYNC_ENABLED_KEY];
+  if (perKey !== undefined && !perKey.readable) {
+    logger.error('syncEnabled is stored but unreadable; refusing to guess the storage area');
+    throw new Error('Could not determine the storage area: syncEnabled is unreadable');
+  }
   let syncEnabled: unknown = DEFAULT_SETTINGS.syncEnabled;
-  if (perKey !== undefined && settingsValueIsValid('syncEnabled', perKey)) {
-    syncEnabled = perKey;
+  if (perKey?.readable === true && settingsValueIsValid('syncEnabled', perKey.value)) {
+    syncEnabled = perKey.value;
   } else {
-    const legacy = legacySettingsField(stored[STORAGE_KEYS.SETTINGS], 'syncEnabled');
+    const blob = stored[STORAGE_KEYS.SETTINGS];
+    let legacy: unknown;
+    if (blob?.readable === true) {
+      legacy = legacySettingsField(blob.value, 'syncEnabled');
+    }
     if (legacy !== undefined) {
       syncEnabled = legacy;
     }
@@ -114,73 +124,75 @@ function isCustomQuote(quote: Quote): boolean {
  * Called automatically when old 'quotes' key is detected
  */
 async function migrateLegacyQuotes(): Promise<void> {
-  try {
-    // Raw, and this one matters more than the other movers: the legacy key is REMOVED at
-    // the end, so a quote dropped from the copy is not quarantined anywhere — it is gone.
-    // Every other validated read leaves the bytes on disk to be salvaged later.
-    const localQuotes = await getFromStorage<Quote[]>(STORAGE_KEYS.QUOTES, 'local');
-    const syncQuotes = await getFromStorage<Quote[]>(STORAGE_KEYS.QUOTES, 'sync');
-    const legacyQuotes = localQuotes || syncQuotes;
+  // Raw, and this one matters more than the other movers: the legacy key is REMOVED at
+  // the end, so a quote dropped from the copy is not quarantined anywhere — it is gone.
+  // Every other validated read leaves the bytes on disk to be salvaged later.
+  const localQuotes = await getFromStorage<Quote[]>(STORAGE_KEYS.QUOTES, 'local');
+  const syncQuotes = await getFromStorage<Quote[]>(STORAGE_KEYS.QUOTES, 'sync');
+  const legacyQuotes = localQuotes || syncQuotes;
 
-    if (!legacyQuotes || legacyQuotes.length === 0) {
-      return; // No migration needed
-    }
-
-    logger.info('Migrating legacy quotes to hybrid storage...');
-
-    // Split into seed and custom quotes
-    const seedQuotes = legacyQuotes.filter((q) => !isCustomQuote(q));
-    const customQuotes = legacyQuotes.filter((q) => isCustomQuote(q));
-
-    // Store seed quotes in local storage
-    if (seedQuotes.length > 0) {
-      await setInStorage(STORAGE_KEYS.SEED_QUOTES, seedQuotes, 'local');
-    }
-
-    // Store custom quotes in appropriate storage area
-    if (customQuotes.length > 0) {
-      const area = await getStorageArea();
-      await setInStorage(STORAGE_KEYS.CUSTOM_QUOTES, customQuotes, area);
-    }
-
-    // Clean up legacy storage from both areas
-    await removeFromStorage(STORAGE_KEYS.QUOTES, 'local');
-    await removeFromStorage(STORAGE_KEYS.QUOTES, 'sync');
-
-    logger.info(
-      `Migration complete: ${seedQuotes.length} seed quotes, ${customQuotes.length} custom quotes`
-    );
-  } catch (error) {
-    logger.error('Error migrating legacy quotes', error);
+  if (!legacyQuotes || legacyQuotes.length === 0) {
+    return; // No migration needed
   }
+
+  logger.info('Migrating legacy quotes to hybrid storage...');
+
+  // Split into seed and custom quotes
+  const seedQuotes = legacyQuotes.filter((q) => !isCustomQuote(q));
+  const customQuotes = legacyQuotes.filter((q) => isCustomQuote(q));
+
+  // Every write is checked before the delete below: the legacy key is the only copy, so a
+  // dropped result would trade a failed write for lost quotes.
+  if (seedQuotes.length > 0) {
+    const seedResult = await setInStorage(STORAGE_KEYS.SEED_QUOTES, seedQuotes, 'local');
+    if (!seedResult.success) {
+      logger.error('Quote migration write failed; keeping the legacy key', seedResult.error);
+      throw new Error(`Could not migrate the legacy quotes: ${seedResult.error.message}`);
+    }
+  }
+
+  if (customQuotes.length > 0) {
+    const area = await getStorageArea();
+    const customResult = await setInStorage(STORAGE_KEYS.CUSTOM_QUOTES, customQuotes, area);
+    if (!customResult.success) {
+      logger.error('Quote migration write failed; keeping the legacy key', customResult.error);
+      throw new Error(`Could not migrate the legacy quotes: ${customResult.error.message}`);
+    }
+  }
+
+  const removedLocal = await removeFromStorage(STORAGE_KEYS.QUOTES, 'local');
+  const removedSync = await removeFromStorage(STORAGE_KEYS.QUOTES, 'sync');
+  if (!removedLocal || !removedSync) {
+    // Not fatal: the copies landed, and the next read migrates the same quotes again.
+    logger.error('Migrated the legacy quotes but could not delete the legacy key');
+  }
+
+  logger.info(
+    `Migration complete: ${seedQuotes.length} seed quotes, ${customQuotes.length} custom quotes`
+  );
 }
 
+/**
+ * Throws rather than answering `[]` when storage could not be read: an empty answer is what the
+ * store seeds on, and seeding rewrites both quote keys — erasing every custom quote.
+ */
 export async function getQuotes(): Promise<Quote[]> {
-  try {
-    // Raw: this only decides whether to migrate, and the migration itself must see
-    // everything that is there.
-    const legacyQuotes = await getFromStorage<Quote[]>(STORAGE_KEYS.QUOTES, 'local');
-    if (legacyQuotes && legacyQuotes.length > 0) {
-      await migrateLegacyQuotes();
-    }
-
-    // Load seed quotes from local storage (always)
-    const seedQuotes =
-      (await getValidatedListFromStorage<Quote>(STORAGE_KEYS.SEED_QUOTES, quoteSchema, 'local')) ??
-      [];
-
-    // Load custom quotes from appropriate storage area
-    const area = await getStorageArea();
-    const customQuotes =
-      (await getValidatedListFromStorage<Quote>(STORAGE_KEYS.CUSTOM_QUOTES, quoteSchema, area)) ??
-      [];
-
-    // Merge seed and custom quotes
-    return [...seedQuotes, ...customQuotes];
-  } catch (error) {
-    logger.error('Error getting quotes', error);
-    return [];
+  // Raw: this only decides whether to migrate, and the migration itself must see
+  // everything that is there.
+  const legacyQuotes = await getFromStorage<Quote[]>(STORAGE_KEYS.QUOTES, 'local');
+  if (legacyQuotes && legacyQuotes.length > 0) {
+    await migrateLegacyQuotes();
   }
+
+  // getListRaw, not the validated read: only a key that was never written reads as empty here.
+  const seedRaw = await getListRaw<unknown>(STORAGE_KEYS.SEED_QUOTES, 'local');
+  const area = await getStorageArea();
+  const customRaw = await getListRaw<unknown>(STORAGE_KEYS.CUSTOM_QUOTES, area);
+
+  return [
+    ...keepValidListItems<Quote>(seedRaw, quoteSchema, STORAGE_KEYS.SEED_QUOTES, 'local'),
+    ...keepValidListItems<Quote>(customRaw, quoteSchema, STORAGE_KEYS.CUSTOM_QUOTES, area),
+  ];
 }
 
 export async function setQuotes(quotes: Quote[]): Promise<StorageResult> {
@@ -485,9 +497,15 @@ function legacySettingsField(blob: unknown, key: string): unknown {
   return value;
 }
 
+interface SettingsEntries {
+  values: Record<string, unknown>;
+  /** Stored but unreadable — not the same as never written, and never defaulted silently. */
+  unreadable: string[];
+}
+
 // Nothing to seed for a key this build cannot name: it sits in its own entry, which no patch
 // rewrites. Null when the read failed, so no caller mistakes that for a stored default.
-async function readSettingsEntries(): Promise<Record<string, unknown> | null> {
+async function readSettingsEntries(): Promise<SettingsEntries | null> {
   await ensureSettingsMigrated();
   const stored = await getManyFromStorage(
     [...SETTINGS_STORAGE_KEYS, STORAGE_KEYS.SETTINGS],
@@ -496,17 +514,24 @@ async function readSettingsEntries(): Promise<Record<string, unknown> | null> {
   if (stored === null) {
     return null;
   }
-  const blob = stored[STORAGE_KEYS.SETTINGS];
-  const byKey: Record<string, unknown> = {};
+  const blobEntry = stored[STORAGE_KEYS.SETTINGS];
+  let blob: unknown;
+  if (blobEntry?.readable === true) {
+    blob = blobEntry.value;
+  }
+  const values: Record<string, unknown> = {};
+  const unreadable: string[] = [];
   for (const key of SETTINGS_KEYS) {
-    const value = stored[settingsStorageKey(key)];
-    if (value === undefined) {
-      byKey[key] = legacySettingsField(blob, key);
+    const entry = stored[settingsStorageKey(key)];
+    if (entry === undefined) {
+      values[key] = legacySettingsField(blob, key);
+    } else if (entry.readable) {
+      values[key] = entry.value;
     } else {
-      byKey[key] = value;
+      unreadable.push(key);
     }
   }
-  return byKey;
+  return { values, unreadable };
 }
 
 /**
@@ -516,9 +541,16 @@ async function readSettingsEntries(): Promise<Record<string, unknown> | null> {
 export async function getSettingsOrNull(): Promise<Settings | null> {
   const entries = await readSettingsEntries();
   if (entries === null) {
+    logger.error('Could not read the stored settings; refusing to answer with defaults');
     return null;
   }
-  return { ...DEFAULT_SETTINGS, ...keepReadableSettingsFields(entries) };
+  if (entries.unreadable.length > 0) {
+    // Names only — a setting's value can be a goal id or a playlist the user picked.
+    logger.error('Defaulting settings fields that are stored but unreadable', {
+      fields: entries.unreadable,
+    });
+  }
+  return { ...DEFAULT_SETTINGS, ...keepReadableSettingsFields(entries.values) };
 }
 
 export async function getSettings(): Promise<Settings> {
@@ -592,7 +624,15 @@ export async function clearSettings(): Promise<boolean> {
   // Migrate then delete the blob: the migration reads an absent per-key entry as a gap to fill,
   // so a surviving blob would restore every cleared value on the next read.
   await ensureSettingsMigrated();
-  return removeManyFromStorage([...SETTINGS_STORAGE_KEYS, STORAGE_KEYS.SETTINGS], 'local');
+  // Enumerated, not derived from DEFAULT_SETTINGS: the migration carries unknown keys across and
+  // sync writes whatever a newer peer sends, so a build-time list leaves them to resurface.
+  const stored = await listStorageKeys(SETTINGS_KEY_PREFIX, 'local');
+  if (stored === null) {
+    logger.error('Could not list the stored settings keys; nothing was reset');
+    return false;
+  }
+  const toRemove = new Set([...SETTINGS_STORAGE_KEYS, ...stored, STORAGE_KEYS.SETTINGS]);
+  return removeManyFromStorage([...toRemove], 'local');
 }
 
 /**
@@ -622,7 +662,10 @@ export async function migrateLegacySettings(): Promise<boolean> {
   const discarded: string[] = [];
   for (const [key, value] of Object.entries(blob)) {
     const storageKey = settingsStorageKey(key);
-    if (existing[storageKey] !== undefined) {
+    // An unreadable entry is filled too: its bytes are garbage no read can use, so the blob's
+    // value — about to be deleted — is strictly better than leaving it.
+    const entry = existing[storageKey];
+    if (entry?.readable === true) {
       continue;
     }
     const fieldSchema = settingsFieldSchema(key);
@@ -711,15 +754,15 @@ async function getListRaw<T>(key: string, area: StorageArea): Promise<T[]> {
   if (stored === null) {
     throw new Error(`Could not read the stored ${key} list`);
   }
-  if (!Object.hasOwn(stored, key)) {
+  const entry = stored[key];
+  if (entry === undefined) {
     return [];
   }
-  const raw = stored[key];
-  if (!Array.isArray(raw)) {
-    logger.error('Refusing to read a stored list that is not an array', { key, area });
+  if (!entry.readable || !Array.isArray(entry.value)) {
+    logger.error('Refusing to read a stored list this build cannot use', { key, area });
     throw new Error(`The stored ${key} list is unreadable`);
   }
-  return raw as T[];
+  return entry.value as T[];
 }
 
 export async function getGoalsRaw(): Promise<Goal[]> {
@@ -741,8 +784,16 @@ export async function getSettingsForSync(): Promise<Settings> {
     // Our defaults would win LWW over the value every peer actually chose.
     throw new Error('Could not read the settings to push: the settings read failed');
   }
+  if (entries.unreadable.length > 0) {
+    logger.error('Refusing to push settings with unreadable fields', {
+      fields: entries.unreadable,
+    });
+    throw new Error(
+      `Could not read the settings to push: ${entries.unreadable.join(', ')} unreadable`
+    );
+  }
   const present = Object.fromEntries(
-    Object.entries(entries).filter(([, value]) => value !== undefined)
+    Object.entries(entries.values).filter(([, value]) => value !== undefined)
   );
   return { ...DEFAULT_SETTINGS, ...present } as Settings;
 }
@@ -855,36 +906,39 @@ export async function migrateStorageData(
   toArea: 'local' | 'sync'
 ): Promise<StorageResult> {
   try {
-    // Raw: a validated read turns an unreadable blob into `[]`, which the unconditional
-    // writes below would then copy over live data in the destination area.
-    const customQuotes =
-      (await getFromStorage<Quote[]>(STORAGE_KEYS.CUSTOM_QUOTES, fromArea)) ?? [];
-    const currentQuote = await getFromStorage<Quote>(STORAGE_KEYS.CURRENT_QUOTE, fromArea);
-    const goals = (await getFromStorage<Goal[]>(STORAGE_KEYS.GOALS, fromArea)) ?? [];
-    const reminders = (await getFromStorage<Reminder[]>(STORAGE_KEYS.REMINDERS, fromArea)) ?? [];
-    const sessions =
-      (await getFromStorage<PomodoroSession[]>(STORAGE_KEYS.POMODORO_SESSIONS, fromArea)) ?? [];
-    const collections =
-      (await getFromStorage<QuoteCollection[]>(STORAGE_KEYS.COLLECTIONS, fromArea)) ?? [];
-    const quickLinks =
-      (await getFromStorage<QuickLink[]>(STORAGE_KEYS.QUICK_LINKS, fromArea)) ?? [];
-    const conceptCards =
-      (await getFromStorage<ConceptCard[]>(STORAGE_KEYS.CONCEPT_CARDS, fromArea)) ?? [];
-
-    // Copy data to destination storage area
     // Note: Seed quotes are not migrated (always in local storage)
-    const results: StorageResult[] = [];
-
-    results.push(await setInStorage(STORAGE_KEYS.CUSTOM_QUOTES, customQuotes, toArea));
-    if (currentQuote) {
-      results.push(await setInStorage(STORAGE_KEYS.CURRENT_QUOTE, currentQuote, toArea));
+    const keys = [
+      STORAGE_KEYS.CUSTOM_QUOTES,
+      STORAGE_KEYS.CURRENT_QUOTE,
+      STORAGE_KEYS.GOALS,
+      STORAGE_KEYS.REMINDERS,
+      STORAGE_KEYS.POMODORO_SESSIONS,
+      STORAGE_KEYS.COLLECTIONS,
+      STORAGE_KEYS.QUICK_LINKS,
+      STORAGE_KEYS.CONCEPT_CARDS,
+    ];
+    // One batch read, so "the source holds nothing here" is told apart from "the source could not
+    // be read" — the second answered as the first copies emptiness over the destination.
+    const source = await getManyFromStorage(keys, fromArea);
+    if (source === null) {
+      logger.error(`Could not read the ${fromArea} area; nothing was migrated`);
+      return storageFailure(`Could not read the ${fromArea} storage area`);
     }
-    results.push(await setInStorage(STORAGE_KEYS.GOALS, goals, toArea));
-    results.push(await setInStorage(STORAGE_KEYS.REMINDERS, reminders, toArea));
-    results.push(await setInStorage(STORAGE_KEYS.POMODORO_SESSIONS, sessions, toArea));
-    results.push(await setInStorage(STORAGE_KEYS.COLLECTIONS, collections, toArea));
-    results.push(await setInStorage(STORAGE_KEYS.QUICK_LINKS, quickLinks, toArea));
-    results.push(await setInStorage(STORAGE_KEYS.CONCEPT_CARDS, conceptCards, toArea));
+    const unreadable = keys.filter((key) => source[key]?.readable === false);
+    if (unreadable.length > 0) {
+      logger.error(`Refusing to migrate unreadable ${fromArea} data`, { keys: unreadable });
+      return storageFailure(`Unreadable data in the ${fromArea} storage area: ${unreadable[0]}`);
+    }
+
+    // Only what the source actually holds: a key it never wrote has nothing to copy, and
+    // writing `[]` for it would delete whatever the destination still has.
+    const results: StorageResult[] = [];
+    for (const key of keys) {
+      const entry = source[key];
+      if (entry?.readable === true) {
+        results.push(await setInStorage(key, entry.value, toArea));
+      }
+    }
 
     // Check if any operation failed
     const failedResult = results.find((r) => !r.success);
@@ -892,10 +946,7 @@ export async function migrateStorageData(
       return failedResult;
     }
 
-    logger.info(`Successfully migrated data from ${fromArea} to ${toArea}`);
-    logger.info(
-      `Migrated ${customQuotes.length} custom quotes (seed quotes remain in local storage)`
-    );
+    logger.info(`Successfully migrated ${results.length} keys from ${fromArea} to ${toArea}`);
     return { success: true };
   } catch (error) {
     logger.error(`Error migrating data from ${fromArea} to ${toArea}`, error);

@@ -1,4 +1,4 @@
-import { logger } from '@cuewise/shared';
+import { logger, readableOnly } from '@cuewise/shared';
 import type { MockChromeStorage } from '@cuewise/test-utils/mocks';
 import { describe, expect, it, vi } from 'vitest';
 import { ChromeKeyValueStore } from './chrome-key-value-store';
@@ -105,7 +105,7 @@ describe('ChromeKeyValueStore with chrome.storage available', () => {
 
     const result = await store.getMany(['a', 'b', 'c'], 'local');
 
-    expect(result).toEqual({ a: 1, c: 3 });
+    expect(readableOnly(result ?? {})).toEqual({ a: 1, c: 3 });
     expect(Object.keys(result ?? {})).not.toContain('b');
   });
 
@@ -117,7 +117,7 @@ describe('ChromeKeyValueStore with chrome.storage available', () => {
 
     const result = await store.getMany(['nulled', 'missing'], 'local');
 
-    expect(result).toEqual({ nulled: null });
+    expect(readableOnly(result ?? {})).toEqual({ nulled: null });
     expect(Object.keys(result ?? {})).toEqual(['nulled']);
   });
 

@@ -4,7 +4,10 @@ import {
   type StorageArea,
   type StorageResult,
   type StorageUsage,
+  type StoredValues,
   storageFailure,
+  storedValue,
+  UNREADABLE_VALUE,
 } from '@cuewise/shared';
 
 const LOCALSTORAGE_QUOTA_BYTES = 5242880; // 5MB (dev fallback estimate)
@@ -41,6 +44,12 @@ export class LocalStorageKeyValueStore implements KeyValueStore {
   }
 
   async set<T>(key: string, value: T, area: StorageArea): Promise<StorageResult> {
+    // JSON.stringify(undefined) is undefined, which localStorage keeps as the string "undefined" —
+    // unparseable for every later read, and reported as a successful write.
+    if (value === undefined) {
+      logger.error(`Refused to store an undefined value for ${key} in ${area} storage`);
+      return storageFailure(`Cannot store an undefined value for ${key}`);
+    }
     try {
       localStorage.setItem(key, JSON.stringify(value));
       return { success: true };
@@ -89,10 +98,9 @@ export class LocalStorageKeyValueStore implements KeyValueStore {
   // sparse settings layout reads an omitted key as "never written, follow the default".
   //
   // A value that will not parse is not a failed read: it costs its own key, never the batch, so
-  // one corrupt entry cannot reset every setting. It stays an OWN key holding `undefined`, so
-  // `!== undefined` readers see "no value" while `Object.hasOwn` can still tell it from absent.
-  async getMany(keys: string[], area: StorageArea): Promise<Record<string, unknown> | null> {
-    const result: Record<string, unknown> = {};
+  // one corrupt entry cannot reset every setting.
+  async getMany(keys: string[], area: StorageArea): Promise<StoredValues | null> {
+    const result: StoredValues = {};
     for (const key of keys) {
       let item: string | null;
       try {
@@ -105,13 +113,29 @@ export class LocalStorageKeyValueStore implements KeyValueStore {
         continue;
       }
       try {
-        result[key] = JSON.parse(item);
+        result[key] = storedValue(JSON.parse(item));
       } catch (error) {
-        logger.error(`Ignoring an unreadable stored value for ${key} in ${area} storage`, error);
-        result[key] = undefined;
+        logger.error(`Found an unreadable stored value for ${key} in ${area} storage`, error);
+        result[key] = UNREADABLE_VALUE;
       }
     }
     return result;
+  }
+
+  async keys(prefix: string, area: StorageArea): Promise<string[] | null> {
+    try {
+      const found: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key?.startsWith(prefix)) {
+          found.push(key);
+        }
+      }
+      return found;
+    } catch (error) {
+      logger.error(`Error listing ${area} storage keys`, { prefix, error });
+      return null;
+    }
   }
 
   // Not atomic: a mid-loop quota failure leaves earlier keys in this call already written.

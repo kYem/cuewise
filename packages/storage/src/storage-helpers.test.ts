@@ -3,11 +3,15 @@ import {
   DEFAULT_SETTINGS,
   type KeyValueStore,
   logger,
+  readableOnly,
   type Settings,
   STORAGE_KEYS,
   type StorageArea,
   type StorageUsage,
+  type StoredValues,
   type SyncMutationSink,
+  storedValue,
+  UNREADABLE_VALUE,
 } from '@cuewise/shared';
 import { goalFactory } from '@cuewise/test-utils/factories';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -53,6 +57,7 @@ function fakeStore(usage: StorageUsage): KeyValueStore {
     set: async () => ({ success: true }),
     remove: async () => true,
     getMany: async () => ({}),
+    keys: async () => [],
     setMany: async () => ({ success: true }),
     removeMany: async () => true,
     getUsage: async () => usage,
@@ -101,14 +106,16 @@ function recordingStore(initial: Partial<Record<StorageArea, Record<string, unkn
       return true;
     },
     getMany: async (keys: string[], area: StorageArea) => {
-      const result: Record<string, unknown> = {};
+      const result: StoredValues = {};
       for (const key of keys) {
         if (key in areas[area]) {
-          result[key] = areas[area][key];
+          result[key] = storedValue(areas[area][key]);
         }
       }
       return result;
     },
+    keys: async (prefix: string, area: StorageArea) =>
+      Object.keys(areas[area]).filter((key) => key.startsWith(prefix)),
     setMany: async (entries: Record<string, unknown>, area: StorageArea) => {
       Object.assign(areas[area], entries);
       return { success: true };
@@ -199,7 +206,9 @@ describe('settings', () => {
 
     await setSettingsPatch({ showClock: true, theme: 'dark' });
 
-    const stored = await getManyFromStorage(SETTINGS_KEYS.map(settingsStorageKey));
+    const stored = readableOnly(
+      (await getManyFromStorage(SETTINGS_KEYS.map(settingsStorageKey))) ?? {}
+    );
 
     expect(Object.keys(stored ?? {}).sort()).toEqual(
       ['settings.showClock', 'settings.theme'].sort()
@@ -349,7 +358,9 @@ describe('migrateLegacySettings', () => {
 
     await migrateLegacySettings();
 
-    const stored = await getManyFromStorage(SETTINGS_KEYS.map(settingsStorageKey));
+    const stored = readableOnly(
+      (await getManyFromStorage(SETTINGS_KEYS.map(settingsStorageKey))) ?? {}
+    );
     expect(stored).toEqual({ 'settings.theme': 'dark' });
   });
 
@@ -408,7 +419,9 @@ describe('migrateLegacySettings', () => {
   it('does nothing when there is no legacy blob', async () => {
     await migrateLegacySettings();
 
-    const stored = await getManyFromStorage(SETTINGS_KEYS.map(settingsStorageKey));
+    const stored = readableOnly(
+      (await getManyFromStorage(SETTINGS_KEYS.map(settingsStorageKey))) ?? {}
+    );
     expect(stored).toEqual({});
   });
 
@@ -431,7 +444,9 @@ describe('migrateLegacySettings', () => {
 
     await migrateLegacySettings();
 
-    const stored = await getManyFromStorage(SETTINGS_KEYS.map(settingsStorageKey));
+    const stored = readableOnly(
+      (await getManyFromStorage(SETTINGS_KEYS.map(settingsStorageKey))) ?? {}
+    );
     expect(stored).toEqual({ 'settings.quoteFilterActiveCollectionIds': ['c1'] });
   });
 
@@ -452,7 +467,9 @@ describe('migrateLegacySettings', () => {
     await migrateLegacySettings();
 
     await expect(getSettings()).resolves.toMatchObject({ theme: 'dark' });
-    expect(await getManyFromStorage([settingsStorageKey('constructor')])).toEqual({
+    expect(
+      readableOnly((await getManyFromStorage([settingsStorageKey('constructor')])) ?? {})
+    ).toEqual({
       [settingsStorageKey('constructor')]: 'from-a-newer-build',
     });
   });
@@ -761,5 +778,126 @@ describe('one unreadable settings entry on the localStorage backend', () => {
     });
     await expect(getStorageUsage()).resolves.toMatchObject({ available: true });
     localStorage.clear();
+  });
+
+  // End to end through the real adapter: a corrupt `syncEnabled` answered as "never written"
+  // routes a sync user to the local area, where the cycle reads their data as empty and seals
+  // a tombstone for every entity on every other device.
+  it('refuses the storage area when syncEnabled itself is the corrupt entry', async () => {
+    localStorage.clear();
+    configurePlatform({ storage: new LocalStorageKeyValueStore() });
+    localStorage.setItem(settingsStorageKey('syncEnabled'), '{not json');
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await expect(getGoals()).rejects.toThrow(/storage area/i);
+    localStorage.clear();
+  });
+});
+
+// Stored-but-unreadable is not "never written". Answering it as absence is what makes a caller
+// default `syncEnabled` to false, read a sync user's data as empty, and push our defaults out.
+describe('a settings value that is stored but unreadable', () => {
+  function unreadableSettingsKey(
+    key: string,
+    initial: Partial<Record<StorageArea, Record<string, unknown>>> = {}
+  ): KeyValueStore {
+    const { store } = recordingStore(initial);
+    return {
+      ...store,
+      getMany: async (keys: string[], area: StorageArea) => {
+        const seen = await store.getMany(keys, area);
+        if (seen !== null && keys.includes(key)) {
+          seen[key] = UNREADABLE_VALUE;
+        }
+        return seen;
+      },
+    };
+  }
+
+  it('leaves the storage area unanswered rather than guessing local', async () => {
+    configurePlatform({
+      storage: unreadableSettingsKey(settingsStorageKey('syncEnabled'), {
+        sync: { [STORAGE_KEYS.GOALS]: goalFactory.buildList(2) },
+      }),
+    });
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await expect(getGoals()).rejects.toThrow(/storage area/i);
+  });
+
+  it('refuses to push settings with an unreadable field', async () => {
+    configurePlatform({ storage: unreadableSettingsKey(settingsStorageKey('theme')) });
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await expect(getSettingsForSync()).rejects.toThrow(/unreadable/i);
+  });
+
+  // Display is the one place defaulting is right: the rest of the screen must still render.
+  it('getSettings defaults that field alone', async () => {
+    configurePlatform({
+      storage: unreadableSettingsKey(settingsStorageKey('theme'), {
+        local: { [settingsStorageKey('colorTheme')]: 'forest' },
+      }),
+    });
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await expect(getSettings()).resolves.toMatchObject({
+      theme: DEFAULT_SETTINGS.theme,
+      colorTheme: 'forest',
+    });
+  });
+
+  it('names the field it defaulted', async () => {
+    configurePlatform({ storage: unreadableSettingsKey(settingsStorageKey('theme')) });
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await getSettings();
+
+    expect(error).toHaveBeenCalledWith(expect.stringContaining('unreadable'), {
+      fields: ['theme'],
+    });
+  });
+});
+
+describe('getSettingsOrNull', () => {
+  it('says so when the read failed, rather than leaving no trace at all', async () => {
+    const { store } = recordingStore();
+    configurePlatform({ storage: { ...store, getMany: async () => null } });
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await expect(getSettingsOrNull()).resolves.toBeNull();
+
+    expect(error).toHaveBeenCalledWith(expect.stringContaining('Could not read'));
+  });
+});
+
+// Reset has to reach a key this build cannot name: the migration carries unknown keys across and
+// sync writes whatever a newer peer sends, so a build-time list leaves them to resurface.
+describe('clearSettings', () => {
+  it('removes a settings key this build does not know about', async () => {
+    const { store, areas } = recordingStore({
+      local: {
+        [settingsStorageKey('theme')]: 'dark',
+        [settingsStorageKey('fromANewerBuild')]: 'kept forever',
+      },
+    });
+    configurePlatform({ storage: store });
+
+    await expect(clearSettings()).resolves.toBe(true);
+
+    expect(areas.local[settingsStorageKey('fromANewerBuild')]).toBeUndefined();
+    expect(areas.local[settingsStorageKey('theme')]).toBeUndefined();
+  });
+
+  it('reports failure instead of claiming a reset it could not enumerate', async () => {
+    const { store, areas } = recordingStore({
+      local: { [settingsStorageKey('theme')]: 'dark' },
+    });
+    configurePlatform({ storage: { ...store, keys: async () => null } });
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await expect(clearSettings()).resolves.toBe(false);
+
+    expect(areas.local[settingsStorageKey('theme')]).toBe('dark');
   });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { FakeKvStore } from './__fixtures__/fake-kv-store';
-import { SyncMetadataStore } from './metadata-store';
+import { SYNC_META_KEY, SyncMetadataStore } from './metadata-store';
 
 describe('SyncMetadataStore', () => {
   it('first load mints a stable deviceNode and default meta', async () => {
@@ -38,5 +38,28 @@ describe('SyncMetadataStore', () => {
 
   it('entityKey composes collection and id', () => {
     expect(SyncMetadataStore.entityKey('goals', 'g1')).toBe('goals/g1');
+  });
+
+  // A blank default saved over the real ledger orphans every pending local edit, and the
+  // cleared HLCs then hand every entity to the remote on the next pull.
+  it('refuses a read it could not make rather than starting as a fresh device', async () => {
+    const kv = new FakeKvStore();
+    const store = new SyncMetadataStore(kv);
+    const first = await store.load();
+    first.dirty = { goals: ['g1'] };
+    await store.save(first);
+    kv.failGetManyForKey = SYNC_META_KEY;
+
+    await expect(store.load()).rejects.toThrow(/sync metadata/i);
+
+    kv.failGetManyForKey = null;
+    expect((await store.load()).dirty).toEqual({ goals: ['g1'] });
+  });
+
+  it('refuses a stored ledger it cannot read', async () => {
+    const kv = new FakeKvStore();
+    kv.unreadableKey = SYNC_META_KEY;
+
+    await expect(new SyncMetadataStore(kv).load()).rejects.toThrow(/unreadable/i);
   });
 });

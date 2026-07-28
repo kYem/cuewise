@@ -28,10 +28,22 @@ export function defaultMeta(deviceNode: string): SyncMeta {
 export class SyncMetadataStore {
   constructor(private readonly store: KeyValueStore) {}
 
+  /**
+   * Refuses rather than starting fresh when the ledger cannot be read: a blank default would be
+   * saved over the real one, orphaning every pending local edit and making `localHlc === undefined`
+   * hand the next pull to the remote for every entity.
+   */
   async load(): Promise<SyncMeta> {
-    const existing = await this.store.get<SyncMeta>(SYNC_META_KEY, 'local');
-    if (existing !== null) {
-      return existing;
+    const stored = await this.store.getMany([SYNC_META_KEY], 'local');
+    if (stored === null) {
+      throw new Error('Could not read the sync metadata');
+    }
+    const entry = stored[SYNC_META_KEY];
+    if (entry !== undefined) {
+      if (!entry.readable) {
+        throw new Error('The stored sync metadata is unreadable');
+      }
+      return entry.value as SyncMeta;
     }
     const meta = defaultMeta(crypto.randomUUID());
     await this.save(meta);

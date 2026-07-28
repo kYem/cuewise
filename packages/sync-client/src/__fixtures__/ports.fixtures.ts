@@ -1,4 +1,11 @@
-import type { KeyValueStore, Scheduler, StorageArea, StorageUsage } from '@cuewise/shared';
+import {
+  type KeyValueStore,
+  type Scheduler,
+  type StorageArea,
+  type StorageUsage,
+  type StoredValues,
+  storedValue,
+} from '@cuewise/shared';
 
 /** Map-backed KeyValueStore for tests; `set` succeeds unless `failWrites` is set. */
 export function createInMemoryKeyValueStore(
@@ -29,15 +36,21 @@ export function createInMemoryKeyValueStore(
     async remove(key: string, area: StorageArea): Promise<boolean> {
       return data.delete(`${area}:${key}`);
     },
-    async getMany(keys: string[], area: StorageArea): Promise<Record<string, unknown>> {
-      const result: Record<string, unknown> = {};
+    async getMany(keys: string[], area: StorageArea): Promise<StoredValues> {
+      const result: StoredValues = {};
       for (const key of keys) {
         const value = data.get(`${area}:${key}`);
         if (value !== undefined) {
-          result[key] = value;
+          result[key] = storedValue(value);
         }
       }
       return result;
+    },
+    async keys(prefix: string, area: StorageArea): Promise<string[]> {
+      return [...data.keys()]
+        .filter((key) => key.startsWith(`${area}:`))
+        .map((key) => key.slice(area.length + 1))
+        .filter((key) => key.startsWith(prefix));
     },
     async setMany(entries: Record<string, unknown>, area: StorageArea) {
       if (opts.failWrites === true) {
