@@ -77,6 +77,8 @@ export class FakeApiClient implements EngineApiClient {
   rejectNextGetChangesWithNetworkError = false;
   /** One-shot: throws a 401 on the next getChanges (pull) call only, then clears itself. */
   rejectNextGetChangesWith401 = false;
+  /** One-shot: throws the resync_required 409 on the next getChanges, then clears itself. */
+  rejectNextGetChangesWithResync = false;
   readonly callOrder: string[] = [];
   /** The request from the most recent exchangeToken call, for asserting the sign-in provider. */
   lastExchangeRequest: ExchangeTokenRequest | null = null;
@@ -124,6 +126,10 @@ export class FakeApiClient implements EngineApiClient {
     if (this.rejectNextGetChangesWithNetworkError) {
       this.rejectNextGetChangesWithNetworkError = false;
       throw new ApiError('network_error', 0);
+    }
+    if (this.rejectNextGetChangesWithResync) {
+      this.rejectNextGetChangesWithResync = false;
+      throw new ApiError('resync_required', 409);
     }
     if (this.rejectNextGetChangesWith401) {
       this.rejectNextGetChangesWith401 = false;

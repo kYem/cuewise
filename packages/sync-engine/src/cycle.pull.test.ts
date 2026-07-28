@@ -223,16 +223,21 @@ describe('pullOnce', () => {
     expect(saved.cursor).toBe(PULL_PAGE);
   });
 
-  it('resets the cursor to 0 when the transport throws a resync_required 409', async () => {
+  // The whole pull is discarded, so the caller must not go on to report a completed sync.
+  it('resets the cursor to 0 and reports the pull as not made on a resync_required 409', async () => {
     const meta = await metaStore.load();
     meta.cursor = 42;
     await metaStore.save(meta);
     transport.getChangesError = new ApiError('resync_required', 409);
+    const logged = vi.spyOn(logger, 'error').mockImplementation(() => {});
 
-    await pullOnce(makeDeps());
+    await expect(pullOnce(makeDeps())).resolves.toBe(false);
 
     const saved = await metaStore.load();
     expect(saved.cursor).toBe(0);
+    expect(logged).toHaveBeenCalledWith(expect.stringContaining('refused the cursor'), {
+      cursor: 42,
+    });
   });
 
   it('propagates a non-resync ApiError from getChanges without resetting the cursor', async () => {
@@ -255,7 +260,7 @@ describe('pullOnce', () => {
     const rec = await sealRecord(dk, 'goals', 'g1', { entity: incomingGoal, hlc: NEWER_HLC }, 1);
     transport.pullRecords = [rec];
 
-    await expect(pullOnce(makeDeps())).resolves.toBeUndefined();
+    await expect(pullOnce(makeDeps())).resolves.toBe(true);
 
     const goals = await getGoals();
     expect(goals).toEqual([incomingGoal]);

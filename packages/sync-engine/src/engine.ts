@@ -245,8 +245,9 @@ export class SyncEngine {
       now: this.now,
       onQuarantine: this.deps.onQuarantine,
     };
+    let pulled: boolean;
     try {
-      await pullOnce(cycleDeps);
+      pulled = await pullOnce(cycleDeps);
       await pushOnce(cycleDeps);
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
@@ -255,7 +256,17 @@ export class SyncEngine {
       }
       throw err;
     }
+    // A refused cursor discards the whole pull, so "Last synced just now" would be a claim about
+    // remote state this device never saw. The next wake restarts from the beginning.
+    if (!pulled) {
+      return;
+    }
     await this.stampLastSynced();
+    // Clears a banner an earlier failed cycle left up, so a manual "Sync now" that worked does not
+    // stay red until the next wake. Only 'error' — an enroll in progress owns its own status.
+    if (this.status === 'error') {
+      this.setStatus('active');
+    }
   }
 
   /**
@@ -329,7 +340,8 @@ export class SyncEngine {
 
     this.dk = persisted.dk;
     this.keyId = persisted.keyId;
-    this.setStatus('active');
+    // 'active' only once the cycle has run — MV3 re-runs start() on every alarm wake, so
+    // announcing it first made an hour offline write twelve active/error pairs.
     await this.syncNowLoopSafe();
     await this.armPullLoopUnlessSignedOut();
   }
@@ -367,7 +379,8 @@ export class SyncEngine {
   private async syncNowLoopSafe(): Promise<void> {
     try {
       await this.syncNow();
-      if (this.status === 'error') {
+      // Not over a signed-out: syncNow ran handleAuthLoss and the session is gone, not in step.
+      if (this.status !== 'signed_out') {
         this.setStatus('active');
       }
     } catch (err) {
@@ -388,7 +401,12 @@ export class SyncEngine {
     await armSyncPull(this.deps.scheduler, PULL_REARM_MINUTES, this.now);
   }
 
+  // Unchanged is not a transition: onStatus persists and repaints, and every alarm wake re-runs
+  // start(), so an offline stretch would otherwise write one pair per wake and flicker open tabs.
   private setStatus(status: SyncStatus): void {
+    if (this.status === status) {
+      return;
+    }
     this.status = status;
     this.deps.onStatus?.(status);
   }

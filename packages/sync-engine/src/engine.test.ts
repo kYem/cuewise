@@ -159,6 +159,22 @@ describe('SyncEngine.enableSync', () => {
     expect(device.engine.getLastSyncedAt()).toBe(5_000);
   });
 
+  // The server refused the cursor, so nothing was applied and the next wake refetches everything.
+  it('refuses to stamp a pull the server discarded', async () => {
+    let t = 5_000;
+    const server = new FakeSyncServer();
+    const device = createDevice(server, { now: () => t });
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    t = 9_000;
+    device.apiClient.rejectNextGetChangesWithResync = true;
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    await device.engine.syncNow();
+
+    expect(device.engine.getLastSyncedAt()).toBe(5_000);
+  });
+
   it('refuses to stamp a cycle whose pulled write could not land', async () => {
     const server = new FakeSyncServer();
     const device = createDevice(server, { now: () => 5_000 });
@@ -478,6 +494,23 @@ describe('SyncEngine.syncNow', () => {
 
     expect(device.apiClient.callOrder).toEqual([]);
   });
+
+  // Only syncNowLoopSafe used to clear it, so a manual "Sync now" that worked left the panel
+  // red until the next scheduled wake — as much as a full pull interval away.
+  it('clears an error status left by an earlier failed cycle', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    device.apiClient.rejectNextGetChangesWithNetworkError = true;
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    await device.engine.handlePullWake();
+    expect(device.engine.getStatus()).toBe('error');
+
+    await device.engine.syncNow();
+
+    expect(device.engine.getStatus()).toBe('active');
+  });
 });
 
 describe('SyncEngine.disableSync', () => {
@@ -552,6 +585,31 @@ describe('SyncEngine.start / stop', () => {
 
     expect(restarted.getStatus()).toBe('error');
     expect(restartedScheduler.scheduled.some((s) => s.id === SYNC_PULL_WAKE_ID)).toBe(true);
+  });
+
+  // MV3 re-runs start() on every alarm wake, so announcing 'active' before the cycle wrote an
+  // active/error pair per wake — twelve an hour, each one repainting an open Settings tab.
+  it('does not announce active and then error on each start of an offline device', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    const onStatus = vi.fn();
+    const offline = new SyncEngine({
+      apiClient: device.apiClient,
+      sessionManager: new SessionManager(device.kv),
+      keyStore: device.kv,
+      scheduler: new FakeScheduler(),
+      onStatus,
+    });
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    device.apiClient.rejectNextGetChangesWithNetworkError = true;
+    await offline.start();
+    device.apiClient.rejectNextGetChangesWithNetworkError = true;
+    await offline.start();
+
+    expect(onStatus.mock.calls.flat()).toEqual(['error']);
   });
 
   it('stop cancels the armed pull wake', async () => {

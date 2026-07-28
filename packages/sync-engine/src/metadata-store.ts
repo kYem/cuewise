@@ -1,4 +1,4 @@
-import { hlcEncode, hlcInit, type KeyValueStore } from '@cuewise/shared';
+import { hlcEncode, hlcInit, type KeyValueStore, logger } from '@cuewise/shared';
 
 export const SYNC_META_KEY = 'syncMeta';
 
@@ -24,6 +24,28 @@ export function defaultMeta(deviceNode: string): SyncMeta {
   };
 }
 
+/**
+ * The union proves the bytes decoded, not that they decoded into a ledger: a stored `null` or a
+ * shape from another build is readable and would sail through the cast, then throw on first use.
+ */
+function isSyncMeta(value: unknown): value is SyncMeta {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+  const meta = value as Partial<SyncMeta>;
+  return (
+    typeof meta.deviceNode === 'string' &&
+    typeof meta.clock === 'string' &&
+    typeof meta.cursor === 'number' &&
+    typeof meta.dirty === 'object' &&
+    meta.dirty !== null &&
+    typeof meta.hlcs === 'object' &&
+    meta.hlcs !== null &&
+    Array.isArray(meta.tombstones) &&
+    Array.isArray(meta.quarantine)
+  );
+}
+
 /** The engine's private bookkeeping: dirty-set, per-entity HLCs, cursor, tombstones, quarantine. */
 export class SyncMetadataStore {
   constructor(private readonly store: KeyValueStore) {}
@@ -43,7 +65,12 @@ export class SyncMetadataStore {
       if (!entry.readable) {
         throw new Error('The stored sync metadata is unreadable');
       }
-      return entry.value as SyncMeta;
+      if (isSyncMeta(entry.value)) {
+        return entry.value;
+      }
+      logger.error('The stored sync metadata is not a ledger; starting a fresh one', {
+        key: SYNC_META_KEY,
+      });
     }
     const meta = defaultMeta(crypto.randomUUID());
     await this.save(meta);
