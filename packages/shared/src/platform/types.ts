@@ -98,6 +98,9 @@ export interface KeyValueStore {
   /**
    * Batch read; `null` when the read failed. Absent keys are omitted from a successful result —
    * absence is meaningful to callers, so a failure must never be reported as one.
+   *
+   * A key whose stored value is present but unreadable is an own key holding `undefined`: it has
+   * no value for `!== undefined` readers, yet `Object.hasOwn` still separates it from absent.
    */
   getMany(keys: string[], area: StorageArea): Promise<Record<string, unknown> | null>;
   /** Batch write. One backend call, so the named keys land together. */

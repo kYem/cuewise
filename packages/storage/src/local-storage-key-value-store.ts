@@ -86,21 +86,30 @@ export class LocalStorageKeyValueStore implements KeyValueStore {
   }
 
   // Absence is decided by the raw item, not by `get`: a key stored as `null` is present, and the
-  // sparse settings layout reads an omitted key as "never written, follow the default". A key
-  // that is there but unreadable fails the whole batch rather than posing as never written.
-  async getMany(keys: string[], _area: StorageArea): Promise<Record<string, unknown> | null> {
+  // sparse settings layout reads an omitted key as "never written, follow the default".
+  //
+  // A value that will not parse is not a failed read: it costs its own key, never the batch, so
+  // one corrupt entry cannot reset every setting. It stays an OWN key holding `undefined`, so
+  // `!== undefined` readers see "no value" while `Object.hasOwn` can still tell it from absent.
+  async getMany(keys: string[], area: StorageArea): Promise<Record<string, unknown> | null> {
     const result: Record<string, unknown> = {};
-    try {
-      for (const key of keys) {
-        const item = localStorage.getItem(key);
-        if (item === null) {
-          continue;
-        }
-        result[key] = JSON.parse(item);
+    for (const key of keys) {
+      let item: string | null;
+      try {
+        item = localStorage.getItem(key);
+      } catch (error) {
+        logger.error(`Error getting ${key} from ${area} storage`, error);
+        return null;
       }
-    } catch (error) {
-      logger.error('Error getting keys from storage', error);
-      return null;
+      if (item === null) {
+        continue;
+      }
+      try {
+        result[key] = JSON.parse(item);
+      } catch (error) {
+        logger.error(`Ignoring an unreadable stored value for ${key} in ${area} storage`, error);
+        result[key] = undefined;
+      }
     }
     return result;
   }

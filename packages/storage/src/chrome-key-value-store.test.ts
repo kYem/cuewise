@@ -1,5 +1,6 @@
+import { logger } from '@cuewise/shared';
 import type { MockChromeStorage } from '@cuewise/test-utils/mocks';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ChromeKeyValueStore } from './chrome-key-value-store';
 
 const store = new ChromeKeyValueStore();
@@ -127,6 +128,22 @@ describe('ChromeKeyValueStore with chrome.storage available', () => {
     local.get.mockRejectedValueOnce(new Error('storage unavailable'));
 
     await expect(store.getMany(['a'], 'local')).resolves.toBeNull();
+  });
+
+  // A batch read backs every settings read and the area routing itself, so the one log line
+  // it leaves has to say which keys and which area — otherwise the failure is untraceable.
+  it('getMany names the keys and the area it could not read', async () => {
+    const local = global.chrome.storage.local as unknown as MockChromeStorage;
+    local.get.mockRejectedValueOnce(new Error('storage unavailable'));
+    const logged = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await store.getMany(['settings.theme'], 'local');
+
+    expect(logged).toHaveBeenCalledWith(
+      expect.stringContaining('local'),
+      expect.objectContaining({ keys: ['settings.theme'] })
+    );
+    logged.mockRestore();
   });
 
   it('setMany writes every entry in one call', async () => {

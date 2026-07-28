@@ -59,7 +59,7 @@ export class ChromeKeyValueStore implements KeyValueStore {
       const values = await areaStore(area).get(keys);
       return values;
     } catch (error) {
-      logger.error('Error getting keys from storage', error);
+      logger.error(`Error getting keys from ${area} storage`, { keys, error });
       return null;
     }
   }
