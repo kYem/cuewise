@@ -113,6 +113,23 @@ describe('pushOnce', () => {
     expect(pushedIds).not.toContain('cloudSyncEnabled');
   });
 
+  // The read decides deleted:true for every dirty id, so an unreadable collection must stop the
+  // push rather than seal each of them as a tombstone for every other device.
+  it('pushes nothing and keeps dirty when the collection cannot be read', async () => {
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    const metaStore = new SyncMetadataStore(kv);
+    await seedDirty(metaStore, 'goals', ['g1']);
+    const deps = makeDeps(kv, transport);
+    kv.failGetManyForKey = 'goals';
+
+    await expect(pushOnce(deps)).rejects.toThrow();
+
+    expect(transport.pushedBatches).toEqual([]);
+    kv.failGetManyForKey = null;
+    const saved = await metaStore.load();
+    expect(saved.dirty.goals).toEqual(['g1']);
+  });
+
   it('leaves meta.dirty intact when pushChanges rejects', async () => {
     const g1 = goalFactory.build({ id: 'g1' });
     await setGoals([g1]);

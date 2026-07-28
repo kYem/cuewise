@@ -13,6 +13,8 @@ export class FakeKvStore implements KeyValueStore {
   failNextSet = false;
   /** While set, every write to exactly this key fails — for targeting one write among many. */
   failSetsForKey: string | null = null;
+  /** While set, a batch read naming exactly this key reports failure instead of absence. */
+  failGetManyForKey: string | null = null;
   private readonly data = new Map<string, unknown>();
 
   async get<T>(key: string, _area: StorageArea): Promise<T | null> {
@@ -40,7 +42,10 @@ export class FakeKvStore implements KeyValueStore {
     return { bytesInUse: 0, quota: 0 };
   }
 
-  async getMany(keys: string[], _area: StorageArea): Promise<Record<string, unknown>> {
+  async getMany(keys: string[], _area: StorageArea): Promise<Record<string, unknown> | null> {
+    if (this.failGetManyForKey !== null && keys.includes(this.failGetManyForKey)) {
+      return null;
+    }
     const result: Record<string, unknown> = {};
     for (const key of keys) {
       if (this.data.has(key)) {

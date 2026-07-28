@@ -149,6 +149,27 @@ describe('settings binding', () => {
   });
 });
 
+// An entity missing from readAll is what the cycle seals as a tombstone for every other device,
+// so "I could not read the list" must never arrive here as "the list is empty".
+describe('a collection the storage layer could not read', () => {
+  beforeEach(async () => {
+    const kv = new FakeKvStore();
+    configurePlatform({ storage: kv });
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    kv.failGetManyForKey = 'goals';
+  });
+
+  it('readAll refuses instead of reporting an empty collection', async () => {
+    await expect(goalsBinding().readAll()).rejects.toThrow();
+  });
+
+  it('writeOne fails instead of rewriting the list from what it could not see', async () => {
+    const result = await goalsBinding().writeOne('g2', goalFactory.build({ id: 'g2' }));
+
+    expect(result).toMatchObject({ success: false });
+  });
+});
+
 describe('defaultBindings', () => {
   it('returns a binding for each synced collection', () => {
     const names = defaultBindings().map((b) => b.name);
