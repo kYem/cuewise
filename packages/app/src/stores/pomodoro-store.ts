@@ -546,7 +546,9 @@ export const usePomodoroStore = create<PomodoroStore>()(
         } catch (error) {
           logger.error('Error completing pomodoro session', error);
           const errorMessage = 'Failed to save session. Please try again.';
-          set({ error: errorMessage });
+          // Paused, not left running: `tick` calls this whenever the time is up, so a running
+          // timer re-enters it every second — one toast a second, and the session never lands.
+          set({ error: errorMessage, status: 'paused', lastTickTime: null });
           useToastStore.getState().error(errorMessage);
         }
       },

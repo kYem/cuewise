@@ -9,7 +9,7 @@ import {
 import { cn, Select } from '@cuewise/ui';
 import { FileSpreadsheet, FolderOpen, Plus, Search } from 'lucide-react';
 import type React from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuoteSelection } from '../hooks/useQuoteSelection';
 import { useQuoteStore } from '../stores/quote-store';
 import { AddQuoteForm } from './AddQuoteForm';
@@ -131,11 +131,16 @@ export const QuoteManagementPage: React.FC = () => {
     clearSelection,
   } = useQuoteSelection({ quotes, filteredQuotes });
 
+  // Gated on "we have tried", not on the result: a failed initialize leaves quotes empty, and
+  // gating on emptiness re-fires this effect — and its error toast — forever.
+  const initializeAttempted = useRef(false);
   useEffect(() => {
-    if (quotes.length === 0 && !isLoading) {
-      initialize();
+    if (initializeAttempted.current || quotes.length > 0) {
+      return;
     }
-  }, [quotes.length, isLoading, initialize]);
+    initializeAttempted.current = true;
+    initialize();
+  }, [quotes.length, initialize]);
 
   // Get missing seed quote count
   const missingSeedQuoteCount = getMissingSeedQuoteCount();

@@ -25,9 +25,14 @@ export const useToastStore = create<ToastStore>((set) => ({
     const id = `toast-${Date.now()}-${Math.random()}`;
     const toast: Toast = { id, type, message, duration };
 
-    set((state) => ({
-      toasts: [...state.toasts, toast],
-    }));
+    set((state) => {
+      // A failure under an interval (quote refresh, reminder sweep) reports the same thing on
+      // every tick; stacking identical copies buries the rest of the screen without adding news.
+      if (state.toasts.some((t) => t.type === type && t.message === message)) {
+        return state;
+      }
+      return { toasts: [...state.toasts, toast] };
+    });
   },
 
   removeToast: (id: string) => {

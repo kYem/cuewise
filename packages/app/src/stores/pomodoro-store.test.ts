@@ -473,6 +473,29 @@ describe('Pomodoro Store - tick wall-clock reconciliation (#159)', () => {
     expect(usePomodoroStore.getState().timeRemaining).toBe(100);
   });
 
+  // tick() completes the session whenever the time is up, so a failure that leaves the timer
+  // running re-enters it a second later — one toast per second, forever, session never saved.
+  it('stops the timer when completing the session fails, instead of retrying every tick', async () => {
+    vi.mocked(storage.getSettings).mockRejectedValue(new Error('storage unavailable'));
+    usePomodoroStore.setState({
+      status: 'running',
+      sessionType: 'work',
+      currentSessionId: 'sess-1',
+      timeRemaining: 3,
+      totalTime: 25 * 60,
+      lastTickTime: Date.now() - 5000,
+    });
+
+    usePomodoroStore.getState().tick();
+    await vi.waitFor(() => expect(toastError).toHaveBeenCalledTimes(1));
+
+    expect(usePomodoroStore.getState().status).not.toBe('running');
+
+    usePomodoroStore.getState().tick();
+
+    expect(toastError).toHaveBeenCalledTimes(1);
+  });
+
   it('completes the session (never negative) when elapsed meets or exceeds what remains', async () => {
     usePomodoroStore.setState({
       status: 'running',
