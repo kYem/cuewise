@@ -1,4 +1,4 @@
-import { logger, readableOnly } from '@cuewise/shared';
+import { logger, toStoredValues, UNREADABLE_VALUE } from '@cuewise/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LocalStorageKeyValueStore } from './local-storage-key-value-store';
 
@@ -44,7 +44,7 @@ describe('LocalStorageKeyValueStore', () => {
 
     const result = await store.getMany(['a', 'b', 'c'], 'local');
 
-    expect(readableOnly(result ?? {})).toEqual({ a: 1, c: 3 });
+    expect(result).toEqual(toStoredValues({ a: 1, c: 3 }));
     expect(Object.keys(result ?? {})).not.toContain('b');
   });
 
@@ -56,7 +56,7 @@ describe('LocalStorageKeyValueStore', () => {
 
     const result = await store.getMany(['nulled', 'missing'], 'local');
 
-    expect(readableOnly(result ?? {})).toEqual({ nulled: null });
+    expect(result).toEqual(toStoredValues({ nulled: null }));
     expect(Object.keys(result ?? {})).toEqual(['nulled']);
   });
 
@@ -71,7 +71,7 @@ describe('LocalStorageKeyValueStore', () => {
 
     const result = await store.getMany(['a', 'corrupt', 'c'], 'local');
 
-    expect(readableOnly(result ?? {})).toEqual({ a: 1, c: 3 });
+    expect(result).toEqual({ ...toStoredValues({ a: 1, c: 3 }), corrupt: UNREADABLE_VALUE });
     expect(logged).toHaveBeenCalledWith(expect.stringContaining('corrupt'), expect.anything());
   });
 

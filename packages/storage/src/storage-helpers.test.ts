@@ -3,7 +3,6 @@ import {
   DEFAULT_SETTINGS,
   type KeyValueStore,
   logger,
-  readableOnly,
   type Settings,
   STORAGE_KEYS,
   type StorageArea,
@@ -11,6 +10,7 @@ import {
   type StoredValues,
   type SyncMutationSink,
   storedValue,
+  toStoredValues,
   UNREADABLE_VALUE,
 } from '@cuewise/shared';
 import { goalFactory } from '@cuewise/test-utils/factories';
@@ -206,13 +206,9 @@ describe('settings', () => {
 
     await setSettingsPatch({ showClock: true, theme: 'dark' });
 
-    const stored = readableOnly(
-      (await getManyFromStorage(SETTINGS_KEYS.map(settingsStorageKey))) ?? {}
-    );
+    const stored = (await getManyFromStorage(SETTINGS_KEYS.map(settingsStorageKey))) ?? {};
 
-    expect(Object.keys(stored ?? {}).sort()).toEqual(
-      ['settings.showClock', 'settings.theme'].sort()
-    );
+    expect(Object.keys(stored).sort()).toEqual(['settings.showClock', 'settings.theme'].sort());
   });
 
   it('a later patch leaves earlier keys untouched', async () => {
@@ -358,10 +354,8 @@ describe('migrateLegacySettings', () => {
 
     await migrateLegacySettings();
 
-    const stored = readableOnly(
-      (await getManyFromStorage(SETTINGS_KEYS.map(settingsStorageKey))) ?? {}
-    );
-    expect(stored).toEqual({ 'settings.theme': 'dark' });
+    const stored = await getManyFromStorage(SETTINGS_KEYS.map(settingsStorageKey));
+    expect(stored).toEqual(toStoredValues({ 'settings.theme': 'dark' }));
   });
 
   // Written through the store, not through setSettingsPatch: that path runs the whole migration
@@ -419,9 +413,7 @@ describe('migrateLegacySettings', () => {
   it('does nothing when there is no legacy blob', async () => {
     await migrateLegacySettings();
 
-    const stored = readableOnly(
-      (await getManyFromStorage(SETTINGS_KEYS.map(settingsStorageKey))) ?? {}
-    );
+    const stored = await getManyFromStorage(SETTINGS_KEYS.map(settingsStorageKey));
     expect(stored).toEqual({});
   });
 
@@ -444,10 +436,8 @@ describe('migrateLegacySettings', () => {
 
     await migrateLegacySettings();
 
-    const stored = readableOnly(
-      (await getManyFromStorage(SETTINGS_KEYS.map(settingsStorageKey))) ?? {}
-    );
-    expect(stored).toEqual({ 'settings.quoteFilterActiveCollectionIds': ['c1'] });
+    const stored = await getManyFromStorage(SETTINGS_KEYS.map(settingsStorageKey));
+    expect(stored).toEqual(toStoredValues({ 'settings.quoteFilterActiveCollectionIds': ['c1'] }));
   });
 
   // `readLegacySettingsBlob` conflates never-stored, wrong-shape and read-failure into null,
@@ -467,11 +457,9 @@ describe('migrateLegacySettings', () => {
     await migrateLegacySettings();
 
     await expect(getSettings()).resolves.toMatchObject({ theme: 'dark' });
-    expect(
-      readableOnly((await getManyFromStorage([settingsStorageKey('constructor')])) ?? {})
-    ).toEqual({
-      [settingsStorageKey('constructor')]: 'from-a-newer-build',
-    });
+    expect(await getManyFromStorage([settingsStorageKey('constructor')])).toEqual(
+      toStoredValues({ [settingsStorageKey('constructor')]: 'from-a-newer-build' })
+    );
   });
 
   // The one settings path that destroys rather than shadows — names only, never the values.

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  readableOnly,
+  type StoredValues,
   storedValue,
   toStoredValues,
   UNREADABLE_VALUE,
@@ -11,14 +11,13 @@ describe('batch read values', () => {
   it('omits absent keys and keeps a key stored as null', () => {
     const batch = toStoredValues({ nulled: null });
 
-    expect(readableOnly(batch)).toEqual({ nulled: null });
+    expect(batch).toEqual({ nulled: storedValue(null) });
     expect(batch.missing).toBeUndefined();
   });
 
-  it('names an unreadable key and leaves it out of the readable values', () => {
+  it('names an unreadable key', () => {
     const batch = { a: storedValue(1), corrupt: UNREADABLE_VALUE };
 
-    expect(readableOnly(batch)).toEqual({ a: 1 });
     expect(unreadableKeys(batch)).toEqual(['corrupt']);
   });
 
@@ -35,5 +34,17 @@ describe('batch read values', () => {
     expect(typeof syncEnabled).not.toBe('boolean');
     expect(Array.isArray(goals)).toBe(false);
     expect('value' in batch.goals).toBe(false);
+  });
+
+  // The other half of the guard: without `| undefined` on the value type, an index read is typed
+  // as always present and the two-arm `if (entry.readable) ... else absent` compiles clean.
+  it('refuses to compile a reader that indexes without narrowing absence', () => {
+    const batch: StoredValues = {};
+    const entry = batch['settings.autoRollDueTasks'];
+
+    // @ts-expect-error the absent arm has to be narrowed before `readable` is reachable
+    const naive = () => entry.readable;
+
+    expect(naive).toThrow(TypeError);
   });
 });

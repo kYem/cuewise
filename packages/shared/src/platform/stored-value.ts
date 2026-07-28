@@ -6,8 +6,12 @@
  */
 export type StoredValue = { readable: true; value: unknown } | { readable: false };
 
-/** Keys absent from the map were never written; that absence is meaningful to callers. */
-export type StoredValues = Record<string, StoredValue>;
+/**
+ * Keys absent from the map were never written; that absence is meaningful to callers. The value
+ * type carries `undefined` so an index read is never typed as total: a reader must narrow all
+ * three states — absent, unreadable, readable — before it can act on one.
+ */
+export type StoredValues = Record<string, StoredValue | undefined>;
 
 export const UNREADABLE_VALUE: StoredValue = { readable: false };
 
@@ -22,20 +26,9 @@ export function toStoredValues(values: Record<string, unknown>): StoredValues {
   );
 }
 
-/** The readable values alone. Only for callers that have handled the unreadable keys. */
-export function readableOnly(batch: StoredValues): Record<string, unknown> {
-  const values: Record<string, unknown> = {};
-  for (const [key, entry] of Object.entries(batch)) {
-    if (entry.readable) {
-      values[key] = entry.value;
-    }
-  }
-  return values;
-}
-
 /** The keys that are stored but unreadable, of those asked for. */
 export function unreadableKeys(batch: StoredValues): string[] {
   return Object.entries(batch)
-    .filter(([, entry]) => !entry.readable)
+    .filter(([, entry]) => entry !== undefined && !entry.readable)
     .map(([key]) => key);
 }

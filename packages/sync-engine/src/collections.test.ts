@@ -1,4 +1,4 @@
-import { configurePlatform, DEFAULT_SETTINGS, readableOnly } from '@cuewise/shared';
+import { configurePlatform, DEFAULT_SETTINGS, toStoredValues } from '@cuewise/shared';
 import {
   getGoals,
   getManyFromStorage,
@@ -97,11 +97,9 @@ describe('settings binding', () => {
   it('writeOne writes only its own key and leaves the others absent', async () => {
     await settingsBinding().writeOne('theme', { key: 'theme', value: 'dark' });
 
-    const stored = readableOnly(
-      (await getManyFromStorage(SETTINGS_KEYS.map(settingsStorageKey))) ?? {}
-    );
+    const stored = await getManyFromStorage(SETTINGS_KEYS.map(settingsStorageKey));
 
-    expect(stored).toEqual({ 'settings.theme': 'dark' });
+    expect(stored).toEqual(toStoredValues({ 'settings.theme': 'dark' }));
   });
 
   it('writeOne leaves every other setting on its default', async () => {
