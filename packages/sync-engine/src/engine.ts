@@ -293,8 +293,7 @@ export class SyncEngine {
       }
       return await this.deps.apiClient.getAccount();
     } catch (err) {
-      const detail = err instanceof Error ? err.message : String(err);
-      logger.warn(`Failed to fetch sync account details: ${detail}`);
+      logger.error('Failed to fetch sync account details', err);
       return null;
     }
   }
@@ -316,9 +315,7 @@ export class SyncEngine {
       await selfHealKeyBlob(this.keyDeps());
     } catch (err) {
       if (err instanceof SelfHealNeedsEnrollError || err instanceof SelfHealUnrecoverableError) {
-        logger.warn('Sync self-heal requires the recovery code; staying signed out', {
-          reason: err.name,
-        });
+        logger.error('Sync self-heal requires the recovery code; staying signed out', err);
         this.setStatus('signed_out');
         return;
       }
@@ -371,9 +368,9 @@ export class SyncEngine {
     try {
       await this.syncNow();
     } catch (err) {
-      logger.warn('Sync failed in the pull loop; the next scheduled wake will retry', {
-        code: err instanceof ApiError ? err.code : undefined,
-      });
+      // At error level with the error itself: the shipped default log level is 'error', and a
+      // fail-closed refusal (an unreadable collection) says why only in its own message.
+      logger.error('Sync failed in the pull loop; the next scheduled wake will retry', err);
     }
   }
 

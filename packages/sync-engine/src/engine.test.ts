@@ -5,7 +5,7 @@ import {
   RecoveryCodeError,
   unwrapDataKey,
 } from '@cuewise/crypto';
-import { configurePlatform } from '@cuewise/shared';
+import { configurePlatform, logger } from '@cuewise/shared';
 import { getGoals, setGoals } from '@cuewise/storage';
 import { SessionManager, SYNC_PULL_WAKE_ID } from '@cuewise/sync-client';
 import { goalFactory } from '@cuewise/test-utils/factories';
@@ -529,6 +529,22 @@ describe('SyncEngine.handlePullWake', () => {
     await device.engine.handlePullWake();
 
     expect(device.apiClient.callOrder).toEqual(['getChanges', 'pushChanges']);
+  });
+
+  // The shipped default log level is 'error', so a warn leaves a permanently wedged loop
+  // invisible — and the reason lives on the error, not on a code only ApiError carries.
+  it('logs the failure at error level, with the error itself', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    device.apiClient.rejectNextGetChangesWithNetworkError = true;
+    const logged = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await device.engine.handlePullWake();
+
+    expect(logged).toHaveBeenCalledWith(expect.stringContaining('pull loop'), expect.any(Error));
+    logged.mockRestore();
   });
 
   it('a 401 during the wake drops to signed_out and does not re-arm', async () => {
