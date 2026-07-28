@@ -39,14 +39,11 @@ const GoogleGlyph: React.FC = () => (
   </svg>
 );
 
-// Every status sync is still enabled for gets a pill; only off/needs_reauth render their own UI.
-// 'error' is included so the failure is stated where the controls that recover from it live —
-// without it the account line, "Last synced", "Sync now" and "Regenerate" all unmount.
+// Only the "on" statuses get a pill; off/needs_reauth/error render their own dedicated UI below.
 const STATUS_PILL_LABEL: Partial<Record<SyncUiStatus, string>> = {
   connecting: 'Connecting…',
   syncing: 'Syncing…',
   active: 'Active',
-  error: "Couldn't sync",
 };
 
 const DISABLE_MESSAGE = 'Re-enabling on this device will need your recovery code.';
@@ -83,15 +80,10 @@ function enableFailureMessage(result: Extract<EnableResult, { ok: false }>): str
 }
 
 function pillClass(status: SyncUiStatus): string {
-  const base =
-    'inline-flex w-fit items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium';
   if (status === 'active') {
-    return `${base} bg-success/15 text-success`;
+    return 'inline-flex w-fit items-center gap-1.5 rounded-full bg-success/15 px-2.5 py-1 text-xs font-medium text-success';
   }
-  if (status === 'error') {
-    return `${base} bg-error/15 text-error`;
-  }
-  return `${base} bg-surface-variant text-secondary`;
+  return 'inline-flex w-fit items-center gap-1.5 rounded-full bg-surface-variant px-2.5 py-1 text-xs font-medium text-secondary';
 }
 
 // Cloud Sync and legacy Chrome sync must never both replicate the same data, so activating Cloud
@@ -135,9 +127,8 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   const [confirmDisableOpen, setConfirmDisableOpen] = useState(false);
   const [unsavedCode, setUnsavedCode] = useState(false);
   // The error state's "Try again" retries the exact action that failed (enable / google /
-  // reconnect) — syncNow can't recover it and would falsely report success. Null means no enrol
-  // failed: the sync loop did, and offering re-enrolment to someone merely offline is wrong.
-  const [failedAction, setFailedAction] = useState<'enable' | 'google' | 'reconnect' | null>(null);
+  // reconnect) — syncNow can't recover it and would falsely report success.
+  const [failedAction, setFailedAction] = useState<'enable' | 'google' | 'reconnect'>('enable');
   // The macOS google flow can take minutes; if Settings closes meanwhile, a late recovery code
   // has no modal to render into — the ref routes it to a global toast instead of vanishing.
   const mountedRef = useRef(true);
@@ -160,9 +151,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     if (!controller || detailsRequestedRef.current) {
       return;
     }
-    // 'error' too: the panel keeps its account line and "Last synced" through a failed cycle, and
-    // a mount straight into error would otherwise have nothing to show them from.
-    if (status !== 'active' && status !== 'syncing' && status !== 'error') {
+    if (status !== 'active' && status !== 'syncing') {
       return;
     }
     detailsRequestedRef.current = true;
@@ -203,14 +192,6 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     setStatus(controller.getStatus());
     return controller.subscribe(setStatus);
   }, [controller]);
-
-  // failedAction describes the error on screen and nothing else: once it clears, a later error is
-  // the sync loop's until an enrol says otherwise. One site, so no success path can forget.
-  useEffect(() => {
-    if (status !== 'error') {
-      setFailedAction(null);
-    }
-  }, [status]);
 
   if (!controller) {
     return null;
@@ -396,12 +377,6 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   // (e.g. the UI mounted straight into a persisted error after a reload) fall back to reconnect,
   // which recovers from persisted creds. Google carries no account id, so it retries directly.
   const handleRetry = async () => {
-    // No enrol failed — the sync cycle did, so retry that rather than sending a user who was
-    // merely offline back through a full sign-in and a recovery-code prompt.
-    if (failedAction === null) {
-      await handleSyncNow();
-      return;
-    }
     if (failedAction === 'google') {
       await handleGoogleSignIn();
       return;
@@ -456,10 +431,6 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
 
   const switchChecked = status === 'off' ? enabling : true;
   const pillLabel = STATUS_PILL_LABEL[status];
-  const errorMessage =
-    failedAction === null
-      ? "Couldn't reach Cloud Sync — your data is safe on this device and will sync when it's back."
-      : 'Cloud Sync hit a problem — please try again.';
 
   // The enable step's sign-in-options div groups Google today; a "Sign in with Apple"
   // button drops in next to it later.
@@ -632,7 +603,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       {status === 'error' && (
         <SettingSubgroup>
           <div className="flex flex-col gap-2 py-2">
-            <p className="text-xs text-error">{errorMessage}</p>
+            <p className="text-xs text-error">Cloud Sync hit a problem — please try again.</p>
             <button
               type="button"
               onClick={handleRetry}
