@@ -44,36 +44,21 @@ interface DirtyRecord {
 /** Seals every dirty entity and pushes it in batches, clearing dirty/tombstones as each batch acks. */
 export async function pushOnce(deps: CycleDeps): Promise<void> {
   const meta = await deps.meta.load();
-  const { records, unsealable } = await buildDirtyRecords(deps, meta);
-  // Cleared, not left: without an HLC there is nothing to seal them with, so they would sit dirty
-  // for every cycle from here on. The next mutation re-adds them with one.
-  if (unsealable.length > 0) {
-    clearDirty(meta, unsealable);
-    await deps.meta.save(meta);
-  }
-  if (records.length === 0) {
+  const dirtyRecords = await buildDirtyRecords(deps, meta);
+  if (dirtyRecords.length === 0) {
     return;
   }
 
-  for (let start = 0; start < records.length; start += MAX_PUSH_BATCH) {
-    const batch = records.slice(start, start + MAX_PUSH_BATCH);
+  for (let start = 0; start < dirtyRecords.length; start += MAX_PUSH_BATCH) {
+    const batch = dirtyRecords.slice(start, start + MAX_PUSH_BATCH);
     await deps.transport.pushChanges(batch.map((item) => item.record));
-    clearDirty(meta, batch);
+    clearAcked(meta, batch);
     await deps.meta.save(meta);
   }
 }
 
-interface DirtyEntity {
-  collection: string;
-  entityId: string;
-}
-
-async function buildDirtyRecords(
-  deps: CycleDeps,
-  meta: SyncMeta
-): Promise<{ records: DirtyRecord[]; unsealable: DirtyEntity[] }> {
-  const records: DirtyRecord[] = [];
-  const unsealable: DirtyEntity[] = [];
+async function buildDirtyRecords(deps: CycleDeps, meta: SyncMeta): Promise<DirtyRecord[]> {
+  const dirtyRecords: DirtyRecord[] = [];
 
   for (const collection of Object.keys(meta.dirty)) {
     const binding = deps.bindings.find((b) => b.name === collection);
@@ -92,29 +77,21 @@ async function buildDirtyRecords(
       const key = SyncMetadataStore.entityKey(collection, entityId);
       const hlc = meta.hlcs[key];
       if (hlc === undefined) {
-        // At error level because the shipped default log level is 'error': this edit is not
-        // reaching the user's other devices, and nothing else says so.
-        logger.error('Dropping a dirty entity that has no HLC to seal it with', {
-          collection,
-          entityId,
-        });
-        unsealable.push({ collection, entityId });
         continue;
       }
 
       const entity = all[entityId] ?? null;
       const body: RecordBody = { entity, hlc };
       const record = await toPushRecord(deps.dk, deps.keyId, collection, entityId, body);
-      records.push({ collection, entityId, record });
+      dirtyRecords.push({ collection, entityId, record });
     }
   }
 
-  return { records, unsealable };
+  return dirtyRecords;
 }
 
-// Clears the ids from dirty (pruning empty collections) and resolves their tombstones — on ack,
-// and for an entity that can never be sealed.
-function clearDirty(meta: SyncMeta, batch: DirtyEntity[]): void {
+// Ack clears the pushed ids from dirty (pruning empty collections) and resolves their tombstones.
+function clearAcked(meta: SyncMeta, batch: DirtyRecord[]): void {
   for (const { collection, entityId } of batch) {
     const ids = meta.dirty[collection];
     if (ids === undefined) {
@@ -132,12 +109,8 @@ function clearDirty(meta: SyncMeta, batch: DirtyEntity[]): void {
   }
 }
 
-/**
- * Pulls remote changes in seq order, resolves each via the strategy, and applies the winners.
- * False when the server refused the cursor and the pull was discarded: nothing was applied, so
- * the caller must not report it as a completed sync.
- */
-export async function pullOnce(deps: CycleDeps): Promise<boolean> {
+/** Pulls remote changes in seq order, resolves each via the strategy, and applies the winners. */
+export async function pullOnce(deps: CycleDeps): Promise<void> {
   const meta = await deps.meta.load();
   // Once per collection per pull — a page of unknown records is one line, not N.
   const warnedUnknownCollections = new Set<string>();
@@ -149,14 +122,9 @@ export async function pullOnce(deps: CycleDeps): Promise<boolean> {
       result = await deps.transport.getChanges(meta.cursor);
     } catch (err) {
       if (err instanceof ApiError && err.status === 409 && err.code === 'resync_required') {
-        // At error level because the shipped default log level is 'error': this cycle applied
-        // nothing, and the next one refetches the whole history.
-        logger.error('The sync server refused the cursor; restarting the pull from the beginning', {
-          cursor: meta.cursor,
-        });
         meta.cursor = 0;
         await deps.meta.save(meta);
-        return false;
+        return;
       }
       throw err;
     }
@@ -176,7 +144,6 @@ export async function pullOnce(deps: CycleDeps): Promise<boolean> {
   }
 
   await deps.meta.save(meta);
-  return true;
 }
 
 /** Applies one pulled record to meta/storage. Returns false to signal "stop the cycle here". */

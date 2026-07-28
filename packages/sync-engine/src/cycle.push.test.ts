@@ -1,8 +1,8 @@
 import { generateDataKey } from '@cuewise/crypto';
-import { configurePlatform, hlcEncode, logger } from '@cuewise/shared';
+import { configurePlatform, hlcEncode } from '@cuewise/shared';
 import { setGoals } from '@cuewise/storage';
 import { goalFactory } from '@cuewise/test-utils/factories';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { FakeKvStore } from './__fixtures__/fake-kv-store';
 import { FakeTransport } from './__fixtures__/fake-transport';
 import { defaultBindings } from './collections';
@@ -142,25 +142,5 @@ describe('pushOnce', () => {
 
     const saved = await metaStore.load();
     expect(saved.dirty.goals).toEqual(['g1']);
-  });
-
-  // Without an HLC there is nothing to seal it with, so it can never push. Left in dirty it is
-  // retried and skipped by every cycle from here on, and nothing anywhere says why.
-  it('names a dirty entity with no hlc and drops it from dirty rather than skipping it forever', async () => {
-    await setGoals([goalFactory.build({ id: 'g1' })]);
-    const metaStore = new SyncMetadataStore(kv);
-    const meta = await metaStore.load();
-    meta.dirty.goals = ['g1'];
-    await metaStore.save(meta);
-    const logged = vi.spyOn(logger, 'error').mockImplementation(() => {});
-
-    await pushOnce(makeDeps(kv, transport));
-
-    expect(transport.pushedBatches).toEqual([]);
-    expect((await metaStore.load()).dirty.goals).toBeUndefined();
-    expect(logged).toHaveBeenCalledWith(expect.stringContaining('no HLC'), {
-      collection: 'goals',
-      entityId: 'g1',
-    });
   });
 });

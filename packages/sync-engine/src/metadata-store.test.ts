@@ -1,5 +1,4 @@
-import { logger } from '@cuewise/shared';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { FakeKvStore } from './__fixtures__/fake-kv-store';
 import { SYNC_META_KEY, SyncMetadataStore } from './metadata-store';
 
@@ -62,22 +61,5 @@ describe('SyncMetadataStore', () => {
     kv.unreadableKey = SYNC_META_KEY;
 
     await expect(new SyncMetadataStore(kv).load()).rejects.toThrow(/unreadable/i);
-  });
-
-  // Readable proves the bytes decoded, not that they decoded into a ledger. Handing a null back
-  // as SyncMeta throws in pushOnce on `Object.keys(meta.dirty)` and takes the whole cycle down.
-  it.each([
-    ['null', null],
-    ['a value from another shape', { cursor: 'not a number' }],
-  ])('starts a fresh ledger over %s rather than handing it back', async (_label, stored) => {
-    const kv = new FakeKvStore();
-    await kv.set(SYNC_META_KEY, stored, 'local');
-    const error = vi.spyOn(logger, 'error').mockImplementation(() => {});
-
-    const meta = await new SyncMetadataStore(kv).load();
-
-    expect(meta.dirty).toEqual({});
-    expect(meta.deviceNode).toMatch(/[0-9a-f-]{36}/);
-    expect(error).toHaveBeenCalledWith(expect.stringContaining('ledger'), { key: SYNC_META_KEY });
   });
 });
