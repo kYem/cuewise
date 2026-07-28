@@ -408,24 +408,25 @@ export const usePomodoroStore = create<PomodoroStore>()(
           return;
         }
 
+        // Create completed session
+        const completedSession: PomodoroSession = {
+          id: currentSessionId,
+          startedAt: new Date(Date.now() - totalTime * 1000).toISOString(),
+          completedAt: new Date().toISOString(),
+          interrupted: false,
+          duration: totalTime / 60, // convert back to minutes
+          type: sessionType,
+          ...(selectedGoalId && sessionType === 'work' ? { goalId: selectedGoalId } : {}),
+        };
+        const updatedSessions = [...sessions, completedSession];
+
+        // Only the persistence is guarded: the transitions, the celebration and the sounds below
+        // must not be reported as "failed to save", nor pause a break that already started.
+        let autoStartBreaks: boolean;
         try {
-          // Get settings to check auto-start preference
           const settings = await getSettings();
-          const autoStartBreaks = settings.pomodoroAutoStartBreaks;
+          autoStartBreaks = settings.pomodoroAutoStartBreaks;
 
-          // Create completed session
-          const completedSession: PomodoroSession = {
-            id: currentSessionId,
-            startedAt: new Date(Date.now() - totalTime * 1000).toISOString(),
-            completedAt: new Date().toISOString(),
-            interrupted: false,
-            duration: totalTime / 60, // convert back to minutes
-            type: sessionType,
-            ...(selectedGoalId && sessionType === 'work' ? { goalId: selectedGoalId } : {}),
-          };
-
-          // Save session
-          const updatedSessions = [...sessions, completedSession];
           const saveResult = await setPomodoroSessions(updatedSessions);
 
           // Show toast if storage failed (quota exceeded, etc.)
@@ -444,105 +445,6 @@ export const usePomodoroStore = create<PomodoroStore>()(
               useToastStore.getState().error('Failed to save session. Please try again.');
             }
           }
-
-          set({ sessions: updatedSessions });
-
-          // Auto-switch logic
-          if (sessionType === 'work') {
-            // Celebrate a completed focus session — but not on a background-recovery
-            // completion (timer expired while all tabs were closed), which would fire
-            // confetti on cold start for a session the user never watched finish.
-            if (!isRecovery) {
-              useCelebrationStore.getState().celebrate('pomodoro');
-            }
-
-            // Increment consecutive work sessions
-            const newConsecutiveCount = consecutiveWorkSessions + 1;
-
-            // Determine next status based on auto-start setting
-            const nextStatus = autoStartBreaks ? 'running' : 'idle';
-            const nextSessionId = autoStartBreaks ? generateId() : null;
-
-            // Check if it's time for long break
-            if (newConsecutiveCount >= longBreakInterval) {
-              set({
-                sessionType: 'longBreak',
-                status: nextStatus,
-                currentSessionId: nextSessionId,
-                timeRemaining: minutesToSeconds(longBreakDuration),
-                totalTime: minutesToSeconds(longBreakDuration),
-                consecutiveWorkSessions: newConsecutiveCount,
-                selectedGoalId: null, // Clear selected goal
-                lastTickTime: autoStartBreaks ? Date.now() : null,
-              });
-              if (autoStartBreaks) {
-                playStartSound(startSound as NotificationSoundType);
-              }
-            } else {
-              set({
-                sessionType: 'break',
-                status: nextStatus,
-                currentSessionId: nextSessionId,
-                timeRemaining: minutesToSeconds(breakDuration),
-                totalTime: minutesToSeconds(breakDuration),
-                consecutiveWorkSessions: newConsecutiveCount,
-                selectedGoalId: null, // Clear selected goal
-                lastTickTime: autoStartBreaks ? Date.now() : null,
-              });
-              if (autoStartBreaks) {
-                playStartSound(startSound as NotificationSoundType);
-              }
-            }
-          } else {
-            // Break or long break completed - auto-start work if setting enabled
-            const resetConsecutive = sessionType === 'longBreak' ? 0 : consecutiveWorkSessions;
-
-            // Determine next status based on auto-start setting
-            const nextStatus = autoStartBreaks ? 'running' : 'idle';
-            const nextSessionId = autoStartBreaks ? generateId() : null;
-
-            set({
-              sessionType: 'work',
-              status: nextStatus,
-              currentSessionId: nextSessionId,
-              timeRemaining: minutesToSeconds(workDuration),
-              totalTime: minutesToSeconds(workDuration),
-              consecutiveWorkSessions: resetConsecutive,
-              lastTickTime: autoStartBreaks ? Date.now() : null,
-            });
-
-            if (autoStartBreaks) {
-              playStartSound(startSound as NotificationSoundType);
-            }
-          }
-
-          // Play completion sound
-          playCompletionSound(completionSound as NotificationSoundType);
-
-          // Notify via the platform port (the desktop build delivers this natively).
-          let message = 'Session complete!';
-          if (sessionType === 'work') {
-            const newCount = consecutiveWorkSessions + 1;
-            message =
-              newCount >= longBreakInterval
-                ? 'Work session complete! Time for a long break.'
-                : 'Work session complete! Time for a break.';
-          } else if (sessionType === 'longBreak') {
-            message = 'Long break complete! Ready to focus?';
-          } else {
-            message = 'Break complete! Ready to focus?';
-          }
-          // Fire-and-forget: a notification failure — async rejection OR a
-          // synchronous getNotifier() throw — must not fail the already-saved session.
-          try {
-            getNotifier()
-              .notify({ id: 'pomodoro-complete', title: 'Pomodoro Timer', body: message })
-              .catch((error) => {
-                logger.error('Failed to show pomodoro completion notification', error);
-              });
-          } catch (error) {
-            logger.error('Failed to show pomodoro completion notification', error);
-          }
         } catch (error) {
           logger.error('Error completing pomodoro session', error);
           const errorMessage = 'Failed to save session. Please try again.';
@@ -550,6 +452,106 @@ export const usePomodoroStore = create<PomodoroStore>()(
           // timer re-enters it every second — one toast a second, and the session never lands.
           set({ error: errorMessage, status: 'paused', lastTickTime: null });
           useToastStore.getState().error(errorMessage);
+          return;
+        }
+
+        set({ sessions: updatedSessions });
+
+        // Auto-switch logic
+        if (sessionType === 'work') {
+          // Celebrate a completed focus session — but not on a background-recovery
+          // completion (timer expired while all tabs were closed), which would fire
+          // confetti on cold start for a session the user never watched finish.
+          if (!isRecovery) {
+            useCelebrationStore.getState().celebrate('pomodoro');
+          }
+
+          // Increment consecutive work sessions
+          const newConsecutiveCount = consecutiveWorkSessions + 1;
+
+          // Determine next status based on auto-start setting
+          const nextStatus = autoStartBreaks ? 'running' : 'idle';
+          const nextSessionId = autoStartBreaks ? generateId() : null;
+
+          // Check if it's time for long break
+          if (newConsecutiveCount >= longBreakInterval) {
+            set({
+              sessionType: 'longBreak',
+              status: nextStatus,
+              currentSessionId: nextSessionId,
+              timeRemaining: minutesToSeconds(longBreakDuration),
+              totalTime: minutesToSeconds(longBreakDuration),
+              consecutiveWorkSessions: newConsecutiveCount,
+              selectedGoalId: null, // Clear selected goal
+              lastTickTime: autoStartBreaks ? Date.now() : null,
+            });
+            if (autoStartBreaks) {
+              playStartSound(startSound as NotificationSoundType);
+            }
+          } else {
+            set({
+              sessionType: 'break',
+              status: nextStatus,
+              currentSessionId: nextSessionId,
+              timeRemaining: minutesToSeconds(breakDuration),
+              totalTime: minutesToSeconds(breakDuration),
+              consecutiveWorkSessions: newConsecutiveCount,
+              selectedGoalId: null, // Clear selected goal
+              lastTickTime: autoStartBreaks ? Date.now() : null,
+            });
+            if (autoStartBreaks) {
+              playStartSound(startSound as NotificationSoundType);
+            }
+          }
+        } else {
+          // Break or long break completed - auto-start work if setting enabled
+          const resetConsecutive = sessionType === 'longBreak' ? 0 : consecutiveWorkSessions;
+
+          // Determine next status based on auto-start setting
+          const nextStatus = autoStartBreaks ? 'running' : 'idle';
+          const nextSessionId = autoStartBreaks ? generateId() : null;
+
+          set({
+            sessionType: 'work',
+            status: nextStatus,
+            currentSessionId: nextSessionId,
+            timeRemaining: minutesToSeconds(workDuration),
+            totalTime: minutesToSeconds(workDuration),
+            consecutiveWorkSessions: resetConsecutive,
+            lastTickTime: autoStartBreaks ? Date.now() : null,
+          });
+
+          if (autoStartBreaks) {
+            playStartSound(startSound as NotificationSoundType);
+          }
+        }
+
+        // Play completion sound
+        playCompletionSound(completionSound as NotificationSoundType);
+
+        // Notify via the platform port (the desktop build delivers this natively).
+        let message = 'Session complete!';
+        if (sessionType === 'work') {
+          const newCount = consecutiveWorkSessions + 1;
+          message =
+            newCount >= longBreakInterval
+              ? 'Work session complete! Time for a long break.'
+              : 'Work session complete! Time for a break.';
+        } else if (sessionType === 'longBreak') {
+          message = 'Long break complete! Ready to focus?';
+        } else {
+          message = 'Break complete! Ready to focus?';
+        }
+        // Fire-and-forget: a notification failure — async rejection OR a
+        // synchronous getNotifier() throw — must not fail the already-saved session.
+        try {
+          getNotifier()
+            .notify({ id: 'pomodoro-complete', title: 'Pomodoro Timer', body: message })
+            .catch((error) => {
+              logger.error('Failed to show pomodoro completion notification', error);
+            });
+        } catch (error) {
+          logger.error('Failed to show pomodoro completion notification', error);
         }
       },
 

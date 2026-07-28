@@ -496,6 +496,28 @@ describe('Pomodoro Store - tick wall-clock reconciliation (#159)', () => {
     expect(toastError).toHaveBeenCalledTimes(1);
   });
 
+  // The session did save; only the confetti threw. Reporting that as "failed to save" and
+  // pausing the break the user is already on is a lie plus a stopped timer.
+  it('does not report a saved session as failed when the celebration throws', async () => {
+    celebrateMock.mockImplementationOnce(() => {
+      throw new Error('confetti failed');
+    });
+    usePomodoroStore.setState({
+      status: 'running',
+      sessionType: 'work',
+      currentSessionId: 'sess-1',
+      timeRemaining: 1,
+      totalTime: 25 * 60,
+      lastTickTime: Date.now(),
+    });
+
+    await expect(usePomodoroStore.getState().completeSession()).rejects.toThrow('confetti failed');
+
+    expect(storage.setPomodoroSessions).toHaveBeenCalled();
+    expect(toastError).not.toHaveBeenCalled();
+    expect(usePomodoroStore.getState().status).not.toBe('paused');
+  });
+
   it('completes the session (never negative) when elapsed meets or exceeds what remains', async () => {
     usePomodoroStore.setState({
       status: 'running',
