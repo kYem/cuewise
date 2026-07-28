@@ -99,6 +99,7 @@ export interface KeyValueStore {
   getMany(keys: string[], area: StorageArea): Promise<Record<string, unknown>>;
   /** Batch write. One backend call, so the named keys land together. */
   setMany(entries: Record<string, unknown>, area: StorageArea): Promise<StorageResult>;
+  /** Batch remove, idempotent: a key that was already absent is removed, not a failure. */
   removeMany(keys: string[], area: StorageArea): Promise<boolean>;
   getUsage(area: StorageArea): Promise<StorageUsage>;
 }

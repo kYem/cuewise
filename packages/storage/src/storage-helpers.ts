@@ -50,6 +50,7 @@ import {
   getValidatedListFromStorage,
   removeFromStorage,
   removeManyFromStorage,
+  type StorageArea,
   type StorageResult,
   setInStorage,
   setManyInStorage,
@@ -71,7 +72,8 @@ async function getStorageArea(): Promise<'local' | 'sync'> {
     settingsSchema.def.shape.syncEnabled,
     'local'
   );
-  const syncEnabled = stored ?? DEFAULT_SETTINGS.syncEnabled;
+  const syncEnabled =
+    stored ?? unmigratedSettingsValue('syncEnabled') ?? DEFAULT_SETTINGS.syncEnabled;
   if (syncEnabled) {
     return 'sync';
   }
@@ -396,6 +398,8 @@ export function settingsStorageKey(key: string): string {
 
 export const SETTINGS_KEYS = Object.keys(DEFAULT_SETTINGS) as (keyof Settings)[];
 
+const SETTINGS_STORAGE_KEYS = SETTINGS_KEYS.map(settingsStorageKey);
+
 const SETTINGS_FIELD_SCHEMAS = settingsSchema.def.shape as Record<string, ZodMiniType | undefined>;
 
 /** Own properties only — a stored key named `constructor` or `toString` otherwise hits Object.prototype. */
@@ -442,17 +446,19 @@ function keepReadableSettingsFields(values: Record<string, unknown>): Partial<Se
 
 // Nothing to seed for a key this build cannot name: it sits in its own entry, which no patch
 // rewrites.
-async function readStoredSettingsFields(): Promise<Partial<Settings>> {
-  const stored = await getManyFromStorage(SETTINGS_KEYS.map(settingsStorageKey), 'local');
-  const byKey = Object.fromEntries(
-    SETTINGS_KEYS.map((key) => [key, stored[settingsStorageKey(key)]])
-  );
-  return keepReadableSettingsFields(byKey);
+async function readSettingsEntries(): Promise<Record<string, unknown>> {
+  await ensureSettingsMigrated();
+  const stored = await getManyFromStorage(SETTINGS_STORAGE_KEYS, 'local');
+  const byKey: Record<string, unknown> = {};
+  for (const key of SETTINGS_KEYS) {
+    const value = stored[settingsStorageKey(key)];
+    byKey[key] = value === undefined ? unmigratedSettings?.[key] : value;
+  }
+  return byKey;
 }
 
 export async function getSettings(): Promise<Settings> {
-  await ensureSettingsMigrated();
-  return { ...DEFAULT_SETTINGS, ...(await readStoredSettingsFields()) };
+  return { ...DEFAULT_SETTINGS, ...keepReadableSettingsFields(await readSettingsEntries()) };
 }
 
 /**
@@ -468,11 +474,15 @@ export async function readLegacySettingsBlob(): Promise<Record<string, unknown> 
   return raw as Record<string, unknown>;
 }
 
+// Migration first: it fills gaps from the legacy blob, so a write that lands before it would be
+// read back as a gap and overwritten by the older value.
 async function writeSettingsEntries(patch: Partial<Settings>): Promise<StorageResult> {
+  await ensureSettingsMigrated();
+  // `undefined` is not storable — localStorage would keep the string "undefined" and throw on
+  // every later read. Omitting a key is how a caller says "leave it alone".
+  const entries = Object.entries(patch).filter(([, value]) => value !== undefined);
   return setManyInStorage(
-    Object.fromEntries(
-      Object.entries(patch).map(([key, value]) => [settingsStorageKey(key), value])
-    ),
+    Object.fromEntries(entries.map(([key, value]) => [settingsStorageKey(key), value])),
     'local'
   );
 }
@@ -513,10 +523,8 @@ export async function clearSettings(): Promise<boolean> {
   // Migrate then delete the blob: the migration reads an absent per-key entry as a gap to fill,
   // so a surviving blob would restore every cleared value on the next read.
   await ensureSettingsMigrated();
-  return removeManyFromStorage(
-    [...SETTINGS_KEYS.map(settingsStorageKey), STORAGE_KEYS.SETTINGS],
-    'local'
-  );
+  unmigratedSettings = null;
+  return removeManyFromStorage([...SETTINGS_STORAGE_KEYS, STORAGE_KEYS.SETTINGS], 'local');
 }
 
 /**
@@ -560,10 +568,14 @@ export async function migrateLegacySettings(): Promise<void> {
   if (Object.keys(patch).length > 0) {
     const result = await setManyInStorage(patch, 'local');
     if (!result.success) {
+      // Held in memory as well as on disk: a reader that saw no per-key entry would otherwise
+      // take every setting for a gap, and `syncEnabled` decides which area the data lives in.
+      unmigratedSettings = blob;
       logger.error('Settings migration write failed; keeping the legacy blob', result.error);
       return;
     }
   }
+  unmigratedSettings = null;
 
   if (discarded.length > 0) {
     // Names only — a setting's value can be a goal id or a playlist the user picked. This is
@@ -577,6 +589,17 @@ export async function migrateLegacySettings(): Promise<void> {
   if (!removed) {
     logger.error('Migrated the legacy settings blob but could not delete it');
   }
+}
+
+// The blob of a migration whose write failed: still the truth for its keys until one succeeds.
+let unmigratedSettings: Record<string, unknown> | null = null;
+
+function unmigratedSettingsValue<K extends keyof Settings>(key: K): Settings[K] | undefined {
+  const value = unmigratedSettings?.[key];
+  if (value === undefined || !settingsValueIsValid(key, value)) {
+    return undefined;
+  }
+  return value as Settings[K];
 }
 
 let settingsMigration: Promise<void> | null = null;
@@ -601,46 +624,47 @@ export function ensureSettingsMigrated(): Promise<void> {
 /** Drops the memo so the next read migrates again. For test isolation. */
 export function resetSettingsMigration(): void {
   settingsMigration = null;
+  unmigratedSettings = null;
 }
 
 /**
  * Raw list reads for the sync engine. An item hidden from `readAll` is deleted by the next
  * `writeOne`, and its absence is how the cycle infers a tombstone for every other device.
+ *
+ * Items are unjudged, but the list itself is: every caller iterates it, so a stored non-array
+ * would throw out of `readAll` and wedge the cycle for every collection at once.
  */
+async function getListRaw<T>(key: string, area: StorageArea): Promise<T[]> {
+  const raw = await getFromStorage<unknown>(key, area);
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  return raw as T[];
+}
+
 export async function getGoalsRaw(): Promise<Goal[]> {
-  return (await getFromStorage<Goal[]>(STORAGE_KEYS.GOALS, await getStorageArea())) ?? [];
+  return getListRaw<Goal>(STORAGE_KEYS.GOALS, await getStorageArea());
 }
 
 export async function getRemindersRaw(): Promise<Reminder[]> {
-  return (await getFromStorage<Reminder[]>(STORAGE_KEYS.REMINDERS, await getStorageArea())) ?? [];
+  return getListRaw<Reminder>(STORAGE_KEYS.REMINDERS, await getStorageArea());
 }
 
 export async function getCollectionsRaw(): Promise<QuoteCollection[]> {
-  return (
-    (await getFromStorage<QuoteCollection[]>(STORAGE_KEYS.COLLECTIONS, await getStorageArea())) ??
-    []
-  );
+  return getListRaw<QuoteCollection>(STORAGE_KEYS.COLLECTIONS, await getStorageArea());
 }
 
 /** Defaults fill only what was never written; nothing is defaulted for being unreadable. */
 export async function getSettingsForSync(): Promise<Settings> {
-  await ensureSettingsMigrated();
-  const stored = await getManyFromStorage(SETTINGS_KEYS.map(settingsStorageKey), 'local');
+  const entries = await readSettingsEntries();
   const present = Object.fromEntries(
-    SETTINGS_KEYS.map((key) => [key, stored[settingsStorageKey(key)]]).filter(
-      ([, value]) => value !== undefined
-    )
+    Object.entries(entries).filter(([, value]) => value !== undefined)
   );
   return { ...DEFAULT_SETTINGS, ...present } as Settings;
 }
 
 export async function getPomodoroSessionsRaw(): Promise<PomodoroSession[]> {
-  return (
-    (await getFromStorage<PomodoroSession[]>(
-      STORAGE_KEYS.POMODORO_SESSIONS,
-      await getStorageArea()
-    )) ?? []
-  );
+  return getListRaw<PomodoroSession>(STORAGE_KEYS.POMODORO_SESSIONS, await getStorageArea());
 }
 
 /** Counterpart to the raw reads: this caller saw everything, so its omissions must land. */
@@ -673,10 +697,11 @@ export async function setQuotesRaw(quotes: Quote[]): Promise<StorageResult> {
 
 /** Seed plus custom, mirroring `getQuotes`, but without dropping anything. */
 export async function getQuotesRaw(): Promise<Quote[]> {
-  const seed = (await getFromStorage<Quote[]>(STORAGE_KEYS.SEED_QUOTES, 'local')) ?? [];
-  const area = await getStorageArea();
-  const custom = (await getFromStorage<Quote[]>(STORAGE_KEYS.CUSTOM_QUOTES, area)) ?? [];
-  return [...seed, ...custom];
+  const [seed, area] = await Promise.all([
+    getListRaw<Quote>(STORAGE_KEYS.SEED_QUOTES, 'local'),
+    getStorageArea(),
+  ]);
+  return [...seed, ...(await getListRaw<Quote>(STORAGE_KEYS.CUSTOM_QUOTES, area))];
 }
 
 // Storage usage tracking

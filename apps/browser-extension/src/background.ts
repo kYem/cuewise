@@ -64,9 +64,9 @@ export function mapToUi(status: SyncStatus): SyncUiStatus {
 }
 
 // A data migration, not a sync concern: this realm runs it whether or not sync is configured.
-// Held as a promise so the sync engine below can still gate its first storage touch on it.
-const settingsMigrated = ensureSettingsMigrated();
-settingsMigrated.catch((error) => {
+// Settles rather than rejects, so a failed migration delays the sync start below instead of
+// cancelling it — every storage helper retries the migration on its own anyway.
+const settingsMigrated = ensureSettingsMigrated().catch((error: unknown) => {
   logger.error('Failed to migrate legacy settings', error);
 });
 

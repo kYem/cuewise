@@ -40,12 +40,11 @@ export class FakeKvStore implements KeyValueStore {
     return { bytesInUse: 0, quota: 0 };
   }
 
-  async getMany(keys: string[], area: StorageArea): Promise<Record<string, unknown>> {
+  async getMany(keys: string[], _area: StorageArea): Promise<Record<string, unknown>> {
     const result: Record<string, unknown> = {};
     for (const key of keys) {
-      const value = await this.get(key, area);
-      if (value !== null) {
-        result[key] = value;
+      if (this.data.has(key)) {
+        result[key] = structuredClone(this.data.get(key));
       }
     }
     return result;
@@ -62,14 +61,10 @@ export class FakeKvStore implements KeyValueStore {
     return { success: true };
   }
 
-  async removeMany(keys: string[], area: StorageArea): Promise<boolean> {
-    let allRemoved = true;
+  async removeMany(keys: string[], _area: StorageArea): Promise<boolean> {
     for (const key of keys) {
-      const removed = await this.remove(key, area);
-      if (!removed) {
-        allRemoved = false;
-      }
+      this.data.delete(key);
     }
-    return allRemoved;
+    return true;
   }
 }

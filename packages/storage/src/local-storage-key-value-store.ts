@@ -85,12 +85,19 @@ export class LocalStorageKeyValueStore implements KeyValueStore {
     return { bytesInUse, quota: LOCALSTORAGE_QUOTA_BYTES };
   }
 
-  async getMany(keys: string[], area: StorageArea): Promise<Record<string, unknown>> {
+  // Absence is decided by the raw item, not by `get`: a key stored as `null` is present, and the
+  // sparse settings layout reads an omitted key as "never written, follow the default".
+  async getMany(keys: string[], _area: StorageArea): Promise<Record<string, unknown>> {
     const result: Record<string, unknown> = {};
     for (const key of keys) {
-      const value = await this.get(key, area);
-      if (value !== null) {
-        result[key] = value;
+      const item = localStorage.getItem(key);
+      if (item === null) {
+        continue;
+      }
+      try {
+        result[key] = JSON.parse(item);
+      } catch (error) {
+        logger.error(`Error getting ${key} from storage`, error);
       }
     }
     return result;

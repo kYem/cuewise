@@ -157,7 +157,7 @@ describe('a stored value that no longer matches its shape', () => {
   });
 
   it('reports how many it dropped and where, never what they held', async () => {
-    const warn = vi.spyOn(logger, 'warn');
+    const error = vi.spyOn(logger, 'error');
     const goals = [
       { id: 'g1', text: 'fine', completed: false, createdAt: 'x', date: '2026-07-26' },
       { id: 'g2', text: 'a private goal', completed: 'nope', createdAt: 'x', date: '2026-07-26' },
@@ -166,11 +166,11 @@ describe('a stored value that no longer matches its shape', () => {
 
     await getGoals();
 
-    expect(warn).toHaveBeenCalledWith(
+    expect(error).toHaveBeenCalledWith(
       'Dropped unreadable items from a stored list',
       expect.objectContaining({ key: 'goals', dropped: 1, of: 2, at: [1] })
     );
-    expect(JSON.stringify(warn.mock.calls)).not.toContain('a private goal');
+    expect(JSON.stringify(error.mock.calls)).not.toContain('a private goal');
   });
 
   it('discards a stored value that is not a list at all', async () => {
@@ -279,11 +279,8 @@ describe('a stored value that still matches', () => {
   });
 });
 
-// Settings is only rewritten when the user changes something, and there is no upgrade
-// migration, so a blob written by any earlier release legitimately lacks every field added
-// since. Rejecting it wholesale resets every preference — and `syncEnabled` decides the
-// storage *area*, so the user's synced goals and quotes would read as empty and the next
-// write would persist that as fact.
+// A blob from any earlier release legitimately lacks every field added since, and `syncEnabled`
+// decides the storage *area* — rejecting it wholesale reads the user's synced data as empty.
 describe('a settings blob written by an older release', () => {
   const v118 = {
     theme: 'dark',

@@ -52,13 +52,10 @@ export function createInMemoryKeyValueStore(
       return { success: true } as const;
     },
     async removeMany(keys: string[], area: StorageArea): Promise<boolean> {
-      let allRemoved = true;
       for (const key of keys) {
-        if (!data.delete(`${area}:${key}`)) {
-          allRemoved = false;
-        }
+        data.delete(`${area}:${key}`);
       }
-      return allRemoved;
+      return true;
     },
     async getUsage(_area: StorageArea): Promise<StorageUsage> {
       return { bytesInUse: 0, quota: 0 };

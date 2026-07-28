@@ -68,7 +68,7 @@ export async function getValidatedListFromStorage<T>(
     return null;
   }
   if (!Array.isArray(raw)) {
-    logger.warn('Discarded a stored value that should have been a list', { key, area });
+    logger.error('Discarded a stored value that should have been a list', { key, area });
     return null;
   }
   const kept: T[] = [];
@@ -82,8 +82,9 @@ export async function getValidatedListFromStorage<T>(
     }
   });
   if (droppedAt.length > 0) {
-    // Positions and counts only; the items themselves are the user's own content.
-    logger.warn('Dropped unreadable items from a stored list', {
+    // Positions and counts only; the items themselves are the user's own content. At error
+    // level because the shipped default log level is 'error' — a warning reaches nobody.
+    logger.error('Dropped unreadable items from a stored list', {
       key,
       area,
       dropped: droppedAt.length,
@@ -107,25 +108,37 @@ export async function setValidatedListInStorage<T>(
   itemSchema: ZodMiniType<T>,
   area: StorageArea = 'local'
 ): Promise<StorageResult> {
-  const raw = await getStorage().get<unknown>(key, area);
+  // One instance for the read-modify-write, so a `configurePlatform` swap mid-flight cannot
+  // merge one backend's rows into another's.
+  const store = getStorage();
+  const raw = await store.get<unknown>(key, area);
   if (!Array.isArray(raw)) {
-    return getStorage().set(key, items, area);
+    return store.set(key, items, area);
   }
-  // By value: both adapters mint fresh objects per read, so an identity check never matches
-  // and the array doubles on every write until it blows the quota.
+  const quarantined = raw.filter((stored) => !itemSchema.safeParse(stored).success);
+  if (quarantined.length === 0) {
+    return store.set(key, items, area);
+  }
+  // By value and by id: both adapters mint fresh objects per read, so an identity check never
+  // matches and the array doubles on every write; and re-creating a hidden item under its own
+  // id would otherwise leave two entries for it, the broken one winning every id-keyed read.
   const written = new Set((items as unknown[]).map((item) => JSON.stringify(item)));
-  const unreadable = raw.filter(
-    (stored) => !itemSchema.safeParse(stored).success && !written.has(JSON.stringify(stored))
+  const writtenIds = new Set<unknown>(
+    (items as { id?: unknown }[]).map((item) => item?.id).filter((id) => typeof id === 'string')
+  );
+  const unreadable = quarantined.filter(
+    (stored) =>
+      !written.has(JSON.stringify(stored)) && !writtenIds.has((stored as { id?: unknown })?.id)
   );
   if (unreadable.length === 0) {
-    return getStorage().set(key, items, area);
+    return store.set(key, items, area);
   }
   logger.warn('Preserved unreadable stored items through a write', {
     key,
     area,
     preserved: unreadable.length,
   });
-  return getStorage().set(key, [...items, ...unreadable], area);
+  return store.set(key, [...items, ...unreadable], area);
 }
 
 export async function setInStorage<T>(
