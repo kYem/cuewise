@@ -950,19 +950,80 @@ describe('SyncSettingsSectionComponent', () => {
     expect(controller.calls.some((c) => c.method === 'reconnect')).toBe(false);
   });
 
-  it('retries via reconnect (not enable with an empty account) when it mounts straight into error', async () => {
+  // Only the sync loop persists this status, and it fails on an offline device as readily as a
+  // broken one. Routing the retry to a sign-in asks a user who lost wifi to re-enrol.
+  it('retries the sync, not a sign-in, when it mounts straight into error', async () => {
     const user = userEvent.setup();
     const controller = new FakeSyncController();
-    // A persisted error hydrated on mount — no in-session failure set failedAction, and there is
-    // no form account id, so retrying enable would send an empty account. Reconnect is the fallback.
     controller.setStatus('error');
-    controller.scriptReconnect({ ok: true });
     renderSection(controller);
 
     await user.click(screen.getByRole('button', { name: 'Try again' }));
 
-    await waitFor(() => expect(controller.calls.some((c) => c.method === 'reconnect')).toBe(true));
+    await waitFor(() => expect(controller.calls.some((c) => c.method === 'syncNow')).toBe(true));
+    expect(controller.calls.some((c) => c.method === 'reconnect')).toBe(false);
     expect(controller.calls.some((c) => c.method === 'enable')).toBe(false);
+  });
+
+  // Without an 'error' pill label the whole subgroup unmounted, taking the account line,
+  // "Last synced", "Sync now" and "Regenerate recovery code" with it.
+  it('keeps the account line and the recovery controls while the status is error', async () => {
+    const controller = new FakeSyncController();
+    controller.scriptDetails({
+      accountId: 'acct-12345678',
+      accountEmail: 'sam@example.com',
+      lastSyncedAt: Date.now(),
+    });
+    controller.setStatus('error');
+    renderSection(controller);
+
+    expect(await screen.findByTestId('sync-account-label')).toHaveTextContent('sam@example.com');
+    expect(screen.getByTestId('sync-status-pill')).toHaveTextContent("Couldn't sync");
+    expect(screen.getByRole('button', { name: 'Sync now' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Regenerate recovery code' })).toBeInTheDocument();
+  });
+
+  // The retry routing has to forget an enrol failure once that enrol succeeds, or a later
+  // loop failure in the same mount sends an offline user back through a sign-in.
+  it('routes a later loop failure to the sync even after an enrol failed and then worked', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptEnableWithGoogle({ ok: false, reason: 'error' });
+    renderSection(controller);
+
+    await user.click(cloudSyncSwitch());
+    await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
+    act(() => controller.setStatus('error'));
+    controller.scriptEnableWithGoogle({ ok: true });
+    await user.click(screen.getByRole('button', { name: 'Try again' }));
+    await waitFor(() =>
+      expect(controller.calls.filter((c) => c.method === 'enableWithGoogle')).toHaveLength(2)
+    );
+    act(() => controller.setStatus('active'));
+
+    act(() => controller.setStatus('error'));
+    await user.click(screen.getByRole('button', { name: 'Try again' }));
+
+    await waitFor(() => expect(controller.calls.some((c) => c.method === 'syncNow')).toBe(true));
+    expect(controller.calls.filter((c) => c.method === 'enableWithGoogle')).toHaveLength(2);
+  });
+
+  it('still re-runs the failed sign-in when an enrol is what put it in error', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptEnableWithGoogle({ ok: false, reason: 'error' });
+    renderSection(controller);
+
+    await user.click(cloudSyncSwitch());
+    await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
+    act(() => controller.setStatus('error'));
+
+    await user.click(screen.getByRole('button', { name: 'Try again' }));
+
+    await waitFor(() =>
+      expect(controller.calls.filter((c) => c.method === 'enableWithGoogle')).toHaveLength(2)
+    );
+    expect(controller.calls.some((c) => c.method === 'syncNow')).toBe(false);
   });
 
   it('retries reconnect on failedAction even with a typed account id (never enable/syncNow)', async () => {
