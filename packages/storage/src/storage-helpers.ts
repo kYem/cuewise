@@ -63,6 +63,9 @@ import {
  *
  * Awaits the migration first: until it runs, syncEnabled is absent and every collection here
  * would resolve to 'local', reading a sync user's data as empty and then writing that back.
+ *
+ * Throws when the read fails, rather than answering an area it cannot know — every caller
+ * already surfaces that as an error state, which is recoverable where a wrong area is not.
  */
 async function getStorageArea(): Promise<'local' | 'sync'> {
   await ensureSettingsMigrated();
@@ -72,6 +75,12 @@ async function getStorageArea(): Promise<'local' | 'sync'> {
     [SETTINGS_SYNC_ENABLED_KEY, STORAGE_KEYS.SETTINGS],
     'local'
   );
+  if (stored === null) {
+    // Answering 'local' on a guess reads a sync user's data as empty, and the sync cycle then
+    // seals every dirty entity as a deletion for every other device.
+    logger.error('Could not read syncEnabled; refusing to guess the storage area');
+    throw new Error('Could not determine the storage area: the settings read failed');
+  }
   const perKey = stored[SETTINGS_SYNC_ENABLED_KEY];
   let syncEnabled: unknown = DEFAULT_SETTINGS.syncEnabled;
   if (perKey !== undefined && settingsValueIsValid('syncEnabled', perKey)) {
@@ -477,13 +486,16 @@ function legacySettingsField(blob: unknown, key: string): unknown {
 }
 
 // Nothing to seed for a key this build cannot name: it sits in its own entry, which no patch
-// rewrites.
-async function readSettingsEntries(): Promise<Record<string, unknown>> {
+// rewrites. Null when the read failed, so no caller mistakes that for a stored default.
+async function readSettingsEntries(): Promise<Record<string, unknown> | null> {
   await ensureSettingsMigrated();
   const stored = await getManyFromStorage(
     [...SETTINGS_STORAGE_KEYS, STORAGE_KEYS.SETTINGS],
     'local'
   );
+  if (stored === null) {
+    return null;
+  }
   const blob = stored[STORAGE_KEYS.SETTINGS];
   const byKey: Record<string, unknown> = {};
   for (const key of SETTINGS_KEYS) {
@@ -497,8 +509,25 @@ async function readSettingsEntries(): Promise<Record<string, unknown>> {
   return byKey;
 }
 
+/**
+ * `null` when the settings could not be read — for callers that must not act on a guess.
+ * `getSettings` hands back defaults there, which a gate would read as consent.
+ */
+export async function getSettingsOrNull(): Promise<Settings | null> {
+  const entries = await readSettingsEntries();
+  if (entries === null) {
+    return null;
+  }
+  return { ...DEFAULT_SETTINGS, ...keepReadableSettingsFields(entries) };
+}
+
 export async function getSettings(): Promise<Settings> {
-  return { ...DEFAULT_SETTINGS, ...keepReadableSettingsFields(await readSettingsEntries()) };
+  const settings = await getSettingsOrNull();
+  if (settings === null) {
+    logger.error('Could not read the stored settings; using defaults for this read');
+    return { ...DEFAULT_SETTINGS };
+  }
+  return settings;
 }
 
 /**
@@ -570,16 +599,25 @@ export async function clearSettings(): Promise<boolean> {
  * One-time move from the legacy settings blob to per-key entries. Idempotent and safe to run in
  * more than one realm: it fills only gaps, so a value a sync pull already wrote is never clobbered,
  * and it writes nothing at all through the store, so no key is ever marked dirty for sync.
+ *
+ * Resolves false when the blob is still on disk and the move has to be retried; the read-through
+ * keeps serving it meanwhile, so an incomplete migration costs nothing but a later attempt.
  */
-export async function migrateLegacySettings(): Promise<void> {
+export async function migrateLegacySettings(): Promise<boolean> {
   // Raw: an unreadable blob reads as null and skips the delete below, rather than being
   // discarded for holding something this build could not parse.
   const blob = await readLegacySettingsBlob();
   if (blob === null) {
-    return;
+    return true;
   }
 
   const existing = await getManyFromStorage(Object.keys(blob).map(settingsStorageKey), 'local');
+  if (existing === null) {
+    // Every key would look like a gap, so the blob's older values would overwrite what a sync
+    // pull already wrote — and the delete below would take the only copy of them with it.
+    logger.error('Could not read the per-key settings entries; keeping the legacy blob');
+    return false;
+  }
   const patch: Record<string, unknown> = {};
   const discarded: string[] = [];
   for (const [key, value] of Object.entries(blob)) {
@@ -610,7 +648,7 @@ export async function migrateLegacySettings(): Promise<void> {
       // Left on disk deliberately: every settings read falls back through it until a later write
       // succeeds, and `syncEnabled` decides which area the rest of the data lives in.
       logger.error('Settings migration write failed; keeping the legacy blob', result.error);
-      return;
+      return false;
     }
   }
 
@@ -625,7 +663,9 @@ export async function migrateLegacySettings(): Promise<void> {
   const removed = await removeFromStorage(STORAGE_KEYS.SETTINGS, 'local');
   if (!removed) {
     logger.error('Migrated the legacy settings blob but could not delete it');
+    return false;
   }
+  return true;
 }
 
 let settingsMigration: Promise<void> | null = null;
@@ -637,12 +677,18 @@ let settingsMigration: Promise<void> | null = null;
  */
 export function ensureSettingsMigrated(): Promise<void> {
   if (settingsMigration === null) {
-    // A rejection is not memoized: getStorageArea awaits this on nearly every storage call, so
-    // caching one would fail every read and write in the realm for the rest of the session.
-    settingsMigration = migrateLegacySettings().catch((error: unknown) => {
-      settingsMigration = null;
-      throw error;
-    });
+    // Neither an incomplete run nor a rejection is memoized: getStorageArea awaits this on nearly
+    // every storage call, so a cached failure would freeze the migration for the whole session.
+    settingsMigration = migrateLegacySettings()
+      .then((completed) => {
+        if (!completed) {
+          settingsMigration = null;
+        }
+      })
+      .catch((error: unknown) => {
+        settingsMigration = null;
+        throw error;
+      });
   }
   return settingsMigration;
 }
@@ -682,6 +728,10 @@ export async function getCollectionsRaw(): Promise<QuoteCollection[]> {
 /** Defaults fill only what was never written; nothing is defaulted for being unreadable. */
 export async function getSettingsForSync(): Promise<Settings> {
   const entries = await readSettingsEntries();
+  if (entries === null) {
+    // Our defaults would win LWW over the value every peer actually chose.
+    throw new Error('Could not read the settings to push: the settings read failed');
+  }
   const present = Object.fromEntries(
     Object.entries(entries).filter(([, value]) => value !== undefined)
   );

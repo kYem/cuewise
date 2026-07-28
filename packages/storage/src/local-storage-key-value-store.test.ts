@@ -40,7 +40,7 @@ describe('LocalStorageKeyValueStore', () => {
     const result = await store.getMany(['a', 'b', 'c'], 'local');
 
     expect(result).toEqual({ a: 1, c: 3 });
-    expect('b' in result).toBe(false);
+    expect(Object.keys(result ?? {})).not.toContain('b');
   });
 
   // Absence is the semantic the sparse settings layout rests on, and both shipped adapters must
@@ -52,8 +52,16 @@ describe('LocalStorageKeyValueStore', () => {
     const result = await store.getMany(['nulled', 'missing'], 'local');
 
     expect(result).toEqual({ nulled: null });
-    expect('nulled' in result).toBe(true);
-    expect('missing' in result).toBe(false);
+    expect(Object.keys(result ?? {})).toEqual(['nulled']);
+  });
+
+  // Absence means "never written" to the settings layer, so a value that is there but
+  // unreadable must not pose as one — both shipped adapters have to agree on that too.
+  it('getMany reports a batch it could not read as null', async () => {
+    const store = new LocalStorageKeyValueStore();
+    localStorage.setItem('corrupt', '{not json');
+
+    await expect(store.getMany(['corrupt'], 'local')).resolves.toBeNull();
   });
 
   it('setMany writes every entry in one call', async () => {

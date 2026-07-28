@@ -42,6 +42,7 @@ export {
   getRemindersRaw,
   getSettings,
   getSettingsForSync,
+  getSettingsOrNull,
   getStorageUsage,
   getWeatherState,
   getYoutubeProgress,

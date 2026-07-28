@@ -20,6 +20,7 @@ import {
   getGoals,
   getSettings,
   getSettingsForSync,
+  getSettingsOrNull,
   getStorageUsage,
   migrateLegacySettings,
   readLegacySettingsBlob,
@@ -196,7 +197,9 @@ describe('settings', () => {
 
     const stored = await getManyFromStorage(SETTINGS_KEYS.map(settingsStorageKey));
 
-    expect(Object.keys(stored).sort()).toEqual(['settings.showClock', 'settings.theme'].sort());
+    expect(Object.keys(stored ?? {}).sort()).toEqual(
+      ['settings.showClock', 'settings.theme'].sort()
+    );
   });
 
   it('a later patch leaves earlier keys untouched', async () => {
@@ -346,14 +349,29 @@ describe('migrateLegacySettings', () => {
     expect(stored).toEqual({ 'settings.theme': 'dark' });
   });
 
+  // Written through the store, not through setSettingsPatch: that path runs the whole migration
+  // first, which deletes the blob and leaves this with nothing to guard against.
   it('does not overwrite a per-key value that landed before it ran', async () => {
     await setInStorage(STORAGE_KEYS.SETTINGS, legacyBlob({ theme: 'dark' }), 'local');
-    await setSettingsPatch({ theme: 'light' });
+    await setInStorage(settingsStorageKey('theme'), 'light', 'local');
 
     await migrateLegacySettings();
 
     const settings = await getSettings();
     expect(settings.theme).toBe('light');
+  });
+
+  // Without a read it can trust, every key looks like a gap: the blob's older values would
+  // overwrite what a sync pull already wrote, and the delete would take the only copy with them.
+  it('keeps the legacy blob and writes nothing when it cannot read the per-key entries', async () => {
+    const blob = legacyBlob({ theme: 'dark' });
+    const { store, areas } = recordingStore({ local: { [STORAGE_KEYS.SETTINGS]: blob } });
+    configurePlatform({ storage: { ...store, getMany: async () => null } });
+
+    await migrateLegacySettings();
+
+    expect(await readLegacySettingsBlob()).toEqual(blob);
+    expect(areas.local[settingsStorageKey('theme')]).toBeUndefined();
   });
 
   it('keeps the legacy blob when the per-key write fails', async () => {
@@ -506,6 +524,74 @@ describe('a migration whose write failed', () => {
       colorTheme: DEFAULT_SETTINGS.colorTheme,
     });
   });
+
+  // Both are live at read time here, and only the per-key entry reflects what was chosen last:
+  // the blob is the value the migration has not yet moved.
+  it('reads the per-key value, not the blob still on disk', async () => {
+    configurePlatform({
+      storage: cannotWriteSettings({
+        local: {
+          [STORAGE_KEYS.SETTINGS]: legacyBlob({ theme: 'dark', colorTheme: 'forest' }),
+          [settingsStorageKey('theme')]: 'light',
+        },
+      }),
+    });
+
+    await expect(getSettings()).resolves.toMatchObject({ theme: 'light' });
+  });
+
+  it('routes on the per-key syncEnabled, not the blob still on disk', async () => {
+    const localGoals = goalFactory.buildList(2);
+    configurePlatform({
+      storage: cannotWriteSettings({
+        local: {
+          [STORAGE_KEYS.SETTINGS]: legacyBlob({ syncEnabled: true, colorTheme: 'forest' }),
+          [settingsStorageKey('syncEnabled')]: false,
+          [STORAGE_KEYS.GOALS]: localGoals,
+        },
+        sync: { [STORAGE_KEYS.GOALS]: goalFactory.buildList(1) },
+      }),
+    });
+
+    await expect(getGoals()).resolves.toEqual(localGoals);
+  });
+});
+
+// Absence means "never written, follow the default" everywhere below, so a read that failed
+// must never arrive as one — for syncEnabled that would route a sync user to the wrong area.
+describe('a settings read that fails', () => {
+  function cannotReadSettings(
+    initial: Partial<Record<StorageArea, Record<string, unknown>>> = {}
+  ): KeyValueStore {
+    const { store } = recordingStore(initial);
+    return { ...store, getMany: async () => null };
+  }
+
+  it('leaves the storage area unanswered rather than guessing local', async () => {
+    configurePlatform({
+      storage: cannotReadSettings({ sync: { [STORAGE_KEYS.GOALS]: goalFactory.buildList(2) } }),
+    });
+
+    await expect(getGoals()).rejects.toThrow(/storage area/i);
+  });
+
+  it('getSettingsOrNull reports it instead of handing back defaults', async () => {
+    configurePlatform({ storage: cannotReadSettings() });
+
+    await expect(getSettingsOrNull()).resolves.toBeNull();
+  });
+
+  it('getSettings falls back to the defaults', async () => {
+    configurePlatform({ storage: cannotReadSettings() });
+
+    await expect(getSettings()).resolves.toEqual(DEFAULT_SETTINGS);
+  });
+
+  it('refuses to push settings it could not read', async () => {
+    configurePlatform({ storage: cannotReadSettings() });
+
+    await expect(getSettingsForSync()).rejects.toThrow(/settings/i);
+  });
 });
 
 // The migration reads which per-key entries exist, then writes the gaps it found. A settings
@@ -563,6 +649,34 @@ describe('ensureSettingsMigrated', () => {
     await expect(ensureSettingsMigrated()).rejects.toThrow('storage unavailable');
 
     await expect(getSettings()).resolves.toMatchObject({ theme: 'dark' });
+  });
+
+  // The blob is still on disk after a failed write, so the memo must not report the move done.
+  it('runs the migration again for the next reader when the write failed', async () => {
+    const { store } = recordingStore({
+      local: { [STORAGE_KEYS.SETTINGS]: legacyBlob({ theme: 'dark' }) },
+    });
+    let writesFail = true;
+    configurePlatform({
+      storage: {
+        ...store,
+        setMany: async (entries: Record<string, unknown>, area: StorageArea) => {
+          if (writesFail) {
+            return {
+              success: false as const,
+              error: { type: 'quota_exceeded' as const, message: 'Storage full' },
+            };
+          }
+          return store.setMany(entries, area);
+        },
+      },
+    });
+
+    await ensureSettingsMigrated();
+    writesFail = false;
+    await ensureSettingsMigrated();
+
+    expect(await readLegacySettingsBlob()).toBeNull();
   });
 });
 

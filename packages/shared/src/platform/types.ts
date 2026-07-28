@@ -95,8 +95,11 @@ export interface KeyValueStore {
   get<T>(key: string, area: StorageArea): Promise<T | null>;
   set<T>(key: string, value: T, area: StorageArea): Promise<StorageResult>;
   remove(key: string, area: StorageArea): Promise<boolean>;
-  /** Batch read. Absent keys are omitted from the result — absence is meaningful to callers. */
-  getMany(keys: string[], area: StorageArea): Promise<Record<string, unknown>>;
+  /**
+   * Batch read; `null` when the read failed. Absent keys are omitted from a successful result —
+   * absence is meaningful to callers, so a failure must never be reported as one.
+   */
+  getMany(keys: string[], area: StorageArea): Promise<Record<string, unknown> | null>;
   /** Batch write. One backend call, so the named keys land together. */
   setMany(entries: Record<string, unknown>, area: StorageArea): Promise<StorageResult>;
   /** Batch remove, idempotent: a key that was already absent is removed, not a failure. */

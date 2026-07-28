@@ -86,19 +86,21 @@ export class LocalStorageKeyValueStore implements KeyValueStore {
   }
 
   // Absence is decided by the raw item, not by `get`: a key stored as `null` is present, and the
-  // sparse settings layout reads an omitted key as "never written, follow the default".
-  async getMany(keys: string[], _area: StorageArea): Promise<Record<string, unknown>> {
+  // sparse settings layout reads an omitted key as "never written, follow the default". A key
+  // that is there but unreadable fails the whole batch rather than posing as never written.
+  async getMany(keys: string[], _area: StorageArea): Promise<Record<string, unknown> | null> {
     const result: Record<string, unknown> = {};
-    for (const key of keys) {
-      const item = localStorage.getItem(key);
-      if (item === null) {
-        continue;
-      }
-      try {
+    try {
+      for (const key of keys) {
+        const item = localStorage.getItem(key);
+        if (item === null) {
+          continue;
+        }
         result[key] = JSON.parse(item);
-      } catch (error) {
-        logger.error(`Error getting ${key} from storage`, error);
       }
+    } catch (error) {
+      logger.error('Error getting keys from storage', error);
+      return null;
     }
     return result;
   }

@@ -54,12 +54,13 @@ export class ChromeKeyValueStore implements KeyValueStore {
     return { bytesInUse, quota: area === 'sync' ? SYNC_QUOTA_BYTES : LOCAL_QUOTA_BYTES };
   }
 
-  async getMany(keys: string[], area: StorageArea): Promise<Record<string, unknown>> {
+  async getMany(keys: string[], area: StorageArea): Promise<Record<string, unknown> | null> {
     try {
-      return await areaStore(area).get(keys);
+      const values = await areaStore(area).get(keys);
+      return values;
     } catch (error) {
       logger.error('Error getting keys from storage', error);
-      return {};
+      return null;
     }
   }
 

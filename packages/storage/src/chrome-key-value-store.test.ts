@@ -105,7 +105,7 @@ describe('ChromeKeyValueStore with chrome.storage available', () => {
     const result = await store.getMany(['a', 'b', 'c'], 'local');
 
     expect(result).toEqual({ a: 1, c: 3 });
-    expect('b' in result).toBe(false);
+    expect(Object.keys(result ?? {})).not.toContain('b');
   });
 
   // The counterpart of the localStorage adapter's own case: "absent" is what the sparse settings
@@ -117,8 +117,16 @@ describe('ChromeKeyValueStore with chrome.storage available', () => {
     const result = await store.getMany(['nulled', 'missing'], 'local');
 
     expect(result).toEqual({ nulled: null });
-    expect('nulled' in result).toBe(true);
-    expect('missing' in result).toBe(false);
+    expect(Object.keys(result ?? {})).toEqual(['nulled']);
+  });
+
+  // Absence means "never written" to the settings layer, so a read that failed must not pose
+  // as one — `syncEnabled` reading absent routes a sync user's whole dataset to the wrong area.
+  it('getMany reports a failed read as null rather than as an empty result', async () => {
+    const local = global.chrome.storage.local as unknown as MockChromeStorage;
+    local.get.mockRejectedValueOnce(new Error('storage unavailable'));
+
+    await expect(store.getMany(['a'], 'local')).resolves.toBeNull();
   });
 
   it('setMany writes every entry in one call', async () => {

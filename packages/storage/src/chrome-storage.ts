@@ -156,10 +156,11 @@ export async function removeFromStorage(
   return getStorage().remove(key, area);
 }
 
+/** `null` when the batch could not be read — distinct from `{}`, which means nothing is stored. */
 export async function getManyFromStorage(
   keys: string[],
   area: StorageArea = 'local'
-): Promise<Record<string, unknown>> {
+): Promise<Record<string, unknown> | null> {
   return getStorage().getMany(keys, area);
 }
 
