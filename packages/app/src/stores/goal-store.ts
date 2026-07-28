@@ -320,7 +320,11 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       // A read that failed is not permission: the default is on, so guessing would re-date
       // every overdue task of a user who turned this off, on every device.
       const settings = await getSettingsOrNull();
-      if (settings === null || !settings.autoRollDueTasks) {
+      if (settings === null) {
+        logger.error('Could not read the auto-roll setting; leaving due tasks where they are');
+        return false;
+      }
+      if (!settings.autoRollDueTasks) {
         return false;
       }
 

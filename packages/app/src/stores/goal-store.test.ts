@@ -2,6 +2,7 @@ import {
   configurePlatform,
   DEFAULT_SETTINGS,
   getTodayDateString,
+  logger,
   type Settings,
   type SyncMutationSink,
   storageFailure,
@@ -1038,6 +1039,24 @@ describe('rollDueTasks', () => {
 
     expect(result).toBe(false);
     expect(storage.setGoals).not.toHaveBeenCalled();
+  });
+
+  // Silently identical to "the user turned it off", so a user whose roll never runs has no
+  // trace anywhere to explain it.
+  it('leaves a trace when the settings could not be read, unlike the feature being off', async () => {
+    const logged = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    vi.mocked(storage.getSettingsOrNull).mockResolvedValue(null);
+    useGoalStore.setState({ goals: [goalFactory.build({ date: '2025-01-01' })] });
+
+    await useGoalStore.getState().rollDueTasks();
+
+    expect(logged).toHaveBeenCalledWith(expect.stringContaining('auto-roll'));
+
+    logged.mockClear();
+    vi.mocked(storage.getSettingsOrNull).mockResolvedValue(autoRollDisabled);
+    await useGoalStore.getState().rollDueTasks();
+
+    expect(logged).not.toHaveBeenCalled();
   });
 });
 

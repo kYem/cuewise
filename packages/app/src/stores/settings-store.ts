@@ -139,6 +139,9 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
         // skipping the area migration while still writing the flag.
         const settings = await getSettingsOrNull();
         if (settings === null) {
+          logger.error('Aborted a settings update: the current settings could not be read', {
+            fields: Object.keys(partialSettings),
+          });
           const errorMessage = 'Could not read your settings, so the change was not saved.';
           set({ error: errorMessage, preview: null });
           useToastStore.getState().error(errorMessage);

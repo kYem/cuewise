@@ -1,6 +1,7 @@
 import {
   configurePlatform,
   DEFAULT_SETTINGS,
+  logger,
   type Settings,
   type StorageResult,
   type SyncMutationSink,
@@ -456,5 +457,17 @@ describe('an update whose read of the current settings failed', () => {
     expect(storage.setSettingsPatch).not.toHaveBeenCalled();
     expect(storage.migrateStorageData).not.toHaveBeenCalled();
     expect(useSettingsStore.getState().error).not.toBeNull();
+  });
+
+  // Every sibling failure branch in updateSettings logs; without this the one abort that
+  // silently drops the user's change is the only one with no record.
+  it('logs the abort, naming the keys that were not saved', async () => {
+    const logged = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await useSettingsStore.getState().updateSettings({ theme: 'dark' });
+
+    expect(logged).toHaveBeenCalledWith(expect.stringContaining('Aborted'), {
+      fields: ['theme'],
+    });
   });
 });
