@@ -519,6 +519,59 @@ describe('getQuotes on a read it could not make', () => {
 
     await expect(getQuotes()).resolves.toEqual([]);
   });
+
+  // The legacy key gates the migration. The single-key read answers null for a failed read and
+  // for a key that was never written alike, so the gate skips, getQuotes answers [] positively,
+  // and the store seeds over the very library the migration was about to move.
+  it('refuses when the legacy quotes key is the read that failed', async () => {
+    const { store } = capturingStore({ quotes: [quoteFactory.build()] });
+    configurePlatform({
+      storage: {
+        ...store,
+        // Both reads, as the real adapters behave: get() has nowhere to report a failure.
+        get: async (key: string, area: StorageArea = 'local') => {
+          if (key === 'quotes') {
+            return null as never;
+          }
+          return store.get(key, area);
+        },
+        getMany: async (keys: string[], area: StorageArea = 'local') => {
+          if (keys.includes('quotes')) {
+            return null;
+          }
+          return store.getMany(keys, area);
+        },
+      },
+    });
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await expect(getQuotes()).rejects.toThrow(/legacy quotes/i);
+  });
+
+  it('refuses a legacy quotes key that is stored but unreadable', async () => {
+    const { store } = capturingStore({ quotes: [quoteFactory.build()] });
+    configurePlatform({
+      storage: {
+        ...store,
+        get: async (key: string, area: StorageArea = 'local') => {
+          if (key === 'quotes') {
+            return null as never;
+          }
+          return store.get(key, area);
+        },
+        getMany: async (keys: string[], area: StorageArea = 'local') => {
+          const seen = await store.getMany(keys, area);
+          if (seen !== null && keys.includes('quotes')) {
+            seen.quotes = UNREADABLE_VALUE;
+          }
+          return seen;
+        },
+      },
+    });
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await expect(getQuotes()).rejects.toThrow(/unreadable/i);
+  });
 });
 
 // The legacy key is the only copy of those quotes, so it may only be deleted once the copies
@@ -556,6 +609,45 @@ describe('the legacy quotes migration', () => {
     await expect(getQuotes()).resolves.toHaveLength(1);
 
     expect(at('quotes')).toBeUndefined();
+  });
+
+  // Sync stands in only for a local key that was never written. Standing in for a local read that
+  // FAILED migrates the wrong list and then deletes both — the local one never seen.
+  it('refuses rather than migrating from sync when its own local read fails', async () => {
+    const { store, at } = capturingStore({ quotes: [quoteFactory.build({ id: 'local-1' })] });
+    await store.set('quotes', [quoteFactory.build({ id: 'sync-1' })], 'sync');
+    // The gate's read lands; the migration's own read of the same key does not.
+    let localReads = 0;
+    const localQuotesRead = (area: StorageArea) => {
+      if (area !== 'local') {
+        return true;
+      }
+      localReads += 1;
+      return localReads === 1;
+    };
+    configurePlatform({
+      storage: {
+        ...store,
+        get: async (key: string, area: StorageArea = 'local') => {
+          if (key === 'quotes' && !localQuotesRead(area)) {
+            return null as never;
+          }
+          return store.get(key, area);
+        },
+        getMany: async (keys: string[], area: StorageArea = 'local') => {
+          if (keys.includes('quotes') && !localQuotesRead(area)) {
+            return null;
+          }
+          return store.getMany(keys, area);
+        },
+      },
+    });
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await expect(getQuotes()).rejects.toThrow(/legacy quotes/i);
+
+    expect(at('quotes', 'sync')).toHaveLength(1);
+    expect(at('seedQuotes')).toBeUndefined();
   });
 });
 

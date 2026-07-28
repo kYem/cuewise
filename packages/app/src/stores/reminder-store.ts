@@ -548,8 +548,10 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       }
 
       commitReminders(set, updated);
-      // `notified` is now persisted, so this sweep is the only chance to announce them.
-      logger.info('Fired due reminders', { count: dueNow.length });
+      // `notified` is now persisted, so this sweep is the only chance to announce them. At error
+      // level because the shipped default log level is 'error' — below it, a reminder that fired
+      // but never reached the user leaves no trace at all.
+      logger.error('Fired due reminders', { count: dueNow.length });
 
       for (const r of dueNow) {
         useToastStore.getState().warning(`Reminder: ${r.text}`);

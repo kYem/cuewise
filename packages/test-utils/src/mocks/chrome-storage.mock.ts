@@ -7,6 +7,8 @@ export interface MockChromeStorage {
   remove: ReturnType<typeof vi.fn>;
   clear: ReturnType<typeof vi.fn>;
   getBytesInUse: ReturnType<typeof vi.fn>;
+  /** Chrome 130+. Delete it from the mock to model an older runtime. */
+  getKeys?: ReturnType<typeof vi.fn>;
 }
 
 export function createChromeStorageMock(): MockChromeStorage {
@@ -47,6 +49,7 @@ export function createChromeStorageMock(): MockChromeStorage {
       return Promise.resolve();
     }),
     getBytesInUse: vi.fn(() => Promise.resolve(0)),
+    getKeys: vi.fn(() => Promise.resolve(Object.keys(data))),
   };
 }
 

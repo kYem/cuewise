@@ -1,4 +1,4 @@
-import { configurePlatform, type SyncMutationSink } from '@cuewise/shared';
+import { configurePlatform, logger, type SyncMutationSink } from '@cuewise/shared';
 import * as storage from '@cuewise/storage';
 import { recurringReminderFactory, reminderFactory } from '@cuewise/test-utils/factories';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -329,6 +329,23 @@ describe('fireDueReminders', () => {
     await useReminderStore.getState().fireDueReminders();
 
     expect(toastWarning).toHaveBeenCalledTimes(2);
+  });
+
+  // The shipped default log level is 'error', so an info line leaves a reminder that fired but
+  // never reached the user with no trace at all.
+  it('records the sweep at a level the shipped log level keeps', async () => {
+    const due = reminderFactory.build({
+      id: 'due-1',
+      text: 'Stand up',
+      dueDate: new Date(Date.now() - 60_000).toISOString(),
+      notified: false,
+    });
+    useReminderStore.setState({ reminders: [due] });
+    const logged = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await useReminderStore.getState().fireDueReminders();
+
+    expect(logged).toHaveBeenCalledWith('Fired due reminders', { count: 1 });
   });
 });
 

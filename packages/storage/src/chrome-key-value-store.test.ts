@@ -146,6 +146,31 @@ describe('ChromeKeyValueStore with chrome.storage available', () => {
     logged.mockRestore();
   });
 
+  // get(null) deserialises the whole area — every quote, the custom background data URL, every
+  // posture stat — just to read the names back off it.
+  it('keys reads the names without deserialising the area', async () => {
+    const local = global.chrome.storage.local as unknown as MockChromeStorage;
+    local.data['settings.theme'] = 'dark';
+    local.data.quotes = 'a very large value';
+    local.get.mockClear();
+
+    await expect(store.keys('settings.', 'local')).resolves.toEqual(['settings.theme']);
+
+    expect(local.get).not.toHaveBeenCalled();
+  });
+
+  it('keys falls back to a full read on a runtime without getKeys', async () => {
+    const local = global.chrome.storage.local as unknown as MockChromeStorage;
+    local.data['settings.theme'] = 'dark';
+    local.data.quotes = 'a very large value';
+    const { getKeys } = local;
+    local.getKeys = undefined;
+
+    await expect(store.keys('settings.', 'local')).resolves.toEqual(['settings.theme']);
+
+    local.getKeys = getKeys;
+  });
+
   it('setMany writes every entry in one call', async () => {
     const local = global.chrome.storage.local as unknown as MockChromeStorage;
 

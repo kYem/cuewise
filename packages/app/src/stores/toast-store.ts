@@ -42,11 +42,13 @@ export const useToastStore = create<ToastStore>((set) => ({
         return { toasts: [...state.toasts, toast] };
       }
       // Restarted, not dropped: a retry that failed again has to look different from one that
-      // worked, and the log keeps the count of what the screen collapsed.
-      logger.warn('Collapsed a repeated toast into the one on screen', { type, message });
+      // worked. At error level because the shipped default log level is 'error' — a warn would
+      // leave a message repeating on an interval with no record of how often.
+      const repeats = (existing.repeats ?? 0) + 1;
+      logger.error('Collapsed a repeated toast into the one on screen', { type, message, repeats });
       return {
         toasts: state.toasts.map((t) =>
-          t.id === existing.id ? { ...t, duration, repeatedAt: Date.now() } : t
+          t.id === existing.id ? { ...t, duration, repeatedAt: Date.now(), repeats } : t
         ),
       };
     });

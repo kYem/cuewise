@@ -128,6 +128,31 @@ function isCustomQuote(quote: Quote): boolean {
 }
 
 /**
+ * The legacy quotes key in one area: `null` only when it was never written. Throws when the read
+ * failed or the value is unreadable — the single-key read conflates those with absence, and this
+ * is the path that DELETES the key, so a wrong "nothing here" is not recoverable.
+ */
+async function readLegacyQuotes(area: StorageArea): Promise<Quote[] | null> {
+  const stored = await getManyFromStorage([STORAGE_KEYS.QUOTES], area);
+  if (stored === null) {
+    logger.error('Could not read the legacy quotes key', { area });
+    throw new Error(`Could not read the legacy quotes key in ${area} storage`);
+  }
+  const entry = stored[STORAGE_KEYS.QUOTES];
+  if (entry === undefined) {
+    return null;
+  }
+  if (!entry.readable) {
+    logger.error('The legacy quotes key is stored but unreadable', { area });
+    throw new Error(`The legacy quotes key in ${area} storage is unreadable`);
+  }
+  if (!Array.isArray(entry.value)) {
+    return null;
+  }
+  return entry.value as Quote[];
+}
+
+/**
  * Migrate legacy quotes storage to hybrid storage
  * Called automatically when old 'quotes' key is detected
  */
@@ -135,11 +160,13 @@ async function migrateLegacyQuotes(): Promise<void> {
   // Raw, and this one matters more than the other movers: the legacy key is REMOVED at
   // the end, so a quote dropped from the copy is not quarantined anywhere — it is gone.
   // Every other validated read leaves the bytes on disk to be salvaged later.
-  const localQuotes = await getFromStorage<Quote[]>(STORAGE_KEYS.QUOTES, 'local');
-  const syncQuotes = await getFromStorage<Quote[]>(STORAGE_KEYS.QUOTES, 'sync');
-  const legacyQuotes = localQuotes || syncQuotes;
+  // readLegacyQuotes throws on a failed local read, so sync can only stand in for a local key
+  // that was never written — never for one this build could not see.
+  const localQuotes = await readLegacyQuotes('local');
+  const syncQuotes = await readLegacyQuotes('sync');
+  const legacyQuotes = localQuotes ?? syncQuotes;
 
-  if (!legacyQuotes || legacyQuotes.length === 0) {
+  if (legacyQuotes === null || legacyQuotes.length === 0) {
     return; // No migration needed
   }
 
@@ -185,10 +212,10 @@ async function migrateLegacyQuotes(): Promise<void> {
  * store seeds on, and seeding rewrites both quote keys — erasing every custom quote.
  */
 export async function getQuotes(): Promise<Quote[]> {
-  // Raw: this only decides whether to migrate, and the migration itself must see
-  // everything that is there.
-  const legacyQuotes = await getFromStorage<Quote[]>(STORAGE_KEYS.QUOTES, 'local');
-  if (legacyQuotes && legacyQuotes.length > 0) {
+  // Raw: this only decides whether to migrate, and the migration itself must see everything that
+  // is there. A read it could not make throws rather than skipping the migration silently.
+  const legacyQuotes = await readLegacyQuotes('local');
+  if (legacyQuotes !== null && legacyQuotes.length > 0) {
     await migrateLegacyQuotes();
   }
 

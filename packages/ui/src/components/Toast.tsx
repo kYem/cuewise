@@ -12,6 +12,8 @@ export interface Toast {
   duration?: number;
   /** Bumped when a repeat is collapsed into this toast, which restarts its auto-dismiss. */
   repeatedAt?: number;
+  /** How many repeats have been collapsed into this toast — 1 after the first. */
+  repeats?: number;
 }
 
 interface ToastItemProps {

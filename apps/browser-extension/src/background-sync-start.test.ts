@@ -40,16 +40,19 @@ const chromeMock = {
   },
 };
 
-const noopStore = {
+// Typed, not cast through unknown: a cast hides a missing method from tsc, and any caller that
+// reached it would get a TypeError where the port contracts a value.
+const noopStore: KeyValueStore = {
   supportsSync: true,
   get: async () => null,
   set: async () => ({ success: true }),
   remove: async () => true,
   getMany: async () => ({}),
+  keys: async () => [],
   setMany: async () => ({ success: true }),
   removeMany: async () => true,
   getUsage: async () => ({ bytesInUse: 0, quota: 0 }),
-} as unknown as KeyValueStore;
+};
 
 beforeAll(async () => {
   global.chrome = chromeMock as unknown as typeof chrome;

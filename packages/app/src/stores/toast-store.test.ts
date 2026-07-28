@@ -62,14 +62,18 @@ describe('toast store', () => {
     expect(collapsed.repeatedAt).toBe(4000);
   });
 
-  it('logs the repeat it kept off the screen', () => {
-    const logged = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+  // At error level, and with a count: the shipped default log level is 'error', so a warn about
+  // a message repeating on an interval reaches nobody and says nothing about how often.
+  it('logs each repeat it kept off the screen, with the running count', () => {
+    const logged = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    useToastStore.getState().error(REPEATING, { collapseRepeats: true });
     useToastStore.getState().error(REPEATING, { collapseRepeats: true });
     useToastStore.getState().error(REPEATING, { collapseRepeats: true });
 
-    expect(logged).toHaveBeenCalledWith(
+    expect(logged).toHaveBeenLastCalledWith(
       expect.stringContaining('Collapsed'),
-      expect.objectContaining({ type: 'error', message: REPEATING })
+      expect.objectContaining({ type: 'error', message: REPEATING, repeats: 2 })
     );
+    expect(useToastStore.getState().toasts[0].repeats).toBe(2);
   });
 });

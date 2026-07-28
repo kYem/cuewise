@@ -67,10 +67,16 @@ export class ChromeKeyValueStore implements KeyValueStore {
     }
   }
 
+  // getKeys where it exists (Chrome 130+): get(null) deserialises the whole area — every quote,
+  // the custom background data URL, every posture stat — only to read the names back off it.
   async keys(prefix: string, area: StorageArea): Promise<string[] | null> {
     try {
-      const all = await areaStore(area).get(null);
-      return Object.keys(all).filter((key) => key.startsWith(prefix));
+      const store = areaStore(area);
+      const all = typeof store.getKeys === 'function' ? await store.getKeys() : null;
+      if (all !== null) {
+        return all.filter((key) => key.startsWith(prefix));
+      }
+      return Object.keys(await store.get(null)).filter((key) => key.startsWith(prefix));
     } catch (error) {
       logger.error(`Error listing ${area} storage keys`, { prefix, error });
       return null;
