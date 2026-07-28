@@ -55,6 +55,10 @@ const fakeNotifier = {
   clear: vi.fn(() => Promise.resolve()),
 };
 
+// completeSession awaits getSettings() before it writes, so a fire-and-forget tick has not
+// reached the write when the caller's next statement runs.
+const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+
 // Test utilities
 const setupWorkSession = (overrides = {}) => {
   usePomodoroStore.setState({
@@ -528,13 +532,14 @@ describe('Pomodoro Store - tick wall-clock reconciliation (#159)', () => {
   // The transition is what stops the tick loop. A throw before it leaves the timer running with
   // the time up, so every later tick completes the same session id and appends it again.
   it('does not append the completed session again when the transition throws', async () => {
-    celebrateMock.mockImplementation(() => {
+    celebrateMock.mockImplementationOnce(() => {
       throw new Error('confetti failed');
     });
     usePomodoroStore.setState({
       status: 'running',
       sessionType: 'work',
       currentSessionId: 'sess-1',
+      sessions: [],
       timeRemaining: 3,
       totalTime: 25 * 60,
       lastTickTime: Date.now() - 5000,
@@ -542,11 +547,13 @@ describe('Pomodoro Store - tick wall-clock reconciliation (#159)', () => {
 
     usePomodoroStore.getState().tick();
     await vi.waitFor(() => expect(storage.setPomodoroSessions).toHaveBeenCalledTimes(1));
+    await flush();
 
     usePomodoroStore.getState().tick();
     usePomodoroStore.getState().tick();
+    await flush();
 
-    expect(storage.setPomodoroSessions).toHaveBeenCalledTimes(1);
+    expect(usePomodoroStore.getState().sessions.map((session) => session.id)).toEqual(['sess-1']);
     expect(usePomodoroStore.getState().status).not.toBe('running');
   });
 
@@ -610,7 +617,9 @@ describe('Pomodoro Store - tick wall-clock reconciliation (#159)', () => {
 
     usePomodoroStore.getState().tick();
     await vi.waitFor(() => expect(storage.setPomodoroSessions).toHaveBeenCalled());
+    await flush();
 
-    expect(usePomodoroStore.getState().timeRemaining).toBeGreaterThanOrEqual(0);
+    expect(usePomodoroStore.getState().sessionType).toBe('break');
+    expect(usePomodoroStore.getState().timeRemaining).toBe(5 * 60);
   });
 });
