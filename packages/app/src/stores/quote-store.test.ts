@@ -78,6 +78,7 @@ describe('Quote Store', () => {
     // Default mock for settings
     vi.mocked(storage.getSettings).mockResolvedValue(defaultSettings);
     settingsMock.updateSettings.mockResolvedValue(true);
+    vi.mocked(storage.setQuotes).mockResolvedValue({ success: true });
   });
 
   describe('initialize', () => {
@@ -134,6 +135,32 @@ describe('Quote Store', () => {
       const state = useQuoteStore.getState();
       expect(state.error).toBeTruthy();
       expect(state.isLoading).toBe(false);
+    });
+
+    // Seeding rewrites both quote keys, so a read that failed must never reach it — the write
+    // would erase every custom quote the user wrote.
+    it('does not seed on a read that failed', async () => {
+      vi.mocked(storage.getQuotes).mockRejectedValue(new Error('Storage error'));
+
+      await useQuoteStore.getState().initialize();
+
+      expect(storage.setQuotes).not.toHaveBeenCalled();
+    });
+
+    it('reports a seed write that did not land instead of showing quotes it never saved', async () => {
+      vi.mocked(storage.getQuotes).mockResolvedValue([]);
+      vi.mocked(storage.getCurrentQuote).mockResolvedValue(null);
+      vi.mocked(storage.setQuotes).mockResolvedValue({
+        success: false,
+        error: { type: 'quota_exceeded', message: 'Storage full' },
+      });
+
+      await useQuoteStore.getState().initialize();
+
+      const state = useQuoteStore.getState();
+      expect(state.error).toBeTruthy();
+      expect(state.quotes).toEqual([]);
+      expect(mockToastError).toHaveBeenCalled();
     });
   });
 

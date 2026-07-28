@@ -1,3 +1,4 @@
+import { quoteFactory } from '@cuewise/test-utils/factories';
 import { render, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { useQuoteStore } from '../stores/quote-store';
@@ -30,5 +31,25 @@ describe('QuoteManagementPage initialization', () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     expect(initialize).toHaveBeenCalledTimes(1);
+  });
+
+  // The already-loaded path returned before the ref was ever set, so the guard held only for
+  // a page that started empty — deleting the last quote reopened the loop.
+  it('holds the guard when the page started with quotes and then lost them', async () => {
+    const initialize = vi.fn(async () => {});
+    useQuoteStore.setState({
+      quotes: [],
+      isLoading: false,
+      error: null,
+      initialize,
+    });
+    useQuoteStore.setState({ quotes: [quoteFactory.build()] });
+
+    const { rerender } = render(<QuoteManagementPage />);
+    useQuoteStore.setState({ quotes: [] });
+    rerender(<QuoteManagementPage />);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(initialize).not.toHaveBeenCalled();
   });
 });

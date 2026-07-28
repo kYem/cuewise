@@ -135,10 +135,13 @@ export const QuoteManagementPage: React.FC = () => {
   // gating on emptiness re-fires this effect — and its error toast — forever.
   const initializeAttempted = useRef(false);
   useEffect(() => {
-    if (initializeAttempted.current || quotes.length > 0) {
+    if (initializeAttempted.current) {
       return;
     }
     initializeAttempted.current = true;
+    if (quotes.length > 0) {
+      return;
+    }
     initialize();
   }, [quotes.length, initialize]);
 
