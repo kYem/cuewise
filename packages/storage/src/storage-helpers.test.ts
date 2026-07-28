@@ -845,6 +845,73 @@ describe('a settings value that is stored but unreadable', () => {
       fields: ['theme'],
     });
   });
+
+  // The gate path, not the display path: defaulting autoRollDueTasks to on re-dates every
+  // overdue task of a user who turned it off, and pushes that to every other device.
+  it('getSettingsOrNull refuses rather than defaulting that field', async () => {
+    configurePlatform({
+      storage: unreadableSettingsKey(settingsStorageKey('autoRollDueTasks')),
+    });
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await expect(getSettingsOrNull()).resolves.toBeNull();
+  });
+});
+
+// The blob back-stops every field until the migration runs, so a blob that cannot be read blinds
+// the same fields an unreadable per-key entry would — and reads exactly like one that never held.
+describe('a legacy settings blob that is stored but unreadable', () => {
+  function unreadableBlob(
+    initial: Partial<Record<StorageArea, Record<string, unknown>>> = {}
+  ): KeyValueStore {
+    const { store } = recordingStore({
+      ...initial,
+      local: { [STORAGE_KEYS.SETTINGS]: legacyBlob({}), ...initial.local },
+    });
+    return {
+      ...store,
+      // The single-key read conflates unreadable with absent, which is what leaves the blob on
+      // disk: the migration reads null, returns early, and every later read still goes through it.
+      get: async <T>(key: string, area: StorageArea) => {
+        if (key === STORAGE_KEYS.SETTINGS) {
+          return null;
+        }
+        return store.get<T>(key, area);
+      },
+      getMany: async (keys: string[], area: StorageArea) => {
+        const seen = await store.getMany(keys, area);
+        if (seen !== null && keys.includes(STORAGE_KEYS.SETTINGS)) {
+          seen[STORAGE_KEYS.SETTINGS] = UNREADABLE_VALUE;
+        }
+        return seen;
+      },
+    };
+  }
+
+  it('leaves the storage area unanswered rather than guessing local', async () => {
+    configurePlatform({
+      storage: unreadableBlob({ sync: { [STORAGE_KEYS.GOALS]: goalFactory.buildList(2) } }),
+    });
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await expect(getGoals()).rejects.toThrow(/storage area/i);
+  });
+
+  it('getSettingsOrNull refuses rather than defaulting the fields it back-stopped', async () => {
+    configurePlatform({ storage: unreadableBlob() });
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await expect(getSettingsOrNull()).resolves.toBeNull();
+  });
+
+  it('keeps a per-key value that does not depend on the blob', async () => {
+    configurePlatform({
+      storage: unreadableBlob({ local: { [settingsStorageKey('colorTheme')]: 'forest' } }),
+    });
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await expect(getSettings()).resolves.toMatchObject({ colorTheme: 'forest' });
+  });
 });
 
 describe('getSettingsOrNull', () => {

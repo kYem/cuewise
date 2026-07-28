@@ -92,10 +92,18 @@ async function getStorageArea(): Promise<'local' | 'sync'> {
   if (perKey?.readable === true && settingsValueIsValid('syncEnabled', perKey.value)) {
     syncEnabled = perKey.value;
   } else {
-    const blob = stored[STORAGE_KEYS.SETTINGS];
+    // The blob back-stops the per-key value until the migration runs, so an unreadable blob is as
+    // blinding as an unreadable per-key entry — reading it as "never held syncEnabled" is a guess.
+    const blobEntry = stored[STORAGE_KEYS.SETTINGS];
+    if (blobEntry !== undefined && !blobEntry.readable) {
+      logger.error('The legacy settings blob is unreadable; refusing to guess the storage area');
+      throw new Error(
+        'Could not determine the storage area: the legacy settings blob is unreadable'
+      );
+    }
     let legacy: unknown;
-    if (blob?.readable === true) {
-      legacy = legacySettingsField(blob.value, 'syncEnabled');
+    if (blobEntry?.readable === true) {
+      legacy = legacySettingsField(blobEntry.value, 'syncEnabled');
     }
     if (legacy !== undefined) {
       syncEnabled = legacy;
@@ -515,6 +523,9 @@ async function readSettingsEntries(): Promise<SettingsEntries | null> {
     return null;
   }
   const blobEntry = stored[STORAGE_KEYS.SETTINGS];
+  // An unreadable blob blinds every key it would have back-stopped: those keys have no per-key
+  // entry, so "absent" here would mean the default, which is a guess about a value that is there.
+  const blobUnreadable = blobEntry !== undefined && !blobEntry.readable;
   let blob: unknown;
   if (blobEntry?.readable === true) {
     blob = blobEntry.value;
@@ -524,7 +535,11 @@ async function readSettingsEntries(): Promise<SettingsEntries | null> {
   for (const key of SETTINGS_KEYS) {
     const entry = stored[settingsStorageKey(key)];
     if (entry === undefined) {
-      values[key] = legacySettingsField(blob, key);
+      if (blobUnreadable) {
+        unreadable.push(key);
+      } else {
+        values[key] = legacySettingsField(blob, key);
+      }
     } else if (entry.readable) {
       values[key] = entry.value;
     } else {
@@ -535,8 +550,10 @@ async function readSettingsEntries(): Promise<SettingsEntries | null> {
 }
 
 /**
- * `null` when the settings could not be read — for callers that must not act on a guess.
- * `getSettings` hands back defaults there, which a gate would read as consent.
+ * `null` when any field could not be read — for callers that must not act on a guess. A field
+ * that is stored but unreadable is refused too, not defaulted: `autoRollDueTasks` defaults to on,
+ * so defaulting it re-dates every overdue task of a user who turned it off, on every device.
+ * `getSettings` is the display path and defaults field-wise; a gate would read that as consent.
  */
 export async function getSettingsOrNull(): Promise<Settings | null> {
   const entries = await readSettingsEntries();
@@ -546,20 +563,27 @@ export async function getSettingsOrNull(): Promise<Settings | null> {
   }
   if (entries.unreadable.length > 0) {
     // Names only — a setting's value can be a goal id or a playlist the user picked.
-    logger.error('Defaulting settings fields that are stored but unreadable', {
+    logger.error('Refusing to default settings fields that are stored but unreadable', {
       fields: entries.unreadable,
     });
+    return null;
   }
   return { ...DEFAULT_SETTINGS, ...keepReadableSettingsFields(entries.values) };
 }
 
 export async function getSettings(): Promise<Settings> {
-  const settings = await getSettingsOrNull();
-  if (settings === null) {
+  const entries = await readSettingsEntries();
+  if (entries === null) {
     logger.error('Could not read the stored settings; using defaults for this read');
     return { ...DEFAULT_SETTINGS };
   }
-  return settings;
+  if (entries.unreadable.length > 0) {
+    // Names only — a setting's value can be a goal id or a playlist the user picked.
+    logger.error('Defaulting settings fields that are stored but unreadable', {
+      fields: entries.unreadable,
+    });
+  }
+  return { ...DEFAULT_SETTINGS, ...keepReadableSettingsFields(entries.values) };
 }
 
 /**
