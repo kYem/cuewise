@@ -603,7 +603,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       {status === 'error' && (
         <SettingSubgroup>
           <div className="flex flex-col gap-2 py-2">
-            <p className="text-xs text-error">Couldn't turn on Cloud Sync — please try again.</p>
+            <p className="text-xs text-error">Cloud Sync hit a problem — please try again.</p>
             <button
               type="button"
               onClick={handleRetry}

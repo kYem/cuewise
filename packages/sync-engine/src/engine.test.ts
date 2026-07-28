@@ -5,7 +5,7 @@ import {
   RecoveryCodeError,
   unwrapDataKey,
 } from '@cuewise/crypto';
-import { configurePlatform, logger } from '@cuewise/shared';
+import { configurePlatform, logger, storageFailure } from '@cuewise/shared';
 import { getGoals, setGoals } from '@cuewise/storage';
 import { SessionManager, SYNC_PULL_WAKE_ID } from '@cuewise/sync-client';
 import { goalFactory } from '@cuewise/test-utils/factories';
@@ -13,6 +13,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { FakeApiClient, FakeSyncServer } from './__fixtures__/fake-api-client';
 import { FakeKvStore } from './__fixtures__/fake-kv-store';
 import { FakeScheduler } from './__fixtures__/fake-scheduler';
+import { defaultBindings } from './collections';
 import {
   CLOUD_SYNC_ENABLED_KEY,
   LAST_SYNCED_AT_KEY,
@@ -138,6 +139,60 @@ describe('SyncEngine.enableSync', () => {
     });
     await restarted.start();
     expect(restarted.getLastSyncedAt()).toBe(5_000);
+  });
+
+  // "Active · Last synced just now" over a cycle that applied nothing is the worst of both:
+  // the wedge is invisible and the timestamp says the devices are in step.
+  it('neither stamps nor stays active when the pull loop fails', async () => {
+    let t = 5_000;
+    const server = new FakeSyncServer();
+    const device = createDevice(server, { now: () => t });
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    t = 9_000;
+    device.apiClient.rejectNextGetChangesWithNetworkError = true;
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    await device.engine.handlePullWake();
+
+    expect(device.engine.getStatus()).toBe('error');
+    expect(device.engine.getLastSyncedAt()).toBe(5_000);
+  });
+
+  it('refuses to stamp a cycle whose pulled write could not land', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server, { now: () => 5_000 });
+    useStorage(device);
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    // Replays the pushed record as an unknown one, so incoming wins and the write is attempted.
+    const meta = new SyncMetadataStore(device.kv);
+    const replayed = await meta.load();
+    replayed.cursor = 0;
+    replayed.hlcs = {};
+    await meta.save(replayed);
+
+    const bindings = defaultBindings();
+    const goals = bindings.find((b) => b.name === 'goals');
+    if (goals === undefined) {
+      throw new Error('goals binding missing from defaultBindings()');
+    }
+    vi.spyOn(goals, 'writeOne').mockResolvedValue(storageFailure('quota exceeded'));
+    const wedged = new SyncEngine({
+      apiClient: device.apiClient,
+      sessionManager: new SessionManager(device.kv),
+      keyStore: device.kv,
+      scheduler: device.scheduler,
+      bindings,
+      now: () => 9_000,
+    });
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await wedged.start();
+
+    expect(wedged.getStatus()).toBe('error');
+    expect(wedged.getLastSyncedAt()).toBe(5_000);
   });
 
   it('a lastSyncedAt persistence failure is log-only: the sync still succeeds, memory updates', async () => {
@@ -495,7 +550,7 @@ describe('SyncEngine.start / stop', () => {
 
     await restarted.start();
 
-    expect(restarted.getStatus()).toBe('active');
+    expect(restarted.getStatus()).toBe('error');
     expect(restartedScheduler.scheduled.some((s) => s.id === SYNC_PULL_WAKE_ID)).toBe(true);
   });
 
@@ -521,7 +576,7 @@ describe('SyncEngine.handlePullWake', () => {
 
     await expect(device.engine.handlePullWake()).resolves.toBeUndefined();
 
-    expect(device.engine.getStatus()).toBe('active');
+    expect(device.engine.getStatus()).toBe('error');
     expect(device.scheduler.scheduled.some((s) => s.id === SYNC_PULL_WAKE_ID)).toBe(true);
 
     await device.engine.markMutated('goals', 'g1');
@@ -529,6 +584,7 @@ describe('SyncEngine.handlePullWake', () => {
     await device.engine.handlePullWake();
 
     expect(device.apiClient.callOrder).toEqual(['getChanges', 'pushChanges']);
+    expect(device.engine.getStatus()).toBe('active');
   });
 
   // The shipped default log level is 'error', so a warn leaves a permanently wedged loop

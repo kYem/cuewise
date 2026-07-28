@@ -133,9 +133,12 @@ export async function pullOnce(deps: CycleDeps): Promise<void> {
     for (const rec of result.records) {
       const applied = await applyPulledRecord(deps, meta, rec, warnedUnknownCollections);
       if (!applied) {
-        // Apply-before-advance: the write failed, so stop here and leave the cursor before it.
+        // Apply-before-advance: the write failed, so save the progress made and refuse the cycle.
+        // Returning normally would let syncNow stamp "Last synced just now" over nothing applied.
         await deps.meta.save(meta);
-        return;
+        throw new Error(
+          `Sync pull stopped: could not apply ${rec.collection}/${rec.entityId} at seq ${rec.seq}`
+        );
       }
     }
   }
