@@ -23,7 +23,11 @@ import {
   rollDueTasksToToday,
   toggleSubtaskInGoal,
 } from '@cuewise/shared';
-import { getSettings, getGoals as loadAllGoals, setGoals as saveAllGoals } from '@cuewise/storage';
+import {
+  getSettingsOrNull,
+  getGoals as loadAllGoals,
+  setGoals as saveAllGoals,
+} from '@cuewise/storage';
 import { create } from 'zustand';
 import { useToastStore } from './toast-store';
 
@@ -312,8 +316,11 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       // Gate on persisted settings, not the settings store: goal hydration races
       // settings hydration (and #goals never hydrates it), so the store can
       // still hold the default when the roll fires on load.
-      const { autoRollDueTasks } = await getSettings();
-      if (!autoRollDueTasks) {
+      //
+      // A read that failed is not permission: the default is on, so guessing would re-date
+      // every overdue task of a user who turned this off, on every device.
+      const settings = await getSettingsOrNull();
+      if (settings === null || !settings.autoRollDueTasks) {
         return false;
       }
 
