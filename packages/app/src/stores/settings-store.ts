@@ -12,7 +12,13 @@ import {
   type Settings,
   type StorageError,
 } from '@cuewise/shared';
-import { clearSettings, getSettings, migrateStorageData, setSettingsPatch } from '@cuewise/storage';
+import {
+  clearSettings,
+  getSettings,
+  getSettingsOrNull,
+  migrateStorageData,
+  setSettingsPatch,
+} from '@cuewise/storage';
 import { create } from 'zustand';
 import { useToastStore } from './toast-store';
 
@@ -129,7 +135,15 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       try {
         // Re-reads settings because a sync pull or a pre-init click can beat this write; the read
         // feeds the merge base and changed-key diff below — the write itself is a sparse per-key patch.
-        const settings = { ...DEFAULT_SETTINGS, ...(await getSettings()) };
+        // Fail-closed: defaults as the base would read `syncEnabled: false` as the user's choice,
+        // skipping the area migration while still writing the flag.
+        const settings = await getSettingsOrNull();
+        if (settings === null) {
+          const errorMessage = 'Could not read your settings, so the change was not saved.';
+          set({ error: errorMessage, preview: null });
+          useToastStore.getState().error(errorMessage);
+          return false;
+        }
 
         // Clamp ranged values here — the settings write path the UI uses — so
         // presets/steppers (and a future settings import) can't persist an out-of-range

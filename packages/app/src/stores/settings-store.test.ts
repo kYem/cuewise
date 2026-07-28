@@ -13,6 +13,7 @@ import { selectBackgroundBlur, selectBackgroundDim, useSettingsStore } from './s
 
 vi.mock('@cuewise/storage', () => ({
   getSettings: vi.fn(),
+  getSettingsOrNull: vi.fn(),
   setSettingsPatch: vi.fn(),
   clearSettings: vi.fn(),
   migrateStorageData: vi.fn(),
@@ -44,6 +45,7 @@ let storedSettings: Settings = defaultSettings;
 function seedStorage(settings: Settings = defaultSettings) {
   storedSettings = settings;
   vi.mocked(storage.getSettings).mockImplementation(async () => storedSettings);
+  vi.mocked(storage.getSettingsOrNull).mockImplementation(async () => storedSettings);
   vi.mocked(storage.setSettingsPatch).mockImplementation(async (patch: Partial<Settings>) => {
     storedSettings = { ...storedSettings, ...patch };
     return { success: true };
@@ -427,5 +429,32 @@ describe('serialized write path', () => {
     await useSettingsStore.getState().updateSettings({ showClock: true });
 
     expect(document.documentElement.classList.contains('dark')).toBe(true);
+  });
+});
+
+// Defaults as the merge base read as the user's own choices: syncEnabled would come back false
+// for a sync user, so toggling sync off would skip the area migration and still write the flag.
+describe('an update whose read of the current settings failed', () => {
+  beforeEach(() => {
+    useSettingsStore.setState({
+      settings: defaultSettings,
+      preview: null,
+      isLoading: false,
+      error: null,
+    });
+    vi.clearAllMocks();
+    seedStorage({ ...defaultSettings, syncEnabled: true });
+    vi.mocked(storage.migrateStorageData).mockResolvedValue({ success: true });
+    vi.mocked(storage.getSettingsOrNull).mockResolvedValue(null);
+  });
+
+  it('aborts instead of writing against defaults', async () => {
+    await expect(useSettingsStore.getState().updateSettings({ syncEnabled: false })).resolves.toBe(
+      false
+    );
+
+    expect(storage.setSettingsPatch).not.toHaveBeenCalled();
+    expect(storage.migrateStorageData).not.toHaveBeenCalled();
+    expect(useSettingsStore.getState().error).not.toBeNull();
   });
 });
