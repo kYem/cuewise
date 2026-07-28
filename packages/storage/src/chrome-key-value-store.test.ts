@@ -108,6 +108,19 @@ describe('ChromeKeyValueStore with chrome.storage available', () => {
     expect('b' in result).toBe(false);
   });
 
+  // The counterpart of the localStorage adapter's own case: "absent" is what the sparse settings
+  // layout reads as "follow the default", so the two backends must not disagree about a null.
+  it('getMany reports a key stored as null as present', async () => {
+    const local = global.chrome.storage.local as unknown as MockChromeStorage;
+    local.data.nulled = null;
+
+    const result = await store.getMany(['nulled', 'missing'], 'local');
+
+    expect(result).toEqual({ nulled: null });
+    expect('nulled' in result).toBe(true);
+    expect('missing' in result).toBe(false);
+  });
+
   it('setMany writes every entry in one call', async () => {
     const local = global.chrome.storage.local as unknown as MockChromeStorage;
 

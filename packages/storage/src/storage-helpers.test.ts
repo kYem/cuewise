@@ -465,6 +465,80 @@ describe('migrateLegacySettings', () => {
   });
 });
 
+// The blob stays on disk when the write fails, and it is still the only record of those keys —
+// including `syncEnabled`, which decides the area every other collection lives in.
+describe('a migration whose write failed', () => {
+  function cannotWriteSettings(
+    initial: Partial<Record<StorageArea, Record<string, unknown>>>
+  ): KeyValueStore {
+    const { store } = recordingStore(initial);
+    return {
+      ...store,
+      setMany: async () => ({
+        success: false as const,
+        error: { type: 'quota_exceeded' as const, message: 'Storage full' },
+      }),
+    };
+  }
+
+  it('still reads a sync user out of the sync area', async () => {
+    const goals = goalFactory.buildList(2);
+    configurePlatform({
+      storage: cannotWriteSettings({
+        local: { [STORAGE_KEYS.SETTINGS]: legacyBlob({ syncEnabled: true }) },
+        sync: { [STORAGE_KEYS.GOALS]: goals },
+      }),
+    });
+
+    await expect(getGoals()).resolves.toEqual(goals);
+  });
+
+  // What the migration would have destroyed must not instead be pushed to every other device.
+  it('drops a blob field that fails its schema, exactly as the migration would', async () => {
+    configurePlatform({
+      storage: cannotWriteSettings({
+        local: { [STORAGE_KEYS.SETTINGS]: { ...legacyBlob({ theme: 'dark' }), colorTheme: 42 } },
+      }),
+    });
+
+    await expect(getSettingsForSync()).resolves.toMatchObject({
+      theme: 'dark',
+      colorTheme: DEFAULT_SETTINGS.colorTheme,
+    });
+  });
+});
+
+// The migration reads which per-key entries exist, then writes the gaps it found. A settings
+// write landing inside that window reads as a gap and is reverted by the migration's own write.
+describe('a settings write racing the migration', () => {
+  it('outlives a migration write that lands after it', async () => {
+    const { store, areas } = recordingStore({
+      local: { [STORAGE_KEYS.SETTINGS]: legacyBlob({ theme: 'dark' }) },
+    });
+    let racingWrite: Promise<unknown> = Promise.resolve();
+    configurePlatform({
+      storage: {
+        ...store,
+        // Fires the write inside the window: the migration has its snapshot of the per-key
+        // entries and has not written its patch yet.
+        getMany: async (keys: string[], area: StorageArea) => {
+          const seen = await store.getMany(keys, area);
+          if (keys.includes(settingsStorageKey('theme'))) {
+            racingWrite = setSettingsPatch({ theme: 'light' });
+            await new Promise((resolve) => setTimeout(resolve, 0));
+          }
+          return seen;
+        },
+      },
+    });
+
+    await ensureSettingsMigrated();
+    await racingWrite;
+
+    expect(areas.local[settingsStorageKey('theme')]).toBe('light');
+  });
+});
+
 // `getStorageArea` awaits this on nearly every storage call, so a memoized rejection would
 // fail every read and write in the realm for the rest of the session.
 describe('ensureSettingsMigrated', () => {

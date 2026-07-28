@@ -43,6 +43,19 @@ describe('LocalStorageKeyValueStore', () => {
     expect('b' in result).toBe(false);
   });
 
+  // Absence is the semantic the sparse settings layout rests on, and both shipped adapters must
+  // agree on it: a key stored as `null` was written, so it is present, not "never set".
+  it('getMany reports a key stored as null as present', async () => {
+    const store = new LocalStorageKeyValueStore();
+    await store.set('nulled', null, 'local');
+
+    const result = await store.getMany(['nulled', 'missing'], 'local');
+
+    expect(result).toEqual({ nulled: null });
+    expect('nulled' in result).toBe(true);
+    expect('missing' in result).toBe(false);
+  });
+
   it('setMany writes every entry in one call', async () => {
     const store = new LocalStorageKeyValueStore();
 

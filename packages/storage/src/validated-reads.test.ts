@@ -179,8 +179,18 @@ describe('a stored value that no longer matches its shape', () => {
     await expect(getGoals()).resolves.toEqual([]);
   });
 
-  // At error level, not warn: the shipped default log level is 'error', so a warning here
-  // would never reach a real user's console.
+  it('names the key it discarded, at a level the shipped log level shows', async () => {
+    const error = vi.spyOn(logger, 'error');
+    configurePlatform({ storage: storeHolding({ goals: { nope: true } }) });
+
+    await getGoals();
+
+    expect(error).toHaveBeenCalledWith('Discarded a stored value that should have been a list', {
+      key: 'goals',
+      area: 'local',
+    });
+  });
+
   it('says where it failed, without ever logging the value', async () => {
     const error = vi.spyOn(logger, 'error');
     configurePlatform({
@@ -424,6 +434,14 @@ describe('the raw view sync reads through', () => {
     await expect(getGoalsRaw()).resolves.toEqual([good, unreadable]);
   });
 
+  // Every caller iterates what this returns, so one corrupt key would throw out of `readAll`
+  // and stall the cycle for every collection at once, not just this one.
+  it('reads a corrupt list as empty rather than handing back a non-array', async () => {
+    configurePlatform({ storage: storeHolding({ goals: { nope: true } }) });
+
+    await expect(getGoalsRaw()).resolves.toEqual([]);
+  });
+
   // Both halves, deliberately: custom quotes are the user-authored ones, and if that read
   // regressed to validating, a quote this build cannot parse would vanish from sync's
   // `readAll` — which infers a tombstone from absence and deletes it on every device.
@@ -509,6 +527,19 @@ describe('who gets their hidden items back', () => {
     await setGoalsRaw(all.filter((goal) => goal.id !== 'g2'));
 
     expect(at('goals')).toEqual([readable]);
+  });
+
+  // The quarantined row is invisible to its own id-keyed reads, so keeping it alongside the
+  // replacement would hand every later lookup the broken one.
+  it('lets the user re-create an item under a quarantined id, once', async () => {
+    const recreated = { ...readable, id: 'g2' };
+    const { at, wroteTo, store } = capturingStore({ goals: [unreadable] });
+    configurePlatform({ storage: store });
+
+    await setGoals([recreated]);
+
+    expect(wroteTo('goals', 'local')).toBe(true);
+    expect(at('goals')).toEqual([recreated]);
   });
 
   // Driven through a MIXED caller — raw read into the validated setter — because that is the
