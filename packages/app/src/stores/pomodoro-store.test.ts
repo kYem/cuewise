@@ -32,7 +32,16 @@ vi.mock('../utils/sounds', () => ({
   playStartSound: vi.fn(),
 }));
 
-const { celebrateMock } = vi.hoisted(() => ({ celebrateMock: vi.fn() }));
+const { celebrateMock, storeLogger } = vi.hoisted(() => ({
+  celebrateMock: vi.fn(),
+  storeLogger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}));
+
+// The store's logger is a private instance, disabled under vitest — hand it a spy instead.
+vi.mock('@cuewise/shared', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@cuewise/shared')>()),
+  createLogger: () => storeLogger,
+}));
 
 vi.mock('./celebration-store', () => ({
   useCelebrationStore: {
@@ -496,8 +505,7 @@ describe('Pomodoro Store - tick wall-clock reconciliation (#159)', () => {
     expect(toastError).toHaveBeenCalledTimes(1);
   });
 
-  // The session did save; only the confetti threw. Reporting that as "failed to save" and
-  // pausing the break the user is already on is a lie plus a stopped timer.
+  // The session did save; only the confetti threw. Reporting that as "failed to save" is a lie.
   it('does not report a saved session as failed when the celebration throws', async () => {
     celebrateMock.mockImplementationOnce(() => {
       throw new Error('confetti failed');
@@ -511,11 +519,83 @@ describe('Pomodoro Store - tick wall-clock reconciliation (#159)', () => {
       lastTickTime: Date.now(),
     });
 
-    await expect(usePomodoroStore.getState().completeSession()).rejects.toThrow('confetti failed');
+    await usePomodoroStore.getState().completeSession();
 
     expect(storage.setPomodoroSessions).toHaveBeenCalled();
     expect(toastError).not.toHaveBeenCalled();
-    expect(usePomodoroStore.getState().status).not.toBe('paused');
+  });
+
+  // The transition is what stops the tick loop. A throw before it leaves the timer running with
+  // the time up, so every later tick completes the same session id and appends it again.
+  it('does not append the completed session again when the transition throws', async () => {
+    celebrateMock.mockImplementation(() => {
+      throw new Error('confetti failed');
+    });
+    usePomodoroStore.setState({
+      status: 'running',
+      sessionType: 'work',
+      currentSessionId: 'sess-1',
+      timeRemaining: 3,
+      totalTime: 25 * 60,
+      lastTickTime: Date.now() - 5000,
+    });
+
+    usePomodoroStore.getState().tick();
+    await vi.waitFor(() => expect(storage.setPomodoroSessions).toHaveBeenCalledTimes(1));
+
+    usePomodoroStore.getState().tick();
+    usePomodoroStore.getState().tick();
+
+    expect(storage.setPomodoroSessions).toHaveBeenCalledTimes(1);
+    expect(usePomodoroStore.getState().status).not.toBe('running');
+  });
+
+  // Both callers are fire-and-forget, so without this the throw is an unhandled rejection.
+  it('logs a throw that lands past the save', async () => {
+    celebrateMock.mockImplementationOnce(() => {
+      throw new Error('confetti failed');
+    });
+    usePomodoroStore.setState({
+      status: 'running',
+      sessionType: 'work',
+      currentSessionId: 'sess-1',
+      timeRemaining: 1,
+      totalTime: 25 * 60,
+      lastTickTime: Date.now(),
+    });
+
+    await usePomodoroStore.getState().completeSession();
+
+    expect(storeLogger.error).toHaveBeenCalledWith(
+      expect.stringContaining('finishing'),
+      expect.any(Error)
+    );
+  });
+
+  // A session kept in memory alone shows in the heatmap and is gone on the next reload.
+  it('does not keep a session the save refused', async () => {
+    vi.mocked(storage.setPomodoroSessions).mockResolvedValue({
+      success: false,
+      error: { type: 'unknown', message: 'write failed' },
+    });
+    usePomodoroStore.setState({
+      status: 'running',
+      sessionType: 'work',
+      currentSessionId: 'sess-1',
+      sessions: [],
+      timeRemaining: 1,
+      totalTime: 25 * 60,
+      lastTickTime: Date.now(),
+    });
+
+    await usePomodoroStore.getState().completeSession();
+
+    expect(usePomodoroStore.getState().sessions).toEqual([]);
+    expect(usePomodoroStore.getState().error).toBe('Failed to save session. Please try again.');
+    expect(storeLogger.error).toHaveBeenCalledWith(expect.stringContaining('save'), {
+      type: 'unknown',
+      message: 'write failed',
+    });
   });
 
   it('completes the session (never negative) when elapsed meets or exceeds what remains', async () => {
