@@ -1,4 +1,5 @@
 import { logger } from '@cuewise/shared';
+import type { SyncFailureReason } from '@cuewise/sync-engine';
 import { defaultSettings } from '@cuewise/test-utils';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -29,6 +30,9 @@ vi.mock('../../stores/settings-store', () => ({
 
 const CODE = 'CW1-MWWJH-3K3QQ-R4RNB-JW1PV-8TRQT-PC14A-R5G5V';
 const DISABLE_MESSAGE = 'Re-enabling on this device will need your recovery code.';
+const INCOMPLETE_MESSAGE = "Sync didn't complete — your data is safe on this device.";
+const DEVICE_FAILURE_MESSAGE =
+  "Cloud Sync couldn't finish on this device. Your data is safe here and it will keep retrying.";
 
 function sectionProps(overrides: Partial<SettingsSectionProps> = {}): SettingsSectionProps {
   return {
@@ -913,18 +917,43 @@ describe('SyncSettingsSectionComponent', () => {
   it('keeps the account controls while a failed cycle is showing', async () => {
     const user = userEvent.setup();
     const controller = new FakeSyncController();
+    controller.scriptDetails({
+      accountEmail: 'kes@example.com',
+      accountId: 'user-1',
+      lastSyncedAt: null,
+    });
     controller.scriptSyncNow({ kind: 'failed', reason: 'device', error: new Error('unreadable') });
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+    await screen.findByTestId('sync-account-label');
+
+    await user.click(screen.getByRole('button', { name: 'Sync now' }));
+
+    expect(await screen.findByTestId('sync-failure-badge')).toBeInTheDocument();
+    // A wedged cycle must not borrow the 'error' status: that one is for a failed enrolment and
+    // hides the very controls — account line, Sync now, Regenerate — that recover from this.
+    expect(screen.getByTestId('sync-status-pill')).toHaveTextContent('Active');
+    expect(screen.getByTestId('sync-account-label')).toHaveTextContent('Signed in as kes@example');
+    expect(screen.getByRole('button', { name: 'Sync now' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Regenerate recovery code/ })).toBeInTheDocument();
+  });
+
+  it('falls back to the incomplete-sync copy for a failure reason this build has no copy for', async () => {
+    // Version skew: an updated service worker can report a reason an already-open page predates.
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptSyncNow({
+      kind: 'failed',
+      reason: 'quota' as SyncFailureReason,
+      error: new Error('unknown to this bundle'),
+    });
     renderSection(controller);
     act(() => controller.setStatus('active'));
 
     await user.click(screen.getByRole('button', { name: 'Sync now' }));
 
-    expect(await screen.findByText(/can't read something on this device/i)).toBeInTheDocument();
-    // A wedged cycle must not borrow the 'error' status: that one is for a failed enrolment and
-    // hides the very controls — account line, Sync now, Regenerate — that recover from this.
-    expect(screen.getByTestId('sync-status-pill')).toHaveTextContent('Active');
-    expect(screen.getByRole('button', { name: 'Sync now' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Regenerate recovery code/ })).toBeInTheDocument();
+    expect(await screen.findByTestId('sync-failure-badge')).toHaveTextContent(INCOMPLETE_MESSAGE);
+    expect(toastError).toHaveBeenCalledWith(INCOMPLETE_MESSAGE);
   });
 
   it('does not report success for a cycle that did nothing', async () => {
@@ -973,6 +1002,22 @@ describe('SyncSettingsSectionComponent', () => {
     expect(controller.calls.some((c) => c.method === 'syncNow')).toBe(false);
   });
 
+  it('shows a failed initial sync after an enable, with no further click', async () => {
+    // Enabling while offline lands at active with a failed cycle behind it; the mount read already
+    // ran, and the enable path fires no status the panel re-reads on, so only this re-read finds it.
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    renderSection(controller);
+    controller.scriptLastCycle({ kind: 'failed', reason: 'network', error: new Error('offline') });
+
+    await enterEnableStep(user, 'acct-1');
+    await user.click(screen.getByRole('button', { name: 'Enable' }));
+    act(() => controller.setStatus('active'));
+
+    expect(await screen.findByTestId('sync-failure-badge')).toBeInTheDocument();
+    expect(controller.calls.some((c) => c.method === 'syncNow')).toBe(false);
+  });
+
   it('clears the failure once a later cycle succeeds', async () => {
     const user = userEvent.setup();
     const controller = new FakeSyncController();
@@ -998,7 +1043,7 @@ describe('SyncSettingsSectionComponent', () => {
     });
     renderSection(controller);
     act(() => controller.setStatus('active'));
-    await screen.findByText(/can't read something on this device/i);
+    await screen.findByText(DEVICE_FAILURE_MESSAGE);
 
     await user.click(cloudSyncSwitch());
     await user.click(screen.getByRole('button', { name: 'Disable' }));

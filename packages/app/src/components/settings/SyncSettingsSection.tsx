@@ -47,17 +47,24 @@ const STATUS_PILL_LABEL: Partial<Record<SyncUiStatus, string>> = {
   active: 'Active',
 };
 
-// Only `network` promises a recovery, because it is the only reason where that promise is true.
-// `device` says "may": the unreadable value can sit in a collection Reset does not touch.
-const FAILURE_MESSAGE: Record<SyncFailureReason, string> = {
+// Only `network` promises a full recovery, because it is the only reason where that promise is
+// true. `device` is also the bucket for anything unrecognised, so it claims no cause and no cure —
+// only the retry that actually happens (the status stays active; the wake retries every 5 min).
+// Partial on purpose: `reason` crosses an untrusted wire, so a skewed peer's unknown value must
+// fall back rather than paint an empty badge.
+const FAILURE_MESSAGE: Partial<Record<SyncFailureReason, string>> = {
   network:
     "Can't reach Cloud Sync. Your data is safe on this device and will sync when you're back online.",
   server: 'Cloud Sync is having trouble. This device will keep retrying.',
   device:
-    "Cloud Sync can't read something on this device, so syncing is paused. Resetting settings may fix it.",
+    "Cloud Sync couldn't finish on this device. Your data is safe here and it will keep retrying.",
 };
 
 const INCOMPLETE_MESSAGE = "Sync didn't complete — your data is safe on this device.";
+
+function failureMessage(reason: SyncFailureReason): string {
+  return FAILURE_MESSAGE[reason] ?? INCOMPLETE_MESSAGE;
+}
 
 const DISABLE_MESSAGE = 'Re-enabling on this device will need your recovery code.';
 const DISABLE_MESSAGE_UNSAVED =
@@ -252,6 +259,23 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       .warning('Cloud sync is on — open Settings → Cloud Sync and regenerate your recovery code.');
   };
 
+  // Enable finishes at `active` even when its initial cycle failed, and that cycle involves no
+  // click and no status the panel branches on — without this re-read, enabling while offline shows
+  // Active with nothing explaining the missing "Last synced".
+  const refreshLastCycle = async () => {
+    lastCycleGenRef.current += 1;
+    const gen = lastCycleGenRef.current;
+    const outcome = await controller.getLastCycle().catch((error) => {
+      logger.warn(
+        `Cloud sync last cycle unavailable: ${error instanceof Error ? error.message : String(error)}`
+      );
+      return null;
+    });
+    if (lastCycleGenRef.current === gen) {
+      setLastCycle(outcome);
+    }
+  };
+
   // Shared by the initial enable() and the reconnect() flows — both surface the same shape.
   // source records which flow needs a code, so the EnrollCodeModal submit routes back correctly.
   const routeEnableResult = async (
@@ -261,6 +285,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     if (result.ok) {
       // Cloud Sync is now active — hand off from legacy Chrome sync (see takeOverFromChromeSync).
       await takeOverFromChromeSync();
+      await refreshLastCycle();
       setEnabling(false);
       if (result.recoveryCode) {
         surfaceRecoveryCode(result.recoveryCode);
@@ -361,6 +386,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     if (result.ok) {
       // Enrolled successfully — hand off from Chrome sync (see takeOverFromChromeSync).
       await takeOverFromChromeSync();
+      await refreshLastCycle();
       setEnabling(false);
       if (result.recoveryCode) {
         surfaceRecoveryCode(result.recoveryCode);
@@ -397,7 +423,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       if (outcome.kind === 'synced') {
         useToastStore.getState().success('Synced');
       } else if (outcome.kind === 'failed') {
-        useToastStore.getState().error(FAILURE_MESSAGE[outcome.reason]);
+        useToastStore.getState().error(failureMessage(outcome.reason));
       } else {
         useToastStore.getState().warning(INCOMPLETE_MESSAGE);
       }
@@ -483,7 +509,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   const switchChecked = status === 'off' ? enabling : true;
   const pillLabel = STATUS_PILL_LABEL[status];
   // Beside the pill, never instead of it: status stays 'active' so the recovery controls survive.
-  const failureMessage = lastCycle?.kind === 'failed' ? FAILURE_MESSAGE[lastCycle.reason] : null;
+  const badgeMessage = lastCycle?.kind === 'failed' ? failureMessage(lastCycle.reason) : null;
 
   // The enable step's sign-in-options div groups Google today; a "Sign in with Apple"
   // button drops in next to it later.
@@ -602,13 +628,13 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
               <span data-testid="sync-status-pill" className={pillClass(status)}>
                 {pillLabel}
               </span>
-              {failureMessage !== null && (
+              {badgeMessage !== null && (
                 <span
                   data-testid="sync-failure-badge"
                   className="inline-flex items-center gap-2 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs font-medium text-warning"
                 >
                   <AlertTriangle className="h-3.5 w-3.5 flex-none" />
-                  {failureMessage}
+                  {badgeMessage}
                 </span>
               )}
             </div>
