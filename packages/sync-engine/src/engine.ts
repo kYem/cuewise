@@ -5,7 +5,7 @@ import {
   RecoveryCodeError,
   wrapDataKey,
 } from '@cuewise/crypto';
-import { type KeyValueStore, logger, type Scheduler } from '@cuewise/shared';
+import { describeThrown, type KeyValueStore, logger, type Scheduler } from '@cuewise/shared';
 import {
   ApiError,
   armSyncPull,
@@ -86,6 +86,23 @@ export interface SyncEngineDeps {
   onStatus?: (status: SyncStatus) => void;
   onQuarantine?: (key: string) => void;
   onRecoveryCode?: (code: string) => void;
+}
+
+/**
+ * The Error a stalled pull reports. A push error outranked by that stall goes in the MESSAGE text,
+ * because `cause` is non-enumerable and any string-coercing or JSON-serialising log surface drops
+ * it; `cause` still rides along for consoles that render it.
+ */
+function stallError(what: string, outrankedPush: { error: unknown } | undefined): Error {
+  if (outrankedPush === undefined) {
+    return new Error(what);
+  }
+  return new Error(
+    `${what}; the same cycle's push also failed: ${describeThrown(outrankedPush.error)}`,
+    {
+      cause: outrankedPush.error,
+    }
+  );
 }
 
 /**
@@ -282,7 +299,8 @@ export class SyncEngine {
     // Push still runs after a stalled pull — outbound changes must not be held hostage by an
     // inbound wedge — but the stall outranks a push error when reporting, because only the stall
     // describes what is actually wrong with this device. A 401 outranks both: it needs cleanup.
-    let outrankedPushError: unknown;
+    // Boxed, not bare: a thrown `undefined` is still a push failure worth reporting.
+    let outrankedPush: { error: unknown } | undefined;
     try {
       await pushOnce(cycleDeps);
     } catch (err) {
@@ -290,19 +308,19 @@ export class SyncEngine {
       if (failure.kind === 'signed-out' || pull.kind !== 'stalled') {
         return failure;
       }
-      outrankedPushError = err;
+      outrankedPush = { error: err };
     }
 
     if (pull.kind === 'stalled') {
       // A clean transport and a parked cursor: every later remote change is unreachable on this
       // device until that write succeeds, so this is a failure however healthy the wire looked.
-      // The outranked push error rides along as the cause, so syncNow's log reports both.
       return {
         kind: 'failed',
         reason: 'device',
-        error: new Error(`sync pull stalled writing ${pull.collection}/${pull.entityId}`, {
-          cause: outrankedPushError,
-        }),
+        error: stallError(
+          `sync pull stalled writing ${pull.collection}/${pull.entityId}`,
+          outrankedPush
+        ),
       };
     }
     return pull.kind === 'resynced' ? { kind: 'resynced' } : { kind: 'synced' };

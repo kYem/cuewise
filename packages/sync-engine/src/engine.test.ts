@@ -621,6 +621,61 @@ describe('SyncEngine.syncNow', () => {
     }
   });
 
+  it('names the outranked push error in the logged stall message, not only in its cause', async () => {
+    // `cause` is non-enumerable: a log surface that stringifies or JSON-serialises the payload
+    // drops it silently. The message text is what every surface actually renders.
+    const server = new FakeSyncServer();
+    const deviceA = createDevice(server);
+    useStorage(deviceA);
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    await deviceA.engine.enableSync('dev', 'cred-a', 'Device A');
+    const recoveryCode = deviceA.onRecoveryCode.mock.calls[0][0] as string;
+
+    const deviceB = createDevice(server, { bindings: bindingsThatCannotWriteGoals() });
+    useStorage(deviceB);
+    await deviceB.engine.enableSync('dev', 'cred-b', 'Device B', { recoveryCode });
+
+    await setGoals([goalFactory.build({ id: 'gb1' })]);
+    await deviceB.engine.markMutated('goals', 'gb1');
+    deviceB.apiClient.rejectNextPushChanges(new ApiError('network_error', 0));
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await deviceB.engine.syncNow();
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Sync cycle failed; the next scheduled wake will retry',
+      expect.objectContaining({
+        reason: 'device',
+        error: expect.objectContaining({
+          message: expect.stringContaining("the same cycle's push also failed: network_error"),
+        }),
+      })
+    );
+  });
+
+  it('leaves an own `cause` off a stall with no push failure behind it', async () => {
+    // Passing the options bag unconditionally gives a clean stall an own `cause` of undefined,
+    // which reads as "there was a second failure" to anything that checks for the property.
+    const server = new FakeSyncServer();
+    const deviceA = createDevice(server);
+    useStorage(deviceA);
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    await deviceA.engine.enableSync('dev', 'cred-a', 'Device A');
+    const recoveryCode = deviceA.onRecoveryCode.mock.calls[0][0] as string;
+
+    const deviceB = createDevice(server, { bindings: bindingsThatCannotWriteGoals() });
+    useStorage(deviceB);
+    await deviceB.engine.enableSync('dev', 'cred-b', 'Device B', { recoveryCode });
+
+    const outcome = await deviceB.engine.syncNow();
+
+    expect(outcome).toMatchObject({ kind: 'failed', reason: 'device' });
+    if (outcome.kind === 'failed') {
+      expect(Object.hasOwn(outcome.error as Error, 'cause')).toBe(false);
+      expect((outcome.error as Error).message).not.toContain('push');
+    }
+  });
+
   it('reports signed-out when the push after a stalled pull 401s, so auth loss still cleans up', async () => {
     const server = new FakeSyncServer();
     const deviceA = createDevice(server);
