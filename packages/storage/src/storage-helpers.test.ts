@@ -301,6 +301,38 @@ describe('settings', () => {
     await expect(getSettings()).resolves.toMatchObject({ theme: DEFAULT_SETTINGS.theme });
   });
 
+  // The blob is dense — every key was materialized on the user's first save — so while a read
+  // consults it, a key the migration left at its default is frozen at the blob's value forever.
+  it('a flagged read follows a changed default, not the value still in the blob', async () => {
+    const { store, areas } = recordingStore();
+    configurePlatform({ storage: store });
+    await setInStorage(STORAGE_KEYS.SETTINGS, legacyBlob({ theme: 'dark' }), 'local');
+    await ensureSettingsMigrated();
+
+    // What shipping a new default looks like from the read's side: the blob still holds the old
+    // one for a key the migration wrote no per-key entry for.
+    areas.local[STORAGE_KEYS.SETTINGS] = legacyBlob({ theme: 'dark', colorTheme: 'forest' });
+
+    await expect(getSettings()).resolves.toMatchObject({
+      theme: 'dark',
+      colorTheme: DEFAULT_SETTINGS.colorTheme,
+    });
+  });
+
+  // The rollback: the flag is the only thing retiring the blob, so removing it restores the
+  // read-through. The migration memo is left resolved, so this is the read path alone.
+  it('reads through the blob again once the flag is cleared', async () => {
+    const { store, areas } = recordingStore();
+    configurePlatform({ storage: store });
+    await setInStorage(STORAGE_KEYS.SETTINGS, legacyBlob({ theme: 'dark' }), 'local');
+    await ensureSettingsMigrated();
+    areas.local[STORAGE_KEYS.SETTINGS] = legacyBlob({ theme: 'dark', colorTheme: 'forest' });
+
+    delete areas.local[STORAGE_KEYS.SETTINGS_MIGRATED];
+
+    await expect(getSettings()).resolves.toMatchObject({ colorTheme: 'forest' });
+  });
+
   it('a changed default reaches a user who never set that key', async () => {
     const { store } = recordingStore();
     configurePlatform({ storage: store });
@@ -402,12 +434,14 @@ describe('migrateLegacySettings', () => {
     expect(await readLegacySettingsBlob()).toEqual(blob);
   });
 
-  it('deletes the legacy blob once migrated', async () => {
-    await setInStorage(STORAGE_KEYS.SETTINGS, legacyBlob({ theme: 'dark' }), 'local');
+  it('flags the move and keeps the legacy blob as a backup', async () => {
+    const blob = legacyBlob({ theme: 'dark' });
+    await setInStorage(STORAGE_KEYS.SETTINGS, blob, 'local');
 
-    await migrateLegacySettings();
+    await expect(migrateLegacySettings()).resolves.toBe(true);
 
-    expect(await readLegacySettingsBlob()).toBeNull();
+    expect(await readLegacySettingsBlob()).toEqual(blob);
+    await expect(getFromStorage(STORAGE_KEYS.SETTINGS_MIGRATED, 'local')).resolves.toBe(true);
   });
 
   it('does nothing when there is no legacy blob', async () => {
@@ -415,6 +449,94 @@ describe('migrateLegacySettings', () => {
 
     const stored = await getManyFromStorage(SETTINGS_KEYS.map(settingsStorageKey));
     expect(stored).toEqual({});
+  });
+
+  it('flags a fresh install that has no blob to migrate', async () => {
+    await expect(migrateLegacySettings()).resolves.toBe(true);
+
+    await expect(getFromStorage(STORAGE_KEYS.SETTINGS_MIGRATED, 'local')).resolves.toBe(true);
+  });
+
+  it('does not re-run or read the blob once flagged', async () => {
+    const { store, areas } = recordingStore({
+      local: {
+        [STORAGE_KEYS.SETTINGS]: legacyBlob({ theme: 'dark' }),
+        [STORAGE_KEYS.SETTINGS_MIGRATED]: true,
+      },
+    });
+    const readKeys: string[] = [];
+    configurePlatform({
+      storage: {
+        ...store,
+        get: async <T>(key: string, area: StorageArea) => {
+          readKeys.push(key);
+          return store.get<T>(key, area);
+        },
+        getMany: async (keys: string[], area: StorageArea) => {
+          readKeys.push(...keys);
+          return store.getMany(keys, area);
+        },
+      },
+    });
+
+    await expect(migrateLegacySettings()).resolves.toBe(true);
+
+    expect(readKeys).toEqual([STORAGE_KEYS.SETTINGS_MIGRATED]);
+    expect(areas.local[settingsStorageKey('theme')]).toBeUndefined();
+  });
+
+  it('leaves the flag unset when the per-key write fails, and copies on the next run', async () => {
+    const { store, areas } = recordingStore({
+      local: { [STORAGE_KEYS.SETTINGS]: legacyBlob({ theme: 'dark' }) },
+    });
+    let writesFail = true;
+    configurePlatform({
+      storage: {
+        ...store,
+        setMany: async (entries: Record<string, unknown>, area: StorageArea) => {
+          if (writesFail) {
+            return {
+              success: false as const,
+              error: { type: 'quota_exceeded' as const, message: 'Storage full' },
+            };
+          }
+          return store.setMany(entries, area);
+        },
+      },
+    });
+
+    await expect(migrateLegacySettings()).resolves.toBe(false);
+    expect(areas.local[STORAGE_KEYS.SETTINGS_MIGRATED]).toBeUndefined();
+
+    writesFail = false;
+    await expect(migrateLegacySettings()).resolves.toBe(true);
+
+    expect(areas.local[settingsStorageKey('theme')]).toBe('dark');
+    expect(areas.local[STORAGE_KEYS.SETTINGS_MIGRATED]).toBe(true);
+  });
+
+  // The flag would otherwise retire a back-stop this build never copied a single value out of.
+  it('leaves the flag unset when the blob is stored but unreadable', async () => {
+    const { store, areas } = recordingStore({
+      local: { [STORAGE_KEYS.SETTINGS]: legacyBlob({ theme: 'dark' }) },
+    });
+    configurePlatform({
+      storage: {
+        ...store,
+        getMany: async (keys: string[], area: StorageArea) => {
+          const seen = await store.getMany(keys, area);
+          if (seen !== null && keys.includes(STORAGE_KEYS.SETTINGS)) {
+            seen[STORAGE_KEYS.SETTINGS] = UNREADABLE_VALUE;
+          }
+          return seen;
+        },
+      },
+    });
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await expect(migrateLegacySettings()).resolves.toBe(false);
+
+    expect(areas.local[STORAGE_KEYS.SETTINGS_MIGRATED]).toBeUndefined();
   });
 
   it('is idempotent across repeated runs', async () => {
@@ -655,12 +777,12 @@ describe('ensureSettingsMigrated', () => {
     configurePlatform({
       storage: {
         ...store,
-        get: async <T>(key: string, area: StorageArea): Promise<T | null> => {
+        getMany: async (keys: string[], area: StorageArea) => {
           if (failNextRead) {
             failNextRead = false;
             throw new Error('storage unavailable');
           }
-          return store.get<T>(key, area);
+          return store.getMany(keys, area);
         },
       },
     });
@@ -670,9 +792,9 @@ describe('ensureSettingsMigrated', () => {
     await expect(getSettings()).resolves.toMatchObject({ theme: 'dark' });
   });
 
-  // The blob is still on disk after a failed write, so the memo must not report the move done.
+  // Nothing was copied after a failed write, so the memo must not report the move done.
   it('runs the migration again for the next reader when the write failed', async () => {
-    const { store } = recordingStore({
+    const { store, areas } = recordingStore({
       local: { [STORAGE_KEYS.SETTINGS]: legacyBlob({ theme: 'dark' }) },
     });
     let writesFail = true;
@@ -695,7 +817,8 @@ describe('ensureSettingsMigrated', () => {
     writesFail = false;
     await ensureSettingsMigrated();
 
-    expect(await readLegacySettingsBlob()).toBeNull();
+    expect(areas.local[settingsStorageKey('theme')]).toBe('dark');
+    expect(areas.local[STORAGE_KEYS.SETTINGS_MIGRATED]).toBe(true);
   });
 });
 
@@ -920,6 +1043,18 @@ describe('a legacy settings blob that is stored but unreadable', () => {
 
     await expect(getSettings()).resolves.toMatchObject({ colorTheme: 'forest' });
   });
+
+  // Once flagged it back-stops nothing, so it can no longer take the storage area down with it.
+  it('answers the storage area anyway once the migration is flagged', async () => {
+    const goals = goalFactory.buildList(2);
+    configurePlatform({
+      storage: unreadableBlob({
+        local: { [STORAGE_KEYS.SETTINGS_MIGRATED]: true, [STORAGE_KEYS.GOALS]: goals },
+      }),
+    });
+
+    await expect(getGoals()).resolves.toEqual(goals);
+  });
 });
 
 describe('readSettings', () => {
@@ -950,6 +1085,30 @@ describe('clearSettings', () => {
 
     expect(areas.local[settingsStorageKey('fromANewerBuild')]).toBeUndefined();
     expect(areas.local[settingsStorageKey('theme')]).toBeUndefined();
+  });
+
+  // The flag lives outside the `settings.` prefix the reset enumerates: cleared with the rest,
+  // the migration would re-run against the surviving blob and restore what the user just reset.
+  it('keeps the migration flag through a reset that cannot delete the blob', async () => {
+    const { store, areas } = recordingStore();
+    configurePlatform({
+      storage: {
+        ...store,
+        removeMany: async (keys: string[], area: StorageArea) =>
+          store.removeMany(
+            keys.filter((key) => key !== STORAGE_KEYS.SETTINGS),
+            area
+          ),
+      },
+    });
+    await setInStorage(STORAGE_KEYS.SETTINGS, legacyBlob({ theme: 'dark' }), 'local');
+    await ensureSettingsMigrated();
+
+    await expect(clearSettings()).resolves.toBe(true);
+    resetSettingsMigration();
+
+    expect(areas.local[STORAGE_KEYS.SETTINGS_MIGRATED]).toBe(true);
+    await expect(getSettings()).resolves.toMatchObject({ theme: DEFAULT_SETTINGS.theme });
   });
 
   it('reports failure instead of claiming a reset it could not enumerate', async () => {
