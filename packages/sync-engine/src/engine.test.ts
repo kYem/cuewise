@@ -5,7 +5,7 @@ import {
   RecoveryCodeError,
   unwrapDataKey,
 } from '@cuewise/crypto';
-import { configurePlatform } from '@cuewise/shared';
+import { configurePlatform, logger } from '@cuewise/shared';
 import { getGoals, setGoals } from '@cuewise/storage';
 import { ApiError, SessionManager, SYNC_PULL_WAKE_ID } from '@cuewise/sync-client';
 import { goalFactory } from '@cuewise/test-utils/factories';
@@ -747,6 +747,27 @@ describe('SyncEngine.handlePullWake', () => {
     await device.engine.handlePullWake();
 
     expect(device.apiClient.callOrder).toEqual(['getChanges', 'pushChanges']);
+  });
+
+  it('logs a failed cycle at error level with the original error, not just its reason', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    device.apiClient.rejectNextGetChangesWithNetworkError = true;
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await device.engine.handlePullWake();
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Sync cycle failed; the next scheduled wake will retry',
+      expect.objectContaining({
+        reason: 'network',
+        error: expect.objectContaining({ message: 'network_error' }),
+      })
+    );
+    errorSpy.mockRestore();
   });
 
   it('a 401 during the wake drops to signed_out and does not re-arm', async () => {
