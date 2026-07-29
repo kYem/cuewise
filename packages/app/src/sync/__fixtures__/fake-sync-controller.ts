@@ -42,6 +42,8 @@ export class FakeSyncController implements SyncController {
   private pendingGoogle: ((result: EnableResult) => void) | null = null;
   private deferredDetails = false;
   private pendingDetails: ((details: SyncDetails | null) => void) | null = null;
+  private deferredLastCycle = false;
+  private pendingLastCycle: ((outcome: SyncOutcome | null) => void) | null = null;
 
   /** Makes the next call to `method` reject with an Error instead of resolving; clears after firing once. */
   failNext(method: FailableMethod): void {
@@ -88,6 +90,20 @@ export class FakeSyncController implements SyncController {
     }
     this.pendingDetails(details);
     this.pendingDetails = null;
+  }
+
+  /** Makes the next getLastCycle() hang until resolveLastCycle() releases it — for asserting read races. */
+  deferNextLastCycle(): void {
+    this.deferredLastCycle = true;
+  }
+
+  /** Releases a getLastCycle() call armed via deferNextLastCycle(). */
+  resolveLastCycle(outcome: SyncOutcome | null): void {
+    if (this.pendingLastCycle === null) {
+      throw new Error('FakeSyncController: no pending getLastCycle() to resolve');
+    }
+    this.pendingLastCycle(outcome);
+    this.pendingLastCycle = null;
   }
 
   /** Records the call, then throws if `method` was armed via failNext (clearing the arm). */
@@ -218,6 +234,12 @@ export class FakeSyncController implements SyncController {
 
   async getLastCycle(): Promise<SyncOutcome | null> {
     this.calls.push({ method: 'getLastCycle', args: [] });
+    if (this.deferredLastCycle) {
+      this.deferredLastCycle = false;
+      return new Promise((resolve) => {
+        this.pendingLastCycle = resolve;
+      });
+    }
     return this.lastCycleOutcome;
   }
 

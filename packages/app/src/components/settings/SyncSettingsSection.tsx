@@ -1,4 +1,5 @@
 import { logger } from '@cuewise/shared';
+import type { SyncFailureReason, SyncOutcome } from '@cuewise/sync-engine';
 import { AlertTriangle, CloudUpload, KeyRound, Loader2, RefreshCw } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
@@ -45,6 +46,18 @@ const STATUS_PILL_LABEL: Partial<Record<SyncUiStatus, string>> = {
   syncing: 'Syncing…',
   active: 'Active',
 };
+
+// Only `network` promises a recovery, because it is the only reason where that promise is true.
+// `device` says "may": the unreadable value can sit in a collection Reset does not touch.
+const FAILURE_MESSAGE: Record<SyncFailureReason, string> = {
+  network:
+    "Can't reach Cloud Sync. Your data is safe on this device and will sync when you're back online.",
+  server: 'Cloud Sync is having trouble. This device will keep retrying.',
+  device:
+    "Cloud Sync can't read something on this device, so syncing is paused. Resetting settings may fix it.",
+};
+
+const INCOMPLETE_MESSAGE = "Sync didn't complete — your data is safe on this device.";
 
 const DISABLE_MESSAGE = 'Re-enabling on this device will need your recovery code.';
 const DISABLE_MESSAGE_UNSAVED =
@@ -139,6 +152,10 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   // generation is stale is dropped, so a slow fetch for a prior account can't clobber a newer
   // one after disable→re-enable, and syncNow's refresh can't lose a race with the mount fetch.
   const detailsGenRef = useRef(0);
+  // What the last cycle did. Read on mount (a failing background wake involves no click) and from
+  // every syncNow, guarded by its own generation counter against the same stale-resolution race.
+  const [lastCycle, setLastCycle] = useState<SyncOutcome | null>(null);
+  const lastCycleGenRef = useRef(0);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -184,6 +201,27 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       }
     );
   }, [controller, status]);
+
+  useEffect(() => {
+    if (!controller) {
+      return;
+    }
+    lastCycleGenRef.current += 1;
+    const gen = lastCycleGenRef.current;
+    controller.getLastCycle().then(
+      (outcome) => {
+        if (lastCycleGenRef.current === gen) {
+          setLastCycle(outcome);
+        }
+      },
+      (error) => {
+        // Contracted never to reject; a host that breaks that leaves the badge off, not unhandled.
+        logger.warn(
+          `Cloud sync last cycle unavailable: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    );
+  }, [controller]);
 
   useEffect(() => {
     if (!controller) {
@@ -349,10 +387,20 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     }
   };
 
+  // `outcome.error` is deliberately not read: chrome.runtime JSON-serialises the outcome, so the
+  // page realm gets `error: {}`. Only `reason` survives; the engine logged the real object already.
   const handleSyncNow = async () => {
     try {
-      await controller.syncNow();
-      useToastStore.getState().success('Synced');
+      const outcome = await controller.syncNow();
+      lastCycleGenRef.current += 1;
+      setLastCycle(outcome);
+      if (outcome.kind === 'synced') {
+        useToastStore.getState().success('Synced');
+      } else if (outcome.kind === 'failed') {
+        useToastStore.getState().error(FAILURE_MESSAGE[outcome.reason]);
+      } else {
+        useToastStore.getState().warning(INCOMPLETE_MESSAGE);
+      }
     } catch (error) {
       logger.error('Cloud sync sync-now failed', error);
       useToastStore.getState().error("Couldn't sync right now — please try again.");
@@ -410,6 +458,9 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       setDetails(null);
       detailsRequestedRef.current = false;
       detailsGenRef.current += 1;
+      // Same reasoning for the cycle: a re-enable must never wear the previous account's failure.
+      setLastCycle(null);
+      lastCycleGenRef.current += 1;
     } catch (error) {
       logger.error('Cloud sync disable failed', error);
       useToastStore.getState().error("Couldn't disable sync — please try again.");
@@ -431,6 +482,8 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
 
   const switchChecked = status === 'off' ? enabling : true;
   const pillLabel = STATUS_PILL_LABEL[status];
+  // Beside the pill, never instead of it: status stays 'active' so the recovery controls survive.
+  const failureMessage = lastCycle?.kind === 'failed' ? FAILURE_MESSAGE[lastCycle.reason] : null;
 
   // The enable step's sign-in-options div groups Google today; a "Sign in with Apple"
   // button drops in next to it later.
@@ -545,9 +598,20 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       {pillLabel && (
         <SettingSubgroup>
           <div className="flex flex-col gap-3 py-2">
-            <span data-testid="sync-status-pill" className={pillClass(status)}>
-              {pillLabel}
-            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <span data-testid="sync-status-pill" className={pillClass(status)}>
+                {pillLabel}
+              </span>
+              {failureMessage !== null && (
+                <span
+                  data-testid="sync-failure-badge"
+                  className="inline-flex items-center gap-2 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs font-medium text-warning"
+                >
+                  <AlertTriangle className="h-3.5 w-3.5 flex-none" />
+                  {failureMessage}
+                </span>
+              )}
+            </div>
             {details && (
               <div data-testid="sync-account-label" className="text-xs text-tertiary">
                 {details.accountEmail !== null

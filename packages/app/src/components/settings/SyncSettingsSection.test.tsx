@@ -910,6 +910,125 @@ describe('SyncSettingsSectionComponent', () => {
     await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith('Synced'));
   });
 
+  it('keeps the account controls while a failed cycle is showing', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptSyncNow({ kind: 'failed', reason: 'device', error: new Error('unreadable') });
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+
+    await user.click(screen.getByRole('button', { name: 'Sync now' }));
+
+    expect(await screen.findByText(/can't read something on this device/i)).toBeInTheDocument();
+    // A wedged cycle must not borrow the 'error' status: that one is for a failed enrolment and
+    // hides the very controls — account line, Sync now, Regenerate — that recover from this.
+    expect(screen.getByTestId('sync-status-pill')).toHaveTextContent('Active');
+    expect(screen.getByRole('button', { name: 'Sync now' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Regenerate recovery code/ })).toBeInTheDocument();
+  });
+
+  it('does not report success for a cycle that did nothing', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptSyncNow({ kind: 'resynced' });
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+
+    await user.click(screen.getByRole('button', { name: 'Sync now' }));
+
+    await waitFor(() => expect(toastWarning).toHaveBeenCalledTimes(1));
+    expect(toastSuccess).not.toHaveBeenCalled();
+  });
+
+  it('toasts the reason, not Synced, when the cycle fails', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptSyncNow({ kind: 'failed', reason: 'server', error: new Error('503') });
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+
+    await user.click(screen.getByRole('button', { name: 'Sync now' }));
+
+    await waitFor(() =>
+      expect(toastError).toHaveBeenCalledWith(
+        'Cloud Sync is having trouble. This device will keep retrying.'
+      )
+    );
+    expect(toastSuccess).not.toHaveBeenCalled();
+  });
+
+  it('shows a failed background cycle on mount, with no click', async () => {
+    // A failing pull wake never involves the panel; reading the last cycle on mount is the only
+    // way it is already on screen when the user opens Settings to find out what is wrong.
+    const controller = new FakeSyncController();
+    controller.scriptLastCycle({ kind: 'failed', reason: 'network', error: new Error('offline') });
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+
+    expect(
+      await screen.findByText(
+        "Can't reach Cloud Sync. Your data is safe on this device and will sync when you're back online."
+      )
+    ).toBeInTheDocument();
+    expect(controller.calls.some((c) => c.method === 'syncNow')).toBe(false);
+  });
+
+  it('clears the failure once a later cycle succeeds', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptLastCycle({ kind: 'failed', reason: 'network', error: new Error('offline') });
+    controller.scriptSyncNow({ kind: 'synced' });
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+    await screen.findByText(/can't reach cloud sync/i);
+
+    await user.click(screen.getByRole('button', { name: 'Sync now' }));
+
+    await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith('Synced'));
+    expect(screen.queryByTestId('sync-failure-badge')).not.toBeInTheDocument();
+  });
+
+  it("drops the failure on disable so a re-enable cannot show the old account's", async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptLastCycle({
+      kind: 'failed',
+      reason: 'device',
+      error: new Error('unreadable'),
+    });
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+    await screen.findByText(/can't read something on this device/i);
+
+    await user.click(cloudSyncSwitch());
+    await user.click(screen.getByRole('button', { name: 'Disable' }));
+    act(() => controller.setStatus('off'));
+    act(() => controller.setStatus('active'));
+
+    expect(screen.queryByTestId('sync-failure-badge')).not.toBeInTheDocument();
+  });
+
+  it('drops a stale mount read that lands after a Sync now failure', async () => {
+    // The mount read and the click race; the click is newer, so its outcome must win even when
+    // the mount read resolves last. Without the generation guard the stale null wipes the badge.
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.deferNextLastCycle();
+    controller.scriptSyncNow({ kind: 'failed', reason: 'device', error: new Error('unreadable') });
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+
+    await user.click(screen.getByRole('button', { name: 'Sync now' }));
+    await screen.findByTestId('sync-failure-badge');
+
+    // `await act(async)` so the resolution's microtask actually runs — a sync act() would leave
+    // the handler unrun and this would pass even with the generation guard deleted.
+    await act(async () => {
+      controller.resolveLastCycle(null);
+    });
+    expect(screen.getByTestId('sync-failure-badge')).toBeInTheDocument();
+  });
+
   it('re-runs enable (never syncNow) when Try again is clicked after a failed enable', async () => {
     const user = userEvent.setup();
     const controller = new FakeSyncController();
