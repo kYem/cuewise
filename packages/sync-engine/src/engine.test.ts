@@ -543,6 +543,78 @@ describe('SyncEngine.syncNow', () => {
     expect(deviceB.engine.getLastSyncedAt()).toBeNull();
   });
 
+  it('still pushes local changes when the pull stalled, so the wedge is inbound only', async () => {
+    const server = new FakeSyncServer();
+    const deviceA = createDevice(server);
+    useStorage(deviceA);
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    await deviceA.engine.enableSync('dev', 'cred-a', 'Device A');
+    const recoveryCode = deviceA.onRecoveryCode.mock.calls[0][0] as string;
+
+    const deviceB = createDevice(server, { bindings: bindingsThatCannotWriteGoals() });
+    useStorage(deviceB);
+    await deviceB.engine.enableSync('dev', 'cred-b', 'Device B', { recoveryCode });
+
+    const localGoal = goalFactory.build({ id: 'gb1' });
+    await setGoals([localGoal]);
+    await deviceB.engine.markMutated('goals', 'gb1');
+    deviceB.apiClient.callOrder.length = 0;
+
+    const outcome = await deviceB.engine.syncNow();
+
+    expect(outcome).toMatchObject({ kind: 'failed', reason: 'device' });
+    expect(deviceB.apiClient.callOrder).toEqual(['getChanges', 'pushChanges']);
+    const uploaded = server.allRecords().some((r) => r.entityId === 'gb1');
+    expect(uploaded).toBe(true);
+  });
+
+  it('reports the stall, not the network, when the push after a stalled pull also fails', async () => {
+    const server = new FakeSyncServer();
+    const deviceA = createDevice(server);
+    useStorage(deviceA);
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    await deviceA.engine.enableSync('dev', 'cred-a', 'Device A');
+    const recoveryCode = deviceA.onRecoveryCode.mock.calls[0][0] as string;
+
+    const deviceB = createDevice(server, { bindings: bindingsThatCannotWriteGoals() });
+    useStorage(deviceB);
+    await deviceB.engine.enableSync('dev', 'cred-b', 'Device B', { recoveryCode });
+
+    await setGoals([goalFactory.build({ id: 'gb1' })]);
+    await deviceB.engine.markMutated('goals', 'gb1');
+    deviceB.apiClient.callOrder.length = 0;
+    // Wi-Fi drops between the pull and the push; the device is still wedged on a LOCAL write, and
+    // reporting `network` would promise it recovers when connectivity returns. It does not.
+    deviceB.apiClient.rejectNextPushChanges(new ApiError('network_error', 0));
+
+    const outcome = await deviceB.engine.syncNow();
+
+    expect(outcome).toMatchObject({ kind: 'failed', reason: 'device' });
+    expect(deviceB.apiClient.callOrder).toEqual(['getChanges', 'pushChanges']);
+  });
+
+  it('reports signed-out when the push after a stalled pull 401s, so auth loss still cleans up', async () => {
+    const server = new FakeSyncServer();
+    const deviceA = createDevice(server);
+    useStorage(deviceA);
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    await deviceA.engine.enableSync('dev', 'cred-a', 'Device A');
+    const recoveryCode = deviceA.onRecoveryCode.mock.calls[0][0] as string;
+
+    const deviceB = createDevice(server, { bindings: bindingsThatCannotWriteGoals() });
+    useStorage(deviceB);
+    await deviceB.engine.enableSync('dev', 'cred-b', 'Device B', { recoveryCode });
+
+    await setGoals([goalFactory.build({ id: 'gb1' })]);
+    await deviceB.engine.markMutated('goals', 'gb1');
+    deviceB.apiClient.rejectNextPushChanges(new ApiError('invalid_token', 401));
+
+    const outcome = await deviceB.engine.syncNow();
+
+    expect(outcome).toEqual({ kind: 'signed-out' });
+    expect(deviceB.engine.getStatus()).toBe('signed_out');
+  });
+
   it('logs a failed cycle for a caller that is not the pull wake', async () => {
     const server = new FakeSyncServer();
     const device = createDevice(server);

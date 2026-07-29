@@ -15,7 +15,7 @@ import {
   SYNC_PULL_WAKE_ID,
 } from '@cuewise/sync-client';
 import { type CollectionBinding, defaultBindings } from './collections';
-import { type CycleDeps, pullOnce, pushOnce } from './cycle';
+import { type CycleDeps, type PullResult, pullOnce, pushOnce } from './cycle';
 import {
   initOrEnrollKey,
   type KeyLifecycleDeps,
@@ -272,25 +272,46 @@ export class SyncEngine {
       now: this.now,
       onQuarantine: this.deps.onQuarantine,
     };
+    let pull: PullResult;
     try {
-      const pull = await pullOnce(cycleDeps);
-      await pushOnce(cycleDeps);
-      if (pull.kind === 'stalled') {
-        // A clean transport and a parked cursor: every later remote change is unreachable on this
-        // device until that write succeeds, so this is a failure however healthy the wire looked.
-        return {
-          kind: 'failed',
-          reason: 'device',
-          error: new Error(`sync pull stalled writing ${pull.collection}/${pull.entityId}`),
-        };
-      }
-      return pull.kind === 'resynced' ? { kind: 'resynced' } : { kind: 'synced' };
+      pull = await pullOnce(cycleDeps);
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) {
-        return { kind: 'signed-out' };
-      }
-      return { kind: 'failed', reason: classifySyncFailure(err), error: err };
+      return this.cycleFailure(err);
     }
+
+    // Push still runs after a stalled pull — outbound changes must not be held hostage by an
+    // inbound wedge — but the stall outranks a push error when reporting, because only the stall
+    // describes what is actually wrong with this device. A 401 outranks both: it needs cleanup.
+    try {
+      await pushOnce(cycleDeps);
+    } catch (err) {
+      const failure = this.cycleFailure(err);
+      if (failure.kind === 'signed-out' || pull.kind !== 'stalled') {
+        return failure;
+      }
+      logger.warn('Sync push failed on an already-stalled cycle; reporting the stall', {
+        error: err,
+      });
+    }
+
+    if (pull.kind === 'stalled') {
+      // A clean transport and a parked cursor: every later remote change is unreachable on this
+      // device until that write succeeds, so this is a failure however healthy the wire looked.
+      return {
+        kind: 'failed',
+        reason: 'device',
+        error: new Error(`sync pull stalled writing ${pull.collection}/${pull.entityId}`),
+      };
+    }
+    return pull.kind === 'resynced' ? { kind: 'resynced' } : { kind: 'synced' };
+  }
+
+  /** Maps a thrown cycle error to its outcome: a 401 is auth loss, anything else is classified. */
+  private cycleFailure(err: unknown): Extract<SyncOutcome, { kind: 'signed-out' | 'failed' }> {
+    if (err instanceof ApiError && err.status === 401) {
+      return { kind: 'signed-out' };
+    }
+    return { kind: 'failed', reason: classifySyncFailure(err), error: err };
   }
 
   /**
