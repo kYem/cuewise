@@ -16,6 +16,8 @@ export class FakeKvStore implements KeyValueStore {
   failNextSet = false;
   /** While set, every write to exactly this key fails — for targeting one write among many. */
   failSetsForKey: string | null = null;
+  /** While set, writes to this key reject outright, as a faulty adapter would. */
+  throwSetsForKey: string | null = null;
   /** While set, a batch read naming exactly this key reports failure instead of absence. */
   failGetManyForKey: string | null = null;
   /** While set, this key reads back as stored-but-unreadable. */
@@ -35,6 +37,9 @@ export class FakeKvStore implements KeyValueStore {
     }
     if (this.failSetsForKey === key) {
       return storageFailure('quota exceeded');
+    }
+    if (this.throwSetsForKey === key) {
+      throw new Error(`FakeKvStore: simulated adapter fault writing ${key}`);
     }
     this.data.set(key, structuredClone(value));
     return { success: true };

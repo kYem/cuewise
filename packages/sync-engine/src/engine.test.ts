@@ -18,6 +18,7 @@ import {
   LAST_SYNCED_AT_KEY,
   SyncEngine,
   type SyncEngineDeps,
+  type SyncStatus,
 } from './engine';
 import { loadPersistedDataKey, RecoveryCodeRequiredError, SYNC_DATA_KEY } from './key-lifecycle';
 import { SyncMetadataStore } from './metadata-store';
@@ -487,14 +488,59 @@ describe('SyncEngine.syncNow', () => {
     await device.engine.enableSync('dev', 'cred-a', 'Device A');
 
     t = 6_000;
-    device.apiClient.rejectNextGetChanges(new ApiError('internal', 500));
+    const serverError = new ApiError('internal', 500);
+    device.apiClient.rejectNextGetChanges(serverError);
     const outcome = await device.engine.syncNow();
 
     expect(outcome.kind).toBe('failed');
     if (outcome.kind === 'failed') {
       expect(outcome.reason).toBe('server');
+      expect(outcome.error).toBe(serverError);
     }
     expect(device.engine.getLastSyncedAt()).toBe(5_000);
+  });
+
+  it('resolves the outcome when a host onCycle callback throws', async () => {
+    const server = new FakeSyncServer();
+    const onCycle = vi.fn(() => {
+      throw new Error('host callback blew up');
+    });
+    const device = createDevice(server, { onCycle });
+    useStorage(device);
+
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    // A throwing callback must not escape into enableSync's catch and poison the status.
+    expect(device.engine.getStatus()).toBe('active');
+    await expect(device.engine.syncNow()).resolves.toEqual({ kind: 'synced' });
+  });
+
+  it('resolves the outcome when persisting the stamp rejects', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    device.kv.throwSetsForKey = LAST_SYNCED_AT_KEY;
+
+    await expect(device.engine.syncNow()).resolves.toEqual({ kind: 'synced' });
+  });
+
+  it('resolves signed-out when the auth-loss cleanup itself throws', async () => {
+    const server = new FakeSyncServer();
+    const onStatus = vi.fn((status: SyncStatus) => {
+      if (status === 'signed_out') {
+        throw new Error('host status listener blew up');
+      }
+    });
+    const device = createDevice(server, { onStatus });
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    device.apiClient.rejectAllWith401 = true;
+
+    await expect(device.engine.syncNow()).resolves.toEqual({ kind: 'signed-out' });
+    expect(device.engine.getStatus()).toBe('signed_out');
   });
 
   it('records the last cycle for callers that did not run it', async () => {
@@ -555,6 +601,20 @@ describe('SyncEngine.disableSync', () => {
     expect(await device.kv.get(SYNC_DATA_KEY, 'local')).toBeNull();
     expect(await device.kv.get(CLOUD_SYNC_ENABLED_KEY, 'local')).toBeNull();
     expect(await getGoals()).toEqual([goal]);
+  });
+
+  it('clears the last cycle so a stale failure cannot outlive the account', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    device.apiClient.rejectNextGetChanges(new ApiError('internal', 500));
+    await device.engine.syncNow();
+    expect(device.engine.getLastCycle()).not.toBeNull();
+
+    await device.engine.disableSync();
+
+    expect(device.engine.getLastCycle()).toBeNull();
   });
 });
 

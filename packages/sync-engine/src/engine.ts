@@ -218,6 +218,7 @@ export class SyncEngine {
     this.dk = null;
     this.keyId = null;
     this.lastSyncedAt = null;
+    this.lastCycle = null;
     this.setStatus('disabled');
   }
 
@@ -258,18 +259,34 @@ export class SyncEngine {
       outcome = pull.resynced ? { kind: 'resynced' } : { kind: 'synced' };
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
-        await this.handleAuthLoss();
         outcome = { kind: 'signed-out' };
       } else {
         outcome = { kind: 'failed', reason: classifySyncFailure(err), error: err };
       }
     }
+    if (outcome.kind === 'signed-out') {
+      await this.bestEffort(() => this.handleAuthLoss(), 'auth-loss cleanup');
+    }
     if (outcome.kind === 'synced') {
-      await this.stampLastSynced();
+      await this.bestEffort(() => this.stampLastSynced(), 'lastSyncedAt stamp');
     }
     this.lastCycle = { at: this.now(), outcome };
-    this.deps.onCycle?.(outcome);
+    await this.bestEffort(() => this.deps.onCycle?.(outcome), 'onCycle notification');
     return outcome;
+  }
+
+  /**
+   * Runs one post-cycle side effect. The cycle already happened, so nothing here may turn a
+   * reported outcome into a rejection — syncNow's never-throws contract holds by construction, not
+   * by trusting adapters and host callbacks (a throwing onCycle would otherwise escape to
+   * enableSync's catch and land an enrolled device on `error`).
+   */
+  private async bestEffort(step: () => Promise<void> | void, what: string): Promise<void> {
+    try {
+      await step();
+    } catch (err) {
+      logger.error(`Sync cycle ${what} failed; the reported outcome still stands`, { error: err });
+    }
   }
 
   /**
