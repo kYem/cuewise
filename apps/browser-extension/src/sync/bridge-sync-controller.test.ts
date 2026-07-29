@@ -597,6 +597,21 @@ describe('BridgeSyncController: disable / syncNow', () => {
     await expect(controller.syncNow()).rejects.toThrow();
   });
 
+  it("carries the worker's reason into the syncNow rejection instead of a constant message", async () => {
+    runtime.sendMessage.mockResolvedValueOnce({ ok: false, reason: 'auth' });
+    const controller = new BridgeSyncController();
+
+    await expect(controller.syncNow()).rejects.toThrow(/auth/);
+  });
+
+  it('rejects syncNow() with a named failure when a dead worker resolves undefined', async () => {
+    runtime.sendMessage.mockResolvedValueOnce(undefined as never);
+    const controller = new BridgeSyncController();
+
+    // Not a TypeError from reading `.ok` off undefined — that says nothing about what happened.
+    await expect(controller.syncNow()).rejects.toThrow(/no response from the background/);
+  });
+
   it('rejects when an ok syncNow response carries no outcome (skewed SW)', async () => {
     runtime.sendMessage.mockResolvedValueOnce({ ok: true } as never);
     const controller = new BridgeSyncController();

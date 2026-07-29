@@ -70,7 +70,9 @@ export interface SyncOpResponse {
   reconnect: SyncControlResponse;
   disable: SyncControlResponse;
   regenerate: SyncControlResponse;
-  syncNow: SyncOutcomeResponse;
+  // Honestly both shapes: the router's error fallback answers ANY op with a failed
+  // SyncControlResponse, so the bridge must narrow on `ok` rather than assume an outcome.
+  syncNow: SyncOutcomeResponse | Extract<SyncControlResponse, { ok: false }>;
   details: SyncDetailsResponse;
   getLastCycle: SyncLastCycleResponse;
 }

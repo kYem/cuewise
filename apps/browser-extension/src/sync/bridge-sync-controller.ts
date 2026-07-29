@@ -245,8 +245,10 @@ export class BridgeSyncController implements SyncController {
   // ok:true response with no outcome (a skewed SW) are different failures, both rejections.
   async syncNow(): Promise<SyncOutcome> {
     const response = await this.send({ kind: 'cuewise-sync-control', op: 'syncNow' });
-    if (!response.ok) {
-      throw new Error('Sync now failed');
+    // `response?.ok` like every sibling: a dead worker resolves undefined, where a bare `.ok`
+    // throws a TypeError naming nothing. The SW's reason rides into the message the panel logs.
+    if (!response?.ok) {
+      throw new Error(`Sync now failed: ${response?.reason ?? 'no response from the background'}`);
     }
     if (response.kind !== 'outcome') {
       throw new Error('Sync now response missing an outcome');
