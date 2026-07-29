@@ -44,6 +44,8 @@ export class FakeSyncController implements SyncController {
   private pendingDetails: ((details: SyncDetails | null) => void) | null = null;
   private deferredLastCycle = false;
   private pendingLastCycle: ((outcome: SyncOutcome | null) => void) | null = null;
+  private deferredSyncNow = false;
+  private pendingSyncNow: ((outcome: SyncOutcome) => void) | null = null;
 
   /** Makes the next call to `method` reject with an Error instead of resolving; clears after firing once. */
   failNext(method: FailableMethod): void {
@@ -104,6 +106,21 @@ export class FakeSyncController implements SyncController {
     }
     this.pendingLastCycle(outcome);
     this.pendingLastCycle = null;
+  }
+
+  /** Makes the next syncNow() hang until resolveSyncNow() releases it — for asserting stale resolutions. */
+  deferNextSyncNow(): void {
+    this.deferredSyncNow = true;
+  }
+
+  /** Releases a syncNow() call armed via deferNextSyncNow(). */
+  resolveSyncNow(outcome: SyncOutcome): void {
+    if (this.pendingSyncNow === null) {
+      throw new Error('FakeSyncController: no pending syncNow() to resolve');
+    }
+    this.lastCycleOutcome = outcome;
+    this.pendingSyncNow(outcome);
+    this.pendingSyncNow = null;
   }
 
   /** Records the call, then throws if `method` was armed via failNext (clearing the arm). */
@@ -226,6 +243,12 @@ export class FakeSyncController implements SyncController {
   async syncNow(): Promise<SyncOutcome> {
     this.calls.push({ method: 'syncNow', args: [] });
     this.maybeFail('syncNow');
+    if (this.deferredSyncNow) {
+      this.deferredSyncNow = false;
+      return new Promise((resolve) => {
+        this.pendingSyncNow = resolve;
+      });
+    }
     const next = this.syncNowResults.shift();
     const outcome = next !== undefined ? next : DEFAULT_SYNC_OUTCOME;
     this.lastCycleOutcome = outcome;

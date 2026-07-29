@@ -1053,6 +1053,52 @@ describe('SyncSettingsSectionComponent', () => {
     expect(screen.queryByTestId('sync-failure-badge')).not.toBeInTheDocument();
   });
 
+  it("drops a Sync now outcome that lands after a disable, never wearing the old account's failure", async () => {
+    // Clicking Sync now offline can hang for the bridge's full timeout; disabling meanwhile must
+    // win, or the re-enabled (possibly different) account inherits the dead one's badge.
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+    controller.deferNextSyncNow();
+
+    await user.click(screen.getByRole('button', { name: 'Sync now' }));
+    await user.click(cloudSyncSwitch());
+    await user.click(screen.getByRole('button', { name: 'Disable' }));
+    act(() => controller.setStatus('off'));
+    act(() => controller.setStatus('active'));
+
+    await act(async () => {
+      controller.resolveSyncNow({
+        kind: 'failed',
+        reason: 'device',
+        error: new Error('unreadable'),
+      });
+    });
+
+    expect(screen.queryByTestId('sync-failure-badge')).not.toBeInTheDocument();
+  });
+
+  it('shows a failed initial sync after a device-#2 enroll, with no further click', async () => {
+    // Enrolling device #2 on a flaky connection is the likeliest failing initial cycle; like the
+    // enable path it lands on Active with nothing else to read the outcome off.
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptEnable({ ok: false, reason: 'needs-code' });
+    renderSection(controller);
+
+    await enterEnableStep(user, 'acct-2');
+    await user.click(screen.getByRole('button', { name: 'Enable' }));
+    await screen.findByText('Enter recovery code');
+    controller.scriptLastCycle({ kind: 'failed', reason: 'network', error: new Error('offline') });
+    await user.type(screen.getByLabelText(/recovery code/i), CODE);
+    await user.click(screen.getByRole('button', { name: 'Enroll' }));
+    act(() => controller.setStatus('active'));
+
+    expect(await screen.findByTestId('sync-failure-badge')).toBeInTheDocument();
+    expect(controller.calls.some((c) => c.method === 'syncNow')).toBe(false);
+  });
+
   it('drops a stale mount read that lands after a Sync now failure', async () => {
     // The mount read and the click race; the click is newer, so its outcome must win even when
     // the mount read resolves last. Without the generation guard the stale null wipes the badge.

@@ -50,9 +50,9 @@ const STATUS_PILL_LABEL: Partial<Record<SyncUiStatus, string>> = {
 // Only `network` promises a full recovery, because it is the only reason where that promise is
 // true. `device` is also the bucket for anything unrecognised, so it claims no cause and no cure —
 // only the retry that actually happens (the status stays active; the wake retries every 5 min).
-// Partial on purpose: `reason` crosses an untrusted wire, so a skewed peer's unknown value must
-// fall back rather than paint an empty badge.
-const FAILURE_MESSAGE: Partial<Record<SyncFailureReason, string>> = {
+// Total on purpose: a new SyncFailureReason without copy here is a compile error, never a silent
+// fall back to the generic line.
+const FAILURE_MESSAGE: Record<SyncFailureReason, string> = {
   network:
     "Can't reach Cloud Sync. Your data is safe on this device and will sync when you're back online.",
   server: 'Cloud Sync is having trouble. This device will keep retrying.',
@@ -63,7 +63,10 @@ const FAILURE_MESSAGE: Partial<Record<SyncFailureReason, string>> = {
 const INCOMPLETE_MESSAGE = "Sync didn't complete — your data is safe on this device.";
 
 function failureMessage(reason: SyncFailureReason): string {
-  return FAILURE_MESSAGE[reason] ?? INCOMPLETE_MESSAGE;
+  // Widened only here: `reason` crosses an untrusted wire, so a skewed peer's unknown value must
+  // fall back rather than paint an empty badge.
+  const known: Partial<Record<SyncFailureReason, string>> = FAILURE_MESSAGE;
+  return known[reason] ?? INCOMPLETE_MESSAGE;
 }
 
 const DISABLE_MESSAGE = 'Re-enabling on this device will need your recovery code.';
@@ -416,10 +419,15 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   // `outcome.error` is deliberately not read: chrome.runtime JSON-serialises the outcome, so the
   // page realm gets `error: {}`. Only `reason` survives; the engine logged the real object already.
   const handleSyncNow = async () => {
+    lastCycleGenRef.current += 1;
+    const cycleGen = lastCycleGenRef.current;
     try {
       const outcome = await controller.syncNow();
-      lastCycleGenRef.current += 1;
-      setLastCycle(outcome);
+      // A stale generation means a disable (or a newer read) superseded this click — the cycle
+      // belongs to an account the panel no longer shows, so its failure must not be painted.
+      if (lastCycleGenRef.current === cycleGen) {
+        setLastCycle(outcome);
+      }
       if (outcome.kind === 'synced') {
         useToastStore.getState().success('Synced');
       } else if (outcome.kind === 'failed') {
