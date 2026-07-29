@@ -88,6 +88,7 @@ export class FakeApiClient implements EngineApiClient {
   exchangeCount = 0;
   private tokenCounter = 0;
   private nextGetChangesError: Error | null = null;
+  private nextPushChangesError: Error | null = null;
 
   constructor(private readonly server: FakeSyncServer) {}
 
@@ -99,6 +100,11 @@ export class FakeApiClient implements EngineApiClient {
   /** One-shot: throws the given error on the next getChanges call, then clears itself. */
   rejectNextGetChanges(error: Error): void {
     this.nextGetChangesError = error;
+  }
+
+  /** One-shot: throws the given error on the next pushChanges call, then clears itself. */
+  rejectNextPushChanges(error: Error): void {
+    this.nextPushChangesError = error;
   }
 
   async exchangeToken(req: ExchangeTokenRequest): Promise<{ token: string }> {
@@ -131,6 +137,9 @@ export class FakeApiClient implements EngineApiClient {
   }
 
   async getChanges(since: number): Promise<{ records: SyncRecord[]; cursor: number }> {
+    // Recorded before every throw below: a call that HAPPENED must be visible to a test that
+    // also scripts it to fail, or a call-order assertion silently reads it as never made.
+    this.callOrder.push('getChanges');
     this.assertAuthorized();
     if (this.rejectNextGetChangesWithNetworkError) {
       this.rejectNextGetChangesWithNetworkError = false;
@@ -145,13 +154,17 @@ export class FakeApiClient implements EngineApiClient {
       this.nextGetChangesError = null;
       throw err;
     }
-    this.callOrder.push('getChanges');
     return this.server.getChanges(since);
   }
 
   async pushChanges(records: PushRecord[]): Promise<{ cursor: number }> {
-    this.assertAuthorized();
     this.callOrder.push('pushChanges');
+    this.assertAuthorized();
+    if (this.nextPushChangesError !== null) {
+      const err = this.nextPushChangesError;
+      this.nextPushChangesError = null;
+      throw err;
+    }
     return this.server.pushChanges(records);
   }
 
