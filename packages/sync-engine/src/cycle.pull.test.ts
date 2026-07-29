@@ -192,6 +192,41 @@ describe('pullOnce', () => {
     errorSpy.mockRestore();
   });
 
+  it('keeps the progress made earlier in the page when a later record stalls the pull', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const goal = goalFactory.build({ id: 'g1' });
+    const sealed = await sealRecord(dk, 'goals', 'g1', { entity: goal, hlc: NEWER_HLC }, 1);
+    const poisoned: SyncRecord = { ...sealed, ciphertext: 'garbage' };
+    const wedging = await sealRecord(
+      dk,
+      'goals',
+      'g2',
+      { entity: goalFactory.build({ id: 'g2' }), hlc: NEWER_HLC },
+      2
+    );
+    transport.pullRecords = [poisoned, wedging];
+    const bindings = defaultBindings();
+    vi.spyOn(requireBinding(bindings, 'goals'), 'writeOne').mockResolvedValue(
+      storageFailure('quota exceeded')
+    );
+    const onQuarantine = vi.fn();
+
+    const first = await pullOnce(makeDeps({ bindings, onQuarantine }));
+
+    expect(first).toEqual({ kind: 'stalled', collection: 'goals', entityId: 'g2' });
+    const afterStall = await metaStore.load();
+    expect(afterStall.quarantine).toEqual(['goals/g1']);
+    expect(afterStall.cursor).toBe(1);
+
+    // Without that persisted progress the wedged device re-quarantines g1 on every 5-minute wake,
+    // re-toasting "a synced item couldn't be read" forever.
+    const second = await pullOnce(makeDeps({ bindings, onQuarantine }));
+
+    expect(second).toEqual({ kind: 'stalled', collection: 'goals', entityId: 'g2' });
+    expect(onQuarantine).toHaveBeenCalledTimes(1);
+    errorSpy.mockRestore();
+  });
+
   // readAll decides the conflict, so an unreadable collection must stop the cycle where it
   // stands rather than resolve every incoming record against an empty local view.
   it('stops without advancing the cursor when the local collection cannot be read', async () => {
@@ -243,6 +278,13 @@ describe('pullOnce', () => {
     const result = await pullOnce(deps);
 
     expect(result).toEqual({ kind: 'resynced' });
+  });
+
+  it('serves the pull after a scripted resync refusal normally, since that script is one-shot', async () => {
+    transport.rejectNextGetChangesWithResync();
+
+    await expect(pullOnce(makeDeps())).resolves.toEqual({ kind: 'resynced' });
+    await expect(pullOnce(makeDeps())).resolves.toEqual({ kind: 'complete' });
   });
 
   it('reports a normal pull as complete', async () => {
