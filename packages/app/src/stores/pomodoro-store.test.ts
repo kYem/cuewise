@@ -1,4 +1,5 @@
-import { configurePlatform } from '@cuewise/shared';
+import { configurePlatform, type Settings } from '@cuewise/shared';
+import type { SettingsRead } from '@cuewise/storage';
 import * as storage from '@cuewise/storage';
 import { defaultSettings } from '@cuewise/test-utils/fixtures';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -10,7 +11,10 @@ vi.mock('@cuewise/storage', () => ({
   getPomodoroSessions: vi.fn(),
   setPomodoroSessions: vi.fn(),
   getSettings: vi.fn(),
+  readSettings: vi.fn(),
 }));
+
+const settingsRead = (settings: Settings): SettingsRead => ({ ok: true, settings });
 
 // Mock toast store with module-level fns so each level is inspectable across getState() calls.
 const toastError = vi.fn();
@@ -55,7 +59,7 @@ const fakeNotifier = {
   clear: vi.fn(() => Promise.resolve()),
 };
 
-// completeSession awaits getSettings() before it writes, so a fire-and-forget tick has not
+// completeSession awaits readSettings() before it writes, so a fire-and-forget tick has not
 // reached the write when the caller's next statement runs.
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -135,6 +139,7 @@ describe('Pomodoro Store - Auto-Start Breaks', () => {
     vi.mocked(storage.getPomodoroSessions).mockResolvedValue([]);
     vi.mocked(storage.setPomodoroSessions).mockResolvedValue({ success: true });
     vi.mocked(storage.getSettings).mockResolvedValue(defaultSettings);
+    vi.mocked(storage.readSettings).mockResolvedValue(settingsRead(defaultSettings));
 
     configurePlatform({ notifier: fakeNotifier });
   });
@@ -192,10 +197,9 @@ describe('Pomodoro Store - Auto-Start Breaks', () => {
 
   describe('completeSession with auto-start disabled', () => {
     beforeEach(() => {
-      vi.mocked(storage.getSettings).mockResolvedValue({
-        ...defaultSettings,
-        pomodoroAutoStartBreaks: false,
-      });
+      vi.mocked(storage.readSettings).mockResolvedValue(
+        settingsRead({ ...defaultSettings, pomodoroAutoStartBreaks: false })
+      );
     });
 
     it('should not auto-start break when work session completes', async () => {
@@ -212,6 +216,44 @@ describe('Pomodoro Store - Auto-Start Breaks', () => {
 
       expectIdleTransition('longBreak');
       expect(sounds.playCompletionSound).toHaveBeenCalledOnce();
+    });
+  });
+
+  // The default is on, so defaulting a value that cannot be read starts a block the user turned
+  // off — while the settings toggle still shows it off.
+  describe('completeSession with an unreadable auto-start setting', () => {
+    beforeEach(() => {
+      vi.mocked(storage.readSettings).mockResolvedValue({
+        ok: false,
+        unreadable: ['pomodoroAutoStartBreaks'],
+      });
+    });
+
+    it('does not auto-start the next block', async () => {
+      setupWorkSession();
+      await usePomodoroStore.getState().completeSession();
+
+      expectIdleTransition('break');
+    });
+
+    it('still saves the completed session and reports no failure', async () => {
+      setupWorkSession();
+      await usePomodoroStore.getState().completeSession();
+
+      expect(usePomodoroStore.getState().sessions.map((session) => session.id)).toEqual([
+        'session-123',
+      ]);
+      expect(usePomodoroStore.getState().error).toBeNull();
+      expect(toastError).not.toHaveBeenCalled();
+    });
+
+    it('leaves a trace naming the gate it refused', async () => {
+      setupWorkSession();
+      await usePomodoroStore.getState().completeSession();
+
+      expect(storeLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining('pomodoroAutoStartBreaks')
+      );
     });
   });
 
@@ -249,10 +291,9 @@ describe('Pomodoro Store - Auto-Start Breaks', () => {
 
   describe('completeSession - break to work transitions with auto-start disabled', () => {
     beforeEach(() => {
-      vi.mocked(storage.getSettings).mockResolvedValue({
-        ...defaultSettings,
-        pomodoroAutoStartBreaks: false,
-      });
+      vi.mocked(storage.readSettings).mockResolvedValue(
+        settingsRead({ ...defaultSettings, pomodoroAutoStartBreaks: false })
+      );
     });
 
     it('should not auto-start work session after break completes', async () => {
@@ -376,6 +417,7 @@ describe('completeSession celebration trigger', () => {
   beforeEach(() => {
     celebrateMock.mockClear();
     vi.mocked(storage.getSettings).mockResolvedValue(defaultSettings);
+    vi.mocked(storage.readSettings).mockResolvedValue(settingsRead(defaultSettings));
     // setPomodoroSessions returns Promise<StorageResult> = { success: boolean }.
     vi.mocked(storage.setPomodoroSessions).mockResolvedValue({ success: true });
   });
@@ -430,6 +472,7 @@ describe('Pomodoro Store - tick wall-clock reconciliation (#159)', () => {
     vi.mocked(storage.getPomodoroSessions).mockResolvedValue([]);
     vi.mocked(storage.setPomodoroSessions).mockResolvedValue({ success: true });
     vi.mocked(storage.getSettings).mockResolvedValue(defaultSettings);
+    vi.mocked(storage.readSettings).mockResolvedValue(settingsRead(defaultSettings));
     configurePlatform({ notifier: fakeNotifier });
   });
 
@@ -489,7 +532,7 @@ describe('Pomodoro Store - tick wall-clock reconciliation (#159)', () => {
   // tick() completes the session whenever the time is up, so a failure that leaves the timer
   // running re-enters it a second later — one toast per second, forever, session never saved.
   it('stops the timer when completing the session fails, instead of retrying every tick', async () => {
-    vi.mocked(storage.getSettings).mockRejectedValue(new Error('storage unavailable'));
+    vi.mocked(storage.readSettings).mockRejectedValue(new Error('storage unavailable'));
     usePomodoroStore.setState({
       status: 'running',
       sessionType: 'work',

@@ -7,7 +7,12 @@ import {
   type NotificationSoundType,
   type PomodoroSession,
 } from '@cuewise/shared';
-import { getPomodoroSessions, getSettings, setPomodoroSessions } from '@cuewise/storage';
+import {
+  getPomodoroSessions,
+  getSettings,
+  readSettings,
+  setPomodoroSessions,
+} from '@cuewise/storage';
 import { useEffect } from 'react';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
@@ -425,8 +430,15 @@ export const usePomodoroStore = create<PomodoroStore>()(
         let autoStartBreaks: boolean;
         let saved: boolean;
         try {
-          const settings = await getSettings();
-          autoStartBreaks = settings.pomodoroAutoStartBreaks;
+          // Defaults to on, so a value it cannot read must leave the user to press start rather
+          // than run a block they may have turned off.
+          const read = await readSettings();
+          if (read.ok) {
+            autoStartBreaks = read.settings.pomodoroAutoStartBreaks;
+          } else {
+            logger.error('Could not read pomodoroAutoStartBreaks; leaving the next block stopped');
+            autoStartBreaks = false;
+          }
 
           const saveResult = await setPomodoroSessions(updatedSessions);
           saved = saveResult.success;
