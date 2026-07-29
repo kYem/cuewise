@@ -443,6 +443,21 @@ describe('handleSyncControlMessage: op errors', () => {
 
     expect(result).toEqual({ ok: false, reason: 'error', detail: 'boom' });
   });
+
+  it('names the cause in detail even when the throw was not an Error', async () => {
+    // The page realm only ever sees `detail`; the raw value stays in the worker's own console.
+    const engine = fakeEngine({
+      syncNow: vi.fn().mockRejectedValue('worker went away'),
+    });
+
+    const result = await handleSyncControlMessage(
+      engine,
+      { kind: 'cuewise-sync-control', op: 'syncNow' },
+      fakeDeps()
+    );
+
+    expect(result).toEqual({ ok: false, reason: 'error', detail: 'worker went away' });
+  });
 });
 
 describe('handleSyncControlMessage: concurrency', () => {

@@ -123,7 +123,9 @@ async function runOp(
     }
   } catch (err) {
     logger.error(`Cloud sync control op '${msg.op}' failed`, err);
-    return { ok: false, reason: 'error', detail: err instanceof Error ? err.message : undefined };
+    // String(err) for a non-Error throw: without it the page realm's log names no cause at all,
+    // and the raw value is only visible in the worker's console — a different inspector.
+    return { ok: false, reason: 'error', detail: err instanceof Error ? err.message : String(err) };
   }
 }
 
