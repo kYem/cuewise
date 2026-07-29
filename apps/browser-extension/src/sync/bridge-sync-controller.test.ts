@@ -654,12 +654,15 @@ describe('BridgeSyncController: getLastCycle', () => {
     warnSpy.mockRestore();
   });
 
-  it('resolves null when a legacy SW answers without a lastCycle kind tag', async () => {
+  it('resolves null when a legacy SW answers ok with no lastCycle kind tag', async () => {
     const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
-    runtime.sendMessage.mockResolvedValueOnce({ ok: false, reason: 'error' });
+    runtime.sendMessage.mockResolvedValueOnce({ ok: true } as never);
     const controller = new BridgeSyncController();
 
     await expect(controller.getLastCycle()).resolves.toBeNull();
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Sync last-cycle outcome unavailable (no responder or error fallback)'
+    );
     warnSpy.mockRestore();
   });
 });
