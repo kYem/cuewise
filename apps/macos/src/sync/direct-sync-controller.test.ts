@@ -504,16 +504,21 @@ describe('createDirectSyncController: syncNow() outcome / getLastCycle()', () =>
       buildEngine: () => engine,
     });
 
-    await expect(controller.getLastCycle()).resolves.toEqual({ kind: 'no-key' });
+    await expect(controller.getLastCycle()).resolves.toEqual({
+      available: true,
+      outcome: { kind: 'no-key' },
+    });
   });
 
-  it('getLastCycle() resolves null when the engine has not run a cycle yet', async () => {
+  it('getLastCycle() reports an available read with no outcome when no cycle has run', async () => {
+    // An in-process read is never "unavailable" — only the extension's realm hop can be, and the
+    // panel clears its badge on this, so reporting unavailable here would latch a stale one.
     const server = new FakeSyncServer();
     const device = createDevice(server);
     useStorage(device);
     const { controller } = buildRealController(device);
 
-    await expect(controller.getLastCycle()).resolves.toBeNull();
+    await expect(controller.getLastCycle()).resolves.toEqual({ available: true, outcome: null });
   });
 });
 

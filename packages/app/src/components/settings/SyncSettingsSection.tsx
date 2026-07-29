@@ -5,8 +5,17 @@ import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useSettingsStore } from '../../stores/settings-store';
 import { useToastStore } from '../../stores/toast-store';
-import type { EnableResult, SyncDetails, SyncUiStatus } from '../../sync/sync-controller';
-import { AUTH_CANCELLED_DETAIL, useSyncController } from '../../sync/sync-controller';
+import type {
+  EnableResult,
+  LastCycleRead,
+  SyncDetails,
+  SyncUiStatus,
+} from '../../sync/sync-controller';
+import {
+  AUTH_CANCELLED_DETAIL,
+  LAST_CYCLE_UNAVAILABLE,
+  useSyncController,
+} from '../../sync/sync-controller';
 import { formatMillisAgo } from '../../utils/reminder-date-utils';
 import { ConfirmationDialog } from '../ConfirmationDialog';
 import { EnrollCodeModal } from './EnrollCodeModal';
@@ -79,6 +88,16 @@ function logUnrecognisedReason(outcome: SyncOutcome | null): void {
   if (KNOWN_FAILURE_MESSAGE[outcome.reason] === undefined) {
     logger.error(`Cloud sync reported an unrecognised failure reason: ${outcome.reason}`);
   }
+}
+
+// The only place a read is adopted. An unavailable read says nothing about the cycle, so it must
+// never repaint — while `{outcome:null}` genuinely means "no cycle" and does clear the badge.
+function adoptLastCycle(read: LastCycleRead, paint: (outcome: SyncOutcome | null) => void): void {
+  if (!read.available) {
+    return;
+  }
+  logUnrecognisedReason(read.outcome);
+  paint(read.outcome);
 }
 
 const DISABLE_MESSAGE = 'Re-enabling on this device will need your recovery code.';
@@ -231,10 +250,9 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     lastCycleGenRef.current += 1;
     const gen = lastCycleGenRef.current;
     controller.getLastCycle().then(
-      (outcome) => {
+      (read) => {
         if (lastCycleGenRef.current === gen) {
-          logUnrecognisedReason(outcome);
-          setLastCycle(outcome);
+          adoptLastCycle(read, setLastCycle);
         }
       },
       (error) => {
@@ -281,15 +299,14 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   const refreshLastCycle = async () => {
     lastCycleGenRef.current += 1;
     const gen = lastCycleGenRef.current;
-    const outcome = await controller.getLastCycle().catch((error) => {
+    const read = await controller.getLastCycle().catch((error) => {
       logger.warn(
         `Cloud sync last cycle unavailable: ${error instanceof Error ? error.message : String(error)}`
       );
-      return null;
+      return LAST_CYCLE_UNAVAILABLE;
     });
     if (lastCycleGenRef.current === gen) {
-      logUnrecognisedReason(outcome);
-      setLastCycle(outcome);
+      adoptLastCycle(read, setLastCycle);
     }
   };
 
@@ -452,11 +469,10 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       }
     } catch (error) {
       logger.error('Cloud sync sync-now failed', error);
-      useToastStore.getState().error("Couldn't sync right now — please try again.");
-      // The bump above already discarded any in-flight read; without a fresh one a rejected click
-      // leaves the badge blank for the rest of the mount (the mount effect never re-arms). Skipped
-      // when superseded — the newer action repaints, and its outcome must outrank this recovery.
+      // Same guard as the try: a superseded click may neither toast (its action is gone from the
+      // panel) nor repaint — and the bump above discarded the in-flight read this recovers.
       if (lastCycleGenRef.current === cycleGen) {
+        useToastStore.getState().error("Couldn't sync right now — please try again.");
         await refreshLastCycle();
       }
     }

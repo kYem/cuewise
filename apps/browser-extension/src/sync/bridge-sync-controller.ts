@@ -1,4 +1,11 @@
-import type { EnableResult, SyncController, SyncDetails, SyncUiStatus } from '@cuewise/app';
+import type {
+  EnableResult,
+  LastCycleRead,
+  SyncController,
+  SyncDetails,
+  SyncUiStatus,
+} from '@cuewise/app';
+import { LAST_CYCLE_UNAVAILABLE } from '@cuewise/app';
 import { logger } from '@cuewise/shared';
 import {
   CLOUD_SYNC_ENABLED_KEY,
@@ -342,20 +349,22 @@ export class BridgeSyncController implements SyncController {
     }
   }
 
-  async getLastCycle(): Promise<SyncOutcome | null> {
+  // Every unreadable path answers LAST_CYCLE_UNAVAILABLE, never a null outcome: a dead worker, a
+  // timeout and a skewed response say nothing about the cycle, so the panel must keep its badge.
+  async getLastCycle(): Promise<LastCycleRead> {
     try {
       // Same shape of guard as getDetails: the wire is untyped, so a skewed SW's {ok:true} with
       // no lastCycle kind tag must read as "unavailable", not silently become undefined.
       const response = await this.send({ kind: 'cuewise-sync-control', op: 'getLastCycle' });
       if (response?.ok && response.kind === 'lastCycle') {
-        return response.outcome;
+        return { available: true, outcome: response.outcome };
       }
       logger.warn('Sync last-cycle outcome unavailable (no responder or error fallback)');
-      return null;
+      return LAST_CYCLE_UNAVAILABLE;
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       logger.warn(`Sync last-cycle control message failed: ${detail}`);
-      return null;
+      return LAST_CYCLE_UNAVAILABLE;
     }
   }
 

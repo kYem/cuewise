@@ -1,4 +1,10 @@
-import type { EnableResult, SyncController, SyncDetails, SyncUiStatus } from '@cuewise/app';
+import type {
+  EnableResult,
+  LastCycleRead,
+  SyncController,
+  SyncDetails,
+  SyncUiStatus,
+} from '@cuewise/app';
 import { AUTH_CANCELLED_DETAIL, buildSyncDetails } from '@cuewise/app';
 import { type KeyValueStore, logger, type Scheduler } from '@cuewise/shared';
 import { ApiError } from '@cuewise/sync-client';
@@ -364,9 +370,10 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
     async getDetails(): Promise<SyncDetails | null> {
       return buildSyncDetails(await engine.getAccount(), engine.getLastSyncedAt());
     },
-    async getLastCycle(): Promise<SyncOutcome | null> {
+    async getLastCycle(): Promise<LastCycleRead> {
+      // Always available: this is an in-process field read, with no realm to be unreachable across.
       const cycle = engine.getLastCycle();
-      return cycle === null ? null : cycle.outcome;
+      return { available: true, outcome: cycle === null ? null : cycle.outcome };
     },
   };
 

@@ -1144,6 +1144,137 @@ describe('SyncSettingsSectionComponent', () => {
     expect(await screen.findByTestId('sync-failure-badge')).toHaveTextContent(/can't reach cloud/i);
   });
 
+  it('keeps the failure badge when the read recovering a rejected Sync now is unavailable', async () => {
+    // The click and the recovery read fail for the SAME reason — an asleep or dead worker. The
+    // read reports "I could not tell", which must never be mistaken for "no cycle has run".
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptLastCycle({ kind: 'failed', reason: 'network', error: new Error('offline') });
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+    await screen.findByTestId('sync-failure-badge');
+
+    controller.failNext('syncNow');
+    controller.scriptLastCycleUnavailable();
+    await user.click(screen.getByRole('button', { name: 'Sync now' }));
+
+    await waitFor(() => expect(toastError).toHaveBeenCalledTimes(1));
+    expect(screen.getByTestId('sync-failure-badge')).toHaveTextContent(/can't reach cloud sync/i);
+  });
+
+  it('keeps the failure badge when the read recovering a rejected Sync now itself rejects', async () => {
+    const user = userEvent.setup();
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    const controller = new FakeSyncController();
+    controller.scriptLastCycle({ kind: 'failed', reason: 'network', error: new Error('offline') });
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+    await screen.findByTestId('sync-failure-badge');
+
+    controller.failNext('syncNow');
+    controller.failNext('getLastCycle');
+    await user.click(screen.getByRole('button', { name: 'Sync now' }));
+
+    await waitFor(() => expect(warnSpy).toHaveBeenCalled());
+    expect(screen.getByTestId('sync-failure-badge')).toBeInTheDocument();
+    warnSpy.mockRestore();
+  });
+
+  it('clears the failure badge when the recovery read reports the engine has no cycle', async () => {
+    // The counterpart: a read that DID answer, with no cycle behind it, still repaints. The guard
+    // is about an unreadable engine, not about never clearing.
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptLastCycle({ kind: 'failed', reason: 'network', error: new Error('offline') });
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+    await screen.findByTestId('sync-failure-badge');
+
+    controller.failNext('syncNow');
+    controller.scriptLastCycle(null);
+    await user.click(screen.getByRole('button', { name: 'Sync now' }));
+
+    await waitFor(() => expect(screen.queryByTestId('sync-failure-badge')).not.toBeInTheDocument());
+  });
+
+  it('leaves the badge off, never unhandled, when the mount read rejects', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    const controller = new FakeSyncController();
+    controller.failNext('getLastCycle');
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+
+    await waitFor(() => expect(warnSpy).toHaveBeenCalled());
+    expect(screen.queryByTestId('sync-failure-badge')).not.toBeInTheDocument();
+    warnSpy.mockRestore();
+  });
+
+  it('does not toast a sync-now rejection for a click that lands after the user disabled sync', async () => {
+    // A click can hang for the bridge's full timeout; by the time it rejects, sync is off and the
+    // Sync now button is unrendered — "please try again" would name an action the panel lacks.
+    const user = userEvent.setup();
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const controller = new FakeSyncController();
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+    controller.deferNextSyncNow();
+
+    await user.click(screen.getByRole('button', { name: 'Sync now' }));
+    await user.click(cloudSyncSwitch());
+    await user.click(screen.getByRole('button', { name: 'Disable' }));
+    act(() => controller.setStatus('off'));
+
+    await act(async () => {
+      controller.rejectSyncNow(new Error('Sync control message timed out'));
+    });
+
+    expect(toastError).not.toHaveBeenCalled();
+    // The recovery read is superseded too — only the diagnostic log survives the guard.
+    expect(controller.calls.filter((c) => c.method === 'getLastCycle')).toHaveLength(1);
+    expect(errorSpy).toHaveBeenCalledWith('Cloud sync sync-now failed', expect.any(Error));
+    errorSpy.mockRestore();
+  });
+
+  it('does not warn about an incomplete cycle for a click that lands after the user disabled sync', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+    controller.deferNextSyncNow();
+
+    await user.click(screen.getByRole('button', { name: 'Sync now' }));
+    await user.click(cloudSyncSwitch());
+    await user.click(screen.getByRole('button', { name: 'Disable' }));
+    act(() => controller.setStatus('off'));
+
+    await act(async () => {
+      controller.resolveSyncNow({ kind: 'no-key' });
+    });
+
+    expect(toastWarning).not.toHaveBeenCalled();
+  });
+
+  it('logs an unrecognised failure reason read on mount, where no click is involved', async () => {
+    // The scenario the log exists for: a background wake's outcome, reported by a skewed worker,
+    // arrives through the mount read — the one call site the click-driven tests never reach.
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const controller = new FakeSyncController();
+    controller.scriptLastCycle({
+      kind: 'failed',
+      reason: 'quota' as SyncFailureReason,
+      error: new Error('unknown to this bundle'),
+    });
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+
+    expect(await screen.findByTestId('sync-failure-badge')).toHaveTextContent(INCOMPLETE_MESSAGE);
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Cloud sync reported an unrecognised failure reason: quota'
+    );
+    expect(controller.calls.some((c) => c.method === 'syncNow')).toBe(false);
+    errorSpy.mockRestore();
+  });
+
   it('shows a failed initial sync after a device-#2 enroll, with no further click', async () => {
     // Enrolling device #2 on a flaky connection is the likeliest failing initial cycle; like the
     // enable path it lands on Active with nothing else to read the outcome off.

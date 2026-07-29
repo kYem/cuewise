@@ -649,38 +649,53 @@ describe('BridgeSyncController: getLastCycle', () => {
     });
     const controller = new BridgeSyncController();
 
-    const outcome = await controller.getLastCycle();
+    const read = await controller.getLastCycle();
 
-    expect(outcome).toEqual({ kind: 'failed', reason: 'network', error: expect.any(Error) });
+    expect(read).toEqual({
+      available: true,
+      outcome: { kind: 'failed', reason: 'network', error: expect.any(Error) },
+    });
     expect(runtime.sendMessage).toHaveBeenCalledWith({
       kind: 'cuewise-sync-control',
       op: 'getLastCycle',
     });
   });
 
-  it('resolves null when no cycle has run yet', async () => {
+  it('reports an available read with no outcome when no cycle has run yet', async () => {
     runtime.sendMessage.mockResolvedValueOnce({ ok: true, kind: 'lastCycle', outcome: null });
     const controller = new BridgeSyncController();
 
-    await expect(controller.getLastCycle()).resolves.toBeNull();
+    await expect(controller.getLastCycle()).resolves.toEqual({ available: true, outcome: null });
   });
 
-  it('resolves null when messaging fails, without throwing', async () => {
+  it('reports unavailable — never "no cycle" — when messaging fails', async () => {
+    // A dead/asleep worker says nothing about the cycle; answering {outcome:null} would wipe a
+    // failure badge a previous read painted.
     const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
     runtime.sendMessage.mockRejectedValueOnce(new Error('no SW'));
     const controller = new BridgeSyncController();
 
-    await expect(controller.getLastCycle()).resolves.toBeNull();
+    await expect(controller.getLastCycle()).resolves.toEqual({ available: false });
     expect(warnSpy).toHaveBeenCalled();
     warnSpy.mockRestore();
   });
 
-  it('resolves null when a legacy SW answers ok with no lastCycle kind tag', async () => {
+  it('reports unavailable when the send times out', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    runtime.sendMessage.mockImplementation(() => new Promise(() => {}));
+    const controller = new BridgeSyncController({ timeoutMs: 10 });
+
+    await expect(controller.getLastCycle()).resolves.toEqual({ available: false });
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it('reports unavailable when a legacy SW answers ok with no lastCycle kind tag', async () => {
     const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
     runtime.sendMessage.mockResolvedValueOnce({ ok: true } as never);
     const controller = new BridgeSyncController();
 
-    await expect(controller.getLastCycle()).resolves.toBeNull();
+    await expect(controller.getLastCycle()).resolves.toEqual({ available: false });
     expect(warnSpy).toHaveBeenCalledWith(
       'Sync last-cycle outcome unavailable (no responder or error fallback)'
     );
