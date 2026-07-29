@@ -110,7 +110,7 @@ function clearAcked(meta: SyncMeta, batch: DirtyRecord[]): void {
 }
 
 /** Pulls remote changes in seq order, resolves each via the strategy, and applies the winners. */
-export async function pullOnce(deps: CycleDeps): Promise<void> {
+export async function pullOnce(deps: CycleDeps): Promise<{ resynced: boolean }> {
   const meta = await deps.meta.load();
   // Once per collection per pull — a page of unknown records is one line, not N.
   const warnedUnknownCollections = new Set<string>();
@@ -124,7 +124,7 @@ export async function pullOnce(deps: CycleDeps): Promise<void> {
       if (err instanceof ApiError && err.status === 409 && err.code === 'resync_required') {
         meta.cursor = 0;
         await deps.meta.save(meta);
-        return;
+        return { resynced: true };
       }
       throw err;
     }
@@ -135,12 +135,13 @@ export async function pullOnce(deps: CycleDeps): Promise<void> {
       if (!applied) {
         // Apply-before-advance: the write failed, so stop here and leave the cursor before it.
         await deps.meta.save(meta);
-        return;
+        return { resynced: false };
       }
     }
   }
 
   await deps.meta.save(meta);
+  return { resynced: false };
 }
 
 /** Applies one pulled record to meta/storage. Returns false to signal "stop the cycle here". */

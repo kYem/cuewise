@@ -1,4 +1,5 @@
 import type { PushRecord, SyncRecord } from '@cuewise/shared';
+import { ApiError } from '@cuewise/sync-client';
 import { PULL_PAGE, type SyncTransport } from '../cycle';
 
 /** In-memory SyncTransport fake; records pushed batches and serves canned pull records by page. */
@@ -12,6 +13,11 @@ export class FakeTransport implements SyncTransport {
   /** `since` argument of every getChanges call, in order — lets tests assert pagination. */
   readonly getChangesSinceCalls: number[] = [];
   private cursor = 0;
+
+  /** Scripts the next getChanges call to fail as the server does on a discarded cursor. */
+  rejectNextGetChangesWithResync(): void {
+    this.getChangesError = new ApiError('resync_required', 409);
+  }
 
   async pushChanges(records: PushRecord[]): Promise<{ cursor: number }> {
     if (this.rejectPush) {

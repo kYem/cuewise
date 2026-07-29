@@ -233,6 +233,23 @@ describe('pullOnce', () => {
     expect(saved.cursor).toBe(0);
   });
 
+  it('reports a refused cursor rather than a completed pull', async () => {
+    const deps = makeDeps();
+    transport.rejectNextGetChangesWithResync();
+
+    const result = await pullOnce(deps);
+
+    expect(result).toEqual({ resynced: true });
+  });
+
+  it('reports a normal pull as not resynced', async () => {
+    const deps = makeDeps();
+
+    const result = await pullOnce(deps);
+
+    expect(result).toEqual({ resynced: false });
+  });
+
   it('propagates a non-resync ApiError from getChanges without resetting the cursor', async () => {
     const meta = await metaStore.load();
     meta.cursor = 7;
@@ -253,7 +270,7 @@ describe('pullOnce', () => {
     const rec = await sealRecord(dk, 'goals', 'g1', { entity: incomingGoal, hlc: NEWER_HLC }, 1);
     transport.pullRecords = [rec];
 
-    await expect(pullOnce(makeDeps())).resolves.toBeUndefined();
+    await expect(pullOnce(makeDeps())).resolves.toEqual({ resynced: false });
 
     const goals = await getGoals();
     expect(goals).toEqual([incomingGoal]);
