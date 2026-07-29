@@ -246,9 +246,16 @@ export class BridgeSyncController implements SyncController {
   async syncNow(): Promise<SyncOutcome> {
     const response = await this.send({ kind: 'cuewise-sync-control', op: 'syncNow' });
     // `response?.ok` like every sibling: a dead worker resolves undefined, where a bare `.ok`
-    // throws a TypeError naming nothing. The SW's reason rides into the message the panel logs.
+    // throws a TypeError naming nothing. The SW hardcodes reason:'error' for this op, so `detail`
+    // is the only field naming the cause — carry it or the message says nothing every time.
     if (!response?.ok) {
-      throw new Error(`Sync now failed: ${response?.reason ?? 'no response from the background'}`);
+      const reason = response?.reason ?? 'no response from the background';
+      const detail = response?.detail;
+      throw new Error(
+        detail === undefined
+          ? `Sync now failed: ${reason}`
+          : `Sync now failed: ${reason} — ${detail}`
+      );
     }
     if (response.kind !== 'outcome') {
       throw new Error('Sync now response missing an outcome');

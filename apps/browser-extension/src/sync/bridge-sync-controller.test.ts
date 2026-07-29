@@ -597,11 +597,17 @@ describe('BridgeSyncController: disable / syncNow', () => {
     await expect(controller.syncNow()).rejects.toThrow();
   });
 
-  it("carries the worker's reason into the syncNow rejection instead of a constant message", async () => {
-    runtime.sendMessage.mockResolvedValueOnce({ ok: false, reason: 'auth' });
+  // The shape the SW actually emits for this op (handle-sync-control-message's catch): both
+  // producers hardcode reason:'error', so a message without `detail` names nothing at all.
+  it("carries the worker's reason AND detail into the syncNow rejection", async () => {
+    runtime.sendMessage.mockResolvedValueOnce({
+      ok: false,
+      reason: 'error',
+      detail: 'quota exceeded',
+    });
     const controller = new BridgeSyncController();
 
-    await expect(controller.syncNow()).rejects.toThrow(/auth/);
+    await expect(controller.syncNow()).rejects.toThrow(/quota exceeded/);
   });
 
   it('rejects syncNow() with a named failure when a dead worker resolves undefined', async () => {
