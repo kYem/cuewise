@@ -5,7 +5,7 @@ import {
   RecoveryCodeError,
   unwrapDataKey,
 } from '@cuewise/crypto';
-import { configurePlatform, logger } from '@cuewise/shared';
+import { configurePlatform, logger, storageFailure } from '@cuewise/shared';
 import { getGoals, setGoals } from '@cuewise/storage';
 import { ApiError, SessionManager, SYNC_PULL_WAKE_ID } from '@cuewise/sync-client';
 import { goalFactory } from '@cuewise/test-utils/factories';
@@ -13,6 +13,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { FakeApiClient, FakeSyncServer } from './__fixtures__/fake-api-client';
 import { FakeKvStore } from './__fixtures__/fake-kv-store';
 import { FakeScheduler } from './__fixtures__/fake-scheduler';
+import { type CollectionBinding, defaultBindings } from './collections';
 import {
   CLOUD_SYNC_ENABLED_KEY,
   LAST_SYNCED_AT_KEY,
@@ -55,6 +56,16 @@ function createDevice(server: FakeSyncServer, overrides: Partial<SyncEngineDeps>
 /** Points the shared @cuewise/storage helpers at this device's backend for the next await chain. */
 function useStorage(device: Pick<Device, 'kv'>): void {
   configurePlatform({ storage: device.kv });
+}
+
+/** Default bindings with goals unable to persist anything — a device at its storage quota. */
+function bindingsThatCannotWriteGoals(): CollectionBinding[] {
+  return defaultBindings().map((binding) => {
+    if (binding.name !== 'goals') {
+      return binding;
+    }
+    return { ...binding, writeOne: async () => storageFailure('quota exceeded') };
+  });
 }
 
 describe('SyncEngine.enableSync', () => {
@@ -513,19 +524,60 @@ describe('SyncEngine.syncNow', () => {
     expect(device.engine.getLastSyncedAt()).toBe(5_000);
   });
 
-  it('resolves the outcome when a host onCycle callback throws', async () => {
+  it('reports a pull that stopped on a failed local write as a device failure, without stamping', async () => {
     const server = new FakeSyncServer();
-    const onCycle = vi.fn(() => {
-      throw new Error('host callback blew up');
-    });
-    const device = createDevice(server, { onCycle });
-    useStorage(device);
+    const deviceA = createDevice(server);
+    useStorage(deviceA);
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    await deviceA.engine.enableSync('dev', 'cred-a', 'Device A');
+    const recoveryCode = deviceA.onRecoveryCode.mock.calls[0][0] as string;
 
+    // Device B cannot write what it pulls (e.g. local quota), so its cursor never advances.
+    const deviceB = createDevice(server, { bindings: bindingsThatCannotWriteGoals() });
+    useStorage(deviceB);
+    await deviceB.engine.enableSync('dev', 'cred-b', 'Device B', { recoveryCode });
+
+    const outcome = await deviceB.engine.syncNow();
+
+    expect(outcome).toMatchObject({ kind: 'failed', reason: 'device' });
+    expect(deviceB.engine.getLastSyncedAt()).toBeNull();
+  });
+
+  it('logs a failed cycle for a caller that is not the pull wake', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    device.apiClient.rejectNextGetChanges(new ApiError('internal', 500));
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await device.engine.syncNow();
+
+    // A manual "Sync now" against a broken backend must leave a trace too, not just the wake.
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Sync cycle failed; the next scheduled wake will retry',
+      expect.objectContaining({
+        reason: 'server',
+        error: expect.objectContaining({ message: 'internal' }),
+      })
+    );
+  });
+
+  it('logs a best-effort step that fails, so a permanently broken one is not silent', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
     await device.engine.enableSync('dev', 'cred-a', 'Device A');
 
-    // A throwing callback must not escape into enableSync's catch and poison the status.
-    expect(device.engine.getStatus()).toBe('active');
-    await expect(device.engine.syncNow()).resolves.toEqual({ kind: 'synced' });
+    device.kv.throwSetsForKey = LAST_SYNCED_AT_KEY;
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await device.engine.syncNow();
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Sync cycle lastSyncedAt stamp failed; the reported outcome still stands',
+      expect.objectContaining({ error: expect.any(Error) })
+    );
   });
 
   it('resolves the outcome when persisting the stamp rejects', async () => {
@@ -584,6 +636,9 @@ describe('SyncEngine.syncNow', () => {
 
     await expect(device.engine.syncNow()).resolves.toEqual({ kind: 'signed-out' });
     expect(device.engine.getStatus()).toBe('signed_out');
+    // The steps are independent: a throwing status listener must not skip either cleanup.
+    expect(await new SessionManager(device.kv).getToken()).toBeNull();
+    expect(device.scheduler.cancelled).toContain(SYNC_PULL_WAKE_ID);
   });
 
   it('records the last cycle for callers that did not run it', async () => {
@@ -600,19 +655,18 @@ describe('SyncEngine.syncNow', () => {
     expect(device.engine.getLastCycle()).toEqual({ at: 6_000, outcome: { kind: 'resynced' } });
   });
 
-  it('notifies onCycle with the outcome of each cycle', async () => {
+  it('records a DK-less cycle instead of leaving an older one as the answer', async () => {
+    let t = 5_000;
     const server = new FakeSyncServer();
-    const onCycle = vi.fn();
-    const device = createDevice(server, { onCycle });
+    const device = createDevice(server, { now: () => t });
     useStorage(device);
     await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    await device.engine.disableSync();
 
-    device.apiClient.rejectNextGetChanges(new ApiError('internal', 500));
+    t = 6_000;
     await device.engine.syncNow();
 
-    expect(onCycle).toHaveBeenLastCalledWith(
-      expect.objectContaining({ kind: 'failed', reason: 'server' })
-    );
+    expect(device.engine.getLastCycle()).toEqual({ at: 6_000, outcome: { kind: 'no-key' } });
   });
 
   it('reports signed-out on a 401 instead of leaving the caller to re-read the status', async () => {

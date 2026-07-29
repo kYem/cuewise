@@ -171,8 +171,11 @@ describe('pullOnce', () => {
       storageFailure('quota exceeded')
     );
 
-    await pullOnce(makeDeps({ bindings }));
+    const result = await pullOnce(makeDeps({ bindings }));
 
+    // Reported as stopped-early, naming the record: a completed-pull result here is what let a
+    // permanently wedged device report `synced` and stamp "Last synced just now".
+    expect(result).toEqual({ kind: 'stalled', collection: 'goals', entityId: 'g1' });
     const saved = await metaStore.load();
     expect(saved.cursor).toBe(0);
     expect(saved.hlcs['goals/g1']).toBeUndefined();
@@ -239,15 +242,15 @@ describe('pullOnce', () => {
 
     const result = await pullOnce(deps);
 
-    expect(result).toEqual({ resynced: true });
+    expect(result).toEqual({ kind: 'resynced' });
   });
 
-  it('reports a normal pull as not resynced', async () => {
+  it('reports a normal pull as complete', async () => {
     const deps = makeDeps();
 
     const result = await pullOnce(deps);
 
-    expect(result).toEqual({ resynced: false });
+    expect(result).toEqual({ kind: 'complete' });
   });
 
   it('propagates a non-resync ApiError from getChanges without resetting the cursor', async () => {
@@ -270,7 +273,7 @@ describe('pullOnce', () => {
     const rec = await sealRecord(dk, 'goals', 'g1', { entity: incomingGoal, hlc: NEWER_HLC }, 1);
     transport.pullRecords = [rec];
 
-    await expect(pullOnce(makeDeps())).resolves.toEqual({ resynced: false });
+    await expect(pullOnce(makeDeps())).resolves.toEqual({ kind: 'complete' });
 
     const goals = await getGoals();
     expect(goals).toEqual([incomingGoal]);

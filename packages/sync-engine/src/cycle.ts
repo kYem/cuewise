@@ -109,8 +109,17 @@ function clearAcked(meta: SyncMeta, batch: DirtyRecord[]): void {
   }
 }
 
+/**
+ * What one pull did. `stalled` is not a completed pull: the cursor is parked before a record
+ * whose local write failed, so no later remote change can reach this device until it succeeds.
+ */
+export type PullResult =
+  | { kind: 'complete' }
+  | { kind: 'resynced' }
+  | { kind: 'stalled'; collection: string; entityId: string };
+
 /** Pulls remote changes in seq order, resolves each via the strategy, and applies the winners. */
-export async function pullOnce(deps: CycleDeps): Promise<{ resynced: boolean }> {
+export async function pullOnce(deps: CycleDeps): Promise<PullResult> {
   const meta = await deps.meta.load();
   // Once per collection per pull — a page of unknown records is one line, not N.
   const warnedUnknownCollections = new Set<string>();
@@ -124,7 +133,7 @@ export async function pullOnce(deps: CycleDeps): Promise<{ resynced: boolean }> 
       if (err instanceof ApiError && err.status === 409 && err.code === 'resync_required') {
         meta.cursor = 0;
         await deps.meta.save(meta);
-        return { resynced: true };
+        return { kind: 'resynced' };
       }
       throw err;
     }
@@ -135,13 +144,13 @@ export async function pullOnce(deps: CycleDeps): Promise<{ resynced: boolean }> 
       if (!applied) {
         // Apply-before-advance: the write failed, so stop here and leave the cursor before it.
         await deps.meta.save(meta);
-        return { resynced: false };
+        return { kind: 'stalled', collection: rec.collection, entityId: rec.entityId };
       }
     }
   }
 
   await deps.meta.save(meta);
-  return { resynced: false };
+  return { kind: 'complete' };
 }
 
 /** Applies one pulled record to meta/storage. Returns false to signal "stop the cycle here". */

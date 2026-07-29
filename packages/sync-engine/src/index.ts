@@ -9,7 +9,7 @@ export {
   defaultBindings,
 } from './collections';
 export { type CreateSyncEngineOptions, createSyncEngine } from './create-engine';
-export { type CycleDeps, pullOnce, pushOnce, type SyncTransport } from './cycle';
+export { type CycleDeps, type PullResult, pullOnce, pushOnce, type SyncTransport } from './cycle';
 export {
   CLOUD_SYNC_ENABLED_KEY,
   type EnableSyncOptions,

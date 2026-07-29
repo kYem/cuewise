@@ -84,7 +84,6 @@ export interface SyncEngineDeps {
   bindings?: CollectionBinding[];
   now?: () => number;
   onStatus?: (status: SyncStatus) => void;
-  onCycle?: (outcome: SyncOutcome) => void;
   onQuarantine?: (key: string) => void;
   onRecoveryCode?: (code: string) => void;
 }
@@ -239,6 +238,27 @@ export class SyncEngine {
    * the outcome. A no-op until a DK is held (never enabled, or self-heal hasn't run).
    */
   async syncNow(): Promise<SyncOutcome> {
+    const outcome = await this.runCycle();
+    if (outcome.kind === 'signed-out') {
+      await this.bestEffort(() => this.handleAuthLoss(), 'auth-loss cleanup');
+    }
+    if (outcome.kind === 'synced') {
+      await this.bestEffort(() => this.stampLastSynced(), 'lastSyncedAt stamp');
+    }
+    if (outcome.kind === 'failed') {
+      // Logged here, not per caller: this is the only place every caller passes through, and the
+      // only one still holding the error itself (the page realm gets a serialized outcome).
+      logger.error('Sync cycle failed; the next scheduled wake will retry', {
+        reason: outcome.reason,
+        error: outcome.error,
+      });
+    }
+    this.lastCycle = { at: this.now(), outcome };
+    return outcome;
+  }
+
+  /** The cycle proper: everything syncNow reports on, with none of the bookkeeping it does after. */
+  private async runCycle(): Promise<SyncOutcome> {
     if (this.dk === null || this.keyId === null) {
       return { kind: 'no-key' };
     }
@@ -252,33 +272,31 @@ export class SyncEngine {
       now: this.now,
       onQuarantine: this.deps.onQuarantine,
     };
-    let outcome: SyncOutcome;
     try {
       const pull = await pullOnce(cycleDeps);
       await pushOnce(cycleDeps);
-      outcome = pull.resynced ? { kind: 'resynced' } : { kind: 'synced' };
+      if (pull.kind === 'stalled') {
+        // A clean transport and a parked cursor: every later remote change is unreachable on this
+        // device until that write succeeds, so this is a failure however healthy the wire looked.
+        return {
+          kind: 'failed',
+          reason: 'device',
+          error: new Error(`sync pull stalled writing ${pull.collection}/${pull.entityId}`),
+        };
+      }
+      return pull.kind === 'resynced' ? { kind: 'resynced' } : { kind: 'synced' };
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
-        outcome = { kind: 'signed-out' };
-      } else {
-        outcome = { kind: 'failed', reason: classifySyncFailure(err), error: err };
+        return { kind: 'signed-out' };
       }
+      return { kind: 'failed', reason: classifySyncFailure(err), error: err };
     }
-    if (outcome.kind === 'signed-out') {
-      await this.bestEffort(() => this.handleAuthLoss(), 'auth-loss cleanup');
-    }
-    if (outcome.kind === 'synced') {
-      await this.bestEffort(() => this.stampLastSynced(), 'lastSyncedAt stamp');
-    }
-    this.lastCycle = { at: this.now(), outcome };
-    await this.bestEffort(() => this.deps.onCycle?.(outcome), 'onCycle notification');
-    return outcome;
   }
 
   /**
    * Runs one side effect whose failure must neither reject the caller nor skip the steps after it.
    * syncNow's never-throws contract and handleAuthLoss's always-lands-signed_out both hold by
-   * construction this way, not by trusting adapters and host callbacks (a throwing onCycle would
+   * construction this way, not by trusting adapters and host callbacks (a throwing onStatus would
    * otherwise escape to enableSync's catch and land an enrolled device on `error`).
    */
   private async bestEffort(step: () => Promise<void> | void, what: string): Promise<void> {
@@ -401,18 +419,9 @@ export class SyncEngine {
   }
 
   // LOOP callers must never let a transient failure (e.g. offline) kill the backstop poll
-  // (spec §5). A 401 is handled inside syncNow itself (handleAuthLoss).
+  // (spec §5). A 401 is handled inside syncNow itself (handleAuthLoss), and so is the failure log.
   private async syncNowLoopSafe(): Promise<void> {
     const outcome = await this.syncNow();
-    if (outcome.kind === 'failed') {
-      // At error level with the error itself: the shipped default log level is 'error', and the
-      // reason alone does not say what broke.
-      logger.error('Sync cycle failed; the next scheduled wake will retry', {
-        reason: outcome.reason,
-        error: outcome.error,
-      });
-      return;
-    }
     if (outcome.kind === 'no-key') {
       logger.debug('Sync wake fired with no data key; nothing to do');
     }
