@@ -1,3 +1,4 @@
+import type { SyncOutcome } from '@cuewise/sync-engine';
 import type { EnableResult, SyncController, SyncDetails, SyncUiStatus } from '../sync-controller';
 
 interface RecordedCall {
@@ -17,6 +18,7 @@ type FailableMethod =
 
 const DEFAULT_ENABLE_RESULT: EnableResult = { ok: true };
 const DEFAULT_RECOVERY_CODE = 'FAKE-RECOVERY-CODE';
+const DEFAULT_SYNC_OUTCOME: SyncOutcome = { kind: 'synced' };
 
 /** Scriptable SyncController fake for UI tests: settable status, queued enable/reconnect results, recorded calls. */
 export class FakeSyncController implements SyncController {
@@ -31,6 +33,8 @@ export class FakeSyncController implements SyncController {
   private readonly reconnectResults: EnableResult[] = [];
   private readonly enrollWithCodeResults: EnableResult[] = [];
   private readonly detailsResults: (SyncDetails | null)[] = [];
+  private readonly syncNowResults: SyncOutcome[] = [];
+  private lastCycleOutcome: SyncOutcome | null = null;
   private readonly failingMethods = new Set<FailableMethod>();
   private deferredDisable = false;
   private pendingDisable: (() => void) | null = null;
@@ -132,6 +136,16 @@ export class FakeSyncController implements SyncController {
     this.detailsResults.push(details);
   }
 
+  /** Queues the outcome the next `syncNow()` call resolves to; also becomes what `getLastCycle()` reports. */
+  scriptSyncNow(outcome: SyncOutcome): void {
+    this.syncNowResults.push(outcome);
+  }
+
+  /** Sets what `getLastCycle()` resolves to without a prior `syncNow()` call — exercises an on-mount read. */
+  scriptLastCycle(outcome: SyncOutcome | null): void {
+    this.lastCycleOutcome = outcome;
+  }
+
   async enable(
     accountId: string,
     deviceName: string,
@@ -193,9 +207,18 @@ export class FakeSyncController implements SyncController {
     return DEFAULT_RECOVERY_CODE;
   }
 
-  async syncNow(): Promise<void> {
+  async syncNow(): Promise<SyncOutcome> {
     this.calls.push({ method: 'syncNow', args: [] });
     this.maybeFail('syncNow');
+    const next = this.syncNowResults.shift();
+    const outcome = next !== undefined ? next : DEFAULT_SYNC_OUTCOME;
+    this.lastCycleOutcome = outcome;
+    return outcome;
+  }
+
+  async getLastCycle(): Promise<SyncOutcome | null> {
+    this.calls.push({ method: 'getLastCycle', args: [] });
+    return this.lastCycleOutcome;
   }
 
   async getDetails(): Promise<SyncDetails | null> {

@@ -12,6 +12,8 @@ import type {
   SyncControlMessage,
   SyncControlResponse,
   SyncDetailsResponse,
+  SyncLastCycleResponse,
+  SyncOutcomeResponse,
 } from './sync-control-messages';
 
 export interface SyncControlDeps {
@@ -64,11 +66,19 @@ async function runDetails(engine: SyncEngineControlSurface): Promise<SyncDetails
   };
 }
 
+/** Read-only last-cycle lookup — deliberately NOT serialized (see handleSyncControlMessage). */
+function runLastCycle(engine: SyncEngineControlSurface): SyncLastCycleResponse {
+  const cycle = engine.getLastCycle();
+  return { ok: true, kind: 'lastCycle', outcome: cycle === null ? null : cycle.outcome };
+}
+
 async function runOp(
   engine: SyncEngineControlSurface,
-  msg: SyncControlMessage & { op: Exclude<SyncControlMessage['op'], 'details'> },
+  msg: SyncControlMessage & {
+    op: Exclude<SyncControlMessage['op'], 'details' | 'getLastCycle'>;
+  },
   deps: SyncControlDeps
-): Promise<SyncControlResponse> {
+): Promise<SyncControlResponse | SyncOutcomeResponse> {
   if (msg.op === 'enable') {
     // Runtime guard (the wire is untyped): reject an unknown provider or an empty credential/
     // device name, not just `undefined`. Log so a caller regression isn't a bare, detail-less error.
@@ -102,8 +112,7 @@ async function runOp(
       case 'regenerate':
         return { ok: true, recoveryCode: await engine.regenerateRecoveryCode() };
       case 'syncNow':
-        await engine.syncNow();
-        return { ok: true };
+        return { ok: true, kind: 'outcome', outcome: await engine.syncNow() };
       default: {
         // Exhaustiveness: a new SYNC_CONTROL_OPS entry is a compile error here — never a
         // silent fallthrough into some other operation.
@@ -144,6 +153,10 @@ export async function handleSyncControlMessage(
     // Read-only and side-effect-free — bypasses the mutex so a slow account fetch can never
     // delay a queued user action (e.g. a disable click) behind it.
     return runDetails(engine);
+  }
+  if (op === 'getLastCycle') {
+    // Same rationale as 'details': read-only, so it must never queue behind a pending op.
+    return runLastCycle(engine);
   }
   return serialize(() => runOp(engine, { ...msg, op }, deps));
 }

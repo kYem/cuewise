@@ -13,12 +13,13 @@ function fakeEngine(overrides: Partial<SyncEngineControlSurface> = {}): SyncEngi
   return {
     enableSync: vi.fn().mockResolvedValue(undefined),
     disableSync: vi.fn().mockResolvedValue(undefined),
-    syncNow: vi.fn().mockResolvedValue(undefined),
+    syncNow: vi.fn().mockResolvedValue({ kind: 'synced' }),
     regenerateRecoveryCode: vi.fn().mockResolvedValue('CW1-NEW00-00000-00000-00000-00000-00000'),
     resumeEnrollWithCode: vi.fn().mockResolvedValue(undefined),
     getStatus: vi.fn().mockReturnValue('active' as SyncStatus),
     getAccount: vi.fn().mockResolvedValue(null),
     getLastSyncedAt: vi.fn().mockReturnValue(null),
+    getLastCycle: vi.fn().mockReturnValue(null),
     ...overrides,
   };
 }
@@ -58,6 +59,32 @@ describe('handleSyncControlMessage: details', () => {
   });
 });
 
+describe('handleSyncControlMessage: getLastCycle', () => {
+  it("maps the engine's last cycle into an outcome response", async () => {
+    const engine = fakeEngine({
+      getLastCycle: vi.fn().mockReturnValue({ at: 1_700_000_000_000, outcome: { kind: 'no-key' } }),
+    });
+
+    const result = await handleSyncControlMessage(
+      engine,
+      { kind: 'cuewise-sync-control', op: 'getLastCycle' },
+      fakeDeps()
+    );
+
+    expect(result).toEqual({ ok: true, kind: 'lastCycle', outcome: { kind: 'no-key' } });
+  });
+
+  it('answers a null outcome when the engine has not run a cycle yet', async () => {
+    const result = await handleSyncControlMessage(
+      fakeEngine(),
+      { kind: 'cuewise-sync-control', op: 'getLastCycle' },
+      fakeDeps()
+    );
+
+    expect(result).toEqual({ ok: true, kind: 'lastCycle', outcome: null });
+  });
+});
+
 function fakeDeps(overrides: Partial<SyncControlDeps> = {}): SyncControlDeps {
   return {
     takeRecoveryCode: vi.fn().mockReturnValue(undefined),
@@ -77,7 +104,7 @@ function enableMessage(overrides: Partial<SyncControlMessage> = {}): SyncControl
 }
 
 describe('handleSyncControlMessage: routing', () => {
-  it('routes syncNow to engine.syncNow and responds ok', async () => {
+  it('routes syncNow to engine.syncNow and responds with its outcome', async () => {
     const engine = fakeEngine();
     const deps = fakeDeps();
 
@@ -88,7 +115,20 @@ describe('handleSyncControlMessage: routing', () => {
     );
 
     expect(engine.syncNow).toHaveBeenCalledOnce();
-    expect(result).toEqual({ ok: true });
+    expect(result).toEqual({ ok: true, kind: 'outcome', outcome: { kind: 'synced' } });
+  });
+
+  it('carries the engine outcome through the round trip unchanged', async () => {
+    const engine = fakeEngine({ syncNow: vi.fn().mockResolvedValue({ kind: 'resynced' }) });
+    const deps = fakeDeps();
+
+    const result = await handleSyncControlMessage(
+      engine,
+      { kind: 'cuewise-sync-control', op: 'syncNow' },
+      deps
+    );
+
+    expect(result).toEqual({ ok: true, kind: 'outcome', outcome: { kind: 'resynced' } });
   });
 
   it('routes disable to engine.disableSync and responds ok', async () => {

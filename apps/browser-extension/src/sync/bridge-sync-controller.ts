@@ -1,6 +1,10 @@
 import type { EnableResult, SyncController, SyncDetails, SyncUiStatus } from '@cuewise/app';
 import { logger } from '@cuewise/shared';
-import { CLOUD_SYNC_ENABLED_KEY, type SyncSignInProvider } from '@cuewise/sync-engine';
+import {
+  CLOUD_SYNC_ENABLED_KEY,
+  type SyncOutcome,
+  type SyncSignInProvider,
+} from '@cuewise/sync-engine';
 import type {
   SyncControlMessage,
   SyncControlOp,
@@ -236,12 +240,18 @@ export class BridgeSyncController implements SyncController {
   }
 
   // No transient 'syncing' emission: the SW's onStatus trampoline never emits it either,
-  // so adding one here would be a page-only flicker the background can't corroborate.
-  async syncNow(): Promise<void> {
+  // so adding one here would be a page-only flicker the background can't corroborate. Two
+  // guards, not one: an ok:false response (a non-conforming engine's op-level throw) and an
+  // ok:true response with no outcome (a skewed SW) are different failures, both rejections.
+  async syncNow(): Promise<SyncOutcome> {
     const response = await this.send({ kind: 'cuewise-sync-control', op: 'syncNow' });
     if (!response.ok) {
-      throw new Error(response.reason);
+      throw new Error('Sync now failed');
     }
+    if (response.kind !== 'outcome') {
+      throw new Error('Sync now response missing an outcome');
+    }
+    return response.outcome;
   }
 
   private setStatus(status: SyncUiStatus): void {
@@ -319,6 +329,23 @@ export class BridgeSyncController implements SyncController {
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       logger.warn(`Sync details control message failed: ${detail}`);
+      return null;
+    }
+  }
+
+  async getLastCycle(): Promise<SyncOutcome | null> {
+    try {
+      // Same shape of guard as getDetails: the wire is untyped, so a skewed SW's {ok:true} with
+      // no lastCycle kind tag must read as "unavailable", not silently become undefined.
+      const response = await this.send({ kind: 'cuewise-sync-control', op: 'getLastCycle' });
+      if (response?.ok && response.kind === 'lastCycle') {
+        return response.outcome;
+      }
+      logger.warn('Sync last-cycle outcome unavailable (no responder or error fallback)');
+      return null;
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      logger.warn(`Sync last-cycle control message failed: ${detail}`);
       return null;
     }
   }

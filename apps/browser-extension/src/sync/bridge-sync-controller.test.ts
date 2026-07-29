@@ -548,6 +548,11 @@ describe('BridgeSyncController: disable / syncNow', () => {
   });
 
   it('sends the syncNow op', async () => {
+    runtime.sendMessage.mockResolvedValueOnce({
+      ok: true,
+      kind: 'outcome',
+      outcome: { kind: 'synced' },
+    });
     const controller = new BridgeSyncController();
 
     await controller.syncNow();
@@ -565,11 +570,17 @@ describe('BridgeSyncController: disable / syncNow', () => {
     await expect(controller.disable()).resolves.toBeUndefined();
   });
 
-  it('resolves syncNow() on an ok response', async () => {
-    runtime.sendMessage.mockResolvedValueOnce({ ok: true });
+  it('returns the outcome from the response instead of discarding it', async () => {
+    runtime.sendMessage.mockResolvedValueOnce({
+      ok: true,
+      kind: 'outcome',
+      outcome: { kind: 'resynced' },
+    });
     const controller = new BridgeSyncController();
 
-    await expect(controller.syncNow()).resolves.toBeUndefined();
+    const outcome = await controller.syncNow();
+
+    expect(outcome).toEqual({ kind: 'resynced' });
   });
 
   it('rejects disable() on a non-ok response instead of resolving silently', async () => {
@@ -581,6 +592,13 @@ describe('BridgeSyncController: disable / syncNow', () => {
 
   it('rejects syncNow() on a non-ok response instead of resolving silently', async () => {
     runtime.sendMessage.mockResolvedValueOnce({ ok: false, reason: 'error' });
+    const controller = new BridgeSyncController();
+
+    await expect(controller.syncNow()).rejects.toThrow();
+  });
+
+  it('rejects when an ok syncNow response carries no outcome (skewed SW)', async () => {
+    runtime.sendMessage.mockResolvedValueOnce({ ok: true } as never);
     const controller = new BridgeSyncController();
 
     await expect(controller.syncNow()).rejects.toThrow();
@@ -598,6 +616,51 @@ describe('BridgeSyncController: disable / syncNow', () => {
     const controller = new BridgeSyncController({ timeoutMs: 10 });
 
     await expect(controller.syncNow()).rejects.toThrow();
+  });
+});
+
+describe('BridgeSyncController: getLastCycle', () => {
+  it('sends the getLastCycle op and returns the relayed outcome', async () => {
+    runtime.sendMessage.mockResolvedValueOnce({
+      ok: true,
+      kind: 'lastCycle',
+      outcome: { kind: 'failed', reason: 'network', error: new Error('offline') },
+    });
+    const controller = new BridgeSyncController();
+
+    const outcome = await controller.getLastCycle();
+
+    expect(outcome).toEqual({ kind: 'failed', reason: 'network', error: expect.any(Error) });
+    expect(runtime.sendMessage).toHaveBeenCalledWith({
+      kind: 'cuewise-sync-control',
+      op: 'getLastCycle',
+    });
+  });
+
+  it('resolves null when no cycle has run yet', async () => {
+    runtime.sendMessage.mockResolvedValueOnce({ ok: true, kind: 'lastCycle', outcome: null });
+    const controller = new BridgeSyncController();
+
+    await expect(controller.getLastCycle()).resolves.toBeNull();
+  });
+
+  it('resolves null when messaging fails, without throwing', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    runtime.sendMessage.mockRejectedValueOnce(new Error('no SW'));
+    const controller = new BridgeSyncController();
+
+    await expect(controller.getLastCycle()).resolves.toBeNull();
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it('resolves null when a legacy SW answers without a lastCycle kind tag', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    runtime.sendMessage.mockResolvedValueOnce({ ok: false, reason: 'error' });
+    const controller = new BridgeSyncController();
+
+    await expect(controller.getLastCycle()).resolves.toBeNull();
+    warnSpy.mockRestore();
   });
 });
 

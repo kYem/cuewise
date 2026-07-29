@@ -32,6 +32,7 @@ export type SyncEngineControlSurface = Pick<
   | 'getStatus'
   | 'getAccount'
   | 'getLastSyncedAt'
+  | 'getLastCycle'
 >;
 export {
   initOrEnrollKey,

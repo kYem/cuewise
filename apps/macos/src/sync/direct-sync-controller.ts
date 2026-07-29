@@ -8,6 +8,7 @@ import {
   RecoveryCodeRequiredError,
   type SyncEngine,
   type SyncEngineControlSurface,
+  type SyncOutcome,
   type SyncSignInProvider,
   type SyncStatus,
 } from '@cuewise/sync-engine';
@@ -351,17 +352,21 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
     async regenerateRecoveryCode(): Promise<string> {
       return engine.regenerateRecoveryCode();
     },
-    async syncNow(): Promise<void> {
+    async syncNow(): Promise<SyncOutcome> {
       emit('syncing');
       // Reconcile in finally so an engine throw doesn't strand the pill on "Syncing…".
       try {
-        await engine.syncNow();
+        return await engine.syncNow();
       } finally {
         emit(mapStatus(engine.getStatus()));
       }
     },
     async getDetails(): Promise<SyncDetails | null> {
       return buildSyncDetails(await engine.getAccount(), engine.getLastSyncedAt());
+    },
+    async getLastCycle(): Promise<SyncOutcome | null> {
+      const cycle = engine.getLastCycle();
+      return cycle === null ? null : cycle.outcome;
     },
   };
 

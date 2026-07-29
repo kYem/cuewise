@@ -1,3 +1,4 @@
+import type { SyncOutcome } from '@cuewise/sync-engine';
 import { createContext, useContext } from 'react';
 
 /**
@@ -62,9 +63,15 @@ export interface SyncController {
   reconnect(recoveryCode?: string): Promise<EnableResult>;
   disable(): Promise<void>;
   regenerateRecoveryCode(): Promise<string>;
-  syncNow(): Promise<void>;
+  syncNow(): Promise<SyncOutcome>;
   /** Informational: resolves null when unavailable (signed out, offline, legacy host); never throws. */
   getDetails(): Promise<SyncDetails | null>;
+  /**
+   * The last cycle's outcome, or null if none has run. Informational; never throws. Async because
+   * the extension's implementation crosses a realm boundary; macOS reads it synchronously from the
+   * engine and resolves.
+   */
+  getLastCycle(): Promise<SyncOutcome | null>;
   /**
    * Aborts a pending enableWithGoogle flow (the pending result resolves as a quiet cancel).
    * Only hosts whose OAuth flow can be aborted implement it (macOS system-browser); the UI

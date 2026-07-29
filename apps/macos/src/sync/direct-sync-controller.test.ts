@@ -161,6 +161,7 @@ describe('createDirectSyncController: enable()', () => {
       getLastSyncedAt: vi.fn().mockReturnValue(null),
       syncNow: vi.fn().mockResolvedValue(undefined),
       getStatus: vi.fn().mockReturnValue('error' as SyncStatus),
+      getLastCycle: vi.fn().mockReturnValue(null),
     };
     const { controller } = buildDirectSyncController<SyncEngineControlSurface>({
       baseUrl: BASE_URL,
@@ -237,6 +238,7 @@ describe('createDirectSyncController: enable()', () => {
           getLastSyncedAt: vi.fn().mockReturnValue(null),
           syncNow: vi.fn().mockResolvedValue(undefined),
           getStatus: vi.fn().mockReturnValue('active' as SyncStatus),
+          getLastCycle: vi.fn().mockReturnValue(null),
         };
       },
     });
@@ -418,6 +420,7 @@ describe('createDirectSyncController: disable() / syncNow() error propagation', 
       getLastSyncedAt: vi.fn().mockReturnValue(null),
       syncNow: vi.fn().mockResolvedValue(undefined),
       getStatus: vi.fn().mockReturnValue('active' as SyncStatus),
+      getLastCycle: vi.fn().mockReturnValue(null),
     };
     const { controller } = buildDirectSyncController<SyncEngineControlSurface>({
       baseUrl: BASE_URL,
@@ -439,6 +442,7 @@ describe('createDirectSyncController: disable() / syncNow() error propagation', 
       getLastSyncedAt: vi.fn().mockReturnValue(null),
       syncNow: vi.fn().mockRejectedValue(new Error('sync failed')),
       getStatus: vi.fn().mockReturnValue('error' as SyncStatus),
+      getLastCycle: vi.fn().mockReturnValue(null),
     };
     const { controller } = buildDirectSyncController<SyncEngineControlSurface>({
       baseUrl: BASE_URL,
@@ -453,6 +457,63 @@ describe('createDirectSyncController: disable() / syncNow() error propagation', 
 
     expect(seen[0]).toBe('syncing');
     expect(seen[seen.length - 1]).toBe('error');
+  });
+});
+
+describe('createDirectSyncController: syncNow() outcome / getLastCycle()', () => {
+  it('returns the outcome the engine reports, rather than discarding it', async () => {
+    const engine: SyncEngineControlSurface = {
+      enableSync: vi.fn().mockResolvedValue(undefined),
+      disableSync: vi.fn().mockResolvedValue(undefined),
+      regenerateRecoveryCode: vi.fn().mockResolvedValue('unused'),
+      resumeEnrollWithCode: vi.fn().mockResolvedValue(undefined),
+      getAccount: vi.fn().mockResolvedValue(null),
+      getLastSyncedAt: vi.fn().mockReturnValue(null),
+      syncNow: vi.fn().mockResolvedValue({ kind: 'resynced' }),
+      getStatus: vi.fn().mockReturnValue('active' as SyncStatus),
+      getLastCycle: vi.fn().mockReturnValue(null),
+    };
+    const { controller } = buildDirectSyncController<SyncEngineControlSurface>({
+      baseUrl: BASE_URL,
+      keyStore: new FakeKvStore(),
+      oauthDriver: unusedDriver(),
+      buildEngine: () => engine,
+    });
+
+    const outcome = await controller.syncNow();
+
+    expect(outcome).toEqual({ kind: 'resynced' });
+  });
+
+  it('getLastCycle() resolves the outcome of the engine-reported last cycle', async () => {
+    const engine: SyncEngineControlSurface = {
+      enableSync: vi.fn().mockResolvedValue(undefined),
+      disableSync: vi.fn().mockResolvedValue(undefined),
+      regenerateRecoveryCode: vi.fn().mockResolvedValue('unused'),
+      resumeEnrollWithCode: vi.fn().mockResolvedValue(undefined),
+      getAccount: vi.fn().mockResolvedValue(null),
+      getLastSyncedAt: vi.fn().mockReturnValue(null),
+      syncNow: vi.fn().mockResolvedValue({ kind: 'synced' }),
+      getStatus: vi.fn().mockReturnValue('active' as SyncStatus),
+      getLastCycle: vi.fn().mockReturnValue({ at: 1_700_000_000_000, outcome: { kind: 'no-key' } }),
+    };
+    const { controller } = buildDirectSyncController<SyncEngineControlSurface>({
+      baseUrl: BASE_URL,
+      keyStore: new FakeKvStore(),
+      oauthDriver: unusedDriver(),
+      buildEngine: () => engine,
+    });
+
+    await expect(controller.getLastCycle()).resolves.toEqual({ kind: 'no-key' });
+  });
+
+  it('getLastCycle() resolves null when the engine has not run a cycle yet', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    const { controller } = buildRealController(device);
+
+    await expect(controller.getLastCycle()).resolves.toBeNull();
   });
 });
 
