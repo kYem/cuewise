@@ -276,10 +276,10 @@ export class SyncEngine {
   }
 
   /**
-   * Runs one post-cycle side effect. The cycle already happened, so nothing here may turn a
-   * reported outcome into a rejection — syncNow's never-throws contract holds by construction, not
-   * by trusting adapters and host callbacks (a throwing onCycle would otherwise escape to
-   * enableSync's catch and land an enrolled device on `error`).
+   * Runs one side effect whose failure must neither reject the caller nor skip the steps after it.
+   * syncNow's never-throws contract and handleAuthLoss's always-lands-signed_out both hold by
+   * construction this way, not by trusting adapters and host callbacks (a throwing onCycle would
+   * otherwise escape to enableSync's catch and land an enrolled device on `error`).
    */
   private async bestEffort(step: () => Promise<void> | void, what: string): Promise<void> {
     try {
@@ -460,8 +460,10 @@ export class SyncEngine {
 
   // Auth 401 (spec §5): drop the session, stop the loop, keep local data + DK. User re-enables.
   private async handleAuthLoss(): Promise<void> {
-    await this.deps.sessionManager.clear();
-    await this.stop();
-    this.setStatus('signed_out');
+    // Status first, steps independent: a partial cleanup failure must never leave the engine
+    // reporting health — armPullLoopUnlessSignedOut reads that status to decide whether to poll on.
+    await this.bestEffort(() => this.setStatus('signed_out'), 'signed-out status notification');
+    await this.bestEffort(() => this.deps.sessionManager.clear(), 'session clear');
+    await this.bestEffort(() => this.stop(), 'pull-wake cancel');
   }
 }

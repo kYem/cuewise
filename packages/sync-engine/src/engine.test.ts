@@ -251,6 +251,19 @@ describe('SyncEngine.enableSync', () => {
     expect(device.apiClient.exchangeCount).toBe(0);
   });
 
+  it('resumeEnrollWithCode still lands signed_out when the wake cancel rejects', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    vi.spyOn(FakeScheduler.prototype, 'cancel').mockRejectedValue(new Error('scheduler fault'));
+
+    await device.engine.resumeEnrollWithCode('CW1-00000-00000-00000-00000-00000-00000');
+
+    // A failed cleanup step must not escape into handleEnableError and repaint this as `error`.
+    expect(device.engine.getStatus()).toBe('signed_out');
+    expect(device.onStatus).not.toHaveBeenCalledWith('error');
+  });
+
   it('resumeEnrollWithCode lands signed_out (no throw) when the live-looking session 401s mid-enroll', async () => {
     const server = new FakeSyncServer();
     const deviceA = createDevice(server);
@@ -524,6 +537,36 @@ describe('SyncEngine.syncNow', () => {
     device.kv.throwSetsForKey = LAST_SYNCED_AT_KEY;
 
     await expect(device.engine.syncNow()).resolves.toEqual({ kind: 'synced' });
+  });
+
+  it('lands signed_out and still cancels the wake when clearing the session rejects', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    vi.spyOn(SessionManager.prototype, 'clear').mockRejectedValue(new Error('storage fault'));
+    device.apiClient.rejectAllWith401 = true;
+
+    await expect(device.engine.syncNow()).resolves.toEqual({ kind: 'signed-out' });
+
+    expect(device.engine.getStatus()).toBe('signed_out');
+    expect(device.scheduler.cancelled).toContain(SYNC_PULL_WAKE_ID);
+  });
+
+  it('lands signed_out and still clears the session when cancelling the wake rejects', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    vi.spyOn(FakeScheduler.prototype, 'cancel').mockRejectedValue(new Error('scheduler fault'));
+    device.apiClient.rejectAllWith401 = true;
+
+    await expect(device.engine.syncNow()).resolves.toEqual({ kind: 'signed-out' });
+
+    expect(device.engine.getStatus()).toBe('signed_out');
+    expect(await new SessionManager(device.kv).getToken()).toBeNull();
   });
 
   it('resolves signed-out when the auth-loss cleanup itself throws', async () => {
