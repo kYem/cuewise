@@ -62,11 +62,23 @@ const FAILURE_MESSAGE: Record<SyncFailureReason, string> = {
 
 const INCOMPLETE_MESSAGE = "Sync didn't complete — your data is safe on this device.";
 
+// Widened once: `reason` crosses an untrusted wire, so a skewed peer's unknown value must fall
+// back rather than paint an empty badge.
+const KNOWN_FAILURE_MESSAGE: Partial<Record<SyncFailureReason, string>> = FAILURE_MESSAGE;
+
 function failureMessage(reason: SyncFailureReason): string {
-  // Widened only here: `reason` crosses an untrusted wire, so a skewed peer's unknown value must
-  // fall back rather than paint an empty badge.
-  const known: Partial<Record<SyncFailureReason, string>> = FAILURE_MESSAGE;
-  return known[reason] ?? INCOMPLETE_MESSAGE;
+  return KNOWN_FAILURE_MESSAGE[reason] ?? INCOMPLETE_MESSAGE;
+}
+
+// Called wherever an outcome arrives, never from failureMessage — render calls that every paint.
+// Without it the fallback copy is indistinguishable from a genuine no-key/resynced/signed-out one.
+function logUnrecognisedReason(outcome: SyncOutcome | null): void {
+  if (outcome === null || outcome.kind !== 'failed') {
+    return;
+  }
+  if (KNOWN_FAILURE_MESSAGE[outcome.reason] === undefined) {
+    logger.error(`Cloud sync reported an unrecognised failure reason: ${outcome.reason}`);
+  }
 }
 
 const DISABLE_MESSAGE = 'Re-enabling on this device will need your recovery code.';
@@ -221,6 +233,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     controller.getLastCycle().then(
       (outcome) => {
         if (lastCycleGenRef.current === gen) {
+          logUnrecognisedReason(outcome);
           setLastCycle(outcome);
         }
       },
@@ -275,6 +288,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       return null;
     });
     if (lastCycleGenRef.current === gen) {
+      logUnrecognisedReason(outcome);
       setLastCycle(outcome);
     }
   };
@@ -426,6 +440,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       // A stale generation means a disable (or a newer click) superseded this one: the cycle
       // belongs to an account the panel no longer shows, so neither badge nor toast may speak for it.
       if (lastCycleGenRef.current === cycleGen) {
+        logUnrecognisedReason(outcome);
         setLastCycle(outcome);
         if (outcome.kind === 'synced') {
           useToastStore.getState().success('Synced');

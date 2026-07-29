@@ -956,6 +956,33 @@ describe('SyncSettingsSectionComponent', () => {
     expect(toastError).toHaveBeenCalledWith(INCOMPLETE_MESSAGE);
   });
 
+  it('logs an unrecognised failure reason once, where the outcome arrives', async () => {
+    // The fallback copy is identical to a genuine no-key/resynced outcome's, so without this log
+    // a skewed peer is indistinguishable from a normal incomplete cycle.
+    const user = userEvent.setup();
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const controller = new FakeSyncController();
+    controller.scriptSyncNow({
+      kind: 'failed',
+      reason: 'quota' as SyncFailureReason,
+      error: new Error('unknown to this bundle'),
+    });
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+
+    await user.click(screen.getByRole('button', { name: 'Sync now' }));
+    await screen.findByTestId('sync-failure-badge');
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Cloud sync reported an unrecognised failure reason: quota'
+    );
+    // Logging from failureMessage instead would repeat on every paint; a repaint proves it does not.
+    errorSpy.mockClear();
+    act(() => controller.setStatus('syncing'));
+    expect(errorSpy).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
   it('does not report success for a cycle that did nothing', async () => {
     const user = userEvent.setup();
     const controller = new FakeSyncController();
