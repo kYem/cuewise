@@ -423,21 +423,27 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     const cycleGen = lastCycleGenRef.current;
     try {
       const outcome = await controller.syncNow();
-      // A stale generation means a disable (or a newer read) superseded this click — the cycle
-      // belongs to an account the panel no longer shows, so its failure must not be painted.
+      // A stale generation means a disable (or a newer click) superseded this one: the cycle
+      // belongs to an account the panel no longer shows, so neither badge nor toast may speak for it.
       if (lastCycleGenRef.current === cycleGen) {
         setLastCycle(outcome);
-      }
-      if (outcome.kind === 'synced') {
-        useToastStore.getState().success('Synced');
-      } else if (outcome.kind === 'failed') {
-        useToastStore.getState().error(failureMessage(outcome.reason));
-      } else {
-        useToastStore.getState().warning(INCOMPLETE_MESSAGE);
+        if (outcome.kind === 'synced') {
+          useToastStore.getState().success('Synced');
+        } else if (outcome.kind === 'failed') {
+          useToastStore.getState().error(failureMessage(outcome.reason));
+        } else {
+          useToastStore.getState().warning(INCOMPLETE_MESSAGE);
+        }
       }
     } catch (error) {
       logger.error('Cloud sync sync-now failed', error);
       useToastStore.getState().error("Couldn't sync right now — please try again.");
+      // The bump above already discarded any in-flight read; without a fresh one a rejected click
+      // leaves the badge blank for the rest of the mount (the mount effect never re-arms). Skipped
+      // when superseded — the newer action repaints, and its outcome must outrank this recovery.
+      if (lastCycleGenRef.current === cycleGen) {
+        await refreshLastCycle();
+      }
     }
     // Refresh "Last synced" OUTSIDE the try — the sync-now error surface belongs to syncNow
     // alone (the catch keeps even a contract-violating host from rejecting the click handler).

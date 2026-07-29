@@ -1077,6 +1077,44 @@ describe('SyncSettingsSectionComponent', () => {
     });
 
     expect(screen.queryByTestId('sync-failure-badge')).not.toBeInTheDocument();
+    // The badge is the quiet surface; a toast promising it "will keep retrying" is the loud one,
+    // and sync is off — the guard has to cover both.
+    expect(toastError).not.toHaveBeenCalled();
+  });
+
+  it('does not toast Synced for a click that lands after the user disabled sync', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+    controller.deferNextSyncNow();
+
+    await user.click(screen.getByRole('button', { name: 'Sync now' }));
+    await user.click(cloudSyncSwitch());
+    await user.click(screen.getByRole('button', { name: 'Disable' }));
+    act(() => controller.setStatus('off'));
+
+    await act(async () => {
+      controller.resolveSyncNow({ kind: 'synced' });
+    });
+
+    expect(toastSuccess).not.toHaveBeenCalled();
+  });
+
+  it('re-reads the last cycle when Sync now rejects, so the badge is not blanked for the mount', async () => {
+    // The mount read is still in flight (asleep worker, 30s bridge timeout) when the click bumps
+    // the generation past it; the rejection must take a fresh read or nothing ever repaints.
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.deferNextLastCycle();
+    controller.scriptLastCycle({ kind: 'failed', reason: 'network', error: new Error('offline') });
+    controller.failNext('syncNow');
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+
+    await user.click(screen.getByRole('button', { name: 'Sync now' }));
+
+    expect(await screen.findByTestId('sync-failure-badge')).toHaveTextContent(/can't reach cloud/i);
   });
 
   it('shows a failed initial sync after a device-#2 enroll, with no further click', async () => {
