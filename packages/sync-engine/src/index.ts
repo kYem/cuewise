@@ -53,3 +53,4 @@ export {
   type RecordBody,
   type Resolution,
 } from './strategy';
+export { classifySyncFailure, type SyncFailureReason, type SyncOutcome } from './sync-outcome';
