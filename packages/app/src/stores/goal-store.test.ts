@@ -2,9 +2,12 @@ import {
   configurePlatform,
   DEFAULT_SETTINGS,
   getTodayDateString,
+  logger,
+  type Settings,
   type SyncMutationSink,
   storageFailure,
 } from '@cuewise/shared';
+import type { SettingsRead } from '@cuewise/storage';
 import * as storage from '@cuewise/storage';
 import {
   completedGoalFactory,
@@ -12,15 +15,24 @@ import {
   objectiveFactory,
   taskWithSubtasksFactory,
 } from '@cuewise/test-utils/factories';
+import { defaultSettings } from '@cuewise/test-utils/fixtures';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useGoalStore } from './goal-store';
 
-// Mock storage functions
 vi.mock('@cuewise/storage', () => ({
   getGoals: vi.fn(),
   setGoals: vi.fn(),
-  getStoredSettings: vi.fn(),
+  readSettings: vi.fn(),
 }));
+
+const settingsRead = (settings: Settings): SettingsRead => ({ ok: true, settings });
+
+const autoRollDisabled: Settings = { ...defaultSettings, autoRollDueTasks: false };
+
+// Storage is sparse: a key the user never chose has no entry, so the read resolves it
+// from DEFAULT_SETTINGS rather than from anything on disk.
+const { autoRollDueTasks: _unset, ...autoRollAbsentFromStorage } = defaultSettings;
+const autoRollNeverStored: Settings = { ...DEFAULT_SETTINGS, ...autoRollAbsentFromStorage };
 
 // Mock toast store with module-level fns so each level is inspectable across getState() calls.
 const toastError = vi.fn();
@@ -911,7 +923,7 @@ describe('sync sink wiring', () => {
     markMutated.mockClear();
     markMutatedBulk.mockClear();
     markDeleted.mockClear();
-    vi.mocked(storage.getStoredSettings).mockResolvedValue(DEFAULT_SETTINGS);
+    vi.mocked(storage.readSettings).mockResolvedValue(settingsRead(defaultSettings));
     vi.mocked(storage.setGoals).mockResolvedValue({ success: true });
     configurePlatform({ syncSink: fakeSink });
   });
@@ -953,7 +965,7 @@ describe('rollDueTasks', () => {
 
   beforeEach(() => {
     useGoalStore.setState({ goals: [], todayTasks: [], isLoading: false, error: null });
-    vi.mocked(storage.getStoredSettings).mockResolvedValue(DEFAULT_SETTINGS);
+    vi.mocked(storage.readSettings).mockClear().mockResolvedValue(settingsRead(defaultSettings));
     vi.mocked(storage.setGoals).mockClear();
   });
 
@@ -975,10 +987,7 @@ describe('rollDueTasks', () => {
   });
 
   it('does nothing when the persisted auto-roll setting is off', async () => {
-    vi.mocked(storage.getStoredSettings).mockResolvedValue({
-      ...DEFAULT_SETTINGS,
-      autoRollDueTasks: false,
-    });
+    vi.mocked(storage.readSettings).mockResolvedValue(settingsRead(autoRollDisabled));
     const overdue = goalFactory.build({ date: '2025-01-01', dueDate: '2025-01-02' });
     useGoalStore.setState({ goals: [overdue] });
 
@@ -1010,36 +1019,57 @@ describe('rollDueTasks', () => {
     expect(useGoalStore.getState().todayTasks).toEqual([]);
   });
 
-  it('fails closed when settings are unreadable or never stored', async () => {
-    vi.mocked(storage.getStoredSettings).mockResolvedValue(null);
-    const overdue = goalFactory.build({ date: '2025-01-01', dueDate: '2025-01-02' });
-    useGoalStore.setState({ goals: [overdue] });
-
-    const result = await useGoalStore.getState().rollDueTasks();
-
-    // A failed read must not re-enable automation the user may have turned off.
-    expect(result).toBe(false);
-    expect(storage.setGoals).not.toHaveBeenCalled();
-  });
-
-  it('treats a legacy settings blob without the key as enabled (the default)', async () => {
-    const legacy = { ...DEFAULT_SETTINGS };
-    delete (legacy as Partial<typeof legacy>).autoRollDueTasks;
-    vi.mocked(storage.getStoredSettings).mockResolvedValue(legacy);
+  it('reads persisted settings, which resolve the default for a key the user never set', async () => {
+    vi.mocked(storage.readSettings).mockResolvedValue(settingsRead(autoRollNeverStored));
     vi.mocked(storage.setGoals).mockResolvedValue({ success: true });
     const overdue = goalFactory.build({ date: '2025-01-01', dueDate: '2025-01-02' });
     useGoalStore.setState({ goals: [overdue] });
 
     const result = await useGoalStore.getState().rollDueTasks();
 
+    expect(storage.readSettings).toHaveBeenCalledOnce();
     expect(result).toBe(true);
+  });
+
+  // The stored default is on, so a read that failed would re-date every overdue task of a
+  // user who turned this off — and push that to every device.
+  it('does nothing when the settings could not be read', async () => {
+    vi.mocked(storage.readSettings).mockResolvedValue({
+      ok: false,
+      unreadable: ['autoRollDueTasks'],
+    });
+    const overdue = goalFactory.build({ date: '2025-01-01', dueDate: '2025-01-02' });
+    useGoalStore.setState({ goals: [overdue] });
+
+    const result = await useGoalStore.getState().rollDueTasks();
+
+    expect(result).toBe(false);
+    expect(storage.setGoals).not.toHaveBeenCalled();
+  });
+
+  // Silently identical to "the user turned it off", so a user whose roll never runs has no
+  // trace anywhere to explain it.
+  it('leaves a trace when the settings could not be read, unlike the feature being off', async () => {
+    const logged = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    vi.mocked(storage.readSettings).mockResolvedValue({ ok: false, unreadable: [] });
+    useGoalStore.setState({ goals: [goalFactory.build({ date: '2025-01-01' })] });
+
+    await useGoalStore.getState().rollDueTasks();
+
+    expect(logged).toHaveBeenCalledWith(expect.stringContaining('auto-roll'));
+
+    logged.mockClear();
+    vi.mocked(storage.readSettings).mockResolvedValue(settingsRead(autoRollDisabled));
+    await useGoalStore.getState().rollDueTasks();
+
+    expect(logged).not.toHaveBeenCalled();
   });
 });
 
 describe('initialize triggers the roll', () => {
   beforeEach(() => {
     useGoalStore.setState({ goals: [], todayTasks: [], isLoading: true, error: null });
-    vi.mocked(storage.getStoredSettings).mockResolvedValue(DEFAULT_SETTINGS);
+    vi.mocked(storage.readSettings).mockResolvedValue(settingsRead(defaultSettings));
     vi.mocked(storage.setGoals).mockClear().mockResolvedValue({ success: true });
   });
 
@@ -1057,10 +1087,7 @@ describe('initialize triggers the roll', () => {
   });
 
   it('honors the persisted opt-out even though the settings store never hydrated', async () => {
-    vi.mocked(storage.getStoredSettings).mockResolvedValue({
-      ...DEFAULT_SETTINGS,
-      autoRollDueTasks: false,
-    });
+    vi.mocked(storage.readSettings).mockResolvedValue(settingsRead(autoRollDisabled));
     const overdue = goalFactory.build({ date: '2025-01-01', dueDate: '2025-01-02' });
     vi.mocked(storage.getGoals).mockResolvedValue([overdue]);
 
@@ -1074,7 +1101,7 @@ describe('initialize triggers the roll', () => {
 describe('handleDayRollover', () => {
   beforeEach(() => {
     useGoalStore.setState({ goals: [], todayTasks: [], isLoading: false, error: null });
-    vi.mocked(storage.getStoredSettings).mockResolvedValue(DEFAULT_SETTINGS);
+    vi.mocked(storage.readSettings).mockResolvedValue(settingsRead(defaultSettings));
     vi.mocked(storage.setGoals).mockClear();
   });
 
@@ -1094,10 +1121,7 @@ describe('handleDayRollover', () => {
   });
 
   it('still refreshes today tasks when auto-roll is disabled', async () => {
-    vi.mocked(storage.getStoredSettings).mockResolvedValue({
-      ...DEFAULT_SETTINGS,
-      autoRollDueTasks: false,
-    });
+    vi.mocked(storage.readSettings).mockResolvedValue(settingsRead(autoRollDisabled));
     const today = getTodayDateString();
     const scheduledToday = goalFactory.build({ date: today });
     useGoalStore.setState({ goals: [scheduledToday], todayTasks: [] });

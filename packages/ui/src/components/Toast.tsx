@@ -10,6 +10,10 @@ export interface Toast {
   type: ToastType;
   message: string;
   duration?: number;
+  /** Bumped when a repeat is collapsed into this toast, which restarts its auto-dismiss. */
+  repeatedAt?: number;
+  /** How many repeats have been collapsed into this toast — 1 after the first. */
+  repeats?: number;
 }
 
 interface ToastItemProps {
@@ -34,7 +38,7 @@ const ToastItem: React.FC<ToastItemProps> = ({ toast, onClose }) => {
 
       return () => clearTimeout(timer);
     }
-  }, [toast.duration]);
+  }, [toast.duration, toast.repeatedAt]);
 
   const handleClose = () => {
     setIsVisible(false);

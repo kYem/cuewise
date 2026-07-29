@@ -189,6 +189,23 @@ describe('pullOnce', () => {
     errorSpy.mockRestore();
   });
 
+  // readAll decides the conflict, so an unreadable collection must stop the cycle where it
+  // stands rather than resolve every incoming record against an empty local view.
+  it('stops without advancing the cursor when the local collection cannot be read', async () => {
+    const goal = goalFactory.build({ id: 'g1' });
+    transport.pullRecords = [
+      await sealRecord(dk, 'goals', 'g1', { entity: goal, hlc: NEWER_HLC }, 1),
+    ];
+    kv.failGetManyForKey = 'goals';
+
+    await expect(pullOnce(makeDeps())).rejects.toThrow();
+
+    kv.failGetManyForKey = null;
+    const saved = await metaStore.load();
+    expect(saved.cursor).toBe(0);
+    expect(saved.hlcs['goals/g1']).toBeUndefined();
+  });
+
   it('fetches a second page when the first getChanges call returns a full page', async () => {
     const records: SyncRecord[] = [];
     for (let seq = 1; seq <= PULL_PAGE; seq++) {

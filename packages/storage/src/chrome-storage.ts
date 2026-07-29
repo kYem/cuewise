@@ -8,7 +8,7 @@
  * override it.
  */
 
-import type { KeyValueStore, StorageArea, StorageResult } from '@cuewise/shared';
+import type { KeyValueStore, StorageArea, StorageResult, StoredValues } from '@cuewise/shared';
 import { configurePlatform, getStorage, logger } from '@cuewise/shared';
 import type { ZodMiniType } from 'zod/mini';
 import { ChromeKeyValueStore } from './chrome-key-value-store';
@@ -46,7 +46,7 @@ export async function getValidatedFromStorage<T>(
     return raw as T;
   }
   // Paths only — stored blobs hold the user's own quotes, goals and reminders.
-  logger.warn('Discarded an unreadable stored value', {
+  logger.error('Discarded an unreadable stored value', {
     key,
     area,
     paths: result.error.issues.map((issue) => issue.path.join('.')).slice(0, 5),
@@ -68,9 +68,19 @@ export async function getValidatedListFromStorage<T>(
     return null;
   }
   if (!Array.isArray(raw)) {
-    logger.warn('Discarded a stored value that should have been a list', { key, area });
+    logger.error('Discarded a stored value that should have been a list', { key, area });
     return null;
   }
+  return keepValidListItems(raw, itemSchema, key, area);
+}
+
+/** Per-item filter shared by the validated list read and the presence-aware quote read. */
+export function keepValidListItems<T>(
+  raw: unknown[],
+  itemSchema: ZodMiniType<T>,
+  key: string,
+  area: StorageArea
+): T[] {
   const kept: T[] = [];
   const droppedAt: number[] = [];
   raw.forEach((item, index) => {
@@ -82,8 +92,9 @@ export async function getValidatedListFromStorage<T>(
     }
   });
   if (droppedAt.length > 0) {
-    // Positions and counts only; the items themselves are the user's own content.
-    logger.warn('Dropped unreadable items from a stored list', {
+    // Positions and counts only; the items themselves are the user's own content. At error
+    // level because the shipped default log level is 'error' — a warning reaches nobody.
+    logger.error('Dropped unreadable items from a stored list', {
       key,
       area,
       dropped: droppedAt.length,
@@ -107,25 +118,37 @@ export async function setValidatedListInStorage<T>(
   itemSchema: ZodMiniType<T>,
   area: StorageArea = 'local'
 ): Promise<StorageResult> {
-  const raw = await getStorage().get<unknown>(key, area);
+  // One instance for the read-modify-write, so a `configurePlatform` swap mid-flight cannot
+  // merge one backend's rows into another's.
+  const store = getStorage();
+  const raw = await store.get<unknown>(key, area);
   if (!Array.isArray(raw)) {
-    return getStorage().set(key, items, area);
+    return store.set(key, items, area);
   }
-  // By value: both adapters mint fresh objects per read, so an identity check never matches
-  // and the array doubles on every write until it blows the quota.
+  const quarantined = raw.filter((stored) => !itemSchema.safeParse(stored).success);
+  if (quarantined.length === 0) {
+    return store.set(key, items, area);
+  }
+  // By value and by id: both adapters mint fresh objects per read, so an identity check never
+  // matches and the array doubles on every write; and re-creating a hidden item under its own
+  // id would otherwise leave two entries for it, the broken one winning every id-keyed read.
   const written = new Set((items as unknown[]).map((item) => JSON.stringify(item)));
-  const unreadable = raw.filter(
-    (stored) => !itemSchema.safeParse(stored).success && !written.has(JSON.stringify(stored))
+  const writtenIds = new Set<unknown>(
+    (items as { id?: unknown }[]).map((item) => item?.id).filter((id) => typeof id === 'string')
+  );
+  const unreadable = quarantined.filter(
+    (stored) =>
+      !written.has(JSON.stringify(stored)) && !writtenIds.has((stored as { id?: unknown })?.id)
   );
   if (unreadable.length === 0) {
-    return getStorage().set(key, items, area);
+    return store.set(key, items, area);
   }
-  logger.warn('Preserved unreadable stored items through a write', {
+  logger.error('Preserved unreadable stored items through a write', {
     key,
     area,
     preserved: unreadable.length,
   });
-  return getStorage().set(key, [...items, ...unreadable], area);
+  return store.set(key, [...items, ...unreadable], area);
 }
 
 export async function setInStorage<T>(
@@ -141,4 +164,34 @@ export async function removeFromStorage(
   area: StorageArea = 'local'
 ): Promise<boolean> {
   return getStorage().remove(key, area);
+}
+
+/** `null` when the batch could not be read — distinct from `{}`, which means nothing is stored. */
+export async function getManyFromStorage(
+  keys: string[],
+  area: StorageArea = 'local'
+): Promise<StoredValues | null> {
+  return getStorage().getMany(keys, area);
+}
+
+/** `null` when the keys could not be enumerated — distinct from `[]`, which means none exist. */
+export async function listStorageKeys(
+  prefix: string,
+  area: StorageArea = 'local'
+): Promise<string[] | null> {
+  return getStorage().keys(prefix, area);
+}
+
+export async function setManyInStorage(
+  entries: Record<string, unknown>,
+  area: StorageArea = 'local'
+): Promise<StorageResult> {
+  return getStorage().setMany(entries, area);
+}
+
+export async function removeManyFromStorage(
+  keys: string[],
+  area: StorageArea = 'local'
+): Promise<boolean> {
+  return getStorage().removeMany(keys, area);
 }

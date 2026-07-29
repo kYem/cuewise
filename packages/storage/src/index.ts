@@ -5,12 +5,21 @@
 export { ChromeKeyValueStore } from './chrome-key-value-store';
 export type { StorageArea, StorageError, StorageErrorType, StorageResult } from './chrome-storage';
 // Low-level storage delegators over the platform port
-export { getFromStorage, removeFromStorage, setInStorage } from './chrome-storage';
+export {
+  getFromStorage,
+  getManyFromStorage,
+  removeFromStorage,
+  removeManyFromStorage,
+  setInStorage,
+  setManyInStorage,
+} from './chrome-storage';
 export { LocalStorageKeyValueStore } from './local-storage-key-value-store';
-export type { PlaylistResumeInfo, StorageUsageInfo } from './storage-helpers';
+export type { PlaylistResumeInfo, SettingsRead, StorageUsageInfo } from './storage-helpers';
 // Typed storage helpers
 export {
   clearCustomBackground,
+  clearSettings,
+  ensureSettingsMigrated,
   formatBytes,
   getCalendarState,
   getCollections,
@@ -34,10 +43,13 @@ export {
   getSettings,
   getSettingsForSync,
   getStorageUsage,
-  getStoredSettings,
   getWeatherState,
   getYoutubeProgress,
+  migrateLegacySettings,
   migrateStorageData,
+  readSettings,
+  SETTINGS_KEY_PREFIX,
+  SETTINGS_KEYS,
   setCalendarState,
   setCollections,
   setCollectionsRaw,
@@ -56,8 +68,9 @@ export {
   setQuotesRaw,
   setReminders,
   setRemindersRaw,
-  setSettings,
-  setSettingsRaw,
+  setSettingsPatch,
+  setSettingsPatchRaw,
+  settingsStorageKey,
   setWeatherState,
   updateVideoProgress,
 } from './storage-helpers';

@@ -3,6 +3,8 @@ import { getSyncSink } from './registry';
 
 // Fire-and-forget: a sync-notify failure (sync or async) must never break the store mutation
 // that triggered it, so every error path is swallowed and logged, never thrown/rejected.
+// At error level because the shipped default log level is 'error' — a lost dirty mark means a
+// write that reports success and never reaches another device, and a warning reaches nobody.
 export function notifyMutated(collection: string, entityId: string): void {
   const sink = getSyncSink();
   if (sink === null) {
@@ -10,10 +12,10 @@ export function notifyMutated(collection: string, entityId: string): void {
   }
   try {
     Promise.resolve(sink.markMutated(collection, entityId)).catch((error) => {
-      logger.warn('Sync notify (markMutated) failed', { collection, entityId, error });
+      logger.error('Sync notify (markMutated) failed', { collection, entityId, error });
     });
   } catch (error) {
-    logger.warn('Sync notify (markMutated) failed', { collection, entityId, error });
+    logger.error('Sync notify (markMutated) failed', { collection, entityId, error });
   }
 }
 
@@ -25,10 +27,10 @@ export function notifyMutatedBulk(collection: string, entityIds: string[]): void
   }
   try {
     Promise.resolve(sink.markMutatedBulk(collection, entityIds)).catch((error) => {
-      logger.warn('Sync notify (markMutatedBulk) failed', { collection, entityIds, error });
+      logger.error('Sync notify (markMutatedBulk) failed', { collection, entityIds, error });
     });
   } catch (error) {
-    logger.warn('Sync notify (markMutatedBulk) failed', { collection, entityIds, error });
+    logger.error('Sync notify (markMutatedBulk) failed', { collection, entityIds, error });
   }
 }
 
@@ -39,9 +41,9 @@ export function notifyDeleted(collection: string, entityId: string): void {
   }
   try {
     Promise.resolve(sink.markDeleted(collection, entityId)).catch((error) => {
-      logger.warn('Sync notify (markDeleted) failed', { collection, entityId, error });
+      logger.error('Sync notify (markDeleted) failed', { collection, entityId, error });
     });
   } catch (error) {
-    logger.warn('Sync notify (markDeleted) failed', { collection, entityId, error });
+    logger.error('Sync notify (markDeleted) failed', { collection, entityId, error });
   }
 }

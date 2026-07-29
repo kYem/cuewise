@@ -1,5 +1,6 @@
+import { logger, toStoredValues } from '@cuewise/shared';
 import type { MockChromeStorage } from '@cuewise/test-utils/mocks';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ChromeKeyValueStore } from './chrome-key-value-store';
 
 const store = new ChromeKeyValueStore();
@@ -94,6 +95,114 @@ describe('ChromeKeyValueStore with chrome.storage available', () => {
     await expect(store.getUsage('sync')).resolves.toEqual({
       bytesInUse: 512,
       quota: 102400,
+    });
+  });
+
+  it('getMany returns only the keys that are present', async () => {
+    const local = global.chrome.storage.local as unknown as MockChromeStorage;
+    local.data.a = 1;
+    local.data.c = 3;
+
+    const result = await store.getMany(['a', 'b', 'c'], 'local');
+
+    expect(result).toEqual(toStoredValues({ a: 1, c: 3 }));
+    expect(Object.keys(result ?? {})).not.toContain('b');
+  });
+
+  // The counterpart of the localStorage adapter's own case: "absent" is what the sparse settings
+  // layout reads as "follow the default", so the two backends must not disagree about a null.
+  it('getMany reports a key stored as null as present', async () => {
+    const local = global.chrome.storage.local as unknown as MockChromeStorage;
+    local.data.nulled = null;
+
+    const result = await store.getMany(['nulled', 'missing'], 'local');
+
+    expect(result).toEqual(toStoredValues({ nulled: null }));
+    expect(Object.keys(result ?? {})).toEqual(['nulled']);
+  });
+
+  // Absence means "never written" to the settings layer, so a read that failed must not pose
+  // as one — `syncEnabled` reading absent routes a sync user's whole dataset to the wrong area.
+  it('getMany reports a failed read as null rather than as an empty result', async () => {
+    const local = global.chrome.storage.local as unknown as MockChromeStorage;
+    local.get.mockRejectedValueOnce(new Error('storage unavailable'));
+
+    await expect(store.getMany(['a'], 'local')).resolves.toBeNull();
+  });
+
+  // A batch read backs every settings read and the area routing itself, so the one log line
+  // it leaves has to say which keys and which area — otherwise the failure is untraceable.
+  it('getMany names the keys and the area it could not read', async () => {
+    const local = global.chrome.storage.local as unknown as MockChromeStorage;
+    local.get.mockRejectedValueOnce(new Error('storage unavailable'));
+    const logged = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await store.getMany(['settings.theme'], 'local');
+
+    expect(logged).toHaveBeenCalledWith(
+      expect.stringContaining('local'),
+      expect.objectContaining({ keys: ['settings.theme'] })
+    );
+    logged.mockRestore();
+  });
+
+  // get(null) deserialises the whole area — every quote, the custom background data URL, every
+  // posture stat — just to read the names back off it.
+  it('keys reads the names without deserialising the area', async () => {
+    const local = global.chrome.storage.local as unknown as MockChromeStorage;
+    local.data['settings.theme'] = 'dark';
+    local.data.quotes = 'a very large value';
+    local.get.mockClear();
+
+    await expect(store.keys('settings.', 'local')).resolves.toEqual(['settings.theme']);
+
+    expect(local.get).not.toHaveBeenCalled();
+  });
+
+  it('keys falls back to a full read on a runtime without getKeys', async () => {
+    const local = global.chrome.storage.local as unknown as MockChromeStorage;
+    local.data['settings.theme'] = 'dark';
+    local.data.quotes = 'a very large value';
+    const { getKeys } = local;
+    local.getKeys = undefined;
+
+    await expect(store.keys('settings.', 'local')).resolves.toEqual(['settings.theme']);
+
+    local.getKeys = getKeys;
+  });
+
+  it('setMany writes every entry in one call', async () => {
+    const local = global.chrome.storage.local as unknown as MockChromeStorage;
+
+    const result = await store.setMany({ a: 1, b: 2 }, 'local');
+
+    expect(result).toEqual({ success: true });
+    expect(local.data.a).toBe(1);
+    expect(local.data.b).toBe(2);
+  });
+
+  it('removeMany deletes every named key and leaves others', async () => {
+    const local = global.chrome.storage.local as unknown as MockChromeStorage;
+    local.data.a = 1;
+    local.data.b = 2;
+    local.data.c = 3;
+
+    await store.removeMany(['a', 'c'], 'local');
+
+    expect(local.data.a).toBeUndefined();
+    expect(local.data.b).toBe(2);
+    expect(local.data.c).toBeUndefined();
+  });
+
+  it('setMany maps a sync quota rejection to a quota_exceeded StorageResult with no key', async () => {
+    const sync = global.chrome.storage.sync as unknown as MockChromeStorage;
+    sync.set.mockRejectedValueOnce(new Error('QUOTA_BYTES quota exceeded'));
+
+    const result = await store.setMany({ big: 'data' }, 'sync');
+
+    expect(result).toMatchObject({
+      success: false,
+      error: { type: 'quota_exceeded', area: 'sync', key: undefined },
     });
   });
 });

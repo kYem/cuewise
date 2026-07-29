@@ -38,6 +38,16 @@ export const StorageIndicator: React.FC<StorageIndicatorProps> = ({ mode = 'full
     );
   }
 
+  // Zeros against a guessed quota would read as all-clear to someone who is actually near it.
+  if (!usage.available) {
+    return (
+      <div className="flex items-center gap-2 text-sm text-secondary">
+        <AlertTriangle className="w-4 h-4" />
+        <span>Storage usage unavailable</span>
+      </div>
+    );
+  }
+
   // Determine color scheme based on usage
   const getColorClasses = () => {
     if (usage.isCritical) {

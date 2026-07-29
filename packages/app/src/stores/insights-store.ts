@@ -210,14 +210,6 @@ export const useInsightsStore = create<InsightsStore>((set, get) => ({
   exportAsCSV: async (type: 'daily' | 'weekly' | 'monthly' | 'goals' | 'pomodoros') => {
     try {
       const { analytics } = get();
-      // Raw for the two entity exports, same reason as the JSON backup: a spreadsheet of
-      // the user's goals should hold their goals, not the subset this build can render.
-      // The trend variants below are derived data and legitimately come from state.
-      const [goals, pomodoroSessions] = await Promise.all([
-        getGoalsRaw(),
-        getPomodoroSessionsRaw(),
-      ]);
-
       let csv = '';
       let filename = '';
 
@@ -246,22 +238,29 @@ export const useInsightsStore = create<InsightsStore>((set, get) => ({
           csv = exportMonthlyTrendsCSV(analytics.monthlyTrends);
           filename = `cuewise-monthly-trends-${getTodayDateString()}.csv`;
           break;
-        case 'goals':
-          if (!goals || goals.length === 0) {
+        // Raw for the two entity exports, same reason as the JSON backup: a spreadsheet of
+        // the user's goals should hold their goals, not the subset this build can render.
+        // Read inside the branch — a refusal must not fail an export that never reads it.
+        case 'goals': {
+          const goals = await getGoalsRaw();
+          if (goals.length === 0) {
             useToastStore.getState().error('No goals data available');
             return;
           }
           csv = exportGoalsCSV(goals);
           filename = `cuewise-goals-${getTodayDateString()}.csv`;
           break;
-        case 'pomodoros':
-          if (!pomodoroSessions || pomodoroSessions.length === 0) {
+        }
+        case 'pomodoros': {
+          const pomodoroSessions = await getPomodoroSessionsRaw();
+          if (pomodoroSessions.length === 0) {
             useToastStore.getState().error('No pomodoro sessions data available');
             return;
           }
           csv = exportPomodoroSessionsCSV(pomodoroSessions);
           filename = `cuewise-pomodoros-${getTodayDateString()}.csv`;
           break;
+        }
       }
 
       downloadFile(csv, filename, 'text/csv');

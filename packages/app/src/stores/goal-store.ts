@@ -1,7 +1,6 @@
 import {
   addSubtaskToGoal,
   assertPersisted,
-  DEFAULT_SETTINGS,
   duplicateGoal as duplicateGoalUtil,
   type Goal,
   type GoalProgress,
@@ -24,11 +23,7 @@ import {
   rollDueTasksToToday,
   toggleSubtaskInGoal,
 } from '@cuewise/shared';
-import {
-  getGoals as loadAllGoals,
-  getStoredSettings as loadStoredSettings,
-  setGoals as saveAllGoals,
-} from '@cuewise/storage';
+import { getGoals as loadAllGoals, readSettings, setGoals as saveAllGoals } from '@cuewise/storage';
 import { create } from 'zustand';
 import { useToastStore } from './toast-store';
 
@@ -314,17 +309,18 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
 
   rollDueTasks: async () => {
     try {
-      // Gate on the persisted setting, not the settings store: goal hydration
-      // races settings hydration (and #goals never hydrates it), so the store
-      // can still hold the default when the roll fires on load.
-      const settings = await loadStoredSettings();
-      // Fail closed on null (unreadable OR never stored): a read failure must
-      // not re-enable automation the user turned off. Pre-onboarding users have
-      // no blob yet — and no overdue tasks either, so nothing is lost.
-      if (settings === null) {
+      // Gate on persisted settings, not the settings store: goal hydration races
+      // settings hydration (and #goals never hydrates it), so the store can
+      // still hold the default when the roll fires on load.
+      //
+      // A read that failed is not permission: the default is on, so guessing would re-date
+      // every overdue task of a user who turned this off, on every device.
+      const read = await readSettings();
+      if (!read.ok) {
+        logger.error('Could not read the auto-roll setting; leaving due tasks where they are');
         return false;
       }
-      if ((settings.autoRollDueTasks ?? DEFAULT_SETTINGS.autoRollDueTasks) === false) {
+      if (!read.settings.autoRollDueTasks) {
         return false;
       }
 

@@ -1,4 +1,4 @@
-import { DEVICE_LOCAL_SETTINGS_KEYS, type Settings } from '@cuewise/shared';
+import { DEVICE_LOCAL_SETTINGS_KEYS, logger, type Settings, storageFailure } from '@cuewise/shared';
 import {
   getCollectionsRaw,
   getGoalsRaw,
@@ -10,7 +10,7 @@ import {
   setGoalsRaw,
   setQuotesRaw,
   setRemindersRaw,
-  setSettingsRaw,
+  setSettingsPatchRaw,
 } from '@cuewise/storage';
 
 /** One synced collection: reads all entities keyed by id, writes/deletes a single one. */
@@ -28,7 +28,13 @@ interface HasId {
   id: string;
 }
 
-/** Wraps a whole-array storage helper pair as a per-entity binding, keyed by `id`. */
+/**
+ * Wraps a whole-array storage helper pair as a per-entity binding, keyed by `id`.
+ *
+ * `getAll` throwing is a refusal, and both sides keep it one: `readAll` lets it out rather than
+ * reporting an empty collection the cycle would seal as a tombstone for every id, and `writeOne`
+ * fails the write rather than rewriting the list from items it never saw.
+ */
 function arrayBinding<T extends HasId>(
   name: string,
   getAll: () => Promise<T[]>,
@@ -41,7 +47,13 @@ function arrayBinding<T extends HasId>(
       return Object.fromEntries(items.map((item) => [item.id, item]));
     },
     async writeOne(entityId, entity) {
-      const items = await getAll();
+      let items: T[];
+      try {
+        items = await getAll();
+      } catch (error) {
+        logger.error(`Could not read the ${name} collection; refusing to rewrite it`, error);
+        return storageFailure(`Could not read the ${name} collection`);
+      }
       if (entity === null) {
         return setAll(items.filter((item) => item.id !== entityId));
       }
@@ -78,14 +90,10 @@ function settingsBinding(): CollectionBinding {
       if (DEVICE_LOCAL_SETTINGS_KEYS.includes(entityId)) {
         return { success: true };
       }
-      // Raw, for the same reason the arrays are: this rewrites the whole object, so a
-      // value the validator would default is a value this would persist as the default.
-      const settings = await getSettingsForSync();
       const { value } = entity as SettingsEntity;
-      const next: Settings = { ...settings, [entityId]: value };
-      // Raw, like the array bindings: this read everything, so the value it carries is the
-      // one that must land — including when it happens to equal our own default.
-      return setSettingsRaw(next);
+      // Raw and one key: the peer may be on a version whose values ours cannot parse, and
+      // refusing the write here would stall the pull cycle on that record forever.
+      return setSettingsPatchRaw({ [entityId]: value } as Partial<Settings>);
     },
   };
 }

@@ -1,6 +1,7 @@
 import {
   configurePlatform,
   DEFAULT_SETTINGS,
+  logger,
   type Settings,
   type StorageResult,
   type SyncMutationSink,
@@ -13,17 +14,18 @@ import { selectBackgroundBlur, selectBackgroundDim, useSettingsStore } from './s
 
 vi.mock('@cuewise/storage', () => ({
   getSettings: vi.fn(),
-  setSettings: vi.fn(),
-  // A reset writes raw: the preserving write cannot tell "reset this to the default" from
-  // "never saw it", so it would keep the very fields a reset exists to clear.
-  setSettingsRaw: vi.fn(),
+  readSettings: vi.fn(),
+  setSettingsPatch: vi.fn(),
+  clearSettings: vi.fn(),
   migrateStorageData: vi.fn(),
 }));
 
+// Module-level fns so the copy each level receives is inspectable across getState() calls.
+const toastError = vi.fn();
 vi.mock('./toast-store', () => ({
   useToastStore: {
     getState: () => ({
-      error: vi.fn(),
+      error: toastError,
       warning: vi.fn(),
       success: vi.fn(),
     }),
@@ -38,20 +40,25 @@ vi.stubGlobal(
     .mockReturnValue({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })
 );
 
-// Mirrors real storage: what setSettings persists is what the next getSettings returns.
-// The merge base in updateSettings now reads storage, so tests must seed it, not just in-memory state.
+// storedSettings models the effective value getSettings() returns (defaults merged with
+// whatever's present) — a patch updates only its own keys and leaves the rest untouched,
+// and clearing drops back to pure defaults, mirroring the real sparse per-key store.
 let storedSettings: Settings = defaultSettings;
 
 function seedStorage(settings: Settings = defaultSettings) {
   storedSettings = settings;
   vi.mocked(storage.getSettings).mockImplementation(async () => storedSettings);
-  vi.mocked(storage.setSettings).mockImplementation(async (next: Settings) => {
-    storedSettings = next;
+  vi.mocked(storage.readSettings).mockImplementation(async () => ({
+    ok: true,
+    settings: storedSettings,
+  }));
+  vi.mocked(storage.setSettingsPatch).mockImplementation(async (patch: Partial<Settings>) => {
+    storedSettings = { ...storedSettings, ...patch };
     return { success: true };
   });
-  vi.mocked(storage.setSettingsRaw).mockImplementation(async (next: Settings) => {
-    storedSettings = next;
-    return { success: true };
+  vi.mocked(storage.clearSettings).mockImplementation(async () => {
+    storedSettings = DEFAULT_SETTINGS;
+    return true;
   });
 }
 
@@ -75,6 +82,12 @@ describe('sync sink wiring', () => {
 
   afterEach(() => {
     configurePlatform({ syncSink: null });
+  });
+
+  it('initialize migrates without marking any key dirty', async () => {
+    await useSettingsStore.getState().initialize();
+
+    expect(markMutated).not.toHaveBeenCalled();
   });
 
   it('notifies markMutated for each changed, non-device-local key after updateSettings persists', async () => {
@@ -140,7 +153,7 @@ describe('background preview lifecycle', () => {
 
     expect(useSettingsStore.getState().preview).toEqual({ backgroundDim: 40, backgroundBlur: 8 });
     expect(useSettingsStore.getState().settings.backgroundDim).toBe(0);
-    expect(storage.setSettings).not.toHaveBeenCalled();
+    expect(storage.setSettingsPatch).not.toHaveBeenCalled();
     expect(markMutated).not.toHaveBeenCalled();
   });
 
@@ -164,9 +177,7 @@ describe('background preview lifecycle', () => {
     const persisted = await useSettingsStore.getState().updateSettings({ backgroundDim: 40 });
 
     expect(persisted).toBe(true);
-    expect(storage.setSettings).toHaveBeenCalledWith(
-      expect.objectContaining({ backgroundDim: 40 })
-    );
+    expect(storage.setSettingsPatch).toHaveBeenCalledWith({ backgroundDim: 40 });
     expect(markMutated).toHaveBeenCalledWith('settings', 'backgroundDim');
     expect(useSettingsStore.getState().preview).toBeNull();
   });
@@ -176,11 +187,11 @@ describe('background preview lifecycle', () => {
     useSettingsStore.getState().clearPreview();
 
     expect(useSettingsStore.getState().preview).toBeNull();
-    expect(storage.setSettings).not.toHaveBeenCalled();
+    expect(storage.setSettingsPatch).not.toHaveBeenCalled();
   });
 
   it('a failed persist surfaces the error, keeps persisted truth, and clears the preview', async () => {
-    vi.mocked(storage.setSettings).mockResolvedValue({
+    vi.mocked(storage.setSettingsPatch).mockResolvedValue({
       success: false,
       error: { type: 'quota_exceeded', message: 'quota exceeded' },
     });
@@ -223,9 +234,11 @@ describe('background preview lifecycle', () => {
       pomodoroWorkDuration: 999,
     });
 
-    expect(storage.setSettings).toHaveBeenCalledWith(
-      expect.objectContaining({ backgroundDim: 100, backgroundBlur: 0, pomodoroWorkDuration: 60 })
-    );
+    expect(storage.setSettingsPatch).toHaveBeenCalledWith({
+      backgroundDim: 100,
+      backgroundBlur: 0,
+      pomodoroWorkDuration: 60,
+    });
   });
 
   it('a failed sync migration clears the preview alongside surfacing the error', async () => {
@@ -252,10 +265,7 @@ describe('background preview lifecycle', () => {
   });
 
   it('a failed reset write surfaces the error instead of claiming defaults', async () => {
-    vi.mocked(storage.setSettingsRaw).mockResolvedValue({
-      success: false,
-      error: { type: 'unknown', message: 'write failed' },
-    });
+    vi.mocked(storage.clearSettings).mockResolvedValue(false);
     useSettingsStore.setState({ settings: { ...defaultSettings, backgroundDim: 30 } });
 
     const persisted = await useSettingsStore.getState().resetToDefaults();
@@ -300,11 +310,24 @@ describe('serialized write path', () => {
     configurePlatform({ syncSink: null });
   });
 
+  it('persists only the keys in the patch', async () => {
+    await useSettingsStore.getState().updateSettings({ showClock: true });
+
+    expect(storage.setSettingsPatch).toHaveBeenCalledWith({ showClock: true });
+  });
+
+  it('resetToDefaults clears the stored keys rather than writing defaults', async () => {
+    await useSettingsStore.getState().resetToDefaults();
+
+    expect(storage.clearSettings).toHaveBeenCalled();
+    expect(storage.setSettingsPatch).not.toHaveBeenCalled();
+  });
+
   it('keeps both patches when two writes overlap', async () => {
     const firstWrite = deferred<StorageResult>();
-    vi.mocked(storage.setSettings).mockImplementationOnce(async (next: Settings) => {
+    vi.mocked(storage.setSettingsPatch).mockImplementationOnce(async (patch: Partial<Settings>) => {
       const result = await firstWrite.promise;
-      storedSettings = next;
+      storedSettings = { ...storedSettings, ...patch };
       return result;
     });
 
@@ -313,9 +336,10 @@ describe('serialized write path', () => {
     firstWrite.resolve({ success: true });
     await Promise.all([first, second]);
 
-    expect(storage.setSettings).toHaveBeenLastCalledWith(
-      expect.objectContaining({ showClock: true, colorTheme: 'forest' })
-    );
+    // Each write persists only its own patch — the queue orders them, it never merges them
+    // into one storage write.
+    expect(storage.setSettingsPatch).toHaveBeenNthCalledWith(1, { showClock: true });
+    expect(storage.setSettingsPatch).toHaveBeenNthCalledWith(2, { colorTheme: 'forest' });
     const { settings } = useSettingsStore.getState();
     expect(settings.showClock).toBe(true);
     expect(settings.colorTheme).toBe('forest');
@@ -323,9 +347,9 @@ describe('serialized write path', () => {
 
   it('does not start the next write until the in-flight one resolves', async () => {
     const firstWrite = deferred<StorageResult>();
-    vi.mocked(storage.setSettings).mockImplementationOnce(async (next: Settings) => {
+    vi.mocked(storage.setSettingsPatch).mockImplementationOnce(async (patch: Partial<Settings>) => {
       const result = await firstWrite.promise;
-      storedSettings = next;
+      storedSettings = { ...storedSettings, ...patch };
       return result;
     });
 
@@ -333,19 +357,19 @@ describe('serialized write path', () => {
     const second = useSettingsStore.getState().updateSettings({ colorTheme: 'forest' });
     await flush();
 
-    expect(storage.setSettings).toHaveBeenCalledTimes(1);
+    expect(storage.setSettingsPatch).toHaveBeenCalledTimes(1);
 
     firstWrite.resolve({ success: true });
     await Promise.all([first, second]);
 
-    expect(storage.setSettings).toHaveBeenCalledTimes(2);
+    expect(storage.setSettingsPatch).toHaveBeenCalledTimes(2);
   });
 
   it('notifies each overlapping write for its own changed key', async () => {
     const firstWrite = deferred<StorageResult>();
-    vi.mocked(storage.setSettings).mockImplementationOnce(async (next: Settings) => {
+    vi.mocked(storage.setSettingsPatch).mockImplementationOnce(async (patch: Partial<Settings>) => {
       const result = await firstWrite.promise;
-      storedSettings = next;
+      storedSettings = { ...storedSettings, ...patch };
       return result;
     });
 
@@ -360,9 +384,9 @@ describe('serialized write path', () => {
 
   it('queues resetToDefaults behind an in-flight update', async () => {
     const firstWrite = deferred<StorageResult>();
-    vi.mocked(storage.setSettings).mockImplementationOnce(async (next: Settings) => {
+    vi.mocked(storage.setSettingsPatch).mockImplementationOnce(async (patch: Partial<Settings>) => {
       const result = await firstWrite.promise;
-      storedSettings = next;
+      storedSettings = { ...storedSettings, ...patch };
       return result;
     });
 
@@ -370,18 +394,18 @@ describe('serialized write path', () => {
     const reset = useSettingsStore.getState().resetToDefaults();
     await flush();
 
-    expect(storage.setSettings).toHaveBeenCalledTimes(1);
-    expect(storage.setSettingsRaw).not.toHaveBeenCalled();
+    expect(storage.setSettingsPatch).toHaveBeenCalledTimes(1);
+    expect(storage.clearSettings).not.toHaveBeenCalled();
 
     firstWrite.resolve({ success: true });
     await Promise.all([update, reset]);
 
-    expect(storage.setSettingsRaw).toHaveBeenLastCalledWith(DEFAULT_SETTINGS);
+    expect(storage.clearSettings).toHaveBeenCalledTimes(1);
     expect(useSettingsStore.getState().settings.showClock).toBe(DEFAULT_SETTINGS.showClock);
   });
 
   it('keeps serving later writes after one fails', async () => {
-    vi.mocked(storage.setSettings).mockResolvedValueOnce(storageFailure('write failed'));
+    vi.mocked(storage.setSettingsPatch).mockResolvedValueOnce(storageFailure('write failed'));
 
     const first = useSettingsStore.getState().updateSettings({ showClock: true });
     const second = useSettingsStore.getState().updateSettings({ colorTheme: 'forest' });
@@ -397,9 +421,9 @@ describe('serialized write path', () => {
 
     await useSettingsStore.getState().updateSettings({ colorTheme: 'forest' });
 
-    expect(storage.setSettings).toHaveBeenLastCalledWith(
-      expect.objectContaining({ showClock: true, colorTheme: 'forest' })
-    );
+    // The write carries only the patch (colorTheme) — showClock never round-trips back to
+    // storage even though it's part of the merged in-memory truth below.
+    expect(storage.setSettingsPatch).toHaveBeenLastCalledWith({ colorTheme: 'forest' });
     expect(useSettingsStore.getState().settings.showClock).toBe(true);
   });
 
@@ -411,5 +435,97 @@ describe('serialized write path', () => {
     await useSettingsStore.getState().updateSettings({ showClock: true });
 
     expect(document.documentElement.classList.contains('dark')).toBe(true);
+  });
+});
+
+// Defaults as the merge base read as the user's own choices: syncEnabled would come back false
+// for a sync user, so toggling sync off would skip the area migration and still write the flag.
+describe('an update whose read of the current settings failed', () => {
+  beforeEach(() => {
+    useSettingsStore.setState({
+      settings: defaultSettings,
+      preview: null,
+      isLoading: false,
+      error: null,
+    });
+    vi.clearAllMocks();
+    seedStorage({ ...defaultSettings, syncEnabled: true });
+    vi.mocked(storage.migrateStorageData).mockResolvedValue({ success: true });
+    vi.mocked(storage.readSettings).mockResolvedValue({ ok: false, unreadable: [] });
+  });
+
+  it('aborts instead of writing against defaults', async () => {
+    await expect(useSettingsStore.getState().updateSettings({ syncEnabled: false })).resolves.toBe(
+      false
+    );
+
+    expect(storage.setSettingsPatch).not.toHaveBeenCalled();
+    expect(storage.migrateStorageData).not.toHaveBeenCalled();
+    expect(useSettingsStore.getState().error).not.toBeNull();
+  });
+
+  // Every sibling failure branch in updateSettings logs; without this the one abort that
+  // silently drops the user's change is the only one with no record.
+  it('logs the abort, naming the keys that were not saved', async () => {
+    const logged = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await useSettingsStore.getState().updateSettings({ theme: 'dark' });
+
+    expect(logged).toHaveBeenCalledWith(expect.stringContaining('Aborted'), {
+      fields: ['theme'],
+    });
+  });
+});
+
+// One corrupt value refuses every write, so the panel is read-only until it is cleared: the
+// message has to name the value and the button that clears it.
+describe('an update blocked by a stored value that cannot be parsed', () => {
+  beforeEach(() => {
+    useSettingsStore.setState({
+      settings: defaultSettings,
+      preview: null,
+      isLoading: false,
+      error: null,
+    });
+    vi.clearAllMocks();
+    seedStorage();
+    vi.mocked(storage.readSettings).mockResolvedValue({
+      ok: false,
+      unreadable: ['pomodoroAutoStartBreaks'],
+    });
+  });
+
+  it('names the setting it cannot read and the action that fixes it', async () => {
+    await expect(useSettingsStore.getState().updateSettings({ theme: 'dark' })).resolves.toBe(
+      false
+    );
+
+    const message =
+      "Cuewise can't read your saved value for pomodoroAutoStartBreaks. Reset to defaults in Settings to fix it.";
+    expect(toastError).toHaveBeenCalledWith(message);
+    expect(useSettingsStore.getState().error).toBe(message);
+  });
+
+  it('names every unreadable setting, not only the first', async () => {
+    vi.mocked(storage.readSettings).mockResolvedValue({
+      ok: false,
+      unreadable: ['autoRollDueTasks', 'colorTheme'],
+    });
+
+    await useSettingsStore.getState().updateSettings({ theme: 'dark' });
+
+    expect(toastError).toHaveBeenCalledWith(
+      "Cuewise can't read your saved values for autoRollDueTasks, colorTheme. Reset to defaults in Settings to fix it."
+    );
+  });
+
+  it('still resets to defaults while every update is refused', async () => {
+    await expect(useSettingsStore.getState().updateSettings({ theme: 'dark' })).resolves.toBe(
+      false
+    );
+
+    await expect(useSettingsStore.getState().resetToDefaults()).resolves.toBe(true);
+    expect(storage.clearSettings).toHaveBeenCalledOnce();
+    expect(useSettingsStore.getState().settings).toEqual(DEFAULT_SETTINGS);
   });
 });

@@ -203,6 +203,21 @@ describe('Insights Store - Import Methods', () => {
       expect(await written().text()).toContain(hiddenId);
     });
 
+    // The trend exports are derived from state and read no list at all, so a collection that
+    // refuses must not take them down with it.
+    it('exports a trend CSV even when a raw list refuses to read', async () => {
+      mockStorageWithData({ goals: [] });
+      vi.mocked(storage.getGoalsRaw).mockRejectedValue(new Error('unreadable'));
+      const written = captureDownloadedBlob();
+      useInsightsStore.setState({
+        analytics: { dailyTrends: [{ date: '2026-07-27', goalsCompleted: 1 }] } as never,
+      });
+
+      await useInsightsStore.getState().exportAsCSV('daily');
+
+      expect(await written().text()).toContain('2026-07-27');
+    });
+
     it('should skip duplicate goals when skipDuplicates is true', async () => {
       const existingGoal = goalFactory.build({ id: 'existing-1' });
       const newGoal = goalFactory.build({ id: 'new-1' });

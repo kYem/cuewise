@@ -7,7 +7,12 @@ import {
   type NotificationSoundType,
   type PomodoroSession,
 } from '@cuewise/shared';
-import { getPomodoroSessions, getSettings, setPomodoroSessions } from '@cuewise/storage';
+import {
+  getPomodoroSessions,
+  getSettings,
+  readSettings,
+  setPomodoroSessions,
+} from '@cuewise/storage';
 import { useEffect } from 'react';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
@@ -408,45 +413,73 @@ export const usePomodoroStore = create<PomodoroStore>()(
           return;
         }
 
+        // Create completed session
+        const completedSession: PomodoroSession = {
+          id: currentSessionId,
+          startedAt: new Date(Date.now() - totalTime * 1000).toISOString(),
+          completedAt: new Date().toISOString(),
+          interrupted: false,
+          duration: totalTime / 60, // convert back to minutes
+          type: sessionType,
+          ...(selectedGoalId && sessionType === 'work' ? { goalId: selectedGoalId } : {}),
+        };
+        const updatedSessions = [...sessions, completedSession];
+
+        // Only the persistence is guarded: the transitions, the celebration and the sounds below
+        // must not be reported as "failed to save", nor pause a break that already started.
+        let autoStartBreaks: boolean;
+        let saved: boolean;
         try {
-          // Get settings to check auto-start preference
-          const settings = await getSettings();
-          const autoStartBreaks = settings.pomodoroAutoStartBreaks;
+          // Defaults to on, so a value it cannot read must leave the user to press start rather
+          // than run a block they may have turned off.
+          const read = await readSettings();
+          if (read.ok) {
+            autoStartBreaks = read.settings.pomodoroAutoStartBreaks;
+          } else {
+            logger.error('Could not read pomodoroAutoStartBreaks; leaving the next block stopped');
+            autoStartBreaks = false;
+          }
 
-          // Create completed session
-          const completedSession: PomodoroSession = {
-            id: currentSessionId,
-            startedAt: new Date(Date.now() - totalTime * 1000).toISOString(),
-            completedAt: new Date().toISOString(),
-            interrupted: false,
-            duration: totalTime / 60, // convert back to minutes
-            type: sessionType,
-            ...(selectedGoalId && sessionType === 'work' ? { goalId: selectedGoalId } : {}),
-          };
-
-          // Save session
-          const updatedSessions = [...sessions, completedSession];
           const saveResult = await setPomodoroSessions(updatedSessions);
+          saved = saveResult.success;
 
-          // Show toast if storage failed (quota exceeded, etc.)
           if (!saveResult.success) {
+            logger.error('Failed to save the completed pomodoro session', saveResult.error);
             if (
               saveResult.error.type === 'per_item_quota_exceeded' ||
               saveResult.error.type === 'quota_exceeded'
             ) {
-              useToastStore
-                .getState()
-                .warning(
-                  'Session completed but could not save to sync storage. ' +
-                    'Consider disabling Chrome Sync in settings or clearing old sessions.'
-                );
+              const message =
+                'Session completed but could not save to sync storage. ' +
+                'Consider disabling Chrome Sync in settings or clearing old sessions.';
+              set({ error: message });
+              useToastStore.getState().warning(message);
             } else {
-              useToastStore.getState().error('Failed to save session. Please try again.');
+              const message = 'Failed to save session. Please try again.';
+              set({ error: message });
+              useToastStore.getState().error(message);
             }
           }
+        } catch (error) {
+          logger.error('Error completing pomodoro session', error);
+          const errorMessage = 'Failed to save session. Please try again.';
+          // Paused, not left running: `tick` calls this whenever the time is up, so a running
+          // timer re-enters it every second — one toast a second, and the session never lands.
+          set({ error: errorMessage, status: 'paused', lastTickTime: null });
+          useToastStore.getState().error(errorMessage);
+          return;
+        }
 
+        // Only on a save that landed: a session held in memory alone shows in the heatmap and is
+        // gone on the next reload, which reads the history back from storage.
+        if (saved) {
           set({ sessions: updatedSessions });
+        }
 
+        // Both callers are fire-and-forget, so a throw past here would be an unhandled rejection
+        // with no log — and one that skips the transition leaves the timer running with the time
+        // up, so the next tick re-enters and appends this same session id again, every second.
+        try {
           // Auto-switch logic
           if (sessionType === 'work') {
             // Celebrate a completed focus session — but not on a background-recovery
@@ -544,10 +577,24 @@ export const usePomodoroStore = create<PomodoroStore>()(
             logger.error('Failed to show pomodoro completion notification', error);
           }
         } catch (error) {
-          logger.error('Error completing pomodoro session', error);
-          const errorMessage = 'Failed to save session. Please try again.';
-          set({ error: errorMessage });
-          useToastStore.getState().error(errorMessage);
+          logger.error('Error finishing a completed pomodoro session', error);
+          const resting = get();
+          const duration = minutesToSeconds(
+            durationForSession(
+              resting.sessionType,
+              resting.workDuration,
+              resting.breakDuration,
+              resting.longBreakDuration
+            )
+          );
+          // Idle with no session id: the tick loop stops here and the re-entry guard holds.
+          set({
+            status: 'idle',
+            currentSessionId: null,
+            lastTickTime: null,
+            timeRemaining: duration,
+            totalTime: duration,
+          });
         }
       },
 

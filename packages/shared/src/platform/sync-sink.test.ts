@@ -39,8 +39,8 @@ describe('sync-sink', () => {
     expect(markDeleted).toHaveBeenCalledWith('goals', 'goal-1');
   });
 
-  it('swallows a synchronous throw from markMutated and logs a warning', () => {
-    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+  it('swallows a synchronous throw from markMutated and logs it', () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
     const fake: SyncMutationSink = {
       markMutated: () => {
         throw new Error('boom');
@@ -50,11 +50,11 @@ describe('sync-sink', () => {
     configurePlatform({ syncSink: fake });
 
     expect(() => notifyMutated('goals', 'goal-1')).not.toThrow();
-    expect(warnSpy).toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalled();
   });
 
-  it('swallows an async rejection from markMutated and logs a warning', async () => {
-    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+  it('swallows an async rejection from markMutated and logs it', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
     const fake: SyncMutationSink = {
       markMutated: () => Promise.reject(new Error('boom')),
       markDeleted: vi.fn(),
@@ -66,11 +66,11 @@ describe('sync-sink', () => {
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(warnSpy).toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalled();
   });
 
-  it('swallows a throw from markDeleted and logs a warning', () => {
-    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+  it('swallows a throw from markDeleted and logs it', () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
     const fake: SyncMutationSink = {
       markMutated: vi.fn(),
       markDeleted: () => {
@@ -80,7 +80,7 @@ describe('sync-sink', () => {
     configurePlatform({ syncSink: fake });
 
     expect(() => notifyDeleted('goals', 'goal-1')).not.toThrow();
-    expect(warnSpy).toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalled();
   });
 
   it('does not call the sink after configurePlatform({ syncSink: null }) clears it', () => {
@@ -112,8 +112,8 @@ describe('sync-sink', () => {
     expect(markMutatedBulk).toHaveBeenCalledWith('goals', ['goal-1', 'goal-2']);
   });
 
-  it('notifyMutatedBulk swallows a synchronous throw from markMutatedBulk and logs a warning', () => {
-    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+  it('notifyMutatedBulk swallows a synchronous throw from markMutatedBulk and logs it', () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
     const fake: SyncMutationSink = {
       markMutated: vi.fn(),
       markDeleted: vi.fn(),
@@ -124,11 +124,11 @@ describe('sync-sink', () => {
     configurePlatform({ syncSink: fake });
 
     expect(() => notifyMutatedBulk('goals', ['goal-1'])).not.toThrow();
-    expect(warnSpy).toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalled();
   });
 
-  it('notifyMutatedBulk swallows an async rejection from markMutatedBulk and logs a warning', async () => {
-    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+  it('notifyMutatedBulk swallows an async rejection from markMutatedBulk and logs it', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
     const fake: SyncMutationSink = {
       markMutated: vi.fn(),
       markDeleted: vi.fn(),
@@ -140,7 +140,7 @@ describe('sync-sink', () => {
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(warnSpy).toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalled();
   });
 
   it('notifyMutatedBulk is a no-op when the registered sink has no markMutatedBulk', () => {

@@ -1,14 +1,17 @@
-import { configurePlatform, DEFAULT_SETTINGS } from '@cuewise/shared';
+import { configurePlatform, DEFAULT_SETTINGS, toStoredValues } from '@cuewise/shared';
 import {
   getGoals,
+  getManyFromStorage,
   getSettings,
   getSettingsForSync,
+  SETTINGS_KEYS,
   setCollectionsRaw,
   setGoals,
   setGoalsRaw,
+  setManyInStorage,
   setQuotesRaw,
   setRemindersRaw,
-  setSettingsRaw,
+  settingsStorageKey,
 } from '@cuewise/storage';
 import { goalFactory } from '@cuewise/test-utils/factories';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -91,7 +94,15 @@ describe('settings binding', () => {
   });
 
   // 'dark', not 'forest': the latter is a colorTheme, so it would assert the validator.
-  it('writeOne updates only the targeted key', async () => {
+  it('writeOne writes only its own key and leaves the others absent', async () => {
+    await settingsBinding().writeOne('theme', { key: 'theme', value: 'dark' });
+
+    const stored = await getManyFromStorage(SETTINGS_KEYS.map(settingsStorageKey));
+
+    expect(stored).toEqual(toStoredValues({ 'settings.theme': 'dark' }));
+  });
+
+  it('writeOne leaves every other setting on its default', async () => {
     await settingsBinding().writeOne('theme', { key: 'theme', value: 'dark' });
 
     const settings = await getSettings();
@@ -99,9 +110,21 @@ describe('settings binding', () => {
     expect(settings.colorTheme).toBe(DEFAULT_SETTINGS.colorTheme);
   });
 
-  // The binding rewrites the whole object, so a value from a newer peer must survive it.
+  // A peer on another version is not wrong for holding a value our schema does not cover, and
+  // a refused write would stall the pull cycle on that record forever.
+  it('lands a pulled value this build cannot interpret', async () => {
+    const result = await settingsBinding().writeOne('colorTheme', {
+      key: 'colorTheme',
+      value: 'aurora',
+    });
+
+    expect(result.success).toBe(true);
+    expect((await getSettingsForSync()).colorTheme).toBe('aurora');
+  });
+
   it('does not overwrite a neighbouring key it cannot interpret', async () => {
     await settingsBinding().writeOne('colorTheme', { key: 'colorTheme', value: 'aurora' });
+
     await settingsBinding().writeOne('theme', { key: 'theme', value: 'dark' });
 
     const stored = await getSettingsForSync();
@@ -123,6 +146,27 @@ describe('settings binding', () => {
     expect(result).toEqual({ success: true });
     const settings = await getSettings();
     expect(settings.theme).toBe(DEFAULT_SETTINGS.theme);
+  });
+});
+
+// An entity missing from readAll is what the cycle seals as a tombstone for every other device,
+// so "I could not read the list" must never arrive here as "the list is empty".
+describe('a collection the storage layer could not read', () => {
+  beforeEach(async () => {
+    const kv = new FakeKvStore();
+    configurePlatform({ storage: kv });
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    kv.failGetManyForKey = 'goals';
+  });
+
+  it('readAll refuses instead of reporting an empty collection', async () => {
+    await expect(goalsBinding().readAll()).rejects.toThrow();
+  });
+
+  it('writeOne fails instead of rewriting the list from what it could not see', async () => {
+    const result = await goalsBinding().writeOne('g2', goalFactory.build({ id: 'g2' }));
+
+    expect(result).toMatchObject({ success: false });
   });
 });
 
@@ -179,16 +223,16 @@ describe('bindings see what the UI cannot', () => {
   });
 
   it('settings readAll exposes a value this build cannot parse', async () => {
-    await setSettingsRaw({ ...DEFAULT_SETTINGS, colorTheme: 'aurora' as never });
+    await setManyInStorage({ [settingsStorageKey('colorTheme')]: 'aurora' }, 'local');
 
     const all = await settingsBinding().readAll();
 
     expect((all.colorTheme as { value: unknown }).value).toBe('aurora');
   });
 
-  // The preserving setter cannot tell "the peer chose our default" from "never saw it".
+  // An absent key is how a default is expressed, so a pulled default still has to be written.
   it('lands a pulled value that happens to equal our own default', async () => {
-    await setSettingsRaw({ ...DEFAULT_SETTINGS, colorTheme: 'aurora' as never });
+    await setManyInStorage({ [settingsStorageKey('colorTheme')]: 'aurora' }, 'local');
 
     await settingsBinding().writeOne('colorTheme', {
       key: 'colorTheme',

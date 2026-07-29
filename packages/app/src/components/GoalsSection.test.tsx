@@ -15,7 +15,7 @@ vi.mock('../stores/settings-store', () => ({ useSettingsStore: vi.fn() }));
 vi.mock('../stores/calendar-store', () => ({ useCalendarStore: vi.fn() }));
 vi.mock('../utils/google-calendar', () => ({ isCalendarFeatureEnabled: vi.fn(() => false) }));
 vi.mock('@cuewise/storage', () => ({
-  getStorageUsage: vi.fn(async () => ({ isWarning: false, isCritical: false })),
+  getStorageUsage: vi.fn(async () => ({ available: true, isWarning: false, isCritical: false })),
 }));
 // Stub the heavy children — this suite only exercises the section's ⚙ menu.
 vi.mock('./GoalsList', () => ({ GoalsList: () => null }));

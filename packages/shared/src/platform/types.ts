@@ -60,6 +60,8 @@ export interface NotifierHost extends Notifier {
   onAction(handler: (id: string, actionIndex: number) => void | Promise<void>): () => void;
 }
 
+import type { StoredValues } from './stored-value';
+
 // Storage port. Area is Chrome-shaped ('local' | 'sync'); non-Chrome adapters
 // map both onto one backend. Types live here (not @cuewise/storage) so the
 // unified registry can reference them without a circular dependency.
@@ -95,6 +97,21 @@ export interface KeyValueStore {
   get<T>(key: string, area: StorageArea): Promise<T | null>;
   set<T>(key: string, value: T, area: StorageArea): Promise<StorageResult>;
   remove(key: string, area: StorageArea): Promise<boolean>;
+  /**
+   * Batch read; `null` when the read failed. Absent keys are omitted from a successful result —
+   * absence is meaningful to callers, so a failure must never be reported as one. A key that is
+   * stored but unreadable comes back as `{ readable: false }`; see `StoredValue`.
+   */
+  getMany(keys: string[], area: StorageArea): Promise<StoredValues | null>;
+  /**
+   * Every stored key starting with `prefix`; `null` when the enumeration failed. Needed to remove
+   * keys this build cannot name — a settings key written by a newer version, say.
+   */
+  keys(prefix: string, area: StorageArea): Promise<string[] | null>;
+  /** Batch write. One backend call, so the named keys land together. */
+  setMany(entries: Record<string, unknown>, area: StorageArea): Promise<StorageResult>;
+  /** Batch remove, idempotent: a key that was already absent is removed, not a failure. */
+  removeMany(keys: string[], area: StorageArea): Promise<boolean>;
   getUsage(area: StorageArea): Promise<StorageUsage>;
 }
 

@@ -1,3 +1,4 @@
+import { logger, toStoredValues, UNREADABLE_VALUE } from '@cuewise/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LocalStorageKeyValueStore } from './local-storage-key-value-store';
 
@@ -6,6 +7,10 @@ const store = new LocalStorageKeyValueStore();
 describe('LocalStorageKeyValueStore', () => {
   beforeEach(() => {
     localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('sets and gets a JSON value', async () => {
@@ -30,6 +35,90 @@ describe('LocalStorageKeyValueStore', () => {
     localStorage.setItem('k', 'v');
 
     await expect(store.getUsage('local')).resolves.toEqual({ bytesInUse: 2, quota: 5242880 });
+  });
+
+  it('getMany returns only the keys that are present', async () => {
+    const store = new LocalStorageKeyValueStore();
+    await store.set('a', 1, 'local');
+    await store.set('c', 3, 'local');
+
+    const result = await store.getMany(['a', 'b', 'c'], 'local');
+
+    expect(result).toEqual(toStoredValues({ a: 1, c: 3 }));
+    expect(Object.keys(result ?? {})).not.toContain('b');
+  });
+
+  // Absence is the semantic the sparse settings layout rests on, and both shipped adapters must
+  // agree on it: a key stored as `null` was written, so it is present, not "never set".
+  it('getMany reports a key stored as null as present', async () => {
+    const store = new LocalStorageKeyValueStore();
+    await store.set('nulled', null, 'local');
+
+    const result = await store.getMany(['nulled', 'missing'], 'local');
+
+    expect(result).toEqual(toStoredValues({ nulled: null }));
+    expect(Object.keys(result ?? {})).toEqual(['nulled']);
+  });
+
+  // One bad value costs its own key, never the batch: the settings layer defaults that field
+  // and keeps the rest, where a null batch would reset every preference on this device.
+  it('getMany keeps the readable keys when one value will not parse', async () => {
+    const store = new LocalStorageKeyValueStore();
+    await store.set('a', 1, 'local');
+    localStorage.setItem('corrupt', '{not json');
+    await store.set('c', 3, 'local');
+    const logged = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    const result = await store.getMany(['a', 'corrupt', 'c'], 'local');
+
+    expect(result).toEqual({ ...toStoredValues({ a: 1, c: 3 }), corrupt: UNREADABLE_VALUE });
+    expect(logged).toHaveBeenCalledWith(expect.stringContaining('corrupt'), expect.anything());
+  });
+
+  // Absence means "never written" to the settings layer, and a raw list read turns it into `[]`
+  // that sync would seal as a tombstone — so a value that is there but unreadable is neither.
+  it('getMany reports an unreadable value as its own arm, not as absent', async () => {
+    const store = new LocalStorageKeyValueStore();
+    localStorage.setItem('corrupt', '{not json');
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    const result = await store.getMany(['corrupt', 'missing'], 'local');
+
+    expect(result?.corrupt).toEqual({ readable: false });
+    expect(result?.missing).toBeUndefined();
+  });
+
+  // A storage that will not answer at all (SecurityError on a locked-down origin) is a failed
+  // read, and only that fails the batch — the settings layer must not read it as "never written".
+  it('getMany reports a batch it could not read as null', async () => {
+    const store = new LocalStorageKeyValueStore();
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new DOMException('denied', 'SecurityError');
+    });
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await expect(store.getMany(['a'], 'local')).resolves.toBeNull();
+  });
+
+  it('setMany writes every entry in one call', async () => {
+    const store = new LocalStorageKeyValueStore();
+
+    const result = await store.setMany({ a: 1, b: 2 }, 'local');
+
+    expect(result).toEqual({ success: true });
+    expect(await store.get('a', 'local')).toBe(1);
+    expect(await store.get('b', 'local')).toBe(2);
+  });
+
+  it('removeMany deletes every named key and leaves others', async () => {
+    const store = new LocalStorageKeyValueStore();
+    await store.setMany({ a: 1, b: 2, c: 3 }, 'local');
+
+    await store.removeMany(['a', 'c'], 'local');
+
+    expect(await store.get('a', 'local')).toBeNull();
+    expect(await store.get('b', 'local')).toBe(2);
+    expect(await store.get('c', 'local')).toBeNull();
   });
 
   describe('write failure classification', () => {
@@ -64,5 +153,19 @@ describe('LocalStorageKeyValueStore', () => {
 
       expect(result).toMatchObject({ success: false, error: { type: 'unknown' } });
     });
+  });
+});
+
+// JSON.stringify(undefined) is undefined, which localStorage keeps as the string "undefined" —
+// unparseable for every later read, and reported to the caller as a successful write.
+describe('LocalStorageKeyValueStore.set with no value', () => {
+  it('refuses it instead of poisoning the key', async () => {
+    const store = new LocalStorageKeyValueStore();
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    const result = await store.set('poisoned', undefined, 'local');
+
+    expect(result.success).toBe(false);
+    expect(localStorage.getItem('poisoned')).toBeNull();
   });
 });

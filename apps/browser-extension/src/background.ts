@@ -12,7 +12,7 @@ import {
   reminderIdFromAlarm,
   resolveReminderNotificationAction,
 } from '@cuewise/shared';
-import { getReminders, setReminders } from '@cuewise/storage';
+import { ensureSettingsMigrated, getReminders, setReminders } from '@cuewise/storage';
 import { SYNC_PULL_WAKE_ID } from '@cuewise/sync-client';
 import { createSyncEngine, type SyncStatus } from '@cuewise/sync-engine';
 import { configureChromePlatform } from './platform';
@@ -63,6 +63,13 @@ export function mapToUi(status: SyncStatus): SyncUiStatus {
   throw new Error(`unmapped sync status: ${String(exhaustive)}`);
 }
 
+// A data migration, not a sync concern: this realm runs it whether or not sync is configured.
+// Settles rather than rejects, so a failed migration delays the sync start below instead of
+// cancelling it — every storage helper retries the migration on its own anyway.
+const settingsMigrated = ensureSettingsMigrated().catch((error: unknown) => {
+  logger.error('Failed to migrate legacy settings', error);
+});
+
 // ENG-45 cloud sync: off by default. Set VITE_SYNC_API_BASE_URL locally (pointed at
 // `wrangler dev`, e.g. localhost:8787) to enable the Cloud Sync settings section and
 // resume/self-heal a session that was enabled some other way (e.g. devtools).
@@ -95,9 +102,14 @@ if (syncApiBaseUrl) {
       syncEngine.handlePullWake();
     }
   });
-  syncEngine.start().catch((error) => {
-    logger.error('Sync engine failed to start', error);
-  });
+  // start() self-heals the key blob and runs the first pull, so it's the one call that must not
+  // touch storage before migration — scheduler.onFire above and the onMessage listeners below
+  // stay synchronous and never wait on it.
+  settingsMigrated
+    .then(() => syncEngine.start())
+    .catch((error) => {
+      logger.error('Sync engine failed to start', error);
+    });
 
   // ENG-45 option B: the page realm relays its store mutations here (this
   // service-worker realm is the single sync owner) instead of holding its own

@@ -3,7 +3,10 @@ import {
   DEFAULT_SETTINGS,
   type KeyValueStore,
   logger,
+  type Settings,
   type StorageArea,
+  storedValue,
+  UNREADABLE_VALUE,
 } from '@cuewise/shared';
 import {
   conceptCardFactory,
@@ -14,6 +17,7 @@ import {
 } from '@cuewise/test-utils/factories';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  clearSettings,
   getCalendarState,
   getCollections,
   getCollectionsRaw,
@@ -34,6 +38,8 @@ import {
   getSettingsForSync,
   getWeatherState,
   getYoutubeProgress,
+  migrateStorageData,
+  resetSettingsMigration,
   setCollections,
   setCollectionsRaw,
   setConceptCards,
@@ -47,8 +53,9 @@ import {
   setQuotesRaw,
   setReminders,
   setRemindersRaw,
-  setSettings,
-  setSettingsRaw,
+  setSettingsPatch,
+  setSettingsPatchRaw,
+  settingsStorageKey,
 } from './storage-helpers';
 
 /** JSON round-trip on read, like both real adapters: a shared reference hides identity bugs. */
@@ -58,14 +65,14 @@ function clone<T>(value: T): T {
 
 /** Seeds `local` only. Area-aware, or every read test built on it is blind to the area. */
 function storeHolding(values: Record<string, unknown>, area: StorageArea = 'local'): KeyValueStore {
-  return {
-    supportsSync: true,
-    get: async (key: string, readArea: StorageArea = 'local') =>
-      readArea === area && key in values ? (clone(values[key]) as never) : null,
-    set: async () => ({ success: true }),
-    remove: async () => true,
-    getUsage: async () => ({ bytesInUse: 0, quota: 10_000_000 }),
-  };
+  return capturingStore(values, area).store;
+}
+
+/** Settings as the store holds them: one entry per key, under the `settings.` prefix. */
+function settingsEntries(values: Partial<Settings>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(values).map(([key, value]) => [settingsStorageKey(key), value])
+  );
 }
 
 /**
@@ -78,22 +85,52 @@ function capturingStore(initial: Record<string, unknown> = {}, seedArea: Storage
     disk.set(`${seedArea}:${key}`, value);
   }
   const writes: { key: string; area: StorageArea }[] = [];
+  const read = (key: string, area: StorageArea) => clone(disk.get(`${area}:${key}`));
+  const write = (key: string, value: unknown, area: StorageArea) => {
+    disk.set(`${area}:${key}`, clone(value));
+    writes.push({ key, area });
+  };
   return {
     /** What a reader of that exact area would find. */
-    at: (key: string, area: StorageArea = 'local') => clone(disk.get(`${area}:${key}`)),
+    at: (key: string, area: StorageArea = 'local') => read(key, area),
     /** Whether that exact area was ever written — distinct from `at`, which also sees seed. */
     wroteTo: (key: string, area: StorageArea) =>
       writes.some((w) => w.key === key && w.area === area),
     store: {
       supportsSync: true,
       get: async (key: string, readArea: StorageArea = 'local') =>
-        (clone(disk.get(`${readArea}:${key}`)) ?? null) as never,
+        (read(key, readArea) ?? null) as never,
       set: async (key: string, value: unknown, writeArea: StorageArea = 'local') => {
-        disk.set(`${writeArea}:${key}`, clone(value));
-        writes.push({ key, area: writeArea });
+        write(key, value, writeArea);
         return { success: true as const };
       },
-      remove: async () => true,
+      remove: async (key: string, removeArea: StorageArea = 'local') => {
+        disk.delete(`${removeArea}:${key}`);
+        return true;
+      },
+      getMany: async (keys: string[], readArea: StorageArea = 'local') =>
+        Object.fromEntries(
+          keys
+            .filter((key) => disk.has(`${readArea}:${key}`))
+            .map((key) => [key, storedValue(read(key, readArea))])
+        ),
+      keys: async (prefix: string, readArea: StorageArea = 'local') =>
+        [...disk.keys()]
+          .filter((key) => key.startsWith(`${readArea}:`))
+          .map((key) => key.slice(readArea.length + 1))
+          .filter((key) => key.startsWith(prefix)),
+      setMany: async (entries: Record<string, unknown>, writeArea: StorageArea = 'local') => {
+        for (const [key, value] of Object.entries(entries)) {
+          write(key, value, writeArea);
+        }
+        return { success: true as const };
+      },
+      removeMany: async (keys: string[], removeArea: StorageArea = 'local') => {
+        for (const key of keys) {
+          disk.delete(`${removeArea}:${key}`);
+        }
+        return true;
+      },
       getUsage: async () => ({ bytesInUse: 0, quota: 10_000_000 }),
     },
   };
@@ -101,6 +138,8 @@ function capturingStore(initial: Record<string, unknown> = {}, seedArea: Storage
 
 beforeEach(() => {
   vi.restoreAllMocks();
+  // Module-scoped memo: without this, only the first test in the file runs the migration.
+  resetSettingsMigration();
 });
 
 // The same blob is read back on every open, so an unhandled shape breaks the page every time.
@@ -126,7 +165,7 @@ describe('a stored value that no longer matches its shape', () => {
   });
 
   it('reports how many it dropped and where, never what they held', async () => {
-    const warn = vi.spyOn(logger, 'warn');
+    const error = vi.spyOn(logger, 'error');
     const goals = [
       { id: 'g1', text: 'fine', completed: false, createdAt: 'x', date: '2026-07-26' },
       { id: 'g2', text: 'a private goal', completed: 'nope', createdAt: 'x', date: '2026-07-26' },
@@ -135,11 +174,11 @@ describe('a stored value that no longer matches its shape', () => {
 
     await getGoals();
 
-    expect(warn).toHaveBeenCalledWith(
+    expect(error).toHaveBeenCalledWith(
       'Dropped unreadable items from a stored list',
       expect.objectContaining({ key: 'goals', dropped: 1, of: 2, at: [1] })
     );
-    expect(JSON.stringify(warn.mock.calls)).not.toContain('a private goal');
+    expect(JSON.stringify(error.mock.calls)).not.toContain('a private goal');
   });
 
   it('discards a stored value that is not a list at all', async () => {
@@ -148,8 +187,20 @@ describe('a stored value that no longer matches its shape', () => {
     await expect(getGoals()).resolves.toEqual([]);
   });
 
+  it('names the key it discarded, at a level the shipped log level shows', async () => {
+    const error = vi.spyOn(logger, 'error');
+    configurePlatform({ storage: storeHolding({ goals: { nope: true } }) });
+
+    await getGoals();
+
+    expect(error).toHaveBeenCalledWith('Discarded a stored value that should have been a list', {
+      key: 'goals',
+      area: 'local',
+    });
+  });
+
   it('says where it failed, without ever logging the value', async () => {
-    const warn = vi.spyOn(logger, 'warn');
+    const error = vi.spyOn(logger, 'error');
     configurePlatform({
       storage: storeHolding({
         currentQuote: { id: 'q1', text: 'a private note', viewCount: 'no' },
@@ -158,12 +209,12 @@ describe('a stored value that no longer matches its shape', () => {
 
     await getCurrentQuote();
 
-    expect(warn).toHaveBeenCalledWith(
+    expect(error).toHaveBeenCalledWith(
       'Discarded an unreadable stored value',
       expect.objectContaining({ key: 'currentQuote' })
     );
     // The blob holds the user's own quotes and goals; the path alone diagnoses a shape change.
-    expect(JSON.stringify(warn.mock.calls)).not.toContain('a private note');
+    expect(JSON.stringify(error.mock.calls)).not.toContain('a private note');
   });
 
   // The store salvages location, snapshot and timestamp independently; validating the
@@ -246,11 +297,8 @@ describe('a stored value that still matches', () => {
   });
 });
 
-// Settings is only rewritten when the user changes something, and there is no upgrade
-// migration, so a blob written by any earlier release legitimately lacks every field added
-// since. Rejecting it wholesale resets every preference — and `syncEnabled` decides the
-// storage *area*, so the user's synced goals and quotes would read as empty and the next
-// write would persist that as fact.
+// A blob from any earlier release legitimately lacks every field added since, and `syncEnabled`
+// decides the storage *area* — rejecting it wholesale reads the user's synced data as empty.
 describe('a settings blob written by an older release', () => {
   const v118 = {
     theme: 'dark',
@@ -286,25 +334,11 @@ describe('a settings blob written by an older release', () => {
     const goals = [
       { id: 'g1', text: 'synced', completed: false, createdAt: 'x', date: '2026-07-26' },
     ];
-    const areas: string[] = [];
-    configurePlatform({
-      storage: {
-        supportsSync: true,
-        get: async (key: string, area: string) => {
-          areas.push(`${key}@${area}`);
-          if (key === 'settings') {
-            return v118 as never;
-          }
-          return (key === 'goals' && area === 'sync' ? goals : null) as never;
-        },
-        set: async () => ({ success: true }),
-        remove: async () => true,
-        getUsage: async () => ({ bytesInUse: 0, quota: 10_000_000 }),
-      },
-    });
+    const { store } = capturingStore({ goals }, 'sync');
+    await store.set('settings', v118, 'local');
+    configurePlatform({ storage: store });
 
     await expect(getGoals()).resolves.toEqual(goals);
-    expect(areas).toContain('goals@sync');
   });
 
   // One unreadable field must cost that field, not the other 67.
@@ -318,18 +352,30 @@ describe('a settings blob written by an older release', () => {
   });
 });
 
-// The same rule the goals read follows: validating is a check, never an edit. Settings is
-// the blob most likely to gain fields, and the store rewrites the whole object on every
-// change, so dropping an unknown key here deletes it permanently on the next toggle.
+// The same rule the goals read follows: migrating is a move, never an edit. The blob is
+// deleted once its keys are across, so a setting dropped on the way has nowhere left to live.
 describe('a settings blob from a newer build', () => {
-  it('keeps the settings this build has never heard of', async () => {
-    const stored = { theme: 'dark', somethingAddedLater: 'chosen-by-the-user' };
-    configurePlatform({ storage: storeHolding({ settings: stored }) });
+  const stored = { theme: 'dark', somethingAddedLater: 'chosen-by-the-user' };
 
-    const settings = (await getSettings()) as unknown as Record<string, unknown>;
+  it('carries a setting this build has never heard of into its own key', async () => {
+    const { at, store } = capturingStore({ settings: stored });
+    configurePlatform({ storage: store });
 
-    expect(settings.somethingAddedLater).toBe('chosen-by-the-user');
-    expect(settings.theme).toBe('dark');
+    await getSettings();
+
+    expect(at(settingsStorageKey('somethingAddedLater'))).toBe('chosen-by-the-user');
+    expect(at(settingsStorageKey('theme'))).toBe('dark');
+  });
+
+  it('leaves that key alone when another setting is written', async () => {
+    const { at, store } = capturingStore({
+      [settingsStorageKey('somethingAddedLater')]: 'chosen-by-the-user',
+    });
+    configurePlatform({ storage: store });
+
+    await setSettingsPatch({ theme: 'dark' });
+
+    expect(at(settingsStorageKey('somethingAddedLater'))).toBe('chosen-by-the-user');
   });
 });
 
@@ -396,6 +442,37 @@ describe('the raw view sync reads through', () => {
     await expect(getGoalsRaw()).resolves.toEqual([good, unreadable]);
   });
 
+  // Empty is what the cycle reads as "every id was deleted". A stalled collection is
+  // recoverable; a tombstone pushed to every device is not.
+  it('refuses a stored list that is not an array rather than reading it as empty', async () => {
+    configurePlatform({ storage: storeHolding({ goals: { nope: true } }) });
+
+    await expect(getGoalsRaw()).rejects.toThrow(/unreadable/i);
+  });
+
+  it('refuses a list whose read failed', async () => {
+    const { store } = capturingStore();
+    configurePlatform({
+      storage: {
+        ...store,
+        getMany: async (keys: string[], area: StorageArea = 'local') => {
+          if (keys.includes('goals')) {
+            return null;
+          }
+          return store.getMany(keys, area);
+        },
+      },
+    });
+
+    await expect(getGoalsRaw()).rejects.toThrow(/could not read/i);
+  });
+
+  it('still reads a list that was never written as empty', async () => {
+    configurePlatform({ storage: storeHolding({}) });
+
+    await expect(getGoalsRaw()).resolves.toEqual([]);
+  });
+
   // Both halves, deliberately: custom quotes are the user-authored ones, and if that read
   // regressed to validating, a quote this build cannot parse would vanish from sync's
   // `readAll` — which infers a tombstone from absence and deletes it on every device.
@@ -407,6 +484,170 @@ describe('the raw view sync reads through', () => {
 
     await expect(getQuotes()).resolves.toEqual([]);
     await expect(getQuotesRaw()).resolves.toEqual([unreadable, unreadableCustom]);
+  });
+});
+
+// `[]` is what the quote store seeds on, and seeding rewrites both keys — so a read that
+// failed answered as empty erases every custom quote the user wrote.
+describe('getQuotes on a read it could not make', () => {
+  it('refuses rather than reporting an empty library', async () => {
+    const { store } = capturingStore({ customQuotes: [quoteFactory.build()] });
+    configurePlatform({
+      storage: {
+        ...store,
+        getMany: async (keys: string[], area: StorageArea = 'local') => {
+          if (keys.includes('customQuotes')) {
+            return null;
+          }
+          return store.getMany(keys, area);
+        },
+      },
+    });
+
+    await expect(getQuotes()).rejects.toThrow(/could not read/i);
+  });
+
+  it('refuses a stored quotes list that is not an array', async () => {
+    configurePlatform({ storage: storeHolding({ customQuotes: { nope: true } }) });
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await expect(getQuotes()).rejects.toThrow(/unreadable/i);
+  });
+
+  it('still reads a library that was never written as empty', async () => {
+    configurePlatform({ storage: storeHolding({}) });
+
+    await expect(getQuotes()).resolves.toEqual([]);
+  });
+
+  // The legacy key gates the migration. The single-key read answers null for a failed read and
+  // for a key that was never written alike, so the gate skips, getQuotes answers [] positively,
+  // and the store seeds over the very library the migration was about to move.
+  it('refuses when the legacy quotes key is the read that failed', async () => {
+    const { store } = capturingStore({ quotes: [quoteFactory.build()] });
+    configurePlatform({
+      storage: {
+        ...store,
+        // Both reads, as the real adapters behave: get() has nowhere to report a failure.
+        get: async (key: string, area: StorageArea = 'local') => {
+          if (key === 'quotes') {
+            return null as never;
+          }
+          return store.get(key, area);
+        },
+        getMany: async (keys: string[], area: StorageArea = 'local') => {
+          if (keys.includes('quotes')) {
+            return null;
+          }
+          return store.getMany(keys, area);
+        },
+      },
+    });
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await expect(getQuotes()).rejects.toThrow(/legacy quotes/i);
+  });
+
+  it('refuses a legacy quotes key that is stored but unreadable', async () => {
+    const { store } = capturingStore({ quotes: [quoteFactory.build()] });
+    configurePlatform({
+      storage: {
+        ...store,
+        get: async (key: string, area: StorageArea = 'local') => {
+          if (key === 'quotes') {
+            return null as never;
+          }
+          return store.get(key, area);
+        },
+        getMany: async (keys: string[], area: StorageArea = 'local') => {
+          const seen = await store.getMany(keys, area);
+          if (seen !== null && keys.includes('quotes')) {
+            seen.quotes = UNREADABLE_VALUE;
+          }
+          return seen;
+        },
+      },
+    });
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await expect(getQuotes()).rejects.toThrow(/unreadable/i);
+  });
+});
+
+// The legacy key is the only copy of those quotes, so it may only be deleted once the copies
+// have provably landed.
+describe('the legacy quotes migration', () => {
+  it('keeps the legacy key when the copy cannot be written', async () => {
+    const legacy = [quoteFactory.build({ id: 'q1', isCustom: false })];
+    const { store, at } = capturingStore({ quotes: legacy });
+    configurePlatform({
+      storage: {
+        ...store,
+        set: async (key: string, value: unknown, area: StorageArea = 'local') => {
+          if (key === 'seedQuotes') {
+            return {
+              success: false as const,
+              error: { type: 'quota_exceeded' as const, message: 'Storage full' },
+            };
+          }
+          return store.set(key, value, area);
+        },
+      },
+    });
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await expect(getQuotes()).rejects.toThrow(/could not migrate/i);
+
+    expect(at('quotes')).toEqual(legacy);
+  });
+
+  it('deletes the legacy key once the copy has landed', async () => {
+    const legacy = [quoteFactory.build({ id: 'q1', isCustom: false })];
+    const { store, at } = capturingStore({ quotes: legacy });
+    configurePlatform({ storage: store });
+
+    await expect(getQuotes()).resolves.toHaveLength(1);
+
+    expect(at('quotes')).toBeUndefined();
+  });
+
+  // Sync stands in only for a local key that was never written. Standing in for a local read that
+  // FAILED migrates the wrong list and then deletes both — the local one never seen.
+  it('refuses rather than migrating from sync when its own local read fails', async () => {
+    const { store, at } = capturingStore({ quotes: [quoteFactory.build({ id: 'local-1' })] });
+    await store.set('quotes', [quoteFactory.build({ id: 'sync-1' })], 'sync');
+    // The gate's read lands; the migration's own read of the same key does not.
+    let localReads = 0;
+    const localQuotesRead = (area: StorageArea) => {
+      if (area !== 'local') {
+        return true;
+      }
+      localReads += 1;
+      return localReads === 1;
+    };
+    configurePlatform({
+      storage: {
+        ...store,
+        get: async (key: string, area: StorageArea = 'local') => {
+          if (key === 'quotes' && !localQuotesRead(area)) {
+            return null as never;
+          }
+          return store.get(key, area);
+        },
+        getMany: async (keys: string[], area: StorageArea = 'local') => {
+          if (keys.includes('quotes') && !localQuotesRead(area)) {
+            return null;
+          }
+          return store.getMany(keys, area);
+        },
+      },
+    });
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await expect(getQuotes()).rejects.toThrow(/legacy quotes/i);
+
+    expect(at('quotes', 'sync')).toHaveLength(1);
+    expect(at('seedQuotes')).toBeUndefined();
   });
 });
 
@@ -481,6 +722,19 @@ describe('who gets their hidden items back', () => {
     await setGoalsRaw(all.filter((goal) => goal.id !== 'g2'));
 
     expect(at('goals')).toEqual([readable]);
+  });
+
+  // The quarantined row is invisible to its own id-keyed reads, so keeping it alongside the
+  // replacement would hand every later lookup the broken one.
+  it('lets the user re-create an item under a quarantined id, once', async () => {
+    const recreated = { ...readable, id: 'g2' };
+    const { at, wroteTo, store } = capturingStore({ goals: [unreadable] });
+    configurePlatform({ storage: store });
+
+    await setGoals([recreated]);
+
+    expect(wroteTo('goals', 'local')).toBe(true);
+    expect(at('goals')).toEqual([recreated]);
   });
 
   // Driven through a MIXED caller — raw read into the validated setter — because that is the
@@ -562,66 +816,87 @@ describe('setQuotesRaw', () => {
   });
 });
 
-// A key this build cannot parse is defaulted on read, and any change rewrites the whole
-// object — so the user's choice is replaced by our default and pushed to the device that made it.
+// A key this build cannot parse is defaulted on read, and that default must never be mistaken
+// for the user's choice and written back over what they actually picked.
 describe('a settings value this build cannot parse', () => {
-  const stored = { theme: 'dark', colorTheme: 'aurora', somethingAddedLater: 'kept' };
-
-  // Named area, not an alias: the area computation itself reads out of this very key.
-  const settingsAt = (at: (key: string, area: StorageArea) => unknown) =>
-    at('settings', 'local') as Record<string, unknown>;
+  const stored = {
+    [settingsStorageKey('theme')]: 'dark',
+    [settingsStorageKey('colorTheme')]: 'aurora',
+  };
 
   it('survives a write of an unrelated setting', async () => {
-    const { at, store } = capturingStore({ settings: stored });
+    const { at, store } = capturingStore(stored);
     configurePlatform({ storage: store });
 
-    await setSettings({ ...(await getSettings()), theme: 'light' });
+    await setSettingsPatch({ theme: 'light' });
 
-    expect(settingsAt(at).colorTheme).toBe('aurora');
-    expect(settingsAt(at).theme).toBe('light');
+    expect(at(settingsStorageKey('colorTheme'))).toBe('aurora');
+    expect(at(settingsStorageKey('theme'))).toBe('light');
   });
 
   it('still yields to an explicit change of that same setting', async () => {
-    const { at, store } = capturingStore({ settings: stored });
+    const { at, store } = capturingStore(stored);
     configurePlatform({ storage: store });
 
-    await setSettings({ ...(await getSettings()), colorTheme: 'rose' });
+    await setSettingsPatch({ colorTheme: 'rose' });
 
-    expect(settingsAt(at).colorTheme).toBe('rose');
+    expect(at(settingsStorageKey('colorTheme'))).toBe('rose');
+  });
+
+  it('is refused as a write, so no read has to default it again', async () => {
+    const { at, store } = capturingStore();
+    configurePlatform({ storage: store });
+
+    const result = await setSettingsPatch({ colorTheme: 'aurora' as never });
+
+    expect(result.success).toBe(false);
+    expect(at(settingsStorageKey('colorTheme'))).toBeUndefined();
+  });
+
+  // Sync applies what a peer on another version chose; dropping it here would lose a value
+  // this build simply cannot name yet.
+  it('is stored anyway when sync applies it, and defaulted on the way out', async () => {
+    const { at, store } = capturingStore();
+    configurePlatform({ storage: store });
+
+    await setSettingsPatchRaw({ colorTheme: 'aurora' as never });
+
+    expect(at(settingsStorageKey('colorTheme'))).toBe('aurora');
+    await expect(getSettings()).resolves.toMatchObject({
+      colorTheme: DEFAULT_SETTINGS.colorTheme,
+    });
   });
 });
 
-// The preserving write cannot tell "reset to the default" from "never saw it", so callers
-// that mean the default use the raw setter.
 describe('a settings write that means the default', () => {
-  const stored = { theme: 'dark', colorTheme: 'aurora', somethingAddedLater: 'kept' };
+  const stored = {
+    [settingsStorageKey('theme')]: 'dark',
+    [settingsStorageKey('colorTheme')]: 'aurora',
+  };
 
   // The one action whose entire job is to clear everything must actually clear the field
   // this build cannot read — otherwise Reset visibly does nothing for that setting.
-  it('clears an unreadable field when written raw', async () => {
-    const { at, store } = capturingStore({ settings: stored });
+  it('clears an unreadable field on a reset', async () => {
+    const { at, store } = capturingStore(stored);
     configurePlatform({ storage: store });
 
-    await setSettingsRaw({ ...DEFAULT_SETTINGS });
+    await clearSettings();
 
-    expect((at('settings') as Record<string, unknown>).colorTheme).toBe(
-      DEFAULT_SETTINGS.colorTheme
-    );
+    expect(at(settingsStorageKey('colorTheme'))).toBeUndefined();
+    await expect(getSettings()).resolves.toMatchObject({
+      colorTheme: DEFAULT_SETTINGS.colorTheme,
+    });
   });
 
-  // Sync reads raw and applies a remote value; if that value happens to equal our default,
-  // the preserving write would drop it and the pull would be a silent no-op.
+  // Absence is how a default is expressed, so a pulled default has to be written rather than
+  // skipped as "already what we have".
   it('lands a remote value that happens to equal our default', async () => {
-    const { at, store } = capturingStore({ settings: stored });
+    const { at, store } = capturingStore(stored);
     configurePlatform({ storage: store });
 
-    await setSettingsRaw({ ...DEFAULT_SETTINGS, theme: DEFAULT_SETTINGS.theme });
+    await setSettingsPatch({ theme: DEFAULT_SETTINGS.theme });
 
-    const written = at('settings') as Record<string, unknown>;
-    expect(written.theme).toBe(DEFAULT_SETTINGS.theme);
-    // And it does not quietly restore the neighbour it cannot read, which is the whole
-    // difference between this setter and the preserving one.
-    expect(written.colorTheme).toBe(DEFAULT_SETTINGS.colorTheme);
+    expect(at(settingsStorageKey('theme'))).toBe(DEFAULT_SETTINGS.theme);
   });
 });
 
@@ -629,24 +904,22 @@ describe('a settings write that means the default', () => {
 // so an identity comparison against the default never matches.
 describe('an unreadable setting whose default is an array', () => {
   const stored = {
-    theme: 'dark',
-    quoteFilterActiveCollectionIds: [{ id: 'c1', name: 'Stoics' }],
+    [settingsStorageKey('quoteFilterActiveCollectionIds')]: [{ id: 'c1', name: 'Stoics' }],
   };
 
-  it('survives a caller that rebuilt the array rather than passing our reference', async () => {
-    const { at, wroteTo, store } = capturingStore({ settings: stored });
+  it('survives a caller that rebuilt the other array rather than passing our reference', async () => {
+    const { at, wroteTo, store } = capturingStore(stored);
     configurePlatform({ storage: store });
 
     const current = await getSettings();
     // A fresh array with the same contents as the default — what `.filter()` produces.
-    await setSettings({
-      ...current,
-      quoteFilterActiveCollectionIds: [...current.quoteFilterActiveCollectionIds],
+    await setSettingsPatch({
+      quoteFilterEnabledCategories: [...current.quoteFilterEnabledCategories],
     });
 
-    expect(wroteTo('settings', 'local')).toBe(true);
-    expect((at('settings') as Record<string, unknown>).quoteFilterActiveCollectionIds).toEqual(
-      stored.quoteFilterActiveCollectionIds
+    expect(wroteTo(settingsStorageKey('quoteFilterEnabledCategories'), 'local')).toBe(true);
+    expect(at(settingsStorageKey('quoteFilterActiveCollectionIds'))).toEqual(
+      stored[settingsStorageKey('quoteFilterActiveCollectionIds')]
     );
   });
 });
@@ -794,7 +1067,7 @@ describe('writes land in the area their reader uses', () => {
     for (const syncEnabled of [true, false]) {
       const expectedArea: StorageArea = syncEnabled ? 'sync' : 'local';
       const otherArea: StorageArea = syncEnabled ? 'local' : 'sync';
-      const { wroteTo, store } = capturingStore({ settings: { syncEnabled } });
+      const { wroteTo, store } = capturingStore(settingsEntries({ syncEnabled }));
       configurePlatform({ storage: store });
 
       await write();
@@ -812,7 +1085,7 @@ describe('writes land in the area their reader uses', () => {
   }
 
   it('writes goals to the sync area when sync is on', async () => {
-    const { at, wroteTo, store } = capturingStore({ settings: { syncEnabled: true } });
+    const { at, wroteTo, store } = capturingStore(settingsEntries({ syncEnabled: true }));
     configurePlatform({ storage: store });
 
     await setGoals([goal]);
@@ -822,13 +1095,13 @@ describe('writes land in the area their reader uses', () => {
   });
 
   it('keeps settings in the local area regardless', async () => {
-    const { wroteTo, store } = capturingStore({ settings: { syncEnabled: true } });
+    const { wroteTo, store } = capturingStore(settingsEntries({ syncEnabled: true }));
     configurePlatform({ storage: store });
 
-    await setSettingsRaw({ ...DEFAULT_SETTINGS, syncEnabled: true });
+    await setSettingsPatch({ theme: 'dark' });
 
-    expect(wroteTo('settings', 'local')).toBe(true);
-    expect(wroteTo('settings', 'sync')).toBe(false);
+    expect(wroteTo(settingsStorageKey('theme'), 'local')).toBe(true);
+    expect(wroteTo(settingsStorageKey('theme'), 'sync')).toBe(false);
   });
 
   /**
@@ -907,7 +1180,7 @@ describe('writes land in the area their reader uses', () => {
     ['validated', (q: unknown[]) => setQuotes(q as never), getQuotes],
   ])('keeps seed quotes local on the %s path even with sync on', async (_path, write, read) => {
     const seedQuote = quoteFactory.build({ id: 'seed-1', isCustom: false });
-    const { wroteTo, store } = capturingStore({ settings: { syncEnabled: true } });
+    const { wroteTo, store } = capturingStore(settingsEntries({ syncEnabled: true }));
     configurePlatform({ storage: store });
 
     await write([seedQuote, quote]);
@@ -930,7 +1203,7 @@ describe('writes land in the area their reader uses', () => {
 
   // Settings cannot follow the area it decides. The writer is pinned above; this is the reader.
   it('reads settings for sync out of the local area, never the synced one', async () => {
-    const { store } = capturingStore({ settings: { ...DEFAULT_SETTINGS, syncEnabled: true } });
+    const { store } = capturingStore(settingsEntries({ ...DEFAULT_SETTINGS, syncEnabled: true }));
     configurePlatform({ storage: store });
 
     await expect(getSettingsForSync()).resolves.toMatchObject({ syncEnabled: true });
@@ -939,7 +1212,7 @@ describe('writes land in the area their reader uses', () => {
   // Quotes split across two keys and only the custom half follows the sync area; the seed
   // half is local by design, so this pins both halves rather than just the one.
   it('sends custom quotes raw to the sync area and keeps seed quotes local', async () => {
-    const { wroteTo, store } = capturingStore({ settings: { syncEnabled: true } });
+    const { wroteTo, store } = capturingStore(settingsEntries({ syncEnabled: true }));
     configurePlatform({ storage: store });
 
     await setQuotesRaw([]);
@@ -960,11 +1233,70 @@ describe('writes land in the area their reader uses', () => {
       isHidden: false,
       viewCount: 0,
     };
-    const { store } = capturingStore({ settings: { syncEnabled: true } });
+    const { store } = capturingStore(settingsEntries({ syncEnabled: true }));
     configurePlatform({ storage: store });
 
     await setQuotesRaw([quote]);
 
     await expect(getQuotesRaw()).resolves.toEqual([quote]);
+  });
+});
+
+// The one path that moves every collection at once, run on a sync toggle. `null` covers both
+// "the source never wrote this" and "the read failed", and the second copied emptiness across.
+describe('migrateStorageData', () => {
+  it('writes nothing when the source area cannot be read', async () => {
+    const destination = [goalFactory.build({ id: 'g1' })];
+    const { store, wroteTo } = capturingStore({ goals: destination }, 'sync');
+    configurePlatform({ storage: { ...store, getMany: async () => null } });
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    const result = await migrateStorageData('local', 'sync');
+
+    expect(result.success).toBe(false);
+    expect(wroteTo('goals', 'sync')).toBe(false);
+  });
+
+  it('refuses when a source value is stored but unreadable', async () => {
+    const { store, wroteTo } = capturingStore({ goals: [] }, 'local');
+    configurePlatform({
+      storage: {
+        ...store,
+        getMany: async (keys: string[], area: StorageArea = 'local') => {
+          const seen = await store.getMany(keys, area);
+          if (seen !== null && keys.includes('goals')) {
+            seen.goals = UNREADABLE_VALUE;
+          }
+          return seen;
+        },
+      },
+    });
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    const result = await migrateStorageData('local', 'sync');
+
+    expect(result.success).toBe(false);
+    expect(wroteTo('goals', 'sync')).toBe(false);
+  });
+
+  it('leaves a destination key alone when the source never wrote it', async () => {
+    const { store, wroteTo } = capturingStore({ customQuotes: [] }, 'local');
+    configurePlatform({ storage: store });
+
+    const result = await migrateStorageData('local', 'sync');
+
+    expect(result.success).toBe(true);
+    expect(wroteTo('customQuotes', 'sync')).toBe(true);
+    expect(wroteTo('goals', 'sync')).toBe(false);
+  });
+
+  it('copies what the source does hold', async () => {
+    const goals = goalFactory.buildList(2);
+    const { store, at } = capturingStore({ goals }, 'local');
+    configurePlatform({ storage: store });
+
+    await expect(migrateStorageData('local', 'sync')).resolves.toEqual({ success: true });
+
+    expect(at('goals', 'sync')).toEqual(goals);
   });
 });

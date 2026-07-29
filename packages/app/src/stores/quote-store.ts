@@ -181,13 +181,16 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     try {
       set({ isLoading: true, error: null });
 
-      // Get quotes from storage
+      // Seeding rewrites both quote keys, so it may only run on a read that positively answered
+      // "nothing is stored" — getQuotes throws rather than reporting a failed read as empty.
       let quotes = await getQuotes();
-
-      // If no quotes exist, seed with default quotes
       if (quotes.length === 0) {
         quotes = SEED_QUOTES;
-        await setQuotes(quotes);
+        const seedResult = await setQuotes(quotes);
+        if (!seedResult.success) {
+          logger.error('Failed to seed the default quotes', seedResult.error);
+          throw new Error(seedResult.error.message);
+        }
       }
 
       // Get collections from storage
@@ -290,7 +293,9 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       logger.error('Error refreshing quote', error);
       const errorMessage = 'Failed to refresh quote. Please try again.';
       set({ error: errorMessage });
-      useToastStore.getState().error(errorMessage);
+      // The new-tab interval calls this on every tick, so a persistent failure would otherwise
+      // stack one identical toast per tick.
+      useToastStore.getState().error(errorMessage, { collapseRepeats: true });
     }
   },
 

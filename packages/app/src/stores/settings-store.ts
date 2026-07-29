@@ -12,12 +12,30 @@ import {
   type Settings,
   type StorageError,
 } from '@cuewise/shared';
-import { getSettings, migrateStorageData, setSettings, setSettingsRaw } from '@cuewise/storage';
+import {
+  clearSettings,
+  getSettings,
+  migrateStorageData,
+  readSettings,
+  setSettingsPatch,
+} from '@cuewise/storage';
 import { create } from 'zustand';
 import { useToastStore } from './toast-store';
 
 // Exactly the keys with preview-aware selectors; widen only alongside a new selector.
 export type PreviewableSettings = Pick<Settings, 'backgroundDim' | 'backgroundBlur'>;
+
+/**
+ * One corrupt value refuses every write, so the message names it and the button that clears it
+ * ("Reset to defaults", in Settings → Advanced). A failed read has neither.
+ */
+function unreadableSettingsMessage(unreadable: string[]): string {
+  if (unreadable.length === 0) {
+    return "Cuewise can't read your settings, so the change was not saved.";
+  }
+  const subject = unreadable.length === 1 ? 'value' : 'values';
+  return `Cuewise can't read your saved ${subject} for ${unreadable.join(', ')}. Reset to defaults in Settings to fix it.`;
+}
 
 /** Quota failures get actionable copy; anything else keeps the generic retry message. */
 function settingsWriteErrorMessage(error: StorageError, fallback: string): string {
@@ -49,8 +67,8 @@ function reconcilePreview(
 
 const noop = () => {};
 
-// Settings writes are read-modify-write over one blob, so overlapping calls would each persist
-// their own merge of a stale base. Chaining makes every write read fresh state at dequeue time.
+// Storage writes are per-key now and don't race, but each write still reads fresh settings to
+// compute the in-memory merge and notify diff — chaining keeps that read/set pair atomic per write.
 let writeChain: Promise<unknown> = Promise.resolve();
 
 function enqueueWrite<T>(run: () => Promise<T>): Promise<T> {
@@ -101,9 +119,8 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     try {
       set({ isLoading: true, error: null });
 
-      const storedSettings = await getSettings();
       // Merge with defaults to ensure all properties exist (for existing users)
-      const settings = { ...DEFAULT_SETTINGS, ...storedSettings };
+      const settings = { ...DEFAULT_SETTINGS, ...(await getSettings()) };
 
       set({
         settings,
@@ -128,10 +145,21 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   updateSettings: (partialSettings: Partial<Settings>) =>
     enqueueWrite(async () => {
       try {
-        // Merge onto persisted truth: the sync engine writes pulled settings straight to storage,
-        // and a page can accept a click before initialize() resolves. Safe to read-modify-write
-        // here only because enqueueWrite serializes the writers.
-        const settings = { ...DEFAULT_SETTINGS, ...(await getSettings()) };
+        // Re-reads settings because a sync pull or a pre-init click can beat this write; the read
+        // feeds the merge base and changed-key diff below — the write itself is a sparse per-key patch.
+        // Fail-closed: defaults as the base would read `syncEnabled: false` as the user's choice,
+        // skipping the area migration while still writing the flag.
+        const read = await readSettings();
+        if (!read.ok) {
+          logger.error('Aborted a settings update: the current settings could not be read', {
+            fields: Object.keys(partialSettings),
+          });
+          const errorMessage = unreadableSettingsMessage(read.unreadable);
+          set({ error: errorMessage, preview: null });
+          useToastStore.getState().error(errorMessage);
+          return false;
+        }
+        const settings = read.settings;
 
         // Clamp ranged values here — the settings write path the UI uses — so
         // presets/steppers (and a future settings import) can't persist an out-of-range
@@ -171,7 +199,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
 
         // The storage adapters never throw — failures come back as a result object,
         // so an unchecked write would silently claim success on e.g. quota exhaustion.
-        const writeResult = await setSettings(updatedSettings);
+        const writeResult = await setSettingsPatch(clampedPartial);
         if (!writeResult.success) {
           logger.error('Error persisting settings', writeResult.error);
           const errorMessage = settingsWriteErrorMessage(
@@ -218,16 +246,12 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   resetToDefaults: () =>
     enqueueWrite(async () => {
       try {
-        // Raw: a reset means every field, including the ones this build cannot read. The
-        // preserving write would keep those — it cannot tell "reset to the default" from
-        // "never saw it" — so the one action that should clear everything would not.
-        const writeResult = await setSettingsRaw(DEFAULT_SETTINGS);
-        if (!writeResult.success) {
-          logger.error('Error persisting settings reset', writeResult.error);
-          const errorMessage = settingsWriteErrorMessage(
-            writeResult.error,
-            'Failed to reset settings. Please try again.'
-          );
+        // Removing the keys, not writing defaults over them: a reset means "follow the
+        // defaults again", and a stored copy would pin today's values against a later change.
+        const cleared = await clearSettings();
+        if (!cleared) {
+          logger.error('Error clearing settings');
+          const errorMessage = 'Failed to reset settings. Please try again.';
           set({ error: errorMessage, preview: null });
           useToastStore.getState().error(errorMessage);
           return false;
