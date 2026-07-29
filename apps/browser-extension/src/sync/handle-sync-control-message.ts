@@ -1,5 +1,5 @@
 import { buildSyncDetails } from '@cuewise/app';
-import { logger } from '@cuewise/shared';
+import { describeThrown, logger } from '@cuewise/shared';
 import { ApiError } from '@cuewise/sync-client';
 import {
   RecoveryCodeError,
@@ -44,7 +44,7 @@ async function doEnable(
     if (err instanceof ApiError && err.status === 401) {
       return { ok: false, reason: 'auth' };
     }
-    const detail = err instanceof Error ? err.message : String(err);
+    const detail = describeThrown(err);
     // Put the cause in the message text so it survives string-coercing surfaces (Chrome's Errors
     // panel); the Error arg still carries the stack in the console. Metadata only, never the token.
     logger.error(`Cloud sync enable failed: ${detail}`, err);
@@ -123,9 +123,10 @@ async function runOp(
     }
   } catch (err) {
     logger.error(`Cloud sync control op '${msg.op}' failed`, err);
-    // String(err) for a non-Error throw: without it the page realm's log names no cause at all,
-    // and the raw value is only visible in the worker's console — a different inspector.
-    return { ok: false, reason: 'error', detail: err instanceof Error ? err.message : String(err) };
+    // Coerced for a non-Error throw: without it the page realm's log names no cause at all, and the
+    // raw value is only visible in the worker's console. describeThrown, because a bare String() on
+    // a null-prototype object throws HERE and the router would answer nothing at all.
+    return { ok: false, reason: 'error', detail: describeThrown(err) };
   }
 }
 

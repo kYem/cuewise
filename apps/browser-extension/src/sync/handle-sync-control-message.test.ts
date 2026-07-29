@@ -458,6 +458,32 @@ describe('handleSyncControlMessage: op errors', () => {
 
     expect(result).toEqual({ ok: false, reason: 'error', detail: 'worker went away' });
   });
+
+  it('still answers the page when the thrown value cannot be coerced to a string', async () => {
+    // A null-prototype object has no toString, so coercing one INSIDE the catch throws and the
+    // router would answer nothing at all — the page's send hangs to its timeout for no reason.
+    const engine = fakeEngine({
+      syncNow: vi.fn().mockRejectedValue(Object.create(null)),
+    });
+
+    const result = await handleSyncControlMessage(
+      engine,
+      { kind: 'cuewise-sync-control', op: 'syncNow' },
+      fakeDeps()
+    );
+
+    expect(result).toEqual({ ok: false, reason: 'error', detail: '[unstringifiable value]' });
+  });
+
+  it('still answers the page when an enable throws a value that cannot be coerced', async () => {
+    const engine = fakeEngine({
+      enableSync: vi.fn().mockRejectedValue(Object.create(null)),
+    });
+
+    const result = await handleSyncControlMessage(engine, enableMessage(), fakeDeps());
+
+    expect(result).toEqual({ ok: false, reason: 'error', detail: '[unstringifiable value]' });
+  });
 });
 
 describe('handleSyncControlMessage: concurrency', () => {
