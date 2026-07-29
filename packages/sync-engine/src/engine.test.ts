@@ -7,7 +7,7 @@ import {
 } from '@cuewise/crypto';
 import { configurePlatform } from '@cuewise/shared';
 import { getGoals, setGoals } from '@cuewise/storage';
-import { SessionManager, SYNC_PULL_WAKE_ID } from '@cuewise/sync-client';
+import { ApiError, SessionManager, SYNC_PULL_WAKE_ID } from '@cuewise/sync-client';
 import { goalFactory } from '@cuewise/test-utils/factories';
 import { describe, expect, it, vi } from 'vitest';
 import { FakeApiClient, FakeSyncServer } from './__fixtures__/fake-api-client';
@@ -123,7 +123,8 @@ describe('SyncEngine.enableSync', () => {
     // A failed cycle must not move the stamp.
     t = 6_000;
     device.apiClient.rejectNextGetChangesWithNetworkError = true;
-    await expect(device.engine.syncNow()).rejects.toMatchObject({ code: 'network_error' });
+    const failed = await device.engine.syncNow();
+    expect(failed).toMatchObject({ kind: 'failed', reason: 'network' });
     expect(device.engine.getLastSyncedAt()).toBe(5_000);
 
     // A restarted engine hydrates the persisted stamp (its own fresh sync is made to fail,
@@ -363,6 +364,22 @@ describe('SyncEngine.enableSync', () => {
     expect(device.scheduler.scheduled.some((s) => s.id === SYNC_PULL_WAKE_ID)).toBe(false);
   });
 
+  it('finishes enable when the initial sync fails transiently, leaving the retry to the pull loop', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    // The DK is already enrolled by the time the pull runs, so a transient cycle failure is not
+    // a failed enrolment — the device is enrolled and the next wake retries.
+    device.apiClient.rejectNextGetChangesWithNetworkError = true;
+
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    expect(device.engine.getStatus()).toBe('active');
+    expect(device.engine.getLastSyncedAt()).toBeNull();
+    expect(device.scheduler.scheduled.some((s) => s.id === SYNC_PULL_WAKE_ID)).toBe(true);
+  });
+
   it('leaves status disabled (not error) when enroll needs a recovery code', async () => {
     const server = new FakeSyncServer();
     const deviceA = createDevice(server);
@@ -422,6 +439,104 @@ describe('SyncEngine.syncNow', () => {
     await device.engine.syncNow();
 
     expect(device.apiClient.callOrder).toEqual([]);
+  });
+
+  it('reports a completed cycle and stamps it', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    const outcome = await device.engine.syncNow();
+
+    expect(outcome).toEqual({ kind: 'synced' });
+    expect(device.engine.getLastSyncedAt()).not.toBeNull();
+  });
+
+  it('reports a missing key without stamping', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+
+    const outcome = await device.engine.syncNow();
+
+    expect(outcome).toEqual({ kind: 'no-key' });
+    expect(device.engine.getLastSyncedAt()).toBeNull();
+  });
+
+  it('reports a refused cursor without stamping', async () => {
+    let t = 5_000;
+    const server = new FakeSyncServer();
+    const device = createDevice(server, { now: () => t });
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    t = 6_000;
+    device.apiClient.rejectNextGetChangesWithResync();
+    const outcome = await device.engine.syncNow();
+
+    expect(outcome).toEqual({ kind: 'resynced' });
+    expect(device.engine.getLastSyncedAt()).toBe(5_000);
+  });
+
+  it('returns a classified failure rather than throwing, and does not stamp', async () => {
+    let t = 5_000;
+    const server = new FakeSyncServer();
+    const device = createDevice(server, { now: () => t });
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    t = 6_000;
+    device.apiClient.rejectNextGetChanges(new ApiError('internal', 500));
+    const outcome = await device.engine.syncNow();
+
+    expect(outcome.kind).toBe('failed');
+    if (outcome.kind === 'failed') {
+      expect(outcome.reason).toBe('server');
+    }
+    expect(device.engine.getLastSyncedAt()).toBe(5_000);
+  });
+
+  it('records the last cycle for callers that did not run it', async () => {
+    let t = 5_000;
+    const server = new FakeSyncServer();
+    const device = createDevice(server, { now: () => t });
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    t = 6_000;
+    device.apiClient.rejectNextGetChangesWithResync();
+    await device.engine.syncNow();
+
+    expect(device.engine.getLastCycle()).toEqual({ at: 6_000, outcome: { kind: 'resynced' } });
+  });
+
+  it('notifies onCycle with the outcome of each cycle', async () => {
+    const server = new FakeSyncServer();
+    const onCycle = vi.fn();
+    const device = createDevice(server, { onCycle });
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    device.apiClient.rejectNextGetChanges(new ApiError('internal', 500));
+    await device.engine.syncNow();
+
+    expect(onCycle).toHaveBeenLastCalledWith(
+      expect.objectContaining({ kind: 'failed', reason: 'server' })
+    );
+  });
+
+  it('reports signed-out on a 401 instead of leaving the caller to re-read the status', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    device.apiClient.rejectAllWith401 = true;
+    const outcome = await device.engine.syncNow();
+
+    expect(outcome).toEqual({ kind: 'signed-out' });
+    expect(device.engine.getStatus()).toBe('signed_out');
   });
 });
 
@@ -547,6 +662,18 @@ describe('SyncEngine.handlePullWake', () => {
     expect(device.engine.getStatus()).toBe('signed_out');
     expect(device.scheduler.cancelled).toContain(SYNC_PULL_WAKE_ID);
     expect(device.scheduler.scheduled).toEqual([]);
+  });
+
+  it('does not paint a disabled device active on a pull wake', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    await device.engine.disableSync();
+
+    await device.engine.handlePullWake();
+
+    expect(device.engine.getStatus()).toBe('disabled');
   });
 });
 

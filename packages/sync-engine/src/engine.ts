@@ -29,6 +29,7 @@ import {
 import { SyncMetadataStore } from './metadata-store';
 import { MutationTracker } from './mutation-tracker';
 import { type ConflictStrategy, LwwHlcStrategy } from './strategy';
+import { classifySyncFailure, type SyncOutcome } from './sync-outcome';
 
 export const CLOUD_SYNC_ENABLED_KEY = 'cloudSyncEnabled';
 
@@ -83,6 +84,7 @@ export interface SyncEngineDeps {
   bindings?: CollectionBinding[];
   now?: () => number;
   onStatus?: (status: SyncStatus) => void;
+  onCycle?: (outcome: SyncOutcome) => void;
   onQuarantine?: (key: string) => void;
   onRecoveryCode?: (code: string) => void;
 }
@@ -101,6 +103,7 @@ export class SyncEngine {
   private dk: DataKey | null = null;
   private keyId: string | null = null;
   private lastSyncedAt: number | null = null;
+  private lastCycle: { at: number; outcome: SyncOutcome } | null = null;
 
   constructor(private readonly deps: SyncEngineDeps) {
     this.now = deps.now ?? Date.now;
@@ -175,9 +178,9 @@ export class SyncEngine {
 
     this.setStatus('initial_sync');
     await this.backfillDirty();
-    await this.syncNow();
-    if (this.status === 'signed_out') {
-      // syncNow already ran handleAuthLoss (dropped the session, kept the DK) — enable didn't finish.
+    const outcome = await this.syncNow();
+    if (outcome.kind === 'signed-out') {
+      // The session was dropped mid-cycle (handleAuthLoss kept the DK) — enable didn't finish.
       return;
     }
 
@@ -230,10 +233,13 @@ export class SyncEngine {
     return code;
   }
 
-  /** pullOnce then pushOnce. A no-op until a DK is held (never enabled, or self-heal hasn't run). */
-  async syncNow(): Promise<void> {
+  /**
+   * pullOnce then pushOnce, reporting what the cycle actually did. Never throws — callers read
+   * the outcome. A no-op until a DK is held (never enabled, or self-heal hasn't run).
+   */
+  async syncNow(): Promise<SyncOutcome> {
     if (this.dk === null || this.keyId === null) {
-      return;
+      return { kind: 'no-key' };
     }
     const cycleDeps: CycleDeps = {
       transport: this.deps.apiClient,
@@ -245,17 +251,25 @@ export class SyncEngine {
       now: this.now,
       onQuarantine: this.deps.onQuarantine,
     };
+    let outcome: SyncOutcome;
     try {
-      await pullOnce(cycleDeps);
+      const pull = await pullOnce(cycleDeps);
       await pushOnce(cycleDeps);
+      outcome = pull.resynced ? { kind: 'resynced' } : { kind: 'synced' };
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         await this.handleAuthLoss();
-        return;
+        outcome = { kind: 'signed-out' };
+      } else {
+        outcome = { kind: 'failed', reason: classifySyncFailure(err), error: err };
       }
-      throw err;
     }
-    await this.stampLastSynced();
+    if (outcome.kind === 'synced') {
+      await this.stampLastSynced();
+    }
+    this.lastCycle = { at: this.now(), outcome };
+    this.deps.onCycle?.(outcome);
+    return outcome;
   }
 
   /**
@@ -277,6 +291,10 @@ export class SyncEngine {
 
   getLastSyncedAt(): number | null {
     return this.lastSyncedAt;
+  }
+
+  getLastCycle(): { at: number; outcome: SyncOutcome } | null {
+    return this.lastCycle;
   }
 
   /**
@@ -366,14 +384,20 @@ export class SyncEngine {
   }
 
   // LOOP callers must never let a transient failure (e.g. offline) kill the backstop poll
-  // (spec §5). A 401 is handled inside syncNow itself (handleAuthLoss), never reaches this catch.
+  // (spec §5). A 401 is handled inside syncNow itself (handleAuthLoss).
   private async syncNowLoopSafe(): Promise<void> {
-    try {
-      await this.syncNow();
-    } catch (err) {
-      logger.warn('Sync failed in the pull loop; the next scheduled wake will retry', {
-        code: err instanceof ApiError ? err.code : undefined,
+    const outcome = await this.syncNow();
+    if (outcome.kind === 'failed') {
+      // At error level with the error itself: the shipped default log level is 'error', and the
+      // reason alone does not say what broke.
+      logger.error('Sync cycle failed; the next scheduled wake will retry', {
+        reason: outcome.reason,
+        error: outcome.error,
       });
+      return;
+    }
+    if (outcome.kind === 'no-key') {
+      logger.debug('Sync wake fired with no data key; nothing to do');
     }
   }
 

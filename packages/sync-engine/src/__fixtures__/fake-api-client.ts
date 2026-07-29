@@ -87,8 +87,19 @@ export class FakeApiClient implements EngineApiClient {
   /** Total successful token exchanges — proves resumeEnrollWithCode doesn't re-exchange. */
   exchangeCount = 0;
   private tokenCounter = 0;
+  private nextGetChangesError: Error | null = null;
 
   constructor(private readonly server: FakeSyncServer) {}
+
+  /** One-shot: fails the next getChanges as the server does on a discarded cursor. */
+  rejectNextGetChangesWithResync(): void {
+    this.nextGetChangesError = new ApiError('resync_required', 409);
+  }
+
+  /** One-shot: throws the given error on the next getChanges call, then clears itself. */
+  rejectNextGetChanges(error: Error): void {
+    this.nextGetChangesError = error;
+  }
 
   async exchangeToken(req: ExchangeTokenRequest): Promise<{ token: string }> {
     this.lastExchangeRequest = req;
@@ -128,6 +139,11 @@ export class FakeApiClient implements EngineApiClient {
     if (this.rejectNextGetChangesWith401) {
       this.rejectNextGetChangesWith401 = false;
       throw new ApiError('invalid_token', 401);
+    }
+    if (this.nextGetChangesError !== null) {
+      const err = this.nextGetChangesError;
+      this.nextGetChangesError = null;
+      throw err;
     }
     this.callOrder.push('getChanges');
     return this.server.getChanges(since);
