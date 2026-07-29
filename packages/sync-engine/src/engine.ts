@@ -282,6 +282,7 @@ export class SyncEngine {
     // Push still runs after a stalled pull — outbound changes must not be held hostage by an
     // inbound wedge — but the stall outranks a push error when reporting, because only the stall
     // describes what is actually wrong with this device. A 401 outranks both: it needs cleanup.
+    let outrankedPushError: unknown;
     try {
       await pushOnce(cycleDeps);
     } catch (err) {
@@ -289,18 +290,19 @@ export class SyncEngine {
       if (failure.kind === 'signed-out' || pull.kind !== 'stalled') {
         return failure;
       }
-      logger.warn('Sync push failed on an already-stalled cycle; reporting the stall', {
-        error: err,
-      });
+      outrankedPushError = err;
     }
 
     if (pull.kind === 'stalled') {
       // A clean transport and a parked cursor: every later remote change is unreachable on this
       // device until that write succeeds, so this is a failure however healthy the wire looked.
+      // The outranked push error rides along as the cause, so syncNow's log reports both.
       return {
         kind: 'failed',
         reason: 'device',
-        error: new Error(`sync pull stalled writing ${pull.collection}/${pull.entityId}`),
+        error: new Error(`sync pull stalled writing ${pull.collection}/${pull.entityId}`, {
+          cause: outrankedPushError,
+        }),
       };
     }
     return pull.kind === 'resynced' ? { kind: 'resynced' } : { kind: 'synced' };

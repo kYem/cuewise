@@ -593,6 +593,34 @@ describe('SyncEngine.syncNow', () => {
     expect(deviceB.apiClient.callOrder).toEqual(['getChanges', 'pushChanges']);
   });
 
+  it("carries the outranked push error as the stall error's cause, so nothing is dropped", async () => {
+    const server = new FakeSyncServer();
+    const deviceA = createDevice(server);
+    useStorage(deviceA);
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    await deviceA.engine.enableSync('dev', 'cred-a', 'Device A');
+    const recoveryCode = deviceA.onRecoveryCode.mock.calls[0][0] as string;
+
+    const deviceB = createDevice(server, { bindings: bindingsThatCannotWriteGoals() });
+    useStorage(deviceB);
+    await deviceB.engine.enableSync('dev', 'cred-b', 'Device B', { recoveryCode });
+
+    await setGoals([goalFactory.build({ id: 'gb1' })]);
+    await deviceB.engine.markMutated('goals', 'gb1');
+    const pushError = new ApiError('network_error', 0);
+    deviceB.apiClient.rejectNextPushChanges(pushError);
+
+    const outcome = await deviceB.engine.syncNow();
+
+    // The stall is what gets reported, but the push error is the only record of the second
+    // failure — welded to the reported error rather than logged separately below the ship level.
+    expect(outcome).toMatchObject({ kind: 'failed', reason: 'device' });
+    if (outcome.kind === 'failed') {
+      expect(outcome.error).toBeInstanceOf(Error);
+      expect((outcome.error as Error).cause).toBe(pushError);
+    }
+  });
+
   it('reports signed-out when the push after a stalled pull 401s, so auth loss still cleans up', async () => {
     const server = new FakeSyncServer();
     const deviceA = createDevice(server);
