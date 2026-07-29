@@ -15,8 +15,8 @@ import {
 import {
   clearSettings,
   getSettings,
-  getSettingsOrNull,
   migrateStorageData,
+  readSettings,
   setSettingsPatch,
 } from '@cuewise/storage';
 import { create } from 'zustand';
@@ -24,6 +24,18 @@ import { useToastStore } from './toast-store';
 
 // Exactly the keys with preview-aware selectors; widen only alongside a new selector.
 export type PreviewableSettings = Pick<Settings, 'backgroundDim' | 'backgroundBlur'>;
+
+/**
+ * One corrupt value refuses every write, so the message names it and the button that clears it
+ * ("Reset to defaults", in Settings → Advanced). A failed read has neither.
+ */
+function unreadableSettingsMessage(unreadable: string[]): string {
+  if (unreadable.length === 0) {
+    return "Cuewise can't read your settings, so the change was not saved.";
+  }
+  const subject = unreadable.length === 1 ? 'value' : 'values';
+  return `Cuewise can't read your saved ${subject} for ${unreadable.join(', ')}. Reset to defaults in Settings to fix it.`;
+}
 
 /** Quota failures get actionable copy; anything else keeps the generic retry message. */
 function settingsWriteErrorMessage(error: StorageError, fallback: string): string {
@@ -137,16 +149,17 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
         // feeds the merge base and changed-key diff below — the write itself is a sparse per-key patch.
         // Fail-closed: defaults as the base would read `syncEnabled: false` as the user's choice,
         // skipping the area migration while still writing the flag.
-        const settings = await getSettingsOrNull();
-        if (settings === null) {
+        const read = await readSettings();
+        if (!read.ok) {
           logger.error('Aborted a settings update: the current settings could not be read', {
             fields: Object.keys(partialSettings),
           });
-          const errorMessage = 'Could not read your settings, so the change was not saved.';
+          const errorMessage = unreadableSettingsMessage(read.unreadable);
           set({ error: errorMessage, preview: null });
           useToastStore.getState().error(errorMessage);
           return false;
         }
+        const settings = read.settings;
 
         // Clamp ranged values here — the settings write path the UI uses — so
         // presets/steppers (and a future settings import) can't persist an out-of-range

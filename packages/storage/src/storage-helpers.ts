@@ -577,25 +577,34 @@ async function readSettingsEntries(): Promise<SettingsEntries | null> {
 }
 
 /**
- * `null` when any field could not be read — for callers that must not act on a guess. A field
+ * A refusal names the corrupt fields; an empty `unreadable` means the read itself failed, which
+ * no reset can fix and no field name describes.
+ */
+export type SettingsRead = { ok: true; settings: Settings } | { ok: false; unreadable: string[] };
+
+/**
+ * `ok: false` when any field could not be read — for callers that must not act on a guess. A field
  * that is stored but unreadable is refused too, not defaulted: `autoRollDueTasks` defaults to on,
  * so defaulting it re-dates every overdue task of a user who turned it off, on every device.
  * `getSettings` is the display path and defaults field-wise; a gate would read that as consent.
  */
-export async function getSettingsOrNull(): Promise<Settings | null> {
+export async function readSettings(): Promise<SettingsRead> {
   const entries = await readSettingsEntries();
   if (entries === null) {
     logger.error('Could not read the stored settings; refusing to answer with defaults');
-    return null;
+    return { ok: false, unreadable: [] };
   }
   if (entries.unreadable.length > 0) {
     // Names only — a setting's value can be a goal id or a playlist the user picked.
     logger.error('Refusing to default settings fields that are stored but unreadable', {
       fields: entries.unreadable,
     });
-    return null;
+    return { ok: false, unreadable: entries.unreadable };
   }
-  return { ...DEFAULT_SETTINGS, ...keepReadableSettingsFields(entries.values) };
+  return {
+    ok: true,
+    settings: { ...DEFAULT_SETTINGS, ...keepReadableSettingsFields(entries.values) },
+  };
 }
 
 export async function getSettings(): Promise<Settings> {

@@ -23,11 +23,7 @@ import {
   rollDueTasksToToday,
   toggleSubtaskInGoal,
 } from '@cuewise/shared';
-import {
-  getSettingsOrNull,
-  getGoals as loadAllGoals,
-  setGoals as saveAllGoals,
-} from '@cuewise/storage';
+import { getGoals as loadAllGoals, readSettings, setGoals as saveAllGoals } from '@cuewise/storage';
 import { create } from 'zustand';
 import { useToastStore } from './toast-store';
 
@@ -319,12 +315,12 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       //
       // A read that failed is not permission: the default is on, so guessing would re-date
       // every overdue task of a user who turned this off, on every device.
-      const settings = await getSettingsOrNull();
-      if (settings === null) {
+      const read = await readSettings();
+      if (!read.ok) {
         logger.error('Could not read the auto-roll setting; leaving due tasks where they are');
         return false;
       }
-      if (!settings.autoRollDueTasks) {
+      if (!read.settings.autoRollDueTasks) {
         return false;
       }
 

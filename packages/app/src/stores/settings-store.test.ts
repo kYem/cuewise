@@ -14,16 +14,18 @@ import { selectBackgroundBlur, selectBackgroundDim, useSettingsStore } from './s
 
 vi.mock('@cuewise/storage', () => ({
   getSettings: vi.fn(),
-  getSettingsOrNull: vi.fn(),
+  readSettings: vi.fn(),
   setSettingsPatch: vi.fn(),
   clearSettings: vi.fn(),
   migrateStorageData: vi.fn(),
 }));
 
+// Module-level fns so the copy each level receives is inspectable across getState() calls.
+const toastError = vi.fn();
 vi.mock('./toast-store', () => ({
   useToastStore: {
     getState: () => ({
-      error: vi.fn(),
+      error: toastError,
       warning: vi.fn(),
       success: vi.fn(),
     }),
@@ -46,7 +48,10 @@ let storedSettings: Settings = defaultSettings;
 function seedStorage(settings: Settings = defaultSettings) {
   storedSettings = settings;
   vi.mocked(storage.getSettings).mockImplementation(async () => storedSettings);
-  vi.mocked(storage.getSettingsOrNull).mockImplementation(async () => storedSettings);
+  vi.mocked(storage.readSettings).mockImplementation(async () => ({
+    ok: true,
+    settings: storedSettings,
+  }));
   vi.mocked(storage.setSettingsPatch).mockImplementation(async (patch: Partial<Settings>) => {
     storedSettings = { ...storedSettings, ...patch };
     return { success: true };
@@ -446,7 +451,7 @@ describe('an update whose read of the current settings failed', () => {
     vi.clearAllMocks();
     seedStorage({ ...defaultSettings, syncEnabled: true });
     vi.mocked(storage.migrateStorageData).mockResolvedValue({ success: true });
-    vi.mocked(storage.getSettingsOrNull).mockResolvedValue(null);
+    vi.mocked(storage.readSettings).mockResolvedValue({ ok: false, unreadable: [] });
   });
 
   it('aborts instead of writing against defaults', async () => {
@@ -469,5 +474,58 @@ describe('an update whose read of the current settings failed', () => {
     expect(logged).toHaveBeenCalledWith(expect.stringContaining('Aborted'), {
       fields: ['theme'],
     });
+  });
+});
+
+// One corrupt value refuses every write, so the panel is read-only until it is cleared: the
+// message has to name the value and the button that clears it.
+describe('an update blocked by a stored value that cannot be parsed', () => {
+  beforeEach(() => {
+    useSettingsStore.setState({
+      settings: defaultSettings,
+      preview: null,
+      isLoading: false,
+      error: null,
+    });
+    vi.clearAllMocks();
+    seedStorage();
+    vi.mocked(storage.readSettings).mockResolvedValue({
+      ok: false,
+      unreadable: ['pomodoroAutoStartBreaks'],
+    });
+  });
+
+  it('names the setting it cannot read and the action that fixes it', async () => {
+    await expect(useSettingsStore.getState().updateSettings({ theme: 'dark' })).resolves.toBe(
+      false
+    );
+
+    const message =
+      "Cuewise can't read your saved value for pomodoroAutoStartBreaks. Reset to defaults in Settings to fix it.";
+    expect(toastError).toHaveBeenCalledWith(message);
+    expect(useSettingsStore.getState().error).toBe(message);
+  });
+
+  it('names every unreadable setting, not only the first', async () => {
+    vi.mocked(storage.readSettings).mockResolvedValue({
+      ok: false,
+      unreadable: ['autoRollDueTasks', 'colorTheme'],
+    });
+
+    await useSettingsStore.getState().updateSettings({ theme: 'dark' });
+
+    expect(toastError).toHaveBeenCalledWith(
+      "Cuewise can't read your saved values for autoRollDueTasks, colorTheme. Reset to defaults in Settings to fix it."
+    );
+  });
+
+  it('still resets to defaults while every update is refused', async () => {
+    await expect(useSettingsStore.getState().updateSettings({ theme: 'dark' })).resolves.toBe(
+      false
+    );
+
+    await expect(useSettingsStore.getState().resetToDefaults()).resolves.toBe(true);
+    expect(storage.clearSettings).toHaveBeenCalledOnce();
+    expect(useSettingsStore.getState().settings).toEqual(DEFAULT_SETTINGS);
   });
 });

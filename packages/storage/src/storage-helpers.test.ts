@@ -25,10 +25,10 @@ import {
   getGoals,
   getSettings,
   getSettingsForSync,
-  getSettingsOrNull,
   getStorageUsage,
   migrateLegacySettings,
   readLegacySettingsBlob,
+  readSettings,
   resetSettingsMigration,
   SETTINGS_KEYS,
   setCustomBackground,
@@ -584,10 +584,12 @@ describe('a settings read that fails', () => {
     await expect(getGoals()).rejects.toThrow(/storage area/i);
   });
 
-  it('getSettingsOrNull reports it instead of handing back defaults', async () => {
+  // No field names: nothing on disk is corrupt, so naming keys would send the user to a reset
+  // that fixes nothing.
+  it('readSettings reports it instead of handing back defaults', async () => {
     configurePlatform({ storage: cannotReadSettings() });
 
-    await expect(getSettingsOrNull()).resolves.toBeNull();
+    await expect(readSettings()).resolves.toEqual({ ok: false, unreadable: [] });
   });
 
   it('getSettings falls back to the defaults', async () => {
@@ -848,13 +850,16 @@ describe('a settings value that is stored but unreadable', () => {
 
   // The gate path, not the display path: defaulting autoRollDueTasks to on re-dates every
   // overdue task of a user who turned it off, and pushes that to every other device.
-  it('getSettingsOrNull refuses rather than defaulting that field', async () => {
+  it('readSettings refuses, naming the field, rather than defaulting it', async () => {
     configurePlatform({
       storage: unreadableSettingsKey(settingsStorageKey('autoRollDueTasks')),
     });
     vi.spyOn(logger, 'error').mockImplementation(() => {});
 
-    await expect(getSettingsOrNull()).resolves.toBeNull();
+    await expect(readSettings()).resolves.toEqual({
+      ok: false,
+      unreadable: ['autoRollDueTasks'],
+    });
   });
 });
 
@@ -897,11 +902,14 @@ describe('a legacy settings blob that is stored but unreadable', () => {
     await expect(getGoals()).rejects.toThrow(/storage area/i);
   });
 
-  it('getSettingsOrNull refuses rather than defaulting the fields it back-stopped', async () => {
+  it('readSettings refuses rather than defaulting the fields it back-stopped', async () => {
     configurePlatform({ storage: unreadableBlob() });
     vi.spyOn(logger, 'error').mockImplementation(() => {});
 
-    await expect(getSettingsOrNull()).resolves.toBeNull();
+    await expect(readSettings()).resolves.toMatchObject({
+      ok: false,
+      unreadable: expect.arrayContaining(['autoRollDueTasks']),
+    });
   });
 
   it('keeps a per-key value that does not depend on the blob', async () => {
@@ -914,13 +922,13 @@ describe('a legacy settings blob that is stored but unreadable', () => {
   });
 });
 
-describe('getSettingsOrNull', () => {
+describe('readSettings', () => {
   it('says so when the read failed, rather than leaving no trace at all', async () => {
     const { store } = recordingStore();
     configurePlatform({ storage: { ...store, getMany: async () => null } });
     const error = vi.spyOn(logger, 'error').mockImplementation(() => {});
 
-    await expect(getSettingsOrNull()).resolves.toBeNull();
+    await expect(readSettings()).resolves.toMatchObject({ ok: false });
 
     expect(error).toHaveBeenCalledWith(expect.stringContaining('Could not read'));
   });

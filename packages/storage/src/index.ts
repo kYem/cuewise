@@ -14,7 +14,7 @@ export {
   setManyInStorage,
 } from './chrome-storage';
 export { LocalStorageKeyValueStore } from './local-storage-key-value-store';
-export type { PlaylistResumeInfo, StorageUsageInfo } from './storage-helpers';
+export type { PlaylistResumeInfo, SettingsRead, StorageUsageInfo } from './storage-helpers';
 // Typed storage helpers
 export {
   clearCustomBackground,
@@ -42,12 +42,12 @@ export {
   getRemindersRaw,
   getSettings,
   getSettingsForSync,
-  getSettingsOrNull,
   getStorageUsage,
   getWeatherState,
   getYoutubeProgress,
   migrateLegacySettings,
   migrateStorageData,
+  readSettings,
   SETTINGS_KEY_PREFIX,
   SETTINGS_KEYS,
   setCalendarState,
