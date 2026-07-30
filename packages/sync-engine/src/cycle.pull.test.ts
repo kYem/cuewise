@@ -421,14 +421,24 @@ describe('pullOnce', () => {
     // which writes nothing — must not inflate it.
     const sealed = await sealRecord(dk, 'goals', 'g1', { entity: null, hlc: NEWER_HLC }, 1);
     const poisoned: SyncRecord = { ...sealed, ciphertext: 'garbage' };
+    // A record the strategy resolves to local writes nothing either, so it must not count.
+    await setGoals([goalFactory.build({ id: 'g3', text: 'local' })]);
+    await seedLocalHlc(metaStore, 'goals', 'g3', NEWER_HLC);
+    const lost = await sealRecord(
+      dk,
+      'goals',
+      'g3',
+      { entity: goalFactory.build({ id: 'g3', text: 'stale' }), hlc: OLDER_HLC },
+      2
+    );
     const good = await sealRecord(
       dk,
       'goals',
       'g2',
       { entity: goalFactory.build({ id: 'g2' }), hlc: NEWER_HLC },
-      2
+      3
     );
-    transport.pullRecords = [poisoned, good];
+    transport.pullRecords = [poisoned, lost, good];
     const bindings = defaultBindings();
     const { isCancelled } = disableAfterFirstWrite(requireBinding(bindings, 'goals'));
     const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});

@@ -292,4 +292,18 @@ describe('EnrollCodeModal', () => {
     expect(screen.queryByText("That doesn't look like a recovery code")).not.toBeInTheDocument();
     expect(screen.getByLabelText(/recovery code/i)).toHaveValue('');
   });
+
+  it('shows no error line for an enroll a disconnect abandoned', async () => {
+    // It arrives with the recovery-code modal, so an "enroll failed" line beside it would be
+    // two contradictory answers to one action.
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue({ ok: false, reason: 'cancelled' });
+    render(<EnrollCodeModal isOpen onClose={vi.fn()} onSubmit={onSubmit} />);
+
+    await user.type(screen.getByLabelText(/recovery code/i), CODE);
+    await user.click(screen.getByRole('button', { name: 'Enroll' }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+    expect(screen.queryByText(/couldn't enroll this device/i)).not.toBeInTheDocument();
+  });
 });

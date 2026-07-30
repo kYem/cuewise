@@ -390,7 +390,11 @@ describe('handleSyncControlMessage: enable', () => {
     const engine = fakeControlSurface({
       getStatus: vi.fn().mockReturnValue('disabled' as SyncStatus),
     });
-    const deps = fakeDeps({ takeRecoveryCode: vi.fn().mockReturnValue('CW1-ABC') });
+    // Read-and-clear, like background.ts's slot: the drain at the top of doEnable must not be
+    // what reaches the user, or a previous attempt's code would open a different account.
+    const deps = fakeDeps({
+      takeRecoveryCode: vi.fn().mockReturnValueOnce(undefined).mockReturnValueOnce('CW1-ABC'),
+    });
 
     const result = await handleSyncControlMessage(engine, enableMessage(), deps);
 

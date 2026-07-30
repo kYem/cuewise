@@ -175,7 +175,10 @@ describe('createDirectSyncController: enable()', () => {
       getStatus: vi.fn().mockReturnValue('disabled' as SyncStatus),
       // The engine hands the code over before it notices it was superseded.
       enableSync: vi.fn().mockImplementation(async () => {
-        trampolines?.onRecoveryCode('CW1-ABC');
+        if (trampolines === undefined) {
+          throw new Error('buildEngine never ran, so there are no trampolines to mint through');
+        }
+        trampolines.onRecoveryCode('CW1-ABC');
       }),
     });
     const { controller } = buildDirectSyncController<SyncEngineControlSurface>({

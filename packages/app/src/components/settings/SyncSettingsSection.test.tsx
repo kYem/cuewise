@@ -262,6 +262,20 @@ describe('SyncSettingsSectionComponent', () => {
     expect(toastWarning).not.toHaveBeenCalled();
   });
 
+  it('still toasts a real failure whose thrown message happens to read "cancelled"', async () => {
+    // Hosts build `detail` from an Error message, so matching on the detail alone would let a
+    // genuine failure pass as the user's own cancel: no toast, no error state, nothing.
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptEnableWithGoogle({ ok: false, reason: 'error', detail: 'cancelled' });
+    renderSection(controller);
+
+    await user.click(cloudSyncSwitch());
+    await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
+
+    await waitFor(() => expect(toastError).toHaveBeenCalledTimes(1));
+  });
+
   it('still toasts an auth failure that carries a non-cancel detail', async () => {
     // Pins the exact-match: loosening `detail === 'cancelled'` to a truthy check would
     // silently swallow real auth failures the moment a producer attaches a diagnostic detail.
