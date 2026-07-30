@@ -2589,6 +2589,20 @@ describe('SyncEngine backfillDirty (first-enable migration)', () => {
 });
 
 describe('SyncEngine.regenerateRecoveryCode', () => {
+  it('seals with the key it checked, even if a disable nulls it mid-flight', async () => {
+    // Reachable on the extension since disable stopped queueing behind other ops, and always was
+    // on macOS: the narrowing survives an await, the value does not.
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    const regenerating = device.engine.regenerateRecoveryCode();
+    await device.engine.disableSync();
+
+    await expect(regenerating).resolves.toEqual(expect.any(String));
+  });
+
   it('rotates the recovery code: the old code stops unwrapping, the new one works', async () => {
     const server = new FakeSyncServer();
     const device = createDevice(server);

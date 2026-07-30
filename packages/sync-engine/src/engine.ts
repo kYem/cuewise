@@ -430,12 +430,16 @@ export class SyncEngine {
 
   /** Rotates the recovery code for the current data key; overwrites the server envelope. */
   async regenerateRecoveryCode(): Promise<string> {
-    if (this.dk === null || this.keyId === null) {
+    // Captured, not re-read below: a disable landing across these awaits nulls the fields, and
+    // the narrowing above survives an await even though the value does not.
+    const dk = this.dk;
+    const keyId = this.keyId;
+    if (dk === null || keyId === null) {
       throw new Error('cannot regenerate recovery code without an active sync session');
     }
     const { code, secret } = await generateRecoveryCode();
     const mk = await deriveMasterKey(secret);
-    const blob = await wrapDataKey(mk, this.dk, this.keyId);
+    const blob = await wrapDataKey(mk, dk, keyId);
     await this.deps.apiClient.putRecoveryEnvelope(blob);
     return code;
   }
