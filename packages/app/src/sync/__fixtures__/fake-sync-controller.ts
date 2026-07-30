@@ -52,6 +52,8 @@ export class FakeSyncController implements SyncController {
   private pendingDetails: ((details: SyncDetails | null) => void) | null = null;
   private deferredLastCycle = false;
   private pendingLastCycle: ((read: LastCycleRead) => void) | null = null;
+  private deferredRegenerate = false;
+  private pendingRegenerate: ((code: string) => void) | null = null;
   private deferredSyncNow = false;
   private pendingSyncNow: {
     resolve: (outcome: SyncOutcome) => void;
@@ -117,6 +119,20 @@ export class FakeSyncController implements SyncController {
     }
     this.pendingLastCycle({ available: true, outcome });
     this.pendingLastCycle = null;
+  }
+
+  /** Makes the next regenerateRecoveryCode() hang — the envelope is replaced before it resolves. */
+  deferNextRegenerate(): void {
+    this.deferredRegenerate = true;
+  }
+
+  /** Releases a regenerateRecoveryCode() armed via deferNextRegenerate(). */
+  resolveRegenerate(code: string): void {
+    if (this.pendingRegenerate === null) {
+      throw new Error('FakeSyncController: no pending regenerateRecoveryCode() to resolve');
+    }
+    this.pendingRegenerate(code);
+    this.pendingRegenerate = null;
   }
 
   /** Makes the next syncNow() hang until resolveSyncNow() releases it — for asserting stale resolutions. */
@@ -274,6 +290,12 @@ export class FakeSyncController implements SyncController {
   async regenerateRecoveryCode(): Promise<string> {
     this.calls.push({ method: 'regenerateRecoveryCode', args: [] });
     this.maybeFail('regenerateRecoveryCode');
+    if (this.deferredRegenerate) {
+      this.deferredRegenerate = false;
+      return new Promise((resolve) => {
+        this.pendingRegenerate = resolve;
+      });
+    }
     return DEFAULT_RECOVERY_CODE;
   }
 

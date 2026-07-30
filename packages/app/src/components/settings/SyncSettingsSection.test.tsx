@@ -1167,6 +1167,28 @@ describe('SyncSettingsSectionComponent', () => {
     ).not.toBeInTheDocument();
   });
 
+  it.each([
+    ['off', { pill: false, prompt: false }],
+    ['connecting', { pill: true, prompt: false }],
+    ['syncing', { pill: true, prompt: false }],
+    ['active', { pill: true, prompt: false }],
+    ['error', { pill: false, prompt: false }],
+    ['needs_reauth', { pill: false, prompt: true }],
+    ['needs_enroll', { pill: false, prompt: true }],
+  ] as const)('gives %s exactly the panel body it owns', async (status, body) => {
+    // A pill and a reconnect prompt are mutually exclusive, and the maps do not enforce that — a
+    // pill on needs_reauth would offer Sync now and Regenerate to a device that cannot use them.
+    const controller = new FakeSyncController();
+    renderSection(controller);
+
+    act(() => controller.setStatus(status));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('sync-status-pill') !== null).toBe(body.pill);
+    });
+    expect(screen.queryByTestId('sync-reconnect-prompt') !== null).toBe(body.prompt);
+  });
+
   it('renders nothing for a status this build does not know', async () => {
     // status arrives as an unvalidated chrome.storage string, so a downgrade or an older bundle can
     // read back a newer one. Indexing a total map would answer undefined and pass a !== null gate.
@@ -1177,6 +1199,44 @@ describe('SyncSettingsSectionComponent', () => {
 
     expect(screen.queryByTestId('sync-reconnect-prompt')).not.toBeInTheDocument();
     expect(screen.queryByTestId('sync-status-pill')).not.toBeInTheDocument();
+  });
+
+  it('warns globally when a regenerated code has no panel left to show it in', async () => {
+    // The server envelope is already replaced by the time it resolves, so swallowing the code is
+    // permanent loss of recovery access.
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.deferNextRegenerate();
+    const { unmount } = renderSection(controller);
+    act(() => controller.setStatus('active'));
+    await screen.findByTestId('sync-status-pill');
+
+    await user.click(screen.getByRole('button', { name: 'Regenerate recovery code' }));
+    unmount();
+    await act(async () => {
+      controller.resolveRegenerate('CW1-AAAAA-AAAAA-AAAAA-AAAAA-AAAAA-AAAAA');
+    });
+
+    expect(toastWarning).toHaveBeenCalled();
+  });
+
+  it('regenerates once per click, since two envelopes would race', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.deferNextRegenerate();
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+    await screen.findByTestId('sync-status-pill');
+
+    const button = screen.getByRole('button', { name: 'Regenerate recovery code' });
+    await user.click(button);
+    expect(button).toBeDisabled();
+    await user.click(button);
+    await act(async () => {
+      controller.resolveRegenerate('CW1-AAAAA-AAAAA-AAAAA-AAAAA-AAAAA-AAAAA');
+    });
+
+    expect(controller.calls.filter((c) => c.method === 'regenerateRecoveryCode')).toHaveLength(1);
   });
 
   it('keeps the failure badge when a click lands before the key does', async () => {

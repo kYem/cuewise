@@ -1396,6 +1396,84 @@ describe('SyncEngine.start / stop', () => {
     expect(device.scheduler.scheduled).toEqual([]);
   });
 
+  it('keeps syncing when only the server envelope is gone, and says how to restore it', async () => {
+    // The key is here, so the device can sync. Stopping it also hides Regenerate recovery code,
+    // which renders only under the pill and is the only thing that rebuilds the envelope.
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    vi.spyOn(device.apiClient, 'getRecoveryEnvelope').mockResolvedValue(null);
+
+    const scheduler = new FakeScheduler();
+    const restarted = new SyncEngine({
+      apiClient: device.apiClient,
+      sessionManager: new SessionManager(device.kv),
+      keyStore: device.kv,
+      scheduler,
+    });
+    await restarted.start();
+
+    expect(restarted.getStatus()).toBe('active');
+    expect(scheduler.scheduled).not.toEqual([]);
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Cloud sync has no recovery envelope on the server; regenerate your recovery code to restore it'
+    );
+  });
+
+  it('keeps syncing when the envelope fetch cannot reach the server', async () => {
+    // Self-heal only verifies the SERVER envelope, so an offline launch says nothing about the key
+    // on disk. Abandoning here left macOS reading "off" for an enrolled device.
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    vi.spyOn(device.apiClient, 'getRecoveryEnvelope').mockRejectedValue(new Error('offline'));
+
+    const scheduler = new FakeScheduler();
+    const restarted = new SyncEngine({
+      apiClient: device.apiClient,
+      sessionManager: new SessionManager(device.kv),
+      keyStore: device.kv,
+      scheduler,
+    });
+    await restarted.start();
+
+    expect(restarted.getStatus()).toBe('active');
+    expect(scheduler.scheduled).not.toEqual([]);
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Cloud sync self-heal could not reach the server: offline',
+      expect.any(Error)
+    );
+  });
+
+  it('signs out rather than activating when the envelope fetch is refused', async () => {
+    // Without this branch an expired session falls through to active and arms the wake — a
+    // signed-out device claiming to sync, forever.
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    vi.spyOn(device.apiClient, 'getRecoveryEnvelope').mockRejectedValue(
+      new ApiError('unauthorized', 401)
+    );
+
+    const scheduler = new FakeScheduler();
+    const restarted = new SyncEngine({
+      apiClient: device.apiClient,
+      sessionManager: new SessionManager(device.kv),
+      keyStore: device.kv,
+      scheduler,
+    });
+    await restarted.start();
+
+    expect(restarted.getStatus()).toBe('signed_out');
+    expect(scheduler.scheduled).toEqual([]);
+  });
+
   it('reports needs_enroll for the ordinary lost-key case, where the envelope still exists', async () => {
     // Every account that enabled sync has an envelope, so self-heal throws NeedsEnroll here rather
     // than falling through — the common path, and it used to claim the sign-in had expired.
@@ -1420,8 +1498,6 @@ describe('SyncEngine.start / stop', () => {
     expect(errorSpy).toHaveBeenCalledWith(
       "Cloud sync needs the recovery code: this device's data key could not be read"
     );
-    // The changeset promises it stops retrying; nothing else asserts that on this path.
-    expect(scheduler.scheduled).toEqual([]);
   });
 
   it('keeps a needs_enroll device on its prompt when the enroll asks for a code', async () => {
