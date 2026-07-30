@@ -45,6 +45,7 @@ export {
   getStorageUsage,
   getWeatherState,
   getYoutubeProgress,
+  isCustomQuote,
   migrateLegacySettings,
   migrateStorageData,
   readSettings,

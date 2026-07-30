@@ -34,6 +34,7 @@ import {
   getPostureStats,
   getQuotes,
   getQuotesRaw,
+  isCustomQuote,
   setGoalsRaw,
   setPomodoroSessionsRaw,
   setQuotesRaw,
@@ -284,8 +285,9 @@ export const useInsightsStore = create<InsightsStore>((set, get) => ({
         getPomodoroSessionsRaw(),
       ]);
 
-      // Filter to only include custom quotes (exclude default/curated quotes)
-      const customQuotes = quotes.filter((quote) => quote.isCustom);
+      // The storage split's own predicate, not `isCustom` alone: a quote the user only favourited
+      // or hid is stored as theirs, so the narrower rule drops it from a "complete" export.
+      const customQuotes = quotes.filter(isCustomQuote);
 
       const exportData: ExportData = {
         // Metadata for compatibility checking

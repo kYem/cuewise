@@ -393,8 +393,34 @@ describe('a calendar cache with one unreadable event', () => {
     await expect(getCalendarState()).resolves.toEqual({
       connected: true,
       events: [good],
-      lastSync: '2026-07-26',
+      lastSync: null,
     });
+  });
+
+  it('clears lastSync, so the store refetches instead of reading the gap as today', async () => {
+    const today = new Date().toISOString();
+    configurePlatform({
+      storage: storeHolding({
+        calendar: { connected: true, events: [{ id: 'e2' }], lastSync: today },
+      }),
+    });
+
+    const state = await getCalendarState();
+
+    expect(state?.lastSync).toBeNull();
+  });
+
+  it('leaves lastSync alone when every cached event is readable', async () => {
+    const good = { id: 'e1', title: 'Standup', allDay: false, start: 'x', end: 'y' };
+    configurePlatform({
+      storage: storeHolding({
+        calendar: { connected: true, events: [good], lastSync: '2026-07-26' },
+      }),
+    });
+
+    const state = await getCalendarState();
+
+    expect(state?.lastSync).toBe('2026-07-26');
   });
 
   // `events` must be an array before the per-item filter, or the read throws a TypeError
@@ -813,6 +839,69 @@ describe('setQuotesRaw', () => {
 
     expect(at('customQuotes')).toEqual([custom]);
     expect(at('seedQuotes')).toEqual([seedish]);
+  });
+});
+
+// Both quote keys are written by one call, so preservation has to be judged against every id the
+// call covers. Per-key it is not: favouriting moves a quote to the sibling key, and the seed
+// write's own slice never names it.
+describe('setQuotes across the seed/custom split', () => {
+  const readable = {
+    id: 'q1',
+    text: 'mine',
+    author: 'A',
+    category: 'learning' as const,
+    isCustom: false,
+    isFavorite: true,
+    isHidden: false,
+    viewCount: 0,
+  };
+
+  it('drops a quarantined row whose replacement landed in the sibling key', async () => {
+    const quarantined = { id: 'q1', text: 'older build', category: 'philosophy' };
+    const { at, store } = capturingStore({ seedQuotes: [quarantined], customQuotes: [] });
+    configurePlatform({ storage: store });
+
+    // Favouriting makes it the user's, so it routes to customQuotes and leaves seedQuotes empty.
+    await setQuotes([readable]);
+
+    expect(at('customQuotes')).toEqual([readable]);
+    expect(at('seedQuotes')).toEqual([]);
+  });
+
+  it('still preserves a quarantined row this write does not replace', async () => {
+    const unrelated = { id: 'q9', text: 'older build', category: 'philosophy' };
+    const { at, store } = capturingStore({ seedQuotes: [unrelated], customQuotes: [] });
+    configurePlatform({ storage: store });
+
+    await setQuotes([readable]);
+
+    expect(at('seedQuotes')).toEqual([unrelated]);
+  });
+});
+
+// Deleting the legacy key is allowed to fail, so the migration runs again on the next read.
+describe('the legacy quote migration running a second time', () => {
+  const seedShape = {
+    text: 't',
+    author: 'A',
+    category: 'learning' as const,
+    isCustom: false,
+    isFavorite: false,
+    isHidden: false,
+    viewCount: 0,
+  };
+
+  it('merges into the destination instead of overwriting what is already there', async () => {
+    const legacy = { ...seedShape, id: 'q1' };
+    const addedSince = { ...seedShape, id: 'q2' };
+    const { at, store } = capturingStore({ quotes: [legacy], seedQuotes: [addedSince] });
+    configurePlatform({ storage: store });
+
+    await getQuotes();
+
+    const ids = (at('seedQuotes') as { id: string }[]).map((quote) => quote.id).sort();
+    expect(ids).toEqual(['q1', 'q2']);
   });
 });
 

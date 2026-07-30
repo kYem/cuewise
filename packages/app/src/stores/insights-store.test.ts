@@ -42,6 +42,10 @@ vi.mock('@cuewise/storage', () => ({
   // Defaults to empty so refresh-after-import paths don't error on posture reads.
   getPostureStats: vi.fn(async () => []),
   setPostureStats: vi.fn(),
+  // The real predicate, not a vi.fn(): the export's completeness depends on what it answers, so a
+  // stub would make these assertions pass for any rule. storage-helpers.test.ts pins the original
+  // against this copy.
+  isCustomQuote: (quote: Quote) => quote.isCustom || quote.isFavorite || quote.isHidden,
 }));
 
 vi.mock('../utils/file-utils', () => ({

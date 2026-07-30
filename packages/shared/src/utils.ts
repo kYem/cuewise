@@ -1692,6 +1692,12 @@ function validateQuotes(quotes: unknown[], warnings: string[]): Quote[] {
       continue;
     }
 
+    // Warned, not just coerced: this rewrites the user's own data and persists it, so it belongs
+    // in the preview rather than being discovered later in the library.
+    if (quote.category !== undefined && !isQuoteCategory(quote.category)) {
+      warnings.push(`quotes[${i}] had an unrecognised category and was filed under inspiration`);
+    }
+
     const candidate: Quote = {
       id: quote.id,
       text: quote.text,
@@ -1748,6 +1754,12 @@ function validatePomodoroSessions(sessions: unknown[], warnings: string[]): Pomo
     }
 
     const sessionTypes: PomodoroSession['type'][] = ['work', 'break', 'longBreak'];
+    if (
+      session.type !== undefined &&
+      !sessionTypes.includes(session.type as PomodoroSession['type'])
+    ) {
+      warnings.push(`pomodoroSessions[${i}] had an unrecognised type and was filed as work`);
+    }
     const candidate: PomodoroSession = {
       id: session.id,
       startedAt: session.startedAt,
