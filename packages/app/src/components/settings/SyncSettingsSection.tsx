@@ -49,16 +49,26 @@ const GoogleGlyph: React.FC = () => (
   </svg>
 );
 
-// Only the "on" statuses get a pill; the rest render their own UI below. needs_enroll joins them
-// deliberately: without a key both "Sync now" and "Regenerate recovery code" would fail.
-const STATUS_PILL_LABEL: Partial<Record<SyncUiStatus, string>> = {
+// Both maps total, like FAILURE_MESSAGE below: a new status with neither a pill nor a prompt would
+// render an empty panel body while the switch still reads on. null says "handled, renders neither".
+// needs_enroll has no pill on purpose — without a key, Sync now and Regenerate both fail.
+const STATUS_PILL_LABEL: Record<SyncUiStatus, string | null> = {
+  off: null,
   connecting: 'Connecting…',
   syncing: 'Syncing…',
   active: 'Active',
+  error: null,
+  needs_reauth: null,
+  needs_enroll: null,
 };
 
 // One block, two causes: same Reconnect button, but only one of them is about the sign-in.
-const RECONNECT_PROMPT: Partial<Record<SyncUiStatus, string>> = {
+const RECONNECT_PROMPT: Record<SyncUiStatus, string | null> = {
+  off: null,
+  connecting: null,
+  syncing: null,
+  active: null,
+  error: null,
   needs_reauth: 'Sign-in expired — reconnect to keep syncing.',
   needs_enroll:
     "This device's encryption key is missing, so nothing can sync. Reconnect with your recovery code to restore it.",
@@ -769,7 +779,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
         </SettingSubgroup>
       )}
 
-      {reconnectPrompt !== undefined && (
+      {reconnectPrompt !== null && (
         <SettingSubgroup>
           <div className="flex flex-col gap-2 py-2">
             <p data-testid="sync-reconnect-prompt" className="text-xs text-tertiary">

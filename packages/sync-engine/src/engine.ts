@@ -503,10 +503,9 @@ export class SyncEngine {
   }
 
   /**
-   * Never rejects, and memoises only a read that settled the question. start() awaits this before
-   * self-heal, so a rejection would leave the engine with no key and no armed loop behind a pill
-   * the extension still persists as 'active' — and skipping the branches below would answer
-   * "no cycle has run", the one value allowed to clear the badge.
+   * Never rejects, and keeps the memo unless the read is worth retrying. start() awaits this
+   * before self-heal, so a rejection would leave the engine keyless behind a pill the extension
+   * still persists as 'active', and skip the branches that stop it answering "no cycle has run".
    */
   private async hydrate(): Promise<void> {
     const epoch = this.accountEpoch;
@@ -536,7 +535,8 @@ export class SyncEngine {
     // place that distinction decides whether a wedged device shows a badge.
     const stored = await this.deps.keyStore.getMany([LAST_SYNCED_AT_KEY, LAST_CYCLE_KEY], 'local');
     if (this.accountEpoch !== epoch) {
-      // Installed nothing, but disableSync already cleared the memo — clearing again could drop a newer one.
+      // Installed nothing, but disableSync already cleared the memo; clearing again could drop
+      // a newer read's.
       logger.debug('Dropped a hydration snapshot: the account was disabled while it was read');
       return 'final';
     }
@@ -563,7 +563,7 @@ export class SyncEngine {
         key: LAST_CYCLE_KEY,
       });
       this.markLastCycleUnknown();
-      // Settled: a value that will not read is deterministic, so retrying only repeats the log.
+      // Final: a value that will not read is deterministic, so retrying only repeats the log.
       return 'final';
     }
     const hydrated = parsePersistedSyncCycle(record.value);
