@@ -278,11 +278,13 @@ export class SyncEngine {
     }
     if (outcome.kind === 'failed') {
       // Logged here, not per caller: this is the only place every caller passes through, and the
-      // only one still holding the error itself (the page realm gets a serialized outcome).
-      logger.error('Sync cycle failed; the next scheduled wake will retry', {
-        reason: outcome.reason,
-        error: outcome.error,
-      });
+      // only one still holding the error itself (the page realm gets a serialized outcome). Reason
+      // and cause go in the MESSAGE — `message` and `cause` are both non-enumerable, so an object
+      // payload renders as `{}` on JSON surfaces and `[object Object]` on coercing ones.
+      logger.error(
+        `Sync cycle failed (${outcome.reason}); the next scheduled wake will retry: ${describeThrown(outcome.error)}`,
+        outcome.error
+      );
     }
     const cycle: SyncCycle = { at: this.now(), outcome };
     this.lastCycle = cycle;

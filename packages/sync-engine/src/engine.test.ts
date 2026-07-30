@@ -655,9 +655,9 @@ describe('SyncEngine.syncNow', () => {
     }
   });
 
-  it('names the outranked push error in the logged stall message, not only in its cause', async () => {
-    // `cause` is non-enumerable: a log surface that stringifies or JSON-serialises the payload
-    // drops it silently. The message text is what every surface actually renders.
+  it('names the reason and the outranked push error in the logged message text', async () => {
+    // `message` and `cause` are both non-enumerable: a surface that stringifies or JSON-serialises
+    // an object payload drops them silently. Only the log's own message text is always rendered.
     const server = new FakeSyncServer();
     const deviceA = createDevice(server);
     useStorage(deviceA);
@@ -677,13 +677,10 @@ describe('SyncEngine.syncNow', () => {
     await deviceB.engine.syncNow();
 
     expect(errorSpy).toHaveBeenCalledWith(
-      'Sync cycle failed; the next scheduled wake will retry',
-      expect.objectContaining({
-        reason: 'device',
-        error: expect.objectContaining({
-          message: expect.stringContaining("the same cycle's push also failed: network_error"),
-        }),
-      })
+      expect.stringMatching(
+        /^Sync cycle failed \(device\);.*the same cycle's push also failed: network_error$/
+      ),
+      expect.any(Error)
     );
   });
 
@@ -744,11 +741,8 @@ describe('SyncEngine.syncNow', () => {
 
     // A manual "Sync now" against a broken backend must leave a trace too, not just the wake.
     expect(errorSpy).toHaveBeenCalledWith(
-      'Sync cycle failed; the next scheduled wake will retry',
-      expect.objectContaining({
-        reason: 'server',
-        error: expect.objectContaining({ message: 'internal' }),
-      })
+      'Sync cycle failed (server); the next scheduled wake will retry: internal',
+      expect.any(ApiError)
     );
   });
 
@@ -1082,11 +1076,8 @@ describe('SyncEngine.handlePullWake', () => {
     await device.engine.handlePullWake();
 
     expect(errorSpy).toHaveBeenCalledWith(
-      'Sync cycle failed; the next scheduled wake will retry',
-      expect.objectContaining({
-        reason: 'network',
-        error: expect.objectContaining({ message: 'network_error' }),
-      })
+      'Sync cycle failed (network); the next scheduled wake will retry: network_error',
+      expect.any(ApiError)
     );
     errorSpy.mockRestore();
   });
