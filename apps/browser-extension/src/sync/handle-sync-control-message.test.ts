@@ -120,6 +120,29 @@ describe('handleSyncControlMessage: getLastCycle', () => {
     expect(order).toEqual(['hydrate', 'read']);
   });
 
+  it('awaits hydration for details too, since it owns the last-synced stamp', async () => {
+    const order: string[] = [];
+    const engine = fakeEngine({
+      getAccount: vi.fn().mockResolvedValue({ userId: 'u1', email: null }),
+      getLastSyncedAt: vi.fn(() => {
+        order.push('read');
+        return null;
+      }),
+      ensureHydrated: vi.fn(async () => {
+        await Promise.resolve();
+        order.push('hydrate');
+      }),
+    });
+
+    await handleSyncControlMessage(
+      engine,
+      { kind: 'cuewise-sync-control', op: 'details' },
+      fakeDeps()
+    );
+
+    expect(order).toEqual(['hydrate', 'read']);
+  });
+
   it('answers a null outcome when the engine has not run a cycle yet', async () => {
     const result = await handleSyncControlMessage(
       fakeEngine(),

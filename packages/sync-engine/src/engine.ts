@@ -149,6 +149,9 @@ export class SyncEngine {
   // answering it as such is exactly what clears a wedged device's badge.
   private lastCycleKnown = true;
   private hydration: Promise<void> | null = null;
+  // Bumped by disableSync so a hydration already in flight drops its snapshot instead of
+  // re-installing the removed account's stamp over the reset disable just performed.
+  private hydrationEpoch = 0;
 
   constructor(private readonly deps: SyncEngineDeps) {
     this.now = deps.now ?? Date.now;
@@ -268,6 +271,8 @@ export class SyncEngine {
     // After a disable "no cycle" is the truth, so an earlier unreadable record must stop
     // reporting unknown — otherwise a failed hydration outlives the account it described.
     this.lastCycleKnown = true;
+    this.hydrationEpoch += 1;
+    this.hydration = null;
     this.setStatus('disabled');
   }
 
@@ -452,37 +457,73 @@ export class SyncEngine {
    */
   async ensureHydrated(): Promise<void> {
     this.hydration ??= this.hydrate();
-    return this.hydration;
+    await this.hydration;
   }
 
+  /**
+   * Never rejects, and memoises only a read that settled the question. start() awaits this before
+   * self-heal, so a rejection would leave the engine with no key and no armed loop behind a pill
+   * the extension still persists as 'active' — and skipping the branches below would answer
+   * "no cycle has run", the one value allowed to clear the badge.
+   */
   private async hydrate(): Promise<void> {
+    const epoch = this.hydrationEpoch;
+    let settled = false;
+    try {
+      settled = await this.readPersistedSyncState(epoch);
+    } catch (err) {
+      logger.error(`Could not read the persisted sync state: ${describeThrown(err)}`, err);
+      this.markLastCycleUnknown();
+    }
+    if (!settled) {
+      // A read that failed outright may succeed later; leaving the memo set would hand the panel's
+      // retry the same cached failure, making that retry a no-op.
+      this.hydration = null;
+    }
+  }
+
+  /** Whether the read settled what the last cycle was — false only for a failure worth retrying. */
+  private async readPersistedSyncState(epoch: number): Promise<boolean> {
     // One batch read, because `get` collapses "absent" into "read failed" and this is the one
     // place that distinction decides whether a wedged device shows a badge.
     const stored = await this.deps.keyStore.getMany([LAST_SYNCED_AT_KEY, LAST_CYCLE_KEY], 'local');
+    if (this.hydrationEpoch !== epoch) {
+      // A disable landed mid-read: this snapshot describes an account that is gone, and the
+      // `=== null` guards below cannot tell disable's own reset from "nothing hydrated yet".
+      return true;
+    }
     if (stored === null) {
       logger.error(
         'Could not read the persisted sync state; the last cycle is unknown this session'
       );
       this.markLastCycleUnknown();
-      return;
+      return false;
     }
 
     const stamp = stored[LAST_SYNCED_AT_KEY];
     // A cycle this process already ran outranks the stored one, for the stamp and the record alike.
     if (stamp?.readable === true && typeof stamp.value === 'number' && this.lastSyncedAt === null) {
       this.lastSyncedAt = stamp.value;
+    } else if (stamp !== undefined && !stamp.readable) {
+      // warn, not error: this only makes "Last synced" read as never, which under-claims freshness
+      // rather than claiming health — the same reasoning as stampLastSynced's own failure.
+      logger.warn('The stored last-synced stamp is unreadable; "Last synced" will read as never');
     }
 
     const record = stored[LAST_CYCLE_KEY];
     if (record === undefined) {
-      return;
+      // A conclusive read clears any earlier unknown: this retry is the whole point of not
+      // memoising a failed one.
+      this.lastCycleKnown = true;
+      return true;
     }
     if (!record.readable) {
       logger.error('The stored last sync cycle is unreadable; reporting it as unknown', {
         key: LAST_CYCLE_KEY,
       });
       this.markLastCycleUnknown();
-      return;
+      // Settled: a value that will not read is deterministic, so retrying only repeats the log.
+      return true;
     }
     const hydrated = parsePersistedSyncCycle(record.value);
     if (hydrated === null) {
@@ -492,11 +533,13 @@ export class SyncEngine {
         shape: describeShape(record.value),
       });
       this.markLastCycleUnknown();
-      return;
+      return true;
     }
+    this.lastCycleKnown = true;
     if (this.lastCycle === null) {
       this.lastCycle = hydrated;
     }
+    return true;
   }
 
   /**
@@ -556,6 +599,12 @@ export class SyncEngine {
 
     const persisted = await loadPersistedDataKey(this.deps.keyStore);
     if (persisted === null) {
+      // Reached only past the enabled-flag check, so this is always a defect: every later wake is
+      // a no-key no-op that re-arms itself, and the extension's persisted pill still says active.
+      // Once per process, so it cannot spam — and it was previously the one silent branch here.
+      logger.error(
+        'Cloud sync is enabled but this device holds no data key; nothing will sync until it re-enrolls'
+      );
       return;
     }
 

@@ -360,8 +360,13 @@ export class BridgeSyncController implements SyncController {
         return { available: true, outcome: response.outcome };
       }
       // error, not warn: the shipped logLevel is 'error', and a device that can never read its
-      // cycle shows Active with no badge — invisible to the user and the engineer alike.
-      logger.error('Sync last-cycle outcome unavailable (no responder or error fallback)');
+      // cycle shows Active with no badge — invisible to the user and the engineer alike. The
+      // detail matters: a live worker answers this way for an unreadable record, which is a
+      // storage fault, not the messaging fault the bare line reads as.
+      const detail = response?.ok === false ? response.detail : undefined;
+      logger.error(
+        `Sync last-cycle outcome unavailable: ${detail ?? 'no responder or error fallback'}`
+      );
       return LAST_CYCLE_UNAVAILABLE;
     } catch (error) {
       logger.error(`Sync last-cycle control message failed: ${describeThrown(error)}`, error);

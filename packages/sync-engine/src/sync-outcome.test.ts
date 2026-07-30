@@ -66,6 +66,12 @@ describe('parsePersistedSyncCycle rejections', () => {
     expect(parsePersistedSyncCycle({ at: 1, kind: 'failed' })).toBeNull();
   });
 
+  it('rejects a non-string reason, the only guard left between storage and the panel', () => {
+    // Arbitrary reason STRINGS are deliberately admitted (a newer peer's), so this type check is
+    // all that stops a number reaching the UI's failure-copy lookup.
+    expect(parsePersistedSyncCycle({ at: 1, kind: 'failed', reason: 5 })).toBeNull();
+  });
+
   it.each([
     ['a non-numeric timestamp', { at: 'ages ago', kind: 'synced' }],
     ['a non-finite timestamp', { at: Number.NaN, kind: 'synced' }],

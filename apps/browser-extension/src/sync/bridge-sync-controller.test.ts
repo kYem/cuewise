@@ -701,7 +701,25 @@ describe('BridgeSyncController: getLastCycle', () => {
 
     await expect(controller.getLastCycle()).resolves.toEqual({ available: false });
     expect(errorSpy).toHaveBeenCalledWith(
-      'Sync last-cycle outcome unavailable (no responder or error fallback)'
+      'Sync last-cycle outcome unavailable: no responder or error fallback'
+    );
+    errorSpy.mockRestore();
+  });
+
+  it('names the storage cause when a live worker reports its record unreadable', async () => {
+    // The seam joining the engine's {known:false} to the panel keeping its badge. Without the
+    // detail the log blames messaging for what is a storage fault.
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    runtime.sendMessage.mockResolvedValueOnce({
+      ok: false,
+      reason: 'error',
+      detail: 'last cycle unreadable',
+    });
+    const controller = new BridgeSyncController();
+
+    await expect(controller.getLastCycle()).resolves.toEqual({ available: false });
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Sync last-cycle outcome unavailable: last cycle unreadable'
     );
     errorSpy.mockRestore();
   });

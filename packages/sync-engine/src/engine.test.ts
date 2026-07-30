@@ -1033,6 +1033,175 @@ describe('SyncEngine.syncNow', () => {
     await cold.finish();
   });
 
+  it('leaves an unknown cycle unknown when a DK-less wake runs after a failed hydration', async () => {
+    // The shipped bug restated: if the no-key no-op flipped the flag, the panel would read
+    // {known:true, cycle:null} — "no cycle has run" — and clear a wedged device's badge.
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    await device.kv.set(LAST_CYCLE_KEY, { at: 1, kind: 'wedged' }, 'local');
+
+    const keyless = new SyncEngine({
+      apiClient: device.apiClient,
+      sessionManager: new SessionManager(device.kv),
+      keyStore: device.kv,
+      scheduler: device.scheduler,
+    });
+    await keyless.ensureHydrated();
+    expect(keyless.getLastCycle()).toEqual({ known: false });
+
+    await expect(keyless.syncNow()).resolves.toEqual({ kind: 'no-key' });
+
+    expect(keyless.getLastCycle()).toEqual({ known: false });
+  });
+
+  it('does not let hydration replace a failure this process is holding in memory', async () => {
+    // A refused persist leaves the failure in memory only while storage still holds an older
+    // success; hydrating over it would swap a live failure for a stale healthy record.
+    let t = 5_000;
+    const server = new FakeSyncServer();
+    const device = createDevice(server, { now: () => t });
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    t = 6_000;
+    device.kv.failSetsForKey = LAST_CYCLE_KEY;
+    device.apiClient.rejectNextGetChanges(new ApiError('internal', 500));
+    await device.engine.syncNow();
+    device.kv.failSetsForKey = null;
+
+    await device.engine.ensureHydrated();
+
+    expect(device.engine.getLastCycle()).toMatchObject({
+      known: true,
+      cycle: { at: 6_000, outcome: { kind: 'failed', reason: 'server' } },
+    });
+  });
+
+  it('does not let hydration replace a stamp this process set', async () => {
+    let t = 5_000;
+    const server = new FakeSyncServer();
+    const device = createDevice(server, { now: () => t });
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    await device.kv.set(LAST_SYNCED_AT_KEY, 1_000, 'local');
+
+    t = 7_000;
+    await device.engine.syncNow();
+    await device.engine.ensureHydrated();
+
+    expect(device.engine.getLastSyncedAt()).toBe(7_000);
+  });
+
+  it('reads the persisted state once, so every later caller is answered from memory', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    const getMany = vi.spyOn(device.kv, 'getMany');
+
+    await device.engine.ensureHydrated();
+    await device.engine.ensureHydrated();
+
+    const cycleReads = getMany.mock.calls.filter((call) => call[0].includes(LAST_CYCLE_KEY));
+    expect(cycleReads).toHaveLength(1);
+  });
+
+  it('re-reads after a failed hydration, so the panel retry is not handed a cached failure', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    device.apiClient.rejectNextGetChanges(new ApiError('internal', 500));
+    await device.engine.syncNow();
+
+    const cold = new SyncEngine({
+      apiClient: device.apiClient,
+      sessionManager: new SessionManager(device.kv),
+      keyStore: device.kv,
+      scheduler: device.scheduler,
+      now: () => 9_999,
+    });
+    device.kv.failGetManyForKey = LAST_CYCLE_KEY;
+    await cold.ensureHydrated();
+    expect(cold.getLastCycle()).toEqual({ known: false });
+
+    device.kv.failGetManyForKey = null;
+    await cold.ensureHydrated();
+
+    expect(cold.getLastCycle()).toMatchObject({
+      known: true,
+      cycle: { outcome: { kind: 'failed', reason: 'server' } },
+    });
+  });
+
+  it('does not reject when the store throws instead of reporting a failed read', async () => {
+    // start() awaits hydration before self-heal, so a rejection would leave the engine keyless
+    // behind a pill the extension still persists as active — and skipping the unknown branches
+    // would answer "no cycle has run", which clears the badge.
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    vi.spyOn(device.kv, 'getMany').mockRejectedValue(new Error('storage is on fire'));
+
+    const engine = new SyncEngine({
+      apiClient: device.apiClient,
+      sessionManager: new SessionManager(device.kv),
+      keyStore: device.kv,
+      scheduler: device.scheduler,
+    });
+
+    await expect(engine.ensureHydrated()).resolves.toBeUndefined();
+    expect(engine.getLastCycle()).toEqual({ known: false });
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Could not read the persisted sync state: storage is on fire',
+      expect.any(Error)
+    );
+  });
+
+  it('drops a hydration snapshot that a disable superseded mid-read', async () => {
+    // The stored stamp describes an account that is gone, and hydrate's `=== null` guards cannot
+    // tell disable's own reset from "nothing hydrated yet".
+    let t = 5_000;
+    const server = new FakeSyncServer();
+    const device = createDevice(server, { now: () => t });
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    t = 6_000;
+    let releaseRead = () => {};
+    const parkedRead = new Promise<void>((resolve) => {
+      releaseRead = resolve;
+    });
+    const realGetMany = device.kv.getMany.bind(device.kv);
+    vi.spyOn(device.kv, 'getMany').mockImplementation(async (keys, area) => {
+      const result = await realGetMany(keys, area);
+      // Only the hydration read parks — disableSync's own reads must still complete, or the
+      // await below deadlocks instead of exercising the race.
+      if (keys.includes(LAST_CYCLE_KEY)) {
+        await parkedRead;
+      }
+      return result;
+    });
+
+    const cold = new SyncEngine({
+      apiClient: device.apiClient,
+      sessionManager: new SessionManager(device.kv),
+      keyStore: device.kv,
+      scheduler: device.scheduler,
+      now: () => 9_999,
+    });
+    const hydrating = cold.ensureHydrated();
+    await cold.disableSync();
+    releaseRead();
+    await hydrating;
+
+    expect(cold.getLastSyncedAt()).toBeNull();
+    expect(cold.getLastCycle()).toEqual({ known: true, cycle: null });
+  });
+
   it('resolves the outcome when persisting the last cycle rejects', async () => {
     const server = new FakeSyncServer();
     const device = createDevice(server);
@@ -1108,6 +1277,28 @@ describe('SyncEngine.disableSync', () => {
     expect(device.engine.getLastCycle()).toEqual({ known: true, cycle: null });
     // The persisted copy too, or the next start() hydrates the previous account's failure.
     expect(await device.kv.get(LAST_CYCLE_KEY, 'local')).toBeNull();
+  });
+
+  it('stops reporting unknown after a disable, since "no cycle" is then the truth', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    // A fresh engine, so no in-session cycle outranks what storage cannot read.
+    const cold = new SyncEngine({
+      apiClient: device.apiClient,
+      sessionManager: new SessionManager(device.kv),
+      keyStore: device.kv,
+      scheduler: device.scheduler,
+    });
+    device.kv.unreadableKey = LAST_CYCLE_KEY;
+    await cold.ensureHydrated();
+    expect(cold.getLastCycle()).toEqual({ known: false });
+
+    await cold.disableSync();
+
+    expect(cold.getLastCycle()).toEqual({ known: true, cycle: null });
   });
 });
 

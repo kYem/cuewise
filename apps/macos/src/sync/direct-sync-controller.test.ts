@@ -9,6 +9,7 @@ import {
   buildRealController,
   corruptChecksum,
   createDevice,
+  fakeEngine,
   fakeOAuthDriver,
   hangingOAuthDriver,
   unusedDriver,
@@ -152,18 +153,10 @@ describe('createDirectSyncController: enable()', () => {
   });
 
   it('maps a thrown ApiError(401) to auth', async () => {
-    const engine: SyncEngineControlSurface = {
+    const engine = fakeEngine({
       enableSync: vi.fn().mockRejectedValue(new ApiError('invalid_token', 401)),
-      disableSync: vi.fn().mockResolvedValue(undefined),
-      regenerateRecoveryCode: vi.fn().mockResolvedValue('unused'),
-      resumeEnrollWithCode: vi.fn().mockResolvedValue(undefined),
-      getAccount: vi.fn().mockResolvedValue(null),
-      getLastSyncedAt: vi.fn().mockReturnValue(null),
-      syncNow: vi.fn().mockResolvedValue(undefined),
       getStatus: vi.fn().mockReturnValue('error' as SyncStatus),
-      getLastCycle: vi.fn().mockReturnValue({ known: true, cycle: null }),
-      ensureHydrated: vi.fn().mockResolvedValue(undefined),
-    };
+    });
     const { controller } = buildDirectSyncController<SyncEngineControlSurface>({
       baseUrl: BASE_URL,
       keyStore: new FakeKvStore(),
@@ -413,18 +406,9 @@ describe('createDirectSyncController: enable() concurrency', () => {
 
 describe('createDirectSyncController: disable() / syncNow() error propagation', () => {
   it('rejects disable() when engine.disableSync() rejects, rather than swallowing it', async () => {
-    const engine: SyncEngineControlSurface = {
-      enableSync: vi.fn().mockResolvedValue(undefined),
+    const engine = fakeEngine({
       disableSync: vi.fn().mockRejectedValue(new Error('disable failed')),
-      regenerateRecoveryCode: vi.fn().mockResolvedValue('unused'),
-      resumeEnrollWithCode: vi.fn().mockResolvedValue(undefined),
-      getAccount: vi.fn().mockResolvedValue(null),
-      getLastSyncedAt: vi.fn().mockReturnValue(null),
-      syncNow: vi.fn().mockResolvedValue(undefined),
-      getStatus: vi.fn().mockReturnValue('active' as SyncStatus),
-      getLastCycle: vi.fn().mockReturnValue({ known: true, cycle: null }),
-      ensureHydrated: vi.fn().mockResolvedValue(undefined),
-    };
+    });
     const { controller } = buildDirectSyncController<SyncEngineControlSurface>({
       baseUrl: BASE_URL,
       keyStore: new FakeKvStore(),
@@ -436,18 +420,10 @@ describe('createDirectSyncController: disable() / syncNow() error propagation', 
   });
 
   it('rejects syncNow() when engine.syncNow() rejects, and still reconciles status via finally', async () => {
-    const engine: SyncEngineControlSurface = {
-      enableSync: vi.fn().mockResolvedValue(undefined),
-      disableSync: vi.fn().mockResolvedValue(undefined),
-      regenerateRecoveryCode: vi.fn().mockResolvedValue('unused'),
-      resumeEnrollWithCode: vi.fn().mockResolvedValue(undefined),
-      getAccount: vi.fn().mockResolvedValue(null),
-      getLastSyncedAt: vi.fn().mockReturnValue(null),
+    const engine = fakeEngine({
       syncNow: vi.fn().mockRejectedValue(new Error('sync failed')),
       getStatus: vi.fn().mockReturnValue('error' as SyncStatus),
-      getLastCycle: vi.fn().mockReturnValue({ known: true, cycle: null }),
-      ensureHydrated: vi.fn().mockResolvedValue(undefined),
-    };
+    });
     const { controller } = buildDirectSyncController<SyncEngineControlSurface>({
       baseUrl: BASE_URL,
       keyStore: new FakeKvStore(),
@@ -466,18 +442,9 @@ describe('createDirectSyncController: disable() / syncNow() error propagation', 
 
 describe('createDirectSyncController: syncNow() outcome / getLastCycle()', () => {
   it('returns the outcome the engine reports, rather than discarding it', async () => {
-    const engine: SyncEngineControlSurface = {
-      enableSync: vi.fn().mockResolvedValue(undefined),
-      disableSync: vi.fn().mockResolvedValue(undefined),
-      regenerateRecoveryCode: vi.fn().mockResolvedValue('unused'),
-      resumeEnrollWithCode: vi.fn().mockResolvedValue(undefined),
-      getAccount: vi.fn().mockResolvedValue(null),
-      getLastSyncedAt: vi.fn().mockReturnValue(null),
+    const engine = fakeEngine({
       syncNow: vi.fn().mockResolvedValue({ kind: 'resynced' }),
-      getStatus: vi.fn().mockReturnValue('active' as SyncStatus),
-      getLastCycle: vi.fn().mockReturnValue({ known: true, cycle: null }),
-      ensureHydrated: vi.fn().mockResolvedValue(undefined),
-    };
+    });
     const { controller } = buildDirectSyncController<SyncEngineControlSurface>({
       baseUrl: BASE_URL,
       keyStore: new FakeKvStore(),
@@ -491,21 +458,12 @@ describe('createDirectSyncController: syncNow() outcome / getLastCycle()', () =>
   });
 
   it('getLastCycle() resolves the outcome of the engine-reported last cycle', async () => {
-    const engine: SyncEngineControlSurface = {
-      enableSync: vi.fn().mockResolvedValue(undefined),
-      disableSync: vi.fn().mockResolvedValue(undefined),
-      regenerateRecoveryCode: vi.fn().mockResolvedValue('unused'),
-      resumeEnrollWithCode: vi.fn().mockResolvedValue(undefined),
-      getAccount: vi.fn().mockResolvedValue(null),
-      getLastSyncedAt: vi.fn().mockReturnValue(null),
-      syncNow: vi.fn().mockResolvedValue({ kind: 'synced' }),
-      getStatus: vi.fn().mockReturnValue('active' as SyncStatus),
+    const engine = fakeEngine({
       getLastCycle: vi.fn().mockReturnValue({
         known: true,
         cycle: { at: 1_700_000_000_000, outcome: { kind: 'no-key' } },
       }),
-      ensureHydrated: vi.fn().mockResolvedValue(undefined),
-    };
+    });
     const { controller } = buildDirectSyncController<SyncEngineControlSurface>({
       baseUrl: BASE_URL,
       keyStore: new FakeKvStore(),
@@ -531,18 +489,9 @@ describe('createDirectSyncController: syncNow() outcome / getLastCycle()', () =>
   });
 
   it('getLastCycle() reports unavailable when the engine cannot read its stored record', async () => {
-    const engine: SyncEngineControlSurface = {
-      enableSync: vi.fn().mockResolvedValue(undefined),
-      disableSync: vi.fn().mockResolvedValue(undefined),
-      regenerateRecoveryCode: vi.fn().mockResolvedValue('unused'),
-      resumeEnrollWithCode: vi.fn().mockResolvedValue(undefined),
-      getAccount: vi.fn().mockResolvedValue(null),
-      getLastSyncedAt: vi.fn().mockReturnValue(null),
-      syncNow: vi.fn().mockResolvedValue({ kind: 'synced' }),
-      getStatus: vi.fn().mockReturnValue('active' as SyncStatus),
+    const engine = fakeEngine({
       getLastCycle: vi.fn().mockReturnValue({ known: false }),
-      ensureHydrated: vi.fn().mockResolvedValue(undefined),
-    };
+    });
     const { controller } = buildDirectSyncController<SyncEngineControlSurface>({
       baseUrl: BASE_URL,
       keyStore: new FakeKvStore(),
@@ -555,15 +504,7 @@ describe('createDirectSyncController: syncNow() outcome / getLastCycle()', () =>
 
   it('getLastCycle() awaits hydration before reading, so a cold read cannot answer early', async () => {
     const order: string[] = [];
-    const engine: SyncEngineControlSurface = {
-      enableSync: vi.fn().mockResolvedValue(undefined),
-      disableSync: vi.fn().mockResolvedValue(undefined),
-      regenerateRecoveryCode: vi.fn().mockResolvedValue('unused'),
-      resumeEnrollWithCode: vi.fn().mockResolvedValue(undefined),
-      getAccount: vi.fn().mockResolvedValue(null),
-      getLastSyncedAt: vi.fn().mockReturnValue(null),
-      syncNow: vi.fn().mockResolvedValue({ kind: 'synced' }),
-      getStatus: vi.fn().mockReturnValue('active' as SyncStatus),
+    const engine = fakeEngine({
       getLastCycle: vi.fn(() => {
         order.push('read');
         return { known: true, cycle: null };
@@ -574,7 +515,7 @@ describe('createDirectSyncController: syncNow() outcome / getLastCycle()', () =>
         await Promise.resolve();
         order.push('hydrate');
       }),
-    };
+    });
     const { controller } = buildDirectSyncController<SyncEngineControlSurface>({
       baseUrl: BASE_URL,
       keyStore: new FakeKvStore(),
@@ -583,6 +524,31 @@ describe('createDirectSyncController: syncNow() outcome / getLastCycle()', () =>
     });
 
     await controller.getLastCycle();
+
+    expect(order).toEqual(['hydrate', 'read']);
+  });
+
+  it('getDetails() awaits hydration too, since it owns the last-synced stamp', async () => {
+    const order: string[] = [];
+    const engine = fakeEngine({
+      getAccount: vi.fn().mockResolvedValue({ userId: 'u1', email: null }),
+      getLastSyncedAt: vi.fn(() => {
+        order.push('read');
+        return null;
+      }),
+      ensureHydrated: vi.fn(async () => {
+        await Promise.resolve();
+        order.push('hydrate');
+      }),
+    });
+    const { controller } = buildDirectSyncController<SyncEngineControlSurface>({
+      baseUrl: BASE_URL,
+      keyStore: new FakeKvStore(),
+      oauthDriver: unusedDriver(),
+      buildEngine: () => engine,
+    });
+
+    await controller.getDetails();
 
     expect(order).toEqual(['hydrate', 'read']);
   });
