@@ -44,11 +44,20 @@ describe('isShortcutKeyEvent', () => {
     expect(press({ on: editable })).toBe(false);
   });
 
-  it('rejects keypresses while a dialog is open', () => {
+  it('rejects keypresses while a modal dialog is open', () => {
     const dialog = document.createElement('div');
     dialog.setAttribute('role', 'dialog');
+    dialog.setAttribute('aria-modal', 'true');
     document.body.appendChild(dialog);
 
     expect(press()).toBe(false);
+  });
+
+  it('allows keypresses while a non-modal dialog-role popover is open', () => {
+    const popover = document.createElement('div');
+    popover.setAttribute('role', 'dialog');
+    document.body.appendChild(popover);
+
+    expect(press()).toBe(true);
   });
 });

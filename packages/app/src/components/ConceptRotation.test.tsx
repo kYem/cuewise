@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useConceptCardsStore } from '../stores/concept-cards-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { ConceptRotation, selectSurfacedCard } from './ConceptRotation';
+import { Modal } from './Modal';
 
 vi.mock('../stores/settings-store', () => ({ useSettingsStore: vi.fn() }));
 vi.mock('../stores/concept-cards-store', () => ({ useConceptCardsStore: vi.fn() }));
@@ -295,12 +296,14 @@ describe('ConceptRotation', () => {
     expect(screen.getByText('QUOTE')).toBeInTheDocument();
   });
 
-  it('ignores the shortcut while a dialog is open', () => {
+  it('ignores the shortcut while a modal dialog is open', () => {
     setup({ framing: 'ambient', cadence: 'off', cards: [dueCard] });
 
     render(
       <>
-        <div role="dialog">Settings</div>
+        <div role="dialog" aria-modal="true">
+          Settings
+        </div>
         <ConceptRotation fallback={<div>QUOTE</div>} />
       </>
     );
@@ -310,6 +313,53 @@ describe('ConceptRotation', () => {
     });
 
     expect(screen.getByText('QUOTE')).toBeInTheDocument();
+  });
+
+  it('ignores the shortcut while the real Add Concept modal is open', () => {
+    setup({ framing: 'ambient', cadence: 'off', cards: [dueCard] });
+
+    render(
+      <>
+        <Modal isOpen onClose={() => {}} title="Add a concept">
+          <button type="button">Save</button>
+        </Modal>
+        <ConceptRotation fallback={<div>QUOTE</div>} />
+      </>
+    );
+
+    act(() => {
+      fireEvent.keyDown(document.body, { key: 'c' });
+    });
+
+    expect(screen.getByText('QUOTE')).toBeInTheDocument();
+  });
+
+  it('toggles the slot on Shift+C', () => {
+    setup({ framing: 'ambient', cadence: 'off', cards: [dueCard] });
+
+    render(<ConceptRotation fallback={<div>QUOTE</div>} />);
+    expect(screen.getByText('QUOTE')).toBeInTheDocument();
+
+    act(() => {
+      fireEvent.keyDown(document.body, { key: 'C', shiftKey: true });
+    });
+
+    expect(screen.getByText('Saga pattern')).toBeInTheDocument();
+    expect(screen.queryByText('QUOTE')).not.toBeInTheDocument();
+  });
+
+  it('toggles the slot on a Caps-Lock-shifted "C" without the Shift modifier', () => {
+    setup({ framing: 'ambient', cadence: 'off', cards: [dueCard] });
+
+    render(<ConceptRotation fallback={<div>QUOTE</div>} />);
+    expect(screen.getByText('QUOTE')).toBeInTheDocument();
+
+    act(() => {
+      fireEvent.keyDown(document.body, { key: 'C' });
+    });
+
+    expect(screen.getByText('Saga pattern')).toBeInTheDocument();
+    expect(screen.queryByText('QUOTE')).not.toBeInTheDocument();
   });
 });
 

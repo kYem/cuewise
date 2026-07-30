@@ -62,6 +62,8 @@ export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, size = '2x
 
       {/* Modal Content */}
       <div
+        role="dialog"
+        aria-modal="true"
         className={`relative bg-surface-elevated rounded-2xl shadow-2xl ${SIZE_CLASS[size]} w-full max-h-[90vh] overflow-hidden animate-slide-up`}
       >
         {/* Header - only show if title is provided */}

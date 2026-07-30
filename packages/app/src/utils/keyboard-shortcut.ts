@@ -12,5 +12,5 @@ export function isShortcutKeyEvent(event: KeyboardEvent): boolean {
   ) {
     return false;
   }
-  return document.querySelector('[role="dialog"]') === null;
+  return document.querySelector('[role="dialog"][aria-modal="true"]') === null;
 }

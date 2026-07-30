@@ -137,7 +137,7 @@ export const ConceptRotation: React.FC<ConceptRotationProps> = ({ fallback, onAd
       return;
     }
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key !== 'c' || !isShortcutKeyEvent(e)) {
+      if (e.key.toLowerCase() !== 'c' || !isShortcutKeyEvent(e)) {
         return;
       }
       e.preventDefault();
@@ -147,9 +147,6 @@ export const ConceptRotation: React.FC<ConceptRotationProps> = ({ fallback, onAd
     return () => document.removeEventListener('keydown', handleKey);
   }, [enabled, isLoading, due.length, surfaced]);
 
-  if (!enabled || isLoading) {
-    return <>{fallback}</>;
-  }
   if (!surfaced) {
     return <>{fallback}</>;
   }
