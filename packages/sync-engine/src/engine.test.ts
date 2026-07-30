@@ -1526,6 +1526,71 @@ describe('SyncEngine.start / stop', () => {
     expect(restarted.getStatus()).toBe('needs_enroll');
   });
 
+  it('reports a fresh key minted for a device that was already enrolled', async () => {
+    // Every record the old key sealed is unopenable after this, and other devices keep it — the
+    // user only sees an ordinary new-code modal.
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    // Key gone AND the account's envelope gone, so the enroll mints rather than restores.
+    await device.kv.remove(SYNC_DATA_KEY, 'local');
+    device.apiClient = new FakeApiClient(new FakeSyncServer());
+    const rekeyed = new SyncEngine({
+      apiClient: device.apiClient,
+      sessionManager: new SessionManager(device.kv),
+      keyStore: device.kv,
+      scheduler: new FakeScheduler(),
+    });
+    await rekeyed.enableSync('dev', 'cred-a', 'Device A');
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Cloud sync minted a new data key for an already-enrolled device'
+    );
+  });
+
+  it('stays quiet about a minted key on a brand-new enable', async () => {
+    // The inverse guard: an error on every first-ever enable would train the reader to ignore it.
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    expect(errorSpy).not.toHaveBeenCalledWith(
+      'Cloud sync minted a new data key for an already-enrolled device'
+    );
+  });
+
+  it('keeps a needs_enroll device on its prompt when a resumed enroll rejects the code', async () => {
+    // resumeEnrollWithCode is the live-session path, and a mistyped code is its likeliest outcome —
+    // flipping to off there hides the prompt that asked for the code.
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await device.kv.remove(SYNC_DATA_KEY, 'local');
+    const restarted = new SyncEngine({
+      apiClient: device.apiClient,
+      sessionManager: new SessionManager(device.kv),
+      keyStore: device.kv,
+      scheduler: new FakeScheduler(),
+    });
+    await restarted.start();
+    expect(restarted.getStatus()).toBe('needs_enroll');
+
+    await expect(restarted.resumeEnrollWithCode('not-a-real-code')).rejects.toThrow(
+      RecoveryCodeError
+    );
+
+    expect(restarted.getStatus()).toBe('needs_enroll');
+  });
+
   it('keeps a device that retried from error on the prompt too, not only needs_enroll', async () => {
     // Retry routes through reconnect, so an error-state device reaches the same needs-code exit.
     // Naming one status here folded every other start into "off" while the code modal was open.

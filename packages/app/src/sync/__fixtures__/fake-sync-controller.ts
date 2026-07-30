@@ -112,6 +112,15 @@ export class FakeSyncController implements SyncController {
     this.deferredLastCycle = true;
   }
 
+  /** Releases a deferred getLastCycle() as an unreadable answer, as a dead worker gives. */
+  resolveLastCycleUnavailable(): void {
+    if (this.pendingLastCycle === null) {
+      throw new Error('FakeSyncController: no pending getLastCycle() to resolve');
+    }
+    this.pendingLastCycle(LAST_CYCLE_UNAVAILABLE);
+    this.pendingLastCycle = null;
+  }
+
   /** Releases a getLastCycle() call armed via deferNextLastCycle(). */
   resolveLastCycle(outcome: SyncOutcome | null): void {
     if (this.pendingLastCycle === null) {
@@ -309,8 +318,13 @@ export class FakeSyncController implements SyncController {
     this.maybeFail('syncNow');
     if (this.deferredSyncNow) {
       this.deferredSyncNow = false;
-      return new Promise((resolve, reject) => {
+      // The real adapter reconciles in a finally, so it emits on every path including this one.
+      return new Promise<SyncOutcome>((resolve, reject) => {
         this.pendingSyncNow = { resolve, reject };
+      }).finally(() => {
+        if (this.emitsSyncingDuringSyncNow) {
+          this.setStatus('active');
+        }
       });
     }
     const next = this.syncNowResults.shift();

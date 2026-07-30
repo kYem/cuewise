@@ -1239,6 +1239,65 @@ describe('SyncSettingsSectionComponent', () => {
     expect(controller.calls.filter((c) => c.method === 'regenerateRecoveryCode')).toHaveLength(1);
   });
 
+  it('does not let a click paint for the account an enroll code replaced', async () => {
+    // A code is only required when the target account HAS an envelope, so this is the branch the
+    // different-account case actually completes on — it needs the same account bump as its sibling.
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptReconnect({ ok: false, reason: 'needs-code' });
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+    await screen.findByTestId('sync-status-pill');
+
+    controller.deferNextSyncNow();
+    await user.click(screen.getByRole('button', { name: 'Sync now' }));
+    act(() => controller.setStatus('needs_reauth'));
+    await user.click(screen.getByRole('button', { name: 'Reconnect' }));
+    await screen.findByText('Enter recovery code');
+    await user.type(screen.getByLabelText(/recovery code/i), CODE);
+    await user.click(screen.getByRole('button', { name: 'Enroll' }));
+    await act(async () => {
+      controller.resolveSyncNow({ kind: 'synced' });
+    });
+
+    expect(toastSuccess).not.toHaveBeenCalledWith('Synced');
+  });
+
+  it('syncs once per click, since two cycles would each toast', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+    await screen.findByTestId('sync-status-pill');
+
+    controller.deferNextSyncNow();
+    const button = screen.getByRole('button', { name: 'Sync now' });
+    await user.click(button);
+    expect(button).toBeDisabled();
+    await user.click(button);
+    await act(async () => {
+      controller.resolveSyncNow({ kind: 'synced' });
+    });
+
+    expect(controller.calls.filter((c) => c.method === 'syncNow')).toHaveLength(1);
+    expect(toastSuccess).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Sync now' })).toBeEnabled();
+  });
+
+  it('says it could not check when the host breaks its never-rejects contract', async () => {
+    // The mount read's rejection handler must answer like an unreadable read, not stay quieter.
+    const controller = new FakeSyncController();
+    controller.setStatus('active');
+    controller.failNext('getLastCycle');
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    renderSection(controller);
+
+    expect(await screen.findByTestId('sync-cycle-unknown')).toBeInTheDocument();
+    expect(errorSpy).toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
   it('keeps the failure badge when a click lands before the key does', async () => {
     // A click can wake a cold worker ahead of its key load and get no-key back. The engine refuses
     // to persist that over the last real cycle; the panel must refuse to paint it for the same reason.

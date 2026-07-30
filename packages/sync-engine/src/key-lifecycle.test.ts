@@ -5,6 +5,7 @@ import {
   generateRecoveryCode,
   wrapDataKey,
 } from '@cuewise/crypto';
+import { logger } from '@cuewise/shared';
 import { describe, expect, it, vi } from 'vitest';
 import { FakeKeyTransport } from './__fixtures__/fake-key-transport';
 import { FakeKvStore } from './__fixtures__/fake-kv-store';
@@ -76,6 +77,32 @@ describe('initOrEnrollKey', () => {
     expect(result.dk).toEqual(winnerDk);
     expect(result.recoveryCodeToShow).toBeUndefined();
     expect(transport.putCalls).toEqual([{ envelope: expect.any(String), ifAbsent: true }]);
+  });
+
+  it('reports a recovery code it had to discard, since the account had no envelope', async () => {
+    const transport = new FakeKeyTransport();
+    const { code } = await generateRecoveryCode();
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await initOrEnrollKey({ transport, keyStore: new FakeKvStore() }, code);
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Cloud sync ignored a recovery code: this account had no envelope to restore'
+    );
+  });
+
+  it('stays quiet when a lost race honours the code instead of discarding it', async () => {
+    // The log must sit after the create-only PUT wins: on the race it loses, the code IS used.
+    const transport = new FakeKeyTransport();
+    const winnerDk = generateDataKey();
+    const { code: winnerCode, secret } = await generateRecoveryCode();
+    const mk = await deriveMasterKey(secret);
+    transport.raceWinnerEnvelope = await wrapDataKey(mk, winnerDk, 'dk-1');
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await initOrEnrollKey({ transport, keyStore: new FakeKvStore() }, winnerCode);
+
+    expect(errorSpy).not.toHaveBeenCalled();
   });
 
   it('falls through to enroll on a lost race but throws a clear error when no code is given', async () => {
