@@ -34,6 +34,7 @@ export type SyncEngineControlSurface = Pick<
   | 'getAccount'
   | 'getLastSyncedAt'
   | 'getLastCycle'
+  | 'ensureHydrated'
 >;
 export {
   initOrEnrollKey,
@@ -57,7 +58,10 @@ export {
 } from './strategy';
 export {
   classifySyncFailure,
+  parsePersistedSyncCycle,
   type SyncCycle,
+  type SyncCycleRead,
   type SyncFailureReason,
   type SyncOutcome,
+  toPersistedSyncCycle,
 } from './sync-outcome';

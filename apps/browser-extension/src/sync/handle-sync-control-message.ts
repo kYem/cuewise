@@ -66,10 +66,27 @@ async function runDetails(engine: SyncEngineControlSurface): Promise<SyncDetails
   };
 }
 
-/** Read-only last-cycle lookup — deliberately NOT serialized (see handleSyncControlMessage). */
-function runLastCycle(engine: SyncEngineControlSurface): SyncLastCycleResponse {
-  const cycle = engine.getLastCycle();
-  return { ok: true, kind: 'lastCycle', outcome: cycle === null ? null : cycle.outcome };
+/**
+ * Read-only last-cycle lookup — deliberately NOT serialized (see handleSyncControlMessage).
+ * Awaits hydration first: this listener is registered synchronously while start() waits on the
+ * settings migration, so a cold worker would otherwise answer "no cycle has run" for a device
+ * whose stored record says it has been failing for an hour.
+ */
+async function runLastCycle(
+  engine: SyncEngineControlSurface
+): Promise<SyncLastCycleResponse | Extract<SyncControlResponse, { ok: false }>> {
+  await engine.ensureHydrated();
+  const read = engine.getLastCycle();
+  if (!read.known) {
+    // Not `outcome:null` — that means "none ran" and would clear the badge. A failed response is
+    // what the bridge turns into LAST_CYCLE_UNAVAILABLE.
+    return { ok: false, reason: 'error', detail: 'last cycle unreadable' };
+  }
+  return {
+    ok: true,
+    kind: 'lastCycle',
+    outcome: read.cycle === null ? null : read.cycle.outcome,
+  };
 }
 
 async function runOp(

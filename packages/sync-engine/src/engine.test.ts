@@ -746,7 +746,9 @@ describe('SyncEngine.syncNow', () => {
     );
   });
 
-  it('logs a best-effort step that fails, so a permanently broken one is not silent', async () => {
+  it('names the cause of a failed best-effort step in the message, not in a payload', async () => {
+    // `message` is non-enumerable, so an { error } payload renders as {} on a JSON surface — the
+    // cause has to be re-stated as text or a permanently broken step reports nothing usable.
     const server = new FakeSyncServer();
     const device = createDevice(server);
     useStorage(device);
@@ -758,8 +760,8 @@ describe('SyncEngine.syncNow', () => {
     await device.engine.syncNow();
 
     expect(errorSpy).toHaveBeenCalledWith(
-      'Sync cycle lastSyncedAt stamp failed; the reported outcome still stands',
-      expect.objectContaining({ error: expect.any(Error) })
+      `Sync cycle lastSyncedAt stamp failed; the reported outcome still stands: FakeKvStore: simulated adapter fault writing ${LAST_SYNCED_AT_KEY}`,
+      expect.any(Error)
     );
   });
 
@@ -835,21 +837,66 @@ describe('SyncEngine.syncNow', () => {
     device.apiClient.rejectNextGetChangesWithResync();
     await device.engine.syncNow();
 
-    expect(device.engine.getLastCycle()).toEqual({ at: 6_000, outcome: { kind: 'resynced' } });
+    expect(device.engine.getLastCycle()).toEqual({
+      known: true,
+      cycle: { at: 6_000, outcome: { kind: 'resynced' } },
+    });
   });
 
-  it('records a DK-less cycle instead of leaving an older one as the answer', async () => {
+  it('overwrites a stored failure once a cycle succeeds, so it cannot outlive its fix', async () => {
+    // The reason the record is written on EVERY cycle and not only failures: without this a device
+    // that failed once wears the badge across every restart, forever.
     let t = 5_000;
     const server = new FakeSyncServer();
     const device = createDevice(server, { now: () => t });
     useStorage(device);
     await device.engine.enableSync('dev', 'cred-a', 'Device A');
-    await device.engine.disableSync();
 
     t = 6_000;
+    device.apiClient.rejectNextGetChanges(new ApiError('internal', 500));
+    await device.engine.syncNow();
+    expect(await device.kv.get(LAST_CYCLE_KEY, 'local')).toMatchObject({ kind: 'failed' });
+
+    t = 7_000;
     await device.engine.syncNow();
 
-    expect(device.engine.getLastCycle()).toEqual({ at: 6_000, outcome: { kind: 'no-key' } });
+    expect(await device.kv.get(LAST_CYCLE_KEY, 'local')).toEqual({ at: 7_000, kind: 'synced' });
+  });
+
+  it('leaves a real cycle as the answer when a DK-less wake beats the key load', async () => {
+    // MV3 registers the alarm listener before start() resolves, so a cold worker can run a cycle
+    // with no key. That no-op reports nothing about the device and must not erase the failure.
+    let t = 5_000;
+    const server = new FakeSyncServer();
+    const device = createDevice(server, { now: () => t });
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    t = 6_000;
+    device.apiClient.rejectNextGetChanges(new ApiError('internal', 500));
+    await device.engine.syncNow();
+
+    // A fresh engine over the same store that never ran start(), so it holds no DK.
+    const keyless = new SyncEngine({
+      apiClient: device.apiClient,
+      sessionManager: new SessionManager(device.kv),
+      keyStore: device.kv,
+      scheduler: device.scheduler,
+      now: () => 9_999,
+    });
+
+    await expect(keyless.syncNow()).resolves.toEqual({ kind: 'no-key' });
+
+    expect(await device.kv.get(LAST_CYCLE_KEY, 'local')).toEqual({
+      at: 6_000,
+      kind: 'failed',
+      reason: 'server',
+    });
+    await keyless.ensureHydrated();
+    expect(keyless.getLastCycle()).toEqual({
+      known: true,
+      cycle: { at: 6_000, outcome: { kind: 'failed', reason: 'server', error: undefined } },
+    });
   });
 
   it('persists the cycle without the error object, which no storage round trip could carry', async () => {
@@ -886,33 +933,84 @@ describe('SyncEngine.syncNow', () => {
     const cold = coldStart(device, 9_999);
 
     await vi.waitFor(() => {
-      expect(cold.engine.getLastCycle()).not.toBeNull();
-    });
-    // 6_000, not 9_999: this engine's own cycle is still parked, so only hydration can have answered.
-    expect(cold.engine.getLastCycle()).toEqual({
-      at: 6_000,
-      outcome: { kind: 'failed', reason: 'server' },
+      expect(cold.engine.getLastCycle()).toEqual({
+        known: true,
+        // 6_000, not 9_999: this engine's own cycle is parked, so only hydration can have answered.
+        cycle: { at: 6_000, outcome: { kind: 'failed', reason: 'server', error: undefined } },
+      });
     });
     await cold.finish();
   });
 
-  it('ignores a stored last cycle that is not a cycle record', async () => {
+  it('reports a stored cycle whose kind this build does not know as unknown, not as none', async () => {
     const server = new FakeSyncServer();
     const device = createDevice(server);
     useStorage(device);
     await device.engine.enableSync('dev', 'cred-a', 'Device A');
-    await device.kv.set(LAST_CYCLE_KEY, { at: 'ages ago', kind: 'wedged' }, 'local');
+    await device.kv.set(LAST_CYCLE_KEY, { at: 1_000, kind: 'wedged' }, 'local');
     const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
 
     const cold = coldStart(device, 9_999);
 
     await vi.waitFor(() => {
       expect(errorSpy).toHaveBeenCalledWith(
-        'The stored last sync cycle is not a cycle record; ignoring it',
-        { key: LAST_CYCLE_KEY }
+        'The stored last sync cycle is not a cycle record; reporting it as unknown',
+        { key: LAST_CYCLE_KEY, shape: '{at,kind}' }
       );
     });
-    expect(cold.engine.getLastCycle()).toBeNull();
+    expect(cold.engine.getLastCycle()).toEqual({ known: false });
+    await cold.finish();
+  });
+
+  it('reports a stored cycle with a non-numeric timestamp as unknown', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    await device.kv.set(LAST_CYCLE_KEY, { at: 'ages ago', kind: 'synced' }, 'local');
+
+    const cold = coldStart(device, 9_999);
+
+    await vi.waitFor(() => {
+      expect(cold.engine.getLastCycle()).toEqual({ known: false });
+    });
+    await cold.finish();
+  });
+
+  it('reports an unreadable stored cycle as unknown rather than as no cycle', async () => {
+    // The distinction the whole read exists for: a record that cannot be read says nothing about
+    // the device, while "no cycle" is the one answer allowed to clear the panel's badge.
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    device.kv.unreadableKey = LAST_CYCLE_KEY;
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    const cold = coldStart(device, 9_999);
+
+    await vi.waitFor(() => {
+      expect(cold.engine.getLastCycle()).toEqual({ known: false });
+    });
+    expect(errorSpy).toHaveBeenCalledWith(
+      'The stored last sync cycle is unreadable; reporting it as unknown',
+      { key: LAST_CYCLE_KEY }
+    );
+    await cold.finish();
+  });
+
+  it('reports unknown when the whole hydration read fails', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    device.kv.failGetManyForKey = LAST_CYCLE_KEY;
+
+    const cold = coldStart(device, 9_999);
+
+    await vi.waitFor(() => {
+      expect(cold.engine.getLastCycle()).toEqual({ known: false });
+    });
     await cold.finish();
   });
 
@@ -925,7 +1023,25 @@ describe('SyncEngine.syncNow', () => {
     device.kv.throwSetsForKey = LAST_CYCLE_KEY;
 
     await expect(device.engine.syncNow()).resolves.toEqual({ kind: 'synced' });
-    expect(device.engine.getLastCycle()).not.toBeNull();
+    expect(device.engine.getLastCycle()).toMatchObject({ known: true });
+  });
+
+  it('names the cause when the last-cycle write is refused rather than thrown', async () => {
+    // The shipped logLevel is 'error', so this must not be a warn: losing the record is what lets
+    // a wedged device show nothing but "Last synced" after the next teardown.
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    device.kv.failSetsForKey = LAST_CYCLE_KEY;
+    await device.engine.syncNow();
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to persist the last sync cycle: quota exceeded'),
+      expect.objectContaining({ message: 'quota exceeded' })
+    );
   });
 
   it('reports signed-out on a 401 instead of leaving the caller to re-read the status', async () => {
@@ -966,11 +1082,11 @@ describe('SyncEngine.disableSync', () => {
     await device.engine.enableSync('dev', 'cred-a', 'Device A');
     device.apiClient.rejectNextGetChanges(new ApiError('internal', 500));
     await device.engine.syncNow();
-    expect(device.engine.getLastCycle()).not.toBeNull();
+    expect(device.engine.getLastCycle()).toMatchObject({ known: true, cycle: expect.anything() });
 
     await device.engine.disableSync();
 
-    expect(device.engine.getLastCycle()).toBeNull();
+    expect(device.engine.getLastCycle()).toEqual({ known: true, cycle: null });
     // The persisted copy too, or the next start() hydrates the previous account's failure.
     expect(await device.kv.get(LAST_CYCLE_KEY, 'local')).toBeNull();
   });

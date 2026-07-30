@@ -5,7 +5,7 @@ import type {
   SyncDetails,
   SyncUiStatus,
 } from '@cuewise/app';
-import { AUTH_CANCELLED_DETAIL, buildSyncDetails } from '@cuewise/app';
+import { AUTH_CANCELLED_DETAIL, buildSyncDetails, LAST_CYCLE_UNAVAILABLE } from '@cuewise/app';
 import { type KeyValueStore, logger, type Scheduler } from '@cuewise/shared';
 import { ApiError } from '@cuewise/sync-client';
 import {
@@ -371,9 +371,14 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
       return buildSyncDetails(await engine.getAccount(), engine.getLastSyncedAt());
     },
     async getLastCycle(): Promise<LastCycleRead> {
-      // Always available: this is an in-process field read, with no realm to be unreachable across.
-      const cycle = engine.getLastCycle();
-      return { available: true, outcome: cycle === null ? null : cycle.outcome };
+      // No realm to be unreachable across, but the record still comes from storage: an unreadable
+      // one is reported as unavailable, never as "no cycle has run".
+      await engine.ensureHydrated();
+      const read = engine.getLastCycle();
+      if (!read.known) {
+        return LAST_CYCLE_UNAVAILABLE;
+      }
+      return { available: true, outcome: read.cycle === null ? null : read.cycle.outcome };
     },
   };
 

@@ -33,6 +33,7 @@ import {
   classifySyncFailure,
   parsePersistedSyncCycle,
   type SyncCycle,
+  type SyncCycleRead,
   type SyncOutcome,
   toPersistedSyncCycle,
 } from './sync-outcome';
@@ -119,6 +120,17 @@ function stallError(what: string, outrankedPush: { error: unknown } | undefined)
 }
 
 /**
+ * Names a rejected record's shape for the log without echoing it — the field names distinguish a
+ * legacy shape from a partial write from garbage, and none of them carry user data.
+ */
+function describeShape(value: unknown): string {
+  if (value === null || typeof value !== 'object') {
+    return typeof value;
+  }
+  return `{${Object.keys(value).join(',')}}`;
+}
+
+/**
  * Top-level orchestration façade (ENG-45): enable/enroll, the migration backfill, the
  * pull-then-push cycle, and the pull-loop re-arm. See package CLAUDE.md for host wiring.
  */
@@ -133,6 +145,10 @@ export class SyncEngine {
   private keyId: string | null = null;
   private lastSyncedAt: number | null = null;
   private lastCycle: SyncCycle | null = null;
+  // False once a stored record turned out to be unreadable: that is not "no cycle ran", and
+  // answering it as such is exactly what clears a wedged device's badge.
+  private lastCycleKnown = true;
+  private hydration: Promise<void> | null = null;
 
   constructor(private readonly deps: SyncEngineDeps) {
     this.now = deps.now ?? Date.now;
@@ -249,6 +265,9 @@ export class SyncEngine {
     this.keyId = null;
     this.lastSyncedAt = null;
     this.lastCycle = null;
+    // After a disable "no cycle" is the truth, so an earlier unreadable record must stop
+    // reporting unknown — otherwise a failed hydration outlives the account it described.
+    this.lastCycleKnown = true;
     this.setStatus('disabled');
   }
 
@@ -286,9 +305,15 @@ export class SyncEngine {
         outcome.error
       );
     }
-    const cycle: SyncCycle = { at: this.now(), outcome };
-    this.lastCycle = cycle;
-    await this.bestEffort(() => this.persistLastCycle(cycle), 'last-cycle persist');
+    // `no-key` means no cycle ran, so it must not speak for the last one that did. An MV3 alarm
+    // registers before start() and can wake a cold worker ahead of the key load, and that no-op
+    // would otherwise overwrite — durably — the failure the user needs to see.
+    if (outcome.kind !== 'no-key') {
+      const cycle: SyncCycle = { at: this.now(), outcome };
+      this.lastCycle = cycle;
+      this.lastCycleKnown = true;
+      await this.bestEffort(() => this.persistLastCycle(cycle), 'last-cycle persist');
+    }
     return outcome;
   }
 
@@ -362,7 +387,12 @@ export class SyncEngine {
     try {
       await step();
     } catch (err) {
-      logger.error(`Sync cycle ${what} failed; the reported outcome still stands`, { error: err });
+      // Cause in the message text, like the cycle log above: `message` and `cause` are both
+      // non-enumerable, so an object payload renders as `{}` on JSON surfaces.
+      logger.error(
+        `Sync cycle ${what} failed; the reported outcome still stands: ${describeThrown(err)}`,
+        err
+      );
     }
   }
 
@@ -403,9 +433,70 @@ export class SyncEngine {
     return this.lastSyncedAt;
   }
 
-  /** The in-session answer carries the failure's `error`; one hydrated after a restart does not. */
-  getLastCycle(): SyncCycle | null {
-    return this.lastCycle;
+  /**
+   * The in-session answer carries the failure's `error`; one hydrated after a restart does not.
+   * Callers that can be answered before hydration (the extension's control path on a cold worker)
+   * must await ensureHydrated() first, or a stored failure reads as "no cycle has run".
+   */
+  getLastCycle(): SyncCycleRead {
+    if (!this.lastCycleKnown) {
+      return { known: false };
+    }
+    return { known: true, cycle: this.lastCycle };
+  }
+
+  /**
+   * Reads the persisted stamp and cycle record, once per process. Public and memoised because the
+   * extension answers a control message from a cold worker BEFORE start() runs — the listeners are
+   * registered synchronously while start() waits on the settings migration.
+   */
+  async ensureHydrated(): Promise<void> {
+    this.hydration ??= this.hydrate();
+    return this.hydration;
+  }
+
+  private async hydrate(): Promise<void> {
+    // One batch read, because `get` collapses "absent" into "read failed" and this is the one
+    // place that distinction decides whether a wedged device shows a badge.
+    const stored = await this.deps.keyStore.getMany([LAST_SYNCED_AT_KEY, LAST_CYCLE_KEY], 'local');
+    if (stored === null) {
+      this.lastCycleKnown = false;
+      logger.error(
+        'Could not read the persisted sync state; the last cycle is unknown this session'
+      );
+      return;
+    }
+
+    const stamp = stored[LAST_SYNCED_AT_KEY];
+    // A cycle this process already ran outranks the stored one, for the stamp and the record alike.
+    if (stamp?.readable === true && typeof stamp.value === 'number' && this.lastSyncedAt === null) {
+      this.lastSyncedAt = stamp.value;
+    }
+
+    const record = stored[LAST_CYCLE_KEY];
+    if (record === undefined) {
+      return;
+    }
+    if (!record.readable) {
+      this.lastCycleKnown = false;
+      logger.error('The stored last sync cycle is unreadable; reporting it as unknown', {
+        key: LAST_CYCLE_KEY,
+      });
+      return;
+    }
+    const hydrated = parsePersistedSyncCycle(record.value);
+    if (hydrated === null) {
+      // A record that will not parse is not "no cycle" either — say unknown rather than paint health.
+      this.lastCycleKnown = false;
+      logger.error('The stored last sync cycle is not a cycle record; reporting it as unknown', {
+        key: LAST_CYCLE_KEY,
+        shape: describeShape(record.value),
+      });
+      return;
+    }
+    if (this.lastCycle === null) {
+      this.lastCycle = hydrated;
+    }
   }
 
   /**
@@ -435,25 +526,9 @@ export class SyncEngine {
       return;
     }
 
-    // Hydrate the details-UI timestamp so a restart shows the last real sync, not a blank.
-    const persistedLastSynced = await this.deps.keyStore.get<number>(LAST_SYNCED_AT_KEY, 'local');
-    if (typeof persistedLastSynced === 'number') {
-      this.lastSyncedAt = persistedLastSynced;
-    }
-
-    // And the cycle beside it, before this process runs one of its own: a control message answered
-    // during start() must not report "no cycle" for a device that has been failing for an hour.
-    const persistedCycle = await this.deps.keyStore.get<unknown>(LAST_CYCLE_KEY, 'local');
-    if (persistedCycle !== null) {
-      const hydrated = parsePersistedSyncCycle(persistedCycle);
-      if (hydrated === null) {
-        logger.error('The stored last sync cycle is not a cycle record; ignoring it', {
-          key: LAST_CYCLE_KEY,
-        });
-      } else {
-        this.lastCycle = hydrated;
-      }
-    }
+    // The details-UI stamp and the cycle record beside it, before this process runs one of its own.
+    // Idempotent: a control message answered on a cold worker already triggered this.
+    await this.ensureHydrated();
 
     try {
       await selfHealKeyBlob(this.keyDeps());

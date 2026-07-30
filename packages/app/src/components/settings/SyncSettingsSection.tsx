@@ -1,4 +1,4 @@
-import { logger } from '@cuewise/shared';
+import { describeThrown, logger } from '@cuewise/shared';
 import type { SyncFailureReason, SyncOutcome } from '@cuewise/sync-engine';
 import { AlertTriangle, CloudUpload, KeyRound, Loader2, RefreshCw } from 'lucide-react';
 import type React from 'react';
@@ -490,7 +490,9 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
         }
       }
     } catch (error) {
-      logger.error('Cloud sync sync-now failed', error);
+      // The bridge builds `Sync now failed: <reason> — <detail>` into the message so the worker's
+      // cause reaches here; message is non-enumerable, so it must be re-stated as text.
+      logger.error(`Cloud sync sync-now failed: ${describeThrown(error)}`, error);
       // Same guard as the try: a superseded click may neither toast (its action is gone from the
       // panel) nor repaint — and the bump above discarded the in-flight read this recovers.
       if (lastCycleGenRef.current === cycleGen) {

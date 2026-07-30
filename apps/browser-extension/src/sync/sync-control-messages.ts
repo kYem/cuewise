@@ -71,10 +71,12 @@ export interface SyncOpResponse {
   disable: SyncControlResponse;
   regenerate: SyncControlResponse;
   // Honestly both shapes: the router's error fallback answers ANY op with a failed
-  // SyncControlResponse, so the bridge must narrow on `ok` rather than assume an outcome.
+  // SyncControlResponse, so the bridge must narrow on `ok` rather than assume an outcome. That
+  // applies to every op, so the read-only two carry it too — declaring them `ok:true` only would
+  // mark the bridge's load-bearing `ok`/`kind` guards as redundancies safe to delete.
   syncNow: SyncOutcomeResponse | Extract<SyncControlResponse, { ok: false }>;
-  details: SyncDetailsResponse;
-  getLastCycle: SyncLastCycleResponse;
+  details: SyncDetailsResponse | Extract<SyncControlResponse, { ok: false }>;
+  getLastCycle: SyncLastCycleResponse | Extract<SyncControlResponse, { ok: false }>;
 }
 
 /** Any op's response — derived from the map so the two never drift. */

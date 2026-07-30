@@ -19,7 +19,8 @@ function fakeEngine(overrides: Partial<SyncEngineControlSurface> = {}): SyncEngi
     getStatus: vi.fn().mockReturnValue('active' as SyncStatus),
     getAccount: vi.fn().mockResolvedValue(null),
     getLastSyncedAt: vi.fn().mockReturnValue(null),
-    getLastCycle: vi.fn().mockReturnValue(null),
+    getLastCycle: vi.fn().mockReturnValue({ known: true, cycle: null }),
+    ensureHydrated: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
 }
@@ -62,7 +63,10 @@ describe('handleSyncControlMessage: details', () => {
 describe('handleSyncControlMessage: getLastCycle', () => {
   it("maps the engine's last cycle into an outcome response", async () => {
     const engine = fakeEngine({
-      getLastCycle: vi.fn().mockReturnValue({ at: 1_700_000_000_000, outcome: { kind: 'no-key' } }),
+      getLastCycle: vi.fn().mockReturnValue({
+        known: true,
+        cycle: { at: 1_700_000_000_000, outcome: { kind: 'no-key' } },
+      }),
     });
 
     const result = await handleSyncControlMessage(
@@ -72,6 +76,45 @@ describe('handleSyncControlMessage: getLastCycle', () => {
     );
 
     expect(result).toEqual({ ok: true, kind: 'lastCycle', outcome: { kind: 'no-key' } });
+  });
+
+  it('answers a failure when the engine cannot read its record, never a null outcome', async () => {
+    // A null outcome means "no cycle has run" and clears the panel's badge; an unreadable record
+    // must instead reach the bridge as a failure it turns into LAST_CYCLE_UNAVAILABLE.
+    const engine = fakeEngine({
+      getLastCycle: vi.fn().mockReturnValue({ known: false }),
+    });
+
+    const result = await handleSyncControlMessage(
+      engine,
+      { kind: 'cuewise-sync-control', op: 'getLastCycle' },
+      fakeDeps()
+    );
+
+    expect(result).toEqual({ ok: false, reason: 'error', detail: 'last cycle unreadable' });
+  });
+
+  it('awaits hydration before reading, so a cold worker cannot answer "no cycle" early', async () => {
+    // The listeners are registered synchronously while start() waits on the settings migration,
+    // so without this the first read after a teardown reports no cycle for a failing device.
+    const order: string[] = [];
+    const engine = fakeEngine({
+      ensureHydrated: vi.fn(async () => {
+        order.push('hydrate');
+      }),
+      getLastCycle: vi.fn(() => {
+        order.push('read');
+        return { known: true, cycle: null };
+      }),
+    });
+
+    await handleSyncControlMessage(
+      engine,
+      { kind: 'cuewise-sync-control', op: 'getLastCycle' },
+      fakeDeps()
+    );
+
+    expect(order).toEqual(['hydrate', 'read']);
   });
 
   it('answers a null outcome when the engine has not run a cycle yet', async () => {

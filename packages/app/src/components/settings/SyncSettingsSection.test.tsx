@@ -1264,7 +1264,12 @@ describe('SyncSettingsSectionComponent', () => {
     expect(toastError).not.toHaveBeenCalled();
     // The recovery read is superseded too — only the diagnostic log survives the guard.
     expect(controller.calls.filter((c) => c.method === 'getLastCycle')).toHaveLength(1);
-    expect(errorSpy).toHaveBeenCalledWith('Cloud sync sync-now failed', expect.any(Error));
+    // The cause is in the message text, not only the Error arg: the bridge builds the worker's
+    // reason into `message`, which is non-enumerable and vanishes on a serialising surface.
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Cloud sync sync-now failed: Sync control message timed out',
+      expect.any(Error)
+    );
     errorSpy.mockRestore();
   });
 
@@ -1313,7 +1318,12 @@ describe('SyncSettingsSectionComponent', () => {
     expect(errorSpy).toHaveBeenCalledWith(
       'Cloud sync reported an unrecognised failure reason: quota'
     );
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    // Back to a status that renders a pill, or the badge is unrenderable and asserting its absence
+    // proves nothing about the supersession guard.
+    act(() => controller.setStatus('active'));
     expect(screen.queryByTestId('sync-failure-badge')).not.toBeInTheDocument();
+    expect(toastError).not.toHaveBeenCalled();
     errorSpy.mockRestore();
   });
 

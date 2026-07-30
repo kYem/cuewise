@@ -17,6 +17,16 @@ export interface SyncCycle {
 }
 
 /**
+ * The engine's answer about its last cycle. `{known:false}` is NOT `{known:true, cycle:null}`: the
+ * stored record exists but could not be read (failed read, unreadable value, unparseable shape),
+ * and only the latter means "no cycle has run". Hosts must map `{known:false}` to their own
+ * unavailable value — reporting it as "none ran" is what clears a wedged device's badge.
+ */
+export type SyncCycleRead =
+  | { readonly known: true; readonly cycle: SyncCycle | null }
+  | { readonly known: false };
+
+/**
  * What a cycle leaves for the next process. Deliberately without the `error`: it does not survive
  * a storage round trip, and syncNow logged the real object while it still had it.
  */
