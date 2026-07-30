@@ -224,6 +224,36 @@ describe('ConceptRotation', () => {
     expect(screen.getByText('Saga pattern')).toBeInTheDocument();
   });
 
+  it('returns to the quote after grading, not the next due card, once toggled onto a card', async () => {
+    const cardA = conceptCardFactory.build({
+      id: 'a',
+      term: 'Card A',
+      schedule: { dueDate: '2020-01-01', interval: 0, easeFactor: 2.5, repetitions: 0, lapses: 0 },
+    });
+    const cardB = conceptCardFactory.build({
+      id: 'b',
+      term: 'Card B',
+      schedule: { dueDate: '2020-01-02', interval: 0, easeFactor: 2.5, repetitions: 0, lapses: 0 },
+    });
+    setup({ framing: 'ambient', cadence: 'off', cards: [cardA, cardB] });
+
+    render(<ConceptRotation fallback={<div>QUOTE</div>} />);
+    expect(screen.getByText('QUOTE')).toBeInTheDocument();
+
+    act(() => {
+      fireEvent.keyDown(document.body, { key: 'c' });
+    });
+    expect(screen.getByText('Card A')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /reveal answer/i }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /good/i }));
+    });
+
+    expect(screen.getByText('QUOTE')).toBeInTheDocument();
+    expect(screen.queryByText('Card B')).not.toBeInTheDocument();
+  });
+
   it('ignores the shortcut when nothing is due', () => {
     setup({ cards: [] });
 

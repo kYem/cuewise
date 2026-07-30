@@ -156,6 +156,7 @@ export const ConceptRotation: React.FC<ConceptRotationProps> = ({ fallback, onAd
 
   const yieldToQuotes = () => {
     setDecision((prev) => (prev ? { ...prev, show: false } : prev));
+    setSlot('auto');
   };
 
   const goNext = () => setIndex((i) => i + 1);
