@@ -185,6 +185,7 @@ export class SyncEngine {
     opts: EnableSyncOptions = {}
   ): Promise<void> {
     const { recoveryCode, codeVerifier } = opts;
+    const before = this.status;
     try {
       this.setStatus('signing_in');
       // A codeVerifier marks a bounced one-time code rather than an id token; of the providers
@@ -200,7 +201,7 @@ export class SyncEngine {
       }
       await this.enrollAndActivate(recoveryCode);
     } catch (err) {
-      await this.handleEnableError(err);
+      await this.handleEnableError(err, before);
     }
   }
 
@@ -211,6 +212,7 @@ export class SyncEngine {
    * been lost (the caller must then re-authenticate).
    */
   async resumeEnrollWithCode(recoveryCode: string): Promise<void> {
+    const before = this.status;
     try {
       // Inside the try so a storage fault reading the token routes through handleEnableError
       // (status → error) like every other enroll failure, not out as a raw rejection.
@@ -221,7 +223,7 @@ export class SyncEngine {
       }
       await this.enrollAndActivate(recoveryCode);
     } catch (err) {
-      await this.handleEnableError(err);
+      await this.handleEnableError(err, before);
     }
   }
 
@@ -259,17 +261,16 @@ export class SyncEngine {
   }
 
   /** Shared enable/enroll error mapping: 401 → auth loss; recovery-code control-flow → disabled+rethrow. */
-  private async handleEnableError(err: unknown): Promise<void> {
+  private async handleEnableError(err: unknown, before: SyncStatus): Promise<void> {
     if (err instanceof ApiError && err.status === 401) {
       await this.handleAuthLoss();
       return;
     }
     if (err instanceof RecoveryCodeRequiredError || err instanceof RecoveryCodeError) {
       // Expected enroll control-flow, not a failure — don't poison the persisted status other tabs
-      // read. A device whose flag is still set was already enrolled here, so 'off' would contradict
-      // the prompt that sent the user to Reconnect in the first place.
-      const enabled = await this.deps.keyStore.get<boolean>(CLOUD_SYNC_ENABLED_KEY, 'local');
-      this.setStatus(enabled === true ? 'needs_enroll' : 'disabled');
+      // read. Restoring where the attempt began keeps a needs_enroll device on the prompt that sent
+      // it to Reconnect, while a first enable still falls back to disabled.
+      this.setStatus(before === 'needs_enroll' ? 'needs_enroll' : 'disabled');
       throw err;
     }
     this.setStatus('error');

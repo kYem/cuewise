@@ -539,8 +539,10 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
         useToastStore.getState().error("Couldn't sync right now — please try again.");
         await refreshLastCycle();
       }
+    } finally {
+      // In a finally like every sibling flag here: an unexpected throw must not strand the button.
+      setIsSyncing(false);
     }
-    setIsSyncing(false);
     // Refresh "Last synced" OUTSIDE the try — the sync-now error surface belongs to syncNow
     // alone (the catch keeps even a contract-violating host from rejecting the click handler).
     // Keep the last known details on a transient null: a stale line beats a vanishing one.

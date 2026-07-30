@@ -1424,6 +1424,48 @@ describe('SyncEngine.start / stop', () => {
     expect(scheduler.scheduled).toEqual([]);
   });
 
+  it('keeps a needs_enroll device on its prompt when the enroll asks for a code', async () => {
+    // Following the prompt must not flip the panel to off — this device is still enrolled here.
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await device.kv.remove(SYNC_DATA_KEY, 'local');
+    const restarted = new SyncEngine({
+      apiClient: device.apiClient,
+      sessionManager: new SessionManager(device.kv),
+      keyStore: device.kv,
+      scheduler: new FakeScheduler(),
+    });
+    await restarted.start();
+    expect(restarted.getStatus()).toBe('needs_enroll');
+
+    // Reconnect with no code: the envelope is still there, so the enroll asks for one.
+    await expect(restarted.enableSync('dev', 'cred-a', 'Device A')).rejects.toThrow(
+      RecoveryCodeRequiredError
+    );
+
+    expect(restarted.getStatus()).toBe('needs_enroll');
+  });
+
+  it('leaves a first enable that needs a code reading disabled, not enrolled', async () => {
+    const server = new FakeSyncServer();
+    const deviceA = createDevice(server);
+    useStorage(deviceA);
+    await deviceA.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    const deviceB = createDevice(server);
+    useStorage(deviceB);
+
+    await expect(deviceB.engine.enableSync('dev', 'cred-b', 'Device B')).rejects.toThrow(
+      RecoveryCodeRequiredError
+    );
+
+    expect(deviceB.engine.getStatus()).toBe('disabled');
+  });
+
   it('reports needs_enroll when the enabled flag outlived the data key', async () => {
     // The session may be valid and the key is what is gone, so the panel must ask for the code.
     const server = new FakeSyncServer();
