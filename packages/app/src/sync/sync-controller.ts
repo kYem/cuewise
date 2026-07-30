@@ -5,7 +5,15 @@ import { createContext, useContext } from 'react';
  * UI-owned sync status — distinct from the engine's own status; host adapters map one to the other.
  * `'syncing'` is adapter-optional: only hosts that report it emit it (macOS does; the extension bridge never does).
  */
-export type SyncUiStatus = 'off' | 'connecting' | 'active' | 'syncing' | 'error' | 'needs_reauth';
+export type SyncUiStatus =
+  | 'off'
+  | 'connecting'
+  | 'active'
+  | 'syncing'
+  | 'error'
+  | 'needs_reauth'
+  /** Enrolled, but this device's key is gone: recoverable only with the recovery code. */
+  | 'needs_enroll';
 
 export type EnableResult =
   | { ok: true; recoveryCode?: string }

@@ -1396,9 +1396,9 @@ describe('SyncEngine.start / stop', () => {
     expect(device.scheduler.scheduled).toEqual([]);
   });
 
-  it('reports signed_out when the enabled flag outlived the data key', async () => {
-    // Without a status the extension's persisted pill keeps claiming active for a device that will
-    // never sync — the reconnect affordance is the only honest surface.
+  it('reports needs_enroll when the enabled flag outlived the data key', async () => {
+    // needs_enroll rather than signed_out: the session may be valid and the KEY is what is gone,
+    // so the panel must ask for the recovery code instead of claiming the sign-in expired.
     const server = new FakeSyncServer();
     const device = createDevice(server);
     useStorage(device);
@@ -1418,10 +1418,33 @@ describe('SyncEngine.start / stop', () => {
 
     await restarted.start();
 
-    expect(restarted.getStatus()).toBe('signed_out');
+    expect(restarted.getStatus()).toBe('needs_enroll');
     expect(errorSpy).toHaveBeenCalledWith(
       "Cloud sync is enabled but this device's data key could not be read; it will not sync until it reconnects"
     );
+  });
+
+  it('stops polling a keyless device, since only a recovery code can change its state', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    await device.kv.remove(SYNC_DATA_KEY, 'local');
+    vi.spyOn(device.apiClient, 'getRecoveryEnvelope').mockResolvedValue(null);
+
+    const scheduler = new FakeScheduler();
+    const restarted = new SyncEngine({
+      apiClient: device.apiClient,
+      sessionManager: new SessionManager(device.kv),
+      keyStore: device.kv,
+      scheduler,
+    });
+    await restarted.start();
+    // A stale alarm from the enrolled era still fires against the keyless engine.
+    await restarted.handlePullWake();
+
+    expect(scheduler.scheduled).toEqual([]);
   });
 
   it('does not report a deliberate disable as a missing key, nor resurrect its pill', async () => {

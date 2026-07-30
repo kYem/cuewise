@@ -1045,6 +1045,74 @@ describe('SyncSettingsSectionComponent', () => {
     expect(controller.calls.some((c) => c.method === 'syncNow')).toBe(false);
   });
 
+  it('says it could not check the last sync when the read comes back unreadable', async () => {
+    // Previously identical to health on a fresh mount: the read correctly refused to repaint, and
+    // the panel had nothing to render for it.
+    const controller = new FakeSyncController();
+    controller.scriptLastCycleUnavailable();
+    renderSection(controller);
+
+    act(() => controller.setStatus('active'));
+
+    expect(await screen.findByTestId('sync-cycle-unknown')).toBeInTheDocument();
+    expect(screen.queryByTestId('sync-failure-badge')).not.toBeInTheDocument();
+  });
+
+  it('keeps a failure badge rather than downgrading it to the unknown line', async () => {
+    // An unreadable read says nothing about a failure already on screen. The badge is the stronger
+    // claim and must win.
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptLastCycle({
+      kind: 'failed',
+      reason: 'device',
+      error: new Error('unreadable'),
+    });
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+    await screen.findByTestId('sync-failure-badge');
+
+    // A rejected Sync now routes through refreshLastCycle, which is the path that performs a
+    // second read — and that read is the one that comes back unreadable.
+    controller.scriptLastCycleUnavailable();
+    controller.deferNextSyncNow();
+    await user.click(screen.getByRole('button', { name: 'Sync now' }));
+    await act(async () => {
+      controller.rejectSyncNow(new Error('Sync control message timed out'));
+    });
+
+    expect(screen.getByTestId('sync-failure-badge')).toBeInTheDocument();
+    expect(screen.queryByTestId('sync-cycle-unknown')).not.toBeInTheDocument();
+  });
+
+  it('asks for the recovery code, not a re-auth, when this device has no key', async () => {
+    const controller = new FakeSyncController();
+    renderSection(controller);
+
+    act(() => controller.setStatus('needs_enroll'));
+
+    expect(await screen.findByTestId('sync-reconnect-prompt')).toHaveTextContent(
+      /encryption key is missing/i
+    );
+    expect(screen.getByRole('button', { name: 'Reconnect' })).toBeInTheDocument();
+    // Both would fail without a key, so offering either offers a broken button.
+    expect(screen.queryByRole('button', { name: 'Sync now' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Regenerate recovery code' })
+    ).not.toBeInTheDocument();
+  });
+
+  it('still says the sign-in expired when that is what actually happened', async () => {
+    const controller = new FakeSyncController();
+    renderSection(controller);
+
+    act(() => controller.setStatus('needs_reauth'));
+
+    expect(await screen.findByTestId('sync-reconnect-prompt')).toHaveTextContent(
+      /sign-in expired/i
+    );
+  });
+
   it('clears the failure once a later cycle succeeds', async () => {
     const user = userEvent.setup();
     const controller = new FakeSyncController();

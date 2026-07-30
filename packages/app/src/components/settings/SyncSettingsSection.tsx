@@ -49,11 +49,21 @@ const GoogleGlyph: React.FC = () => (
   </svg>
 );
 
-// Only the "on" statuses get a pill; off/needs_reauth/error render their own dedicated UI below.
+// Only the "on" statuses get a pill; off/needs_reauth/needs_enroll/error render their own dedicated
+// UI below. needs_enroll deliberately hides the pill subgroup with them: without a data key both
+// "Sync now" and "Regenerate recovery code" would fail, so offering them offers a broken button.
 const STATUS_PILL_LABEL: Partial<Record<SyncUiStatus, string>> = {
   connecting: 'Connecting…',
   syncing: 'Syncing…',
   active: 'Active',
+};
+
+// Two states, one block: both are recovered by the same Reconnect button, but only one of them is
+// about the sign-in. Claiming an expired session for a missing key sends the user to the wrong fix.
+const RECONNECT_PROMPT: Partial<Record<SyncUiStatus, string>> = {
+  needs_reauth: 'Sign-in expired — reconnect to keep syncing.',
+  needs_enroll:
+    "This device's encryption key is missing, so nothing can sync. Reconnect with your recovery code to restore it.",
 };
 
 // Only `network` promises a full recovery, because it is the only reason where that promise is
@@ -91,16 +101,21 @@ function logUnrecognisedReason(outcome: SyncOutcome | null): void {
 }
 
 // The only place a read is adopted. An unavailable read says nothing about the cycle, so it must
-// never repaint — while `{outcome:null}` genuinely means "no cycle" and does clear the badge.
+// never repaint the outcome — while `{outcome:null}` genuinely means "no cycle" and does clear the
+// badge. It does set `unknown`, which is a separate, softer line the render only shows when there
+// is no badge to preserve.
 // Reports whether it painted, so a caller can re-arm its once-per-mount read after a transient miss.
 function adoptLastCycle(
   read: LastCycleRead,
-  paint: (outcome: SyncOutcome | null) => void
+  paint: (outcome: SyncOutcome | null) => void,
+  markUnknown: (unknown: boolean) => void
 ): boolean {
   if (!read.available) {
+    markUnknown(true);
     return false;
   }
   logUnrecognisedReason(read.outcome);
+  markUnknown(false);
   paint(read.outcome);
   return true;
 }
@@ -201,6 +216,8 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   // What the last cycle did. Read on mount (a failing background wake involves no click) and from
   // every syncNow, guarded by its own generation counter against the same stale-resolution race.
   const [lastCycle, setLastCycle] = useState<SyncOutcome | null>(null);
+  // A read that could not answer, kept apart from the outcome so it can never clear a badge.
+  const [cycleUnknown, setCycleUnknown] = useState(false);
   const lastCycleGenRef = useRef(0);
   const lastCycleRequestedRef = useRef(false);
 
@@ -261,7 +278,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
         if (lastCycleGenRef.current !== gen) {
           return;
         }
-        if (!adoptLastCycle(read, setLastCycle)) {
+        if (!adoptLastCycle(read, setLastCycle, setCycleUnknown)) {
           // An unreadable read (asleep worker, timeout) is a transient miss like the details one —
           // re-arm so the next status transition retries instead of latching the badge off.
           lastCycleRequestedRef.current = false;
@@ -325,7 +342,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     if (lastCycleGenRef.current !== gen) {
       return;
     }
-    if (!adoptLastCycle(read, setLastCycle)) {
+    if (!adoptLastCycle(read, setLastCycle, setCycleUnknown)) {
       lastCycleRequestedRef.current = false;
     }
   };
@@ -579,6 +596,10 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   const pillLabel = STATUS_PILL_LABEL[status];
   // Beside the pill, never instead of it: status stays 'active' so the recovery controls survive.
   const badgeMessage = lastCycle?.kind === 'failed' ? failureMessage(lastCycle.reason) : null;
+  // A failure outranks an unknown — a read that could not answer says nothing about a failure
+  // already on screen, and must never replace it with the softer line.
+  const showUnknownCycle = badgeMessage === null && cycleUnknown;
+  const reconnectPrompt = RECONNECT_PROMPT[status];
 
   // The enable step's sign-in-options div groups Google today; a "Sign in with Apple"
   // button drops in next to it later.
@@ -706,6 +727,11 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
                   {badgeMessage}
                 </span>
               )}
+              {showUnknownCycle && (
+                <span data-testid="sync-cycle-unknown" className="text-xs text-tertiary">
+                  Couldn't check when this device last synced.
+                </span>
+              )}
             </div>
             {details && (
               <div data-testid="sync-account-label" className="text-xs text-tertiary">
@@ -742,10 +768,12 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
         </SettingSubgroup>
       )}
 
-      {status === 'needs_reauth' && (
+      {reconnectPrompt !== undefined && (
         <SettingSubgroup>
           <div className="flex flex-col gap-2 py-2">
-            <p className="text-xs text-tertiary">Sign-in expired — reconnect to keep syncing.</p>
+            <p data-testid="sync-reconnect-prompt" className="text-xs text-tertiary">
+              {reconnectPrompt}
+            </p>
             <button
               type="button"
               onClick={handleReconnect}

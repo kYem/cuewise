@@ -79,6 +79,9 @@ export type SyncStatus =
   | 'enrolling'
   | 'initial_sync'
   | 'active'
+  // Enabled here, but the data key is gone. Distinct from `signed_out`, whose whole point is that
+  // the key survived so re-authenticating is silent: this one needs the recovery code.
+  | 'needs_enroll'
   | 'signed_out'
   | 'error';
 
@@ -686,9 +689,9 @@ export class SyncEngine {
       logger.error(
         "Cloud sync is enabled but this device's data key could not be read; it will not sync until it reconnects"
       );
-      // Like the self-heal branch above, whose case is also a key that needs re-enrolling: without
-      // a status the extension's persisted pill keeps claiming active for a device that never syncs.
-      this.setStatus('signed_out');
+      // needs_enroll, not signed_out: the session may be perfectly valid and what is missing is the
+      // key, so the UI must ask for the recovery code rather than claim the sign-in expired.
+      this.setStatus('needs_enroll');
       return;
     }
 
@@ -754,7 +757,13 @@ export class SyncEngine {
     // `disabled` for the same reason as `signed_out`: both had their wake cancelled by stop(), and
     // re-arming undoes that. Without the first, a disable landing inside start()'s own cycle
     // resurrects the loop, and a stale alarm on a disabled device re-arms itself forever.
-    if (this.status === 'signed_out' || this.status === 'disabled') {
+    // `needs_enroll` because a keyless device's every cycle is a no-op — it polls on to no effect,
+    // and only the user supplying a recovery code can change that. enableSync re-arms it.
+    if (
+      this.status === 'signed_out' ||
+      this.status === 'disabled' ||
+      this.status === 'needs_enroll'
+    ) {
       return;
     }
     await armSyncPull(this.deps.scheduler, PULL_REARM_MINUTES, this.now);
