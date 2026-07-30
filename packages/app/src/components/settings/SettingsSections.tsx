@@ -678,8 +678,8 @@ function HomeSection({ s, set, filter }: SettingsSectionProps) {
           <SettingRow
             label="How often"
             filter={filter}
-            help="How often a due card appears in the rotation"
-            keywords="cadence frequency how often tabs"
+            help="How often a due card appears in the rotation — press C any time to swap"
+            keywords="cadence frequency how often tabs shortcut key c swap"
           >
             <Segmented
               value={s.conceptCadence}
