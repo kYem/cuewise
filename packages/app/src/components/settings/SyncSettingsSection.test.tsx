@@ -1057,6 +1057,29 @@ describe('SyncSettingsSectionComponent', () => {
     expect(screen.queryByTestId('sync-failure-badge')).not.toBeInTheDocument();
   });
 
+  it('still reports a Sync now result on a host that emits status from inside the call', async () => {
+    // macOS emits 'syncing' synchronously inside syncNow. That re-runs the read effect, and gating
+    // the click on the read counter let its own emission swallow the outcome and every toast.
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.emitsSyncingDuringSyncNow = true;
+    // An unavailable read re-arms the effect, which is what lets the emission bump the counter.
+    controller.scriptLastCycleUnavailable();
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+    await screen.findByTestId('sync-cycle-unknown');
+
+    // Deferred so the emission's effect flushes while the cycle is still in flight, as a real
+    // network cycle does — resolving inside one act would hide the race.
+    controller.deferNextSyncNow();
+    await user.click(screen.getByRole('button', { name: 'Sync now' }));
+    await act(async () => {
+      controller.resolveSyncNow({ kind: 'synced' });
+    });
+
+    expect(toastSuccess).toHaveBeenCalledWith('Synced');
+  });
+
   it('drops the unknown line once a read can answer again', async () => {
     // Otherwise the line latches and a recovered device keeps saying it could not be checked.
     const user = userEvent.setup();
@@ -1134,7 +1157,7 @@ describe('SyncSettingsSectionComponent', () => {
     act(() => controller.setStatus('needs_enroll'));
 
     expect(await screen.findByTestId('sync-reconnect-prompt')).toHaveTextContent(
-      /encryption key is missing/i
+      /can't read its encryption key/i
     );
     expect(screen.getByRole('button', { name: 'Reconnect' })).toBeInTheDocument();
     // Both would fail without a key, so offering either offers a broken button.

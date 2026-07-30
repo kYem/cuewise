@@ -128,6 +128,11 @@ async function initNewKey(
   deps: KeyLifecycleDeps,
   recoveryCode: string | undefined
 ): Promise<{ dk: DataKey; keyId: string; recoveryCodeToShow?: string }> {
+  if (recoveryCode !== undefined) {
+    // The account has no envelope, so there is nothing this code can unwrap: this mints a NEW key
+    // and leaves any other device on the old one. Audible because the caller looks successful.
+    logger.error('Cloud sync ignored a recovery code: this account has no envelope to restore');
+  }
   const dk = generateDataKey();
   const { code, secret } = await generateRecoveryCode();
   const mk = await deriveMasterKey(secret);

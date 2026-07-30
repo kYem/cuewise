@@ -1396,6 +1396,31 @@ describe('SyncEngine.start / stop', () => {
     expect(device.scheduler.scheduled).toEqual([]);
   });
 
+  it('reports needs_enroll for the ordinary lost-key case, where the envelope still exists', async () => {
+    // Every account that enabled sync has an envelope, so self-heal throws NeedsEnroll here rather
+    // than falling through — the common path, and it used to claim the sign-in had expired.
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await device.kv.remove(SYNC_DATA_KEY, 'local');
+    const restarted = new SyncEngine({
+      apiClient: device.apiClient,
+      sessionManager: new SessionManager(device.kv),
+      keyStore: device.kv,
+      scheduler: new FakeScheduler(),
+    });
+
+    await restarted.start();
+
+    expect(restarted.getStatus()).toBe('needs_enroll');
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Cloud sync needs the recovery code: this device has no data key'
+    );
+  });
+
   it('reports needs_enroll when the enabled flag outlived the data key', async () => {
     // The session may be valid and the key is what is gone, so the panel must ask for the code.
     const server = new FakeSyncServer();

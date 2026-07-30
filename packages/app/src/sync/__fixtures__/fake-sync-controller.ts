@@ -164,6 +164,9 @@ export class FakeSyncController implements SyncController {
     };
   }
 
+  /** Models the macOS adapter, which emits status from inside syncNow rather than around it. */
+  emitsSyncingDuringSyncNow = false;
+
   /** Test helper: sets status and notifies subscribers (not part of SyncController). */
   setStatus(status: SyncUiStatus): void {
     this.status = status;
@@ -270,6 +273,11 @@ export class FakeSyncController implements SyncController {
 
   async syncNow(): Promise<SyncOutcome> {
     this.calls.push({ method: 'syncNow', args: [] });
+    // macOS emits 'syncing' synchronously here and reconciles in a finally; the extension bridge
+    // never does. Off by default so existing tests keep modelling the bridge.
+    if (this.emitsSyncingDuringSyncNow) {
+      this.setStatus('syncing');
+    }
     this.maybeFail('syncNow');
     if (this.deferredSyncNow) {
       this.deferredSyncNow = false;
@@ -280,6 +288,9 @@ export class FakeSyncController implements SyncController {
     const next = this.syncNowResults.shift();
     const outcome = next !== undefined ? next : DEFAULT_SYNC_OUTCOME;
     this.lastCycleRead = { available: true, outcome };
+    if (this.emitsSyncingDuringSyncNow) {
+      this.setStatus('active');
+    }
     return outcome;
   }
 

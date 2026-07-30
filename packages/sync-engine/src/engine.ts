@@ -662,10 +662,17 @@ export class SyncEngine {
       if (this.startSuperseded(epoch)) {
         return;
       }
-      if (err instanceof SelfHealNeedsEnrollError || err instanceof SelfHealUnrecoverableError) {
-        logger.warn('Sync self-heal requires the recovery code; staying signed out', {
-          reason: err.name,
-        });
+      if (err instanceof SelfHealNeedsEnrollError) {
+        // The ordinary lost-key case, not a rare one: every account that enabled sync has an
+        // envelope, so self-heal throws here rather than falling through to the branch below.
+        logger.error('Cloud sync needs the recovery code: this device has no data key');
+        this.setStatus('needs_enroll');
+        return;
+      }
+      if (err instanceof SelfHealUnrecoverableError) {
+        // A third condition: the key is HERE, the server envelope is gone. Nothing to re-enroll,
+        // so it keeps signed_out rather than asking for a code it cannot use.
+        logger.warn('Sync self-heal found no server envelope; staying signed out');
         this.setStatus('signed_out');
         return;
       }

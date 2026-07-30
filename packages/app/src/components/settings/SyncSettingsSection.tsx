@@ -70,8 +70,9 @@ const RECONNECT_PROMPT: Record<SyncUiStatus, string | null> = {
   active: null,
   error: null,
   needs_reauth: 'Sign-in expired — reconnect to keep syncing.',
+  // "can't read" rather than "is missing": a transient read failure reaches this status too.
   needs_enroll:
-    "This device's encryption key is missing, so nothing can sync. Reconnect with your recovery code to restore it.",
+    "This device can't read its encryption key, so nothing can sync. Reconnect with your recovery code to restore it.",
 };
 
 // Only `network` promises a full recovery, because it is the only reason where that promise is
@@ -224,6 +225,9 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   const [lastCycle, setLastCycle] = useState<SyncOutcome | null>(null);
   // A read that could not answer, kept apart from the outcome so it can never clear a badge.
   const [cycleUnknown, setCycleUnknown] = useState(false);
+  // Which account the panel shows; only a disable moves it. Separate from the read counter below,
+  // which any status transition can bump — that must not decide whether a click may speak.
+  const accountGenRef = useRef(0);
   const lastCycleGenRef = useRef(0);
   const lastCycleRequestedRef = useRef(false);
 
@@ -291,12 +295,11 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
         }
       },
       (error) => {
-        // Contracted never to reject; a host that breaks that leaves the badge off, not unhandled.
-        logger.error(
-          `Cloud sync last cycle unavailable: ${error instanceof Error ? error.message : String(error)}`,
-          error
-        );
+        // Contracted never to reject; a host that breaks that gets the same answer as an
+        // unreadable read rather than a quieter one, so both paths say "couldn't check".
+        logger.error(`Cloud sync last cycle unavailable: ${describeThrown(error)}`, error);
         if (lastCycleGenRef.current === gen) {
+          adoptLastCycle(LAST_CYCLE_UNAVAILABLE, setLastCycle, setCycleUnknown);
           lastCycleRequestedRef.current = false;
         }
       }
@@ -493,16 +496,19 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   // `outcome.error` is deliberately not read: chrome.runtime JSON-serialises the outcome, so the
   // page realm gets `error: {}`. Only `reason` survives; the engine logged the real object already.
   const handleSyncNow = async () => {
+    // Bumped so an in-flight read cannot paint over this click's outcome. The click's own right to
+    // speak is the account generation, which a mid-click status emission does not move — macOS emits
+    // 'syncing' from inside syncNow, and gating on the read counter swallowed the whole result.
     lastCycleGenRef.current += 1;
-    const cycleGen = lastCycleGenRef.current;
+    const accountGen = accountGenRef.current;
     try {
       const outcome = await controller.syncNow();
       // Above the guard: a build/skew defect is not this account's outcome, so a superseded click
       // must not drop the only evidence of it.
       logUnrecognisedReason(outcome);
-      // A stale generation means a disable (or a newer click) superseded this one: the cycle
-      // belongs to an account the panel no longer shows, so neither badge nor toast may speak for it.
-      if (lastCycleGenRef.current === cycleGen) {
+      // Only a disable retires this click: the cycle then belongs to an account the panel no longer
+      // shows, so neither badge nor toast may speak for it.
+      if (accountGenRef.current === accountGen) {
         setLastCycle(outcome);
         // This click is an answer, so it retires an earlier "couldn't check" — and it paints
         // directly rather than through adoptLastCycle, so it does not get that clear for free.
@@ -519,9 +525,9 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       // The bridge builds `Sync now failed: <reason> — <detail>` into the message so the worker's
       // cause reaches here; message is non-enumerable, so it must be re-stated as text.
       logger.error(`Cloud sync sync-now failed: ${describeThrown(error)}`, error);
-      // Same guard as the try: a superseded click may neither toast (its action is gone from the
-      // panel) nor repaint — and the bump above discarded the in-flight read this recovers.
-      if (lastCycleGenRef.current === cycleGen) {
+      // Same guard as the try: a disabled account's click may neither toast nor repaint — and the
+      // bump above discarded the in-flight read this recovers.
+      if (accountGenRef.current === accountGen) {
         useToastStore.getState().error("Couldn't sync right now — please try again.");
         await refreshLastCycle();
       }
@@ -579,12 +585,12 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       setDetails(null);
       detailsRequestedRef.current = false;
       detailsGenRef.current += 1;
-      // Same reasoning for the cycle: a re-enable must never wear the previous account's failure.
+      // Same reasoning for the cycle: a re-enable must never wear the previous account's failure,
+      // nor its "couldn't check" — this is what retires a click the disable superseded.
       setLastCycle(null);
-      // Belt-and-braces, and untestable today: every path that sets the flag also re-arms the
-      // read, so one always follows and would overwrite this anyway.
       setCycleUnknown(false);
       lastCycleGenRef.current += 1;
+      accountGenRef.current += 1;
     } catch (error) {
       logger.error('Cloud sync disable failed', error);
       useToastStore.getState().error("Couldn't disable sync — please try again.");
