@@ -468,6 +468,15 @@ describe('the raw view sync reads through', () => {
     await expect(getGoalsRaw()).resolves.toEqual([good, unreadable]);
   });
 
+  // Shape only. A null row carries no id, so nothing can key it, and every caller spreads the
+  // list and reads `.id` off each entry — the whole list would throw for one unusable row.
+  it('drops a row with no usable shape and keeps the rest readable', async () => {
+    const good = { id: 'g1', text: 'fine', completed: false, createdAt: 'x', date: '2026-07-26' };
+    configurePlatform({ storage: storeHolding({ goals: [good, null, 'nope'] }) });
+
+    await expect(getGoalsRaw()).resolves.toEqual([good]);
+  });
+
   // Empty is what the cycle reads as "every id was deleted". A stalled collection is
   // recoverable; a tombstone pushed to every device is not.
   it('refuses a stored list that is not an array rather than reading it as empty', async () => {
@@ -877,6 +886,30 @@ describe('setQuotes across the seed/custom split', () => {
     await setQuotes([readable]);
 
     expect(at('seedQuotes')).toEqual([unrelated]);
+  });
+});
+
+// Failing to delete the legacy key is not fatal, so the app keeps running with it in place — and
+// the next read would migrate the same quotes over whatever the user did in between.
+describe('the legacy quote migration when the legacy key cannot be deleted', () => {
+  const seedShape = {
+    text: 't',
+    author: 'A',
+    category: 'learning' as const,
+    isCustom: false,
+    isFavorite: false,
+    isHidden: false,
+    viewCount: 0,
+  };
+
+  it('empties the key instead, so a retry cannot resurrect a deleted quote', async () => {
+    const legacy = { ...seedShape, id: 'q1' };
+    const { at, store } = capturingStore({ quotes: [legacy], seedQuotes: [] });
+    configurePlatform({ storage: { ...store, remove: async () => false } });
+
+    await getQuotes();
+
+    expect(at('quotes')).toEqual([]);
   });
 });
 

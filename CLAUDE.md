@@ -227,6 +227,9 @@ Never restate what the code says, narrate history ("used to be X"), or explain a
 code — that belongs in the commit message. Needing a long comment means the code should change
 instead. This applies to tests too: the test name carries the intent.
 
+**Never write comments inside JSX** (`{/* ... */}`). Put the note on the constant, prop, or helper
+the markup reads from, or extract a named value so the markup explains itself.
+
 ### Type Checking
 
 ```bash

@@ -36,7 +36,7 @@ describe('imported items always satisfy the read schemas', () => {
     const result = importOf({ quotes: [{ id: 'q1', text: 't', category: 'philosophy' }] });
 
     expect(result.warnings).toContainEqual(
-      expect.stringContaining('unrecognised category and was filed under inspiration')
+      '1 quote had an unrecognised category and was filed under inspiration'
     );
   });
 
@@ -46,8 +46,25 @@ describe('imported items always satisfy the read schemas', () => {
     });
 
     expect(result.warnings).toContainEqual(
-      expect.stringContaining('unrecognised type and was filed as work')
+      '1 session had an unrecognised type and was recorded as work'
     );
+  });
+
+  // One line per kind, not per item: a file with hundreds of odd rows would otherwise push the
+  // Import button off the page.
+  it('reports one aggregate line however many quotes it re-files', () => {
+    const result = importOf({
+      quotes: [
+        { id: 'q1', text: 't', category: 'philosophy' },
+        { id: 'q2', text: 't', category: 'astrology' },
+        { id: 'q3', text: 't', category: 'alchemy' },
+      ],
+    });
+
+    expect(result.warnings).toContainEqual(
+      '3 quotes had unrecognised categories and were filed under inspiration'
+    );
+    expect(result.warnings.filter((w) => w.includes('unrecognised categor'))).toHaveLength(1);
   });
 
   it('does not warn about a category it recognises', () => {

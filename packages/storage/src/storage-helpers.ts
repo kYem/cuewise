@@ -215,8 +215,15 @@ async function migrateLegacyQuotes(): Promise<void> {
   const removedLocal = await removeFromStorage(STORAGE_KEYS.QUOTES, 'local');
   const removedSync = await removeFromStorage(STORAGE_KEYS.QUOTES, 'sync');
   if (!removedLocal || !removedSync) {
-    // Not fatal: the copies landed, and the next read migrates the same quotes again.
-    logger.error('Migrated the legacy quotes but could not delete the legacy key');
+    // Emptied, not left in place: the copies landed, so a surviving legacy key makes the next read
+    // re-add a quote deleted since — or duplicate into the sibling key one favouriting had moved.
+    logger.error('Migrated the legacy quotes but could not delete the legacy key; emptying it');
+    if (!removedLocal) {
+      await setInStorage(STORAGE_KEYS.QUOTES, [], 'local');
+    }
+    if (!removedSync) {
+      await setInStorage(STORAGE_KEYS.QUOTES, [], 'sync');
+    }
   }
 
   logger.info(
@@ -916,7 +923,19 @@ async function getListRaw<T>(key: string, area: StorageArea): Promise<T[]> {
     logger.error('Refusing to read a stored list this build cannot use', { key, area });
     throw new Error(`The stored ${key} list is unreadable`);
   }
-  return entry.value as T[];
+  // Shape, not content: a null or primitive row carries no id, so nothing can key it and every
+  // caller that spreads the list and reads `.id` throws on it. Rows that survive are untouched.
+  const rows = entry.value as unknown[];
+  const usable = rows.filter((row) => row !== null && typeof row === 'object');
+  if (usable.length !== rows.length) {
+    logger.error('Dropped rows with no usable shape from a raw list read', {
+      key,
+      area,
+      dropped: rows.length - usable.length,
+      of: rows.length,
+    });
+  }
+  return usable as T[];
 }
 
 export async function getGoalsRaw(): Promise<Goal[]> {
