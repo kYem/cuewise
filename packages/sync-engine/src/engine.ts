@@ -317,7 +317,7 @@ export class SyncEngine {
     }
   }
 
-  // A throwing adapter counts as a failed removal rather than escaping the rollback.
+  // No shipped adapter throws here — both catch and return false — so this is for the next one.
   private async bestEffortRemove(key: string): Promise<boolean> {
     try {
       return await this.deps.keyStore.remove(key, 'local');
@@ -333,6 +333,8 @@ export class SyncEngine {
    * account it made, which is why that is reported rather than swallowed.
    */
   private async abandonEnroll(mintedCode: string | undefined): Promise<void> {
+    // Redundant today — disableSync nulls these itself, and it always ran to move the epoch — but
+    // held here so the method is a complete rollback rather than one that relies on its caller.
     this.dk = null;
     this.keyId = null;
     await this.rollbackKey(SYNC_DATA_KEY, 'its data key');

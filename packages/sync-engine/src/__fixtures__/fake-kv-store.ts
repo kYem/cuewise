@@ -100,10 +100,13 @@ export class FakeKvStore implements KeyValueStore {
     return { success: true };
   }
 
-  async removeMany(keys: string[], _area: StorageArea): Promise<boolean> {
+  async removeMany(keys: string[], area: StorageArea): Promise<boolean> {
+    // Through remove(), so the failure hooks reach here too — setMany routes through set() for
+    // the same reason, and a bypass here is a trap for the next test that reaches for it.
+    let removed = true;
     for (const key of keys) {
-      this.data.delete(key);
+      removed = (await this.remove(key, area)) && removed;
     }
-    return true;
+    return removed;
   }
 }

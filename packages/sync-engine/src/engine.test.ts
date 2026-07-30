@@ -372,6 +372,49 @@ describe('SyncEngine.enableSync', () => {
     errorSpy.mockRestore();
   });
 
+  it('does not report the disconnect-provoked 401 as a fault, which is the ordinary case', async () => {
+    // disableSync clears the session, so an enrol caught mid-flight usually 401s. Logging that at
+    // error puts an ordinary user action in the extension's Errors panel as a defect.
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    vi.spyOn(device.apiClient, 'getRecoveryEnvelope').mockImplementation(async () => {
+      await device.engine.disableSync();
+      throw new ApiError('invalid_token', 401);
+    });
+
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    expect(errorSpy).not.toHaveBeenCalledWith(
+      expect.stringContaining('Cloud sync enable failed as it was abandoned'),
+      expect.anything()
+    );
+    expect(device.engine.getStatus()).toBe('disabled');
+    errorSpy.mockRestore();
+  });
+
+  it('names a session clear its adapter threw on, rather than letting it escape', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    device.kv.throwRemovesForKey = SYNC_SESSION_KEY;
+    vi.spyOn(device.apiClient, 'getChanges').mockImplementation(async () => {
+      await device.engine.disableSync();
+      return { records: [], cursor: 0 };
+    });
+
+    await expect(device.engine.enableSync('dev', 'cred-a', 'Device A')).resolves.toBeUndefined();
+
+    expect(device.engine.getStatus()).toBe('disabled');
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Cloud sync rollback threw clearing the session'),
+      expect.anything()
+    );
+    errorSpy.mockRestore();
+  });
+
   it('names the key an abandoned enrol could not roll back, rather than reporting success', async () => {
     // `remove` reports failure by returning false, never by throwing, so a bestEffort wrapper
     // alone would call a failed rollback a success.
@@ -415,6 +458,9 @@ describe('SyncEngine.enableSync', () => {
     expect(await device.kv.get(LAST_SYNCED_AT_KEY, 'local')).toBeNull();
     expect(await device.kv.get(LAST_CYCLE_KEY, 'local')).toBeNull();
     expect(device.engine.getLastSyncedAt()).toBeNull();
+    // In memory too: left set, getLastCycle answers with the removed account's cycle and
+    // lastCycleKnown stays true, so no later read ever corrects it.
+    expect(device.engine.getLastCycle()).toEqual({ known: true, cycle: null });
   });
 
   it('answers an enable that threw after a disconnect as cancelled, not as a failure', async () => {
