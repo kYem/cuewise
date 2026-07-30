@@ -10,6 +10,7 @@ import { cn } from '@cuewise/ui';
 import { BookOpen, Brain, CornerRightDown } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useState } from 'react';
+import { isShortcutKeyEvent } from '../utils/keyboard-shortcut';
 import { ConceptToolbar } from './ConceptToolbar';
 
 // Per-grade accent (theme tokens: error / success / brand violet) — a soft
@@ -52,23 +53,13 @@ export const ConceptCardDisplay: React.FC<ConceptCardDisplayProps> = ({
 
   const topic = card.tags?.[0];
 
-  // Anki-style 1/2/3 grading, live only once the answer is revealed. Ignores
-  // modifier combos and keystrokes aimed at a text field.
+  // Anki-style 1/2/3 grading, live only once the answer is revealed.
   useEffect(() => {
     if (!revealed) {
       return;
     }
     const handleKey = (e: KeyboardEvent) => {
-      if (e.metaKey || e.ctrlKey || e.altKey) {
-        return;
-      }
-      const target = e.target as HTMLElement | null;
-      if (
-        target?.tagName === 'INPUT' ||
-        target?.tagName === 'TEXTAREA' ||
-        target?.tagName === 'SELECT' ||
-        target?.isContentEditable
-      ) {
+      if (!isShortcutKeyEvent(e)) {
         return;
       }
       const index = ['1', '2', '3'].indexOf(e.key);
