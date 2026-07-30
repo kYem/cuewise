@@ -230,6 +230,9 @@ export class SyncEngine {
 
   /** The enroll → initial-sync → activate tail shared by enableSync and resumeEnrollWithCode. */
   private async enrollAndActivate(recoveryCode: string | undefined): Promise<void> {
+    // Snapshotted before the first await, like start(): every step below writes something a
+    // disable is trying to remove, and syncNow's own epoch only covers the cycle's window.
+    const epoch = this.accountEpoch;
     // A code is only passed when enrolling an additional device; brand-new enable passes none.
     this.setStatus(recoveryCode ? 'enrolling' : 'key_init');
     const wasEnabled = await this.deps.keyStore.get<boolean>(CLOUD_SYNC_ENABLED_KEY, 'local');
@@ -246,18 +249,14 @@ export class SyncEngine {
     }
 
     this.setStatus('initial_sync');
-    if (wasEnabled !== true) {
-      // Enabling a device that was off: disable's metadata reset is best-effort, so a cursor can
-      // outlive the account it belonged to, and a surviving high-water mark makes this first pull
-      // skip every record below it without a word. A re-auth (wasEnabled) keeps its own cursor.
-      await this.resetPullCursor();
-    }
+    // Unconditionally: the flag is only written once an enable finishes, so its absence does not
+    // mean the cursor belongs to another account — and its presence does not mean it belongs to
+    // this one, since a re-auth can land on a different account at the provider's chooser.
+    await this.resetPullCursor();
     await this.backfillDirty();
     const outcome = await this.syncNow();
-    if (outcome.kind === 'signed-out' || outcome.kind === 'cancelled') {
-      // signed-out: the session was dropped mid-cycle (handleAuthLoss kept the DK).
-      // cancelled: a disable landed mid-enable, and the flag below would re-arm sync — on the next
-      // start(), for good — for the account that disable just removed.
+    // signed-out: the session was dropped mid-cycle (handleAuthLoss kept the DK).
+    if (outcome.kind === 'signed-out' || this.enrollSuperseded(epoch)) {
       return;
     }
 
@@ -289,7 +288,10 @@ export class SyncEngine {
     throw err;
   }
 
-  /** Clears session + DK + the enabled flag + sync bookkeeping. Local domain data is untouched. */
+  /**
+   * Clears session + DK + the enabled flag + sync bookkeeping, and cancels a cycle in flight.
+   * Local domain data is untouched.
+   */
   async disableSync(): Promise<void> {
     // First, and synchronously: everything else here awaits, and a concurrent start() or cycle can
     // only be superseded by an epoch that has already moved when their own reads resolve.
@@ -341,18 +343,14 @@ export class SyncEngine {
 
   /**
    * pullOnce then pushOnce, reporting what the cycle actually did — or `cancelled` if a disable
-   * landed inside it, which is not an outcome and is never recorded. Never throws: callers read
-   * the result. A no-op until a DK is held (never enabled, or self-heal hasn't run).
+   * landed inside it. Never throws: callers read the result. A no-op until a DK is held.
    */
   async syncNow(): Promise<SyncNowResult> {
     const epoch = this.accountEpoch;
     const outcome = await this.runCycle(epoch);
-    // The cycle is a network round trip, so a disable landing inside it still produces a result —
-    // either one the cycle abandoned partway, or a whole one for an account that no longer exists.
-    // Both answer `cancelled`, because none of the bookkeeping below may speak for that account:
-    // the stamp and the record would re-create the very keys disableSync removed, and
-    // handleAuthLoss would repaint the pill as "Sign-in expired" for a device the user
-    // deliberately disconnected.
+    // Both an abandoned cycle and a whole one for a removed account answer `cancelled`: the stamp
+    // and the record below would re-create the very keys disableSync removed, and handleAuthLoss
+    // would repaint the pill as "Sign-in expired" for a device the user deliberately disconnected.
     if (outcome.kind === 'cancelled' || this.accountEpoch !== epoch) {
       logger.debug(
         `Sync cycle result dropped: the account was disabled mid-cycle (${outcome.kind})`
@@ -421,7 +419,7 @@ export class SyncEngine {
     // Boxed, not bare: a thrown `undefined` is still a push failure worth reporting.
     let outrankedPush: { error: unknown } | undefined;
     try {
-      if ((await pushOnce(cycleDeps)) === 'cancelled') {
+      if ((await pushOnce(cycleDeps)).kind === 'cancelled') {
         return { kind: 'cancelled' };
       }
     } catch (err) {
@@ -751,6 +749,16 @@ export class SyncEngine {
    * check it: otherwise start() reports the user's own action as a defect, or re-activates the pill
    * and the pull wake for an account they just removed.
    */
+  // Every write past this point — the enabled flag above all — would re-create what the disable
+  // that moved the epoch has just removed.
+  private enrollSuperseded(epoch: number): boolean {
+    if (this.accountEpoch === epoch) {
+      return false;
+    }
+    logger.debug('Sync enable abandoned: the account was disabled while it was enrolling');
+    return true;
+  }
+
   private startSuperseded(epoch: number): boolean {
     if (this.accountEpoch === epoch) {
       return false;
@@ -839,9 +847,6 @@ export class SyncEngine {
     if (meta.cursor === 0) {
       return;
     }
-    // Error, not warn, like every other report here: the app embedding this ships logLevel
-    // 'error', so a warn would be unreachable by anyone able to act on it.
-    logger.error('Cloud sync discarded a pull cursor that outlived its account');
     meta.cursor = 0;
     await this.meta.save(meta);
   }

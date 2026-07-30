@@ -1,4 +1,4 @@
-import { buildSyncDetails } from '@cuewise/app';
+import { AUTH_CANCELLED_DETAIL, buildSyncDetails } from '@cuewise/app';
 import { describeThrown, logger } from '@cuewise/shared';
 import { ApiError } from '@cuewise/sync-client';
 import {
@@ -52,6 +52,11 @@ async function doEnable(
   }
   if (engine.getStatus() === 'signed_out') {
     return { ok: false, reason: 'auth' };
+  }
+  if (engine.getStatus() === 'disabled') {
+    // enableSync returned without activating, so a disable landed inside it: ok here would
+    // persist creds, hand Chrome sync off, and show a code for a key that no longer exists.
+    return { ok: false, reason: 'error', detail: AUTH_CANCELLED_DETAIL };
   }
   return { ok: true, recoveryCode: deps.takeRecoveryCode() };
 }

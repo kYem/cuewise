@@ -210,6 +210,11 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
       logger.warn(`Cloud sync sign-in rejected (401) ${trace}`);
       return { ok: false, reason: 'auth' };
     }
+    if (engine.getStatus() === 'disabled') {
+      // enableSync returned without activating, so a disable landed inside it: ok here would
+      // persist creds, hand Chrome sync off, and show a code for a key that no longer exists.
+      return { ok: false, reason: 'error', detail: AUTH_CANCELLED_DETAIL };
+    }
     await persistCreds(creds);
     const capturedCode = capturedRecoveryCode;
     capturedRecoveryCode = undefined;

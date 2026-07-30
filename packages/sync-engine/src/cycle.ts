@@ -29,27 +29,32 @@ export interface CycleDeps {
   now?: () => number;
   onQuarantine?: (key: string) => void;
   /**
-   * Checked between pages, between records and between push batches. The engine answers "the
-   * account this cycle belongs to is gone", so a disable landing mid-cycle stops the removed
-   * account's records from being written locally.
+   * True once the account this cycle belongs to is gone; the cycle then stops without writing or
+   * saving anything further. Required, so no caller can silently opt back into an uncancellable one.
    */
-  isCancelled?: () => boolean;
+  isCancelled: () => boolean;
 }
 
-function cancelled(deps: CycleDeps): boolean {
-  return deps.isCancelled?.() === true;
+/** Saves unless the account is gone, since anything written now outlives the account it describes. */
+async function saveUnlessCancelled(deps: CycleDeps, meta: SyncMeta): Promise<boolean> {
+  if (deps.isCancelled()) {
+    return false;
+  }
+  await deps.meta.save(meta);
+  return true;
 }
 
 /**
- * Persists what the pull applied and reports `result` — or saves nothing and reports `cancelled`:
- * a cursor that outlives its account makes a later enable's first pull skip every record below it.
+ * Records that the cycle stopped for a removed account. Records already applied stay on this device
+ * with no hlc left to explain them, so this count is the only trace of where they came from.
  */
-async function saveThen(deps: CycleDeps, meta: SyncMeta, result: PullResult): Promise<PullResult> {
-  if (cancelled(deps)) {
-    return { kind: 'cancelled' };
+function cancelledPull(applied: number): PullResult {
+  if (applied > 0) {
+    logger.error(
+      `Cloud sync stopped a pull for a disconnected account; ${applied} of its records had already been applied and remain on this device`
+    );
   }
-  await deps.meta.save(meta);
-  return result;
+  return { kind: 'cancelled' };
 }
 
 const MAX_PUSH_BATCH = 100;
@@ -63,27 +68,32 @@ interface DirtyRecord {
   record: PushRecord;
 }
 
-/** Whether a push ran to the end. `cancelled` stopped between batches; earlier batches still acked. */
-export type PushResult = 'complete' | 'cancelled';
+/** Whether a push ran to the end. Batches before a `cancelled` still reached the server. */
+export type PushResult = { kind: 'complete' } | { kind: 'cancelled' };
 
 /** Seals every dirty entity and pushes it in batches, clearing dirty/tombstones as each batch acks. */
 export async function pushOnce(deps: CycleDeps): Promise<PushResult> {
   const meta = await deps.meta.load();
   const dirtyRecords = await buildDirtyRecords(deps, meta);
   if (dirtyRecords.length === 0) {
-    return 'complete';
+    return { kind: 'complete' };
   }
 
   for (let start = 0; start < dirtyRecords.length; start += MAX_PUSH_BATCH) {
-    if (cancelled(deps)) {
-      return 'cancelled';
+    if (deps.isCancelled()) {
+      return { kind: 'cancelled' };
     }
     const batch = dirtyRecords.slice(start, start + MAX_PUSH_BATCH);
     await deps.transport.pushChanges(batch.map((item) => item.record));
     clearAcked(meta, batch);
-    await deps.meta.save(meta);
+    // Checked again after the round trip, not just before it: `save` rewrites the whole ledger
+    // from a snapshot loaded before the disable, so it would restore the cursor and hlcs that
+    // disableSync just cleared. Losing this ack costs one re-push the next enable makes anyway.
+    if (!(await saveUnlessCancelled(deps, meta))) {
+      return { kind: 'cancelled' };
+    }
   }
-  return 'complete';
+  return { kind: 'complete' };
 }
 
 async function buildDirtyRecords(deps: CycleDeps, meta: SyncMeta): Promise<DirtyRecord[]> {
@@ -145,7 +155,6 @@ function clearAcked(meta: SyncMeta, batch: DirtyRecord[]): void {
 export type PullResult =
   | { kind: 'complete' }
   | { kind: 'resynced' }
-  /** Stopped at a cancellation check, saving nothing — the stored cursor stays where it started. */
   | { kind: 'cancelled' }
   | { kind: 'stalled'; collection: string; entityId: string };
 
@@ -154,11 +163,12 @@ export async function pullOnce(deps: CycleDeps): Promise<PullResult> {
   const meta = await deps.meta.load();
   // Once per collection per pull — a page of unknown records is one line, not N.
   const warnedUnknownCollections = new Set<string>();
+  let appliedCount = 0;
 
   let pageSize = PULL_PAGE;
   while (pageSize === PULL_PAGE) {
-    if (cancelled(deps)) {
-      return { kind: 'cancelled' };
+    if (deps.isCancelled()) {
+      return cancelledPull(appliedCount);
     }
     let result: { records: SyncRecord[]; cursor: number };
     try {
@@ -166,40 +176,49 @@ export async function pullOnce(deps: CycleDeps): Promise<PullResult> {
     } catch (err) {
       if (err instanceof ApiError && err.status === 409 && err.code === 'resync_required') {
         meta.cursor = 0;
-        return await saveThen(deps, meta, { kind: 'resynced' });
+        if (!(await saveUnlessCancelled(deps, meta))) {
+          return cancelledPull(appliedCount);
+        }
+        return { kind: 'resynced' };
       }
       throw err;
     }
     pageSize = result.records.length;
 
     for (const rec of result.records) {
-      if (cancelled(deps)) {
-        // Deliberately without saving: records earlier in this page are already in storage, but
-        // leaving the stored cursor behind them is what lets a later enable replay from before them.
-        return { kind: 'cancelled' };
+      if (deps.isCancelled()) {
+        return cancelledPull(appliedCount);
       }
       const applied = await applyPulledRecord(deps, meta, rec, warnedUnknownCollections);
-      if (!applied) {
+      if (applied === 'failed') {
         // Apply-before-advance: the write failed, so stop here and leave the cursor before it.
-        return await saveThen(deps, meta, {
-          kind: 'stalled',
-          collection: rec.collection,
-          entityId: rec.entityId,
-        });
+        if (!(await saveUnlessCancelled(deps, meta))) {
+          return cancelledPull(appliedCount);
+        }
+        return { kind: 'stalled', collection: rec.collection, entityId: rec.entityId };
+      }
+      if (applied === 'wrote') {
+        appliedCount += 1;
       }
     }
   }
 
-  return await saveThen(deps, meta, { kind: 'complete' });
+  if (!(await saveUnlessCancelled(deps, meta))) {
+    return cancelledPull(appliedCount);
+  }
+  return { kind: 'complete' };
 }
 
-/** Applies one pulled record to meta/storage. Returns false to signal "stop the cycle here". */
+/** What one pulled record did. `failed` is the write refusing, and stops the cycle where it stands. */
+type ApplyResult = 'wrote' | 'skipped' | 'failed';
+
+/** Applies one pulled record to meta/storage. */
 async function applyPulledRecord(
   deps: CycleDeps,
   meta: SyncMeta,
   rec: SyncRecord,
   warnedUnknownCollections: Set<string>
-): Promise<boolean> {
+): Promise<ApplyResult> {
   const key = SyncMetadataStore.entityKey(rec.collection, rec.entityId);
 
   let incoming: RecordBody;
@@ -220,7 +239,7 @@ async function applyPulledRecord(
       });
     }
     advanceCursor(meta, rec.seq);
-    return true;
+    return 'skipped';
   }
 
   // Decrypt succeeded: a previously-quarantined key has recovered (spec §5.3 self-heal).
@@ -237,7 +256,7 @@ async function applyPulledRecord(
       });
     }
     advanceCursor(meta, rec.seq);
-    return true;
+    return 'skipped';
   }
 
   const all = await binding.readAll();
@@ -260,7 +279,7 @@ async function applyPulledRecord(
         seq: rec.seq,
         error: res.error,
       });
-      return false;
+      return 'failed';
     }
     meta.hlcs[key] = resolution.body.hlc;
     meta.clock = hlcEncode(
@@ -276,7 +295,7 @@ async function applyPulledRecord(
   }
 
   advanceCursor(meta, rec.seq);
-  return true;
+  return resolution.winner === 'incoming' ? 'wrote' : 'skipped';
 }
 
 // The server-issued cursor only moves forward — a backward value is dropped, not applied.

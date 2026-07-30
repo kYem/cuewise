@@ -1,3 +1,4 @@
+import { AUTH_CANCELLED_DETAIL } from '@cuewise/app';
 import { ApiError } from '@cuewise/sync-client';
 import {
   RecoveryCodeError,
@@ -384,6 +385,20 @@ describe('handleSyncControlMessage: enable', () => {
     const result = await handleSyncControlMessage(engine, enableMessage(), deps);
 
     expect(result).toEqual({ ok: false, reason: 'auth' });
+  });
+
+  it('maps a post-call disabled status to a quiet cancel, never to ok', async () => {
+    // enableSync returned without activating, so a disable landed inside it. Reporting ok would
+    // persist creds for the removed account, hand Chrome sync off, and show a recovery code for
+    // a key that no longer exists.
+    const engine = fakeControlSurface({
+      getStatus: vi.fn().mockReturnValue('disabled' as SyncStatus),
+    });
+    const deps = fakeDeps();
+
+    const result = await handleSyncControlMessage(engine, enableMessage(), deps);
+
+    expect(result).toEqual({ ok: false, reason: 'error', detail: AUTH_CANCELLED_DETAIL });
   });
 
   it('maps any other thrown error to error with its message as detail', async () => {

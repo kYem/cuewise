@@ -985,8 +985,6 @@ describe('SyncSettingsSectionComponent', () => {
   });
 
   it('leaves the badge and the toasts alone when a disable retires the cycle', async () => {
-    // Another window disconnected the account mid-cycle: there is no cycle to report and no
-    // account left to report it about, so the previous cycle's badge stands.
     const user = userEvent.setup();
     const controller = new FakeSyncController();
     controller.scriptSyncNow({ kind: 'failed', reason: 'device', error: new Error('unreadable') });
@@ -996,6 +994,7 @@ describe('SyncSettingsSectionComponent', () => {
     await user.click(screen.getByRole('button', { name: 'Sync now' }));
     await screen.findByTestId('sync-failure-badge');
     toastError.mockClear();
+    const detailsBefore = controller.calls.filter((call) => call.method === 'getDetails').length;
 
     await user.click(screen.getByRole('button', { name: 'Sync now' }));
 
@@ -1003,9 +1002,32 @@ describe('SyncSettingsSectionComponent', () => {
       expect(controller.calls.filter((call) => call.method === 'syncNow')).toHaveLength(2)
     );
     expect(screen.getByTestId('sync-failure-badge')).toBeInTheDocument();
+    // No account left to fetch details for, so the trailing refresh must not run either.
+    expect(controller.calls.filter((call) => call.method === 'getDetails')).toHaveLength(
+      detailsBefore
+    );
     expect(toastError).not.toHaveBeenCalled();
     expect(toastWarning).not.toHaveBeenCalled();
     expect(toastSuccess).not.toHaveBeenCalled();
+  });
+
+  it('still shows the failure when Settings is reopened after a wake that found no key', async () => {
+    // A cold worker can wake before the key loads. The engine records no cycle for that, so the
+    // next mount's read must not answer with it — this pins the fake to the engine it stands for.
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptSyncNow({ kind: 'failed', reason: 'device', error: new Error('unreadable') });
+    controller.scriptSyncNow({ kind: 'no-key' });
+    const { unmount } = renderSection(controller);
+    act(() => controller.setStatus('active'));
+    await user.click(screen.getByRole('button', { name: 'Sync now' }));
+    await screen.findByTestId('sync-failure-badge');
+    await user.click(screen.getByRole('button', { name: 'Sync now' }));
+
+    unmount();
+    renderSection(controller);
+
+    expect(await screen.findByTestId('sync-failure-badge')).toBeInTheDocument();
   });
 
   it('does not report success for a cycle that did nothing', async () => {

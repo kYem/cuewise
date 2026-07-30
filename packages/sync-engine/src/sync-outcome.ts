@@ -1,3 +1,4 @@
+import { logger } from '@cuewise/shared';
 import { ApiError } from '@cuewise/sync-client';
 
 export type SyncFailureReason = 'network' | 'server' | 'device';
@@ -11,9 +12,8 @@ export type SyncOutcome =
   | { kind: 'failed'; reason: SyncFailureReason; error: unknown };
 
 /**
- * What syncNow answers. `cancelled` is deliberately NOT a SyncOutcome: the account was removed
- * mid-cycle, so the cycle stopped and its result speaks for no account. Keeping it out of the
- * outcome union is what stops it being recorded, persisted or painted as a cycle that ran.
+ * What syncNow answers. Keeping `cancelled` out of SyncOutcome is what stops it being recorded,
+ * persisted or painted as a cycle that ran — it speaks for an account that no longer exists.
  */
 export type SyncNowResult = SyncOutcome | { kind: 'cancelled' };
 
@@ -89,6 +89,13 @@ function storedOutcome(record: Partial<PersistedSyncCycle>): SyncOutcome | null 
   }
   if (record.kind === 'resynced') {
     return { kind: 'resynced' };
+  }
+  if (record.kind !== undefined) {
+    // Exhaustiveness: a new SyncOutcome kind must be handled above, or every device that wrote one
+    // reads it back as unparseable. `cancelled` is not among them by construction — it is not an
+    // outcome, so nothing ever persists it.
+    const unhandled: never = record.kind;
+    logger.error(`Ignoring a stored sync cycle of unknown kind: ${String(unhandled)}`);
   }
   return null;
 }

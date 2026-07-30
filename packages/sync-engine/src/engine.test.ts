@@ -102,12 +102,18 @@ async function replayFromScratch(device: Pick<Device, 'kv'>): Promise<void> {
   await setGoals([]);
 }
 
-/** A disable landing mid-pull: it fires once, while the first pulled goal is being written. */
-function disableWhileWritingGoals(bindings: CollectionBinding[], engine: SyncEngine): void {
+/** Finds the goals binding or fails loudly — avoids a non-null assertion at call sites. */
+function requireGoalsBinding(bindings: CollectionBinding[]): CollectionBinding {
   const goals = bindings.find((binding) => binding.name === 'goals');
   if (goals === undefined) {
     throw new Error('binding not found: goals');
   }
+  return goals;
+}
+
+/** A disable landing mid-pull: it fires once, while the first pulled goal is being written. */
+function disableWhileWritingGoals(bindings: CollectionBinding[], engine: SyncEngine): void {
+  const goals = requireGoalsBinding(bindings);
   const write = goals.writeOne.bind(goals);
   let disabled = false;
   vi.spyOn(goals, 'writeOne').mockImplementation(async (entityId, entity) => {
@@ -262,9 +268,27 @@ describe('SyncEngine.enableSync', () => {
     expect(device.engine.getStatus()).toBe('disabled');
   });
 
+  it('does not persist the enabled flag when a disable lands before the cycle even starts', async () => {
+    // The window syncNow's own epoch cannot see: its epoch is captured after the disable already
+    // bumped, so the cycle looks untroubled — it just finds no key and reports `no-key`.
+    const server = new FakeSyncServer();
+    const bindings = defaultBindings();
+    const device = createDevice(server, { bindings });
+    useStorage(device);
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    const goals = requireGoalsBinding(bindings);
+    vi.spyOn(goals, 'readAll').mockImplementation(async () => {
+      await device.engine.disableSync();
+      return {};
+    });
+
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    expect(await device.kv.get(CLOUD_SYNC_ENABLED_KEY, 'local')).toBeNull();
+    expect(device.engine.getStatus()).toBe('disabled');
+  });
+
   it('discards a pull cursor left behind by a disable whose metadata reset failed', async () => {
-    // A surviving high-water mark makes the first pull skip every record below it, and reads as a
-    // clean first sync — the one field whose staleness loses history silently.
     const server = new FakeSyncServer();
     const device = createDevice(server);
     useStorage(device);
@@ -278,30 +302,49 @@ describe('SyncEngine.enableSync', () => {
     const getMany = vi.spyOn(device.kv, 'getMany').mockResolvedValue(null);
     await device.engine.disableSync();
     getMany.mockRestore();
-    errorSpy.mockClear();
+    errorSpy.mockRestore();
     const getChanges = vi.spyOn(device.apiClient, 'getChanges');
 
     await device.engine.enableSync('dev', 'cred-a', 'Device A', { recoveryCode });
 
     expect(getChanges).toHaveBeenCalledWith(0);
-    expect(errorSpy).toHaveBeenCalledWith(
-      'Cloud sync discarded a pull cursor that outlived its account'
-    );
   });
 
-  it('keeps the cursor when a device that is still enabled re-authenticates', async () => {
+  it('leaves the rest of the ledger alone when an enable discards the cursor', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    await device.engine.syncNow();
+    const metaStore = new SyncMetadataStore(device.kv);
+    const seeded = await metaStore.load();
+    seeded.cursor = 42;
+    seeded.quarantine = ['goals/g-poison'];
+    await metaStore.save(seeded);
+    const getChanges = vi.spyOn(device.apiClient, 'getChanges');
+
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    expect(getChanges).toHaveBeenCalledWith(0);
+    // A widened reset would re-quarantine the same record on the next pull, re-toasting forever.
+    expect((await metaStore.load()).quarantine).toEqual(['goals/g-poison']);
+  });
+
+  it('discards the cursor on a re-auth too, which can land on a different account', async () => {
+    // The enabled flag cannot answer "is this cursor mine": it survives handleAuthLoss, and a
+    // reconnect re-runs the provider's account chooser.
     const server = new FakeSyncServer();
     const device = createDevice(server);
     useStorage(device);
     await setGoals([goalFactory.build({ id: 'g1' })]);
     await device.engine.enableSync('dev', 'cred-a', 'Device A');
     await device.engine.syncNow();
-    const { cursor } = await new SyncMetadataStore(device.kv).load();
+    expect((await new SyncMetadataStore(device.kv).load()).cursor).toBeGreaterThan(0);
     const getChanges = vi.spyOn(device.apiClient, 'getChanges');
 
-    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    await device.engine.enableSync('dev', 'cred-b', 'Device A');
 
-    expect(getChanges).toHaveBeenCalledWith(cursor);
+    expect(getChanges).toHaveBeenCalledWith(0);
   });
 
   it('getAccount returns the api result with a session and null when signed out', async () => {
@@ -1448,8 +1491,6 @@ describe('SyncEngine.disableSync', () => {
   });
 
   it('stops applying a pull the moment it lands, leaving the rest of the page unwritten', async () => {
-    // The bookkeeping guard in syncNow runs after the cycle, by which point every pulled record
-    // has already been written — only a signal inside the cycle can stop the writes themselves.
     const server = new FakeSyncServer();
     const bindings = defaultBindings();
     const device = createDevice(server, { bindings });
@@ -1465,6 +1506,7 @@ describe('SyncEngine.disableSync', () => {
     // Only the record already in flight when the disable landed.
     expect(await getGoals()).toHaveLength(1);
     expect(await device.kv.get(LAST_SYNCED_AT_KEY, 'local')).toBeNull();
+    expect(await device.kv.get(LAST_CYCLE_KEY, 'local')).toBeNull();
   });
 
   it('stops reporting unknown after a disable, since "no cycle" is then the truth', async () => {
@@ -1913,6 +1955,11 @@ describe('SyncEngine.start / stop', () => {
     expect(await device.kv.get(LAST_SYNCED_AT_KEY, 'local')).toBeNull();
     expect(await device.kv.get(LAST_CYCLE_KEY, 'local')).toBeNull();
     expect(device.engine.getStatus()).toBe('disabled');
+    // The ack must not be recorded either: that save would rewrite the whole ledger from its
+    // pre-disable snapshot, restoring the cursor and hlcs disableSync had just cleared.
+    const ledger = await new SyncMetadataStore(device.kv).load();
+    expect(ledger.cursor).toBe(0);
+    expect(ledger.hlcs).toEqual({});
   });
 
   it('completes a disable whose metadata reset fails, instead of stranding it half-done', async () => {

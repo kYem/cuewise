@@ -3,7 +3,7 @@ import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useToastStore } from '../../stores/toast-store';
 import type { EnableResult } from '../../sync/sync-controller';
-import { AUTH_CANCELLED_DETAIL } from '../../sync/sync-controller';
+import { isCancelledEnable } from '../../sync/sync-controller';
 import { Modal } from '../Modal';
 
 export interface EnrollCodeModalProps {
@@ -23,7 +23,7 @@ const GENERIC_FAILURE_MESSAGE = "Couldn't enroll this device — please try agai
 
 /** null = quiet outcome: a deliberate re-auth cancel keeps the modal open with no error line. */
 function messageFor(result: Extract<EnableResult, { ok: false }>): string | null {
-  if (result.reason === 'auth' && result.detail === AUTH_CANCELLED_DETAIL) {
+  if (isCancelledEnable(result)) {
     return null;
   }
   if (result.reason === 'bad-code') {

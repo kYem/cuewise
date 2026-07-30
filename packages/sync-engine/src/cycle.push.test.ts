@@ -40,6 +40,7 @@ function makeDeps(
     dk: generateDataKey(),
     keyId: KEY_ID,
     strategy: new LwwHlcStrategy(),
+    isCancelled: () => false,
     ...overrides,
   };
 }
@@ -135,22 +136,23 @@ describe('pushOnce', () => {
     expect(saved.dirty.goals).toEqual(['g1']);
   });
 
-  it('stops between batches once cancelled, leaving the ids it never pushed dirty', async () => {
+  it('stops between batches once cancelled, without writing the ack back to the ledger', async () => {
     const ids = Array.from({ length: 150 }, (_, i) => `g${i}`);
     await setGoals(ids.map((id) => goalFactory.build({ id })));
     const metaStore = new SyncMetadataStore(kv);
     await seedDirty(metaStore, 'goals', ids);
-    // The disable lands while the first batch is in flight.
     const deps = makeDeps(kv, transport, {
       isCancelled: () => transport.pushedBatches.length > 0,
     });
 
     const result = await pushOnce(deps);
 
-    expect(result).toBe('cancelled');
+    expect(result).toEqual({ kind: 'cancelled' });
     expect(transport.pushedBatches).toHaveLength(1);
+    // Every id still dirty proves no save ran: `save` rewrites the whole ledger from a snapshot
+    // taken before the disable, so recording this ack would restore what the disable cleared.
     const saved = await metaStore.load();
-    expect(saved.dirty.goals).toEqual(ids.slice(100));
+    expect(saved.dirty.goals).toEqual(ids);
   });
 
   it('leaves meta.dirty intact when pushChanges rejects', async () => {

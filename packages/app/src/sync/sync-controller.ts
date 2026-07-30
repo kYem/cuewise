@@ -21,11 +21,17 @@ export type EnableResult =
 
 /**
  * EnableResult.detail marker for a deliberate user cancel; the UI goes quiet on it (no toast,
- * no error state). Hosts must only emit it when the cancel signal is trustworthy — macOS's
- * server-sanitized access_denied qualifies; the extension's window-close message does NOT
- * (Chromium reports closing a Google-side error page the same way).
+ * no error state), whatever the reason beside it. Hosts must only emit it when the cancel signal
+ * is trustworthy — macOS's server-sanitized access_denied and a post-enable status of `disabled`
+ * both qualify; the extension's window-close message does NOT (Chromium reports closing a
+ * Google-side error page the same way).
  */
 export const AUTH_CANCELLED_DETAIL = 'cancelled';
+
+/** Whether a failed enable was the user's own doing, and so must not surface as an error. */
+export function isCancelledEnable(result: Extract<EnableResult, { ok: false }>): boolean {
+  return result.detail === AUTH_CANCELLED_DETAIL;
+}
 
 /**
  * A last-cycle read. `{available:false}` is NOT `{available:true, outcome:null}`: only the latter

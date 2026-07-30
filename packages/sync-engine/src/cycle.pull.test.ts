@@ -90,6 +90,7 @@ describe('pullOnce', () => {
       dk,
       keyId: KEY_ID,
       strategy: new LwwHlcStrategy(),
+      isCancelled: () => false,
       ...overrides,
     };
   }
@@ -360,11 +361,16 @@ describe('pullOnce', () => {
     expect(saved.cursor).toBe(5);
   });
 
-  it('never reaches the server when the cycle is already cancelled', async () => {
+  it('never reaches the server when the cycle is already cancelled, and says nothing', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
     const result = await pullOnce(makeDeps({ isCancelled: () => true }));
 
     expect(result).toEqual({ kind: 'cancelled' });
     expect(transport.getChangesSinceCalls).toEqual([]);
+    // Nothing landed, so there is nothing to attribute: a disconnect is not itself a fault.
+    expect(errorSpy).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
   });
 
   it('stops mid-page once cancelled, so the rest of the removed account’s records never land', async () => {
@@ -377,12 +383,19 @@ describe('pullOnce', () => {
     const bindings = defaultBindings();
     const { isCancelled } = disableAfterFirstWrite(requireBinding(bindings, 'goals'));
 
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
     const result = await pullOnce(makeDeps({ bindings, isCancelled }));
 
     expect(result).toEqual({ kind: 'cancelled' });
     expect(await getGoals()).toEqual([first]);
     const saved = await metaStore.load();
     expect(saved.cursor).toBe(0);
+    // The record that did land has no hlc left to explain it, so this count is its only trace.
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Cloud sync stopped a pull for a disconnected account; 1 of its records had already been applied and remain on this device'
+    );
+    errorSpy.mockRestore();
   });
 
   it('persists no cursor when the account is removed while the last record of a page is applied', async () => {
@@ -401,6 +414,63 @@ describe('pullOnce', () => {
     const saved = await metaStore.load();
     expect(saved.cursor).toBe(0);
     expect(saved.hlcs['goals/g1']).toBeUndefined();
+  });
+
+  it('persists nothing when a write fails at the moment the account is removed', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    transport.pullRecords = [
+      await sealRecord(
+        dk,
+        'goals',
+        'g1',
+        { entity: goalFactory.build({ id: 'g1' }), hlc: NEWER_HLC },
+        1
+      ),
+      await sealRecord(
+        dk,
+        'goals',
+        'g2',
+        { entity: goalFactory.build({ id: 'g2' }), hlc: NEWER_HLC },
+        2
+      ),
+    ];
+    const bindings = defaultBindings();
+    const goals = requireBinding(bindings, 'goals');
+    const write = goals.writeOne.bind(goals);
+    let disabled = false;
+    vi.spyOn(goals, 'writeOne').mockImplementation(async (entityId, entity) => {
+      if (entityId === 'g2') {
+        disabled = true;
+        return storageFailure('quota exceeded');
+      }
+      return write(entityId, entity);
+    });
+
+    const result = await pullOnce(makeDeps({ bindings, isCancelled: () => disabled }));
+
+    // A stall saves the progress before it; that save must still not run for a removed account,
+    // or the cursor and hlcs it advanced outlive the account that earned them.
+    expect(result).toEqual({ kind: 'cancelled' });
+    const saved = await metaStore.load();
+    expect(saved.cursor).toBe(0);
+    expect(saved.hlcs['goals/g1']).toBeUndefined();
+    errorSpy.mockRestore();
+  });
+
+  it('persists nothing when the server discards the cursor of an account already removed', async () => {
+    const meta = await metaStore.load();
+    meta.cursor = 42;
+    await metaStore.save(meta);
+    transport.getChangesError = new ApiError('resync_required', 409);
+
+    // Cancelled only once the request has been made, so the 409 branch is the one that runs.
+    const result = await pullOnce(
+      makeDeps({ isCancelled: () => transport.getChangesSinceCalls.length > 0 })
+    );
+
+    expect(result).toEqual({ kind: 'cancelled' });
+    const saved = await metaStore.load();
+    expect(saved.cursor).toBe(42);
   });
 
   it('recovers a quarantined key once a later pull decrypts it cleanly, removing it from quarantine', async () => {

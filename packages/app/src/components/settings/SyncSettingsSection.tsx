@@ -13,7 +13,7 @@ import type {
   SyncUiStatus,
 } from '../../sync/sync-controller';
 import {
-  AUTH_CANCELLED_DETAIL,
+  isCancelledEnable,
   LAST_CYCLE_UNAVAILABLE,
   useSyncController,
 } from '../../sync/sync-controller';
@@ -408,9 +408,9 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       setEnrollOpen(true);
       return;
     }
-    if (result.reason === 'auth' && result.detail === AUTH_CANCELLED_DETAIL) {
-      // A deliberate user cancel (closing Google's consent screen) isn't a failure — no error
-      // state, no toast; the form stays open for another attempt.
+    if (isCancelledEnable(result)) {
+      // The user's own cancel — closing Google's consent screen, or disconnecting mid-enable —
+      // isn't a failure: no error state, no toast; the form stays open for another attempt.
       logger.info(`Cloud sync ${source} sign-in was cancelled by the user`);
       return;
     }
@@ -479,7 +479,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
           // twice. The resume can find the session already gone (revoked/expired while the user
           // hunted for the code) → reason:'auth'; retrying resume is hopeless, so fall back to a
           // full re-auth, which re-establishes the session (the code is already typed).
-          if (!result.ok && result.reason === 'auth' && result.detail !== AUTH_CANCELLED_DETAIL) {
+          if (!result.ok && result.reason === 'auth' && !isCancelledEnable(result)) {
             result = await controller.enableWithGoogle(deviceName, code);
           }
         } else {
@@ -502,7 +502,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       if (result.recoveryCode) {
         surfaceRecoveryCode(result.recoveryCode);
       }
-    } else if (result.reason === 'auth' && result.detail === AUTH_CANCELLED_DETAIL) {
+    } else if (isCancelledEnable(result)) {
       logger.info('Cloud sync enroll re-auth was cancelled by the user');
     } else {
       // The modal renders the message; this is the default-visible trace of what failed.
