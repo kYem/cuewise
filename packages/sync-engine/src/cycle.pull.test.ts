@@ -416,6 +416,31 @@ describe('pullOnce', () => {
     expect(saved.hlcs['goals/g1']).toBeUndefined();
   });
 
+  it('counts only the records it actually wrote when reporting what a cancelled pull left', async () => {
+    // The count is the sole trace of what a disconnect left behind, so a quarantined record —
+    // which writes nothing — must not inflate it.
+    const sealed = await sealRecord(dk, 'goals', 'g1', { entity: null, hlc: NEWER_HLC }, 1);
+    const poisoned: SyncRecord = { ...sealed, ciphertext: 'garbage' };
+    const good = await sealRecord(
+      dk,
+      'goals',
+      'g2',
+      { entity: goalFactory.build({ id: 'g2' }), hlc: NEWER_HLC },
+      2
+    );
+    transport.pullRecords = [poisoned, good];
+    const bindings = defaultBindings();
+    const { isCancelled } = disableAfterFirstWrite(requireBinding(bindings, 'goals'));
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await pullOnce(makeDeps({ bindings, isCancelled }));
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Cloud sync stopped a pull for a disconnected account; 1 of its records had already been applied to this device'
+    );
+    errorSpy.mockRestore();
+  });
+
   it('persists nothing when a write fails at the moment the account is removed', async () => {
     const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
     transport.pullRecords = [

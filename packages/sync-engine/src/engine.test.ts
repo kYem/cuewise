@@ -23,7 +23,7 @@ import {
   type SyncStatus,
 } from './engine';
 import { loadPersistedDataKey, RecoveryCodeRequiredError, SYNC_DATA_KEY } from './key-lifecycle';
-import { SyncMetadataStore } from './metadata-store';
+import { SYNC_META_KEY, SyncMetadataStore } from './metadata-store';
 import { MutationTracker } from './mutation-tracker';
 
 interface Device {
@@ -326,6 +326,7 @@ describe('SyncEngine.enableSync', () => {
     vi.spyOn(device.apiClient, 'putRecoveryEnvelope').mockImplementation(async () => {
       await device.engine.disableSync();
     });
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
 
     await device.engine.enableSync('dev', 'cred-a', 'Device A');
 
@@ -334,6 +335,10 @@ describe('SyncEngine.enableSync', () => {
     expect(device.engine.getStatus()).toBe('disabled');
     // The envelope cannot be withdrawn, so the code it minted is the account's only way back.
     expect(device.onRecoveryCode).toHaveBeenCalledTimes(1);
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Cloud sync enable was abandoned after creating an account; its recovery code is the only way back into it'
+    );
+    errorSpy.mockRestore();
   });
 
   it('does not upload the removed account a whole cycle when the enrol is abandoned', async () => {
@@ -349,6 +354,28 @@ describe('SyncEngine.enableSync', () => {
 
     expect(device.apiClient.callOrder).not.toContain('pushChanges');
     expect(await device.kv.get(LAST_SYNCED_AT_KEY, 'local')).toBeNull();
+  });
+
+  it('rolls the enabled flag back when a disable lands inside the write itself', async () => {
+    // Left set with no data key, the next start() lands needs_enroll and demands a recovery code
+    // for the account the user disconnected.
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    let disabled = false;
+    const write = device.kv.set.bind(device.kv);
+    vi.spyOn(device.kv, 'set').mockImplementation(async (key, value, area) => {
+      if (key === CLOUD_SYNC_ENABLED_KEY && !disabled) {
+        disabled = true;
+        await device.engine.disableSync();
+      }
+      return write(key, value, area);
+    });
+
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    expect(await device.kv.get(CLOUD_SYNC_ENABLED_KEY, 'local')).toBeNull();
+    expect(device.engine.getStatus()).toBe('disabled');
   });
 
   it('discards a pull cursor left behind by a disable whose metadata reset failed', async () => {
@@ -1520,6 +1547,31 @@ describe('SyncEngine.syncNow', () => {
   });
 });
 
+describe('SyncEngine.resumeEnrollWithCode', () => {
+  it('answers a disable that lands inside it with disabled, not a sign-in expiry', async () => {
+    const server = new FakeSyncServer();
+    const kv = new FakeKvStore();
+    const sessionManager = new SessionManager(kv);
+    const apiClient = new FakeApiClient(server);
+    const engine = new SyncEngine({
+      apiClient,
+      sessionManager,
+      keyStore: kv,
+      scheduler: new FakeScheduler(),
+    });
+    configurePlatform({ storage: kv });
+    // The session is gone because the disable cleared it, mid-resume.
+    vi.spyOn(sessionManager, 'getToken').mockImplementation(async () => {
+      await engine.disableSync();
+      return null;
+    });
+
+    await engine.resumeEnrollWithCode('CW1-ABC');
+
+    expect(engine.getStatus()).toBe('disabled');
+  });
+});
+
 describe('SyncEngine.disableSync', () => {
   it('clears status/DK/enabled-flag but leaves local domain data untouched', async () => {
     const server = new FakeSyncServer();
@@ -2023,6 +2075,53 @@ describe('SyncEngine.start / stop', () => {
     const ledger = await new SyncMetadataStore(device.kv).load();
     expect(ledger.cursor).toBe(0);
     expect(ledger.hlcs).toEqual({});
+  });
+
+  it('drops a whole cycle for an account removed between its pull and its push', async () => {
+    // Nothing dirty, so pushOnce returns before its own cancellation check — leaving syncNow's
+    // post-cycle epoch check as the only thing between a removed account and a `synced` report.
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    let metaReads = 0;
+    let disabled = false;
+    const readMany = device.kv.getMany.bind(device.kv);
+    vi.spyOn(device.kv, 'getMany').mockImplementation(async (keys, area) => {
+      const result = await readMany(keys, area);
+      if (!keys.includes(SYNC_META_KEY) || disabled) {
+        return result;
+      }
+      metaReads += 1;
+      // The second is the push opening its own ledger read; the first was the pull's.
+      if (metaReads === 2) {
+        disabled = true;
+        await device.engine.disableSync();
+      }
+      return result;
+    });
+
+    const outcome = await device.engine.syncNow();
+
+    expect(outcome).toEqual({ kind: 'cancelled' });
+    expect(await device.kv.get(LAST_SYNCED_AT_KEY, 'local')).toBeNull();
+    expect(await device.kv.get(LAST_CYCLE_KEY, 'local')).toBeNull();
+  });
+
+  it('does not report a sign-in expiry for a cycle whose 401 was the disable clearing the session', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    vi.spyOn(device.apiClient, 'getChanges').mockImplementation(async () => {
+      await device.engine.disableSync();
+      throw new ApiError('invalid_token', 401);
+    });
+
+    const outcome = await device.engine.syncNow();
+
+    expect(outcome).toEqual({ kind: 'cancelled' });
+    expect(device.engine.getStatus()).toBe('disabled');
   });
 
   it('completes a disable whose metadata reset fails, instead of stranding it half-done', async () => {

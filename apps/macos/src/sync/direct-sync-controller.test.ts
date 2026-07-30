@@ -172,19 +172,29 @@ describe('createDirectSyncController: enable()', () => {
   it('maps a post-call disabled status to a cancel, never to ok', async () => {
     // enableSync returned without activating, so a disable landed inside it. ok would persist
     // creds, hand Chrome sync off, and show a recovery code for a key that no longer exists.
+    let trampolines: { onRecoveryCode: (code: string) => void } | undefined;
     const engine = fakeControlSurface({
       getStatus: vi.fn().mockReturnValue('disabled' as SyncStatus),
+      // The engine hands the code over before it notices it was superseded.
+      enableSync: vi.fn().mockImplementation(async () => {
+        trampolines?.onRecoveryCode('CW1-ABC');
+      }),
     });
     const { controller } = buildDirectSyncController<SyncEngineControlSurface>({
       baseUrl: BASE_URL,
       keyStore: new FakeKvStore(),
       oauthDriver: unusedDriver(),
-      buildEngine: () => engine,
+      buildEngine: (built) => {
+        trampolines = built;
+        return engine;
+      },
     });
 
     const result = await controller.enable('cred-a', 'Device A');
 
-    expect(result).toEqual({ ok: false, reason: 'cancelled' });
+    // The code comes too: disableSync withdraws no envelope, so the account this attempt made on
+    // the server outlives it and nothing else can re-enroll it.
+    expect(result).toEqual({ ok: false, reason: 'cancelled', recoveryCode: 'CW1-ABC' });
   });
 
   it('maps any other thrown error to error with its message as detail', async () => {

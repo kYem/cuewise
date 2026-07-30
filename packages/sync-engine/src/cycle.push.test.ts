@@ -136,6 +136,18 @@ describe('pushOnce', () => {
     expect(saved.dirty.goals).toEqual(['g1']);
   });
 
+  it('pushes nothing when the cycle is already cancelled', async () => {
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    const metaStore = new SyncMetadataStore(kv);
+    await seedDirty(metaStore, 'goals', ['g1']);
+    const deps = makeDeps(kv, transport, { isCancelled: () => true });
+
+    const result = await pushOnce(deps);
+
+    expect(result).toEqual({ kind: 'cancelled' });
+    expect(transport.pushedBatches).toEqual([]);
+  });
+
   it('stops between batches once cancelled, without writing the ack back to the ledger', async () => {
     const ids = Array.from({ length: 150 }, (_, i) => `g${i}`);
     await setGoals(ids.map((id) => goalFactory.build({ id })));

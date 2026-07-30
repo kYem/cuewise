@@ -393,11 +393,13 @@ describe('handleSyncControlMessage: enable', () => {
     const engine = fakeControlSurface({
       getStatus: vi.fn().mockReturnValue('disabled' as SyncStatus),
     });
-    const deps = fakeDeps();
+    const deps = fakeDeps({ takeRecoveryCode: vi.fn().mockReturnValue('CW1-ABC') });
 
     const result = await handleSyncControlMessage(engine, enableMessage(), deps);
 
-    expect(result).toEqual({ ok: false, reason: 'cancelled' });
+    // The code comes too: disableSync withdraws no envelope, so the account this attempt made on
+    // the server outlives it and nothing else can re-enroll it.
+    expect(result).toEqual({ ok: false, reason: 'cancelled', recoveryCode: 'CW1-ABC' });
   });
 
   it('maps any other thrown error to error with its message as detail', async () => {
