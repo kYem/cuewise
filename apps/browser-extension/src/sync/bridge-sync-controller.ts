@@ -353,7 +353,9 @@ export class BridgeSyncController implements SyncController {
   private static describeUnavailableCause(
     response: SyncOpResponse['getLastCycle'] | undefined
   ): string {
-    if (response === undefined) {
+    // Null as well as undefined: the wire is untyped, and reading `.ok` off a null answer would
+    // turn this diagnostic into the throw the outer catch then reports instead of the cause.
+    if (response === undefined || response === null) {
       return 'no response from the background';
     }
     if (response.ok === false) {

@@ -23,7 +23,8 @@ export class SessionManager {
     return this.store.set(SYNC_SESSION_KEY, token, 'local');
   }
 
-  async clear(): Promise<void> {
-    await this.store.remove(SYNC_SESSION_KEY, 'local');
+  /** False when the token survived: it is a live credential, so a caller must be able to say so. */
+  async clear(): Promise<boolean> {
+    return this.store.remove(SYNC_SESSION_KEY, 'local');
   }
 }

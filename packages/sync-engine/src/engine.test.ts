@@ -1436,6 +1436,99 @@ describe('SyncEngine.start / stop', () => {
     expect(errorSpy).not.toHaveBeenCalled();
   });
 
+  it('does not re-arm the pull wake when a disable lands inside its own first cycle', async () => {
+    // start() epoch-checks before activating, but its cycle is a full network round trip after
+    // that. disableSync cancels the wake; re-arming past it polls on for a removed account.
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    const restartedScheduler = new FakeScheduler();
+    const restarted = new SyncEngine({
+      apiClient: device.apiClient,
+      sessionManager: new SessionManager(device.kv),
+      keyStore: device.kv,
+      scheduler: restartedScheduler,
+    });
+    // The disable lands while start()'s own cycle is on the wire.
+    vi.spyOn(device.apiClient, 'getChanges').mockImplementation(async () => {
+      await restarted.disableSync();
+      return { records: [], cursor: 0 };
+    });
+
+    await restarted.start();
+
+    expect(restarted.getStatus()).toBe('disabled');
+    expect(restartedScheduler.scheduled).toEqual([]);
+  });
+
+  it('drops a cycle that finished after a disable, rather than re-creating its keys', async () => {
+    // runCycle captured the DK before the disable, so the cycle still succeeds. Stamping it would
+    // re-create the two keys disableSync just removed, and hand them to the next account.
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    vi.spyOn(device.apiClient, 'getChanges').mockImplementation(async () => {
+      await device.engine.disableSync();
+      return { records: [], cursor: 0 };
+    });
+    await device.engine.syncNow();
+
+    expect(await device.kv.get(LAST_SYNCED_AT_KEY, 'local')).toBeNull();
+    expect(await device.kv.get(LAST_CYCLE_KEY, 'local')).toBeNull();
+    expect(device.engine.getStatus()).toBe('disabled');
+  });
+
+  it('completes a disable whose metadata reset fails, instead of stranding it half-done', async () => {
+    // resetMeta throws deterministically on an unreadable ledger. Running it first left the keys
+    // gone, the pill still active, and the user told to retry a disable that had already happened.
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    vi.spyOn(device.kv, 'getMany').mockResolvedValue(null);
+
+    await expect(device.engine.disableSync()).resolves.toBeUndefined();
+
+    expect(device.engine.getStatus()).toBe('disabled');
+    expect(await device.kv.get(CLOUD_SYNC_ENABLED_KEY, 'local')).toBeNull();
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('disable metadata reset failed'),
+      expect.anything()
+    );
+  });
+
+  it('names the session token when it is the key that survived a disable', async () => {
+    // The one surviving key that is a live credential: it keeps isSignedIn() answering true.
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    vi.spyOn(device.kv, 'remove').mockImplementation(async (key) => key !== 'syncSession');
+
+    await device.engine.disableSync();
+
+    expect(errorSpy).toHaveBeenCalledWith('Disable could not remove every sync key: syncSession');
+  });
+
+  it('stops re-arming once a stale wake fires on a device whose sync is off', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    await device.engine.disableSync();
+    device.scheduler.scheduled.length = 0;
+
+    await device.engine.handlePullWake();
+
+    expect(device.scheduler.scheduled).toEqual([]);
+  });
+
   it('self-heals the DK, syncs, and arms the pull loop for a restarted engine instance', async () => {
     const server = new FakeSyncServer();
     const device = createDevice(server);
