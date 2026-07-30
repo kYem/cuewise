@@ -128,11 +128,6 @@ async function initNewKey(
   deps: KeyLifecycleDeps,
   recoveryCode: string | undefined
 ): Promise<{ dk: DataKey; keyId: string; recoveryCodeToShow?: string }> {
-  if (recoveryCode !== undefined) {
-    // The account has no envelope, so there is nothing this code can unwrap: this mints a NEW key
-    // and leaves any other device on the old one. Audible because the caller looks successful.
-    logger.error('Cloud sync ignored a recovery code: this account has no envelope to restore');
-  }
   const dk = generateDataKey();
   const { code, secret } = await generateRecoveryCode();
   const mk = await deriveMasterKey(secret);
@@ -148,6 +143,11 @@ async function initNewKey(
     throw err;
   }
 
+  if (recoveryCode !== undefined) {
+    // Only once the create-only PUT has won: on the race it loses to, the code is forwarded and
+    // honoured. Here there was no envelope to unwrap, so a fresh key is minted instead.
+    logger.error('Cloud sync ignored a recovery code: this account had no envelope to restore');
+  }
   await persistDataKey(deps.keyStore, INITIAL_KEY_ID, dk);
   return { dk, keyId: INITIAL_KEY_ID, recoveryCodeToShow: code };
 }

@@ -12,7 +12,7 @@ export type SyncUiStatus =
   | 'syncing'
   | 'error'
   | 'needs_reauth'
-  /** Enrolled, but this device's key is gone: recoverable only with the recovery code. */
+  /** Enrolled, but this device cannot read its key: recoverable with the recovery code. */
   | 'needs_enroll';
 
 export type EnableResult =

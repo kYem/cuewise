@@ -1058,8 +1058,7 @@ describe('SyncSettingsSectionComponent', () => {
   });
 
   it('still reports a Sync now result on a host that emits status from inside the call', async () => {
-    // macOS emits 'syncing' synchronously inside syncNow. That re-runs the read effect, and gating
-    // the click on the read counter let its own emission swallow the outcome and every toast.
+    // macOS emits 'syncing' synchronously inside syncNow, which re-runs the read effect.
     const user = userEvent.setup();
     const controller = new FakeSyncController();
     controller.emitsSyncingDuringSyncNow = true;

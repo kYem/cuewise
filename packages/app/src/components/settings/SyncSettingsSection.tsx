@@ -199,6 +199,9 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGoogleSigningIn, setIsGoogleSigningIn] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
+  // Gates the Sync now button: two overlapping cycles would each toast, and the badge would belong
+  // to whichever finished last rather than the newest click.
+  const [isSyncing, setIsSyncing] = useState(false);
   const [isDisabling, setIsDisabling] = useState(false);
   const [recoveryCode, setRecoveryCode] = useState<string | null>(null);
   const [enrollOpen, setEnrollOpen] = useState(false);
@@ -342,10 +345,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     lastCycleGenRef.current += 1;
     const gen = lastCycleGenRef.current;
     const read = await controller.getLastCycle().catch((error) => {
-      logger.error(
-        `Cloud sync last cycle unavailable: ${error instanceof Error ? error.message : String(error)}`,
-        error
-      );
+      logger.error(`Cloud sync last cycle unavailable: ${describeThrown(error)}`, error);
       return LAST_CYCLE_UNAVAILABLE;
     });
     if (lastCycleGenRef.current !== gen) {
@@ -363,6 +363,11 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     source: 'enable' | 'google' | 'reconnect'
   ) => {
     if (result.ok) {
+      // A reconnect can land on a DIFFERENT account, so this is an account change like a disable:
+      // without the bump a click still in flight paints and toasts for the previous one.
+      accountGenRef.current += 1;
+      detailsRequestedRef.current = false;
+      detailsGenRef.current += 1;
       // Cloud Sync is now active — hand off from legacy Chrome sync (see takeOverFromChromeSync).
       await takeOverFromChromeSync();
       await refreshLastCycle();
@@ -496,11 +501,11 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   // `outcome.error` is deliberately not read: chrome.runtime JSON-serialises the outcome, so the
   // page realm gets `error: {}`. Only `reason` survives; the engine logged the real object already.
   const handleSyncNow = async () => {
-    // Bumped so an in-flight read cannot paint over this click's outcome. The click's own right to
-    // speak is the account generation, which a mid-click status emission does not move — macOS emits
-    // 'syncing' from inside syncNow, and gating on the read counter swallowed the whole result.
+    // Whether this click may speak is the account, not the read counter: macOS emits 'syncing' from
+    // inside syncNow, and that emission must not retire the click it belongs to.
     lastCycleGenRef.current += 1;
     const accountGen = accountGenRef.current;
+    setIsSyncing(true);
     try {
       const outcome = await controller.syncNow();
       // Above the guard: a build/skew defect is not this account's outcome, so a superseded click
@@ -509,6 +514,9 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       // Only a disable retires this click: the cycle then belongs to an account the panel no longer
       // shows, so neither badge nor toast may speak for it.
       if (accountGenRef.current === accountGen) {
+        // Again here: a read the cycle's own status emission started is younger than the bump above,
+        // so without this it outranks the paint and can re-raise "couldn't check" after a success.
+        lastCycleGenRef.current += 1;
         setLastCycle(outcome);
         // This click is an answer, so it retires an earlier "couldn't check" — and it paints
         // directly rather than through adoptLastCycle, so it does not get that clear for free.
@@ -532,6 +540,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
         await refreshLastCycle();
       }
     }
+    setIsSyncing(false);
     // Refresh "Last synced" OUTSIDE the try — the sync-now error surface belongs to syncNow
     // alone (the catch keeps even a contract-violating host from rejecting the click handler).
     // Keep the last known details on a transient null: a stale line beats a vanishing one.
@@ -767,9 +776,10 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
               <button
                 type="button"
                 onClick={handleSyncNow}
-                className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-xs font-medium text-primary transition-colors hover:bg-surface-variant"
+                disabled={isSyncing}
+                className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-xs font-medium text-primary transition-colors hover:bg-surface-variant disabled:cursor-not-allowed disabled:opacity-50"
               >
-                <RefreshCw className="h-3.5 w-3.5" />
+                <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
                 Sync now
               </button>
               <button

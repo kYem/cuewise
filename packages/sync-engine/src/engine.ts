@@ -229,10 +229,16 @@ export class SyncEngine {
   private async enrollAndActivate(recoveryCode: string | undefined): Promise<void> {
     // A code is only passed when enrolling an additional device; brand-new enable passes none.
     this.setStatus(recoveryCode ? 'enrolling' : 'key_init');
+    const wasEnabled = await this.deps.keyStore.get<boolean>(CLOUD_SYNC_ENABLED_KEY, 'local');
     const enrolled = await initOrEnrollKey(this.keyDeps(), recoveryCode);
     this.dk = enrolled.dk;
     this.keyId = enrolled.keyId;
     if (enrolled.recoveryCodeToShow !== undefined) {
+      if (wasEnabled === true) {
+        // A fresh key on a device that was already enrolled: every record the old key sealed is now
+        // unopenable, and other devices keep it. The user only sees an ordinary new-code modal.
+        logger.error('Cloud sync minted a new data key for an already-enrolled device');
+      }
       this.deps.onRecoveryCode?.(enrolled.recoveryCodeToShow);
     }
 
@@ -259,8 +265,11 @@ export class SyncEngine {
       return;
     }
     if (err instanceof RecoveryCodeRequiredError || err instanceof RecoveryCodeError) {
-      // Expected enroll control-flow, not a failure — don't poison the persisted status other tabs read.
-      this.setStatus('disabled');
+      // Expected enroll control-flow, not a failure — don't poison the persisted status other tabs
+      // read. A device whose flag is still set was already enrolled here, so 'off' would contradict
+      // the prompt that sent the user to Reconnect in the first place.
+      const enabled = await this.deps.keyStore.get<boolean>(CLOUD_SYNC_ENABLED_KEY, 'local');
+      this.setStatus(enabled === true ? 'needs_enroll' : 'disabled');
       throw err;
     }
     this.setStatus('error');
@@ -665,18 +674,21 @@ export class SyncEngine {
       if (err instanceof SelfHealNeedsEnrollError) {
         // The ordinary lost-key case, not a rare one: every account that enabled sync has an
         // envelope, so self-heal throws here rather than falling through to the branch below.
-        logger.error('Cloud sync needs the recovery code: this device has no data key');
+        logger.error(
+          "Cloud sync needs the recovery code: this device's data key could not be read"
+        );
         this.setStatus('needs_enroll');
         return;
       }
-      if (err instanceof SelfHealUnrecoverableError) {
-        // A third condition: the key is HERE, the server envelope is gone. Nothing to re-enroll,
-        // so it keeps signed_out rather than asking for a code it cannot use.
-        logger.warn('Sync self-heal found no server envelope; staying signed out');
-        this.setStatus('signed_out');
-        return;
+      if (!(err instanceof SelfHealUnrecoverableError)) {
+        throw err;
       }
-      throw err;
+      // The key is HERE and only the server envelope is gone, so this device can still sync. Falls
+      // through rather than stopping it: reaching active is also what keeps Regenerate recovery
+      // code — the one control that restores the envelope — on screen.
+      logger.error(
+        'Cloud sync has no recovery envelope on the server; regenerate your recovery code to restore it'
+      );
     }
 
     const persisted = await loadPersistedDataKey(this.deps.keyStore);

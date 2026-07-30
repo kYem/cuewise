@@ -1406,19 +1406,22 @@ describe('SyncEngine.start / stop', () => {
     const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
 
     await device.kv.remove(SYNC_DATA_KEY, 'local');
+    const scheduler = new FakeScheduler();
     const restarted = new SyncEngine({
       apiClient: device.apiClient,
       sessionManager: new SessionManager(device.kv),
       keyStore: device.kv,
-      scheduler: new FakeScheduler(),
+      scheduler,
     });
 
     await restarted.start();
 
     expect(restarted.getStatus()).toBe('needs_enroll');
     expect(errorSpy).toHaveBeenCalledWith(
-      'Cloud sync needs the recovery code: this device has no data key'
+      "Cloud sync needs the recovery code: this device's data key could not be read"
     );
+    // The changeset promises it stops retrying; nothing else asserts that on this path.
+    expect(scheduler.scheduled).toEqual([]);
   });
 
   it('reports needs_enroll when the enabled flag outlived the data key', async () => {
