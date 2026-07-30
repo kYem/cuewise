@@ -160,6 +160,127 @@ describe('ConceptRotation', () => {
 
     expect(screen.getByText('QUOTE')).toBeInTheDocument();
   });
+
+  it('surfaces a due card when the shortcut is pressed on a quote', () => {
+    setup({ framing: 'ambient', cadence: 'off', cards: [dueCard] });
+
+    render(<ConceptRotation fallback={<div>QUOTE</div>} />);
+    expect(screen.getByText('QUOTE')).toBeInTheDocument();
+
+    act(() => {
+      fireEvent.keyDown(document.body, { key: 'c' });
+    });
+
+    expect(screen.getByText('Saga pattern')).toBeInTheDocument();
+    expect(screen.queryByText('QUOTE')).not.toBeInTheDocument();
+  });
+
+  it('returns to the quote when the shortcut is pressed on a card', () => {
+    setup({ framing: 'queue', cadence: 'every', cards: [dueCard] });
+
+    render(<ConceptRotation fallback={<div>QUOTE</div>} />);
+    expect(screen.getByText('Saga pattern')).toBeInTheDocument();
+
+    act(() => {
+      fireEvent.keyDown(document.body, { key: 'c' });
+    });
+
+    expect(screen.getByText('QUOTE')).toBeInTheDocument();
+    expect(screen.queryByText('Saga pattern')).not.toBeInTheDocument();
+  });
+
+  it('returns to the quote from a card added during the tab', () => {
+    setup({ framing: 'ambient', cadence: 'off', cards: [dueCard] });
+    const { rerender } = render(<ConceptRotation fallback={<div>QUOTE</div>} />);
+    expect(screen.getByText('QUOTE')).toBeInTheDocument();
+
+    const added = conceptCardFactory.build({
+      term: 'Just added',
+      schedule: { dueDate: '2020-01-01', interval: 0, easeFactor: 2.5, repetitions: 0, lapses: 0 },
+    });
+    setup({ framing: 'ambient', cadence: 'off', cards: [dueCard, added] });
+    rerender(<ConceptRotation fallback={<div>QUOTE</div>} />);
+    expect(screen.queryByText('QUOTE')).not.toBeInTheDocument();
+
+    act(() => {
+      fireEvent.keyDown(document.body, { key: 'c' });
+    });
+
+    expect(screen.getByText('QUOTE')).toBeInTheDocument();
+  });
+
+  it('toggles back to the card on a second press', () => {
+    setup({ framing: 'queue', cadence: 'every', cards: [dueCard] });
+
+    render(<ConceptRotation fallback={<div>QUOTE</div>} />);
+
+    act(() => {
+      fireEvent.keyDown(document.body, { key: 'c' });
+    });
+    act(() => {
+      fireEvent.keyDown(document.body, { key: 'c' });
+    });
+
+    expect(screen.getByText('Saga pattern')).toBeInTheDocument();
+  });
+
+  it('ignores the shortcut when nothing is due', () => {
+    setup({ cards: [] });
+
+    render(<ConceptRotation fallback={<div>QUOTE</div>} />);
+
+    act(() => {
+      fireEvent.keyDown(document.body, { key: 'c' });
+    });
+
+    expect(screen.getByText('QUOTE')).toBeInTheDocument();
+  });
+
+  it('ignores the shortcut when concepts are disabled', () => {
+    setup({ enabled: false, cards: [dueCard] });
+
+    render(<ConceptRotation fallback={<div>QUOTE</div>} />);
+
+    act(() => {
+      fireEvent.keyDown(document.body, { key: 'c' });
+    });
+
+    expect(screen.getByText('QUOTE')).toBeInTheDocument();
+  });
+
+  it('ignores the shortcut while typing in a text field', () => {
+    setup({ framing: 'ambient', cadence: 'off', cards: [dueCard] });
+
+    render(
+      <>
+        <input aria-label="note" />
+        <ConceptRotation fallback={<div>QUOTE</div>} />
+      </>
+    );
+
+    act(() => {
+      fireEvent.keyDown(screen.getByLabelText('note'), { key: 'c' });
+    });
+
+    expect(screen.getByText('QUOTE')).toBeInTheDocument();
+  });
+
+  it('ignores the shortcut while a dialog is open', () => {
+    setup({ framing: 'ambient', cadence: 'off', cards: [dueCard] });
+
+    render(
+      <>
+        <div role="dialog">Settings</div>
+        <ConceptRotation fallback={<div>QUOTE</div>} />
+      </>
+    );
+
+    act(() => {
+      fireEvent.keyDown(document.body, { key: 'c' });
+    });
+
+    expect(screen.getByText('QUOTE')).toBeInTheDocument();
+  });
 });
 
 describe('selectSurfacedCard', () => {

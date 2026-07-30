@@ -9,6 +9,7 @@ import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { useConceptCardsStore } from '../stores/concept-cards-store';
 import { useSettingsStore } from '../stores/settings-store';
+import { isShortcutKeyEvent } from '../utils/keyboard-shortcut';
 import { ConceptCardDisplay } from './ConceptCardDisplay';
 
 // "1 in N tabs" period per ambient cadence; 'every'/'off' are handled before this
@@ -60,6 +61,10 @@ export function selectSurfacedCard(
   return { current: deck[position], position };
 }
 
+// Explicit per-tab choice that outranks the cadence decision. 'quotes' also
+// suppresses cards added during the tab, which decision.show alone does not.
+type SlotOverride = 'auto' | 'quotes' | 'concepts';
+
 interface ConceptRotationProps {
   /** Rendered when no concept surfaces this tab (the normal quote rotation). */
   fallback: React.ReactNode;
@@ -92,6 +97,7 @@ export const ConceptRotation: React.FC<ConceptRotationProps> = ({ fallback, onAd
   const [grading, setGrading] = useState(false);
   // Browse position for the toolbar's prev/next within the surfaced deck.
   const [index, setIndex] = useState(0);
+  const [slot, setSlot] = useState<SlotOverride>('auto');
 
   useEffect(() => {
     initialize();
@@ -103,6 +109,7 @@ export const ConceptRotation: React.FC<ConceptRotationProps> = ({ fallback, onAd
     setDecision(null);
     setHandledIds([]);
     setIndex(0);
+    setSlot('auto');
   }, [framing, cadence, enabled]);
 
   const due = useMemo(() => {
@@ -120,12 +127,30 @@ export const ConceptRotation: React.FC<ConceptRotationProps> = ({ fallback, onAd
     setDecision({ show: cadenceAllows(framing, cadence), knownIds: due.map((card) => card.id) });
   }, [enabled, isLoading, decision, due.length, framing, cadence]);
 
+  const effectiveDecision: SurfacingDecision | null =
+    slot === 'concepts' ? { show: true, knownIds: decision?.knownIds ?? [] } : decision;
+  const { current, position } = selectSurfacedCard(due, effectiveDecision, index);
+  const surfaced = slot === 'quotes' ? undefined : current;
+
+  useEffect(() => {
+    if (!enabled || isLoading || due.length === 0) {
+      return;
+    }
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key !== 'c' || !isShortcutKeyEvent(e)) {
+        return;
+      }
+      e.preventDefault();
+      setSlot(surfaced ? 'quotes' : 'concepts');
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [enabled, isLoading, due.length, surfaced]);
+
   if (!enabled || isLoading) {
     return <>{fallback}</>;
   }
-
-  const { current, position } = selectSurfacedCard(due, decision, index);
-  if (!current) {
+  if (!surfaced) {
     return <>{fallback}</>;
   }
 
@@ -142,12 +167,12 @@ export const ConceptRotation: React.FC<ConceptRotationProps> = ({ fallback, onAd
     }
     setGrading(true);
     // Only retire the card from the deck once the review actually persisted.
-    const ok = await reviewCard(current.id, grade);
+    const ok = await reviewCard(surfaced.id, grade);
     setGrading(false);
     if (!ok) {
       return;
     }
-    setHandledIds((ids) => [...ids, current.id]);
+    setHandledIds((ids) => [...ids, surfaced.id]);
     // Ambient: one moment of recall, then back to the calm quote rotation.
     if (framing === 'ambient') {
       yieldToQuotes();
@@ -160,14 +185,14 @@ export const ConceptRotation: React.FC<ConceptRotationProps> = ({ fallback, onAd
 
   return (
     <ConceptCardDisplay
-      key={current.id}
-      card={current}
+      key={surfaced.id}
+      card={surfaced}
       activeRecall={activeRecall}
       onGrade={handleGrade}
       onPrev={goPrev}
       onNext={goNext}
-      isFavorite={current.isFavorite ?? false}
-      onToggleFavorite={() => toggleFavorite(current.id)}
+      isFavorite={surfaced.isFavorite ?? false}
+      onToggleFavorite={() => toggleFavorite(surfaced.id)}
       dueCount={due.length}
       onAdd={onAdd}
       queueLabel={queueLabel}
