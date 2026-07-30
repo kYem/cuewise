@@ -474,10 +474,12 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     const cycleGen = lastCycleGenRef.current;
     try {
       const outcome = await controller.syncNow();
+      // Above the guard: a build/skew defect is not this account's outcome, so a superseded click
+      // must not drop the only evidence of it.
+      logUnrecognisedReason(outcome);
       // A stale generation means a disable (or a newer click) superseded this one: the cycle
       // belongs to an account the panel no longer shows, so neither badge nor toast may speak for it.
       if (lastCycleGenRef.current === cycleGen) {
-        logUnrecognisedReason(outcome);
         setLastCycle(outcome);
         if (outcome.kind === 'synced') {
           useToastStore.getState().success('Synced');

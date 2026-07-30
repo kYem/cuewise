@@ -1287,6 +1287,36 @@ describe('SyncSettingsSectionComponent', () => {
     expect(toastWarning).not.toHaveBeenCalled();
   });
 
+  it('logs an unrecognised failure reason even when the click that carried it was superseded', async () => {
+    // Supersession is a reason not to paint another account's outcome; the unknown reason is a
+    // build/skew defect, and this click is the only place it was ever visible.
+    const user = userEvent.setup();
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const controller = new FakeSyncController();
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+    controller.deferNextSyncNow();
+
+    await user.click(screen.getByRole('button', { name: 'Sync now' }));
+    await user.click(cloudSyncSwitch());
+    await user.click(screen.getByRole('button', { name: 'Disable' }));
+    act(() => controller.setStatus('off'));
+
+    await act(async () => {
+      controller.resolveSyncNow({
+        kind: 'failed',
+        reason: 'quota' as SyncFailureReason,
+        error: new Error('unknown to this bundle'),
+      });
+    });
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Cloud sync reported an unrecognised failure reason: quota'
+    );
+    expect(screen.queryByTestId('sync-failure-badge')).not.toBeInTheDocument();
+    errorSpy.mockRestore();
+  });
+
   it('logs an unrecognised failure reason read on mount, where no click is involved', async () => {
     // The scenario the log exists for: a background wake's outcome, reported by a skewed worker,
     // arrives through the mount read — the one call site the click-driven tests never reach.
