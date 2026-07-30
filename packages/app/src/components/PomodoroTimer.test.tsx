@@ -1,6 +1,6 @@
 import type { Goal } from '@cuewise/shared';
 import { createSelectorMock, createSettingsStoreMock } from '@cuewise/test-utils';
-import { goalFactory } from '@cuewise/test-utils/factories';
+import { completedGoalFactory, goalFactory } from '@cuewise/test-utils/factories';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
@@ -176,6 +176,80 @@ describe('PomodoroTimer - goal picker', () => {
     expect(screen.getByText('Short Break')).toBeInTheDocument();
     expect(screen.queryByTitle('Select a goal')).not.toBeInTheDocument();
     expect(screen.queryByTitle('Change goal')).not.toBeInTheDocument();
+  });
+});
+
+describe('PomodoroTimer - goal hint', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('shows the hint when a work session has active goals and none is selected', () => {
+    const todo = goalFactory.build({ text: 'Write the report', completed: false });
+    mockStores({ todayTasks: [todo] });
+
+    render(<PomodoroTimer />);
+
+    expect(screen.getByText('Select a goal')).toBeInTheDocument();
+  });
+
+  it('is part of the header toggle rather than a second trigger', () => {
+    const todo = goalFactory.build({ text: 'Write the report', completed: false });
+    mockStores({ todayTasks: [todo] });
+
+    render(<PomodoroTimer />);
+
+    expect(screen.getByTitle('Select a goal')).toContainElement(screen.getByText('Select a goal'));
+    expect(screen.queryByRole('button', { name: 'Select a goal' })).not.toBeInTheDocument();
+  });
+
+  it('opens the dropdown when the hint is clicked', async () => {
+    const user = userEvent.setup();
+    const todo = goalFactory.build({ text: 'Write the report', completed: false });
+    mockStores({ todayTasks: [todo] });
+
+    render(<PomodoroTimer />);
+
+    await user.click(screen.getByText('Select a goal'));
+
+    expect(screen.getByTitle('Select a goal')).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('shows the hint when the selected goal is no longer one of today tasks', () => {
+    const todo = goalFactory.build({ text: 'Write the report', completed: false });
+    mockStores({ todayTasks: [todo], selectedGoalId: 'goal-from-yesterday' });
+
+    render(<PomodoroTimer />);
+
+    expect(screen.getByText('Select a goal')).toBeInTheDocument();
+    expect(screen.getByTitle('Select a goal')).toHaveTextContent('Focus Session');
+  });
+
+  it('hides the hint once a goal is selected', () => {
+    const todo = goalFactory.build({ text: 'Write the report', completed: false });
+    mockStores({ todayTasks: [todo], selectedGoalId: todo.id });
+
+    render(<PomodoroTimer />);
+
+    expect(screen.queryByText('Select a goal')).not.toBeInTheDocument();
+  });
+
+  it('hides the hint when today has no incomplete goals', () => {
+    const done = completedGoalFactory.build({ text: 'Already finished' });
+    mockStores({ todayTasks: [done] });
+
+    render(<PomodoroTimer />);
+
+    expect(screen.queryByText('Select a goal')).not.toBeInTheDocument();
+  });
+
+  it('hides the hint during a break', () => {
+    const todo = goalFactory.build({ text: 'Write the report', completed: false });
+    mockStores({ sessionType: 'break', todayTasks: [todo] });
+
+    render(<PomodoroTimer />);
+
+    expect(screen.queryByText('Select a goal')).not.toBeInTheDocument();
   });
 });
 

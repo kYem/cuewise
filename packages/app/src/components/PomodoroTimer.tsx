@@ -8,6 +8,7 @@ import {
   Play,
   RotateCcw,
   SkipForward,
+  Target,
   X,
 } from 'lucide-react';
 import type React from 'react';
@@ -282,24 +283,32 @@ export const PomodoroTimer: React.FC = () => {
                 aria-haspopup="menu"
                 aria-expanded={showGoalPicker}
               >
-                <h2
-                  ref={titleRef}
-                  className="min-w-0 flex-1 font-semibold text-white"
-                  style={{
-                    lineHeight: 1.2,
-                    maxHeight: '2.4em',
-                    overflow: 'hidden',
-                    overflowWrap: 'anywhere',
-                    ...(titleFaded
-                      ? {
-                          maskImage: 'linear-gradient(to bottom, #000 60%, transparent)',
-                          WebkitMaskImage: 'linear-gradient(to bottom, #000 60%, transparent)',
-                        }
-                      : {}),
-                  }}
-                >
-                  {headerTitle}
-                </h2>
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <h2
+                    ref={titleRef}
+                    className="min-w-0 font-semibold text-white"
+                    style={{
+                      lineHeight: 1.2,
+                      maxHeight: '2.4em',
+                      overflow: 'hidden',
+                      overflowWrap: 'anywhere',
+                      ...(titleFaded
+                        ? {
+                            maskImage: 'linear-gradient(to bottom, #000 60%, transparent)',
+                            WebkitMaskImage: 'linear-gradient(to bottom, #000 60%, transparent)',
+                          }
+                        : {}),
+                    }}
+                  >
+                    {headerTitle}
+                  </h2>
+                  {!selectedGoal && activeGoals.length > 0 && (
+                    <span className="flex items-center gap-1 text-[11px] leading-tight text-white/50">
+                      <Target className="h-3 w-3 flex-shrink-0" />
+                      Select a goal
+                    </span>
+                  )}
+                </div>
                 <ChevronDown
                   className={`w-4 h-4 text-white/60 flex-shrink-0 transition-transform ${
                     showGoalPicker ? 'rotate-180' : ''
