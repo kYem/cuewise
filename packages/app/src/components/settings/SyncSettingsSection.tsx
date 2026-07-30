@@ -409,9 +409,13 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       return;
     }
     if (isCancelledEnable(result)) {
-      // The user's own cancel — closing Google's consent screen, or disconnecting mid-enable —
-      // isn't a failure: no error state, no toast; the form stays open for another attempt.
+      // The user's own cancel isn't a failure: no error state, no toast; the form stays open for
+      // another attempt. But a code minted before they cancelled is the only way back into the
+      // account that attempt created, so it is shown anyway.
       logger.info(`Cloud sync ${source} sign-in was cancelled by the user`);
+      if (result.recoveryCode) {
+        surfaceRecoveryCode(result.recoveryCode);
+      }
       return;
     }
     setFailedAction(source);

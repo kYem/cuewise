@@ -212,8 +212,11 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
     }
     if (engine.getStatus() === 'disabled') {
       // enableSync returned without activating, so a disable landed inside it: ok here would
-      // persist creds, hand Chrome sync off, and show a code for a key that no longer exists.
-      return { ok: false, reason: 'error', detail: AUTH_CANCELLED_DETAIL };
+      // persist creds and hand Chrome sync off. A code it already minted still has to reach the
+      // user — the account it created on the server cannot be re-enrolled without it.
+      const abandonedCode = capturedRecoveryCode;
+      capturedRecoveryCode = undefined;
+      return { ok: false, reason: 'cancelled', recoveryCode: abandonedCode };
     }
     await persistCreds(creds);
     const capturedCode = capturedRecoveryCode;

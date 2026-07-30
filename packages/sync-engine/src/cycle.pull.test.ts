@@ -393,7 +393,7 @@ describe('pullOnce', () => {
     expect(saved.cursor).toBe(0);
     // The record that did land has no hlc left to explain it, so this count is its only trace.
     expect(errorSpy).toHaveBeenCalledWith(
-      'Cloud sync stopped a pull for a disconnected account; 1 of its records had already been applied and remain on this device'
+      'Cloud sync stopped a pull for a disconnected account; 1 of its records had already been applied to this device'
     );
     errorSpy.mockRestore();
   });

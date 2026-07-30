@@ -17,20 +17,35 @@ export type SyncUiStatus =
 
 export type EnableResult =
   | { ok: true; recoveryCode?: string }
-  | { ok: false; reason: 'needs-code' | 'bad-code' | 'auth' | 'error'; detail?: string };
+  | {
+      ok: false;
+      reason: 'needs-code' | 'bad-code' | 'auth' | 'error' | 'cancelled';
+      detail?: string;
+      /**
+       * A code the attempt minted before it was abandoned. It must still reach the user: the
+       * account it created on the server outlives the attempt, and nothing else can re-enroll it.
+       */
+      recoveryCode?: string;
+    };
 
 /**
- * EnableResult.detail marker for a deliberate user cancel; the UI goes quiet on it (no toast,
- * no error state), whatever the reason beside it. Hosts must only emit it when the cancel signal
- * is trustworthy — macOS's server-sanitized access_denied and a post-enable status of `disabled`
- * both qualify; the extension's window-close message does NOT (Chromium reports closing a
- * Google-side error page the same way).
+ * EnableResult.detail marker for a deliberate cancel of the SIGN-IN itself; only meaningful beside
+ * `reason:'auth'`, whose results carry no other detail. Hosts must only emit it when the cancel
+ * signal is trustworthy — macOS's server-sanitized access_denied qualifies; the extension's
+ * window-close message does NOT (Chromium reports closing a Google-side error page the same way).
  */
 export const AUTH_CANCELLED_DETAIL = 'cancelled';
 
-/** Whether a failed enable was the user's own doing, and so must not surface as an error. */
+/**
+ * Whether a failed enable was the user's own doing, so it must not surface as an error. Read the
+ * reason, not just the detail: an `error` result's detail is a thrown message, and one that read
+ * "cancelled" would otherwise silence a real failure.
+ */
 export function isCancelledEnable(result: Extract<EnableResult, { ok: false }>): boolean {
-  return result.detail === AUTH_CANCELLED_DETAIL;
+  if (result.reason === 'cancelled') {
+    return true;
+  }
+  return result.reason === 'auth' && result.detail === AUTH_CANCELLED_DETAIL;
 }
 
 /**

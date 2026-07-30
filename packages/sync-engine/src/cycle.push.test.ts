@@ -1,8 +1,8 @@
 import { generateDataKey } from '@cuewise/crypto';
-import { configurePlatform, hlcEncode } from '@cuewise/shared';
+import { configurePlatform, hlcEncode, logger } from '@cuewise/shared';
 import { setGoals } from '@cuewise/storage';
 import { goalFactory } from '@cuewise/test-utils/factories';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeKvStore } from './__fixtures__/fake-kv-store';
 import { FakeTransport } from './__fixtures__/fake-transport';
 import { defaultBindings } from './collections';
@@ -145,10 +145,17 @@ describe('pushOnce', () => {
       isCancelled: () => transport.pushedBatches.length > 0,
     });
 
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
     const result = await pushOnce(deps);
 
     expect(result).toEqual({ kind: 'cancelled' });
     expect(transport.pushedBatches).toHaveLength(1);
+    // The server kept those 100, so "disconnecting stops the sync" needs the qualification.
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Cloud sync stopped a push for a disconnected account, but its server had already accepted 100 records'
+    );
+    errorSpy.mockRestore();
     // Every id still dirty proves no save ran: `save` rewrites the whole ledger from a snapshot
     // taken before the disable, so recording this ack would restore what the disable cleared.
     const saved = await metaStore.load();

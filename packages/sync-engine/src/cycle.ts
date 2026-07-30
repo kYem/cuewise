@@ -50,8 +50,9 @@ async function saveUnlessCancelled(deps: CycleDeps, meta: SyncMeta): Promise<boo
  */
 function cancelledPull(applied: number): PullResult {
   if (applied > 0) {
+    // "applied", not "remain": a pulled tombstone counts too, and that one deleted local data.
     logger.error(
-      `Cloud sync stopped a pull for a disconnected account; ${applied} of its records had already been applied and remain on this device`
+      `Cloud sync stopped a pull for a disconnected account; ${applied} of its records had already been applied to this device`
     );
   }
   return { kind: 'cancelled' };
@@ -89,9 +90,15 @@ export async function pushOnce(deps: CycleDeps): Promise<PushResult> {
     // Checked again after the round trip, not just before it: `save` rewrites the whole ledger
     // from a snapshot loaded before the disable, so it would restore the cursor and hlcs that
     // disableSync just cleared. Losing this ack costs one re-push the next enable makes anyway.
-    if (!(await saveUnlessCancelled(deps, meta))) {
+    if (deps.isCancelled()) {
+      // The mirror of cancelledPull, and the direction that matters more: the server accepted
+      // these before the cycle stopped, so "disconnect stopped the sync" is not the whole truth.
+      logger.error(
+        `Cloud sync stopped a push for a disconnected account, but its server had already accepted ${batch.length} records`
+      );
       return { kind: 'cancelled' };
     }
+    await deps.meta.save(meta);
   }
   return { kind: 'complete' };
 }

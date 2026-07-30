@@ -227,6 +227,37 @@ describe('SyncSettingsSectionComponent', () => {
     expect(toastError).not.toHaveBeenCalled();
   });
 
+  it('shows a recovery code minted by an enable that a disconnect then abandoned', async () => {
+    // disableSync makes no API call, so the account that enable created on the server outlives it
+    // — and this code is the only thing that can ever re-enroll it. Dropping it bricks the account.
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptEnableWithGoogle({ ok: false, reason: 'cancelled', recoveryCode: CODE });
+    renderSection(controller);
+
+    await user.click(cloudSyncSwitch());
+    await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
+
+    expect(await screen.findByText('Save your recovery code')).toBeInTheDocument();
+    // The modal renders the code in groups, so the rendered text carries no separators.
+    expect(screen.getByTestId('recovery-code-display')).toHaveTextContent(CODE.replaceAll('-', ''));
+    expect(toastError).not.toHaveBeenCalled();
+  });
+
+  it('stays quiet with no code when the user cancelled before anything was created', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptEnableWithGoogle({ ok: false, reason: 'cancelled' });
+    renderSection(controller);
+
+    await user.click(cloudSyncSwitch());
+    await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
+
+    expect(await screen.findByRole('button', { name: 'Sign in with Google' })).toBeEnabled();
+    expect(screen.queryByText('Save your recovery code')).not.toBeInTheDocument();
+    expect(toastError).not.toHaveBeenCalled();
+  });
+
   it('still toasts an auth failure that carries a non-cancel detail', async () => {
     // Pins the exact-match: loosening `detail === 'cancelled'` to a truthy check would
     // silently swallow real auth failures the moment a producer attaches a diagnostic detail.

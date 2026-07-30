@@ -288,6 +288,69 @@ describe('SyncEngine.enableSync', () => {
     expect(device.engine.getStatus()).toBe('disabled');
   });
 
+  it('reports disabled the moment an enrol is abandoned, not whatever status it was mid-way through', async () => {
+    // disableSync writes its own 'disabled' LAST, after several awaited storage hops, so the
+    // abandoned enable's unwind gets there first — and both hosts read this status to decide
+    // whether the connect worked.
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    let releaseDisable = () => {};
+    const parked = new Promise<void>((resolve) => {
+      releaseDisable = resolve;
+    });
+    // Parks the disable on its first hop, before it can write its own status.
+    vi.spyOn(device.scheduler, 'cancel').mockImplementation(async () => {
+      await parked;
+    });
+    let disabling: Promise<void> = Promise.resolve();
+    vi.spyOn(device.apiClient, 'getChanges').mockImplementation(async () => {
+      disabling = device.engine.disableSync();
+      return { records: [], cursor: 0 };
+    });
+
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    expect(device.engine.getStatus()).toBe('disabled');
+
+    releaseDisable();
+    await disabling;
+  });
+
+  it('rolls back the data key when a disable lands during the enrol itself', async () => {
+    // Left on disk it would seal the NEXT account's records under a key whose server holds no
+    // envelope for it, making that device's records unreadable on every other device.
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    vi.spyOn(device.apiClient, 'putRecoveryEnvelope').mockImplementation(async () => {
+      await device.engine.disableSync();
+    });
+
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    expect(await device.kv.get(SYNC_DATA_KEY, 'local')).toBeNull();
+    expect(await device.kv.get(CLOUD_SYNC_ENABLED_KEY, 'local')).toBeNull();
+    expect(device.engine.getStatus()).toBe('disabled');
+    // The envelope cannot be withdrawn, so the code it minted is the account's only way back.
+    expect(device.onRecoveryCode).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not upload the removed account a whole cycle when the enrol is abandoned', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await setGoals([goalFactory.build({ id: 'g1' }), goalFactory.build({ id: 'g2' })]);
+    vi.spyOn(device.apiClient, 'putRecoveryEnvelope').mockImplementation(async () => {
+      await device.engine.disableSync();
+    });
+
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    expect(device.apiClient.callOrder).not.toContain('pushChanges');
+    expect(await device.kv.get(LAST_SYNCED_AT_KEY, 'local')).toBeNull();
+  });
+
   it('discards a pull cursor left behind by a disable whose metadata reset failed', async () => {
     const server = new FakeSyncServer();
     const device = createDevice(server);

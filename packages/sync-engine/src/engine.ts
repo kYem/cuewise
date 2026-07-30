@@ -186,6 +186,7 @@ export class SyncEngine {
     opts: EnableSyncOptions = {}
   ): Promise<void> {
     const { recoveryCode, codeVerifier } = opts;
+    const epoch = this.accountEpoch;
     const before = this.status;
     try {
       this.setStatus('signing_in');
@@ -202,7 +203,7 @@ export class SyncEngine {
       }
       await this.enrollAndActivate(recoveryCode);
     } catch (err) {
-      await this.handleEnableError(err, before);
+      await this.handleEnableError(err, before, epoch);
     }
   }
 
@@ -213,18 +214,24 @@ export class SyncEngine {
    * been lost (the caller must then re-authenticate).
    */
   async resumeEnrollWithCode(recoveryCode: string): Promise<void> {
+    const epoch = this.accountEpoch;
     const before = this.status;
     try {
       // Inside the try so a storage fault reading the token routes through handleEnableError
       // (status → error) like every other enroll failure, not out as a raw rejection.
       const token = await this.deps.sessionManager.getToken();
       if (token === null) {
+        // A disable is why the session is gone, and it has already cleared it: handleAuthLoss
+        // would repaint the pill as "Sign-in expired" for a device the user disconnected.
+        if (this.enrollSuperseded(epoch)) {
+          return;
+        }
         await this.handleAuthLoss();
         return;
       }
       await this.enrollAndActivate(recoveryCode);
     } catch (err) {
-      await this.handleEnableError(err, before);
+      await this.handleEnableError(err, before, epoch);
     }
   }
 
@@ -237,16 +244,26 @@ export class SyncEngine {
     this.setStatus(recoveryCode ? 'enrolling' : 'key_init');
     const wasEnabled = await this.deps.keyStore.get<boolean>(CLOUD_SYNC_ENABLED_KEY, 'local');
     const enrolled = await initOrEnrollKey(this.keyDeps(), recoveryCode);
-    this.dk = enrolled.dk;
-    this.keyId = enrolled.keyId;
     if (enrolled.recoveryCodeToShow !== undefined) {
       if (wasEnabled === true) {
         // A fresh key on a device that was already enrolled: every record the old key sealed is now
         // unopenable, and other devices keep it. The user only sees an ordinary new-code modal.
         logger.error('Cloud sync minted a new data key for an already-enrolled device');
       }
+      // Handed over before the guard below, not after: the envelope is already on the server, so
+      // this code is the only way back into the account even if the enable is abandoned here.
       this.deps.onRecoveryCode?.(enrolled.recoveryCodeToShow);
     }
+    // Checked before the key is adopted: everything past this point — a full cycle's worth of the
+    // removed account's records, the stamps, the ledger — writes for an account that is gone, and
+    // a data key left on disk would seal the NEXT account's records under a key its server has no
+    // envelope for, leaving that device's records unreadable everywhere else.
+    if (this.enrollSuperseded(epoch)) {
+      await this.abandonEnroll(enrolled.recoveryCodeToShow);
+      return;
+    }
+    this.dk = enrolled.dk;
+    this.keyId = enrolled.keyId;
 
     this.setStatus('initial_sync');
     // Unconditionally: the flag is only written once an enable finishes, so its absence does not
@@ -255,8 +272,14 @@ export class SyncEngine {
     await this.resetPullCursor();
     await this.backfillDirty();
     const outcome = await this.syncNow();
+    // The epoch first: it also covers a cycle that 401'd because the disable cleared the session,
+    // which would otherwise be reported to the user as their sign-in expiring.
+    if (this.enrollSuperseded(epoch)) {
+      await this.abandonEnroll(enrolled.recoveryCodeToShow);
+      return;
+    }
     // signed-out: the session was dropped mid-cycle (handleAuthLoss kept the DK).
-    if (outcome.kind === 'signed-out' || this.enrollSuperseded(epoch)) {
+    if (outcome.kind === 'signed-out') {
       return;
     }
 
@@ -264,15 +287,49 @@ export class SyncEngine {
     if (!enabledResult.success) {
       throw new Error(`failed to persist cloudSyncEnabled: ${enabledResult.error.message}`);
     }
+    // Re-checked after the write, like the cycle's own saves: a disable landing inside it would
+    // otherwise leave the flag set with no key, and the next start() would demand a recovery code
+    // for the account the user disconnected.
+    if (this.enrollSuperseded(epoch)) {
+      await this.bestEffort(
+        () => this.deps.keyStore.remove(CLOUD_SYNC_ENABLED_KEY, 'local'),
+        'enable flag rollback'
+      );
+      await this.abandonEnroll(enrolled.recoveryCodeToShow);
+      return;
+    }
     this.setStatus('active');
     await this.armPullLoopUnlessOff();
+  }
+
+  /**
+   * Undoes what an abandoned enroll persisted. The server envelope cannot be withdrawn — there is
+   * no delete call — so a code it minted is reported as the only way back into the account it made.
+   */
+  private async abandonEnroll(mintedCode: string | undefined): Promise<void> {
+    this.dk = null;
+    this.keyId = null;
+    await this.bestEffort(
+      () => this.deps.keyStore.remove(SYNC_DATA_KEY, 'local'),
+      'abandoned enroll key rollback'
+    );
+    if (mintedCode !== undefined) {
+      logger.error(
+        'Cloud sync enable was abandoned after creating an account; its recovery code is the only way back into it'
+      );
+    }
   }
 
   /**
    * Shared enable/enroll error mapping: 401 → auth loss; recovery-code control-flow → the
    * pre-attempt status + rethrow. `before` must be read before enableSync's first setStatus.
    */
-  private async handleEnableError(err: unknown, before: SyncStatus): Promise<void> {
+  private async handleEnableError(err: unknown, before: SyncStatus, epoch: number): Promise<void> {
+    // First: disableSync clears the session, so an enroll caught mid-flight usually fails with a
+    // 401 that is the user's own doing. handleAuthLoss would answer it with "Sign-in expired".
+    if (this.enrollSuperseded(epoch)) {
+      return;
+    }
     if (err instanceof ApiError && err.status === 401) {
       await this.handleAuthLoss();
       return;
@@ -756,6 +813,10 @@ export class SyncEngine {
       return false;
     }
     logger.debug('Sync enable abandoned: the account was disabled while it was enrolling');
+    // Written here rather than left to the disable: disableSync sets it LAST, after several
+    // awaited storage hops, so the abandoned enable's own unwind would otherwise hand the host a
+    // mid-enable status and be reported as a connect that worked.
+    this.setStatus('disabled');
     return true;
   }
 

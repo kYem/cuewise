@@ -169,6 +169,24 @@ describe('createDirectSyncController: enable()', () => {
     expect(result).toEqual({ ok: false, reason: 'auth' });
   });
 
+  it('maps a post-call disabled status to a cancel, never to ok', async () => {
+    // enableSync returned without activating, so a disable landed inside it. ok would persist
+    // creds, hand Chrome sync off, and show a recovery code for a key that no longer exists.
+    const engine = fakeControlSurface({
+      getStatus: vi.fn().mockReturnValue('disabled' as SyncStatus),
+    });
+    const { controller } = buildDirectSyncController<SyncEngineControlSurface>({
+      baseUrl: BASE_URL,
+      keyStore: new FakeKvStore(),
+      oauthDriver: unusedDriver(),
+      buildEngine: () => engine,
+    });
+
+    const result = await controller.enable('cred-a', 'Device A');
+
+    expect(result).toEqual({ ok: false, reason: 'cancelled' });
+  });
+
   it('maps any other thrown error to error with its message as detail', async () => {
     const server = new FakeSyncServer();
     const device = createDevice(server);
