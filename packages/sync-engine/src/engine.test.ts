@@ -1450,6 +1450,27 @@ describe('SyncEngine.start / stop', () => {
     expect(restarted.getStatus()).toBe('needs_enroll');
   });
 
+  it('keeps a device that retried from error on the prompt too, not only needs_enroll', async () => {
+    // Retry routes through reconnect, so an error-state device reaches the same needs-code exit.
+    // Naming one status here folded every other start into "off" while the code modal was open.
+    const server = new FakeSyncServer();
+    const deviceA = createDevice(server);
+    useStorage(deviceA);
+    await deviceA.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    const deviceB = createDevice(server);
+    useStorage(deviceB);
+    vi.spyOn(deviceB.apiClient, 'exchangeToken').mockRejectedValueOnce(new Error('boom'));
+    await expect(deviceB.engine.enableSync('dev', 'cred-b', 'Device B')).rejects.toThrow('boom');
+    expect(deviceB.engine.getStatus()).toBe('error');
+
+    await expect(deviceB.engine.enableSync('dev', 'cred-b', 'Device B')).rejects.toThrow(
+      RecoveryCodeRequiredError
+    );
+
+    expect(deviceB.engine.getStatus()).toBe('needs_enroll');
+  });
+
   it('leaves a first enable that needs a code reading disabled, not enrolled', async () => {
     const server = new FakeSyncServer();
     const deviceA = createDevice(server);

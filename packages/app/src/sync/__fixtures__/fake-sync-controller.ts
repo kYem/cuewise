@@ -167,6 +167,9 @@ export class FakeSyncController implements SyncController {
   /** Models the macOS adapter, which emits status from inside syncNow rather than around it. */
   emitsSyncingDuringSyncNow = false;
 
+  /** Both hosts reach active before enable() resolves; the panel's ok-branch runs after that. */
+  emitsActiveBeforeEnableResolves = false;
+
   /** Test helper: sets status and notifies subscribers (not part of SyncController). */
   setStatus(status: SyncUiStatus): void {
     this.status = status;
@@ -217,6 +220,9 @@ export class FakeSyncController implements SyncController {
   ): Promise<EnableResult> {
     this.calls.push({ method: 'enable', args: [accountId, deviceName, recoveryCode] });
     this.maybeFail('enable');
+    if (this.emitsActiveBeforeEnableResolves) {
+      this.setStatus('active');
+    }
     const next = this.enableResults.shift();
     if (next !== undefined) {
       return next;

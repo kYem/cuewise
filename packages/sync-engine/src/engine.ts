@@ -260,7 +260,10 @@ export class SyncEngine {
     await this.armPullLoopUnlessOff();
   }
 
-  /** Shared enable/enroll error mapping: 401 → auth loss; recovery-code control-flow → disabled+rethrow. */
+  /**
+   * Shared enable/enroll error mapping: 401 → auth loss; recovery-code control-flow → the
+   * pre-attempt status + rethrow. `before` must be read before enableSync's first setStatus.
+   */
   private async handleEnableError(err: unknown, before: SyncStatus): Promise<void> {
     if (err instanceof ApiError && err.status === 401) {
       await this.handleAuthLoss();
@@ -268,9 +271,9 @@ export class SyncEngine {
     }
     if (err instanceof RecoveryCodeRequiredError || err instanceof RecoveryCodeError) {
       // Expected enroll control-flow, not a failure — don't poison the persisted status other tabs
-      // read. Restoring where the attempt began keeps a needs_enroll device on the prompt that sent
-      // it to Reconnect, while a first enable still falls back to disabled.
-      this.setStatus(before === 'needs_enroll' ? 'needs_enroll' : 'disabled');
+      // read. Only a first enable begins at `disabled`; every other start means this device was
+      // already set up, so 'off' would contradict the prompt that sent the user here.
+      this.setStatus(before === 'disabled' ? 'disabled' : 'needs_enroll');
       throw err;
     }
     this.setStatus('error');
@@ -681,15 +684,24 @@ export class SyncEngine {
         this.setStatus('needs_enroll');
         return;
       }
-      if (!(err instanceof SelfHealUnrecoverableError)) {
-        throw err;
+      if (err instanceof ApiError && err.status === 401) {
+        await this.handleAuthLoss();
+        return;
       }
-      // The key is HERE and only the server envelope is gone, so this device can still sync. Falls
-      // through rather than stopping it: reaching active is also what keeps Regenerate recovery
-      // code — the one control that restores the envelope — on screen.
-      logger.error(
-        'Cloud sync has no recovery envelope on the server; regenerate your recovery code to restore it'
-      );
+      // Everything below falls through to the key load. Self-heal only verifies the SERVER envelope,
+      // so neither a missing one nor an unreachable server says anything about the key on disk —
+      // abandoning here left an enrolled device reading "off" on macOS after one offline launch.
+      if (err instanceof SelfHealUnrecoverableError) {
+        // Reaching active is also what keeps Regenerate recovery code, the one fix, on screen.
+        logger.error(
+          'Cloud sync has no recovery envelope on the server; regenerate your recovery code to restore it'
+        );
+      } else {
+        logger.error(
+          `Cloud sync self-heal could not reach the server: ${describeThrown(err)}`,
+          err
+        );
+      }
     }
 
     const persisted = await loadPersistedDataKey(this.deps.keyStore);

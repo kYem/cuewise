@@ -5,6 +5,7 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeSyncController } from '../../sync/__fixtures__/fake-sync-controller';
+import type { SyncUiStatus } from '../../sync/sync-controller';
 import { SyncControllerContext } from '../../sync/sync-controller';
 import { SyncSettingsSectionComponent } from './SyncSettingsSection';
 import type { SettingsSectionProps } from './settings-types';
@@ -1164,6 +1165,81 @@ describe('SyncSettingsSectionComponent', () => {
     expect(
       screen.queryByRole('button', { name: 'Regenerate recovery code' })
     ).not.toBeInTheDocument();
+  });
+
+  it('renders nothing for a status this build does not know', async () => {
+    // status arrives as an unvalidated chrome.storage string, so a downgrade or an older bundle can
+    // read back a newer one. Indexing a total map would answer undefined and pass a !== null gate.
+    const controller = new FakeSyncController();
+    renderSection(controller);
+
+    act(() => controller.setStatus('throttled' as SyncUiStatus));
+
+    expect(screen.queryByTestId('sync-reconnect-prompt')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('sync-status-pill')).not.toBeInTheDocument();
+  });
+
+  it('keeps the failure badge when a click lands before the key does', async () => {
+    // A click can wake a cold worker ahead of its key load and get no-key back. The engine refuses
+    // to persist that over the last real cycle; the panel must refuse to paint it for the same reason.
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptLastCycle({
+      kind: 'failed',
+      reason: 'device',
+      error: new Error('unreadable'),
+    });
+    controller.scriptSyncNow({ kind: 'no-key' });
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+    await screen.findByTestId('sync-failure-badge');
+
+    await user.click(screen.getByRole('button', { name: 'Sync now' }));
+
+    await waitFor(() => expect(toastWarning).toHaveBeenCalledWith(INCOMPLETE_MESSAGE));
+    expect(screen.getByTestId('sync-failure-badge')).toBeInTheDocument();
+  });
+
+  it('shows the account line after an enable, not only after the next sync', async () => {
+    // The account bump invalidates the details fetch the status change already started, so without
+    // its own re-read the panel renders no "Signed in as" line for the rest of the mount.
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    // Both hosts reach active before enable() resolves, so the effect's fetch is already in flight
+    // when the ok-branch invalidates it. Deferring that fetch is what pins the ordering: without a
+    // re-read of its own, the invalidated fetch is the only one and the line never appears.
+    controller.emitsActiveBeforeEnableResolves = true;
+    controller.scriptDetails({ accountEmail: 'a@example.com', accountId: 'a', lastSyncedAt: null });
+    controller.deferNextDetails();
+    renderSection(controller);
+
+    await enterEnableStep(user, 'acct-1');
+    await user.click(screen.getByRole('button', { name: 'Enable' }));
+
+    expect(await screen.findByTestId('sync-account-label')).toHaveTextContent(
+      'Signed in as a@example.com'
+    );
+  });
+
+  it('does not let a click paint for the account a reconnect replaced', async () => {
+    // The reason accountGenRef exists: a reconnect can land on a different account, and until it
+    // bumped, an in-flight click still toasted and painted for the previous one.
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptLastCycle(null);
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+    await screen.findByTestId('sync-status-pill');
+
+    controller.deferNextSyncNow();
+    await user.click(screen.getByRole('button', { name: 'Sync now' }));
+    act(() => controller.setStatus('needs_reauth'));
+    await user.click(screen.getByRole('button', { name: 'Reconnect' }));
+    await act(async () => {
+      controller.resolveSyncNow({ kind: 'synced' });
+    });
+
+    expect(toastSuccess).not.toHaveBeenCalledWith('Synced');
   });
 
   it('still says the sign-in expired when that is what actually happened', async () => {
