@@ -339,18 +339,15 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   // A show-once recovery code must never vanish: if Settings closed during a slow OAuth flow,
   // the modal has no mount — tell the user (globally) to regenerate one instead. Recoverable:
   // the code grants nothing by itself and Regenerate mints a fresh one.
-  const surfaceRecoveryCode = (code: string, closedMessage?: string) => {
+  const surfaceRecoveryCode = (code: string) => {
     if (mountedRef.current) {
       setRecoveryCode(code);
       return;
     }
-    logger.error('Cloud sync issued a recovery code after Settings closed — it had no surface');
+    logger.error('Cloud sync enabled after Settings closed — the recovery code had no surface');
     useToastStore
       .getState()
-      .warning(
-        closedMessage ??
-          'Cloud sync is on — open Settings → Cloud Sync and regenerate your recovery code.'
-      );
+      .warning('Cloud sync is on — open Settings → Cloud Sync and regenerate your recovery code.');
   };
 
   // Enable finishes at `active` even when its initial cycle failed, and that cycle involves no
@@ -392,16 +389,25 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     await refreshDetails();
   };
 
-  // A disconnect landed mid-enable. The switch must stop reading on, and a code the attempt
-  // minted is the only way back into the account it created on the server before it was abandoned.
+  // A disconnect landed mid-enable, so the switch must stop reading on.
   const routeAbandonedEnable = (recoveryCode: string | undefined) => {
     logger.error('Cloud sync enable was abandoned by a disconnect');
     setEnabling(false);
+    // The enroll modal is a prompt to finish joining an account this device is no longer joining;
+    // left open, its Enroll button starts a fresh sign-in for it.
+    setEnrollOpen(false);
     if (recoveryCode === undefined) {
       return;
     }
-    surfaceRecoveryCode(recoveryCode, ABANDONED_CODE_MESSAGE);
-    useToastStore.getState().warning(ABANDONED_CODE_MESSAGE);
+    if (mountedRef.current) {
+      surfaceRecoveryCode(recoveryCode);
+      useToastStore.getState().warning(ABANDONED_CODE_MESSAGE);
+      return;
+    }
+    // No modal to render into, and Regenerate cannot mint a replacement, so the code itself has
+    // to travel in the message — losing it strands the account this attempt created.
+    logger.error('Cloud sync issued a recovery code after Settings closed — it had no surface');
+    useToastStore.getState().warning(`${ABANDONED_CODE_MESSAGE} ${recoveryCode}`);
   };
 
   // Shared by the initial enable() and the reconnect() flows — both surface the same shape.
@@ -433,7 +439,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     }
     if (isCancelledEnable(result)) {
       // A cancelled sign-in isn't a failure: no error state, no toast; the form stays open for
-      // another attempt, unlike the disconnect above, which ended the account entirely.
+      // another attempt, unlike the disconnect above, which ended this device's setup.
       logger.info(`Cloud sync ${source} sign-in was cancelled by the user`);
       return;
     }

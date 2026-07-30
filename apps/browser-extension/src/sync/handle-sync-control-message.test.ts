@@ -386,6 +386,37 @@ describe('handleSyncControlMessage: enable', () => {
     expect(result).toEqual({ ok: false, reason: 'auth' });
   });
 
+  it('lets a disable reach the engine while an enable is still in flight', async () => {
+    // Queued behind it, the disconnect could only land once the enable had finished — so the
+    // engine's cancellation would never see it, and the panel would have handed Chrome sync off
+    // for an account the user had already disconnected.
+    let releaseEnable = () => {};
+    const parked = new Promise<void>((resolve) => {
+      releaseEnable = resolve;
+    });
+    const disableSync = vi.fn().mockResolvedValue(undefined);
+    const engine = fakeControlSurface({
+      enableSync: vi.fn().mockImplementation(() => parked),
+      disableSync,
+    });
+    const deps = fakeDeps();
+
+    const enabling = handleSyncControlMessage(engine, enableMessage(), deps);
+    const disabling = handleSyncControlMessage(
+      engine,
+      { kind: 'cuewise-sync-control', op: 'disable' },
+      deps
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    // Read and released before asserting: the mutex is module-scoped, so a throw here would
+    // strand the parked enable and time out every later test in the file.
+    const reachedEngine = disableSync.mock.calls.length;
+    releaseEnable();
+    await Promise.all([enabling, disabling]);
+
+    expect(reachedEngine).toBe(1);
+  });
+
   it('maps a post-call disabled status to a quiet cancel, never to ok', async () => {
     const engine = fakeControlSurface({
       getStatus: vi.fn().mockReturnValue('disabled' as SyncStatus),
@@ -398,8 +429,6 @@ describe('handleSyncControlMessage: enable', () => {
 
     const result = await handleSyncControlMessage(engine, enableMessage(), deps);
 
-    // The code comes too: disableSync withdraws no envelope, so the account this attempt made on
-    // the server outlives it and nothing else can re-enroll it.
     expect(result).toEqual({ ok: false, reason: 'cancelled', recoveryCode: 'CW1-ABC' });
   });
 

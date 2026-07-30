@@ -91,8 +91,7 @@ function storedOutcome(record: Partial<PersistedSyncCycle>): SyncOutcome | null 
     return { kind: 'resynced' };
   }
   if (record.kind !== undefined) {
-    // Exhaustiveness. `cancelled` is not among them by construction: it is not an outcome, so
-    // nothing ever persists it.
+    // `cancelled` is not among them by construction: it is not an outcome, so nothing persists it.
     const unhandled: never = record.kind;
     logger.error(`Ignoring a stored sync cycle of unknown kind: ${String(unhandled)}`);
   }

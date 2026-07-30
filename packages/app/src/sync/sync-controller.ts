@@ -21,10 +21,7 @@ export type EnableResult =
       ok: false;
       reason: 'needs-code' | 'bad-code' | 'auth' | 'error' | 'cancelled';
       detail?: string;
-      /**
-       * A code the attempt minted before it was abandoned. It must still reach the user: the
-       * account it created on the server outlives the attempt, and nothing else can re-enroll it.
-       */
+      /** A code the abandoned attempt minted; the account it created outlives the attempt. */
       recoveryCode?: string;
     };
 
@@ -37,9 +34,8 @@ export type EnableResult =
 export const AUTH_CANCELLED_DETAIL = 'cancelled';
 
 /**
- * Whether a failed enable was the user's own doing, so it must not surface as an error. Reads the
- * reason, not just the detail: an `error` detail is a thrown message, and one reading "cancelled"
- * would otherwise silence a real failure.
+ * Whether a failed enable was the user's own doing. Reads the reason, not just the detail: an
+ * `error` detail is a thrown message, and one reading "cancelled" would silence a real failure.
  */
 export function isCancelledEnable(result: Extract<EnableResult, { ok: false }>): boolean {
   if (result.reason === 'cancelled') {

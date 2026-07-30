@@ -45,9 +45,9 @@ export class FakeKvStore implements KeyValueStore {
     return { success: true };
   }
 
-  /** Keys whose removal reports failure, as a real adapter does — `false`, never a throw. */
+  /** A key whose removal reports failure the way the port defines it: `false`, not a throw. */
   failRemovesForKey: string | null = null;
-  /** Keys whose removal throws instead, which the port forbids but an adapter could still do. */
+  /** A key whose removal throws instead — off-contract, but an adapter could still do it. */
   throwRemovesForKey: string | null = null;
 
   async remove(key: string, _area: StorageArea): Promise<boolean> {

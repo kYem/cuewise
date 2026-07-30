@@ -279,8 +279,6 @@ describe('SyncEngine.enableSync', () => {
   });
 
   it('does not persist the enabled flag when a disable lands before the cycle even starts', async () => {
-    // The window syncNow's own epoch cannot see: its epoch is captured after the disable already
-    // bumped, so the cycle looks untroubled — it just finds no key and reports `no-key`.
     const server = new FakeSyncServer();
     const bindings = defaultBindings();
     const device = createDevice(server, { bindings });
@@ -376,8 +374,7 @@ describe('SyncEngine.enableSync', () => {
 
   it('names the key an abandoned enrol could not roll back, rather than reporting success', async () => {
     // `remove` reports failure by returning false, never by throwing, so a bestEffort wrapper
-    // alone calls a failed rollback a success — and the flag left set lands the next start() on
-    // needs_enroll, demanding a recovery code for the account the user just removed.
+    // alone would call a failed rollback a success.
     const server = new FakeSyncServer();
     const device = createDevice(server);
     useStorage(device);
@@ -518,7 +515,6 @@ describe('SyncEngine.enableSync', () => {
     expect(await device.kv.get(SYNC_DATA_KEY, 'local')).toBeNull();
     expect(await device.kv.get(CLOUD_SYNC_ENABLED_KEY, 'local')).toBeNull();
     expect(device.engine.getStatus()).toBe('disabled');
-    // The envelope cannot be withdrawn, so the code it minted is the account's only way back.
     expect(device.onRecoveryCode).toHaveBeenCalledTimes(1);
     expect(errorSpy).toHaveBeenCalledWith(
       'Cloud sync enable was abandoned after creating an account; its recovery code is the only way back into it'
@@ -1168,7 +1164,7 @@ describe('SyncEngine.syncNow', () => {
     await device.engine.syncNow();
 
     expect(errorSpy).toHaveBeenCalledWith(
-      `Sync cycle lastSyncedAt stamp failed; the reported outcome still stands: FakeKvStore: simulated adapter fault writing ${LAST_SYNCED_AT_KEY}`,
+      `Cloud sync lastSyncedAt stamp failed; what it belongs to still stands: FakeKvStore: simulated adapter fault writing ${LAST_SYNCED_AT_KEY}`,
       expect.any(Error)
     );
   });

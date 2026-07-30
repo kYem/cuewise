@@ -228,8 +228,6 @@ describe('SyncSettingsSectionComponent', () => {
   });
 
   it('shows a recovery code minted by an enable that a disconnect then abandoned', async () => {
-    // disableSync makes no API call, so the account that enable created on the server outlives it
-    // — and this code is the only thing that can ever re-enroll it. Dropping it bricks the account.
     const user = userEvent.setup();
     const controller = new FakeSyncController();
     controller.scriptEnableWithGoogle({ ok: false, reason: 'cancelled', recoveryCode: CODE });
@@ -245,6 +243,56 @@ describe('SyncSettingsSectionComponent', () => {
     expect(toastWarning).toHaveBeenCalledWith(expect.stringContaining('disconnected before setup'));
     expect(cloudSyncSwitch()).not.toBeChecked();
     expect(toastError).not.toHaveBeenCalled();
+  });
+
+  it('closes the enroll prompt too, so its Enroll button cannot restart a dead sign-in', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptEnableWithGoogle({ ok: false, reason: 'needs-code' });
+    controller.scriptEnrollWithCode({ ok: false, reason: 'cancelled', recoveryCode: CODE });
+    renderSection(controller);
+
+    await user.click(cloudSyncSwitch());
+    await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
+    await screen.findByText('Enter recovery code');
+    await user.type(screen.getByLabelText(/recovery code/i), CODE);
+    await user.click(screen.getByRole('button', { name: 'Enroll' }));
+
+    expect(await screen.findByText('Save your recovery code')).toBeInTheDocument();
+    expect(screen.queryByText('Enter recovery code')).not.toBeInTheDocument();
+  });
+
+  it('explains the modal it just opened, with one warning', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptEnableWithGoogle({ ok: false, reason: 'cancelled', recoveryCode: CODE });
+    renderSection(controller);
+
+    await user.click(cloudSyncSwitch());
+    await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
+
+    await screen.findByText('Save your recovery code');
+    expect(toastWarning).toHaveBeenCalledTimes(1);
+  });
+
+  it('carries the code in the message when Settings closed before it could be shown', async () => {
+    // Nothing else holds it — the host slots are read-and-clear and Regenerate cannot mint a
+    // replacement without a key, so a message that omits it destroys the account's only way back.
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.deferNextEnableWithGoogle();
+    const { unmount } = renderSection(controller);
+
+    await user.click(cloudSyncSwitch());
+    await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
+    unmount();
+    await act(async () => {
+      controller.resolveEnableWithGoogle({ ok: false, reason: 'cancelled', recoveryCode: CODE });
+    });
+
+    // Once: the closed-panel path used to warn from here AND from surfaceRecoveryCode.
+    expect(toastWarning).toHaveBeenCalledTimes(1);
+    expect(toastWarning).toHaveBeenCalledWith(expect.stringContaining(CODE));
   });
 
   it('closes the enable form when a disconnect abandons it, with nothing to show', async () => {
@@ -595,8 +643,7 @@ describe('SyncSettingsSectionComponent', () => {
   });
 
   it('shows a code minted by an enroll submit that a disconnect then abandoned', async () => {
-    // The enroll fallback can land on a different account, mint a fresh code, and be abandoned —
-    // and this branch discarded it while its two siblings surfaced it.
+    // The enroll fallback can land on a different account, mint a fresh code, and be abandoned.
     const user = userEvent.setup();
     const controller = new FakeSyncController();
     controller.scriptEnableWithGoogle({ ok: false, reason: 'needs-code' });

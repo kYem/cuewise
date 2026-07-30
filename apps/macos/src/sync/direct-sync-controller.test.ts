@@ -193,8 +193,6 @@ describe('createDirectSyncController: enable()', () => {
 
     const result = await controller.enable('cred-a', 'Device A');
 
-    // The code comes too: disableSync withdraws no envelope, so the account this attempt made on
-    // the server outlives it and nothing else can re-enroll it.
     expect(result).toEqual({ ok: false, reason: 'cancelled', recoveryCode: 'CW1-ABC' });
   });
 

@@ -186,5 +186,12 @@ export async function handleSyncControlMessage(
     // Same rationale as 'details': read-only, so it must never queue behind a pending op.
     return runLastCycle(engine);
   }
+  if (op === 'disable') {
+    // Deliberately outside the mutex, unlike enable/reconnect: queued behind an in-flight enable
+    // it could only land once that enable had finished — the engine's own cancellation would
+    // never see it, and the user's Disconnect would arrive after Chrome sync had been handed off.
+    // The engine is what makes this safe: disableSync bumps the epoch first and synchronously.
+    return runOp(engine, { ...msg, op }, deps);
+  }
   return serialize(() => runOp(engine, { ...msg, op }, deps));
 }

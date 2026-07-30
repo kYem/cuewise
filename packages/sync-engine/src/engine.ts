@@ -162,8 +162,8 @@ export class SyncEngine {
   // answering it as such is exactly what clears a wedged device's badge.
   private lastCycleKnown = true;
   private hydration: Promise<void> | null = null;
-  // Bumped by disableSync so a hydration already in flight drops its snapshot instead of
-  // re-installing the removed account's stamp over the reset disable just performed.
+  // The cancellation token for everything a disable must stop: the cycle, each enrol checkpoint,
+  // start(), and any bookkeeping already in flight. Only disableSync bumps it, and only upward.
   private accountEpoch = 0;
 
   constructor(private readonly deps: SyncEngineDeps) {
@@ -249,8 +249,7 @@ export class SyncEngine {
         // unopenable, and other devices keep it. The user only sees an ordinary new-code modal.
         logger.error('Cloud sync minted a new data key for an already-enrolled device');
       }
-      // Handed over before the guard below, not after: the envelope is already on the server, so
-      // this code is the only way back into the account even if the enable is abandoned here.
+      // Handed over before the guard below, not after — see abandonEnroll.
       this.deps.onRecoveryCode?.(enrolled.recoveryCodeToShow);
     }
     // Before the key is adopted: everything past here writes for an account that is gone.
@@ -266,8 +265,8 @@ export class SyncEngine {
     // cursor is this account's — a re-auth can land on another at the provider's chooser.
     await this.resetPullCursor();
     await this.backfillDirty();
-    // Both wrote to the ledger disableSync had just cleared, so a disable landing across them
-    // needs that reset repeating before this enroll walks away from it.
+    // backfillDirty wrote to the ledger disableSync had just cleared, so a disable landing across
+    // it needs that reset repeating before this enroll walks away.
     if (this.enrollSuperseded(epoch)) {
       await this.bestEffort(() => this.resetMeta(), 'abandoned enroll ledger rollback');
       await this.abandonEnroll(enrolled.recoveryCodeToShow);
@@ -309,7 +308,16 @@ export class SyncEngine {
     }
   }
 
-  // Separate only so a throwing adapter counts as a failed removal rather than escaping.
+  private async clearSessionSafely(): Promise<boolean> {
+    try {
+      return await this.deps.sessionManager.clear();
+    } catch (err) {
+      logger.error(`Cloud sync rollback threw clearing the session: ${describeThrown(err)}`, err);
+      return false;
+    }
+  }
+
+  // A throwing adapter counts as a failed removal rather than escaping the rollback.
   private async bestEffortRemove(key: string): Promise<boolean> {
     try {
       return await this.deps.keyStore.remove(key, 'local');
@@ -320,20 +328,20 @@ export class SyncEngine {
   }
 
   /**
-   * Drops the data key an abandoned enroll adopted. The server envelope cannot be withdrawn —
-   * there is no delete call — so a code it minted is the only way back into the account it made.
+   * Drops what an abandoned enroll persisted, adopted or not. The server envelope cannot be
+   * withdrawn — there is no delete call — so a code it minted is the only way back into the
+   * account it made, which is why that is reported rather than swallowed.
    */
   private async abandonEnroll(mintedCode: string | undefined): Promise<void> {
     this.dk = null;
     this.keyId = null;
     await this.rollbackKey(SYNC_DATA_KEY, 'its data key');
-    // The session too: disableSync cleared it before this enroll's saveToken wrote it, so the
-    // device would otherwise hold a live token and getAccount would keep naming the account the
-    // user disconnected.
-    await this.bestEffort(
-      () => this.deps.sessionManager.clear(),
-      'abandoned enroll session rollback'
-    );
+    // disableSync cleared the session before this enroll's saveToken wrote it, so a live token
+    // for the disconnected account survives unless this removes it — and `clear` reports failure
+    // by returning false, exactly as `remove` does.
+    if (!(await this.clearSessionSafely())) {
+      logger.error('Cloud sync abandoned an enable but could not clear its session');
+    }
     if (mintedCode !== undefined) {
       logger.error(
         'Cloud sync enable was abandoned after creating an account; its recovery code is the only way back into it'
@@ -349,7 +357,11 @@ export class SyncEngine {
     // First: disableSync clears the session, so an enroll caught mid-flight usually fails with a
     // 401 that is the user's own doing. handleAuthLoss would answer it with "Sign-in expired".
     if (this.enrollSuperseded(epoch)) {
-      if (!(err instanceof ApiError && err.status === 401)) {
+      const expected =
+        (err instanceof ApiError && err.status === 401) ||
+        err instanceof RecoveryCodeRequiredError ||
+        err instanceof RecoveryCodeError;
+      if (!expected) {
         // Not the 401 the disable's own session clear provokes, so it is a real fault that the
         // abandoned enable would otherwise bury.
         logger.error(`Cloud sync enable failed as it was abandoned: ${describeThrown(err)}`, err);
@@ -477,12 +489,11 @@ export class SyncEngine {
     return outcome;
   }
 
-  /** Removes what the bookkeeping re-created when a disable landed inside its own writes. */
   private async rollbackCycleRecord(): Promise<void> {
     this.lastSyncedAt = null;
     this.lastCycle = null;
-    await this.bestEffortRemove(LAST_SYNCED_AT_KEY);
-    await this.bestEffortRemove(LAST_CYCLE_KEY);
+    await this.rollbackKey(LAST_SYNCED_AT_KEY, 'the last-synced stamp');
+    await this.rollbackKey(LAST_CYCLE_KEY, 'the last cycle record');
   }
 
   /** The cycle proper: everything syncNow reports on, with none of the bookkeeping it does after. */
@@ -567,7 +578,7 @@ export class SyncEngine {
       // Cause in the message text, like the cycle log above: `message` and `cause` are both
       // non-enumerable, so an object payload renders as `{}` on JSON surfaces.
       logger.error(
-        `Sync cycle ${what} failed; the reported outcome still stands: ${describeThrown(err)}`,
+        `Cloud sync ${what} failed; what it belongs to still stands: ${describeThrown(err)}`,
         err
       );
     }

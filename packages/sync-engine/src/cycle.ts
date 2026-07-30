@@ -35,7 +35,6 @@ export interface CycleDeps {
   isCancelled: () => boolean;
 }
 
-/** Saves unless the account is gone; false when it skipped, so the caller can report `cancelled`. */
 async function saveUnlessCancelled(deps: CycleDeps, meta: SyncMeta): Promise<boolean> {
   if (deps.isCancelled()) {
     return false;
@@ -69,7 +68,7 @@ interface DirtyRecord {
   record: PushRecord;
 }
 
-/** Whether a push ran to the end. Batches before a `cancelled` still reached the server. */
+/** Batches before a `cancelled` still reached the server. */
 export type PushResult = { kind: 'complete' } | { kind: 'cancelled' };
 
 /** Seals every dirty entity and pushes it in batches, clearing dirty/tombstones as each batch acks. */
