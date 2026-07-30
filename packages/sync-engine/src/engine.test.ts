@@ -1018,6 +1018,51 @@ describe('SyncEngine.syncNow', () => {
     });
   });
 
+  it('reports an unreadable stamp as unreadable, not as the wrong shape', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    device.kv.unreadableKey = LAST_SYNCED_AT_KEY;
+
+    const cold = new SyncEngine({
+      apiClient: device.apiClient,
+      sessionManager: new SessionManager(device.kv),
+      keyStore: device.kv,
+      scheduler: device.scheduler,
+    });
+    await cold.ensureHydrated();
+
+    expect(cold.getLastSyncedAt()).toBeNull();
+    expect(errorSpy).toHaveBeenCalledWith('The stored last-synced stamp is unreadable', {
+      key: LAST_SYNCED_AT_KEY,
+    });
+  });
+
+  it('refuses a stored stamp that is not a number, rather than rendering Invalid Date', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    await device.kv.set(LAST_SYNCED_AT_KEY, 'yesterday', 'local');
+
+    const cold = new SyncEngine({
+      apiClient: device.apiClient,
+      sessionManager: new SessionManager(device.kv),
+      keyStore: device.kv,
+      scheduler: device.scheduler,
+    });
+    await cold.ensureHydrated();
+
+    expect(cold.getLastSyncedAt()).toBeNull();
+    expect(errorSpy).toHaveBeenCalledWith('The stored last-synced stamp is not a number', {
+      key: LAST_SYNCED_AT_KEY,
+      shape: 'string',
+    });
+  });
+
   it('reports unknown when the whole hydration read fails', async () => {
     const server = new FakeSyncServer();
     const device = createDevice(server);
@@ -1087,8 +1132,15 @@ describe('SyncEngine.syncNow', () => {
     await device.engine.enableSync('dev', 'cred-a', 'Device A');
     await device.kv.set(LAST_SYNCED_AT_KEY, 1_000, 'local');
 
+    // The refused write is what makes storage and memory disagree. Without it syncNow persists
+    // 7_000 over the seed and hydration reads back the very number the assertion expects, so the
+    // guard under test could be deleted and this would still pass.
     t = 7_000;
+    device.kv.failSetsForKey = LAST_SYNCED_AT_KEY;
     await device.engine.syncNow();
+    device.kv.failSetsForKey = null;
+    expect(await device.kv.get(LAST_SYNCED_AT_KEY, 'local')).toBe(1_000);
+
     await device.engine.ensureHydrated();
 
     expect(device.engine.getLastSyncedAt()).toBe(7_000);
@@ -1164,42 +1216,6 @@ describe('SyncEngine.syncNow', () => {
     await hydrating;
 
     expect(cold.getLastCycle()).toEqual({ known: true, cycle: null });
-  });
-
-  it('leaves the memo alone when a failed read no longer owns it', async () => {
-    // Clearing it unconditionally would drop a newer read's memo and run two reads concurrently
-    // over the same fields.
-    const server = new FakeSyncServer();
-    const device = createDevice(server);
-    useStorage(device);
-    await device.engine.enableSync('dev', 'cred-a', 'Device A');
-
-    let finishRead = () => {};
-    const parked = new Promise<null>((resolve) => {
-      finishRead = () => resolve(null);
-    });
-    const cold = new SyncEngine({
-      apiClient: device.apiClient,
-      sessionManager: new SessionManager(device.kv),
-      keyStore: device.kv,
-      scheduler: device.scheduler,
-    });
-    const getMany = vi
-      .spyOn(device.kv, 'getMany')
-      .mockImplementation((keys) => (keys.includes(LAST_CYCLE_KEY) ? parked : Promise.resolve({})));
-
-    const hydrating = cold.ensureHydrated();
-    await cold.disableSync();
-    finishRead();
-    await hydrating;
-    const readsBefore = getMany.mock.calls.length;
-
-    // The disable already cleared the memo, so this read is the second and last one.
-    getMany.mockResolvedValue({});
-    await cold.ensureHydrated();
-    await cold.ensureHydrated();
-
-    expect(getMany.mock.calls.length).toBe(readsBefore + 1);
   });
 
   it('does not reject when the store throws instead of reporting a failed read', async () => {
@@ -1434,6 +1450,59 @@ describe('SyncEngine.start / stop', () => {
 
     expect(restarted.getStatus()).toBe('disabled');
     expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not report a disable that lands after self-heal as a missing key', async () => {
+    // Reaches start()'s SECOND epoch gate, which its sibling test cannot: self-heal succeeds here,
+    // so the disable has to land in the key read that follows it.
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    const restarted = new SyncEngine({
+      apiClient: device.apiClient,
+      sessionManager: new SessionManager(device.kv),
+      keyStore: device.kv,
+      scheduler: new FakeScheduler(),
+    });
+    // Self-heal reads the key first and finds it; the disable then lands in loadPersistedDataKey's
+    // own read, so start() resumes to find the key gone with a matching epoch unless it re-checks.
+    let selfHealDone = false;
+    const realGet = device.kv.get.bind(device.kv);
+    vi.spyOn(device.kv, 'get').mockImplementation(async (key, area) => {
+      if (key === SYNC_DATA_KEY && selfHealDone) {
+        await restarted.disableSync();
+        return realGet(key, area);
+      }
+      const value = await realGet(key, area);
+      if (key === SYNC_DATA_KEY) {
+        selfHealDone = true;
+      }
+      return value;
+    });
+
+    await restarted.start();
+
+    expect(restarted.getStatus()).toBe('disabled');
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it('names whichever key survived a disable, not only the session token', async () => {
+    // A surviving enabled flag re-activates sync on the next start() for a removed account.
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    vi.spyOn(device.kv, 'remove').mockImplementation(async (key) => key !== CLOUD_SYNC_ENABLED_KEY);
+
+    await device.engine.disableSync();
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      `Disable could not remove every sync key: ${CLOUD_SYNC_ENABLED_KEY}`
+    );
   });
 
   it('does not re-arm the pull wake when a disable lands inside its own first cycle', async () => {

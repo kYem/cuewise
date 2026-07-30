@@ -126,8 +126,12 @@ function stallError(what: string, outrankedPush: { error: unknown } | undefined)
   );
 }
 
-/** What one hydration read achieved; only `settled` may be memoised. See readPersistedSyncState. */
-type HydrationResult = 'settled' | 'retryable' | 'abandoned';
+/**
+ * Whether a hydration read may stay memoised. Two states, not three: a read that was superseded
+ * mid-flight installed nothing, but it must not clear a memo it no longer owns either — so it takes
+ * the same `final` action as a conclusive read, for a different reason the comments carry.
+ */
+type HydrationResult = 'final' | 'retry';
 
 /**
  * Names a rejected record's shape for the log without echoing it — the field names distinguish a
@@ -508,7 +512,7 @@ export class SyncEngine {
    */
   private async hydrate(): Promise<void> {
     const epoch = this.accountEpoch;
-    let result: HydrationResult = 'abandoned';
+    let result: HydrationResult = 'final';
     try {
       result = await this.readPersistedSyncState(epoch);
     } catch (err) {
@@ -518,33 +522,31 @@ export class SyncEngine {
       logger.error(`Could not read the persisted sync state: ${describeThrown(err)}`, err);
       if (this.accountEpoch === epoch) {
         this.markLastCycleUnknown();
-        result = 'retryable';
+        result = 'retry';
       }
     }
     // Only while this call still owns the memo — a disable or a newer read may have replaced it,
     // and clearing that would run two reads concurrently over the same fields.
-    if (result === 'retryable' && this.accountEpoch === epoch) {
+    if (result === 'retry' && this.accountEpoch === epoch) {
       this.hydration = null;
     }
   }
 
-  /**
-   * `retryable` is a read that failed outright and may succeed later, so the memo is dropped;
-   * `abandoned` installed nothing because a disable superseded it. Neither is `settled`, which is
-   * the only answer that may be cached.
-   */
+  /** `retry` only for a read that failed outright and may succeed later; see HydrationResult. */
   private async readPersistedSyncState(epoch: number): Promise<HydrationResult> {
     // One batch read, because `get` collapses "absent" into "read failed" and this is the one
     // place that distinction decides whether a wedged device shows a badge.
     const stored = await this.deps.keyStore.getMany([LAST_SYNCED_AT_KEY, LAST_CYCLE_KEY], 'local');
     if (this.accountEpoch !== epoch) {
+      // Installed nothing, but `final` rather than `retry`: disableSync already cleared the memo,
+      // and clearing again could drop a newer read's.
       logger.debug('Dropped a hydration snapshot: the account was disabled while it was read');
-      return 'abandoned';
+      return 'final';
     }
     if (stored === null) {
       logger.error('Could not read the persisted sync state; the next read will retry');
       this.markLastCycleUnknown();
-      return 'retryable';
+      return 'retry';
     }
 
     const stamp = stored[LAST_SYNCED_AT_KEY];
@@ -557,7 +559,7 @@ export class SyncEngine {
       // A conclusive read clears any earlier unknown: this retry is the whole point of not
       // memoising a failed one.
       this.lastCycleKnown = true;
-      return 'settled';
+      return 'final';
     }
     if (!record.readable) {
       logger.error('The stored last sync cycle is unreadable; reporting it as unknown', {
@@ -565,7 +567,7 @@ export class SyncEngine {
       });
       this.markLastCycleUnknown();
       // Settled: a value that will not read is deterministic, so retrying only repeats the log.
-      return 'settled';
+      return 'final';
     }
     const hydrated = parsePersistedSyncCycle(record.value);
     if (hydrated === null) {
@@ -575,13 +577,13 @@ export class SyncEngine {
         shape: describeShape(record.value),
       });
       this.markLastCycleUnknown();
-      return 'settled';
+      return 'final';
     }
     this.lastCycleKnown = true;
     if (this.lastCycle === null) {
       this.lastCycle = hydrated;
     }
-    return 'settled';
+    return 'final';
   }
 
   /**
