@@ -701,7 +701,7 @@ describe('BridgeSyncController: getLastCycle', () => {
 
     await expect(controller.getLastCycle()).resolves.toEqual({ available: false });
     expect(errorSpy).toHaveBeenCalledWith(
-      'Sync last-cycle outcome unavailable: no responder or error fallback'
+      'Sync last-cycle outcome unavailable: a response carrying no lastCycle payload'
     );
     errorSpy.mockRestore();
   });
@@ -719,7 +719,21 @@ describe('BridgeSyncController: getLastCycle', () => {
 
     await expect(controller.getLastCycle()).resolves.toEqual({ available: false });
     expect(errorSpy).toHaveBeenCalledWith(
-      'Sync last-cycle outcome unavailable: last cycle unreadable'
+      'Sync last-cycle outcome unavailable: the background reported error — last cycle unreadable'
+    );
+    errorSpy.mockRestore();
+  });
+
+  it('does not blame a silent worker when a live one answered without a detail', async () => {
+    // background.ts's port-closing fallback answers {ok:false, reason:'error'} with no detail; the
+    // old text called that "no responder", pointing at messaging for a handler that did respond.
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    runtime.sendMessage.mockResolvedValueOnce({ ok: false, reason: 'error' });
+    const controller = new BridgeSyncController();
+
+    await expect(controller.getLastCycle()).resolves.toEqual({ available: false });
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Sync last-cycle outcome unavailable: the background reported error'
     );
     errorSpy.mockRestore();
   });

@@ -1,13 +1,12 @@
 import { configurePlatform } from '@cuewise/shared';
 import { SessionManager } from '@cuewise/sync-client';
-import { SyncEngine, type SyncEngineControlSurface, type SyncStatus } from '@cuewise/sync-engine';
+import { SyncEngine } from '@cuewise/sync-engine';
 import {
   FakeApiClient,
   type FakeSyncServer,
 } from '@cuewise/sync-engine/src/__fixtures__/fake-api-client';
 import { FakeKvStore } from '@cuewise/sync-engine/src/__fixtures__/fake-kv-store';
 import { FakeScheduler } from '@cuewise/sync-engine/src/__fixtures__/fake-scheduler';
-import { vi } from 'vitest';
 import { OAuthCancelledError, type OAuthDriver } from '../../platform/oauth-driver';
 import { buildDirectSyncController } from '../direct-sync-controller';
 
@@ -31,28 +30,6 @@ export function createDevice(server: FakeSyncServer): Device {
 /** Points @cuewise/storage's helpers (used by SyncEngine.backfillDirty) at this device's kv. */
 export function useStorage(device: Pick<Device, 'kv'>): void {
   configurePlatform({ storage: device.kv });
-}
-
-/**
- * A stubbed control surface for tests that drive the adapter without a real engine. Mirrors the
- * extension's `fakeEngine` — adding a method to the port should touch one place, not eight.
- */
-export function fakeEngine(
-  overrides: Partial<SyncEngineControlSurface> = {}
-): SyncEngineControlSurface {
-  return {
-    enableSync: vi.fn().mockResolvedValue(undefined),
-    disableSync: vi.fn().mockResolvedValue(undefined),
-    regenerateRecoveryCode: vi.fn().mockResolvedValue('unused'),
-    resumeEnrollWithCode: vi.fn().mockResolvedValue(undefined),
-    syncNow: vi.fn().mockResolvedValue({ kind: 'synced' }),
-    getStatus: vi.fn().mockReturnValue('active' as SyncStatus),
-    getAccount: vi.fn().mockResolvedValue(null),
-    getLastSyncedAt: vi.fn().mockReturnValue(null),
-    getLastCycle: vi.fn().mockReturnValue({ known: true, cycle: null }),
-    ensureHydrated: vi.fn().mockResolvedValue(undefined),
-    ...overrides,
-  };
 }
 
 /** Default driver: tests that never sign in with Google fail loudly if the flow runs anyway. */

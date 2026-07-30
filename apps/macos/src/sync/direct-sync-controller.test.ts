@@ -2,6 +2,7 @@ import { logger } from '@cuewise/shared';
 import { ApiError } from '@cuewise/sync-client';
 import type { SyncEngineControlSurface, SyncStatus } from '@cuewise/sync-engine';
 import { FakeSyncServer } from '@cuewise/sync-engine/src/__fixtures__/fake-api-client';
+import { fakeControlSurface } from '@cuewise/sync-engine/src/__fixtures__/fake-control-surface';
 import { FakeKvStore } from '@cuewise/sync-engine/src/__fixtures__/fake-kv-store';
 import { describe, expect, it, vi } from 'vitest';
 import {
@@ -9,7 +10,6 @@ import {
   buildRealController,
   corruptChecksum,
   createDevice,
-  fakeEngine,
   fakeOAuthDriver,
   hangingOAuthDriver,
   unusedDriver,
@@ -153,7 +153,7 @@ describe('createDirectSyncController: enable()', () => {
   });
 
   it('maps a thrown ApiError(401) to auth', async () => {
-    const engine = fakeEngine({
+    const engine = fakeControlSurface({
       enableSync: vi.fn().mockRejectedValue(new ApiError('invalid_token', 401)),
       getStatus: vi.fn().mockReturnValue('error' as SyncStatus),
     });
@@ -406,7 +406,7 @@ describe('createDirectSyncController: enable() concurrency', () => {
 
 describe('createDirectSyncController: disable() / syncNow() error propagation', () => {
   it('rejects disable() when engine.disableSync() rejects, rather than swallowing it', async () => {
-    const engine = fakeEngine({
+    const engine = fakeControlSurface({
       disableSync: vi.fn().mockRejectedValue(new Error('disable failed')),
     });
     const { controller } = buildDirectSyncController<SyncEngineControlSurface>({
@@ -420,7 +420,7 @@ describe('createDirectSyncController: disable() / syncNow() error propagation', 
   });
 
   it('rejects syncNow() when engine.syncNow() rejects, and still reconciles status via finally', async () => {
-    const engine = fakeEngine({
+    const engine = fakeControlSurface({
       syncNow: vi.fn().mockRejectedValue(new Error('sync failed')),
       getStatus: vi.fn().mockReturnValue('error' as SyncStatus),
     });
@@ -442,7 +442,7 @@ describe('createDirectSyncController: disable() / syncNow() error propagation', 
 
 describe('createDirectSyncController: syncNow() outcome / getLastCycle()', () => {
   it('returns the outcome the engine reports, rather than discarding it', async () => {
-    const engine = fakeEngine({
+    const engine = fakeControlSurface({
       syncNow: vi.fn().mockResolvedValue({ kind: 'resynced' }),
     });
     const { controller } = buildDirectSyncController<SyncEngineControlSurface>({
@@ -458,7 +458,7 @@ describe('createDirectSyncController: syncNow() outcome / getLastCycle()', () =>
   });
 
   it('getLastCycle() resolves the outcome of the engine-reported last cycle', async () => {
-    const engine = fakeEngine({
+    const engine = fakeControlSurface({
       getLastCycle: vi.fn().mockReturnValue({
         known: true,
         cycle: { at: 1_700_000_000_000, outcome: { kind: 'no-key' } },
@@ -489,7 +489,7 @@ describe('createDirectSyncController: syncNow() outcome / getLastCycle()', () =>
   });
 
   it('getLastCycle() reports unavailable when the engine cannot read its stored record', async () => {
-    const engine = fakeEngine({
+    const engine = fakeControlSurface({
       getLastCycle: vi.fn().mockReturnValue({ known: false }),
     });
     const { controller } = buildDirectSyncController<SyncEngineControlSurface>({
@@ -504,7 +504,7 @@ describe('createDirectSyncController: syncNow() outcome / getLastCycle()', () =>
 
   it('getLastCycle() awaits hydration before reading, so a cold read cannot answer early', async () => {
     const order: string[] = [];
-    const engine = fakeEngine({
+    const engine = fakeControlSurface({
       getLastCycle: vi.fn(() => {
         order.push('read');
         return { known: true, cycle: null };
@@ -530,7 +530,7 @@ describe('createDirectSyncController: syncNow() outcome / getLastCycle()', () =>
 
   it('getDetails() awaits hydration too, since it owns the last-synced stamp', async () => {
     const order: string[] = [];
-    const engine = fakeEngine({
+    const engine = fakeControlSurface({
       getAccount: vi.fn().mockResolvedValue({ userId: 'u1', email: null }),
       getLastSyncedAt: vi.fn(() => {
         order.push('read');

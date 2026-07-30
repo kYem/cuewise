@@ -5,7 +5,13 @@ import {
   RecoveryCodeError,
   wrapDataKey,
 } from '@cuewise/crypto';
-import { describeThrown, type KeyValueStore, logger, type Scheduler } from '@cuewise/shared';
+import {
+  describeThrown,
+  type KeyValueStore,
+  logger,
+  type Scheduler,
+  type StoredValue,
+} from '@cuewise/shared';
 import {
   ApiError,
   armSyncPull,
@@ -119,6 +125,9 @@ function stallError(what: string, outrankedPush: { error: unknown } | undefined)
   );
 }
 
+/** What one hydration read achieved; only `settled` may be memoised. See readPersistedSyncState. */
+type HydrationResult = 'settled' | 'retryable' | 'abandoned';
+
 /**
  * Names a rejected record's shape for the log without echoing it — the field names distinguish a
  * legacy shape from a partial write from garbage, and none of them carry user data.
@@ -151,7 +160,7 @@ export class SyncEngine {
   private hydration: Promise<void> | null = null;
   // Bumped by disableSync so a hydration already in flight drops its snapshot instead of
   // re-installing the removed account's stamp over the reset disable just performed.
-  private hydrationEpoch = 0;
+  private accountEpoch = 0;
 
   constructor(private readonly deps: SyncEngineDeps) {
     this.now = deps.now ?? Date.now;
@@ -259,10 +268,18 @@ export class SyncEngine {
   async disableSync(): Promise<void> {
     await this.stop();
     await this.deps.sessionManager.clear();
-    await this.deps.keyStore.remove(SYNC_DATA_KEY, 'local');
-    await this.deps.keyStore.remove(CLOUD_SYNC_ENABLED_KEY, 'local');
-    await this.deps.keyStore.remove(LAST_SYNCED_AT_KEY, 'local');
-    await this.deps.keyStore.remove(LAST_CYCLE_KEY, 'local');
+    const survived: string[] = [];
+    for (const key of [SYNC_DATA_KEY, CLOUD_SYNC_ENABLED_KEY, LAST_SYNCED_AT_KEY, LAST_CYCLE_KEY]) {
+      const removed = await this.deps.keyStore.remove(key, 'local');
+      if (!removed) {
+        survived.push(key);
+      }
+    }
+    if (survived.length > 0) {
+      // A surviving enabled flag re-activates sync on the next start(); a surviving stamp can be
+      // hydrated onto whatever account comes next. Both outlast the account they describe.
+      logger.error(`Disable could not remove every sync key: ${survived.join(', ')}`);
+    }
     await this.resetMeta();
     this.dk = null;
     this.keyId = null;
@@ -271,7 +288,7 @@ export class SyncEngine {
     // After a disable "no cycle" is the truth, so an earlier unreadable record must stop
     // reporting unknown — otherwise a failed hydration outlives the account it described.
     this.lastCycleKnown = true;
-    this.hydrationEpoch += 1;
+    this.accountEpoch += 1;
     this.hydration = null;
     this.setStatus('disabled');
   }
@@ -467,47 +484,49 @@ export class SyncEngine {
    * "no cycle has run", the one value allowed to clear the badge.
    */
   private async hydrate(): Promise<void> {
-    const epoch = this.hydrationEpoch;
-    let settled = false;
+    const epoch = this.accountEpoch;
+    let result: HydrationResult = 'abandoned';
     try {
-      settled = await this.readPersistedSyncState(epoch);
+      result = await this.readPersistedSyncState(epoch);
     } catch (err) {
-      logger.error(`Could not read the persisted sync state: ${describeThrown(err)}`, err);
-      this.markLastCycleUnknown();
+      // Epoch-checked like every in-band branch: a superseded read's failure describes an account
+      // that is gone, so neither its state nor its memo is this call's to touch.
+      if (this.accountEpoch === epoch) {
+        logger.error(`Could not read the persisted sync state: ${describeThrown(err)}`, err);
+        this.markLastCycleUnknown();
+        result = 'retryable';
+      }
     }
-    if (!settled) {
-      // A read that failed outright may succeed later; leaving the memo set would hand the panel's
-      // retry the same cached failure, making that retry a no-op.
+    // Only while this call still owns the memo — a disable or a newer read may have replaced it,
+    // and clearing that would run two reads concurrently over the same fields.
+    if (result === 'retryable' && this.accountEpoch === epoch) {
       this.hydration = null;
     }
   }
 
-  /** Whether the read settled what the last cycle was — false only for a failure worth retrying. */
-  private async readPersistedSyncState(epoch: number): Promise<boolean> {
+  /**
+   * `retryable` is a read that failed outright and may succeed later, so the memo is dropped;
+   * `abandoned` installed nothing because a disable superseded it. Neither is `settled`, which is
+   * the only answer that may be cached.
+   */
+  private async readPersistedSyncState(epoch: number): Promise<HydrationResult> {
     // One batch read, because `get` collapses "absent" into "read failed" and this is the one
     // place that distinction decides whether a wedged device shows a badge.
     const stored = await this.deps.keyStore.getMany([LAST_SYNCED_AT_KEY, LAST_CYCLE_KEY], 'local');
-    if (this.hydrationEpoch !== epoch) {
-      // A disable landed mid-read: this snapshot describes an account that is gone, and the
-      // `=== null` guards below cannot tell disable's own reset from "nothing hydrated yet".
-      return true;
+    if (this.accountEpoch !== epoch) {
+      // Named, because it is the one benign explanation for the keyless error start() may log.
+      logger.debug('Dropped a hydration snapshot: the account was disabled while it was read');
+      return 'abandoned';
     }
     if (stored === null) {
-      logger.error(
-        'Could not read the persisted sync state; the last cycle is unknown this session'
-      );
+      logger.error('Could not read the persisted sync state; the next read will retry');
       this.markLastCycleUnknown();
-      return false;
+      return 'retryable';
     }
 
     const stamp = stored[LAST_SYNCED_AT_KEY];
-    // A cycle this process already ran outranks the stored one, for the stamp and the record alike.
-    if (stamp?.readable === true && typeof stamp.value === 'number' && this.lastSyncedAt === null) {
-      this.lastSyncedAt = stamp.value;
-    } else if (stamp !== undefined && !stamp.readable) {
-      // warn, not error: this only makes "Last synced" read as never, which under-claims freshness
-      // rather than claiming health — the same reasoning as stampLastSynced's own failure.
-      logger.warn('The stored last-synced stamp is unreadable; "Last synced" will read as never');
+    if (stamp !== undefined) {
+      this.hydrateStamp(stamp);
     }
 
     const record = stored[LAST_CYCLE_KEY];
@@ -515,7 +534,7 @@ export class SyncEngine {
       // A conclusive read clears any earlier unknown: this retry is the whole point of not
       // memoising a failed one.
       this.lastCycleKnown = true;
-      return true;
+      return 'settled';
     }
     if (!record.readable) {
       logger.error('The stored last sync cycle is unreadable; reporting it as unknown', {
@@ -523,7 +542,7 @@ export class SyncEngine {
       });
       this.markLastCycleUnknown();
       // Settled: a value that will not read is deterministic, so retrying only repeats the log.
-      return true;
+      return 'settled';
     }
     const hydrated = parsePersistedSyncCycle(record.value);
     if (hydrated === null) {
@@ -533,13 +552,36 @@ export class SyncEngine {
         shape: describeShape(record.value),
       });
       this.markLastCycleUnknown();
-      return true;
+      return 'settled';
     }
     this.lastCycleKnown = true;
     if (this.lastCycle === null) {
       this.lastCycle = hydrated;
     }
-    return true;
+    return 'settled';
+  }
+
+  /**
+   * Installs the persisted stamp, or names why it could not be. Both rejections log at error: only
+   * localStorage can report an unreadable value, and the app embedding it ships logLevel 'error',
+   * so a warn would be unreachable by anyone able to act on it.
+   */
+  private hydrateStamp(stamp: StoredValue): void {
+    if (!stamp.readable) {
+      logger.error('The stored last-synced stamp is unreadable', { key: LAST_SYNCED_AT_KEY });
+      return;
+    }
+    if (typeof stamp.value !== 'number') {
+      logger.error('The stored last-synced stamp is not a number', {
+        key: LAST_SYNCED_AT_KEY,
+        shape: describeShape(stamp.value),
+      });
+      return;
+    }
+    // A cycle this process already ran outranks the stored one.
+    if (this.lastSyncedAt === null) {
+      this.lastSyncedAt = stamp.value;
+    }
   }
 
   /**
@@ -580,6 +622,11 @@ export class SyncEngine {
       return;
     }
 
+    // A disable can land during the awaits below — its control message is what wakes a cold worker,
+    // and selfHealKeyBlob is a network round trip. Everything past here speaks for the account that
+    // was enabled when the flag was read.
+    const epoch = this.accountEpoch;
+
     // The details-UI stamp and the cycle record beside it, before this process runs one of its own.
     // Idempotent: a control message answered on a cold worker already triggered this.
     await this.ensureHydrated();
@@ -588,6 +635,11 @@ export class SyncEngine {
       await selfHealKeyBlob(this.keyDeps());
     } catch (err) {
       if (err instanceof SelfHealNeedsEnrollError || err instanceof SelfHealUnrecoverableError) {
+        // Epoch-checked before the status: a disable landing inside self-heal's network round trip
+        // makes it throw Unrecoverable, and signing out then overwrites the user's own disable.
+        if (this.startSuperseded(epoch)) {
+          return;
+        }
         logger.warn('Sync self-heal requires the recovery code; staying signed out', {
           reason: err.name,
         });
@@ -598,13 +650,19 @@ export class SyncEngine {
     }
 
     const persisted = await loadPersistedDataKey(this.deps.keyStore);
+    if (this.startSuperseded(epoch)) {
+      return;
+    }
     if (persisted === null) {
-      // Reached only past the enabled-flag check, so this is always a defect: every later wake is
-      // a no-key no-op that re-arms itself, and the extension's persisted pill still says active.
-      // Once per process, so it cannot spam — and it was previously the one silent branch here.
+      // The enabled flag outlived the key, so nothing syncs and every later wake is a no-op that
+      // re-arms itself. "could not be read" rather than "is gone": a transient read failure lands
+      // here too, and the adapter reports both as null.
       logger.error(
-        'Cloud sync is enabled but this device holds no data key; nothing will sync until it re-enrolls'
+        "Cloud sync is enabled but this device's data key could not be read; it will not sync until it reconnects"
       );
+      // Like the self-heal branch above, whose case is also a key that needs re-enrolling: without
+      // a status the extension's persisted pill keeps claiming active for a device that never syncs.
+      this.setStatus('signed_out');
       return;
     }
 
@@ -613,6 +671,19 @@ export class SyncEngine {
     this.setStatus('active');
     await this.syncNowLoopSafe();
     await this.armPullLoopUnlessSignedOut();
+  }
+
+  /**
+   * Whether a disable landed while start() was running. Every exit past the enabled-flag read must
+   * check it: otherwise start() reports the user's own action as a defect, or re-activates the pill
+   * and the pull wake for an account they just removed.
+   */
+  private startSuperseded(epoch: number): boolean {
+    if (this.accountEpoch === epoch) {
+      return false;
+    }
+    logger.debug('Sync start abandoned: the account was disabled while it was starting');
+    return true;
   }
 
   /** Cancels the armed pull wake. Does not touch session/keys — call disableSync() for that. */

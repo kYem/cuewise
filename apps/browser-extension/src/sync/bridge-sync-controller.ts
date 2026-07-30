@@ -349,6 +349,20 @@ export class BridgeSyncController implements SyncController {
     }
   }
 
+  /** Names which of the three unavailable causes this was; `reason` is present on every ok:false. */
+  private static describeUnavailableCause(
+    response: SyncOpResponse['getLastCycle'] | undefined
+  ): string {
+    if (response === undefined) {
+      return 'no response from the background';
+    }
+    if (response.ok === false) {
+      const detail = response.detail === undefined ? '' : ` — ${response.detail}`;
+      return `the background reported ${response.reason}${detail}`;
+    }
+    return 'a response carrying no lastCycle payload';
+  }
+
   // Every unreadable path answers LAST_CYCLE_UNAVAILABLE, never a null outcome: a dead worker, a
   // timeout and a skewed response say nothing about the cycle, so the panel must keep its badge.
   async getLastCycle(): Promise<LastCycleRead> {
@@ -360,12 +374,11 @@ export class BridgeSyncController implements SyncController {
         return { available: true, outcome: response.outcome };
       }
       // error, not warn: the shipped logLevel is 'error', and a device that can never read its
-      // cycle shows Active with no badge — invisible to the user and the engineer alike. The
-      // detail matters: a live worker answers this way for an unreadable record, which is a
-      // storage fault, not the messaging fault the bare line reads as.
-      const detail = response?.ok === false ? response.detail : undefined;
+      // cycle shows Active with no badge — invisible to the user and the engineer alike. The cause
+      // must distinguish a silent worker from one that answered: a live worker reports an
+      // unreadable record this way, and blaming messaging for a storage fault points the wrong way.
       logger.error(
-        `Sync last-cycle outcome unavailable: ${detail ?? 'no responder or error fallback'}`
+        `Sync last-cycle outcome unavailable: ${BridgeSyncController.describeUnavailableCause(response)}`
       );
       return LAST_CYCLE_UNAVAILABLE;
     } catch (error) {
