@@ -1672,6 +1672,7 @@ function validateGoals(goals: unknown[], warnings: string[]): Goal[] {
  */
 function validateQuotes(quotes: unknown[], warnings: string[]): Quote[] {
   const validQuotes: Quote[] = [];
+  let refiled = 0;
 
   for (let i = 0; i < quotes.length; i++) {
     const quote = quotes[i] as Record<string, unknown>;
@@ -1692,10 +1693,10 @@ function validateQuotes(quotes: unknown[], warnings: string[]): Quote[] {
       continue;
     }
 
-    // Warned, not just coerced: this rewrites the user's own data and persists it, so it belongs
-    // in the preview rather than being discovered later in the library.
+    // Counted, not warned per item: this rewrites the user's own data and persists it, so it has
+    // to reach the preview — but one line per quote would bury the Import button on a large file.
     if (quote.category !== undefined && !isQuoteCategory(quote.category)) {
-      warnings.push(`quotes[${i}] had an unrecognised category and was filed under inspiration`);
+      refiled += 1;
     }
 
     const candidate: Quote = {
@@ -1725,6 +1726,14 @@ function validateQuotes(quotes: unknown[], warnings: string[]): Quote[] {
     validQuotes.push(candidate);
   }
 
+  if (refiled > 0) {
+    warnings.push(
+      refiled === 1
+        ? '1 quote had an unrecognised category and was filed under inspiration'
+        : `${refiled} quotes had unrecognised categories and were filed under inspiration`
+    );
+  }
+
   return validQuotes;
 }
 
@@ -1733,6 +1742,7 @@ function validateQuotes(quotes: unknown[], warnings: string[]): Quote[] {
  */
 function validatePomodoroSessions(sessions: unknown[], warnings: string[]): PomodoroSession[] {
   const validSessions: PomodoroSession[] = [];
+  let rerecorded = 0;
 
   for (let i = 0; i < sessions.length; i++) {
     const session = sessions[i] as Record<string, unknown>;
@@ -1758,7 +1768,7 @@ function validatePomodoroSessions(sessions: unknown[], warnings: string[]): Pomo
       session.type !== undefined &&
       !sessionTypes.includes(session.type as PomodoroSession['type'])
     ) {
-      warnings.push(`pomodoroSessions[${i}] had an unrecognised type and was filed as work`);
+      rerecorded += 1;
     }
     const candidate: PomodoroSession = {
       id: session.id,
@@ -1776,6 +1786,14 @@ function validatePomodoroSessions(sessions: unknown[], warnings: string[]): Pomo
       continue;
     }
     validSessions.push(candidate);
+  }
+
+  if (rerecorded > 0) {
+    warnings.push(
+      rerecorded === 1
+        ? '1 session had an unrecognised type and was recorded as work'
+        : `${rerecorded} sessions had unrecognised types and were recorded as work`
+    );
   }
 
   return validSessions;

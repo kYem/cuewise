@@ -8,6 +8,10 @@ import { AlertCircle, AlertTriangle, CheckCircle2, FileUp, Upload } from 'lucide
 import type React from 'react';
 import { useRef, useState } from 'react';
 
+// Per-item warnings survive aggregation (a skipped row names its index), so an unbounded list
+// would push the Import button off the bottom of the page on a large file.
+const WARNING_PREVIEW_LIMIT = 5;
+
 interface ImportControlsProps {
   importValidation: ImportValidation | null;
   isImporting: boolean;
@@ -143,9 +147,12 @@ export const ImportControls: React.FC<ImportControlsProps> = ({
               <div>
                 <div className="font-semibold text-yellow-700 dark:text-yellow-400">Warnings</div>
                 <ul className="text-xs text-yellow-600 dark:text-yellow-500 mt-1 space-y-1">
-                  {importValidation.warnings.map((warning, i) => (
+                  {importValidation.warnings.slice(0, WARNING_PREVIEW_LIMIT).map((warning, i) => (
                     <li key={`warning-${i}`}>{warning}</li>
                   ))}
+                  {importValidation.warnings.length > WARNING_PREVIEW_LIMIT && (
+                    <li>+ {importValidation.warnings.length - WARNING_PREVIEW_LIMIT} more</li>
+                  )}
                 </ul>
               </div>
             </div>
