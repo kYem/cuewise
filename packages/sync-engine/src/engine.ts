@@ -79,8 +79,7 @@ export type SyncStatus =
   | 'enrolling'
   | 'initial_sync'
   | 'active'
-  // Enabled here, but the data key is gone. Distinct from `signed_out`, whose whole point is that
-  // the key survived so re-authenticating is silent: this one needs the recovery code.
+  // Enabled, but the key is gone. Unlike `signed_out`, re-authenticating alone cannot fix it.
   | 'needs_enroll'
   | 'signed_out'
   | 'error';
@@ -129,11 +128,7 @@ function stallError(what: string, outrankedPush: { error: unknown } | undefined)
   );
 }
 
-/**
- * Whether a hydration read may stay memoised. Two states, not three: a read that was superseded
- * mid-flight installed nothing, but it must not clear a memo it no longer owns either — so it takes
- * the same `final` action as a conclusive read, for a different reason the comments carry.
- */
+/** Whether a hydration read may stay memoised; only an outright failure is worth re-reading. */
 type HydrationResult = 'final' | 'retry';
 
 /**
@@ -541,8 +536,7 @@ export class SyncEngine {
     // place that distinction decides whether a wedged device shows a badge.
     const stored = await this.deps.keyStore.getMany([LAST_SYNCED_AT_KEY, LAST_CYCLE_KEY], 'local');
     if (this.accountEpoch !== epoch) {
-      // Installed nothing, but `final` rather than `retry`: disableSync already cleared the memo,
-      // and clearing again could drop a newer read's.
+      // Installed nothing, but disableSync already cleared the memo — clearing again could drop a newer one.
       logger.debug('Dropped a hydration snapshot: the account was disabled while it was read');
       return 'final';
     }
@@ -689,8 +683,7 @@ export class SyncEngine {
       logger.error(
         "Cloud sync is enabled but this device's data key could not be read; it will not sync until it reconnects"
       );
-      // needs_enroll, not signed_out: the session may be perfectly valid and what is missing is the
-      // key, so the UI must ask for the recovery code rather than claim the sign-in expired.
+      // Not signed_out: the session may be fine, so the UI must ask for the recovery code.
       this.setStatus('needs_enroll');
       return;
     }
@@ -754,11 +747,8 @@ export class SyncEngine {
 
   // handleAuthLoss already cancelled the wake; re-arming here would silently undo that.
   private async armPullLoopUnlessOff(): Promise<void> {
-    // `disabled` for the same reason as `signed_out`: both had their wake cancelled by stop(), and
-    // re-arming undoes that. Without the first, a disable landing inside start()'s own cycle
-    // resurrects the loop, and a stale alarm on a disabled device re-arms itself forever.
-    // `needs_enroll` because a keyless device's every cycle is a no-op — it polls on to no effect,
-    // and only the user supplying a recovery code can change that. enableSync re-arms it.
+    // All three had their wake cancelled, or can never complete a cycle; re-arming undoes that.
+    // enableSync arms it again once the device recovers.
     if (
       this.status === 'signed_out' ||
       this.status === 'disabled' ||

@@ -154,9 +154,8 @@ class ConsoleLogger implements Logger {
  * into an unhandled one.
  */
 export function describeThrown(error: unknown): string {
-  // The WHOLE body is guarded, not just String(): `instanceof` throws on a revoked or trapping
-  // Proxy and `.message` on a subclass with a throwing getter. stallError calls this on runCycle's
-  // return path rather than in a catch, where a throw would reject the never-throws syncNow().
+  // All of it guarded, not just String(): `instanceof` throws on a revoked Proxy and `.message` on
+  // a subclass with a throwing getter — and stallError calls this outside any catch.
   try {
     if (error instanceof Error) {
       return error.message;

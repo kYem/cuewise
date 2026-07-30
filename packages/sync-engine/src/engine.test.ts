@@ -1397,8 +1397,7 @@ describe('SyncEngine.start / stop', () => {
   });
 
   it('reports needs_enroll when the enabled flag outlived the data key', async () => {
-    // needs_enroll rather than signed_out: the session may be valid and the KEY is what is gone,
-    // so the panel must ask for the recovery code instead of claiming the sign-in expired.
+    // The session may be valid and the key is what is gone, so the panel must ask for the code.
     const server = new FakeSyncServer();
     const device = createDevice(server);
     useStorage(device);

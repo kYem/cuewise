@@ -1046,8 +1046,7 @@ describe('SyncSettingsSectionComponent', () => {
   });
 
   it('says it could not check the last sync when the read comes back unreadable', async () => {
-    // Previously identical to health on a fresh mount: the read correctly refused to repaint, and
-    // the panel had nothing to render for it.
+    // On a fresh mount there is no badge to protect, so this used to look exactly like health.
     const controller = new FakeSyncController();
     controller.scriptLastCycleUnavailable();
     renderSection(controller);
@@ -1058,9 +1057,53 @@ describe('SyncSettingsSectionComponent', () => {
     expect(screen.queryByTestId('sync-failure-badge')).not.toBeInTheDocument();
   });
 
+  it('drops the unknown line once a read can answer again', async () => {
+    // Otherwise the line latches and a recovered device keeps saying it could not be checked.
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptLastCycleUnavailable();
+    controller.scriptSyncNow({ kind: 'synced' });
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+    await screen.findByTestId('sync-cycle-unknown');
+
+    controller.scriptLastCycle(null);
+    await user.click(screen.getByRole('button', { name: 'Sync now' }));
+
+    await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith('Synced'));
+    expect(screen.queryByTestId('sync-cycle-unknown')).not.toBeInTheDocument();
+  });
+
+  it('drops the unknown line when a retried read answers, not only when a click does', async () => {
+    // handleSyncNow paints directly, so without this only the click's clear is covered.
+    const controller = new FakeSyncController();
+    controller.scriptLastCycleUnavailable();
+    renderSection(controller);
+    // An unavailable read re-arms the once-per-mount fetch, so each transition retries.
+    act(() => controller.setStatus('active'));
+    await screen.findByTestId('sync-cycle-unknown');
+
+    controller.scriptLastCycle(null);
+    act(() => controller.setStatus('syncing'));
+    act(() => controller.setStatus('active'));
+
+    await waitFor(() => expect(screen.queryByTestId('sync-cycle-unknown')).not.toBeInTheDocument());
+  });
+
+  it('stays quiet about an unreadable read while sync is still connecting', async () => {
+    // Mid-enrolment nothing has synced yet, so the line reads as an enrolment problem.
+    const controller = new FakeSyncController();
+    controller.scriptLastCycleUnavailable();
+    renderSection(controller);
+
+    act(() => controller.setStatus('connecting'));
+
+    expect(await screen.findByTestId('sync-status-pill')).toHaveTextContent('Connecting…');
+    expect(screen.queryByTestId('sync-cycle-unknown')).not.toBeInTheDocument();
+  });
+
   it('keeps a failure badge rather than downgrading it to the unknown line', async () => {
-    // An unreadable read says nothing about a failure already on screen. The badge is the stronger
-    // claim and must win.
+    // The badge is the stronger claim; an unreadable read says nothing about it.
     const user = userEvent.setup();
     const controller = new FakeSyncController();
     controller.scriptLastCycle({
@@ -1072,8 +1115,7 @@ describe('SyncSettingsSectionComponent', () => {
     act(() => controller.setStatus('active'));
     await screen.findByTestId('sync-failure-badge');
 
-    // A rejected Sync now routes through refreshLastCycle, which is the path that performs a
-    // second read — and that read is the one that comes back unreadable.
+    // A rejected Sync now routes through refreshLastCycle — the path that reads a second time.
     controller.scriptLastCycleUnavailable();
     controller.deferNextSyncNow();
     await user.click(screen.getByRole('button', { name: 'Sync now' }));

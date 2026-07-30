@@ -49,17 +49,15 @@ const GoogleGlyph: React.FC = () => (
   </svg>
 );
 
-// Only the "on" statuses get a pill; off/needs_reauth/needs_enroll/error render their own dedicated
-// UI below. needs_enroll deliberately hides the pill subgroup with them: without a data key both
-// "Sync now" and "Regenerate recovery code" would fail, so offering them offers a broken button.
+// Only the "on" statuses get a pill; the rest render their own UI below. needs_enroll joins them
+// deliberately: without a key both "Sync now" and "Regenerate recovery code" would fail.
 const STATUS_PILL_LABEL: Partial<Record<SyncUiStatus, string>> = {
   connecting: 'Connecting…',
   syncing: 'Syncing…',
   active: 'Active',
 };
 
-// Two states, one block: both are recovered by the same Reconnect button, but only one of them is
-// about the sign-in. Claiming an expired session for a missing key sends the user to the wrong fix.
+// One block, two causes: same Reconnect button, but only one of them is about the sign-in.
 const RECONNECT_PROMPT: Partial<Record<SyncUiStatus, string>> = {
   needs_reauth: 'Sign-in expired — reconnect to keep syncing.',
   needs_enroll:
@@ -100,11 +98,9 @@ function logUnrecognisedReason(outcome: SyncOutcome | null): void {
   }
 }
 
-// The only place a read is adopted. An unavailable read says nothing about the cycle, so it must
-// never repaint the outcome — while `{outcome:null}` genuinely means "no cycle" and does clear the
-// badge. It does set `unknown`, which is a separate, softer line the render only shows when there
-// is no badge to preserve.
-// Reports whether it painted, so a caller can re-arm its once-per-mount read after a transient miss.
+// The only place a read is adopted. An unavailable read must never repaint the outcome — only
+// `{outcome:null}` means "no cycle" — so it sets `unknown` instead, a softer, separate line.
+// Returns whether it painted, so a caller can re-arm its once-per-mount read after a miss.
 function adoptLastCycle(
   read: LastCycleRead,
   paint: (outcome: SyncOutcome | null) => void,
@@ -498,6 +494,9 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       // belongs to an account the panel no longer shows, so neither badge nor toast may speak for it.
       if (lastCycleGenRef.current === cycleGen) {
         setLastCycle(outcome);
+        // This click is an answer, so it retires an earlier "couldn't check" — and it paints
+        // directly rather than through adoptLastCycle, so it does not get that clear for free.
+        setCycleUnknown(false);
         if (outcome.kind === 'synced') {
           useToastStore.getState().success('Synced');
         } else if (outcome.kind === 'failed') {
@@ -572,6 +571,9 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       detailsGenRef.current += 1;
       // Same reasoning for the cycle: a re-enable must never wear the previous account's failure.
       setLastCycle(null);
+      // Belt-and-braces, and untestable today: every path that sets the flag also re-arms the
+      // read, so one always follows and would overwrite this anyway.
+      setCycleUnknown(false);
       lastCycleGenRef.current += 1;
     } catch (error) {
       logger.error('Cloud sync disable failed', error);
@@ -596,9 +598,8 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   const pillLabel = STATUS_PILL_LABEL[status];
   // Beside the pill, never instead of it: status stays 'active' so the recovery controls survive.
   const badgeMessage = lastCycle?.kind === 'failed' ? failureMessage(lastCycle.reason) : null;
-  // A failure outranks an unknown — a read that could not answer says nothing about a failure
-  // already on screen, and must never replace it with the softer line.
-  const showUnknownCycle = badgeMessage === null && cycleUnknown;
+  // A failure outranks an unknown, and mid-enrolment there is no freshness claim to qualify yet.
+  const showUnknownCycle = status === 'active' && badgeMessage === null && cycleUnknown;
   const reconnectPrompt = RECONNECT_PROMPT[status];
 
   // The enable step's sign-in-options div groups Google today; a "Sign in with Apple"

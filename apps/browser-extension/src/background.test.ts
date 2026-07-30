@@ -99,6 +99,8 @@ describe('background: mapToUi', () => {
     expect(mapToUi('active')).toBe('active');
     expect(mapToUi('error')).toBe('error');
     expect(mapToUi('signed_out')).toBe('needs_reauth');
+    // Collapsing these is one line, and it puts "Sign-in expired" back in front of a keyless user.
+    expect(mapToUi('needs_enroll')).toBe('needs_enroll');
   });
 });
 
