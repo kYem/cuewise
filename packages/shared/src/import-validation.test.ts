@@ -30,6 +30,32 @@ describe('imported items always satisfy the read schemas', () => {
     expect(result.data?.quotes?.[0].category).toBe('inspiration');
   });
 
+  // Coercing is right, doing it silently is not: this rewrites the user's own data and persists
+  // it, so the preview has to say so rather than leaving them to find it in the library.
+  it('warns that it re-filed an unrecognised category', () => {
+    const result = importOf({ quotes: [{ id: 'q1', text: 't', category: 'philosophy' }] });
+
+    expect(result.warnings).toContainEqual(
+      expect.stringContaining('unrecognised category and was filed under inspiration')
+    );
+  });
+
+  it('warns that it re-filed an unrecognised session type', () => {
+    const result = importOf({
+      pomodoroSessions: [{ id: 's1', startedAt: 'x', type: 'meditation' }],
+    });
+
+    expect(result.warnings).toContainEqual(
+      expect.stringContaining('unrecognised type and was filed as work')
+    );
+  });
+
+  it('does not warn about a category it recognises', () => {
+    const result = importOf({ quotes: [{ id: 'q1', text: 't', category: 'learning' }] });
+
+    expect(result.warnings).not.toContainEqual(expect.stringContaining('unrecognised category'));
+  });
+
   it('normalises a non-numeric viewCount to zero', () => {
     const result = importOf({ quotes: [{ id: 'q1', text: 't', viewCount: '5' }] });
 

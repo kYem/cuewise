@@ -121,10 +121,11 @@ async function getStorageArea(): Promise<'local' | 'sync'> {
 // Custom quotes: Stored in sync/local based on user preference (user-created data)
 
 /**
- * Check if a quote is a custom quote (user-created or modified seed quote)
+ * Which quotes belong to the user rather than the seed set: user-created, or a seed quote they
+ * favourited or hid. Exported because it decides which key a quote lands in, so anything handing
+ * back "the user's quotes" — the export above all — must ask the same question or omit what it stored.
  */
-function isCustomQuote(quote: Quote): boolean {
-  // Custom quotes have isCustom flag OR have been favorited/hidden (modified state)
+export function isCustomQuote(quote: Quote): boolean {
   return quote.isCustom || quote.isFavorite || quote.isHidden;
 }
 
@@ -154,6 +155,33 @@ async function readLegacyQuotes(area: StorageArea): Promise<Quote[] | null> {
 }
 
 /**
+ * One leg of the move, merged by id rather than overwritten. Deleting the legacy key is allowed
+ * to fail, so this runs again on the next read — and an overwrite would replace everything added
+ * to the destination since with the stale legacy copy.
+ */
+async function moveLegacyQuotesInto(
+  key: string,
+  incoming: Quote[],
+  area: StorageArea
+): Promise<void> {
+  if (incoming.length === 0) {
+    return;
+  }
+  // Raw: a validated read hides rows this build cannot parse, and the merge would then drop them.
+  const existing = await getListRaw<{ id?: unknown }>(key, area);
+  const existingIds = new Set(existing.map((item) => item?.id));
+  const missing = incoming.filter((quote) => !existingIds.has(quote.id));
+  if (missing.length === 0) {
+    return;
+  }
+  const result = await setInStorage(key, [...existing, ...missing], area);
+  if (!result.success) {
+    logger.error('Quote migration write failed; keeping the legacy key', result.error);
+    throw new Error(`Could not migrate the legacy quotes: ${result.error.message}`);
+  }
+}
+
+/**
  * Migrate legacy quotes storage to hybrid storage
  * Called automatically when old 'quotes' key is detected
  */
@@ -179,21 +207,9 @@ async function migrateLegacyQuotes(): Promise<void> {
 
   // Every write is checked before the delete below: the legacy key is the only copy, so a
   // dropped result would trade a failed write for lost quotes.
-  if (seedQuotes.length > 0) {
-    const seedResult = await setInStorage(STORAGE_KEYS.SEED_QUOTES, seedQuotes, 'local');
-    if (!seedResult.success) {
-      logger.error('Quote migration write failed; keeping the legacy key', seedResult.error);
-      throw new Error(`Could not migrate the legacy quotes: ${seedResult.error.message}`);
-    }
-  }
-
+  await moveLegacyQuotesInto(STORAGE_KEYS.SEED_QUOTES, seedQuotes, 'local');
   if (customQuotes.length > 0) {
-    const area = await getStorageArea();
-    const customResult = await setInStorage(STORAGE_KEYS.CUSTOM_QUOTES, customQuotes, area);
-    if (!customResult.success) {
-      logger.error('Quote migration write failed; keeping the legacy key', customResult.error);
-      throw new Error(`Could not migrate the legacy quotes: ${customResult.error.message}`);
-    }
+    await moveLegacyQuotesInto(STORAGE_KEYS.CUSTOM_QUOTES, customQuotes, await getStorageArea());
   }
 
   const removedLocal = await removeFromStorage(STORAGE_KEYS.QUOTES, 'local');
@@ -236,13 +252,17 @@ export async function setQuotes(quotes: Quote[]): Promise<StorageResult> {
     // Split into seed and custom quotes
     const seedQuotes = quotes.filter((q) => !isCustomQuote(q));
     const customQuotes = quotes.filter((q) => isCustomQuote(q));
+    // Both keys judge preservation against every id this write covers: favouriting moves a quote
+    // to the sibling key, and a per-key view would keep its quarantined twin beside the new copy.
+    const coveredIds = quotes.map((q) => q.id);
 
     // Store seed quotes in local storage
     const seedResult = await setValidatedListInStorage(
       STORAGE_KEYS.SEED_QUOTES,
       seedQuotes,
       quoteSchema,
-      'local'
+      'local',
+      coveredIds
     );
     if (!seedResult.success) {
       return seedResult;
@@ -254,7 +274,8 @@ export async function setQuotes(quotes: Quote[]): Promise<StorageResult> {
       STORAGE_KEYS.CUSTOM_QUOTES,
       customQuotes,
       quoteSchema,
-      area
+      area,
+      coveredIds
     );
 
     return customResult;
@@ -389,7 +410,16 @@ export async function getCalendarState(): Promise<CalendarState | null> {
   const events = stored.events.filter(
     (event) => calendarEventSchema.safeParse(event).success
   ) as CalendarState['events'];
-  return { ...stored, events };
+  if (events.length === stored.events.length) {
+    return { ...stored, events };
+  }
+  logger.warn('Dropped unreadable cached calendar events', {
+    dropped: stored.events.length - events.length,
+    of: stored.events.length,
+  });
+  // `lastSync` goes too, or the store reads it as `syncedToday`, skips its refetch and shows
+  // the gaps as the user's agenda for the rest of the day.
+  return { ...stored, events, lastSync: null };
 }
 
 export async function setCalendarState(state: CalendarState): Promise<StorageResult> {

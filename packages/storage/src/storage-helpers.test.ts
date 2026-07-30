@@ -13,7 +13,7 @@ import {
   toStoredValues,
   UNREADABLE_VALUE,
 } from '@cuewise/shared';
-import { goalFactory } from '@cuewise/test-utils/factories';
+import { goalFactory, quoteFactory } from '@cuewise/test-utils/factories';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getFromStorage, getManyFromStorage, setInStorage } from './chrome-storage';
 import { LocalStorageKeyValueStore } from './local-storage-key-value-store';
@@ -26,6 +26,7 @@ import {
   getSettings,
   getSettingsForSync,
   getStorageUsage,
+  isCustomQuote,
   migrateLegacySettings,
   readLegacySettingsBlob,
   readSettings,
@@ -1121,5 +1122,24 @@ describe('clearSettings', () => {
     await expect(clearSettings()).resolves.toBe(false);
 
     expect(areas.local[settingsStorageKey('theme')]).toBe('dark');
+  });
+});
+
+// Pinned directly because the insights-store export mock reimplements this predicate: narrowing
+// the original to `isCustom` alone would leave that suite green while a favourited quote silently
+// vanished from a "complete" export.
+describe('isCustomQuote', () => {
+  it.each([
+    ['user-created', { isCustom: true }],
+    ['a favourited seed quote', { isFavorite: true }],
+    ['a hidden seed quote', { isHidden: true }],
+  ])("treats %s as the user's", (_label, overrides) => {
+    expect(isCustomQuote(quoteFactory.build({ isCustom: false, ...overrides }))).toBe(true);
+  });
+
+  it('leaves an untouched seed quote with the seed set', () => {
+    const seed = quoteFactory.build({ isCustom: false, isFavorite: false, isHidden: false });
+
+    expect(isCustomQuote(seed)).toBe(false);
   });
 });

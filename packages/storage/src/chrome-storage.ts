@@ -116,7 +116,10 @@ export async function setValidatedListInStorage<T>(
   key: string,
   items: T[],
   itemSchema: ZodMiniType<T>,
-  area: StorageArea = 'local'
+  area: StorageArea = 'local',
+  // For a write split across sibling keys: every id the whole operation covers. Without it each
+  // key judges against its own slice, so a row that moved key leaves its quarantined twin behind.
+  coveredIds?: Iterable<string>
 ): Promise<StorageResult> {
   // One instance for the read-modify-write, so a `configurePlatform` swap mid-flight cannot
   // merge one backend's rows into another's.
@@ -136,6 +139,9 @@ export async function setValidatedListInStorage<T>(
   const writtenIds = new Set<unknown>(
     (items as { id?: unknown }[]).map((item) => item?.id).filter((id) => typeof id === 'string')
   );
+  for (const id of coveredIds ?? []) {
+    writtenIds.add(id);
+  }
   const unreadable = quarantined.filter(
     (stored) =>
       !written.has(JSON.stringify(stored)) && !writtenIds.has((stored as { id?: unknown })?.id)
