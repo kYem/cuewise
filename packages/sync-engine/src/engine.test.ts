@@ -7,7 +7,12 @@ import {
 } from '@cuewise/crypto';
 import { configurePlatform, logger, storageFailure } from '@cuewise/shared';
 import { getGoals, setGoals } from '@cuewise/storage';
-import { ApiError, SessionManager, SYNC_PULL_WAKE_ID } from '@cuewise/sync-client';
+import {
+  ApiError,
+  SessionManager,
+  SYNC_PULL_WAKE_ID,
+  SYNC_SESSION_KEY,
+} from '@cuewise/sync-client';
 import { goalFactory } from '@cuewise/test-utils/factories';
 import { describe, expect, it, vi } from 'vitest';
 import { FakeApiClient, FakeSyncServer } from './__fixtures__/fake-api-client';
@@ -277,15 +282,20 @@ describe('SyncEngine.enableSync', () => {
     useStorage(device);
     await setGoals([goalFactory.build({ id: 'g1' })]);
     const goals = requireGoalsBinding(bindings);
+    const readAll = goals.readAll.bind(goals);
+    // Returns the real library, so backfillDirty still writes to the ledger the disable cleared.
     vi.spyOn(goals, 'readAll').mockImplementation(async () => {
       await device.engine.disableSync();
-      return {};
+      return readAll();
     });
 
     await device.engine.enableSync('dev', 'cred-a', 'Device A');
 
     expect(await device.kv.get(CLOUD_SYNC_ENABLED_KEY, 'local')).toBeNull();
     expect(device.engine.getStatus()).toBe('disabled');
+    // backfillDirty wrote to the ledger disableSync had just cleared; walking away would leave a
+    // disconnected device holding a dirty set naming every goal it has.
+    expect((await new SyncMetadataStore(device.kv).load()).dirty).toEqual({});
   });
 
   it('reports disabled the moment an enrol is abandoned, not whatever status it was mid-way through', async () => {
@@ -315,6 +325,87 @@ describe('SyncEngine.enableSync', () => {
 
     releaseDisable();
     await disabling;
+  });
+
+  it('does not complete an enable whose account was removed during sign-in', async () => {
+    // The window a snapshot taken inside enrollAndActivate cannot see: the epoch has already
+    // moved by the time it reads it, so every later checkpoint compares equal.
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    vi.spyOn(device.apiClient, 'exchangeToken').mockImplementation(async () => {
+      await device.engine.disableSync();
+      return { token: 'fake-token-1' };
+    });
+
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    expect(await device.kv.get(CLOUD_SYNC_ENABLED_KEY, 'local')).toBeNull();
+    expect(await device.kv.get(SYNC_DATA_KEY, 'local')).toBeNull();
+    expect(device.engine.getStatus()).toBe('disabled');
+  });
+
+  it('names the key an abandoned enrol could not roll back, rather than reporting success', async () => {
+    // `remove` reports failure by returning false, never by throwing, so a bestEffort wrapper
+    // alone calls a failed rollback a success — and the flag left set lands the next start() on
+    // needs_enroll, demanding a recovery code for the account the user just removed.
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    device.kv.failRemovesForKey = SYNC_DATA_KEY;
+    vi.spyOn(device.apiClient, 'putRecoveryEnvelope').mockImplementation(async () => {
+      await device.engine.disableSync();
+    });
+
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      `Cloud sync abandoned an enable but could not remove its data key: ${SYNC_DATA_KEY}`
+    );
+    errorSpy.mockRestore();
+  });
+
+  it('drops the stamp and the cycle record when a disable lands inside those very writes', async () => {
+    // The epoch check runs before them, so only a re-check afterwards keeps a removed account's
+    // "Last synced" from being hydrated onto whatever account comes next.
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    let disabled = false;
+    const write = device.kv.set.bind(device.kv);
+    vi.spyOn(device.kv, 'set').mockImplementation(async (key, value, area) => {
+      if (key === LAST_SYNCED_AT_KEY && !disabled) {
+        disabled = true;
+        await device.engine.disableSync();
+      }
+      return write(key, value, area);
+    });
+
+    const outcome = await device.engine.syncNow();
+
+    expect(outcome).toEqual({ kind: 'cancelled' });
+    expect(await device.kv.get(LAST_SYNCED_AT_KEY, 'local')).toBeNull();
+    expect(await device.kv.get(LAST_CYCLE_KEY, 'local')).toBeNull();
+    expect(device.engine.getLastSyncedAt()).toBeNull();
+  });
+
+  it('clears a session an abandoned enrol persisted, so the panel cannot name its account', async () => {
+    // disableSync clears the session BEFORE this enrol's saveToken writes it, so only the
+    // rollback can remove it — and a live token keeps getAccount answering for that account.
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    vi.spyOn(device.apiClient, 'exchangeToken').mockImplementation(async () => {
+      await device.engine.disableSync();
+      return { token: 'fake-token-1' };
+    });
+
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    expect(await device.kv.get(SYNC_SESSION_KEY, 'local')).toBeNull();
+    expect(await device.engine.getAccount()).toBeNull();
   });
 
   it('rolls back the data key when a disable lands during the enrol itself', async () => {
@@ -1618,7 +1709,6 @@ describe('SyncEngine.disableSync', () => {
     const outcome = await device.engine.syncNow();
 
     expect(outcome).toEqual({ kind: 'cancelled' });
-    // Only the record already in flight when the disable landed.
     expect(await getGoals()).toHaveLength(1);
     expect(await device.kv.get(LAST_SYNCED_AT_KEY, 'local')).toBeNull();
     expect(await device.kv.get(LAST_CYCLE_KEY, 'local')).toBeNull();
@@ -2070,8 +2160,6 @@ describe('SyncEngine.start / stop', () => {
     expect(await device.kv.get(LAST_SYNCED_AT_KEY, 'local')).toBeNull();
     expect(await device.kv.get(LAST_CYCLE_KEY, 'local')).toBeNull();
     expect(device.engine.getStatus()).toBe('disabled');
-    // The ack must not be recorded either: that save would rewrite the whole ledger from its
-    // pre-disable snapshot, restoring the cursor and hlcs disableSync had just cleared.
     const ledger = await new SyncMetadataStore(device.kv).load();
     expect(ledger.cursor).toBe(0);
     expect(ledger.hlcs).toEqual({});

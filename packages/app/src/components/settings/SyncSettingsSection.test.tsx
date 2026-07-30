@@ -241,10 +241,13 @@ describe('SyncSettingsSectionComponent', () => {
     expect(await screen.findByText('Save your recovery code')).toBeInTheDocument();
     // The modal renders the code in groups, so the rendered text carries no separators.
     expect(screen.getByTestId('recovery-code-display')).toHaveTextContent(CODE.replaceAll('-', ''));
+    // A modal with no explanation, beside a switch still reading on, is not a coherent screen.
+    expect(toastWarning).toHaveBeenCalledWith(expect.stringContaining('disconnected before setup'));
+    expect(cloudSyncSwitch()).not.toBeChecked();
     expect(toastError).not.toHaveBeenCalled();
   });
 
-  it('stays quiet with no code when the user cancelled before anything was created', async () => {
+  it('closes the enable form when a disconnect abandons it, with nothing to show', async () => {
     const user = userEvent.setup();
     const controller = new FakeSyncController();
     controller.scriptEnableWithGoogle({ ok: false, reason: 'cancelled' });
@@ -253,9 +256,10 @@ describe('SyncSettingsSectionComponent', () => {
     await user.click(cloudSyncSwitch());
     await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
 
-    expect(await screen.findByRole('button', { name: 'Sign in with Google' })).toBeEnabled();
+    await waitFor(() => expect(cloudSyncSwitch()).not.toBeChecked());
     expect(screen.queryByText('Save your recovery code')).not.toBeInTheDocument();
     expect(toastError).not.toHaveBeenCalled();
+    expect(toastWarning).not.toHaveBeenCalled();
   });
 
   it('still toasts an auth failure that carries a non-cancel detail', async () => {
@@ -574,6 +578,24 @@ describe('SyncSettingsSectionComponent', () => {
     expect(controller.calls.filter((call) => call.method === 'enableWithGoogle')).toHaveLength(1);
     expect(controller.calls.some((call) => call.method === 'enable')).toBe(false);
     expect(controller.calls.some((call) => call.method === 'reconnect')).toBe(false);
+  });
+
+  it('shows a code minted by an enroll submit that a disconnect then abandoned', async () => {
+    // The enroll fallback can land on a different account, mint a fresh code, and be abandoned —
+    // and this branch discarded it while its two siblings surfaced it.
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptEnableWithGoogle({ ok: false, reason: 'needs-code' });
+    controller.scriptEnrollWithCode({ ok: false, reason: 'cancelled', recoveryCode: CODE });
+    renderSection(controller);
+
+    await user.click(cloudSyncSwitch());
+    await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
+    await screen.findByText('Enter recovery code');
+    await user.type(screen.getByLabelText(/recovery code/i), CODE);
+    await user.click(screen.getByRole('button', { name: 'Enroll' }));
+
+    expect(await screen.findByText('Save your recovery code')).toBeInTheDocument();
   });
 
   it('falls back to enableWithGoogle for enroll when the host lacks enrollWithCode (extension)', async () => {

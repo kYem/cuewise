@@ -170,8 +170,6 @@ describe('createDirectSyncController: enable()', () => {
   });
 
   it('maps a post-call disabled status to a cancel, never to ok', async () => {
-    // enableSync returned without activating, so a disable landed inside it. ok would persist
-    // creds, hand Chrome sync off, and show a recovery code for a key that no longer exists.
     let trampolines: { onRecoveryCode: (code: string) => void } | undefined;
     const engine = fakeControlSurface({
       getStatus: vi.fn().mockReturnValue('disabled' as SyncStatus),

@@ -186,6 +186,8 @@ export class SyncEngine {
     opts: EnableSyncOptions = {}
   ): Promise<void> {
     const { recoveryCode, codeVerifier } = opts;
+    // Before sign-in, not inside enrollAndActivate: a disable landing during the token exchange
+    // would move the epoch before a later snapshot read it, and then match at every checkpoint.
     const epoch = this.accountEpoch;
     const before = this.status;
     try {
@@ -201,7 +203,7 @@ export class SyncEngine {
       if (!saved.success) {
         throw new Error(`failed to persist sync session: ${saved.error.message}`);
       }
-      await this.enrollAndActivate(recoveryCode);
+      await this.enrollAndActivate(recoveryCode, epoch);
     } catch (err) {
       await this.handleEnableError(err, before, epoch);
     }
@@ -229,17 +231,14 @@ export class SyncEngine {
         await this.handleAuthLoss();
         return;
       }
-      await this.enrollAndActivate(recoveryCode);
+      await this.enrollAndActivate(recoveryCode, epoch);
     } catch (err) {
       await this.handleEnableError(err, before, epoch);
     }
   }
 
   /** The enroll → initial-sync → activate tail shared by enableSync and resumeEnrollWithCode. */
-  private async enrollAndActivate(recoveryCode: string | undefined): Promise<void> {
-    // Snapshotted before the first await, like start(): every step below writes something a
-    // disable is trying to remove, and syncNow's own epoch only covers the cycle's window.
-    const epoch = this.accountEpoch;
+  private async enrollAndActivate(recoveryCode: string | undefined, epoch: number): Promise<void> {
     // A code is only passed when enrolling an additional device; brand-new enable passes none.
     this.setStatus(recoveryCode ? 'enrolling' : 'key_init');
     const wasEnabled = await this.deps.keyStore.get<boolean>(CLOUD_SYNC_ENABLED_KEY, 'local');
@@ -254,10 +253,7 @@ export class SyncEngine {
       // this code is the only way back into the account even if the enable is abandoned here.
       this.deps.onRecoveryCode?.(enrolled.recoveryCodeToShow);
     }
-    // Checked before the key is adopted: everything past this point — a full cycle's worth of the
-    // removed account's records, the stamps, the ledger — writes for an account that is gone, and
-    // a data key left on disk would seal the NEXT account's records under a key its server has no
-    // envelope for, leaving that device's records unreadable everywhere else.
+    // Before the key is adopted: everything past here writes for an account that is gone.
     if (this.enrollSuperseded(epoch)) {
       await this.abandonEnroll(enrolled.recoveryCodeToShow);
       return;
@@ -266,19 +262,22 @@ export class SyncEngine {
     this.keyId = enrolled.keyId;
 
     this.setStatus('initial_sync');
-    // Unconditionally: the flag is only written once an enable finishes, so its absence does not
-    // mean the cursor belongs to another account — and its presence does not mean it belongs to
-    // this one, since a re-auth can land on a different account at the provider's chooser.
+    // Unconditionally: the enabled flag survives handleAuthLoss, so its presence cannot mean the
+    // cursor is this account's — a re-auth can land on another at the provider's chooser.
     await this.resetPullCursor();
     await this.backfillDirty();
+    // Both wrote to the ledger disableSync had just cleared, so a disable landing across them
+    // needs that reset repeating before this enroll walks away from it.
+    if (this.enrollSuperseded(epoch)) {
+      await this.bestEffort(() => this.resetMeta(), 'abandoned enroll ledger rollback');
+      await this.abandonEnroll(enrolled.recoveryCodeToShow);
+      return;
+    }
     const outcome = await this.syncNow();
-    // The epoch first: it also covers a cycle that 401'd because the disable cleared the session,
-    // which would otherwise be reported to the user as their sign-in expiring.
     if (this.enrollSuperseded(epoch)) {
       await this.abandonEnroll(enrolled.recoveryCodeToShow);
       return;
     }
-    // signed-out: the session was dropped mid-cycle (handleAuthLoss kept the DK).
     if (outcome.kind === 'signed-out') {
       return;
     }
@@ -287,14 +286,10 @@ export class SyncEngine {
     if (!enabledResult.success) {
       throw new Error(`failed to persist cloudSyncEnabled: ${enabledResult.error.message}`);
     }
-    // Re-checked after the write, like the cycle's own saves: a disable landing inside it would
-    // otherwise leave the flag set with no key, and the next start() would demand a recovery code
-    // for the account the user disconnected.
+    // Re-checked after the write: the flag left set with no key makes the next start() demand a
+    // recovery code for the account the user disconnected.
     if (this.enrollSuperseded(epoch)) {
-      await this.bestEffort(
-        () => this.deps.keyStore.remove(CLOUD_SYNC_ENABLED_KEY, 'local'),
-        'enable flag rollback'
-      );
+      await this.rollbackKey(CLOUD_SYNC_ENABLED_KEY, 'its enabled flag');
       await this.abandonEnroll(enrolled.recoveryCodeToShow);
       return;
     }
@@ -303,15 +298,41 @@ export class SyncEngine {
   }
 
   /**
-   * Undoes what an abandoned enroll persisted. The server envelope cannot be withdrawn — there is
-   * no delete call — so a code it minted is reported as the only way back into the account it made.
+   * Removes one key an abandoned enroll wrote. `remove` reports failure by returning false rather
+   * than throwing, so bestEffort alone would call a failed rollback a success — and a surviving
+   * enabled flag lands the next start() on needs_enroll, demanding a code for a removed account.
+   */
+  private async rollbackKey(key: string, what: string): Promise<void> {
+    const removed = await this.bestEffortRemove(key);
+    if (!removed) {
+      logger.error(`Cloud sync abandoned an enable but could not remove ${what}: ${key}`);
+    }
+  }
+
+  // Separate only so a throwing adapter counts as a failed removal rather than escaping.
+  private async bestEffortRemove(key: string): Promise<boolean> {
+    try {
+      return await this.deps.keyStore.remove(key, 'local');
+    } catch (err) {
+      logger.error(`Cloud sync rollback threw removing ${key}: ${describeThrown(err)}`, err);
+      return false;
+    }
+  }
+
+  /**
+   * Drops the data key an abandoned enroll adopted. The server envelope cannot be withdrawn —
+   * there is no delete call — so a code it minted is the only way back into the account it made.
    */
   private async abandonEnroll(mintedCode: string | undefined): Promise<void> {
     this.dk = null;
     this.keyId = null;
+    await this.rollbackKey(SYNC_DATA_KEY, 'its data key');
+    // The session too: disableSync cleared it before this enroll's saveToken wrote it, so the
+    // device would otherwise hold a live token and getAccount would keep naming the account the
+    // user disconnected.
     await this.bestEffort(
-      () => this.deps.keyStore.remove(SYNC_DATA_KEY, 'local'),
-      'abandoned enroll key rollback'
+      () => this.deps.sessionManager.clear(),
+      'abandoned enroll session rollback'
     );
     if (mintedCode !== undefined) {
       logger.error(
@@ -328,6 +349,13 @@ export class SyncEngine {
     // First: disableSync clears the session, so an enroll caught mid-flight usually fails with a
     // 401 that is the user's own doing. handleAuthLoss would answer it with "Sign-in expired".
     if (this.enrollSuperseded(epoch)) {
+      if (!(err instanceof ApiError && err.status === 401)) {
+        // Not the 401 the disable's own session clear provokes, so it is a real fault that the
+        // abandoned enable would otherwise bury.
+        logger.error(`Cloud sync enable failed as it was abandoned: ${describeThrown(err)}`, err);
+      }
+      // Through the same rollback: a throw partway can still have persisted the key.
+      await this.abandonEnroll(undefined);
       return;
     }
     if (err instanceof ApiError && err.status === 401) {
@@ -439,7 +467,22 @@ export class SyncEngine {
       this.lastCycleKnown = true;
       await this.bestEffort(() => this.persistLastCycle(cycle), 'last-cycle persist');
     }
+    // Re-checked after those writes, not only before them: a disable landing inside one of them
+    // would otherwise leave the removed account's stamp to be hydrated onto whatever comes next,
+    // and hand the caller a `synced` to toast.
+    if (this.accountEpoch !== epoch) {
+      await this.rollbackCycleRecord();
+      return { kind: 'cancelled' };
+    }
     return outcome;
+  }
+
+  /** Removes what the bookkeeping re-created when a disable landed inside its own writes. */
+  private async rollbackCycleRecord(): Promise<void> {
+    this.lastSyncedAt = null;
+    this.lastCycle = null;
+    await this.bestEffortRemove(LAST_SYNCED_AT_KEY);
+    await this.bestEffortRemove(LAST_CYCLE_KEY);
   }
 
   /** The cycle proper: everything syncNow reports on, with none of the bookkeeping it does after. */
@@ -801,13 +844,6 @@ export class SyncEngine {
     await this.armPullLoopUnlessOff();
   }
 
-  /**
-   * Whether a disable landed while start() was running. Every exit past the enabled-flag read must
-   * check it: otherwise start() reports the user's own action as a defect, or re-activates the pill
-   * and the pull wake for an account they just removed.
-   */
-  // Every write past this point — the enabled flag above all — would re-create what the disable
-  // that moved the epoch has just removed.
   private enrollSuperseded(epoch: number): boolean {
     if (this.accountEpoch === epoch) {
       return false;
@@ -820,6 +856,11 @@ export class SyncEngine {
     return true;
   }
 
+  /**
+   * Whether a disable landed while start() was running. Every exit past the enabled-flag read must
+   * check it: otherwise start() reports the user's own action as a defect, or re-activates the pill
+   * and the pull wake for an account they just removed.
+   */
   private startSuperseded(epoch: number): boolean {
     if (this.accountEpoch === epoch) {
       return false;
@@ -901,8 +942,8 @@ export class SyncEngine {
     }
   }
 
-  // Only the cursor: the rest of a surviving ledger is re-stamped by backfillDirty or resolved by
-  // the strategy, and the cursor is the one field whose staleness silently skips history.
+  // Only the cursor: widening this would drop the quarantine list too, and the device would
+  // re-quarantine the same records on its next pull, re-toasting the user every time.
   private async resetPullCursor(): Promise<void> {
     const meta = await this.meta.load();
     if (meta.cursor === 0) {

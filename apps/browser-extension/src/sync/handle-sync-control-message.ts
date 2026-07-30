@@ -55,8 +55,7 @@ async function doEnable(
   }
   if (engine.getStatus() === 'disabled') {
     // enableSync returned without activating, so a disable landed inside it: ok here would
-    // persist creds and hand Chrome sync off. A code it already minted still has to reach the
-    // user — the account it created on the server cannot be re-enrolled without it.
+    // persist creds and hand Chrome sync off. A code it minted still has to reach the user.
     return { ok: false, reason: 'cancelled', recoveryCode: deps.takeRecoveryCode() };
   }
   return { ok: true, recoveryCode: deps.takeRecoveryCode() };

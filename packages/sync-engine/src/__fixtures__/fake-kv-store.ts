@@ -45,8 +45,17 @@ export class FakeKvStore implements KeyValueStore {
     return { success: true };
   }
 
+  /** Keys whose removal reports failure, as a real adapter does — `false`, never a throw. */
+  failRemovesForKey: string | null = null;
+
   async remove(key: string, _area: StorageArea): Promise<boolean> {
-    return this.data.delete(key);
+    if (this.failRemovesForKey === key) {
+      return false;
+    }
+    // `false` means the removal FAILED (see the port); an absent key is a successful no-op, so
+    // Map.delete's own false must not be forwarded.
+    this.data.delete(key);
+    return true;
   }
 
   async getUsage(_area: StorageArea): Promise<StorageUsage> {

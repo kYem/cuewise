@@ -21,7 +21,7 @@ const BAD_CODE_MESSAGES: Record<string, string> = {
 const GENERIC_BAD_CODE_MESSAGE = "That recovery code didn't work — please check it and try again";
 const GENERIC_FAILURE_MESSAGE = "Couldn't enroll this device — please try again";
 
-/** null = quiet outcome: a deliberate re-auth cancel keeps the modal open with no error line. */
+/** null = quiet outcome: the user's own cancel keeps the modal open with no error line. */
 function messageFor(result: Extract<EnableResult, { ok: false }>): string | null {
   if (isCancelledEnable(result)) {
     return null;

@@ -135,6 +135,10 @@ function adoptLastCycle(
   return true;
 }
 
+// Regenerate cannot fix this one — the abandoned enrol dropped the key it would need.
+const ABANDONED_CODE_MESSAGE =
+  'Cloud Sync was disconnected before setup finished. Save this recovery code — it is the only way back into the account it had already created.';
+
 const DISABLE_MESSAGE = 'Re-enabling on this device will need your recovery code.';
 const DISABLE_MESSAGE_UNSAVED =
   "You haven't saved your recovery code yet — regenerate and save one first, or you may lose access when you re-enable this device.";
@@ -335,15 +339,18 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   // A show-once recovery code must never vanish: if Settings closed during a slow OAuth flow,
   // the modal has no mount — tell the user (globally) to regenerate one instead. Recoverable:
   // the code grants nothing by itself and Regenerate mints a fresh one.
-  const surfaceRecoveryCode = (code: string) => {
+  const surfaceRecoveryCode = (code: string, closedMessage?: string) => {
     if (mountedRef.current) {
       setRecoveryCode(code);
       return;
     }
-    logger.error('Cloud sync enabled after Settings closed — the recovery code had no surface');
+    logger.error('Cloud sync issued a recovery code after Settings closed — it had no surface');
     useToastStore
       .getState()
-      .warning('Cloud sync is on — open Settings → Cloud Sync and regenerate your recovery code.');
+      .warning(
+        closedMessage ??
+          'Cloud sync is on — open Settings → Cloud Sync and regenerate your recovery code.'
+      );
   };
 
   // Enable finishes at `active` even when its initial cycle failed, and that cycle involves no
@@ -385,6 +392,18 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     await refreshDetails();
   };
 
+  // A disconnect landed mid-enable. The switch must stop reading on, and a code the attempt
+  // minted is the only way back into the account it created on the server before it was abandoned.
+  const routeAbandonedEnable = (recoveryCode: string | undefined) => {
+    logger.error('Cloud sync enable was abandoned by a disconnect');
+    setEnabling(false);
+    if (recoveryCode === undefined) {
+      return;
+    }
+    surfaceRecoveryCode(recoveryCode, ABANDONED_CODE_MESSAGE);
+    useToastStore.getState().warning(ABANDONED_CODE_MESSAGE);
+  };
+
   // Shared by the initial enable() and the reconnect() flows — both surface the same shape.
   // source records which flow needs a code, so the EnrollCodeModal submit routes back correctly.
   const routeEnableResult = async (
@@ -408,14 +427,14 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       setEnrollOpen(true);
       return;
     }
+    if (result.reason === 'cancelled') {
+      routeAbandonedEnable(result.recoveryCode);
+      return;
+    }
     if (isCancelledEnable(result)) {
-      // The user's own cancel isn't a failure: no error state, no toast; the form stays open for
-      // another attempt. But a code minted before they cancelled is the only way back into the
-      // account that attempt created, so it is shown anyway.
+      // A cancelled sign-in isn't a failure: no error state, no toast; the form stays open for
+      // another attempt, unlike the disconnect above, which ended the account entirely.
       logger.info(`Cloud sync ${source} sign-in was cancelled by the user`);
-      if (result.recoveryCode) {
-        surfaceRecoveryCode(result.recoveryCode);
-      }
       return;
     }
     setFailedAction(source);
@@ -506,8 +525,10 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       if (result.recoveryCode) {
         surfaceRecoveryCode(result.recoveryCode);
       }
+    } else if (result.reason === 'cancelled') {
+      routeAbandonedEnable(result.recoveryCode);
     } else if (isCancelledEnable(result)) {
-      logger.info('Cloud sync enroll re-auth was cancelled by the user');
+      logger.info('Cloud sync enroll sign-in was cancelled by the user');
     } else {
       // The modal renders the message; this is the default-visible trace of what failed.
       logger.error(

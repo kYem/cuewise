@@ -387,9 +387,6 @@ describe('handleSyncControlMessage: enable', () => {
   });
 
   it('maps a post-call disabled status to a quiet cancel, never to ok', async () => {
-    // enableSync returned without activating, so a disable landed inside it. Reporting ok would
-    // persist creds for the removed account, hand Chrome sync off, and show a recovery code for
-    // a key that no longer exists.
     const engine = fakeControlSurface({
       getStatus: vi.fn().mockReturnValue('disabled' as SyncStatus),
     });

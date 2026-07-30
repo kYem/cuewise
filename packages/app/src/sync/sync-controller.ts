@@ -37,9 +37,9 @@ export type EnableResult =
 export const AUTH_CANCELLED_DETAIL = 'cancelled';
 
 /**
- * Whether a failed enable was the user's own doing, so it must not surface as an error. Read the
- * reason, not just the detail: an `error` result's detail is a thrown message, and one that read
- * "cancelled" would otherwise silence a real failure.
+ * Whether a failed enable was the user's own doing, so it must not surface as an error. Reads the
+ * reason, not just the detail: an `error` detail is a thrown message, and one reading "cancelled"
+ * would otherwise silence a real failure.
  */
 export function isCancelledEnable(result: Extract<EnableResult, { ok: false }>): boolean {
   if (result.reason === 'cancelled') {
@@ -103,7 +103,6 @@ export interface SyncController {
   reconnect(recoveryCode?: string): Promise<EnableResult>;
   disable(): Promise<void>;
   regenerateRecoveryCode(): Promise<string>;
-  /** `{kind:'cancelled'}` when a disable landed mid-cycle: no cycle to report, so paint nothing. */
   syncNow(): Promise<SyncNowResult>;
   /** Informational: resolves null when unavailable (signed out, offline, legacy host); never throws. */
   getDetails(): Promise<SyncDetails | null>;

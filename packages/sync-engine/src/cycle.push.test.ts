@@ -163,13 +163,10 @@ describe('pushOnce', () => {
 
     expect(result).toEqual({ kind: 'cancelled' });
     expect(transport.pushedBatches).toHaveLength(1);
-    // The server kept those 100, so "disconnecting stops the sync" needs the qualification.
     expect(errorSpy).toHaveBeenCalledWith(
       'Cloud sync stopped a push for a disconnected account, but its server had already accepted 100 records'
     );
     errorSpy.mockRestore();
-    // Every id still dirty proves no save ran: `save` rewrites the whole ledger from a snapshot
-    // taken before the disable, so recording this ack would restore what the disable cleared.
     const saved = await metaStore.load();
     expect(saved.dirty.goals).toEqual(ids);
   });

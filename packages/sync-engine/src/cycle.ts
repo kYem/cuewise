@@ -35,7 +35,7 @@ export interface CycleDeps {
   isCancelled: () => boolean;
 }
 
-/** Saves unless the account is gone, since anything written now outlives the account it describes. */
+/** Saves unless the account is gone; false when it skipped, so the caller can report `cancelled`. */
 async function saveUnlessCancelled(deps: CycleDeps, meta: SyncMeta): Promise<boolean> {
   if (deps.isCancelled()) {
     return false;
@@ -87,12 +87,9 @@ export async function pushOnce(deps: CycleDeps): Promise<PushResult> {
     const batch = dirtyRecords.slice(start, start + MAX_PUSH_BATCH);
     await deps.transport.pushChanges(batch.map((item) => item.record));
     clearAcked(meta, batch);
-    // Checked again after the round trip, not just before it: `save` rewrites the whole ledger
-    // from a snapshot loaded before the disable, so it would restore the cursor and hlcs that
-    // disableSync just cleared. Losing this ack costs one re-push the next enable makes anyway.
+    // After the round trip, not just before: `save` rewrites the whole ledger from a pre-disable
+    // snapshot, restoring the cursor and hlcs disableSync cleared. The lost ack costs one re-push.
     if (deps.isCancelled()) {
-      // The mirror of cancelledPull, and the direction that matters more: the server accepted
-      // these before the cycle stopped, so "disconnect stopped the sync" is not the whole truth.
       logger.error(
         `Cloud sync stopped a push for a disconnected account, but its server had already accepted ${batch.length} records`
       );
@@ -216,10 +213,9 @@ export async function pullOnce(deps: CycleDeps): Promise<PullResult> {
   return { kind: 'complete' };
 }
 
-/** What one pulled record did. `failed` is the write refusing, and stops the cycle where it stands. */
+/** What one pulled record did. `failed` is the write refusing, which parks the pull where it is. */
 type ApplyResult = 'wrote' | 'skipped' | 'failed';
 
-/** Applies one pulled record to meta/storage. */
 async function applyPulledRecord(
   deps: CycleDeps,
   meta: SyncMeta,
