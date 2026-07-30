@@ -100,6 +100,9 @@ describe('handleSyncControlMessage: getLastCycle', () => {
     const order: string[] = [];
     const engine = fakeEngine({
       ensureHydrated: vi.fn(async () => {
+        // Yield first, or the push lands synchronously and a caller that never awaits still
+        // produces this order — the assertion would pass against the very bug it guards.
+        await Promise.resolve();
         order.push('hydrate');
       }),
       getLastCycle: vi.fn(() => {

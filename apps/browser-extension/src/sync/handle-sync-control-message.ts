@@ -58,6 +58,9 @@ async function doEnable(
 
 /** Read-only details lookup — deliberately NOT serialized (see handleSyncControlMessage). */
 async function runDetails(engine: SyncEngineControlSurface): Promise<SyncDetailsResponse> {
+  // Hydration owns lastSyncedAt as well as the cycle; without this the stamp is only correct
+  // because getAccount's network hop happens to outlast two local reads on a cold worker.
+  await engine.ensureHydrated();
   // Informational for the settings UI; engine.getAccount never throws (null on any failure).
   return {
     ok: true,

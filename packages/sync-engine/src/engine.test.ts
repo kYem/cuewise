@@ -999,6 +999,25 @@ describe('SyncEngine.syncNow', () => {
     await cold.finish();
   });
 
+  it('keeps a cycle this process ran when the stored record turns out unreadable', async () => {
+    // handlePullWake syncs without awaiting hydration, so a read that fails afterwards must not
+    // mask the failure that cycle already recorded — it is the badge, not a guess about storage.
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    device.apiClient.rejectNextGetChanges(new ApiError('internal', 500));
+    await device.engine.syncNow();
+
+    device.kv.failGetManyForKey = LAST_CYCLE_KEY;
+    await device.engine.ensureHydrated();
+
+    expect(device.engine.getLastCycle()).toMatchObject({
+      known: true,
+      cycle: { outcome: { kind: 'failed', reason: 'server' } },
+    });
+  });
+
   it('reports unknown when the whole hydration read fails', async () => {
     const server = new FakeSyncServer();
     const device = createDevice(server);

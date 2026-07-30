@@ -460,10 +460,10 @@ export class SyncEngine {
     // place that distinction decides whether a wedged device shows a badge.
     const stored = await this.deps.keyStore.getMany([LAST_SYNCED_AT_KEY, LAST_CYCLE_KEY], 'local');
     if (stored === null) {
-      this.lastCycleKnown = false;
       logger.error(
         'Could not read the persisted sync state; the last cycle is unknown this session'
       );
+      this.markLastCycleUnknown();
       return;
     }
 
@@ -478,24 +478,35 @@ export class SyncEngine {
       return;
     }
     if (!record.readable) {
-      this.lastCycleKnown = false;
       logger.error('The stored last sync cycle is unreadable; reporting it as unknown', {
         key: LAST_CYCLE_KEY,
       });
+      this.markLastCycleUnknown();
       return;
     }
     const hydrated = parsePersistedSyncCycle(record.value);
     if (hydrated === null) {
       // A record that will not parse is not "no cycle" either — say unknown rather than paint health.
-      this.lastCycleKnown = false;
       logger.error('The stored last sync cycle is not a cycle record; reporting it as unknown', {
         key: LAST_CYCLE_KEY,
         shape: describeShape(record.value),
       });
+      this.markLastCycleUnknown();
       return;
     }
     if (this.lastCycle === null) {
       this.lastCycle = hydrated;
+    }
+  }
+
+  /**
+   * Storage could not answer. Only downgrades while this process has run no cycle of its own: the
+   * pull wake syncs without awaiting hydration, so a later failed read would otherwise mask the
+   * failure that cycle already recorded — the badge this whole path exists to show.
+   */
+  private markLastCycleUnknown(): void {
+    if (this.lastCycle === null) {
+      this.lastCycleKnown = false;
     }
   }
 

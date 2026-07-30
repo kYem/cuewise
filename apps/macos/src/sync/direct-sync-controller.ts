@@ -368,6 +368,9 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
       }
     },
     async getDetails(): Promise<SyncDetails | null> {
+      // Hydration owns lastSyncedAt too; without this the stamp is only correct because
+      // getAccount's network hop happens to outlast two local reads.
+      await engine.ensureHydrated();
       return buildSyncDetails(await engine.getAccount(), engine.getLastSyncedAt());
     },
     async getLastCycle(): Promise<LastCycleRead> {
