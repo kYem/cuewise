@@ -670,36 +670,40 @@ describe('BridgeSyncController: getLastCycle', () => {
 
   it('reports unavailable — never "no cycle" — when messaging fails', async () => {
     // A dead/asleep worker says nothing about the cycle; answering {outcome:null} would wipe a
-    // failure badge a previous read painted.
-    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    // failure badge a previous read painted. Error level: the shipped logLevel is 'error', and a
+    // device that can never read its cycle shows Active with no badge at all.
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
     runtime.sendMessage.mockRejectedValueOnce(new Error('no SW'));
     const controller = new BridgeSyncController();
 
     await expect(controller.getLastCycle()).resolves.toEqual({ available: false });
-    expect(warnSpy).toHaveBeenCalled();
-    warnSpy.mockRestore();
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Sync last-cycle control message failed: no SW',
+      expect.any(Error)
+    );
+    errorSpy.mockRestore();
   });
 
   it('reports unavailable when the send times out', async () => {
-    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
     runtime.sendMessage.mockImplementation(() => new Promise(() => {}));
     const controller = new BridgeSyncController({ timeoutMs: 10 });
 
     await expect(controller.getLastCycle()).resolves.toEqual({ available: false });
-    expect(warnSpy).toHaveBeenCalled();
-    warnSpy.mockRestore();
+    expect(errorSpy).toHaveBeenCalled();
+    errorSpy.mockRestore();
   });
 
   it('reports unavailable when a legacy SW answers ok with no lastCycle kind tag', async () => {
-    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
     runtime.sendMessage.mockResolvedValueOnce({ ok: true } as never);
     const controller = new BridgeSyncController();
 
     await expect(controller.getLastCycle()).resolves.toEqual({ available: false });
-    expect(warnSpy).toHaveBeenCalledWith(
+    expect(errorSpy).toHaveBeenCalledWith(
       'Sync last-cycle outcome unavailable (no responder or error fallback)'
     );
-    warnSpy.mockRestore();
+    errorSpy.mockRestore();
   });
 });
 

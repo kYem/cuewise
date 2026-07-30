@@ -92,12 +92,17 @@ function logUnrecognisedReason(outcome: SyncOutcome | null): void {
 
 // The only place a read is adopted. An unavailable read says nothing about the cycle, so it must
 // never repaint — while `{outcome:null}` genuinely means "no cycle" and does clear the badge.
-function adoptLastCycle(read: LastCycleRead, paint: (outcome: SyncOutcome | null) => void): void {
+// Reports whether it painted, so a caller can re-arm its once-per-mount read after a transient miss.
+function adoptLastCycle(
+  read: LastCycleRead,
+  paint: (outcome: SyncOutcome | null) => void
+): boolean {
   if (!read.available) {
-    return;
+    return false;
   }
   logUnrecognisedReason(read.outcome);
   paint(read.outcome);
+  return true;
 }
 
 const DISABLE_MESSAGE = 'Re-enabling on this device will need your recovery code.';
@@ -197,6 +202,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   // every syncNow, guarded by its own generation counter against the same stale-resolution race.
   const [lastCycle, setLastCycle] = useState<SyncOutcome | null>(null);
   const lastCycleGenRef = useRef(0);
+  const lastCycleRequestedRef = useRef(false);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -244,25 +250,35 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   }, [controller, status]);
 
   useEffect(() => {
-    if (!controller) {
+    if (!controller || lastCycleRequestedRef.current) {
       return;
     }
+    lastCycleRequestedRef.current = true;
     lastCycleGenRef.current += 1;
     const gen = lastCycleGenRef.current;
     controller.getLastCycle().then(
       (read) => {
-        if (lastCycleGenRef.current === gen) {
-          adoptLastCycle(read, setLastCycle);
+        if (lastCycleGenRef.current !== gen) {
+          return;
+        }
+        if (!adoptLastCycle(read, setLastCycle)) {
+          // An unreadable read (asleep worker, timeout) is a transient miss like the details one —
+          // re-arm so the next status transition retries instead of latching the badge off.
+          lastCycleRequestedRef.current = false;
         }
       },
       (error) => {
         // Contracted never to reject; a host that breaks that leaves the badge off, not unhandled.
-        logger.warn(
-          `Cloud sync last cycle unavailable: ${error instanceof Error ? error.message : String(error)}`
+        logger.error(
+          `Cloud sync last cycle unavailable: ${error instanceof Error ? error.message : String(error)}`,
+          error
         );
+        if (lastCycleGenRef.current === gen) {
+          lastCycleRequestedRef.current = false;
+        }
       }
     );
-  }, [controller]);
+  }, [controller, status]);
 
   useEffect(() => {
     if (!controller) {
@@ -300,13 +316,17 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     lastCycleGenRef.current += 1;
     const gen = lastCycleGenRef.current;
     const read = await controller.getLastCycle().catch((error) => {
-      logger.warn(
-        `Cloud sync last cycle unavailable: ${error instanceof Error ? error.message : String(error)}`
+      logger.error(
+        `Cloud sync last cycle unavailable: ${error instanceof Error ? error.message : String(error)}`,
+        error
       );
       return LAST_CYCLE_UNAVAILABLE;
     });
-    if (lastCycleGenRef.current === gen) {
-      adoptLastCycle(read, setLastCycle);
+    if (lastCycleGenRef.current !== gen) {
+      return;
+    }
+    if (!adoptLastCycle(read, setLastCycle)) {
+      lastCycleRequestedRef.current = false;
     }
   };
 

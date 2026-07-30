@@ -1164,7 +1164,7 @@ describe('SyncSettingsSectionComponent', () => {
 
   it('keeps the failure badge when the read recovering a rejected Sync now itself rejects', async () => {
     const user = userEvent.setup();
-    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
     const controller = new FakeSyncController();
     controller.scriptLastCycle({ kind: 'failed', reason: 'network', error: new Error('offline') });
     renderSection(controller);
@@ -1175,9 +1175,15 @@ describe('SyncSettingsSectionComponent', () => {
     controller.failNext('getLastCycle');
     await user.click(screen.getByRole('button', { name: 'Sync now' }));
 
-    await waitFor(() => expect(warnSpy).toHaveBeenCalled());
+    // Error level, not warn: the shipped logLevel is 'error', so a warn prints for nobody.
+    await waitFor(() =>
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Cloud sync last cycle unavailable'),
+        expect.any(Error)
+      )
+    );
     expect(screen.getByTestId('sync-failure-badge')).toBeInTheDocument();
-    warnSpy.mockRestore();
+    errorSpy.mockRestore();
   });
 
   it('clears the failure badge when the recovery read reports the engine has no cycle', async () => {
@@ -1198,15 +1204,42 @@ describe('SyncSettingsSectionComponent', () => {
   });
 
   it('leaves the badge off, never unhandled, when the mount read rejects', async () => {
-    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
     const controller = new FakeSyncController();
     controller.failNext('getLastCycle');
     renderSection(controller);
     act(() => controller.setStatus('active'));
 
-    await waitFor(() => expect(warnSpy).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Cloud sync last cycle unavailable'),
+        expect.any(Error)
+      )
+    );
     expect(screen.queryByTestId('sync-failure-badge')).not.toBeInTheDocument();
-    warnSpy.mockRestore();
+    errorSpy.mockRestore();
+  });
+
+  it('retries an unavailable mount read on the next status transition', async () => {
+    // The mount read hits an asleep worker. Without a re-arm the effect keys on a stable prop and
+    // never runs again, so a wedged device shows Active with no badge for the whole mount.
+    const controller = new FakeSyncController();
+    controller.scriptLastCycleUnavailable();
+    renderSection(controller);
+    await waitFor(() =>
+      expect(controller.calls.filter((c) => c.method === 'getLastCycle')).toHaveLength(1)
+    );
+
+    controller.scriptLastCycle({
+      kind: 'failed',
+      reason: 'device',
+      error: new Error('unreadable'),
+    });
+    act(() => controller.setStatus('active'));
+
+    expect(await screen.findByTestId('sync-failure-badge')).toHaveTextContent(
+      DEVICE_FAILURE_MESSAGE
+    );
   });
 
   it('does not toast a sync-now rejection for a click that lands after the user disabled sync', async () => {

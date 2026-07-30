@@ -6,7 +6,7 @@ import type {
   SyncUiStatus,
 } from '@cuewise/app';
 import { LAST_CYCLE_UNAVAILABLE } from '@cuewise/app';
-import { logger } from '@cuewise/shared';
+import { describeThrown, logger } from '@cuewise/shared';
 import {
   CLOUD_SYNC_ENABLED_KEY,
   type SyncOutcome,
@@ -359,11 +359,12 @@ export class BridgeSyncController implements SyncController {
       if (response?.ok && response.kind === 'lastCycle') {
         return { available: true, outcome: response.outcome };
       }
-      logger.warn('Sync last-cycle outcome unavailable (no responder or error fallback)');
+      // error, not warn: the shipped logLevel is 'error', and a device that can never read its
+      // cycle shows Active with no badge — invisible to the user and the engineer alike.
+      logger.error('Sync last-cycle outcome unavailable (no responder or error fallback)');
       return LAST_CYCLE_UNAVAILABLE;
     } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error);
-      logger.warn(`Sync last-cycle control message failed: ${detail}`);
+      logger.error(`Sync last-cycle control message failed: ${describeThrown(error)}`, error);
       return LAST_CYCLE_UNAVAILABLE;
     }
   }
