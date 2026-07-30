@@ -79,6 +79,8 @@ export type SyncStatus =
   | 'enrolling'
   | 'initial_sync'
   | 'active'
+  // Enabled, but the key is gone. Unlike `signed_out`, re-authenticating alone cannot fix it.
+  | 'needs_enroll'
   | 'signed_out'
   | 'error';
 
@@ -126,8 +128,8 @@ function stallError(what: string, outrankedPush: { error: unknown } | undefined)
   );
 }
 
-/** What one hydration read achieved; only `settled` may be memoised. See readPersistedSyncState. */
-type HydrationResult = 'settled' | 'retryable' | 'abandoned';
+/** Whether a hydration read may stay memoised; only an outright failure is worth re-reading. */
+type HydrationResult = 'final' | 'retry';
 
 /**
  * Names a rejected record's shape for the log without echoing it — the field names distinguish a
@@ -183,6 +185,7 @@ export class SyncEngine {
     opts: EnableSyncOptions = {}
   ): Promise<void> {
     const { recoveryCode, codeVerifier } = opts;
+    const before = this.status;
     try {
       this.setStatus('signing_in');
       // A codeVerifier marks a bounced one-time code rather than an id token; of the providers
@@ -198,7 +201,7 @@ export class SyncEngine {
       }
       await this.enrollAndActivate(recoveryCode);
     } catch (err) {
-      await this.handleEnableError(err);
+      await this.handleEnableError(err, before);
     }
   }
 
@@ -209,6 +212,7 @@ export class SyncEngine {
    * been lost (the caller must then re-authenticate).
    */
   async resumeEnrollWithCode(recoveryCode: string): Promise<void> {
+    const before = this.status;
     try {
       // Inside the try so a storage fault reading the token routes through handleEnableError
       // (status → error) like every other enroll failure, not out as a raw rejection.
@@ -219,7 +223,7 @@ export class SyncEngine {
       }
       await this.enrollAndActivate(recoveryCode);
     } catch (err) {
-      await this.handleEnableError(err);
+      await this.handleEnableError(err, before);
     }
   }
 
@@ -227,10 +231,16 @@ export class SyncEngine {
   private async enrollAndActivate(recoveryCode: string | undefined): Promise<void> {
     // A code is only passed when enrolling an additional device; brand-new enable passes none.
     this.setStatus(recoveryCode ? 'enrolling' : 'key_init');
+    const wasEnabled = await this.deps.keyStore.get<boolean>(CLOUD_SYNC_ENABLED_KEY, 'local');
     const enrolled = await initOrEnrollKey(this.keyDeps(), recoveryCode);
     this.dk = enrolled.dk;
     this.keyId = enrolled.keyId;
     if (enrolled.recoveryCodeToShow !== undefined) {
+      if (wasEnabled === true) {
+        // A fresh key on a device that was already enrolled: every record the old key sealed is now
+        // unopenable, and other devices keep it. The user only sees an ordinary new-code modal.
+        logger.error('Cloud sync minted a new data key for an already-enrolled device');
+      }
       this.deps.onRecoveryCode?.(enrolled.recoveryCodeToShow);
     }
 
@@ -250,15 +260,20 @@ export class SyncEngine {
     await this.armPullLoopUnlessOff();
   }
 
-  /** Shared enable/enroll error mapping: 401 → auth loss; recovery-code control-flow → disabled+rethrow. */
-  private async handleEnableError(err: unknown): Promise<void> {
+  /**
+   * Shared enable/enroll error mapping: 401 → auth loss; recovery-code control-flow → the
+   * pre-attempt status + rethrow. `before` must be read before enableSync's first setStatus.
+   */
+  private async handleEnableError(err: unknown, before: SyncStatus): Promise<void> {
     if (err instanceof ApiError && err.status === 401) {
       await this.handleAuthLoss();
       return;
     }
     if (err instanceof RecoveryCodeRequiredError || err instanceof RecoveryCodeError) {
-      // Expected enroll control-flow, not a failure — don't poison the persisted status other tabs read.
-      this.setStatus('disabled');
+      // Expected enroll control-flow, not a failure — don't poison the persisted status other tabs
+      // read. Only a first enable begins at `disabled`; every other start means this device was
+      // already set up, so 'off' would contradict the prompt that sent the user here.
+      this.setStatus(before === 'disabled' ? 'disabled' : 'needs_enroll');
       throw err;
     }
     this.setStatus('error');
@@ -501,14 +516,13 @@ export class SyncEngine {
   }
 
   /**
-   * Never rejects, and memoises only a read that settled the question. start() awaits this before
-   * self-heal, so a rejection would leave the engine with no key and no armed loop behind a pill
-   * the extension still persists as 'active' — and skipping the branches below would answer
-   * "no cycle has run", the one value allowed to clear the badge.
+   * Never rejects, and keeps the memo unless the read is worth retrying. start() awaits this
+   * before self-heal, so a rejection would leave the engine keyless behind a pill the extension
+   * still persists as 'active', and skip the branches that stop it answering "no cycle has run".
    */
   private async hydrate(): Promise<void> {
     const epoch = this.accountEpoch;
-    let result: HydrationResult = 'abandoned';
+    let result: HydrationResult = 'final';
     try {
       result = await this.readPersistedSyncState(epoch);
     } catch (err) {
@@ -518,33 +532,31 @@ export class SyncEngine {
       logger.error(`Could not read the persisted sync state: ${describeThrown(err)}`, err);
       if (this.accountEpoch === epoch) {
         this.markLastCycleUnknown();
-        result = 'retryable';
+        result = 'retry';
       }
     }
     // Only while this call still owns the memo — a disable or a newer read may have replaced it,
     // and clearing that would run two reads concurrently over the same fields.
-    if (result === 'retryable' && this.accountEpoch === epoch) {
+    if (result === 'retry' && this.accountEpoch === epoch) {
       this.hydration = null;
     }
   }
 
-  /**
-   * `retryable` is a read that failed outright and may succeed later, so the memo is dropped;
-   * `abandoned` installed nothing because a disable superseded it. Neither is `settled`, which is
-   * the only answer that may be cached.
-   */
+  /** `retry` only for a read that failed outright and may succeed later; see HydrationResult. */
   private async readPersistedSyncState(epoch: number): Promise<HydrationResult> {
     // One batch read, because `get` collapses "absent" into "read failed" and this is the one
     // place that distinction decides whether a wedged device shows a badge.
     const stored = await this.deps.keyStore.getMany([LAST_SYNCED_AT_KEY, LAST_CYCLE_KEY], 'local');
     if (this.accountEpoch !== epoch) {
+      // Installed nothing, but disableSync already cleared the memo; clearing again could drop
+      // a newer read's.
       logger.debug('Dropped a hydration snapshot: the account was disabled while it was read');
-      return 'abandoned';
+      return 'final';
     }
     if (stored === null) {
       logger.error('Could not read the persisted sync state; the next read will retry');
       this.markLastCycleUnknown();
-      return 'retryable';
+      return 'retry';
     }
 
     const stamp = stored[LAST_SYNCED_AT_KEY];
@@ -557,15 +569,15 @@ export class SyncEngine {
       // A conclusive read clears any earlier unknown: this retry is the whole point of not
       // memoising a failed one.
       this.lastCycleKnown = true;
-      return 'settled';
+      return 'final';
     }
     if (!record.readable) {
       logger.error('The stored last sync cycle is unreadable; reporting it as unknown', {
         key: LAST_CYCLE_KEY,
       });
       this.markLastCycleUnknown();
-      // Settled: a value that will not read is deterministic, so retrying only repeats the log.
-      return 'settled';
+      // Final: a value that will not read is deterministic, so retrying only repeats the log.
+      return 'final';
     }
     const hydrated = parsePersistedSyncCycle(record.value);
     if (hydrated === null) {
@@ -575,13 +587,13 @@ export class SyncEngine {
         shape: describeShape(record.value),
       });
       this.markLastCycleUnknown();
-      return 'settled';
+      return 'final';
     }
     this.lastCycleKnown = true;
     if (this.lastCycle === null) {
       this.lastCycle = hydrated;
     }
-    return 'settled';
+    return 'final';
   }
 
   /**
@@ -663,14 +675,33 @@ export class SyncEngine {
       if (this.startSuperseded(epoch)) {
         return;
       }
-      if (err instanceof SelfHealNeedsEnrollError || err instanceof SelfHealUnrecoverableError) {
-        logger.warn('Sync self-heal requires the recovery code; staying signed out', {
-          reason: err.name,
-        });
-        this.setStatus('signed_out');
+      if (err instanceof SelfHealNeedsEnrollError) {
+        // The ordinary lost-key case, not a rare one: every account that enabled sync has an
+        // envelope, so self-heal throws here rather than falling through to the branch below.
+        logger.error(
+          "Cloud sync needs the recovery code: this device's data key could not be read"
+        );
+        this.setStatus('needs_enroll');
         return;
       }
-      throw err;
+      if (err instanceof ApiError && err.status === 401) {
+        await this.handleAuthLoss();
+        return;
+      }
+      // Everything below falls through to the key load. Self-heal only verifies the SERVER envelope,
+      // so neither a missing one nor an unreachable server says anything about the key on disk —
+      // abandoning here left an enrolled device reading "off" on macOS after one offline launch.
+      if (err instanceof SelfHealUnrecoverableError) {
+        // Reaching active is also what keeps Regenerate recovery code, the one fix, on screen.
+        logger.error(
+          'Cloud sync has no recovery envelope on the server; regenerate your recovery code to restore it'
+        );
+      } else {
+        logger.error(
+          `Cloud sync self-heal could not reach the server: ${describeThrown(err)}`,
+          err
+        );
+      }
     }
 
     const persisted = await loadPersistedDataKey(this.deps.keyStore);
@@ -684,9 +715,8 @@ export class SyncEngine {
       logger.error(
         "Cloud sync is enabled but this device's data key could not be read; it will not sync until it reconnects"
       );
-      // Like the self-heal branch above, whose case is also a key that needs re-enrolling: without
-      // a status the extension's persisted pill keeps claiming active for a device that never syncs.
-      this.setStatus('signed_out');
+      // Not signed_out: the session may be fine, so the UI must ask for the recovery code.
+      this.setStatus('needs_enroll');
       return;
     }
 
@@ -749,10 +779,13 @@ export class SyncEngine {
 
   // handleAuthLoss already cancelled the wake; re-arming here would silently undo that.
   private async armPullLoopUnlessOff(): Promise<void> {
-    // `disabled` for the same reason as `signed_out`: both had their wake cancelled by stop(), and
-    // re-arming undoes that. Without the first, a disable landing inside start()'s own cycle
-    // resurrects the loop, and a stale alarm on a disabled device re-arms itself forever.
-    if (this.status === 'signed_out' || this.status === 'disabled') {
+    // All three had their wake cancelled, or can never complete a cycle; re-arming undoes that.
+    // enableSync arms it again once the device recovers.
+    if (
+      this.status === 'signed_out' ||
+      this.status === 'disabled' ||
+      this.status === 'needs_enroll'
+    ) {
       return;
     }
     await armSyncPull(this.deps.scheduler, PULL_REARM_MINUTES, this.now);

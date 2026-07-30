@@ -1018,6 +1018,51 @@ describe('SyncEngine.syncNow', () => {
     });
   });
 
+  it('reports an unreadable stamp as unreadable, not as the wrong shape', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    device.kv.unreadableKey = LAST_SYNCED_AT_KEY;
+
+    const cold = new SyncEngine({
+      apiClient: device.apiClient,
+      sessionManager: new SessionManager(device.kv),
+      keyStore: device.kv,
+      scheduler: device.scheduler,
+    });
+    await cold.ensureHydrated();
+
+    expect(cold.getLastSyncedAt()).toBeNull();
+    expect(errorSpy).toHaveBeenCalledWith('The stored last-synced stamp is unreadable', {
+      key: LAST_SYNCED_AT_KEY,
+    });
+  });
+
+  it('refuses a stored stamp that is not a number, rather than rendering Invalid Date', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    await device.kv.set(LAST_SYNCED_AT_KEY, 'yesterday', 'local');
+
+    const cold = new SyncEngine({
+      apiClient: device.apiClient,
+      sessionManager: new SessionManager(device.kv),
+      keyStore: device.kv,
+      scheduler: device.scheduler,
+    });
+    await cold.ensureHydrated();
+
+    expect(cold.getLastSyncedAt()).toBeNull();
+    expect(errorSpy).toHaveBeenCalledWith('The stored last-synced stamp is not a number', {
+      key: LAST_SYNCED_AT_KEY,
+      shape: 'string',
+    });
+  });
+
   it('reports unknown when the whole hydration read fails', async () => {
     const server = new FakeSyncServer();
     const device = createDevice(server);
@@ -1087,8 +1132,15 @@ describe('SyncEngine.syncNow', () => {
     await device.engine.enableSync('dev', 'cred-a', 'Device A');
     await device.kv.set(LAST_SYNCED_AT_KEY, 1_000, 'local');
 
+    // The refused write is what makes storage and memory disagree. Without it syncNow persists
+    // 7_000 over the seed and hydration reads back the very number the assertion expects, so the
+    // guard under test could be deleted and this would still pass.
     t = 7_000;
+    device.kv.failSetsForKey = LAST_SYNCED_AT_KEY;
     await device.engine.syncNow();
+    device.kv.failSetsForKey = null;
+    expect(await device.kv.get(LAST_SYNCED_AT_KEY, 'local')).toBe(1_000);
+
     await device.engine.ensureHydrated();
 
     expect(device.engine.getLastSyncedAt()).toBe(7_000);
@@ -1164,42 +1216,6 @@ describe('SyncEngine.syncNow', () => {
     await hydrating;
 
     expect(cold.getLastCycle()).toEqual({ known: true, cycle: null });
-  });
-
-  it('leaves the memo alone when a failed read no longer owns it', async () => {
-    // Clearing it unconditionally would drop a newer read's memo and run two reads concurrently
-    // over the same fields.
-    const server = new FakeSyncServer();
-    const device = createDevice(server);
-    useStorage(device);
-    await device.engine.enableSync('dev', 'cred-a', 'Device A');
-
-    let finishRead = () => {};
-    const parked = new Promise<null>((resolve) => {
-      finishRead = () => resolve(null);
-    });
-    const cold = new SyncEngine({
-      apiClient: device.apiClient,
-      sessionManager: new SessionManager(device.kv),
-      keyStore: device.kv,
-      scheduler: device.scheduler,
-    });
-    const getMany = vi
-      .spyOn(device.kv, 'getMany')
-      .mockImplementation((keys) => (keys.includes(LAST_CYCLE_KEY) ? parked : Promise.resolve({})));
-
-    const hydrating = cold.ensureHydrated();
-    await cold.disableSync();
-    finishRead();
-    await hydrating;
-    const readsBefore = getMany.mock.calls.length;
-
-    // The disable already cleared the memo, so this read is the second and last one.
-    getMany.mockResolvedValue({});
-    await cold.ensureHydrated();
-    await cold.ensureHydrated();
-
-    expect(getMany.mock.calls.length).toBe(readsBefore + 1);
   });
 
   it('does not reject when the store throws instead of reporting a failed read', async () => {
@@ -1380,9 +1396,240 @@ describe('SyncEngine.start / stop', () => {
     expect(device.scheduler.scheduled).toEqual([]);
   });
 
-  it('reports signed_out when the enabled flag outlived the data key', async () => {
-    // Without a status the extension's persisted pill keeps claiming active for a device that will
-    // never sync — the reconnect affordance is the only honest surface.
+  it('keeps syncing when only the server envelope is gone, and says how to restore it', async () => {
+    // The key is here, so the device can sync. Stopping it also hides Regenerate recovery code,
+    // which renders only under the pill and is the only thing that rebuilds the envelope.
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    vi.spyOn(device.apiClient, 'getRecoveryEnvelope').mockResolvedValue(null);
+
+    const scheduler = new FakeScheduler();
+    const restarted = new SyncEngine({
+      apiClient: device.apiClient,
+      sessionManager: new SessionManager(device.kv),
+      keyStore: device.kv,
+      scheduler,
+    });
+    await restarted.start();
+
+    expect(restarted.getStatus()).toBe('active');
+    expect(scheduler.scheduled).not.toEqual([]);
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Cloud sync has no recovery envelope on the server; regenerate your recovery code to restore it'
+    );
+  });
+
+  it('keeps syncing when the envelope fetch cannot reach the server', async () => {
+    // Self-heal only verifies the SERVER envelope, so an offline launch says nothing about the key
+    // on disk. Abandoning here left macOS reading "off" for an enrolled device.
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    vi.spyOn(device.apiClient, 'getRecoveryEnvelope').mockRejectedValue(new Error('offline'));
+
+    const scheduler = new FakeScheduler();
+    const restarted = new SyncEngine({
+      apiClient: device.apiClient,
+      sessionManager: new SessionManager(device.kv),
+      keyStore: device.kv,
+      scheduler,
+    });
+    await restarted.start();
+
+    expect(restarted.getStatus()).toBe('active');
+    expect(scheduler.scheduled).not.toEqual([]);
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Cloud sync self-heal could not reach the server: offline',
+      expect.any(Error)
+    );
+  });
+
+  it('signs out rather than activating when the envelope fetch is refused', async () => {
+    // Without this branch an expired session falls through to active and arms the wake — a
+    // signed-out device claiming to sync, forever.
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    vi.spyOn(device.apiClient, 'getRecoveryEnvelope').mockRejectedValue(
+      new ApiError('unauthorized', 401)
+    );
+
+    const scheduler = new FakeScheduler();
+    const restarted = new SyncEngine({
+      apiClient: device.apiClient,
+      sessionManager: new SessionManager(device.kv),
+      keyStore: device.kv,
+      scheduler,
+    });
+    await restarted.start();
+
+    expect(restarted.getStatus()).toBe('signed_out');
+    expect(scheduler.scheduled).toEqual([]);
+  });
+
+  it('reports needs_enroll for the ordinary lost-key case, where the envelope still exists', async () => {
+    // Every account that enabled sync has an envelope, so self-heal throws NeedsEnroll here rather
+    // than falling through — the common path, and it used to claim the sign-in had expired.
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await device.kv.remove(SYNC_DATA_KEY, 'local');
+    const scheduler = new FakeScheduler();
+    const restarted = new SyncEngine({
+      apiClient: device.apiClient,
+      sessionManager: new SessionManager(device.kv),
+      keyStore: device.kv,
+      scheduler,
+    });
+
+    await restarted.start();
+
+    expect(restarted.getStatus()).toBe('needs_enroll');
+    expect(errorSpy).toHaveBeenCalledWith(
+      "Cloud sync needs the recovery code: this device's data key could not be read"
+    );
+  });
+
+  it('keeps a needs_enroll device on its prompt when the enroll asks for a code', async () => {
+    // Following the prompt must not flip the panel to off — this device is still enrolled here.
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await device.kv.remove(SYNC_DATA_KEY, 'local');
+    const restarted = new SyncEngine({
+      apiClient: device.apiClient,
+      sessionManager: new SessionManager(device.kv),
+      keyStore: device.kv,
+      scheduler: new FakeScheduler(),
+    });
+    await restarted.start();
+    expect(restarted.getStatus()).toBe('needs_enroll');
+
+    // Reconnect with no code: the envelope is still there, so the enroll asks for one.
+    await expect(restarted.enableSync('dev', 'cred-a', 'Device A')).rejects.toThrow(
+      RecoveryCodeRequiredError
+    );
+
+    expect(restarted.getStatus()).toBe('needs_enroll');
+  });
+
+  it('reports a fresh key minted for a device that was already enrolled', async () => {
+    // Every record the old key sealed is unopenable after this, and other devices keep it — the
+    // user only sees an ordinary new-code modal.
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    // Key gone AND the account's envelope gone, so the enroll mints rather than restores.
+    await device.kv.remove(SYNC_DATA_KEY, 'local');
+    device.apiClient = new FakeApiClient(new FakeSyncServer());
+    const rekeyed = new SyncEngine({
+      apiClient: device.apiClient,
+      sessionManager: new SessionManager(device.kv),
+      keyStore: device.kv,
+      scheduler: new FakeScheduler(),
+    });
+    await rekeyed.enableSync('dev', 'cred-a', 'Device A');
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Cloud sync minted a new data key for an already-enrolled device'
+    );
+  });
+
+  it('stays quiet about a minted key on a brand-new enable', async () => {
+    // The inverse guard: an error on every first-ever enable would train the reader to ignore it.
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    expect(errorSpy).not.toHaveBeenCalledWith(
+      'Cloud sync minted a new data key for an already-enrolled device'
+    );
+  });
+
+  it('keeps a needs_enroll device on its prompt when a resumed enroll rejects the code', async () => {
+    // resumeEnrollWithCode is the live-session path, and a mistyped code is its likeliest outcome —
+    // flipping to off there hides the prompt that asked for the code.
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await device.kv.remove(SYNC_DATA_KEY, 'local');
+    const restarted = new SyncEngine({
+      apiClient: device.apiClient,
+      sessionManager: new SessionManager(device.kv),
+      keyStore: device.kv,
+      scheduler: new FakeScheduler(),
+    });
+    await restarted.start();
+    expect(restarted.getStatus()).toBe('needs_enroll');
+
+    await expect(restarted.resumeEnrollWithCode('not-a-real-code')).rejects.toThrow(
+      RecoveryCodeError
+    );
+
+    expect(restarted.getStatus()).toBe('needs_enroll');
+  });
+
+  it('keeps a device that retried from error on the prompt too, not only needs_enroll', async () => {
+    // Retry routes through reconnect, so an error-state device reaches the same needs-code exit.
+    // Naming one status here folded every other start into "off" while the code modal was open.
+    const server = new FakeSyncServer();
+    const deviceA = createDevice(server);
+    useStorage(deviceA);
+    await deviceA.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    const deviceB = createDevice(server);
+    useStorage(deviceB);
+    vi.spyOn(deviceB.apiClient, 'exchangeToken').mockRejectedValueOnce(new Error('boom'));
+    await expect(deviceB.engine.enableSync('dev', 'cred-b', 'Device B')).rejects.toThrow('boom');
+    expect(deviceB.engine.getStatus()).toBe('error');
+
+    await expect(deviceB.engine.enableSync('dev', 'cred-b', 'Device B')).rejects.toThrow(
+      RecoveryCodeRequiredError
+    );
+
+    expect(deviceB.engine.getStatus()).toBe('needs_enroll');
+  });
+
+  it('leaves a first enable that needs a code reading disabled, not enrolled', async () => {
+    const server = new FakeSyncServer();
+    const deviceA = createDevice(server);
+    useStorage(deviceA);
+    await deviceA.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    const deviceB = createDevice(server);
+    useStorage(deviceB);
+
+    await expect(deviceB.engine.enableSync('dev', 'cred-b', 'Device B')).rejects.toThrow(
+      RecoveryCodeRequiredError
+    );
+
+    expect(deviceB.engine.getStatus()).toBe('disabled');
+  });
+
+  it('reports needs_enroll when the enabled flag outlived the data key', async () => {
+    // The session may be valid and the key is what is gone, so the panel must ask for the code.
     const server = new FakeSyncServer();
     const device = createDevice(server);
     useStorage(device);
@@ -1402,10 +1649,33 @@ describe('SyncEngine.start / stop', () => {
 
     await restarted.start();
 
-    expect(restarted.getStatus()).toBe('signed_out');
+    expect(restarted.getStatus()).toBe('needs_enroll');
     expect(errorSpy).toHaveBeenCalledWith(
       "Cloud sync is enabled but this device's data key could not be read; it will not sync until it reconnects"
     );
+  });
+
+  it('stops polling a keyless device, since only a recovery code can change its state', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    await device.kv.remove(SYNC_DATA_KEY, 'local');
+    vi.spyOn(device.apiClient, 'getRecoveryEnvelope').mockResolvedValue(null);
+
+    const scheduler = new FakeScheduler();
+    const restarted = new SyncEngine({
+      apiClient: device.apiClient,
+      sessionManager: new SessionManager(device.kv),
+      keyStore: device.kv,
+      scheduler,
+    });
+    await restarted.start();
+    // A stale alarm from the enrolled era still fires against the keyless engine.
+    await restarted.handlePullWake();
+
+    expect(scheduler.scheduled).toEqual([]);
   });
 
   it('does not report a deliberate disable as a missing key, nor resurrect its pill', async () => {
@@ -1434,6 +1704,59 @@ describe('SyncEngine.start / stop', () => {
 
     expect(restarted.getStatus()).toBe('disabled');
     expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not report a disable that lands after self-heal as a missing key', async () => {
+    // Reaches start()'s SECOND epoch gate, which its sibling test cannot: self-heal succeeds here,
+    // so the disable has to land in the key read that follows it.
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    const restarted = new SyncEngine({
+      apiClient: device.apiClient,
+      sessionManager: new SessionManager(device.kv),
+      keyStore: device.kv,
+      scheduler: new FakeScheduler(),
+    });
+    // Self-heal reads the key first and finds it; the disable then lands in loadPersistedDataKey's
+    // own read, so start() resumes to find the key gone with a matching epoch unless it re-checks.
+    let selfHealDone = false;
+    const realGet = device.kv.get.bind(device.kv);
+    vi.spyOn(device.kv, 'get').mockImplementation(async (key, area) => {
+      if (key === SYNC_DATA_KEY && selfHealDone) {
+        await restarted.disableSync();
+        return realGet(key, area);
+      }
+      const value = await realGet(key, area);
+      if (key === SYNC_DATA_KEY) {
+        selfHealDone = true;
+      }
+      return value;
+    });
+
+    await restarted.start();
+
+    expect(restarted.getStatus()).toBe('disabled');
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it('names whichever key survived a disable, not only the session token', async () => {
+    // A surviving enabled flag re-activates sync on the next start() for a removed account.
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    vi.spyOn(device.kv, 'remove').mockImplementation(async (key) => key !== CLOUD_SYNC_ENABLED_KEY);
+
+    await device.engine.disableSync();
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      `Disable could not remove every sync key: ${CLOUD_SYNC_ENABLED_KEY}`
+    );
   });
 
   it('does not re-arm the pull wake when a disable lands inside its own first cycle', async () => {

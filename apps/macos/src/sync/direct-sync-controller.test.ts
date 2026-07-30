@@ -286,6 +286,21 @@ describe('createDirectSyncController: subscribe()', () => {
     expect(controller.getStatus()).toBe('active');
   });
 
+  it('keeps needs_enroll distinct from needs_reauth when mapping to the UI', async () => {
+    // Collapsing these is one line, and it puts "Sign-in expired" back in front of a keyless user.
+    const engine = fakeControlSurface({
+      getStatus: vi.fn().mockReturnValue('needs_enroll' as SyncStatus),
+    });
+    const { controller } = buildDirectSyncController<SyncEngineControlSurface>({
+      baseUrl: BASE_URL,
+      keyStore: new FakeKvStore(),
+      oauthDriver: unusedDriver(),
+      buildEngine: () => engine,
+    });
+
+    expect(controller.getStatus()).toBe('needs_enroll');
+  });
+
   it('wraps a self-initiated syncNow() with transient syncing/mapped-status emissions', async () => {
     const server = new FakeSyncServer();
     const device = createDevice(server);

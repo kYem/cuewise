@@ -5,6 +5,7 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeSyncController } from '../../sync/__fixtures__/fake-sync-controller';
+import type { SyncUiStatus } from '../../sync/sync-controller';
 import { SyncControllerContext } from '../../sync/sync-controller';
 import { SyncSettingsSectionComponent } from './SyncSettingsSection';
 import type { SettingsSectionProps } from './settings-types';
@@ -1043,6 +1044,332 @@ describe('SyncSettingsSectionComponent', () => {
 
     expect(await screen.findByTestId('sync-failure-badge')).toBeInTheDocument();
     expect(controller.calls.some((c) => c.method === 'syncNow')).toBe(false);
+  });
+
+  it('says it could not check the last sync when the read comes back unreadable', async () => {
+    // On a fresh mount there is no badge to protect, so this used to look exactly like health.
+    const controller = new FakeSyncController();
+    controller.scriptLastCycleUnavailable();
+    renderSection(controller);
+
+    act(() => controller.setStatus('active'));
+
+    expect(await screen.findByTestId('sync-cycle-unknown')).toBeInTheDocument();
+    expect(screen.queryByTestId('sync-failure-badge')).not.toBeInTheDocument();
+  });
+
+  it('still reports a Sync now result on a host that emits status from inside the call', async () => {
+    // macOS emits 'syncing' synchronously inside syncNow, which re-runs the read effect.
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.emitsSyncingDuringSyncNow = true;
+    // An unavailable read re-arms the effect, which is what lets the emission bump the counter.
+    controller.scriptLastCycleUnavailable();
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+    await screen.findByTestId('sync-cycle-unknown');
+
+    // Deferred so the emission's effect flushes while the cycle is still in flight, as a real
+    // network cycle does — resolving inside one act would hide the race.
+    controller.deferNextSyncNow();
+    await user.click(screen.getByRole('button', { name: 'Sync now' }));
+    await act(async () => {
+      controller.resolveSyncNow({ kind: 'synced' });
+    });
+
+    expect(toastSuccess).toHaveBeenCalledWith('Synced');
+  });
+
+  it('drops the unknown line once a read can answer again', async () => {
+    // Otherwise the line latches and a recovered device keeps saying it could not be checked.
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptLastCycleUnavailable();
+    controller.scriptSyncNow({ kind: 'synced' });
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+    await screen.findByTestId('sync-cycle-unknown');
+
+    controller.scriptLastCycle(null);
+    await user.click(screen.getByRole('button', { name: 'Sync now' }));
+
+    await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith('Synced'));
+    expect(screen.queryByTestId('sync-cycle-unknown')).not.toBeInTheDocument();
+  });
+
+  it('drops the unknown line when a retried read answers, not only when a click does', async () => {
+    // handleSyncNow paints directly, so without this only the click's clear is covered.
+    const controller = new FakeSyncController();
+    controller.scriptLastCycleUnavailable();
+    renderSection(controller);
+    // An unavailable read re-arms the once-per-mount fetch, so each transition retries.
+    act(() => controller.setStatus('active'));
+    await screen.findByTestId('sync-cycle-unknown');
+
+    controller.scriptLastCycle(null);
+    act(() => controller.setStatus('syncing'));
+    act(() => controller.setStatus('active'));
+
+    await waitFor(() => expect(screen.queryByTestId('sync-cycle-unknown')).not.toBeInTheDocument());
+  });
+
+  it('stays quiet about an unreadable read while sync is still connecting', async () => {
+    // Mid-enrolment nothing has synced yet, so the line reads as an enrolment problem.
+    const controller = new FakeSyncController();
+    controller.scriptLastCycleUnavailable();
+    renderSection(controller);
+
+    act(() => controller.setStatus('connecting'));
+
+    expect(await screen.findByTestId('sync-status-pill')).toHaveTextContent('Connecting…');
+    expect(screen.queryByTestId('sync-cycle-unknown')).not.toBeInTheDocument();
+  });
+
+  it('keeps a failure badge rather than downgrading it to the unknown line', async () => {
+    // The badge is the stronger claim; an unreadable read says nothing about it.
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptLastCycle({
+      kind: 'failed',
+      reason: 'device',
+      error: new Error('unreadable'),
+    });
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+    await screen.findByTestId('sync-failure-badge');
+
+    // A rejected Sync now routes through refreshLastCycle — the path that reads a second time.
+    controller.scriptLastCycleUnavailable();
+    controller.deferNextSyncNow();
+    await user.click(screen.getByRole('button', { name: 'Sync now' }));
+    await act(async () => {
+      controller.rejectSyncNow(new Error('Sync control message timed out'));
+    });
+
+    expect(screen.getByTestId('sync-failure-badge')).toBeInTheDocument();
+    expect(screen.queryByTestId('sync-cycle-unknown')).not.toBeInTheDocument();
+  });
+
+  it('asks for the recovery code, not a re-auth, when this device has no key', async () => {
+    const controller = new FakeSyncController();
+    renderSection(controller);
+
+    act(() => controller.setStatus('needs_enroll'));
+
+    expect(await screen.findByTestId('sync-reconnect-prompt')).toHaveTextContent(
+      /can't read its encryption key/i
+    );
+    expect(screen.getByRole('button', { name: 'Reconnect' })).toBeInTheDocument();
+    // Both would fail without a key, so offering either offers a broken button.
+    expect(screen.queryByRole('button', { name: 'Sync now' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Regenerate recovery code' })
+    ).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['off', { pill: false, prompt: false }],
+    ['connecting', { pill: true, prompt: false }],
+    ['syncing', { pill: true, prompt: false }],
+    ['active', { pill: true, prompt: false }],
+    ['error', { pill: false, prompt: false }],
+    ['needs_reauth', { pill: false, prompt: true }],
+    ['needs_enroll', { pill: false, prompt: true }],
+  ] as const)('gives %s exactly the panel body it owns', async (status, body) => {
+    // A pill and a reconnect prompt are mutually exclusive, and the maps do not enforce that — a
+    // pill on needs_reauth would offer Sync now and Regenerate to a device that cannot use them.
+    const controller = new FakeSyncController();
+    renderSection(controller);
+
+    act(() => controller.setStatus(status));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('sync-status-pill') !== null).toBe(body.pill);
+    });
+    expect(screen.queryByTestId('sync-reconnect-prompt') !== null).toBe(body.prompt);
+  });
+
+  it('renders nothing for a status this build does not know', async () => {
+    // status arrives as an unvalidated chrome.storage string, so a downgrade or an older bundle can
+    // read back a newer one. Indexing a total map would answer undefined and pass a !== null gate.
+    const controller = new FakeSyncController();
+    renderSection(controller);
+
+    act(() => controller.setStatus('throttled' as SyncUiStatus));
+
+    expect(screen.queryByTestId('sync-reconnect-prompt')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('sync-status-pill')).not.toBeInTheDocument();
+  });
+
+  it('warns globally when a regenerated code has no panel left to show it in', async () => {
+    // The server envelope is already replaced by the time it resolves, so swallowing the code is
+    // permanent loss of recovery access.
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.deferNextRegenerate();
+    const { unmount } = renderSection(controller);
+    act(() => controller.setStatus('active'));
+    await screen.findByTestId('sync-status-pill');
+
+    await user.click(screen.getByRole('button', { name: 'Regenerate recovery code' }));
+    unmount();
+    await act(async () => {
+      controller.resolveRegenerate('CW1-AAAAA-AAAAA-AAAAA-AAAAA-AAAAA-AAAAA');
+    });
+
+    expect(toastWarning).toHaveBeenCalled();
+  });
+
+  it('regenerates once per click, since two envelopes would race', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.deferNextRegenerate();
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+    await screen.findByTestId('sync-status-pill');
+
+    const button = screen.getByRole('button', { name: 'Regenerate recovery code' });
+    await user.click(button);
+    expect(button).toBeDisabled();
+    await user.click(button);
+    await act(async () => {
+      controller.resolveRegenerate('CW1-AAAAA-AAAAA-AAAAA-AAAAA-AAAAA-AAAAA');
+    });
+
+    expect(controller.calls.filter((c) => c.method === 'regenerateRecoveryCode')).toHaveLength(1);
+  });
+
+  it('does not let a click paint for the account an enroll code replaced', async () => {
+    // A code is only required when the target account HAS an envelope, so this is the branch the
+    // different-account case actually completes on — it needs the same account bump as its sibling.
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptReconnect({ ok: false, reason: 'needs-code' });
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+    await screen.findByTestId('sync-status-pill');
+
+    controller.deferNextSyncNow();
+    await user.click(screen.getByRole('button', { name: 'Sync now' }));
+    act(() => controller.setStatus('needs_reauth'));
+    await user.click(screen.getByRole('button', { name: 'Reconnect' }));
+    await screen.findByText('Enter recovery code');
+    await user.type(screen.getByLabelText(/recovery code/i), CODE);
+    await user.click(screen.getByRole('button', { name: 'Enroll' }));
+    await act(async () => {
+      controller.resolveSyncNow({ kind: 'synced' });
+    });
+
+    expect(toastSuccess).not.toHaveBeenCalledWith('Synced');
+  });
+
+  it('syncs once per click, since two cycles would each toast', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+    await screen.findByTestId('sync-status-pill');
+
+    controller.deferNextSyncNow();
+    const button = screen.getByRole('button', { name: 'Sync now' });
+    await user.click(button);
+    expect(button).toBeDisabled();
+    await user.click(button);
+    await act(async () => {
+      controller.resolveSyncNow({ kind: 'synced' });
+    });
+
+    expect(controller.calls.filter((c) => c.method === 'syncNow')).toHaveLength(1);
+    expect(toastSuccess).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Sync now' })).toBeEnabled();
+  });
+
+  it('says it could not check when the host breaks its never-rejects contract', async () => {
+    // The mount read's rejection handler must answer like an unreadable read, not stay quieter.
+    const controller = new FakeSyncController();
+    controller.setStatus('active');
+    controller.failNext('getLastCycle');
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    renderSection(controller);
+
+    expect(await screen.findByTestId('sync-cycle-unknown')).toBeInTheDocument();
+    expect(errorSpy).toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
+  it('keeps the failure badge when a click lands before the key does', async () => {
+    // A click can wake a cold worker ahead of its key load and get no-key back. The engine refuses
+    // to persist that over the last real cycle; the panel must refuse to paint it for the same reason.
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptLastCycle({
+      kind: 'failed',
+      reason: 'device',
+      error: new Error('unreadable'),
+    });
+    controller.scriptSyncNow({ kind: 'no-key' });
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+    await screen.findByTestId('sync-failure-badge');
+
+    await user.click(screen.getByRole('button', { name: 'Sync now' }));
+
+    await waitFor(() => expect(toastWarning).toHaveBeenCalledWith(INCOMPLETE_MESSAGE));
+    expect(screen.getByTestId('sync-failure-badge')).toBeInTheDocument();
+  });
+
+  it('shows the account line after an enable, not only after the next sync', async () => {
+    // The account bump invalidates the details fetch the status change already started, so without
+    // its own re-read the panel renders no "Signed in as" line for the rest of the mount.
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    // Both hosts reach active before enable() resolves, so the effect's fetch is already in flight
+    // when the ok-branch invalidates it. Deferring that fetch is what pins the ordering: without a
+    // re-read of its own, the invalidated fetch is the only one and the line never appears.
+    controller.emitsActiveBeforeEnableResolves = true;
+    controller.scriptDetails({ accountEmail: 'a@example.com', accountId: 'a', lastSyncedAt: null });
+    controller.deferNextDetails();
+    renderSection(controller);
+
+    await enterEnableStep(user, 'acct-1');
+    await user.click(screen.getByRole('button', { name: 'Enable' }));
+
+    expect(await screen.findByTestId('sync-account-label')).toHaveTextContent(
+      'Signed in as a@example.com'
+    );
+  });
+
+  it('does not let a click paint for the account a reconnect replaced', async () => {
+    // The reason accountGenRef exists: a reconnect can land on a different account, and until it
+    // bumped, an in-flight click still toasted and painted for the previous one.
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptLastCycle(null);
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+    await screen.findByTestId('sync-status-pill');
+
+    controller.deferNextSyncNow();
+    await user.click(screen.getByRole('button', { name: 'Sync now' }));
+    act(() => controller.setStatus('needs_reauth'));
+    await user.click(screen.getByRole('button', { name: 'Reconnect' }));
+    await act(async () => {
+      controller.resolveSyncNow({ kind: 'synced' });
+    });
+
+    expect(toastSuccess).not.toHaveBeenCalledWith('Synced');
+  });
+
+  it('still says the sign-in expired when that is what actually happened', async () => {
+    const controller = new FakeSyncController();
+    renderSection(controller);
+
+    act(() => controller.setStatus('needs_reauth'));
+
+    expect(await screen.findByTestId('sync-reconnect-prompt')).toHaveTextContent(
+      /sign-in expired/i
+    );
   });
 
   it('clears the failure once a later cycle succeeds', async () => {

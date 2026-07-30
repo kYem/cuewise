@@ -1,5 +1,6 @@
 import { describeThrown, logger } from '@cuewise/shared';
 import type { SyncFailureReason, SyncOutcome } from '@cuewise/sync-engine';
+import { cn } from '@cuewise/ui';
 import { AlertTriangle, CloudUpload, KeyRound, Loader2, RefreshCw } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
@@ -49,12 +50,38 @@ const GoogleGlyph: React.FC = () => (
   </svg>
 );
 
-// Only the "on" statuses get a pill; off/needs_reauth/error render their own dedicated UI below.
-const STATUS_PILL_LABEL: Partial<Record<SyncUiStatus, string>> = {
+// Both maps total, like FAILURE_MESSAGE below: a new status with neither a pill nor a prompt would
+// render an empty panel body while the switch still reads on. null says "handled, renders neither".
+// needs_enroll has no pill on purpose — without a key, Sync now and Regenerate both fail.
+const STATUS_PILL_LABEL_BY_STATUS: Record<SyncUiStatus, string | null> = {
+  off: null,
   connecting: 'Connecting…',
   syncing: 'Syncing…',
   active: 'Active',
+  error: null,
+  needs_reauth: null,
+  needs_enroll: null,
 };
+
+// One block, two causes: same Reconnect button, but only one of them is about the sign-in.
+const RECONNECT_PROMPT_BY_STATUS: Record<SyncUiStatus, string | null> = {
+  off: null,
+  connecting: null,
+  syncing: null,
+  active: null,
+  error: null,
+  needs_reauth: 'Sign-in expired — reconnect to keep syncing.',
+  // "can't read" rather than "is missing": a transient read failure reaches this status too.
+  needs_enroll:
+    "This device can't read its encryption key, so nothing can sync. Reconnect with your recovery code to restore it.",
+};
+
+// Read through Partial for the same reason as KNOWN_FAILURE_MESSAGE below: `status` reaches the page
+// as an unvalidated chrome.storage string, so an unknown one must render nothing rather than an
+// empty prompt beside a live Reconnect button. The literals stay total, so a new member still fails
+// to compile.
+const STATUS_PILL_LABEL: Partial<Record<SyncUiStatus, string | null>> = STATUS_PILL_LABEL_BY_STATUS;
+const RECONNECT_PROMPT: Partial<Record<SyncUiStatus, string | null>> = RECONNECT_PROMPT_BY_STATUS;
 
 // Only `network` promises a full recovery, because it is the only reason where that promise is
 // true. `device` is also the bucket for anything unrecognised, so it claims no cause and no cure —
@@ -90,17 +117,20 @@ function logUnrecognisedReason(outcome: SyncOutcome | null): void {
   }
 }
 
-// The only place a read is adopted. An unavailable read says nothing about the cycle, so it must
-// never repaint — while `{outcome:null}` genuinely means "no cycle" and does clear the badge.
-// Reports whether it painted, so a caller can re-arm its once-per-mount read after a transient miss.
+// The only place a read is adopted. An unavailable read must never repaint the outcome — only
+// `{outcome:null}` means "no cycle" — so it sets `unknown` instead, a softer, separate line.
+// Returns whether it painted, so a caller can re-arm its once-per-mount read after a miss.
 function adoptLastCycle(
   read: LastCycleRead,
-  paint: (outcome: SyncOutcome | null) => void
+  paint: (outcome: SyncOutcome | null) => void,
+  markUnknown: (unknown: boolean) => void
 ): boolean {
   if (!read.available) {
+    markUnknown(true);
     return false;
   }
   logUnrecognisedReason(read.outcome);
+  markUnknown(false);
   paint(read.outcome);
   return true;
 }
@@ -177,6 +207,10 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGoogleSigningIn, setIsGoogleSigningIn] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
+  // Gates the Sync now button: two overlapping cycles would each toast, and the badge would belong
+  // to whichever finished last rather than the newest click.
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [isRegenerating, setIsRegenerating] = useState(false);
   const [isDisabling, setIsDisabling] = useState(false);
   const [recoveryCode, setRecoveryCode] = useState<string | null>(null);
   const [enrollOpen, setEnrollOpen] = useState(false);
@@ -198,9 +232,13 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   // generation is stale is dropped, so a slow fetch for a prior account can't clobber a newer
   // one after disable→re-enable, and syncNow's refresh can't lose a race with the mount fetch.
   const detailsGenRef = useRef(0);
-  // What the last cycle did. Read on mount (a failing background wake involves no click) and from
-  // every syncNow, guarded by its own generation counter against the same stale-resolution race.
+  // What the last cycle did. Reads are guarded by lastCycleGenRef, a click's paint by accountGenRef.
   const [lastCycle, setLastCycle] = useState<SyncOutcome | null>(null);
+  // A read that could not answer, kept apart from the outcome so it can never clear a badge.
+  const [cycleUnknown, setCycleUnknown] = useState(false);
+  // Which account the panel shows; a disable or a successful (re)connect moves it. Separate from
+  // the read counter, which any status transition bumps — that must not silence a click.
+  const accountGenRef = useRef(0);
   const lastCycleGenRef = useRef(0);
   const lastCycleRequestedRef = useRef(false);
 
@@ -261,19 +299,18 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
         if (lastCycleGenRef.current !== gen) {
           return;
         }
-        if (!adoptLastCycle(read, setLastCycle)) {
+        if (!adoptLastCycle(read, setLastCycle, setCycleUnknown)) {
           // An unreadable read (asleep worker, timeout) is a transient miss like the details one —
           // re-arm so the next status transition retries instead of latching the badge off.
           lastCycleRequestedRef.current = false;
         }
       },
       (error) => {
-        // Contracted never to reject; a host that breaks that leaves the badge off, not unhandled.
-        logger.error(
-          `Cloud sync last cycle unavailable: ${error instanceof Error ? error.message : String(error)}`,
-          error
-        );
+        // Contracted never to reject; a host that breaks that gets the same answer as an
+        // unreadable read rather than a quieter one, so both paths say "couldn't check".
+        logger.error(`Cloud sync last cycle unavailable: ${describeThrown(error)}`, error);
         if (lastCycleGenRef.current === gen) {
+          adoptLastCycle(LAST_CYCLE_UNAVAILABLE, setLastCycle, setCycleUnknown);
           lastCycleRequestedRef.current = false;
         }
       }
@@ -316,18 +353,36 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     lastCycleGenRef.current += 1;
     const gen = lastCycleGenRef.current;
     const read = await controller.getLastCycle().catch((error) => {
-      logger.error(
-        `Cloud sync last cycle unavailable: ${error instanceof Error ? error.message : String(error)}`,
-        error
-      );
+      logger.error(`Cloud sync last cycle unavailable: ${describeThrown(error)}`, error);
       return LAST_CYCLE_UNAVAILABLE;
     });
     if (lastCycleGenRef.current !== gen) {
       return;
     }
-    if (!adoptLastCycle(read, setLastCycle)) {
+    if (!adoptLastCycle(read, setLastCycle, setCycleUnknown)) {
       lastCycleRequestedRef.current = false;
     }
+  };
+
+  const refreshDetails = async () => {
+    detailsGenRef.current += 1;
+    const gen = detailsGenRef.current;
+    const next = await controller.getDetails().catch((error) => {
+      logger.error(`Cloud sync details unavailable: ${describeThrown(error)}`, error);
+      return null;
+    });
+    if (detailsGenRef.current === gen && next !== null) {
+      setDetails(next);
+    }
+  };
+
+  // Every path that lands on a new account: a reconnect can land on a DIFFERENT one, so an in-flight
+  // click must stop being able to paint or toast for the previous one, and both shown facts re-read.
+  const adoptNewAccount = async () => {
+    accountGenRef.current += 1;
+    detailsRequestedRef.current = false;
+    await refreshLastCycle();
+    await refreshDetails();
   };
 
   // Shared by the initial enable() and the reconnect() flows — both surface the same shape.
@@ -339,7 +394,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     if (result.ok) {
       // Cloud Sync is now active — hand off from legacy Chrome sync (see takeOverFromChromeSync).
       await takeOverFromChromeSync();
-      await refreshLastCycle();
+      await adoptNewAccount();
       setEnabling(false);
       if (result.recoveryCode) {
         surfaceRecoveryCode(result.recoveryCode);
@@ -439,8 +494,10 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     }
     if (result.ok) {
       // Enrolled successfully — hand off from Chrome sync (see takeOverFromChromeSync).
+      // A code is only required when the target account has an envelope, so this is the branch the
+      // different-account case actually completes on — it needs adoptNewAccount as much as the other.
       await takeOverFromChromeSync();
-      await refreshLastCycle();
+      await adoptNewAccount();
       setEnabling(false);
       if (result.recoveryCode) {
         surfaceRecoveryCode(result.recoveryCode);
@@ -456,31 +513,49 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     return result;
   };
 
+  // Two clicks would upload two envelopes under two master keys and show whichever RESOLVED last,
+  // which need not be the one the server kept — a saved code that opens nothing.
   const handleRegenerate = async () => {
+    setIsRegenerating(true);
     try {
       const code = await controller.regenerateRecoveryCode();
       setUnsavedCode(false);
-      setRecoveryCode(code);
+      // Not setRecoveryCode: the server envelope is already replaced, so a closed panel must not
+      // swallow the only copy of the code that opens it.
+      surfaceRecoveryCode(code);
     } catch (error) {
       logger.error('Cloud sync regenerate recovery code failed', error);
       useToastStore.getState().error("Couldn't regenerate your recovery code — please try again.");
+    } finally {
+      setIsRegenerating(false);
     }
   };
 
   // `outcome.error` is deliberately not read: chrome.runtime JSON-serialises the outcome, so the
   // page realm gets `error: {}`. Only `reason` survives; the engine logged the real object already.
   const handleSyncNow = async () => {
+    // Whether this click may speak is the account, not the read counter: macOS emits 'syncing' from
+    // inside syncNow, and that emission must not retire the click it belongs to.
     lastCycleGenRef.current += 1;
-    const cycleGen = lastCycleGenRef.current;
+    const accountGen = accountGenRef.current;
+    setIsSyncing(true);
     try {
       const outcome = await controller.syncNow();
       // Above the guard: a build/skew defect is not this account's outcome, so a superseded click
       // must not drop the only evidence of it.
       logUnrecognisedReason(outcome);
-      // A stale generation means a disable (or a newer click) superseded this one: the cycle
-      // belongs to an account the panel no longer shows, so neither badge nor toast may speak for it.
-      if (lastCycleGenRef.current === cycleGen) {
-        setLastCycle(outcome);
+      // Only an account change retires this click: the cycle then belongs to an account the panel
+      // no longer shows, so neither badge nor toast may speak for it.
+      if (accountGenRef.current === accountGen) {
+        // A read the cycle's own 'syncing' emission started is younger than the bump above, and
+        // would otherwise outrank this paint.
+        lastCycleGenRef.current += 1;
+        // `no-key` means no cycle ran, so it must not speak for the last one that did — the engine
+        // refuses to persist it for the same reason. Everything else is an answer.
+        if (outcome.kind !== 'no-key') {
+          setLastCycle(outcome);
+          setCycleUnknown(false);
+        }
         if (outcome.kind === 'synced') {
           useToastStore.getState().success('Synced');
         } else if (outcome.kind === 'failed') {
@@ -493,12 +568,14 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       // The bridge builds `Sync now failed: <reason> — <detail>` into the message so the worker's
       // cause reaches here; message is non-enumerable, so it must be re-stated as text.
       logger.error(`Cloud sync sync-now failed: ${describeThrown(error)}`, error);
-      // Same guard as the try: a superseded click may neither toast (its action is gone from the
-      // panel) nor repaint — and the bump above discarded the in-flight read this recovers.
-      if (lastCycleGenRef.current === cycleGen) {
+      // Same guard as the try: a superseded account's click may neither toast nor repaint.
+      if (accountGenRef.current === accountGen) {
         useToastStore.getState().error("Couldn't sync right now — please try again.");
         await refreshLastCycle();
       }
+    } finally {
+      // In a finally like every sibling flag here: an unexpected throw must not strand the button.
+      setIsSyncing(false);
     }
     // Refresh "Last synced" OUTSIDE the try — the sync-now error surface belongs to syncNow
     // alone (the catch keeps even a contract-violating host from rejecting the click handler).
@@ -553,9 +630,12 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       setDetails(null);
       detailsRequestedRef.current = false;
       detailsGenRef.current += 1;
-      // Same reasoning for the cycle: a re-enable must never wear the previous account's failure.
+      // Same reasoning for the cycle: a re-enable must never wear the previous account's failure,
+      // nor its "couldn't check" — this is what retires a click the disable superseded.
       setLastCycle(null);
+      setCycleUnknown(false);
       lastCycleGenRef.current += 1;
+      accountGenRef.current += 1;
     } catch (error) {
       logger.error('Cloud sync disable failed', error);
       useToastStore.getState().error("Couldn't disable sync — please try again.");
@@ -579,6 +659,10 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   const pillLabel = STATUS_PILL_LABEL[status];
   // Beside the pill, never instead of it: status stays 'active' so the recovery controls survive.
   const badgeMessage = lastCycle?.kind === 'failed' ? failureMessage(lastCycle.reason) : null;
+  // A failure outranks an unknown, and mid-enrolment there is no freshness claim to qualify yet.
+  const showUnknownCycle = status === 'active' && badgeMessage === null && cycleUnknown;
+  // `?? null` so an unknown persisted status renders nothing, not an empty prompt.
+  const reconnectPrompt = RECONNECT_PROMPT[status] ?? null;
 
   // The enable step's sign-in-options div groups Google today; a "Sign in with Apple"
   // button drops in next to it later.
@@ -706,6 +790,11 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
                   {badgeMessage}
                 </span>
               )}
+              {showUnknownCycle && (
+                <span data-testid="sync-cycle-unknown" className="text-xs text-tertiary">
+                  Couldn't check when this device last synced.
+                </span>
+              )}
             </div>
             {details && (
               <div data-testid="sync-account-label" className="text-xs text-tertiary">
@@ -724,15 +813,17 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
               <button
                 type="button"
                 onClick={handleSyncNow}
-                className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-xs font-medium text-primary transition-colors hover:bg-surface-variant"
+                disabled={isSyncing}
+                className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-xs font-medium text-primary transition-colors hover:bg-surface-variant disabled:cursor-not-allowed disabled:opacity-50"
               >
-                <RefreshCw className="h-3.5 w-3.5" />
+                <RefreshCw className={cn('h-3.5 w-3.5', isSyncing && 'animate-spin')} />
                 Sync now
               </button>
               <button
                 type="button"
                 onClick={handleRegenerate}
-                className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-xs font-medium text-primary transition-colors hover:bg-surface-variant"
+                disabled={isRegenerating}
+                className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-xs font-medium text-primary transition-colors hover:bg-surface-variant disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <KeyRound className="h-3.5 w-3.5" />
                 Regenerate recovery code
@@ -742,10 +833,12 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
         </SettingSubgroup>
       )}
 
-      {status === 'needs_reauth' && (
+      {reconnectPrompt !== null && (
         <SettingSubgroup>
           <div className="flex flex-col gap-2 py-2">
-            <p className="text-xs text-tertiary">Sign-in expired — reconnect to keep syncing.</p>
+            <p data-testid="sync-reconnect-prompt" className="text-xs text-tertiary">
+              {reconnectPrompt}
+            </p>
             <button
               type="button"
               onClick={handleReconnect}

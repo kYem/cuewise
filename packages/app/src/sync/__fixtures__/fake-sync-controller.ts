@@ -52,6 +52,8 @@ export class FakeSyncController implements SyncController {
   private pendingDetails: ((details: SyncDetails | null) => void) | null = null;
   private deferredLastCycle = false;
   private pendingLastCycle: ((read: LastCycleRead) => void) | null = null;
+  private deferredRegenerate = false;
+  private pendingRegenerate: ((code: string) => void) | null = null;
   private deferredSyncNow = false;
   private pendingSyncNow: {
     resolve: (outcome: SyncOutcome) => void;
@@ -110,6 +112,15 @@ export class FakeSyncController implements SyncController {
     this.deferredLastCycle = true;
   }
 
+  /** Releases a deferred getLastCycle() as an unreadable answer, as a dead worker gives. */
+  resolveLastCycleUnavailable(): void {
+    if (this.pendingLastCycle === null) {
+      throw new Error('FakeSyncController: no pending getLastCycle() to resolve');
+    }
+    this.pendingLastCycle(LAST_CYCLE_UNAVAILABLE);
+    this.pendingLastCycle = null;
+  }
+
   /** Releases a getLastCycle() call armed via deferNextLastCycle(). */
   resolveLastCycle(outcome: SyncOutcome | null): void {
     if (this.pendingLastCycle === null) {
@@ -117,6 +128,20 @@ export class FakeSyncController implements SyncController {
     }
     this.pendingLastCycle({ available: true, outcome });
     this.pendingLastCycle = null;
+  }
+
+  /** Makes the next regenerateRecoveryCode() hang — the envelope is replaced before it resolves. */
+  deferNextRegenerate(): void {
+    this.deferredRegenerate = true;
+  }
+
+  /** Releases a regenerateRecoveryCode() armed via deferNextRegenerate(). */
+  resolveRegenerate(code: string): void {
+    if (this.pendingRegenerate === null) {
+      throw new Error('FakeSyncController: no pending regenerateRecoveryCode() to resolve');
+    }
+    this.pendingRegenerate(code);
+    this.pendingRegenerate = null;
   }
 
   /** Makes the next syncNow() hang until resolveSyncNow() releases it — for asserting stale resolutions. */
@@ -163,6 +188,12 @@ export class FakeSyncController implements SyncController {
       this.subscribers.delete(cb);
     };
   }
+
+  /** Models the macOS adapter, which emits status from inside syncNow rather than around it. */
+  emitsSyncingDuringSyncNow = false;
+
+  /** Both hosts reach active before enable() resolves; the panel's ok-branch runs after that. */
+  emitsActiveBeforeEnableResolves = false;
 
   /** Test helper: sets status and notifies subscribers (not part of SyncController). */
   setStatus(status: SyncUiStatus): void {
@@ -214,6 +245,9 @@ export class FakeSyncController implements SyncController {
   ): Promise<EnableResult> {
     this.calls.push({ method: 'enable', args: [accountId, deviceName, recoveryCode] });
     this.maybeFail('enable');
+    if (this.emitsActiveBeforeEnableResolves) {
+      this.setStatus('active');
+    }
     const next = this.enableResults.shift();
     if (next !== undefined) {
       return next;
@@ -265,21 +299,40 @@ export class FakeSyncController implements SyncController {
   async regenerateRecoveryCode(): Promise<string> {
     this.calls.push({ method: 'regenerateRecoveryCode', args: [] });
     this.maybeFail('regenerateRecoveryCode');
+    if (this.deferredRegenerate) {
+      this.deferredRegenerate = false;
+      return new Promise((resolve) => {
+        this.pendingRegenerate = resolve;
+      });
+    }
     return DEFAULT_RECOVERY_CODE;
   }
 
   async syncNow(): Promise<SyncOutcome> {
     this.calls.push({ method: 'syncNow', args: [] });
+    // macOS emits 'syncing' synchronously here and reconciles in a finally; the extension bridge
+    // never does. Off by default so existing tests keep modelling the bridge.
+    if (this.emitsSyncingDuringSyncNow) {
+      this.setStatus('syncing');
+    }
     this.maybeFail('syncNow');
     if (this.deferredSyncNow) {
       this.deferredSyncNow = false;
-      return new Promise((resolve, reject) => {
+      // The real adapter reconciles in a finally, so it emits on every path including this one.
+      return new Promise<SyncOutcome>((resolve, reject) => {
         this.pendingSyncNow = { resolve, reject };
+      }).finally(() => {
+        if (this.emitsSyncingDuringSyncNow) {
+          this.setStatus('active');
+        }
       });
     }
     const next = this.syncNowResults.shift();
     const outcome = next !== undefined ? next : DEFAULT_SYNC_OUTCOME;
     this.lastCycleRead = { available: true, outcome };
+    if (this.emitsSyncingDuringSyncNow) {
+      this.setStatus('active');
+    }
     return outcome;
   }
 

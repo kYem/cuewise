@@ -143,6 +143,11 @@ async function initNewKey(
     throw err;
   }
 
+  if (recoveryCode !== undefined) {
+    // Only once the create-only PUT has won: on the race it loses to, the code is forwarded and
+    // honoured. Here there was no envelope to unwrap, so a fresh key is minted instead.
+    logger.error('Cloud sync ignored a recovery code: this account had no envelope to restore');
+  }
   await persistDataKey(deps.keyStore, INITIAL_KEY_ID, dk);
   return { dk, keyId: INITIAL_KEY_ID, recoveryCodeToShow: code };
 }

@@ -724,6 +724,20 @@ describe('BridgeSyncController: getLastCycle', () => {
     errorSpy.mockRestore();
   });
 
+  it('names a null answer as no response, rather than throwing while describing it', async () => {
+    // The wire is untyped: reading `.ok` off null would make the outer catch report a TypeError in
+    // place of the cause, defeating the point of naming causes at all.
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    runtime.sendMessage.mockResolvedValueOnce(null as never);
+    const controller = new BridgeSyncController();
+
+    await expect(controller.getLastCycle()).resolves.toEqual({ available: false });
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Sync last-cycle outcome unavailable: no response from the background'
+    );
+    errorSpy.mockRestore();
+  });
+
   it('does not blame a silent worker when a live one answered without a detail', async () => {
     // background.ts's port-closing fallback answers {ok:false, reason:'error'} with no detail; the
     // old text called that "no responder", pointing at messaging for a handler that did respond.

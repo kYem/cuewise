@@ -58,6 +58,9 @@ export function mapToUi(status: SyncStatus): SyncUiStatus {
   if (status === 'signed_out') {
     return 'needs_reauth';
   }
+  if (status === 'needs_enroll') {
+    return 'needs_enroll';
+  }
   // Exhaustiveness guard: a new SyncStatus member is a compile error here, not a silent fallthrough.
   const exhaustive: never = status;
   throw new Error(`unmapped sync status: ${String(exhaustive)}`);

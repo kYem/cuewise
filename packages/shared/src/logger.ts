@@ -154,10 +154,12 @@ class ConsoleLogger implements Logger {
  * into an unhandled one.
  */
 export function describeThrown(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
+  // All of it guarded, not just String(): `instanceof` throws on a revoked Proxy and `.message` on
+  // a subclass with a throwing getter — and stallError calls this outside any catch.
   try {
+    if (error instanceof Error) {
+      return error.message;
+    }
     return String(error);
   } catch {
     return '[unstringifiable value]';
