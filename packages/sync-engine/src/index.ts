@@ -9,7 +9,14 @@ export {
   defaultBindings,
 } from './collections';
 export { type CreateSyncEngineOptions, createSyncEngine } from './create-engine';
-export { type CycleDeps, type PullResult, pullOnce, pushOnce, type SyncTransport } from './cycle';
+export {
+  type CycleDeps,
+  type PullResult,
+  type PushResult,
+  pullOnce,
+  pushOnce,
+  type SyncTransport,
+} from './cycle';
 export {
   CLOUD_SYNC_ENABLED_KEY,
   type EnableSyncOptions,
@@ -62,6 +69,7 @@ export {
   type SyncCycle,
   type SyncCycleRead,
   type SyncFailureReason,
+  type SyncNowResult,
   type SyncOutcome,
   toPersistedSyncCycle,
 } from './sync-outcome';

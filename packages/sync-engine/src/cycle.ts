@@ -28,6 +28,28 @@ export interface CycleDeps {
   strategy: ConflictStrategy;
   now?: () => number;
   onQuarantine?: (key: string) => void;
+  /**
+   * Checked between pages, between records and between push batches. The engine answers "the
+   * account this cycle belongs to is gone", so a disable landing mid-cycle stops the removed
+   * account's records from being written locally.
+   */
+  isCancelled?: () => boolean;
+}
+
+function cancelled(deps: CycleDeps): boolean {
+  return deps.isCancelled?.() === true;
+}
+
+/**
+ * Persists what the pull applied and reports `result` — or saves nothing and reports `cancelled`:
+ * a cursor that outlives its account makes a later enable's first pull skip every record below it.
+ */
+async function saveThen(deps: CycleDeps, meta: SyncMeta, result: PullResult): Promise<PullResult> {
+  if (cancelled(deps)) {
+    return { kind: 'cancelled' };
+  }
+  await deps.meta.save(meta);
+  return result;
 }
 
 const MAX_PUSH_BATCH = 100;
@@ -41,20 +63,27 @@ interface DirtyRecord {
   record: PushRecord;
 }
 
+/** Whether a push ran to the end. `cancelled` stopped between batches; earlier batches still acked. */
+export type PushResult = 'complete' | 'cancelled';
+
 /** Seals every dirty entity and pushes it in batches, clearing dirty/tombstones as each batch acks. */
-export async function pushOnce(deps: CycleDeps): Promise<void> {
+export async function pushOnce(deps: CycleDeps): Promise<PushResult> {
   const meta = await deps.meta.load();
   const dirtyRecords = await buildDirtyRecords(deps, meta);
   if (dirtyRecords.length === 0) {
-    return;
+    return 'complete';
   }
 
   for (let start = 0; start < dirtyRecords.length; start += MAX_PUSH_BATCH) {
+    if (cancelled(deps)) {
+      return 'cancelled';
+    }
     const batch = dirtyRecords.slice(start, start + MAX_PUSH_BATCH);
     await deps.transport.pushChanges(batch.map((item) => item.record));
     clearAcked(meta, batch);
     await deps.meta.save(meta);
   }
+  return 'complete';
 }
 
 async function buildDirtyRecords(deps: CycleDeps, meta: SyncMeta): Promise<DirtyRecord[]> {
@@ -116,6 +145,8 @@ function clearAcked(meta: SyncMeta, batch: DirtyRecord[]): void {
 export type PullResult =
   | { kind: 'complete' }
   | { kind: 'resynced' }
+  /** Stopped at a cancellation check, saving nothing — the stored cursor stays where it started. */
+  | { kind: 'cancelled' }
   | { kind: 'stalled'; collection: string; entityId: string };
 
 /** Pulls remote changes in seq order, resolves each via the strategy, and applies the winners. */
@@ -126,31 +157,40 @@ export async function pullOnce(deps: CycleDeps): Promise<PullResult> {
 
   let pageSize = PULL_PAGE;
   while (pageSize === PULL_PAGE) {
+    if (cancelled(deps)) {
+      return { kind: 'cancelled' };
+    }
     let result: { records: SyncRecord[]; cursor: number };
     try {
       result = await deps.transport.getChanges(meta.cursor);
     } catch (err) {
       if (err instanceof ApiError && err.status === 409 && err.code === 'resync_required') {
         meta.cursor = 0;
-        await deps.meta.save(meta);
-        return { kind: 'resynced' };
+        return await saveThen(deps, meta, { kind: 'resynced' });
       }
       throw err;
     }
     pageSize = result.records.length;
 
     for (const rec of result.records) {
+      if (cancelled(deps)) {
+        // Deliberately without saving: records earlier in this page are already in storage, but
+        // leaving the stored cursor behind them is what lets a later enable replay from before them.
+        return { kind: 'cancelled' };
+      }
       const applied = await applyPulledRecord(deps, meta, rec, warnedUnknownCollections);
       if (!applied) {
         // Apply-before-advance: the write failed, so stop here and leave the cursor before it.
-        await deps.meta.save(meta);
-        return { kind: 'stalled', collection: rec.collection, entityId: rec.entityId };
+        return await saveThen(deps, meta, {
+          kind: 'stalled',
+          collection: rec.collection,
+          entityId: rec.entityId,
+        });
       }
     }
   }
 
-  await deps.meta.save(meta);
-  return { kind: 'complete' };
+  return await saveThen(deps, meta, { kind: 'complete' });
 }
 
 /** Applies one pulled record to meta/storage. Returns false to signal "stop the cycle here". */

@@ -28,7 +28,11 @@ async function seedDirty(
   return meta;
 }
 
-function makeDeps(kv: FakeKvStore, transport: FakeTransport): CycleDeps {
+function makeDeps(
+  kv: FakeKvStore,
+  transport: FakeTransport,
+  overrides: Partial<CycleDeps> = {}
+): CycleDeps {
   return {
     transport,
     meta: new SyncMetadataStore(kv),
@@ -36,6 +40,7 @@ function makeDeps(kv: FakeKvStore, transport: FakeTransport): CycleDeps {
     dk: generateDataKey(),
     keyId: KEY_ID,
     strategy: new LwwHlcStrategy(),
+    ...overrides,
   };
 }
 
@@ -128,6 +133,24 @@ describe('pushOnce', () => {
     kv.failGetManyForKey = null;
     const saved = await metaStore.load();
     expect(saved.dirty.goals).toEqual(['g1']);
+  });
+
+  it('stops between batches once cancelled, leaving the ids it never pushed dirty', async () => {
+    const ids = Array.from({ length: 150 }, (_, i) => `g${i}`);
+    await setGoals(ids.map((id) => goalFactory.build({ id })));
+    const metaStore = new SyncMetadataStore(kv);
+    await seedDirty(metaStore, 'goals', ids);
+    // The disable lands while the first batch is in flight.
+    const deps = makeDeps(kv, transport, {
+      isCancelled: () => transport.pushedBatches.length > 0,
+    });
+
+    const result = await pushOnce(deps);
+
+    expect(result).toBe('cancelled');
+    expect(transport.pushedBatches).toHaveLength(1);
+    const saved = await metaStore.load();
+    expect(saved.dirty.goals).toEqual(ids.slice(100));
   });
 
   it('leaves meta.dirty intact when pushChanges rejects', async () => {

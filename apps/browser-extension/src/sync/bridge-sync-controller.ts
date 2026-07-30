@@ -9,7 +9,7 @@ import { LAST_CYCLE_UNAVAILABLE } from '@cuewise/app';
 import { describeThrown, logger } from '@cuewise/shared';
 import {
   CLOUD_SYNC_ENABLED_KEY,
-  type SyncOutcome,
+  type SyncNowResult,
   type SyncSignInProvider,
 } from '@cuewise/sync-engine';
 import type {
@@ -250,7 +250,7 @@ export class BridgeSyncController implements SyncController {
   // so adding one here would be a page-only flicker the background can't corroborate. Two
   // guards, not one: an ok:false response (a non-conforming engine's op-level throw) and an
   // ok:true response with no outcome (a skewed SW) are different failures, both rejections.
-  async syncNow(): Promise<SyncOutcome> {
+  async syncNow(): Promise<SyncNowResult> {
     const response = await this.send({ kind: 'cuewise-sync-control', op: 'syncNow' });
     // `response?.ok` like every sibling: a dead worker resolves undefined, where a bare `.ok`
     // throws a TypeError naming nothing. The SW hardcodes reason:'error' for this op, so `detail`

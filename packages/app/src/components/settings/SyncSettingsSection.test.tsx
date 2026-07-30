@@ -984,6 +984,30 @@ describe('SyncSettingsSectionComponent', () => {
     errorSpy.mockRestore();
   });
 
+  it('leaves the badge and the toasts alone when a disable retires the cycle', async () => {
+    // Another window disconnected the account mid-cycle: there is no cycle to report and no
+    // account left to report it about, so the previous cycle's badge stands.
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptSyncNow({ kind: 'failed', reason: 'device', error: new Error('unreadable') });
+    controller.scriptSyncNow({ kind: 'cancelled' });
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+    await user.click(screen.getByRole('button', { name: 'Sync now' }));
+    await screen.findByTestId('sync-failure-badge');
+    toastError.mockClear();
+
+    await user.click(screen.getByRole('button', { name: 'Sync now' }));
+
+    await waitFor(() =>
+      expect(controller.calls.filter((call) => call.method === 'syncNow')).toHaveLength(2)
+    );
+    expect(screen.getByTestId('sync-failure-badge')).toBeInTheDocument();
+    expect(toastError).not.toHaveBeenCalled();
+    expect(toastWarning).not.toHaveBeenCalled();
+    expect(toastSuccess).not.toHaveBeenCalled();
+  });
+
   it('does not report success for a cycle that did nothing', async () => {
     const user = userEvent.setup();
     const controller = new FakeSyncController();

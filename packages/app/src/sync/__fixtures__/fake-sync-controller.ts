@@ -1,4 +1,4 @@
-import type { SyncOutcome } from '@cuewise/sync-engine';
+import type { SyncNowResult, SyncOutcome } from '@cuewise/sync-engine';
 import type {
   EnableResult,
   LastCycleRead,
@@ -26,7 +26,7 @@ type FailableMethod =
 
 const DEFAULT_ENABLE_RESULT: EnableResult = { ok: true };
 const DEFAULT_RECOVERY_CODE = 'FAKE-RECOVERY-CODE';
-const DEFAULT_SYNC_OUTCOME: SyncOutcome = { kind: 'synced' };
+const DEFAULT_SYNC_OUTCOME: SyncNowResult = { kind: 'synced' };
 
 /** Scriptable SyncController fake for UI tests: settable status, queued enable/reconnect results, recorded calls. */
 export class FakeSyncController implements SyncController {
@@ -41,7 +41,7 @@ export class FakeSyncController implements SyncController {
   private readonly reconnectResults: EnableResult[] = [];
   private readonly enrollWithCodeResults: EnableResult[] = [];
   private readonly detailsResults: (SyncDetails | null)[] = [];
-  private readonly syncNowResults: SyncOutcome[] = [];
+  private readonly syncNowResults: SyncNowResult[] = [];
   private lastCycleRead: LastCycleRead = { available: true, outcome: null };
   private readonly failingMethods = new Set<FailableMethod>();
   private deferredDisable = false;
@@ -56,7 +56,7 @@ export class FakeSyncController implements SyncController {
   private pendingRegenerate: ((code: string) => void) | null = null;
   private deferredSyncNow = false;
   private pendingSyncNow: {
-    resolve: (outcome: SyncOutcome) => void;
+    resolve: (outcome: SyncNowResult) => void;
     reject: (error: Error) => void;
   } | null = null;
 
@@ -150,11 +150,11 @@ export class FakeSyncController implements SyncController {
   }
 
   /** Releases a syncNow() call armed via deferNextSyncNow(). */
-  resolveSyncNow(outcome: SyncOutcome): void {
+  resolveSyncNow(outcome: SyncNowResult): void {
     if (this.pendingSyncNow === null) {
       throw new Error('FakeSyncController: no pending syncNow() to resolve');
     }
-    this.lastCycleRead = { available: true, outcome };
+    this.rememberCycle(outcome);
     this.pendingSyncNow.resolve(outcome);
     this.pendingSyncNow = null;
   }
@@ -224,7 +224,7 @@ export class FakeSyncController implements SyncController {
   }
 
   /** Queues the outcome the next `syncNow()` call resolves to; also becomes what `getLastCycle()` reports. */
-  scriptSyncNow(outcome: SyncOutcome): void {
+  scriptSyncNow(outcome: SyncNowResult): void {
     this.syncNowResults.push(outcome);
   }
 
@@ -308,7 +308,7 @@ export class FakeSyncController implements SyncController {
     return DEFAULT_RECOVERY_CODE;
   }
 
-  async syncNow(): Promise<SyncOutcome> {
+  async syncNow(): Promise<SyncNowResult> {
     this.calls.push({ method: 'syncNow', args: [] });
     // macOS emits 'syncing' synchronously here and reconciles in a finally; the extension bridge
     // never does. Off by default so existing tests keep modelling the bridge.
@@ -319,7 +319,7 @@ export class FakeSyncController implements SyncController {
     if (this.deferredSyncNow) {
       this.deferredSyncNow = false;
       // The real adapter reconciles in a finally, so it emits on every path including this one.
-      return new Promise<SyncOutcome>((resolve, reject) => {
+      return new Promise<SyncNowResult>((resolve, reject) => {
         this.pendingSyncNow = { resolve, reject };
       }).finally(() => {
         if (this.emitsSyncingDuringSyncNow) {
@@ -329,11 +329,19 @@ export class FakeSyncController implements SyncController {
     }
     const next = this.syncNowResults.shift();
     const outcome = next !== undefined ? next : DEFAULT_SYNC_OUTCOME;
-    this.lastCycleRead = { available: true, outcome };
+    this.rememberCycle(outcome);
     if (this.emitsSyncingDuringSyncNow) {
       this.setStatus('active');
     }
     return outcome;
+  }
+
+  /** Mirrors the engine: it records neither of these, so a later read must not report them. */
+  private rememberCycle(outcome: SyncNowResult): void {
+    if (outcome.kind === 'cancelled' || outcome.kind === 'no-key') {
+      return;
+    }
+    this.lastCycleRead = { available: true, outcome };
   }
 
   async getLastCycle(): Promise<LastCycleRead> {

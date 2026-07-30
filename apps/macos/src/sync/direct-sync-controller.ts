@@ -14,7 +14,7 @@ import {
   RecoveryCodeRequiredError,
   type SyncEngine,
   type SyncEngineControlSurface,
-  type SyncOutcome,
+  type SyncNowResult,
   type SyncSignInProvider,
   type SyncStatus,
 } from '@cuewise/sync-engine';
@@ -361,7 +361,7 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
     async regenerateRecoveryCode(): Promise<string> {
       return engine.regenerateRecoveryCode();
     },
-    async syncNow(): Promise<SyncOutcome> {
+    async syncNow(): Promise<SyncNowResult> {
       emit('syncing');
       // Reconcile in finally so an engine throw doesn't strand the pill on "Syncing…".
       try {

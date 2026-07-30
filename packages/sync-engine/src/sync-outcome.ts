@@ -10,6 +10,13 @@ export type SyncOutcome =
   | { kind: 'resynced' }
   | { kind: 'failed'; reason: SyncFailureReason; error: unknown };
 
+/**
+ * What syncNow answers. `cancelled` is deliberately NOT a SyncOutcome: the account was removed
+ * mid-cycle, so the cycle stopped and its result speaks for no account. Keeping it out of the
+ * outcome union is what stops it being recorded, persisted or painted as a cycle that ran.
+ */
+export type SyncNowResult = SyncOutcome | { kind: 'cancelled' };
+
 /** One cycle plus when it ran. A cycle hydrated from storage carries no `error` — see below. */
 export interface SyncCycle {
   at: number;

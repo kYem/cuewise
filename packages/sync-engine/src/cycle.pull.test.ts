@@ -43,6 +43,18 @@ function requireBinding(bindings: CollectionBinding[], name: string): Collection
   return binding;
 }
 
+/** A disable landing while the page is being applied: the flag flips once one record is written. */
+function disableAfterFirstWrite(binding: CollectionBinding): { isCancelled: () => boolean } {
+  const write = binding.writeOne.bind(binding);
+  let disabled = false;
+  vi.spyOn(binding, 'writeOne').mockImplementation(async (entityId, entity) => {
+    const result = await write(entityId, entity);
+    disabled = true;
+    return result;
+  });
+  return { isCancelled: () => disabled };
+}
+
 /** Marks an entity as known-local at a given hlc, bypassing a real pull/push round trip. */
 async function seedLocalHlc(
   metaStore: SyncMetadataStore,
@@ -346,6 +358,49 @@ describe('pullOnce', () => {
 
     const saved = await metaStore.load();
     expect(saved.cursor).toBe(5);
+  });
+
+  it('never reaches the server when the cycle is already cancelled', async () => {
+    const result = await pullOnce(makeDeps({ isCancelled: () => true }));
+
+    expect(result).toEqual({ kind: 'cancelled' });
+    expect(transport.getChangesSinceCalls).toEqual([]);
+  });
+
+  it('stops mid-page once cancelled, so the rest of the removed account’s records never land', async () => {
+    const first = goalFactory.build({ id: 'g1', text: 'first' });
+    const second = goalFactory.build({ id: 'g2', text: 'second' });
+    transport.pullRecords = [
+      await sealRecord(dk, 'goals', 'g1', { entity: first, hlc: NEWER_HLC }, 1),
+      await sealRecord(dk, 'goals', 'g2', { entity: second, hlc: NEWER_HLC }, 2),
+    ];
+    const bindings = defaultBindings();
+    const { isCancelled } = disableAfterFirstWrite(requireBinding(bindings, 'goals'));
+
+    const result = await pullOnce(makeDeps({ bindings, isCancelled }));
+
+    expect(result).toEqual({ kind: 'cancelled' });
+    expect(await getGoals()).toEqual([first]);
+    const saved = await metaStore.load();
+    expect(saved.cursor).toBe(0);
+  });
+
+  it('persists no cursor when the account is removed while the last record of a page is applied', async () => {
+    // The narrow window the per-record check cannot see: nothing is left to check, so only the
+    // guard on the save keeps an advanced cursor from outliving the account that earned it.
+    const goal = goalFactory.build({ id: 'g1' });
+    transport.pullRecords = [
+      await sealRecord(dk, 'goals', 'g1', { entity: goal, hlc: NEWER_HLC }, 1),
+    ];
+    const bindings = defaultBindings();
+    const { isCancelled } = disableAfterFirstWrite(requireBinding(bindings, 'goals'));
+
+    const result = await pullOnce(makeDeps({ bindings, isCancelled }));
+
+    expect(result).toEqual({ kind: 'cancelled' });
+    const saved = await metaStore.load();
+    expect(saved.cursor).toBe(0);
+    expect(saved.hlcs['goals/g1']).toBeUndefined();
   });
 
   it('recovers a quarantined key once a later pull decrypts it cleanly, removing it from quarantine', async () => {

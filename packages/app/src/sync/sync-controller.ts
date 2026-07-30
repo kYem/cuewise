@@ -1,4 +1,4 @@
-import type { SyncOutcome } from '@cuewise/sync-engine';
+import type { SyncNowResult, SyncOutcome } from '@cuewise/sync-engine';
 import { createContext, useContext } from 'react';
 
 /**
@@ -82,7 +82,8 @@ export interface SyncController {
   reconnect(recoveryCode?: string): Promise<EnableResult>;
   disable(): Promise<void>;
   regenerateRecoveryCode(): Promise<string>;
-  syncNow(): Promise<SyncOutcome>;
+  /** `{kind:'cancelled'}` when a disable landed mid-cycle: no cycle to report, so paint nothing. */
+  syncNow(): Promise<SyncNowResult>;
   /** Informational: resolves null when unavailable (signed out, offline, legacy host); never throws. */
   getDetails(): Promise<SyncDetails | null>;
   /**

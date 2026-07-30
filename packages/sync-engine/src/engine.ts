@@ -41,6 +41,7 @@ import {
   parsePersistedSyncCycle,
   type SyncCycle,
   type SyncCycleRead,
+  type SyncNowResult,
   type SyncOutcome,
   toPersistedSyncCycle,
 } from './sync-outcome';
@@ -245,10 +246,18 @@ export class SyncEngine {
     }
 
     this.setStatus('initial_sync');
+    if (wasEnabled !== true) {
+      // Enabling a device that was off: disable's metadata reset is best-effort, so a cursor can
+      // outlive the account it belonged to, and a surviving high-water mark makes this first pull
+      // skip every record below it without a word. A re-auth (wasEnabled) keeps its own cursor.
+      await this.resetPullCursor();
+    }
     await this.backfillDirty();
     const outcome = await this.syncNow();
-    if (outcome.kind === 'signed-out') {
-      // The session was dropped mid-cycle (handleAuthLoss kept the DK) — enable didn't finish.
+    if (outcome.kind === 'signed-out' || outcome.kind === 'cancelled') {
+      // signed-out: the session was dropped mid-cycle (handleAuthLoss kept the DK).
+      // cancelled: a disable landed mid-enable, and the flag below would re-arm sync — on the next
+      // start(), for good — for the account that disable just removed.
       return;
     }
 
@@ -331,22 +340,24 @@ export class SyncEngine {
   }
 
   /**
-   * pullOnce then pushOnce, reporting what the cycle actually did. Never throws — callers read
-   * the outcome. A no-op until a DK is held (never enabled, or self-heal hasn't run).
+   * pullOnce then pushOnce, reporting what the cycle actually did — or `cancelled` if a disable
+   * landed inside it, which is not an outcome and is never recorded. Never throws: callers read
+   * the result. A no-op until a DK is held (never enabled, or self-heal hasn't run).
    */
-  async syncNow(): Promise<SyncOutcome> {
+  async syncNow(): Promise<SyncNowResult> {
     const epoch = this.accountEpoch;
-    const outcome = await this.runCycle();
-    // The cycle is a network round trip, and runCycle captured the DK before it began, so a disable
-    // landing inside it still produces an outcome. Returning it is fine — the caller asked — but
-    // none of the bookkeeping below may speak for the account that is now gone: the stamp and the
-    // record would re-create the very keys disableSync removed, and handleAuthLoss would repaint
-    // the pill as "Sign-in expired" for a device the user deliberately disconnected.
-    if (this.accountEpoch !== epoch) {
+    const outcome = await this.runCycle(epoch);
+    // The cycle is a network round trip, so a disable landing inside it still produces a result —
+    // either one the cycle abandoned partway, or a whole one for an account that no longer exists.
+    // Both answer `cancelled`, because none of the bookkeeping below may speak for that account:
+    // the stamp and the record would re-create the very keys disableSync removed, and
+    // handleAuthLoss would repaint the pill as "Sign-in expired" for a device the user
+    // deliberately disconnected.
+    if (outcome.kind === 'cancelled' || this.accountEpoch !== epoch) {
       logger.debug(
         `Sync cycle result dropped: the account was disabled mid-cycle (${outcome.kind})`
       );
-      return outcome;
+      return { kind: 'cancelled' };
     }
     if (outcome.kind === 'signed-out') {
       await this.bestEffort(() => this.handleAuthLoss(), 'auth-loss cleanup');
@@ -377,7 +388,7 @@ export class SyncEngine {
   }
 
   /** The cycle proper: everything syncNow reports on, with none of the bookkeeping it does after. */
-  private async runCycle(): Promise<SyncOutcome> {
+  private async runCycle(epoch: number): Promise<SyncNowResult> {
     if (this.dk === null || this.keyId === null) {
       return { kind: 'no-key' };
     }
@@ -390,12 +401,18 @@ export class SyncEngine {
       strategy: this.strategy,
       now: this.now,
       onQuarantine: this.deps.onQuarantine,
+      // syncNow's epoch gate only drops the bookkeeping, and by the time it runs every pulled
+      // record has already been written locally — this is what stops those writes mid-page.
+      isCancelled: () => this.accountEpoch !== epoch,
     };
     let pull: PullResult;
     try {
       pull = await pullOnce(cycleDeps);
     } catch (err) {
       return this.cycleFailure(err);
+    }
+    if (pull.kind === 'cancelled') {
+      return { kind: 'cancelled' };
     }
 
     // Push still runs after a stalled pull — outbound changes must not be held hostage by an
@@ -404,7 +421,9 @@ export class SyncEngine {
     // Boxed, not bare: a thrown `undefined` is still a push failure worth reporting.
     let outrankedPush: { error: unknown } | undefined;
     try {
-      await pushOnce(cycleDeps);
+      if ((await pushOnce(cycleDeps)) === 'cancelled') {
+        return { kind: 'cancelled' };
+      }
     } catch (err) {
       const failure = this.cycleFailure(err);
       if (failure.kind === 'signed-out' || pull.kind !== 'stalled') {
@@ -811,6 +830,20 @@ export class SyncEngine {
       }
       await this.tracker.markMutatedBulk(binding.name, entityIds);
     }
+  }
+
+  // Only the cursor: the rest of a surviving ledger is re-stamped by backfillDirty or resolved by
+  // the strategy, and the cursor is the one field whose staleness silently skips history.
+  private async resetPullCursor(): Promise<void> {
+    const meta = await this.meta.load();
+    if (meta.cursor === 0) {
+      return;
+    }
+    // Error, not warn, like every other report here: the app embedding this ships logLevel
+    // 'error', so a warn would be unreachable by anyone able to act on it.
+    logger.error('Cloud sync discarded a pull cursor that outlived its account');
+    meta.cursor = 0;
+    await this.meta.save(meta);
   }
 
   private async resetMeta(): Promise<void> {

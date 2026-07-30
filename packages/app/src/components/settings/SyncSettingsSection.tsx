@@ -1,5 +1,5 @@
 import { describeThrown, logger } from '@cuewise/shared';
-import type { SyncFailureReason, SyncOutcome } from '@cuewise/sync-engine';
+import type { SyncFailureReason, SyncNowResult, SyncOutcome } from '@cuewise/sync-engine';
 import { cn } from '@cuewise/ui';
 import { AlertTriangle, CloudUpload, KeyRound, Loader2, RefreshCw } from 'lucide-react';
 import type React from 'react';
@@ -108,7 +108,7 @@ function failureMessage(reason: SyncFailureReason): string {
 
 // Called wherever an outcome arrives, never from failureMessage — render calls that every paint.
 // Without it the fallback copy is indistinguishable from a genuine no-key/resynced/signed-out one.
-function logUnrecognisedReason(outcome: SyncOutcome | null): void {
+function logUnrecognisedReason(outcome: SyncNowResult | null): void {
   if (outcome === null || outcome.kind !== 'failed') {
     return;
   }
@@ -544,6 +544,11 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       // Above the guard: a build/skew defect is not this account's outcome, so a superseded click
       // must not drop the only evidence of it.
       logUnrecognisedReason(outcome);
+      if (outcome.kind === 'cancelled') {
+        // A disable landed mid-cycle: no cycle to paint, no account to toast about, and no
+        // details left to refresh below.
+        return;
+      }
       // Only an account change retires this click: the cycle then belongs to an account the panel
       // no longer shows, so neither badge nor toast may speak for it.
       if (accountGenRef.current === accountGen) {
