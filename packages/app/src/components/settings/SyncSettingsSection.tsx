@@ -391,23 +391,27 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
 
   // A disconnect landed mid-enable, so the switch must stop reading on.
   const routeAbandonedEnable = (recoveryCode: string | undefined) => {
-    logger.error('Cloud sync enable was abandoned by a disconnect');
     setEnabling(false);
     // The enroll modal is a prompt to finish joining an account this device is no longer joining;
     // left open, its Enroll button starts a fresh sign-in for it.
     setEnrollOpen(false);
     if (recoveryCode === undefined) {
+      // Nothing minted means nothing outlives the attempt: the user's own action, not a fault.
+      logger.info('Cloud sync enable was abandoned by a disconnect');
       return;
     }
+    logger.error('Cloud sync enable was abandoned after creating an account on the server');
     if (mountedRef.current) {
       surfaceRecoveryCode(recoveryCode);
       useToastStore.getState().warning(ABANDONED_CODE_MESSAGE);
       return;
     }
     // No modal to render into, and Regenerate cannot mint a replacement, so the code itself has
-    // to travel in the message — losing it strands the account this attempt created.
-    logger.error('Cloud sync issued a recovery code after Settings closed — it had no surface');
-    useToastStore.getState().warning(`${ABANDONED_CODE_MESSAGE} ${recoveryCode}`);
+    // to travel in the message — and it must not time out like an ordinary toast.
+    logger.error('Cloud sync issued a recovery code after Settings closed — it went to a toast');
+    useToastStore
+      .getState()
+      .warning(`${ABANDONED_CODE_MESSAGE} ${recoveryCode}`, { duration: Number.POSITIVE_INFINITY });
   };
 
   // Shared by the initial enable() and the reconnect() flows — both surface the same shape.

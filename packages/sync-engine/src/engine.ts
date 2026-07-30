@@ -288,7 +288,7 @@ export class SyncEngine {
     // Re-checked after the write: the flag left set with no key makes the next start() demand a
     // recovery code for the account the user disconnected.
     if (this.enrollSuperseded(epoch)) {
-      await this.rollbackKey(CLOUD_SYNC_ENABLED_KEY, 'its enabled flag');
+      await this.rollbackKey(CLOUD_SYNC_ENABLED_KEY, 'its enabled flag', 'abandoned an enable');
       await this.abandonEnroll(enrolled.recoveryCodeToShow);
       return;
     }
@@ -301,10 +301,10 @@ export class SyncEngine {
    * than throwing, so bestEffort alone would call a failed rollback a success — and a surviving
    * enabled flag lands the next start() on needs_enroll, demanding a code for a removed account.
    */
-  private async rollbackKey(key: string, what: string): Promise<void> {
+  private async rollbackKey(key: string, what: string, subject: string): Promise<void> {
     const removed = await this.bestEffortRemove(key);
     if (!removed) {
-      logger.error(`Cloud sync abandoned an enable but could not remove ${what}: ${key}`);
+      logger.error(`Cloud sync ${subject} but could not remove ${what}: ${key}`);
     }
   }
 
@@ -337,7 +337,7 @@ export class SyncEngine {
     // held here so the method is a complete rollback rather than one that relies on its caller.
     this.dk = null;
     this.keyId = null;
-    await this.rollbackKey(SYNC_DATA_KEY, 'its data key');
+    await this.rollbackKey(SYNC_DATA_KEY, 'its data key', 'abandoned an enable');
     // disableSync cleared the session before this enroll's saveToken wrote it, so a live token
     // for the disconnected account survives unless this removes it — and `clear` reports failure
     // by returning false, exactly as `remove` does.
@@ -498,8 +498,8 @@ export class SyncEngine {
   private async rollbackCycleRecord(): Promise<void> {
     this.lastSyncedAt = null;
     this.lastCycle = null;
-    await this.rollbackKey(LAST_SYNCED_AT_KEY, 'the last-synced stamp');
-    await this.rollbackKey(LAST_CYCLE_KEY, 'the last cycle record');
+    await this.rollbackKey(LAST_SYNCED_AT_KEY, 'the last-synced stamp', 'retired a cycle');
+    await this.rollbackKey(LAST_CYCLE_KEY, 'the last cycle record', 'retired a cycle');
   }
 
   /** The cycle proper: everything syncNow reports on, with none of the bookkeeping it does after. */

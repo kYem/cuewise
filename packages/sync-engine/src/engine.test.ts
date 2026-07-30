@@ -2597,10 +2597,25 @@ describe('SyncEngine.regenerateRecoveryCode', () => {
     useStorage(device);
     await device.engine.enableSync('dev', 'cred-a', 'Device A');
 
+    const dk = await loadPersistedDataKey(device.kv);
+    expect(dk).not.toBeNull();
+    if (dk === null) {
+      throw new Error('data key missing before the race');
+    }
+
     const regenerating = device.engine.regenerateRecoveryCode();
     await device.engine.disableSync();
+    const code = await regenerating;
 
-    await expect(regenerating).resolves.toEqual(expect.any(String));
+    // Not merely "did not throw": the defect is a code that opens nothing, which is what the
+    // whole area exists to prevent — a graceful bail-out would satisfy a resolves-to-string.
+    const envelope = server.getRecoveryEnvelope();
+    expect(envelope).not.toBeNull();
+    if (envelope === null) {
+      throw new Error('envelope missing after regenerate');
+    }
+    const mk = await deriveMasterKey(await parseRecoveryCode(code));
+    expect((await unwrapDataKey(mk, envelope.envelope)).dk).toEqual(dk.dk);
   });
 
   it('rotates the recovery code: the old code stops unwrapping, the new one works', async () => {

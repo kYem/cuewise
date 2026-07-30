@@ -292,11 +292,15 @@ describe('SyncSettingsSectionComponent', () => {
 
     // Once: the closed-panel path used to warn from here AND from surfaceRecoveryCode.
     expect(toastWarning).toHaveBeenCalledTimes(1);
-    expect(toastWarning).toHaveBeenCalledWith(expect.stringContaining(CODE));
+    // And it must not time out — it is the only surface the code gets.
+    expect(toastWarning).toHaveBeenCalledWith(expect.stringContaining(CODE), {
+      duration: Number.POSITIVE_INFINITY,
+    });
   });
 
   it('closes the enable form when a disconnect abandons it, with nothing to show', async () => {
     const user = userEvent.setup();
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
     const controller = new FakeSyncController();
     controller.scriptEnableWithGoogle({ ok: false, reason: 'cancelled' });
     renderSection(controller);
@@ -308,6 +312,8 @@ describe('SyncSettingsSectionComponent', () => {
     expect(screen.queryByText('Save your recovery code')).not.toBeInTheDocument();
     expect(toastError).not.toHaveBeenCalled();
     expect(toastWarning).not.toHaveBeenCalled();
+    // Nothing was stranded, so this is the user's own action rather than a fault to report.
+    expect(errorSpy).not.toHaveBeenCalled();
   });
 
   it('still toasts a real failure whose thrown message happens to read "cancelled"', async () => {
