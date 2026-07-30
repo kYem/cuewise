@@ -14,6 +14,7 @@ export {
   CLOUD_SYNC_ENABLED_KEY,
   type EnableSyncOptions,
   type EngineApiClient,
+  LAST_CYCLE_KEY,
   LAST_SYNCED_AT_KEY,
   SyncEngine,
   type SyncEngineDeps,
@@ -54,4 +55,9 @@ export {
   type RecordBody,
   type Resolution,
 } from './strategy';
-export { classifySyncFailure, type SyncFailureReason, type SyncOutcome } from './sync-outcome';
+export {
+  classifySyncFailure,
+  type SyncCycle,
+  type SyncFailureReason,
+  type SyncOutcome,
+} from './sync-outcome';

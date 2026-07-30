@@ -29,12 +29,25 @@ import {
 import { SyncMetadataStore } from './metadata-store';
 import { MutationTracker } from './mutation-tracker';
 import { type ConflictStrategy, LwwHlcStrategy } from './strategy';
-import { classifySyncFailure, type SyncOutcome } from './sync-outcome';
+import {
+  classifySyncFailure,
+  parsePersistedSyncCycle,
+  type SyncCycle,
+  type SyncOutcome,
+  toPersistedSyncCycle,
+} from './sync-outcome';
 
 export const CLOUD_SYNC_ENABLED_KEY = 'cloudSyncEnabled';
 
 /** Millis timestamp of the last successful sync cycle; survives restarts for the details UI. */
 export const LAST_SYNCED_AT_KEY = 'cuewise.sync.lastSyncedAt';
+
+/**
+ * The last cycle's reduced record. Persisted for the same reason as the stamp above, and it matters
+ * more: an MV3 worker is torn down between pull wakes, so an in-memory-only failure is gone by the
+ * time the user opens Settings — leaving the hydrated "Last synced" as the only thing on screen.
+ */
+export const LAST_CYCLE_KEY = 'cuewise.sync.lastCycle';
 
 // The periodic pull backstop cadence (spec §3: "~5 min"); foreground opens trigger sooner via syncNow.
 const PULL_REARM_MINUTES = 5;
@@ -119,7 +132,7 @@ export class SyncEngine {
   private dk: DataKey | null = null;
   private keyId: string | null = null;
   private lastSyncedAt: number | null = null;
-  private lastCycle: { at: number; outcome: SyncOutcome } | null = null;
+  private lastCycle: SyncCycle | null = null;
 
   constructor(private readonly deps: SyncEngineDeps) {
     this.now = deps.now ?? Date.now;
@@ -230,6 +243,7 @@ export class SyncEngine {
     await this.deps.keyStore.remove(SYNC_DATA_KEY, 'local');
     await this.deps.keyStore.remove(CLOUD_SYNC_ENABLED_KEY, 'local');
     await this.deps.keyStore.remove(LAST_SYNCED_AT_KEY, 'local');
+    await this.deps.keyStore.remove(LAST_CYCLE_KEY, 'local');
     await this.resetMeta();
     this.dk = null;
     this.keyId = null;
@@ -270,7 +284,9 @@ export class SyncEngine {
         error: outcome.error,
       });
     }
-    this.lastCycle = { at: this.now(), outcome };
+    const cycle: SyncCycle = { at: this.now(), outcome };
+    this.lastCycle = cycle;
+    await this.bestEffort(() => this.persistLastCycle(cycle), 'last-cycle persist');
     return outcome;
   }
 
@@ -365,11 +381,28 @@ export class SyncEngine {
     }
   }
 
+  /**
+   * Stored on every cycle, not only failures: a stale failure must not outlive the success that
+   * followed it. Error-level on failure, unlike the stamp above — losing this record is what lets a
+   * wedged device report nothing but "Last synced" after the next worker teardown.
+   */
+  private async persistLastCycle(cycle: SyncCycle): Promise<void> {
+    const result = await this.deps.keyStore.set(
+      LAST_CYCLE_KEY,
+      toPersistedSyncCycle(cycle),
+      'local'
+    );
+    if (!result.success) {
+      logger.error(`Failed to persist the last sync cycle: ${result.error.message}`, result.error);
+    }
+  }
+
   getLastSyncedAt(): number | null {
     return this.lastSyncedAt;
   }
 
-  getLastCycle(): { at: number; outcome: SyncOutcome } | null {
+  /** The in-session answer carries the failure's `error`; one hydrated after a restart does not. */
+  getLastCycle(): SyncCycle | null {
     return this.lastCycle;
   }
 
@@ -404,6 +437,20 @@ export class SyncEngine {
     const persistedLastSynced = await this.deps.keyStore.get<number>(LAST_SYNCED_AT_KEY, 'local');
     if (typeof persistedLastSynced === 'number') {
       this.lastSyncedAt = persistedLastSynced;
+    }
+
+    // And the cycle beside it, before this process runs one of its own: a control message answered
+    // during start() must not report "no cycle" for a device that has been failing for an hour.
+    const persistedCycle = await this.deps.keyStore.get<unknown>(LAST_CYCLE_KEY, 'local');
+    if (persistedCycle !== null) {
+      const hydrated = parsePersistedSyncCycle(persistedCycle);
+      if (hydrated === null) {
+        logger.error('The stored last sync cycle is not a cycle record; ignoring it', {
+          key: LAST_CYCLE_KEY,
+        });
+      } else {
+        this.lastCycle = hydrated;
+      }
     }
 
     try {
