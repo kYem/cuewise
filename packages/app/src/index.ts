@@ -27,6 +27,7 @@ export { useToastStore } from './stores/toast-store';
 // drives; host adapters (macOS/extension) implement SyncController and provide it.
 export type {
   EnableResult,
+  LastCycleRead,
   SyncController,
   SyncDetails,
   SyncUiStatus,
@@ -34,6 +35,7 @@ export type {
 export {
   AUTH_CANCELLED_DETAIL,
   buildSyncDetails,
+  LAST_CYCLE_UNAVAILABLE,
   SyncControllerContext,
   useSyncController,
 } from './sync/sync-controller';

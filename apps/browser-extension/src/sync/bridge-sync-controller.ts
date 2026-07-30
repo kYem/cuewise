@@ -1,6 +1,17 @@
-import type { EnableResult, SyncController, SyncDetails, SyncUiStatus } from '@cuewise/app';
-import { logger } from '@cuewise/shared';
-import { CLOUD_SYNC_ENABLED_KEY, type SyncSignInProvider } from '@cuewise/sync-engine';
+import type {
+  EnableResult,
+  LastCycleRead,
+  SyncController,
+  SyncDetails,
+  SyncUiStatus,
+} from '@cuewise/app';
+import { LAST_CYCLE_UNAVAILABLE } from '@cuewise/app';
+import { describeThrown, logger } from '@cuewise/shared';
+import {
+  CLOUD_SYNC_ENABLED_KEY,
+  type SyncOutcome,
+  type SyncSignInProvider,
+} from '@cuewise/sync-engine';
 import type {
   SyncControlMessage,
   SyncControlOp,
@@ -236,12 +247,27 @@ export class BridgeSyncController implements SyncController {
   }
 
   // No transient 'syncing' emission: the SW's onStatus trampoline never emits it either,
-  // so adding one here would be a page-only flicker the background can't corroborate.
-  async syncNow(): Promise<void> {
+  // so adding one here would be a page-only flicker the background can't corroborate. Two
+  // guards, not one: an ok:false response (a non-conforming engine's op-level throw) and an
+  // ok:true response with no outcome (a skewed SW) are different failures, both rejections.
+  async syncNow(): Promise<SyncOutcome> {
     const response = await this.send({ kind: 'cuewise-sync-control', op: 'syncNow' });
-    if (!response.ok) {
-      throw new Error(response.reason);
+    // `response?.ok` like every sibling: a dead worker resolves undefined, where a bare `.ok`
+    // throws a TypeError naming nothing. The SW hardcodes reason:'error' for this op, so `detail`
+    // is the only field naming the cause — carry it or the message says nothing every time.
+    if (!response?.ok) {
+      const reason = response?.reason ?? 'no response from the background';
+      const detail = response?.detail;
+      throw new Error(
+        detail === undefined
+          ? `Sync now failed: ${reason}`
+          : `Sync now failed: ${reason} — ${detail}`
+      );
     }
+    if (response.kind !== 'outcome') {
+      throw new Error('Sync now response missing an outcome');
+    }
+    return response.outcome;
   }
 
   private setStatus(status: SyncUiStatus): void {
@@ -320,6 +346,46 @@ export class BridgeSyncController implements SyncController {
       const detail = error instanceof Error ? error.message : String(error);
       logger.warn(`Sync details control message failed: ${detail}`);
       return null;
+    }
+  }
+
+  /** Names which of the three unavailable causes this was; `reason` is present on every ok:false. */
+  private static describeUnavailableCause(
+    response: SyncOpResponse['getLastCycle'] | undefined
+  ): string {
+    // Null as well as undefined: the wire is untyped, and reading `.ok` off a null answer would
+    // turn this diagnostic into the throw the outer catch then reports instead of the cause.
+    if (response === undefined || response === null) {
+      return 'no response from the background';
+    }
+    if (response.ok === false) {
+      const detail = response.detail === undefined ? '' : ` — ${response.detail}`;
+      return `the background reported ${response.reason}${detail}`;
+    }
+    return 'a response carrying no lastCycle payload';
+  }
+
+  // Every unreadable path answers LAST_CYCLE_UNAVAILABLE, never a null outcome: a dead worker, a
+  // timeout and a skewed response say nothing about the cycle, so the panel must keep its badge.
+  async getLastCycle(): Promise<LastCycleRead> {
+    try {
+      // Same shape of guard as getDetails: the wire is untyped, so a skewed SW's {ok:true} with
+      // no lastCycle kind tag must read as "unavailable", not silently become undefined.
+      const response = await this.send({ kind: 'cuewise-sync-control', op: 'getLastCycle' });
+      if (response?.ok && response.kind === 'lastCycle') {
+        return { available: true, outcome: response.outcome };
+      }
+      // error, not warn: the shipped logLevel is 'error', and a device that can never read its
+      // cycle shows Active with no badge — invisible to the user and the engineer alike. The cause
+      // must distinguish a silent worker from one that answered: a live worker reports an
+      // unreadable record this way, and blaming messaging for a storage fault points the wrong way.
+      logger.error(
+        `Sync last-cycle outcome unavailable: ${BridgeSyncController.describeUnavailableCause(response)}`
+      );
+      return LAST_CYCLE_UNAVAILABLE;
+    } catch (error) {
+      logger.error(`Sync last-cycle control message failed: ${describeThrown(error)}`, error);
+      return LAST_CYCLE_UNAVAILABLE;
     }
   }
 

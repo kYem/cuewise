@@ -147,6 +147,23 @@ class ConsoleLogger implements Logger {
   }
 }
 
+/**
+ * Message text for an unknown throw, for the many places that put the cause in a string so it
+ * survives string-coercing surfaces. Safe on values `String()` itself throws on — a null-prototype
+ * object has no Symbol.toPrimitive/toString, so coercing one inside a catch turns a handled failure
+ * into an unhandled one.
+ */
+export function describeThrown(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  try {
+    return String(error);
+  } catch {
+    return '[unstringifiable value]';
+  }
+}
+
 // Global logger instance
 let globalLogger: Logger = new ConsoleLogger();
 

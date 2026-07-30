@@ -14,8 +14,10 @@ export class FakeKvStore implements KeyValueStore {
   // Single Map backend, area ignored — matches LocalStorageKeyValueStore's `false`, not chrome.storage.
   readonly supportsSync = false;
   failNextSet = false;
-  /** While set, every write to exactly this key fails — for targeting one write among many. */
+  /** While set, writes to exactly this key return a failure Result — one write among many. */
   failSetsForKey: string | null = null;
+  /** While set, writes to exactly this key reject instead, as a faulty adapter would. */
+  throwSetsForKey: string | null = null;
   /** While set, a batch read naming exactly this key reports failure instead of absence. */
   failGetManyForKey: string | null = null;
   /** While set, this key reads back as stored-but-unreadable. */
@@ -35,6 +37,9 @@ export class FakeKvStore implements KeyValueStore {
     }
     if (this.failSetsForKey === key) {
       return storageFailure('quota exceeded');
+    }
+    if (this.throwSetsForKey === key) {
+      throw new Error(`FakeKvStore: simulated adapter fault writing ${key}`);
     }
     this.data.set(key, structuredClone(value));
     return { success: true };
@@ -70,7 +75,7 @@ export class FakeKvStore implements KeyValueStore {
     return [...this.data.keys()].filter((key) => key.startsWith(prefix));
   }
 
-  // Routes through set() so failNextSet / failSetsForKey still apply to batch writes.
+  // Routes through set() so failNextSet / failSetsForKey / throwSetsForKey apply to batch writes.
   async setMany(entries: Record<string, unknown>, area: StorageArea): Promise<StorageResult> {
     for (const [key, value] of Object.entries(entries)) {
       const result = await this.set(key, value, area);

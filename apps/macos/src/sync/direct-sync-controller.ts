@@ -1,5 +1,11 @@
-import type { EnableResult, SyncController, SyncDetails, SyncUiStatus } from '@cuewise/app';
-import { AUTH_CANCELLED_DETAIL, buildSyncDetails } from '@cuewise/app';
+import type {
+  EnableResult,
+  LastCycleRead,
+  SyncController,
+  SyncDetails,
+  SyncUiStatus,
+} from '@cuewise/app';
+import { AUTH_CANCELLED_DETAIL, buildSyncDetails, LAST_CYCLE_UNAVAILABLE } from '@cuewise/app';
 import { type KeyValueStore, logger, type Scheduler } from '@cuewise/shared';
 import { ApiError } from '@cuewise/sync-client';
 import {
@@ -8,6 +14,7 @@ import {
   RecoveryCodeRequiredError,
   type SyncEngine,
   type SyncEngineControlSurface,
+  type SyncOutcome,
   type SyncSignInProvider,
   type SyncStatus,
 } from '@cuewise/sync-engine';
@@ -351,17 +358,30 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
     async regenerateRecoveryCode(): Promise<string> {
       return engine.regenerateRecoveryCode();
     },
-    async syncNow(): Promise<void> {
+    async syncNow(): Promise<SyncOutcome> {
       emit('syncing');
       // Reconcile in finally so an engine throw doesn't strand the pill on "Syncing…".
       try {
-        await engine.syncNow();
+        return await engine.syncNow();
       } finally {
         emit(mapStatus(engine.getStatus()));
       }
     },
     async getDetails(): Promise<SyncDetails | null> {
+      // Hydration owns lastSyncedAt too; without this the stamp is only correct because
+      // getAccount's network hop happens to outlast two local reads.
+      await engine.ensureHydrated();
       return buildSyncDetails(await engine.getAccount(), engine.getLastSyncedAt());
+    },
+    async getLastCycle(): Promise<LastCycleRead> {
+      // No realm to be unreachable across, but the record still comes from storage: an unreadable
+      // one is reported as unavailable, never as "no cycle has run".
+      await engine.ensureHydrated();
+      const read = engine.getLastCycle();
+      if (!read.known) {
+        return LAST_CYCLE_UNAVAILABLE;
+      }
+      return { available: true, outcome: read.cycle === null ? null : read.cycle.outcome };
     },
   };
 

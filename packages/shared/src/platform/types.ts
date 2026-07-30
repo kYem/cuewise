@@ -96,6 +96,11 @@ export interface KeyValueStore {
   readonly supportsSync: boolean;
   get<T>(key: string, area: StorageArea): Promise<T | null>;
   set<T>(key: string, value: T, area: StorageArea): Promise<StorageResult>;
+  /**
+   * Idempotent, like removeMany: a key that was already absent is removed, not a failure. `false`
+   * means the removal itself failed — callers log that, so returning it for "nothing to delete"
+   * turns an ordinary disable into an error report.
+   */
   remove(key: string, area: StorageArea): Promise<boolean>;
   /**
    * Batch read; `null` when the read failed. Absent keys are omitted from a successful result —

@@ -548,6 +548,11 @@ describe('BridgeSyncController: disable / syncNow', () => {
   });
 
   it('sends the syncNow op', async () => {
+    runtime.sendMessage.mockResolvedValueOnce({
+      ok: true,
+      kind: 'outcome',
+      outcome: { kind: 'synced' },
+    });
     const controller = new BridgeSyncController();
 
     await controller.syncNow();
@@ -565,11 +570,17 @@ describe('BridgeSyncController: disable / syncNow', () => {
     await expect(controller.disable()).resolves.toBeUndefined();
   });
 
-  it('resolves syncNow() on an ok response', async () => {
-    runtime.sendMessage.mockResolvedValueOnce({ ok: true });
+  it('returns the outcome from the response instead of discarding it', async () => {
+    runtime.sendMessage.mockResolvedValueOnce({
+      ok: true,
+      kind: 'outcome',
+      outcome: { kind: 'resynced' },
+    });
     const controller = new BridgeSyncController();
 
-    await expect(controller.syncNow()).resolves.toBeUndefined();
+    const outcome = await controller.syncNow();
+
+    expect(outcome).toEqual({ kind: 'resynced' });
   });
 
   it('rejects disable() on a non-ok response instead of resolving silently', async () => {
@@ -581,6 +592,34 @@ describe('BridgeSyncController: disable / syncNow', () => {
 
   it('rejects syncNow() on a non-ok response instead of resolving silently', async () => {
     runtime.sendMessage.mockResolvedValueOnce({ ok: false, reason: 'error' });
+    const controller = new BridgeSyncController();
+
+    await expect(controller.syncNow()).rejects.toThrow();
+  });
+
+  // The shape the SW actually emits for this op (handle-sync-control-message's catch): both
+  // producers hardcode reason:'error', so a message without `detail` names nothing at all.
+  it("carries the worker's reason AND detail into the syncNow rejection", async () => {
+    runtime.sendMessage.mockResolvedValueOnce({
+      ok: false,
+      reason: 'error',
+      detail: 'quota exceeded',
+    });
+    const controller = new BridgeSyncController();
+
+    await expect(controller.syncNow()).rejects.toThrow(/quota exceeded/);
+  });
+
+  it('rejects syncNow() with a named failure when a dead worker resolves undefined', async () => {
+    runtime.sendMessage.mockResolvedValueOnce(undefined as never);
+    const controller = new BridgeSyncController();
+
+    // Not a TypeError from reading `.ok` off undefined — that says nothing about what happened.
+    await expect(controller.syncNow()).rejects.toThrow(/no response from the background/);
+  });
+
+  it('rejects when an ok syncNow response carries no outcome (skewed SW)', async () => {
+    runtime.sendMessage.mockResolvedValueOnce({ ok: true } as never);
     const controller = new BridgeSyncController();
 
     await expect(controller.syncNow()).rejects.toThrow();
@@ -598,6 +637,105 @@ describe('BridgeSyncController: disable / syncNow', () => {
     const controller = new BridgeSyncController({ timeoutMs: 10 });
 
     await expect(controller.syncNow()).rejects.toThrow();
+  });
+});
+
+describe('BridgeSyncController: getLastCycle', () => {
+  it('sends the getLastCycle op and returns the relayed outcome', async () => {
+    runtime.sendMessage.mockResolvedValueOnce({
+      ok: true,
+      kind: 'lastCycle',
+      outcome: { kind: 'failed', reason: 'network', error: new Error('offline') },
+    });
+    const controller = new BridgeSyncController();
+
+    const read = await controller.getLastCycle();
+
+    expect(read).toEqual({
+      available: true,
+      outcome: { kind: 'failed', reason: 'network', error: expect.any(Error) },
+    });
+    expect(runtime.sendMessage).toHaveBeenCalledWith({
+      kind: 'cuewise-sync-control',
+      op: 'getLastCycle',
+    });
+  });
+
+  it('reports an available read with no outcome when no cycle has run yet', async () => {
+    runtime.sendMessage.mockResolvedValueOnce({ ok: true, kind: 'lastCycle', outcome: null });
+    const controller = new BridgeSyncController();
+
+    await expect(controller.getLastCycle()).resolves.toEqual({ available: true, outcome: null });
+  });
+
+  it('reports unavailable — never "no cycle" — when messaging fails', async () => {
+    // A dead/asleep worker says nothing about the cycle; answering {outcome:null} would wipe a
+    // failure badge a previous read painted. Error level: the shipped logLevel is 'error', and a
+    // device that can never read its cycle shows Active with no badge at all.
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    runtime.sendMessage.mockRejectedValueOnce(new Error('no SW'));
+    const controller = new BridgeSyncController();
+
+    await expect(controller.getLastCycle()).resolves.toEqual({ available: false });
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Sync last-cycle control message failed: no SW',
+      expect.any(Error)
+    );
+    errorSpy.mockRestore();
+  });
+
+  it('reports unavailable when the send times out', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    runtime.sendMessage.mockImplementation(() => new Promise(() => {}));
+    const controller = new BridgeSyncController({ timeoutMs: 10 });
+
+    await expect(controller.getLastCycle()).resolves.toEqual({ available: false });
+    expect(errorSpy).toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
+  it('reports unavailable when a legacy SW answers ok with no lastCycle kind tag', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    runtime.sendMessage.mockResolvedValueOnce({ ok: true } as never);
+    const controller = new BridgeSyncController();
+
+    await expect(controller.getLastCycle()).resolves.toEqual({ available: false });
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Sync last-cycle outcome unavailable: a response carrying no lastCycle payload'
+    );
+    errorSpy.mockRestore();
+  });
+
+  it('names the storage cause when a live worker reports its record unreadable', async () => {
+    // The seam joining the engine's {known:false} to the panel keeping its badge. Without the
+    // detail the log blames messaging for what is a storage fault.
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    runtime.sendMessage.mockResolvedValueOnce({
+      ok: false,
+      reason: 'error',
+      detail: 'last cycle unreadable',
+    });
+    const controller = new BridgeSyncController();
+
+    await expect(controller.getLastCycle()).resolves.toEqual({ available: false });
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Sync last-cycle outcome unavailable: the background reported error — last cycle unreadable'
+    );
+    errorSpy.mockRestore();
+  });
+
+  it('does not blame a silent worker when a live one answered without a detail', async () => {
+    // background.ts's port-closing fallback answers {ok:false, reason:'error'} with no detail; the
+    // old text called that "no responder", pointing at messaging for a handler that did respond.
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    runtime.sendMessage.mockResolvedValueOnce({ ok: false, reason: 'error' });
+    const controller = new BridgeSyncController();
+
+    await expect(controller.getLastCycle()).resolves.toEqual({ available: false });
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Sync last-cycle outcome unavailable: the background reported error'
+    );
+    errorSpy.mockRestore();
   });
 });
 

@@ -1,5 +1,5 @@
 import type { EnableResult, SyncDetails } from '@cuewise/app';
-import type { SyncSignInProvider } from '@cuewise/sync-engine';
+import type { SyncOutcome, SyncSignInProvider } from '@cuewise/sync-engine';
 import { z } from 'zod/mini';
 
 // One source of truth for the op list and its type, so the runtime guard can't desync from the union.
@@ -10,6 +10,7 @@ export const SYNC_CONTROL_OPS = [
   'regenerate',
   'syncNow',
   'details',
+  'getLastCycle',
 ] as const;
 export type SyncControlOp = (typeof SYNC_CONTROL_OPS)[number];
 
@@ -46,6 +47,20 @@ export interface SyncDetailsResponse {
   details: SyncDetails | null;
 }
 
+/** Response to the 'syncNow' op — same kept-out-of-SyncControlResponse shape as SyncDetailsResponse. */
+export interface SyncOutcomeResponse {
+  ok: true;
+  kind: 'outcome';
+  outcome: SyncOutcome;
+}
+
+/** Response to the 'getLastCycle' op; `outcome` is null until the first cycle has run. */
+export interface SyncLastCycleResponse {
+  ok: true;
+  kind: 'lastCycle';
+  outcome: SyncOutcome | null;
+}
+
 /**
  * Ties each op to the response shape its SW handler produces, so the bridge's send<O> can't
  * silently mis-assume one (adding an op without an entry here is a compile error at send).
@@ -55,8 +70,13 @@ export interface SyncOpResponse {
   reconnect: SyncControlResponse;
   disable: SyncControlResponse;
   regenerate: SyncControlResponse;
-  syncNow: SyncControlResponse;
-  details: SyncDetailsResponse;
+  // Honestly both shapes: the router's error fallback answers ANY op with a failed
+  // SyncControlResponse, so the bridge must narrow on `ok` rather than assume an outcome. That
+  // applies to every op, so the read-only two carry it too — declaring them `ok:true` only would
+  // mark the bridge's load-bearing `ok`/`kind` guards as redundancies safe to delete.
+  syncNow: SyncOutcomeResponse | Extract<SyncControlResponse, { ok: false }>;
+  details: SyncDetailsResponse | Extract<SyncControlResponse, { ok: false }>;
+  getLastCycle: SyncLastCycleResponse | Extract<SyncControlResponse, { ok: false }>;
 }
 
 /** Any op's response — derived from the map so the two never drift. */

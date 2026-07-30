@@ -171,8 +171,11 @@ describe('pullOnce', () => {
       storageFailure('quota exceeded')
     );
 
-    await pullOnce(makeDeps({ bindings }));
+    const result = await pullOnce(makeDeps({ bindings }));
 
+    // Reported as stopped-early, naming the record: a completed-pull result here is what let a
+    // permanently wedged device report `synced` and stamp "Last synced just now".
+    expect(result).toEqual({ kind: 'stalled', collection: 'goals', entityId: 'g1' });
     const saved = await metaStore.load();
     expect(saved.cursor).toBe(0);
     expect(saved.hlcs['goals/g1']).toBeUndefined();
@@ -186,6 +189,41 @@ describe('pullOnce', () => {
         error: expect.objectContaining({ message: 'quota exceeded' }),
       })
     );
+    errorSpy.mockRestore();
+  });
+
+  it('keeps the progress made earlier in the page when a later record stalls the pull', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const goal = goalFactory.build({ id: 'g1' });
+    const sealed = await sealRecord(dk, 'goals', 'g1', { entity: goal, hlc: NEWER_HLC }, 1);
+    const poisoned: SyncRecord = { ...sealed, ciphertext: 'garbage' };
+    const wedging = await sealRecord(
+      dk,
+      'goals',
+      'g2',
+      { entity: goalFactory.build({ id: 'g2' }), hlc: NEWER_HLC },
+      2
+    );
+    transport.pullRecords = [poisoned, wedging];
+    const bindings = defaultBindings();
+    vi.spyOn(requireBinding(bindings, 'goals'), 'writeOne').mockResolvedValue(
+      storageFailure('quota exceeded')
+    );
+    const onQuarantine = vi.fn();
+
+    const first = await pullOnce(makeDeps({ bindings, onQuarantine }));
+
+    expect(first).toEqual({ kind: 'stalled', collection: 'goals', entityId: 'g2' });
+    const afterStall = await metaStore.load();
+    expect(afterStall.quarantine).toEqual(['goals/g1']);
+    expect(afterStall.cursor).toBe(1);
+
+    // Without that persisted progress the wedged device re-quarantines g1 on every 5-minute wake,
+    // re-toasting "a synced item couldn't be read" forever.
+    const second = await pullOnce(makeDeps({ bindings, onQuarantine }));
+
+    expect(second).toEqual({ kind: 'stalled', collection: 'goals', entityId: 'g2' });
+    expect(onQuarantine).toHaveBeenCalledTimes(1);
     errorSpy.mockRestore();
   });
 
@@ -233,6 +271,30 @@ describe('pullOnce', () => {
     expect(saved.cursor).toBe(0);
   });
 
+  it('reports a refused cursor rather than a completed pull', async () => {
+    const deps = makeDeps();
+    transport.rejectNextGetChangesWithResync();
+
+    const result = await pullOnce(deps);
+
+    expect(result).toEqual({ kind: 'resynced' });
+  });
+
+  it('serves the pull after a scripted resync refusal normally, since that script is one-shot', async () => {
+    transport.rejectNextGetChangesWithResync();
+
+    await expect(pullOnce(makeDeps())).resolves.toEqual({ kind: 'resynced' });
+    await expect(pullOnce(makeDeps())).resolves.toEqual({ kind: 'complete' });
+  });
+
+  it('reports a normal pull as complete', async () => {
+    const deps = makeDeps();
+
+    const result = await pullOnce(deps);
+
+    expect(result).toEqual({ kind: 'complete' });
+  });
+
   it('propagates a non-resync ApiError from getChanges without resetting the cursor', async () => {
     const meta = await metaStore.load();
     meta.cursor = 7;
@@ -253,7 +315,7 @@ describe('pullOnce', () => {
     const rec = await sealRecord(dk, 'goals', 'g1', { entity: incomingGoal, hlc: NEWER_HLC }, 1);
     transport.pullRecords = [rec];
 
-    await expect(pullOnce(makeDeps())).resolves.toBeUndefined();
+    await expect(pullOnce(makeDeps())).resolves.toEqual({ kind: 'complete' });
 
     const goals = await getGoals();
     expect(goals).toEqual([incomingGoal]);

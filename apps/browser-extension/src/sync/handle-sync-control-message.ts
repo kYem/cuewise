@@ -1,5 +1,5 @@
 import { buildSyncDetails } from '@cuewise/app';
-import { logger } from '@cuewise/shared';
+import { describeThrown, logger } from '@cuewise/shared';
 import { ApiError } from '@cuewise/sync-client';
 import {
   RecoveryCodeError,
@@ -12,6 +12,8 @@ import type {
   SyncControlMessage,
   SyncControlResponse,
   SyncDetailsResponse,
+  SyncLastCycleResponse,
+  SyncOutcomeResponse,
 } from './sync-control-messages';
 
 export interface SyncControlDeps {
@@ -42,7 +44,7 @@ async function doEnable(
     if (err instanceof ApiError && err.status === 401) {
       return { ok: false, reason: 'auth' };
     }
-    const detail = err instanceof Error ? err.message : String(err);
+    const detail = describeThrown(err);
     // Put the cause in the message text so it survives string-coercing surfaces (Chrome's Errors
     // panel); the Error arg still carries the stack in the console. Metadata only, never the token.
     logger.error(`Cloud sync enable failed: ${detail}`, err);
@@ -56,6 +58,9 @@ async function doEnable(
 
 /** Read-only details lookup — deliberately NOT serialized (see handleSyncControlMessage). */
 async function runDetails(engine: SyncEngineControlSurface): Promise<SyncDetailsResponse> {
+  // Hydration owns lastSyncedAt as well as the cycle; without this the stamp is only correct
+  // because getAccount's network hop happens to outlast two local reads on a cold worker.
+  await engine.ensureHydrated();
   // Informational for the settings UI; engine.getAccount never throws (null on any failure).
   return {
     ok: true,
@@ -64,11 +69,36 @@ async function runDetails(engine: SyncEngineControlSurface): Promise<SyncDetails
   };
 }
 
+/**
+ * Read-only last-cycle lookup — deliberately NOT serialized (see handleSyncControlMessage).
+ * Awaits hydration first: this listener is registered synchronously while start() waits on the
+ * settings migration, so a cold worker would otherwise answer "no cycle has run" for a device
+ * whose stored record says it has been failing for an hour.
+ */
+async function runLastCycle(
+  engine: SyncEngineControlSurface
+): Promise<SyncLastCycleResponse | Extract<SyncControlResponse, { ok: false }>> {
+  await engine.ensureHydrated();
+  const read = engine.getLastCycle();
+  if (!read.known) {
+    // Not `outcome:null` — that means "none ran" and would clear the badge. A failed response is
+    // what the bridge turns into LAST_CYCLE_UNAVAILABLE.
+    return { ok: false, reason: 'error', detail: 'last cycle unreadable' };
+  }
+  return {
+    ok: true,
+    kind: 'lastCycle',
+    outcome: read.cycle === null ? null : read.cycle.outcome,
+  };
+}
+
 async function runOp(
   engine: SyncEngineControlSurface,
-  msg: SyncControlMessage & { op: Exclude<SyncControlMessage['op'], 'details'> },
+  msg: SyncControlMessage & {
+    op: Exclude<SyncControlMessage['op'], 'details' | 'getLastCycle'>;
+  },
   deps: SyncControlDeps
-): Promise<SyncControlResponse> {
+): Promise<SyncControlResponse | SyncOutcomeResponse> {
   if (msg.op === 'enable') {
     // Runtime guard (the wire is untyped): reject an unknown provider or an empty credential/
     // device name, not just `undefined`. Log so a caller regression isn't a bare, detail-less error.
@@ -102,8 +132,7 @@ async function runOp(
       case 'regenerate':
         return { ok: true, recoveryCode: await engine.regenerateRecoveryCode() };
       case 'syncNow':
-        await engine.syncNow();
-        return { ok: true };
+        return { ok: true, kind: 'outcome', outcome: await engine.syncNow() };
       default: {
         // Exhaustiveness: a new SYNC_CONTROL_OPS entry is a compile error here — never a
         // silent fallthrough into some other operation.
@@ -114,7 +143,10 @@ async function runOp(
     }
   } catch (err) {
     logger.error(`Cloud sync control op '${msg.op}' failed`, err);
-    return { ok: false, reason: 'error', detail: err instanceof Error ? err.message : undefined };
+    // Coerced for a non-Error throw: without it the page realm's log names no cause at all, and the
+    // raw value is only visible in the worker's console. describeThrown, because a bare String() on
+    // a null-prototype object throws HERE and the router would answer nothing at all.
+    return { ok: false, reason: 'error', detail: describeThrown(err) };
   }
 }
 
@@ -144,6 +176,10 @@ export async function handleSyncControlMessage(
     // Read-only and side-effect-free — bypasses the mutex so a slow account fetch can never
     // delay a queued user action (e.g. a disable click) behind it.
     return runDetails(engine);
+  }
+  if (op === 'getLastCycle') {
+    // Same rationale as 'details': read-only, so it must never queue behind a pending op.
+    return runLastCycle(engine);
   }
   return serialize(() => runOp(engine, { ...msg, op }, deps));
 }

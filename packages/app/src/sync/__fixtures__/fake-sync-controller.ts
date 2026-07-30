@@ -1,4 +1,12 @@
-import type { EnableResult, SyncController, SyncDetails, SyncUiStatus } from '../sync-controller';
+import type { SyncOutcome } from '@cuewise/sync-engine';
+import type {
+  EnableResult,
+  LastCycleRead,
+  SyncController,
+  SyncDetails,
+  SyncUiStatus,
+} from '../sync-controller';
+import { LAST_CYCLE_UNAVAILABLE } from '../sync-controller';
 
 interface RecordedCall {
   method: string;
@@ -13,10 +21,12 @@ type FailableMethod =
   | 'disable'
   | 'regenerateRecoveryCode'
   | 'syncNow'
-  | 'getDetails';
+  | 'getDetails'
+  | 'getLastCycle';
 
 const DEFAULT_ENABLE_RESULT: EnableResult = { ok: true };
 const DEFAULT_RECOVERY_CODE = 'FAKE-RECOVERY-CODE';
+const DEFAULT_SYNC_OUTCOME: SyncOutcome = { kind: 'synced' };
 
 /** Scriptable SyncController fake for UI tests: settable status, queued enable/reconnect results, recorded calls. */
 export class FakeSyncController implements SyncController {
@@ -31,6 +41,8 @@ export class FakeSyncController implements SyncController {
   private readonly reconnectResults: EnableResult[] = [];
   private readonly enrollWithCodeResults: EnableResult[] = [];
   private readonly detailsResults: (SyncDetails | null)[] = [];
+  private readonly syncNowResults: SyncOutcome[] = [];
+  private lastCycleRead: LastCycleRead = { available: true, outcome: null };
   private readonly failingMethods = new Set<FailableMethod>();
   private deferredDisable = false;
   private pendingDisable: (() => void) | null = null;
@@ -38,6 +50,13 @@ export class FakeSyncController implements SyncController {
   private pendingGoogle: ((result: EnableResult) => void) | null = null;
   private deferredDetails = false;
   private pendingDetails: ((details: SyncDetails | null) => void) | null = null;
+  private deferredLastCycle = false;
+  private pendingLastCycle: ((read: LastCycleRead) => void) | null = null;
+  private deferredSyncNow = false;
+  private pendingSyncNow: {
+    resolve: (outcome: SyncOutcome) => void;
+    reject: (error: Error) => void;
+  } | null = null;
 
   /** Makes the next call to `method` reject with an Error instead of resolving; clears after firing once. */
   failNext(method: FailableMethod): void {
@@ -86,6 +105,47 @@ export class FakeSyncController implements SyncController {
     this.pendingDetails = null;
   }
 
+  /** Makes the next getLastCycle() hang until resolveLastCycle() releases it — for asserting read races. */
+  deferNextLastCycle(): void {
+    this.deferredLastCycle = true;
+  }
+
+  /** Releases a getLastCycle() call armed via deferNextLastCycle(). */
+  resolveLastCycle(outcome: SyncOutcome | null): void {
+    if (this.pendingLastCycle === null) {
+      throw new Error('FakeSyncController: no pending getLastCycle() to resolve');
+    }
+    this.pendingLastCycle({ available: true, outcome });
+    this.pendingLastCycle = null;
+  }
+
+  /** Makes the next syncNow() hang until resolveSyncNow() releases it — for asserting stale resolutions. */
+  deferNextSyncNow(): void {
+    this.deferredSyncNow = true;
+  }
+
+  /** Releases a syncNow() call armed via deferNextSyncNow(). */
+  resolveSyncNow(outcome: SyncOutcome): void {
+    if (this.pendingSyncNow === null) {
+      throw new Error('FakeSyncController: no pending syncNow() to resolve');
+    }
+    this.lastCycleRead = { available: true, outcome };
+    this.pendingSyncNow.resolve(outcome);
+    this.pendingSyncNow = null;
+  }
+
+  /**
+   * Rejects a syncNow() armed via deferNextSyncNow() — the bridge's 30s timeout landing late.
+   * failNext('syncNow') cannot model this: it throws before the defer arms.
+   */
+  rejectSyncNow(error: Error): void {
+    if (this.pendingSyncNow === null) {
+      throw new Error('FakeSyncController: no pending syncNow() to reject');
+    }
+    this.pendingSyncNow.reject(error);
+    this.pendingSyncNow = null;
+  }
+
   /** Records the call, then throws if `method` was armed via failNext (clearing the arm). */
   private maybeFail(method: FailableMethod): void {
     if (this.failingMethods.delete(method)) {
@@ -130,6 +190,21 @@ export class FakeSyncController implements SyncController {
   /** Queues the result the next `getDetails()` call resolves to (unscripted calls resolve null). */
   scriptDetails(details: SyncDetails | null): void {
     this.detailsResults.push(details);
+  }
+
+  /** Queues the outcome the next `syncNow()` call resolves to; also becomes what `getLastCycle()` reports. */
+  scriptSyncNow(outcome: SyncOutcome): void {
+    this.syncNowResults.push(outcome);
+  }
+
+  /** Sets what `getLastCycle()` resolves to without a prior `syncNow()` call — exercises an on-mount read. */
+  scriptLastCycle(outcome: SyncOutcome | null): void {
+    this.lastCycleRead = { available: true, outcome };
+  }
+
+  /** Makes `getLastCycle()` report the cycle as unreadable, as a dead/skewed worker does. */
+  scriptLastCycleUnavailable(): void {
+    this.lastCycleRead = LAST_CYCLE_UNAVAILABLE;
   }
 
   async enable(
@@ -193,9 +268,31 @@ export class FakeSyncController implements SyncController {
     return DEFAULT_RECOVERY_CODE;
   }
 
-  async syncNow(): Promise<void> {
+  async syncNow(): Promise<SyncOutcome> {
     this.calls.push({ method: 'syncNow', args: [] });
     this.maybeFail('syncNow');
+    if (this.deferredSyncNow) {
+      this.deferredSyncNow = false;
+      return new Promise((resolve, reject) => {
+        this.pendingSyncNow = { resolve, reject };
+      });
+    }
+    const next = this.syncNowResults.shift();
+    const outcome = next !== undefined ? next : DEFAULT_SYNC_OUTCOME;
+    this.lastCycleRead = { available: true, outcome };
+    return outcome;
+  }
+
+  async getLastCycle(): Promise<LastCycleRead> {
+    this.calls.push({ method: 'getLastCycle', args: [] });
+    this.maybeFail('getLastCycle');
+    if (this.deferredLastCycle) {
+      this.deferredLastCycle = false;
+      return new Promise((resolve) => {
+        this.pendingLastCycle = resolve;
+      });
+    }
+    return this.lastCycleRead;
   }
 
   async getDetails(): Promise<SyncDetails | null> {

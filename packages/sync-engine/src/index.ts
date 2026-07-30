@@ -9,11 +9,12 @@ export {
   defaultBindings,
 } from './collections';
 export { type CreateSyncEngineOptions, createSyncEngine } from './create-engine';
-export { type CycleDeps, pullOnce, pushOnce, type SyncTransport } from './cycle';
+export { type CycleDeps, type PullResult, pullOnce, pushOnce, type SyncTransport } from './cycle';
 export {
   CLOUD_SYNC_ENABLED_KEY,
   type EnableSyncOptions,
   type EngineApiClient,
+  LAST_CYCLE_KEY,
   LAST_SYNCED_AT_KEY,
   SyncEngine,
   type SyncEngineDeps,
@@ -32,6 +33,8 @@ export type SyncEngineControlSurface = Pick<
   | 'getStatus'
   | 'getAccount'
   | 'getLastSyncedAt'
+  | 'getLastCycle'
+  | 'ensureHydrated'
 >;
 export {
   initOrEnrollKey,
@@ -53,3 +56,12 @@ export {
   type RecordBody,
   type Resolution,
 } from './strategy';
+export {
+  classifySyncFailure,
+  parsePersistedSyncCycle,
+  type SyncCycle,
+  type SyncCycleRead,
+  type SyncFailureReason,
+  type SyncOutcome,
+  toPersistedSyncCycle,
+} from './sync-outcome';
