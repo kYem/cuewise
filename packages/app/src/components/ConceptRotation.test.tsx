@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useConceptCardsStore } from '../stores/concept-cards-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { ConceptRotation, selectSurfacedCard } from './ConceptRotation';
+import { Modal } from './Modal';
 
 vi.mock('../stores/settings-store', () => ({ useSettingsStore: vi.fn() }));
 vi.mock('../stores/concept-cards-store', () => ({ useConceptCardsStore: vi.fn() }));
@@ -159,6 +160,206 @@ describe('ConceptRotation', () => {
     });
 
     expect(screen.getByText('QUOTE')).toBeInTheDocument();
+  });
+
+  it('surfaces a due card when the shortcut is pressed on a quote', () => {
+    setup({ framing: 'ambient', cadence: 'off', cards: [dueCard] });
+
+    render(<ConceptRotation fallback={<div>QUOTE</div>} />);
+    expect(screen.getByText('QUOTE')).toBeInTheDocument();
+
+    act(() => {
+      fireEvent.keyDown(document.body, { key: 'c' });
+    });
+
+    expect(screen.getByText('Saga pattern')).toBeInTheDocument();
+    expect(screen.queryByText('QUOTE')).not.toBeInTheDocument();
+  });
+
+  it('returns to the quote when the shortcut is pressed on a card', () => {
+    setup({ framing: 'queue', cadence: 'every', cards: [dueCard] });
+
+    render(<ConceptRotation fallback={<div>QUOTE</div>} />);
+    expect(screen.getByText('Saga pattern')).toBeInTheDocument();
+
+    act(() => {
+      fireEvent.keyDown(document.body, { key: 'c' });
+    });
+
+    expect(screen.getByText('QUOTE')).toBeInTheDocument();
+    expect(screen.queryByText('Saga pattern')).not.toBeInTheDocument();
+  });
+
+  it('returns to the quote from a card added during the tab', () => {
+    setup({ framing: 'ambient', cadence: 'off', cards: [dueCard] });
+    const { rerender } = render(<ConceptRotation fallback={<div>QUOTE</div>} />);
+    expect(screen.getByText('QUOTE')).toBeInTheDocument();
+
+    const added = conceptCardFactory.build({
+      term: 'Just added',
+      schedule: { dueDate: '2020-01-01', interval: 0, easeFactor: 2.5, repetitions: 0, lapses: 0 },
+    });
+    setup({ framing: 'ambient', cadence: 'off', cards: [dueCard, added] });
+    rerender(<ConceptRotation fallback={<div>QUOTE</div>} />);
+    expect(screen.queryByText('QUOTE')).not.toBeInTheDocument();
+
+    act(() => {
+      fireEvent.keyDown(document.body, { key: 'c' });
+    });
+
+    expect(screen.getByText('QUOTE')).toBeInTheDocument();
+  });
+
+  it('toggles back to the card on a second press', () => {
+    setup({ framing: 'queue', cadence: 'every', cards: [dueCard] });
+
+    render(<ConceptRotation fallback={<div>QUOTE</div>} />);
+
+    act(() => {
+      fireEvent.keyDown(document.body, { key: 'c' });
+    });
+    act(() => {
+      fireEvent.keyDown(document.body, { key: 'c' });
+    });
+
+    expect(screen.getByText('Saga pattern')).toBeInTheDocument();
+  });
+
+  it('returns to the quote after grading, not the next due card, once toggled onto a card', async () => {
+    const cardA = conceptCardFactory.build({
+      id: 'a',
+      term: 'Card A',
+      schedule: { dueDate: '2020-01-01', interval: 0, easeFactor: 2.5, repetitions: 0, lapses: 0 },
+    });
+    const cardB = conceptCardFactory.build({
+      id: 'b',
+      term: 'Card B',
+      schedule: { dueDate: '2020-01-02', interval: 0, easeFactor: 2.5, repetitions: 0, lapses: 0 },
+    });
+    setup({ framing: 'ambient', cadence: 'off', cards: [cardA, cardB] });
+
+    render(<ConceptRotation fallback={<div>QUOTE</div>} />);
+    expect(screen.getByText('QUOTE')).toBeInTheDocument();
+
+    act(() => {
+      fireEvent.keyDown(document.body, { key: 'c' });
+    });
+    expect(screen.getByText('Card A')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /reveal answer/i }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /good/i }));
+    });
+
+    expect(screen.getByText('QUOTE')).toBeInTheDocument();
+    expect(screen.queryByText('Card B')).not.toBeInTheDocument();
+  });
+
+  it('ignores the shortcut when nothing is due', () => {
+    setup({ cards: [] });
+
+    render(<ConceptRotation fallback={<div>QUOTE</div>} />);
+
+    act(() => {
+      fireEvent.keyDown(document.body, { key: 'c' });
+    });
+
+    expect(screen.getByText('QUOTE')).toBeInTheDocument();
+  });
+
+  it('ignores the shortcut when concepts are disabled', () => {
+    setup({ enabled: false, cards: [dueCard] });
+
+    render(<ConceptRotation fallback={<div>QUOTE</div>} />);
+
+    act(() => {
+      fireEvent.keyDown(document.body, { key: 'c' });
+    });
+
+    expect(screen.getByText('QUOTE')).toBeInTheDocument();
+  });
+
+  it('ignores the shortcut while typing in a text field', () => {
+    setup({ framing: 'ambient', cadence: 'off', cards: [dueCard] });
+
+    render(
+      <>
+        <input aria-label="note" />
+        <ConceptRotation fallback={<div>QUOTE</div>} />
+      </>
+    );
+
+    act(() => {
+      fireEvent.keyDown(screen.getByLabelText('note'), { key: 'c' });
+    });
+
+    expect(screen.getByText('QUOTE')).toBeInTheDocument();
+  });
+
+  it('ignores the shortcut while a modal dialog is open', () => {
+    setup({ framing: 'ambient', cadence: 'off', cards: [dueCard] });
+
+    render(
+      <>
+        <div role="dialog" aria-modal="true">
+          Settings
+        </div>
+        <ConceptRotation fallback={<div>QUOTE</div>} />
+      </>
+    );
+
+    act(() => {
+      fireEvent.keyDown(document.body, { key: 'c' });
+    });
+
+    expect(screen.getByText('QUOTE')).toBeInTheDocument();
+  });
+
+  it('ignores the shortcut while the real Add Concept modal is open', () => {
+    setup({ framing: 'ambient', cadence: 'off', cards: [dueCard] });
+
+    render(
+      <>
+        <Modal isOpen onClose={() => {}} title="Add a concept">
+          <button type="button">Save</button>
+        </Modal>
+        <ConceptRotation fallback={<div>QUOTE</div>} />
+      </>
+    );
+
+    act(() => {
+      fireEvent.keyDown(document.body, { key: 'c' });
+    });
+
+    expect(screen.getByText('QUOTE')).toBeInTheDocument();
+  });
+
+  it('toggles the slot on Shift+C', () => {
+    setup({ framing: 'ambient', cadence: 'off', cards: [dueCard] });
+
+    render(<ConceptRotation fallback={<div>QUOTE</div>} />);
+    expect(screen.getByText('QUOTE')).toBeInTheDocument();
+
+    act(() => {
+      fireEvent.keyDown(document.body, { key: 'C', shiftKey: true });
+    });
+
+    expect(screen.getByText('Saga pattern')).toBeInTheDocument();
+    expect(screen.queryByText('QUOTE')).not.toBeInTheDocument();
+  });
+
+  it('toggles the slot on a Caps-Lock-shifted "C" without the Shift modifier', () => {
+    setup({ framing: 'ambient', cadence: 'off', cards: [dueCard] });
+
+    render(<ConceptRotation fallback={<div>QUOTE</div>} />);
+    expect(screen.getByText('QUOTE')).toBeInTheDocument();
+
+    act(() => {
+      fireEvent.keyDown(document.body, { key: 'C' });
+    });
+
+    expect(screen.getByText('Saga pattern')).toBeInTheDocument();
+    expect(screen.queryByText('QUOTE')).not.toBeInTheDocument();
   });
 });
 
