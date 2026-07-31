@@ -53,9 +53,12 @@ let storedSettings: Settings = defaultSettings;
 function seedStorage(settings: Settings = defaultSettings) {
   storedSettings = settings;
   vi.mocked(storage.getSettings).mockImplementation(async () => storedSettings);
+  // structuredClone, not a spread: a spread leaves the array-valued fields reference-equal, which
+  // is exactly what neither backend does — Chrome clones across the IPC boundary, localStorage
+  // JSON.parses. With a spread an own-write echo is indistinguishable from a real change.
   vi.mocked(storage.readSettings).mockImplementation(async () => ({
     ok: true,
-    settings: storedSettings,
+    settings: structuredClone(storedSettings),
   }));
   vi.mocked(storage.setSettingsPatch).mockImplementation(async (patch: Partial<Settings>) => {
     storedSettings = { ...storedSettings, ...patch };
@@ -614,6 +617,62 @@ describe('converging on settings written elsewhere', () => {
 
     await vi.waitFor(() => expect(useSettingsStore.getState().error).toContain('colorTheme'));
     errorSpy.mockRestore();
+  });
+
+  it('leaves state alone when a change turns out to be its own write echoing back', async () => {
+    // Both backends report a context's own writes, and two Settings fields are arrays parsed
+    // fresh per read — compared by reference, every write would repaint and re-apply the DOM.
+    const fake = fakeStore();
+    configurePlatform({ storage: fake.store });
+    await useSettingsStore.getState().initialize();
+    const before = useSettingsStore.getState().settings;
+
+    fake.emit(['settings.colorTheme']);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(useSettingsStore.getState().settings).toBe(before);
+  });
+
+  it('applies a pulled theme to the DOM, not only to the store', async () => {
+    const fake = fakeStore();
+    configurePlatform({ storage: fake.store });
+    await useSettingsStore.getState().initialize();
+    storedSettings = { ...defaultSettings, colorTheme: 'forest' };
+
+    fake.emit(['settings.colorTheme']);
+
+    await vi.waitFor(() =>
+      expect(document.documentElement.getAttribute('data-theme')).toBe('forest')
+    );
+  });
+
+  it('coalesces a burst into one re-read, since a pull writes one key at a time', async () => {
+    const fake = fakeStore();
+    configurePlatform({ storage: fake.store });
+    await useSettingsStore.getState().initialize();
+    vi.mocked(storage.readSettings).mockClear();
+
+    fake.emit(['settings.colorTheme']);
+    fake.emit(['settings.showClock']);
+    fake.emit(['settings.theme']);
+
+    await vi.waitFor(() => expect(storage.readSettings).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(storage.readSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops observing a backend the platform replaced', async () => {
+    const first = fakeStore();
+    configurePlatform({ storage: first.store });
+    await useSettingsStore.getState().initialize();
+    const second = fakeStore();
+    configurePlatform({ storage: second.store });
+
+    await useSettingsStore.getState().initialize();
+
+    // Left subscribed, every write to the dead store queues a re-read of the live one, forever.
+    expect(first.subscriberCount).toBe(0);
+    expect(second.subscriberCount).toBe(1);
   });
 
   it('ignores a change to keys it does not own', async () => {

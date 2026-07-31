@@ -87,22 +87,67 @@ let unsubscribeFromStorage: (() => void) | null = null;
 // the store it replaced. Identity, not a boolean: every initialize() calls this.
 let subscribedTo: KeyValueStore | null = null;
 
+/**
+ * Structural for the array-valued keys: both backends hand back a fresh array per read (Chrome
+ * structured-clones across the IPC boundary, localStorage JSON.parses), so `===` on those reports
+ * "changed" for every user who has ever touched a quote filter.
+ */
+function sameSettings(a: Settings, b: Settings): boolean {
+  return SETTINGS_KEYS.every((key) => {
+    const left = a[key];
+    const right = b[key];
+    if (Array.isArray(left) && Array.isArray(right)) {
+      return left.length === right.length && left.every((item, index) => item === right[index]);
+    }
+    return left === right;
+  });
+}
+
+// Trailing edge: the sync engine writes settings one key per call, so a first sync applying fifty
+// records would otherwise queue fifty full re-reads behind each other.
+let refreshQueued = false;
+
+function queueRefresh(): void {
+  if (refreshQueued) {
+    return;
+  }
+  refreshQueued = true;
+  void enqueueWrite(async () => {
+    refreshQueued = false;
+    await refreshFromStorage();
+  });
+}
+
 /** Converges the in-memory copy on settings written anywhere else — a pull, or another tab. */
 function subscribeToStorage(): void {
   const store = observableStorage();
-  if (store === null || store === subscribedTo) {
+  if (store === subscribedTo) {
     return;
   }
-  unsubscribeFromStorage?.();
+  if (unsubscribeFromStorage !== null) {
+    try {
+      // Its own try: initialize() calls this inside the try that reports a failed load, and a
+      // throwing teardown would abort the load before the settings are even read.
+      unsubscribeFromStorage();
+    } catch (error) {
+      logger.error(
+        `Could not stop observing the previous storage: ${describeThrown(error)}`,
+        error
+      );
+    }
+  }
   unsubscribeFromStorage = null;
   subscribedTo = null;
+  if (store === null) {
+    return;
+  }
   const unsubscribe = safeSubscribe(store, (keys) => {
     if (!keys.some((key) => key.startsWith(SETTINGS_KEY_PREFIX))) {
       return;
     }
     // Queued: unqueued it can read between an in-flight initialize's read and its set, and be
     // overwritten by that older snapshot.
-    void enqueueWrite(refreshFromStorage);
+    queueRefresh();
   });
   if (unsubscribe === null) {
     return;
@@ -142,12 +187,14 @@ async function refreshFromStorage(): Promise<void> {
   }
   const { settings, preview } = useSettingsStore.getState();
   // A key names a write, not a changed value, so an own write arrives here as a no-op.
-  if (SETTINGS_KEYS.every((key) => settings[key] === read.settings[key])) {
+  if (sameSettings(settings, read.settings)) {
     return;
   }
   useSettingsStore.setState({
     settings: read.settings,
     preview: reconcilePreview(preview, read.settings),
+    // Cleared, since this read succeeded: set by the branch above, nothing else ever resets it.
+    error: null,
   });
   applyAll(read.settings);
 }

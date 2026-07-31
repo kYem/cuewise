@@ -234,6 +234,45 @@ describe('LocalStorageKeyValueStore.onChanged', () => {
     expect(seen).toContainEqual({ keys: ['b'], area: 'sync' });
   });
 
+  it('reports a removal, which is half the write surface', async () => {
+    // clearSettings() ends in removeMany: unreported, "Reset to defaults" stops propagating.
+    const store = new LocalStorageKeyValueStore();
+    await store.set('settings.theme', 'dark', 'local');
+    const seen: string[][] = [];
+    store.onChanged((keys) => seen.push(keys));
+
+    await store.remove('settings.theme', 'local');
+
+    expect(seen).toEqual([['settings.theme']]);
+  });
+
+  it('reports a batch removal once, like a batch write', async () => {
+    const store = new LocalStorageKeyValueStore();
+    await store.setMany({ 'settings.theme': 'dark', 'settings.showClock': true }, 'local');
+    const seen: string[][] = [];
+    store.onChanged((keys) => seen.push(keys));
+
+    await store.removeMany(['settings.theme', 'settings.showClock'], 'local');
+
+    expect(seen).toEqual([['settings.theme', 'settings.showClock']]);
+  });
+
+  it('loses no key when a shorter batch drains inside a longer one', async () => {
+    // Equal-length batches drain before either flushes, so only unequal ones tell a depth counter
+    // apart from a flag — the shorter finishes while the longer is still going.
+    const store = new LocalStorageKeyValueStore();
+    const seen: string[][] = [];
+    store.onChanged((keys) => seen.push(keys));
+
+    await Promise.all([
+      store.setMany({ a: 1, b: 2, c: 3 }, 'local'),
+      store.setMany({ d: 4 }, 'local'),
+    ]);
+
+    expect(seen).toHaveLength(1);
+    expect(seen.flat().sort()).toEqual(['a', 'b', 'c', 'd']);
+  });
+
   it('stops reporting once unsubscribed', async () => {
     const store = new LocalStorageKeyValueStore();
     const seen: string[][] = [];
