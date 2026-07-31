@@ -679,16 +679,15 @@ export function usePomodoroStorageSync() {
       return;
     }
     // Rehydrate only: completeSession() here double-completes with tick() and skips breaks.
-    return (
-      safeSubscribe(store, 'the pomodoro timer', (keys, area) => {
-        if (area !== 'local' || !keys.includes('pomodoroState')) {
-          return;
-        }
-        // Dropped rather than returned, so the port's own promise guard never sees it.
-        Promise.resolve(usePomodoroStore.persist.rehydrate()).catch((error) => {
-          logger.error('Could not rehydrate the pomodoro timer after a storage change', error);
-        });
-      }) ?? undefined
-    );
+    const unsubscribe = safeSubscribe(store, 'the pomodoro timer', (keys, area) => {
+      if (area !== 'local' || !keys.includes('pomodoroState')) {
+        return;
+      }
+      // Dropped rather than returned, so the port's own promise guard never sees it.
+      Promise.resolve(usePomodoroStore.persist.rehydrate()).catch((error) => {
+        logger.error('Could not rehydrate the pomodoro timer after a storage change', error);
+      });
+    });
+    return unsubscribe ?? undefined;
   }, []);
 }

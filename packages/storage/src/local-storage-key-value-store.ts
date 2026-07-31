@@ -2,6 +2,7 @@ import {
   type KeyValueStore,
   logger,
   type StorageArea,
+  type StorageChangeHandler,
   type StorageResult,
   type StorageUsage,
   type StoredValues,
@@ -34,11 +35,11 @@ export class LocalStorageKeyValueStore implements KeyValueStore {
   // Single localStorage backend, no separate sync area — so sync-only UI hides.
   readonly supportsSync = false;
 
-  private readonly subscribers = new Set<(keys: string[], area: StorageArea) => void>();
+  private readonly subscribers = new Set<StorageChangeHandler>();
 
   // Emits writes made through THIS instance, because `window.onstorage` fires only for OTHER
   // documents — and here the writer (the sync engine) and the reader (a store) share one.
-  onChanged(handler: (keys: string[], area: StorageArea) => void): () => void {
+  onChanged(handler: StorageChangeHandler): () => void {
     this.subscribers.add(handler);
     return () => {
       this.subscribers.delete(handler);
@@ -191,20 +192,16 @@ export class LocalStorageKeyValueStore implements KeyValueStore {
     }
   }
 
+  // No try/finally, unlike setMany: nothing here returns early, and neither deleteOne nor emit
+  // can throw past this loop.
   async removeMany(keys: string[], area: StorageArea): Promise<boolean> {
     const removed: string[] = [];
-    try {
-      let allRemoved = true;
-      for (const key of keys) {
-        if (this.deleteOne(key)) {
-          removed.push(key);
-        } else {
-          allRemoved = false;
-        }
+    for (const key of keys) {
+      if (this.deleteOne(key)) {
+        removed.push(key);
       }
-      return allRemoved;
-    } finally {
-      this.emit(removed, area);
     }
+    this.emit(removed, area);
+    return removed.length === keys.length;
   }
 }

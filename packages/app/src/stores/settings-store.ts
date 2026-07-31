@@ -6,11 +6,11 @@ import {
   DEFAULT_SETTINGS,
   DEVICE_LOCAL_SETTINGS_KEYS,
   describeThrown,
-  type KeyValueStore,
   type LayoutDensity,
   LogLevel as LoggerLevel,
   logger,
   notifyMutated,
+  type ObservableKeyValueStore,
   type Settings,
   type StorageError,
 } from '@cuewise/shared';
@@ -33,26 +33,20 @@ export type PreviewableSettings = Pick<Settings, 'backgroundDim' | 'backgroundBl
 
 /**
  * One corrupt value refuses every write, so the message names it and the button that clears it
- * ("Reset to defaults", in Settings → Advanced). A failed read has neither.
+ * ("Reset to defaults", in Settings → Advanced). A failed read names neither, so the caller supplies
+ * what it cost — a refresh must not tell the user their change was lost.
  */
-function unreadableSettingsMessage(unreadable: string[]): string {
+function unreadableSettingsMessage(unreadable: string[], consequence: string): string {
   if (unreadable.length === 0) {
-    return "Cuewise can't read your settings, so the change was not saved.";
+    return `Cuewise can't read your settings, so ${consequence}.`;
   }
-  return `${namesUnreadable(unreadable)} Reset to defaults in Settings to fix it.`;
-}
-
-/** Same failure, but nobody was saving: a refresh must not tell the user their change was lost. */
-function staleSettingsMessage(unreadable: string[]): string {
-  if (unreadable.length === 0) {
-    return "Cuewise can't read your settings, so what you see may be out of date.";
-  }
-  return `${namesUnreadable(unreadable)} Reset to defaults in Settings to fix it.`;
-}
-
-function namesUnreadable(unreadable: string[]): string {
   const subject = unreadable.length === 1 ? 'value' : 'values';
-  return `Cuewise can't read your saved ${subject} for ${unreadable.join(', ')}.`;
+  const named = `Cuewise can't read your saved ${subject} for ${unreadable.join(', ')}.`;
+  return `${named} Reset to defaults in Settings to fix it.`;
+}
+
+function staleSettingsMessage(unreadable: string[]): string {
+  return unreadableSettingsMessage(unreadable, 'what you see may be out of date');
 }
 
 /** Quota failures get actionable copy; anything else keeps the generic retry message. */
@@ -94,8 +88,8 @@ function applyAll(settings: Settings): void {
   applyLogLevel(settings.logLevel);
 }
 
-let unsubscribeFromStorage: (() => void) | null = null;
-let subscribedTo: KeyValueStore | null = null;
+// One field, so the store and its teardown cannot drift apart.
+let observing: { store: ObservableKeyValueStore; unsubscribe: () => void } | null = null;
 
 // Structural for the array-valued keys: both backends parse a fresh array per read, so `===`
 // reports "changed" for anyone who has ever touched a quote filter.
@@ -147,22 +141,13 @@ function queueRefresh(): void {
 /** Converges the in-memory copy on settings written anywhere else — a pull, or another tab. */
 function subscribeToStorage(): void {
   const store = observableStorage();
-  if (store === subscribedTo) {
+  if (observing !== null && observing.store === store) {
     return;
   }
-  if (unsubscribeFromStorage !== null) {
-    try {
-      // Its own try: a throwing teardown would otherwise abort initialize()'s load.
-      unsubscribeFromStorage();
-    } catch (error) {
-      logger.error(
-        `Could not stop observing the previous storage: ${describeThrown(error)}`,
-        error
-      );
-    }
+  if (observing !== null) {
+    observing.unsubscribe();
+    observing = null;
   }
-  unsubscribeFromStorage = null;
-  subscribedTo = null;
   if (store === null) {
     return;
   }
@@ -172,13 +157,11 @@ function subscribeToStorage(): void {
     }
     queueRefresh();
   });
-  if (unsubscribe === null) {
-    return;
+  // Left null on a failed subscribe, so the next initialize() retries rather than believing it
+  // is already observing.
+  if (unsubscribe !== null) {
+    observing = { store, unsubscribe };
   }
-  // Assigned only once the subscribe returns: set beforehand, a failure wedges the identity guard
-  // above and no later initialize() ever retries.
-  unsubscribeFromStorage = unsubscribe;
-  subscribedTo = store;
 }
 
 /**
@@ -197,8 +180,6 @@ async function refreshFromStorage(): Promise<void> {
       `Could not re-read settings after a storage change: ${describeThrown(error)}`,
       error
     );
-    // Reported like the branch below, not only logged: the shown values are just as stale, and at
-    // `logLevel: 'none'` a log is nothing at all.
     reportStale([]);
     return;
   }
@@ -309,7 +290,10 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
           logger.error('Aborted a settings update: the current settings could not be read', {
             fields: Object.keys(partialSettings),
           });
-          const errorMessage = unreadableSettingsMessage(read.unreadable);
+          const errorMessage = unreadableSettingsMessage(
+            read.unreadable,
+            'the change was not saved'
+          );
           set({ error: errorMessage, preview: null });
           useToastStore.getState().error(errorMessage);
           return false;
@@ -413,11 +397,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
             notifyMutated('settings', key);
           }
         }
-        applyTheme(DEFAULT_SETTINGS.theme);
-        applyColorTheme(DEFAULT_SETTINGS.colorTheme);
-        applyGlassEnhanced(DEFAULT_SETTINGS.glassEnhanced);
-        applyLayoutDensity(DEFAULT_SETTINGS.layoutDensity);
-        applyLogLevel(DEFAULT_SETTINGS.logLevel);
+        applyAll(DEFAULT_SETTINGS);
         return true;
       } catch (error) {
         logger.error('Error resetting settings', error);

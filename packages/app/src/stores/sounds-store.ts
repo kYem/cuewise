@@ -630,24 +630,23 @@ export function useSoundsStorageSync() {
     if (store === null) {
       return;
     }
-    return (
-      safeSubscribe(store, 'ambient sounds', (keys, area) => {
-        if (area !== 'local' || !keys.includes('soundsState')) {
-          return;
-        }
-        // Dropped rather than returned, so the port's own promise guard never sees either of these.
-        Promise.resolve(useSoundsStore.persist.rehydrate()).catch((error) => {
-          logger.error('Could not rehydrate the sounds state after a storage change', error);
-        });
-        if (isLeader) {
-          setTimeout(() => {
-            syncLeaderPlayback().catch((error) => {
-              logger.error('Could not sync leader playback after a storage change', error);
-            });
-          }, 50);
-        }
-      }) ?? undefined
-    );
+    const unsubscribe = safeSubscribe(store, 'ambient sounds', (keys, area) => {
+      if (area !== 'local' || !keys.includes('soundsState')) {
+        return;
+      }
+      // Dropped rather than returned, so the port's own promise guard never sees either of these.
+      Promise.resolve(useSoundsStore.persist.rehydrate()).catch((error) => {
+        logger.error('Could not rehydrate the sounds state after a storage change', error);
+      });
+      if (isLeader) {
+        setTimeout(() => {
+          syncLeaderPlayback().catch((error) => {
+            logger.error('Could not sync leader playback after a storage change', error);
+          });
+        }, 50);
+      }
+    });
+    return unsubscribe ?? undefined;
   }, [isLeader]);
 }
 
@@ -691,8 +690,16 @@ async function syncLeaderPlayback() {
               startAt
             );
           } catch (error) {
-            // Only that callback clears the flag, so a throw before it strands the spinner on.
-            useSoundsStore.setState({ isYoutubeLoading: false });
+            // That callback is what starts playback, so nothing is playing — and left as-is the
+            // panel renders its "playing" indicator over silence.
+            useSoundsStore.setState({
+              isYoutubeLoading: false,
+              isPlaying: false,
+              isPaused: false,
+            });
+            useToastStore
+              .getState()
+              .error('Could not start the playlist. Press play to try again.');
             throw error;
           }
         } else if (!youtubePlayer.isPlaying()) {

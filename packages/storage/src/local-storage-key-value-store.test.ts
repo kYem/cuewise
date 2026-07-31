@@ -206,8 +206,7 @@ describe('LocalStorageKeyValueStore.onChanged', () => {
   });
 
   it('reports the failure that stopped a batch, and stops at it', async () => {
-    // `success` here means the macOS write path installs a setting and pushes it to the peer with
-    // nothing on disk behind it.
+    // A success here would push a setting to the peer with nothing on disk behind it.
     const store = new LocalStorageKeyValueStore();
     const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
 
@@ -309,7 +308,7 @@ describe('LocalStorageKeyValueStore.onChanged', () => {
   });
 
   it('reports a removal, which is half the write surface', async () => {
-    // clearSettings() ends in removeMany: unreported, "Reset to defaults" stops propagating.
+    // Unreported removals mean "Reset to defaults" silently stops propagating.
     const store = new LocalStorageKeyValueStore();
     await store.set('settings.theme', 'dark', 'local');
     const seen: string[][] = [];

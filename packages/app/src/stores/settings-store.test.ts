@@ -53,9 +53,8 @@ let storedSettings: Settings = defaultSettings;
 function seedStorage(settings: Settings = defaultSettings) {
   storedSettings = settings;
   vi.mocked(storage.getSettings).mockImplementation(async () => storedSettings);
-  // structuredClone, not a spread: a spread leaves the array-valued fields reference-equal, which
-  // is exactly what neither backend does — Chrome clones across the IPC boundary, localStorage
-  // JSON.parses. With a spread an own-write echo is indistinguishable from a real change.
+  // structuredClone, not a spread: both backends return fresh arrays per read, so a spread makes
+  // an own-write echo look unchanged.
   vi.mocked(storage.readSettings).mockImplementation(async () => ({
     ok: true,
     settings: structuredClone(storedSettings),
@@ -539,8 +538,6 @@ describe('an update blocked by a stored value that cannot be parsed', () => {
 });
 
 describe('converging on settings written elsewhere', () => {
-  const fakeStore = fakeObservableStore;
-
   beforeEach(() => {
     useSettingsStore.setState({
       settings: defaultSettings,
@@ -557,7 +554,7 @@ describe('converging on settings written elsewhere', () => {
   });
 
   it('adopts a value the sync engine wrote straight to storage', async () => {
-    const fake = fakeStore();
+    const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
     await useSettingsStore.getState().initialize();
     storedSettings = { ...defaultSettings, colorTheme: 'forest' };
@@ -567,7 +564,7 @@ describe('converging on settings written elsewhere', () => {
   });
 
   it('reports a rejected re-read instead of discarding it', async () => {
-    const fake = fakeStore();
+    const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
     await useSettingsStore.getState().initialize();
     const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
@@ -585,24 +582,26 @@ describe('converging on settings written elsewhere', () => {
   });
 
   it('tells the user about a rejected re-read, not only the console', async () => {
-    // At logLevel 'none' a log is nothing at all, and these values are as stale as the ones the
-    // refusal branch already toasts about.
-    const fake = fakeStore();
+    const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
     await useSettingsStore.getState().initialize();
     const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
     vi.mocked(storage.readSettings).mockRejectedValue(new Error('storage unavailable'));
 
     fake.emit(['settings.colorTheme']);
-
     await vi.waitFor(() =>
       expect(toastError).toHaveBeenCalledWith(expect.stringContaining('out of date'))
     );
+    fake.emit(['settings.showClock']);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    // A pull writing twelve keys through a migration that throws would otherwise toast twelve times.
+    expect(toastError).toHaveBeenCalledTimes(1);
     errorSpy.mockRestore();
   });
 
   it('says so when settings changed elsewhere cannot be read', async () => {
-    const fake = fakeStore();
+    const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
     await useSettingsStore.getState().initialize();
     const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
@@ -616,7 +615,7 @@ describe('converging on settings written elsewhere', () => {
   });
 
   it('says an unreadable value once, not once per key a pull writes', async () => {
-    const fake = fakeStore();
+    const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
     await useSettingsStore.getState().initialize();
     const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
@@ -632,7 +631,7 @@ describe('converging on settings written elsewhere', () => {
   });
 
   it('drops the complaint once the value it named becomes readable', async () => {
-    const fake = fakeStore();
+    const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
     await useSettingsStore.getState().initialize();
     const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
@@ -650,7 +649,7 @@ describe('converging on settings written elsewhere', () => {
   });
 
   it('leaves state alone when a change turns out to be its own write echoing back', async () => {
-    const fake = fakeStore();
+    const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
     await useSettingsStore.getState().initialize();
     const before = useSettingsStore.getState().settings;
@@ -662,7 +661,7 @@ describe('converging on settings written elsewhere', () => {
   });
 
   it('applies a pulled theme to the DOM, not only to the store', async () => {
-    const fake = fakeStore();
+    const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
     await useSettingsStore.getState().initialize();
     storedSettings = { ...defaultSettings, colorTheme: 'forest' };
@@ -675,7 +674,7 @@ describe('converging on settings written elsewhere', () => {
   });
 
   it('applies every DOM effect a pulled setting drives, not only the theme', async () => {
-    const fake = fakeStore();
+    const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
     await useSettingsStore.getState().initialize();
     storedSettings = { ...defaultSettings, layoutDensity: 'compact', glassEnhanced: true };
@@ -689,7 +688,7 @@ describe('converging on settings written elsewhere', () => {
   });
 
   it('coalesces a burst into one re-read, since a pull writes one key at a time', async () => {
-    const fake = fakeStore();
+    const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
     await useSettingsStore.getState().initialize();
     vi.mocked(storage.readSettings).mockClear();
@@ -704,10 +703,10 @@ describe('converging on settings written elsewhere', () => {
   });
 
   it('stops observing a backend the platform replaced', async () => {
-    const first = fakeStore();
+    const first = fakeObservableStore();
     configurePlatform({ storage: first.store });
     await useSettingsStore.getState().initialize();
-    const second = fakeStore();
+    const second = fakeObservableStore();
     configurePlatform({ storage: second.store });
 
     await useSettingsStore.getState().initialize();
@@ -718,7 +717,7 @@ describe('converging on settings written elsewhere', () => {
   });
 
   it('ignores a change to keys it does not own', async () => {
-    const fake = fakeStore();
+    const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
     await useSettingsStore.getState().initialize();
     storedSettings = { ...defaultSettings, colorTheme: 'forest' };
@@ -730,7 +729,7 @@ describe('converging on settings written elsewhere', () => {
   });
 
   it('subscribes once however many times initialize runs', async () => {
-    const fake = fakeStore();
+    const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
 
     await useSettingsStore.getState().initialize();
@@ -752,7 +751,7 @@ describe('converging on settings written elsewhere', () => {
     // Marking a converged key dirty pushes it to the peer whose pull marks it dirty in turn —
     // the unbounded echo the port warns about, between two devices rather than inside one.
     const markMutated = vi.fn();
-    const fake = fakeStore();
+    const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store, syncSink: { markMutated, markDeleted: vi.fn() } });
     await useSettingsStore.getState().initialize();
     storedSettings = { ...defaultSettings, colorTheme: 'forest' };
@@ -765,7 +764,7 @@ describe('converging on settings written elsewhere', () => {
   });
 
   it('converges on a changed array, not only on a changed primitive', async () => {
-    const fake = fakeStore();
+    const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
     await useSettingsStore.getState().initialize();
     storedSettings = { ...defaultSettings, quoteFilterActiveCollectionIds: ['c1'] };
@@ -778,7 +777,7 @@ describe('converging on settings written elsewhere', () => {
   });
 
   it('keeps a slider gesture that started while the pulled write was in flight', async () => {
-    const fake = fakeStore();
+    const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
     await useSettingsStore.getState().initialize();
     useSettingsStore.getState().previewSettings({ backgroundDim: 80 });
@@ -791,26 +790,28 @@ describe('converging on settings written elsewhere', () => {
   });
 
   it('loads the settings even when dropping the old subscription throws', async () => {
-    // An invalidated MV3 context throws from removeListener; unguarded, that aborts the load and
-    // the user gets "Failed to load settings" with nothing wrong with the settings.
+    // The user would otherwise get "Failed to load settings" with nothing wrong with the settings.
     const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
     const first = fakeObservableStore({ throwOnUnsubscribe: true });
     configurePlatform({ storage: first.store });
     await useSettingsStore.getState().initialize();
     storedSettings = { ...defaultSettings, colorTheme: 'forest' };
-    configurePlatform({ storage: fakeObservableStore().store });
+    const second = fakeObservableStore();
+    configurePlatform({ storage: second.store });
 
     await useSettingsStore.getState().initialize();
 
     expect(useSettingsStore.getState().settings.colorTheme).toBe('forest');
     expect(useSettingsStore.getState().error).toBeNull();
+    // Recovering means observing the replacement, not merely surviving the throw.
+    expect(second.subscriberCount).toBe(1);
     errorSpy.mockRestore();
   });
 
   it('does not blame a lost change on a user who was only looking at the page', async () => {
     // An empty `unreadable` is the read itself failing, and the write path's copy for that says
     // "the change was not saved" — a sentence about a change nobody made.
-    const fake = fakeStore();
+    const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
     await useSettingsStore.getState().initialize();
     const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
@@ -825,7 +826,7 @@ describe('converging on settings written elsewhere', () => {
   });
 
   it('says so again when the same value goes unreadable after recovering', async () => {
-    const fake = fakeStore();
+    const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
     await useSettingsStore.getState().initialize();
     const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
@@ -849,7 +850,7 @@ describe('converging on settings written elsewhere', () => {
   });
 
   it('says so again after a reload, having told nobody in this session yet', async () => {
-    const fake = fakeStore();
+    const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
     await useSettingsStore.getState().initialize();
     const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
@@ -865,7 +866,7 @@ describe('converging on settings written elsewhere', () => {
   });
 
   it('says so again when a different value turns out to be unreadable', async () => {
-    const fake = fakeStore();
+    const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
     await useSettingsStore.getState().initialize();
     const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
@@ -882,7 +883,7 @@ describe('converging on settings written elsewhere', () => {
 
   it('retries the subscription after one that threw', async () => {
     const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
-    const fake = fakeObservableStore(1);
+    const fake = fakeObservableStore({ failedSubscribes: 1 });
     configurePlatform({ storage: fake.store });
 
     await useSettingsStore.getState().initialize();
@@ -897,7 +898,7 @@ describe('converging on settings written elsewhere', () => {
     const parked = new Promise<void>((resolve) => {
       releaseWrite = resolve;
     });
-    const fake = fakeStore();
+    const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
     await useSettingsStore.getState().initialize();
     vi.mocked(storage.readSettings).mockClear();

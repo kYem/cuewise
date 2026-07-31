@@ -134,6 +134,15 @@ export interface KeyValueStore {
 
 export type StorageChangeHandler = (keys: string[], area: StorageArea) => void;
 
+/** A store whose `onChanged` is known present, so callers past the feature test stop re-checking. */
+export interface ObservableKeyValueStore extends KeyValueStore {
+  onChanged(handler: StorageChangeHandler): () => void;
+}
+
+export function canObserveWrites(store: KeyValueStore): store is ObservableKeyValueStore {
+  return store.onChanged !== undefined;
+}
+
 /**
  * Outbound HTTP. A port because the Tauri webview is blocked from api.cuewise.app by its
  * production CSP *and* the API's CORS policy, so macOS must route through the native

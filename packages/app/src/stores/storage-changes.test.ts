@@ -2,14 +2,15 @@ import {
   configurePlatform,
   type KeyValueStore,
   logger,
+  type ObservableKeyValueStore,
   resetPlatform,
   type StorageArea,
 } from '@cuewise/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { observableStorage, safeSubscribe } from './storage-changes';
 
-function storeWith(onChanged?: KeyValueStore['onChanged']): KeyValueStore {
-  return { onChanged } as unknown as KeyValueStore;
+function storeWith(onChanged?: KeyValueStore['onChanged']): ObservableKeyValueStore {
+  return { onChanged } as unknown as ObservableKeyValueStore;
 }
 
 describe('observableStorage', () => {
@@ -44,7 +45,6 @@ describe('observableStorage', () => {
   });
 
   it('stays quiet on a backend that simply cannot observe writes', () => {
-    // A platform limit, not a wiring bug: logging it would cry wolf on every macOS launch.
     const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
     configurePlatform({ storage: storeWith(undefined) });
 
@@ -76,16 +76,37 @@ describe('safeSubscribe', () => {
     errorSpy.mockRestore();
   });
 
-  it('passes the handler through and returns its unsubscribe', () => {
-    const unsubscribe = () => {};
+  it('passes the handler through and tears down through the one it was given', () => {
+    let torndown = false;
     const handlers: ((keys: string[], area: StorageArea) => void)[] = [];
     const store = storeWith((handler) => {
       handlers.push(handler);
-      return unsubscribe;
+      return () => {
+        torndown = true;
+      };
     });
     const handler = () => {};
 
-    expect(safeSubscribe(store, 'settings', handler)).toBe(unsubscribe);
+    const unsubscribe = safeSubscribe(store, 'settings', handler);
+    unsubscribe?.();
+
     expect(handlers).toEqual([handler]);
+    expect(torndown).toBe(true);
+  });
+
+  it('contains a teardown that throws, which React would otherwise take the tree down for', () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const store = storeWith(() => () => {
+      throw new Error('removeListener unavailable');
+    });
+
+    const unsubscribe = safeSubscribe(store, 'the pomodoro timer', () => {});
+
+    expect(() => unsubscribe?.()).not.toThrow();
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('stop observing storage changes for the pomodoro timer'),
+      expect.anything()
+    );
+    errorSpy.mockRestore();
   });
 });

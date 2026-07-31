@@ -16,8 +16,8 @@ export default mergeConfig(
       environment: 'jsdom',
       include: ['src/**/*.test.{ts,tsx}'],
       setupFiles: ['./vitest.setup.ts'],
-      // Matches sync-engine and storage. A spy restored after its assertions is skipped when one
-      // fails, and the next test in the file then fails for a reason that is not its own.
+      // A spy restored after its assertions is skipped when one fails, and the next test in the
+      // file then fails for a reason that is not its own.
       restoreMocks: true,
     },
   })

@@ -2,6 +2,7 @@ import {
   type KeyValueStore,
   logger,
   type StorageArea,
+  type StorageChangeHandler,
   type StorageError,
   type StorageErrorType,
   type StorageResult,
@@ -25,7 +26,7 @@ export class ChromeKeyValueStore implements KeyValueStore {
 
   // The only channel that already crosses the extension's worker/page split in this direction:
   // the sync engine writes from the worker, the stores read in the page.
-  onChanged(handler: (keys: string[], area: StorageArea) => void): () => void {
+  onChanged(handler: StorageChangeHandler): () => void {
     const listener = (changes: Record<string, unknown>, areaName: string) => {
       if (areaName !== 'local' && areaName !== 'sync') {
         return;

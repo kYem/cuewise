@@ -1,6 +1,8 @@
 import { configurePlatform, resetPlatform } from '@cuewise/shared';
+import * as storage from '@cuewise/storage';
 import { renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { youtubePlayer } from '../services/youtube-player';
 import { fakeObservableStore } from './__fixtures__/storage-changes.fixtures';
 import { useSoundsStorageSync, useSoundsStore } from './sounds-store';
 
@@ -96,5 +98,34 @@ describe('useSoundsStorageSync', () => {
     resetPlatform();
 
     expect(() => renderHook(() => useSoundsStorageSync())).not.toThrow();
+  });
+
+  it('stops claiming playback when the leader cannot load the playlist', async () => {
+    // The load callback is what starts the audio, so without it the panel would render its
+    // "playing" indicator over silence.
+    const fake = fakeObservableStore();
+    configurePlatform({ storage: fake.store });
+    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockImplementation(() => {});
+    vi.spyOn(youtubePlayer, 'getCurrentPlaylistId').mockReturnValue('another-playlist');
+    vi.spyOn(youtubePlayer, 'loadPlaylist').mockImplementation(() => {
+      throw new Error('the iframe API is not ready');
+    });
+    vi.spyOn(storage, 'getCurrentVideoForPlaylist').mockResolvedValue(null);
+    useSoundsStore.setState({
+      isLeader: true,
+      activeSource: 'youtube',
+      isPlaying: true,
+      isYoutubeLoading: false,
+      selectedPlaylistId: 'p1',
+      playlists: [
+        { id: 'p1', name: 'Focus', playlistId: 'PL1', firstVideoId: 'v1', isCustom: false },
+      ],
+    });
+    renderHook(() => useSoundsStorageSync());
+
+    fake.emit(['soundsState']);
+    await vi.waitFor(() => expect(useSoundsStore.getState().isPlaying).toBe(false));
+
+    expect(useSoundsStore.getState().isYoutubeLoading).toBe(false);
   });
 });
