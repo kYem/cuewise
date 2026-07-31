@@ -101,20 +101,23 @@ export class LocalStorageKeyValueStore implements KeyValueStore {
   }
 
   async remove(key: string, area: StorageArea): Promise<boolean> {
-    const removed = this.deleteOne(key);
-    if (removed) {
+    const { ok, existed } = this.deleteOne(key);
+    if (existed) {
       this.emit([key], area);
     }
-    return removed;
+    return ok;
   }
 
-  private deleteOne(key: string): boolean {
+  // `existed` apart from `ok`: removing an absent key succeeds (the port calls it idempotent) but
+  // changes nothing, and announcing it queues a re-read for a write that never happened.
+  private deleteOne(key: string): { ok: boolean; existed: boolean } {
     try {
+      const existed = localStorage.getItem(key) !== null;
       localStorage.removeItem(key);
-      return true;
+      return { ok: true, existed };
     } catch (error) {
       logger.error(`Error removing ${key} from storage`, error);
-      return false;
+      return { ok: false, existed: false };
     }
   }
 
@@ -174,34 +177,35 @@ export class LocalStorageKeyValueStore implements KeyValueStore {
     }
   }
 
-  // Not atomic, and the emit is in a `finally`: a batch that fails partway still announces the
-  // keys that did land.
+  // Not atomic: a batch that stops partway still announces the keys that did land.
   async setMany(entries: Record<string, unknown>, area: StorageArea): Promise<StorageResult> {
     const written: string[] = [];
-    try {
-      for (const [key, value] of Object.entries(entries)) {
-        const result = this.writeOne(key, value, area);
-        if (!result.success) {
-          return result;
-        }
-        written.push(key);
+    let failure: StorageResult | null = null;
+    for (const [key, value] of Object.entries(entries)) {
+      const result = this.writeOne(key, value, area);
+      if (!result.success) {
+        failure = result;
+        break;
       }
-      return { success: true };
-    } finally {
-      this.emit(written, area);
+      written.push(key);
     }
+    this.emit(written, area);
+    return failure ?? { success: true };
   }
 
-  // No try/finally, unlike setMany: nothing here returns early, and neither deleteOne nor emit
-  // can throw past this loop.
   async removeMany(keys: string[], area: StorageArea): Promise<boolean> {
     const removed: string[] = [];
+    let allRemoved = true;
     for (const key of keys) {
-      if (this.deleteOne(key)) {
+      const { ok, existed } = this.deleteOne(key);
+      if (!ok) {
+        allRemoved = false;
+      }
+      if (existed) {
         removed.push(key);
       }
     }
     this.emit(removed, area);
-    return removed.length === keys.length;
+    return allRemoved;
   }
 }

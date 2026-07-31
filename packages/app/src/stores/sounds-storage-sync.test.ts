@@ -47,6 +47,25 @@ describe('useSoundsStorageSync', () => {
 
     fake.emit(['soundsState']);
 
+    // Asserted alongside the timer count, so "not the leader" cannot pass as "never subscribed".
+    expect(rehydrate).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+    rehydrate.mockRestore();
+  });
+
+  it('drops a handoff scheduled just before the tab stopped being the leader', () => {
+    vi.useFakeTimers();
+    const fake = fakeObservableStore();
+    configurePlatform({ storage: fake.store });
+    const rehydrate = vi.spyOn(useSoundsStore.persist, 'rehydrate').mockImplementation(() => {});
+    useSoundsStore.setState({ isLeader: true });
+    const { rerender } = renderHook(() => useSoundsStorageSync());
+    fake.emit(['soundsState']);
+    expect(vi.getTimerCount()).toBe(1);
+
+    useSoundsStore.setState({ isLeader: false });
+    rerender();
+
     expect(vi.getTimerCount()).toBe(0);
     rehydrate.mockRestore();
   });

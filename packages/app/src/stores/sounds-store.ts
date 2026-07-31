@@ -630,6 +630,9 @@ export function useSoundsStorageSync() {
     if (store === null) {
       return;
     }
+    // Tracked so a handoff scheduled just before a leadership flip or an unmount can't restart the
+    // player from a tab that is no longer the leader.
+    let handoff: ReturnType<typeof setTimeout> | undefined;
     const unsubscribe = safeSubscribe(store, 'ambient sounds', (keys, area) => {
       if (area !== 'local' || !keys.includes('soundsState')) {
         return;
@@ -639,14 +642,19 @@ export function useSoundsStorageSync() {
         logger.error('Could not rehydrate the sounds state after a storage change', error);
       });
       if (isLeader) {
-        setTimeout(() => {
+        // One pending handoff at a time: a newer state supersedes the one the last event scheduled.
+        clearTimeout(handoff);
+        handoff = setTimeout(() => {
           syncLeaderPlayback().catch((error) => {
             logger.error('Could not sync leader playback after a storage change', error);
           });
         }, 50);
       }
     });
-    return unsubscribe ?? undefined;
+    return () => {
+      clearTimeout(handoff);
+      unsubscribe?.();
+    };
   }, [isLeader]);
 }
 

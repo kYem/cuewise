@@ -319,6 +319,21 @@ describe('LocalStorageKeyValueStore.onChanged', () => {
     expect(seen).toEqual([['settings.theme']]);
   });
 
+  it('says nothing about removing a key that was never there, while still succeeding', async () => {
+    // A reset removes every settings key on a profile that stored two of them; announcing all of
+    // them queues a full re-read for a write that never happened.
+    const store = new LocalStorageKeyValueStore();
+    await store.set('settings.theme', 'dark', 'local');
+    const seen: string[][] = [];
+    store.onChanged((keys) => seen.push(keys));
+
+    await expect(store.removeMany(['settings.theme', 'settings.showClock'], 'local')).resolves.toBe(
+      true
+    );
+
+    expect(seen).toEqual([['settings.theme']]);
+  });
+
   it('reports a batch removal once, like a batch write', async () => {
     const store = new LocalStorageKeyValueStore();
     await store.setMany({ 'settings.theme': 'dark', 'settings.showClock': true }, 'local');

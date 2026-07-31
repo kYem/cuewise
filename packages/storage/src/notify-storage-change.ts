@@ -6,7 +6,9 @@ export function notifyStorageChange(
   keys: string[],
   area: StorageArea
 ): void {
-  for (const subscriber of subscribers) {
+  // Snapshot first: a subscriber that subscribes from inside its own handler would otherwise be
+  // told about a write that predates it.
+  for (const subscriber of [...subscribers]) {
     try {
       // Typed `=> void`, but a caller can still hand back a promise, whose rejection a sync catch
       // cannot see.

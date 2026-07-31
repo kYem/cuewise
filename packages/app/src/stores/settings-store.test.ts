@@ -121,6 +121,16 @@ describe('sync sink wiring', () => {
     expect(markMutated).not.toHaveBeenCalledWith('settings', 'showClock');
   });
 
+  it('does not notify an array key whose contents did not change', async () => {
+    // Both backends parse a fresh array per read, so a reference compare calls every quote-filter
+    // interaction a change and pushes it to every peer.
+    await useSettingsStore.getState().updateSettings({
+      quoteFilterEnabledCategories: [...defaultSettings.quoteFilterEnabledCategories],
+    });
+
+    expect(markMutated).not.toHaveBeenCalledWith('settings', 'quoteFilterEnabledCategories');
+  });
+
   it('notifies markMutated with "theme" after a theme write persists', async () => {
     await useSettingsStore.getState().updateSettings({ theme: 'dark' });
 
@@ -630,6 +640,25 @@ describe('converging on settings written elsewhere', () => {
     errorSpy.mockRestore();
   });
 
+  it('leaves a failed write standing when an unrelated read succeeds', async () => {
+    // A read succeeding says nothing about a write that failed — storage is still full.
+    const fake = fakeObservableStore();
+    configurePlatform({ storage: fake.store });
+    await useSettingsStore.getState().initialize();
+    vi.mocked(storage.setSettingsPatch).mockResolvedValueOnce(storageFailure('write failed'));
+    await useSettingsStore.getState().updateSettings({ colorTheme: 'forest' });
+    const writeError = useSettingsStore.getState().error;
+    expect(writeError).not.toBeNull();
+    storedSettings = { ...defaultSettings, showClock: !defaultSettings.showClock };
+
+    fake.emit(['settings.showClock']);
+
+    await vi.waitFor(() =>
+      expect(useSettingsStore.getState().settings.showClock).toBe(!defaultSettings.showClock)
+    );
+    expect(useSettingsStore.getState().error).toBe(writeError);
+  });
+
   it('drops the complaint once the value it named becomes readable', async () => {
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
@@ -806,6 +835,39 @@ describe('converging on settings written elsewhere', () => {
     // Recovering means observing the replacement, not merely surviving the throw.
     expect(second.subscriberCount).toBe(1);
     errorSpy.mockRestore();
+  });
+
+  it('keeps a failed write reported, since a converging read is no evidence it landed', async () => {
+    const fake = fakeObservableStore();
+    configurePlatform({ storage: fake.store });
+    await useSettingsStore.getState().initialize();
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    vi.mocked(storage.setSettingsPatch).mockResolvedValue({
+      success: false,
+      error: { type: 'quota_exceeded', message: 'quota exceeded' },
+    });
+    await useSettingsStore.getState().updateSettings({ colorTheme: 'forest' });
+    const writeError = useSettingsStore.getState().error;
+    storedSettings = { ...defaultSettings, showClock: false };
+
+    fake.emit(['settings.showClock']);
+
+    await vi.waitFor(() => expect(useSettingsStore.getState().settings.showClock).toBe(false));
+    expect(writeError).toContain('Storage is full');
+    expect(useSettingsStore.getState().error).toBe(writeError);
+    errorSpy.mockRestore();
+  });
+
+  it('ignores a settings key announced in an area it never reads', async () => {
+    const fake = fakeObservableStore();
+    configurePlatform({ storage: fake.store });
+    await useSettingsStore.getState().initialize();
+    storedSettings = { ...defaultSettings, colorTheme: 'forest' };
+
+    fake.emit(['settings.colorTheme'], 'sync');
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(useSettingsStore.getState().settings.colorTheme).toBe(defaultSettings.colorTheme);
   });
 
   it('does not blame a lost change on a user who was only looking at the page', async () => {

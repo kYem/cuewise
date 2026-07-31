@@ -93,15 +93,15 @@ let observing: { store: ObservableKeyValueStore; unsubscribe: () => void } | nul
 
 // Structural for the array-valued keys: both backends parse a fresh array per read, so `===`
 // reports "changed" for anyone who has ever touched a quote filter.
+function sameSettingValue(left: unknown, right: unknown): boolean {
+  if (Array.isArray(left) && Array.isArray(right)) {
+    return left.length === right.length && left.every((item, index) => item === right[index]);
+  }
+  return left === right;
+}
+
 function sameSettings(a: Settings, b: Settings): boolean {
-  return SETTINGS_KEYS.every((key) => {
-    const left = a[key];
-    const right = b[key];
-    if (Array.isArray(left) && Array.isArray(right)) {
-      return left.length === right.length && left.every((item, index) => item === right[index]);
-    }
-    return left === right;
-  });
+  return SETTINGS_KEYS.every((key) => sameSettingValue(a[key], b[key]));
 }
 
 let reportedStale: string | null = null;
@@ -151,8 +151,10 @@ function subscribeToStorage(): void {
   if (store === null) {
     return;
   }
-  const unsubscribe = safeSubscribe(store, 'settings', (keys) => {
-    if (!keys.some((key) => key.startsWith(SETTINGS_KEY_PREFIX))) {
+  // Settings are read and written in the local area only, so a `settings.`-prefixed key announced
+  // anywhere else names a value this store never reads.
+  const unsubscribe = safeSubscribe(store, 'settings', (keys, area) => {
+    if (area !== 'local' || !keys.some((key) => key.startsWith(SETTINGS_KEY_PREFIX))) {
       return;
     }
     queueRefresh();
@@ -191,11 +193,13 @@ async function refreshFromStorage(): Promise<void> {
     reportStale(read.unreadable);
     return;
   }
+  const staleComplaint = reportedStale;
   reportedStale = null;
   const { settings, preview, error } = useSettingsStore.getState();
-  // Before the no-op check: a reset that fixes the value converges on what this store already
-  // holds, and the complaint about it would otherwise stand forever.
-  if (error !== null) {
+  // Only this path's own complaint, and before the no-op check: a reset that fixes the value
+  // converges on what this store already holds, but a read succeeding says nothing about a
+  // write that failed.
+  if (error !== null && error === staleComplaint) {
     useSettingsStore.setState({ error: null });
   }
   // A key names a write, not a changed value, so an own write arrives here as a no-op.
@@ -358,7 +362,10 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
         for (const key of Object.keys(clampedPartial)) {
           if (
             !DEVICE_LOCAL_SETTINGS_KEYS.includes(key) &&
-            updatedSettings[key as keyof Settings] !== settings[key as keyof Settings]
+            !sameSettingValue(
+              updatedSettings[key as keyof Settings],
+              settings[key as keyof Settings]
+            )
           ) {
             notifyMutated('settings', key);
           }
