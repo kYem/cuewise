@@ -45,8 +45,22 @@ export class FakeKvStore implements KeyValueStore {
     return { success: true };
   }
 
+  /** A key whose removal reports failure the way the port defines it: `false`, not a throw. */
+  failRemovesForKey: string | null = null;
+  /** A key whose removal throws instead — off-contract, but an adapter could still do it. */
+  throwRemovesForKey: string | null = null;
+
   async remove(key: string, _area: StorageArea): Promise<boolean> {
-    return this.data.delete(key);
+    if (this.throwRemovesForKey === key) {
+      throw new Error(`FakeKvStore: simulated adapter fault removing ${key}`);
+    }
+    if (this.failRemovesForKey === key) {
+      return false;
+    }
+    // `false` means the removal FAILED (see the port); an absent key is a successful no-op, so
+    // Map.delete's own false must not be forwarded.
+    this.data.delete(key);
+    return true;
   }
 
   async getUsage(_area: StorageArea): Promise<StorageUsage> {
@@ -86,10 +100,13 @@ export class FakeKvStore implements KeyValueStore {
     return { success: true };
   }
 
-  async removeMany(keys: string[], _area: StorageArea): Promise<boolean> {
+  async removeMany(keys: string[], area: StorageArea): Promise<boolean> {
+    // Through remove(), so the failure hooks reach here too — setMany routes through set() for
+    // the same reason, and a bypass here is a trap for the next test that reaches for it.
+    let removed = true;
     for (const key of keys) {
-      this.data.delete(key);
+      removed = (await this.remove(key, area)) && removed;
     }
-    return true;
+    return removed;
   }
 }

@@ -53,6 +53,11 @@ async function doEnable(
   if (engine.getStatus() === 'signed_out') {
     return { ok: false, reason: 'auth' };
   }
+  if (engine.getStatus() === 'disabled') {
+    // enableSync returned without activating, so a disable landed inside it: ok here would
+    // persist creds and hand Chrome sync off. A code it minted still has to reach the user.
+    return { ok: false, reason: 'cancelled', recoveryCode: deps.takeRecoveryCode() };
+  }
   return { ok: true, recoveryCode: deps.takeRecoveryCode() };
 }
 
@@ -180,6 +185,13 @@ export async function handleSyncControlMessage(
   if (op === 'getLastCycle') {
     // Same rationale as 'details': read-only, so it must never queue behind a pending op.
     return runLastCycle(engine);
+  }
+  if (op === 'disable') {
+    // Deliberately outside the mutex, unlike enable/reconnect: queued behind an in-flight enable
+    // it could only land once that enable had finished — the engine's own cancellation would
+    // never see it, and the user's Disconnect would arrive after Chrome sync had been handed off.
+    // The engine is what makes this safe: disableSync bumps the epoch first and synchronously.
+    return runOp(engine, { ...msg, op }, deps);
   }
   return serialize(() => runOp(engine, { ...msg, op }, deps));
 }

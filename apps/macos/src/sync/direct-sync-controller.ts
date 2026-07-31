@@ -14,7 +14,7 @@ import {
   RecoveryCodeRequiredError,
   type SyncEngine,
   type SyncEngineControlSurface,
-  type SyncOutcome,
+  type SyncNowResult,
   type SyncSignInProvider,
   type SyncStatus,
 } from '@cuewise/sync-engine';
@@ -210,6 +210,13 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
       logger.warn(`Cloud sync sign-in rejected (401) ${trace}`);
       return { ok: false, reason: 'auth' };
     }
+    if (engine.getStatus() === 'disabled') {
+      // enableSync returned without activating, so a disable landed inside it: ok here would
+      // persist creds for a removed account. A code it minted still has to reach the user.
+      const abandonedCode = capturedRecoveryCode;
+      capturedRecoveryCode = undefined;
+      return { ok: false, reason: 'cancelled', recoveryCode: abandonedCode };
+    }
     await persistCreds(creds);
     const capturedCode = capturedRecoveryCode;
     capturedRecoveryCode = undefined;
@@ -361,7 +368,7 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
     async regenerateRecoveryCode(): Promise<string> {
       return engine.regenerateRecoveryCode();
     },
-    async syncNow(): Promise<SyncOutcome> {
+    async syncNow(): Promise<SyncNowResult> {
       emit('syncing');
       // Reconcile in finally so an engine throw doesn't strand the pill on "Syncing…".
       try {

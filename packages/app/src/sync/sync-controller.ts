@@ -1,4 +1,4 @@
-import type { SyncOutcome } from '@cuewise/sync-engine';
+import type { SyncNowResult, SyncOutcome } from '@cuewise/sync-engine';
 import { createContext, useContext } from 'react';
 
 /**
@@ -17,15 +17,32 @@ export type SyncUiStatus =
 
 export type EnableResult =
   | { ok: true; recoveryCode?: string }
-  | { ok: false; reason: 'needs-code' | 'bad-code' | 'auth' | 'error'; detail?: string };
+  | {
+      ok: false;
+      reason: 'needs-code' | 'bad-code' | 'auth' | 'error' | 'cancelled';
+      detail?: string;
+      /** A code the abandoned attempt minted; the account it created outlives the attempt. */
+      recoveryCode?: string;
+    };
 
 /**
- * EnableResult.detail marker for a deliberate user cancel; the UI goes quiet on it (no toast,
- * no error state). Hosts must only emit it when the cancel signal is trustworthy — macOS's
- * server-sanitized access_denied qualifies; the extension's window-close message does NOT
- * (Chromium reports closing a Google-side error page the same way).
+ * EnableResult.detail marker for a deliberate cancel of the SIGN-IN itself; only meaningful beside
+ * `reason:'auth'`, whose results carry no other detail. Hosts must only emit it when the cancel
+ * signal is trustworthy — macOS's server-sanitized access_denied qualifies; the extension's
+ * window-close message does NOT (Chromium reports closing a Google-side error page the same way).
  */
 export const AUTH_CANCELLED_DETAIL = 'cancelled';
+
+/**
+ * Whether a failed enable was the user's own doing. Reads the reason, not just the detail: an
+ * `error` detail is a thrown message, and one reading "cancelled" would silence a real failure.
+ */
+export function isCancelledEnable(result: Extract<EnableResult, { ok: false }>): boolean {
+  if (result.reason === 'cancelled') {
+    return true;
+  }
+  return result.reason === 'auth' && result.detail === AUTH_CANCELLED_DETAIL;
+}
 
 /**
  * A last-cycle read. `{available:false}` is NOT `{available:true, outcome:null}`: only the latter
@@ -82,7 +99,7 @@ export interface SyncController {
   reconnect(recoveryCode?: string): Promise<EnableResult>;
   disable(): Promise<void>;
   regenerateRecoveryCode(): Promise<string>;
-  syncNow(): Promise<SyncOutcome>;
+  syncNow(): Promise<SyncNowResult>;
   /** Informational: resolves null when unavailable (signed out, offline, legacy host); never throws. */
   getDetails(): Promise<SyncDetails | null>;
   /**

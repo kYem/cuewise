@@ -1,5 +1,5 @@
 import { describeThrown, logger } from '@cuewise/shared';
-import type { SyncFailureReason, SyncOutcome } from '@cuewise/sync-engine';
+import type { SyncFailureReason, SyncNowResult, SyncOutcome } from '@cuewise/sync-engine';
 import { cn } from '@cuewise/ui';
 import { AlertTriangle, CloudUpload, KeyRound, Loader2, RefreshCw } from 'lucide-react';
 import type React from 'react';
@@ -13,7 +13,7 @@ import type {
   SyncUiStatus,
 } from '../../sync/sync-controller';
 import {
-  AUTH_CANCELLED_DETAIL,
+  isCancelledEnable,
   LAST_CYCLE_UNAVAILABLE,
   useSyncController,
 } from '../../sync/sync-controller';
@@ -108,7 +108,7 @@ function failureMessage(reason: SyncFailureReason): string {
 
 // Called wherever an outcome arrives, never from failureMessage — render calls that every paint.
 // Without it the fallback copy is indistinguishable from a genuine no-key/resynced/signed-out one.
-function logUnrecognisedReason(outcome: SyncOutcome | null): void {
+function logUnrecognisedReason(outcome: SyncNowResult | null): void {
   if (outcome === null || outcome.kind !== 'failed') {
     return;
   }
@@ -134,6 +134,10 @@ function adoptLastCycle(
   paint(read.outcome);
   return true;
 }
+
+// Regenerate cannot fix this one — the abandoned enrol dropped the key it would need.
+const ABANDONED_CODE_MESSAGE =
+  'Cloud Sync was disconnected before setup finished. Save this recovery code — it is the only way back into the account it had already created.';
 
 const DISABLE_MESSAGE = 'Re-enabling on this device will need your recovery code.';
 const DISABLE_MESSAGE_UNSAVED =
@@ -385,6 +389,31 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     await refreshDetails();
   };
 
+  // A disconnect landed mid-enable, so the switch must stop reading on.
+  const routeAbandonedEnable = (recoveryCode: string | undefined) => {
+    setEnabling(false);
+    // The enroll modal is a prompt to finish joining an account this device is no longer joining;
+    // left open, its Enroll button starts a fresh sign-in for it.
+    setEnrollOpen(false);
+    if (recoveryCode === undefined) {
+      // Nothing minted means nothing outlives the attempt: the user's own action, not a fault.
+      logger.info('Cloud sync enable was abandoned by a disconnect');
+      return;
+    }
+    logger.error('Cloud sync enable was abandoned after creating an account on the server');
+    if (mountedRef.current) {
+      surfaceRecoveryCode(recoveryCode);
+      useToastStore.getState().warning(ABANDONED_CODE_MESSAGE);
+      return;
+    }
+    // No modal to render into, and Regenerate cannot mint a replacement, so the code itself has
+    // to travel in the message — and it must not time out like an ordinary toast.
+    logger.error('Cloud sync issued a recovery code after Settings closed — it went to a toast');
+    useToastStore
+      .getState()
+      .warning(`${ABANDONED_CODE_MESSAGE} ${recoveryCode}`, { duration: Number.POSITIVE_INFINITY });
+  };
+
   // Shared by the initial enable() and the reconnect() flows — both surface the same shape.
   // source records which flow needs a code, so the EnrollCodeModal submit routes back correctly.
   const routeEnableResult = async (
@@ -408,9 +437,13 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       setEnrollOpen(true);
       return;
     }
-    if (result.reason === 'auth' && result.detail === AUTH_CANCELLED_DETAIL) {
-      // A deliberate user cancel (closing Google's consent screen) isn't a failure — no error
-      // state, no toast; the form stays open for another attempt.
+    if (result.reason === 'cancelled') {
+      routeAbandonedEnable(result.recoveryCode);
+      return;
+    }
+    if (isCancelledEnable(result)) {
+      // A cancelled sign-in isn't a failure: no error state, no toast; the form stays open for
+      // another attempt, unlike the disconnect above, which ended this device's setup.
       logger.info(`Cloud sync ${source} sign-in was cancelled by the user`);
       return;
     }
@@ -479,7 +512,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
           // twice. The resume can find the session already gone (revoked/expired while the user
           // hunted for the code) → reason:'auth'; retrying resume is hopeless, so fall back to a
           // full re-auth, which re-establishes the session (the code is already typed).
-          if (!result.ok && result.reason === 'auth' && result.detail !== AUTH_CANCELLED_DETAIL) {
+          if (!result.ok && result.reason === 'auth' && !isCancelledEnable(result)) {
             result = await controller.enableWithGoogle(deviceName, code);
           }
         } else {
@@ -502,8 +535,10 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       if (result.recoveryCode) {
         surfaceRecoveryCode(result.recoveryCode);
       }
-    } else if (result.reason === 'auth' && result.detail === AUTH_CANCELLED_DETAIL) {
-      logger.info('Cloud sync enroll re-auth was cancelled by the user');
+    } else if (result.reason === 'cancelled') {
+      routeAbandonedEnable(result.recoveryCode);
+    } else if (isCancelledEnable(result)) {
+      logger.info('Cloud sync enroll sign-in was cancelled by the user');
     } else {
       // The modal renders the message; this is the default-visible trace of what failed.
       logger.error(
@@ -544,6 +579,11 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       // Above the guard: a build/skew defect is not this account's outcome, so a superseded click
       // must not drop the only evidence of it.
       logUnrecognisedReason(outcome);
+      if (outcome.kind === 'cancelled') {
+        // A disable landed mid-cycle: no cycle to paint, no account to toast about, and no
+        // details left to refresh below.
+        return;
+      }
       // Only an account change retires this click: the cycle then belongs to an account the panel
       // no longer shows, so neither badge nor toast may speak for it.
       if (accountGenRef.current === accountGen) {

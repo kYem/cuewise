@@ -169,6 +169,33 @@ describe('createDirectSyncController: enable()', () => {
     expect(result).toEqual({ ok: false, reason: 'auth' });
   });
 
+  it('maps a post-call disabled status to a cancel, never to ok', async () => {
+    let trampolines: { onRecoveryCode: (code: string) => void } | undefined;
+    const engine = fakeControlSurface({
+      getStatus: vi.fn().mockReturnValue('disabled' as SyncStatus),
+      // The engine hands the code over before it notices it was superseded.
+      enableSync: vi.fn().mockImplementation(async () => {
+        if (trampolines === undefined) {
+          throw new Error('buildEngine never ran, so there are no trampolines to mint through');
+        }
+        trampolines.onRecoveryCode('CW1-ABC');
+      }),
+    });
+    const { controller } = buildDirectSyncController<SyncEngineControlSurface>({
+      baseUrl: BASE_URL,
+      keyStore: new FakeKvStore(),
+      oauthDriver: unusedDriver(),
+      buildEngine: (built) => {
+        trampolines = built;
+        return engine;
+      },
+    });
+
+    const result = await controller.enable('cred-a', 'Device A');
+
+    expect(result).toEqual({ ok: false, reason: 'cancelled', recoveryCode: 'CW1-ABC' });
+  });
+
   it('maps any other thrown error to error with its message as detail', async () => {
     const server = new FakeSyncServer();
     const device = createDevice(server);

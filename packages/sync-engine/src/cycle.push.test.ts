@@ -1,8 +1,8 @@
 import { generateDataKey } from '@cuewise/crypto';
-import { configurePlatform, hlcEncode } from '@cuewise/shared';
+import { configurePlatform, hlcEncode, logger } from '@cuewise/shared';
 import { setGoals } from '@cuewise/storage';
 import { goalFactory } from '@cuewise/test-utils/factories';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeKvStore } from './__fixtures__/fake-kv-store';
 import { FakeTransport } from './__fixtures__/fake-transport';
 import { defaultBindings } from './collections';
@@ -28,7 +28,11 @@ async function seedDirty(
   return meta;
 }
 
-function makeDeps(kv: FakeKvStore, transport: FakeTransport): CycleDeps {
+function makeDeps(
+  kv: FakeKvStore,
+  transport: FakeTransport,
+  overrides: Partial<CycleDeps> = {}
+): CycleDeps {
   return {
     transport,
     meta: new SyncMetadataStore(kv),
@@ -36,6 +40,8 @@ function makeDeps(kv: FakeKvStore, transport: FakeTransport): CycleDeps {
     dk: generateDataKey(),
     keyId: KEY_ID,
     strategy: new LwwHlcStrategy(),
+    isCancelled: () => false,
+    ...overrides,
   };
 }
 
@@ -128,6 +134,41 @@ describe('pushOnce', () => {
     kv.failGetManyForKey = null;
     const saved = await metaStore.load();
     expect(saved.dirty.goals).toEqual(['g1']);
+  });
+
+  it('pushes nothing when the cycle is already cancelled', async () => {
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    const metaStore = new SyncMetadataStore(kv);
+    await seedDirty(metaStore, 'goals', ['g1']);
+    const deps = makeDeps(kv, transport, { isCancelled: () => true });
+
+    const result = await pushOnce(deps);
+
+    expect(result).toEqual({ kind: 'cancelled' });
+    expect(transport.pushedBatches).toEqual([]);
+  });
+
+  it('stops between batches once cancelled, without writing the ack back to the ledger', async () => {
+    const ids = Array.from({ length: 150 }, (_, i) => `g${i}`);
+    await setGoals(ids.map((id) => goalFactory.build({ id })));
+    const metaStore = new SyncMetadataStore(kv);
+    await seedDirty(metaStore, 'goals', ids);
+    const deps = makeDeps(kv, transport, {
+      isCancelled: () => transport.pushedBatches.length > 0,
+    });
+
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    const result = await pushOnce(deps);
+
+    expect(result).toEqual({ kind: 'cancelled' });
+    expect(transport.pushedBatches).toHaveLength(1);
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Cloud sync stopped a push for a disconnected account, but its server had already accepted 100 records'
+    );
+    errorSpy.mockRestore();
+    const saved = await metaStore.load();
+    expect(saved.dirty.goals).toEqual(ids);
   });
 
   it('leaves meta.dirty intact when pushChanges rejects', async () => {

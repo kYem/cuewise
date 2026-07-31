@@ -227,6 +227,109 @@ describe('SyncSettingsSectionComponent', () => {
     expect(toastError).not.toHaveBeenCalled();
   });
 
+  it('shows a recovery code minted by an enable that a disconnect then abandoned', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptEnableWithGoogle({ ok: false, reason: 'cancelled', recoveryCode: CODE });
+    renderSection(controller);
+
+    await user.click(cloudSyncSwitch());
+    await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
+
+    expect(await screen.findByText('Save your recovery code')).toBeInTheDocument();
+    // The modal renders the code in groups, so the rendered text carries no separators.
+    expect(screen.getByTestId('recovery-code-display')).toHaveTextContent(CODE.replaceAll('-', ''));
+    // A modal with no explanation, beside a switch still reading on, is not a coherent screen.
+    expect(toastWarning).toHaveBeenCalledWith(expect.stringContaining('disconnected before setup'));
+    expect(cloudSyncSwitch()).not.toBeChecked();
+    expect(toastError).not.toHaveBeenCalled();
+  });
+
+  it('closes the enroll prompt too, so its Enroll button cannot restart a dead sign-in', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptEnableWithGoogle({ ok: false, reason: 'needs-code' });
+    controller.scriptEnrollWithCode({ ok: false, reason: 'cancelled', recoveryCode: CODE });
+    renderSection(controller);
+
+    await user.click(cloudSyncSwitch());
+    await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
+    await screen.findByText('Enter recovery code');
+    await user.type(screen.getByLabelText(/recovery code/i), CODE);
+    await user.click(screen.getByRole('button', { name: 'Enroll' }));
+
+    expect(await screen.findByText('Save your recovery code')).toBeInTheDocument();
+    expect(screen.queryByText('Enter recovery code')).not.toBeInTheDocument();
+  });
+
+  it('explains the modal it just opened, with one warning', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptEnableWithGoogle({ ok: false, reason: 'cancelled', recoveryCode: CODE });
+    renderSection(controller);
+
+    await user.click(cloudSyncSwitch());
+    await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
+
+    await screen.findByText('Save your recovery code');
+    expect(toastWarning).toHaveBeenCalledTimes(1);
+  });
+
+  it('carries the code in the message when Settings closed before it could be shown', async () => {
+    // Nothing else holds it — the host slots are read-and-clear and Regenerate cannot mint a
+    // replacement without a key, so a message that omits it destroys the account's only way back.
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.deferNextEnableWithGoogle();
+    const { unmount } = renderSection(controller);
+
+    await user.click(cloudSyncSwitch());
+    await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
+    unmount();
+    await act(async () => {
+      controller.resolveEnableWithGoogle({ ok: false, reason: 'cancelled', recoveryCode: CODE });
+    });
+
+    // Once: the closed-panel path used to warn from here AND from surfaceRecoveryCode.
+    expect(toastWarning).toHaveBeenCalledTimes(1);
+    // And it must not time out — it is the only surface the code gets.
+    expect(toastWarning).toHaveBeenCalledWith(expect.stringContaining(CODE), {
+      duration: Number.POSITIVE_INFINITY,
+    });
+  });
+
+  it('closes the enable form when a disconnect abandons it, with nothing to show', async () => {
+    const user = userEvent.setup();
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const controller = new FakeSyncController();
+    controller.scriptEnableWithGoogle({ ok: false, reason: 'cancelled' });
+    renderSection(controller);
+
+    await user.click(cloudSyncSwitch());
+    await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
+
+    await waitFor(() => expect(cloudSyncSwitch()).not.toBeChecked());
+    expect(screen.queryByText('Save your recovery code')).not.toBeInTheDocument();
+    expect(toastError).not.toHaveBeenCalled();
+    expect(toastWarning).not.toHaveBeenCalled();
+    // Nothing was stranded, so this is the user's own action rather than a fault to report.
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it('still toasts a real failure whose thrown message happens to read "cancelled"', async () => {
+    // Hosts build `detail` from an Error message, so matching on the detail alone would let a
+    // genuine failure pass as the user's own cancel: no toast, no error state, nothing.
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptEnableWithGoogle({ ok: false, reason: 'error', detail: 'cancelled' });
+    renderSection(controller);
+
+    await user.click(cloudSyncSwitch());
+    await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
+
+    await waitFor(() => expect(toastError).toHaveBeenCalledTimes(1));
+  });
+
   it('still toasts an auth failure that carries a non-cancel detail', async () => {
     // Pins the exact-match: loosening `detail === 'cancelled'` to a truthy check would
     // silently swallow real auth failures the moment a producer attaches a diagnostic detail.
@@ -543,6 +646,23 @@ describe('SyncSettingsSectionComponent', () => {
     expect(controller.calls.filter((call) => call.method === 'enableWithGoogle')).toHaveLength(1);
     expect(controller.calls.some((call) => call.method === 'enable')).toBe(false);
     expect(controller.calls.some((call) => call.method === 'reconnect')).toBe(false);
+  });
+
+  it('shows a code minted by an enroll submit that a disconnect then abandoned', async () => {
+    // The enroll fallback can land on a different account, mint a fresh code, and be abandoned.
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptEnableWithGoogle({ ok: false, reason: 'needs-code' });
+    controller.scriptEnrollWithCode({ ok: false, reason: 'cancelled', recoveryCode: CODE });
+    renderSection(controller);
+
+    await user.click(cloudSyncSwitch());
+    await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
+    await screen.findByText('Enter recovery code');
+    await user.type(screen.getByLabelText(/recovery code/i), CODE);
+    await user.click(screen.getByRole('button', { name: 'Enroll' }));
+
+    expect(await screen.findByText('Save your recovery code')).toBeInTheDocument();
   });
 
   it('falls back to enableWithGoogle for enroll when the host lacks enrollWithCode (extension)', async () => {
@@ -982,6 +1102,52 @@ describe('SyncSettingsSectionComponent', () => {
     act(() => controller.setStatus('syncing'));
     expect(errorSpy).not.toHaveBeenCalled();
     errorSpy.mockRestore();
+  });
+
+  it('leaves the badge and the toasts alone when a disable retires the cycle', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptSyncNow({ kind: 'failed', reason: 'device', error: new Error('unreadable') });
+    controller.scriptSyncNow({ kind: 'cancelled' });
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+    await user.click(screen.getByRole('button', { name: 'Sync now' }));
+    await screen.findByTestId('sync-failure-badge');
+    toastError.mockClear();
+    const detailsBefore = controller.calls.filter((call) => call.method === 'getDetails').length;
+
+    await user.click(screen.getByRole('button', { name: 'Sync now' }));
+
+    await waitFor(() =>
+      expect(controller.calls.filter((call) => call.method === 'syncNow')).toHaveLength(2)
+    );
+    expect(screen.getByTestId('sync-failure-badge')).toBeInTheDocument();
+    // No account left to fetch details for, so the trailing refresh must not run either.
+    expect(controller.calls.filter((call) => call.method === 'getDetails')).toHaveLength(
+      detailsBefore
+    );
+    expect(toastError).not.toHaveBeenCalled();
+    expect(toastWarning).not.toHaveBeenCalled();
+    expect(toastSuccess).not.toHaveBeenCalled();
+  });
+
+  it('still shows the failure when Settings is reopened after a wake that found no key', async () => {
+    // A cold worker can wake before the key loads. The engine records no cycle for that, so the
+    // next mount's read must not answer with it — this pins the fake to the engine it stands for.
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptSyncNow({ kind: 'failed', reason: 'device', error: new Error('unreadable') });
+    controller.scriptSyncNow({ kind: 'no-key' });
+    const { unmount } = renderSection(controller);
+    act(() => controller.setStatus('active'));
+    await user.click(screen.getByRole('button', { name: 'Sync now' }));
+    await screen.findByTestId('sync-failure-badge');
+    await user.click(screen.getByRole('button', { name: 'Sync now' }));
+
+    unmount();
+    renderSection(controller);
+
+    expect(await screen.findByTestId('sync-failure-badge')).toBeInTheDocument();
   });
 
   it('does not report success for a cycle that did nothing', async () => {

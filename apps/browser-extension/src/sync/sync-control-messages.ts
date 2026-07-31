@@ -1,5 +1,5 @@
 import type { EnableResult, SyncDetails } from '@cuewise/app';
-import type { SyncOutcome, SyncSignInProvider } from '@cuewise/sync-engine';
+import type { SyncNowResult, SyncOutcome, SyncSignInProvider } from '@cuewise/sync-engine';
 import { z } from 'zod/mini';
 
 // One source of truth for the op list and its type, so the runtime guard can't desync from the union.
@@ -51,7 +51,7 @@ export interface SyncDetailsResponse {
 export interface SyncOutcomeResponse {
   ok: true;
   kind: 'outcome';
-  outcome: SyncOutcome;
+  outcome: SyncNowResult;
 }
 
 /** Response to the 'getLastCycle' op; `outcome` is null until the first cycle has run. */
