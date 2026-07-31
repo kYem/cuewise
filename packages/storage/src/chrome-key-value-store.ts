@@ -9,6 +9,7 @@ import {
   type StoredValues,
   toStoredValues,
 } from '@cuewise/shared';
+import { notifyStorageChange } from './notify-storage-change';
 
 // Chrome storage quotas
 const SYNC_QUOTA_BYTES = 102400; // 100KB
@@ -29,7 +30,7 @@ export class ChromeKeyValueStore implements KeyValueStore {
       if (areaName !== 'local' && areaName !== 'sync') {
         return;
       }
-      handler(Object.keys(changes), areaName);
+      notifyStorageChange([handler], Object.keys(changes), areaName);
     };
     chrome.storage.onChanged.addListener(listener);
     return () => {

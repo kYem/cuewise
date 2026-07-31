@@ -7,12 +7,9 @@ import {
 } from '@cuewise/shared';
 
 /**
- * The configured store when this build can observe writes through it, else null. Never throws:
- * these callers are React effects and a store initializer, where a throw crashes the render tree.
- *
- * The two nulls are not the same. An absent `onChanged` is a platform limit the caller lives with;
- * an unreachable registry is a wiring bug, and the hooks that ask do no follow-up read that would
- * report it.
+ * The configured store when this build can observe writes through it, else null. Returns null
+ * rather than throwing — a caller is a React effect, where a throw takes down the render tree.
+ * A missing `onChanged` is a platform limit and stays quiet; an unreachable registry is logged.
  */
 export function observableStorage(): KeyValueStore | null {
   let store: KeyValueStore;
@@ -25,16 +22,22 @@ export function observableStorage(): KeyValueStore | null {
   return store.onChanged === undefined ? null : store;
 }
 
-/** Named, since a failure here silently stops one consumer converging and never retries. */
+/** Names the consumer in the log: a failure here stops it converging and never retries. */
 export function safeSubscribe(
   store: KeyValueStore,
   what: string,
   handler: (keys: string[], area: StorageArea) => void
 ): (() => void) | null {
+  let unsubscribe: (() => void) | undefined;
   try {
-    return store.onChanged?.(handler) ?? null;
+    unsubscribe = store.onChanged?.(handler);
   } catch (error) {
     logger.error(`Could not observe storage changes for ${what}: ${describeThrown(error)}`, error);
     return null;
   }
+  if (unsubscribe === undefined) {
+    logger.error(`Storage cannot observe changes for ${what}, so it will not converge`);
+    return null;
+  }
+  return unsubscribe;
 }

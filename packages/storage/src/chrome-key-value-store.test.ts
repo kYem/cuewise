@@ -244,6 +244,20 @@ describe('ChromeKeyValueStore.onChanged', () => {
     unsubscribe();
   });
 
+  it('reports a throwing subscriber rather than letting it escape into Chrome', () => {
+    // Uncaught here it surfaces in the dispatcher, never through the app's own logger — the same
+    // fault the dev backend catches and names.
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const unsubscribe = store.onChanged(() => {
+      throw new Error('subscriber exploded');
+    });
+
+    expect(() => event().fire({ 'settings.theme': { newValue: 'dark' } }, 'local')).not.toThrow();
+    expect(errorSpy).toHaveBeenCalledWith('A storage change subscriber threw', expect.anything());
+    unsubscribe();
+    errorSpy.mockRestore();
+  });
+
   it('stops reporting once unsubscribed', () => {
     const seen: string[][] = [];
 

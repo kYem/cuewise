@@ -39,8 +39,20 @@ function unreadableSettingsMessage(unreadable: string[]): string {
   if (unreadable.length === 0) {
     return "Cuewise can't read your settings, so the change was not saved.";
   }
+  return `${namesUnreadable(unreadable)} Reset to defaults in Settings to fix it.`;
+}
+
+/** Same failure, but nobody was saving: a refresh must not tell the user their change was lost. */
+function staleSettingsMessage(unreadable: string[]): string {
+  if (unreadable.length === 0) {
+    return "Cuewise can't read your settings, so what you see may be out of date.";
+  }
+  return `${namesUnreadable(unreadable)} Reset to defaults in Settings to fix it.`;
+}
+
+function namesUnreadable(unreadable: string[]): string {
   const subject = unreadable.length === 1 ? 'value' : 'values';
-  return `Cuewise can't read your saved ${subject} for ${unreadable.join(', ')}. Reset to defaults in Settings to fix it.`;
+  return `Cuewise can't read your saved ${subject} for ${unreadable.join(', ')}.`;
 }
 
 /** Quota failures get actionable copy; anything else keeps the generic retry message. */
@@ -83,11 +95,9 @@ function applyAll(settings: Settings): void {
 }
 
 let unsubscribeFromStorage: (() => void) | null = null;
-// Which backend that subscription belongs to, so a reconfigured platform is not left observing
-// the store it replaced. Identity, not a boolean: every initialize() calls this.
 let subscribedTo: KeyValueStore | null = null;
 
-// Structural for the two array-valued keys: both backends parse a fresh array per read, so `===`
+// Structural for the array-valued keys: both backends parse a fresh array per read, so `===`
 // reports "changed" for anyone who has ever touched a quote filter.
 function sameSettings(a: Settings, b: Settings): boolean {
   return SETTINGS_KEYS.every((key) => {
@@ -100,8 +110,10 @@ function sameSettings(a: Settings, b: Settings): boolean {
   });
 }
 
-// Trailing edge: the sync engine writes settings one key per call, so a first sync applying fifty
-// records would otherwise queue fifty full re-reads behind each other.
+let reportedStale: string | null = null;
+
+// The sync engine writes settings one key per call, so a burst would otherwise queue one full
+// re-read per key.
 let refreshQueued = false;
 
 function queueRefresh(): void {
@@ -109,8 +121,7 @@ function queueRefresh(): void {
     return;
   }
   refreshQueued = true;
-  // Nobody awaits this, so its own rejection is the only place a throw can be reported — and it
-  // recurs per settings write, since the flag is already cleared by the time one lands.
+  // Floating on purpose; its own rejection is the only place a throw here can be reported.
   enqueueWrite(async () => {
     refreshQueued = false;
     await refreshFromStorage();
@@ -127,8 +138,7 @@ function subscribeToStorage(): void {
   }
   if (unsubscribeFromStorage !== null) {
     try {
-      // Its own try: initialize() calls this inside the try that reports a failed load, and a
-      // throwing teardown would abort the load before the settings are even read.
+      // Its own try: a throwing teardown would otherwise abort initialize()'s load.
       unsubscribeFromStorage();
     } catch (error) {
       logger.error(
@@ -146,8 +156,6 @@ function subscribeToStorage(): void {
     if (!keys.some((key) => key.startsWith(SETTINGS_KEY_PREFIX))) {
       return;
     }
-    // Queued: unqueued it can read between an in-flight initialize's read and its set, and be
-    // overwritten by that older snapshot.
     queueRefresh();
   });
   if (unsubscribe === null) {
@@ -178,21 +186,24 @@ async function refreshFromStorage(): Promise<void> {
     return;
   }
   if (!read.ok) {
+    // An empty list is the read itself failing, not zero unreadable fields.
     logger.error('Settings changed elsewhere could not be read; the shown values are stale', {
-      fields: read.unreadable,
+      fields: read.unreadable.length > 0 ? read.unreadable : 'the read failed',
     });
-    // Toasted, because nothing renders `error` — and only on a change of message, because a
-    // listener repeats: one stale-value problem says so once, not once per key a pull writes.
-    const message = unreadableSettingsMessage(read.unreadable);
-    if (useSettingsStore.getState().error !== message) {
+    // Latched on its own, not on `error`, which the write path sets too: a pull writes one key at
+    // a time, so one problem should say so once — and a different one should still say so.
+    const message = staleSettingsMessage(read.unreadable);
+    if (reportedStale !== message) {
+      reportedStale = message;
       useSettingsStore.setState({ error: message });
       useToastStore.getState().error(message);
     }
     return;
   }
+  reportedStale = null;
   const { settings, preview, error } = useSettingsStore.getState();
-  // Before the no-op check, not after: a reset that fixes the corrupt value converges to settings
-  // this store already holds, and would otherwise leave the complaint about it standing forever.
+  // Before the no-op check: a reset that fixes the value converges on what this store already
+  // holds, and the complaint about it would otherwise stand forever.
   if (error !== null) {
     useSettingsStore.setState({ error: null });
   }
@@ -261,6 +272,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     enqueueWrite(async () => {
       try {
         subscribeToStorage();
+        reportedStale = null;
         set({ isLoading: true, error: null });
 
         const settings = await getSettings();

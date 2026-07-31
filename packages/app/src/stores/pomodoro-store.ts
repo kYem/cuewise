@@ -684,7 +684,10 @@ export function usePomodoroStorageSync() {
         if (area !== 'local' || !keys.includes('pomodoroState')) {
           return;
         }
-        usePomodoroStore.persist.rehydrate();
+        // Dropped rather than returned, so the port's own promise guard never sees it.
+        Promise.resolve(usePomodoroStore.persist.rehydrate()).catch((error) => {
+          logger.error('Could not rehydrate the pomodoro timer after a storage change', error);
+        });
       }) ?? undefined
     );
   }, []);

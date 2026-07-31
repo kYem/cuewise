@@ -635,10 +635,15 @@ export function useSoundsStorageSync() {
         if (area !== 'local' || !keys.includes('soundsState')) {
           return;
         }
-        useSoundsStore.persist.rehydrate();
+        // Dropped rather than returned, so the port's own promise guard never sees either of these.
+        Promise.resolve(useSoundsStore.persist.rehydrate()).catch((error) => {
+          logger.error('Could not rehydrate the sounds state after a storage change', error);
+        });
         if (isLeader) {
           setTimeout(() => {
-            syncLeaderPlayback();
+            syncLeaderPlayback().catch((error) => {
+              logger.error('Could not sync leader playback after a storage change', error);
+            });
           }, 50);
         }
       }) ?? undefined

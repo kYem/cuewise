@@ -200,10 +200,85 @@ describe('LocalStorageKeyValueStore.onChanged', () => {
     const seen: string[][] = [];
     store.onChanged((keys) => seen.push(keys));
 
-    // The second entry refuses: `undefined` is the value the adapter rejects outright.
     await store.setMany({ 'settings.theme': 'dark', 'settings.showClock': undefined }, 'local');
 
     expect(seen).toEqual([['settings.theme']]);
+  });
+
+  it('reports the failure that stopped a batch, and stops at it', async () => {
+    // `success` here means the macOS write path installs a setting and pushes it to the peer with
+    // nothing on disk behind it.
+    const store = new LocalStorageKeyValueStore();
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    const result = await store.setMany(
+      { 'settings.theme': undefined, 'settings.showClock': true },
+      'local'
+    );
+
+    expect(result.success).toBe(false);
+    expect(localStorage.getItem('settings.showClock')).toBeNull();
+    errorSpy.mockRestore();
+  });
+
+  it('says nothing at all when a batch lands nothing', async () => {
+    const store = new LocalStorageKeyValueStore();
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const seen: string[][] = [];
+    store.onChanged((keys) => seen.push(keys));
+
+    await store.setMany({ 'settings.theme': undefined }, 'local');
+
+    expect(seen).toEqual([]);
+    errorSpy.mockRestore();
+  });
+
+  it('does not announce a write that failed', async () => {
+    const store = new LocalStorageKeyValueStore();
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const seen: string[][] = [];
+    store.onChanged((keys) => seen.push(keys));
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementationOnce(() => {
+      throw new DOMException('the quota has been exceeded', 'QuotaExceededError');
+    });
+
+    await store.set('settings.theme', 'dark', 'local');
+
+    expect(seen).toEqual([]);
+    errorSpy.mockRestore();
+  });
+
+  it('reports a removal that failed while still announcing the ones that landed', async () => {
+    const store = new LocalStorageKeyValueStore();
+    await store.setMany({ a: 1, b: 2 }, 'local');
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const seen: string[][] = [];
+    store.onChanged((keys) => seen.push(keys));
+    vi.spyOn(Storage.prototype, 'removeItem').mockImplementationOnce(() => {
+      throw new DOMException('denied', 'SecurityError');
+    });
+
+    await expect(store.removeMany(['a', 'b'], 'local')).resolves.toBe(false);
+
+    expect(seen).toEqual([['b']]);
+    errorSpy.mockRestore();
+  });
+
+  it('announces a write made from inside a subscriber separately', async () => {
+    const store = new LocalStorageKeyValueStore();
+    const seen: string[][] = [];
+    let reentered = false;
+    store.onChanged((keys) => {
+      seen.push(keys);
+      if (!reentered) {
+        reentered = true;
+        void store.set('c', 3, 'local');
+      }
+    });
+
+    await store.setMany({ a: 1, b: 2 }, 'local');
+
+    expect(seen).toEqual([['a', 'b'], ['c']]);
   });
 
   it('announces each concurrent batch under its own keys', async () => {

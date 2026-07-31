@@ -9,6 +9,7 @@ import {
   storedValue,
   UNREADABLE_VALUE,
 } from '@cuewise/shared';
+import { notifyStorageChange } from './notify-storage-change';
 
 const LOCALSTORAGE_QUOTA_BYTES = 5242880; // 5MB (dev fallback estimate)
 
@@ -44,25 +45,11 @@ export class LocalStorageKeyValueStore implements KeyValueStore {
     };
   }
 
-  // A throwing subscriber must not fail the write that notified it.
   private emit(keys: string[], area: StorageArea): void {
     if (keys.length === 0) {
       return;
     }
-    for (const subscriber of this.subscribers) {
-      try {
-        // Typed `=> void`, but a caller can still hand back a promise, whose rejection a sync
-        // catch cannot see.
-        const settled = subscriber(keys, area) as unknown;
-        if (settled instanceof Promise) {
-          settled.catch((error) => {
-            logger.error('A storage change subscriber rejected', { keys, area, error });
-          });
-        }
-      } catch (error) {
-        logger.error('A storage change subscriber threw', { keys, area, error });
-      }
-    }
+    notifyStorageChange(this.subscribers, keys, area);
   }
 
   async get<T>(key: string, _area: StorageArea): Promise<T | null> {
@@ -186,11 +173,8 @@ export class LocalStorageKeyValueStore implements KeyValueStore {
     }
   }
 
-  // Not atomic: a mid-loop quota failure leaves earlier keys in this call already written.
-  //
-  // One notification carrying this call's own keys. Collected per call, not in an instance-wide
-  // batch window: that window spans awaits, so it would swallow a concurrent write's event and
-  // report that key as part of an operation which never wrote it.
+  // Not atomic, and the emit is in a `finally`: a batch that fails partway still announces the
+  // keys that did land.
   async setMany(entries: Record<string, unknown>, area: StorageArea): Promise<StorageResult> {
     const written: string[] = [];
     try {

@@ -63,18 +63,23 @@ describe('useSoundsStorageSync', () => {
     rehydrate.mockRestore();
   });
 
-  it('drops the old subscription when leadership changes', () => {
-    // The effect re-runs on isLeader, so a dropped teardown leaks one subscriber per flip — and
-    // each leaked one rehydrates and schedules its own leader sync.
+  it('re-subscribes with the new role when leadership changes', () => {
+    // A tab that becomes leader after mount keeps a closure holding isLeader false, and silently
+    // stops scheduling the handoff. A dropped teardown leaks a subscriber per flip instead.
+    vi.useFakeTimers();
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
+    const rehydrate = vi.spyOn(useSoundsStore.persist, 'rehydrate').mockImplementation(() => {});
     const { rerender } = renderHook(() => useSoundsStorageSync());
     expect(fake.subscriberCount).toBe(1);
 
     useSoundsStore.setState({ isLeader: true });
     rerender();
+    fake.emit(['soundsState']);
 
     expect(fake.subscriberCount).toBe(1);
+    expect(vi.getTimerCount()).toBe(1);
+    rehydrate.mockRestore();
   });
 
   it('stops observing when the component unmounts', () => {

@@ -594,7 +594,6 @@ describe('converging on settings written elsewhere', () => {
     fake.emit(['settings.colorTheme']);
 
     await vi.waitFor(() => expect(useSettingsStore.getState().error).toContain('colorTheme'));
-    // Nothing renders `error`, so without the toast the page shows values it knows are stale.
     expect(toastError).toHaveBeenCalledWith(expect.stringContaining('colorTheme'));
     errorSpy.mockRestore();
   });
@@ -616,8 +615,6 @@ describe('converging on settings written elsewhere', () => {
   });
 
   it('drops the complaint once the value it named becomes readable', async () => {
-    // Reset to defaults converges on settings this store already holds, so a clear that waited for
-    // a *difference* would leave the store naming a corrupt value the user has just cleared.
     const fake = fakeStore();
     configurePlatform({ storage: fake.store });
     await useSettingsStore.getState().initialize();
@@ -776,6 +773,56 @@ describe('converging on settings written elsewhere', () => {
     expect(useSettingsStore.getState().preview).toEqual({ backgroundDim: 80 });
   });
 
+  it('loads the settings even when dropping the old subscription throws', async () => {
+    // An invalidated MV3 context throws from removeListener; unguarded, that aborts the load and
+    // the user gets "Failed to load settings" with nothing wrong with the settings.
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const first = fakeObservableStore({ throwOnUnsubscribe: true });
+    configurePlatform({ storage: first.store });
+    await useSettingsStore.getState().initialize();
+    storedSettings = { ...defaultSettings, colorTheme: 'forest' };
+    configurePlatform({ storage: fakeObservableStore().store });
+
+    await useSettingsStore.getState().initialize();
+
+    expect(useSettingsStore.getState().settings.colorTheme).toBe('forest');
+    expect(useSettingsStore.getState().error).toBeNull();
+    errorSpy.mockRestore();
+  });
+
+  it('does not blame a lost change on a user who was only looking at the page', async () => {
+    // An empty `unreadable` is the read itself failing, and the write path's copy for that says
+    // "the change was not saved" — a sentence about a change nobody made.
+    const fake = fakeStore();
+    configurePlatform({ storage: fake.store });
+    await useSettingsStore.getState().initialize();
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    vi.mocked(storage.readSettings).mockResolvedValue({ ok: false, unreadable: [] });
+
+    fake.emit(['settings.colorTheme']);
+
+    await vi.waitFor(() => expect(toastError).toHaveBeenCalled());
+    expect(toastError).toHaveBeenCalledWith(expect.stringContaining('out of date'));
+    expect(toastError).not.toHaveBeenCalledWith(expect.stringContaining('not saved'));
+    errorSpy.mockRestore();
+  });
+
+  it('says so again when a different value turns out to be unreadable', async () => {
+    const fake = fakeStore();
+    configurePlatform({ storage: fake.store });
+    await useSettingsStore.getState().initialize();
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    vi.mocked(storage.readSettings).mockResolvedValue({ ok: false, unreadable: ['colorTheme'] });
+
+    fake.emit(['settings.colorTheme']);
+    await vi.waitFor(() => expect(toastError).toHaveBeenCalledTimes(1));
+    vi.mocked(storage.readSettings).mockResolvedValue({ ok: false, unreadable: ['theme'] });
+    fake.emit(['settings.theme']);
+
+    await vi.waitFor(() => expect(toastError).toHaveBeenCalledTimes(2));
+    errorSpy.mockRestore();
+  });
+
   it('retries the subscription after one that threw', async () => {
     const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
     const fake = fakeObservableStore(1);
@@ -831,7 +878,6 @@ describe('initialize against a concurrent write', () => {
   });
 
   it('waits for an in-flight write rather than reading beside it', async () => {
-    // Asserts the ordering: an outcome test would have to park the read as well as the write.
     let releaseWrite = () => {};
     const parked = new Promise<void>((resolve) => {
       releaseWrite = resolve;
