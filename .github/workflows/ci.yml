@@ -233,3 +233,15 @@ jobs:
 
       - name: Run e2e (smoke + csp)
         run: pnpm --filter @cuewise/macos e2e
+
+      # This suite flakes rarely and only here, so a failure that leaves nothing
+      # behind costs a whole cycle to reproduce. The artifact upload endpoints
+      # are already in the egress allowlist above.
+      - name: Upload Playwright traces
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: playwright-results-${{ github.run_id }}-${{ github.run_attempt }}
+          path: apps/macos/test-results/
+          if-no-files-found: ignore
+          retention-days: 7

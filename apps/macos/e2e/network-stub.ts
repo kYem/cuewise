@@ -25,45 +25,51 @@ const ONE_PX_PNG = Buffer.from(
 export async function stubThirdPartyRequests(page: Page): Promise<() => string[]> {
   const requested: string[] = [];
 
-  await page.route('**/*', async (route) => {
-    const url = new URL(route.request().url());
-    if (url.hostname === 'localhost') {
-      await route.continue();
-      return;
-    }
+  // Match off-origin only. Routing '**/*' and continuing the first-party ones put
+  // every app asset through interception, which is both pointless and a stall
+  // surface: a subresource whose handler doesn't resolve holds the `load` event
+  // open forever, and anything waiting on load (page.reload, app boot) hangs.
+  await page.route(
+    (url) => url.hostname !== 'localhost',
+    async (route) => {
+      requested.push(route.request().url());
+      const headers = { [STUB_HEADER]: '1' };
 
-    requested.push(route.request().url());
-    const headers = { [STUB_HEADER]: '1' };
-
-    // NOTE: google.com/s2/favicons really 301s to a *.gstatic.com host in
-    // production (img-src allows both for that reason), but WebKit's route
-    // interception can't emulate a redirect — `route.fulfill({ status: 301, ... })`
-    // throws "Cannot fulfill with redirect status" (verified against Playwright
-    // 1.61 / WebKit). So this stub answers the favicon request directly like any
-    // other image, and the gstatic redirect target is untested by this harness —
-    // see the comment on the img-src assertion in csp.spec.ts.
-    switch (route.request().resourceType()) {
-      case 'image':
-        await route.fulfill({ status: 200, contentType: 'image/png', headers, body: ONE_PX_PNG });
-        return;
-      // The YouTube-player iframe's own document load (frame-src cuewise.app).
-      case 'document':
-        await route.fulfill({
-          status: 200,
-          contentType: 'text/html',
-          headers,
-          body: '<!doctype html><title>stub</title>',
-        });
-        return;
-      // The oEmbed playlist-metadata lookup (connect-src youtube.com).
-      case 'xhr':
-      case 'fetch':
-        await route.fulfill({ status: 200, contentType: 'application/json', headers, body: '{}' });
-        return;
-      default:
-        await route.fulfill({ status: 200, headers, body: '' });
+      // NOTE: google.com/s2/favicons really 301s to a *.gstatic.com host in
+      // production (img-src allows both for that reason), but WebKit's route
+      // interception can't emulate a redirect — `route.fulfill({ status: 301, ... })`
+      // throws "Cannot fulfill with redirect status" (verified against Playwright
+      // 1.61 / WebKit). So this stub answers the favicon request directly like any
+      // other image, and the gstatic redirect target is untested by this harness —
+      // see the comment on the img-src assertion in csp.spec.ts.
+      switch (route.request().resourceType()) {
+        case 'image':
+          await route.fulfill({ status: 200, contentType: 'image/png', headers, body: ONE_PX_PNG });
+          return;
+        // The YouTube-player iframe's own document load (frame-src cuewise.app).
+        case 'document':
+          await route.fulfill({
+            status: 200,
+            contentType: 'text/html',
+            headers,
+            body: '<!doctype html><title>stub</title>',
+          });
+          return;
+        // The oEmbed playlist-metadata lookup (connect-src youtube.com).
+        case 'xhr':
+        case 'fetch':
+          await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            headers,
+            body: '{}',
+          });
+          return;
+        default:
+          await route.fulfill({ status: 200, headers, body: '' });
+      }
     }
-  });
+  );
 
   return () => requested;
 }

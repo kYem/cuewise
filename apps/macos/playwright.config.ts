@@ -16,8 +16,18 @@ const port = Number(process.env.E2E_PORT ?? 1420);
 export default defineConfig({
   testDir: './e2e',
   reporter: 'list',
+  // Spec files run in parallel workers by default. On a 2-core CI runner that
+  // starves csp.spec.ts — which also runs its own vite build and static server —
+  // from ~13s to over its 30s budget, failing on whatever step the clock ran out
+  // on. Serial on CI trades ~15s of wall time for a deterministic suite.
+  workers: process.env.CI ? 1 : undefined,
+  // A failed actionability check says only "waiting for element to be visible,
+  // enabled and stable" — the trace's DOM snapshot is the only way to see which
+  // check it was and what was on top of the element.
   use: {
     baseURL: `http://localhost:${port}`,
+    trace: 'retain-on-failure',
+    screenshot: 'only-on-failure',
   },
   projects: [{ name: 'webkit', use: { ...devices['Desktop Safari'] } }],
   webServer: {
