@@ -364,7 +364,10 @@ describe('LocalStorageKeyValueStore.onChanged', () => {
     await expect(store.set('settings.theme', 'dark', 'local')).resolves.toEqual({ success: true });
 
     expect(seen).toEqual([['settings.theme']]);
-    expect(errorSpy).toHaveBeenCalledWith('A storage change subscriber threw', expect.anything());
+    expect(errorSpy).toHaveBeenCalledWith('A storage change subscriber threw', expect.anything(), {
+      keys: ['settings.theme'],
+      area: 'local',
+    });
     errorSpy.mockRestore();
   });
 
@@ -380,7 +383,8 @@ describe('LocalStorageKeyValueStore.onChanged', () => {
 
     expect(errorSpy).toHaveBeenCalledWith(
       'A storage change subscriber rejected',
-      expect.objectContaining({ keys: ['settings.theme'] })
+      expect.anything(),
+      { keys: ['settings.theme'], area: 'local' }
     );
     errorSpy.mockRestore();
   });

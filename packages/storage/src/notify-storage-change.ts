@@ -1,6 +1,4 @@
-import { logger, type StorageArea } from '@cuewise/shared';
-
-export type StorageChangeHandler = (keys: string[], area: StorageArea) => void;
+import { logger, type StorageArea, type StorageChangeHandler } from '@cuewise/shared';
 
 /** A failing subscriber must not fail the write that notified it, nor the subscribers after it. */
 export function notifyStorageChange(
@@ -15,11 +13,11 @@ export function notifyStorageChange(
       const settled = subscriber(keys, area) as unknown;
       if (settled instanceof Promise) {
         settled.catch((error) => {
-          logger.error('A storage change subscriber rejected', { keys, area, error });
+          logger.error('A storage change subscriber rejected', error, { keys, area });
         });
       }
     } catch (error) {
-      logger.error('A storage change subscriber threw', { keys, area, error });
+      logger.error('A storage change subscriber threw', error, { keys, area });
     }
   }
 }

@@ -3,7 +3,7 @@ import {
   getStorage,
   type KeyValueStore,
   logger,
-  type StorageArea,
+  type StorageChangeHandler,
 } from '@cuewise/shared';
 
 /**
@@ -26,7 +26,7 @@ export function observableStorage(): KeyValueStore | null {
 export function safeSubscribe(
   store: KeyValueStore,
   what: string,
-  handler: (keys: string[], area: StorageArea) => void
+  handler: StorageChangeHandler
 ): (() => void) | null {
   let unsubscribe: (() => void) | undefined;
   try {

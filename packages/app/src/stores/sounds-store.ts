@@ -675,20 +675,26 @@ async function syncLeaderPlayback() {
         const currentPlaylistId = youtubePlayer.getCurrentPlaylistId();
         if (currentPlaylistId !== playlist.playlistId) {
           useSoundsStore.setState({ isYoutubeLoading: true });
-          // Get last played video and timestamp (or fall back to first video)
-          const resumeInfo = await getCurrentVideoForPlaylist(playlist.playlistId);
-          const videoId = resumeInfo?.videoId || playlist.firstVideoId;
-          const startAt = resumeInfo?.timestamp || 0;
-          youtubePlayer.loadPlaylist(
-            playlist.playlistId,
-            videoId,
-            () => {
-              youtubePlayer.play();
-              youtubePlayer.setVolume(youtubeVolume);
-              useSoundsStore.setState({ isYoutubeLoading: false });
-            },
-            startAt
-          );
+          try {
+            // Get last played video and timestamp (or fall back to first video)
+            const resumeInfo = await getCurrentVideoForPlaylist(playlist.playlistId);
+            const videoId = resumeInfo?.videoId || playlist.firstVideoId;
+            const startAt = resumeInfo?.timestamp || 0;
+            youtubePlayer.loadPlaylist(
+              playlist.playlistId,
+              videoId,
+              () => {
+                youtubePlayer.play();
+                youtubePlayer.setVolume(youtubeVolume);
+                useSoundsStore.setState({ isYoutubeLoading: false });
+              },
+              startAt
+            );
+          } catch (error) {
+            // Only that callback clears the flag, so a throw before it strands the spinner on.
+            useSoundsStore.setState({ isYoutubeLoading: false });
+            throw error;
+          }
         } else if (!youtubePlayer.isPlaying()) {
           youtubePlayer.play();
         }

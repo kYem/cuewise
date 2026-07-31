@@ -129,8 +129,10 @@ export interface KeyValueStore {
    * including code that bypassed this port; the localStorage one sees only writes made through
    * that instance.
    */
-  onChanged?(handler: (keys: string[], area: StorageArea) => void): () => void;
+  onChanged?(handler: StorageChangeHandler): () => void;
 }
+
+export type StorageChangeHandler = (keys: string[], area: StorageArea) => void;
 
 /**
  * Outbound HTTP. A port because the Tauri webview is blocked from api.cuewise.app by its

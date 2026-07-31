@@ -584,6 +584,23 @@ describe('converging on settings written elsewhere', () => {
     errorSpy.mockRestore();
   });
 
+  it('tells the user about a rejected re-read, not only the console', async () => {
+    // At logLevel 'none' a log is nothing at all, and these values are as stale as the ones the
+    // refusal branch already toasts about.
+    const fake = fakeStore();
+    configurePlatform({ storage: fake.store });
+    await useSettingsStore.getState().initialize();
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    vi.mocked(storage.readSettings).mockRejectedValue(new Error('storage unavailable'));
+
+    fake.emit(['settings.colorTheme']);
+
+    await vi.waitFor(() =>
+      expect(toastError).toHaveBeenCalledWith(expect.stringContaining('out of date'))
+    );
+    errorSpy.mockRestore();
+  });
+
   it('says so when settings changed elsewhere cannot be read', async () => {
     const fake = fakeStore();
     configurePlatform({ storage: fake.store });
@@ -804,6 +821,46 @@ describe('converging on settings written elsewhere', () => {
     await vi.waitFor(() => expect(toastError).toHaveBeenCalled());
     expect(toastError).toHaveBeenCalledWith(expect.stringContaining('out of date'));
     expect(toastError).not.toHaveBeenCalledWith(expect.stringContaining('not saved'));
+    errorSpy.mockRestore();
+  });
+
+  it('says so again when the same value goes unreadable after recovering', async () => {
+    const fake = fakeStore();
+    configurePlatform({ storage: fake.store });
+    await useSettingsStore.getState().initialize();
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    vi.mocked(storage.readSettings).mockResolvedValueOnce({
+      ok: false,
+      unreadable: ['colorTheme'],
+    });
+
+    fake.emit(['settings.colorTheme']);
+    await vi.waitFor(() => expect(toastError).toHaveBeenCalledTimes(1));
+    fake.emit(['settings.colorTheme']);
+    await vi.waitFor(() => expect(useSettingsStore.getState().error).toBeNull());
+    vi.mocked(storage.readSettings).mockResolvedValueOnce({
+      ok: false,
+      unreadable: ['colorTheme'],
+    });
+    fake.emit(['settings.colorTheme']);
+
+    await vi.waitFor(() => expect(toastError).toHaveBeenCalledTimes(2));
+    errorSpy.mockRestore();
+  });
+
+  it('says so again after a reload, having told nobody in this session yet', async () => {
+    const fake = fakeStore();
+    configurePlatform({ storage: fake.store });
+    await useSettingsStore.getState().initialize();
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    vi.mocked(storage.readSettings).mockResolvedValue({ ok: false, unreadable: ['colorTheme'] });
+
+    fake.emit(['settings.colorTheme']);
+    await vi.waitFor(() => expect(toastError).toHaveBeenCalledTimes(1));
+    await useSettingsStore.getState().initialize();
+    fake.emit(['settings.colorTheme']);
+
+    await vi.waitFor(() => expect(toastError).toHaveBeenCalledTimes(2));
     errorSpy.mockRestore();
   });
 

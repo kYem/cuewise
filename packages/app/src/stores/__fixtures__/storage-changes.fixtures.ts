@@ -1,4 +1,4 @@
-import type { KeyValueStore, StorageArea } from '@cuewise/shared';
+import type { KeyValueStore, StorageArea, StorageChangeHandler } from '@cuewise/shared';
 
 export interface FakeObservableStore {
   store: KeyValueStore;
@@ -19,21 +19,22 @@ export function fakeObservableStore(
 ): FakeObservableStore {
   const { failedSubscribes = 0, throwOnUnsubscribe = false } =
     typeof options === 'number' ? { failedSubscribes: options } : options;
-  const subscribers = new Set<(keys: string[], area: StorageArea) => void>();
+  const subscribers = new Set<StorageChangeHandler>();
   let remainingFailures = failedSubscribes;
   return {
     store: {
-      onChanged(handler: (keys: string[], area: StorageArea) => void) {
+      onChanged(handler: StorageChangeHandler) {
         if (remainingFailures > 0) {
           remainingFailures -= 1;
           throw new Error('addListener unavailable');
         }
         subscribers.add(handler);
         return () => {
-          subscribers.delete(handler);
+          // Throws before removing, as an invalidated MV3 context does — the listener stays.
           if (throwOnUnsubscribe) {
             throw new Error('removeListener unavailable');
           }
+          subscribers.delete(handler);
         };
       },
     } as unknown as KeyValueStore,

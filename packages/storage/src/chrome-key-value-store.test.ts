@@ -253,7 +253,10 @@ describe('ChromeKeyValueStore.onChanged', () => {
     });
 
     expect(() => event().fire({ 'settings.theme': { newValue: 'dark' } }, 'local')).not.toThrow();
-    expect(errorSpy).toHaveBeenCalledWith('A storage change subscriber threw', expect.anything());
+    expect(errorSpy).toHaveBeenCalledWith('A storage change subscriber threw', expect.anything(), {
+      keys: ['settings.theme'],
+      area: 'local',
+    });
     unsubscribe();
     errorSpy.mockRestore();
   });

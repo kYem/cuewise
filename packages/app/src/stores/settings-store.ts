@@ -112,6 +112,20 @@ function sameSettings(a: Settings, b: Settings): boolean {
 
 let reportedStale: string | null = null;
 
+/**
+ * Latched on its own, not on `error`, which the write path sets too: a pull writes one key at a
+ * time, so one problem should say so once — and a different one should still say so.
+ */
+function reportStale(unreadable: string[]): void {
+  const message = staleSettingsMessage(unreadable);
+  if (reportedStale === message) {
+    return;
+  }
+  reportedStale = message;
+  useSettingsStore.setState({ error: message });
+  useToastStore.getState().error(message);
+}
+
 // The sync engine writes settings one key per call, so a burst would otherwise queue one full
 // re-read per key.
 let refreshQueued = false;
@@ -183,6 +197,9 @@ async function refreshFromStorage(): Promise<void> {
       `Could not re-read settings after a storage change: ${describeThrown(error)}`,
       error
     );
+    // Reported like the branch below, not only logged: the shown values are just as stale, and at
+    // `logLevel: 'none'` a log is nothing at all.
+    reportStale([]);
     return;
   }
   if (!read.ok) {
@@ -190,14 +207,7 @@ async function refreshFromStorage(): Promise<void> {
     logger.error('Settings changed elsewhere could not be read; the shown values are stale', {
       fields: read.unreadable.length > 0 ? read.unreadable : 'the read failed',
     });
-    // Latched on its own, not on `error`, which the write path sets too: a pull writes one key at
-    // a time, so one problem should say so once — and a different one should still say so.
-    const message = staleSettingsMessage(read.unreadable);
-    if (reportedStale !== message) {
-      reportedStale = message;
-      useSettingsStore.setState({ error: message });
-      useToastStore.getState().error(message);
-    }
+    reportStale(read.unreadable);
     return;
   }
   reportedStale = null;
