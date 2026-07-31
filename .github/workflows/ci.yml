@@ -231,8 +231,11 @@ jobs:
       - name: Install Playwright webkit
         run: pnpm --filter @cuewise/macos exec playwright install --with-deps webkit
 
-      - name: Run e2e (smoke + csp)
-        run: pnpm --filter @cuewise/macos e2e
+      # TEMPORARY (flake hunt, do not merge): 8 repeats of the whole suite in the
+      # real CI configuration (workers come from playwright.config.ts). Restore:
+      #   run: pnpm --filter @cuewise/macos e2e
+      - name: Run e2e (full suite x8, flake hunt)
+        run: pnpm --filter @cuewise/macos e2e --repeat-each=8 --retries=0
 
       # This suite flakes rarely and only here, so a failure that leaves nothing
       # behind costs a whole cycle to reproduce. The artifact upload endpoints
