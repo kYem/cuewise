@@ -231,8 +231,12 @@ jobs:
       - name: Install Playwright webkit
         run: pnpm --filter @cuewise/macos exec playwright install --with-deps webkit
 
-      - name: Run e2e (smoke + csp)
-        run: pnpm --filter @cuewise/macos e2e
+      # TEMPORARY (flake hunt, do not merge): 20 serial runs of the one spec that
+      # flakes, to measure the failure rate on Linux WebKit. --workers=1 because
+      # csp.spec.ts binds a fixed port. Restore the line below before merging:
+      #   run: pnpm --filter @cuewise/macos e2e
+      - name: Run e2e (csp x20, flake hunt)
+        run: pnpm --filter @cuewise/macos e2e csp.spec.ts --repeat-each=20 --workers=1 --retries=0
 
       # This suite flakes rarely and only here, so a failure that leaves nothing
       # behind costs a whole cycle to reproduce. The artifact upload endpoints
