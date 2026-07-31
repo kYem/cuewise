@@ -16,8 +16,13 @@ const port = Number(process.env.E2E_PORT ?? 1420);
 export default defineConfig({
   testDir: './e2e',
   reporter: 'list',
+  // A failed actionability check says only "waiting for element to be visible,
+  // enabled and stable" — the trace's DOM snapshot is the only way to see which
+  // check it was and what was on top of the element.
   use: {
     baseURL: `http://localhost:${port}`,
+    trace: 'retain-on-failure',
+    screenshot: 'only-on-failure',
   },
   projects: [{ name: 'webkit', use: { ...devices['Desktop Safari'] } }],
   webServer: {
