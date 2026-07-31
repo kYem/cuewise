@@ -2,7 +2,6 @@ import {
   createLogger,
   generateId,
   getNotifier,
-  getStorage,
   LogLevel,
   minutesToSeconds,
   type NotificationSoundType,
@@ -22,6 +21,7 @@ import { playCompletionSound, playStartSound } from '../utils/sounds';
 import { useCelebrationStore } from './celebration-store';
 import { useFocusModeStore } from './focus-mode-store';
 import { useSettingsStore } from './settings-store';
+import { observableStorage, safeSubscribe } from './storage-changes';
 import { useToastStore } from './toast-store';
 
 const logger = createLogger({
@@ -660,8 +660,11 @@ export const usePomodoroStore = create<PomodoroStore>()(
 );
 
 /**
- * React hook to sync Pomodoro state across tabs
- * Listens to chrome.storage changes and rehydrates the store
+ * React hook to sync Pomodoro state across tabs.
+ *
+ * Rehydrates on a storage change reported through the KeyValueStore port. Silent on a backend
+ * whose persist adapter bypasses that port — the zustand chrome adapter writes localStorage
+ * directly, so on the localStorage backend nothing ever announces `pomodoroState`.
  *
  * Usage: Call this hook in components that need cross-tab synchronization
  * @example
@@ -672,17 +675,18 @@ export const usePomodoroStore = create<PomodoroStore>()(
  */
 export function usePomodoroStorageSync() {
   useEffect(() => {
-    const store = getStorage();
-    if (store.onChanged === undefined) {
+    const store = observableStorage();
+    if (store === null) {
       return;
     }
-    // Rehydrate only — NOT completeSession(): that double-completed a session (once from tick(),
-    // once from here) and made the timer skip breaks.
-    return store.onChanged((keys, area) => {
-      if (area !== 'local' || !keys.includes('pomodoroState')) {
-        return;
-      }
-      usePomodoroStore.persist.rehydrate();
-    });
-  }, []); // Empty deps - only set up once per component mount
+    // Rehydrate only: completeSession() here double-completes with tick() and skips breaks.
+    return (
+      safeSubscribe(store, (keys, area) => {
+        if (area !== 'local' || !keys.includes('pomodoroState')) {
+          return;
+        }
+        usePomodoroStore.persist.rehydrate();
+      }) ?? undefined
+    );
+  }, []);
 }

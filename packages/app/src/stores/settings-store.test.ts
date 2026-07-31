@@ -583,6 +583,39 @@ describe('converging on settings written elsewhere', () => {
     await vi.waitFor(() => expect(useSettingsStore.getState().settings.colorTheme).toBe('forest'));
   });
 
+  it('reports a rejected re-read instead of discarding it', async () => {
+    // readSettings rejects as well as answering ok:false — the migration it awaits throws on an
+    // undeterminable storage area. Fired with `void`, that is one unhandled rejection per write.
+    const fake = fakeStore();
+    configurePlatform({ storage: fake.store });
+    await useSettingsStore.getState().initialize();
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    vi.mocked(storage.readSettings).mockRejectedValue(new Error('storage unavailable'));
+
+    fake.emit(['settings.colorTheme']);
+
+    await vi.waitFor(() =>
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Could not re-read settings after a storage change'),
+        expect.anything()
+      )
+    );
+    errorSpy.mockRestore();
+  });
+
+  it('says so when settings changed elsewhere cannot be read', async () => {
+    const fake = fakeStore();
+    configurePlatform({ storage: fake.store });
+    await useSettingsStore.getState().initialize();
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    vi.mocked(storage.readSettings).mockResolvedValue({ ok: false, unreadable: ['colorTheme'] });
+
+    fake.emit(['settings.colorTheme']);
+
+    await vi.waitFor(() => expect(useSettingsStore.getState().error).toContain('colorTheme'));
+    errorSpy.mockRestore();
+  });
+
   it('ignores a change to keys it does not own', async () => {
     const fake = fakeStore();
     configurePlatform({ storage: fake.store });
@@ -628,8 +661,7 @@ describe('initialize against a concurrent write', () => {
   });
 
   it('waits for an in-flight write rather than reading beside it', async () => {
-    // Asserts the ordering, not an outcome: queued and unqueued sequence differently, so no single
-    // interleaving can distinguish them by the final value alone.
+    // Asserts the ordering: an outcome test would have to park the read as well as the write.
     let releaseWrite = () => {};
     const parked = new Promise<void>((resolve) => {
       releaseWrite = resolve;

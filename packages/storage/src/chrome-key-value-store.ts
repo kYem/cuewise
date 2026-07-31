@@ -22,8 +22,8 @@ function areaStore(area: StorageArea): chrome.storage.StorageArea {
 export class ChromeKeyValueStore implements KeyValueStore {
   readonly supportsSync = true;
 
-  // Cross-realm, which is the whole point: the extension's sync engine writes from the service
-  // worker while the stores live in the page, so nothing else can tell them what it changed.
+  // The only channel that already crosses the extension's worker/page split in this direction:
+  // the sync engine writes from the worker, the stores read in the page.
   onChanged(handler: (keys: string[], area: StorageArea) => void): () => void {
     const listener = (changes: Record<string, unknown>, areaName: string) => {
       if (areaName !== 'local' && areaName !== 'sync') {

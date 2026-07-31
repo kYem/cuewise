@@ -4,7 +4,7 @@
  * Manages both ambient sounds and YouTube music playback in a unified store.
  * Key features:
  * - Mutually exclusive: Only one source (ambient or YouTube) can play at a time
- * - Cross-tab synchronization via chrome.storage
+ * - Cross-tab synchronization: persisted through the chrome adapter, notified through the port
  * - YouTube timestamp memory for resume playback
  * - Leader election for YouTube player control
  */
@@ -13,7 +13,6 @@ import {
   type AmbientSoundType,
   DEFAULT_YOUTUBE_PLAYLISTS,
   generateId,
-  getStorage,
   logger,
   type SoundSource,
   type YoutubePlaylist,
@@ -30,6 +29,7 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import { chromeLocalStorage } from '../adapters/zustand-chrome-adapter';
 import { fetchPlaylistMetadata, youtubePlayer } from '../services/youtube-player';
 import { ambientSoundPlayer } from '../utils/ambient-sounds';
+import { observableStorage, safeSubscribe } from './storage-changes';
 import { useToastStore } from './toast-store';
 
 interface SoundsStore {
@@ -626,21 +626,23 @@ export function useSoundsStorageSync() {
   const isLeader = useSoundsStore((state) => state.isLeader);
 
   useEffect(() => {
-    const store = getStorage();
-    if (store.onChanged === undefined) {
+    const store = observableStorage();
+    if (store === null) {
       return;
     }
-    return store.onChanged((keys, area) => {
-      if (area !== 'local' || !keys.includes('soundsState')) {
-        return;
-      }
-      useSoundsStore.persist.rehydrate();
-      if (isLeader) {
-        setTimeout(() => {
-          syncLeaderPlayback();
-        }, 50);
-      }
-    });
+    return (
+      safeSubscribe(store, (keys, area) => {
+        if (area !== 'local' || !keys.includes('soundsState')) {
+          return;
+        }
+        useSoundsStore.persist.rehydrate();
+        if (isLeader) {
+          setTimeout(() => {
+            syncLeaderPlayback();
+          }, 50);
+        }
+      }) ?? undefined
+    );
   }, [isLeader]);
 }
 

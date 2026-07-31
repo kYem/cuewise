@@ -6,7 +6,6 @@ import {
   DEFAULT_SETTINGS,
   DEVICE_LOCAL_SETTINGS_KEYS,
   describeThrown,
-  getStorage,
   type KeyValueStore,
   type LayoutDensity,
   LogLevel as LoggerLevel,
@@ -22,9 +21,11 @@ import {
   readSettings,
   SETTINGS_KEY_PREFIX,
   SETTINGS_KEYS,
+  type SettingsRead,
   setSettingsPatch,
 } from '@cuewise/storage';
 import { create } from 'zustand';
+import { observableStorage, safeSubscribe } from './storage-changes';
 import { useToastStore } from './toast-store';
 
 // Exactly the keys with preview-aware selectors; widen only alongside a new selector.
@@ -72,7 +73,7 @@ function reconcilePreview(
 
 const noop = () => {};
 
-/** Every DOM/logger effect a settings value drives. All five are idempotent. */
+/** Every DOM/logger effect a settings value drives; all idempotent. */
 function applyAll(settings: Settings): void {
   applyTheme(settings.theme);
   applyColorTheme(settings.colorTheme);
@@ -86,38 +87,30 @@ let unsubscribeFromStorage: (() => void) | null = null;
 // the store it replaced. Identity, not a boolean: every initialize() calls this.
 let subscribedTo: KeyValueStore | null = null;
 
-/**
- * Converges the in-memory copy on settings written anywhere else — the sync engine applying a pull,
- * or another tab. Idempotent because every caller of initialize() runs it, and because the backends
- * report a context's own writes too.
- */
+/** Converges the in-memory copy on settings written anywhere else — a pull, or another tab. */
 function subscribeToStorage(): void {
-  let store: KeyValueStore;
-  try {
-    store = getStorage();
-  } catch (error) {
-    // Hides nothing: settings are unusable without a storage backend, so the read below this
-    // reports the same misconfiguration through the path that already tells the user.
-    logger.debug(`Settings will not observe storage changes: ${describeThrown(error)}`);
-    return;
-  }
-  if (store === subscribedTo) {
+  const store = observableStorage();
+  if (store === null || store === subscribedTo) {
     return;
   }
   unsubscribeFromStorage?.();
   unsubscribeFromStorage = null;
   subscribedTo = null;
-  if (store.onChanged === undefined) {
-    // A backend that cannot observe writes keeps the staleness it has today.
-    return;
-  }
-  subscribedTo = store;
-  unsubscribeFromStorage = store.onChanged((keys) => {
+  const unsubscribe = safeSubscribe(store, (keys) => {
     if (!keys.some((key) => key.startsWith(SETTINGS_KEY_PREFIX))) {
       return;
     }
-    void refreshFromStorage();
+    // Queued: unqueued it can read between an in-flight initialize's read and its set, and be
+    // overwritten by that older snapshot.
+    void enqueueWrite(refreshFromStorage);
   });
+  if (unsubscribe === null) {
+    return;
+  }
+  // Both assigned only once the subscribe returns: set beforehand, a failure leaves them
+  // disagreeing and the identity guard above short-circuits every later attempt.
+  unsubscribeFromStorage = unsubscribe;
+  subscribedTo = store;
 }
 
 /**
@@ -126,13 +119,29 @@ function subscribeToStorage(): void {
  * write path or re-notify the sync engine about a change that came FROM it.
  */
 async function refreshFromStorage(): Promise<void> {
-  const read = await readSettings();
+  let read: SettingsRead;
+  try {
+    read = await readSettings();
+  } catch (error) {
+    // readSettings rejects as well as answering `ok:false` — the migration it awaits throws on an
+    // undeterminable storage area. Unhandled, this is one rejection per settings write, forever.
+    logger.error(
+      `Could not re-read settings after a storage change: ${describeThrown(error)}`,
+      error
+    );
+    return;
+  }
   if (!read.ok) {
-    // The write path already reports unreadable settings, loudly and with the field names; a
-    // background refresh saying it again would toast the user for something they did not do.
+    // No toast: the user did not do this, and a listener repeats. The store's own error channel
+    // says it once, where the write path would otherwise be the only thing that ever reports it.
+    logger.error('Settings changed elsewhere could not be read; the shown values are stale', {
+      fields: read.unreadable,
+    });
+    useSettingsStore.setState({ error: unreadableSettingsMessage(read.unreadable) });
     return;
   }
   const { settings, preview } = useSettingsStore.getState();
+  // A key names a write, not a changed value, so an own write arrives here as a no-op.
   if (SETTINGS_KEYS.every((key) => settings[key] === read.settings[key])) {
     return;
   }
@@ -195,12 +204,11 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     // In the write queue, not beside it: an init resolving after a write would otherwise install
     // the settings it read BEFORE that write, reverting it in memory until the next reload.
     enqueueWrite(async () => {
-      subscribeToStorage();
       try {
+        subscribeToStorage();
         set({ isLoading: true, error: null });
 
-        // Merge with defaults to ensure all properties exist (for existing users)
-        const settings = { ...DEFAULT_SETTINGS, ...(await getSettings()) };
+        const settings = await getSettings();
 
         set({ settings, preview: null, isLoading: false });
         applyAll(settings);
@@ -295,8 +303,8 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
           }
         }
 
-        // Drive the DOM off the merged result, not the incoming patch: a sync pull can change these
-        // keys in storage without this write touching them. All five applies are idempotent.
+        // Off the merged result, not the incoming patch: a pull can change these without this
+        // write touching them.
         applyAll(updatedSettings);
         return true;
       } catch (error) {

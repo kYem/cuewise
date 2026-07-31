@@ -36,9 +36,10 @@ export class LocalStorageKeyValueStore implements KeyValueStore {
   private readonly subscribers = new Set<(keys: string[], area: StorageArea) => void>();
 
   /**
-   * Emits this store's OWN writes. `window.onstorage` fires only for other documents, and the
-   * hosts on this backend are single-document — so a change nobody emits is a change nobody sees,
-   * even though the writer (the sync engine) and the reader (a store) share the realm.
+   * Emits writes made through THIS instance. `window.onstorage` fires only for other documents,
+   * so a same-document write it does not emit is one nobody sees — even though the writer (the
+   * sync engine) and the reader (a store) share the realm. Writes from another document, or
+   * straight to `localStorage`, are not observed at all.
    */
   onChanged(handler: (keys: string[], area: StorageArea) => void): () => void {
     this.subscribers.add(handler);
@@ -47,14 +48,18 @@ export class LocalStorageKeyValueStore implements KeyValueStore {
     };
   }
 
-  // Collects instead of emitting while a batch is open, so one setMany is one notification
-  // rather than one per key — the batch's callers read every key back on each of them.
-  private batched: string[] | null = null;
+  // Collects while a batch is open, so one setMany is one notification rather than one per key —
+  // every subscriber re-reads on each. Depth, not a flag, and keyed by area: overlapping batches
+  // must merge, since a second one replacing the collector drops what the first had gathered.
+  private batchDepth = 0;
+  private batchedKeys = new Map<StorageArea, string[]>();
 
   // A throwing subscriber must not fail the write that notified it.
   private emit(keys: string[], area: StorageArea): void {
-    if (this.batched !== null) {
-      this.batched.push(...keys);
+    if (this.batchDepth > 0) {
+      const pending = this.batchedKeys.get(area) ?? [];
+      pending.push(...keys);
+      this.batchedKeys.set(area, pending);
       return;
     }
     if (keys.length === 0) {
@@ -62,9 +67,16 @@ export class LocalStorageKeyValueStore implements KeyValueStore {
     }
     for (const subscriber of this.subscribers) {
       try {
-        subscriber(keys, area);
+        // Typed `=> void`, but a caller can still hand back a promise, and every subscriber this
+        // ships today is async — a rejection a sync catch cannot see would escape unhandled.
+        const settled = subscriber(keys, area) as unknown;
+        if (settled instanceof Promise) {
+          settled.catch((error) => {
+            logger.error('A storage change subscriber rejected', { keys, area, error });
+          });
+        }
       } catch (error) {
-        logger.error('A storage change subscriber threw', error);
+        logger.error('A storage change subscriber threw', { keys, area, error });
       }
     }
   }
@@ -178,7 +190,7 @@ export class LocalStorageKeyValueStore implements KeyValueStore {
 
   // Not atomic: a mid-loop quota failure leaves earlier keys in this call already written.
   async setMany(entries: Record<string, unknown>, area: StorageArea): Promise<StorageResult> {
-    this.batched = [];
+    this.batchDepth += 1;
     try {
       for (const [key, value] of Object.entries(entries)) {
         const result = await this.set(key, value, area);
@@ -188,13 +200,12 @@ export class LocalStorageKeyValueStore implements KeyValueStore {
       }
       return { success: true };
     } finally {
-      // In a finally so a partial batch still reports what it did land.
-      this.flush(area);
+      this.flush();
     }
   }
 
   async removeMany(keys: string[], area: StorageArea): Promise<boolean> {
-    this.batched = [];
+    this.batchDepth += 1;
     try {
       let allRemoved = true;
       for (const key of keys) {
@@ -205,13 +216,21 @@ export class LocalStorageKeyValueStore implements KeyValueStore {
       }
       return allRemoved;
     } finally {
-      this.flush(area);
+      this.flush();
     }
   }
 
-  private flush(area: StorageArea): void {
-    const keys = this.batched ?? [];
-    this.batched = null;
-    this.emit(keys, area);
+  // Only the outermost batch emits, so overlapping ones report together rather than one cancelling
+  // the other. Per area, because a consumer that filters on it must not see another area's keys.
+  private flush(): void {
+    this.batchDepth -= 1;
+    if (this.batchDepth > 0) {
+      return;
+    }
+    const batches = [...this.batchedKeys];
+    this.batchedKeys.clear();
+    for (const [area, keys] of batches) {
+      this.emit(keys, area);
+    }
   }
 }

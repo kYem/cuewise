@@ -200,10 +200,38 @@ describe('LocalStorageKeyValueStore.onChanged', () => {
     const seen: string[][] = [];
     store.onChanged((keys) => seen.push(keys));
 
-    // The second entry refuses: `undefined` is the one value the adapter will not store.
+    // The second entry refuses: `undefined` is the value the adapter rejects outright.
     await store.setMany({ 'settings.theme': 'dark', 'settings.showClock': undefined }, 'local');
 
     expect(seen).toEqual([['settings.theme']]);
+  });
+
+  it('loses no key when two batches overlap', async () => {
+    // A second batch replacing the collector drops whatever the first had gathered.
+    const store = new LocalStorageKeyValueStore();
+    const seen: string[][] = [];
+    store.onChanged((keys) => seen.push(keys));
+
+    await Promise.all([
+      store.setMany({ a: 1, b: 2 }, 'local'),
+      store.setMany({ c: 3, d: 4 }, 'local'),
+    ]);
+
+    // One notification, not one per batch: coalescing is the whole point of batching, and each
+    // costs every subscriber a full re-read.
+    expect(seen).toHaveLength(1);
+    expect(seen.flat().sort()).toEqual(['a', 'b', 'c', 'd']);
+  });
+
+  it('keeps an overlapping batch’s areas apart, so an area filter cannot drop the wrong keys', async () => {
+    const store = new LocalStorageKeyValueStore();
+    const seen: { keys: string[]; area: StorageArea }[] = [];
+    store.onChanged((keys, area) => seen.push({ keys, area }));
+
+    await Promise.all([store.setMany({ a: 1 }, 'local'), store.setMany({ b: 2 }, 'sync')]);
+
+    expect(seen).toContainEqual({ keys: ['a'], area: 'local' });
+    expect(seen).toContainEqual({ keys: ['b'], area: 'sync' });
   });
 
   it('stops reporting once unsubscribed', async () => {
