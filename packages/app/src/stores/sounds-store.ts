@@ -13,6 +13,7 @@ import {
   type AmbientSoundType,
   DEFAULT_YOUTUBE_PLAYLISTS,
   generateId,
+  getStorage,
   logger,
   type SoundSource,
   type YoutubePlaylist,
@@ -625,37 +626,21 @@ export function useSoundsStorageSync() {
   const isLeader = useSoundsStore((state) => state.isLeader);
 
   useEffect(() => {
-    const handleStorageChange = (
-      changes: { [key: string]: chrome.storage.StorageChange },
-      areaName: string
-    ) => {
-      if (areaName !== 'local') {
+    const store = getStorage();
+    if (store.onChanged === undefined) {
+      return;
+    }
+    return store.onChanged((keys, area) => {
+      if (area !== 'local' || !keys.includes('soundsState')) {
         return;
       }
-
-      const soundsStateChange = changes.soundsState;
-      if (!soundsStateChange) {
-        return;
-      }
-
       useSoundsStore.persist.rehydrate();
-
       if (isLeader) {
         setTimeout(() => {
           syncLeaderPlayback();
         }, 50);
       }
-    };
-
-    if (typeof chrome !== 'undefined' && chrome.storage) {
-      chrome.storage.onChanged.addListener(handleStorageChange);
-    }
-
-    return () => {
-      if (typeof chrome !== 'undefined' && chrome.storage) {
-        chrome.storage.onChanged.removeListener(handleStorageChange);
-      }
-    };
+    });
   }, [isLeader]);
 }
 

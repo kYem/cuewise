@@ -5,6 +5,9 @@ import {
   configureLogger,
   DEFAULT_SETTINGS,
   DEVICE_LOCAL_SETTINGS_KEYS,
+  describeThrown,
+  getStorage,
+  type KeyValueStore,
   type LayoutDensity,
   LogLevel as LoggerLevel,
   logger,
@@ -17,6 +20,8 @@ import {
   getSettings,
   migrateStorageData,
   readSettings,
+  SETTINGS_KEY_PREFIX,
+  SETTINGS_KEYS,
   setSettingsPatch,
 } from '@cuewise/storage';
 import { create } from 'zustand';
@@ -67,6 +72,77 @@ function reconcilePreview(
 
 const noop = () => {};
 
+/** Every DOM/logger effect a settings value drives. All five are idempotent. */
+function applyAll(settings: Settings): void {
+  applyTheme(settings.theme);
+  applyColorTheme(settings.colorTheme);
+  applyGlassEnhanced(settings.glassEnhanced);
+  applyLayoutDensity(settings.layoutDensity);
+  applyLogLevel(settings.logLevel);
+}
+
+let unsubscribeFromStorage: (() => void) | null = null;
+// Which backend that subscription belongs to, so a reconfigured platform is not left observing
+// the store it replaced. Identity, not a boolean: every initialize() calls this.
+let subscribedTo: KeyValueStore | null = null;
+
+/**
+ * Converges the in-memory copy on settings written anywhere else — the sync engine applying a pull,
+ * or another tab. Idempotent because every caller of initialize() runs it, and because the backends
+ * report a context's own writes too.
+ */
+function subscribeToStorage(): void {
+  let store: KeyValueStore;
+  try {
+    store = getStorage();
+  } catch (error) {
+    // Hides nothing: settings are unusable without a storage backend, so the read below this
+    // reports the same misconfiguration through the path that already tells the user.
+    logger.debug(`Settings will not observe storage changes: ${describeThrown(error)}`);
+    return;
+  }
+  if (store === subscribedTo) {
+    return;
+  }
+  unsubscribeFromStorage?.();
+  unsubscribeFromStorage = null;
+  subscribedTo = null;
+  if (store.onChanged === undefined) {
+    // A backend that cannot observe writes keeps the staleness it has today.
+    return;
+  }
+  subscribedTo = store;
+  unsubscribeFromStorage = store.onChanged((keys) => {
+    if (!keys.some((key) => key.startsWith(SETTINGS_KEY_PREFIX))) {
+      return;
+    }
+    void refreshFromStorage();
+  });
+}
+
+/**
+ * Reads persisted truth rather than trusting the event: by the time this runs another writer may
+ * have replaced the value that triggered it. Never calls updateSettings, so it cannot re-enter the
+ * write path or re-notify the sync engine about a change that came FROM it.
+ */
+async function refreshFromStorage(): Promise<void> {
+  const read = await readSettings();
+  if (!read.ok) {
+    // The write path already reports unreadable settings, loudly and with the field names; a
+    // background refresh saying it again would toast the user for something they did not do.
+    return;
+  }
+  const { settings, preview } = useSettingsStore.getState();
+  if (SETTINGS_KEYS.every((key) => settings[key] === read.settings[key])) {
+    return;
+  }
+  useSettingsStore.setState({
+    settings: read.settings,
+    preview: reconcilePreview(preview, read.settings),
+  });
+  applyAll(read.settings);
+}
+
 // Storage writes are per-key now and don't race, but each write still reads fresh settings to
 // compute the in-memory merge and notify diff — chaining keeps that read/set pair atomic per write.
 let writeChain: Promise<unknown> = Promise.resolve();
@@ -115,32 +191,26 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     set({ preview: null });
   },
 
-  initialize: async () => {
-    try {
-      set({ isLoading: true, error: null });
+  initialize: () =>
+    // In the write queue, not beside it: an init resolving after a write would otherwise install
+    // the settings it read BEFORE that write, reverting it in memory until the next reload.
+    enqueueWrite(async () => {
+      subscribeToStorage();
+      try {
+        set({ isLoading: true, error: null });
 
-      // Merge with defaults to ensure all properties exist (for existing users)
-      const settings = { ...DEFAULT_SETTINGS, ...(await getSettings()) };
+        // Merge with defaults to ensure all properties exist (for existing users)
+        const settings = { ...DEFAULT_SETTINGS, ...(await getSettings()) };
 
-      set({
-        settings,
-        preview: null,
-        isLoading: false,
-      });
-
-      // Apply all customization on initialization
-      applyTheme(settings.theme);
-      applyColorTheme(settings.colorTheme);
-      applyGlassEnhanced(settings.glassEnhanced);
-      applyLayoutDensity(settings.layoutDensity);
-      applyLogLevel(settings.logLevel);
-    } catch (error) {
-      logger.error('Error initializing settings store', error);
-      const errorMessage = 'Failed to load settings. Please refresh the page.';
-      set({ error: errorMessage, isLoading: false });
-      useToastStore.getState().error(errorMessage);
-    }
-  },
+        set({ settings, preview: null, isLoading: false });
+        applyAll(settings);
+      } catch (error) {
+        logger.error('Error initializing settings store', error);
+        const errorMessage = 'Failed to load settings. Please refresh the page.';
+        set({ error: errorMessage, isLoading: false });
+        useToastStore.getState().error(errorMessage);
+      }
+    }),
 
   updateSettings: (partialSettings: Partial<Settings>) =>
     enqueueWrite(async () => {
@@ -227,11 +297,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
 
         // Drive the DOM off the merged result, not the incoming patch: a sync pull can change these
         // keys in storage without this write touching them. All five applies are idempotent.
-        applyTheme(updatedSettings.theme);
-        applyColorTheme(updatedSettings.colorTheme);
-        applyGlassEnhanced(updatedSettings.glassEnhanced);
-        applyLayoutDensity(updatedSettings.layoutDensity);
-        applyLogLevel(updatedSettings.logLevel);
+        applyAll(updatedSettings);
         return true;
       } catch (error) {
         logger.error('Error updating settings', error);

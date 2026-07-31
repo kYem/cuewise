@@ -1,4 +1,4 @@
-import { logger, toStoredValues, UNREADABLE_VALUE } from '@cuewise/shared';
+import { logger, type StorageArea, toStoredValues, UNREADABLE_VALUE } from '@cuewise/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LocalStorageKeyValueStore } from './local-storage-key-value-store';
 
@@ -167,5 +167,69 @@ describe('LocalStorageKeyValueStore.set with no value', () => {
 
     expect(result.success).toBe(false);
     expect(localStorage.getItem('poisoned')).toBeNull();
+  });
+});
+
+describe('LocalStorageKeyValueStore.onChanged', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('reports its own writes, since window.onstorage never fires for the writer', async () => {
+    const store = new LocalStorageKeyValueStore();
+    const seen: { keys: string[]; area: StorageArea }[] = [];
+    store.onChanged((keys, area) => seen.push({ keys, area }));
+
+    await store.set('settings.theme', 'dark', 'local');
+
+    expect(seen).toEqual([{ keys: ['settings.theme'], area: 'local' }]);
+  });
+
+  it('reports a batch once, not once per key', async () => {
+    const store = new LocalStorageKeyValueStore();
+    const seen: string[][] = [];
+    store.onChanged((keys) => seen.push(keys));
+
+    await store.setMany({ 'settings.theme': 'dark', 'settings.showClock': true }, 'local');
+
+    expect(seen).toEqual([['settings.theme', 'settings.showClock']]);
+  });
+
+  it('reports what a partial batch did land, not nothing', async () => {
+    const store = new LocalStorageKeyValueStore();
+    const seen: string[][] = [];
+    store.onChanged((keys) => seen.push(keys));
+
+    // The second entry refuses: `undefined` is the one value the adapter will not store.
+    await store.setMany({ 'settings.theme': 'dark', 'settings.showClock': undefined }, 'local');
+
+    expect(seen).toEqual([['settings.theme']]);
+  });
+
+  it('stops reporting once unsubscribed', async () => {
+    const store = new LocalStorageKeyValueStore();
+    const seen: string[][] = [];
+    const unsubscribe = store.onChanged((keys) => seen.push(keys));
+
+    unsubscribe();
+    await store.set('settings.theme', 'dark', 'local');
+
+    expect(seen).toEqual([]);
+  });
+
+  it('keeps notifying the rest when one subscriber throws', async () => {
+    const store = new LocalStorageKeyValueStore();
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const seen: string[][] = [];
+    store.onChanged(() => {
+      throw new Error('subscriber exploded');
+    });
+    store.onChanged((keys) => seen.push(keys));
+
+    await expect(store.set('settings.theme', 'dark', 'local')).resolves.toEqual({ success: true });
+
+    expect(seen).toEqual([['settings.theme']]);
+    expect(errorSpy).toHaveBeenCalledWith('A storage change subscriber threw', expect.anything());
+    errorSpy.mockRestore();
   });
 });

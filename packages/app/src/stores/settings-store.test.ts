@@ -1,8 +1,11 @@
 import {
   configurePlatform,
   DEFAULT_SETTINGS,
+  type KeyValueStore,
   logger,
+  resetPlatform,
   type Settings,
+  type StorageArea,
   type StorageResult,
   type SyncMutationSink,
   storageFailure,
@@ -18,6 +21,8 @@ vi.mock('@cuewise/storage', () => ({
   setSettingsPatch: vi.fn(),
   clearSettings: vi.fn(),
   migrateStorageData: vi.fn(),
+  SETTINGS_KEY_PREFIX: 'settings.',
+  SETTINGS_KEYS: Object.keys(DEFAULT_SETTINGS),
 }));
 
 // Module-level fns so the copy each level receives is inspectable across getState() calls.
@@ -527,5 +532,124 @@ describe('an update blocked by a stored value that cannot be parsed', () => {
     await expect(useSettingsStore.getState().resetToDefaults()).resolves.toBe(true);
     expect(storage.clearSettings).toHaveBeenCalledOnce();
     expect(useSettingsStore.getState().settings).toEqual(DEFAULT_SETTINGS);
+  });
+});
+
+describe('converging on settings written elsewhere', () => {
+  // Only onChanged is exercised: the store reaches the backend through the mocked helpers above,
+  // and reads the registry solely to subscribe.
+  function fakeStore() {
+    const subscribers = new Set<(keys: string[], area: StorageArea) => void>();
+    return {
+      store: {
+        onChanged(handler: (keys: string[], area: StorageArea) => void) {
+          subscribers.add(handler);
+          return () => subscribers.delete(handler);
+        },
+      } as unknown as KeyValueStore,
+      emit(keys: string[], area: StorageArea = 'local') {
+        for (const subscriber of subscribers) {
+          subscriber(keys, area);
+        }
+      },
+      get subscriberCount() {
+        return subscribers.size;
+      },
+    };
+  }
+
+  beforeEach(() => {
+    useSettingsStore.setState({
+      settings: defaultSettings,
+      preview: null,
+      isLoading: false,
+      error: null,
+    });
+    vi.clearAllMocks();
+    seedStorage();
+  });
+
+  afterEach(() => {
+    resetPlatform();
+  });
+
+  it('adopts a value the sync engine wrote straight to storage', async () => {
+    const fake = fakeStore();
+    configurePlatform({ storage: fake.store });
+    await useSettingsStore.getState().initialize();
+    storedSettings = { ...defaultSettings, colorTheme: 'forest' };
+
+    fake.emit(['settings.colorTheme']);
+    await vi.waitFor(() => expect(useSettingsStore.getState().settings.colorTheme).toBe('forest'));
+  });
+
+  it('ignores a change to keys it does not own', async () => {
+    const fake = fakeStore();
+    configurePlatform({ storage: fake.store });
+    await useSettingsStore.getState().initialize();
+    storedSettings = { ...defaultSettings, colorTheme: 'forest' };
+
+    fake.emit(['quotes']);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(useSettingsStore.getState().settings.colorTheme).toBe(defaultSettings.colorTheme);
+  });
+
+  it('subscribes once however many times initialize runs', async () => {
+    const fake = fakeStore();
+    configurePlatform({ storage: fake.store });
+
+    await useSettingsStore.getState().initialize();
+    await useSettingsStore.getState().initialize();
+
+    expect(fake.subscriberCount).toBe(1);
+  });
+
+  it('initializes normally on a backend that cannot observe writes', async () => {
+    configurePlatform({ storage: {} as unknown as KeyValueStore });
+
+    await useSettingsStore.getState().initialize();
+
+    expect(useSettingsStore.getState().isLoading).toBe(false);
+    expect(useSettingsStore.getState().error).toBeNull();
+  });
+});
+
+describe('initialize against a concurrent write', () => {
+  beforeEach(() => {
+    useSettingsStore.setState({
+      settings: defaultSettings,
+      preview: null,
+      isLoading: false,
+      error: null,
+    });
+    vi.clearAllMocks();
+    seedStorage();
+  });
+
+  it('waits for an in-flight write rather than reading beside it', async () => {
+    // Asserts the ordering, not an outcome: queued and unqueued sequence differently, so no single
+    // interleaving can distinguish them by the final value alone.
+    let releaseWrite = () => {};
+    const parked = new Promise<void>((resolve) => {
+      releaseWrite = resolve;
+    });
+    vi.mocked(storage.setSettingsPatch).mockImplementation(async (patch: Partial<Settings>) => {
+      await parked;
+      storedSettings = { ...storedSettings, ...patch };
+      return { success: true };
+    });
+
+    const writing = useSettingsStore.getState().updateSettings({ colorTheme: 'forest' });
+    const initializing = useSettingsStore.getState().initialize();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    // Its read has not even started: beside the queue it would already hold settings that the
+    // in-flight write is about to make stale, and would install them on top of it.
+    expect(storage.getSettings).not.toHaveBeenCalled();
+
+    releaseWrite();
+    await Promise.all([writing, initializing]);
+    expect(useSettingsStore.getState().settings.colorTheme).toBe('forest');
   });
 });

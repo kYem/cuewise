@@ -2,6 +2,7 @@ import {
   createLogger,
   generateId,
   getNotifier,
+  getStorage,
   LogLevel,
   minutesToSeconds,
   type NotificationSoundType,
@@ -671,40 +672,17 @@ export const usePomodoroStore = create<PomodoroStore>()(
  */
 export function usePomodoroStorageSync() {
   useEffect(() => {
-    const handleStorageChange = (
-      changes: { [key: string]: chrome.storage.StorageChange },
-      areaName: string
-    ) => {
-      // Only react to local storage changes
-      if (areaName !== 'local') {
-        return;
-      }
-
-      // Check if pomodoroState changed
-      const pomodoroStateChange = changes.pomodoroState;
-      if (!pomodoroStateChange) {
-        return;
-      }
-
-      // Trigger rehydration to sync with other tabs
-      // This will update the Zustand store with the latest storage value
-      // NOTE: Removed automatic completeSession() call here as it causes
-      // double completion (once from tick(), once from storage sync),
-      // which makes the timer skip breaks by completing them immediately.
-      // The rehydrate() call is sufficient to keep tabs in sync.
-      usePomodoroStore.persist.rehydrate();
-    };
-
-    // Register listener
-    if (typeof chrome !== 'undefined' && chrome.storage) {
-      chrome.storage.onChanged.addListener(handleStorageChange);
+    const store = getStorage();
+    if (store.onChanged === undefined) {
+      return;
     }
-
-    // Cleanup on unmount
-    return () => {
-      if (typeof chrome !== 'undefined' && chrome.storage) {
-        chrome.storage.onChanged.removeListener(handleStorageChange);
+    // Rehydrate only — NOT completeSession(): that double-completed a session (once from tick(),
+    // once from here) and made the timer skip breaks.
+    return store.onChanged((keys, area) => {
+      if (area !== 'local' || !keys.includes('pomodoroState')) {
+        return;
       }
-    };
+      usePomodoroStore.persist.rehydrate();
+    });
   }, []); // Empty deps - only set up once per component mount
 }

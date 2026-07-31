@@ -118,6 +118,17 @@ export interface KeyValueStore {
   /** Batch remove, idempotent: a key that was already absent is removed, not a failure. */
   removeMany(keys: string[], area: StorageArea): Promise<boolean>;
   getUsage(area: StorageArea): Promise<StorageUsage>;
+  /**
+   * Subscribe to writes, returning an unsubscribe fn. Optional and feature-detected by presence,
+   * like SyncController's host-specific methods: a backend that cannot observe writes simply omits
+   * it, and a caller that finds it absent keeps whatever staleness it has today.
+   *
+   * It reports WHICH keys changed, not their values: a handler that re-reads sees persisted truth,
+   * where one trusting an event payload would act on a value another writer has already replaced.
+   * Own writes are included — Chrome delivers them to the writing context too — so handlers must be
+   * idempotent rather than assume every notification is somebody else's.
+   */
+  onChanged?(handler: (keys: string[], area: StorageArea) => void): () => void;
 }
 
 /**

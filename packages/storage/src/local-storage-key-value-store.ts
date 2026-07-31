@@ -33,6 +33,42 @@ export class LocalStorageKeyValueStore implements KeyValueStore {
   // Single localStorage backend, no separate sync area — so sync-only UI hides.
   readonly supportsSync = false;
 
+  private readonly subscribers = new Set<(keys: string[], area: StorageArea) => void>();
+
+  /**
+   * Emits this store's OWN writes. `window.onstorage` fires only for other documents, and the
+   * hosts on this backend are single-document — so a change nobody emits is a change nobody sees,
+   * even though the writer (the sync engine) and the reader (a store) share the realm.
+   */
+  onChanged(handler: (keys: string[], area: StorageArea) => void): () => void {
+    this.subscribers.add(handler);
+    return () => {
+      this.subscribers.delete(handler);
+    };
+  }
+
+  // Collects instead of emitting while a batch is open, so one setMany is one notification
+  // rather than one per key — the batch's callers read every key back on each of them.
+  private batched: string[] | null = null;
+
+  // A throwing subscriber must not fail the write that notified it.
+  private emit(keys: string[], area: StorageArea): void {
+    if (this.batched !== null) {
+      this.batched.push(...keys);
+      return;
+    }
+    if (keys.length === 0) {
+      return;
+    }
+    for (const subscriber of this.subscribers) {
+      try {
+        subscriber(keys, area);
+      } catch (error) {
+        logger.error('A storage change subscriber threw', error);
+      }
+    }
+  }
+
   async get<T>(key: string, _area: StorageArea): Promise<T | null> {
     try {
       const item = localStorage.getItem(key);
@@ -52,6 +88,7 @@ export class LocalStorageKeyValueStore implements KeyValueStore {
     }
     try {
       localStorage.setItem(key, JSON.stringify(value));
+      this.emit([key], area);
       return { success: true };
     } catch (error) {
       logger.error(`Error saving ${key} to storage`, error);
@@ -72,9 +109,10 @@ export class LocalStorageKeyValueStore implements KeyValueStore {
     }
   }
 
-  async remove(key: string, _area: StorageArea): Promise<boolean> {
+  async remove(key: string, area: StorageArea): Promise<boolean> {
     try {
       localStorage.removeItem(key);
+      this.emit([key], area);
       return true;
     } catch (error) {
       logger.error(`Error removing ${key} from storage`, error);
@@ -140,23 +178,40 @@ export class LocalStorageKeyValueStore implements KeyValueStore {
 
   // Not atomic: a mid-loop quota failure leaves earlier keys in this call already written.
   async setMany(entries: Record<string, unknown>, area: StorageArea): Promise<StorageResult> {
-    for (const [key, value] of Object.entries(entries)) {
-      const result = await this.set(key, value, area);
-      if (!result.success) {
-        return result;
+    this.batched = [];
+    try {
+      for (const [key, value] of Object.entries(entries)) {
+        const result = await this.set(key, value, area);
+        if (!result.success) {
+          return result;
+        }
       }
+      return { success: true };
+    } finally {
+      // In a finally so a partial batch still reports what it did land.
+      this.flush(area);
     }
-    return { success: true };
   }
 
   async removeMany(keys: string[], area: StorageArea): Promise<boolean> {
-    let allRemoved = true;
-    for (const key of keys) {
-      const removed = await this.remove(key, area);
-      if (!removed) {
-        allRemoved = false;
+    this.batched = [];
+    try {
+      let allRemoved = true;
+      for (const key of keys) {
+        const removed = await this.remove(key, area);
+        if (!removed) {
+          allRemoved = false;
+        }
       }
+      return allRemoved;
+    } finally {
+      this.flush(area);
     }
-    return allRemoved;
+  }
+
+  private flush(area: StorageArea): void {
+    const keys = this.batched ?? [];
+    this.batched = null;
+    this.emit(keys, area);
   }
 }
