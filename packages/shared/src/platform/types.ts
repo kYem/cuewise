@@ -119,21 +119,15 @@ export interface KeyValueStore {
   removeMany(keys: string[], area: StorageArea): Promise<boolean>;
   getUsage(area: StorageArea): Promise<StorageUsage>;
   /**
-   * Subscribe to writes, returning an unsubscribe fn. Optional and feature-detected by presence,
-   * like `SyncMutationSink.markMutatedBulk` below: a backend that cannot observe writes omits it,
-   * and a caller that finds it absent keeps whatever staleness it has today.
+   * Optional and feature-detected by presence: a backend that cannot observe writes omits it.
    *
-   * Reports WHICH keys changed, never their values: a handler that re-reads sees persisted truth,
-   * where one trusting an event payload would act on a value another writer already replaced. A
-   * key names a write that happened, not a value that differs, and says nothing about whether it
-   * was a set or a remove.
+   * A key names a write that happened, not a value that differs — own writes are reported too and
+   * a set is indistinguishable from a remove, so handlers re-read rather than trust the event. A
+   * handler that writes back through the store it observes echoes forever.
    *
-   * A handler must not write back through the store it observes: own writes are reported too, so
-   * that is an unbounded echo. Re-reading is safe; re-persisting is not.
-   *
-   * Scope differs by backend and no signature can say which you have: the Chrome adapter sees
-   * every write to the area from any context, including code that bypassed this port; the
-   * localStorage one sees only writes made through that instance.
+   * Scope differs by backend: the Chrome adapter sees every write to the area from any context,
+   * including code that bypassed this port; the localStorage one sees only writes made through
+   * that instance.
    */
   onChanged?(handler: (keys: string[], area: StorageArea) => void): () => void;
 }

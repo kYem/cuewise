@@ -5,7 +5,6 @@ import {
   logger,
   resetPlatform,
   type Settings,
-  type StorageArea,
   type StorageResult,
   type SyncMutationSink,
   storageFailure,
@@ -13,6 +12,7 @@ import {
 import * as storage from '@cuewise/storage';
 import { defaultSettings } from '@cuewise/test-utils/fixtures';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fakeObservableStore } from './__fixtures__/storage-changes.fixtures';
 import { selectBackgroundBlur, selectBackgroundDim, useSettingsStore } from './settings-store';
 
 vi.mock('@cuewise/storage', () => ({
@@ -539,27 +539,7 @@ describe('an update blocked by a stored value that cannot be parsed', () => {
 });
 
 describe('converging on settings written elsewhere', () => {
-  // Only onChanged is exercised: the store reaches the backend through the mocked helpers above,
-  // and reads the registry solely to subscribe.
-  function fakeStore() {
-    const subscribers = new Set<(keys: string[], area: StorageArea) => void>();
-    return {
-      store: {
-        onChanged(handler: (keys: string[], area: StorageArea) => void) {
-          subscribers.add(handler);
-          return () => subscribers.delete(handler);
-        },
-      } as unknown as KeyValueStore,
-      emit(keys: string[], area: StorageArea = 'local') {
-        for (const subscriber of subscribers) {
-          subscriber(keys, area);
-        }
-      },
-      get subscriberCount() {
-        return subscribers.size;
-      },
-    };
-  }
+  const fakeStore = fakeObservableStore;
 
   beforeEach(() => {
     useSettingsStore.setState({
@@ -587,8 +567,6 @@ describe('converging on settings written elsewhere', () => {
   });
 
   it('reports a rejected re-read instead of discarding it', async () => {
-    // readSettings rejects as well as answering ok:false — the migration it awaits throws on an
-    // undeterminable storage area. Fired with `void`, that is one unhandled rejection per write.
     const fake = fakeStore();
     configurePlatform({ storage: fake.store });
     await useSettingsStore.getState().initialize();
@@ -616,12 +594,48 @@ describe('converging on settings written elsewhere', () => {
     fake.emit(['settings.colorTheme']);
 
     await vi.waitFor(() => expect(useSettingsStore.getState().error).toContain('colorTheme'));
+    // Nothing renders `error`, so without the toast the page shows values it knows are stale.
+    expect(toastError).toHaveBeenCalledWith(expect.stringContaining('colorTheme'));
+    errorSpy.mockRestore();
+  });
+
+  it('says an unreadable value once, not once per key a pull writes', async () => {
+    const fake = fakeStore();
+    configurePlatform({ storage: fake.store });
+    await useSettingsStore.getState().initialize();
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    vi.mocked(storage.readSettings).mockResolvedValue({ ok: false, unreadable: ['colorTheme'] });
+
+    fake.emit(['settings.colorTheme']);
+    await vi.waitFor(() => expect(toastError).toHaveBeenCalledTimes(1));
+    fake.emit(['settings.showClock']);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(toastError).toHaveBeenCalledTimes(1);
+    errorSpy.mockRestore();
+  });
+
+  it('drops the complaint once the value it named becomes readable', async () => {
+    // Reset to defaults converges on settings this store already holds, so a clear that waited for
+    // a *difference* would leave the store naming a corrupt value the user has just cleared.
+    const fake = fakeStore();
+    configurePlatform({ storage: fake.store });
+    await useSettingsStore.getState().initialize();
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    vi.mocked(storage.readSettings).mockResolvedValueOnce({
+      ok: false,
+      unreadable: ['colorTheme'],
+    });
+
+    fake.emit(['settings.colorTheme']);
+    await vi.waitFor(() => expect(useSettingsStore.getState().error).not.toBeNull());
+    fake.emit(['settings.colorTheme']);
+
+    await vi.waitFor(() => expect(useSettingsStore.getState().error).toBeNull());
     errorSpy.mockRestore();
   });
 
   it('leaves state alone when a change turns out to be its own write echoing back', async () => {
-    // Both backends report a context's own writes, and two Settings fields are arrays parsed
-    // fresh per read — compared by reference, every write would repaint and re-apply the DOM.
     const fake = fakeStore();
     configurePlatform({ storage: fake.store });
     await useSettingsStore.getState().initialize();
@@ -644,6 +658,20 @@ describe('converging on settings written elsewhere', () => {
     await vi.waitFor(() =>
       expect(document.documentElement.getAttribute('data-theme')).toBe('forest')
     );
+  });
+
+  it('applies every DOM effect a pulled setting drives, not only the theme', async () => {
+    const fake = fakeStore();
+    configurePlatform({ storage: fake.store });
+    await useSettingsStore.getState().initialize();
+    storedSettings = { ...defaultSettings, layoutDensity: 'compact', glassEnhanced: true };
+
+    fake.emit(['settings.layoutDensity']);
+
+    await vi.waitFor(() =>
+      expect(document.documentElement.getAttribute('data-density')).toBe('compact')
+    );
+    expect(document.documentElement.classList.contains('glass-enhanced')).toBe(true);
   });
 
   it('coalesces a burst into one re-read, since a pull writes one key at a time', async () => {
@@ -705,6 +733,89 @@ describe('converging on settings written elsewhere', () => {
     expect(useSettingsStore.getState().isLoading).toBe(false);
     expect(useSettingsStore.getState().error).toBeNull();
   });
+
+  it('does not push back what it just pulled', async () => {
+    // Marking a converged key dirty pushes it to the peer whose pull marks it dirty in turn —
+    // the unbounded echo the port warns about, between two devices rather than inside one.
+    const markMutated = vi.fn();
+    const fake = fakeStore();
+    configurePlatform({ storage: fake.store, syncSink: { markMutated, markDeleted: vi.fn() } });
+    await useSettingsStore.getState().initialize();
+    storedSettings = { ...defaultSettings, colorTheme: 'forest' };
+
+    fake.emit(['settings.colorTheme']);
+
+    await vi.waitFor(() => expect(useSettingsStore.getState().settings.colorTheme).toBe('forest'));
+    expect(markMutated).not.toHaveBeenCalled();
+    configurePlatform({ syncSink: null });
+  });
+
+  it('converges on a changed array, not only on a changed primitive', async () => {
+    const fake = fakeStore();
+    configurePlatform({ storage: fake.store });
+    await useSettingsStore.getState().initialize();
+    storedSettings = { ...defaultSettings, quoteFilterActiveCollectionIds: ['c1'] };
+
+    fake.emit(['settings.quoteFilterActiveCollectionIds']);
+
+    await vi.waitFor(() =>
+      expect(useSettingsStore.getState().settings.quoteFilterActiveCollectionIds).toEqual(['c1'])
+    );
+  });
+
+  it('keeps a slider gesture that started while the pulled write was in flight', async () => {
+    const fake = fakeStore();
+    configurePlatform({ storage: fake.store });
+    await useSettingsStore.getState().initialize();
+    useSettingsStore.getState().previewSettings({ backgroundDim: 80 });
+    storedSettings = { ...defaultSettings, colorTheme: 'forest' };
+
+    fake.emit(['settings.colorTheme']);
+
+    await vi.waitFor(() => expect(useSettingsStore.getState().settings.colorTheme).toBe('forest'));
+    expect(useSettingsStore.getState().preview).toEqual({ backgroundDim: 80 });
+  });
+
+  it('retries the subscription after one that threw', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const fake = fakeObservableStore(1);
+    configurePlatform({ storage: fake.store });
+
+    await useSettingsStore.getState().initialize();
+    await useSettingsStore.getState().initialize();
+
+    expect(fake.subscriberCount).toBe(1);
+    errorSpy.mockRestore();
+  });
+
+  it('waits for an in-flight write rather than re-reading beside it', async () => {
+    let releaseWrite = () => {};
+    const parked = new Promise<void>((resolve) => {
+      releaseWrite = resolve;
+    });
+    const fake = fakeStore();
+    configurePlatform({ storage: fake.store });
+    await useSettingsStore.getState().initialize();
+    vi.mocked(storage.readSettings).mockClear();
+    vi.mocked(storage.setSettingsPatch).mockImplementation(async (patch: Partial<Settings>) => {
+      await parked;
+      storedSettings = { ...storedSettings, ...patch };
+      return { success: true };
+    });
+
+    const writing = useSettingsStore.getState().updateSettings({ colorTheme: 'forest' });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const readsBeforeChange = vi.mocked(storage.readSettings).mock.calls.length;
+    fake.emit(['settings.theme']);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    // Unqueued, the re-read runs now and installs a snapshot the parked write is about to replace.
+    expect(storage.readSettings).toHaveBeenCalledTimes(readsBeforeChange);
+    releaseWrite();
+    await writing;
+    await vi.waitFor(() => expect(storage.readSettings).toHaveBeenCalled());
+    expect(useSettingsStore.getState().settings.colorTheme).toBe('forest');
+  });
 });
 
 describe('initialize against a concurrent write', () => {
@@ -735,8 +846,6 @@ describe('initialize against a concurrent write', () => {
     const initializing = useSettingsStore.getState().initialize();
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    // Its read has not even started: beside the queue it would already hold settings that the
-    // in-flight write is about to make stale, and would install them on top of it.
     expect(storage.getSettings).not.toHaveBeenCalled();
 
     releaseWrite();

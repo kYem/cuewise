@@ -222,6 +222,16 @@ describe('ChromeKeyValueStore.onChanged', () => {
     unsubscribe();
   });
 
+  it('reports the sync area too, which is where a second device writes', () => {
+    const seen: { keys: string[]; area: StorageArea }[] = [];
+    const unsubscribe = store.onChanged((keys, area) => seen.push({ keys, area }));
+
+    event().fire({ 'settings.theme': { newValue: 'dark' } }, 'sync');
+
+    expect(seen).toEqual([{ keys: ['settings.theme'], area: 'sync' }]);
+    unsubscribe();
+  });
+
   it('ignores an area this port cannot name, rather than passing it through', () => {
     // `managed` and `session` exist in Chrome; StorageArea covers neither, so forwarding one
     // would hand a consumer an area its own filters cannot match.

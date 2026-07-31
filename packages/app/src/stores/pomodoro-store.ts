@@ -662,9 +662,8 @@ export const usePomodoroStore = create<PomodoroStore>()(
 /**
  * React hook to sync Pomodoro state across tabs.
  *
- * Rehydrates on a storage change reported through the KeyValueStore port. Silent on a backend
- * whose persist adapter bypasses that port — the zustand chrome adapter writes localStorage
- * directly, so on the localStorage backend nothing ever announces `pomodoroState`.
+ * Rehydrates on a storage change reported through the KeyValueStore port, which `chromeLocalStorage`
+ * only reaches on the extension backend — see the note there.
  *
  * Usage: Call this hook in components that need cross-tab synchronization
  * @example
@@ -681,7 +680,7 @@ export function usePomodoroStorageSync() {
     }
     // Rehydrate only: completeSession() here double-completes with tick() and skips breaks.
     return (
-      safeSubscribe(store, (keys, area) => {
+      safeSubscribe(store, 'the pomodoro timer', (keys, area) => {
         if (area !== 'local' || !keys.includes('pomodoroState')) {
           return;
         }

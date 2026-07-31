@@ -53,7 +53,6 @@ export function createChromeStorageMock(): MockChromeStorage {
   };
 }
 
-/** The `chrome.storage.onChanged` event, with a `fire` a test drives it from. */
 export interface MockChromeStorageEvent {
   addListener: ReturnType<typeof vi.fn>;
   removeListener: ReturnType<typeof vi.fn>;

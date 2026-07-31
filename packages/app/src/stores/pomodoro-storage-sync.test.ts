@@ -1,32 +1,8 @@
-import {
-  configurePlatform,
-  type KeyValueStore,
-  resetPlatform,
-  type StorageArea,
-} from '@cuewise/shared';
+import { configurePlatform, resetPlatform } from '@cuewise/shared';
 import { renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { fakeObservableStore } from './__fixtures__/storage-changes.fixtures';
 import { usePomodoroStorageSync, usePomodoroStore } from './pomodoro-store';
-
-function fakeStore() {
-  const subscribers = new Set<(keys: string[], area: StorageArea) => void>();
-  return {
-    store: {
-      onChanged(handler: (keys: string[], area: StorageArea) => void) {
-        subscribers.add(handler);
-        return () => subscribers.delete(handler);
-      },
-    } as unknown as KeyValueStore,
-    emit(keys: string[], area: StorageArea = 'local') {
-      for (const subscriber of subscribers) {
-        subscriber(keys, area);
-      }
-    },
-    get subscriberCount() {
-      return subscribers.size;
-    },
-  };
-}
 
 describe('usePomodoroStorageSync', () => {
   afterEach(() => {
@@ -34,7 +10,7 @@ describe('usePomodoroStorageSync', () => {
   });
 
   it('rehydrates when another context writes the timer state', () => {
-    const fake = fakeStore();
+    const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
     const rehydrate = vi.spyOn(usePomodoroStore.persist, 'rehydrate').mockImplementation(() => {});
     renderHook(() => usePomodoroStorageSync());
@@ -46,7 +22,7 @@ describe('usePomodoroStorageSync', () => {
   });
 
   it('ignores another key, and the same key in another area', () => {
-    const fake = fakeStore();
+    const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
     const rehydrate = vi.spyOn(usePomodoroStore.persist, 'rehydrate').mockImplementation(() => {});
     renderHook(() => usePomodoroStorageSync());
@@ -59,7 +35,7 @@ describe('usePomodoroStorageSync', () => {
   });
 
   it('stops observing when the component unmounts', () => {
-    const fake = fakeStore();
+    const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
 
     const { unmount } = renderHook(() => usePomodoroStorageSync());
@@ -70,7 +46,10 @@ describe('usePomodoroStorageSync', () => {
   });
 
   it('mounts without a storage backend rather than crashing the tree', () => {
-    // getStorage() throws when unconfigured, and this runs inside a useEffect.
+    // Reset here, not inherited from a neighbour's afterEach: run alone this test would otherwise
+    // meet the self-registered backend and never reach the guard it names.
+    resetPlatform();
+
     expect(() => renderHook(() => usePomodoroStorageSync())).not.toThrow();
   });
 });

@@ -35,12 +35,8 @@ export class LocalStorageKeyValueStore implements KeyValueStore {
 
   private readonly subscribers = new Set<(keys: string[], area: StorageArea) => void>();
 
-  /**
-   * Emits writes made through THIS instance. `window.onstorage` fires only for other documents,
-   * so a same-document write it does not emit is one nobody sees — even though the writer (the
-   * sync engine) and the reader (a store) share the realm. Writes from another document, or
-   * straight to `localStorage`, are not observed at all.
-   */
+  // Emits writes made through THIS instance, because `window.onstorage` fires only for OTHER
+  // documents — and here the writer (the sync engine) and the reader (a store) share one.
   onChanged(handler: (keys: string[], area: StorageArea) => void): () => void {
     this.subscribers.add(handler);
     return () => {
@@ -48,27 +44,15 @@ export class LocalStorageKeyValueStore implements KeyValueStore {
     };
   }
 
-  // Collects while a batch is open, so one setMany is one notification rather than one per key —
-  // every subscriber re-reads on each. Depth, not a flag, and keyed by area: overlapping batches
-  // must merge, since a second one replacing the collector drops what the first had gathered.
-  private batchDepth = 0;
-  private batchedKeys = new Map<StorageArea, string[]>();
-
   // A throwing subscriber must not fail the write that notified it.
   private emit(keys: string[], area: StorageArea): void {
-    if (this.batchDepth > 0) {
-      const pending = this.batchedKeys.get(area) ?? [];
-      pending.push(...keys);
-      this.batchedKeys.set(area, pending);
-      return;
-    }
     if (keys.length === 0) {
       return;
     }
     for (const subscriber of this.subscribers) {
       try {
-        // Typed `=> void`, but a caller can still hand back a promise, and every subscriber this
-        // ships today is async — a rejection a sync catch cannot see would escape unhandled.
+        // Typed `=> void`, but a caller can still hand back a promise, whose rejection a sync
+        // catch cannot see.
         const settled = subscriber(keys, area) as unknown;
         if (settled instanceof Promise) {
           settled.catch((error) => {
@@ -92,6 +76,14 @@ export class LocalStorageKeyValueStore implements KeyValueStore {
   }
 
   async set<T>(key: string, value: T, area: StorageArea): Promise<StorageResult> {
+    const result = this.writeOne(key, value, area);
+    if (result.success) {
+      this.emit([key], area);
+    }
+    return result;
+  }
+
+  private writeOne<T>(key: string, value: T, area: StorageArea): StorageResult {
     // JSON.stringify(undefined) is undefined, which localStorage keeps as the string "undefined" —
     // unparseable for every later read, and reported as a successful write.
     if (value === undefined) {
@@ -100,7 +92,6 @@ export class LocalStorageKeyValueStore implements KeyValueStore {
     }
     try {
       localStorage.setItem(key, JSON.stringify(value));
-      this.emit([key], area);
       return { success: true };
     } catch (error) {
       logger.error(`Error saving ${key} to storage`, error);
@@ -122,9 +113,16 @@ export class LocalStorageKeyValueStore implements KeyValueStore {
   }
 
   async remove(key: string, area: StorageArea): Promise<boolean> {
+    const removed = this.deleteOne(key);
+    if (removed) {
+      this.emit([key], area);
+    }
+    return removed;
+  }
+
+  private deleteOne(key: string): boolean {
     try {
       localStorage.removeItem(key);
-      this.emit([key], area);
       return true;
     } catch (error) {
       logger.error(`Error removing ${key} from storage`, error);
@@ -189,48 +187,40 @@ export class LocalStorageKeyValueStore implements KeyValueStore {
   }
 
   // Not atomic: a mid-loop quota failure leaves earlier keys in this call already written.
+  //
+  // One notification carrying this call's own keys. Collected per call, not in an instance-wide
+  // batch window: that window spans awaits, so it would swallow a concurrent write's event and
+  // report that key as part of an operation which never wrote it.
   async setMany(entries: Record<string, unknown>, area: StorageArea): Promise<StorageResult> {
-    this.batchDepth += 1;
+    const written: string[] = [];
     try {
       for (const [key, value] of Object.entries(entries)) {
-        const result = await this.set(key, value, area);
+        const result = this.writeOne(key, value, area);
         if (!result.success) {
           return result;
         }
+        written.push(key);
       }
       return { success: true };
     } finally {
-      this.flush();
+      this.emit(written, area);
     }
   }
 
   async removeMany(keys: string[], area: StorageArea): Promise<boolean> {
-    this.batchDepth += 1;
+    const removed: string[] = [];
     try {
       let allRemoved = true;
       for (const key of keys) {
-        const removed = await this.remove(key, area);
-        if (!removed) {
+        if (this.deleteOne(key)) {
+          removed.push(key);
+        } else {
           allRemoved = false;
         }
       }
       return allRemoved;
     } finally {
-      this.flush();
-    }
-  }
-
-  // Only the outermost batch emits, so overlapping ones report together rather than one cancelling
-  // the other. Per area, because a consumer that filters on it must not see another area's keys.
-  private flush(): void {
-    this.batchDepth -= 1;
-    if (this.batchDepth > 0) {
-      return;
-    }
-    const batches = [...this.batchedKeys];
-    this.batchedKeys.clear();
-    for (const [area, keys] of batches) {
-      this.emit(keys, area);
+      this.emit(removed, area);
     }
   }
 }

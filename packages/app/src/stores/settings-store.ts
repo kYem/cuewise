@@ -87,11 +87,8 @@ let unsubscribeFromStorage: (() => void) | null = null;
 // the store it replaced. Identity, not a boolean: every initialize() calls this.
 let subscribedTo: KeyValueStore | null = null;
 
-/**
- * Structural for the array-valued keys: both backends hand back a fresh array per read (Chrome
- * structured-clones across the IPC boundary, localStorage JSON.parses), so `===` on those reports
- * "changed" for every user who has ever touched a quote filter.
- */
+// Structural for the two array-valued keys: both backends parse a fresh array per read, so `===`
+// reports "changed" for anyone who has ever touched a quote filter.
 function sameSettings(a: Settings, b: Settings): boolean {
   return SETTINGS_KEYS.every((key) => {
     const left = a[key];
@@ -112,9 +109,13 @@ function queueRefresh(): void {
     return;
   }
   refreshQueued = true;
-  void enqueueWrite(async () => {
+  // Nobody awaits this, so its own rejection is the only place a throw can be reported — and it
+  // recurs per settings write, since the flag is already cleared by the time one lands.
+  enqueueWrite(async () => {
     refreshQueued = false;
     await refreshFromStorage();
+  }).catch((error) => {
+    logger.error(`Could not apply settings changed elsewhere: ${describeThrown(error)}`, error);
   });
 }
 
@@ -141,7 +142,7 @@ function subscribeToStorage(): void {
   if (store === null) {
     return;
   }
-  const unsubscribe = safeSubscribe(store, (keys) => {
+  const unsubscribe = safeSubscribe(store, 'settings', (keys) => {
     if (!keys.some((key) => key.startsWith(SETTINGS_KEY_PREFIX))) {
       return;
     }
@@ -152,8 +153,8 @@ function subscribeToStorage(): void {
   if (unsubscribe === null) {
     return;
   }
-  // Both assigned only once the subscribe returns: set beforehand, a failure leaves them
-  // disagreeing and the identity guard above short-circuits every later attempt.
+  // Assigned only once the subscribe returns: set beforehand, a failure wedges the identity guard
+  // above and no later initialize() ever retries.
   unsubscribeFromStorage = unsubscribe;
   subscribedTo = store;
 }
@@ -177,15 +178,24 @@ async function refreshFromStorage(): Promise<void> {
     return;
   }
   if (!read.ok) {
-    // No toast: the user did not do this, and a listener repeats. The store's own error channel
-    // says it once, where the write path would otherwise be the only thing that ever reports it.
     logger.error('Settings changed elsewhere could not be read; the shown values are stale', {
       fields: read.unreadable,
     });
-    useSettingsStore.setState({ error: unreadableSettingsMessage(read.unreadable) });
+    // Toasted, because nothing renders `error` — and only on a change of message, because a
+    // listener repeats: one stale-value problem says so once, not once per key a pull writes.
+    const message = unreadableSettingsMessage(read.unreadable);
+    if (useSettingsStore.getState().error !== message) {
+      useSettingsStore.setState({ error: message });
+      useToastStore.getState().error(message);
+    }
     return;
   }
-  const { settings, preview } = useSettingsStore.getState();
+  const { settings, preview, error } = useSettingsStore.getState();
+  // Before the no-op check, not after: a reset that fixes the corrupt value converges to settings
+  // this store already holds, and would otherwise leave the complaint about it standing forever.
+  if (error !== null) {
+    useSettingsStore.setState({ error: null });
+  }
   // A key names a write, not a changed value, so an own write arrives here as a no-op.
   if (sameSettings(settings, read.settings)) {
     return;
@@ -193,8 +203,6 @@ async function refreshFromStorage(): Promise<void> {
   useSettingsStore.setState({
     settings: read.settings,
     preview: reconcilePreview(preview, read.settings),
-    // Cleared, since this read succeeded: set by the branch above, nothing else ever resets it.
-    error: null,
   });
   applyAll(read.settings);
 }

@@ -631,7 +631,7 @@ export function useSoundsStorageSync() {
       return;
     }
     return (
-      safeSubscribe(store, (keys, area) => {
+      safeSubscribe(store, 'ambient sounds', (keys, area) => {
         if (area !== 'local' || !keys.includes('soundsState')) {
           return;
         }

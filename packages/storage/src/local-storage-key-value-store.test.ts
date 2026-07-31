@@ -206,8 +206,7 @@ describe('LocalStorageKeyValueStore.onChanged', () => {
     expect(seen).toEqual([['settings.theme']]);
   });
 
-  it('loses no key when two batches overlap', async () => {
-    // A second batch replacing the collector drops whatever the first had gathered.
+  it('announces each concurrent batch under its own keys', async () => {
     const store = new LocalStorageKeyValueStore();
     const seen: string[][] = [];
     store.onChanged((keys) => seen.push(keys));
@@ -217,10 +216,10 @@ describe('LocalStorageKeyValueStore.onChanged', () => {
       store.setMany({ c: 3, d: 4 }, 'local'),
     ]);
 
-    // One notification, not one per batch: coalescing is the whole point of batching, and each
-    // costs every subscriber a full re-read.
-    expect(seen).toHaveLength(1);
-    expect(seen.flat().sort()).toEqual(['a', 'b', 'c', 'd']);
+    expect(seen).toEqual([
+      ['a', 'b'],
+      ['c', 'd'],
+    ]);
   });
 
   it('keeps an overlapping batch’s areas apart, so an area filter cannot drop the wrong keys', async () => {
@@ -257,20 +256,14 @@ describe('LocalStorageKeyValueStore.onChanged', () => {
     expect(seen).toEqual([['settings.theme', 'settings.showClock']]);
   });
 
-  it('loses no key when a shorter batch drains inside a longer one', async () => {
-    // Equal-length batches drain before either flushes, so only unequal ones tell a depth counter
-    // apart from a flag — the shorter finishes while the longer is still going.
+  it('does not fold a concurrent single write into a batch that never wrote it', async () => {
     const store = new LocalStorageKeyValueStore();
     const seen: string[][] = [];
     store.onChanged((keys) => seen.push(keys));
 
-    await Promise.all([
-      store.setMany({ a: 1, b: 2, c: 3 }, 'local'),
-      store.setMany({ d: 4 }, 'local'),
-    ]);
+    await Promise.all([store.setMany({ a: 1, b: 2 }, 'local'), store.set('c', 3, 'local')]);
 
-    expect(seen).toHaveLength(1);
-    expect(seen.flat().sort()).toEqual(['a', 'b', 'c', 'd']);
+    expect(seen).toEqual([['a', 'b'], ['c']]);
   });
 
   it('stops reporting once unsubscribed', async () => {
@@ -297,6 +290,23 @@ describe('LocalStorageKeyValueStore.onChanged', () => {
 
     expect(seen).toEqual([['settings.theme']]);
     expect(errorSpy).toHaveBeenCalledWith('A storage change subscriber threw', expect.anything());
+    errorSpy.mockRestore();
+  });
+
+  it('reports a subscriber that rejects, which the sync catch cannot see', async () => {
+    const store = new LocalStorageKeyValueStore();
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    store.onChanged(async () => {
+      throw new Error('subscriber rejected');
+    });
+
+    await store.set('settings.theme', 'dark', 'local');
+    await Promise.resolve();
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      'A storage change subscriber rejected',
+      expect.objectContaining({ keys: ['settings.theme'] })
+    );
     errorSpy.mockRestore();
   });
 });
