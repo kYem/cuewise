@@ -167,7 +167,8 @@ describe('useSoundsStorageSync', () => {
     expect(toastError).toHaveBeenCalledWith(
       expect.stringContaining('Could not start the playlist')
     );
-    // Names which call threw: the try also wraps the resume-position read.
+    // If the getCurrentVideoForPlaylist spy ever stopped taking effect, the real call would
+    // reject into the same catch and every other assertion here would still pass.
     expect(loadPlaylist).toHaveBeenCalled();
   });
 });

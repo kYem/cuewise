@@ -31,10 +31,7 @@ import { useToastStore } from './toast-store';
 // Exactly the keys with preview-aware selectors; widen only alongside a new selector.
 export type PreviewableSettings = Pick<Settings, 'backgroundDim' | 'backgroundBlur'>;
 
-/**
- * The cost clause is what the dedupe latch discriminates on, so a refusal to save and a stale view
- * must not pass the same one. Naming the field adds the remedy for it.
- */
+/** The latch dedupes on the whole message, so the two paths must not share a cost clause. */
 type FailureCost = 'what you see may be out of date' | 'the change was not saved';
 
 function unreadableSettingsMessage(unreadable: string[], cost: FailureCost): string {
@@ -297,8 +294,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
             read.unreadable,
             'the change was not saved'
           );
-          // Latched so a later good read can retire it; the two paths' messages differ, so this
-          // never dedupes one against the other.
+          // Latched so a later good read can retire it.
           reportedUnreadable = errorMessage;
           set({ error: errorMessage, preview: null });
           useToastStore.getState().error(errorMessage);
@@ -402,8 +398,8 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
           return false;
         }
         set({ settings: DEFAULT_SETTINGS, preview: null });
-        // Not left to the change subscription: it is queued behind this write, and a backend that
-        // cannot observe writes never delivers one at all.
+        // Not left to the change subscription: the refresh it queues runs behind this write, and
+        // a backend that cannot observe writes never delivers an event at all.
         clearOwnComplaint();
         for (const key of Object.keys(DEFAULT_SETTINGS)) {
           if (!DEVICE_LOCAL_SETTINGS_KEYS.includes(key)) {

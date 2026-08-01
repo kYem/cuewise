@@ -13,7 +13,7 @@ export interface FakeObservableStoreOptions {
   throwOnUnsubscribe?: boolean;
 }
 
-/** The removed cast means every member must exist; these name themselves rather than fail as undefined. */
+/** Throws with its own name, so an unmocked call isn't an anonymous "not a function". */
 function unserved<K extends Exclude<keyof ObservableKeyValueStore, 'supportsSync' | 'onChanged'>>(
   method: K
 ): ObservableKeyValueStore[K] {

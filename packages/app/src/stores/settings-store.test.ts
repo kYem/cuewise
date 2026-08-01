@@ -666,8 +666,6 @@ describe('converging on settings written elsewhere', () => {
   });
 
   it('tells the user the view is stale even after refusing their save for the same field', async () => {
-    // The two costs are what keep these distinct; sharing one collapses them into a single latched
-    // string, and the second report is deduped away.
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
     await useSettingsStore.getState().initialize();
@@ -679,12 +677,10 @@ describe('converging on settings written elsewhere', () => {
     fake.emit(['settings.colorTheme']);
 
     await vi.waitFor(() => expect(toastError).toHaveBeenCalledTimes(2));
-    expect(useSettingsStore.getState().error).toContain('out of date');
+    expect(toastError).toHaveBeenLastCalledWith(expect.stringContaining('out of date'));
   });
 
   it('clears the complaint when the reset lands, without waiting for a storage event', async () => {
-    // The reset removes the legacy blob key too, which fails the `settings.` filter — and a
-    // backend that cannot observe writes never delivers an event at all.
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
     await useSettingsStore.getState().initialize();

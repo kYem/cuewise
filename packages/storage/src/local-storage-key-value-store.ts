@@ -180,7 +180,7 @@ export class LocalStorageKeyValueStore implements KeyValueStore {
   }
 
   // Not atomic: a batch that stops partway still announces the keys that did land — in a
-  // `finally`, since writeOne's own logging sits outside its try and could throw past the loop.
+  // `finally` here and in removeMany, because both helpers can throw rather than return a failure.
   async setMany(entries: Record<string, unknown>, area: StorageArea): Promise<StorageResult> {
     const written: string[] = [];
     let failure: StorageResult | null = null;
@@ -202,16 +202,19 @@ export class LocalStorageKeyValueStore implements KeyValueStore {
   async removeMany(keys: string[], area: StorageArea): Promise<boolean> {
     const changed: string[] = [];
     let noFailures = true;
-    for (const key of keys) {
-      const outcome = this.deleteOne(key);
-      if (outcome === 'failed') {
-        noFailures = false;
+    try {
+      for (const key of keys) {
+        const outcome = this.deleteOne(key);
+        if (outcome === 'failed') {
+          noFailures = false;
+        }
+        if (outcome === 'removed') {
+          changed.push(key);
+        }
       }
-      if (outcome === 'removed') {
-        changed.push(key);
-      }
+    } finally {
+      this.emit(changed, area);
     }
-    this.emit(changed, area);
     return noFailures;
   }
 }
