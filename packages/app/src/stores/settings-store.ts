@@ -32,10 +32,12 @@ import { useToastStore } from './toast-store';
 export type PreviewableSettings = Pick<Settings, 'backgroundDim' | 'backgroundBlur'>;
 
 /**
- * Always states what the failure cost, so a refusal to save and a stale view stay distinguishable —
- * to the reader, and to the latch that dedupes them. Naming the field adds the remedy for it.
+ * The cost clause is what the dedupe latch discriminates on, so a refusal to save and a stale view
+ * must not pass the same one. Naming the field adds the remedy for it.
  */
-function unreadableSettingsMessage(unreadable: string[], cost: string): string {
+type FailureCost = 'what you see may be out of date' | 'the change was not saved';
+
+function unreadableSettingsMessage(unreadable: string[], cost: FailureCost): string {
   if (unreadable.length > 0) {
     const subject = unreadable.length === 1 ? 'value' : 'values';
     const named = `Cuewise can't read your saved ${subject} for ${unreadable.join(', ')}`;
@@ -98,7 +100,7 @@ function sameSettings(a: Settings, b: Settings): boolean {
   return SETTINGS_KEYS.every((key) => sameSettingValue(a[key], b[key]));
 }
 
-let reportedStale: string | null = null;
+let reportedUnreadable: string | null = null;
 
 /**
  * Latched on its own, not on `error`, which the write path sets too: a pull writes one key at a
@@ -106,22 +108,18 @@ let reportedStale: string | null = null;
  */
 function reportStale(unreadable: string[]): void {
   const message = unreadableSettingsMessage(unreadable, 'what you see may be out of date');
-  if (reportedStale === message) {
+  if (reportedUnreadable === message) {
     return;
   }
-  reportedStale = message;
+  reportedUnreadable = message;
   useSettingsStore.setState({ error: message });
   useToastStore.getState().error(message);
 }
 
-/**
- * Retires this module's own complaint, and only that: a read succeeding says nothing about a write
- * that failed, so a quota message outlives it. Every path that proves the values are readable
- * again calls this — the refresh, and the reset the complaint itself asks the user to perform.
- */
+/** Only this module's own latched complaint: a read succeeding says nothing about a write that failed. */
 function clearOwnComplaint(): void {
-  const complaint = reportedStale;
-  reportedStale = null;
+  const complaint = reportedUnreadable;
+  reportedUnreadable = null;
   if (complaint !== null && useSettingsStore.getState().error === complaint) {
     useSettingsStore.setState({ error: null });
   }
@@ -268,7 +266,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     enqueueWrite(async () => {
       try {
         subscribeToStorage();
-        reportedStale = null;
+        reportedUnreadable = null;
         set({ isLoading: true, error: null });
 
         const settings = await getSettings();
@@ -299,14 +297,13 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
             read.unreadable,
             'the change was not saved'
           );
-          // Latched like the refresh path's own complaint, because it is one: a later good read
-          // means the value it names is readable again, and the reset it asks for clears it.
-          reportedStale = errorMessage;
+          // Latched so a later good read can retire it; the two paths' messages differ, so this
+          // never dedupes one against the other.
+          reportedUnreadable = errorMessage;
           set({ error: errorMessage, preview: null });
           useToastStore.getState().error(errorMessage);
           return false;
         }
-        // This read is the same evidence the refresh path releases the latch on.
         clearOwnComplaint();
         const settings = read.settings;
 
@@ -405,8 +402,8 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
           return false;
         }
         set({ settings: DEFAULT_SETTINGS, preview: null });
-        // Not left to the change subscription: the legacy blob key fails its `settings.` filter,
-        // and a backend that cannot observe writes never delivers one at all.
+        // Not left to the change subscription: it is queued behind this write, and a backend that
+        // cannot observe writes never delivers one at all.
         clearOwnComplaint();
         for (const key of Object.keys(DEFAULT_SETTINGS)) {
           if (!DEVICE_LOCAL_SETTINGS_KEYS.includes(key)) {

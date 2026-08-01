@@ -132,10 +132,7 @@ export interface KeyValueStore {
 
 export type StorageChangeHandler = (keys: string[], area: StorageArea) => void;
 
-/**
- * A store whose `onChanged` is present, so callers past the feature test stop re-checking. Present,
- * not usable: subscribing can still throw, which is why callers go through `safeSubscribe`.
- */
+/** A store whose `onChanged` is present, so callers past the feature test stop re-checking. */
 export interface ObservableKeyValueStore extends KeyValueStore {
   onChanged(handler: StorageChangeHandler): () => void;
 }

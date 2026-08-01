@@ -646,7 +646,7 @@ describe('converging on settings written elsewhere', () => {
     expect(toastError).toHaveBeenCalledTimes(1);
   });
 
-  it('clears the write path’s unreadable complaint once the reset it asks for lands', async () => {
+  it('clears the write path’s complaint once a change event proves the value readable', async () => {
     // The write path is where a corrupt value is usually noticed — initialize() defaults rather
     // than complaining — so a complaint only the refresh path could clear would never clear.
     const fake = fakeObservableStore();
@@ -663,6 +663,23 @@ describe('converging on settings written elsewhere', () => {
     fake.emit(['settings.colorTheme']);
 
     await vi.waitFor(() => expect(useSettingsStore.getState().error).toBeNull());
+  });
+
+  it('tells the user the view is stale even after refusing their save for the same field', async () => {
+    // The two costs are what keep these distinct; sharing one collapses them into a single latched
+    // string, and the second report is deduped away.
+    const fake = fakeObservableStore();
+    configurePlatform({ storage: fake.store });
+    await useSettingsStore.getState().initialize();
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    vi.mocked(storage.readSettings).mockResolvedValue({ ok: false, unreadable: ['colorTheme'] });
+    await useSettingsStore.getState().updateSettings({ colorTheme: 'forest' });
+    expect(toastError).toHaveBeenCalledTimes(1);
+
+    fake.emit(['settings.colorTheme']);
+
+    await vi.waitFor(() => expect(toastError).toHaveBeenCalledTimes(2));
+    expect(useSettingsStore.getState().error).toContain('out of date');
   });
 
   it('clears the complaint when the reset lands, without waiting for a storage event', async () => {

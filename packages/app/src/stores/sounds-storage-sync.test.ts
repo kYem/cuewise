@@ -18,8 +18,7 @@ describe('useSoundsStorageSync', () => {
     resetPlatform();
     useSoundsStore.setState({ isLeader: false });
     vi.useRealTimers();
-    // restoreMocks restores spies, not a bare vi.fn() — without this its call history accumulates
-    // and a toHaveBeenCalledWith is satisfied by whatever an earlier test toasted.
+    // restoreMocks does not reach a bare vi.fn().
     toastError.mockClear();
   });
 
@@ -145,7 +144,7 @@ describe('useSoundsStorageSync', () => {
     configurePlatform({ storage: fake.store });
     vi.spyOn(useSoundsStore.persist, 'rehydrate').mockImplementation(() => {});
     vi.spyOn(youtubePlayer, 'getCurrentPlaylistId').mockReturnValue('another-playlist');
-    vi.spyOn(youtubePlayer, 'loadPlaylist').mockImplementation(() => {
+    const loadPlaylist = vi.spyOn(youtubePlayer, 'loadPlaylist').mockImplementation(() => {
       throw new Error('the iframe API is not ready');
     });
     vi.spyOn(storage, 'getCurrentVideoForPlaylist').mockResolvedValue(null);
@@ -168,5 +167,7 @@ describe('useSoundsStorageSync', () => {
     expect(toastError).toHaveBeenCalledWith(
       expect.stringContaining('Could not start the playlist')
     );
+    // Names which call threw: the try also wraps the resume-position read.
+    expect(loadPlaylist).toHaveBeenCalled();
   });
 });

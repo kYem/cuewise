@@ -13,11 +13,13 @@ export interface FakeObservableStoreOptions {
   throwOnUnsubscribe?: boolean;
 }
 
-/** Tests install this as the whole registry, so an unmocked read must name itself, not undefined. */
-function unserved(method: string): () => never {
-  return () => {
+/** The removed cast means every member must exist; these name themselves rather than fail as undefined. */
+function unserved<K extends Exclude<keyof ObservableKeyValueStore, 'supportsSync' | 'onChanged'>>(
+  method: K
+): ObservableKeyValueStore[K] {
+  return ((): never => {
     throw new Error(`fakeObservableStore does not serve ${method}`);
-  };
+  }) as ObservableKeyValueStore[K];
 }
 
 /** A backend that only observes: consumers reach storage itself through mocked helpers. */

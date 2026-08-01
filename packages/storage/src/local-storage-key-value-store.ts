@@ -179,7 +179,8 @@ export class LocalStorageKeyValueStore implements KeyValueStore {
     }
   }
 
-  // Not atomic: a batch that stops partway still announces the keys that did land.
+  // Not atomic: a batch that stops partway still announces the keys that did land — in a
+  // `finally`, since writeOne's own logging sits outside its try and could throw past the loop.
   async setMany(entries: Record<string, unknown>, area: StorageArea): Promise<StorageResult> {
     const written: string[] = [];
     let failure: StorageResult | null = null;
