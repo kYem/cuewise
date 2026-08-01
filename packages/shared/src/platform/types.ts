@@ -113,7 +113,7 @@ export interface KeyValueStore {
    * keys this build cannot name — a settings key written by a newer version, say.
    */
   keys(prefix: string, area: StorageArea): Promise<string[] | null>;
-  /** Batch write. Chrome lands the keys in one call; the localStorage fallback loops and can stop partway. */
+  /** Batch write, not atomic: a failure can leave earlier keys written and announced. */
   setMany(entries: Record<string, unknown>, area: StorageArea): Promise<StorageResult>;
   /** Batch remove, idempotent: a key that was already absent is removed, not a failure. */
   removeMany(keys: string[], area: StorageArea): Promise<boolean>;
@@ -132,7 +132,10 @@ export interface KeyValueStore {
 
 export type StorageChangeHandler = (keys: string[], area: StorageArea) => void;
 
-/** A store whose `onChanged` is known present, so callers past the feature test stop re-checking. */
+/**
+ * A store whose `onChanged` is present, so callers past the feature test stop re-checking. Present,
+ * not usable: subscribing can still throw, which is why callers go through `safeSubscribe`.
+ */
 export interface ObservableKeyValueStore extends KeyValueStore {
   onChanged(handler: StorageChangeHandler): () => void;
 }

@@ -18,6 +18,9 @@ describe('useSoundsStorageSync', () => {
     resetPlatform();
     useSoundsStore.setState({ isLeader: false });
     vi.useRealTimers();
+    // restoreMocks restores spies, not a bare vi.fn() — without this its call history accumulates
+    // and a toHaveBeenCalledWith is satisfied by whatever an earlier test toasted.
+    toastError.mockClear();
   });
 
   it('rehydrates when another context writes the sounds state', () => {
@@ -162,7 +165,6 @@ describe('useSoundsStorageSync', () => {
     await vi.waitFor(() => expect(useSoundsStore.getState().isPlaying).toBe(false));
 
     expect(useSoundsStore.getState().isYoutubeLoading).toBe(false);
-    // Stopping silently is the same defect wearing different clothes.
     expect(toastError).toHaveBeenCalledWith(
       expect.stringContaining('Could not start the playlist')
     );

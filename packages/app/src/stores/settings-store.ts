@@ -32,17 +32,16 @@ import { useToastStore } from './toast-store';
 export type PreviewableSettings = Pick<Settings, 'backgroundDim' | 'backgroundBlur'>;
 
 /**
- * A named field carries its own remedy ("Reset to defaults", in Settings → Advanced), so both
- * callers say the same thing. Only a read that names nothing needs the caller to say what it cost —
- * a refresh must not tell the user their change was lost.
+ * Always states what the failure cost, so a refusal to save and a stale view stay distinguishable —
+ * to the reader, and to the latch that dedupes them. Naming the field adds the remedy for it.
  */
-function unreadableSettingsMessage(unreadable: string[], costWhenUnnamed: string): string {
+function unreadableSettingsMessage(unreadable: string[], cost: string): string {
   if (unreadable.length > 0) {
     const subject = unreadable.length === 1 ? 'value' : 'values';
-    const named = `Cuewise can't read your saved ${subject} for ${unreadable.join(', ')}.`;
-    return `${named} Reset to defaults in Settings to fix it.`;
+    const named = `Cuewise can't read your saved ${subject} for ${unreadable.join(', ')}`;
+    return `${named}, so ${cost}. Reset to defaults in Settings to fix it.`;
   }
-  return `Cuewise can't read your settings, so ${costWhenUnnamed}.`;
+  return `Cuewise can't read your settings, so ${cost}.`;
 }
 
 /** Quota failures get actionable copy; anything else keeps the generic retry message. */
@@ -113,6 +112,19 @@ function reportStale(unreadable: string[]): void {
   reportedStale = message;
   useSettingsStore.setState({ error: message });
   useToastStore.getState().error(message);
+}
+
+/**
+ * Retires this module's own complaint, and only that: a read succeeding says nothing about a write
+ * that failed, so a quota message outlives it. Every path that proves the values are readable
+ * again calls this — the refresh, and the reset the complaint itself asks the user to perform.
+ */
+function clearOwnComplaint(): void {
+  const complaint = reportedStale;
+  reportedStale = null;
+  if (complaint !== null && useSettingsStore.getState().error === complaint) {
+    useSettingsStore.setState({ error: null });
+  }
 }
 
 // The sync engine writes settings one key per call, so a burst would otherwise queue one full
@@ -188,15 +200,9 @@ async function refreshFromStorage(): Promise<void> {
     reportStale(read.unreadable);
     return;
   }
-  const staleComplaint = reportedStale;
-  reportedStale = null;
-  const { settings, preview, error } = useSettingsStore.getState();
-  // Only this path's own complaint, and before the no-op check: a reset that fixes the value
-  // converges on what this store already holds, but a read succeeding says nothing about a
-  // write that failed.
-  if (staleComplaint !== null && error === staleComplaint) {
-    useSettingsStore.setState({ error: null });
-  }
+  // Before the no-op check: a reset that fixes the value converges on what this store already holds.
+  clearOwnComplaint();
+  const { settings, preview } = useSettingsStore.getState();
   // A key names a write, not a changed value, so an own write arrives here as a no-op.
   if (sameSettings(settings, read.settings)) {
     return;
@@ -300,6 +306,8 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
           useToastStore.getState().error(errorMessage);
           return false;
         }
+        // This read is the same evidence the refresh path releases the latch on.
+        clearOwnComplaint();
         const settings = read.settings;
 
         // Clamp ranged values here — the settings write path the UI uses — so
@@ -397,6 +405,9 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
           return false;
         }
         set({ settings: DEFAULT_SETTINGS, preview: null });
+        // Not left to the change subscription: the legacy blob key fails its `settings.` filter,
+        // and a backend that cannot observe writes never delivers one at all.
+        clearOwnComplaint();
         for (const key of Object.keys(DEFAULT_SETTINGS)) {
           if (!DEVICE_LOCAL_SETTINGS_KEYS.includes(key)) {
             notifyMutated('settings', key);

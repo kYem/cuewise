@@ -27,8 +27,8 @@ export class ChromeKeyValueStore implements KeyValueStore {
   // The only channel that already crosses the extension's worker/page split in this direction:
   // the sync engine writes from the worker, the stores read in the page.
   onChanged(handler: StorageChangeHandler): () => void {
-    // `chrome.storage` existing does not mean this event does — an invalidated context has neither,
-    // and the method's mere presence is what `canObserveWrites` feature-tests.
+    // The method's mere presence is what canObserveWrites tests, so an unusable event must throw
+    // rather than hand back a teardown that observes nothing.
     const events = chrome.storage?.onChanged;
     if (events === undefined) {
       throw new Error('chrome.storage.onChanged is unavailable in this context');

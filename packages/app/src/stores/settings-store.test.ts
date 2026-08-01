@@ -528,7 +528,7 @@ describe('an update blocked by a stored value that cannot be parsed', () => {
     );
 
     const message =
-      "Cuewise can't read your saved value for pomodoroAutoStartBreaks. Reset to defaults in Settings to fix it.";
+      "Cuewise can't read your saved value for pomodoroAutoStartBreaks, so the change was not saved. Reset to defaults in Settings to fix it.";
     expect(toastError).toHaveBeenCalledWith(message);
     expect(useSettingsStore.getState().error).toBe(message);
   });
@@ -542,7 +542,7 @@ describe('an update blocked by a stored value that cannot be parsed', () => {
     await useSettingsStore.getState().updateSettings({ theme: 'dark' });
 
     expect(toastError).toHaveBeenCalledWith(
-      "Cuewise can't read your saved values for autoRollDueTasks, colorTheme. Reset to defaults in Settings to fix it."
+      "Cuewise can't read your saved values for autoRollDueTasks, colorTheme, so the change was not saved. Reset to defaults in Settings to fix it."
     );
   });
 
@@ -663,6 +663,42 @@ describe('converging on settings written elsewhere', () => {
     fake.emit(['settings.colorTheme']);
 
     await vi.waitFor(() => expect(useSettingsStore.getState().error).toBeNull());
+  });
+
+  it('clears the complaint when the reset lands, without waiting for a storage event', async () => {
+    // The reset removes the legacy blob key too, which fails the `settings.` filter — and a
+    // backend that cannot observe writes never delivers an event at all.
+    const fake = fakeObservableStore();
+    configurePlatform({ storage: fake.store });
+    await useSettingsStore.getState().initialize();
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    vi.mocked(storage.readSettings).mockResolvedValueOnce({
+      ok: false,
+      unreadable: ['colorTheme'],
+    });
+    await useSettingsStore.getState().updateSettings({ colorTheme: 'forest' });
+    expect(useSettingsStore.getState().error).toContain('colorTheme');
+
+    await useSettingsStore.getState().resetToDefaults();
+
+    expect(useSettingsStore.getState().error).toBeNull();
+  });
+
+  it('clears the complaint when a later write proves the value readable again', async () => {
+    const fake = fakeObservableStore();
+    configurePlatform({ storage: fake.store });
+    await useSettingsStore.getState().initialize();
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    vi.mocked(storage.readSettings).mockResolvedValueOnce({
+      ok: false,
+      unreadable: ['colorTheme'],
+    });
+    await useSettingsStore.getState().updateSettings({ colorTheme: 'forest' });
+    expect(useSettingsStore.getState().error).toContain('colorTheme');
+
+    await useSettingsStore.getState().updateSettings({ colorTheme: 'forest' });
+
+    expect(useSettingsStore.getState().error).toBeNull();
   });
 
   it('leaves a failed write standing when an unrelated read succeeds', async () => {

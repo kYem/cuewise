@@ -13,6 +13,13 @@ export interface FakeObservableStoreOptions {
   throwOnUnsubscribe?: boolean;
 }
 
+/** Tests install this as the whole registry, so an unmocked read must name itself, not undefined. */
+function unserved(method: string): () => never {
+  return () => {
+    throw new Error(`fakeObservableStore does not serve ${method}`);
+  };
+}
+
 /** A backend that only observes: consumers reach storage itself through mocked helpers. */
 export function fakeObservableStore(options: FakeObservableStoreOptions = {}): FakeObservableStore {
   const { failedSubscribes = 0, throwOnUnsubscribe = false } = options;
@@ -20,6 +27,15 @@ export function fakeObservableStore(options: FakeObservableStoreOptions = {}): F
   let remainingFailures = failedSubscribes;
   return {
     store: {
+      supportsSync: false,
+      get: unserved('get'),
+      set: unserved('set'),
+      remove: unserved('remove'),
+      getMany: unserved('getMany'),
+      keys: unserved('keys'),
+      setMany: unserved('setMany'),
+      removeMany: unserved('removeMany'),
+      getUsage: unserved('getUsage'),
       onChanged(handler: StorageChangeHandler) {
         if (remainingFailures > 0) {
           remainingFailures -= 1;
@@ -33,7 +49,7 @@ export function fakeObservableStore(options: FakeObservableStoreOptions = {}): F
           subscribers.delete(handler);
         };
       },
-    } as unknown as ObservableKeyValueStore,
+    },
     emit(keys: string[], area: StorageArea = 'local') {
       for (const subscriber of [...subscribers]) {
         subscriber(keys, area);

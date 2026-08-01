@@ -266,13 +266,23 @@ describe('LocalStorageKeyValueStore.onChanged', () => {
   it('does not tell a subscriber added mid-notify about the write that added it', async () => {
     const store = new LocalStorageKeyValueStore();
     const late: string[][] = [];
+    let subscribed = false;
     store.onChanged(() => {
+      if (subscribed) {
+        return;
+      }
+      subscribed = true;
       store.onChanged((keys) => late.push(keys));
     });
 
     await store.set('settings.theme', 'dark', 'local');
-
     expect(late).toEqual([]);
+
+    // The next write proves it did subscribe, so an empty `late` above is the snapshot and not a
+    // subscription that never happened.
+    await store.set('settings.showClock', true, 'local');
+
+    expect(late).toEqual([['settings.showClock']]);
   });
 
   it('announces a write made from inside a subscriber separately', async () => {

@@ -179,8 +179,7 @@ export class LocalStorageKeyValueStore implements KeyValueStore {
     }
   }
 
-  // Not atomic: a batch that stops partway still announces the keys that did land. The emit is in
-  // a `finally` and the return outside it, so neither a throw nor the emit can lose the other.
+  // Not atomic: a batch that stops partway still announces the keys that did land.
   async setMany(entries: Record<string, unknown>, area: StorageArea): Promise<StorageResult> {
     const written: string[] = [];
     let failure: StorageResult | null = null;
@@ -201,17 +200,17 @@ export class LocalStorageKeyValueStore implements KeyValueStore {
 
   async removeMany(keys: string[], area: StorageArea): Promise<boolean> {
     const changed: string[] = [];
-    let allRemoved = true;
+    let noFailures = true;
     for (const key of keys) {
       const outcome = this.deleteOne(key);
       if (outcome === 'failed') {
-        allRemoved = false;
+        noFailures = false;
       }
       if (outcome === 'removed') {
         changed.push(key);
       }
     }
     this.emit(changed, area);
-    return allRemoved;
+    return noFailures;
   }
 }
