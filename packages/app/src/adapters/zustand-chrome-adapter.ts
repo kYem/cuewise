@@ -9,6 +9,9 @@ import type { StateStorage } from 'zustand/middleware';
 /**
  * Chrome Local Storage adapter for Zustand
  * Uses chrome.storage.local with async get/set operations
+ *
+ * Writes storage directly rather than through `KeyValueStore`, so on the dev/Tauri fallback below
+ * nothing announces these keys — `onChanged` there reports only writes made through the port.
  */
 export const chromeLocalStorage: StateStorage = {
   getItem: async (name: string): Promise<string | null> => {

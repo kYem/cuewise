@@ -53,10 +53,33 @@ export function createChromeStorageMock(): MockChromeStorage {
   };
 }
 
+export interface MockChromeStorageEvent {
+  addListener: ReturnType<typeof vi.fn>;
+  removeListener: ReturnType<typeof vi.fn>;
+  fire: (changes: Record<string, unknown>, areaName: string) => void;
+}
+
+export function createChromeStorageEventMock(): MockChromeStorageEvent {
+  const listeners = new Set<(changes: Record<string, unknown>, areaName: string) => void>();
+  return {
+    addListener: vi.fn((listener) => listeners.add(listener)),
+    removeListener: vi.fn((listener) => listeners.delete(listener)),
+    fire: (changes, areaName) => {
+      for (const listener of listeners) {
+        listener(changes, areaName);
+      }
+    },
+  };
+}
+
 /** Install a fresh chrome.storage mock on the global (both local and sync areas). */
 export function installChromeStorageMock(): void {
   const mockStorage = createChromeStorageMock();
   (globalThis as { chrome?: unknown }).chrome = {
-    storage: { local: mockStorage, sync: mockStorage },
+    storage: {
+      local: mockStorage,
+      sync: mockStorage,
+      onChanged: createChromeStorageEventMock(),
+    },
   };
 }

@@ -113,11 +113,33 @@ export interface KeyValueStore {
    * keys this build cannot name — a settings key written by a newer version, say.
    */
   keys(prefix: string, area: StorageArea): Promise<string[] | null>;
-  /** Batch write. One backend call, so the named keys land together. */
+  /** Batch write, not atomic: a failure can leave earlier keys written and announced. */
   setMany(entries: Record<string, unknown>, area: StorageArea): Promise<StorageResult>;
   /** Batch remove, idempotent: a key that was already absent is removed, not a failure. */
   removeMany(keys: string[], area: StorageArea): Promise<boolean>;
   getUsage(area: StorageArea): Promise<StorageUsage>;
+  /**
+   * A key names a write that happened, not a value that differs — own writes are reported too and
+   * a set is indistinguishable from a remove, so handlers re-read rather than trust the event. A
+   * handler that writes back through the store it observes echoes forever.
+   *
+   * Scope differs by backend: the Chrome adapter sees every write to the area from any context,
+   * including code that bypassed this port; the localStorage one sees only writes made through
+   * that instance.
+   */
+  onChanged?(handler: StorageChangeHandler): () => void;
+}
+
+export type StorageChangeHandler = (keys: string[], area: StorageArea) => void;
+
+/** A store whose `onChanged` is present, so callers past the feature test stop re-checking. */
+export interface ObservableKeyValueStore extends KeyValueStore {
+  onChanged(handler: StorageChangeHandler): () => void;
+}
+
+/** Presence, not reachability: subscribing can still throw, which is what `safeSubscribe` is for. */
+export function canObserveWrites(store: KeyValueStore): store is ObservableKeyValueStore {
+  return store.onChanged !== undefined;
 }
 
 /**

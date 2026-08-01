@@ -5,10 +5,12 @@ import {
   configureLogger,
   DEFAULT_SETTINGS,
   DEVICE_LOCAL_SETTINGS_KEYS,
+  describeThrown,
   type LayoutDensity,
   LogLevel as LoggerLevel,
   logger,
   notifyMutated,
+  type ObservableKeyValueStore,
   type Settings,
   type StorageError,
 } from '@cuewise/shared';
@@ -17,24 +19,28 @@ import {
   getSettings,
   migrateStorageData,
   readSettings,
+  SETTINGS_KEY_PREFIX,
+  SETTINGS_KEYS,
+  type SettingsRead,
   setSettingsPatch,
 } from '@cuewise/storage';
 import { create } from 'zustand';
+import { observableStorage, safeSubscribe } from './storage-changes';
 import { useToastStore } from './toast-store';
 
 // Exactly the keys with preview-aware selectors; widen only alongside a new selector.
 export type PreviewableSettings = Pick<Settings, 'backgroundDim' | 'backgroundBlur'>;
 
-/**
- * One corrupt value refuses every write, so the message names it and the button that clears it
- * ("Reset to defaults", in Settings → Advanced). A failed read has neither.
- */
-function unreadableSettingsMessage(unreadable: string[]): string {
-  if (unreadable.length === 0) {
-    return "Cuewise can't read your settings, so the change was not saved.";
+/** The latch dedupes on the whole message, so the two paths must not share a cost clause. */
+type FailureCost = 'what you see may be out of date' | 'the change was not saved';
+
+function unreadableSettingsMessage(unreadable: string[], cost: FailureCost): string {
+  if (unreadable.length > 0) {
+    const subject = unreadable.length === 1 ? 'value' : 'values';
+    const named = `Cuewise can't read your saved ${subject} for ${unreadable.join(', ')}`;
+    return `${named}, so ${cost}. Reset to defaults in Settings to fix it.`;
   }
-  const subject = unreadable.length === 1 ? 'value' : 'values';
-  return `Cuewise can't read your saved ${subject} for ${unreadable.join(', ')}. Reset to defaults in Settings to fix it.`;
+  return `Cuewise can't read your settings, so ${cost}.`;
 }
 
 /** Quota failures get actionable copy; anything else keeps the generic retry message. */
@@ -66,6 +72,142 @@ function reconcilePreview(
 }
 
 const noop = () => {};
+
+/** Every DOM/logger effect a settings value drives; all idempotent. */
+function applyAll(settings: Settings): void {
+  applyTheme(settings.theme);
+  applyColorTheme(settings.colorTheme);
+  applyGlassEnhanced(settings.glassEnhanced);
+  applyLayoutDensity(settings.layoutDensity);
+  applyLogLevel(settings.logLevel);
+}
+
+let observing: { store: ObservableKeyValueStore; unsubscribe: () => void } | null = null;
+
+// Structural for the array-valued keys: both backends parse a fresh array per read, so `===`
+// reports "changed" for anyone who has ever touched a quote filter.
+function sameSettingValue(left: unknown, right: unknown): boolean {
+  if (Array.isArray(left) && Array.isArray(right)) {
+    return left.length === right.length && left.every((item, index) => item === right[index]);
+  }
+  return left === right;
+}
+
+function sameSettings(a: Settings, b: Settings): boolean {
+  return SETTINGS_KEYS.every((key) => sameSettingValue(a[key], b[key]));
+}
+
+let reportedUnreadable: string | null = null;
+
+/**
+ * Latched on its own, not on `error`, which the write path sets too: a pull writes one key at a
+ * time, so one problem should say so once — and a different one should still say so.
+ */
+function reportStale(unreadable: string[]): void {
+  const message = unreadableSettingsMessage(unreadable, 'what you see may be out of date');
+  if (reportedUnreadable === message) {
+    return;
+  }
+  reportedUnreadable = message;
+  useSettingsStore.setState({ error: message });
+  useToastStore.getState().error(message);
+}
+
+/** Only this module's own latched complaint: a read succeeding says nothing about a write that failed. */
+function clearOwnComplaint(): void {
+  const complaint = reportedUnreadable;
+  reportedUnreadable = null;
+  if (complaint !== null && useSettingsStore.getState().error === complaint) {
+    useSettingsStore.setState({ error: null });
+  }
+}
+
+// The sync engine writes settings one key per call, so a burst would otherwise queue one full
+// re-read per key.
+let refreshQueued = false;
+
+function queueRefresh(): void {
+  if (refreshQueued) {
+    return;
+  }
+  refreshQueued = true;
+  // Floating on purpose; its own rejection is the only place a throw here can be reported.
+  enqueueWrite(async () => {
+    refreshQueued = false;
+    await refreshFromStorage();
+  }).catch((error) => {
+    logger.error(`Could not apply settings changed elsewhere: ${describeThrown(error)}`, error);
+  });
+}
+
+/** Converges the in-memory copy on settings written anywhere else — a pull, or another tab. */
+function subscribeToStorage(): void {
+  const store = observableStorage();
+  if (observing !== null && observing.store === store) {
+    return;
+  }
+  if (observing !== null) {
+    observing.unsubscribe();
+    observing = null;
+  }
+  if (store === null) {
+    return;
+  }
+  // Settings are read and written in the local area only, so a `settings.`-prefixed key announced
+  // anywhere else names a value this store never reads.
+  const unsubscribe = safeSubscribe(store, 'settings', (keys, area) => {
+    if (area !== 'local' || !keys.some((key) => key.startsWith(SETTINGS_KEY_PREFIX))) {
+      return;
+    }
+    queueRefresh();
+  });
+  // Left null on a failed subscribe, so the next initialize() retries rather than believing it
+  // is already observing.
+  if (unsubscribe !== null) {
+    observing = { store, unsubscribe };
+  }
+}
+
+/**
+ * Reads persisted truth rather than trusting the event: by the time this runs another writer may
+ * have replaced the value that triggered it. Never calls updateSettings, so it cannot re-enter the
+ * write path or re-notify the sync engine about a change that came FROM it.
+ */
+async function refreshFromStorage(): Promise<void> {
+  let read: SettingsRead;
+  try {
+    read = await readSettings();
+  } catch (error) {
+    // readSettings rejects as well as answering `ok:false` — an unconfigured registry throws — and
+    // a silently stale view is worse than a loud one.
+    logger.error(
+      `Could not re-read settings after a storage change: ${describeThrown(error)}`,
+      error
+    );
+    reportStale([]);
+    return;
+  }
+  if (!read.ok) {
+    // An empty list is the read itself failing, not zero unreadable fields.
+    logger.error('Settings changed elsewhere could not be read; the shown values are stale', {
+      fields: read.unreadable.length > 0 ? read.unreadable : 'the read failed',
+    });
+    reportStale(read.unreadable);
+    return;
+  }
+  // Before the no-op check: a reset that fixes the value converges on what this store already holds.
+  clearOwnComplaint();
+  const { settings, preview } = useSettingsStore.getState();
+  // A key names a write, not a changed value, so an own write arrives here as a no-op.
+  if (sameSettings(settings, read.settings)) {
+    return;
+  }
+  useSettingsStore.setState({
+    settings: read.settings,
+    preview: reconcilePreview(preview, read.settings),
+  });
+  applyAll(read.settings);
+}
 
 // Storage writes are per-key now and don't race, but each write still reads fresh settings to
 // compute the in-memory merge and notify diff — chaining keeps that read/set pair atomic per write.
@@ -115,32 +257,26 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     set({ preview: null });
   },
 
-  initialize: async () => {
-    try {
-      set({ isLoading: true, error: null });
+  initialize: () =>
+    // In the write queue, not beside it: an init resolving after a write would otherwise install
+    // the settings it read BEFORE that write, reverting it in memory until the next reload.
+    enqueueWrite(async () => {
+      try {
+        subscribeToStorage();
+        reportedUnreadable = null;
+        set({ isLoading: true, error: null });
 
-      // Merge with defaults to ensure all properties exist (for existing users)
-      const settings = { ...DEFAULT_SETTINGS, ...(await getSettings()) };
+        const settings = await getSettings();
 
-      set({
-        settings,
-        preview: null,
-        isLoading: false,
-      });
-
-      // Apply all customization on initialization
-      applyTheme(settings.theme);
-      applyColorTheme(settings.colorTheme);
-      applyGlassEnhanced(settings.glassEnhanced);
-      applyLayoutDensity(settings.layoutDensity);
-      applyLogLevel(settings.logLevel);
-    } catch (error) {
-      logger.error('Error initializing settings store', error);
-      const errorMessage = 'Failed to load settings. Please refresh the page.';
-      set({ error: errorMessage, isLoading: false });
-      useToastStore.getState().error(errorMessage);
-    }
-  },
+        set({ settings, preview: null, isLoading: false });
+        applyAll(settings);
+      } catch (error) {
+        logger.error('Error initializing settings store', error);
+        const errorMessage = 'Failed to load settings. Please refresh the page.';
+        set({ error: errorMessage, isLoading: false });
+        useToastStore.getState().error(errorMessage);
+      }
+    }),
 
   updateSettings: (partialSettings: Partial<Settings>) =>
     enqueueWrite(async () => {
@@ -154,11 +290,17 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
           logger.error('Aborted a settings update: the current settings could not be read', {
             fields: Object.keys(partialSettings),
           });
-          const errorMessage = unreadableSettingsMessage(read.unreadable);
+          const errorMessage = unreadableSettingsMessage(
+            read.unreadable,
+            'the change was not saved'
+          );
+          // Latched so a later good read can retire it.
+          reportedUnreadable = errorMessage;
           set({ error: errorMessage, preview: null });
           useToastStore.getState().error(errorMessage);
           return false;
         }
+        clearOwnComplaint();
         const settings = read.settings;
 
         // Clamp ranged values here — the settings write path the UI uses — so
@@ -219,19 +361,18 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
         for (const key of Object.keys(clampedPartial)) {
           if (
             !DEVICE_LOCAL_SETTINGS_KEYS.includes(key) &&
-            updatedSettings[key as keyof Settings] !== settings[key as keyof Settings]
+            !sameSettingValue(
+              updatedSettings[key as keyof Settings],
+              settings[key as keyof Settings]
+            )
           ) {
             notifyMutated('settings', key);
           }
         }
 
-        // Drive the DOM off the merged result, not the incoming patch: a sync pull can change these
-        // keys in storage without this write touching them. All five applies are idempotent.
-        applyTheme(updatedSettings.theme);
-        applyColorTheme(updatedSettings.colorTheme);
-        applyGlassEnhanced(updatedSettings.glassEnhanced);
-        applyLayoutDensity(updatedSettings.layoutDensity);
-        applyLogLevel(updatedSettings.logLevel);
+        // Off the merged result, not the incoming patch: a pull can change these without this
+        // write touching them.
+        applyAll(updatedSettings);
         return true;
       } catch (error) {
         logger.error('Error updating settings', error);
@@ -257,16 +398,15 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
           return false;
         }
         set({ settings: DEFAULT_SETTINGS, preview: null });
+        // Not left to the change subscription: the refresh it queues runs behind this write, and
+        // a backend that cannot observe writes never delivers an event at all.
+        clearOwnComplaint();
         for (const key of Object.keys(DEFAULT_SETTINGS)) {
           if (!DEVICE_LOCAL_SETTINGS_KEYS.includes(key)) {
             notifyMutated('settings', key);
           }
         }
-        applyTheme(DEFAULT_SETTINGS.theme);
-        applyColorTheme(DEFAULT_SETTINGS.colorTheme);
-        applyGlassEnhanced(DEFAULT_SETTINGS.glassEnhanced);
-        applyLayoutDensity(DEFAULT_SETTINGS.layoutDensity);
-        applyLogLevel(DEFAULT_SETTINGS.logLevel);
+        applyAll(DEFAULT_SETTINGS);
         return true;
       } catch (error) {
         logger.error('Error resetting settings', error);

@@ -1,5 +1,5 @@
-import { logger, toStoredValues } from '@cuewise/shared';
-import type { MockChromeStorage } from '@cuewise/test-utils/mocks';
+import { logger, type StorageArea, toStoredValues } from '@cuewise/shared';
+import type { MockChromeStorage, MockChromeStorageEvent } from '@cuewise/test-utils/mocks';
 import { describe, expect, it, vi } from 'vitest';
 import { ChromeKeyValueStore } from './chrome-key-value-store';
 
@@ -204,5 +204,78 @@ describe('ChromeKeyValueStore with chrome.storage available', () => {
       success: false,
       error: { type: 'quota_exceeded', area: 'sync', key: undefined },
     });
+  });
+});
+
+describe('ChromeKeyValueStore.onChanged', () => {
+  function event() {
+    return (global.chrome.storage as unknown as { onChanged: MockChromeStorageEvent }).onChanged;
+  }
+
+  it('reports the keys of a change in a real area', () => {
+    const seen: { keys: string[]; area: StorageArea }[] = [];
+    const unsubscribe = store.onChanged((keys, area) => seen.push({ keys, area }));
+
+    event().fire({ 'settings.theme': { newValue: 'dark' } }, 'local');
+
+    expect(seen).toEqual([{ keys: ['settings.theme'], area: 'local' }]);
+    unsubscribe();
+  });
+
+  it('reports the sync area too, which is where a second device writes', () => {
+    const seen: { keys: string[]; area: StorageArea }[] = [];
+    const unsubscribe = store.onChanged((keys, area) => seen.push({ keys, area }));
+
+    event().fire({ 'settings.theme': { newValue: 'dark' } }, 'sync');
+
+    expect(seen).toEqual([{ keys: ['settings.theme'], area: 'sync' }]);
+    unsubscribe();
+  });
+
+  it('ignores an area this port cannot name, rather than passing it through', () => {
+    // `managed` and `session` exist in Chrome; StorageArea covers neither, so forwarding one
+    // would hand a consumer an area its own filters cannot match.
+    const seen: string[][] = [];
+    const unsubscribe = store.onChanged((keys) => seen.push(keys));
+
+    event().fire({ policy: { newValue: 1 } }, 'managed');
+
+    expect(seen).toEqual([]);
+    unsubscribe();
+  });
+
+  it('refuses to subscribe when the event is gone, rather than answering a dead teardown', () => {
+    // No restore needed: vitest.setup.ts reinstalls a fresh global.chrome per test.
+    const storage = global.chrome.storage as unknown as { onChanged?: MockChromeStorageEvent };
+    storage.onChanged = undefined;
+
+    expect(() => store.onChanged(() => {})).toThrow(/onChanged/);
+  });
+
+  it('reports a throwing subscriber rather than letting it escape into Chrome', () => {
+    // Uncaught here it surfaces in the dispatcher, never through the app's own logger — the same
+    // fault the dev backend catches and names.
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const unsubscribe = store.onChanged(() => {
+      throw new Error('subscriber exploded');
+    });
+
+    expect(() => event().fire({ 'settings.theme': { newValue: 'dark' } }, 'local')).not.toThrow();
+    expect(errorSpy).toHaveBeenCalledWith('A storage change subscriber threw', expect.anything(), {
+      keys: ['settings.theme'],
+      area: 'local',
+    });
+    unsubscribe();
+    errorSpy.mockRestore();
+  });
+
+  it('stops reporting once unsubscribed', () => {
+    const seen: string[][] = [];
+
+    const unsubscribe = store.onChanged((keys) => seen.push(keys));
+    unsubscribe();
+    event().fire({ 'settings.theme': { newValue: 'dark' } }, 'local');
+
+    expect(seen).toEqual([]);
   });
 });

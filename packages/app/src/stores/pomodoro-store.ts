@@ -21,6 +21,7 @@ import { playCompletionSound, playStartSound } from '../utils/sounds';
 import { useCelebrationStore } from './celebration-store';
 import { useFocusModeStore } from './focus-mode-store';
 import { useSettingsStore } from './settings-store';
+import { observableStorage, safeSubscribe } from './storage-changes';
 import { useToastStore } from './toast-store';
 
 const logger = createLogger({
@@ -659,8 +660,10 @@ export const usePomodoroStore = create<PomodoroStore>()(
 );
 
 /**
- * React hook to sync Pomodoro state across tabs
- * Listens to chrome.storage changes and rehydrates the store
+ * React hook to sync Pomodoro state across tabs.
+ *
+ * Rehydrates on a storage change reported through the KeyValueStore port, which `chromeLocalStorage`
+ * only reaches on the extension backend — see the note there.
  *
  * Usage: Call this hook in components that need cross-tab synchronization
  * @example
@@ -671,40 +674,20 @@ export const usePomodoroStore = create<PomodoroStore>()(
  */
 export function usePomodoroStorageSync() {
   useEffect(() => {
-    const handleStorageChange = (
-      changes: { [key: string]: chrome.storage.StorageChange },
-      areaName: string
-    ) => {
-      // Only react to local storage changes
-      if (areaName !== 'local') {
-        return;
-      }
-
-      // Check if pomodoroState changed
-      const pomodoroStateChange = changes.pomodoroState;
-      if (!pomodoroStateChange) {
-        return;
-      }
-
-      // Trigger rehydration to sync with other tabs
-      // This will update the Zustand store with the latest storage value
-      // NOTE: Removed automatic completeSession() call here as it causes
-      // double completion (once from tick(), once from storage sync),
-      // which makes the timer skip breaks by completing them immediately.
-      // The rehydrate() call is sufficient to keep tabs in sync.
-      usePomodoroStore.persist.rehydrate();
-    };
-
-    // Register listener
-    if (typeof chrome !== 'undefined' && chrome.storage) {
-      chrome.storage.onChanged.addListener(handleStorageChange);
+    const store = observableStorage();
+    if (store === null) {
+      return;
     }
-
-    // Cleanup on unmount
-    return () => {
-      if (typeof chrome !== 'undefined' && chrome.storage) {
-        chrome.storage.onChanged.removeListener(handleStorageChange);
+    // Rehydrate only: completeSession() here double-completes with tick() and skips breaks.
+    const unsubscribe = safeSubscribe(store, 'the pomodoro timer', (keys, area) => {
+      if (area !== 'local' || !keys.includes('pomodoroState')) {
+        return;
       }
-    };
-  }, []); // Empty deps - only set up once per component mount
+      // Caught here, not returned: the port's guard logs a rejection without naming what failed.
+      Promise.resolve(usePomodoroStore.persist.rehydrate()).catch((error) => {
+        logger.error('Could not rehydrate the pomodoro timer after a storage change', error);
+      });
+    });
+    return unsubscribe ?? undefined;
+  }, []);
 }

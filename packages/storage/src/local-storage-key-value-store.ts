@@ -2,6 +2,7 @@ import {
   type KeyValueStore,
   logger,
   type StorageArea,
+  type StorageChangeHandler,
   type StorageResult,
   type StorageUsage,
   type StoredValues,
@@ -9,8 +10,11 @@ import {
   storedValue,
   UNREADABLE_VALUE,
 } from '@cuewise/shared';
+import { notifyStorageChange } from './notify-storage-change';
 
 const LOCALSTORAGE_QUOTA_BYTES = 5242880; // 5MB (dev fallback estimate)
+
+type RemoveOutcome = 'removed' | 'absent' | 'failed';
 
 // localStorage signals a full store with a DOMException named QuotaExceededError
 // (legacy WebKit: code 22; old Firefox: NS_ERROR_DOM_QUOTA_REACHED).
@@ -33,6 +37,24 @@ export class LocalStorageKeyValueStore implements KeyValueStore {
   // Single localStorage backend, no separate sync area — so sync-only UI hides.
   readonly supportsSync = false;
 
+  private readonly subscribers = new Set<StorageChangeHandler>();
+
+  // Emits writes made through THIS instance, because `window.onstorage` fires only for OTHER
+  // documents — and here the writer (the sync engine) and the reader (a store) share one.
+  onChanged(handler: StorageChangeHandler): () => void {
+    this.subscribers.add(handler);
+    return () => {
+      this.subscribers.delete(handler);
+    };
+  }
+
+  private emit(keys: string[], area: StorageArea): void {
+    if (keys.length === 0) {
+      return;
+    }
+    notifyStorageChange(this.subscribers, keys, area);
+  }
+
   async get<T>(key: string, _area: StorageArea): Promise<T | null> {
     try {
       const item = localStorage.getItem(key);
@@ -44,6 +66,14 @@ export class LocalStorageKeyValueStore implements KeyValueStore {
   }
 
   async set<T>(key: string, value: T, area: StorageArea): Promise<StorageResult> {
+    const result = this.writeOne(key, value, area);
+    if (result.success) {
+      this.emit([key], area);
+    }
+    return result;
+  }
+
+  private writeOne<T>(key: string, value: T, area: StorageArea): StorageResult {
     // JSON.stringify(undefined) is undefined, which localStorage keeps as the string "undefined" —
     // unparseable for every later read, and reported as a successful write.
     if (value === undefined) {
@@ -72,13 +102,24 @@ export class LocalStorageKeyValueStore implements KeyValueStore {
     }
   }
 
-  async remove(key: string, _area: StorageArea): Promise<boolean> {
+  async remove(key: string, area: StorageArea): Promise<boolean> {
+    const outcome = this.deleteOne(key);
+    if (outcome === 'removed') {
+      this.emit([key], area);
+    }
+    return outcome !== 'failed';
+  }
+
+  // 'absent' apart from 'removed': removing an absent key succeeds (the port calls it idempotent)
+  // but changes nothing, and announcing it queues a re-read for a write that never happened.
+  private deleteOne(key: string): RemoveOutcome {
     try {
+      const existed = localStorage.getItem(key) !== null;
       localStorage.removeItem(key);
-      return true;
+      return existed ? 'removed' : 'absent';
     } catch (error) {
       logger.error(`Error removing ${key} from storage`, error);
-      return false;
+      return 'failed';
     }
   }
 
@@ -138,25 +179,42 @@ export class LocalStorageKeyValueStore implements KeyValueStore {
     }
   }
 
-  // Not atomic: a mid-loop quota failure leaves earlier keys in this call already written.
+  // Not atomic: a batch that stops at a failure still announces the keys that did land. The emit
+  // is in a `finally` here and below because a failing logger escapes both per-key helpers.
   async setMany(entries: Record<string, unknown>, area: StorageArea): Promise<StorageResult> {
-    for (const [key, value] of Object.entries(entries)) {
-      const result = await this.set(key, value, area);
-      if (!result.success) {
-        return result;
+    const written: string[] = [];
+    let failure: StorageResult | null = null;
+    try {
+      for (const [key, value] of Object.entries(entries)) {
+        const result = this.writeOne(key, value, area);
+        if (!result.success) {
+          failure = result;
+          break;
+        }
+        written.push(key);
       }
+    } finally {
+      this.emit(written, area);
     }
-    return { success: true };
+    return failure ?? { success: true };
   }
 
   async removeMany(keys: string[], area: StorageArea): Promise<boolean> {
-    let allRemoved = true;
-    for (const key of keys) {
-      const removed = await this.remove(key, area);
-      if (!removed) {
-        allRemoved = false;
+    const changed: string[] = [];
+    let noFailures = true;
+    try {
+      for (const key of keys) {
+        const outcome = this.deleteOne(key);
+        if (outcome === 'failed') {
+          noFailures = false;
+        }
+        if (outcome === 'removed') {
+          changed.push(key);
+        }
       }
+    } finally {
+      this.emit(changed, area);
     }
-    return allRemoved;
+    return noFailures;
   }
 }

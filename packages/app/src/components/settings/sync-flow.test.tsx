@@ -128,12 +128,6 @@ describe('dev-flag gating (integration re-assert)', () => {
     setReducedMotion(false);
     window.IntersectionObserver =
       StubIntersectionObserver as unknown as typeof IntersectionObserver;
-    // The shared chrome-storage mock doesn't stub onChanged; pomodoro-store's
-    // cross-tab sync listener needs it to mount without throwing.
-    (chrome.storage as unknown as Record<string, unknown>).onChanged = {
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-    };
     window.location.hash = '#settings';
   });
 

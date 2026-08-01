@@ -2,7 +2,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Compass } from 'lucide-react';
 import { act } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import App from './App';
 import { setReducedMotion } from './components/__fixtures__/motion.fixtures';
 import type { SettingsSection } from './components/settings/SettingsSections';
@@ -38,12 +38,6 @@ describe('App sync wiring', () => {
     setReducedMotion(false);
     window.IntersectionObserver =
       StubIntersectionObserver as unknown as typeof IntersectionObserver;
-    // The shared chrome-storage mock doesn't stub onChanged; pomodoro-store's
-    // cross-tab sync listener needs it to mount without throwing.
-    (chrome.storage as unknown as Record<string, unknown>).onChanged = {
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-    };
   });
 
   afterEach(() => {

@@ -4,7 +4,7 @@
  * Manages both ambient sounds and YouTube music playback in a unified store.
  * Key features:
  * - Mutually exclusive: Only one source (ambient or YouTube) can play at a time
- * - Cross-tab synchronization via chrome.storage
+ * - Cross-tab synchronization: persisted through the chrome adapter, notified through the port
  * - YouTube timestamp memory for resume playback
  * - Leader election for YouTube player control
  */
@@ -29,6 +29,7 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import { chromeLocalStorage } from '../adapters/zustand-chrome-adapter';
 import { fetchPlaylistMetadata, youtubePlayer } from '../services/youtube-player';
 import { ambientSoundPlayer } from '../utils/ambient-sounds';
+import { observableStorage, safeSubscribe } from './storage-changes';
 import { useToastStore } from './toast-store';
 
 interface SoundsStore {
@@ -207,7 +208,6 @@ export const useSoundsStore = create<SoundsStore>()(
             const playlist = playlists.find((p) => p.id === selectedPlaylistId);
             if (playlist?.firstVideoId) {
               set({ isYoutubeLoading: true });
-              // Get last played video and timestamp (or fall back to first video)
               getCurrentVideoForPlaylist(playlist.playlistId).then((resumeInfo) => {
                 const videoId = resumeInfo?.videoId || playlist.firstVideoId;
                 const startAt = resumeInfo?.timestamp || 0;
@@ -625,36 +625,34 @@ export function useSoundsStorageSync() {
   const isLeader = useSoundsStore((state) => state.isLeader);
 
   useEffect(() => {
-    const handleStorageChange = (
-      changes: { [key: string]: chrome.storage.StorageChange },
-      areaName: string
-    ) => {
-      if (areaName !== 'local') {
+    const store = observableStorage();
+    if (store === null) {
+      return;
+    }
+    // Tracked so a handoff scheduled just before a leadership flip or an unmount can't restart the
+    // player from a tab that is no longer the leader.
+    let handoff: ReturnType<typeof setTimeout> | undefined;
+    const unsubscribe = safeSubscribe(store, 'ambient sounds', (keys, area) => {
+      if (area !== 'local' || !keys.includes('soundsState')) {
         return;
       }
-
-      const soundsStateChange = changes.soundsState;
-      if (!soundsStateChange) {
-        return;
-      }
-
-      useSoundsStore.persist.rehydrate();
-
+      // Caught here, not returned: the port's guard logs a rejection without naming what failed.
+      Promise.resolve(useSoundsStore.persist.rehydrate()).catch((error) => {
+        logger.error('Could not rehydrate the sounds state after a storage change', error);
+      });
       if (isLeader) {
-        setTimeout(() => {
-          syncLeaderPlayback();
+        // One pending handoff at a time: a newer state supersedes the one the last event scheduled.
+        clearTimeout(handoff);
+        handoff = setTimeout(() => {
+          syncLeaderPlayback().catch((error) => {
+            logger.error('Could not sync leader playback after a storage change', error);
+          });
         }, 50);
       }
-    };
-
-    if (typeof chrome !== 'undefined' && chrome.storage) {
-      chrome.storage.onChanged.addListener(handleStorageChange);
-    }
-
+    });
     return () => {
-      if (typeof chrome !== 'undefined' && chrome.storage) {
-        chrome.storage.onChanged.removeListener(handleStorageChange);
-      }
+      clearTimeout(handoff);
+      unsubscribe?.();
     };
   }, [isLeader]);
 }
@@ -683,20 +681,36 @@ async function syncLeaderPlayback() {
         const currentPlaylistId = youtubePlayer.getCurrentPlaylistId();
         if (currentPlaylistId !== playlist.playlistId) {
           useSoundsStore.setState({ isYoutubeLoading: true });
-          // Get last played video and timestamp (or fall back to first video)
-          const resumeInfo = await getCurrentVideoForPlaylist(playlist.playlistId);
-          const videoId = resumeInfo?.videoId || playlist.firstVideoId;
-          const startAt = resumeInfo?.timestamp || 0;
-          youtubePlayer.loadPlaylist(
-            playlist.playlistId,
-            videoId,
-            () => {
-              youtubePlayer.play();
-              youtubePlayer.setVolume(youtubeVolume);
-              useSoundsStore.setState({ isYoutubeLoading: false });
-            },
-            startAt
-          );
+          try {
+            // Get last played video and timestamp (or fall back to first video)
+            const resumeInfo = await getCurrentVideoForPlaylist(playlist.playlistId);
+            const videoId = resumeInfo?.videoId || playlist.firstVideoId;
+            const startAt = resumeInfo?.timestamp || 0;
+            youtubePlayer.loadPlaylist(
+              playlist.playlistId,
+              videoId,
+              () => {
+                youtubePlayer.play();
+                youtubePlayer.setVolume(youtubeVolume);
+                useSoundsStore.setState({ isYoutubeLoading: false });
+              },
+              startAt
+            );
+          } catch (error) {
+            // Logged first: a throw from the recovery below would otherwise replace this cause.
+            logger.error('Could not load the playlist for leader playback', error);
+            // That callback is what starts playback, so nothing is playing — and left as-is the
+            // panel renders its "playing" indicator over silence.
+            useSoundsStore.setState({
+              isYoutubeLoading: false,
+              isPlaying: false,
+              isPaused: false,
+            });
+            useToastStore
+              .getState()
+              .error('Could not start the playlist. Press play to try again.');
+            throw error;
+          }
         } else if (!youtubePlayer.isPlaying()) {
           youtubePlayer.play();
         }

@@ -1,4 +1,4 @@
-import { logger, toStoredValues, UNREADABLE_VALUE } from '@cuewise/shared';
+import { logger, type StorageArea, toStoredValues, UNREADABLE_VALUE } from '@cuewise/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LocalStorageKeyValueStore } from './local-storage-key-value-store';
 
@@ -167,5 +167,307 @@ describe('LocalStorageKeyValueStore.set with no value', () => {
 
     expect(result.success).toBe(false);
     expect(localStorage.getItem('poisoned')).toBeNull();
+  });
+});
+
+describe('LocalStorageKeyValueStore.onChanged', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('reports its own writes, since window.onstorage never fires for the writer', async () => {
+    const store = new LocalStorageKeyValueStore();
+    const seen: { keys: string[]; area: StorageArea }[] = [];
+    store.onChanged((keys, area) => seen.push({ keys, area }));
+
+    await store.set('settings.theme', 'dark', 'local');
+
+    expect(seen).toEqual([{ keys: ['settings.theme'], area: 'local' }]);
+  });
+
+  it('reports a batch once, not once per key', async () => {
+    const store = new LocalStorageKeyValueStore();
+    const seen: string[][] = [];
+    store.onChanged((keys) => seen.push(keys));
+
+    await store.setMany({ 'settings.theme': 'dark', 'settings.showClock': true }, 'local');
+
+    expect(seen).toEqual([['settings.theme', 'settings.showClock']]);
+  });
+
+  it('reports what a partial batch did land, not nothing', async () => {
+    const store = new LocalStorageKeyValueStore();
+    const seen: string[][] = [];
+    store.onChanged((keys) => seen.push(keys));
+
+    await store.setMany({ 'settings.theme': 'dark', 'settings.showClock': undefined }, 'local');
+
+    expect(seen).toEqual([['settings.theme']]);
+  });
+
+  it('reports the failure that stopped a batch, and stops at it', async () => {
+    // A success here would push a setting to the peer with nothing on disk behind it.
+    const store = new LocalStorageKeyValueStore();
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    const result = await store.setMany(
+      { 'settings.theme': undefined, 'settings.showClock': true },
+      'local'
+    );
+
+    expect(result.success).toBe(false);
+    expect(localStorage.getItem('settings.showClock')).toBeNull();
+    errorSpy.mockRestore();
+  });
+
+  it('says nothing at all when a batch lands nothing', async () => {
+    const store = new LocalStorageKeyValueStore();
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const seen: string[][] = [];
+    store.onChanged((keys) => seen.push(keys));
+
+    await store.setMany({ 'settings.theme': undefined }, 'local');
+
+    expect(seen).toEqual([]);
+    errorSpy.mockRestore();
+  });
+
+  it('does not announce a write that failed', async () => {
+    const store = new LocalStorageKeyValueStore();
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const seen: string[][] = [];
+    store.onChanged((keys) => seen.push(keys));
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementationOnce(() => {
+      throw new DOMException('the quota has been exceeded', 'QuotaExceededError');
+    });
+
+    await store.set('settings.theme', 'dark', 'local');
+
+    expect(seen).toEqual([]);
+    errorSpy.mockRestore();
+  });
+
+  it('announces the writes that landed even when the batch throws', async () => {
+    // writeOne logs its refusal from outside its own try, so a failing logger escapes the loop —
+    // and keys already on disk would otherwise be announced to nobody.
+    const store = new LocalStorageKeyValueStore();
+    const seen: string[][] = [];
+    store.onChanged((keys) => seen.push(keys));
+    vi.spyOn(logger, 'error').mockImplementation(() => {
+      throw new Error('logging is down');
+    });
+
+    await expect(store.setMany({ a: 1, bad: undefined }, 'local')).rejects.toThrow(
+      'logging is down'
+    );
+
+    expect(seen).toEqual([['a']]);
+  });
+
+  it('announces the removals that landed even when the batch throws', async () => {
+    const store = new LocalStorageKeyValueStore();
+    await store.setMany({ a: 1, b: 2 }, 'local');
+    const seen: string[][] = [];
+    store.onChanged((keys) => seen.push(keys));
+    let removals = 0;
+    vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => {
+      removals += 1;
+      if (removals === 2) {
+        throw new DOMException('denied', 'SecurityError');
+      }
+    });
+    vi.spyOn(logger, 'error').mockImplementation(() => {
+      throw new Error('logging is down');
+    });
+
+    await expect(store.removeMany(['a', 'b'], 'local')).rejects.toThrow('logging is down');
+
+    expect(seen).toEqual([['a']]);
+  });
+
+  it('reports a removal that failed while still announcing the ones that landed', async () => {
+    const store = new LocalStorageKeyValueStore();
+    await store.setMany({ a: 1, b: 2 }, 'local');
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const seen: string[][] = [];
+    store.onChanged((keys) => seen.push(keys));
+    vi.spyOn(Storage.prototype, 'removeItem').mockImplementationOnce(() => {
+      throw new DOMException('denied', 'SecurityError');
+    });
+
+    await expect(store.removeMany(['a', 'b'], 'local')).resolves.toBe(false);
+
+    expect(seen).toEqual([['b']]);
+    errorSpy.mockRestore();
+  });
+
+  it('does not tell a subscriber added mid-notify about the write that added it', async () => {
+    const store = new LocalStorageKeyValueStore();
+    const late: string[][] = [];
+    let subscribed = false;
+    store.onChanged(() => {
+      if (subscribed) {
+        return;
+      }
+      subscribed = true;
+      store.onChanged((keys) => late.push(keys));
+    });
+
+    await store.set('settings.theme', 'dark', 'local');
+    expect(late).toEqual([]);
+
+    // The next write proves it did subscribe, so an empty `late` above is the snapshot and not a
+    // subscription that never happened.
+    await store.set('settings.showClock', true, 'local');
+
+    expect(late).toEqual([['settings.showClock']]);
+  });
+
+  it('announces a write made from inside a subscriber separately', async () => {
+    const store = new LocalStorageKeyValueStore();
+    const seen: string[][] = [];
+    let reentered = false;
+    store.onChanged((keys) => {
+      seen.push(keys);
+      if (!reentered) {
+        reentered = true;
+        void store.set('c', 3, 'local');
+      }
+    });
+
+    await store.setMany({ a: 1, b: 2 }, 'local');
+
+    expect(seen).toEqual([['a', 'b'], ['c']]);
+  });
+
+  it('announces each concurrent batch under its own keys', async () => {
+    const store = new LocalStorageKeyValueStore();
+    const seen: string[][] = [];
+    store.onChanged((keys) => seen.push(keys));
+
+    await Promise.all([
+      store.setMany({ a: 1, b: 2 }, 'local'),
+      store.setMany({ c: 3, d: 4 }, 'local'),
+    ]);
+
+    expect(seen).toEqual([
+      ['a', 'b'],
+      ['c', 'd'],
+    ]);
+  });
+
+  it('keeps an overlapping batch’s areas apart, so an area filter cannot drop the wrong keys', async () => {
+    const store = new LocalStorageKeyValueStore();
+    const seen: { keys: string[]; area: StorageArea }[] = [];
+    store.onChanged((keys, area) => seen.push({ keys, area }));
+
+    await Promise.all([store.setMany({ a: 1 }, 'local'), store.setMany({ b: 2 }, 'sync')]);
+
+    expect(seen).toContainEqual({ keys: ['a'], area: 'local' });
+    expect(seen).toContainEqual({ keys: ['b'], area: 'sync' });
+  });
+
+  it('says nothing about removing a single key that was never there', async () => {
+    const store = new LocalStorageKeyValueStore();
+    const seen: string[][] = [];
+    store.onChanged((keys) => seen.push(keys));
+
+    await expect(store.remove('settings.showClock', 'local')).resolves.toBe(true);
+
+    expect(seen).toEqual([]);
+  });
+
+  it('reports a removal, which is half the write surface', async () => {
+    // Unreported removals mean "Reset to defaults" silently stops propagating.
+    const store = new LocalStorageKeyValueStore();
+    await store.set('settings.theme', 'dark', 'local');
+    const seen: string[][] = [];
+    store.onChanged((keys) => seen.push(keys));
+
+    await store.remove('settings.theme', 'local');
+
+    expect(seen).toEqual([['settings.theme']]);
+  });
+
+  it('says nothing about removing a key that was never there, while still succeeding', async () => {
+    const store = new LocalStorageKeyValueStore();
+    await store.set('settings.theme', 'dark', 'local');
+    const seen: string[][] = [];
+    store.onChanged((keys) => seen.push(keys));
+
+    await expect(store.removeMany(['settings.theme', 'settings.showClock'], 'local')).resolves.toBe(
+      true
+    );
+
+    expect(seen).toEqual([['settings.theme']]);
+  });
+
+  it('reports a batch removal once, like a batch write', async () => {
+    const store = new LocalStorageKeyValueStore();
+    await store.setMany({ 'settings.theme': 'dark', 'settings.showClock': true }, 'local');
+    const seen: string[][] = [];
+    store.onChanged((keys) => seen.push(keys));
+
+    await store.removeMany(['settings.theme', 'settings.showClock'], 'local');
+
+    expect(seen).toEqual([['settings.theme', 'settings.showClock']]);
+  });
+
+  it('does not fold a concurrent single write into a batch that never wrote it', async () => {
+    const store = new LocalStorageKeyValueStore();
+    const seen: string[][] = [];
+    store.onChanged((keys) => seen.push(keys));
+
+    await Promise.all([store.setMany({ a: 1, b: 2 }, 'local'), store.set('c', 3, 'local')]);
+
+    expect(seen).toEqual([['a', 'b'], ['c']]);
+  });
+
+  it('stops reporting once unsubscribed', async () => {
+    const store = new LocalStorageKeyValueStore();
+    const seen: string[][] = [];
+    const unsubscribe = store.onChanged((keys) => seen.push(keys));
+
+    unsubscribe();
+    await store.set('settings.theme', 'dark', 'local');
+
+    expect(seen).toEqual([]);
+  });
+
+  it('keeps notifying the rest when one subscriber throws', async () => {
+    const store = new LocalStorageKeyValueStore();
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const seen: string[][] = [];
+    store.onChanged(() => {
+      throw new Error('subscriber exploded');
+    });
+    store.onChanged((keys) => seen.push(keys));
+
+    await expect(store.set('settings.theme', 'dark', 'local')).resolves.toEqual({ success: true });
+
+    expect(seen).toEqual([['settings.theme']]);
+    expect(errorSpy).toHaveBeenCalledWith('A storage change subscriber threw', expect.anything(), {
+      keys: ['settings.theme'],
+      area: 'local',
+    });
+    errorSpy.mockRestore();
+  });
+
+  it('reports a subscriber that rejects, which the sync catch cannot see', async () => {
+    const store = new LocalStorageKeyValueStore();
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    store.onChanged(async () => {
+      throw new Error('subscriber rejected');
+    });
+
+    await store.set('settings.theme', 'dark', 'local');
+    await Promise.resolve();
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      'A storage change subscriber rejected',
+      expect.anything(),
+      { keys: ['settings.theme'], area: 'local' }
+    );
+    errorSpy.mockRestore();
   });
 });

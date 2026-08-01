@@ -2,6 +2,7 @@ import {
   type KeyValueStore,
   logger,
   type StorageArea,
+  type StorageChangeHandler,
   type StorageError,
   type StorageErrorType,
   type StorageResult,
@@ -9,6 +10,7 @@ import {
   type StoredValues,
   toStoredValues,
 } from '@cuewise/shared';
+import { notifyStorageChange } from './notify-storage-change';
 
 // Chrome storage quotas
 const SYNC_QUOTA_BYTES = 102400; // 100KB
@@ -21,6 +23,27 @@ function areaStore(area: StorageArea): chrome.storage.StorageArea {
 /** KeyValueStore backed by chrome.storage.local/sync (selected only where it exists). */
 export class ChromeKeyValueStore implements KeyValueStore {
   readonly supportsSync = true;
+
+  // The only channel that already crosses the extension's worker/page split in this direction:
+  // the sync engine writes from the worker, the stores read in the page.
+  onChanged(handler: StorageChangeHandler): () => void {
+    // The method's mere presence is what canObserveWrites tests, so an unusable event must throw
+    // rather than hand back a teardown that observes nothing.
+    const events = chrome.storage?.onChanged;
+    if (events === undefined) {
+      throw new Error('chrome.storage.onChanged is unavailable in this context');
+    }
+    const listener = (changes: Record<string, unknown>, areaName: string) => {
+      if (areaName !== 'local' && areaName !== 'sync') {
+        return;
+      }
+      notifyStorageChange([handler], Object.keys(changes), areaName);
+    };
+    events.addListener(listener);
+    return () => {
+      events.removeListener(listener);
+    };
+  }
 
   async get<T>(key: string, area: StorageArea): Promise<T | null> {
     try {

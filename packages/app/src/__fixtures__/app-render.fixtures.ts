@@ -1,5 +1,5 @@
 import { screen, waitFor } from '@testing-library/react';
-import { expect, vi } from 'vitest';
+import { expect } from 'vitest';
 import { setReducedMotion } from '../components/__fixtures__/motion.fixtures';
 
 /** Satisfies isUnsplashUrl's `images.unsplash.com` prefix check, so the credit renders. */
@@ -12,17 +12,10 @@ class StubIntersectionObserver {
   disconnect(): void {}
 }
 
-/**
- * The globals every `render(<App />)` needs. The shared chrome-storage mock doesn't stub
- * onChanged, which pomodoro-store's and sounds-store's cross-tab listeners need to mount.
- */
+/** The globals every `render(<App />)` needs beyond the shared chrome-storage mock. */
 export function installAppRenderStubs(): void {
   setReducedMotion(false);
   window.IntersectionObserver = StubIntersectionObserver as unknown as typeof IntersectionObserver;
-  (chrome.storage as unknown as Record<string, unknown>).onChanged = {
-    addListener: vi.fn(),
-    removeListener: vi.fn(),
-  };
 }
 
 /** The layer always renders; only a loaded background gives it a url() and full opacity. */
