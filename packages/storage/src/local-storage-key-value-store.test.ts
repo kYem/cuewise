@@ -247,6 +247,44 @@ describe('LocalStorageKeyValueStore.onChanged', () => {
     errorSpy.mockRestore();
   });
 
+  it('announces the writes that landed even when the batch throws', async () => {
+    // writeOne logs its refusal from outside its own try, so a failing logger escapes the loop —
+    // and keys already on disk would otherwise be announced to nobody.
+    const store = new LocalStorageKeyValueStore();
+    const seen: string[][] = [];
+    store.onChanged((keys) => seen.push(keys));
+    vi.spyOn(logger, 'error').mockImplementation(() => {
+      throw new Error('logging is down');
+    });
+
+    await expect(store.setMany({ a: 1, bad: undefined }, 'local')).rejects.toThrow(
+      'logging is down'
+    );
+
+    expect(seen).toEqual([['a']]);
+  });
+
+  it('announces the removals that landed even when the batch throws', async () => {
+    const store = new LocalStorageKeyValueStore();
+    await store.setMany({ a: 1, b: 2 }, 'local');
+    const seen: string[][] = [];
+    store.onChanged((keys) => seen.push(keys));
+    let removals = 0;
+    vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => {
+      removals += 1;
+      if (removals === 2) {
+        throw new DOMException('denied', 'SecurityError');
+      }
+    });
+    vi.spyOn(logger, 'error').mockImplementation(() => {
+      throw new Error('logging is down');
+    });
+
+    await expect(store.removeMany(['a', 'b'], 'local')).rejects.toThrow('logging is down');
+
+    expect(seen).toEqual([['a']]);
+  });
+
   it('reports a removal that failed while still announcing the ones that landed', async () => {
     const store = new LocalStorageKeyValueStore();
     await store.setMany({ a: 1, b: 2 }, 'local');
