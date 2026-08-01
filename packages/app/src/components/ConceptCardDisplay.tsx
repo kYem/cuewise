@@ -21,6 +21,8 @@ const GRADE_ACCENT: Record<ConceptGrade, string> = {
   easy: 'border-primary-600/50 hover:bg-primary-600/10',
 };
 
+const GRADE_KEYS = ['1', '2', '3'];
+
 interface ConceptCardDisplayProps {
   card: ConceptCard;
   activeRecall: boolean;
@@ -59,11 +61,8 @@ export const ConceptCardDisplay: React.FC<ConceptCardDisplayProps> = ({
       return;
     }
     const handleKey = (e: KeyboardEvent) => {
-      if (!isShortcutKeyEvent(e)) {
-        return;
-      }
-      const index = ['1', '2', '3'].indexOf(e.key);
-      if (index === -1 || index >= CONCEPT_GRADES.length) {
+      const index = GRADE_KEYS.indexOf(e.key);
+      if (index === -1 || index >= CONCEPT_GRADES.length || !isShortcutKeyEvent(e)) {
         return;
       }
       e.preventDefault();

@@ -61,7 +61,12 @@ export const WelcomeModal: React.FC<WelcomeModalProps> = ({ isOpen, onClose }) =
       />
 
       {/* Modal Content */}
-      <div className="relative bg-surface-elevated rounded-2xl shadow-2xl max-w-md w-full overflow-hidden animate-slide-up">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Welcome to Cuewise"
+        className="relative bg-surface-elevated rounded-2xl shadow-2xl max-w-md w-full overflow-hidden animate-slide-up"
+      >
         {/* Header with gradient accent */}
         <div className="px-6 pt-6 pb-4 text-center">
           <div className="flex justify-center mb-3">

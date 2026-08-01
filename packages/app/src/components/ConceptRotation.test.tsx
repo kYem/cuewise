@@ -218,8 +218,24 @@ describe('ConceptRotation', () => {
     act(() => {
       fireEvent.keyDown(document.body, { key: 'c' });
     });
+    expect(screen.getByText('QUOTE')).toBeInTheDocument();
     act(() => {
       fireEvent.keyDown(document.body, { key: 'c' });
+    });
+
+    expect(screen.getByText('Saga pattern')).toBeInTheDocument();
+  });
+
+  it('ignores an auto-repeat of the shortcut, so holding the key does not strobe the slot', () => {
+    setup({ framing: 'ambient', cadence: 'off', cards: [dueCard] });
+
+    render(<ConceptRotation fallback={<div>QUOTE</div>} />);
+
+    act(() => {
+      fireEvent.keyDown(document.body, { key: 'c' });
+    });
+    act(() => {
+      fireEvent.keyDown(document.body, { key: 'c', repeat: true });
     });
 
     expect(screen.getByText('Saga pattern')).toBeInTheDocument();
