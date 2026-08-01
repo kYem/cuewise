@@ -6,6 +6,13 @@ import { youtubePlayer } from '../services/youtube-player';
 import { fakeObservableStore } from './__fixtures__/storage-changes.fixtures';
 import { useSoundsStorageSync, useSoundsStore } from './sounds-store';
 
+const toastError = vi.fn();
+vi.mock('./toast-store', () => ({
+  useToastStore: {
+    getState: () => ({ error: toastError, warning: vi.fn(), success: vi.fn() }),
+  },
+}));
+
 describe('useSoundsStorageSync', () => {
   afterEach(() => {
     resetPlatform();
@@ -22,7 +29,6 @@ describe('useSoundsStorageSync', () => {
     fake.emit(['soundsState']);
 
     expect(rehydrate).toHaveBeenCalledTimes(1);
-    rehydrate.mockRestore();
   });
 
   it('ignores another key, and the same key in another area', () => {
@@ -35,7 +41,6 @@ describe('useSoundsStorageSync', () => {
     fake.emit(['soundsState'], 'sync');
 
     expect(rehydrate).not.toHaveBeenCalled();
-    rehydrate.mockRestore();
   });
 
   it('leaves playback alone in a tab that is not the leader', () => {
@@ -50,14 +55,13 @@ describe('useSoundsStorageSync', () => {
     // Asserted alongside the timer count, so "not the leader" cannot pass as "never subscribed".
     expect(rehydrate).toHaveBeenCalledTimes(1);
     expect(vi.getTimerCount()).toBe(0);
-    rehydrate.mockRestore();
   });
 
   it('drops a handoff scheduled just before the tab stopped being the leader', () => {
     vi.useFakeTimers();
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
-    const rehydrate = vi.spyOn(useSoundsStore.persist, 'rehydrate').mockImplementation(() => {});
+    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockImplementation(() => {});
     useSoundsStore.setState({ isLeader: true });
     const { rerender } = renderHook(() => useSoundsStorageSync());
     fake.emit(['soundsState']);
@@ -67,21 +71,34 @@ describe('useSoundsStorageSync', () => {
     rerender();
 
     expect(vi.getTimerCount()).toBe(0);
-    rehydrate.mockRestore();
+  });
+
+  it('keeps one pending handoff across a burst, not one per key', () => {
+    // A pull writes a burst, and overlapping handoffs each call loadPlaylist against the others.
+    vi.useFakeTimers();
+    const fake = fakeObservableStore();
+    configurePlatform({ storage: fake.store });
+    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockImplementation(() => {});
+    useSoundsStore.setState({ isLeader: true });
+    renderHook(() => useSoundsStorageSync());
+
+    fake.emit(['soundsState']);
+    fake.emit(['soundsState']);
+
+    expect(vi.getTimerCount()).toBe(1);
   });
 
   it('schedules the leader playback sync in the tab that is the leader', () => {
     vi.useFakeTimers();
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
-    const rehydrate = vi.spyOn(useSoundsStore.persist, 'rehydrate').mockImplementation(() => {});
+    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockImplementation(() => {});
     useSoundsStore.setState({ isLeader: true });
     renderHook(() => useSoundsStorageSync());
 
     fake.emit(['soundsState']);
 
     expect(vi.getTimerCount()).toBe(1);
-    rehydrate.mockRestore();
   });
 
   it('re-subscribes with the new role when leadership changes', () => {
@@ -90,7 +107,7 @@ describe('useSoundsStorageSync', () => {
     vi.useFakeTimers();
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
-    const rehydrate = vi.spyOn(useSoundsStore.persist, 'rehydrate').mockImplementation(() => {});
+    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockImplementation(() => {});
     const { rerender } = renderHook(() => useSoundsStorageSync());
     expect(fake.subscriberCount).toBe(1);
 
@@ -100,7 +117,6 @@ describe('useSoundsStorageSync', () => {
 
     expect(fake.subscriberCount).toBe(1);
     expect(vi.getTimerCount()).toBe(1);
-    rehydrate.mockRestore();
   });
 
   it('stops observing when the component unmounts', () => {
@@ -146,5 +162,9 @@ describe('useSoundsStorageSync', () => {
     await vi.waitFor(() => expect(useSoundsStore.getState().isPlaying).toBe(false));
 
     expect(useSoundsStore.getState().isYoutubeLoading).toBe(false);
+    // Stopping silently is the same defect wearing different clothes.
+    expect(toastError).toHaveBeenCalledWith(
+      expect.stringContaining('Could not start the playlist')
+    );
   });
 });

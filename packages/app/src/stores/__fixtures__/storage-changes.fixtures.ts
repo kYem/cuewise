@@ -1,7 +1,7 @@
-import type { KeyValueStore, StorageArea, StorageChangeHandler } from '@cuewise/shared';
+import type { ObservableKeyValueStore, StorageArea, StorageChangeHandler } from '@cuewise/shared';
 
 export interface FakeObservableStore {
-  store: KeyValueStore;
+  store: ObservableKeyValueStore;
   emit: (keys: string[], area?: StorageArea) => void;
   readonly subscriberCount: number;
 }
@@ -33,9 +33,9 @@ export function fakeObservableStore(options: FakeObservableStoreOptions = {}): F
           subscribers.delete(handler);
         };
       },
-    } as unknown as KeyValueStore,
+    } as unknown as ObservableKeyValueStore,
     emit(keys: string[], area: StorageArea = 'local') {
-      for (const subscriber of subscribers) {
+      for (const subscriber of [...subscribers]) {
         subscriber(keys, area);
       }
     },

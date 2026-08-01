@@ -273,6 +273,16 @@ describe('background preview lifecycle', () => {
     expect(useSettingsStore.getState().settings.syncEnabled).toBe(defaultSettings.syncEnabled);
   });
 
+  it('resetToDefaults applies the defaults to the DOM, not only to the store', async () => {
+    document.documentElement.setAttribute('data-density', 'compact');
+
+    await useSettingsStore.getState().resetToDefaults();
+
+    expect(document.documentElement.getAttribute('data-density')).toBe(
+      DEFAULT_SETTINGS.layoutDensity
+    );
+  });
+
   it('resetToDefaults clears a lingering preview', async () => {
     useSettingsStore.getState().previewSettings({ backgroundDim: 40 });
     const persisted = await useSettingsStore.getState().resetToDefaults();
@@ -588,14 +598,13 @@ describe('converging on settings written elsewhere', () => {
         expect.anything()
       )
     );
-    errorSpy.mockRestore();
   });
 
   it('tells the user about a rejected re-read, not only the console', async () => {
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
     await useSettingsStore.getState().initialize();
-    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
     vi.mocked(storage.readSettings).mockRejectedValue(new Error('storage unavailable'));
 
     fake.emit(['settings.colorTheme']);
@@ -603,41 +612,57 @@ describe('converging on settings written elsewhere', () => {
       expect(toastError).toHaveBeenCalledWith(expect.stringContaining('out of date'))
     );
     fake.emit(['settings.showClock']);
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await flush();
 
-    // A pull writing twelve keys through a migration that throws would otherwise toast twelve times.
+    // Latched: a pull writing many keys must toast once.
     expect(toastError).toHaveBeenCalledTimes(1);
-    errorSpy.mockRestore();
   });
 
   it('says so when settings changed elsewhere cannot be read', async () => {
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
     await useSettingsStore.getState().initialize();
-    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
     vi.mocked(storage.readSettings).mockResolvedValue({ ok: false, unreadable: ['colorTheme'] });
 
     fake.emit(['settings.colorTheme']);
 
     await vi.waitFor(() => expect(useSettingsStore.getState().error).toContain('colorTheme'));
     expect(toastError).toHaveBeenCalledWith(expect.stringContaining('colorTheme'));
-    errorSpy.mockRestore();
   });
 
   it('says an unreadable value once, not once per key a pull writes', async () => {
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
     await useSettingsStore.getState().initialize();
-    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
     vi.mocked(storage.readSettings).mockResolvedValue({ ok: false, unreadable: ['colorTheme'] });
 
     fake.emit(['settings.colorTheme']);
     await vi.waitFor(() => expect(toastError).toHaveBeenCalledTimes(1));
     fake.emit(['settings.showClock']);
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await flush();
 
     expect(toastError).toHaveBeenCalledTimes(1);
-    errorSpy.mockRestore();
+  });
+
+  it('clears the write path’s unreadable complaint once the reset it asks for lands', async () => {
+    // The write path is where a corrupt value is usually noticed — initialize() defaults rather
+    // than complaining — so a complaint only the refresh path could clear would never clear.
+    const fake = fakeObservableStore();
+    configurePlatform({ storage: fake.store });
+    await useSettingsStore.getState().initialize();
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    vi.mocked(storage.readSettings).mockResolvedValueOnce({
+      ok: false,
+      unreadable: ['colorTheme'],
+    });
+    await useSettingsStore.getState().updateSettings({ colorTheme: 'forest' });
+    expect(useSettingsStore.getState().error).toContain('colorTheme');
+
+    fake.emit(['settings.colorTheme']);
+
+    await vi.waitFor(() => expect(useSettingsStore.getState().error).toBeNull());
   });
 
   it('leaves a failed write standing when an unrelated read succeeds', async () => {
@@ -663,7 +688,7 @@ describe('converging on settings written elsewhere', () => {
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
     await useSettingsStore.getState().initialize();
-    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
     vi.mocked(storage.readSettings).mockResolvedValueOnce({
       ok: false,
       unreadable: ['colorTheme'],
@@ -674,7 +699,6 @@ describe('converging on settings written elsewhere', () => {
     fake.emit(['settings.colorTheme']);
 
     await vi.waitFor(() => expect(useSettingsStore.getState().error).toBeNull());
-    errorSpy.mockRestore();
   });
 
   it('leaves state alone when a change turns out to be its own write echoing back', async () => {
@@ -685,7 +709,7 @@ describe('converging on settings written elsewhere', () => {
 
     fake.emit(['settings.colorTheme']);
 
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await flush();
     expect(useSettingsStore.getState().settings).toBe(before);
   });
 
@@ -727,7 +751,7 @@ describe('converging on settings written elsewhere', () => {
     fake.emit(['settings.theme']);
 
     await vi.waitFor(() => expect(storage.readSettings).toHaveBeenCalled());
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await flush();
     expect(storage.readSettings).toHaveBeenCalledTimes(1);
   });
 
@@ -753,7 +777,7 @@ describe('converging on settings written elsewhere', () => {
 
     fake.emit(['quotes']);
 
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await flush();
     expect(useSettingsStore.getState().settings.colorTheme).toBe(defaultSettings.colorTheme);
   });
 
@@ -820,7 +844,7 @@ describe('converging on settings written elsewhere', () => {
 
   it('loads the settings even when dropping the old subscription throws', async () => {
     // The user would otherwise get "Failed to load settings" with nothing wrong with the settings.
-    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
     const first = fakeObservableStore({ throwOnUnsubscribe: true });
     configurePlatform({ storage: first.store });
     await useSettingsStore.getState().initialize();
@@ -834,14 +858,13 @@ describe('converging on settings written elsewhere', () => {
     expect(useSettingsStore.getState().error).toBeNull();
     // Recovering means observing the replacement, not merely surviving the throw.
     expect(second.subscriberCount).toBe(1);
-    errorSpy.mockRestore();
   });
 
   it('keeps a failed write reported, since a converging read is no evidence it landed', async () => {
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
     await useSettingsStore.getState().initialize();
-    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
     vi.mocked(storage.setSettingsPatch).mockResolvedValue({
       success: false,
       error: { type: 'quota_exceeded', message: 'quota exceeded' },
@@ -855,7 +878,6 @@ describe('converging on settings written elsewhere', () => {
     await vi.waitFor(() => expect(useSettingsStore.getState().settings.showClock).toBe(false));
     expect(writeError).toContain('Storage is full');
     expect(useSettingsStore.getState().error).toBe(writeError);
-    errorSpy.mockRestore();
   });
 
   it('ignores a settings key announced in an area it never reads', async () => {
@@ -866,7 +888,7 @@ describe('converging on settings written elsewhere', () => {
 
     fake.emit(['settings.colorTheme'], 'sync');
 
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await flush();
     expect(useSettingsStore.getState().settings.colorTheme).toBe(defaultSettings.colorTheme);
   });
 
@@ -876,7 +898,7 @@ describe('converging on settings written elsewhere', () => {
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
     await useSettingsStore.getState().initialize();
-    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
     vi.mocked(storage.readSettings).mockResolvedValue({ ok: false, unreadable: [] });
 
     fake.emit(['settings.colorTheme']);
@@ -884,14 +906,13 @@ describe('converging on settings written elsewhere', () => {
     await vi.waitFor(() => expect(toastError).toHaveBeenCalled());
     expect(toastError).toHaveBeenCalledWith(expect.stringContaining('out of date'));
     expect(toastError).not.toHaveBeenCalledWith(expect.stringContaining('not saved'));
-    errorSpy.mockRestore();
   });
 
   it('says so again when the same value goes unreadable after recovering', async () => {
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
     await useSettingsStore.getState().initialize();
-    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
     vi.mocked(storage.readSettings).mockResolvedValueOnce({
       ok: false,
       unreadable: ['colorTheme'],
@@ -908,14 +929,13 @@ describe('converging on settings written elsewhere', () => {
     fake.emit(['settings.colorTheme']);
 
     await vi.waitFor(() => expect(toastError).toHaveBeenCalledTimes(2));
-    errorSpy.mockRestore();
   });
 
   it('says so again after a reload, having told nobody in this session yet', async () => {
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
     await useSettingsStore.getState().initialize();
-    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
     vi.mocked(storage.readSettings).mockResolvedValue({ ok: false, unreadable: ['colorTheme'] });
 
     fake.emit(['settings.colorTheme']);
@@ -924,14 +944,13 @@ describe('converging on settings written elsewhere', () => {
     fake.emit(['settings.colorTheme']);
 
     await vi.waitFor(() => expect(toastError).toHaveBeenCalledTimes(2));
-    errorSpy.mockRestore();
   });
 
   it('says so again when a different value turns out to be unreadable', async () => {
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
     await useSettingsStore.getState().initialize();
-    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
     vi.mocked(storage.readSettings).mockResolvedValue({ ok: false, unreadable: ['colorTheme'] });
 
     fake.emit(['settings.colorTheme']);
@@ -940,11 +959,10 @@ describe('converging on settings written elsewhere', () => {
     fake.emit(['settings.theme']);
 
     await vi.waitFor(() => expect(toastError).toHaveBeenCalledTimes(2));
-    errorSpy.mockRestore();
   });
 
   it('retries the subscription after one that threw', async () => {
-    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
     const fake = fakeObservableStore({ failedSubscribes: 1 });
     configurePlatform({ storage: fake.store });
 
@@ -952,7 +970,6 @@ describe('converging on settings written elsewhere', () => {
     await useSettingsStore.getState().initialize();
 
     expect(fake.subscriberCount).toBe(1);
-    errorSpy.mockRestore();
   });
 
   it('waits for an in-flight write rather than re-reading beside it', async () => {
@@ -971,10 +988,10 @@ describe('converging on settings written elsewhere', () => {
     });
 
     const writing = useSettingsStore.getState().updateSettings({ colorTheme: 'forest' });
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await flush();
     const readsBeforeChange = vi.mocked(storage.readSettings).mock.calls.length;
     fake.emit(['settings.theme']);
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await flush();
 
     // Unqueued, the re-read runs now and installs a snapshot the parked write is about to replace.
     expect(storage.readSettings).toHaveBeenCalledTimes(readsBeforeChange);
@@ -1010,7 +1027,7 @@ describe('initialize against a concurrent write', () => {
 
     const writing = useSettingsStore.getState().updateSettings({ colorTheme: 'forest' });
     const initializing = useSettingsStore.getState().initialize();
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await flush();
 
     expect(storage.getSettings).not.toHaveBeenCalled();
 

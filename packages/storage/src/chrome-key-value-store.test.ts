@@ -244,6 +244,18 @@ describe('ChromeKeyValueStore.onChanged', () => {
     unsubscribe();
   });
 
+  it('refuses to subscribe when the event is gone, rather than answering a dead teardown', () => {
+    // Returning a no-op here is worse than throwing: the method's presence already satisfied
+    // canObserveWrites, so the caller latches a subscription that can never fire and never retries.
+    const storage = global.chrome.storage as unknown as { onChanged?: MockChromeStorageEvent };
+    const { onChanged } = storage;
+    storage.onChanged = undefined;
+
+    expect(() => store.onChanged(() => {})).toThrow(/onChanged/);
+
+    storage.onChanged = onChanged;
+  });
+
   it('reports a throwing subscriber rather than letting it escape into Chrome', () => {
     // Uncaught here it surfaces in the dispatcher, never through the app's own logger — the same
     // fault the dev backend catches and names.

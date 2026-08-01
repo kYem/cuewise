@@ -263,6 +263,18 @@ describe('LocalStorageKeyValueStore.onChanged', () => {
     errorSpy.mockRestore();
   });
 
+  it('does not tell a subscriber added mid-notify about the write that added it', async () => {
+    const store = new LocalStorageKeyValueStore();
+    const late: string[][] = [];
+    store.onChanged(() => {
+      store.onChanged((keys) => late.push(keys));
+    });
+
+    await store.set('settings.theme', 'dark', 'local');
+
+    expect(late).toEqual([]);
+  });
+
   it('announces a write made from inside a subscriber separately', async () => {
     const store = new LocalStorageKeyValueStore();
     const seen: string[][] = [];
@@ -307,6 +319,18 @@ describe('LocalStorageKeyValueStore.onChanged', () => {
     expect(seen).toContainEqual({ keys: ['b'], area: 'sync' });
   });
 
+  it('says nothing about removing a single key that was never there', async () => {
+    // clearAllQuotes removes the same key from both areas, and this backend has one — so the
+    // second call is always an absent-key removal.
+    const store = new LocalStorageKeyValueStore();
+    const seen: string[][] = [];
+    store.onChanged((keys) => seen.push(keys));
+
+    await expect(store.remove('settings.showClock', 'local')).resolves.toBe(true);
+
+    expect(seen).toEqual([]);
+  });
+
   it('reports a removal, which is half the write surface', async () => {
     // Unreported removals mean "Reset to defaults" silently stops propagating.
     const store = new LocalStorageKeyValueStore();
@@ -320,8 +344,6 @@ describe('LocalStorageKeyValueStore.onChanged', () => {
   });
 
   it('says nothing about removing a key that was never there, while still succeeding', async () => {
-    // A reset removes every settings key on a profile that stored two of them; announcing all of
-    // them queues a full re-read for a write that never happened.
     const store = new LocalStorageKeyValueStore();
     await store.set('settings.theme', 'dark', 'local');
     const seen: string[][] = [];

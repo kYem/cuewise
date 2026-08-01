@@ -637,7 +637,7 @@ export function useSoundsStorageSync() {
       if (area !== 'local' || !keys.includes('soundsState')) {
         return;
       }
-      // Dropped rather than returned, so the port's own promise guard never sees either of these.
+      // Caught here, not returned: the port's guard logs a rejection without naming what failed.
       Promise.resolve(useSoundsStore.persist.rehydrate()).catch((error) => {
         logger.error('Could not rehydrate the sounds state after a storage change', error);
       });
@@ -698,6 +698,8 @@ async function syncLeaderPlayback() {
               startAt
             );
           } catch (error) {
+            // Logged first: a throw from the recovery below would otherwise replace this cause.
+            logger.error('Could not load the playlist for leader playback', error);
             // That callback is what starts playback, so nothing is playing — and left as-is the
             // panel renders its "playing" indicator over silence.
             useSoundsStore.setState({

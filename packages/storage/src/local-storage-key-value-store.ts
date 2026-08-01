@@ -14,6 +14,8 @@ import { notifyStorageChange } from './notify-storage-change';
 
 const LOCALSTORAGE_QUOTA_BYTES = 5242880; // 5MB (dev fallback estimate)
 
+type RemoveOutcome = 'removed' | 'absent' | 'failed';
+
 // localStorage signals a full store with a DOMException named QuotaExceededError
 // (legacy WebKit: code 22; old Firefox: NS_ERROR_DOM_QUOTA_REACHED).
 function isQuotaError(error: unknown): boolean {
@@ -101,23 +103,23 @@ export class LocalStorageKeyValueStore implements KeyValueStore {
   }
 
   async remove(key: string, area: StorageArea): Promise<boolean> {
-    const { ok, existed } = this.deleteOne(key);
-    if (existed) {
+    const outcome = this.deleteOne(key);
+    if (outcome === 'removed') {
       this.emit([key], area);
     }
-    return ok;
+    return outcome !== 'failed';
   }
 
-  // `existed` apart from `ok`: removing an absent key succeeds (the port calls it idempotent) but
-  // changes nothing, and announcing it queues a re-read for a write that never happened.
-  private deleteOne(key: string): { ok: boolean; existed: boolean } {
+  // 'absent' apart from 'removed': removing an absent key succeeds (the port calls it idempotent)
+  // but changes nothing, and announcing it queues a re-read for a write that never happened.
+  private deleteOne(key: string): RemoveOutcome {
     try {
       const existed = localStorage.getItem(key) !== null;
       localStorage.removeItem(key);
-      return { ok: true, existed };
+      return existed ? 'removed' : 'absent';
     } catch (error) {
       logger.error(`Error removing ${key} from storage`, error);
-      return { ok: false, existed: false };
+      return 'failed';
     }
   }
 
@@ -177,35 +179,39 @@ export class LocalStorageKeyValueStore implements KeyValueStore {
     }
   }
 
-  // Not atomic: a batch that stops partway still announces the keys that did land.
+  // Not atomic: a batch that stops partway still announces the keys that did land. The emit is in
+  // a `finally` and the return outside it, so neither a throw nor the emit can lose the other.
   async setMany(entries: Record<string, unknown>, area: StorageArea): Promise<StorageResult> {
     const written: string[] = [];
     let failure: StorageResult | null = null;
-    for (const [key, value] of Object.entries(entries)) {
-      const result = this.writeOne(key, value, area);
-      if (!result.success) {
-        failure = result;
-        break;
+    try {
+      for (const [key, value] of Object.entries(entries)) {
+        const result = this.writeOne(key, value, area);
+        if (!result.success) {
+          failure = result;
+          break;
+        }
+        written.push(key);
       }
-      written.push(key);
+    } finally {
+      this.emit(written, area);
     }
-    this.emit(written, area);
     return failure ?? { success: true };
   }
 
   async removeMany(keys: string[], area: StorageArea): Promise<boolean> {
-    const removed: string[] = [];
+    const changed: string[] = [];
     let allRemoved = true;
     for (const key of keys) {
-      const { ok, existed } = this.deleteOne(key);
-      if (!ok) {
+      const outcome = this.deleteOne(key);
+      if (outcome === 'failed') {
         allRemoved = false;
       }
-      if (existed) {
-        removed.push(key);
+      if (outcome === 'removed') {
+        changed.push(key);
       }
     }
-    this.emit(removed, area);
+    this.emit(changed, area);
     return allRemoved;
   }
 }

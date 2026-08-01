@@ -26,7 +26,7 @@ export function observableStorage(): ObservableKeyValueStore | null {
 }
 
 /**
- * Named, since a failure here silently stops one consumer converging and never retries. The
+ * Named, since a failure here silently stops one consumer converging and nothing else says which. The
  * teardown it hands back cannot throw: callers pass it straight to React, where a throwing cleanup
  * takes down the tree and skips the cleanups queued behind it.
  */

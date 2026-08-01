@@ -25,14 +25,12 @@ describe('observableStorage', () => {
   });
 
   it('answers null rather than throwing when no storage is configured', () => {
-    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
 
     expect(observableStorage()).toBeNull();
-
-    errorSpy.mockRestore();
   });
 
-  it('says so when there is no backend at all, since the hooks that ask do no other read', () => {
+  it('says so when there is no backend at all', () => {
     const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
 
     observableStorage();
@@ -41,7 +39,6 @@ describe('observableStorage', () => {
       expect.stringContaining('No storage backend to observe'),
       expect.anything()
     );
-    errorSpy.mockRestore();
   });
 
   it('stays quiet on a backend that simply cannot observe writes', () => {
@@ -50,7 +47,6 @@ describe('observableStorage', () => {
 
     expect(observableStorage()).toBeNull();
     expect(errorSpy).not.toHaveBeenCalled();
-    errorSpy.mockRestore();
   });
 
   it('answers the store when it can', () => {
@@ -73,7 +69,6 @@ describe('safeSubscribe', () => {
       expect.stringContaining('storage changes for settings'),
       expect.anything()
     );
-    errorSpy.mockRestore();
   });
 
   it('passes the handler through and tears down through the one it was given', () => {
@@ -107,6 +102,5 @@ describe('safeSubscribe', () => {
       expect.stringContaining('stop observing storage changes for the pomodoro timer'),
       expect.anything()
     );
-    errorSpy.mockRestore();
   });
 });

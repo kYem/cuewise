@@ -18,7 +18,6 @@ describe('usePomodoroStorageSync', () => {
     fake.emit(['pomodoroState']);
 
     expect(rehydrate).toHaveBeenCalledTimes(1);
-    rehydrate.mockRestore();
   });
 
   it('ignores another key, and the same key in another area', () => {
@@ -31,7 +30,6 @@ describe('usePomodoroStorageSync', () => {
     fake.emit(['pomodoroState'], 'sync');
 
     expect(rehydrate).not.toHaveBeenCalled();
-    rehydrate.mockRestore();
   });
 
   it('stops observing when the component unmounts', () => {

@@ -32,21 +32,17 @@ import { useToastStore } from './toast-store';
 export type PreviewableSettings = Pick<Settings, 'backgroundDim' | 'backgroundBlur'>;
 
 /**
- * One corrupt value refuses every write, so the message names it and the button that clears it
- * ("Reset to defaults", in Settings → Advanced). A failed read names neither, so the caller supplies
- * what it cost — a refresh must not tell the user their change was lost.
+ * A named field carries its own remedy ("Reset to defaults", in Settings → Advanced), so both
+ * callers say the same thing. Only a read that names nothing needs the caller to say what it cost —
+ * a refresh must not tell the user their change was lost.
  */
-function unreadableSettingsMessage(unreadable: string[], consequence: string): string {
-  if (unreadable.length === 0) {
-    return `Cuewise can't read your settings, so ${consequence}.`;
+function unreadableSettingsMessage(unreadable: string[], costWhenUnnamed: string): string {
+  if (unreadable.length > 0) {
+    const subject = unreadable.length === 1 ? 'value' : 'values';
+    const named = `Cuewise can't read your saved ${subject} for ${unreadable.join(', ')}.`;
+    return `${named} Reset to defaults in Settings to fix it.`;
   }
-  const subject = unreadable.length === 1 ? 'value' : 'values';
-  const named = `Cuewise can't read your saved ${subject} for ${unreadable.join(', ')}.`;
-  return `${named} Reset to defaults in Settings to fix it.`;
-}
-
-function staleSettingsMessage(unreadable: string[]): string {
-  return unreadableSettingsMessage(unreadable, 'what you see may be out of date');
+  return `Cuewise can't read your settings, so ${costWhenUnnamed}.`;
 }
 
 /** Quota failures get actionable copy; anything else keeps the generic retry message. */
@@ -88,7 +84,6 @@ function applyAll(settings: Settings): void {
   applyLogLevel(settings.logLevel);
 }
 
-// One field, so the store and its teardown cannot drift apart.
 let observing: { store: ObservableKeyValueStore; unsubscribe: () => void } | null = null;
 
 // Structural for the array-valued keys: both backends parse a fresh array per read, so `===`
@@ -111,7 +106,7 @@ let reportedStale: string | null = null;
  * time, so one problem should say so once — and a different one should still say so.
  */
 function reportStale(unreadable: string[]): void {
-  const message = staleSettingsMessage(unreadable);
+  const message = unreadableSettingsMessage(unreadable, 'what you see may be out of date');
   if (reportedStale === message) {
     return;
   }
@@ -176,8 +171,8 @@ async function refreshFromStorage(): Promise<void> {
   try {
     read = await readSettings();
   } catch (error) {
-    // readSettings rejects as well as answering `ok:false` — the migration it awaits throws on an
-    // undeterminable storage area. Unhandled, this is one rejection per settings write, forever.
+    // readSettings rejects as well as answering `ok:false` — an unconfigured registry throws — and
+    // a silently stale view is worse than a loud one.
     logger.error(
       `Could not re-read settings after a storage change: ${describeThrown(error)}`,
       error
@@ -199,7 +194,7 @@ async function refreshFromStorage(): Promise<void> {
   // Only this path's own complaint, and before the no-op check: a reset that fixes the value
   // converges on what this store already holds, but a read succeeding says nothing about a
   // write that failed.
-  if (error !== null && error === staleComplaint) {
+  if (staleComplaint !== null && error === staleComplaint) {
     useSettingsStore.setState({ error: null });
   }
   // A key names a write, not a changed value, so an own write arrives here as a no-op.
@@ -298,6 +293,9 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
             read.unreadable,
             'the change was not saved'
           );
+          // Latched like the refresh path's own complaint, because it is one: a later good read
+          // means the value it names is readable again, and the reset it asks for clears it.
+          reportedStale = errorMessage;
           set({ error: errorMessage, preview: null });
           useToastStore.getState().error(errorMessage);
           return false;
