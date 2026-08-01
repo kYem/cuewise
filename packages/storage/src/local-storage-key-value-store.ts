@@ -179,8 +179,8 @@ export class LocalStorageKeyValueStore implements KeyValueStore {
     }
   }
 
-  // Not atomic: a batch that stops partway still announces the keys that did land — in a
-  // `finally` here and in removeMany, because both helpers can throw rather than return a failure.
+  // Not atomic: a batch that stops at a failure still announces the keys that did land. The emit
+  // is in a `finally` here and below because a failing logger escapes both per-key helpers.
   async setMany(entries: Record<string, unknown>, area: StorageArea): Promise<StorageResult> {
     const written: string[] = [];
     let failure: StorageResult | null = null;

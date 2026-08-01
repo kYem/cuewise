@@ -53,8 +53,8 @@ let storedSettings: Settings = defaultSettings;
 function seedStorage(settings: Settings = defaultSettings) {
   storedSettings = settings;
   vi.mocked(storage.getSettings).mockImplementation(async () => storedSettings);
-  // structuredClone, not a spread: both backends return fresh arrays per read, so a spread makes
-  // an own-write echo look unchanged.
+  // structuredClone, not a spread: real reads yield fresh arrays, so a shared reference would let
+  // a `===` compare pass the convergence tests below.
   vi.mocked(storage.readSettings).mockImplementation(async () => ({
     ok: true,
     settings: structuredClone(storedSettings),
@@ -614,7 +614,6 @@ describe('converging on settings written elsewhere', () => {
     fake.emit(['settings.showClock']);
     await flush();
 
-    // Latched: a pull writing many keys must toast once.
     expect(toastError).toHaveBeenCalledTimes(1);
   });
 
@@ -715,7 +714,6 @@ describe('converging on settings written elsewhere', () => {
   });
 
   it('leaves a failed write standing when an unrelated read succeeds', async () => {
-    // A read succeeding says nothing about a write that failed — storage is still full.
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
     await useSettingsStore.getState().initialize();

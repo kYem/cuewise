@@ -368,8 +368,6 @@ describe('LocalStorageKeyValueStore.onChanged', () => {
   });
 
   it('says nothing about removing a single key that was never there', async () => {
-    // clearAllQuotes removes the same key from both areas, and this backend has one — so the
-    // second call is always an absent-key removal.
     const store = new LocalStorageKeyValueStore();
     const seen: string[][] = [];
     store.onChanged((keys) => seen.push(keys));

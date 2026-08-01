@@ -208,7 +208,6 @@ export const useSoundsStore = create<SoundsStore>()(
             const playlist = playlists.find((p) => p.id === selectedPlaylistId);
             if (playlist?.firstVideoId) {
               set({ isYoutubeLoading: true });
-              // Get last played video and timestamp (or fall back to first video)
               getCurrentVideoForPlaylist(playlist.playlistId).then((resumeInfo) => {
                 const videoId = resumeInfo?.videoId || playlist.firstVideoId;
                 const startAt = resumeInfo?.timestamp || 0;
