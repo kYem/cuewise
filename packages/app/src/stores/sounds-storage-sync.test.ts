@@ -22,7 +22,6 @@ vi.mock('./toast-store', () => ({
 describe('useSoundsStorageSync', () => {
   afterEach(() => {
     resetPlatform();
-    // Whole-slice reset: the store is a module singleton and restoreMocks does not reach it.
     useSoundsStore.setState(useSoundsStore.getInitialState());
     vi.useRealTimers();
     // restoreMocks does not reach a bare vi.fn().
@@ -150,21 +149,13 @@ describe('useSoundsStorageSync', () => {
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
     vi.spyOn(useSoundsStore.persist, 'rehydrate').mockImplementation(() => {});
-    vi.spyOn(youtubePlayer, 'getCurrentPlaylistId').mockReturnValue('another-playlist');
+    stubYoutubePlayer();
     const loadPlaylist = vi.spyOn(youtubePlayer, 'loadPlaylist').mockImplementation(() => {
       throw new Error('the iframe API is not ready');
     });
     vi.spyOn(storage, 'getCurrentVideoForPlaylist').mockResolvedValue(null);
-    useSoundsStore.setState({
-      isLeader: true,
-      activeSource: 'youtube',
-      isPlaying: true,
-      isYoutubeLoading: false,
-      selectedPlaylistId: 'p1',
-      playlists: [
-        { id: 'p1', name: 'Focus', playlistId: 'PL1', firstVideoId: 'v1', isCustom: false },
-      ],
-    });
+    leaderPlayingYoutube();
+    useSoundsStore.setState({ isYoutubeLoading: false });
     renderHook(() => useSoundsStorageSync());
 
     fake.emit(['soundsState']);
@@ -227,8 +218,8 @@ describe('useSoundsStorageSync', () => {
 
     fake.emit(['soundsState']);
     await vi.advanceTimersByTimeAsync(50);
-    const onReady = player.loadPlaylist.mock.calls[0][2] as () => void;
-    onReady();
+    const onReady = player.loadPlaylist.mock.calls[0][2];
+    onReady?.();
 
     expect(player.play).toHaveBeenCalled();
     expect(setVolume).toHaveBeenCalledWith(useSoundsStore.getState().youtubeVolume);
@@ -303,8 +294,6 @@ describe('useSoundsStorageSync', () => {
     renderHook(() => useSoundsStorageSync());
     const stopEcho = echoWritesTo(useSoundsStore, fake, 'soundsState');
 
-    // Driven from the test, not from whatever the sync happens to write, so the re-entry this
-    // guards stays covered however that changes.
     fake.emit(['soundsState']);
     await vi.advanceTimersByTimeAsync(50);
     fake.emit(['soundsState']);
@@ -321,7 +310,7 @@ describe('useSoundsStorageSync', () => {
     vi.spyOn(useSoundsStore.persist, 'rehydrate').mockImplementation(() => {});
     const playAmbient = vi.spyOn(ambientSoundPlayer, 'play').mockImplementation(() => {});
     const stopAmbient = vi.spyOn(ambientSoundPlayer, 'stop').mockImplementation(() => {});
-    stubYoutubePlayer();
+    const player = stubYoutubePlayer();
     useSoundsStore.setState({
       isLeader: true,
       activeSource: 'ambient',
@@ -335,6 +324,23 @@ describe('useSoundsStorageSync', () => {
 
     expect(playAmbient).not.toHaveBeenCalled();
     expect(stopAmbient).not.toHaveBeenCalled();
+    expect(player.stop).toHaveBeenCalled();
+  });
+
+  it('silences its own ambient when another tab switches to youtube', async () => {
+    vi.useFakeTimers();
+    const fake = fakeObservableStore();
+    configurePlatform({ storage: fake.store });
+    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockImplementation(() => {});
+    const stopAmbient = vi.spyOn(ambientSoundPlayer, 'stop').mockImplementation(() => {});
+    stubYoutubePlayer({ loaded: leaderPlaylist.playlistId, playing: true });
+    leaderPlayingYoutube();
+    renderHook(() => useSoundsStorageSync());
+
+    fake.emit(['soundsState']);
+    await vi.advanceTimersByTimeAsync(50);
+
+    expect(stopAmbient).toHaveBeenCalled();
   });
 
   it('silences its own ambient when another tab stops it', async () => {

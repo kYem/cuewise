@@ -34,6 +34,10 @@ interface MockOptions {
   selectedGoalId?: string | null;
   todayTasks?: Goal[];
   setSelectedGoal?: Mock;
+  activeSource?: 'none' | 'ambient' | 'youtube';
+  isSoundsLeader?: boolean;
+  /** Auto-start is off in the shared settings fixture, so the music effect needs it turned on. */
+  musicAutoStart?: boolean;
 }
 
 function mockStores(options: MockOptions = {}) {
@@ -62,8 +66,9 @@ function mockStores(options: MockOptions = {}) {
   };
   const goalState = { todayTasks: options.todayTasks ?? [], initialize: vi.fn() };
   const soundsState = {
-    activeSource: 'none',
+    activeSource: options.activeSource ?? 'none',
     isPlaying: false,
+    isLeader: options.isSoundsLeader ?? false,
     pause: vi.fn(),
     resume: vi.fn(),
     stop: vi.fn(),
@@ -75,11 +80,16 @@ function mockStores(options: MockOptions = {}) {
   vi.mocked(useGoalStore).mockImplementation(createSelectorMock(goalState));
   // focusModeEnabled: false keeps the focus button (and its store call) out of the tree.
   vi.mocked(useSettingsStore).mockImplementation(
-    createSettingsStoreMock({ focusModeEnabled: false, updateSettings })
+    createSettingsStoreMock({
+      focusModeEnabled: false,
+      updateSettings,
+      pomodoroMusicEnabled: options.musicAutoStart ?? false,
+      pomodoroMusicAutoStart: options.musicAutoStart ?? false,
+    })
   );
   vi.mocked(useSoundsStore).mockImplementation(createSelectorMock(soundsState));
 
-  return { setSelectedGoal, reloadSettings, updateSettings };
+  return { setSelectedGoal, reloadSettings, updateSettings, soundsState };
 }
 
 describe('PomodoroTimer - goal picker', () => {
@@ -93,6 +103,36 @@ describe('PomodoroTimer - goal picker', () => {
     render(<PomodoroTimer />);
 
     expect(useSoundsStorageSync).toHaveBeenCalled();
+  });
+
+  it('drives the timer-following sounds from the tab holding the audio', () => {
+    const { soundsState } = mockStores({
+      musicAutoStart: true,
+      activeSource: 'youtube',
+      isSoundsLeader: true,
+      status: 'running',
+    });
+
+    const { unmount } = render(<PomodoroTimer />);
+    expect(soundsState.resume).toHaveBeenCalled();
+    unmount();
+
+    expect(soundsState.stop).toHaveBeenCalled();
+  });
+
+  it('leaves them alone in a second tab, which would stop audio it never started', () => {
+    const { soundsState } = mockStores({
+      musicAutoStart: true,
+      activeSource: 'youtube',
+      isSoundsLeader: false,
+      status: 'running',
+    });
+
+    const { unmount } = render(<PomodoroTimer />);
+    unmount();
+
+    expect(soundsState.resume).not.toHaveBeenCalled();
+    expect(soundsState.stop).not.toHaveBeenCalled();
   });
 
   it('opens the dropdown from the header and lists only incomplete goals', async () => {

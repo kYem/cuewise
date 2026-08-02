@@ -1,5 +1,12 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { decidePlayerErrorAction, isAllowedMessageOrigin, youtubePlayer } from './youtube-player';
+
+/** Asserted rather than narrowed with `?.`, so a missing frame fails here and not downstream. */
+function currentIframe(): HTMLIFrameElement {
+  const iframe = document.querySelector('#youtube-player-iframe');
+  expect(iframe).toBeInstanceOf(HTMLIFrameElement);
+  return iframe as HTMLIFrameElement;
+}
 
 describe('the playlist a load is in flight for', () => {
   afterEach(() => {
@@ -29,11 +36,70 @@ describe('the playlist a load is in flight for', () => {
 
   it('is released when the iframe fails, so the next request retries', () => {
     youtubePlayer.loadPlaylist('PL1', 'v1');
-    const iframe = document.querySelector('#youtube-player-iframe');
-    expect(iframe).toBeInstanceOf(HTMLIFrameElement);
-    iframe?.dispatchEvent(new Event('error'));
+    currentIframe().dispatchEvent(new Event('error'));
 
     expect(youtubePlayer.getRequestedPlaylistId()).toBeNull();
+  });
+
+  it('is not released by a frame the newer load already replaced', () => {
+    youtubePlayer.loadPlaylist('PL1', 'v1');
+    const superseded = currentIframe();
+    youtubePlayer.loadPlaylist('PL2', 'v2');
+    superseded.dispatchEvent(new Event('error'));
+
+    expect(youtubePlayer.getRequestedPlaylistId()).toBe('PL2');
+  });
+
+  it('is forgotten when the player is destroyed', () => {
+    youtubePlayer.loadPlaylist('PL1', 'v1');
+    youtubePlayer.destroy();
+
+    expect(youtubePlayer.getRequestedPlaylistId()).toBeNull();
+  });
+});
+
+describe('a load that is no longer wanted', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    youtubePlayer.destroy();
+    vi.useRealTimers();
+  });
+
+  it('is not adopted when it lands after a stop', () => {
+    const onReady = vi.fn();
+    youtubePlayer.loadPlaylist('PL1', 'v1', onReady);
+    const iframe = currentIframe();
+    youtubePlayer.stop();
+    iframe.dispatchEvent(new Event('load'));
+    vi.advanceTimersByTime(2000);
+
+    expect(onReady).not.toHaveBeenCalled();
+    expect(youtubePlayer.getCurrentPlaylistId()).toBeNull();
+  });
+
+  it('is not adopted when a newer load has replaced it', () => {
+    const onReady = vi.fn();
+    youtubePlayer.loadPlaylist('PL1', 'v1', onReady);
+    const superseded = currentIframe();
+    youtubePlayer.loadPlaylist('PL2', 'v2');
+    superseded.dispatchEvent(new Event('load'));
+    vi.advanceTimersByTime(2000);
+
+    expect(onReady).not.toHaveBeenCalled();
+    expect(youtubePlayer.getCurrentPlaylistId()).toBeNull();
+  });
+
+  it('stops reporting the playlist it replaced while the new one loads', () => {
+    youtubePlayer.loadPlaylist('PL1', 'v1');
+    currentIframe().dispatchEvent(new Event('load'));
+    expect(youtubePlayer.getCurrentPlaylistId()).toBe('PL1');
+
+    youtubePlayer.loadPlaylist('PL2', 'v2');
+
+    expect(youtubePlayer.getCurrentPlaylistId()).toBeNull();
   });
 });
 

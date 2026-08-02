@@ -173,7 +173,7 @@ export const PomodoroTimer: React.FC = () => {
   // Sounds leader election - only one tab plays YouTube audio
   useSoundsLeader();
 
-  // Mounted with the election: a non-leader tab only writes state, so the leader drives playback.
+  // Must be mounted wherever the election runs, or the elected tab never hears another tab's write.
   useSoundsStorageSync();
 
   // Initialize on mount
@@ -194,8 +194,8 @@ export const PomodoroTimer: React.FC = () => {
       return;
     }
 
-    // These follow this tab's lifecycle, not the user, and they now travel to whichever tab holds
-    // the audio — so from a second tab they'd stop music it never started.
+    // The resume/pause/stop below follow this tab's lifecycle rather than the user, and they reach
+    // whichever tab holds the audio — so only the tab that owns it may drive them.
     if (!isSoundsLeader) {
       return;
     }

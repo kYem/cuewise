@@ -215,7 +215,11 @@ class YouTubePlayerService {
       this.initialize();
     }
 
+    // The pair moves together: what is mounted is nothing until this load lands, and leaving the
+    // old playlist standing as "current" makes a switch back to it look already satisfied.
     this.state.requestedPlaylistId = playlistId;
+    this.state.currentPlaylistId = null;
+    this.state.isReady = false;
 
     // Remove existing iframe if any
     if (this.iframe) {
@@ -258,6 +262,13 @@ class YouTubePlayerService {
 
     // Handle iframe load
     this.iframe.onload = () => {
+      // A stop, or a newer load, has moved on since — this frame's result is no longer wanted, and
+      // adopting it would start audio nobody asked for.
+      if (this.state.requestedPlaylistId !== playlistId) {
+        logger.debug('Ignoring a load that was superseded', { playlistId });
+        return;
+      }
+
       this.state.isReady = true;
       this.state.currentPlaylistId = playlistId;
       this.state.currentVideoId = firstVideoId;
@@ -284,8 +295,10 @@ class YouTubePlayerService {
 
     // Handle iframe errors
     this.iframe.onerror = (error) => {
-      // Released so the next request retries instead of being taken for one already in flight.
-      this.state.requestedPlaylistId = null;
+      // Only its own: a superseded frame erroring must not release the load that replaced it.
+      if (this.state.requestedPlaylistId === playlistId) {
+        this.state.requestedPlaylistId = null;
+      }
       logger.error('YouTube iframe failed to load', { playlistId, error });
     };
 
@@ -662,7 +675,7 @@ class YouTubePlayerService {
     return this.state.currentPlaylistId;
   }
 
-  /** The playlist a load is in flight for, which getCurrentPlaylistId only reports once it lands. */
+  /** The playlist last asked for; getCurrentPlaylistId lags it until that load lands. */
   getRequestedPlaylistId(): string | null {
     return this.state.requestedPlaylistId;
   }

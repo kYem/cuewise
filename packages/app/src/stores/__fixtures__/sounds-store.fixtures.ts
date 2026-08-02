@@ -1,5 +1,5 @@
 import { DEFAULT_YOUTUBE_PLAYLISTS } from '@cuewise/shared';
-import { vi } from 'vitest';
+import { type Mock, vi } from 'vitest';
 import { youtubePlayer } from '../../services/youtube-player';
 import { useSoundsStore } from '../sounds-store';
 
@@ -8,16 +8,14 @@ const [firstPlaylist] = DEFAULT_YOUTUBE_PLAYLISTS;
 export const leaderPlaylist = firstPlaylist;
 
 export interface StubbedPlayer {
-  loadPlaylist: ReturnType<typeof vi.spyOn>;
-  play: ReturnType<typeof vi.spyOn>;
-  stop: ReturnType<typeof vi.spyOn>;
-  pause: ReturnType<typeof vi.spyOn>;
-  /** Land the in-flight load, as the real iframe's onload does. */
-  finishLoad: () => void;
+  loadPlaylist: Mock<typeof youtubePlayer.loadPlaylist>;
+  play: Mock<typeof youtubePlayer.play>;
+  stop: Mock<typeof youtubePlayer.stop>;
+  pause: Mock<typeof youtubePlayer.pause>;
 }
 
 export interface StubPlayerOptions {
-  /** The playlist the player already has loaded, as getCurrentPlaylistId reports it. */
+  /** A playlist already landed, so both the requested and the current id answer with it. */
   loaded?: string | null;
   playing?: boolean;
 }
@@ -30,31 +28,32 @@ export function stubYoutubePlayer(options: StubPlayerOptions = {}): StubbedPlaye
   const { loaded = null, playing = false } = options;
   let current = loaded;
   let requested = loaded;
+  let isPlaying = playing;
 
   vi.spyOn(youtubePlayer, 'getCurrentPlaylistId').mockImplementation(() => current);
   vi.spyOn(youtubePlayer, 'getRequestedPlaylistId').mockImplementation(() => requested);
-  vi.spyOn(youtubePlayer, 'isPlaying').mockReturnValue(playing);
-  const loadPlaylist = vi
-    .spyOn(youtubePlayer, 'loadPlaylist')
-    .mockImplementation((playlistId: string) => {
-      requested = playlistId;
-    });
-  const stop = vi.spyOn(youtubePlayer, 'stop').mockImplementation(() => {
-    requested = null;
-  });
+  vi.spyOn(youtubePlayer, 'isPlaying').mockImplementation(() => isPlaying);
 
   return {
-    loadPlaylist,
-    stop,
-    play: vi.spyOn(youtubePlayer, 'play').mockImplementation(() => {}),
-    pause: vi.spyOn(youtubePlayer, 'pause').mockImplementation(() => {}),
-    finishLoad: () => {
-      current = requested;
-    },
+    loadPlaylist: vi
+      .spyOn(youtubePlayer, 'loadPlaylist')
+      .mockImplementation((playlistId: string) => {
+        requested = playlistId;
+        current = null;
+      }),
+    play: vi.spyOn(youtubePlayer, 'play').mockImplementation(() => {
+      isPlaying = true;
+    }),
+    pause: vi.spyOn(youtubePlayer, 'pause').mockImplementation(() => {
+      isPlaying = false;
+    }),
+    stop: vi.spyOn(youtubePlayer, 'stop').mockImplementation(() => {
+      requested = null;
+      isPlaying = false;
+    }),
   };
 }
 
-/** The leader tab, holding a playlist the panel says is playing. */
 export function leaderPlayingYoutube(): void {
   useSoundsStore.setState({
     isLeader: true,

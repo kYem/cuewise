@@ -637,16 +637,20 @@ export function useSoundsStorageSync() {
         return;
       }
       // Caught here, not returned: the port's guard logs a rejection without naming what failed.
-      Promise.resolve(useSoundsStore.persist.rehydrate()).catch((error) => {
+      const rehydrated = Promise.resolve(useSoundsStore.persist.rehydrate()).catch((error) => {
         logger.error('Could not rehydrate the sounds state after a storage change', error);
       });
       if (isLeader) {
         // One pending handoff at a time: a newer state supersedes the one the last event scheduled.
         clearTimeout(handoff);
         handoff = setTimeout(() => {
-          syncLeaderPlayback().catch((error) => {
-            logger.error('Could not sync leader playback after a storage change', error);
-          });
+          // Chained, not raced: syncing reads the store, so a read slower than the delay would
+          // otherwise reconcile the player against the state this change already replaced.
+          rehydrated
+            .then(() => syncLeaderPlayback())
+            .catch((error) => {
+              logger.error('Could not sync leader playback after a storage change', error);
+            });
         }, 50);
       }
     });
@@ -666,9 +670,8 @@ async function syncLeaderPlayback() {
 
   logger.debug('Leader syncing playback state', { activeSource, isPlaying, isPaused });
 
-  // Asymmetric on purpose: playAmbient runs in whichever tab pressed it, so starting ambient here
-  // would play one sound out of two tabs — but stopping is the only way a stop pressed elsewhere
-  // reaches ambient audio this tab is emitting.
+  // Stop but never start: playAmbient already runs in the tab that pressed it, so starting here
+  // would sound the same thing twice — while stopping is what a remote stop has no other route to.
   if (activeSource !== 'ambient' || !isPlaying) {
     ambientSoundPlayer.stop();
   }
