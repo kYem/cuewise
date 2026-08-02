@@ -124,10 +124,15 @@ export const PomodoroTimer: React.FC = () => {
   );
 
   // Sounds state - use useShallow for multiple values
-  const { activeSource, isPlaying: isSoundsPlaying } = useSoundsStore(
+  const {
+    activeSource,
+    isPlaying: isSoundsPlaying,
+    isSoundsLeader,
+  } = useSoundsStore(
     useShallow((state) => ({
       activeSource: state.activeSource,
       isPlaying: state.isPlaying,
+      isSoundsLeader: state.isLeader,
     }))
   );
 
@@ -168,8 +173,7 @@ export const PomodoroTimer: React.FC = () => {
   // Sounds leader election - only one tab plays YouTube audio
   useSoundsLeader();
 
-  // Beside the election, because a non-leader tab only writes state: without this the leader
-  // never hears it and the play it shows never starts.
+  // Mounted with the election: a non-leader tab only writes state, so the leader drives playback.
   useSoundsStorageSync();
 
   // Initialize on mount
@@ -187,6 +191,12 @@ export const PomodoroTimer: React.FC = () => {
 
     // Skip if sounds feature is disabled or auto-start is off
     if (!pomodoroMusicEnabled || !pomodoroMusicAutoStart) {
+      return;
+    }
+
+    // These follow this tab's lifecycle, not the user, and they now travel to whichever tab holds
+    // the audio — so from a second tab they'd stop music it never started.
+    if (!isSoundsLeader) {
       return;
     }
 
@@ -217,6 +227,7 @@ export const PomodoroTimer: React.FC = () => {
     status,
     sessionType,
     activeSource,
+    isSoundsLeader,
     settings.pomodoroMusicEnabled,
     settings.pomodoroMusicAutoStart,
     settings.pomodoroMusicPlayDuringBreaks,

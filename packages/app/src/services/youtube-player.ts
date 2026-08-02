@@ -97,6 +97,9 @@ interface PlayerState {
   isPaused: boolean;
   isReady: boolean;
   currentPlaylistId: string | null;
+  // Set the moment a load starts; currentPlaylistId only catches up once the iframe reports in,
+  // so this is the only way a caller can tell "already loading it" from "not loaded".
+  requestedPlaylistId: string | null;
   currentVideoId: string | null;
   currentTime: number; // Current playback position in seconds
   volume: number;
@@ -150,6 +153,7 @@ class YouTubePlayerService {
     isPaused: false,
     isReady: false,
     currentPlaylistId: null,
+    requestedPlaylistId: null,
     currentVideoId: null,
     currentTime: 0,
     volume: 50,
@@ -210,6 +214,8 @@ class YouTubePlayerService {
     if (!this.container) {
       this.initialize();
     }
+
+    this.state.requestedPlaylistId = playlistId;
 
     // Remove existing iframe if any
     if (this.iframe) {
@@ -278,6 +284,8 @@ class YouTubePlayerService {
 
     // Handle iframe errors
     this.iframe.onerror = (error) => {
+      // Released so the next request retries instead of being taken for one already in flight.
+      this.state.requestedPlaylistId = null;
       logger.error('YouTube iframe failed to load', { playlistId, error });
     };
 
@@ -502,6 +510,10 @@ class YouTubePlayerService {
    * Stop playback and unload the playlist
    */
   stop(): void {
+    // Before the readiness guard: stopping abandons a load that never got there, and leaving the
+    // request standing would have the next play mistaken for that same load still in flight.
+    this.state.requestedPlaylistId = null;
+
     if (!this.state.isReady) {
       return;
     }
@@ -650,6 +662,11 @@ class YouTubePlayerService {
     return this.state.currentPlaylistId;
   }
 
+  /** The playlist a load is in flight for, which getCurrentPlaylistId only reports once it lands. */
+  getRequestedPlaylistId(): string | null {
+    return this.state.requestedPlaylistId;
+  }
+
   /**
    * Get current state
    */
@@ -734,6 +751,7 @@ class YouTubePlayerService {
       isPaused: false,
       isReady: false,
       currentPlaylistId: null,
+      requestedPlaylistId: null,
       currentVideoId: null,
       currentTime: 0,
       volume: 50,

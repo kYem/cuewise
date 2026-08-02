@@ -87,9 +87,7 @@ describe('PomodoroTimer - goal picker', () => {
     vi.clearAllMocks();
   });
 
-  it('subscribes to sounds written by another tab', () => {
-    // Without this the leader never hears a non-leader tab's play, and the panel there shows
-    // "playing" over silence. It mounts here because this is where leadership is elected.
+  it('mounts the sounds storage sync', () => {
     mockStores();
 
     render(<PomodoroTimer />);

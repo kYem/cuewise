@@ -1,5 +1,41 @@
-import { describe, expect, it } from 'vitest';
-import { decidePlayerErrorAction, isAllowedMessageOrigin } from './youtube-player';
+import { afterEach, describe, expect, it } from 'vitest';
+import { decidePlayerErrorAction, isAllowedMessageOrigin, youtubePlayer } from './youtube-player';
+
+describe('the playlist a load is in flight for', () => {
+  afterEach(() => {
+    youtubePlayer.destroy();
+  });
+
+  it('is reported the moment the load starts, before the iframe reports back', () => {
+    youtubePlayer.loadPlaylist('PL1', 'v1');
+
+    expect(youtubePlayer.getRequestedPlaylistId()).toBe('PL1');
+    expect(youtubePlayer.getCurrentPlaylistId()).toBeNull();
+  });
+
+  it('follows the newest load rather than latching on the one it replaced', () => {
+    youtubePlayer.loadPlaylist('PL1', 'v1');
+    youtubePlayer.loadPlaylist('PL2', 'v2');
+
+    expect(youtubePlayer.getRequestedPlaylistId()).toBe('PL2');
+  });
+
+  it('is released by a stop, so the next play is not taken for it still loading', () => {
+    youtubePlayer.loadPlaylist('PL1', 'v1');
+    youtubePlayer.stop();
+
+    expect(youtubePlayer.getRequestedPlaylistId()).toBeNull();
+  });
+
+  it('is released when the iframe fails, so the next request retries', () => {
+    youtubePlayer.loadPlaylist('PL1', 'v1');
+    const iframe = document.querySelector('#youtube-player-iframe');
+    expect(iframe).toBeInstanceOf(HTMLIFrameElement);
+    iframe?.dispatchEvent(new Event('error'));
+
+    expect(youtubePlayer.getRequestedPlaylistId()).toBeNull();
+  });
+});
 
 // 100 = removed, 101 & 150 = embedding disabled by the owner (per-video failures).
 describe('decidePlayerErrorAction', () => {

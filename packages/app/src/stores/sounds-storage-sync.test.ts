@@ -4,6 +4,11 @@ import { renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { youtubePlayer } from '../services/youtube-player';
 import { ambientSoundPlayer } from '../utils/ambient-sounds';
+import {
+  leaderPlayingYoutube,
+  leaderPlaylist,
+  stubYoutubePlayer,
+} from './__fixtures__/sounds-store.fixtures';
 import { echoWritesTo, fakeObservableStore } from './__fixtures__/storage-changes.fixtures';
 import { useSoundsStorageSync, useSoundsStore } from './sounds-store';
 
@@ -17,7 +22,8 @@ vi.mock('./toast-store', () => ({
 describe('useSoundsStorageSync', () => {
   afterEach(() => {
     resetPlatform();
-    useSoundsStore.setState({ isLeader: false, activeSource: 'none', isPlaying: false });
+    // Whole-slice reset: the store is a module singleton and restoreMocks does not reach it.
+    useSoundsStore.setState(useSoundsStore.getInitialState());
     vi.useRealTimers();
     // restoreMocks does not reach a bare vi.fn().
     toastError.mockClear();
@@ -172,30 +178,118 @@ describe('useSoundsStorageSync', () => {
   });
 
   it('starts the audio the leader was told about by another tab', async () => {
-    // The whole point of the hook: a non-leader tab writes state and plays nothing, so unless the
-    // leader hears the change the user gets a panel that says "playing" over silence.
     vi.useFakeTimers();
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
     vi.spyOn(useSoundsStore.persist, 'rehydrate').mockImplementation(() => {});
-    vi.spyOn(youtubePlayer, 'getCurrentPlaylistId').mockReturnValue('another-playlist');
-    const loadPlaylist = vi.spyOn(youtubePlayer, 'loadPlaylist').mockImplementation(() => {});
+    const player = stubYoutubePlayer();
     vi.spyOn(storage, 'getCurrentVideoForPlaylist').mockResolvedValue(null);
-    useSoundsStore.setState({
-      isLeader: true,
-      selectedPlaylistId: 'p1',
-      playlists: [
-        { id: 'p1', name: 'Focus', playlistId: 'PL1', firstVideoId: 'v1', isCustom: false },
-      ],
-    });
+    leaderPlayingYoutube();
     renderHook(() => useSoundsStorageSync());
 
-    // What the other tab's non-leader `playYoutube` leaves behind, then announces.
-    useSoundsStore.setState({ activeSource: 'youtube', isPlaying: true, isPaused: false });
     fake.emit(['soundsState']);
     await vi.advanceTimersByTimeAsync(50);
 
-    expect(loadPlaylist).toHaveBeenCalledWith('PL1', 'v1', expect.any(Function), 0);
+    expect(player.loadPlaylist).toHaveBeenCalledWith(
+      leaderPlaylist.playlistId,
+      leaderPlaylist.firstVideoId,
+      expect.any(Function),
+      0
+    );
+  });
+
+  it('resumes a playlist the leader already has loaded instead of loading it again', async () => {
+    vi.useFakeTimers();
+    const fake = fakeObservableStore();
+    configurePlatform({ storage: fake.store });
+    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockImplementation(() => {});
+    const player = stubYoutubePlayer({ loaded: leaderPlaylist.playlistId, playing: false });
+    leaderPlayingYoutube();
+    renderHook(() => useSoundsStorageSync());
+
+    fake.emit(['soundsState']);
+    await vi.advanceTimersByTimeAsync(50);
+
+    expect(player.play).toHaveBeenCalled();
+    expect(player.loadPlaylist).not.toHaveBeenCalled();
+  });
+
+  it('starts the audio once the load the leader began lands', async () => {
+    vi.useFakeTimers();
+    const fake = fakeObservableStore();
+    configurePlatform({ storage: fake.store });
+    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockImplementation(() => {});
+    const player = stubYoutubePlayer();
+    vi.spyOn(storage, 'getCurrentVideoForPlaylist').mockResolvedValue(null);
+    const setVolume = vi.spyOn(youtubePlayer, 'setVolume').mockImplementation(() => {});
+    leaderPlayingYoutube();
+    renderHook(() => useSoundsStorageSync());
+
+    fake.emit(['soundsState']);
+    await vi.advanceTimersByTimeAsync(50);
+    const onReady = player.loadPlaylist.mock.calls[0][2] as () => void;
+    onReady();
+
+    expect(player.play).toHaveBeenCalled();
+    expect(setVolume).toHaveBeenCalledWith(useSoundsStore.getState().youtubeVolume);
+    expect(useSoundsStore.getState().isYoutubeLoading).toBe(false);
+  });
+
+  it('stops the audio when another tab stops it', async () => {
+    vi.useFakeTimers();
+    const fake = fakeObservableStore();
+    configurePlatform({ storage: fake.store });
+    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockImplementation(() => {});
+    const player = stubYoutubePlayer({ loaded: leaderPlaylist.playlistId, playing: true });
+    leaderPlayingYoutube();
+    useSoundsStore.setState({ isPlaying: false, isPaused: false });
+    renderHook(() => useSoundsStorageSync());
+
+    fake.emit(['soundsState']);
+    await vi.advanceTimersByTimeAsync(50);
+
+    expect(player.stop).toHaveBeenCalled();
+  });
+
+  it('pauses rather than unloading when another tab pauses', async () => {
+    vi.useFakeTimers();
+    const fake = fakeObservableStore();
+    configurePlatform({ storage: fake.store });
+    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockImplementation(() => {});
+    const player = stubYoutubePlayer({ loaded: leaderPlaylist.playlistId, playing: true });
+    leaderPlayingYoutube();
+    useSoundsStore.setState({ isPlaying: false, isPaused: true });
+    renderHook(() => useSoundsStorageSync());
+
+    fake.emit(['soundsState']);
+    await vi.advanceTimersByTimeAsync(50);
+
+    expect(player.pause).toHaveBeenCalled();
+    expect(player.stop).not.toHaveBeenCalled();
+  });
+
+  it('resumes from the remembered timestamp rather than the top of the playlist', async () => {
+    vi.useFakeTimers();
+    const fake = fakeObservableStore();
+    configurePlatform({ storage: fake.store });
+    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockImplementation(() => {});
+    const player = stubYoutubePlayer();
+    vi.spyOn(storage, 'getCurrentVideoForPlaylist').mockResolvedValue({
+      videoId: 'half-watched',
+      timestamp: 137,
+    });
+    leaderPlayingYoutube();
+    renderHook(() => useSoundsStorageSync());
+
+    fake.emit(['soundsState']);
+    await vi.advanceTimersByTimeAsync(50);
+
+    expect(player.loadPlaylist).toHaveBeenCalledWith(
+      leaderPlaylist.playlistId,
+      'half-watched',
+      expect.any(Function),
+      137
+    );
   });
 
   it('loads once while the player has yet to report the playlist it is loading', async () => {
@@ -203,25 +297,21 @@ describe('useSoundsStorageSync', () => {
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
     vi.spyOn(useSoundsStore.persist, 'rehydrate').mockImplementation(() => {});
-    // currentPlaylistId is assigned in iframe.onload, so the player reports none until it lands.
-    vi.spyOn(youtubePlayer, 'getCurrentPlaylistId').mockReturnValue(null);
-    const loadPlaylist = vi.spyOn(youtubePlayer, 'loadPlaylist').mockImplementation(() => {});
+    const player = stubYoutubePlayer();
     vi.spyOn(storage, 'getCurrentVideoForPlaylist').mockResolvedValue(null);
-    useSoundsStore.setState({
-      isLeader: true,
-      selectedPlaylistId: 'p1',
-      playlists: [
-        { id: 'p1', name: 'Focus', playlistId: 'PL1', firstVideoId: 'v1', isCustom: false },
-      ],
-    });
+    leaderPlayingYoutube();
     renderHook(() => useSoundsStorageSync());
     const stopEcho = echoWritesTo(useSoundsStore, fake, 'soundsState');
 
-    useSoundsStore.setState({ activeSource: 'youtube', isPlaying: true, isPaused: false });
+    // Driven from the test, not from whatever the sync happens to write, so the re-entry this
+    // guards stays covered however that changes.
+    fake.emit(['soundsState']);
+    await vi.advanceTimersByTimeAsync(50);
+    fake.emit(['soundsState']);
     await vi.advanceTimersByTimeAsync(500);
     stopEcho();
 
-    expect(loadPlaylist).toHaveBeenCalledTimes(1);
+    expect(player.loadPlaylist).toHaveBeenCalledTimes(1);
   });
 
   it('leaves ambient playback to the tab that started it', async () => {
@@ -230,7 +320,8 @@ describe('useSoundsStorageSync', () => {
     configurePlatform({ storage: fake.store });
     vi.spyOn(useSoundsStore.persist, 'rehydrate').mockImplementation(() => {});
     const playAmbient = vi.spyOn(ambientSoundPlayer, 'play').mockImplementation(() => {});
-    const stopYoutube = vi.spyOn(youtubePlayer, 'stop').mockImplementation(() => {});
+    const stopAmbient = vi.spyOn(ambientSoundPlayer, 'stop').mockImplementation(() => {});
+    stubYoutubePlayer();
     useSoundsStore.setState({
       isLeader: true,
       activeSource: 'ambient',
@@ -243,6 +334,27 @@ describe('useSoundsStorageSync', () => {
     await vi.advanceTimersByTimeAsync(50);
 
     expect(playAmbient).not.toHaveBeenCalled();
-    expect(stopYoutube).toHaveBeenCalled();
+    expect(stopAmbient).not.toHaveBeenCalled();
+  });
+
+  it('silences its own ambient when another tab stops it', async () => {
+    vi.useFakeTimers();
+    const fake = fakeObservableStore();
+    configurePlatform({ storage: fake.store });
+    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockImplementation(() => {});
+    const stopAmbient = vi.spyOn(ambientSoundPlayer, 'stop').mockImplementation(() => {});
+    stubYoutubePlayer();
+    useSoundsStore.setState({
+      isLeader: true,
+      activeSource: 'ambient',
+      selectedAmbientSound: 'rain',
+      isPlaying: false,
+    });
+    renderHook(() => useSoundsStorageSync());
+
+    fake.emit(['soundsState']);
+    await vi.advanceTimersByTimeAsync(50);
+
+    expect(stopAmbient).toHaveBeenCalled();
   });
 });
