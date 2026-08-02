@@ -219,7 +219,8 @@ export const useSoundsStore = create<SoundsStore>()(
                   playlist.playlistId,
                   videoId,
                   finishYoutubeLoad,
-                  startAt
+                  startAt,
+                  failYoutubeLoad
                 );
               });
             }
@@ -326,7 +327,13 @@ export const useSoundsStore = create<SoundsStore>()(
               activeTab: 'nowPlaying',
             });
 
-            youtubePlayer.loadPlaylist(playlist.playlistId, videoId, finishYoutubeLoad, startAt);
+            youtubePlayer.loadPlaylist(
+              playlist.playlistId,
+              videoId,
+              finishYoutubeLoad,
+              startAt,
+              failYoutubeLoad
+            );
           } else {
             // Same playlist, just seek and play
             set({
@@ -458,7 +465,13 @@ export const useSoundsStore = create<SoundsStore>()(
           const resumeInfo = await getCurrentVideoForPlaylist(playlist.playlistId);
           const videoId = resumeInfo?.videoId || playlist.firstVideoId;
           const startAt = resumeInfo?.timestamp || 0;
-          youtubePlayer.loadPlaylist(playlist.playlistId, videoId, finishYoutubeLoad, startAt);
+          youtubePlayer.loadPlaylist(
+            playlist.playlistId,
+            videoId,
+            finishYoutubeLoad,
+            startAt,
+            failYoutubeLoad
+          );
         }
 
         logger.debug('Playlist selected', { playlistId, name: playlist.name });
@@ -693,6 +706,15 @@ function silenceAmbientUnlessWanted(): void {
   }
 }
 
+/**
+ * The audio is not coming, so the panel must stop claiming it — left as-is it renders its
+ * "playing" indicator, and its spinner, over silence.
+ */
+function failYoutubeLoad(): void {
+  useSoundsStore.setState({ isYoutubeLoading: false, isPlaying: false, isPaused: false });
+  useToastStore.getState().error('Could not start the playlist. Press play to try again.');
+}
+
 /** The load landed, but a stop, a pause or a switch of source since is what should win. */
 function finishYoutubeLoad(): void {
   // Read now rather than captured when the load began — the volume may have been dragged since.
@@ -734,20 +756,17 @@ async function syncLeaderPlayback() {
             const resumeInfo = await getCurrentVideoForPlaylist(playlist.playlistId);
             const videoId = resumeInfo?.videoId || playlist.firstVideoId;
             const startAt = resumeInfo?.timestamp || 0;
-            youtubePlayer.loadPlaylist(playlist.playlistId, videoId, finishYoutubeLoad, startAt);
+            youtubePlayer.loadPlaylist(
+              playlist.playlistId,
+              videoId,
+              finishYoutubeLoad,
+              startAt,
+              failYoutubeLoad
+            );
           } catch (error) {
             // Logged first: a throw from the recovery below would otherwise replace this cause.
             logger.error('Could not load the playlist for leader playback', error);
-            // That callback is what starts playback, so nothing is playing — and left as-is the
-            // panel renders its "playing" indicator over silence.
-            useSoundsStore.setState({
-              isYoutubeLoading: false,
-              isPlaying: false,
-              isPaused: false,
-            });
-            useToastStore
-              .getState()
-              .error('Could not start the playlist. Press play to try again.');
+            failYoutubeLoad();
             throw error;
           }
         } else if (!youtubePlayer.isPlaying()) {

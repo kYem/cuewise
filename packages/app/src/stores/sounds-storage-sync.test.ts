@@ -185,7 +185,8 @@ describe('useSoundsStorageSync', () => {
       leaderPlaylist.playlistId,
       leaderPlaylist.firstVideoId,
       expect.any(Function),
-      0
+      0,
+      expect.any(Function)
     );
   });
 
@@ -280,7 +281,8 @@ describe('useSoundsStorageSync', () => {
       leaderPlaylist.playlistId,
       'half-watched',
       expect.any(Function),
-      137
+      137,
+      expect.any(Function)
     );
   });
 
@@ -391,6 +393,28 @@ describe('useSoundsStorageSync', () => {
 
     expect(player.play).not.toHaveBeenCalled();
     expect(useSoundsStore.getState().isYoutubeLoading).toBe(false);
+  });
+
+  it('stops claiming playback when the load it started never arrives', async () => {
+    vi.useFakeTimers();
+    const fake = fakeObservableStore();
+    configurePlatform({ storage: fake.store });
+    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockImplementation(() => {});
+    const player = stubYoutubePlayer();
+    vi.spyOn(storage, 'getCurrentVideoForPlaylist').mockResolvedValue(null);
+    leaderPlayingYoutube();
+    renderHook(() => useSoundsStorageSync());
+
+    fake.emit(['soundsState']);
+    await vi.advanceTimersByTimeAsync(50);
+    const onFailed = player.loadPlaylist.mock.calls[0][4];
+    onFailed?.();
+
+    expect(useSoundsStore.getState().isYoutubeLoading).toBe(false);
+    expect(useSoundsStore.getState().isPlaying).toBe(false);
+    expect(toastError).toHaveBeenCalledWith(
+      expect.stringContaining('Could not start the playlist')
+    );
   });
 
   it('does not start a load the user moved off youtube while it was still landing', async () => {

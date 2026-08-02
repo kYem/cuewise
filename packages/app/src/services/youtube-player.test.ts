@@ -58,6 +58,64 @@ describe('the playlist a load is in flight for', () => {
   });
 });
 
+describe('a load that never arrives', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    youtubePlayer.destroy();
+    vi.useRealTimers();
+  });
+
+  it('is given up on, so the next request for it is not taken for this one', () => {
+    const onFailed = vi.fn();
+    youtubePlayer.loadPlaylist('PL1', 'v1', undefined, 0, onFailed);
+    vi.advanceTimersByTime(60_000);
+
+    expect(onFailed).toHaveBeenCalled();
+    expect(youtubePlayer.getRequestedPlaylistId()).toBeNull();
+  });
+
+  it('is reported the moment the frame errors, without waiting out the timeout', () => {
+    const onFailed = vi.fn();
+    youtubePlayer.loadPlaylist('PL1', 'v1', undefined, 0, onFailed);
+    currentIframe().dispatchEvent(new Event('error'));
+
+    expect(onFailed).toHaveBeenCalled();
+    expect(youtubePlayer.getRequestedPlaylistId()).toBeNull();
+  });
+
+  it('is not given up on once it has arrived', () => {
+    const onFailed = vi.fn();
+    youtubePlayer.loadPlaylist('PL1', 'v1', undefined, 0, onFailed);
+    currentIframe().dispatchEvent(new Event('load'));
+    vi.advanceTimersByTime(60_000);
+
+    expect(onFailed).not.toHaveBeenCalled();
+  });
+
+  it('is not given up on after a stop already abandoned it', () => {
+    const onFailed = vi.fn();
+    youtubePlayer.loadPlaylist('PL1', 'v1', undefined, 0, onFailed);
+    youtubePlayer.stop();
+    vi.advanceTimersByTime(60_000);
+
+    expect(onFailed).not.toHaveBeenCalled();
+  });
+
+  it('reports only the load still wanted when a newer one replaced it', () => {
+    const failedFirst = vi.fn();
+    const failedSecond = vi.fn();
+    youtubePlayer.loadPlaylist('PL1', 'v1', undefined, 0, failedFirst);
+    youtubePlayer.loadPlaylist('PL2', 'v2', undefined, 0, failedSecond);
+    vi.advanceTimersByTime(60_000);
+
+    expect(failedFirst).not.toHaveBeenCalled();
+    expect(failedSecond).toHaveBeenCalled();
+  });
+});
+
 describe('a load that is no longer wanted', () => {
   beforeEach(() => {
     vi.useFakeTimers();

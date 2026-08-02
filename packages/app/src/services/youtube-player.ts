@@ -113,6 +113,11 @@ const RECOVERABLE_ERROR_CODES = new Set([100, 101, 150]);
 // playlist doesn't churn forever.
 const MAX_CONSECUTIVE_SKIPS = 5;
 
+// A framed navigation that is blocked or hangs reports neither load nor error, so without a bound
+// the request stays claimed and every later one for that playlist is taken for it still arriving.
+// Generous against a slow connection: the load itself is followed by a 1s settling delay.
+const LOAD_TIMEOUT_MS = 20_000;
+
 export type PlayerErrorAction = 'skip' | 'give-up' | 'notify';
 
 // Single source of truth for the player origin — overridable at build time
@@ -163,6 +168,7 @@ class YouTubePlayerService {
   private timeTrackingInterval: ReturnType<typeof setInterval> | null = null;
   private onTimeUpdateCallbacks: Array<(videoId: string, time: number) => void> = [];
   private lastTimeUpdateNotification = 0; // Timestamp of last callback notification
+  private loadWatchdog: ReturnType<typeof setTimeout> | null = null;
   private consecutiveErrors = 0; // consecutive playback errors, for bounded auto-skip
 
   /**
@@ -204,22 +210,30 @@ class YouTubePlayerService {
    * @param firstVideoId - First video ID in the playlist (required for proper embedding)
    * @param onReady - Optional callback when playlist is loaded and ready
    * @param startAt - Optional start time in seconds (for resuming from saved position)
+   * @param onFailed - Optional callback when the load errors or never arrives
    */
   loadPlaylist(
     playlistId: string,
     firstVideoId: string,
     onReady?: () => void,
-    startAt?: number
+    startAt?: number,
+    onFailed?: () => void
   ): void {
     if (!this.container) {
       this.initialize();
     }
+
+    this.clearLoadWatchdog();
 
     // All three move together: no usable player exists until this load lands, and leaving the old
     // playlist standing as "current" makes a switch back to it look already satisfied.
     this.state.requestedPlaylistId = playlistId;
     this.state.currentPlaylistId = null;
     this.state.isReady = false;
+
+    this.loadWatchdog = setTimeout(() => {
+      this.failLoad(playlistId, 'it never reported back', onFailed);
+    }, LOAD_TIMEOUT_MS);
 
     // Remove existing iframe if any
     if (this.iframe) {
@@ -289,6 +303,7 @@ class YouTubePlayerService {
           return;
         }
 
+        this.clearLoadWatchdog();
         this.setVolume(this.state.volume);
         // Call onReady callback after volume is set
         if (onReady) {
@@ -302,15 +317,31 @@ class YouTubePlayerService {
 
     // Handle iframe errors
     this.iframe.onerror = (error) => {
-      // Only its own: a superseded frame erroring must not release the load that replaced it.
-      if (this.state.requestedPlaylistId === playlistId) {
-        this.state.requestedPlaylistId = null;
-      }
-      logger.error('YouTube iframe failed to load', { playlistId, error });
+      logger.debug('YouTube iframe error event', { playlistId, error });
+      this.failLoad(playlistId, 'the frame reported an error', onFailed);
     };
 
     this.container?.appendChild(this.iframe);
     logger.info('Loading YouTube playlist', { playlistId, embedUrl });
+  }
+
+  private clearLoadWatchdog(): void {
+    if (this.loadWatchdog !== null) {
+      clearTimeout(this.loadWatchdog);
+      this.loadWatchdog = null;
+    }
+  }
+
+  /** Only its own: a superseded frame failing must not release the load that replaced it. */
+  private failLoad(playlistId: string, reason: string, onFailed?: () => void): void {
+    if (this.state.requestedPlaylistId !== playlistId) {
+      return;
+    }
+
+    this.clearLoadWatchdog();
+    this.state.requestedPlaylistId = null;
+    logger.error('Could not load the YouTube playlist', { playlistId, reason });
+    onFailed?.();
   }
 
   /**
@@ -533,6 +564,7 @@ class YouTubePlayerService {
     // Before the readiness guard: stopping abandons a load that never got there, and leaving the
     // request standing would have the next play mistaken for that same load still in flight.
     this.state.requestedPlaylistId = null;
+    this.clearLoadWatchdog();
 
     if (!this.state.isReady) {
       return;
@@ -750,6 +782,7 @@ class YouTubePlayerService {
   destroy(): void {
     // Stop time tracking
     this.stopTimeTracking();
+    this.clearLoadWatchdog();
 
     if (this.messageHandler) {
       window.removeEventListener('message', this.messageHandler);
