@@ -20,7 +20,7 @@ import { useFocusModeStore } from '../stores/focus-mode-store';
 import { useGoalStore } from '../stores/goal-store';
 import { usePomodoroStorageSync, usePomodoroStore } from '../stores/pomodoro-store';
 import { useSettingsStore } from '../stores/settings-store';
-import { useSoundsStore } from '../stores/sounds-store';
+import { useSoundsStorageSync, useSoundsStore } from '../stores/sounds-store';
 import { getSessionLabel, getSessionStyles } from '../utils/pomodoro-styles';
 import { PomodoroMiniSettings } from './PomodoroMiniSettings';
 import { PomodoroPipButton } from './PomodoroPipButton';
@@ -167,6 +167,10 @@ export const PomodoroTimer: React.FC = () => {
 
   // Sounds leader election - only one tab plays YouTube audio
   useSoundsLeader();
+
+  // Beside the election, because a non-leader tab only writes state: without this the leader
+  // never hears it and the play it shows never starts.
+  useSoundsStorageSync();
 
   // Initialize on mount
   useEffect(() => {

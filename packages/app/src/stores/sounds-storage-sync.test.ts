@@ -169,4 +169,31 @@ describe('useSoundsStorageSync', () => {
     );
     expect(loadPlaylist).toHaveBeenCalled();
   });
+
+  it('starts the audio the leader was told about by another tab', async () => {
+    // The whole point of the hook: a non-leader tab writes state and plays nothing, so unless the
+    // leader hears the change the user gets a panel that says "playing" over silence.
+    vi.useFakeTimers();
+    const fake = fakeObservableStore();
+    configurePlatform({ storage: fake.store });
+    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockImplementation(() => {});
+    vi.spyOn(youtubePlayer, 'getCurrentPlaylistId').mockReturnValue('another-playlist');
+    const loadPlaylist = vi.spyOn(youtubePlayer, 'loadPlaylist').mockImplementation(() => {});
+    vi.spyOn(storage, 'getCurrentVideoForPlaylist').mockResolvedValue(null);
+    useSoundsStore.setState({
+      isLeader: true,
+      selectedPlaylistId: 'p1',
+      playlists: [
+        { id: 'p1', name: 'Focus', playlistId: 'PL1', firstVideoId: 'v1', isCustom: false },
+      ],
+    });
+    renderHook(() => useSoundsStorageSync());
+
+    // What the other tab's non-leader `playYoutube` leaves behind, then announces.
+    useSoundsStore.setState({ activeSource: 'youtube', isPlaying: true, isPaused: false });
+    fake.emit(['soundsState']);
+    await vi.advanceTimersByTimeAsync(50);
+
+    expect(loadPlaylist).toHaveBeenCalledWith('PL1', 'v1', expect.any(Function), 0);
+  });
 });

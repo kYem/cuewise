@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { useGoalStore } from '../stores/goal-store';
 import { usePomodoroStore } from '../stores/pomodoro-store';
 import { useSettingsStore } from '../stores/settings-store';
-import { useSoundsStore } from '../stores/sounds-store';
+import { useSoundsStorageSync, useSoundsStore } from '../stores/sounds-store';
 import { PomodoroTimer } from './PomodoroTimer';
 
 // The timer pulls from five stores plus leader/sync hooks; stub them all so the
@@ -18,7 +18,10 @@ vi.mock('../stores/pomodoro-store', () => ({
 }));
 vi.mock('../stores/goal-store', () => ({ useGoalStore: vi.fn() }));
 vi.mock('../stores/settings-store', () => ({ useSettingsStore: vi.fn() }));
-vi.mock('../stores/sounds-store', () => ({ useSoundsStore: vi.fn() }));
+vi.mock('../stores/sounds-store', () => ({
+  useSoundsStore: vi.fn(),
+  useSoundsStorageSync: vi.fn(),
+}));
 vi.mock('../stores/focus-mode-store', () => ({
   useFocusModeStore: Object.assign(vi.fn(), { getState: () => ({ enterFocusMode: vi.fn() }) }),
 }));
@@ -82,6 +85,16 @@ function mockStores(options: MockOptions = {}) {
 describe('PomodoroTimer - goal picker', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('subscribes to sounds written by another tab', () => {
+    // Without this the leader never hears a non-leader tab's play, and the panel there shows
+    // "playing" over silence. It mounts here because this is where leadership is elected.
+    mockStores();
+
+    render(<PomodoroTimer />);
+
+    expect(useSoundsStorageSync).toHaveBeenCalled();
   });
 
   it('opens the dropdown from the header and lists only incomplete goals', async () => {
