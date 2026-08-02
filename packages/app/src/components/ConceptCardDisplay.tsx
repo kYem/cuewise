@@ -21,7 +21,8 @@ const GRADE_ACCENT: Record<ConceptGrade, string> = {
   easy: 'border-primary-600/50 hover:bg-primary-600/10',
 };
 
-const GRADE_KEYS = ['1', '2', '3'];
+// Derived, so a fourth grade gets a key rather than becoming silently unreachable.
+const GRADE_KEYS = CONCEPT_GRADES.map((_, index) => String(index + 1));
 
 interface ConceptCardDisplayProps {
   card: ConceptCard;
@@ -62,7 +63,7 @@ export const ConceptCardDisplay: React.FC<ConceptCardDisplayProps> = ({
     }
     const handleKey = (e: KeyboardEvent) => {
       const index = GRADE_KEYS.indexOf(e.key);
-      if (index === -1 || index >= CONCEPT_GRADES.length || !isShortcutKeyEvent(e)) {
+      if (index === -1 || !isShortcutKeyEvent(e)) {
         return;
       }
       e.preventDefault();
