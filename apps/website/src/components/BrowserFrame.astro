@@ -1,5 +1,5 @@
 ---
-import { getImage } from 'astro:assets';
+import { Image } from 'astro:assets';
 import type { ImageMetadata } from 'astro';
 
 interface Props {
@@ -8,8 +8,12 @@ interface Props {
   label: string;
 }
 
+// The frame is half of the 1180px wrap minus the 56px gap above 900px, and full
+// width below it — so no viewport ever renders the 1826px source at 1x.
+const WIDTHS = [420, 560, 780, 1080, 1440];
+const SIZES = '(max-width: 900px) calc(100vw - 48px), 538px';
+
 const { src, alt, label } = Astro.props;
-const opt = await getImage({ src, format: 'webp' });
 ---
 
 <div class="browser">
@@ -17,5 +21,5 @@ const opt = await getImage({ src, format: 'webp' });
     <div class="dots"><span class="r"></span><span class="y"></span><span class="g"></span></div>
     <div class="url">{label}</div>
   </div>
-  <img src={opt.src} alt={alt} loading="lazy" />
+  <Image src={src} alt={alt} widths={WIDTHS} sizes={SIZES} format="webp" loading="lazy" />
 </div>
