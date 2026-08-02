@@ -11,6 +11,14 @@ describe('WelcomeModal', () => {
     expect(screen.getByText('Your personal productivity companion')).toBeInTheDocument();
   });
 
+  it('declares itself a modal dialog, which is what silences page shortcuts behind it', () => {
+    // isShortcutKeyEvent looks for [role="dialog"][aria-modal="true"], so without these the C
+    // shortcut swaps the quote slot on the page a first-run user cannot see.
+    render(<WelcomeModal isOpen={true} onClose={vi.fn()} />);
+
+    expect(screen.getByRole('dialog')).toHaveAttribute('aria-modal', 'true');
+  });
+
   it('should not render when isOpen is false', () => {
     render(<WelcomeModal isOpen={false} onClose={vi.fn()} />);
 

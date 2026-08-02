@@ -1,3 +1,4 @@
+import { CONCEPT_GRADES } from '@cuewise/shared';
 import { conceptCardFactory } from '@cuewise/test-utils/factories';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
@@ -55,6 +56,17 @@ describe('ConceptCardDisplay', () => {
     fireEvent.click(screen.getByRole('button', { name: /good/i }));
 
     expect(onGrade).toHaveBeenCalledWith('good');
+  });
+
+  it('binds a key to every grade, so adding one cannot leave it unreachable', () => {
+    // Fails the moment the key list stops being derived from CONCEPT_GRADES.
+    const onGrade = vi.fn();
+    renderCard({ activeRecall: false, onGrade });
+
+    for (const [index, grade] of CONCEPT_GRADES.entries()) {
+      fireEvent.keyDown(document.body, { key: String(index + 1) });
+      expect(onGrade).toHaveBeenCalledWith(grade.id);
+    }
   });
 
   it('grades with the 1/2/3 keys once the answer is revealed', () => {

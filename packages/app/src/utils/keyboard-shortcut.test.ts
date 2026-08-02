@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { isShortcutKeyEvent } from './keyboard-shortcut';
 
-function press(options: { on?: HTMLElement; metaKey?: boolean } = {}): boolean {
+function press(options: { on?: HTMLElement; metaKey?: boolean; repeat?: boolean } = {}): boolean {
   const target = options.on ?? document.body;
   let allowed = false;
   const handler = (event: KeyboardEvent) => {
@@ -9,7 +9,12 @@ function press(options: { on?: HTMLElement; metaKey?: boolean } = {}): boolean {
   };
   document.addEventListener('keydown', handler);
   target.dispatchEvent(
-    new KeyboardEvent('keydown', { key: 'c', bubbles: true, metaKey: options.metaKey })
+    new KeyboardEvent('keydown', {
+      key: 'c',
+      bubbles: true,
+      metaKey: options.metaKey,
+      repeat: options.repeat,
+    })
   );
   document.removeEventListener('keydown', handler);
   return allowed;
@@ -26,6 +31,10 @@ describe('isShortcutKeyEvent', () => {
 
   it('rejects a modifier combo', () => {
     expect(press({ metaKey: true })).toBe(false);
+  });
+
+  it('rejects an auto-repeat, which the OS emits tens of times a second', () => {
+    expect(press({ repeat: true })).toBe(false);
   });
 
   it('rejects keypresses aimed at a text field', () => {
