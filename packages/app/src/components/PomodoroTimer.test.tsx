@@ -36,6 +36,8 @@ interface MockOptions {
   setSelectedGoal?: Mock;
   activeSource?: 'none' | 'ambient' | 'youtube';
   isSoundsLeader?: boolean;
+  /** Passed in when a test re-mocks across a rerender and needs the same spies to survive it. */
+  soundsActions?: { pause: Mock; resume: Mock; stop: Mock };
   /** The shared settings fixture disables music, which short-circuits the timer's sounds effect. */
   music?: boolean;
 }
@@ -65,13 +67,12 @@ function mockStores(options: MockOptions = {}) {
     reloadSettings,
   };
   const goalState = { todayTasks: options.todayTasks ?? [], initialize: vi.fn() };
+  const soundsActions = options.soundsActions ?? { pause: vi.fn(), resume: vi.fn(), stop: vi.fn() };
   const soundsState = {
     activeSource: options.activeSource ?? 'none',
     isPlaying: false,
     isLeader: options.isSoundsLeader ?? false,
-    pause: vi.fn(),
-    resume: vi.fn(),
-    stop: vi.fn(),
+    ...soundsActions,
     initialize: vi.fn(),
     getActiveSourceName: vi.fn(() => ''),
   };
@@ -112,11 +113,44 @@ describe('PomodoroTimer - sounds', () => {
       status: 'running',
     });
 
-    const { unmount } = render(<PomodoroTimer />);
+    render(<PomodoroTimer />);
+
     expect(soundsState.resume).toHaveBeenCalled();
+  });
+
+  it('stops them when the tab holding the audio goes away', () => {
+    const { soundsState } = mockStores({
+      music: true,
+      activeSource: 'youtube',
+      isSoundsLeader: true,
+      status: 'running',
+    });
+
+    const { unmount } = render(<PomodoroTimer />);
     unmount();
 
     expect(soundsState.stop).toHaveBeenCalled();
+  });
+
+  it('takes them over once this tab wins the election', () => {
+    // Leadership is won asynchronously, so every tab's first render is a non-leader render — the
+    // effect has to re-run on the flip or no tab ever drives sounds.
+    const soundsActions = { pause: vi.fn(), resume: vi.fn(), stop: vi.fn() };
+    const playing = {
+      music: true,
+      activeSource: 'youtube',
+      isSoundsLeader: false,
+      status: 'running',
+      soundsActions,
+    } as const;
+    mockStores(playing);
+    const { rerender } = render(<PomodoroTimer />);
+    expect(soundsActions.resume).not.toHaveBeenCalled();
+
+    mockStores({ ...playing, isSoundsLeader: true });
+    rerender(<PomodoroTimer />);
+
+    expect(soundsActions.resume).toHaveBeenCalled();
   });
 
   it('pauses them when the timer pauses', () => {

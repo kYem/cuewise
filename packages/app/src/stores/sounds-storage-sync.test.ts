@@ -51,7 +51,7 @@ describe('useSoundsStorageSync', () => {
     expect(rehydrate).not.toHaveBeenCalled();
   });
 
-  it('leaves playback alone in a tab that is not the leader', () => {
+  it('schedules no youtube handoff in a tab that is not the leader', () => {
     vi.useFakeTimers();
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });

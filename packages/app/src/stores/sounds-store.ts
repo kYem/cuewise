@@ -655,6 +655,29 @@ export function useSoundsStorageSync() {
 }
 
 /**
+ * Custom playlists are built per tab and never persisted, so one added in another tab is unknown
+ * here until they are re-read — and the request for it would otherwise be dropped in silence.
+ */
+async function findPlaylist(
+  playlists: YoutubePlaylist[],
+  selectedPlaylistId: string
+): Promise<YoutubePlaylist | undefined> {
+  const known = playlists.find((p) => p.id === selectedPlaylistId);
+  if (known) {
+    return known;
+  }
+
+  const refreshed = [...DEFAULT_YOUTUBE_PLAYLISTS, ...(await getCustomYoutubePlaylists())];
+  useSoundsStore.setState({ playlists: refreshed });
+
+  const found = refreshed.find((p) => p.id === selectedPlaylistId);
+  if (!found) {
+    logger.warn('Another tab asked for a playlist this one cannot find', { selectedPlaylistId });
+  }
+  return found;
+}
+
+/**
  * Stop but never start: playAmbient already runs in the tab that pressed it, so starting here
  * would sound the same thing twice — while stopping is what a remote stop has no other route to.
  */
@@ -672,8 +695,8 @@ function silenceAmbientUnlessWanted(): void {
 
 /** The load landed, but a stop, a pause or a switch of source since is what should win. */
 function finishYoutubeLoad(): void {
-  // Read now rather than captured when the load began: isPlaying covers both sources, and the
-  // volume may have been dragged while the iframe was still loading.
+  // Read now rather than captured when the load began — the volume may have been dragged since.
+  // activeSource is checked too because isPlaying is true for ambient as well.
   const { isPlaying, activeSource, youtubeVolume } = useSoundsStore.getState();
   useSoundsStore.setState({ isYoutubeLoading: false });
 
@@ -696,7 +719,7 @@ async function syncLeaderPlayback() {
 
   if (activeSource === 'youtube') {
     if (isPlaying) {
-      const playlist = playlists.find((p) => p.id === selectedPlaylistId);
+      const playlist = await findPlaylist(playlists, selectedPlaylistId);
       if (playlist?.firstVideoId) {
         const currentPlaylistId = youtubePlayer.getCurrentPlaylistId();
         if (currentPlaylistId !== playlist.playlistId) {
@@ -746,7 +769,7 @@ async function syncLeaderPlayback() {
   }
 }
 
-/** A stop drops the pending load with its callback, so the spinner is the sync's to clear. */
+/** Nothing here is going to start playing, so the panel should not still be promising it. */
 function abandonYoutubeLoad(): void {
   if (useSoundsStore.getState().isYoutubeLoading) {
     useSoundsStore.setState({ isYoutubeLoading: false });

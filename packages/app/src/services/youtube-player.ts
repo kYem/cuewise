@@ -215,7 +215,7 @@ class YouTubePlayerService {
       this.initialize();
     }
 
-    // All three move together: nothing is mounted until this load lands, and leaving the old
+    // All three move together: no usable player exists until this load lands, and leaving the old
     // playlist standing as "current" makes a switch back to it look already satisfied.
     this.state.requestedPlaylistId = playlistId;
     this.state.currentPlaylistId = null;

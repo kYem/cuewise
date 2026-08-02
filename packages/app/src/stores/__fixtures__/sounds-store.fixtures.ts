@@ -36,8 +36,8 @@ export function stubYoutubePlayer(options: StubPlayerOptions = {}): StubbedPlaye
   vi.spyOn(youtubePlayer, 'getRequestedPlaylistId').mockImplementation(() => requested);
   vi.spyOn(youtubePlayer, 'isPlaying').mockImplementation(() => isPlaying);
 
-  // The real play/pause/stop all return early until a load has landed, so a stub that always
-  // acted would let a test assert playback the player would have refused.
+  // The real play and pause return early until a load has landed, so a stub that always acted
+  // would let a test assert playback the player would have refused.
   const isReady = () => current !== null;
 
   return {
