@@ -331,9 +331,12 @@ h1.hero-title {
   width: 12px;
   height: 12px;
 }
+/* height:auto is load-bearing — the intrinsic width/height attributes reserve
+   the right box before load, and without it the height attribute wins. */
 .browser img {
   display: block;
   width: 100%;
+  height: auto;
 }
 
 .hero-shot {
