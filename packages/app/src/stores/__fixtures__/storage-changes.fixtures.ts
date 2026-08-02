@@ -22,6 +22,20 @@ function unserved<K extends Exclude<keyof ObservableKeyValueStore, 'supportsSync
   }) as ObservableKeyValueStore[K];
 }
 
+/**
+ * What the extension backend does that a fake store alone does not: persist writes the whole slice
+ * on any set, and chrome.storage.onChanged reports it to every context, the writer's included.
+ */
+export function echoWritesTo(
+  store: { subscribe: (listener: () => void) => () => void },
+  fake: FakeObservableStore,
+  key: string
+): () => void {
+  return store.subscribe(() => {
+    fake.emit([key]);
+  });
+}
+
 /** A backend that only observes: consumers reach storage itself through mocked helpers. */
 export function fakeObservableStore(options: FakeObservableStoreOptions = {}): FakeObservableStore {
   const { failedSubscribes = 0, throwOnUnsubscribe = false } = options;

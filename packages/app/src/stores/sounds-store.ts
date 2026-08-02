@@ -632,6 +632,9 @@ export function useSoundsStorageSync() {
     // Tracked so a handoff scheduled just before a leadership flip or an unmount can't restart the
     // player from a tab that is no longer the leader.
     let handoff: ReturnType<typeof setTimeout> | undefined;
+    // Held here rather than in the store: persist writes the whole slice on any set and that write
+    // is announced back to this tab, so a store flag would re-enter the sync it guards.
+    const loading: LoadingPlaylist = { id: null };
     const unsubscribe = safeSubscribe(store, 'ambient sounds', (keys, area) => {
       if (area !== 'local' || !keys.includes('soundsState')) {
         return;
@@ -644,7 +647,7 @@ export function useSoundsStorageSync() {
         // One pending handoff at a time: a newer state supersedes the one the last event scheduled.
         clearTimeout(handoff);
         handoff = setTimeout(() => {
-          syncLeaderPlayback().catch((error) => {
+          syncLeaderPlayback(loading).catch((error) => {
             logger.error('Could not sync leader playback after a storage change', error);
           });
         }, 50);
@@ -657,20 +660,17 @@ export function useSoundsStorageSync() {
   }, [isLeader]);
 }
 
+/** The playlist the leader has started loading, before the player can report it. */
+interface LoadingPlaylist {
+  id: string | null;
+}
+
 /**
  * Sync the leader's playback with the current store state
  */
-async function syncLeaderPlayback() {
-  const {
-    activeSource,
-    isPlaying,
-    isPaused,
-    selectedPlaylistId,
-    playlists,
-    youtubeVolume,
-    selectedAmbientSound,
-    ambientVolume,
-  } = useSoundsStore.getState();
+async function syncLeaderPlayback(loading: LoadingPlaylist) {
+  const { activeSource, isPlaying, isPaused, selectedPlaylistId, playlists, youtubeVolume } =
+    useSoundsStore.getState();
 
   logger.debug('Leader syncing playback state', { activeSource, isPlaying, isPaused });
 
@@ -680,6 +680,12 @@ async function syncLeaderPlayback() {
       if (playlist?.firstVideoId) {
         const currentPlaylistId = youtubePlayer.getCurrentPlaylistId();
         if (currentPlaylistId !== playlist.playlistId) {
+          // The player only reports a playlist once its iframe has loaded, so without this a
+          // change arriving mid-load tears the loading iframe down and starts over, forever.
+          if (loading.id === playlist.playlistId) {
+            return;
+          }
+          loading.id = playlist.playlistId;
           useSoundsStore.setState({ isYoutubeLoading: true });
           try {
             // Get last played video and timestamp (or fall back to first video)
@@ -690,6 +696,7 @@ async function syncLeaderPlayback() {
               playlist.playlistId,
               videoId,
               () => {
+                loading.id = null;
                 youtubePlayer.play();
                 youtubePlayer.setVolume(youtubeVolume);
                 useSoundsStore.setState({ isYoutubeLoading: false });
@@ -697,6 +704,7 @@ async function syncLeaderPlayback() {
               startAt
             );
           } catch (error) {
+            loading.id = null;
             // Logged first: a throw from the recovery below would otherwise replace this cause.
             logger.error('Could not load the playlist for leader playback', error);
             // That callback is what starts playback, so nothing is playing — and left as-is the
@@ -722,18 +730,9 @@ async function syncLeaderPlayback() {
     } else {
       youtubePlayer.stop();
     }
-  } else if (activeSource === 'ambient') {
-    // Ambient sounds are local only, not synced across tabs
-    if (isPlaying && selectedAmbientSound !== 'none') {
-      if (!ambientSoundPlayer.getIsPlaying()) {
-        ambientSoundPlayer.play(selectedAmbientSound, ambientVolume);
-      }
-    } else {
-      ambientSoundPlayer.stop();
-    }
   } else {
-    // No active source - stop everything
+    // Only YouTube is shared. playAmbient runs in whichever tab pressed it, so starting ambient
+    // here would play the same sound out of that tab and this one at once.
     youtubePlayer.stop();
-    ambientSoundPlayer.stop();
   }
 }
