@@ -203,7 +203,7 @@ export const useSoundsStore = create<SoundsStore>()(
           initYoutubeLeader(set);
 
           // Resume playback if YouTube was active
-          const { activeSource, isPlaying, selectedPlaylistId, playlists, youtubeVolume } = get();
+          const { activeSource, isPlaying, selectedPlaylistId, playlists } = get();
           if (activeSource === 'youtube' && isPlaying && selectedPlaylistId) {
             const playlist = playlists.find((p) => p.id === selectedPlaylistId);
             if (playlist?.firstVideoId) {
@@ -218,7 +218,7 @@ export const useSoundsStore = create<SoundsStore>()(
                 youtubePlayer.loadPlaylist(
                   playlist.playlistId,
                   videoId,
-                  () => finishYoutubeLoad(youtubeVolume),
+                  finishYoutubeLoad,
                   startAt
                 );
               });
@@ -282,7 +282,7 @@ export const useSoundsStore = create<SoundsStore>()(
       },
 
       playYoutube: async (playlistId?: string) => {
-        const { selectedPlaylistId, playlists, isLeader, youtubeVolume } = get();
+        const { selectedPlaylistId, playlists, isLeader } = get();
 
         // Stop ambient if playing
         if (ambientSoundPlayer.getIsPlaying()) {
@@ -326,12 +326,7 @@ export const useSoundsStore = create<SoundsStore>()(
               activeTab: 'nowPlaying',
             });
 
-            youtubePlayer.loadPlaylist(
-              playlist.playlistId,
-              videoId,
-              () => finishYoutubeLoad(youtubeVolume),
-              startAt
-            );
+            youtubePlayer.loadPlaylist(playlist.playlistId, videoId, finishYoutubeLoad, startAt);
           } else {
             // Same playlist, just seek and play
             set({
@@ -367,8 +362,8 @@ export const useSoundsStore = create<SoundsStore>()(
           youtubePlayer.pause();
         }
 
-        // A load abandoned mid-flight never reaches finishYoutubeLoad, so the spinner is this
-        // caller's to clear.
+        // Loading is what the panel shows over a player about to start, which a pause has just
+        // said it should not.
         set({ isPlaying: false, isPaused: true, isYoutubeLoading: false });
       },
 
@@ -444,7 +439,7 @@ export const useSoundsStore = create<SoundsStore>()(
       },
 
       selectPlaylist: async (playlistId: string) => {
-        const { playlists, isPlaying, isLeader, activeSource, youtubeVolume } = get();
+        const { playlists, isPlaying, isLeader, activeSource } = get();
 
         const playlist = playlists.find((p) => p.id === playlistId);
         if (!playlist) {
@@ -463,12 +458,7 @@ export const useSoundsStore = create<SoundsStore>()(
           const resumeInfo = await getCurrentVideoForPlaylist(playlist.playlistId);
           const videoId = resumeInfo?.videoId || playlist.firstVideoId;
           const startAt = resumeInfo?.timestamp || 0;
-          youtubePlayer.loadPlaylist(
-            playlist.playlistId,
-            videoId,
-            () => finishYoutubeLoad(youtubeVolume),
-            startAt
-          );
+          youtubePlayer.loadPlaylist(playlist.playlistId, videoId, finishYoutubeLoad, startAt);
         }
 
         logger.debug('Playlist selected', { playlistId, name: playlist.name });
@@ -669,30 +659,37 @@ export function useSoundsStorageSync() {
  * would sound the same thing twice — while stopping is what a remote stop has no other route to.
  */
 function silenceAmbientUnlessWanted(): void {
-  const { activeSource, isPlaying } = useSoundsStore.getState();
-  if (activeSource !== 'ambient' || !isPlaying) {
+  const { activeSource, isPlaying, selectedAmbientSound } = useSoundsStore.getState();
+  const wanted =
+    activeSource === 'ambient' &&
+    isPlaying &&
+    ambientSoundPlayer.getCurrentSound() === selectedAmbientSound;
+
+  if (!wanted) {
     ambientSoundPlayer.stop();
   }
 }
 
-/** The load landed, but a stop or pause since means its audio is no longer what the user asked for. */
-function finishYoutubeLoad(volume: number): void {
-  const { isPlaying } = useSoundsStore.getState();
+/** The load landed, but a stop, a pause or a switch of source since is what should win. */
+function finishYoutubeLoad(): void {
+  // Read now rather than captured when the load began: isPlaying covers both sources, and the
+  // volume may have been dragged while the iframe was still loading.
+  const { isPlaying, activeSource, youtubeVolume } = useSoundsStore.getState();
   useSoundsStore.setState({ isYoutubeLoading: false });
 
-  if (!isPlaying) {
+  if (!isPlaying || activeSource !== 'youtube') {
     return;
   }
 
   youtubePlayer.play();
-  youtubePlayer.setVolume(volume);
+  youtubePlayer.setVolume(youtubeVolume);
 }
 
 /**
  * Sync the leader's playback with the current store state
  */
 async function syncLeaderPlayback() {
-  const { activeSource, isPlaying, isPaused, selectedPlaylistId, playlists, youtubeVolume } =
+  const { activeSource, isPlaying, isPaused, selectedPlaylistId, playlists } =
     useSoundsStore.getState();
 
   logger.debug('Leader syncing playback state', { activeSource, isPlaying, isPaused });
@@ -714,12 +711,7 @@ async function syncLeaderPlayback() {
             const resumeInfo = await getCurrentVideoForPlaylist(playlist.playlistId);
             const videoId = resumeInfo?.videoId || playlist.firstVideoId;
             const startAt = resumeInfo?.timestamp || 0;
-            youtubePlayer.loadPlaylist(
-              playlist.playlistId,
-              videoId,
-              () => finishYoutubeLoad(youtubeVolume),
-              startAt
-            );
+            youtubePlayer.loadPlaylist(playlist.playlistId, videoId, finishYoutubeLoad, startAt);
           } catch (error) {
             // Logged first: a throw from the recovery below would otherwise replace this cause.
             logger.error('Could not load the playlist for leader playback', error);
@@ -754,7 +746,7 @@ async function syncLeaderPlayback() {
   }
 }
 
-/** Nothing wants the in-flight load now, so its callback will never arrive to clear the spinner. */
+/** A stop drops the pending load with its callback, so the spinner is the sync's to clear. */
 function abandonYoutubeLoad(): void {
   if (useSoundsStore.getState().isYoutubeLoading) {
     useSoundsStore.setState({ isYoutubeLoading: false });

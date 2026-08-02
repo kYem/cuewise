@@ -215,8 +215,8 @@ class YouTubePlayerService {
       this.initialize();
     }
 
-    // The pair moves together: what is mounted is nothing until this load lands, and leaving the
-    // old playlist standing as "current" makes a switch back to it look already satisfied.
+    // All three move together: nothing is mounted until this load lands, and leaving the old
+    // playlist standing as "current" makes a switch back to it look already satisfied.
     this.state.requestedPlaylistId = playlistId;
     this.state.currentPlaylistId = null;
     this.state.isReady = false;
@@ -282,6 +282,13 @@ class YouTubePlayerService {
 
       // Apply saved volume after load
       setTimeout(() => {
+        // Re-checked, because a second passes here: adopting the frame was only ever a decision
+        // about that instant, and a stop since is what this callback would otherwise undo.
+        if (this.state.requestedPlaylistId !== playlistId) {
+          logger.debug('Dropping a load completion that was superseded', { playlistId });
+          return;
+        }
+
         this.setVolume(this.state.volume);
         // Call onReady callback after volume is set
         if (onReady) {

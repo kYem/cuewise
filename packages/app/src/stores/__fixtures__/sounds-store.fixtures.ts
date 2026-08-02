@@ -12,8 +12,8 @@ export interface StubbedPlayer {
   play: Mock<typeof youtubePlayer.play>;
   stop: Mock<typeof youtubePlayer.stop>;
   pause: Mock<typeof youtubePlayer.pause>;
-  /** Land the in-flight load, as the iframe's onload does. */
-  landLoad: () => void;
+  /** Land the in-flight load, which like the real onload refuses a request already superseded. */
+  landLoad: (playlistId?: string | null) => void;
 }
 
 export interface StubPlayerOptions {
@@ -36,8 +36,8 @@ export function stubYoutubePlayer(options: StubPlayerOptions = {}): StubbedPlaye
   vi.spyOn(youtubePlayer, 'getRequestedPlaylistId').mockImplementation(() => requested);
   vi.spyOn(youtubePlayer, 'isPlaying').mockImplementation(() => isPlaying);
 
-  // The real play/pause return early until a load has landed, so a stub that always acted would
-  // let a test assert playback the player would have refused.
+  // The real play/pause/stop all return early until a load has landed, so a stub that always
+  // acted would let a test assert playback the player would have refused.
   const isReady = () => current !== null;
 
   return {
@@ -63,8 +63,10 @@ export function stubYoutubePlayer(options: StubPlayerOptions = {}): StubbedPlaye
         isPlaying = false;
       }
     }),
-    landLoad: () => {
-      current = requested;
+    landLoad: (playlistId = requested) => {
+      if (playlistId === requested) {
+        current = playlistId;
+      }
     },
   };
 }

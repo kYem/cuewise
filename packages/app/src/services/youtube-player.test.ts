@@ -92,6 +92,16 @@ describe('a load that is no longer wanted', () => {
     expect(youtubePlayer.getCurrentPlaylistId()).toBeNull();
   });
 
+  it('is dropped when the stop arrives after the frame landed but before it completes', () => {
+    const onReady = vi.fn();
+    youtubePlayer.loadPlaylist('PL1', 'v1', onReady);
+    currentIframe().dispatchEvent(new Event('load'));
+    youtubePlayer.stop();
+    vi.advanceTimersByTime(2000);
+
+    expect(onReady).not.toHaveBeenCalled();
+  });
+
   it('stops reporting the playlist it replaced while the new one loads', () => {
     youtubePlayer.loadPlaylist('PL1', 'v1');
     currentIframe().dispatchEvent(new Event('load'));
