@@ -203,7 +203,7 @@ export const useSoundsStore = create<SoundsStore>()(
           initYoutubeLeader(set);
 
           // Resume playback if YouTube was active
-          const { activeSource, isPlaying, selectedPlaylistId, playlists, youtubeVolume } = get();
+          const { activeSource, isPlaying, selectedPlaylistId, playlists } = get();
           if (activeSource === 'youtube' && isPlaying && selectedPlaylistId) {
             const playlist = playlists.find((p) => p.id === selectedPlaylistId);
             if (playlist?.firstVideoId) {
@@ -218,12 +218,9 @@ export const useSoundsStore = create<SoundsStore>()(
                 youtubePlayer.loadPlaylist(
                   playlist.playlistId,
                   videoId,
-                  () => {
-                    youtubePlayer.play();
-                    youtubePlayer.setVolume(youtubeVolume);
-                    set({ isYoutubeLoading: false });
-                  },
-                  startAt
+                  finishYoutubeLoad,
+                  startAt,
+                  failYoutubeLoad
                 );
               });
             }
@@ -286,7 +283,7 @@ export const useSoundsStore = create<SoundsStore>()(
       },
 
       playYoutube: async (playlistId?: string) => {
-        const { selectedPlaylistId, playlists, isLeader, youtubeVolume } = get();
+        const { selectedPlaylistId, playlists, isLeader } = get();
 
         // Stop ambient if playing
         if (ambientSoundPlayer.getIsPlaying()) {
@@ -333,12 +330,9 @@ export const useSoundsStore = create<SoundsStore>()(
             youtubePlayer.loadPlaylist(
               playlist.playlistId,
               videoId,
-              () => {
-                youtubePlayer.play();
-                youtubePlayer.setVolume(youtubeVolume);
-                set({ isYoutubeLoading: false });
-              },
-              startAt
+              finishYoutubeLoad,
+              startAt,
+              failYoutubeLoad
             );
           } else {
             // Same playlist, just seek and play
@@ -375,7 +369,9 @@ export const useSoundsStore = create<SoundsStore>()(
           youtubePlayer.pause();
         }
 
-        set({ isPlaying: false, isPaused: true });
+        // Loading is what the panel shows over a player about to start, which a pause has just
+        // said it should not.
+        set({ isPlaying: false, isPaused: true, isYoutubeLoading: false });
       },
 
       resume: () => {
@@ -403,6 +399,7 @@ export const useSoundsStore = create<SoundsStore>()(
         set({
           isPlaying: false,
           isPaused: false,
+          isYoutubeLoading: false,
         });
       },
 
@@ -449,7 +446,7 @@ export const useSoundsStore = create<SoundsStore>()(
       },
 
       selectPlaylist: async (playlistId: string) => {
-        const { playlists, isPlaying, isLeader, activeSource, youtubeVolume } = get();
+        const { playlists, isPlaying, isLeader, activeSource } = get();
 
         const playlist = playlists.find((p) => p.id === playlistId);
         if (!playlist) {
@@ -471,12 +468,9 @@ export const useSoundsStore = create<SoundsStore>()(
           youtubePlayer.loadPlaylist(
             playlist.playlistId,
             videoId,
-            () => {
-              youtubePlayer.play();
-              youtubePlayer.setVolume(youtubeVolume);
-              set({ isYoutubeLoading: false });
-            },
-            startAt
+            finishYoutubeLoad,
+            startAt,
+            failYoutubeLoad
           );
         }
 
@@ -637,16 +631,32 @@ export function useSoundsStorageSync() {
         return;
       }
       // Caught here, not returned: the port's guard logs a rejection without naming what failed.
-      Promise.resolve(useSoundsStore.persist.rehydrate()).catch((error) => {
+      const rehydrated = Promise.resolve(useSoundsStore.persist.rehydrate()).catch((error) => {
         logger.error('Could not rehydrate the sounds state after a storage change', error);
+      });
+      // Every tab, not only the leader: ambient plays out of whichever tab pressed it, so this is
+      // the one place that can silence what this tab is holding.
+      rehydrated.then(silenceAmbientUnlessWanted).catch((error) => {
+        logger.error('Could not reconcile ambient playback after a storage change', error);
       });
       if (isLeader) {
         // One pending handoff at a time: a newer state supersedes the one the last event scheduled.
         clearTimeout(handoff);
         handoff = setTimeout(() => {
-          syncLeaderPlayback().catch((error) => {
-            logger.error('Could not sync leader playback after a storage change', error);
-          });
+          // Chained, not raced: syncing reads the store, so a read slower than the delay would
+          // otherwise reconcile the player against the state this change already replaced.
+          rehydrated
+            .then(() => {
+              // Re-checked because clearTimeout stops guarding once the timer has fired: a flip
+              // during the rehydrate would otherwise let a resigned tab restart the player.
+              if (!useSoundsStore.getState().isLeader) {
+                return undefined;
+              }
+              return syncLeaderPlayback();
+            })
+            .catch((error) => {
+              logger.error('Could not sync leader playback after a storage change', error);
+            });
         }, 50);
       }
     });
@@ -658,28 +668,88 @@ export function useSoundsStorageSync() {
 }
 
 /**
+ * Custom playlists are built per tab and never persisted, so one added in another tab is unknown
+ * here until they are re-read — and the request for it would otherwise be dropped in silence.
+ */
+async function findPlaylist(
+  playlists: YoutubePlaylist[],
+  selectedPlaylistId: string
+): Promise<YoutubePlaylist | undefined> {
+  const known = playlists.find((p) => p.id === selectedPlaylistId);
+  if (known) {
+    return known;
+  }
+
+  const refreshed = [...DEFAULT_YOUTUBE_PLAYLISTS, ...(await getCustomYoutubePlaylists())];
+  useSoundsStore.setState({ playlists: refreshed });
+
+  const found = refreshed.find((p) => p.id === selectedPlaylistId);
+  if (!found) {
+    logger.warn('Another tab asked for a playlist this one cannot find', { selectedPlaylistId });
+  }
+  return found;
+}
+
+/**
+ * Stop but never start: playAmbient already runs in the tab that pressed it, so starting here
+ * would sound the same thing twice — while stopping is what a remote stop has no other route to.
+ */
+function silenceAmbientUnlessWanted(): void {
+  const { activeSource, isPlaying, selectedAmbientSound } = useSoundsStore.getState();
+  const wanted =
+    activeSource === 'ambient' &&
+    isPlaying &&
+    ambientSoundPlayer.getCurrentSound() === selectedAmbientSound;
+
+  if (!wanted) {
+    ambientSoundPlayer.stop();
+  }
+}
+
+/**
+ * The audio is not coming, so the panel must stop claiming it — left as-is it renders its
+ * "playing" indicator, and its spinner, over silence.
+ */
+function failYoutubeLoad(): void {
+  useSoundsStore.setState({ isYoutubeLoading: false, isPlaying: false, isPaused: false });
+  useToastStore.getState().error('Could not start the playlist. Press play to try again.');
+}
+
+/** The load landed, but a stop, a pause or a switch of source since is what should win. */
+function finishYoutubeLoad(): void {
+  // Read now rather than captured when the load began — the volume may have been dragged since.
+  // activeSource is checked too because isPlaying is true for ambient as well.
+  const { isPlaying, activeSource, youtubeVolume } = useSoundsStore.getState();
+  useSoundsStore.setState({ isYoutubeLoading: false });
+
+  if (!isPlaying || activeSource !== 'youtube') {
+    return;
+  }
+
+  youtubePlayer.play();
+  youtubePlayer.setVolume(youtubeVolume);
+}
+
+/**
  * Sync the leader's playback with the current store state
  */
 async function syncLeaderPlayback() {
-  const {
-    activeSource,
-    isPlaying,
-    isPaused,
-    selectedPlaylistId,
-    playlists,
-    youtubeVolume,
-    selectedAmbientSound,
-    ambientVolume,
-  } = useSoundsStore.getState();
+  const { activeSource, isPlaying, isPaused, selectedPlaylistId, playlists } =
+    useSoundsStore.getState();
 
   logger.debug('Leader syncing playback state', { activeSource, isPlaying, isPaused });
 
   if (activeSource === 'youtube') {
     if (isPlaying) {
-      const playlist = playlists.find((p) => p.id === selectedPlaylistId);
+      const playlist = await findPlaylist(playlists, selectedPlaylistId);
       if (playlist?.firstVideoId) {
         const currentPlaylistId = youtubePlayer.getCurrentPlaylistId();
         if (currentPlaylistId !== playlist.playlistId) {
+          // loadPlaylist tears down the iframe it finds, so acting while one is already in flight
+          // for this playlist would restart the load the last change started.
+          if (youtubePlayer.getRequestedPlaylistId() === playlist.playlistId) {
+            return;
+          }
           useSoundsStore.setState({ isYoutubeLoading: true });
           try {
             // Get last played video and timestamp (or fall back to first video)
@@ -689,26 +759,14 @@ async function syncLeaderPlayback() {
             youtubePlayer.loadPlaylist(
               playlist.playlistId,
               videoId,
-              () => {
-                youtubePlayer.play();
-                youtubePlayer.setVolume(youtubeVolume);
-                useSoundsStore.setState({ isYoutubeLoading: false });
-              },
-              startAt
+              finishYoutubeLoad,
+              startAt,
+              failYoutubeLoad
             );
           } catch (error) {
             // Logged first: a throw from the recovery below would otherwise replace this cause.
             logger.error('Could not load the playlist for leader playback', error);
-            // That callback is what starts playback, so nothing is playing — and left as-is the
-            // panel renders its "playing" indicator over silence.
-            useSoundsStore.setState({
-              isYoutubeLoading: false,
-              isPlaying: false,
-              isPaused: false,
-            });
-            useToastStore
-              .getState()
-              .error('Could not start the playlist. Press play to try again.');
+            failYoutubeLoad();
             throw error;
           }
         } else if (!youtubePlayer.isPlaying()) {
@@ -719,21 +777,20 @@ async function syncLeaderPlayback() {
       if (youtubePlayer.isPlaying()) {
         youtubePlayer.pause();
       }
+      abandonYoutubeLoad();
     } else {
       youtubePlayer.stop();
-    }
-  } else if (activeSource === 'ambient') {
-    // Ambient sounds are local only, not synced across tabs
-    if (isPlaying && selectedAmbientSound !== 'none') {
-      if (!ambientSoundPlayer.getIsPlaying()) {
-        ambientSoundPlayer.play(selectedAmbientSound, ambientVolume);
-      }
-    } else {
-      ambientSoundPlayer.stop();
+      abandonYoutubeLoad();
     }
   } else {
-    // No active source - stop everything
     youtubePlayer.stop();
-    ambientSoundPlayer.stop();
+    abandonYoutubeLoad();
+  }
+}
+
+/** Nothing here is going to start playing, so the panel should not still be promising it. */
+function abandonYoutubeLoad(): void {
+  if (useSoundsStore.getState().isYoutubeLoading) {
+    useSoundsStore.setState({ isYoutubeLoading: false });
   }
 }

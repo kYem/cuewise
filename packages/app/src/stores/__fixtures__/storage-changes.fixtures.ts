@@ -1,4 +1,5 @@
 import type { ObservableKeyValueStore, StorageArea, StorageChangeHandler } from '@cuewise/shared';
+import type { StoreApi } from 'zustand';
 
 export interface FakeObservableStore {
   store: ObservableKeyValueStore;
@@ -20,6 +21,20 @@ function unserved<K extends Exclude<keyof ObservableKeyValueStore, 'supportsSync
   return ((): never => {
     throw new Error(`fakeObservableStore does not serve ${method}`);
   }) as ObservableKeyValueStore[K];
+}
+
+/**
+ * What the extension backend does that a fake store alone does not: persist writes the whole slice
+ * on any set, and chrome.storage.onChanged reports it to every context, the writer's included.
+ */
+export function echoWritesTo(
+  store: Pick<StoreApi<unknown>, 'subscribe'>,
+  fake: FakeObservableStore,
+  key: string
+): () => void {
+  return store.subscribe(() => {
+    fake.emit([key]);
+  });
 }
 
 /** A backend that only observes: consumers reach storage itself through mocked helpers. */

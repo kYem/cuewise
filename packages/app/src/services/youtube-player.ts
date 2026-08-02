@@ -97,6 +97,9 @@ interface PlayerState {
   isPaused: boolean;
   isReady: boolean;
   currentPlaylistId: string | null;
+  // Set the moment a load starts; currentPlaylistId only catches up once the iframe reports in,
+  // so this is the only way a caller can tell "already loading it" from "not loaded".
+  requestedPlaylistId: string | null;
   currentVideoId: string | null;
   currentTime: number; // Current playback position in seconds
   volume: number;
@@ -109,6 +112,11 @@ const RECOVERABLE_ERROR_CODES = new Set([100, 101, 150]);
 // Stop auto-skipping after this many failures in a row so an entirely unplayable
 // playlist doesn't churn forever.
 const MAX_CONSECUTIVE_SKIPS = 5;
+
+// A framed navigation that is blocked or hangs reports neither load nor error, so without a bound
+// the request stays claimed and every later one for that playlist is taken for it still arriving.
+// Generous against a slow connection: the load itself is followed by a 1s settling delay.
+const LOAD_TIMEOUT_MS = 20_000;
 
 export type PlayerErrorAction = 'skip' | 'give-up' | 'notify';
 
@@ -150,6 +158,7 @@ class YouTubePlayerService {
     isPaused: false,
     isReady: false,
     currentPlaylistId: null,
+    requestedPlaylistId: null,
     currentVideoId: null,
     currentTime: 0,
     volume: 50,
@@ -159,6 +168,7 @@ class YouTubePlayerService {
   private timeTrackingInterval: ReturnType<typeof setInterval> | null = null;
   private onTimeUpdateCallbacks: Array<(videoId: string, time: number) => void> = [];
   private lastTimeUpdateNotification = 0; // Timestamp of last callback notification
+  private loadWatchdog: ReturnType<typeof setTimeout> | null = null;
   private consecutiveErrors = 0; // consecutive playback errors, for bounded auto-skip
 
   /**
@@ -200,16 +210,30 @@ class YouTubePlayerService {
    * @param firstVideoId - First video ID in the playlist (required for proper embedding)
    * @param onReady - Optional callback when playlist is loaded and ready
    * @param startAt - Optional start time in seconds (for resuming from saved position)
+   * @param onFailed - Optional callback when the load errors or never arrives
    */
   loadPlaylist(
     playlistId: string,
     firstVideoId: string,
     onReady?: () => void,
-    startAt?: number
+    startAt?: number,
+    onFailed?: () => void
   ): void {
     if (!this.container) {
       this.initialize();
     }
+
+    this.clearLoadWatchdog();
+
+    // All three move together: no usable player exists until this load lands, and leaving the old
+    // playlist standing as "current" makes a switch back to it look already satisfied.
+    this.state.requestedPlaylistId = playlistId;
+    this.state.currentPlaylistId = null;
+    this.state.isReady = false;
+
+    this.loadWatchdog = setTimeout(() => {
+      this.failLoad(playlistId, 'it never reported back', onFailed);
+    }, LOAD_TIMEOUT_MS);
 
     // Remove existing iframe if any
     if (this.iframe) {
@@ -252,6 +276,13 @@ class YouTubePlayerService {
 
     // Handle iframe load
     this.iframe.onload = () => {
+      // A stop, or a newer load, has moved on since — this frame's result is no longer wanted, and
+      // adopting it would start audio nobody asked for.
+      if (this.state.requestedPlaylistId !== playlistId) {
+        logger.debug('Ignoring a load that was superseded', { playlistId });
+        return;
+      }
+
       this.state.isReady = true;
       this.state.currentPlaylistId = playlistId;
       this.state.currentVideoId = firstVideoId;
@@ -265,6 +296,14 @@ class YouTubePlayerService {
 
       // Apply saved volume after load
       setTimeout(() => {
+        // Re-checked, because a second passes here: adopting the frame was only ever a decision
+        // about that instant, and a stop since is what this callback would otherwise undo.
+        if (this.state.requestedPlaylistId !== playlistId) {
+          logger.debug('Dropping a load completion that was superseded', { playlistId });
+          return;
+        }
+
+        this.clearLoadWatchdog();
         this.setVolume(this.state.volume);
         // Call onReady callback after volume is set
         if (onReady) {
@@ -278,11 +317,31 @@ class YouTubePlayerService {
 
     // Handle iframe errors
     this.iframe.onerror = (error) => {
-      logger.error('YouTube iframe failed to load', { playlistId, error });
+      logger.debug('YouTube iframe error event', { playlistId, error });
+      this.failLoad(playlistId, 'the frame reported an error', onFailed);
     };
 
     this.container?.appendChild(this.iframe);
     logger.info('Loading YouTube playlist', { playlistId, embedUrl });
+  }
+
+  private clearLoadWatchdog(): void {
+    if (this.loadWatchdog !== null) {
+      clearTimeout(this.loadWatchdog);
+      this.loadWatchdog = null;
+    }
+  }
+
+  /** Only its own: a superseded frame failing must not release the load that replaced it. */
+  private failLoad(playlistId: string, reason: string, onFailed?: () => void): void {
+    if (this.state.requestedPlaylistId !== playlistId) {
+      return;
+    }
+
+    this.clearLoadWatchdog();
+    this.state.requestedPlaylistId = null;
+    logger.error('Could not load the YouTube playlist', { playlistId, reason });
+    onFailed?.();
   }
 
   /**
@@ -502,6 +561,11 @@ class YouTubePlayerService {
    * Stop playback and unload the playlist
    */
   stop(): void {
+    // Before the readiness guard: stopping abandons a load that never got there, and leaving the
+    // request standing would have the next play mistaken for that same load still in flight.
+    this.state.requestedPlaylistId = null;
+    this.clearLoadWatchdog();
+
     if (!this.state.isReady) {
       return;
     }
@@ -650,6 +714,11 @@ class YouTubePlayerService {
     return this.state.currentPlaylistId;
   }
 
+  /** The playlist last asked for; getCurrentPlaylistId lags it until that load lands. */
+  getRequestedPlaylistId(): string | null {
+    return this.state.requestedPlaylistId;
+  }
+
   /**
    * Get current state
    */
@@ -713,6 +782,7 @@ class YouTubePlayerService {
   destroy(): void {
     // Stop time tracking
     this.stopTimeTracking();
+    this.clearLoadWatchdog();
 
     if (this.messageHandler) {
       window.removeEventListener('message', this.messageHandler);
@@ -734,6 +804,7 @@ class YouTubePlayerService {
       isPaused: false,
       isReady: false,
       currentPlaylistId: null,
+      requestedPlaylistId: null,
       currentVideoId: null,
       currentTime: 0,
       volume: 50,

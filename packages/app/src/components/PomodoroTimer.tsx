@@ -20,7 +20,7 @@ import { useFocusModeStore } from '../stores/focus-mode-store';
 import { useGoalStore } from '../stores/goal-store';
 import { usePomodoroStorageSync, usePomodoroStore } from '../stores/pomodoro-store';
 import { useSettingsStore } from '../stores/settings-store';
-import { useSoundsStore } from '../stores/sounds-store';
+import { useSoundsStorageSync, useSoundsStore } from '../stores/sounds-store';
 import { getSessionLabel, getSessionStyles } from '../utils/pomodoro-styles';
 import { PomodoroMiniSettings } from './PomodoroMiniSettings';
 import { PomodoroPipButton } from './PomodoroPipButton';
@@ -124,10 +124,15 @@ export const PomodoroTimer: React.FC = () => {
   );
 
   // Sounds state - use useShallow for multiple values
-  const { activeSource, isPlaying: isSoundsPlaying } = useSoundsStore(
+  const {
+    activeSource,
+    isPlaying: isSoundsPlaying,
+    isSoundsLeader,
+  } = useSoundsStore(
     useShallow((state) => ({
       activeSource: state.activeSource,
       isPlaying: state.isPlaying,
+      isSoundsLeader: state.isLeader,
     }))
   );
 
@@ -168,6 +173,9 @@ export const PomodoroTimer: React.FC = () => {
   // Sounds leader election - only one tab plays YouTube audio
   useSoundsLeader();
 
+  // Must be mounted wherever the election runs, or the elected tab never hears another tab's write.
+  useSoundsStorageSync();
+
   // Initialize on mount
   useEffect(() => {
     initialize();
@@ -183,6 +191,12 @@ export const PomodoroTimer: React.FC = () => {
 
     // Skip if sounds feature is disabled or auto-start is off
     if (!pomodoroMusicEnabled || !pomodoroMusicAutoStart) {
+      return;
+    }
+
+    // The resume/pause/stop below follow this tab's lifecycle rather than the user, and they reach
+    // whichever tab holds the audio — so only the tab that owns it may drive them.
+    if (!isSoundsLeader) {
       return;
     }
 
@@ -213,6 +227,7 @@ export const PomodoroTimer: React.FC = () => {
     status,
     sessionType,
     activeSource,
+    isSoundsLeader,
     settings.pomodoroMusicEnabled,
     settings.pomodoroMusicAutoStart,
     settings.pomodoroMusicPlayDuringBreaks,
