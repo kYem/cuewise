@@ -218,11 +218,7 @@ export const useSoundsStore = create<SoundsStore>()(
                 youtubePlayer.loadPlaylist(
                   playlist.playlistId,
                   videoId,
-                  () => {
-                    youtubePlayer.play();
-                    youtubePlayer.setVolume(youtubeVolume);
-                    set({ isYoutubeLoading: false });
-                  },
+                  () => finishYoutubeLoad(youtubeVolume),
                   startAt
                 );
               });
@@ -333,11 +329,7 @@ export const useSoundsStore = create<SoundsStore>()(
             youtubePlayer.loadPlaylist(
               playlist.playlistId,
               videoId,
-              () => {
-                youtubePlayer.play();
-                youtubePlayer.setVolume(youtubeVolume);
-                set({ isYoutubeLoading: false });
-              },
+              () => finishYoutubeLoad(youtubeVolume),
               startAt
             );
           } else {
@@ -375,7 +367,9 @@ export const useSoundsStore = create<SoundsStore>()(
           youtubePlayer.pause();
         }
 
-        set({ isPlaying: false, isPaused: true });
+        // A load abandoned mid-flight never reaches finishYoutubeLoad, so the spinner is this
+        // caller's to clear.
+        set({ isPlaying: false, isPaused: true, isYoutubeLoading: false });
       },
 
       resume: () => {
@@ -403,6 +397,7 @@ export const useSoundsStore = create<SoundsStore>()(
         set({
           isPlaying: false,
           isPaused: false,
+          isYoutubeLoading: false,
         });
       },
 
@@ -471,11 +466,7 @@ export const useSoundsStore = create<SoundsStore>()(
           youtubePlayer.loadPlaylist(
             playlist.playlistId,
             videoId,
-            () => {
-              youtubePlayer.play();
-              youtubePlayer.setVolume(youtubeVolume);
-              set({ isYoutubeLoading: false });
-            },
+            () => finishYoutubeLoad(youtubeVolume),
             startAt
           );
         }
@@ -640,6 +631,11 @@ export function useSoundsStorageSync() {
       const rehydrated = Promise.resolve(useSoundsStore.persist.rehydrate()).catch((error) => {
         logger.error('Could not rehydrate the sounds state after a storage change', error);
       });
+      // Every tab, not only the leader: ambient plays out of whichever tab pressed it, so this is
+      // the one place that can silence what this tab is holding.
+      rehydrated.then(silenceAmbientUnlessWanted).catch((error) => {
+        logger.error('Could not reconcile ambient playback after a storage change', error);
+      });
       if (isLeader) {
         // One pending handoff at a time: a newer state supersedes the one the last event scheduled.
         clearTimeout(handoff);
@@ -647,7 +643,14 @@ export function useSoundsStorageSync() {
           // Chained, not raced: syncing reads the store, so a read slower than the delay would
           // otherwise reconcile the player against the state this change already replaced.
           rehydrated
-            .then(() => syncLeaderPlayback())
+            .then(() => {
+              // Re-checked because clearTimeout stops guarding once the timer has fired: a flip
+              // during the rehydrate would otherwise let a resigned tab restart the player.
+              if (!useSoundsStore.getState().isLeader) {
+                return undefined;
+              }
+              return syncLeaderPlayback();
+            })
             .catch((error) => {
               logger.error('Could not sync leader playback after a storage change', error);
             });
@@ -662,6 +665,30 @@ export function useSoundsStorageSync() {
 }
 
 /**
+ * Stop but never start: playAmbient already runs in the tab that pressed it, so starting here
+ * would sound the same thing twice — while stopping is what a remote stop has no other route to.
+ */
+function silenceAmbientUnlessWanted(): void {
+  const { activeSource, isPlaying } = useSoundsStore.getState();
+  if (activeSource !== 'ambient' || !isPlaying) {
+    ambientSoundPlayer.stop();
+  }
+}
+
+/** The load landed, but a stop or pause since means its audio is no longer what the user asked for. */
+function finishYoutubeLoad(volume: number): void {
+  const { isPlaying } = useSoundsStore.getState();
+  useSoundsStore.setState({ isYoutubeLoading: false });
+
+  if (!isPlaying) {
+    return;
+  }
+
+  youtubePlayer.play();
+  youtubePlayer.setVolume(volume);
+}
+
+/**
  * Sync the leader's playback with the current store state
  */
 async function syncLeaderPlayback() {
@@ -669,12 +696,6 @@ async function syncLeaderPlayback() {
     useSoundsStore.getState();
 
   logger.debug('Leader syncing playback state', { activeSource, isPlaying, isPaused });
-
-  // Stop but never start: playAmbient already runs in the tab that pressed it, so starting here
-  // would sound the same thing twice — while stopping is what a remote stop has no other route to.
-  if (activeSource !== 'ambient' || !isPlaying) {
-    ambientSoundPlayer.stop();
-  }
 
   if (activeSource === 'youtube') {
     if (isPlaying) {
@@ -696,11 +717,7 @@ async function syncLeaderPlayback() {
             youtubePlayer.loadPlaylist(
               playlist.playlistId,
               videoId,
-              () => {
-                youtubePlayer.play();
-                youtubePlayer.setVolume(youtubeVolume);
-                useSoundsStore.setState({ isYoutubeLoading: false });
-              },
+              () => finishYoutubeLoad(youtubeVolume),
               startAt
             );
           } catch (error) {
@@ -726,10 +743,20 @@ async function syncLeaderPlayback() {
       if (youtubePlayer.isPlaying()) {
         youtubePlayer.pause();
       }
+      abandonYoutubeLoad();
     } else {
       youtubePlayer.stop();
+      abandonYoutubeLoad();
     }
   } else {
     youtubePlayer.stop();
+    abandonYoutubeLoad();
+  }
+}
+
+/** Nothing wants the in-flight load now, so its callback will never arrive to clear the spinner. */
+function abandonYoutubeLoad(): void {
+  if (useSoundsStore.getState().isYoutubeLoading) {
+    useSoundsStore.setState({ isYoutubeLoading: false });
   }
 }

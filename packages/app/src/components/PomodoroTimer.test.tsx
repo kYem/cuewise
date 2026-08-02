@@ -36,8 +36,8 @@ interface MockOptions {
   setSelectedGoal?: Mock;
   activeSource?: 'none' | 'ambient' | 'youtube';
   isSoundsLeader?: boolean;
-  /** Auto-start is off in the shared settings fixture, so the music effect needs it turned on. */
-  musicAutoStart?: boolean;
+  /** The shared settings fixture disables music, which short-circuits the timer's sounds effect. */
+  music?: boolean;
 }
 
 function mockStores(options: MockOptions = {}) {
@@ -83,8 +83,7 @@ function mockStores(options: MockOptions = {}) {
     createSettingsStoreMock({
       focusModeEnabled: false,
       updateSettings,
-      pomodoroMusicEnabled: options.musicAutoStart ?? false,
-      pomodoroMusicAutoStart: options.musicAutoStart ?? false,
+      pomodoroMusicEnabled: options.music ?? false,
     })
   );
   vi.mocked(useSoundsStore).mockImplementation(createSelectorMock(soundsState));
@@ -92,7 +91,7 @@ function mockStores(options: MockOptions = {}) {
   return { setSelectedGoal, reloadSettings, updateSettings, soundsState };
 }
 
-describe('PomodoroTimer - goal picker', () => {
+describe('PomodoroTimer - sounds', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -107,7 +106,7 @@ describe('PomodoroTimer - goal picker', () => {
 
   it('drives the timer-following sounds from the tab holding the audio', () => {
     const { soundsState } = mockStores({
-      musicAutoStart: true,
+      music: true,
       activeSource: 'youtube',
       isSoundsLeader: true,
       status: 'running',
@@ -120,9 +119,22 @@ describe('PomodoroTimer - goal picker', () => {
     expect(soundsState.stop).toHaveBeenCalled();
   });
 
+  it('pauses them when the timer pauses', () => {
+    const { soundsState } = mockStores({
+      music: true,
+      activeSource: 'youtube',
+      isSoundsLeader: true,
+      status: 'paused',
+    });
+
+    render(<PomodoroTimer />);
+
+    expect(soundsState.pause).toHaveBeenCalled();
+  });
+
   it('leaves them alone in a second tab, which would stop audio it never started', () => {
     const { soundsState } = mockStores({
-      musicAutoStart: true,
+      music: true,
       activeSource: 'youtube',
       isSoundsLeader: false,
       status: 'running',
@@ -133,6 +145,12 @@ describe('PomodoroTimer - goal picker', () => {
 
     expect(soundsState.resume).not.toHaveBeenCalled();
     expect(soundsState.stop).not.toHaveBeenCalled();
+  });
+});
+
+describe('PomodoroTimer - goal picker', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
   });
 
   it('opens the dropdown from the header and lists only incomplete goals', async () => {
