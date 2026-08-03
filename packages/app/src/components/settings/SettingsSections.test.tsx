@@ -132,12 +132,14 @@ describe('settings sections', () => {
     // A section matches on `terms`, then each row re-filters on its own label/help/keywords
     // (SettingControls.tsx:31). A term no row carries opens the section onto an empty panel.
     // Scoped to the sections this change owns; timer/sound/home have pre-existing orphans.
+    // Focus mode is checked with its toggle both on and off, because half its rows are gated.
     it.each([
-      ['background', sectionById('background').terms],
-      ['focus', sectionById('focus').terms],
-    ] as const)('every search term in %s reaches at least one row', (id, terms) => {
-      const orphans = [...new Set(terms.split(' '))].filter((term) => {
-        const { container, unmount } = renderSection(id, term);
+      ['background', true],
+      ['focus', true],
+      ['focus', false],
+    ] as const)('every search term in %s reaches a row (focus on: %s)', (id, focusModeEnabled) => {
+      const orphans = [...new Set(sectionById(id).terms.split(' '))].filter((term) => {
+        const { container, unmount } = renderSection(id, term, { focusModeEnabled });
         const rendered = container.textContent?.trim() ?? '';
         unmount();
         return rendered.length === 0;

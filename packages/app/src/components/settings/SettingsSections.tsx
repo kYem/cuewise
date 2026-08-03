@@ -389,6 +389,10 @@ function BackgroundSection({ s, set, filter }: SettingsSectionProps) {
   );
 }
 
+// Also carries the gated rows' terms: with focus mode off those rows don't render, and a
+// search for one of them would otherwise open the section onto an empty panel.
+const FOCUS_TOGGLE_KEYWORDS = 'fullscreen enable quote goal auto enter';
+
 /* Focus mode */
 function FocusSection({ s, set, filter }: SettingsSectionProps) {
   return (
@@ -397,7 +401,7 @@ function FocusSection({ s, set, filter }: SettingsSectionProps) {
         label="Focus mode"
         filter={filter}
         help="Adds a fullscreen button to the timer"
-        keywords="fullscreen enable"
+        keywords={FOCUS_TOGGLE_KEYWORDS}
       >
         <Switch
           label="Focus mode"
