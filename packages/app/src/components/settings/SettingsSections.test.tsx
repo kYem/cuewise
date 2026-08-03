@@ -48,7 +48,7 @@ function renderSection(id: string, filter = '', settingsOverrides: Partial<Setti
   return render(<section.component {...props} />);
 }
 
-// Mirrors SettingsModal.tsx:158 — drifts silently if that filter changes.
+// Mirrors the section filter in ../SettingsModal — drifts silently if that changes.
 function sectionsMatching(query: string) {
   return SETTINGS_SECTIONS.filter((s) => settingsMatch(query, s.label, s.terms)).map((s) => s.id);
 }
@@ -132,9 +132,7 @@ describe('settings sections', () => {
     });
 
     // A section matches on `terms`, then each row re-filters on its own label/help/keywords
-    // (SettingControls.tsx:31). A term no row carries opens the section onto an empty panel.
-    // Scoped to the sections this change owns; timer/sound/home have pre-existing orphans.
-    // Focus mode is checked with its toggle both on and off, because half its rows are gated.
+    // (SettingControls.tsx). A term no row carries opens the section onto an empty panel.
     it.each([
       ['background', true],
       ['focus', true],
