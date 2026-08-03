@@ -1021,8 +1021,10 @@ describe('converging on quotes written elsewhere', () => {
   async function initializeObserving(): Promise<ReturnType<typeof fakeObservableStore>> {
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store, syncSink: fakeSink });
-    vi.mocked(storage.getQuotes).mockResolvedValue([mine]);
-    vi.mocked(storage.getCollections).mockResolvedValue([]);
+    // A fresh array per read, as a real parse gives: mockResolvedValue hands back one reference,
+    // which would satisfy the no-op guard's identity assertions whether or not the guard exists.
+    vi.mocked(storage.getQuotes).mockImplementation(async () => [mine]);
+    vi.mocked(storage.getCollections).mockImplementation(async () => []);
     vi.mocked(storage.getCurrentQuote).mockResolvedValue(mine);
     await useQuoteStore.getState().initialize();
     return fake;

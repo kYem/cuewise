@@ -105,8 +105,7 @@ export function createStorageObserver(
       });
       drained = { promise, settle };
     }
-    // Held before run(), which can replace `drained` once its pass settles — returning the field
-    // instead would hand a later caller's promise to this one.
+    // The episode this call joined; run() replaces `drained` once that episode settles.
     const awaiting = drained.promise;
     if (inFlight === null) {
       run();

@@ -977,7 +977,9 @@ describe('converging on goals written elsewhere', () => {
   async function initializeObserving(): Promise<ReturnType<typeof fakeObservableStore>> {
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store, syncSink: fakeSink });
-    vi.mocked(storage.getGoals).mockResolvedValue([mine]);
+    // A fresh array per read, as a real parse gives: mockResolvedValue hands back one reference,
+    // which would satisfy the no-op guard's identity assertions whether or not the guard exists.
+    vi.mocked(storage.getGoals).mockImplementation(async () => [mine]);
     await useGoalStore.getState().initialize();
     return fake;
   }
@@ -1027,16 +1029,16 @@ describe('converging on goals written elsewhere', () => {
     );
   });
 
-  // A pull that landed between initialize's read and its subscribe is announced to nobody.
+  // No event is emitted here: without the awaited reconcile the load installs the pre-pull list.
   it('picks up a pull that landed while it was still loading', async () => {
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store, syncSink: fakeSink });
-    vi.mocked(storage.getGoals).mockResolvedValue([mine]);
+    vi.mocked(storage.getGoals).mockImplementation(async () => [mine]);
     const loaded = useGoalStore.getState().initialize();
-    vi.mocked(storage.getGoals).mockResolvedValue([mine, theirs]);
+    vi.mocked(storage.getGoals).mockImplementation(async () => [mine, theirs]);
     await loaded;
 
-    await vi.waitFor(() => expect(useGoalStore.getState().goals).toHaveLength(2));
+    expect(useGoalStore.getState().goals).toHaveLength(2);
   });
 
   it('keeps the pulled goal when the next local write rewrites the whole list', async () => {
