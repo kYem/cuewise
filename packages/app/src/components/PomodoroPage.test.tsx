@@ -51,7 +51,11 @@ vi.mock('./PageHeader', () => ({
     <div data-testid="page-header" data-transparent={String(transparent)} />
   ),
 }));
-vi.mock('./sounds', () => ({ SoundsMiniPlayer: () => null }));
+vi.mock('./sounds', () => ({
+  SoundsMiniPlayer: ({ variant }: { variant?: string }) => (
+    <div data-testid="sounds-mini-player" data-variant={variant} />
+  ),
+}));
 
 const initCalendar = vi.fn();
 
@@ -251,6 +255,14 @@ describe('PomodoroPage - chrome wiring', () => {
     render(<PomodoroPage />);
 
     expect(screen.getByTestId('calendar-strip')).toHaveAttribute('data-variant', 'surface');
+  });
+
+  it('hands the music player surface chrome when the theme shows no photo', () => {
+    setup('quote', false, { colorTheme: 'purple', pomodoroMusicEnabled: true });
+
+    render(<PomodoroPage />);
+
+    expect(screen.getByTestId('sounds-mini-player')).toHaveAttribute('data-variant', 'surface');
   });
 
   it('lets the header pick its own transparency instead of forcing it', () => {

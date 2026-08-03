@@ -316,7 +316,10 @@ export const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ variant = 'overlay
 
   return (
     <div className={`${timerSize.card} max-w-[92vw] mx-auto`}>
-      <div className={`${t.card} rounded-2xl shadow-lg p-density-lg border`}>
+      <div
+        className={`${t.card} rounded-2xl shadow-lg p-density-lg border`}
+        data-testid="pomodoro-timer-card"
+      >
         {/* Header - icon + goal picker (work) or session label (break). During work
             the title IS the goal selector: the chosen goal or "Focus Session" + a
             chevron opening today's goals; Clear lives inside that dropdown. */}

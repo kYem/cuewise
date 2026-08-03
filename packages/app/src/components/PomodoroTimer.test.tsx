@@ -393,29 +393,21 @@ describe('PomodoroTimer - chrome variant', () => {
     vi.clearAllMocks();
   });
 
-  function timerCard(container: HTMLElement) {
-    const card = container.querySelector('.rounded-2xl');
-    if (card === null) {
-      throw new Error('timer card not found');
-    }
-    return card;
-  }
-
   it('uses white-on-dark chrome by default, for the glass photo behind it', () => {
     mockStores();
 
-    const { container } = render(<PomodoroTimer />);
+    render(<PomodoroTimer />);
 
-    expect(timerCard(container)).toHaveClass('bg-black/25');
+    expect(screen.getByTestId('pomodoro-timer-card')).toHaveClass('bg-black/25');
     expect(screen.getByText('25:00')).toHaveClass('text-white');
   });
 
   it('uses theme tokens on the surface variant, so a light page stays readable', () => {
     mockStores();
 
-    const { container } = render(<PomodoroTimer variant="surface" />);
+    render(<PomodoroTimer variant="surface" />);
 
-    const card = timerCard(container);
+    const card = screen.getByTestId('pomodoro-timer-card');
     expect(card).toHaveClass('bg-surface/80');
     expect(card).not.toHaveClass('bg-black/25');
     expect(screen.getByText('25:00')).toHaveClass('text-primary');
