@@ -98,6 +98,7 @@ export const PomodoroMiniSettings: React.FC<PomodoroMiniSettingsProps> = ({
         <div
           ref={anchorRef}
           className={`flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-xs ${chrome.row}`}
+          data-testid="pomodoro-rhythm-row"
         >
           {FIELDS.map((f) => {
             const Icon = f.icon;

@@ -400,6 +400,7 @@ describe('PomodoroTimer - chrome variant', () => {
 
     expect(screen.getByTestId('pomodoro-timer-card')).toHaveClass('bg-black/25');
     expect(screen.getByText('25:00')).toHaveClass('text-white');
+    expect(screen.getByTestId('pomodoro-rhythm-row')).toHaveClass('text-white/60');
   });
 
   it('uses theme tokens on the surface variant, so a light page stays readable', () => {
@@ -412,5 +413,16 @@ describe('PomodoroTimer - chrome variant', () => {
     expect(card).not.toHaveClass('bg-black/25');
     expect(screen.getByText('25:00')).toHaveClass('text-primary');
     expect(screen.getByText('25:00')).not.toHaveClass('text-white');
+  });
+
+  // The rhythm row lives in PomodoroMiniSettings, a grandchild the timer forwards to.
+  it('passes the variant down to the rhythm row', () => {
+    mockStores();
+
+    render(<PomodoroTimer variant="surface" />);
+
+    const row = screen.getByTestId('pomodoro-rhythm-row');
+    expect(row).toHaveClass('text-secondary');
+    expect(row).not.toHaveClass('text-white/60');
   });
 });
