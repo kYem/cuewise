@@ -57,6 +57,7 @@ function setup(
       initialize: vi.fn(),
       settings: {
         quoteChangeInterval: 0,
+        colorTheme: 'glass',
         focusModeImageCategory: 'nature',
         pomodoroMusicEnabled: false,
         pomodoroCompanion: companion,
@@ -159,6 +160,37 @@ describe('background resolution', () => {
 
     await waitFor(() => expect(screen.queryByTestId('quote-display')).toBeInTheDocument());
     expect(vi.mocked(preloadImages)).not.toHaveBeenCalled();
+  });
+});
+
+describe('PomodoroPage - theme gate', () => {
+  it.each([
+    'purple',
+    'forest',
+    'rose',
+  ] as const)('renders no background layer on the %s theme', (colorTheme) => {
+    setup('quote', false, { colorTheme });
+
+    const { container } = render(<PomodoroPage />);
+
+    expect(container.querySelector('.bg-cover')).toBeNull();
+  });
+
+  it('does not resolve an image the theme will never show', async () => {
+    setup('quote', false, { colorTheme: 'purple' });
+
+    render(<PomodoroPage />);
+
+    await waitFor(() => expect(screen.queryByTestId('quote-display')).toBeInTheDocument());
+    expect(vi.mocked(preloadImages)).not.toHaveBeenCalled();
+  });
+
+  it('renders the background layer on the glass theme', () => {
+    setup('quote', false, { colorTheme: 'glass' });
+
+    const { container } = render(<PomodoroPage />);
+
+    expect(container.querySelector('.bg-cover')).not.toBeNull();
   });
 });
 

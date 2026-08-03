@@ -25,6 +25,7 @@ export const PomodoroPage: React.FC = () => {
   const refreshQuote = useQuoteStore((state) => state.refreshQuote);
   const initializeSettings = useSettingsStore((state) => state.initialize);
   const quoteChangeInterval = useSettingsStore((state) => state.settings.quoteChangeInterval);
+  const colorTheme = useSettingsStore((state) => state.settings.colorTheme);
   const focusModeImageCategory = useSettingsStore((state) => state.settings.focusModeImageCategory);
   const customBackground = useBackgroundStore((state) => state.customBackground);
   const isCustomBackgroundLoaded = useBackgroundStore((state) => state.isLoaded);
@@ -55,7 +56,17 @@ export const PomodoroPage: React.FC = () => {
     }
   }, [companionMode, initCalendar]);
 
+  // The photo belongs to the Glass theme; other themes keep their own colours here, the
+  // same as the home page. Focus mode is the exception and shows it on every theme.
+  const showBackgroundImage = colorTheme === 'glass';
+
   useEffect(() => {
+    if (!showBackgroundImage) {
+      setBackgroundImage(null);
+      setImageLoaded(false);
+      return;
+    }
+
     // Wait for storage: resolving now would fetch a curated photo the user has overridden.
     if (!isCustomBackgroundLoaded) {
       return;
@@ -98,7 +109,7 @@ export const PomodoroPage: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [focusModeImageCategory, isCustomBackgroundLoaded, customBackground]);
+  }, [showBackgroundImage, focusModeImageCategory, isCustomBackgroundLoaded, customBackground]);
 
   // Auto-refresh quotes based on interval setting
   useEffect(() => {
@@ -135,22 +146,22 @@ export const PomodoroPage: React.FC = () => {
 
   return (
     <div className="min-h-screen w-full relative">
-      {/* Background Image */}
-      <div className="absolute inset-0 overflow-hidden">
-        <div
-          className={`absolute inset-0 bg-cover bg-center bg-no-repeat transition-opacity duration-1000 ${
-            imageLoaded && backgroundImage ? 'opacity-100' : 'opacity-0'
-          }`}
-          style={{
-            backgroundImage: backgroundImage ? `url(${backgroundImage})` : undefined,
-            ...getBackgroundFilterStyle(backgroundDim, backgroundBlur),
-          }}
-        />
-      </div>
+      {showBackgroundImage && (
+        <div className="absolute inset-0 overflow-hidden">
+          <div
+            className={`absolute inset-0 bg-cover bg-center bg-no-repeat transition-opacity duration-1000 ${
+              imageLoaded && backgroundImage ? 'opacity-100' : 'opacity-0'
+            }`}
+            style={{
+              backgroundImage: backgroundImage ? `url(${backgroundImage})` : undefined,
+              ...getBackgroundFilterStyle(backgroundDim, backgroundBlur),
+            }}
+          />
+        </div>
+      )}
 
-      {/* Content */}
       <div className="relative z-10">
-        <PageHeader currentPage="pomodoro" transparent />
+        <PageHeader currentPage="pomodoro" />
 
         {/* Music Mini Player - Fixed position below header */}
         {/* Hidden when focus mode is active (FocusMode has its own mini player) */}
