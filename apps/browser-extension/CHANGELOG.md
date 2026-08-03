@@ -1,5 +1,44 @@
 # @cuewise/browser-extension
 
+## 1.21.0
+
+### Minor Changes
+
+- Reliability release: settings stored one at a time so two devices can no longer overwrite each other, a Cloud Sync panel that says plainly when sync isn't working instead of showing a healthy one, fixes for several ways your quotes, calendar and exports could change behind you, and **C** on the new tab to swap between your quote and a concept card that's due.
+
+### Patch Changes
+
+- Cloud Sync now tells you when it isn't working. A sync that fails no longer shows as active with a fresh "Last synced" time, and "Sync now" always reports what actually happened, on both the extension and the Mac app, instead of reporting success for a sync that didn't complete. When something goes wrong you'll see what kind of problem it is — offline, a problem on our side, or something on this device — with your account details and controls still available. A device that can't read its encryption key asks for your recovery code instead of saying your sign-in expired, and stops retrying a sync it cannot complete. When Cuewise can't tell you whether this device synced recently, it says so rather than showing nothing.
+
+  Disconnecting Cloud Sync now stops a sync already in progress. Previously a sync that was mid-download kept writing the disconnected account's goals, quotes and settings onto this device, and could leave behind a bookmark that made the next connection silently skip everything before it. Connecting now always starts from a clean bookmark, so a reconnect can no longer inherit one from a different account. Disconnecting while Cloud Sync is still setting up undoes what setup had started, rather than finishing behind you and switching itself back on — and if it had already created your account, it still shows you the recovery code, which is the only way back into it.
+
+- Press **C** on the new tab to swap between your quote and a concept card that's due for review, in either direction. Until now a card only appeared when the rotation decided to show one, and the only way back to a quote was to grade it. Your surfacing and cadence settings still work exactly as before — the key just lets you reach either one when you want it. Holding **C** swaps once rather than flickering between the two while the key is down, and the shortcut stays out of the way while you're typing, when a dialog is open, or while the welcome screen is up.
+- cd561f9: The photographer credit now appears in a small panel above the background credit rather than expanding the line itself, so the "new background" button no longer jumps sideways on hover. The panel stays up long enough to click through to the photographer and Unsplash.
+- c011261: Play, pause, stop and playlist changes made in one tab now reach the tab that is actually playing the music. Only one tab drives YouTube playback, and the others were updating their own controls without ever telling it — so pressing play in a second tab showed "playing" and stayed silent. Ambient sounds still play from whichever tab you started them in, and now stop there when you stop them from any tab.
+- Fix several ways your data could quietly change behind you. Favouriting a quote could leave an older, unreadable copy of it behind, and that copy could then win on your other devices — the favourited version now replaces it everywhere. If moving your quote library to its new home was interrupted, retrying could overwrite quotes added since; the retry now merges instead, and if Cuewise cannot clear the old storage afterwards it empties it rather than leaving a copy that could bring back a quote you deleted. When Cuewise cannot read some cached calendar events, it refetches your agenda instead of showing the gaps as your real schedule for the rest of the day. A backup now includes quotes you only favourited or hid, which a "complete" export was leaving out.
+
+  Importing a file that uses a category or session type this version does not recognise now tells you it was re-filed, rather than changing your data silently — and says so once per kind ("12 quotes had unrecognised categories…") instead of once per row, with the list capped at five and a count of the rest, so the Import button stays where you can reach it.
+
+  Cuewise also checks its own saved data before showing it. If a note, goal or setting on your device ever ends up in a shape this version cannot read — after a downgrade, or a sync from a newer device — that one item is skipped instead of breaking the page, and a stored list containing a corrupt row no longer stops the whole list being read. Nothing else is touched, and anything a newer version added is left exactly as it was.
+
+- Settings are now stored one at a time rather than as a single record. Changing a setting on one device can no longer overwrite a change arriving from another, and settings you have never touched follow Cuewise's defaults, so improvements to those defaults reach you instead of being frozen at whatever they were when you first changed something. Turning on cloud sync is the exception: it uploads your settings in full so every device starts from the same place, which fixes them at their current values from then on.
+
+  This also fixes settings that could silently revert. Changing two settings in quick succession — nudging a slider while flipping a toggle — could quietly undo the first change, in the moment and on disk. Quote filter preferences were saved by a separate path that never reached cloud sync, so they stayed on one device; they now sync like every other preference. Settings survive a change arriving from another device mid-edit, and a setting changed on another device now appears straight away — the open page used to keep showing the old values until you changed something else or reloaded, so a theme you picked on your laptop looked like it hadn't arrived. If storage is full, saving a setting says so instead of appearing to succeed.
+
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies [cd561f9]
+- Updated dependencies [c011261]
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+  - @cuewise/app@1.19.0
+  - @cuewise/shared@1.21.0
+  - @cuewise/storage@1.21.0
+  - @cuewise/ui@1.21.0
+  - @cuewise/sync-client@0.1.6
+  - @cuewise/sync-engine@0.1.6
+
 ## 1.20.0
 
 ### Minor Changes
