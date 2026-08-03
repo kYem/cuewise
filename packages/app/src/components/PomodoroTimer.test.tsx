@@ -401,6 +401,7 @@ describe('PomodoroTimer - chrome variant', () => {
     expect(screen.getByTestId('pomodoro-timer-card')).toHaveClass('bg-black/25');
     expect(screen.getByText('25:00')).toHaveClass('text-white');
     expect(screen.getByTestId('pomodoro-rhythm-row')).toHaveClass('text-white/60');
+    expect(screen.getByTitle('Focus duration')).toHaveClass('hover:text-white/90');
   });
 
   it('uses theme tokens on the surface variant, so a light page stays readable', () => {
@@ -424,5 +425,6 @@ describe('PomodoroTimer - chrome variant', () => {
     const row = screen.getByTestId('pomodoro-rhythm-row');
     expect(row).toHaveClass('text-secondary');
     expect(row).not.toHaveClass('text-white/60');
+    expect(screen.getByTitle('Focus duration')).not.toHaveClass('hover:text-white/90');
   });
 });
