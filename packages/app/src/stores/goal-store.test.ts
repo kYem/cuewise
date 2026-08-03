@@ -986,6 +986,9 @@ describe('converging on goals written elsewhere', () => {
     markMutated.mockClear();
     markMutatedBulk.mockClear();
     markDeleted.mockClear();
+    // vitest's restoreMocks resets spies, not vi.fn()s — without this a leftover warn from the
+    // previous test satisfies the next one's waitFor before it has done anything.
+    toastWarning.mockClear();
     vi.mocked(storage.readSettings).mockResolvedValue(settingsRead(autoRollDisabled));
     vi.mocked(storage.setGoals).mockResolvedValue({ success: true });
   });
@@ -1077,7 +1080,7 @@ describe('converging on goals written elsewhere', () => {
     fake.emit(['goals']);
 
     await vi.waitFor(() =>
-      expect(toastWarning).toHaveBeenCalledWith(expect.stringContaining('out of date'))
+      expect(toastWarning).toHaveBeenCalledWith(expect.stringContaining('your goals'))
     );
     expect(useGoalStore.getState().goals).toBe(before);
   });

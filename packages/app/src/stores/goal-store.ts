@@ -89,8 +89,6 @@ async function persistGoals(updatedGoals: Goal[]): Promise<void> {
   assertPersisted(await saveAllGoals(updatedGoals));
 }
 
-// No advice to reload: the read fails both for a transient miss, which reload fixes, and for a
-// stored value this build cannot use, which it never will.
 const STALE_GOALS_MESSAGE =
   "Cuewise couldn't re-read your goals just now, so what you see may be out of date.";
 

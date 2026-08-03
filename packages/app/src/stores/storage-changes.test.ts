@@ -295,6 +295,37 @@ describe('createStorageObserver', () => {
     expect(applied).toBe(true);
   });
 
+  // Awaiting the pass already running would answer with a read taken before reconcile was asked
+  // for — and the caller writes the whole array back from what it then holds.
+  it('resolves reconcile after the trailing pass, not the one already running', async () => {
+    const fake = fakeObservableStore();
+    configurePlatform({ storage: fake.store });
+    let release = (): void => {};
+    let started = 0;
+    let applied = 0;
+    const observer = createStorageObserver('goals', ['goals'], async () => {
+      started += 1;
+      if (started === 1) {
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+      } else {
+        // The read the caller is waiting on: it must not resume before this lands.
+        await settleQueuedWork();
+      }
+      applied = started;
+    });
+    observer.subscribe();
+
+    fake.emit(['goals']);
+    await vi.waitFor(() => expect(started).toBe(1));
+    const settled = observer.reconcile();
+    release();
+    await settled;
+
+    expect(applied).toBe(2);
+  });
+
   it('subscribes without re-reading, so a load can observe before its own first read', async () => {
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });

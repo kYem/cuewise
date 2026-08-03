@@ -58,6 +58,7 @@ export function createStorageObserver(
   let observing: { store: ObservableKeyValueStore; unsubscribe: () => void } | null = null;
   let inFlight: Promise<void> | null = null;
   let pending = false;
+  let drained: { promise: Promise<void>; settle: () => void } | null = null;
 
   function run(): void {
     pending = false;
@@ -68,12 +69,12 @@ export function createStorageObserver(
       .then(
         () => report?.fresh(),
         (error) => {
-          // Named to the user too: the copy this store keeps is now older than storage, and its
-          // next write rewrites the whole array from it.
           logger.error(
             `Could not apply ${what} changed elsewhere: ${describeThrown(error)}`,
             error
           );
+          // The copy this store keeps is now older than storage, and its next write rewrites the
+          // whole array from it — so this is named to the user, not only to the log.
           report?.stale();
         }
       )
@@ -81,18 +82,35 @@ export function createStorageObserver(
         inFlight = null;
         if (pending) {
           run();
+          return;
         }
+        const settled = drained;
+        drained = null;
+        settled?.settle();
       });
   }
 
-  // A pull writes one entity per call, so a burst coalesces into a single re-read — plus one
-  // trailing pass, since a write landing mid-refresh is not in the snapshot that refresh read.
-  function queueRefresh(): void {
-    if (inFlight !== null) {
-      pending = true;
-      return;
+  /**
+   * A pull writes one entity per call, so a burst coalesces into a single re-read — plus one
+   * trailing pass, since a write landing mid-refresh is not in the snapshot that refresh read.
+   *
+   * Answers when the queue is empty, NOT when the current pass ends: awaiting the pass already
+   * running would hand the caller a read taken before it asked for one.
+   */
+  function queueRefresh(): Promise<void> {
+    if (drained === null) {
+      let settle = (): void => {};
+      const promise = new Promise<void>((resolve) => {
+        settle = resolve;
+      });
+      drained = { promise, settle };
     }
-    run();
+    if (inFlight === null) {
+      run();
+    } else {
+      pending = true;
+    }
+    return drained?.promise ?? Promise.resolve();
   }
 
   function subscribe(): void {
@@ -120,8 +138,7 @@ export function createStorageObserver(
     subscribe,
     reconcile() {
       subscribe();
-      queueRefresh();
-      return inFlight ?? Promise.resolve();
+      return queueRefresh();
     },
   };
 }

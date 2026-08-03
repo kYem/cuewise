@@ -683,9 +683,22 @@ describe('converging on reminders written elsewhere', () => {
     fake.emit(['reminders']);
 
     await vi.waitFor(() =>
-      expect(toastWarning).toHaveBeenCalledWith(expect.stringContaining('out of date'))
+      expect(toastWarning).toHaveBeenCalledWith(expect.stringContaining('your reminders'))
     );
     expect(useReminderStore.getState().reminders).toBe(before);
     expect(useReminderStore.getState().error).toBeNull();
+  });
+
+  // ReminderWidget chains fireDueReminders off initialize(), and that rewrites the whole array
+  // from the in-memory copy — without the awaited reconcile it writes the pre-pull one.
+  it('picks up a pull that landed while it was still loading', async () => {
+    const fake = fakeObservableStore();
+    configurePlatform({ storage: fake.store, syncSink: fakeSink });
+    getRemindersMock.mockResolvedValue([mine]);
+    const loaded = useReminderStore.getState().initialize();
+    getRemindersMock.mockResolvedValue([mine, theirs]);
+    await loaded;
+
+    expect(useReminderStore.getState().reminders).toHaveLength(2);
   });
 });

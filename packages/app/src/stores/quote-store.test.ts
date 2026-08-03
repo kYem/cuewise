@@ -1111,7 +1111,7 @@ describe('converging on quotes written elsewhere', () => {
     fake.emit(['customQuotes']);
 
     await vi.waitFor(() =>
-      expect(mockToastWarning).toHaveBeenCalledWith(expect.stringContaining('out of date'))
+      expect(mockToastWarning).toHaveBeenCalledWith(expect.stringContaining('your quotes'))
     );
     expect(useQuoteStore.getState().quotes).toBe(before);
     expect(useQuoteStore.getState().error).toBeNull();

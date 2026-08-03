@@ -305,7 +305,8 @@ export async function setCurrentQuote(quote: Quote): Promise<StorageResult> {
 /**
  * Raw-then-validate, like getQuotes: every writer rewrites the whole array from what this read
  * answered, so reporting a failed read as `[]` is how a wedged read becomes a fleet-wide erase.
- * Only a key that was never written reads as empty — see getListRaw.
+ * A failed read and an unusable stored value both throw; a row the schema rejects is dropped
+ * here but carried through on write, so it is not deleted either.
  */
 export async function getGoals(): Promise<Goal[]> {
   const area = await getStorageArea();
