@@ -1,3 +1,4 @@
+import type { Settings } from '@cuewise/shared';
 import * as storage from '@cuewise/storage';
 import { defaultSettings } from '@cuewise/test-utils/fixtures';
 import { render, screen } from '@testing-library/react';
@@ -15,7 +16,7 @@ vi.mock('@cuewise/storage', () => ({
   setSettingsPatch: vi.fn(),
   getCustomBackground: vi.fn(),
   setCustomBackground: vi.fn(),
-  removeCustomBackground: vi.fn(),
+  clearCustomBackground: vi.fn(),
 }));
 
 vi.mock('../../stores/toast-store', () => ({
@@ -25,6 +26,7 @@ vi.mock('../../stores/toast-store', () => ({
 }));
 
 const BACKGROUND_ROWS = ['Background', 'Your own image', 'Readability'];
+const FOCUS_GATED_ROWS = ['Show quote', 'Show current goal', 'Auto-enter on start'];
 
 function sectionById(id: string) {
   const section = SETTINGS_SECTIONS.find((s) => s.id === id);
@@ -34,10 +36,10 @@ function sectionById(id: string) {
   return section;
 }
 
-function renderSection(id: string, filter = '') {
+function renderSection(id: string, filter = '', settingsOverrides: Partial<Settings> = {}) {
   const section = sectionById(id);
   const props: SettingsSectionProps = {
-    s: defaultSettings,
+    s: { ...defaultSettings, ...settingsOverrides },
     set: vi.fn(),
     filter,
     onReset: vi.fn(),
@@ -46,7 +48,7 @@ function renderSection(id: string, filter = '') {
   return render(<section.component {...props} />);
 }
 
-/** How SettingsModal decides which sections a search surfaces. */
+// Mirrors SettingsModal.tsx:158 — drifts silently if that filter changes.
 function sectionsMatching(query: string) {
   return SETTINGS_SECTIONS.filter((s) => settingsMatch(query, s.label, s.terms)).map((s) => s.id);
 }
@@ -78,7 +80,7 @@ describe('settings sections', () => {
       expect(screen.getByText(label)).toBeInTheDocument();
     });
 
-    it('says where the photo actually appears', () => {
+    it('documents Glass and focus mode as the surfaces that show the photo', () => {
       renderSection('background');
 
       expect(
@@ -88,18 +90,24 @@ describe('settings sections', () => {
   });
 
   describe('Focus mode', () => {
-    it.each(BACKGROUND_ROWS)('no longer renders the %s row', (label) => {
+    it.each(BACKGROUND_ROWS)('does not render the %s row', (label) => {
       renderSection('focus');
 
       expect(screen.queryByText(label)).not.toBeInTheDocument();
     });
 
-    it('keeps the controls the focus toggle genuinely gates', () => {
-      renderSection('focus');
+    it('renders the controls the focus toggle gates when it is on', () => {
+      renderSection('focus', '', { focusModeEnabled: true });
 
       expect(screen.getByText('Show quote')).toBeInTheDocument();
       expect(screen.getByText('Show current goal')).toBeInTheDocument();
       expect(screen.getByText('Auto-enter on start')).toBeInTheDocument();
+    });
+
+    it.each(FOCUS_GATED_ROWS)('hides the %s row when the toggle is off', (label) => {
+      renderSection('focus', '', { focusModeEnabled: false });
+
+      expect(screen.queryByText(label)).not.toBeInTheDocument();
     });
   });
 
@@ -109,6 +117,7 @@ describe('settings sections', () => {
       'blur',
       'wallpaper',
       'unsplash',
+      'scenic',
     ])('surfaces Background and not Focus mode for "%s"', (query) => {
       const matched = sectionsMatching(query);
 
@@ -118,6 +127,23 @@ describe('settings sections', () => {
 
     it.each(['fullscreen', 'auto enter'])('still surfaces Focus mode for "%s"', (query) => {
       expect(sectionsMatching(query)).toContain('focus');
+    });
+
+    // A section matches on `terms`, then each row re-filters on its own label/help/keywords
+    // (SettingControls.tsx:31). A term no row carries opens the section onto an empty panel.
+    // Scoped to the sections this change owns; timer/sound/home have pre-existing orphans.
+    it.each([
+      ['background', sectionById('background').terms],
+      ['focus', sectionById('focus').terms],
+    ] as const)('every search term in %s reaches at least one row', (id, terms) => {
+      const orphans = [...new Set(terms.split(' '))].filter((term) => {
+        const { container, unmount } = renderSection(id, term);
+        const rendered = container.textContent?.trim() ?? '';
+        unmount();
+        return rendered.length === 0;
+      });
+
+      expect(orphans).toEqual([]);
     });
   });
 });

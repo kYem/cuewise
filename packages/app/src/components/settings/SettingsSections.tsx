@@ -351,7 +351,7 @@ function SoundSection({ s, set, filter, onOpenSoundsPanel }: SettingsSectionProp
   );
 }
 
-/* Focus mode */
+/* Background */
 function BackgroundSection({ s, set, filter }: SettingsSectionProps) {
   return (
     <div>
@@ -360,7 +360,7 @@ function BackgroundSection({ s, set, filter }: SettingsSectionProps) {
         label="Background"
         filter={filter}
         help="High-quality photos from Unsplash. Shown on the Glass theme, and in focus mode on any theme."
-        keywords="image category nature forest ocean mountains minimal dark glass wallpaper"
+        keywords="image category nature forest ocean mountains minimal dark glass wallpaper scenic photo unsplash"
       >
         <ThumbPicker
           value={s.focusModeImageCategory}
@@ -389,6 +389,7 @@ function BackgroundSection({ s, set, filter }: SettingsSectionProps) {
   );
 }
 
+/* Focus mode */
 function FocusSection({ s, set, filter }: SettingsSectionProps) {
   return (
     <div>
