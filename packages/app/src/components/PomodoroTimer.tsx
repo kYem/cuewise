@@ -71,7 +71,42 @@ const TIMER_SIZES: Record<
   },
 };
 
-export const PomodoroTimer: React.FC = () => {
+// 'overlay': white-on-dark glass, legible over the Glass theme photo.
+// 'surface': theme tokens, for the plain themes where the page can be light.
+const OVERLAY_TOKENS = {
+  card: 'bg-black/25 backdrop-blur-md border-white/10',
+  title: 'text-white',
+  muted: 'text-white/70',
+  faint: 'text-white/60',
+  hint: 'text-white/50',
+  menu: 'bg-black/50 backdrop-blur-md border-white/20',
+  menuItem: 'text-white hover:bg-white/20',
+  menuItemMuted: 'text-white/70 hover:bg-white/20 hover:text-white',
+  divider: 'bg-white/15',
+  pip: 'bg-white/20',
+  iconButton: 'bg-white/20 text-white hover:bg-white/30',
+} as const;
+
+const SURFACE_TOKENS = {
+  card: 'bg-surface/80 backdrop-blur-sm border-border',
+  title: 'text-primary',
+  muted: 'text-secondary',
+  faint: 'text-secondary',
+  hint: 'text-tertiary',
+  menu: 'bg-surface backdrop-blur-sm border-border',
+  menuItem: 'text-primary hover:bg-surface-variant',
+  menuItemMuted: 'text-secondary hover:bg-surface-variant hover:text-primary',
+  divider: 'bg-divider',
+  pip: 'bg-divider',
+  iconButton: 'bg-surface-variant text-primary hover:bg-surface-variant/70',
+} as const;
+
+interface PomodoroTimerProps {
+  variant?: 'overlay' | 'surface';
+}
+
+export const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ variant = 'overlay' }) => {
+  const t = variant === 'overlay' ? OVERLAY_TOKENS : SURFACE_TOKENS;
   // Pomodoro state - use useShallow to prevent re-renders when unrelated state changes
   const {
     status,
@@ -279,7 +314,7 @@ export const PomodoroTimer: React.FC = () => {
 
   return (
     <div className={`${timerSize.card} max-w-[92vw] mx-auto`}>
-      <div className="bg-black/25 backdrop-blur-md rounded-2xl shadow-lg p-density-lg border border-white/10">
+      <div className={`${t.card} rounded-2xl shadow-lg p-density-lg border`}>
         {/* Header - icon + goal picker (work) or session label (break). During work
             the title IS the goal selector: the chosen goal or "Focus Session" + a
             chevron opening today's goals; Clear lives inside that dropdown. */}
@@ -301,7 +336,7 @@ export const PomodoroTimer: React.FC = () => {
                 <div className="flex min-w-0 flex-1 flex-col">
                   <h2
                     ref={titleRef}
-                    className="min-w-0 font-semibold text-white"
+                    className={`min-w-0 font-semibold ${t.title}`}
                     style={{
                       lineHeight: 1.2,
                       maxHeight: '2.4em',
@@ -318,31 +353,37 @@ export const PomodoroTimer: React.FC = () => {
                     {headerTitle}
                   </h2>
                   {!selectedGoal && activeGoals.length > 0 && (
-                    <span className="flex items-center gap-1 text-[11px] leading-tight text-white/50">
+                    <span className={`flex items-center gap-1 text-[11px] leading-tight ${t.hint}`}>
                       <Target className="h-3 w-3 flex-shrink-0" />
                       Select a goal
                     </span>
                   )}
                 </div>
                 <ChevronDown
-                  className={`w-4 h-4 text-white/60 flex-shrink-0 transition-transform ${
+                  className={`w-4 h-4 ${t.faint} flex-shrink-0 transition-transform ${
                     showGoalPicker ? 'rotate-180' : ''
                   }`}
                 />
               </button>
             ) : (
-              <h2 className="text-lg font-semibold text-white flex-1 min-w-0 truncate">{label}</h2>
+              <h2 className={`text-lg font-semibold ${t.title} flex-1 min-w-0 truncate`}>
+                {label}
+              </h2>
             )}
           </div>
 
           {/* Goal Picker Dropdown */}
           {isWork && showGoalPicker && (
-            <div className="absolute left-0 right-0 top-full mt-2 z-20 p-2 bg-black/50 backdrop-blur-md rounded-lg border border-white/20 shadow-lg max-h-48 overflow-y-auto">
-              <p className="px-2 pb-1.5 pt-1 text-[11px] font-semibold uppercase tracking-wider text-white/50">
+            <div
+              className={`absolute left-0 right-0 top-full mt-2 z-20 p-2 ${t.menu} rounded-lg border shadow-lg max-h-48 overflow-y-auto`}
+            >
+              <p
+                className={`px-2 pb-1.5 pt-1 text-[11px] font-semibold uppercase tracking-wider ${t.hint}`}
+              >
                 Work on a goal
               </p>
               {activeGoals.length === 0 ? (
-                <p className="p-2 text-sm text-white/70">No active goals for today</p>
+                <p className={`p-2 text-sm ${t.muted}`}>No active goals for today</p>
               ) : (
                 activeGoals.map((goal) => (
                   <button
@@ -352,7 +393,7 @@ export const PomodoroTimer: React.FC = () => {
                       setSelectedGoal(goal.id);
                       setShowGoalPicker(false);
                     }}
-                    className="flex w-full items-center gap-2 rounded p-2 text-left text-sm text-white transition-colors hover:bg-white/20"
+                    className={`flex w-full items-center gap-2 rounded p-2 text-left text-sm transition-colors ${t.menuItem}`}
                   >
                     <span className="min-w-0 flex-1 truncate">{goal.text}</span>
                     {selectedGoalId === goal.id && <Check className="h-4 w-4 flex-shrink-0" />}
@@ -361,14 +402,14 @@ export const PomodoroTimer: React.FC = () => {
               )}
               {selectedGoal && (
                 <>
-                  <div className="my-1 h-px bg-white/15" />
+                  <div className={`my-1 h-px ${t.divider}`} />
                   <button
                     type="button"
                     onClick={() => {
                       setSelectedGoal(null);
                       setShowGoalPicker(false);
                     }}
-                    className="flex w-full items-center gap-2 rounded p-2 text-left text-sm text-white/70 transition-colors hover:bg-white/20 hover:text-white"
+                    className={`flex w-full items-center gap-2 rounded p-2 text-left text-sm transition-colors ${t.menuItemMuted}`}
                   >
                     <X className="h-4 w-4 flex-shrink-0" />
                     <span>Clear goal</span>
@@ -415,7 +456,7 @@ export const PomodoroTimer: React.FC = () => {
 
             {/* Time display in center */}
             <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <div className={`${timerSize.fontSize} font-bold text-white font-mono`}>
+              <div className={`${timerSize.fontSize} font-bold ${t.title} font-mono`}>
                 {formatTimeRemaining(timeRemaining)}
               </div>
               <div
@@ -434,16 +475,14 @@ export const PomodoroTimer: React.FC = () => {
               {Array.from({ length: longBreakInterval }).map((_, i) => (
                 <div
                   key={i}
-                  className={`h-1.5 w-5 rounded-full ${
-                    i < consecutiveWorkSessions ? '' : 'bg-white/20'
-                  }`}
+                  className={`h-1.5 w-5 rounded-full ${i < consecutiveWorkSessions ? '' : t.pip}`}
                   style={
                     i < consecutiveWorkSessions ? { backgroundColor: progressColor } : undefined
                   }
                 />
               ))}
             </div>
-            <span className="text-xs text-white/60">{sessionsUntilLongBreak} until long break</span>
+            <span className={`text-xs ${t.faint}`}>{sessionsUntilLongBreak} until long break</span>
           </div>
         )}
 
@@ -491,7 +530,7 @@ export const PomodoroTimer: React.FC = () => {
             <button
               type="button"
               onClick={reset}
-              className="p-2.5 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-colors shadow-md hover:shadow-lg"
+              className={`p-2.5 ${t.iconButton} rounded-lg transition-colors shadow-md hover:shadow-lg`}
               title="Reset timer"
             >
               <RotateCcw className="w-4 h-4" />
@@ -502,7 +541,7 @@ export const PomodoroTimer: React.FC = () => {
           <button
             type="button"
             onClick={skip}
-            className="p-2.5 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-colors shadow-md hover:shadow-lg"
+            className={`p-2.5 ${t.iconButton} rounded-lg transition-colors shadow-md hover:shadow-lg`}
             title={`Skip to ${isWork ? 'break' : 'work'}`}
           >
             <SkipForward className="w-4 h-4" />
@@ -511,7 +550,7 @@ export const PomodoroTimer: React.FC = () => {
           {/* Pop-out Button — floating always-on-top timer (Document PiP) */}
           {status !== 'idle' && (
             <PomodoroPipButton
-              className="p-2.5 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-colors shadow-md hover:shadow-lg"
+              className={`p-2.5 ${t.iconButton} rounded-lg transition-colors shadow-md hover:shadow-lg`}
               iconClassName="w-4 h-4"
             />
           )}
@@ -521,7 +560,7 @@ export const PomodoroTimer: React.FC = () => {
             <button
               type="button"
               onClick={() => useFocusModeStore.getState().enterFocusMode()}
-              className="p-2.5 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-colors shadow-md hover:shadow-lg"
+              className={`p-2.5 ${t.iconButton} rounded-lg transition-colors shadow-md hover:shadow-lg`}
               title="Enter focus mode"
             >
               <Maximize2 className="w-4 h-4" />
@@ -533,7 +572,7 @@ export const PomodoroTimer: React.FC = () => {
         <div className="mt-density-md">
           <PomodoroMiniSettings settings={settings} onApply={handleApplyTimerSettings} />
           {activeSource !== 'none' && isSoundsPlaying && isWork && (
-            <p className="mt-2 flex items-center justify-center gap-1.5 text-xs text-white/60">
+            <p className={`mt-2 flex items-center justify-center gap-1.5 text-xs ${t.faint}`}>
               <Music className="w-3 h-3" />
               <span>{getActiveSourceName()}</span>
             </p>

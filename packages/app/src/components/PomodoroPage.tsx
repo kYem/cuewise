@@ -34,6 +34,7 @@ export const PomodoroPage: React.FC = () => {
   const backgroundBlur = useSettingsStore(selectBackgroundBlur);
   const pomodoroCompanion = useSettingsStore((state) => state.settings.pomodoroCompanion);
   const initCalendar = useCalendarStore((state) => state.initialize);
+  // Hides the mini player: FocusMode renders its own.
   const isFocusModeActive = useFocusModeStore((state) => state.isActive);
   const [lastManualRefresh, setLastManualRefresh] = useState(Date.now());
   const [backgroundImage, setBackgroundImage] = useState<string | null>(null);
@@ -56,8 +57,6 @@ export const PomodoroPage: React.FC = () => {
     }
   }, [companionMode, initCalendar]);
 
-  // The photo belongs to the Glass theme; other themes keep their own colours here, the
-  // same as the home page. Focus mode is the exception and shows it on every theme.
   const showBackgroundImage = colorTheme === 'glass';
 
   useEffect(() => {
@@ -129,14 +128,17 @@ export const PomodoroPage: React.FC = () => {
     };
   }, [quoteChangeInterval, refreshQuote, lastManualRefresh]);
 
+  // White-on-dark only reads over the photo; without it the page can be light.
+  const chromeVariant = showBackgroundImage ? 'overlay' : 'surface';
+
   // Companion shown beside the timer on large screens
   let companion: React.ReactNode;
   if (companionMode === 'calendar') {
-    companion = <CalendarStrip />;
+    companion = <CalendarStrip variant={chromeVariant} />;
   } else if (companionMode === 'both') {
     companion = (
       <div className="flex w-full flex-col items-center gap-density-lg">
-        <CalendarStrip lean />
+        <CalendarStrip lean variant={chromeVariant} />
         <QuoteDisplay onManualRefresh={() => setLastManualRefresh(Date.now())} hideCategory />
       </div>
     );
@@ -147,11 +149,12 @@ export const PomodoroPage: React.FC = () => {
   return (
     <div className="min-h-screen w-full relative">
       {showBackgroundImage && (
-        <div className="absolute inset-0 overflow-hidden">
+        <div className="absolute inset-0 overflow-hidden" data-testid="pomodoro-background">
           <div
             className={`absolute inset-0 bg-cover bg-center bg-no-repeat transition-opacity duration-1000 ${
               imageLoaded && backgroundImage ? 'opacity-100' : 'opacity-0'
             }`}
+            data-testid="pomodoro-background-photo"
             style={{
               backgroundImage: backgroundImage ? `url(${backgroundImage})` : undefined,
               ...getBackgroundFilterStyle(backgroundDim, backgroundBlur),
@@ -163,26 +166,21 @@ export const PomodoroPage: React.FC = () => {
       <div className="relative z-10">
         <PageHeader currentPage="pomodoro" />
 
-        {/* Music Mini Player - Fixed position below header */}
-        {/* Hidden when focus mode is active (FocusMode has its own mini player) */}
         {pomodoroMusicEnabled && !isFocusModeActive && (
           <div className="fixed top-16 left-4 z-50">
-            <SoundsMiniPlayer />
+            <SoundsMiniPlayer variant={chromeVariant} />
           </div>
         )}
 
-        {/* Split Layout for Large Screens */}
         <div className="flex flex-col lg:flex-row gap-density-lg items-center justify-center min-h-[calc(100vh-12rem)] px-4 sm:px-6 lg:px-8 py-8">
-          {/* Pomodoro Timer */}
           <div className="flex-shrink-0">
-            <PomodoroTimer />
+            <PomodoroTimer variant={chromeVariant} />
           </div>
 
           <div className="hidden lg:flex lg:max-w-2xl">{companion}</div>
         </div>
       </div>
 
-      {/* Focus Mode Overlay (renders as portal) */}
       <FocusMode />
     </div>
   );

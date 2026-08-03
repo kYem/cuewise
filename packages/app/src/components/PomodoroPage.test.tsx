@@ -1,5 +1,6 @@
-import type { Settings } from '@cuewise/shared';
+import { COLOR_THEMES, type ColorTheme, type Settings } from '@cuewise/shared';
 import { createSelectorMock } from '@cuewise/test-utils';
+import { defaultSettings } from '@cuewise/test-utils/fixtures';
 import { render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useBackgroundStore } from '../stores/background-store';
@@ -30,8 +31,8 @@ vi.mock('../utils/unsplash', () => ({ loadImageWithFallback: () => Promise.resol
 
 // Stub heavy children so the test isolates the companion-selection logic.
 vi.mock('./CalendarStrip', () => ({
-  CalendarStrip: ({ lean }: { lean?: boolean }) => (
-    <div data-testid="calendar-strip" data-lean={lean ? 'true' : 'false'} />
+  CalendarStrip: ({ lean, variant }: { lean?: boolean; variant?: string }) => (
+    <div data-testid="calendar-strip" data-lean={lean ? 'true' : 'false'} data-variant={variant} />
   ),
 }));
 vi.mock('./QuoteDisplay', () => ({
@@ -40,7 +41,11 @@ vi.mock('./QuoteDisplay', () => ({
   ),
 }));
 vi.mock('./FocusMode', () => ({ FocusMode: () => null }));
-vi.mock('./PomodoroTimer', () => ({ PomodoroTimer: () => null }));
+vi.mock('./PomodoroTimer', () => ({
+  PomodoroTimer: ({ variant }: { variant?: string }) => (
+    <div data-testid="pomodoro-timer" data-variant={variant} />
+  ),
+}));
 vi.mock('./PageHeader', () => ({ PageHeader: () => null }));
 vi.mock('./sounds', () => ({ SoundsMiniPlayer: () => null }));
 
@@ -56,7 +61,9 @@ function setup(
     createSelectorMock({
       initialize: vi.fn(),
       settings: {
+        ...defaultSettings,
         quoteChangeInterval: 0,
+        // The background only renders under glass; these tests are about that layer.
         colorTheme: 'glass',
         focusModeImageCategory: 'nature',
         pomodoroMusicEnabled: false,
@@ -163,17 +170,15 @@ describe('background resolution', () => {
   });
 });
 
+const PLAIN_THEMES = (Object.keys(COLOR_THEMES) as ColorTheme[]).filter((t) => t !== 'glass');
+
 describe('PomodoroPage - theme gate', () => {
-  it.each([
-    'purple',
-    'forest',
-    'rose',
-  ] as const)('renders no background layer on the %s theme', (colorTheme) => {
+  it.each(PLAIN_THEMES)('renders no background layer on the %s theme', (colorTheme) => {
     setup('quote', false, { colorTheme });
 
-    const { container } = render(<PomodoroPage />);
+    render(<PomodoroPage />);
 
-    expect(container.querySelector('.bg-cover')).toBeNull();
+    expect(screen.queryByTestId('pomodoro-background')).not.toBeInTheDocument();
   });
 
   it('does not resolve an image the theme will never show', async () => {
@@ -185,12 +190,58 @@ describe('PomodoroPage - theme gate', () => {
     expect(vi.mocked(preloadImages)).not.toHaveBeenCalled();
   });
 
-  it('renders the background layer on the glass theme', () => {
+  it('shows the resolved photo on the glass theme', async () => {
     setup('quote', false, { colorTheme: 'glass' });
 
-    const { container } = render(<PomodoroPage />);
+    render(<PomodoroPage />);
 
-    expect(container.querySelector('.bg-cover')).not.toBeNull();
+    await waitFor(() => {
+      const photo = screen.getByTestId('pomodoro-background-photo');
+      expect(photo).toHaveClass('opacity-100');
+      expect(photo).toHaveStyle({ backgroundImage: 'url(preloaded.jpg)' });
+    });
+  });
+
+  it('drops a loaded photo when the user leaves the glass theme', async () => {
+    setup('quote', false, { colorTheme: 'glass' });
+    const { rerender } = render(<PomodoroPage />);
+    await waitFor(() =>
+      expect(screen.getByTestId('pomodoro-background-photo')).toHaveClass('opacity-100')
+    );
+
+    setup('quote', false, { colorTheme: 'purple' });
+    rerender(<PomodoroPage />);
+    expect(screen.queryByTestId('pomodoro-background')).not.toBeInTheDocument();
+
+    setup('quote', false, { colorTheme: 'glass' });
+    rerender(<PomodoroPage />);
+    expect(screen.getByTestId('pomodoro-background-photo')).toHaveClass('opacity-0');
+  });
+});
+
+describe('PomodoroPage - chrome variant', () => {
+  it('keeps the timer on overlay chrome under the glass photo', () => {
+    setup('quote', false, { colorTheme: 'glass' });
+
+    render(<PomodoroPage />);
+
+    expect(screen.getByTestId('pomodoro-timer')).toHaveAttribute('data-variant', 'overlay');
+  });
+
+  it.each(PLAIN_THEMES)('switches the timer to surface chrome on %s', (colorTheme) => {
+    setup('quote', false, { colorTheme });
+
+    render(<PomodoroPage />);
+
+    expect(screen.getByTestId('pomodoro-timer')).toHaveAttribute('data-variant', 'surface');
+  });
+
+  it.each(PLAIN_THEMES)('switches the calendar strip to surface chrome on %s', (colorTheme) => {
+    setup('calendar', true, { colorTheme });
+
+    render(<PomodoroPage />);
+
+    expect(screen.getByTestId('calendar-strip')).toHaveAttribute('data-variant', 'surface');
   });
 });
 
