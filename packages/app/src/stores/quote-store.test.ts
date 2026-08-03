@@ -3,6 +3,7 @@ import {
   configurePlatform,
   logger,
   type QuoteCollection,
+  resetPlatform,
   type Settings,
   type SyncMutationSink,
 } from '@cuewise/shared';
@@ -1031,10 +1032,15 @@ describe('converging on quotes written elsewhere', () => {
     markMutated.mockClear();
     markMutatedBulk.mockClear();
     markDeleted.mockClear();
+    // vitest's restoreMocks resets spies, not vi.fn()s — a leftover warn would satisfy the next
+    // test's waitFor before it has done anything.
+    mockToastWarning.mockClear();
   });
 
+  // Not just the sink: the observer is module-scoped, so a fake left registered keeps it
+  // subscribed to a dead backend for any describe added after this one.
   afterEach(() => {
-    configurePlatform({ syncSink: null });
+    resetPlatform();
   });
 
   it('adopts a quote the sync engine wrote straight to storage', async () => {
@@ -1115,6 +1121,24 @@ describe('converging on quotes written elsewhere', () => {
     );
     expect(useQuoteStore.getState().quotes).toBe(before);
     expect(useQuoteStore.getState().error).toBeNull();
+  });
+
+  // The collections read must reject out of the refresh too — degrading it to [] is what would
+  // make the next createCollection persist a one-element array over the rest.
+  it('keeps its collections when only the collections read fails', async () => {
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const fake = await initializeObserving();
+    const before = useQuoteStore.getState().collections;
+    vi.mocked(storage.getCollections).mockRejectedValue(
+      new Error('Could not read the stored collections list')
+    );
+
+    fake.emit(['collections']);
+
+    await vi.waitFor(() =>
+      expect(mockToastWarning).toHaveBeenCalledWith(expect.stringContaining('your quotes'))
+    );
+    expect(useQuoteStore.getState().collections).toBe(before);
   });
 
   it('leaves the displayed quote alone', async () => {

@@ -105,12 +105,15 @@ export function createStorageObserver(
       });
       drained = { promise, settle };
     }
+    // Held before run(), which can replace `drained` once its pass settles — returning the field
+    // instead would hand a later caller's promise to this one.
+    const awaiting = drained.promise;
     if (inFlight === null) {
       run();
     } else {
       pending = true;
     }
-    return drained?.promise ?? Promise.resolve();
+    return awaiting;
   }
 
   function subscribe(): void {

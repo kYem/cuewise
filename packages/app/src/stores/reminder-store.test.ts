@@ -1,4 +1,4 @@
-import { configurePlatform, logger, type SyncMutationSink } from '@cuewise/shared';
+import { configurePlatform, logger, resetPlatform, type SyncMutationSink } from '@cuewise/shared';
 import * as storage from '@cuewise/storage';
 import { recurringReminderFactory, reminderFactory } from '@cuewise/test-utils/factories';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -597,8 +597,16 @@ describe('converging on reminders written elsewhere', () => {
     return fake;
   }
 
+  beforeEach(() => {
+    // vitest's restoreMocks resets spies, not vi.fn()s — a leftover warn would satisfy the next
+    // test's waitFor before it has done anything.
+    toastWarning.mockClear();
+  });
+
+  // Not just the sink: the observer is module-scoped, so a fake left registered keeps it
+  // subscribed to a dead backend for any describe added after this one.
   afterEach(() => {
-    configurePlatform({ syncSink: null });
+    resetPlatform();
   });
 
   it('adopts a reminder the sync engine wrote straight to storage', async () => {

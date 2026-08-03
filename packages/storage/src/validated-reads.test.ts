@@ -557,44 +557,6 @@ describe('getQuotes on a read it could not make', () => {
     await expect(getQuotes()).resolves.toEqual([]);
   });
 
-  // The three validated list reads that back a whole-array writer. Goals had this alone; a
-  // simplification pass that put any of them back on the tolerant helper would restore the erase.
-  describe.each([
-    ['goals', 'goals', getGoals],
-    ['reminders', 'reminders', getReminders],
-    ['collections', 'collections', getCollections],
-  ] as const)('%s, read through its store', (_name, key, read) => {
-    it('refuses a read that failed rather than reporting an empty list', async () => {
-      const { store } = capturingStore();
-      configurePlatform({
-        storage: {
-          ...store,
-          getMany: async (keys: string[], area: StorageArea = 'local') => {
-            if (keys.includes(key)) {
-              return null;
-            }
-            return store.getMany(keys, area);
-          },
-        },
-      });
-
-      await expect(read()).rejects.toThrow(/could not read/i);
-    });
-
-    it('refuses a stored value that is not a list', async () => {
-      vi.spyOn(logger, 'error').mockImplementation(() => {});
-      configurePlatform({ storage: storeHolding({ [key]: { nope: true } }) });
-
-      await expect(read()).rejects.toThrow(/unreadable/i);
-    });
-
-    it('still reads a key that was never written as empty', async () => {
-      configurePlatform({ storage: storeHolding({}) });
-
-      await expect(read()).resolves.toEqual([]);
-    });
-  });
-
   // The legacy key gates the migration. The single-key read answers null for a failed read and
   // for a key that was never written alike, so the gate skips, getQuotes answers [] positively,
   // and the store seeds over the very library the migration was about to move.
@@ -646,6 +608,44 @@ describe('getQuotes on a read it could not make', () => {
     vi.spyOn(logger, 'error').mockImplementation(() => {});
 
     await expect(getQuotes()).rejects.toThrow(/unreadable/i);
+  });
+});
+
+// The synced lists whose store rewrites them whole: putting any back on the tolerant helper
+// makes a failed read an erase every other device then adopts.
+describe.each([
+  ['goals', getGoals],
+  ['reminders', getReminders],
+  ['collections', getCollections],
+] as const)('%s, read through its store', (key, read) => {
+  it('refuses a read that failed rather than reporting an empty list', async () => {
+    const { store } = capturingStore();
+    configurePlatform({
+      storage: {
+        ...store,
+        getMany: async (keys: string[], area: StorageArea = 'local') => {
+          if (keys.includes(key)) {
+            return null;
+          }
+          return store.getMany(keys, area);
+        },
+      },
+    });
+
+    await expect(read()).rejects.toThrow(/could not read/i);
+  });
+
+  it('refuses a stored value that is not a list', async () => {
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    configurePlatform({ storage: storeHolding({ [key]: { nope: true } }) });
+
+    await expect(read()).rejects.toThrow(/unreadable/i);
+  });
+
+  it('still reads a key that was never written as empty', async () => {
+    configurePlatform({ storage: storeHolding({}) });
+
+    await expect(read()).resolves.toEqual([]);
   });
 });
 

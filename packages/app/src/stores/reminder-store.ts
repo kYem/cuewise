@@ -121,9 +121,8 @@ const STALE_REMINDERS_MESSAGE =
   "Cuewise couldn't re-read your reminders just now, so what you see may be out of date.";
 
 /**
- * Known gap: a pulled reminder is shown but never armed — this only commits state, and on Chrome
- * nothing re-arms it at all, since initialize()'s loop is skipped where the scheduler persists
- * its own wakes. Only a local edit arms one.
+ * Known gap: a pulled reminder is shown but not armed — the re-arm loop below is skipped where the
+ * scheduler persists its own wakes, so a pulled one-off waits for a local edit.
  */
 const remindersObserver = createStorageObserver(
   'reminders',

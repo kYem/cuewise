@@ -326,6 +326,54 @@ describe('createStorageObserver', () => {
     expect(applied).toBe(2);
   });
 
+  // The record is per-episode, not per-observer: a second load must not be handed the promise the
+  // first one already settled.
+  it('makes a second reconcile wait for its own re-read', async () => {
+    const fake = fakeObservableStore();
+    configurePlatform({ storage: fake.store });
+    let applied = 0;
+    const observer = createStorageObserver('goals', ['goals'], async () => {
+      await settleQueuedWork();
+      applied += 1;
+    });
+
+    await observer.reconcile();
+    expect(applied).toBe(1);
+    await observer.reconcile();
+
+    expect(applied).toBe(2);
+  });
+
+  // A pull writing a watched key while the load awaits its reconcile must extend that wait, not
+  // replace the promise the load is holding with one nothing settles.
+  it('does not orphan a caller when a change lands mid-reconcile', async () => {
+    const fake = fakeObservableStore();
+    configurePlatform({ storage: fake.store });
+    let release = (): void => {};
+    let started = 0;
+    const observer = createStorageObserver('goals', ['goals'], async () => {
+      started += 1;
+      if (started === 1) {
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+      }
+    });
+    observer.subscribe();
+
+    const settled = observer.reconcile();
+    await vi.waitFor(() => expect(started).toBe(1));
+    fake.emit(['goals']);
+    release();
+
+    await expect(
+      Promise.race([
+        settled.then(() => 'resolved'),
+        new Promise((resolve) => setTimeout(() => resolve('hung'), 300)),
+      ])
+    ).resolves.toBe('resolved');
+  });
+
   it('subscribes without re-reading, so a load can observe before its own first read', async () => {
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
