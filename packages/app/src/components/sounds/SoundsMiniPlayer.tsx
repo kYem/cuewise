@@ -36,9 +36,8 @@ const ambientIcons: Record<string, React.FC<{ className?: string }>> = {
 
 // 'overlay' keeps the white-on-dark chrome legible over the Glass photo; 'surface'
 // uses theme tokens for the plain themes, where the page can be light.
-// `thumb`/`thumbIcon` are their own pair: the glyph sits on the thumbnail fill, not on the
-// page, so it cannot reuse `icon`. `dot` avoids bg-primary-600, which the Glass theme
-// overrides to translucent black — invisible over a photo.
+// 'overlay' is white-on-dark for the Glass photo; 'surface' uses theme tokens and is only
+// ever used off Glass, where bg-primary-600 is a real colour rather than translucent black.
 const CHROME = {
   overlay: {
     pill: 'bg-black/40 backdrop-blur-sm',
@@ -47,8 +46,6 @@ const CHROME = {
     muted: 'text-white/70',
     button: 'bg-black/40 backdrop-blur-sm text-white/80 hover:bg-black/50',
     track: 'bg-white/20',
-    thumb: 'bg-black/40 backdrop-blur-sm',
-    thumbIcon: 'text-white/80',
     dot: 'bg-white',
   },
   surface: {
@@ -58,8 +55,6 @@ const CHROME = {
     muted: 'text-secondary',
     button: 'bg-surface-variant text-primary hover:bg-surface-variant/70',
     track: 'bg-divider',
-    thumb: 'bg-gradient-to-br from-primary-500 to-primary-600',
-    thumbIcon: 'text-white',
     dot: 'bg-primary-600',
   },
 } as const;
@@ -97,12 +92,12 @@ export const SoundsMiniPlayer: React.FC<SoundsMiniPlayerProps> = ({ variant = 'o
   const setVolume = activeSource === 'ambient' ? setAmbientVolume : setYoutubeVolume;
 
   // Get icon for current source
-  const getSourceIcon = (tone: string = c.icon) => {
+  const getSourceIcon = () => {
     if (activeSource === 'ambient' && selectedAmbientSound !== 'none') {
       const IconComponent = ambientIcons[selectedAmbientSound];
-      return IconComponent ? <IconComponent className={`w-4 h-4 ${tone}`} /> : null;
+      return IconComponent ? <IconComponent className={`w-4 h-4 ${c.icon}`} /> : null;
     }
-    return <Music className={`w-4 h-4 ${tone}`} />;
+    return <Music className={`w-4 h-4 ${c.icon}`} />;
   };
 
   // Get thumbnail for current source
@@ -120,8 +115,8 @@ export const SoundsMiniPlayer: React.FC<SoundsMiniPlayerProps> = ({ variant = 'o
     // Ambient sounds - show icon with gradient background
     if (activeSource === 'ambient' && selectedAmbientSound !== 'none') {
       return (
-        <div className={`w-full h-full ${c.thumb} flex items-center justify-center`}>
-          {getSourceIcon(c.thumbIcon)}
+        <div className={`w-full h-full ${c.pill} flex items-center justify-center`}>
+          {getSourceIcon()}
         </div>
       );
     }

@@ -66,6 +66,17 @@ describe('SoundsMiniPlayer chrome variant', () => {
     expect(screen.getByTitle('Play')).not.toHaveClass('bg-black/40');
   });
 
+  it.each([
+    [undefined, 'bg-black/40'],
+    ['surface', 'bg-surface/80'],
+  ] as const)('gives the ambient thumbnail the chrome fill (variant: %s)', (variant, fill) => {
+    mockStores();
+
+    render(<SoundsMiniPlayer variant={variant} />);
+
+    expect(screen.getByTitle('Open sounds panel').firstElementChild).toHaveClass(fill);
+  });
+
   it('keeps the playing indicator visible over a photo rather than on theme fill', () => {
     mockStores({ isPlaying: true });
 
