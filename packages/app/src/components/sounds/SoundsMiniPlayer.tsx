@@ -34,8 +34,6 @@ const ambientIcons: Record<string, React.FC<{ className?: string }>> = {
   brownNoise: Wind,
 };
 
-// 'overlay' keeps the white-on-dark chrome legible over the Glass photo; 'surface'
-// uses theme tokens for the plain themes, where the page can be light.
 // 'overlay' is white-on-dark for the Glass photo; 'surface' uses theme tokens and is only
 // ever used off Glass, where bg-primary-600 is a real colour rather than translucent black.
 const CHROME = {
