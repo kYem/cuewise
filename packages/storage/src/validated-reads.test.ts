@@ -181,19 +181,21 @@ describe('a stored value that no longer matches its shape', () => {
     expect(JSON.stringify(error.mock.calls)).not.toContain('a private goal');
   });
 
-  it('discards a stored value that is not a list at all', async () => {
+  // Not discarded to `[]`, unlike a single bad row: the caller rewrites the whole array from what
+  // this answered, so an empty answer is a fleet-wide erase. A wedged list is recoverable.
+  it('refuses a stored value that is not a list at all', async () => {
     configurePlatform({ storage: storeHolding({ goals: { nope: true } }) });
 
-    await expect(getGoals()).resolves.toEqual([]);
+    await expect(getGoals()).rejects.toThrow('The stored goals list is unreadable');
   });
 
-  it('names the key it discarded, at a level the shipped log level shows', async () => {
+  it('names the key it refused, at a level the shipped log level shows', async () => {
     const error = vi.spyOn(logger, 'error');
     configurePlatform({ storage: storeHolding({ goals: { nope: true } }) });
 
-    await getGoals();
+    await expect(getGoals()).rejects.toThrow();
 
-    expect(error).toHaveBeenCalledWith('Discarded a stored value that should have been a list', {
+    expect(error).toHaveBeenCalledWith('Refusing to read a stored list this build cannot use', {
       key: 'goals',
       area: 'local',
     });
@@ -606,6 +608,44 @@ describe('getQuotes on a read it could not make', () => {
     vi.spyOn(logger, 'error').mockImplementation(() => {});
 
     await expect(getQuotes()).rejects.toThrow(/unreadable/i);
+  });
+});
+
+// The synced lists whose store rewrites them whole: putting any back on the tolerant helper
+// makes a failed read an erase every other device then adopts.
+describe.each([
+  ['goals', getGoals],
+  ['reminders', getReminders],
+  ['collections', getCollections],
+] as const)('%s, read through its store', (key, read) => {
+  it('refuses a read that failed rather than reporting an empty list', async () => {
+    const { store } = capturingStore();
+    configurePlatform({
+      storage: {
+        ...store,
+        getMany: async (keys: string[], area: StorageArea = 'local') => {
+          if (keys.includes(key)) {
+            return null;
+          }
+          return store.getMany(keys, area);
+        },
+      },
+    });
+
+    await expect(read()).rejects.toThrow(/could not read/i);
+  });
+
+  it('refuses a stored value that is not a list', async () => {
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    configurePlatform({ storage: storeHolding({ [key]: { nope: true } }) });
+
+    await expect(read()).rejects.toThrow(/unreadable/i);
+  });
+
+  it('still reads a key that was never written as empty', async () => {
+    configurePlatform({ storage: storeHolding({}) });
+
+    await expect(read()).resolves.toEqual([]);
   });
 });
 

@@ -12,6 +12,7 @@ import {
   type Quote,
   type QuoteCategory,
   type QuoteCollection,
+  STORAGE_KEYS,
 } from '@cuewise/shared';
 import {
   getCollections,
@@ -26,6 +27,7 @@ import {
 import { create } from 'zustand';
 import { SEED_QUOTES } from '../data/seed-quotes';
 import { useSettingsStore } from './settings-store';
+import { createStaleLatch, createStorageObserver, sameEntities } from './storage-changes';
 import { useToastStore } from './toast-store';
 
 /** Seed quotes not present in the given list, keyed by id. */
@@ -164,6 +166,32 @@ async function persistFilterSettings(state: QuoteStore): Promise<void> {
   });
 }
 
+const STALE_QUOTES_MESSAGE =
+  "Cuewise couldn't re-read your quotes just now, so what you see may be out of date.";
+
+/**
+ * The displayed quote and its history are this tab's own. The filters do sync, but as settings —
+ * settings-store converges them, and this store's copies go stale until the next initialize().
+ */
+const quotesObserver = createStorageObserver(
+  'quotes',
+  [STORAGE_KEYS.SEED_QUOTES, STORAGE_KEYS.CUSTOM_QUOTES, STORAGE_KEYS.COLLECTIONS],
+  async () => {
+    const [quotes, collections] = await Promise.all([getQuotes(), getCollections()]);
+    const current = useQuoteStore.getState();
+    const nextQuotes = sameEntities(current.quotes, quotes) ? null : quotes;
+    const nextCollections = sameEntities(current.collections, collections) ? null : collections;
+    if (nextQuotes === null && nextCollections === null) {
+      return;
+    }
+    useQuoteStore.setState({
+      ...(nextQuotes !== null && { quotes: nextQuotes }),
+      ...(nextCollections !== null && { collections: nextCollections }),
+    });
+  },
+  createStaleLatch((message) => useToastStore.getState().warning(message), STALE_QUOTES_MESSAGE)
+);
+
 export const useQuoteStore = create<QuoteStore>((set, get) => ({
   quotes: [],
   currentQuote: null,
@@ -178,6 +206,9 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
   activeCollectionIds: [],
 
   initialize: async () => {
+    // Before the read: a pull landing during it is otherwise announced to nobody, and the seed
+    // and view-count writes below would persist the pre-pull snapshot over it.
+    quotesObserver.subscribe();
     try {
       set({ isLoading: true, error: null });
 
@@ -234,7 +265,6 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         activeCollectionIds,
         isLoading: false,
       });
-
       // Increment view count for current quote
       if (currentQuote) {
         await get().incrementViewCount(currentQuote.id);
@@ -245,6 +275,9 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       set({ error: errorMessage, isLoading: false });
       useToastStore.getState().error(errorMessage);
     }
+    // Awaited, last, and outside the try so a failed load still reconciles: it re-reads storage,
+    // so it has to see everything this load wrote (the seed, the view-count bump).
+    await quotesObserver.reconcile();
   },
 
   refreshQuote: async () => {

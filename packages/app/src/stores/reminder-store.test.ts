@@ -1,7 +1,8 @@
-import { configurePlatform, logger, type SyncMutationSink } from '@cuewise/shared';
+import { configurePlatform, logger, resetPlatform, type SyncMutationSink } from '@cuewise/shared';
 import * as storage from '@cuewise/storage';
 import { recurringReminderFactory, reminderFactory } from '@cuewise/test-utils/factories';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fakeObservableStore } from './__fixtures__/storage-changes.fixtures';
 import { useReminderStore } from './reminder-store';
 
 // Mock storage functions
@@ -576,5 +577,136 @@ describe('sync sink wiring', () => {
     await useReminderStore.getState().deleteReminder(reminder.id);
 
     expect(markDeleted).toHaveBeenCalledWith('reminders', reminder.id);
+  });
+});
+
+describe('converging on reminders written elsewhere', () => {
+  const markMutated = vi.fn();
+  const markMutatedBulk = vi.fn();
+  const markDeleted = vi.fn();
+  const fakeSink: SyncMutationSink = { markMutated, markMutatedBulk, markDeleted };
+
+  const mine = reminderFactory.build({ text: 'mine' });
+  const theirs = reminderFactory.build({ text: 'pulled from the other device' });
+
+  async function initializeObserving(): Promise<ReturnType<typeof fakeObservableStore>> {
+    const fake = fakeObservableStore();
+    configurePlatform({ storage: fake.store, syncSink: fakeSink });
+    getRemindersMock.mockResolvedValue([mine]);
+    await useReminderStore.getState().initialize();
+    return fake;
+  }
+
+  beforeEach(() => {
+    // vitest's restoreMocks resets spies, not vi.fn()s — a leftover warn would satisfy the next
+    // test's waitFor before it has done anything.
+    toastWarning.mockClear();
+  });
+
+  // Not just the sink: the observer is module-scoped, so a fake left registered keeps it
+  // subscribed to a dead backend for any describe added after this one.
+  afterEach(() => {
+    resetPlatform();
+  });
+
+  it('adopts a reminder the sync engine wrote straight to storage', async () => {
+    const fake = await initializeObserving();
+    getRemindersMock.mockResolvedValue([mine, theirs]);
+
+    fake.emit(['reminders']);
+
+    await vi.waitFor(() =>
+      expect(useReminderStore.getState().reminders.map((reminder) => reminder.text)).toEqual([
+        'mine',
+        'pulled from the other device',
+      ])
+    );
+  });
+
+  it('recomputes the widget buckets, not only the full list', async () => {
+    const fake = await initializeObserving();
+    const upcoming = reminderFactory.build({
+      text: 'pulled and upcoming',
+      dueDate: new Date(Date.now() + 3_600_000).toISOString(),
+      completed: false,
+    });
+    getRemindersMock.mockResolvedValue([mine, upcoming]);
+
+    fake.emit(['reminders']);
+
+    await vi.waitFor(() =>
+      expect(useReminderStore.getState().upcomingReminders.map((each) => each.text)).toContain(
+        'pulled and upcoming'
+      )
+    );
+  });
+
+  it('keeps the pulled reminder when the next local write rewrites the whole list', async () => {
+    const fake = await initializeObserving();
+    getRemindersMock.mockResolvedValue([mine, theirs]);
+    fake.emit(['reminders']);
+    await vi.waitFor(() => expect(useReminderStore.getState().reminders).toHaveLength(2));
+
+    await useReminderStore.getState().addReminder('added here', new Date(Date.now() + 60_000));
+
+    const persisted = setRemindersMock.mock.lastCall?.[0] ?? [];
+    expect(persisted.map((reminder) => reminder.text)).toEqual([
+      'mine',
+      'pulled from the other device',
+      'added here',
+    ]);
+  });
+
+  it('does not report a pulled change back to the sync engine', async () => {
+    const fake = await initializeObserving();
+    getRemindersMock.mockResolvedValue([mine, theirs]);
+
+    fake.emit(['reminders']);
+
+    await vi.waitFor(() => expect(useReminderStore.getState().reminders).toHaveLength(2));
+    expect(markMutated).not.toHaveBeenCalled();
+    expect(markMutatedBulk).not.toHaveBeenCalled();
+    expect(markDeleted).not.toHaveBeenCalled();
+  });
+
+  it('leaves the in-memory buckets alone when its own write is announced back', async () => {
+    const fake = await initializeObserving();
+    const before = useReminderStore.getState().upcomingReminders;
+    const readsAfterInit = getRemindersMock.mock.calls.length;
+
+    fake.emit(['reminders']);
+
+    await vi.waitFor(() =>
+      expect(getRemindersMock.mock.calls.length).toBeGreaterThan(readsAfterInit)
+    );
+    expect(useReminderStore.getState().upcomingReminders).toBe(before);
+  });
+
+  it('keeps the list it has when the re-read fails, and warns the view is stale', async () => {
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const fake = await initializeObserving();
+    const before = useReminderStore.getState().reminders;
+    getRemindersMock.mockRejectedValue(new Error('Could not read the stored reminders list'));
+
+    fake.emit(['reminders']);
+
+    await vi.waitFor(() =>
+      expect(toastWarning).toHaveBeenCalledWith(expect.stringContaining('your reminders'))
+    );
+    expect(useReminderStore.getState().reminders).toBe(before);
+    expect(useReminderStore.getState().error).toBeNull();
+  });
+
+  // ReminderWidget chains fireDueReminders off initialize(), and that rewrites the whole array
+  // from the in-memory copy — without the awaited reconcile it writes the pre-pull one.
+  it('picks up a pull that landed while it was still loading', async () => {
+    const fake = fakeObservableStore();
+    configurePlatform({ storage: fake.store, syncSink: fakeSink });
+    getRemindersMock.mockResolvedValue([mine]);
+    const loaded = useReminderStore.getState().initialize();
+    getRemindersMock.mockResolvedValue([mine, theirs]);
+    await loaded;
+
+    expect(useReminderStore.getState().reminders).toHaveLength(2);
   });
 });

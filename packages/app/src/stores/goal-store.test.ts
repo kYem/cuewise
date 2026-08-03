@@ -3,6 +3,7 @@ import {
   DEFAULT_SETTINGS,
   getTodayDateString,
   logger,
+  resetPlatform,
   type Settings,
   type SyncMutationSink,
   storageFailure,
@@ -17,6 +18,7 @@ import {
 } from '@cuewise/test-utils/factories';
 import { defaultSettings } from '@cuewise/test-utils/fixtures';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fakeObservableStore } from './__fixtures__/storage-changes.fixtures';
 import { useGoalStore } from './goal-store';
 
 vi.mock('@cuewise/storage', () => ({
@@ -960,6 +962,175 @@ describe('sync sink wiring', () => {
   });
 });
 
+describe('converging on goals written elsewhere', () => {
+  const markMutated = vi.fn();
+  const markMutatedBulk = vi.fn();
+  const markDeleted = vi.fn();
+  const fakeSink: SyncMutationSink = { markMutated, markMutatedBulk, markDeleted };
+
+  const mine = goalFactory.build({ date: getTodayDateString(), text: 'mine' });
+  const theirs = goalFactory.build({
+    date: getTodayDateString(),
+    text: 'pulled from the other device',
+  });
+
+  async function initializeObserving(): Promise<ReturnType<typeof fakeObservableStore>> {
+    const fake = fakeObservableStore();
+    configurePlatform({ storage: fake.store, syncSink: fakeSink });
+    // A fresh array per read, as a real parse gives: mockResolvedValue hands back one reference,
+    // which would satisfy the no-op guard's identity assertions whether or not the guard exists.
+    vi.mocked(storage.getGoals).mockImplementation(async () => [mine]);
+    await useGoalStore.getState().initialize();
+    return fake;
+  }
+
+  beforeEach(() => {
+    markMutated.mockClear();
+    markMutatedBulk.mockClear();
+    markDeleted.mockClear();
+    // vitest's restoreMocks resets spies, not vi.fn()s — without this a leftover warn from the
+    // previous test satisfies the next one's waitFor before it has done anything.
+    toastWarning.mockClear();
+    vi.mocked(storage.readSettings).mockResolvedValue(settingsRead(autoRollDisabled));
+    vi.mocked(storage.setGoals).mockResolvedValue({ success: true });
+  });
+
+  // Not just the sink: the observer is module-scoped, so a fake left registered keeps it
+  // subscribed to a dead backend for every describe after this one.
+  afterEach(() => {
+    resetPlatform();
+  });
+
+  it('adopts a goal the sync engine wrote straight to storage', async () => {
+    const fake = await initializeObserving();
+    vi.mocked(storage.getGoals).mockResolvedValue([mine, theirs]);
+
+    fake.emit(['goals']);
+
+    await vi.waitFor(() =>
+      expect(useGoalStore.getState().goals.map((goal) => goal.text)).toEqual([
+        'mine',
+        'pulled from the other device',
+      ])
+    );
+  });
+
+  it('recomputes the home-page list, not only the full one', async () => {
+    const fake = await initializeObserving();
+    vi.mocked(storage.getGoals).mockResolvedValue([mine, theirs]);
+
+    fake.emit(['goals']);
+
+    await vi.waitFor(() =>
+      expect(useGoalStore.getState().todayTasks.map((task) => task.text)).toEqual([
+        'mine',
+        'pulled from the other device',
+      ])
+    );
+  });
+
+  // No event is emitted here: without the awaited reconcile the load installs the pre-pull list.
+  it('picks up a pull that landed while it was still loading', async () => {
+    const fake = fakeObservableStore();
+    configurePlatform({ storage: fake.store, syncSink: fakeSink });
+    vi.mocked(storage.getGoals).mockImplementation(async () => [mine]);
+    const loaded = useGoalStore.getState().initialize();
+    vi.mocked(storage.getGoals).mockImplementation(async () => [mine, theirs]);
+    await loaded;
+
+    expect(useGoalStore.getState().goals).toHaveLength(2);
+  });
+
+  it('keeps the pulled goal when the next local write rewrites the whole list', async () => {
+    const fake = await initializeObserving();
+    vi.mocked(storage.getGoals).mockResolvedValue([mine, theirs]);
+    fake.emit(['goals']);
+    await vi.waitFor(() => expect(useGoalStore.getState().goals).toHaveLength(2));
+
+    await useGoalStore.getState().addTask('added here afterwards');
+
+    const persisted = vi.mocked(storage.setGoals).mock.lastCall?.[0] ?? [];
+    expect(persisted.map((goal) => goal.text)).toEqual([
+      'mine',
+      'pulled from the other device',
+      'added here afterwards',
+    ]);
+  });
+
+  it('does not report a pulled change back to the sync engine', async () => {
+    const fake = await initializeObserving();
+    vi.mocked(storage.getGoals).mockResolvedValue([mine, theirs]);
+
+    fake.emit(['goals']);
+
+    await vi.waitFor(() => expect(useGoalStore.getState().goals).toHaveLength(2));
+    expect(markMutated).not.toHaveBeenCalled();
+    expect(markMutatedBulk).not.toHaveBeenCalled();
+    expect(markDeleted).not.toHaveBeenCalled();
+  });
+
+  // The read answers by rejecting, never with []. Adopting an empty list here is what would put
+  // an erase on disk the moment anything wrote next.
+  it('keeps the list it has when the re-read fails, and warns the view is stale', async () => {
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const fake = await initializeObserving();
+    const before = useGoalStore.getState().goals;
+    vi.mocked(storage.getGoals).mockRejectedValue(
+      new Error('Could not read the stored goals list')
+    );
+
+    fake.emit(['goals']);
+
+    await vi.waitFor(() =>
+      expect(toastWarning).toHaveBeenCalledWith(expect.stringContaining('your goals'))
+    );
+    expect(useGoalStore.getState().goals).toBe(before);
+  });
+
+  // GoalsSection renders any `error` as a whole-panel failure, so a merely-stale view must not
+  // set it — the goals it still holds are worth showing.
+  it('does not put the panel into its failed state', async () => {
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const fake = await initializeObserving();
+    vi.mocked(storage.getGoals).mockRejectedValue(
+      new Error('Could not read the stored goals list')
+    );
+
+    fake.emit(['goals']);
+
+    await vi.waitFor(() => expect(toastWarning).toHaveBeenCalled());
+    expect(useGoalStore.getState().error).toBeNull();
+  });
+
+  it('still observes after a load that failed', async () => {
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const fake = fakeObservableStore();
+    configurePlatform({ storage: fake.store, syncSink: fakeSink });
+    vi.mocked(storage.getGoals).mockRejectedValue(
+      new Error('Could not read the stored goals list')
+    );
+    await useGoalStore.getState().initialize();
+
+    vi.mocked(storage.getGoals).mockResolvedValue([mine, theirs]);
+    fake.emit(['goals']);
+
+    await vi.waitFor(() => expect(useGoalStore.getState().goals).toHaveLength(2));
+  });
+
+  it('leaves the in-memory list alone when its own write is announced back', async () => {
+    const fake = await initializeObserving();
+    const before = useGoalStore.getState().goals;
+    const readsAfterInit = vi.mocked(storage.getGoals).mock.calls.length;
+
+    fake.emit(['goals']);
+
+    await vi.waitFor(() =>
+      expect(vi.mocked(storage.getGoals).mock.calls.length).toBeGreaterThan(readsAfterInit)
+    );
+    expect(useGoalStore.getState().goals).toBe(before);
+  });
+});
+
 describe('rollDueTasks', () => {
   const today = getTodayDateString();
 
@@ -1077,6 +1248,11 @@ describe('initialize triggers the roll', () => {
     const today = getTodayDateString();
     const overdue = goalFactory.build({ date: '2025-01-01', dueDate: '2025-01-02' });
     vi.mocked(storage.getGoals).mockResolvedValue([overdue]);
+    // The load's reconcile re-reads, so the read has to answer what the roll just wrote.
+    vi.mocked(storage.setGoals).mockImplementation(async (goals) => {
+      vi.mocked(storage.getGoals).mockResolvedValue(goals);
+      return { success: true };
+    });
 
     await useGoalStore.getState().initialize();
 

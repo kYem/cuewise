@@ -1,7 +1,9 @@
 import {
   ALL_QUOTE_CATEGORIES,
   configurePlatform,
+  logger,
   type QuoteCollection,
+  resetPlatform,
   type Settings,
   type SyncMutationSink,
 } from '@cuewise/shared';
@@ -24,7 +26,16 @@ import {
   expectNavigationToQuote,
   expectViewCountIncremented,
 } from './__fixtures__/quote-store.fixtures';
+import { fakeObservableStore } from './__fixtures__/storage-changes.fixtures';
 import { useQuoteStore } from './quote-store';
+
+/** The load's reconcile re-reads, so the read has to answer what the load just wrote. */
+function readsBackWrites(): void {
+  vi.mocked(storage.setQuotes).mockImplementation(async (quotes) => {
+    vi.mocked(storage.getQuotes).mockResolvedValue(quotes);
+    return { success: true };
+  });
+}
 
 // Mock storage functions
 vi.mock('@cuewise/storage', () => ({
@@ -88,6 +99,7 @@ describe('Quote Store', () => {
 
       vi.mocked(storage.getQuotes).mockResolvedValue(mockQuotes);
       vi.mocked(storage.getCurrentQuote).mockResolvedValue(mockCurrentQuote);
+      readsBackWrites();
 
       await useQuoteStore.getState().initialize();
 
@@ -104,6 +116,7 @@ describe('Quote Store', () => {
     it('should seed quotes when storage is empty', async () => {
       vi.mocked(storage.getQuotes).mockResolvedValue([]);
       vi.mocked(storage.getCurrentQuote).mockResolvedValue(null);
+      readsBackWrites();
 
       await useQuoteStore.getState().initialize();
 
@@ -993,5 +1006,151 @@ describe('sync sink wiring', () => {
       created.map((q) => q.id)
     );
     expect(markMutated).not.toHaveBeenCalled();
+  });
+});
+
+describe('converging on quotes written elsewhere', () => {
+  const markMutated = vi.fn();
+  const markMutatedBulk = vi.fn();
+  const markDeleted = vi.fn();
+  const fakeSink: SyncMutationSink = { markMutated, markMutatedBulk, markDeleted };
+
+  const mine = quoteFactory.build({ text: 'mine' });
+  const theirs = quoteFactory.build({ text: 'pulled from the other device' });
+
+  async function initializeObserving(): Promise<ReturnType<typeof fakeObservableStore>> {
+    const fake = fakeObservableStore();
+    configurePlatform({ storage: fake.store, syncSink: fakeSink });
+    // A fresh array per read, as a real parse gives: mockResolvedValue hands back one reference,
+    // which would satisfy the no-op guard's identity assertions whether or not the guard exists.
+    vi.mocked(storage.getQuotes).mockImplementation(async () => [mine]);
+    vi.mocked(storage.getCollections).mockImplementation(async () => []);
+    vi.mocked(storage.getCurrentQuote).mockResolvedValue(mine);
+    await useQuoteStore.getState().initialize();
+    return fake;
+  }
+
+  beforeEach(() => {
+    markMutated.mockClear();
+    markMutatedBulk.mockClear();
+    markDeleted.mockClear();
+    // vitest's restoreMocks resets spies, not vi.fn()s — a leftover warn would satisfy the next
+    // test's waitFor before it has done anything.
+    mockToastWarning.mockClear();
+  });
+
+  // Not just the sink: the observer is module-scoped, so a fake left registered keeps it
+  // subscribed to a dead backend for any describe added after this one.
+  afterEach(() => {
+    resetPlatform();
+  });
+
+  it('adopts a quote the sync engine wrote straight to storage', async () => {
+    const fake = await initializeObserving();
+    vi.mocked(storage.getQuotes).mockResolvedValue([mine, theirs]);
+
+    fake.emit(['customQuotes']);
+
+    await vi.waitFor(() =>
+      expect(useQuoteStore.getState().quotes.map((quote) => quote.text)).toEqual([
+        'mine',
+        'pulled from the other device',
+      ])
+    );
+  });
+
+  it('adopts a collection written under its own key', async () => {
+    const fake = await initializeObserving();
+    const collection: QuoteCollection = { id: 'c1', name: 'Pulled', createdAt: '2026-08-03' };
+    vi.mocked(storage.getCollections).mockResolvedValue([collection]);
+
+    fake.emit(['collections']);
+
+    await vi.waitFor(() =>
+      expect(useQuoteStore.getState().collections.map((each) => each.name)).toEqual(['Pulled'])
+    );
+  });
+
+  it('does not report a pulled change back to the sync engine', async () => {
+    const fake = await initializeObserving();
+    vi.mocked(storage.getQuotes).mockResolvedValue([mine, theirs]);
+
+    fake.emit(['customQuotes']);
+
+    await vi.waitFor(() => expect(useQuoteStore.getState().quotes).toHaveLength(2));
+    expect(markMutated).not.toHaveBeenCalled();
+    expect(markMutatedBulk).not.toHaveBeenCalled();
+    expect(markDeleted).not.toHaveBeenCalled();
+  });
+
+  it('keeps the pulled quote when the next local write rewrites the whole list', async () => {
+    const fake = await initializeObserving();
+    vi.mocked(storage.getQuotes).mockResolvedValue([mine, theirs]);
+    fake.emit(['customQuotes']);
+    await vi.waitFor(() => expect(useQuoteStore.getState().quotes).toHaveLength(2));
+
+    await useQuoteStore.getState().toggleFavorite(mine.id);
+
+    const persisted = vi.mocked(storage.setQuotes).mock.lastCall?.[0] ?? [];
+    expect(persisted.map((quote) => quote.text)).toContain('pulled from the other device');
+  });
+
+  it('leaves the in-memory list alone when its own write is announced back', async () => {
+    const fake = await initializeObserving();
+    const before = useQuoteStore.getState().quotes;
+    const readsAfterInit = vi.mocked(storage.getQuotes).mock.calls.length;
+
+    fake.emit(['customQuotes']);
+
+    await vi.waitFor(() =>
+      expect(vi.mocked(storage.getQuotes).mock.calls.length).toBeGreaterThan(readsAfterInit)
+    );
+    expect(useQuoteStore.getState().quotes).toBe(before);
+  });
+
+  it('keeps the list it has when the re-read fails, and warns the view is stale', async () => {
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const fake = await initializeObserving();
+    const before = useQuoteStore.getState().quotes;
+    vi.mocked(storage.getQuotes).mockRejectedValue(
+      new Error('Could not read the stored customQuotes list')
+    );
+
+    fake.emit(['customQuotes']);
+
+    await vi.waitFor(() =>
+      expect(mockToastWarning).toHaveBeenCalledWith(expect.stringContaining('your quotes'))
+    );
+    expect(useQuoteStore.getState().quotes).toBe(before);
+    expect(useQuoteStore.getState().error).toBeNull();
+  });
+
+  // The collections read must reject out of the refresh too — degrading it to [] is what would
+  // make the next createCollection persist a one-element array over the rest.
+  it('keeps its collections when only the collections read fails', async () => {
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const fake = await initializeObserving();
+    const before = useQuoteStore.getState().collections;
+    vi.mocked(storage.getCollections).mockRejectedValue(
+      new Error('Could not read the stored collections list')
+    );
+
+    fake.emit(['collections']);
+
+    await vi.waitFor(() =>
+      expect(mockToastWarning).toHaveBeenCalledWith(expect.stringContaining('your quotes'))
+    );
+    expect(useQuoteStore.getState().collections).toBe(before);
+  });
+
+  it('leaves the displayed quote alone', async () => {
+    const fake = await initializeObserving();
+    const displayed = useQuoteStore.getState().currentQuote;
+    vi.mocked(storage.getQuotes).mockResolvedValue([mine, theirs]);
+
+    fake.emit(['customQuotes']);
+
+    await vi.waitFor(() => expect(useQuoteStore.getState().quotes).toHaveLength(2));
+    expect(useQuoteStore.getState().currentQuote).toBe(displayed);
   });
 });
