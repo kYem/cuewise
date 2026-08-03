@@ -17,6 +17,7 @@ import {
 } from '@cuewise/test-utils/factories';
 import { defaultSettings } from '@cuewise/test-utils/fixtures';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fakeObservableStore } from './__fixtures__/storage-changes.fixtures';
 import { useGoalStore } from './goal-store';
 
 vi.mock('@cuewise/storage', () => ({
@@ -957,6 +958,98 @@ describe('sync sink wiring', () => {
     await useGoalStore.getState().deleteTask(task.id);
 
     expect(markDeleted).toHaveBeenCalledWith('goals', task.id);
+  });
+});
+
+describe('converging on goals written elsewhere', () => {
+  const markMutated = vi.fn();
+  const markMutatedBulk = vi.fn();
+  const markDeleted = vi.fn();
+  const fakeSink: SyncMutationSink = { markMutated, markMutatedBulk, markDeleted };
+
+  const mine = goalFactory.build({ date: getTodayDateString(), text: 'mine' });
+  const theirs = goalFactory.build({
+    date: getTodayDateString(),
+    text: 'pulled from the other device',
+  });
+
+  async function initializeObserving(): Promise<ReturnType<typeof fakeObservableStore>> {
+    const fake = fakeObservableStore();
+    configurePlatform({ storage: fake.store, syncSink: fakeSink });
+    vi.mocked(storage.getGoals).mockResolvedValue([mine]);
+    await useGoalStore.getState().initialize();
+    return fake;
+  }
+
+  beforeEach(() => {
+    markMutated.mockClear();
+    markMutatedBulk.mockClear();
+    markDeleted.mockClear();
+    vi.mocked(storage.readSettings).mockResolvedValue(settingsRead(autoRollDisabled));
+    vi.mocked(storage.setGoals).mockResolvedValue({ success: true });
+  });
+
+  afterEach(() => {
+    configurePlatform({ syncSink: null });
+  });
+
+  it('adopts a goal the sync engine wrote straight to storage', async () => {
+    const fake = await initializeObserving();
+    vi.mocked(storage.getGoals).mockResolvedValue([mine, theirs]);
+
+    fake.emit(['goals']);
+
+    await vi.waitFor(() =>
+      expect(useGoalStore.getState().goals.map((goal) => goal.text)).toEqual([
+        'mine',
+        'pulled from the other device',
+      ])
+    );
+  });
+
+  // The whole point: every writer rewrites the array from the in-memory copy, so a copy left
+  // stale by the pull would persist over what the pull landed.
+  it('keeps the pulled goal when the next local write rewrites the whole list', async () => {
+    const fake = await initializeObserving();
+    vi.mocked(storage.getGoals).mockResolvedValue([mine, theirs]);
+    fake.emit(['goals']);
+    await vi.waitFor(() => expect(useGoalStore.getState().goals).toHaveLength(2));
+
+    await useGoalStore.getState().addTask('added here afterwards');
+
+    const persisted = vi.mocked(storage.setGoals).mock.lastCall?.[0] ?? [];
+    expect(persisted.map((goal) => goal.text)).toEqual([
+      'mine',
+      'pulled from the other device',
+      'added here afterwards',
+    ]);
+  });
+
+  it('does not report a pulled change back to the sync engine', async () => {
+    const fake = await initializeObserving();
+    vi.mocked(storage.getGoals).mockResolvedValue([mine, theirs]);
+
+    fake.emit(['goals']);
+
+    await vi.waitFor(() => expect(useGoalStore.getState().goals).toHaveLength(2));
+    expect(markMutated).not.toHaveBeenCalled();
+    expect(markMutatedBulk).not.toHaveBeenCalled();
+    expect(markDeleted).not.toHaveBeenCalled();
+  });
+
+  // A change event names a write, not a changed value, so a store's own write arrives as a no-op.
+  // Swapping the array for an equal one would remount whatever row is mid-edit.
+  it('leaves the in-memory list alone when its own write is announced back', async () => {
+    const fake = await initializeObserving();
+    const before = useGoalStore.getState().goals;
+    const readsAfterInit = vi.mocked(storage.getGoals).mock.calls.length;
+
+    fake.emit(['goals']);
+
+    await vi.waitFor(() =>
+      expect(vi.mocked(storage.getGoals).mock.calls.length).toBeGreaterThan(readsAfterInit)
+    );
+    expect(useGoalStore.getState().goals).toBe(before);
   });
 });
 

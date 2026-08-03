@@ -11,10 +11,12 @@ import {
   type ReminderCategory,
   type ReminderRecurrence,
   reminderAlarmId,
+  STORAGE_KEYS,
   skipReminderOccurrence,
 } from '@cuewise/shared';
 import { getReminders, setReminders } from '@cuewise/storage';
 import { create } from 'zustand';
+import { createStorageObserver, sameEntities } from './storage-changes';
 import { useToastStore } from './toast-store';
 
 interface ReminderStore {
@@ -115,6 +117,19 @@ function commitReminders(
   set({ reminders, upcomingReminders: upcoming, overdueReminders: overdue, ...extra });
 }
 
+/**
+ * Every writer here rewrites the whole array from the in-memory copy, so a copy left stale by a
+ * pull is not just a stale view — the next write persists it over what the pull landed. Alarms are
+ * deliberately not re-armed from here: this owns the view, and initialize() owns the schedule.
+ */
+const remindersObserver = createStorageObserver('reminders', [STORAGE_KEYS.REMINDERS], async () => {
+  const reminders = await getReminders();
+  if (sameEntities(useReminderStore.getState().reminders, reminders)) {
+    return;
+  }
+  commitReminders((partial) => useReminderStore.setState(partial), reminders);
+});
+
 export const useReminderStore = create<ReminderStore>((set, get) => ({
   reminders: [],
   upcomingReminders: [],
@@ -174,6 +189,8 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       }
 
       commitReminders(set, reminders, { isLoading: false });
+      // After the first commit, so a change arriving mid-load cannot be overwritten by it.
+      remindersObserver.ensureSubscribed();
 
       // Rust-backed schedulers lose their armed wakes on restart (unlike
       // chrome.alarms), so re-arm every active reminder from storage. Overdue

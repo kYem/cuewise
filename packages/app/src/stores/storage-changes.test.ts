@@ -7,7 +7,13 @@ import {
   type StorageArea,
 } from '@cuewise/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { observableStorage, safeSubscribe } from './storage-changes';
+import { fakeObservableStore } from './__fixtures__/storage-changes.fixtures';
+import {
+  createStorageObserver,
+  observableStorage,
+  safeSubscribe,
+  sameEntities,
+} from './storage-changes';
 
 function storeWith(onChanged?: KeyValueStore['onChanged']): ObservableKeyValueStore {
   return { onChanged } as unknown as ObservableKeyValueStore;
@@ -102,5 +108,129 @@ describe('safeSubscribe', () => {
       expect.stringContaining('stop observing storage changes for the pomodoro timer'),
       expect.anything()
     );
+  });
+});
+
+describe('sameEntities', () => {
+  it('reports no change for a list that only differs by identity', () => {
+    expect(sameEntities([{ id: 'a', text: 'one' }], [{ id: 'a', text: 'one' }])).toBe(true);
+  });
+
+  it('reports a change for a value a whole-array write would otherwise clobber', () => {
+    expect(sameEntities([{ id: 'a', done: false }], [{ id: 'a', done: true }])).toBe(false);
+  });
+});
+
+describe('createStorageObserver', () => {
+  afterEach(() => {
+    resetPlatform();
+  });
+
+  it('re-reads when a watched key is written elsewhere', async () => {
+    const fake = fakeObservableStore();
+    configurePlatform({ storage: fake.store });
+    const refresh = vi.fn().mockResolvedValue(undefined);
+    createStorageObserver('goals', ['goals'], refresh).ensureSubscribed();
+
+    fake.emit(['goals']);
+
+    await vi.waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+  });
+
+  it('ignores a key it does not watch', async () => {
+    const fake = fakeObservableStore();
+    configurePlatform({ storage: fake.store });
+    const refresh = vi.fn().mockResolvedValue(undefined);
+    createStorageObserver('goals', ['goals'], refresh).ensureSubscribed();
+
+    fake.emit(['quotes']);
+
+    await Promise.resolve();
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  // Goals move between areas when sync is enabled, so an area filter would go deaf on the move.
+  it('converges on a watched key announced in either area', async () => {
+    const fake = fakeObservableStore();
+    configurePlatform({ storage: fake.store });
+    const refresh = vi.fn().mockResolvedValue(undefined);
+    createStorageObserver('goals', ['goals'], refresh).ensureSubscribed();
+
+    fake.emit(['goals'], 'sync');
+
+    await vi.waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+  });
+
+  it('coalesces a pull burst into one re-read, then one more for what landed mid-read', async () => {
+    const fake = fakeObservableStore();
+    configurePlatform({ storage: fake.store });
+    let release = (): void => {};
+    const refresh = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            release = resolve;
+          })
+      )
+      .mockResolvedValue(undefined);
+    createStorageObserver('goals', ['goals'], refresh).ensureSubscribed();
+
+    fake.emit(['goals']);
+    await vi.waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+    fake.emit(['goals']);
+    fake.emit(['goals']);
+    expect(refresh).toHaveBeenCalledTimes(1);
+
+    release();
+
+    await vi.waitFor(() => expect(refresh).toHaveBeenCalledTimes(2));
+  });
+
+  it('names a rejected re-read instead of leaving an unhandled rejection', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const fake = fakeObservableStore();
+    configurePlatform({ storage: fake.store });
+    const refresh = vi.fn().mockRejectedValue(new Error('storage unreachable'));
+    createStorageObserver('goals', ['goals'], refresh).ensureSubscribed();
+
+    fake.emit(['goals']);
+
+    await vi.waitFor(() =>
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Could not apply goals changed elsewhere'),
+        expect.anything()
+      )
+    );
+  });
+
+  it('subscribes once however often initialize runs', () => {
+    const fake = fakeObservableStore();
+    configurePlatform({ storage: fake.store });
+    const observer = createStorageObserver(
+      'goals',
+      ['goals'],
+      vi.fn().mockResolvedValue(undefined)
+    );
+
+    observer.ensureSubscribed();
+    observer.ensureSubscribed();
+
+    expect(fake.subscriberCount).toBe(1);
+  });
+
+  it('retries a subscribe that failed rather than believing it is observing', async () => {
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const fake = fakeObservableStore({ failedSubscribes: 1 });
+    configurePlatform({ storage: fake.store });
+    const refresh = vi.fn().mockResolvedValue(undefined);
+    const observer = createStorageObserver('goals', ['goals'], refresh);
+
+    observer.ensureSubscribed();
+    expect(fake.subscriberCount).toBe(0);
+    observer.ensureSubscribed();
+
+    fake.emit(['goals']);
+    await vi.waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
   });
 });

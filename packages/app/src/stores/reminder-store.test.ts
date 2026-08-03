@@ -2,6 +2,7 @@ import { configurePlatform, logger, type SyncMutationSink } from '@cuewise/share
 import * as storage from '@cuewise/storage';
 import { recurringReminderFactory, reminderFactory } from '@cuewise/test-utils/factories';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fakeObservableStore } from './__fixtures__/storage-changes.fixtures';
 import { useReminderStore } from './reminder-store';
 
 // Mock storage functions
@@ -576,5 +577,69 @@ describe('sync sink wiring', () => {
     await useReminderStore.getState().deleteReminder(reminder.id);
 
     expect(markDeleted).toHaveBeenCalledWith('reminders', reminder.id);
+  });
+});
+
+describe('converging on reminders written elsewhere', () => {
+  const markMutated = vi.fn();
+  const markMutatedBulk = vi.fn();
+  const markDeleted = vi.fn();
+  const fakeSink: SyncMutationSink = { markMutated, markMutatedBulk, markDeleted };
+
+  const mine = reminderFactory.build({ text: 'mine' });
+  const theirs = reminderFactory.build({ text: 'pulled from the other device' });
+
+  async function initializeObserving(): Promise<ReturnType<typeof fakeObservableStore>> {
+    const fake = fakeObservableStore();
+    configurePlatform({ storage: fake.store, syncSink: fakeSink });
+    getRemindersMock.mockResolvedValue([mine]);
+    await useReminderStore.getState().initialize();
+    return fake;
+  }
+
+  afterEach(() => {
+    configurePlatform({ syncSink: null });
+  });
+
+  it('adopts a reminder the sync engine wrote straight to storage', async () => {
+    const fake = await initializeObserving();
+    getRemindersMock.mockResolvedValue([mine, theirs]);
+
+    fake.emit(['reminders']);
+
+    await vi.waitFor(() =>
+      expect(useReminderStore.getState().reminders.map((reminder) => reminder.text)).toEqual([
+        'mine',
+        'pulled from the other device',
+      ])
+    );
+  });
+
+  it('keeps the pulled reminder when the next local write rewrites the whole list', async () => {
+    const fake = await initializeObserving();
+    getRemindersMock.mockResolvedValue([mine, theirs]);
+    fake.emit(['reminders']);
+    await vi.waitFor(() => expect(useReminderStore.getState().reminders).toHaveLength(2));
+
+    await useReminderStore.getState().addReminder('added here', new Date(Date.now() + 60_000));
+
+    const persisted = setRemindersMock.mock.lastCall?.[0] ?? [];
+    expect(persisted.map((reminder) => reminder.text)).toEqual([
+      'mine',
+      'pulled from the other device',
+      'added here',
+    ]);
+  });
+
+  it('does not report a pulled change back to the sync engine', async () => {
+    const fake = await initializeObserving();
+    getRemindersMock.mockResolvedValue([mine, theirs]);
+
+    fake.emit(['reminders']);
+
+    await vi.waitFor(() => expect(useReminderStore.getState().reminders).toHaveLength(2));
+    expect(markMutated).not.toHaveBeenCalled();
+    expect(markMutatedBulk).not.toHaveBeenCalled();
+    expect(markDeleted).not.toHaveBeenCalled();
   });
 });

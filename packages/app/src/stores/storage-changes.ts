@@ -30,6 +30,90 @@ export function observableStorage(): ObservableKeyValueStore | null {
  * teardown it hands back cannot throw: callers pass it straight to React, where a throwing cleanup
  * takes down the tree and skips the cleanups queued behind it.
  */
+export interface StorageObserver {
+  /** Idempotent: safe to call on every initialize(), and retries a subscribe that failed. */
+  ensureSubscribed(): void;
+}
+
+/**
+ * Keeps one store's in-memory copy converged on keys written anywhere else — a sync pull, or
+ * another tab. `refresh` must only re-read and setState: going through the store's write path
+ * would re-notify the sync engine about a change that came FROM it.
+ *
+ * No area filter, unlike settings: these collections live in whichever area `getStorageArea()`
+ * resolves, so pinning one would go deaf the moment enabling sync moves them.
+ */
+export function createStorageObserver(
+  what: string,
+  keys: readonly string[],
+  refresh: () => Promise<void>
+): StorageObserver {
+  const watched = new Set(keys);
+  let observing: { store: ObservableKeyValueStore; unsubscribe: () => void } | null = null;
+  let inFlight: Promise<void> | null = null;
+  let pending = false;
+
+  function run(): void {
+    pending = false;
+    inFlight = refresh()
+      .catch((error) => {
+        logger.error(`Could not apply ${what} changed elsewhere: ${describeThrown(error)}`, error);
+      })
+      .finally(() => {
+        inFlight = null;
+        if (pending) {
+          run();
+        }
+      });
+  }
+
+  // A pull writes one entity per call, so a burst coalesces into a single re-read — plus one
+  // trailing pass, since a write landing mid-refresh is not in the snapshot that refresh read.
+  function queueRefresh(): void {
+    if (inFlight !== null) {
+      pending = true;
+      return;
+    }
+    run();
+  }
+
+  return {
+    ensureSubscribed() {
+      const store = observableStorage();
+      if (observing !== null && observing.store === store) {
+        return;
+      }
+      if (observing !== null) {
+        observing.unsubscribe();
+        observing = null;
+      }
+      if (store === null) {
+        return;
+      }
+      const unsubscribe = safeSubscribe(store, what, (changed) => {
+        if (changed.some((key) => watched.has(key))) {
+          queueRefresh();
+        }
+      });
+      // Left null on a failed subscribe, so the next initialize() retries rather than believing
+      // it is already observing.
+      if (unsubscribe !== null) {
+        observing = { store, unsubscribe };
+      }
+    },
+  };
+}
+
+/**
+ * Whether a re-read found nothing new. A change event names a write, not a changed value, so a
+ * store's own write arrives here as a no-op — and swapping the array anyway would remount whatever
+ * row is mid-edit. Key order can differ between an in-memory object and one just parsed from
+ * storage, so this may report a change that isn't one; it can never miss one that is.
+ */
+export function sameEntities(a: unknown, b: unknown): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
 export function safeSubscribe(
   store: ObservableKeyValueStore,
   what: string,

@@ -12,6 +12,7 @@ import {
   type Quote,
   type QuoteCategory,
   type QuoteCollection,
+  STORAGE_KEYS,
 } from '@cuewise/shared';
 import {
   getCollections,
@@ -26,6 +27,7 @@ import {
 import { create } from 'zustand';
 import { SEED_QUOTES } from '../data/seed-quotes';
 import { useSettingsStore } from './settings-store';
+import { createStorageObserver, sameEntities } from './storage-changes';
 import { useToastStore } from './toast-store';
 
 /** Seed quotes not present in the given list, keyed by id. */
@@ -164,6 +166,31 @@ async function persistFilterSettings(state: QuoteStore): Promise<void> {
   });
 }
 
+/**
+ * Every writer here rewrites the whole list from the in-memory copy, so a copy left stale by a
+ * pull is not just a stale view — the next write persists it over what the pull landed.
+ *
+ * Only the two collections sync owns. The displayed quote, its history and the filters are this
+ * tab's view state: swapping them for a remote edit would change what the reader is looking at.
+ */
+const quotesObserver = createStorageObserver(
+  'quotes',
+  [STORAGE_KEYS.SEED_QUOTES, STORAGE_KEYS.CUSTOM_QUOTES, STORAGE_KEYS.COLLECTIONS],
+  async () => {
+    const [quotes, collections] = await Promise.all([getQuotes(), getCollections()]);
+    const current = useQuoteStore.getState();
+    const nextQuotes = sameEntities(current.quotes, quotes) ? null : quotes;
+    const nextCollections = sameEntities(current.collections, collections) ? null : collections;
+    if (nextQuotes === null && nextCollections === null) {
+      return;
+    }
+    useQuoteStore.setState({
+      ...(nextQuotes !== null && { quotes: nextQuotes }),
+      ...(nextCollections !== null && { collections: nextCollections }),
+    });
+  }
+);
+
 export const useQuoteStore = create<QuoteStore>((set, get) => ({
   quotes: [],
   currentQuote: null,
@@ -234,6 +261,8 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         activeCollectionIds,
         isLoading: false,
       });
+      // After the first set, so a change arriving mid-load cannot be overwritten by it.
+      quotesObserver.ensureSubscribed();
 
       // Increment view count for current quote
       if (currentQuote) {

@@ -24,6 +24,7 @@ import {
   expectNavigationToQuote,
   expectViewCountIncremented,
 } from './__fixtures__/quote-store.fixtures';
+import { fakeObservableStore } from './__fixtures__/storage-changes.fixtures';
 import { useQuoteStore } from './quote-store';
 
 // Mock storage functions
@@ -993,5 +994,85 @@ describe('sync sink wiring', () => {
       created.map((q) => q.id)
     );
     expect(markMutated).not.toHaveBeenCalled();
+  });
+});
+
+describe('converging on quotes written elsewhere', () => {
+  const markMutated = vi.fn();
+  const markMutatedBulk = vi.fn();
+  const markDeleted = vi.fn();
+  const fakeSink: SyncMutationSink = { markMutated, markMutatedBulk, markDeleted };
+
+  const mine = quoteFactory.build({ text: 'mine' });
+  const theirs = quoteFactory.build({ text: 'pulled from the other device' });
+
+  async function initializeObserving(): Promise<ReturnType<typeof fakeObservableStore>> {
+    const fake = fakeObservableStore();
+    configurePlatform({ storage: fake.store, syncSink: fakeSink });
+    vi.mocked(storage.getQuotes).mockResolvedValue([mine]);
+    vi.mocked(storage.getCollections).mockResolvedValue([]);
+    vi.mocked(storage.getCurrentQuote).mockResolvedValue(mine);
+    await useQuoteStore.getState().initialize();
+    return fake;
+  }
+
+  beforeEach(() => {
+    markMutated.mockClear();
+    markMutatedBulk.mockClear();
+    markDeleted.mockClear();
+  });
+
+  afterEach(() => {
+    configurePlatform({ syncSink: null });
+  });
+
+  it('adopts a quote the sync engine wrote straight to storage', async () => {
+    const fake = await initializeObserving();
+    vi.mocked(storage.getQuotes).mockResolvedValue([mine, theirs]);
+
+    fake.emit(['customQuotes']);
+
+    await vi.waitFor(() =>
+      expect(useQuoteStore.getState().quotes.map((quote) => quote.text)).toEqual([
+        'mine',
+        'pulled from the other device',
+      ])
+    );
+  });
+
+  it('adopts a collection written under its own key', async () => {
+    const fake = await initializeObserving();
+    const collection: QuoteCollection = { id: 'c1', name: 'Pulled', createdAt: '2026-08-03' };
+    vi.mocked(storage.getCollections).mockResolvedValue([collection]);
+
+    fake.emit(['collections']);
+
+    await vi.waitFor(() =>
+      expect(useQuoteStore.getState().collections.map((each) => each.name)).toEqual(['Pulled'])
+    );
+  });
+
+  it('does not report a pulled change back to the sync engine', async () => {
+    const fake = await initializeObserving();
+    vi.mocked(storage.getQuotes).mockResolvedValue([mine, theirs]);
+
+    fake.emit(['customQuotes']);
+
+    await vi.waitFor(() => expect(useQuoteStore.getState().quotes).toHaveLength(2));
+    expect(markMutated).not.toHaveBeenCalled();
+    expect(markMutatedBulk).not.toHaveBeenCalled();
+    expect(markDeleted).not.toHaveBeenCalled();
+  });
+
+  // The reader is looking at the current quote; a remote edit must not swap it mid-read.
+  it('leaves the displayed quote alone', async () => {
+    const fake = await initializeObserving();
+    const displayed = useQuoteStore.getState().currentQuote;
+    vi.mocked(storage.getQuotes).mockResolvedValue([mine, theirs]);
+
+    fake.emit(['customQuotes']);
+
+    await vi.waitFor(() => expect(useQuoteStore.getState().quotes).toHaveLength(2));
+    expect(useQuoteStore.getState().currentQuote).toBe(displayed);
   });
 });
