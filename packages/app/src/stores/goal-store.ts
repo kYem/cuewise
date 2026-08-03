@@ -89,10 +89,6 @@ async function persistGoals(updatedGoals: Goal[]): Promise<void> {
   assertPersisted(await saveAllGoals(updatedGoals));
 }
 
-/**
- * Every writer here rewrites the whole array from the in-memory copy, so a copy left stale by a
- * pull is not just a stale view — the next write persists it over what the pull landed.
- */
 const goalsObserver = createStorageObserver('goals', [STORAGE_KEYS.GOALS], async () => {
   const goals = await loadAllGoals();
   if (sameEntities(useGoalStore.getState().goals, goals)) {
@@ -115,8 +111,6 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       const allGoals = await loadAllGoals();
 
       set({ goals: allGoals, todayTasks: filterTodayTasks(allGoals), isLoading: false });
-      // After the first set, so a change arriving mid-load cannot be overwritten by it.
-      goalsObserver.ensureSubscribed();
     } catch (error) {
       logger.error('Error initializing goal store', error);
       const errorMessage = 'Failed to load goals. Please refresh the page.';
@@ -126,6 +120,9 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
     // Outside the try: the roll handles its own failures, and a roll problem
     // must never masquerade as the "Failed to load goals" toast.
     await get().rollDueTasks();
+    // Last, and outside the try for the same reason a failed load still needs observing: the
+    // reconcile re-reads storage, so it has to run after everything this load wrote.
+    goalsObserver.subscribeAndReconcile();
   },
 
   addTask: async (text: string, parentId?: string) => {

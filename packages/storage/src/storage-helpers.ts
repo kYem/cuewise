@@ -302,11 +302,15 @@ export async function setCurrentQuote(quote: Quote): Promise<StorageResult> {
   return setInStorage(STORAGE_KEYS.CURRENT_QUOTE, quote, area);
 }
 
-// Goals
+/**
+ * Raw-then-validate, like getQuotes: every writer rewrites the whole array from what this read
+ * answered, so reporting a failed read as `[]` is how a wedged read becomes a fleet-wide erase.
+ * Only a key that was never written reads as empty — see getListRaw.
+ */
 export async function getGoals(): Promise<Goal[]> {
   const area = await getStorageArea();
-  const goals = await getValidatedListFromStorage<Goal>(STORAGE_KEYS.GOALS, goalSchema, area);
-  return goals ?? [];
+  const raw = await getListRaw<unknown>(STORAGE_KEYS.GOALS, area);
+  return keepValidListItems<Goal>(raw, goalSchema, STORAGE_KEYS.GOALS, area);
 }
 
 export async function setGoals(goals: Goal[]): Promise<StorageResult> {
@@ -314,15 +318,11 @@ export async function setGoals(goals: Goal[]): Promise<StorageResult> {
   return setValidatedListInStorage(STORAGE_KEYS.GOALS, goals, goalSchema, area);
 }
 
-// Reminders
+/** Raw-then-validate for the same reason as getGoals. */
 export async function getReminders(): Promise<Reminder[]> {
   const area = await getStorageArea();
-  const reminders = await getValidatedListFromStorage<Reminder>(
-    STORAGE_KEYS.REMINDERS,
-    reminderSchema,
-    area
-  );
-  return reminders ?? [];
+  const raw = await getListRaw<unknown>(STORAGE_KEYS.REMINDERS, area);
+  return keepValidListItems<Reminder>(raw, reminderSchema, STORAGE_KEYS.REMINDERS, area);
 }
 
 export async function setReminders(reminders: Reminder[]): Promise<StorageResult> {
@@ -330,15 +330,16 @@ export async function setReminders(reminders: Reminder[]): Promise<StorageResult
   return setValidatedListInStorage(STORAGE_KEYS.REMINDERS, reminders, reminderSchema, area);
 }
 
-// Quote Collections
+/** Raw-then-validate for the same reason as getGoals. */
 export async function getCollections(): Promise<QuoteCollection[]> {
   const area = await getStorageArea();
-  const collections = await getValidatedListFromStorage<QuoteCollection>(
-    STORAGE_KEYS.COLLECTIONS,
+  const raw = await getListRaw<unknown>(STORAGE_KEYS.COLLECTIONS, area);
+  return keepValidListItems<QuoteCollection>(
+    raw,
     quoteCollectionSchema,
+    STORAGE_KEYS.COLLECTIONS,
     area
   );
-  return collections ?? [];
 }
 
 export async function setCollections(collections: QuoteCollection[]): Promise<StorageResult> {

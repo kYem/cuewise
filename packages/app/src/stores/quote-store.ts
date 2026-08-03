@@ -167,11 +167,8 @@ async function persistFilterSettings(state: QuoteStore): Promise<void> {
 }
 
 /**
- * Every writer here rewrites the whole list from the in-memory copy, so a copy left stale by a
- * pull is not just a stale view — the next write persists it over what the pull landed.
- *
- * Only the two collections sync owns. The displayed quote, its history and the filters are this
- * tab's view state: swapping them for a remote edit would change what the reader is looking at.
+ * The displayed quote and its history are this tab's own. The filters do sync, but as settings —
+ * settings-store converges them, and this store's copies go stale until the next initialize().
  */
 const quotesObserver = createStorageObserver(
   'quotes',
@@ -261,13 +258,14 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         activeCollectionIds,
         isLoading: false,
       });
-      // After the first set, so a change arriving mid-load cannot be overwritten by it.
-      quotesObserver.ensureSubscribed();
-
       // Increment view count for current quote
       if (currentQuote) {
         await get().incrementViewCount(currentQuote.id);
       }
+
+      // Last: the reconcile re-reads storage, so it has to run after everything this load wrote
+      // (the seed, the view-count bump) or it reads back a snapshot taken before them.
+      quotesObserver.subscribeAndReconcile();
     } catch (error) {
       logger.error('Error initializing quote store', error);
       const errorMessage = 'Failed to load quotes. Please refresh the page.';

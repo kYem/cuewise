@@ -13,6 +13,11 @@ export interface FakeObservableStoreOptions {
   throwOnUnsubscribe?: boolean;
 }
 
+/** Drains the microtask queue, so a negative assertion isn't just one tick early. */
+export async function flushMicrotasks(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 /** Throws with its own name, so an unmocked call isn't an anonymous "not a function". */
 function unserved<K extends Exclude<keyof ObservableKeyValueStore, 'supportsSync' | 'onChanged'>>(
   method: K

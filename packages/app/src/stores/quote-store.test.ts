@@ -1064,7 +1064,18 @@ describe('converging on quotes written elsewhere', () => {
     expect(markDeleted).not.toHaveBeenCalled();
   });
 
-  // The reader is looking at the current quote; a remote edit must not swap it mid-read.
+  it('keeps the pulled quote when the next local write rewrites the whole list', async () => {
+    const fake = await initializeObserving();
+    vi.mocked(storage.getQuotes).mockResolvedValue([mine, theirs]);
+    fake.emit(['customQuotes']);
+    await vi.waitFor(() => expect(useQuoteStore.getState().quotes).toHaveLength(2));
+
+    await useQuoteStore.getState().toggleFavorite(mine.id);
+
+    const persisted = vi.mocked(storage.setQuotes).mock.lastCall?.[0] ?? [];
+    expect(persisted.map((quote) => quote.text)).toContain('pulled from the other device');
+  });
+
   it('leaves the displayed quote alone', async () => {
     const fake = await initializeObserving();
     const displayed = useQuoteStore.getState().currentQuote;

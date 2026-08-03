@@ -181,19 +181,21 @@ describe('a stored value that no longer matches its shape', () => {
     expect(JSON.stringify(error.mock.calls)).not.toContain('a private goal');
   });
 
-  it('discards a stored value that is not a list at all', async () => {
+  // Not discarded to `[]`, unlike a single bad row: the caller rewrites the whole array from what
+  // this answered, so an empty answer is a fleet-wide erase. A wedged list is recoverable.
+  it('refuses a stored value that is not a list at all', async () => {
     configurePlatform({ storage: storeHolding({ goals: { nope: true } }) });
 
-    await expect(getGoals()).resolves.toEqual([]);
+    await expect(getGoals()).rejects.toThrow('The stored goals list is unreadable');
   });
 
-  it('names the key it discarded, at a level the shipped log level shows', async () => {
+  it('names the key it refused, at a level the shipped log level shows', async () => {
     const error = vi.spyOn(logger, 'error');
     configurePlatform({ storage: storeHolding({ goals: { nope: true } }) });
 
-    await getGoals();
+    await expect(getGoals()).rejects.toThrow();
 
-    expect(error).toHaveBeenCalledWith('Discarded a stored value that should have been a list', {
+    expect(error).toHaveBeenCalledWith('Refusing to read a stored list this build cannot use', {
       key: 'goals',
       area: 'local',
     });

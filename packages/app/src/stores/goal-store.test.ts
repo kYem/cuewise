@@ -3,6 +3,7 @@ import {
   DEFAULT_SETTINGS,
   getTodayDateString,
   logger,
+  resetPlatform,
   type Settings,
   type SyncMutationSink,
   storageFailure,
@@ -989,8 +990,10 @@ describe('converging on goals written elsewhere', () => {
     vi.mocked(storage.setGoals).mockResolvedValue({ success: true });
   });
 
+  // Not just the sink: the observer is module-scoped, so a fake left registered keeps it
+  // subscribed to a dead backend for every describe after this one.
   afterEach(() => {
-    configurePlatform({ syncSink: null });
+    resetPlatform();
   });
 
   it('adopts a goal the sync engine wrote straight to storage', async () => {
@@ -1007,8 +1010,32 @@ describe('converging on goals written elsewhere', () => {
     );
   });
 
-  // The whole point: every writer rewrites the array from the in-memory copy, so a copy left
-  // stale by the pull would persist over what the pull landed.
+  it('recomputes the home-page list, not only the full one', async () => {
+    const fake = await initializeObserving();
+    vi.mocked(storage.getGoals).mockResolvedValue([mine, theirs]);
+
+    fake.emit(['goals']);
+
+    await vi.waitFor(() =>
+      expect(useGoalStore.getState().todayTasks.map((task) => task.text)).toEqual([
+        'mine',
+        'pulled from the other device',
+      ])
+    );
+  });
+
+  // A pull that landed between initialize's read and its subscribe is announced to nobody.
+  it('picks up a pull that landed while it was still loading', async () => {
+    const fake = fakeObservableStore();
+    configurePlatform({ storage: fake.store, syncSink: fakeSink });
+    vi.mocked(storage.getGoals).mockResolvedValue([mine]);
+    const loaded = useGoalStore.getState().initialize();
+    vi.mocked(storage.getGoals).mockResolvedValue([mine, theirs]);
+    await loaded;
+
+    await vi.waitFor(() => expect(useGoalStore.getState().goals).toHaveLength(2));
+  });
+
   it('keeps the pulled goal when the next local write rewrites the whole list', async () => {
     const fake = await initializeObserving();
     vi.mocked(storage.getGoals).mockResolvedValue([mine, theirs]);
@@ -1037,8 +1064,6 @@ describe('converging on goals written elsewhere', () => {
     expect(markDeleted).not.toHaveBeenCalled();
   });
 
-  // A change event names a write, not a changed value, so a store's own write arrives as a no-op.
-  // Swapping the array for an equal one would remount whatever row is mid-edit.
   it('leaves the in-memory list alone when its own write is announced back', async () => {
     const fake = await initializeObserving();
     const before = useGoalStore.getState().goals;

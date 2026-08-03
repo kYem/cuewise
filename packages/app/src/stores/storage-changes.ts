@@ -25,37 +25,36 @@ export function observableStorage(): ObservableKeyValueStore | null {
   return store;
 }
 
-/**
- * Named, since a failure here silently stops one consumer converging and nothing else says which. The
- * teardown it hands back cannot throw: callers pass it straight to React, where a throwing cleanup
- * takes down the tree and skips the cleanups queued behind it.
- */
 export interface StorageObserver {
-  /** Idempotent: safe to call on every initialize(), and retries a subscribe that failed. */
-  ensureSubscribed(): void;
+  /** Module-scoped and never torn down; call on every initialize(). */
+  subscribeAndReconcile(): void;
 }
 
 /**
  * Keeps one store's in-memory copy converged on keys written anywhere else — a sync pull, or
  * another tab. `refresh` must only re-read and setState: going through the store's write path
- * would re-notify the sync engine about a change that came FROM it.
+ * would re-notify the sync engine about a change that came FROM it, and `refresh` must treat a
+ * failed read as a failure rather than as an empty collection — see getListRaw.
  *
- * No area filter, unlike settings: these collections live in whichever area `getStorageArea()`
- * resolves, so pinning one would go deaf the moment enabling sync moves them.
+ * No area filter, unlike settings: `goals`, `customQuotes`, `collections` and `reminders` move
+ * area with the `syncEnabled` setting, so pinning one would go deaf the moment they move.
  */
 export function createStorageObserver(
   what: string,
-  keys: readonly string[],
+  keys: readonly [string, ...string[]],
   refresh: () => Promise<void>
 ): StorageObserver {
-  const watched = new Set(keys);
+  const watched = new Set<string>(keys);
   let observing: { store: ObservableKeyValueStore; unsubscribe: () => void } | null = null;
   let inFlight: Promise<void> | null = null;
   let pending = false;
 
   function run(): void {
     pending = false;
-    inFlight = refresh()
+    // Through a resolved promise, so a synchronous throw lands here and not in the backend's
+    // listener dispatch.
+    inFlight = Promise.resolve()
+      .then(refresh)
       .catch((error) => {
         logger.error(`Could not apply ${what} changed elsewhere: ${describeThrown(error)}`, error);
       })
@@ -78,42 +77,48 @@ export function createStorageObserver(
   }
 
   return {
-    ensureSubscribed() {
+    subscribeAndReconcile() {
       const store = observableStorage();
-      if (observing !== null && observing.store === store) {
-        return;
-      }
-      if (observing !== null) {
+      if (observing !== null && observing.store !== store) {
         observing.unsubscribe();
         observing = null;
       }
-      if (store === null) {
-        return;
-      }
-      const unsubscribe = safeSubscribe(store, what, (changed) => {
-        if (changed.some((key) => watched.has(key))) {
-          queueRefresh();
+      if (store !== null && observing === null) {
+        const unsubscribe = safeSubscribe(store, what, (changed) => {
+          if (changed.some((key) => watched.has(key))) {
+            queueRefresh();
+          }
+        });
+        // Left null on a failed subscribe, so the next initialize() retries rather than believing
+        // it is already observing.
+        if (unsubscribe !== null) {
+          observing = { store, unsubscribe };
         }
-      });
-      // Left null on a failed subscribe, so the next initialize() retries rather than believing
-      // it is already observing.
-      if (unsubscribe !== null) {
-        observing = { store, unsubscribe };
       }
+      // Unconditional, and this is what makes the load safe to leave unqueued: initialize's own
+      // set may have just reinstalled the snapshot it read before a pull landed, and no further
+      // event is coming to correct it.
+      queueRefresh();
     },
   };
 }
 
 /**
  * Whether a re-read found nothing new. A change event names a write, not a changed value, so a
- * store's own write arrives here as a no-op — and swapping the array anyway would remount whatever
- * row is mid-edit. Key order can differ between an in-memory object and one just parsed from
- * storage, so this may report a change that isn't one; it can never miss one that is.
+ * store's own write arrives here as a no-op, and swapping the array anyway re-renders every
+ * consumer for nothing. Key order can differ between an in-memory object and one just parsed from
+ * storage, so this may report a change that isn't one; for JSON-representable entities it cannot
+ * miss one that is.
  */
-export function sameEntities(a: unknown, b: unknown): boolean {
+export function sameEntities<T>(a: readonly T[], b: readonly NoInfer<T>[]): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
+/**
+ * Named, since a failure here silently stops one consumer converging and nothing else says which. The
+ * teardown it hands back cannot throw: callers pass it straight to React, where a throwing cleanup
+ * takes down the tree and skips the cleanups queued behind it.
+ */
 export function safeSubscribe(
   store: ObservableKeyValueStore,
   what: string,

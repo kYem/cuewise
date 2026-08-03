@@ -118,9 +118,8 @@ function commitReminders(
 }
 
 /**
- * Every writer here rewrites the whole array from the in-memory copy, so a copy left stale by a
- * pull is not just a stale view — the next write persists it over what the pull landed. Alarms are
- * deliberately not re-armed from here: this owns the view, and initialize() owns the schedule.
+ * Known gap: a reminder that arrives by pull is shown but never armed. Nothing in the sync path
+ * arms alarms, and initialize()'s re-arm loop is skipped wherever the scheduler persists its own.
  */
 const remindersObserver = createStorageObserver('reminders', [STORAGE_KEYS.REMINDERS], async () => {
   const reminders = await getReminders();
@@ -189,8 +188,6 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       }
 
       commitReminders(set, reminders, { isLoading: false });
-      // After the first commit, so a change arriving mid-load cannot be overwritten by it.
-      remindersObserver.ensureSubscribed();
 
       // Rust-backed schedulers lose their armed wakes on restart (unlike
       // chrome.alarms), so re-arm every active reminder from storage. Overdue
@@ -213,6 +210,9 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       set({ error: errorMessage, isLoading: false });
       useToastStore.getState().error(errorMessage);
     }
+    // Last, and outside the try so a failed load still observes: the reconcile re-reads storage,
+    // so it has to run after everything this load wrote.
+    remindersObserver.subscribeAndReconcile();
   },
 
   addReminder: async (text: string, dueDate: Date, recurring?, category?) => {

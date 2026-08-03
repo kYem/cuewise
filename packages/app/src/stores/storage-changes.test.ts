@@ -7,10 +7,16 @@ import {
   type StorageArea,
 } from '@cuewise/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fakeObservableStore } from './__fixtures__/storage-changes.fixtures';
+import {
+  type FakeObservableStore,
+  type FakeObservableStoreOptions,
+  fakeObservableStore,
+  flushMicrotasks,
+} from './__fixtures__/storage-changes.fixtures';
 import {
   createStorageObserver,
   observableStorage,
+  type StorageObserver,
   safeSubscribe,
   sameEntities,
 } from './storage-changes';
@@ -126,65 +132,80 @@ describe('createStorageObserver', () => {
     resetPlatform();
   });
 
-  it('re-reads when a watched key is written elsewhere', async () => {
+  /** Subscribes and settles the reconcile pass, so each test counts only what it triggers. */
+  async function observing(
+    refresh: () => Promise<void>,
+    options?: FakeObservableStoreOptions
+  ): Promise<{ fake: FakeObservableStore; observer: StorageObserver }> {
+    const fake = fakeObservableStore(options);
+    configurePlatform({ storage: fake.store });
+    const observer = createStorageObserver('goals', ['goals'], refresh);
+    observer.subscribeAndReconcile();
+    await vi.waitFor(() => expect(refresh).toHaveBeenCalled());
+    return { fake, observer };
+  }
+
+  // What recovers a pull that landed between initialize's read and this call; without it that
+  // change is never announced to anyone and the store keeps a pre-pull snapshot.
+  it('reconciles once on subscribing, with no change announced', async () => {
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
     const refresh = vi.fn().mockResolvedValue(undefined);
-    createStorageObserver('goals', ['goals'], refresh).ensureSubscribed();
+
+    createStorageObserver('goals', ['goals'], refresh).subscribeAndReconcile();
+
+    await vi.waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+  });
+
+  it('re-reads when a watched key is written elsewhere', async () => {
+    const refresh = vi.fn().mockResolvedValue(undefined);
+    const { fake } = await observing(refresh);
 
     fake.emit(['goals']);
 
-    await vi.waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(refresh).toHaveBeenCalledTimes(2));
   });
 
   it('ignores a key it does not watch', async () => {
-    const fake = fakeObservableStore();
-    configurePlatform({ storage: fake.store });
     const refresh = vi.fn().mockResolvedValue(undefined);
-    createStorageObserver('goals', ['goals'], refresh).ensureSubscribed();
+    const { fake } = await observing(refresh);
 
     fake.emit(['quotes']);
 
-    await Promise.resolve();
-    expect(refresh).not.toHaveBeenCalled();
+    await flushMicrotasks();
+    expect(refresh).toHaveBeenCalledTimes(1);
   });
 
-  // Goals move between areas when sync is enabled, so an area filter would go deaf on the move.
+  // These collections move area with the syncEnabled setting, so an area filter goes deaf on the move.
   it('converges on a watched key announced in either area', async () => {
-    const fake = fakeObservableStore();
-    configurePlatform({ storage: fake.store });
     const refresh = vi.fn().mockResolvedValue(undefined);
-    createStorageObserver('goals', ['goals'], refresh).ensureSubscribed();
+    const { fake } = await observing(refresh);
 
     fake.emit(['goals'], 'sync');
 
-    await vi.waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(refresh).toHaveBeenCalledTimes(2));
   });
 
   it('coalesces a pull burst into one re-read, then one more for what landed mid-read', async () => {
-    const fake = fakeObservableStore();
-    configurePlatform({ storage: fake.store });
     let release = (): void => {};
-    const refresh = vi
-      .fn()
-      .mockImplementationOnce(
-        () =>
-          new Promise<void>((resolve) => {
-            release = resolve;
-          })
-      )
-      .mockResolvedValue(undefined);
-    createStorageObserver('goals', ['goals'], refresh).ensureSubscribed();
+    const refresh = vi.fn().mockResolvedValue(undefined);
+    const { fake } = await observing(refresh);
+    refresh.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        })
+    );
 
     fake.emit(['goals']);
-    await vi.waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(refresh).toHaveBeenCalledTimes(2));
     fake.emit(['goals']);
     fake.emit(['goals']);
-    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(refresh).toHaveBeenCalledTimes(2);
 
     release();
 
-    await vi.waitFor(() => expect(refresh).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(refresh).toHaveBeenCalledTimes(3));
   });
 
   it('names a rejected re-read instead of leaving an unhandled rejection', async () => {
@@ -192,7 +213,7 @@ describe('createStorageObserver', () => {
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
     const refresh = vi.fn().mockRejectedValue(new Error('storage unreachable'));
-    createStorageObserver('goals', ['goals'], refresh).ensureSubscribed();
+    createStorageObserver('goals', ['goals'], refresh).subscribeAndReconcile();
 
     fake.emit(['goals']);
 
@@ -204,33 +225,56 @@ describe('createStorageObserver', () => {
     );
   });
 
-  it('subscribes once however often initialize runs', () => {
+  // A synchronous throw would otherwise escape into the backend's listener dispatch.
+  it('contains a refresh that throws before it returns a promise', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
-    const observer = createStorageObserver(
-      'goals',
-      ['goals'],
-      vi.fn().mockResolvedValue(undefined)
-    );
+    const refresh = vi.fn(() => {
+      throw new Error('read threw synchronously');
+    });
+    createStorageObserver('goals', ['goals'], refresh).subscribeAndReconcile();
 
-    observer.ensureSubscribed();
-    observer.ensureSubscribed();
+    expect(() => fake.emit(['goals'])).not.toThrow();
+    await vi.waitFor(() =>
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Could not apply goals changed elsewhere'),
+        expect.anything()
+      )
+    );
+  });
+
+  it('subscribes once however often initialize runs', async () => {
+    const refresh = vi.fn().mockResolvedValue(undefined);
+    const { fake, observer } = await observing(refresh);
+
+    observer.subscribeAndReconcile();
 
     expect(fake.subscriberCount).toBe(1);
   });
 
+  it('stops observing a backend the platform replaced', async () => {
+    const refresh = vi.fn().mockResolvedValue(undefined);
+    const { fake: first, observer } = await observing(refresh);
+    const second = fakeObservableStore();
+    configurePlatform({ storage: second.store });
+
+    observer.subscribeAndReconcile();
+
+    expect(first.subscriberCount).toBe(0);
+    expect(second.subscriberCount).toBe(1);
+  });
+
   it('retries a subscribe that failed rather than believing it is observing', async () => {
     vi.spyOn(logger, 'error').mockImplementation(() => {});
-    const fake = fakeObservableStore({ failedSubscribes: 1 });
-    configurePlatform({ storage: fake.store });
     const refresh = vi.fn().mockResolvedValue(undefined);
-    const observer = createStorageObserver('goals', ['goals'], refresh);
-
-    observer.ensureSubscribed();
+    const { fake, observer } = await observing(refresh, { failedSubscribes: 1 });
     expect(fake.subscriberCount).toBe(0);
-    observer.ensureSubscribed();
 
+    observer.subscribeAndReconcile();
     fake.emit(['goals']);
-    await vi.waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+
+    await vi.waitFor(() => expect(fake.subscriberCount).toBe(1));
+    await vi.waitFor(() => expect(refresh.mock.calls.length).toBeGreaterThan(2));
   });
 });

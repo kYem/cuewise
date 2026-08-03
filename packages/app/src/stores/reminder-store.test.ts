@@ -615,6 +615,24 @@ describe('converging on reminders written elsewhere', () => {
     );
   });
 
+  it('recomputes the widget buckets, not only the full list', async () => {
+    const fake = await initializeObserving();
+    const upcoming = reminderFactory.build({
+      text: 'pulled and upcoming',
+      dueDate: new Date(Date.now() + 3_600_000).toISOString(),
+      completed: false,
+    });
+    getRemindersMock.mockResolvedValue([mine, upcoming]);
+
+    fake.emit(['reminders']);
+
+    await vi.waitFor(() =>
+      expect(useReminderStore.getState().upcomingReminders.map((each) => each.text)).toContain(
+        'pulled and upcoming'
+      )
+    );
+  });
+
   it('keeps the pulled reminder when the next local write rewrites the whole list', async () => {
     const fake = await initializeObserving();
     getRemindersMock.mockResolvedValue([mine, theirs]);
