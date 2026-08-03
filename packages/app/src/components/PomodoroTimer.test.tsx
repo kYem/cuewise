@@ -425,6 +425,7 @@ describe('PomodoroTimer - chrome variant', () => {
     const row = screen.getByTestId('pomodoro-rhythm-row');
     expect(row).toHaveClass('text-secondary');
     expect(row).not.toHaveClass('text-white/60');
+    expect(screen.getByTitle('Focus duration')).toHaveClass('hover:text-text-primary');
     expect(screen.getByTitle('Focus duration')).not.toHaveClass('hover:text-white/90');
   });
 });

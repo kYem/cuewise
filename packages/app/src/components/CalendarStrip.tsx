@@ -11,9 +11,9 @@ interface CalendarStripProps {
   // Wide single-line "Up next" variant for the stacked Calendar + Quote layout:
   // drops past events and the now-line, shows only the next few.
   lean?: boolean;
-  // 'overlay' (default): white-on-dark glass, for the Pomodoro image background.
-  // 'surface': theme tokens, for the home new tab where the background follows
-  // the theme (and can be light), matching the goals card / QuoteDisplay.
+  // 'overlay' (default): white-on-dark glass, for a photo background.
+  // 'surface': theme tokens plus the goals-card width, for any page whose
+  // background follows the theme (and can be light).
   variant?: 'overlay' | 'surface';
 }
 
@@ -28,9 +28,9 @@ const SURFACE_TOKENS = {
   time: 'text-secondary',
   title: 'text-primary',
   connectBtn: 'border-border bg-surface-variant text-primary hover:bg-surface-variant/70',
-  refresh: 'text-tertiary hover:text-primary',
-  nowLine: 'bg-divider',
-  nowDot: 'bg-primary',
+  refresh: 'text-tertiary hover:text-text-primary',
+  nowLine: 'bg-border',
+  nowDot: 'bg-text-primary',
   bar: 'bg-divider',
   empty: 'text-secondary',
   error: 'text-red-500 dark:text-red-400',

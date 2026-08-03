@@ -97,9 +97,9 @@ const SURFACE_TOKENS = {
   menu: 'bg-surface backdrop-blur-sm border-border',
   menuItem: 'text-primary hover:bg-surface-variant',
   menuItemMuted: 'text-secondary hover:bg-surface-variant hover:text-text-primary',
-  ring: 'stroke-divider',
+  ring: 'stroke-border',
   divider: 'bg-divider',
-  pip: 'bg-divider',
+  pip: 'bg-border',
   iconButton: 'bg-surface-variant text-primary hover:bg-surface-variant/70',
 } as const;
 

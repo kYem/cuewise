@@ -1,5 +1,4 @@
-import { createSelectorMock } from '@cuewise/test-utils';
-import { defaultSettings } from '@cuewise/test-utils/fixtures';
+import { createSelectorMock, createSettingsStoreMock } from '@cuewise/test-utils';
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useSettingsStore } from '../../stores/settings-store';
@@ -11,12 +10,13 @@ vi.mock('../../stores/sounds-store', () => ({ useSoundsStore: vi.fn() }));
 vi.mock('./SoundsPanel', () => ({ SoundsPanel: () => null }));
 
 // `accent` is not a colour in this theme, so any utility naming it renders unstyled.
-const UNDEFINED_ACCENT = /^(?:[a-z-]+:)*(?:bg|text|border|ring|from|via|to)-accent(?:\/\d+)?$/;
+const UNDEFINED_ACCENT =
+  /^(?:[a-z-]+:)*(?:accent|bg|text|border|divide|outline|ring|fill|stroke|shadow|from|via|to)-accent(?:\/\d+)?$/;
 
 function mockStores({ isPlaying = false } = {}) {
-  vi.mocked(useSettingsStore).mockReturnValue({
-    settings: { ...defaultSettings, pomodoroMusicEnabled: true },
-  } as unknown as ReturnType<typeof useSettingsStore>);
+  vi.mocked(useSettingsStore).mockImplementation(
+    createSettingsStoreMock({ pomodoroMusicEnabled: true })
+  );
   vi.mocked(useSoundsStore).mockImplementation(
     createSelectorMock({
       activeSource: 'ambient',
@@ -77,15 +77,32 @@ describe('SoundsMiniPlayer chrome variant', () => {
     expect(screen.getByTitle('Open sounds panel').firstElementChild).toHaveClass(fill);
   });
 
+  // The Glass theme overrides bg-primary-600 to translucent black — invisible on a photo.
   it('keeps the playing indicator visible over a photo rather than on theme fill', () => {
     mockStores({ isPlaying: true });
 
     render(<SoundsMiniPlayer />);
 
-    // The Glass theme overrides bg-primary-600 to translucent black — invisible on a photo.
-    expect(renderedClasses(screen.getByTestId('playing-indicator'))).not.toContain(
-      'bg-primary-600'
-    );
+    const indicator = renderedClasses(screen.getByTestId('playing-indicator'));
+    expect(indicator).toContain('bg-white');
+    expect(indicator).not.toContain('bg-primary-600');
+  });
+
+  it('marks the play button as playing without the fill the glass theme flattens', () => {
+    mockStores({ isPlaying: true });
+
+    render(<SoundsMiniPlayer />);
+
+    expect(screen.getByTitle('Pause')).toHaveClass('bg-white/25');
+    expect(screen.getByTitle('Pause')).not.toHaveClass('bg-primary-600');
+  });
+
+  it('fills the playing button with the theme colour on the surface variant', () => {
+    mockStores({ isPlaying: true });
+
+    render(<SoundsMiniPlayer variant="surface" />);
+
+    expect(screen.getByTitle('Pause')).toHaveClass('bg-primary-600');
   });
 
   it('tints the playing indicator with the theme on the surface variant', () => {

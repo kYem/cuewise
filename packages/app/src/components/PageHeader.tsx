@@ -55,7 +55,9 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
               onClick={handleBackToHome}
               className={cn(
                 'flex items-center gap-2 transition-colors group',
-                transparent ? 'text-white/80 hover:text-white' : 'text-secondary hover:text-primary'
+                transparent
+                  ? 'text-white/80 hover:text-white'
+                  : 'text-secondary hover:text-text-primary'
               )}
               title="Back to home"
             >
@@ -126,7 +128,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
                       : 'bg-primary-600 text-white shadow-sm'
                     : transparent
                       ? 'text-white/80 hover:text-white hover:bg-white/20'
-                      : 'text-secondary hover:text-primary hover:bg-surface'
+                      : 'text-secondary hover:text-text-primary hover:bg-surface'
                 )}
                 title={`Go to ${item.label}`}
               >

@@ -1,9 +1,9 @@
-import { COLOR_THEMES, type ColorTheme } from '@cuewise/shared';
-import { createSelectorMock } from '@cuewise/test-utils';
-import { defaultSettings } from '@cuewise/test-utils/fixtures';
+import type { ColorTheme } from '@cuewise/shared';
+import { createSettingsStoreMock } from '@cuewise/test-utils';
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useSettingsStore } from '../stores/settings-store';
+import { PLAIN_THEMES } from './__fixtures__/color-theme.fixtures';
 import { PageHeader } from './PageHeader';
 
 vi.mock('../stores/settings-store', async (importOriginal) => ({
@@ -12,12 +12,8 @@ vi.mock('../stores/settings-store', async (importOriginal) => ({
 }));
 
 function setup(colorTheme: ColorTheme) {
-  vi.mocked(useSettingsStore).mockImplementation(
-    createSelectorMock({ settings: { ...defaultSettings, colorTheme } })
-  );
+  vi.mocked(useSettingsStore).mockImplementation(createSettingsStoreMock({ colorTheme }));
 }
-
-const PLAIN_THEMES = (Object.keys(COLOR_THEMES) as ColorTheme[]).filter((t) => t !== 'glass');
 
 function header() {
   return screen.getByRole('banner');

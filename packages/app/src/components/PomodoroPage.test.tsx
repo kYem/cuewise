@@ -1,4 +1,4 @@
-import { COLOR_THEMES, type ColorTheme, type Settings } from '@cuewise/shared';
+import type { Settings } from '@cuewise/shared';
 import { createSelectorMock } from '@cuewise/test-utils';
 import { defaultSettings } from '@cuewise/test-utils/fixtures';
 import { render, screen, waitFor } from '@testing-library/react';
@@ -10,6 +10,7 @@ import { useQuoteStore } from '../stores/quote-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { isCalendarFeatureEnabled } from '../utils/google-calendar';
 import { preloadImages } from '../utils/image-preload-cache';
+import { PLAIN_THEMES } from './__fixtures__/color-theme.fixtures';
 import { PomodoroPage } from './PomodoroPage';
 
 vi.mock('../stores/quote-store', () => ({ useQuoteStore: vi.fn() }));
@@ -48,7 +49,7 @@ vi.mock('./PomodoroTimer', () => ({
 }));
 vi.mock('./PageHeader', () => ({
   PageHeader: ({ transparent }: { transparent?: boolean }) => (
-    <div data-testid="page-header" data-transparent={String(transparent)} />
+    <div data-testid="page-header" data-transparent={transparent} />
   ),
 }));
 vi.mock('./sounds', () => ({
@@ -178,8 +179,6 @@ describe('background resolution', () => {
   });
 });
 
-const PLAIN_THEMES = (Object.keys(COLOR_THEMES) as ColorTheme[]).filter((t) => t !== 'glass');
-
 describe('PomodoroPage - theme gate', () => {
   it.each(PLAIN_THEMES)('renders no background layer on the %s theme', (colorTheme) => {
     setup('quote', false, { colorTheme });
@@ -270,7 +269,7 @@ describe('PomodoroPage - chrome wiring', () => {
 
     render(<PomodoroPage />);
 
-    expect(screen.getByTestId('page-header')).toHaveAttribute('data-transparent', 'undefined');
+    expect(screen.getByTestId('page-header')).not.toHaveAttribute('data-transparent');
   });
 });
 

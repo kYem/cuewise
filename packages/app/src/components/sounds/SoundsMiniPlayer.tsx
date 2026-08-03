@@ -43,6 +43,7 @@ const CHROME = {
     label: 'text-white/90',
     muted: 'text-white/70',
     button: 'bg-black/40 backdrop-blur-sm text-white/80 hover:bg-black/50',
+    buttonActive: 'bg-white/25 backdrop-blur-sm text-white hover:bg-white/35',
     track: 'bg-white/20',
     dot: 'bg-white',
   },
@@ -52,6 +53,7 @@ const CHROME = {
     label: 'text-primary',
     muted: 'text-secondary',
     button: 'bg-surface-variant text-primary hover:bg-surface-variant/70',
+    buttonActive: 'bg-primary-600 text-white hover:bg-primary-700',
     track: 'bg-divider',
     dot: 'bg-primary-600',
   },
@@ -110,19 +112,9 @@ export const SoundsMiniPlayer: React.FC<SoundsMiniPlayerProps> = ({ variant = 'o
       );
     }
 
-    // Ambient sounds - show icon with gradient background
-    if (activeSource === 'ambient' && selectedAmbientSound !== 'none') {
-      return (
-        <div className={`w-full h-full ${c.pill} flex items-center justify-center`}>
-          {getSourceIcon()}
-        </div>
-      );
-    }
-
-    // Default - music icon
     return (
       <div className={`w-full h-full ${c.pill} flex items-center justify-center`}>
-        <Music className={`w-4 h-4 ${c.icon}`} />
+        {getSourceIcon()}
       </div>
     );
   };
@@ -154,7 +146,7 @@ export const SoundsMiniPlayer: React.FC<SoundsMiniPlayerProps> = ({ variant = 'o
               type="button"
               className={cn(
                 'w-8 h-8 rounded-lg overflow-hidden transition-all flex-shrink-0 shadow-md',
-                'hover:ring-2 hover:ring-primary-500 hover:scale-105',
+                'hover:ring-2 hover:ring-primary-700 hover:scale-105',
                 isPlaying && 'ring-2 ring-primary-600'
               )}
               title="Open sounds panel"
@@ -178,7 +170,7 @@ export const SoundsMiniPlayer: React.FC<SoundsMiniPlayerProps> = ({ variant = 'o
             onClick={togglePlayPause}
             className={cn(
               'w-7 h-7 rounded-lg flex items-center justify-center transition-all hover:scale-105 shadow-md',
-              isPlaying ? 'bg-primary-600 text-white hover:bg-primary-700' : c.button
+              isPlaying ? c.buttonActive : c.button
             )}
             title={isPlaying ? 'Pause' : 'Play'}
           >

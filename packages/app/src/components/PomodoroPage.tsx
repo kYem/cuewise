@@ -167,7 +167,7 @@ export const PomodoroPage: React.FC = () => {
         <PageHeader currentPage="pomodoro" />
 
         {pomodoroMusicEnabled && !isFocusModeActive && (
-          <div className="fixed top-16 left-4 z-50">
+          <div className="fixed top-20 left-4 z-50">
             <SoundsMiniPlayer variant={chromeVariant} />
           </div>
         )}
