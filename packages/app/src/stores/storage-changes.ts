@@ -127,24 +127,21 @@ export function createStorageObserver(
 }
 
 /**
- * A store's "what you see is older than storage" complaint, retracted only by the refresh that
- * fixed it — never by a write whose own error this would otherwise clear.
+ * Says once that a store's view is older than storage, and re-arms only after a refresh that
+ * fixed it. Deliberately not the store's `error` field: these stores render that as a whole-panel
+ * failure, and a view that is merely stale is still worth showing.
  */
-export function createStaleLatch(
-  message: string,
-  read: () => string | null,
-  write: (error: string | null) => void
-): StaleReport {
+export function createStaleLatch(warn: (message: string) => void, message: string): StaleReport {
   let latched = false;
   return {
     stale() {
+      if (latched) {
+        return;
+      }
       latched = true;
-      write(message);
+      warn(message);
     },
     fresh() {
-      if (latched && read() === message) {
-        write(null);
-      }
       latched = false;
     },
   };

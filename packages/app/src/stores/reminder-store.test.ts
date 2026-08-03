@@ -674,7 +674,7 @@ describe('converging on reminders written elsewhere', () => {
     expect(useReminderStore.getState().upcomingReminders).toBe(before);
   });
 
-  it('keeps the list it has when the re-read fails, and says the view is stale', async () => {
+  it('keeps the list it has when the re-read fails, and warns the view is stale', async () => {
     vi.spyOn(logger, 'error').mockImplementation(() => {});
     const fake = await initializeObserving();
     const before = useReminderStore.getState().reminders;
@@ -682,7 +682,10 @@ describe('converging on reminders written elsewhere', () => {
 
     fake.emit(['reminders']);
 
-    await vi.waitFor(() => expect(useReminderStore.getState().error).toContain('out of date'));
+    await vi.waitFor(() =>
+      expect(toastWarning).toHaveBeenCalledWith(expect.stringContaining('out of date'))
+    );
     expect(useReminderStore.getState().reminders).toBe(before);
+    expect(useReminderStore.getState().error).toBeNull();
   });
 });

@@ -17,7 +17,6 @@ import {
   createStaleLatch,
   createStorageObserver,
   observableStorage,
-  type StaleReport,
   type StorageObserver,
   safeSubscribe,
   sameEntities,
@@ -328,44 +327,34 @@ describe('createStorageObserver', () => {
 });
 
 describe('createStaleLatch', () => {
-  function latchOver(initial: string | null): {
-    latch: StaleReport;
-    read: () => string | null;
-    write: (next: string | null) => void;
-  } {
-    let error = initial;
-    const write = (next: string | null): void => {
-      error = next;
-    };
-    return { latch: createStaleLatch('stale', () => error, write), read: () => error, write };
-  }
-
-  it('takes back its own complaint', () => {
-    const { latch, read } = latchOver(null);
+  it('says it once, however many re-reads fail', () => {
+    const warn = vi.fn();
+    const latch = createStaleLatch(warn, 'stale');
 
     latch.stale();
-    expect(read()).toBe('stale');
-    latch.fresh();
+    latch.stale();
 
-    expect(read()).toBeNull();
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith('stale');
   });
 
-  // A write that failed while the view was stale owns the field once it sets it.
-  it('leaves a different complaint standing', () => {
-    const { latch, read, write } = latchOver(null);
+  it('says it again after a refresh that fixed it', () => {
+    const warn = vi.fn();
+    const latch = createStaleLatch(warn, 'stale');
 
     latch.stale();
-    write('Storage is full — could not save.');
     latch.fresh();
+    latch.stale();
 
-    expect(read()).toBe('Storage is full — could not save.');
+    expect(warn).toHaveBeenCalledTimes(2);
   });
 
-  it('clears nothing when it never complained', () => {
-    const { latch, read } = latchOver('could not save');
+  it('stays quiet on a refresh that never failed', () => {
+    const warn = vi.fn();
+    const latch = createStaleLatch(warn, 'stale');
 
     latch.fresh();
 
-    expect(read()).toBe('could not save');
+    expect(warn).not.toHaveBeenCalled();
   });
 });

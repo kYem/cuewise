@@ -118,7 +118,7 @@ function commitReminders(
 }
 
 const STALE_REMINDERS_MESSAGE =
-  "Cuewise can't read your reminders right now, so what you see may be out of date. Reload before editing.";
+  "Cuewise couldn't re-read your reminders just now, so what you see may be out of date.";
 
 /**
  * Known gap: a pulled reminder is shown but never armed — this only commits state, and nothing
@@ -134,11 +134,7 @@ const remindersObserver = createStorageObserver(
     }
     commitReminders((partial) => useReminderStore.setState(partial), reminders);
   },
-  createStaleLatch(
-    STALE_REMINDERS_MESSAGE,
-    () => useReminderStore.getState().error,
-    (error) => useReminderStore.setState({ error })
-  )
+  createStaleLatch((message) => useToastStore.getState().warning(message), STALE_REMINDERS_MESSAGE)
 );
 
 export const useReminderStore = create<ReminderStore>((set, get) => ({

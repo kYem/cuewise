@@ -1100,7 +1100,7 @@ describe('converging on quotes written elsewhere', () => {
     expect(useQuoteStore.getState().quotes).toBe(before);
   });
 
-  it('keeps the list it has when the re-read fails, and says the view is stale', async () => {
+  it('keeps the list it has when the re-read fails, and warns the view is stale', async () => {
     vi.spyOn(logger, 'error').mockImplementation(() => {});
     const fake = await initializeObserving();
     const before = useQuoteStore.getState().quotes;
@@ -1110,8 +1110,11 @@ describe('converging on quotes written elsewhere', () => {
 
     fake.emit(['customQuotes']);
 
-    await vi.waitFor(() => expect(useQuoteStore.getState().error).toContain('out of date'));
+    await vi.waitFor(() =>
+      expect(mockToastWarning).toHaveBeenCalledWith(expect.stringContaining('out of date'))
+    );
     expect(useQuoteStore.getState().quotes).toBe(before);
+    expect(useQuoteStore.getState().error).toBeNull();
   });
 
   it('leaves the displayed quote alone', async () => {

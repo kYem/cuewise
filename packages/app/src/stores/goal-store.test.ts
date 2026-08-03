@@ -1066,7 +1066,7 @@ describe('converging on goals written elsewhere', () => {
 
   // The read answers by rejecting, never with []. Adopting an empty list here is what would put
   // an erase on disk the moment anything wrote next.
-  it('keeps the list it has when the re-read fails, and says the view is stale', async () => {
+  it('keeps the list it has when the re-read fails, and warns the view is stale', async () => {
     vi.spyOn(logger, 'error').mockImplementation(() => {});
     const fake = await initializeObserving();
     const before = useGoalStore.getState().goals;
@@ -1076,24 +1076,25 @@ describe('converging on goals written elsewhere', () => {
 
     fake.emit(['goals']);
 
-    await vi.waitFor(() => expect(useGoalStore.getState().error).toContain('out of date'));
+    await vi.waitFor(() =>
+      expect(toastWarning).toHaveBeenCalledWith(expect.stringContaining('out of date'))
+    );
     expect(useGoalStore.getState().goals).toBe(before);
   });
 
-  it('takes the staleness back once a re-read succeeds', async () => {
+  // GoalsSection renders any `error` as a whole-panel failure, so a merely-stale view must not
+  // set it — the goals it still holds are worth showing.
+  it('does not put the panel into its failed state', async () => {
     vi.spyOn(logger, 'error').mockImplementation(() => {});
     const fake = await initializeObserving();
     vi.mocked(storage.getGoals).mockRejectedValue(
       new Error('Could not read the stored goals list')
     );
-    fake.emit(['goals']);
-    await vi.waitFor(() => expect(useGoalStore.getState().error).not.toBeNull());
 
-    vi.mocked(storage.getGoals).mockResolvedValue([mine, theirs]);
     fake.emit(['goals']);
 
-    await vi.waitFor(() => expect(useGoalStore.getState().error).toBeNull());
-    expect(useGoalStore.getState().goals).toHaveLength(2);
+    await vi.waitFor(() => expect(toastWarning).toHaveBeenCalled());
+    expect(useGoalStore.getState().error).toBeNull();
   });
 
   it('still observes after a load that failed', async () => {

@@ -167,7 +167,7 @@ async function persistFilterSettings(state: QuoteStore): Promise<void> {
 }
 
 const STALE_QUOTES_MESSAGE =
-  "Cuewise can't read your quotes right now, so what you see may be out of date. Reload before editing.";
+  "Cuewise couldn't re-read your quotes just now, so what you see may be out of date.";
 
 /**
  * The displayed quote and its history are this tab's own. The filters do sync, but as settings —
@@ -189,11 +189,7 @@ const quotesObserver = createStorageObserver(
       ...(nextCollections !== null && { collections: nextCollections }),
     });
   },
-  createStaleLatch(
-    STALE_QUOTES_MESSAGE,
-    () => useQuoteStore.getState().error,
-    (error) => useQuoteStore.setState({ error })
-  )
+  createStaleLatch((message) => useToastStore.getState().warning(message), STALE_QUOTES_MESSAGE)
 );
 
 export const useQuoteStore = create<QuoteStore>((set, get) => ({
