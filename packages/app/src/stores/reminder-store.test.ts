@@ -660,4 +660,29 @@ describe('converging on reminders written elsewhere', () => {
     expect(markMutatedBulk).not.toHaveBeenCalled();
     expect(markDeleted).not.toHaveBeenCalled();
   });
+
+  it('leaves the in-memory buckets alone when its own write is announced back', async () => {
+    const fake = await initializeObserving();
+    const before = useReminderStore.getState().upcomingReminders;
+    const readsAfterInit = getRemindersMock.mock.calls.length;
+
+    fake.emit(['reminders']);
+
+    await vi.waitFor(() =>
+      expect(getRemindersMock.mock.calls.length).toBeGreaterThan(readsAfterInit)
+    );
+    expect(useReminderStore.getState().upcomingReminders).toBe(before);
+  });
+
+  it('keeps the list it has when the re-read fails, and says the view is stale', async () => {
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const fake = await initializeObserving();
+    const before = useReminderStore.getState().reminders;
+    getRemindersMock.mockRejectedValue(new Error('Could not read the stored reminders list'));
+
+    fake.emit(['reminders']);
+
+    await vi.waitFor(() => expect(useReminderStore.getState().error).toContain('out of date'));
+    expect(useReminderStore.getState().reminders).toBe(before);
+  });
 });

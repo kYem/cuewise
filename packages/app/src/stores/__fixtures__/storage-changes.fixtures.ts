@@ -13,8 +13,8 @@ export interface FakeObservableStoreOptions {
   throwOnUnsubscribe?: boolean;
 }
 
-/** Drains the microtask queue, so a negative assertion isn't just one tick early. */
-export async function flushMicrotasks(): Promise<void> {
+/** Yields a timer turn, so a negative assertion isn't just one tick early. */
+export async function settleQueuedWork(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 

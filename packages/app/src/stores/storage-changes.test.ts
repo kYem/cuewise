@@ -11,11 +11,13 @@ import {
   type FakeObservableStore,
   type FakeObservableStoreOptions,
   fakeObservableStore,
-  flushMicrotasks,
+  settleQueuedWork,
 } from './__fixtures__/storage-changes.fixtures';
 import {
+  createStaleLatch,
   createStorageObserver,
   observableStorage,
+  type StaleReport,
   type StorageObserver,
   safeSubscribe,
   sameEntities,
@@ -140,7 +142,7 @@ describe('createStorageObserver', () => {
     const fake = fakeObservableStore(options);
     configurePlatform({ storage: fake.store });
     const observer = createStorageObserver('goals', ['goals'], refresh);
-    observer.subscribeAndReconcile();
+    observer.reconcile();
     await vi.waitFor(() => expect(refresh).toHaveBeenCalled());
     return { fake, observer };
   }
@@ -152,7 +154,7 @@ describe('createStorageObserver', () => {
     configurePlatform({ storage: fake.store });
     const refresh = vi.fn().mockResolvedValue(undefined);
 
-    createStorageObserver('goals', ['goals'], refresh).subscribeAndReconcile();
+    createStorageObserver('goals', ['goals'], refresh).reconcile();
 
     await vi.waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
   });
@@ -172,7 +174,7 @@ describe('createStorageObserver', () => {
 
     fake.emit(['quotes']);
 
-    await flushMicrotasks();
+    await settleQueuedWork();
     expect(refresh).toHaveBeenCalledTimes(1);
   });
 
@@ -213,7 +215,7 @@ describe('createStorageObserver', () => {
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
     const refresh = vi.fn().mockRejectedValue(new Error('storage unreachable'));
-    createStorageObserver('goals', ['goals'], refresh).subscribeAndReconcile();
+    createStorageObserver('goals', ['goals'], refresh).reconcile();
 
     fake.emit(['goals']);
 
@@ -233,7 +235,7 @@ describe('createStorageObserver', () => {
     const refresh = vi.fn(() => {
       throw new Error('read threw synchronously');
     });
-    createStorageObserver('goals', ['goals'], refresh).subscribeAndReconcile();
+    createStorageObserver('goals', ['goals'], refresh).reconcile();
 
     expect(() => fake.emit(['goals'])).not.toThrow();
     await vi.waitFor(() =>
@@ -248,7 +250,7 @@ describe('createStorageObserver', () => {
     const refresh = vi.fn().mockResolvedValue(undefined);
     const { fake, observer } = await observing(refresh);
 
-    observer.subscribeAndReconcile();
+    observer.reconcile();
 
     expect(fake.subscriberCount).toBe(1);
   });
@@ -259,7 +261,7 @@ describe('createStorageObserver', () => {
     const second = fakeObservableStore();
     configurePlatform({ storage: second.store });
 
-    observer.subscribeAndReconcile();
+    observer.reconcile();
 
     expect(first.subscriberCount).toBe(0);
     expect(second.subscriberCount).toBe(1);
@@ -271,10 +273,99 @@ describe('createStorageObserver', () => {
     const { fake, observer } = await observing(refresh, { failedSubscribes: 1 });
     expect(fake.subscriberCount).toBe(0);
 
-    observer.subscribeAndReconcile();
+    await observer.reconcile();
     fake.emit(['goals']);
 
     await vi.waitFor(() => expect(fake.subscriberCount).toBe(1));
     await vi.waitFor(() => expect(refresh.mock.calls.length).toBeGreaterThan(2));
+  });
+
+  // ReminderWidget chains a whole-array write off initialize(); an unawaited reconcile would
+  // hand it pre-reconcile state to write back.
+  it('resolves reconcile only once the re-read has been applied', async () => {
+    const fake = fakeObservableStore();
+    configurePlatform({ storage: fake.store });
+    let applied = false;
+    const observer = createStorageObserver('goals', ['goals'], async () => {
+      await Promise.resolve();
+      applied = true;
+    });
+
+    await observer.reconcile();
+
+    expect(applied).toBe(true);
+  });
+
+  it('subscribes without re-reading, so a load can observe before its own first read', async () => {
+    const fake = fakeObservableStore();
+    configurePlatform({ storage: fake.store });
+    const refresh = vi.fn().mockResolvedValue(undefined);
+
+    createStorageObserver('goals', ['goals'], refresh).subscribe();
+
+    await settleQueuedWork();
+    expect(refresh).not.toHaveBeenCalled();
+    expect(fake.subscriberCount).toBe(1);
+  });
+
+  it('reports a failed re-read as stale, and takes it back on the next good one', async () => {
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const fake = fakeObservableStore();
+    configurePlatform({ storage: fake.store });
+    const refresh = vi.fn().mockRejectedValueOnce(new Error('storage unreachable'));
+    const report = { stale: vi.fn(), fresh: vi.fn() };
+    const observer = createStorageObserver('goals', ['goals'], refresh, report);
+
+    await observer.reconcile();
+    expect(report.stale).toHaveBeenCalledTimes(1);
+    expect(report.fresh).not.toHaveBeenCalled();
+
+    refresh.mockResolvedValue(undefined);
+    fake.emit(['goals']);
+
+    await vi.waitFor(() => expect(report.fresh).toHaveBeenCalledTimes(1));
+  });
+});
+
+describe('createStaleLatch', () => {
+  function latchOver(initial: string | null): {
+    latch: StaleReport;
+    read: () => string | null;
+    write: (next: string | null) => void;
+  } {
+    let error = initial;
+    const write = (next: string | null): void => {
+      error = next;
+    };
+    return { latch: createStaleLatch('stale', () => error, write), read: () => error, write };
+  }
+
+  it('takes back its own complaint', () => {
+    const { latch, read } = latchOver(null);
+
+    latch.stale();
+    expect(read()).toBe('stale');
+    latch.fresh();
+
+    expect(read()).toBeNull();
+  });
+
+  // A write that failed while the view was stale owns the field once it sets it.
+  it('leaves a different complaint standing', () => {
+    const { latch, read, write } = latchOver(null);
+
+    latch.stale();
+    write('Storage is full — could not save.');
+    latch.fresh();
+
+    expect(read()).toBe('Storage is full — could not save.');
+  });
+
+  it('clears nothing when it never complained', () => {
+    const { latch, read } = latchOver('could not save');
+
+    latch.fresh();
+
+    expect(read()).toBe('could not save');
   });
 });

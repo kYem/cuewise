@@ -27,7 +27,7 @@ import {
 import { create } from 'zustand';
 import { SEED_QUOTES } from '../data/seed-quotes';
 import { useSettingsStore } from './settings-store';
-import { createStorageObserver, sameEntities } from './storage-changes';
+import { createStaleLatch, createStorageObserver, sameEntities } from './storage-changes';
 import { useToastStore } from './toast-store';
 
 /** Seed quotes not present in the given list, keyed by id. */
@@ -166,6 +166,9 @@ async function persistFilterSettings(state: QuoteStore): Promise<void> {
   });
 }
 
+const STALE_QUOTES_MESSAGE =
+  "Cuewise can't read your quotes right now, so what you see may be out of date. Reload before editing.";
+
 /**
  * The displayed quote and its history are this tab's own. The filters do sync, but as settings —
  * settings-store converges them, and this store's copies go stale until the next initialize().
@@ -185,7 +188,12 @@ const quotesObserver = createStorageObserver(
       ...(nextQuotes !== null && { quotes: nextQuotes }),
       ...(nextCollections !== null && { collections: nextCollections }),
     });
-  }
+  },
+  createStaleLatch(
+    STALE_QUOTES_MESSAGE,
+    () => useQuoteStore.getState().error,
+    (error) => useQuoteStore.setState({ error })
+  )
 );
 
 export const useQuoteStore = create<QuoteStore>((set, get) => ({
@@ -202,6 +210,9 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
   activeCollectionIds: [],
 
   initialize: async () => {
+    // Before the read: a pull landing during it is otherwise announced to nobody, and the seed
+    // and view-count writes below would persist the pre-pull snapshot over it.
+    quotesObserver.subscribe();
     try {
       set({ isLoading: true, error: null });
 
@@ -262,16 +273,15 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       if (currentQuote) {
         await get().incrementViewCount(currentQuote.id);
       }
-
-      // Last: the reconcile re-reads storage, so it has to run after everything this load wrote
-      // (the seed, the view-count bump) or it reads back a snapshot taken before them.
-      quotesObserver.subscribeAndReconcile();
     } catch (error) {
       logger.error('Error initializing quote store', error);
       const errorMessage = 'Failed to load quotes. Please refresh the page.';
       set({ error: errorMessage, isLoading: false });
       useToastStore.getState().error(errorMessage);
     }
+    // Awaited, last, and outside the try so a failed load still reconciles: it re-reads storage,
+    // so it has to see everything this load wrote (the seed, the view-count bump).
+    await quotesObserver.reconcile();
   },
 
   refreshQuote: async () => {

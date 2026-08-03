@@ -26,7 +26,7 @@ import {
 } from '@cuewise/shared';
 import { getGoals as loadAllGoals, readSettings, setGoals as saveAllGoals } from '@cuewise/storage';
 import { create } from 'zustand';
-import { createStorageObserver, sameEntities } from './storage-changes';
+import { createStaleLatch, createStorageObserver, sameEntities } from './storage-changes';
 import { useToastStore } from './toast-store';
 
 export type CompletionFilter = 'all' | 'completed' | 'incomplete';
@@ -89,13 +89,25 @@ async function persistGoals(updatedGoals: Goal[]): Promise<void> {
   assertPersisted(await saveAllGoals(updatedGoals));
 }
 
-const goalsObserver = createStorageObserver('goals', [STORAGE_KEYS.GOALS], async () => {
-  const goals = await loadAllGoals();
-  if (sameEntities(useGoalStore.getState().goals, goals)) {
-    return;
-  }
-  useGoalStore.setState({ goals, todayTasks: filterTodayTasks(goals) });
-});
+const STALE_GOALS_MESSAGE =
+  "Cuewise can't read your goals right now, so what you see may be out of date. Reload before editing.";
+
+const goalsObserver = createStorageObserver(
+  'goals',
+  [STORAGE_KEYS.GOALS],
+  async () => {
+    const goals = await loadAllGoals();
+    if (sameEntities(useGoalStore.getState().goals, goals)) {
+      return;
+    }
+    useGoalStore.setState({ goals, todayTasks: filterTodayTasks(goals) });
+  },
+  createStaleLatch(
+    STALE_GOALS_MESSAGE,
+    () => useGoalStore.getState().error,
+    (error) => useGoalStore.setState({ error })
+  )
+);
 
 export const useGoalStore = create<GoalStore>((set, get) => ({
   goals: [],
@@ -105,6 +117,9 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
   completionFilter: 'all',
 
   initialize: async () => {
+    // Before the read: a pull landing during it is otherwise announced to nobody, and this
+    // load's own writes below would persist the pre-pull snapshot over it.
+    goalsObserver.subscribe();
     try {
       set({ isLoading: true, error: null });
 
@@ -120,9 +135,9 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
     // Outside the try: the roll handles its own failures, and a roll problem
     // must never masquerade as the "Failed to load goals" toast.
     await get().rollDueTasks();
-    // Last, and outside the try for the same reason a failed load still needs observing: the
-    // reconcile re-reads storage, so it has to run after everything this load wrote.
-    goalsObserver.subscribeAndReconcile();
+    // Awaited and last: the reconcile re-reads storage, so it has to see everything this load
+    // wrote — and a caller chaining off initialize() must not get pre-reconcile state.
+    await goalsObserver.reconcile();
   },
 
   addTask: async (text: string, parentId?: string) => {

@@ -1,6 +1,7 @@
 import {
   ALL_QUOTE_CATEGORIES,
   configurePlatform,
+  logger,
   type QuoteCollection,
   type Settings,
   type SyncMutationSink,
@@ -26,6 +27,14 @@ import {
 } from './__fixtures__/quote-store.fixtures';
 import { fakeObservableStore } from './__fixtures__/storage-changes.fixtures';
 import { useQuoteStore } from './quote-store';
+
+/** The load's reconcile re-reads, so the read has to answer what the load just wrote. */
+function readsBackWrites(): void {
+  vi.mocked(storage.setQuotes).mockImplementation(async (quotes) => {
+    vi.mocked(storage.getQuotes).mockResolvedValue(quotes);
+    return { success: true };
+  });
+}
 
 // Mock storage functions
 vi.mock('@cuewise/storage', () => ({
@@ -89,6 +98,7 @@ describe('Quote Store', () => {
 
       vi.mocked(storage.getQuotes).mockResolvedValue(mockQuotes);
       vi.mocked(storage.getCurrentQuote).mockResolvedValue(mockCurrentQuote);
+      readsBackWrites();
 
       await useQuoteStore.getState().initialize();
 
@@ -105,6 +115,7 @@ describe('Quote Store', () => {
     it('should seed quotes when storage is empty', async () => {
       vi.mocked(storage.getQuotes).mockResolvedValue([]);
       vi.mocked(storage.getCurrentQuote).mockResolvedValue(null);
+      readsBackWrites();
 
       await useQuoteStore.getState().initialize();
 
@@ -1074,6 +1085,33 @@ describe('converging on quotes written elsewhere', () => {
 
     const persisted = vi.mocked(storage.setQuotes).mock.lastCall?.[0] ?? [];
     expect(persisted.map((quote) => quote.text)).toContain('pulled from the other device');
+  });
+
+  it('leaves the in-memory list alone when its own write is announced back', async () => {
+    const fake = await initializeObserving();
+    const before = useQuoteStore.getState().quotes;
+    const readsAfterInit = vi.mocked(storage.getQuotes).mock.calls.length;
+
+    fake.emit(['customQuotes']);
+
+    await vi.waitFor(() =>
+      expect(vi.mocked(storage.getQuotes).mock.calls.length).toBeGreaterThan(readsAfterInit)
+    );
+    expect(useQuoteStore.getState().quotes).toBe(before);
+  });
+
+  it('keeps the list it has when the re-read fails, and says the view is stale', async () => {
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const fake = await initializeObserving();
+    const before = useQuoteStore.getState().quotes;
+    vi.mocked(storage.getQuotes).mockRejectedValue(
+      new Error('Could not read the stored customQuotes list')
+    );
+
+    fake.emit(['customQuotes']);
+
+    await vi.waitFor(() => expect(useQuoteStore.getState().error).toContain('out of date'));
+    expect(useQuoteStore.getState().quotes).toBe(before);
   });
 
   it('leaves the displayed quote alone', async () => {

@@ -16,7 +16,7 @@ import {
 } from '@cuewise/shared';
 import { getReminders, setReminders } from '@cuewise/storage';
 import { create } from 'zustand';
-import { createStorageObserver, sameEntities } from './storage-changes';
+import { createStaleLatch, createStorageObserver, sameEntities } from './storage-changes';
 import { useToastStore } from './toast-store';
 
 interface ReminderStore {
@@ -117,17 +117,29 @@ function commitReminders(
   set({ reminders, upcomingReminders: upcoming, overdueReminders: overdue, ...extra });
 }
 
+const STALE_REMINDERS_MESSAGE =
+  "Cuewise can't read your reminders right now, so what you see may be out of date. Reload before editing.";
+
 /**
- * Known gap: a reminder that arrives by pull is shown but never armed. Nothing in the sync path
- * arms alarms, and initialize()'s re-arm loop is skipped wherever the scheduler persists its own.
+ * Known gap: a pulled reminder is shown but never armed — this only commits state, and nothing
+ * else arms it until the next initialize().
  */
-const remindersObserver = createStorageObserver('reminders', [STORAGE_KEYS.REMINDERS], async () => {
-  const reminders = await getReminders();
-  if (sameEntities(useReminderStore.getState().reminders, reminders)) {
-    return;
-  }
-  commitReminders((partial) => useReminderStore.setState(partial), reminders);
-});
+const remindersObserver = createStorageObserver(
+  'reminders',
+  [STORAGE_KEYS.REMINDERS],
+  async () => {
+    const reminders = await getReminders();
+    if (sameEntities(useReminderStore.getState().reminders, reminders)) {
+      return;
+    }
+    commitReminders((partial) => useReminderStore.setState(partial), reminders);
+  },
+  createStaleLatch(
+    STALE_REMINDERS_MESSAGE,
+    () => useReminderStore.getState().error,
+    (error) => useReminderStore.setState({ error })
+  )
+);
 
 export const useReminderStore = create<ReminderStore>((set, get) => ({
   reminders: [],
@@ -137,6 +149,9 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
   error: null,
 
   initialize: async () => {
+    // Before the read: a pull landing during it is otherwise announced to nobody, and the
+    // auto-advance write below would persist the pre-pull snapshot over it.
+    remindersObserver.subscribe();
     try {
       set({ isLoading: true, error: null });
 
@@ -210,9 +225,9 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       set({ error: errorMessage, isLoading: false });
       useToastStore.getState().error(errorMessage);
     }
-    // Last, and outside the try so a failed load still observes: the reconcile re-reads storage,
-    // so it has to run after everything this load wrote.
-    remindersObserver.subscribeAndReconcile();
+    // Awaited and last: ReminderWidget chains fireDueReminders off this, and that writes the
+    // whole array from the in-memory copy — it must not run against pre-reconcile state.
+    await remindersObserver.reconcile();
   },
 
   addReminder: async (text: string, dueDate: Date, recurring?, category?) => {

@@ -26,15 +26,24 @@ export function observableStorage(): ObservableKeyValueStore | null {
 }
 
 export interface StorageObserver {
-  /** Module-scoped and never torn down; call on every initialize(). */
-  subscribeAndReconcile(): void;
+  /** Idempotent, and retries a subscribe that failed; call before the load's first read. */
+  subscribe(): void;
+  /** Subscribes, then re-reads and settles. Await it, or the caller gets pre-reconcile state. */
+  reconcile(): Promise<void>;
+}
+
+/** How a store says its view went stale, and takes it back. See createStaleLatch. */
+export interface StaleReport {
+  stale(): void;
+  fresh(): void;
 }
 
 /**
  * Keeps one store's in-memory copy converged on keys written anywhere else — a sync pull, or
  * another tab. `refresh` must only re-read and setState: going through the store's write path
- * would re-notify the sync engine about a change that came FROM it, and `refresh` must treat a
- * failed read as a failure rather than as an empty collection — see getListRaw.
+ * would re-notify the sync engine about a change that came FROM it. It must also let a failed
+ * read reject rather than answering an empty collection, which every whole-array writer would
+ * then persist as a deletion.
  *
  * No area filter, unlike settings: `goals`, `customQuotes`, `collections` and `reminders` move
  * area with the `syncEnabled` setting, so pinning one would go deaf the moment they move.
@@ -42,7 +51,8 @@ export interface StorageObserver {
 export function createStorageObserver(
   what: string,
   keys: readonly [string, ...string[]],
-  refresh: () => Promise<void>
+  refresh: () => Promise<void>,
+  report?: StaleReport
 ): StorageObserver {
   const watched = new Set<string>(keys);
   let observing: { store: ObservableKeyValueStore; unsubscribe: () => void } | null = null;
@@ -55,9 +65,18 @@ export function createStorageObserver(
     // listener dispatch.
     inFlight = Promise.resolve()
       .then(refresh)
-      .catch((error) => {
-        logger.error(`Could not apply ${what} changed elsewhere: ${describeThrown(error)}`, error);
-      })
+      .then(
+        () => report?.fresh(),
+        (error) => {
+          // Named to the user too: the copy this store keeps is now older than storage, and its
+          // next write rewrites the whole array from it.
+          logger.error(
+            `Could not apply ${what} changed elsewhere: ${describeThrown(error)}`,
+            error
+          );
+          report?.stale();
+        }
+      )
       .finally(() => {
         inFlight = null;
         if (pending) {
@@ -76,29 +95,57 @@ export function createStorageObserver(
     run();
   }
 
+  function subscribe(): void {
+    const store = observableStorage();
+    if (observing !== null && observing.store !== store) {
+      observing.unsubscribe();
+      observing = null;
+    }
+    if (store === null || observing !== null) {
+      return;
+    }
+    const unsubscribe = safeSubscribe(store, what, (changed) => {
+      if (changed.some((key) => watched.has(key))) {
+        queueRefresh();
+      }
+    });
+    // Left null on a failed subscribe, so the next initialize() retries rather than believing
+    // it is already observing.
+    if (unsubscribe !== null) {
+      observing = { store, unsubscribe };
+    }
+  }
+
   return {
-    subscribeAndReconcile() {
-      const store = observableStorage();
-      if (observing !== null && observing.store !== store) {
-        observing.unsubscribe();
-        observing = null;
-      }
-      if (store !== null && observing === null) {
-        const unsubscribe = safeSubscribe(store, what, (changed) => {
-          if (changed.some((key) => watched.has(key))) {
-            queueRefresh();
-          }
-        });
-        // Left null on a failed subscribe, so the next initialize() retries rather than believing
-        // it is already observing.
-        if (unsubscribe !== null) {
-          observing = { store, unsubscribe };
-        }
-      }
-      // Unconditional, and this is what makes the load safe to leave unqueued: initialize's own
-      // set may have just reinstalled the snapshot it read before a pull landed, and no further
-      // event is coming to correct it.
+    subscribe,
+    reconcile() {
+      subscribe();
       queueRefresh();
+      return inFlight ?? Promise.resolve();
+    },
+  };
+}
+
+/**
+ * A store's "what you see is older than storage" complaint, retracted only by the refresh that
+ * fixed it — never by a write whose own error this would otherwise clear.
+ */
+export function createStaleLatch(
+  message: string,
+  read: () => string | null,
+  write: (error: string | null) => void
+): StaleReport {
+  let latched = false;
+  return {
+    stale() {
+      latched = true;
+      write(message);
+    },
+    fresh() {
+      if (latched && read() === message) {
+        write(null);
+      }
+      latched = false;
     },
   };
 }
