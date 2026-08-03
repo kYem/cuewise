@@ -43,6 +43,7 @@ const CHROME = {
     label: 'text-white/90',
     muted: 'text-white/70',
     button: 'bg-black/40 backdrop-blur-sm text-white/80 hover:bg-black/50',
+    track: 'bg-white/20',
   },
   surface: {
     pill: 'bg-surface/80 backdrop-blur-sm border border-border',
@@ -50,6 +51,7 @@ const CHROME = {
     label: 'text-primary',
     muted: 'text-secondary',
     button: 'bg-surface-variant text-primary hover:bg-surface-variant/70',
+    track: 'bg-divider',
   },
 } as const;
 
@@ -109,7 +111,7 @@ export const SoundsMiniPlayer: React.FC<SoundsMiniPlayerProps> = ({ variant = 'o
     // Ambient sounds - show icon with gradient background
     if (activeSource === 'ambient' && selectedAmbientSound !== 'none') {
       return (
-        <div className="w-full h-full bg-gradient-to-br from-accent/80 to-accent flex items-center justify-center">
+        <div className="w-full h-full bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center">
           {getSourceIcon()}
         </div>
       );
@@ -151,7 +153,7 @@ export const SoundsMiniPlayer: React.FC<SoundsMiniPlayerProps> = ({ variant = 'o
               className={cn(
                 'w-8 h-8 rounded-lg overflow-hidden transition-all flex-shrink-0 shadow-md',
                 'hover:ring-2 hover:ring-primary-500 hover:scale-105',
-                isPlaying && 'ring-2 ring-accent'
+                isPlaying && 'ring-2 ring-primary-600'
               )}
               title="Open sounds panel"
             >
@@ -174,7 +176,7 @@ export const SoundsMiniPlayer: React.FC<SoundsMiniPlayerProps> = ({ variant = 'o
             onClick={togglePlayPause}
             className={cn(
               'w-7 h-7 rounded-lg flex items-center justify-center transition-all hover:scale-105 shadow-md',
-              isPlaying ? 'bg-accent text-white hover:bg-accent/90' : c.button
+              isPlaying ? 'bg-primary-600 text-white hover:bg-primary-700' : c.button
             )}
             title={isPlaying ? 'Pause' : 'Play'}
           >
@@ -200,7 +202,7 @@ export const SoundsMiniPlayer: React.FC<SoundsMiniPlayerProps> = ({ variant = 'o
                 max="100"
                 value={volume}
                 onChange={handleVolumeChange}
-                className="w-12 h-1 bg-white/20 rounded-lg appearance-none cursor-pointer accent-accent"
+                className={`w-12 h-1 ${c.track} rounded-lg appearance-none cursor-pointer accent-primary-600`}
                 title={`Volume: ${volume}%`}
               />
             </div>
@@ -210,8 +212,8 @@ export const SoundsMiniPlayer: React.FC<SoundsMiniPlayerProps> = ({ variant = 'o
         {/* Playing indicator */}
         {isPlaying && (
           <span className="absolute top-0 left-0 flex h-2.5 w-2.5">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75" />
-            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-accent" />
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary-600 opacity-75" />
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-primary-600" />
           </span>
         )}
       </div>

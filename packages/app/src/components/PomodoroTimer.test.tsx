@@ -387,3 +387,38 @@ describe('PomodoroTimer - mini-settings wiring', () => {
     );
   });
 });
+
+describe('PomodoroTimer - chrome variant', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  function timerCard(container: HTMLElement) {
+    const card = container.querySelector('.rounded-2xl');
+    if (card === null) {
+      throw new Error('timer card not found');
+    }
+    return card;
+  }
+
+  it('uses white-on-dark chrome by default, for the glass photo behind it', () => {
+    mockStores();
+
+    const { container } = render(<PomodoroTimer />);
+
+    expect(timerCard(container)).toHaveClass('bg-black/25');
+    expect(screen.getByText('25:00')).toHaveClass('text-white');
+  });
+
+  it('uses theme tokens on the surface variant, so a light page stays readable', () => {
+    mockStores();
+
+    const { container } = render(<PomodoroTimer variant="surface" />);
+
+    const card = timerCard(container);
+    expect(card).toHaveClass('bg-surface/80');
+    expect(card).not.toHaveClass('bg-black/25');
+    expect(screen.getByText('25:00')).toHaveClass('text-primary');
+    expect(screen.getByText('25:00')).not.toHaveClass('text-white');
+  });
+});

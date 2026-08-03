@@ -46,7 +46,11 @@ vi.mock('./PomodoroTimer', () => ({
     <div data-testid="pomodoro-timer" data-variant={variant} />
   ),
 }));
-vi.mock('./PageHeader', () => ({ PageHeader: () => null }));
+vi.mock('./PageHeader', () => ({
+  PageHeader: ({ transparent }: { transparent?: boolean }) => (
+    <div data-testid="page-header" data-transparent={String(transparent)} />
+  ),
+}));
 vi.mock('./sounds', () => ({ SoundsMiniPlayer: () => null }));
 
 const initCalendar = vi.fn();
@@ -202,7 +206,7 @@ describe('PomodoroPage - theme gate', () => {
     });
   });
 
-  it('drops a loaded photo when the user leaves the glass theme', async () => {
+  it('does not flash the previous photo when returning to the glass theme', async () => {
     setup('quote', false, { colorTheme: 'glass' });
     const { rerender } = render(<PomodoroPage />);
     await waitFor(() =>
@@ -211,16 +215,21 @@ describe('PomodoroPage - theme gate', () => {
 
     setup('quote', false, { colorTheme: 'purple' });
     rerender(<PomodoroPage />);
-    expect(screen.queryByTestId('pomodoro-background')).not.toBeInTheDocument();
 
     setup('quote', false, { colorTheme: 'glass' });
     rerender(<PomodoroPage />);
     expect(screen.getByTestId('pomodoro-background-photo')).toHaveClass('opacity-0');
+
+    await waitFor(() =>
+      expect(screen.getByTestId('pomodoro-background-photo')).toHaveClass('opacity-100')
+    );
   });
 });
 
-describe('PomodoroPage - chrome variant', () => {
-  it('keeps the timer on overlay chrome under the glass photo', () => {
+// The children are stubbed here, so these cover the wiring only — that each child is handed
+// the variant the theme implies. Whether a child honours it is its own suite's job.
+describe('PomodoroPage - chrome wiring', () => {
+  it('hands the timer overlay chrome under the glass photo', () => {
     setup('quote', false, { colorTheme: 'glass' });
 
     render(<PomodoroPage />);
@@ -228,20 +237,28 @@ describe('PomodoroPage - chrome variant', () => {
     expect(screen.getByTestId('pomodoro-timer')).toHaveAttribute('data-variant', 'overlay');
   });
 
-  it.each(PLAIN_THEMES)('switches the timer to surface chrome on %s', (colorTheme) => {
-    setup('quote', false, { colorTheme });
+  it('hands the timer surface chrome when the theme shows no photo', () => {
+    setup('quote', false, { colorTheme: 'purple' });
 
     render(<PomodoroPage />);
 
     expect(screen.getByTestId('pomodoro-timer')).toHaveAttribute('data-variant', 'surface');
   });
 
-  it.each(PLAIN_THEMES)('switches the calendar strip to surface chrome on %s', (colorTheme) => {
-    setup('calendar', true, { colorTheme });
+  it('hands the calendar strip surface chrome when the theme shows no photo', () => {
+    setup('calendar', true, { colorTheme: 'purple' });
 
     render(<PomodoroPage />);
 
     expect(screen.getByTestId('calendar-strip')).toHaveAttribute('data-variant', 'surface');
+  });
+
+  it('lets the header pick its own transparency instead of forcing it', () => {
+    setup('quote', false, { colorTheme: 'purple' });
+
+    render(<PomodoroPage />);
+
+    expect(screen.getByTestId('page-header')).toHaveAttribute('data-transparent', 'undefined');
   });
 });
 

@@ -1,4 +1,4 @@
-import type { ColorTheme } from '@cuewise/shared';
+import { COLOR_THEMES, type ColorTheme } from '@cuewise/shared';
 import { createSelectorMock } from '@cuewise/test-utils';
 import { defaultSettings } from '@cuewise/test-utils/fixtures';
 import { render, screen } from '@testing-library/react';
@@ -17,6 +17,8 @@ function setup(colorTheme: ColorTheme) {
   );
 }
 
+const PLAIN_THEMES = (Object.keys(COLOR_THEMES) as ColorTheme[]).filter((t) => t !== 'glass');
+
 function header() {
   return screen.getByRole('banner');
 }
@@ -34,11 +36,9 @@ describe('PageHeader transparency', () => {
     expect(header()).toHaveClass('bg-transparent');
   });
 
-  it.each([
-    'purple',
-    'forest',
-    'rose',
-  ] as const)('is opaque on the %s theme, where there is no photo behind it', (colorTheme) => {
+  it.each(
+    PLAIN_THEMES
+  )('is opaque on the %s theme, where there is no photo behind it', (colorTheme) => {
     setup(colorTheme);
 
     render(<PageHeader currentPage="pomodoro" />);

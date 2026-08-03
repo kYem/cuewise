@@ -82,6 +82,7 @@ const OVERLAY_TOKENS = {
   menu: 'bg-black/50 backdrop-blur-md border-white/20',
   menuItem: 'text-white hover:bg-white/20',
   menuItemMuted: 'text-white/70 hover:bg-white/20 hover:text-white',
+  ring: 'stroke-white/20',
   divider: 'bg-white/15',
   pip: 'bg-white/20',
   iconButton: 'bg-white/20 text-white hover:bg-white/30',
@@ -95,7 +96,8 @@ const SURFACE_TOKENS = {
   hint: 'text-tertiary',
   menu: 'bg-surface backdrop-blur-sm border-border',
   menuItem: 'text-primary hover:bg-surface-variant',
-  menuItemMuted: 'text-secondary hover:bg-surface-variant hover:text-primary',
+  menuItemMuted: 'text-secondary hover:bg-surface-variant hover:text-text-primary',
+  ring: 'stroke-divider',
   divider: 'bg-divider',
   pip: 'bg-divider',
   iconButton: 'bg-surface-variant text-primary hover:bg-surface-variant/70',
@@ -435,7 +437,7 @@ export const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ variant = 'overlay
                 cx={timerSize.center}
                 cy={timerSize.center}
                 r={timerSize.radius}
-                className="stroke-white/20"
+                className={t.ring}
                 strokeWidth={timerSize.strokeWidth}
                 fill="none"
               />
@@ -570,7 +572,11 @@ export const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ variant = 'overlay
 
         {/* Timer rhythm: tap any value to open the shared mini-settings popover. */}
         <div className="mt-density-md">
-          <PomodoroMiniSettings settings={settings} onApply={handleApplyTimerSettings} />
+          <PomodoroMiniSettings
+            settings={settings}
+            onApply={handleApplyTimerSettings}
+            variant={variant}
+          />
           {activeSource !== 'none' && isSoundsPlaying && isWork && (
             <p className={`mt-2 flex items-center justify-center gap-1.5 text-xs ${t.faint}`}>
               <Music className="w-3 h-3" />
