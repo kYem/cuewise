@@ -64,6 +64,8 @@ describe('settings sections', () => {
     vi.clearAllMocks();
     vi.mocked(storage.setSettingsPatch).mockResolvedValue({ success: true });
     vi.mocked(storage.readSettings).mockResolvedValue({ ok: true, settings: defaultSettings });
+    // BackgroundSection mounts the real CustomBackgroundPicker, which reads on mount.
+    vi.mocked(storage.getCustomBackground).mockResolvedValue(null);
   });
 
   describe('Background', () => {
