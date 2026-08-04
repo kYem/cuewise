@@ -11,6 +11,7 @@ import {
 } from '../stores/settings-store';
 import { getBackgroundFilterStyle } from '../utils/background-filter';
 import { resolvePomodoroCompanion } from '../utils/calendar-visibility';
+import type { ChromeVariant } from '../utils/chrome-variant';
 import { getPreloadedCurrentUrl, preloadImages } from '../utils/image-preload-cache';
 import { loadImageWithFallback } from '../utils/unsplash';
 import { CalendarStrip } from './CalendarStrip';
@@ -19,6 +20,9 @@ import { PageHeader } from './PageHeader';
 import { PomodoroTimer } from './PomodoroTimer';
 import { QuoteDisplay } from './QuoteDisplay';
 import { SoundsMiniPlayer } from './sounds';
+
+// top-20 clears PageHeader, which is 4.5rem tall once a plain theme makes it opaque.
+const PLAYER_OFFSET = 'fixed top-20 left-4 z-50';
 
 export const PomodoroPage: React.FC = () => {
   const initialize = useQuoteStore((state) => state.initialize);
@@ -129,7 +133,7 @@ export const PomodoroPage: React.FC = () => {
   }, [quoteChangeInterval, refreshQuote, lastManualRefresh]);
 
   // White-on-dark only reads over the photo; without it the page can be light.
-  const chromeVariant = showBackgroundImage ? 'overlay' : 'surface';
+  const chromeVariant: ChromeVariant = showBackgroundImage ? 'overlay' : 'surface';
 
   // Companion shown beside the timer on large screens
   let companion: React.ReactNode;
@@ -167,7 +171,7 @@ export const PomodoroPage: React.FC = () => {
         <PageHeader currentPage="pomodoro" />
 
         {pomodoroMusicEnabled && !isFocusModeActive && (
-          <div className="fixed top-20 left-4 z-50">
+          <div className={PLAYER_OFFSET}>
             <SoundsMiniPlayer variant={chromeVariant} />
           </div>
         )}

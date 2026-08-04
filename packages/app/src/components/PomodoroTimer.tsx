@@ -21,6 +21,7 @@ import { useGoalStore } from '../stores/goal-store';
 import { usePomodoroStorageSync, usePomodoroStore } from '../stores/pomodoro-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { useSoundsStorageSync, useSoundsStore } from '../stores/sounds-store';
+import type { ChromeVariant } from '../utils/chrome-variant';
 import { getSessionLabel, getSessionStyles } from '../utils/pomodoro-styles';
 import { PomodoroMiniSettings } from './PomodoroMiniSettings';
 import { PomodoroPipButton } from './PomodoroPipButton';
@@ -94,7 +95,7 @@ const SURFACE_TOKENS = {
   muted: 'text-secondary',
   faint: 'text-secondary',
   hint: 'text-tertiary',
-  menu: 'bg-surface backdrop-blur-sm border-border',
+  menu: 'bg-surface-elevated backdrop-blur-sm border-border',
   menuItem: 'text-primary hover:bg-surface-variant',
   menuItemMuted: 'text-secondary hover:bg-surface-variant hover:text-text-primary',
   ring: 'stroke-border',
@@ -104,7 +105,7 @@ const SURFACE_TOKENS = {
 } as const;
 
 interface PomodoroTimerProps {
-  variant?: 'overlay' | 'surface';
+  variant?: ChromeVariant;
 }
 
 export const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ variant = 'overlay' }) => {

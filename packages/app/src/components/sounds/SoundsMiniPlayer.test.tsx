@@ -52,7 +52,6 @@ describe('SoundsMiniPlayer chrome variant', () => {
 
     render(<SoundsMiniPlayer />);
 
-    expect(screen.getByRole('slider')).toHaveClass('bg-white/20');
     expect(screen.getByTitle('Play')).toHaveClass('bg-black/40');
   });
 
@@ -61,9 +60,21 @@ describe('SoundsMiniPlayer chrome variant', () => {
 
     render(<SoundsMiniPlayer variant="surface" />);
 
-    expect(screen.getByRole('slider')).toHaveClass('bg-divider');
     expect(screen.getByTitle('Play')).toHaveClass('bg-surface-variant');
     expect(screen.getByTitle('Play')).not.toHaveClass('bg-black/40');
+  });
+
+  // FocusMode renders the overlay variant over a photo on every theme, so its ring
+  // must not fall back to the theme's own primary scale.
+  it.each([
+    [undefined, 'hover:ring-white/90'],
+    ['surface', 'hover:ring-primary-700'],
+  ] as const)('keeps the thumbnail ring on the chrome (variant: %s)', (variant, ring) => {
+    mockStores();
+
+    render(<SoundsMiniPlayer variant={variant} />);
+
+    expect(screen.getByTitle('Open sounds panel')).toHaveClass(ring);
   });
 
   it.each([

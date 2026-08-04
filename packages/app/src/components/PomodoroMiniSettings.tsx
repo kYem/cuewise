@@ -3,6 +3,7 @@ import { cn, Popover, PopoverAnchor, PopoverContent } from '@cuewise/ui';
 import { Bed, Coffee, type LucideIcon, Repeat, Timer } from 'lucide-react';
 import type React from 'react';
 import { useRef, useState } from 'react';
+import type { ChromeVariant } from '../utils/chrome-variant';
 import { PresetGrid } from './settings/PresetGrid';
 import { Stepper } from './settings/SettingControls';
 import { pomodoroWorkStep } from './settings/timer-presets';
@@ -68,7 +69,7 @@ const FIELDS: readonly RhythmField[] = [
 interface PomodoroMiniSettingsProps {
   settings: Settings;
   onApply: (patch: Partial<Settings>) => void | Promise<void>;
-  variant?: 'overlay' | 'surface';
+  variant?: ChromeVariant;
 }
 
 const ROW_CHROME = {

@@ -22,6 +22,7 @@ import {
 import type React from 'react';
 import { useSettingsStore } from '../../stores/settings-store';
 import { useSoundsStore } from '../../stores/sounds-store';
+import type { ChromeVariant } from '../../utils/chrome-variant';
 import { SoundsPanel } from './SoundsPanel';
 
 // Map ambient sound types to icons
@@ -39,28 +40,33 @@ const ambientIcons: Record<string, React.FC<{ className?: string }>> = {
 const CHROME = {
   overlay: {
     pill: 'bg-black/40 backdrop-blur-sm',
+    // The thumbnail fills a rounded, clipped button, so it must stay borderless.
+    thumb: 'bg-black/40 backdrop-blur-sm',
     icon: 'text-white/80',
     label: 'text-white/90',
     muted: 'text-white/70',
     button: 'bg-black/40 backdrop-blur-sm text-white/80 hover:bg-black/50',
     buttonActive: 'bg-white/25 backdrop-blur-sm text-white hover:bg-white/35',
-    track: 'bg-white/20',
+    ring: 'ring-white/80',
+    ringHover: 'hover:ring-white/90',
     dot: 'bg-white',
   },
   surface: {
     pill: 'bg-surface/80 backdrop-blur-sm border border-border',
+    thumb: 'bg-surface/80 backdrop-blur-sm',
     icon: 'text-secondary',
     label: 'text-primary',
     muted: 'text-secondary',
     button: 'bg-surface-variant text-primary hover:bg-surface-variant/70',
     buttonActive: 'bg-primary-600 text-white hover:bg-primary-700',
-    track: 'bg-divider',
+    ring: 'ring-primary-600',
+    ringHover: 'hover:ring-primary-700',
     dot: 'bg-primary-600',
   },
 } as const;
 
 interface SoundsMiniPlayerProps {
-  variant?: 'overlay' | 'surface';
+  variant?: ChromeVariant;
 }
 
 export const SoundsMiniPlayer: React.FC<SoundsMiniPlayerProps> = ({ variant = 'overlay' }) => {
@@ -113,7 +119,7 @@ export const SoundsMiniPlayer: React.FC<SoundsMiniPlayerProps> = ({ variant = 'o
     }
 
     return (
-      <div className={`w-full h-full ${c.pill} flex items-center justify-center`}>
+      <div className={`w-full h-full ${c.thumb} flex items-center justify-center`}>
         {getSourceIcon()}
       </div>
     );
@@ -146,8 +152,9 @@ export const SoundsMiniPlayer: React.FC<SoundsMiniPlayerProps> = ({ variant = 'o
               type="button"
               className={cn(
                 'w-8 h-8 rounded-lg overflow-hidden transition-all flex-shrink-0 shadow-md',
-                'hover:ring-2 hover:ring-primary-700 hover:scale-105',
-                isPlaying && 'ring-2 ring-primary-600'
+                'hover:ring-2 hover:scale-105',
+                c.ringHover,
+                isPlaying && `ring-2 ${c.ring}`
               )}
               title="Open sounds panel"
             >
@@ -196,7 +203,7 @@ export const SoundsMiniPlayer: React.FC<SoundsMiniPlayerProps> = ({ variant = 'o
                 max="100"
                 value={volume}
                 onChange={handleVolumeChange}
-                className={`w-12 h-1 ${c.track} rounded-lg appearance-none cursor-pointer accent-primary-600`}
+                className="w-12 h-1 rounded-lg appearance-none cursor-pointer accent-primary-600"
                 title={`Volume: ${volume}%`}
               />
             </div>

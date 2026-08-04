@@ -447,13 +447,13 @@ export const GoalsSection: React.FC = () => {
     <div className="flex flex-col items-center gap-density-lg w-full">
       {showCalendar && calendarPosition === 'above' && (
         <div className="w-full animate-fade-in motion-reduce:animate-none">
-          <CalendarStrip variant="surface" />
+          <CalendarStrip variant="surface" wide />
         </div>
       )}
       {goalsContent}
       {showCalendar && calendarPosition === 'below' && (
         <div className="w-full animate-fade-in motion-reduce:animate-none">
-          <CalendarStrip variant="surface" />
+          <CalendarStrip variant="surface" wide />
         </div>
       )}
     </div>
