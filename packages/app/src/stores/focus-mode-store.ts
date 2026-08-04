@@ -1,6 +1,10 @@
 import { logger } from '@cuewise/shared';
 import { create } from 'zustand';
-import { getCustomBackgroundOverride, getPreloadedCurrentUrl } from '../utils/image-preload-cache';
+import {
+  getCustomBackgroundOverride,
+  getPreloadedCurrentUrl,
+  preloadImages,
+} from '../utils/image-preload-cache';
 import { loadImageWithFallback } from '../utils/unsplash';
 import { useSettingsStore } from './settings-store';
 
@@ -65,14 +69,20 @@ export const useFocusModeStore = create<FocusModeStore>((set, get) => ({
         return;
       }
 
-      // Load a new image from our curated collection
-      const loadedUrl = await loadImageWithFallback(category);
+      // Resolve through the shared cache rather than fetching directly: this is the path
+      // that persists today's photo, so focus mode keeps showing it instead of re-rolling
+      // on every entry when nothing else has warmed the cache.
+      await preloadImages(category);
 
       // The user's image may have loaded while we were fetching; it wins, or the curated
       // photo would stick for the whole session (auto-enter races the storage read).
       const override = getCustomBackgroundOverride();
+      const resolved = override ?? getPreloadedCurrentUrl(category);
+      if (resolved === null) {
+        throw new Error('No background image could be resolved');
+      }
       set({
-        currentImageUrl: override ?? loadedUrl,
+        currentImageUrl: resolved,
         isImageLoading: false,
       });
 

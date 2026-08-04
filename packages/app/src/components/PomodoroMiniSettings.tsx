@@ -3,6 +3,7 @@ import { cn, Popover, PopoverAnchor, PopoverContent } from '@cuewise/ui';
 import { Bed, Coffee, type LucideIcon, Repeat, Timer } from 'lucide-react';
 import type React from 'react';
 import { useRef, useState } from 'react';
+import type { ChromeVariant } from '../utils/chrome-variant';
 import { PresetGrid } from './settings/PresetGrid';
 import { Stepper } from './settings/SettingControls';
 import { pomodoroWorkStep } from './settings/timer-presets';
@@ -68,13 +69,21 @@ const FIELDS: readonly RhythmField[] = [
 interface PomodoroMiniSettingsProps {
   settings: Settings;
   onApply: (patch: Partial<Settings>) => void | Promise<void>;
+  variant?: ChromeVariant;
 }
+
+const ROW_CHROME = {
+  overlay: { row: 'text-white/60', hover: 'hover:text-white/90' },
+  surface: { row: 'text-secondary', hover: 'hover:text-text-primary' },
+} as const;
 
 /** Tap any timer value to open a shared popover with rhythm presets + per-field steppers. */
 export const PomodoroMiniSettings: React.FC<PomodoroMiniSettingsProps> = ({
   settings,
   onApply,
+  variant = 'overlay',
 }) => {
+  const chrome = ROW_CHROME[variant];
   const [open, setOpen] = useState(false);
   const [focused, setFocused] = useState<FieldKey | null>(null);
   const anchorRef = useRef<HTMLDivElement>(null);
@@ -89,7 +98,8 @@ export const PomodoroMiniSettings: React.FC<PomodoroMiniSettingsProps> = ({
       <PopoverAnchor asChild>
         <div
           ref={anchorRef}
-          className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-xs text-white/60"
+          className={`flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-xs ${chrome.row}`}
+          data-testid="pomodoro-rhythm-row"
         >
           {FIELDS.map((f) => {
             const Icon = f.icon;
@@ -103,7 +113,7 @@ export const PomodoroMiniSettings: React.FC<PomodoroMiniSettingsProps> = ({
                 aria-haspopup="dialog"
                 aria-expanded={open && focused === f.key}
                 onClick={() => openField(f.key)}
-                className="inline-flex items-center gap-1.5 transition-colors hover:text-white/90"
+                className={`inline-flex items-center gap-1.5 transition-colors ${chrome.hover}`}
               >
                 <Icon className="h-3.5 w-3.5" />
                 <span className="font-semibold underline decoration-dotted underline-offset-2">

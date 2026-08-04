@@ -387,3 +387,45 @@ describe('PomodoroTimer - mini-settings wiring', () => {
     );
   });
 });
+
+describe('PomodoroTimer - chrome variant', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('uses white-on-dark chrome by default, for the glass photo behind it', () => {
+    mockStores();
+
+    render(<PomodoroTimer />);
+
+    expect(screen.getByTestId('pomodoro-timer-card')).toHaveClass('bg-black/25');
+    expect(screen.getByText('25:00')).toHaveClass('text-white');
+    expect(screen.getByTestId('pomodoro-rhythm-row')).toHaveClass('text-white/60');
+    expect(screen.getByTitle('Focus duration')).toHaveClass('hover:text-white/90');
+  });
+
+  it('uses theme tokens on the surface variant, so a light page stays readable', () => {
+    mockStores();
+
+    render(<PomodoroTimer variant="surface" />);
+
+    const card = screen.getByTestId('pomodoro-timer-card');
+    expect(card).toHaveClass('bg-surface/80');
+    expect(card).not.toHaveClass('bg-black/25');
+    expect(screen.getByText('25:00')).toHaveClass('text-primary');
+    expect(screen.getByText('25:00')).not.toHaveClass('text-white');
+  });
+
+  // The rhythm row lives in PomodoroMiniSettings, a grandchild the timer forwards to.
+  it('passes the variant down to the rhythm row', () => {
+    mockStores();
+
+    render(<PomodoroTimer variant="surface" />);
+
+    const row = screen.getByTestId('pomodoro-rhythm-row');
+    expect(row).toHaveClass('text-secondary');
+    expect(row).not.toHaveClass('text-white/60');
+    expect(screen.getByTitle('Focus duration')).toHaveClass('hover:text-text-primary');
+    expect(screen.getByTitle('Focus duration')).not.toHaveClass('hover:text-white/90');
+  });
+});

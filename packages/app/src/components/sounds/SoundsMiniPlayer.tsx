@@ -22,6 +22,7 @@ import {
 import type React from 'react';
 import { useSettingsStore } from '../../stores/settings-store';
 import { useSoundsStore } from '../../stores/sounds-store';
+import type { ChromeVariant } from '../../utils/chrome-variant';
 import { SoundsPanel } from './SoundsPanel';
 
 // Map ambient sound types to icons
@@ -34,7 +35,42 @@ const ambientIcons: Record<string, React.FC<{ className?: string }>> = {
   brownNoise: Wind,
 };
 
-export const SoundsMiniPlayer: React.FC = () => {
+// 'overlay' is white-on-dark for the Glass photo; 'surface' uses theme tokens and is only
+// ever used off Glass, where bg-primary-600 is a real colour rather than translucent black.
+const CHROME = {
+  overlay: {
+    pill: 'bg-black/40 backdrop-blur-sm',
+    // The thumbnail fills a rounded, clipped button, so it must stay borderless.
+    thumb: 'bg-black/40 backdrop-blur-sm',
+    icon: 'text-white/80',
+    label: 'text-white/90',
+    muted: 'text-white/70',
+    button: 'bg-black/40 backdrop-blur-sm text-white/80 hover:bg-black/50',
+    buttonActive: 'bg-white/25 backdrop-blur-sm text-white hover:bg-white/35',
+    ring: 'ring-white/80',
+    ringHover: 'hover:ring-white/90',
+    dot: 'bg-white',
+  },
+  surface: {
+    pill: 'bg-surface/80 backdrop-blur-sm border border-border',
+    thumb: 'bg-surface/80 backdrop-blur-sm',
+    icon: 'text-secondary',
+    label: 'text-primary',
+    muted: 'text-secondary',
+    button: 'bg-surface-variant text-primary hover:bg-surface-variant/70',
+    buttonActive: 'bg-primary-600 text-white hover:bg-primary-700',
+    ring: 'ring-primary-600',
+    ringHover: 'hover:ring-primary-700',
+    dot: 'bg-primary-600',
+  },
+} as const;
+
+interface SoundsMiniPlayerProps {
+  variant?: ChromeVariant;
+}
+
+export const SoundsMiniPlayer: React.FC<SoundsMiniPlayerProps> = ({ variant = 'overlay' }) => {
+  const c = CHROME[variant];
   const { settings } = useSettingsStore();
 
   const activeSource = useSoundsStore((state) => state.activeSource);
@@ -65,9 +101,9 @@ export const SoundsMiniPlayer: React.FC = () => {
   const getSourceIcon = () => {
     if (activeSource === 'ambient' && selectedAmbientSound !== 'none') {
       const IconComponent = ambientIcons[selectedAmbientSound];
-      return IconComponent ? <IconComponent className="w-4 h-4 text-white/80" /> : null;
+      return IconComponent ? <IconComponent className={`w-4 h-4 ${c.icon}`} /> : null;
     }
-    return <Music className="w-4 h-4 text-white/80" />;
+    return <Music className={`w-4 h-4 ${c.icon}`} />;
   };
 
   // Get thumbnail for current source
@@ -82,19 +118,9 @@ export const SoundsMiniPlayer: React.FC = () => {
       );
     }
 
-    // Ambient sounds - show icon with gradient background
-    if (activeSource === 'ambient' && selectedAmbientSound !== 'none') {
-      return (
-        <div className="w-full h-full bg-gradient-to-br from-accent/80 to-accent flex items-center justify-center">
-          {getSourceIcon()}
-        </div>
-      );
-    }
-
-    // Default - music icon
     return (
-      <div className="w-full h-full bg-black/40 backdrop-blur-sm flex items-center justify-center">
-        <Music className="w-4 h-4 text-white/80" />
+      <div className={`w-full h-full ${c.thumb} flex items-center justify-center`}>
+        {getSourceIcon()}
       </div>
     );
   };
@@ -126,8 +152,9 @@ export const SoundsMiniPlayer: React.FC = () => {
               type="button"
               className={cn(
                 'w-8 h-8 rounded-lg overflow-hidden transition-all flex-shrink-0 shadow-md',
-                'hover:ring-2 hover:ring-primary-500 hover:scale-105',
-                isPlaying && 'ring-2 ring-accent'
+                'hover:ring-2 hover:scale-105',
+                c.ringHover,
+                isPlaying && `ring-2 ${c.ring}`
               )}
               title="Open sounds panel"
             >
@@ -150,9 +177,7 @@ export const SoundsMiniPlayer: React.FC = () => {
             onClick={togglePlayPause}
             className={cn(
               'w-7 h-7 rounded-lg flex items-center justify-center transition-all hover:scale-105 shadow-md',
-              isPlaying
-                ? 'bg-accent text-white hover:bg-accent/90'
-                : 'bg-black/40 backdrop-blur-sm text-white/80 hover:bg-black/50'
+              isPlaying ? c.buttonActive : c.button
             )}
             title={isPlaying ? 'Pause' : 'Play'}
           >
@@ -170,26 +195,27 @@ export const SoundsMiniPlayer: React.FC = () => {
                 : 'max-w-0 opacity-0 group-hover:max-w-[120px] group-hover:opacity-100'
             )}
           >
-            <div className="flex items-center gap-1 bg-black/40 backdrop-blur-sm px-2 py-1 rounded">
-              <Volume2 className="w-3.5 h-3.5 text-white/70 flex-shrink-0" />
+            <div className={`flex items-center gap-1 ${c.pill} px-2 py-1 rounded`}>
+              <Volume2 className={`w-3.5 h-3.5 ${c.muted} flex-shrink-0`} />
               <input
                 type="range"
                 min="0"
                 max="100"
                 value={volume}
                 onChange={handleVolumeChange}
-                className="w-12 h-1 bg-white/20 rounded-lg appearance-none cursor-pointer accent-accent"
+                className="w-12 h-1 rounded-lg appearance-none cursor-pointer accent-primary-600"
                 title={`Volume: ${volume}%`}
               />
             </div>
           </div>
         )}
 
-        {/* Playing indicator */}
         {isPlaying && (
-          <span className="absolute top-0 left-0 flex h-2.5 w-2.5">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75" />
-            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-accent" />
+          <span className="absolute top-0 left-0 flex h-2.5 w-2.5" data-testid="playing-indicator">
+            <span
+              className={`animate-ping absolute inline-flex h-full w-full rounded-full ${c.dot} opacity-75`}
+            />
+            <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${c.dot}`} />
           </span>
         )}
       </div>
@@ -204,7 +230,9 @@ export const SoundsMiniPlayer: React.FC = () => {
               : 'max-h-0 opacity-0 group-hover:max-h-8 group-hover:opacity-100'
           )}
         >
-          <span className="text-xs text-white/90 font-medium truncate max-w-[180px] bg-black/40 backdrop-blur-sm px-2 py-1 rounded inline-block">
+          <span
+            className={`text-xs ${c.label} font-medium truncate max-w-[180px] ${c.pill} px-2 py-1 rounded inline-block`}
+          >
             {sourceName.length > 25 ? `${sourceName.substring(0, 25)}...` : sourceName}
           </span>
         </div>

@@ -1,5 +1,6 @@
 import type { Settings } from '@cuewise/shared';
 import { createSelectorMock } from '@cuewise/test-utils';
+import { defaultSettings } from '@cuewise/test-utils/fixtures';
 import { render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useBackgroundStore } from '../stores/background-store';
@@ -9,6 +10,7 @@ import { useQuoteStore } from '../stores/quote-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { isCalendarFeatureEnabled } from '../utils/google-calendar';
 import { preloadImages } from '../utils/image-preload-cache';
+import { PLAIN_THEMES } from './__fixtures__/color-theme.fixtures';
 import { PomodoroPage } from './PomodoroPage';
 
 vi.mock('../stores/quote-store', () => ({ useQuoteStore: vi.fn() }));
@@ -30,8 +32,8 @@ vi.mock('../utils/unsplash', () => ({ loadImageWithFallback: () => Promise.resol
 
 // Stub heavy children so the test isolates the companion-selection logic.
 vi.mock('./CalendarStrip', () => ({
-  CalendarStrip: ({ lean }: { lean?: boolean }) => (
-    <div data-testid="calendar-strip" data-lean={lean ? 'true' : 'false'} />
+  CalendarStrip: ({ lean, variant }: { lean?: boolean; variant?: string }) => (
+    <div data-testid="calendar-strip" data-lean={lean ? 'true' : 'false'} data-variant={variant} />
   ),
 }));
 vi.mock('./QuoteDisplay', () => ({
@@ -40,9 +42,21 @@ vi.mock('./QuoteDisplay', () => ({
   ),
 }));
 vi.mock('./FocusMode', () => ({ FocusMode: () => null }));
-vi.mock('./PomodoroTimer', () => ({ PomodoroTimer: () => null }));
-vi.mock('./PageHeader', () => ({ PageHeader: () => null }));
-vi.mock('./sounds', () => ({ SoundsMiniPlayer: () => null }));
+vi.mock('./PomodoroTimer', () => ({
+  PomodoroTimer: ({ variant }: { variant?: string }) => (
+    <div data-testid="pomodoro-timer" data-variant={variant} />
+  ),
+}));
+vi.mock('./PageHeader', () => ({
+  PageHeader: ({ transparent }: { transparent?: boolean }) => (
+    <div data-testid="page-header" data-transparent={transparent} />
+  ),
+}));
+vi.mock('./sounds', () => ({
+  SoundsMiniPlayer: ({ variant }: { variant?: string }) => (
+    <div data-testid="sounds-mini-player" data-variant={variant} />
+  ),
+}));
 
 const initCalendar = vi.fn();
 
@@ -56,7 +70,10 @@ function setup(
     createSelectorMock({
       initialize: vi.fn(),
       settings: {
+        ...defaultSettings,
         quoteChangeInterval: 0,
+        // The background only renders under glass; these tests are about that layer.
+        colorTheme: 'glass',
         focusModeImageCategory: 'nature',
         pomodoroMusicEnabled: false,
         pomodoroCompanion: companion,
@@ -140,20 +157,25 @@ describe('PomodoroPage - companion selection', () => {
   });
 });
 
-describe('background resolution', () => {
-  it("resolves today's background before reading the cache", async () => {
-    setup('quote', false);
+// App paints the Glass photo app-wide (App.background.test.tsx covers it); this page must
+// not resolve or render a second copy on any theme.
+describe('PomodoroPage - background', () => {
+  it.each([
+    ...PLAIN_THEMES,
+    'glass',
+  ] as const)('renders no background layer of its own on the %s theme', (colorTheme) => {
+    setup('quote', false, { colorTheme });
 
     render(<PomodoroPage />);
 
-    await waitFor(() => expect(vi.mocked(preloadImages)).toHaveBeenCalledWith('nature'));
+    expect(screen.queryByTestId('pomodoro-background')).not.toBeInTheDocument();
   });
 
-  it('waits for storage before resolving, so a curated photo cannot flash over a custom one', async () => {
-    setup('quote', false);
-    vi.mocked(useBackgroundStore).mockImplementation(
-      createSelectorMock({ customBackground: null, isLoaded: false })
-    );
+  it.each([
+    ...PLAIN_THEMES,
+    'glass',
+  ] as const)('resolves no image of its own on the %s theme', async (colorTheme) => {
+    setup('quote', false, { colorTheme });
 
     render(<PomodoroPage />);
 
@@ -162,15 +184,46 @@ describe('background resolution', () => {
   });
 });
 
-describe('PomodoroPage - background readability', () => {
-  it('applies the readability filter to the image layer inside a clipping wrapper', () => {
-    setup('quote', false, { backgroundDim: 40, backgroundBlur: 8 });
+// The children are stubbed here, so these cover the wiring only — that each child is handed
+// the variant the theme implies. Whether a child honours it is its own suite's job.
+describe('PomodoroPage - chrome wiring', () => {
+  it('hands the timer overlay chrome under the glass photo', () => {
+    setup('quote', false, { colorTheme: 'glass' });
 
-    const { container } = render(<PomodoroPage />);
+    render(<PomodoroPage />);
 
-    const layer = container.querySelector('div[style*="brightness"]');
-    expect(layer).not.toBeNull();
-    expect(layer).toHaveStyle({ filter: 'brightness(0.6) blur(8px)', margin: '-16px' });
-    expect(layer?.parentElement).toHaveClass('overflow-hidden');
+    expect(screen.getByTestId('pomodoro-timer')).toHaveAttribute('data-variant', 'overlay');
+  });
+
+  it('hands the timer surface chrome when the theme shows no photo', () => {
+    setup('quote', false, { colorTheme: 'purple' });
+
+    render(<PomodoroPage />);
+
+    expect(screen.getByTestId('pomodoro-timer')).toHaveAttribute('data-variant', 'surface');
+  });
+
+  it('hands the calendar strip surface chrome when the theme shows no photo', () => {
+    setup('calendar', true, { colorTheme: 'purple' });
+
+    render(<PomodoroPage />);
+
+    expect(screen.getByTestId('calendar-strip')).toHaveAttribute('data-variant', 'surface');
+  });
+
+  it('hands the music player surface chrome when the theme shows no photo', () => {
+    setup('quote', false, { colorTheme: 'purple', pomodoroMusicEnabled: true });
+
+    render(<PomodoroPage />);
+
+    expect(screen.getByTestId('sounds-mini-player')).toHaveAttribute('data-variant', 'surface');
+  });
+
+  it('lets the header pick its own transparency instead of forcing it', () => {
+    setup('quote', false, { colorTheme: 'purple' });
+
+    render(<PomodoroPage />);
+
+    expect(screen.getByTestId('page-header')).not.toHaveAttribute('data-transparent');
   });
 });

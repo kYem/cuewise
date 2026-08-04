@@ -6,15 +6,15 @@ import { Fragment, useEffect, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useCalendarStore } from '../stores/calendar-store';
 import { useSettingsStore } from '../stores/settings-store';
+import type { ChromeVariant } from '../utils/chrome-variant';
 
 interface CalendarStripProps {
   // Wide single-line "Up next" variant for the stacked Calendar + Quote layout:
   // drops past events and the now-line, shows only the next few.
   lean?: boolean;
-  // 'overlay' (default): white-on-dark glass, for the Pomodoro image background.
-  // 'surface': theme tokens, for the home new tab where the background follows
-  // the theme (and can be light), matching the goals card / QuoteDisplay.
-  variant?: 'overlay' | 'surface';
+  variant?: ChromeVariant;
+  // Match the goals card (400px) instead of the standalone 360px card.
+  wide?: boolean;
 }
 
 // Per-variant color classes (module-level so they aren't rebuilt each render).
@@ -28,9 +28,9 @@ const SURFACE_TOKENS = {
   time: 'text-secondary',
   title: 'text-primary',
   connectBtn: 'border-border bg-surface-variant text-primary hover:bg-surface-variant/70',
-  refresh: 'text-tertiary hover:text-primary',
-  nowLine: 'bg-divider',
-  nowDot: 'bg-primary',
+  refresh: 'text-tertiary hover:text-text-primary',
+  nowLine: 'bg-text-tertiary',
+  nowDot: 'bg-text-primary',
   bar: 'bg-divider',
   empty: 'text-secondary',
   error: 'text-red-500 dark:text-red-400',
@@ -67,6 +67,7 @@ function formatTime(iso: string, twentyFour: boolean): string {
 export const CalendarStrip: React.FC<CalendarStripProps> = ({
   lean = false,
   variant = 'overlay',
+  wide = false,
 }) => {
   const { connected, events, isLoading, error } = useCalendarStore(
     useShallow((s) => ({
@@ -133,13 +134,10 @@ export const CalendarStrip: React.FC<CalendarStripProps> = ({
   }, [connected, refresh]);
 
   const t = variant === 'surface' ? SURFACE_TOKENS : OVERLAY_TOKENS;
-  // Match the goals card (max-w-[400px]) in the surface/home layout so the
-  // stacked "both" view lines up; the Pomodoro overlay keeps its 360px card and
-  // the lean "Up next" strip stays wide.
   let width = 'w-[360px] max-w-[92vw]';
   if (lean) {
     width = 'w-full max-w-[520px]';
-  } else if (variant === 'surface') {
+  } else if (wide) {
     width = 'w-full max-w-[400px]';
   }
   const cardClass = cn(width, 'mx-auto rounded-2xl border p-density-md shadow-lg', t.card);

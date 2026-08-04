@@ -1,5 +1,5 @@
 import { logger } from '@cuewise/shared';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // A blocked CDN takes ~32s to exhaust the retries below — far too long to gate the app on.
@@ -31,6 +31,7 @@ import {
 } from './__fixtures__/app-render.fixtures';
 import App from './App';
 import { useBackgroundStore } from './stores/background-store';
+import { useSettingsStore } from './stores/settings-store';
 import { getPreloadedCurrentUrl, preloadImages } from './utils/image-preload-cache';
 import { isUnsplashUrl, preloadImage } from './utils/unsplash';
 
@@ -129,6 +130,23 @@ describe('App background gate', () => {
     // Applied AND visible — a layer stuck at opacity-0 renders the photo invisible.
     await waitFor(() => expect(photoLayer().className).toContain('opacity-100'));
     expect(vi.mocked(preloadImage)).toHaveBeenCalledWith(PHOTO, 5000);
+  });
+
+  // This layer is the only one painting the photo, so it is the only place the readability
+  // sliders can take effect.
+  it('applies the readability filter to the photo layer', async () => {
+    vi.mocked(preloadImages).mockResolvedValue(undefined);
+    vi.mocked(getPreloadedCurrentUrl).mockReturnValue(PHOTO);
+
+    render(<App />);
+    await vi.advanceTimersByTimeAsync(100);
+    await waitFor(() => expect(photoLayer().className).toContain('opacity-100'));
+
+    act(() => {
+      useSettingsStore.setState({ preview: { backgroundDim: 40, backgroundBlur: 8 } });
+    });
+
+    expect(photoLayer()).toHaveStyle({ filter: 'brightness(0.6) blur(8px)', margin: '-16px' });
   });
 
   it('reveals immediately when no image resolves, without waiting out the deadline', async () => {
