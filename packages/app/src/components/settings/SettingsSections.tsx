@@ -23,6 +23,7 @@ import {
   Bell,
   Headphones,
   House,
+  ImageIcon,
   Maximize2,
   Music,
   Play,
@@ -350,6 +351,48 @@ function SoundSection({ s, set, filter, onOpenSoundsPanel }: SettingsSectionProp
   );
 }
 
+/* Background */
+function BackgroundSection({ s, set, filter }: SettingsSectionProps) {
+  return (
+    <div>
+      <SettingRow
+        stack
+        label="Background"
+        filter={filter}
+        help="High-quality photos from Unsplash. Shown on the Glass theme, and in focus mode on any theme."
+        keywords="image category nature forest ocean mountains minimal dark glass wallpaper scenic photo unsplash"
+      >
+        <ThumbPicker
+          value={s.focusModeImageCategory}
+          onChange={(v: FocusImageCategory) => set({ focusModeImageCategory: v })}
+        />
+      </SettingRow>
+      <SettingRow
+        stack
+        label="Your own image"
+        filter={filter}
+        help="Use a picture of your own instead. It's stored on this device and never uploaded."
+        keywords="custom background wallpaper upload own photo picture personal image"
+      >
+        <CustomBackgroundPicker />
+      </SettingRow>
+      <SettingRow
+        stack
+        label="Readability"
+        filter={filter}
+        help="Dim or blur the background so your quote and goals stay easy to read over any photo."
+        keywords="dim brightness blur darken readability contrast background image effects"
+      >
+        <BackgroundEffectControls />
+      </SettingRow>
+    </div>
+  );
+}
+
+// Also carries the gated rows' terms: with focus mode off those rows don't render, and a
+// search for one of them would otherwise open the section onto an empty panel.
+const FOCUS_TOGGLE_KEYWORDS = 'fullscreen enable quote goal auto enter';
+
 /* Focus mode */
 function FocusSection({ s, set, filter }: SettingsSectionProps) {
   return (
@@ -357,8 +400,8 @@ function FocusSection({ s, set, filter }: SettingsSectionProps) {
       <SettingRow
         label="Focus mode"
         filter={filter}
-        help="Adds a fullscreen button to the timer, with scenic backgrounds"
-        keywords="fullscreen scenic enable"
+        help="Adds a fullscreen button to the timer"
+        keywords={FOCUS_TOGGLE_KEYWORDS}
       >
         <Switch
           label="Focus mode"
@@ -366,38 +409,6 @@ function FocusSection({ s, set, filter }: SettingsSectionProps) {
           onChange={(v) => set({ focusModeEnabled: v })}
         />
       </SettingRow>
-      <SettingSubgroup>
-        <SettingRow
-          stack
-          label="Background"
-          filter={filter}
-          help="High-quality photos from Unsplash — also used as the Glass theme wallpaper"
-          keywords="image category nature forest ocean mountains minimal dark glass wallpaper"
-        >
-          <ThumbPicker
-            value={s.focusModeImageCategory}
-            onChange={(v: FocusImageCategory) => set({ focusModeImageCategory: v })}
-          />
-        </SettingRow>
-        <SettingRow
-          stack
-          label="Your own image"
-          filter={filter}
-          help="Use a picture of your own instead. It's stored on this device and never uploaded."
-          keywords="custom background wallpaper upload own photo picture personal image"
-        >
-          <CustomBackgroundPicker />
-        </SettingRow>
-        <SettingRow
-          stack
-          label="Readability"
-          filter={filter}
-          help="Dim or blur the background so your quote and goals stay easy to read over any photo."
-          keywords="dim brightness blur darken readability contrast background image effects"
-        >
-          <BackgroundEffectControls />
-        </SettingRow>
-      </SettingSubgroup>
       {s.focusModeEnabled && (
         <SettingSubgroup>
           <SettingRow label="Show quote" filter={filter} keywords="quote overlay focus">
@@ -900,7 +911,15 @@ function AdvancedSection({ s, set, filter, onReset }: SettingsSectionProps) {
 }
 
 /** Section identifiers, also the routing keys for the sidebar nav. */
-export const SECTION_IDS = ['timer', 'sound', 'focus', 'home', 'goals', 'advanced'] as const;
+export const SECTION_IDS = [
+  'timer',
+  'sound',
+  'background',
+  'focus',
+  'home',
+  'goals',
+  'advanced',
+] as const;
 // The built-in sections' nav keys (module-internal; hosts may use any string id).
 type BuiltInSectionId = (typeof SECTION_IDS)[number];
 
@@ -937,12 +956,19 @@ export const SETTINGS_SECTIONS: (SettingsSection & { id: BuiltInSectionId })[] =
       'sound music start completion chime bell digital gentle youtube playlist lofi ambient breaks',
   },
   {
+    id: 'background',
+    label: 'Background',
+    icon: ImageIcon,
+    component: BackgroundSection,
+    terms:
+      'background wallpaper photo image unsplash nature forest ocean mountains minimal dark glass scenic custom own picture readability dim brightness blur darken contrast',
+  },
+  {
     id: 'focus',
     label: 'Focus mode',
     icon: Maximize2,
     component: FocusSection,
-    terms:
-      'focus mode fullscreen background nature forest ocean mountains minimal dark quote auto enter scenic',
+    terms: 'focus mode fullscreen quote goal auto enter',
   },
   {
     id: 'home',
