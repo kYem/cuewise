@@ -15,7 +15,10 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 # macos-private-api: required for the transparent glow overlay windows (not
 # Mac-App-Store compatible; the app is distributed directly).
-tauri = { version = "2", features = ["tray-icon", "macos-private-api"] }
+# devtools: debug builds get the inspector for free, but sync and OAuth can only be
+# exercised in a bundled build (deep links don't arrive under `tauri dev`), so the
+# release build needs it too. Revisit when ENG-70 opens up distribution.
+tauri = { version = "2", features = ["tray-icon", "macos-private-api", "devtools"] }
 tauri-plugin-deep-link = "2"
 tauri-plugin-http = "2"
 tauri-plugin-notification = "2"
