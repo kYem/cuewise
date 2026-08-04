@@ -772,6 +772,42 @@ describe('SyncSettingsSectionComponent', () => {
     expect(screen.queryByTestId('unsaved-code-banner')).not.toBeInTheDocument();
   });
 
+  it('names an account with no recovery envelope, pointing at the one repair', async () => {
+    const controller = new FakeSyncController();
+    controller.scriptDetails({
+      accountEmail: 'kes@example.com',
+      accountId: 'acct-1',
+      lastSyncedAt: null,
+      recoveryEnvelopePresent: false,
+    });
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+
+    expect(await screen.findByTestId('no-recovery-code-banner')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Regenerate recovery code/i })).toBeInTheDocument();
+  });
+
+  // null is "self-heal has not answered", and an older service worker omits the field entirely.
+  // Painting either as a missing code tells a healthy account its data is unrecoverable.
+  it.each([
+    ['not yet answered', { recoveryEnvelopePresent: null }],
+    ['answered present', { recoveryEnvelopePresent: true }],
+    ['absent, from a service worker that predates the field', {}],
+  ])('stays quiet when the envelope is %s', async (_name, envelope) => {
+    const controller = new FakeSyncController();
+    controller.scriptDetails({
+      accountEmail: 'kes@example.com',
+      accountId: 'acct-1',
+      lastSyncedAt: null,
+      ...envelope,
+    });
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+
+    await screen.findByText(/kes@example.com/);
+    expect(screen.queryByTestId('no-recovery-code-banner')).not.toBeInTheDocument();
+  });
+
   it('tracks the pill text through status changes', () => {
     const controller = new FakeSyncController();
     renderSection(controller);

@@ -70,7 +70,11 @@ async function runDetails(engine: SyncEngineControlSurface): Promise<SyncDetails
   return {
     ok: true,
     kind: 'details',
-    details: buildSyncDetails(await engine.getAccount(), engine.getLastSyncedAt()),
+    details: buildSyncDetails(
+      await engine.getAccount(),
+      engine.getLastSyncedAt(),
+      engine.getRecoveryEnvelopePresent()
+    ),
   };
 }
 
