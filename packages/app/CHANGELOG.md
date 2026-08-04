@@ -1,5 +1,37 @@
 # @cuewise/app
 
+## 1.20.0
+
+### Minor Changes
+
+- Colour release: the Pomodoro page follows your theme instead of always showing a photo, hover and placeholder colours start working throughout the app, the background controls get a Settings section of their own, and an edit made on one device stops being reverted by another.
+
+### Patch Changes
+
+- 8b5d67c: The Pomodoro page now follows your colour theme. It was showing a scenic photo on every theme — including Purple, Forest and Rose, where the rest of Cuewise uses your theme's own colours — so picking a plain theme gave you a clean home page and then a full photo the moment you opened the timer. The photo belongs to the Glass theme. On the other themes the timer, the agenda beside it, the music player and the page header now use your theme's colours instead of the white-on-dark styling they needed over a photo — so they stay readable in light mode. Focus mode still shows the photo whichever theme you use, since that's the point of it.
+
+  Three things in the music player start working along the way: the pulsing dot that marks something as playing, the tint behind the ambient sound icon, and the play button's filled state while something is playing. All three were written against a colour Cuewise doesn't define, so they had quietly never rendered at all.
+
+  Elsewhere in the same corners: the page header's navigation tabs and Back button get their hover colour back, the "now" marker in the agenda becomes visible again, and the timer's progress ring and session dots keep enough contrast to read on a light page.
+
+  Two quieter repairs. The Pomodoro page was painting its own copy of the Glass wallpaper on top of the one Cuewise already draws behind every page, so the photo was dimmed and blurred twice over and the readability sliders bit harder there than anywhere else — the Pomodoro page now shows the same photo, at the same strength, as the rest of the app. And focus mode keeps the day's photo instead of picking a new one each time you enter it.
+
+- The background photo, your own image and the readability sliders now have a **Background** section of their own in Settings, instead of sitting under Focus mode. They were never controlled by the Focus mode switch — turning it off left them exactly as they were — and they set the wallpaper you see on the Glass theme, not just the one in focus mode. Focus mode now holds only the things it actually turns on.
+
+  Searching your settings also lands you on a control instead of a blank panel. Words like "format", "breaks", "digital" and "custom" matched a section but nothing inside it, so the section opened empty — and the settings they describe live behind a switch that was turned off, which is exactly when you'd be searching for them. Those searches now land on the switch that reveals them.
+
+- b35aca6: Fix goals, quotes and reminders edited on one device being reverted on another. A page that was already open never learned that a sync pull had changed its data, so the next edit made there saved its own stale copy over what arrived — losing a completed task, a changed due date or an added subtask, in either direction. Open pages now pick up changes as they land.
+
+  Also stop a goal, reminder or collection list that cannot be read from being reported as an empty one. Those lists are saved back whole, so a read that failed mid-session could turn into an empty list being saved over real data and synced everywhere. A failed read is now refused, the way quotes already were.
+
+- 028b733: Hover and placeholder colours around the app start working. Buttons, tabs and links that were meant to brighten as your pointer passes over them had been sitting still, and text you haven't typed yet — search boxes, the quote editor, the goal field — was showing in the browser's own grey rather than your theme's. Both were written correctly; the styling behind them had never been generated.
+
+  The sound panel gets its colour back too: the selected soundscape, the active tab and the "Add" button were all painted in a highlight colour Cuewise never actually defined, so a picked soundscape looked the same as an unpicked one. Each theme's highlight is now the deeper shade of its own colour — violet for Purple, green for Forest, rose for Rose, and a brighter white for Glass.
+
+- Updated dependencies [b35aca6]
+  - @cuewise/storage@1.22.0
+  - @cuewise/sync-engine@0.1.7
+
 ## 1.19.0
 
 ### Minor Changes

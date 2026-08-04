@@ -1,5 +1,12 @@
 # @cuewise/sync-engine
 
+## 0.1.7
+
+### Patch Changes
+
+- Updated dependencies [b35aca6]
+  - @cuewise/storage@1.22.0
+
 ## 0.1.6
 
 ### Patch Changes
