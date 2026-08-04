@@ -157,30 +157,13 @@ describe('PomodoroPage - companion selection', () => {
   });
 });
 
-describe('background resolution', () => {
-  it("resolves today's background before reading the cache", async () => {
-    setup('quote', false);
-
-    render(<PomodoroPage />);
-
-    await waitFor(() => expect(vi.mocked(preloadImages)).toHaveBeenCalledWith('nature'));
-  });
-
-  it('waits for storage before resolving, so a curated photo cannot flash over a custom one', async () => {
-    setup('quote', false);
-    vi.mocked(useBackgroundStore).mockImplementation(
-      createSelectorMock({ customBackground: null, isLoaded: false })
-    );
-
-    render(<PomodoroPage />);
-
-    await waitFor(() => expect(screen.queryByTestId('quote-display')).toBeInTheDocument());
-    expect(vi.mocked(preloadImages)).not.toHaveBeenCalled();
-  });
-});
-
-describe('PomodoroPage - theme gate', () => {
-  it.each(PLAIN_THEMES)('renders no background layer on the %s theme', (colorTheme) => {
+// App paints the Glass photo app-wide (App.background.test.tsx covers it); this page must
+// not resolve or render a second copy on any theme.
+describe('PomodoroPage - background', () => {
+  it.each([
+    ...PLAIN_THEMES,
+    'glass',
+  ] as const)('renders no background layer of its own on the %s theme', (colorTheme) => {
     setup('quote', false, { colorTheme });
 
     render(<PomodoroPage />);
@@ -188,44 +171,16 @@ describe('PomodoroPage - theme gate', () => {
     expect(screen.queryByTestId('pomodoro-background')).not.toBeInTheDocument();
   });
 
-  it('does not resolve an image the theme will never show', async () => {
-    setup('quote', false, { colorTheme: 'purple' });
+  it.each([
+    ...PLAIN_THEMES,
+    'glass',
+  ] as const)('resolves no image of its own on the %s theme', async (colorTheme) => {
+    setup('quote', false, { colorTheme });
 
     render(<PomodoroPage />);
 
     await waitFor(() => expect(screen.queryByTestId('quote-display')).toBeInTheDocument());
     expect(vi.mocked(preloadImages)).not.toHaveBeenCalled();
-  });
-
-  it('shows the resolved photo on the glass theme', async () => {
-    setup('quote', false, { colorTheme: 'glass' });
-
-    render(<PomodoroPage />);
-
-    await waitFor(() => {
-      const photo = screen.getByTestId('pomodoro-background-photo');
-      expect(photo).toHaveClass('opacity-100');
-      expect(photo).toHaveStyle({ backgroundImage: 'url(preloaded.jpg)' });
-    });
-  });
-
-  it('does not flash the previous photo when returning to the glass theme', async () => {
-    setup('quote', false, { colorTheme: 'glass' });
-    const { rerender } = render(<PomodoroPage />);
-    await waitFor(() =>
-      expect(screen.getByTestId('pomodoro-background-photo')).toHaveClass('opacity-100')
-    );
-
-    setup('quote', false, { colorTheme: 'purple' });
-    rerender(<PomodoroPage />);
-
-    setup('quote', false, { colorTheme: 'glass' });
-    rerender(<PomodoroPage />);
-    expect(screen.getByTestId('pomodoro-background-photo')).toHaveClass('opacity-0');
-
-    await waitFor(() =>
-      expect(screen.getByTestId('pomodoro-background-photo')).toHaveClass('opacity-100')
-    );
   });
 });
 
@@ -270,18 +225,5 @@ describe('PomodoroPage - chrome wiring', () => {
     render(<PomodoroPage />);
 
     expect(screen.getByTestId('page-header')).not.toHaveAttribute('data-transparent');
-  });
-});
-
-describe('PomodoroPage - background readability', () => {
-  it('applies the readability filter to the image layer inside a clipping wrapper', () => {
-    setup('quote', false, { backgroundDim: 40, backgroundBlur: 8 });
-
-    const { container } = render(<PomodoroPage />);
-
-    const layer = container.querySelector('div[style*="brightness"]');
-    expect(layer).not.toBeNull();
-    expect(layer).toHaveStyle({ filter: 'brightness(0.6) blur(8px)', margin: '-16px' });
-    expect(layer?.parentElement).toHaveClass('overflow-hidden');
   });
 });

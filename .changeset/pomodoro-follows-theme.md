@@ -9,3 +9,5 @@ The Pomodoro page now follows your colour theme. It was showing a scenic photo o
 Three things in the music player start working along the way: the pulsing dot that marks something as playing, the tint behind the ambient sound icon, and the play button's filled state while something is playing. All three were written against a colour Cuewise doesn't define, so they had quietly never rendered at all.
 
 Elsewhere in the same corners: the page header's navigation tabs and Back button get their hover colour back, the "now" marker in the agenda becomes visible again, and the timer's progress ring and session dots keep enough contrast to read on a light page.
+
+Two quieter repairs. The Pomodoro page was painting its own copy of the Glass wallpaper on top of the one Cuewise already draws behind every page, so the photo was dimmed and blurred twice over and the readability sliders bit harder there than anywhere else — the Pomodoro page now shows the same photo, at the same strength, as the rest of the app. And focus mode keeps the day's photo instead of picking a new one each time you enter it.
