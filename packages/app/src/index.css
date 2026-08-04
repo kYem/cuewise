@@ -35,6 +35,10 @@ html.dark[data-theme="rose"] {
   --color-primary-800: oklch(0.4 0.18 285);
   --color-primary-900: oklch(0.34 0.14 285);
 
+  /* COLOR_THEMES defines each theme's accent as the 600 shade of its primary, so this
+     follows every theme and mode override for free. Glass reassigns it (photo backdrop). */
+  --color-accent: var(--color-primary-600);
+
   /* Semantic colors - Light mode defaults */
   --color-background: white;
   --color-surface: oklch(0.99 0.005 300);
@@ -489,6 +493,9 @@ html.dark[data-theme="rose"] {
     --color-primary-800: rgba(255, 255, 255, 0.95);
     --color-primary-900: rgba(255, 255, 255, 1);
 
+    /* Glass's accent is a brighter white than its primary, not a deeper one. */
+    --color-accent: var(--color-primary-700);
+
     /* Transparent/glass surfaces */
     --color-background: transparent;
     --color-surface: rgba(0, 0, 0, 0.25);
@@ -736,6 +743,18 @@ html.dark[data-theme="rose"] {
   }
 }
 
+/* The text aliases are @utility, not plain classes in @layer: Tailwind only generates
+   variants for utilities it owns, so `hover:text-primary` emits nothing otherwise. */
+@utility text-primary {
+  color: var(--color-text-primary);
+}
+@utility text-secondary {
+  color: var(--color-text-secondary);
+}
+@utility text-tertiary {
+  color: var(--color-text-tertiary);
+}
+
 @layer utilities {
   .text-balance {
     text-wrap: balance;
@@ -753,16 +772,6 @@ html.dark[data-theme="rose"] {
   }
   .bg-surface-variant {
     background-color: var(--color-surface-variant);
-  }
-
-  .text-primary {
-    color: var(--color-text-primary);
-  }
-  .text-secondary {
-    color: var(--color-text-secondary);
-  }
-  .text-tertiary {
-    color: var(--color-text-tertiary);
   }
 
   .border-border {
