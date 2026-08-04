@@ -78,7 +78,7 @@ export const PomodoroPage: React.FC = () => {
   } else if (companionMode === 'both') {
     companion = (
       <div className="flex w-full flex-col items-center gap-density-lg">
-        <CalendarStrip lean variant={chromeVariant} />
+        <CalendarStrip lean width="stacked" variant={chromeVariant} />
         <QuoteDisplay onManualRefresh={() => setLastManualRefresh(Date.now())} hideCategory />
       </div>
     );

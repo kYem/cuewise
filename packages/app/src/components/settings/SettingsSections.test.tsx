@@ -19,6 +19,13 @@ vi.mock('@cuewise/storage', () => ({
   clearCustomBackground: vi.fn(),
 }));
 
+// The extension's storage backend supports Chrome sync, so the Advanced row that carries
+// the 'chrome sync cloud' terms renders. A backend without it (macOS) hides that row.
+vi.mock('@cuewise/shared', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@cuewise/shared')>()),
+  getStorage: () => ({ supportsSync: true }),
+}));
+
 vi.mock('../../stores/toast-store', () => ({
   useToastStore: {
     getState: () => ({ error: vi.fn(), warning: vi.fn(), success: vi.fn() }),
@@ -133,17 +140,27 @@ describe('settings sections', () => {
 
     // A section matches on `terms`, then each row re-filters on its own label/help/keywords
     // (SettingControls.tsx). A term no row carries opens the section onto an empty panel.
-    it.each([
-      ['background', true],
-      ['focus', true],
-      ['focus', false],
-    ] as const)('every search term in %s reaches a row (focus on: %s)', (id, focusModeEnabled) => {
-      const orphans = [...new Set(sectionById(id).terms.split(' '))].filter((term) => {
-        const { container, unmount } = renderSection(id, term, { focusModeEnabled });
-        const rendered = container.textContent?.trim() ?? '';
-        unmount();
-        return rendered.length === 0;
-      });
+    // Words already in the section's label are excluded: those surface it via label matching
+    // whatever `terms` says, so they can only be fixed structurally, not with keywords.
+    it.each(
+      SETTINGS_SECTIONS.flatMap(
+        (s) =>
+          [
+            [s.id, true],
+            [s.id, false],
+          ] as const
+      )
+    )('every search term in %s reaches a row (focus on: %s)', (id, focusModeEnabled) => {
+      const section = sectionById(id);
+      const labelWords = new Set(section.label.toLowerCase().split(/[^a-z0-9]+/));
+      const orphans = [...new Set(section.terms.split(' '))]
+        .filter((term) => !labelWords.has(term))
+        .filter((term) => {
+          const { container, unmount } = renderSection(id, term, { focusModeEnabled });
+          const rendered = container.textContent?.trim() ?? '';
+          unmount();
+          return rendered.length === 0;
+        });
 
       expect(orphans).toEqual([]);
     });

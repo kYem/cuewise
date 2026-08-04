@@ -162,7 +162,7 @@ function TimerSection({ s, set, filter }: SettingsSectionProps) {
         label="Session recipe"
         filter={filter}
         help="Pick a rhythm — work · short break · long break, in minutes. Fine-tune below."
-        keywords="pomodoro preset classic deep work sprint durations"
+        keywords="pomodoro preset classic deep work sprint durations custom timer"
       >
         <PresetGrid s={s} onApply={set} />
       </SettingRow>
@@ -266,7 +266,7 @@ function SoundSection({ s, set, filter, onOpenSoundsPanel }: SettingsSectionProp
         label="Start sound"
         filter={filter}
         help="Played when a session starts"
-        keywords="notification chime bell audio"
+        keywords="notification chime bell audio digital gentle"
       >
         <div className="flex items-center gap-2">
           <SelectControl
@@ -301,7 +301,7 @@ function SoundSection({ s, set, filter, onOpenSoundsPanel }: SettingsSectionProp
         label="Focus music"
         filter={filter}
         help="Play YouTube playlists during Pomodoro sessions"
-        keywords="youtube playlist lofi ambient"
+        keywords="youtube playlist lofi ambient breaks"
       >
         <Switch
           label="Focus music"
@@ -555,7 +555,7 @@ function HomeSection({ s, set, filter }: SettingsSectionProps) {
         label="Clock"
         filter={filter}
         help="Time, date, and greeting on the home page"
-        keywords="time date greeting show"
+        keywords="time date greeting show format 12 24"
       >
         <Switch label="Clock" checked={s.showClock} onChange={(v) => set({ showClock: v })} />
       </SettingRow>
