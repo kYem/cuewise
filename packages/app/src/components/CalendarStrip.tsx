@@ -8,13 +8,19 @@ import { useCalendarStore } from '../stores/calendar-store';
 import { useSettingsStore } from '../stores/settings-store';
 import type { ChromeVariant } from '../utils/chrome-variant';
 
+// Geometry is its own axis: `lean` and `variant` each used to set width as a side effect,
+// so the card silently resized when unrelated props changed.
+const WIDTHS = {
+  card: 'w-[360px] max-w-[92vw]',
+  goals: 'w-full max-w-[400px]',
+  stacked: 'w-full max-w-[520px]',
+} as const;
+
 interface CalendarStripProps {
-  // Wide single-line "Up next" variant for the stacked Calendar + Quote layout:
-  // drops past events and the now-line, shows only the next few.
+  // Single-line "Up next" content: drops past events and the now-line, shows only the next few.
   lean?: boolean;
   variant?: ChromeVariant;
-  // Match the goals card (400px) instead of the standalone 360px card.
-  wide?: boolean;
+  width?: keyof typeof WIDTHS;
 }
 
 // Per-variant color classes (module-level so they aren't rebuilt each render).
@@ -67,7 +73,7 @@ function formatTime(iso: string, twentyFour: boolean): string {
 export const CalendarStrip: React.FC<CalendarStripProps> = ({
   lean = false,
   variant = 'overlay',
-  wide = false,
+  width = 'card',
 }) => {
   const { connected, events, isLoading, error } = useCalendarStore(
     useShallow((s) => ({
@@ -134,13 +140,7 @@ export const CalendarStrip: React.FC<CalendarStripProps> = ({
   }, [connected, refresh]);
 
   const t = variant === 'surface' ? SURFACE_TOKENS : OVERLAY_TOKENS;
-  let width = 'w-[360px] max-w-[92vw]';
-  if (lean) {
-    width = 'w-full max-w-[520px]';
-  } else if (wide) {
-    width = 'w-full max-w-[400px]';
-  }
-  const cardClass = cn(width, 'mx-auto rounded-2xl border p-density-md shadow-lg', t.card);
+  const cardClass = cn(WIDTHS[width], 'mx-auto rounded-2xl border p-density-md shadow-lg', t.card);
 
   const header = (right?: React.ReactNode) => (
     <div className="flex items-center justify-between mb-density-sm">
