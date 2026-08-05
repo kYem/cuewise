@@ -173,7 +173,9 @@ export class SyncEngine {
   private accountEpoch = 0;
   private pushTimer: ReturnType<typeof setTimeout> | null = null;
   private pushDeadline: number | null = null;
-  private cycleInFlight = false;
+  // A count, not a flag: syncNow is concurrently callable (explicit sync, pull wake, start), and a
+  // second cycle finishing first would otherwise clear it while the first is still running.
+  private cyclesInFlight = 0;
 
   constructor(private readonly deps: SyncEngineDeps) {
     this.now = deps.now ?? Date.now;
@@ -458,7 +460,7 @@ export class SyncEngine {
    * landed inside it. Never throws: callers read the result. A no-op until a DK is held.
    */
   async syncNow(): Promise<SyncNowResult> {
-    this.cycleInFlight = true;
+    this.cyclesInFlight += 1;
     try {
       const epoch = this.accountEpoch;
       const outcome = await this.runCycle(epoch);
@@ -505,7 +507,7 @@ export class SyncEngine {
       }
       return outcome;
     } finally {
-      this.cycleInFlight = false;
+      this.cyclesInFlight -= 1;
     }
   }
 
@@ -960,7 +962,7 @@ export class SyncEngine {
 
   private async firePush(): Promise<void> {
     this.pushTimer = null;
-    if (this.cycleInFlight) {
+    if (this.cyclesInFlight > 0) {
       // Clear the deadline before re-arming: otherwise, once the in-flight cycle outlives
       // PUSH_MAX_WAIT_MS, the stale deadline computes delay 0 forever and this spins instead
       // of polling. Re-arm rather than run a second cycle over the top of the one already going.
@@ -1020,22 +1022,19 @@ export class SyncEngine {
   // Only the cursor: widening this would drop the quarantine list too, and the device would
   // re-quarantine the same records on its next pull, re-toasting the user every time.
   private async resetPullCursor(): Promise<void> {
-    const meta = await this.meta.load();
-    if (meta.cursor === 0) {
-      return;
-    }
-    meta.cursor = 0;
-    await this.meta.save(meta);
+    await this.meta.update((meta) => {
+      meta.cursor = 0;
+    });
   }
 
   private async resetMeta(): Promise<void> {
-    const meta = await this.meta.load();
-    meta.cursor = 0;
-    meta.dirty = {};
-    meta.hlcs = {};
-    meta.tombstones = [];
-    meta.quarantine = [];
-    await this.meta.save(meta);
+    await this.meta.update((meta) => {
+      meta.cursor = 0;
+      meta.dirty = {};
+      meta.hlcs = {};
+      meta.tombstones = [];
+      meta.quarantine = [];
+    });
   }
 
   // Auth 401 (spec §5): drop the session, stop the loop, keep local data + DK. User re-enables.

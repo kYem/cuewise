@@ -50,6 +50,9 @@ function isSyncMeta(value: unknown): value is SyncMeta {
 
 /** The engine's private bookkeeping: dirty-set, per-entity HLCs, cursor, tombstones, quarantine. */
 export class SyncMetadataStore {
+  // Tail of the serialised update queue; see `update`.
+  private chain: Promise<void> = Promise.resolve();
+
   constructor(private readonly store: KeyValueStore) {}
 
   /**
@@ -102,6 +105,22 @@ export class SyncMetadataStore {
     if (!result.success) {
       throw new Error(`Failed to save sync metadata: ${result.error.message}`);
     }
+  }
+
+  /**
+   * The only safe way to change the ledger: loads fresh, applies `mutator`, saves — queued behind
+   * any update still running. Every writer works on one whole blob, so two that each load → mutate
+   * → save around a network round trip would otherwise have the later save erase the earlier's.
+   */
+  async update(mutator: (meta: SyncMeta) => void): Promise<void> {
+    const run = this.chain.then(async () => {
+      const meta = await this.load();
+      mutator(meta);
+      await this.save(meta);
+    });
+    // The queue tracks a settled run, not a rejected one: one failed mutator must not wedge it.
+    this.chain = run.catch(() => {});
+    return run;
   }
 
   static entityKey(collection: string, entityId: string): string {

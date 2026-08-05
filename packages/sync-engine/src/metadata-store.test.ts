@@ -37,6 +37,68 @@ describe('SyncMetadataStore', () => {
     await expect(store.save(meta)).rejects.toThrow();
   });
 
+  describe('update', () => {
+    // Every writer does load → mutate → save on one blob, so two that overlap must not both read
+    // the same pre-state — the later save would otherwise erase the earlier one's change.
+    it('serialises concurrent callers so neither change is lost', async () => {
+      const store = new SyncMetadataStore(new FakeKvStore());
+      await store.load();
+
+      await Promise.all([
+        store.update((meta) => {
+          meta.dirty.goals = [...(meta.dirty.goals ?? []), 'g1'];
+        }),
+        store.update((meta) => {
+          meta.dirty.goals = [...(meta.dirty.goals ?? []), 'g2'];
+        }),
+      ]);
+
+      expect((await store.load()).dirty.goals).toEqual(['g1', 'g2']);
+    });
+
+    it('rejects to its own caller when the mutator throws', async () => {
+      const store = new SyncMetadataStore(new FakeKvStore());
+
+      await expect(
+        store.update(() => {
+          throw new Error('boom');
+        })
+      ).rejects.toThrow('boom');
+    });
+
+    it('still runs an update queued behind one whose mutator threw', async () => {
+      const store = new SyncMetadataStore(new FakeKvStore());
+      await store.load();
+
+      const failing = store.update(() => {
+        throw new Error('boom');
+      });
+      const queued = store.update((meta) => {
+        meta.cursor = 9;
+      });
+
+      await expect(failing).rejects.toThrow('boom');
+      await queued;
+      expect((await store.load()).cursor).toBe(9);
+    });
+
+    it('leaves the stored ledger untouched when the mutator throws', async () => {
+      const store = new SyncMetadataStore(new FakeKvStore());
+      const meta = await store.load();
+      meta.cursor = 4;
+      await store.save(meta);
+
+      await expect(
+        store.update((fresh) => {
+          fresh.cursor = 8;
+          throw new Error('boom');
+        })
+      ).rejects.toThrow('boom');
+
+      expect((await store.load()).cursor).toBe(4);
+    });
+  });
+
   it('entityKey composes collection and id', () => {
     expect(SyncMetadataStore.entityKey('goals', 'g1')).toBe('goals/g1');
   });

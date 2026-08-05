@@ -2327,9 +2327,10 @@ describe('SyncEngine.start / stop', () => {
         return result;
       }
       metaReads += 1;
-      // The second is the push opening its own ledger read; the first was the pull's. Coupled to
-      // that count: a new ledger read anywhere in the cycle re-targets this and must move it.
-      if (metaReads === 2) {
+      // The third is the push opening its own ledger read; the first two are the pull's snapshot
+      // and the re-read its delta write makes. Coupled to that count: a new ledger read anywhere
+      // in the cycle re-targets this and must move it.
+      if (metaReads === 3) {
         disabled = true;
         await device.engine.disableSync();
       }
@@ -2688,9 +2689,13 @@ describe('push on change', () => {
     const goal = goalFactory.build({ id: 'g1' });
     await setGoals([goal]);
     server.reset();
+    const syncNow = vi.spyOn(device.engine, 'syncNow');
 
     await device.engine.markMutated('goals', 'g1');
     await vi.advanceTimersByTimeAsync(2_000);
+    // The fake clock only drains what it owns, and the push seals with real async crypto, so the
+    // cycle that timer fired has to be awaited before asking what reached the server.
+    await Promise.all(syncNow.mock.results.map((result) => result.value));
 
     expect(server.allRecords().some((r) => r.entityId === 'g1')).toBe(true);
     vi.useRealTimers();
@@ -2713,7 +2718,7 @@ describe('push on change', () => {
 
     // Each later mutation must replace the pending timer, not add another one alongside it —
     // an uncancelled extra timer would eventually fire its own cycle, just later and unobserved
-    // by a short window (cycleInFlight would mask it as a harmless re-arm).
+    // by a short window (cyclesInFlight would mask it as a harmless re-arm).
     expect(vi.getTimerCount()).toBe(1);
     await vi.advanceTimersByTimeAsync(2_000);
 
@@ -2815,6 +2820,45 @@ describe('push on change', () => {
 
     // Once the first cycle finished, the deferred push still ran a cycle of its own.
     expect(syncNow).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
+  });
+
+  it('keeps deferring while an outer cycle outlives an inner one that started later', async () => {
+    vi.useFakeTimers();
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+
+    let release = (): void => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const original = device.apiClient.getChanges.bind(device.apiClient);
+    let calls = 0;
+    vi.spyOn(device.apiClient, 'getChanges').mockImplementation(async (since: number) => {
+      calls += 1;
+      if (calls === 1) {
+        await gate;
+      }
+      return original(since);
+    });
+    const syncNow = vi.spyOn(device.engine, 'syncNow');
+
+    const outer = device.engine.syncNow();
+    // Starts second, finishes first — a boolean flag would report "no cycle in flight" here.
+    await device.engine.syncNow();
+    await device.engine.markMutated('goals', 'g1');
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    expect(syncNow).toHaveBeenCalledTimes(2);
+
+    release();
+    await outer;
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    expect(syncNow).toHaveBeenCalledTimes(3);
     vi.useRealTimers();
   });
 
