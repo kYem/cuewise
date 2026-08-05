@@ -72,6 +72,8 @@ async function savePullUnlessCancelled(deps: CycleDeps, pull: PullState): Promis
   if (deps.isCancelled()) {
     return false;
   }
+  // `update` enqueues synchronously, and no await may come between it and the check above: a
+  // disable slipping into that gap would reset the ledger first and have this delta restore it.
   await deps.meta.update((fresh) => mergePull(fresh, pull, (deps.now ?? Date.now)()));
   return true;
 }
@@ -132,9 +134,8 @@ export async function pushOnce(deps: CycleDeps): Promise<PushResult> {
     }
     const batch = dirtyRecords.slice(start, start + MAX_PUSH_BATCH);
     await deps.transport.pushChanges(batch.map((item) => item.record));
-    // After the round trip, not just before: the ledger this ack would clear belongs to whatever
-    // account is enrolled by the time it lands, not to the one that sealed the batch. The lost
-    // ack costs one re-push, which the next enable makes anyway.
+    // After the round trip: the server already holds these records, and that has to be said. The
+    // skipped write is belt-and-braces — clearAcked's hlc guard no-ops on a reset ledger anyway.
     if (deps.isCancelled()) {
       logger.error(
         `Cloud sync stopped a push for a disconnected account, but its server had already accepted ${batch.length} records`
@@ -142,6 +143,7 @@ export async function pushOnce(deps: CycleDeps): Promise<PushResult> {
       return { kind: 'cancelled' };
     }
     // A delta, not the snapshot above: anything marked dirty during the round trip must survive.
+    // Enqueued synchronously after that check, so nothing may await between the two.
     await deps.meta.update((fresh) => clearAcked(fresh, batch));
   }
   logger.debug(`Sync push sent ${dirtyRecords.length} record(s)`, {
@@ -183,11 +185,8 @@ async function buildDirtyRecords(deps: CycleDeps, meta: SyncMeta): Promise<Dirty
   return dirtyRecords;
 }
 
-/**
- * Ack clears the pushed ids from dirty (pruning empty collections) and resolves their tombstones.
- * An id re-marked during the round trip carries a newer hlc than the batch sealed, and stays dirty:
- * clearing it would strand that edit until the same entity happened to be touched again.
- */
+// Clears the pushed ids from dirty (pruning empty collections) and resolves their tombstones. An
+// id whose hlc moved during the round trip was re-edited, so the ack does not speak for it.
 function clearAcked(meta: SyncMeta, batch: DirtyRecord[]): void {
   for (const { collection, entityId, hlc } of batch) {
     if (meta.hlcs[SyncMetadataStore.entityKey(collection, entityId)] !== hlc) {

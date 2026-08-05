@@ -210,8 +210,6 @@ describe('pushOnce', () => {
     expect(saved.dirty.quotes).toEqual(['q1']);
   });
 
-  // The ack speaks for the version it sent, so an id edited again mid-flight must stay dirty —
-  // otherwise that edit never leaves the device until the same entity is touched again.
   it('keeps an id dirty when it was re-edited while its own batch was in flight', async () => {
     await setGoals([goalFactory.build({ id: 'g1' })]);
     const metaStore = new SyncMetadataStore(kv);
