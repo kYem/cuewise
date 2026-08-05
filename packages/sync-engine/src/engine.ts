@@ -58,6 +58,13 @@ export const LAST_SYNCED_AT_KEY = 'cuewise.sync.lastSyncedAt';
  */
 export const LAST_CYCLE_KEY = 'cuewise.sync.lastCycle';
 
+/**
+ * Whether the server holds a recovery envelope for this account. Persisted, not held per process:
+ * the extension respawns its worker on every wake, so an in-memory answer would be recomputed —
+ * and re-logged — every five minutes, and the panel reads this on a cold worker.
+ */
+export const RECOVERY_ENVELOPE_KEY = 'cuewise.sync.recoveryEnvelope';
+
 // The periodic pull backstop cadence (spec §3: "~5 min"); foreground opens trigger sooner via syncNow.
 const PULL_REARM_MINUTES = 5;
 
@@ -167,6 +174,9 @@ export class SyncEngine {
   // False once a stored record turned out to be unreadable: that is not "no cycle ran", and
   // answering it as such is exactly what clears a wedged device's badge.
   private lastCycleKnown = true;
+  // null until self-heal has answered once, so a panel on a cold worker cannot read "unknown" as
+  // "missing" and claim an account has no recovery path before anything has checked.
+  private recoveryEnvelope: boolean | null = null;
   private hydration: Promise<void> | null = null;
   // The cancellation token for everything a disable must stop: the cycle, each enrol checkpoint,
   // start(), and any bookkeeping already in flight. Only disableSync bumps it, and only upward.
@@ -270,6 +280,9 @@ export class SyncEngine {
     }
     this.dk = enrolled.dk;
     this.keyId = enrolled.keyId;
+    // Both enrol paths prove one: initNewKey PUT it, enrollFromEnvelope unwrapped it. Without
+    // this a freshly-connected device reads "unknown" until its next start().
+    await this.recordRecoveryEnvelope(true);
 
     this.setStatus('initial_sync');
     // Unconditionally: the enabled flag survives handleAuthLoss, so its presence cannot mean the
@@ -413,7 +426,13 @@ export class SyncEngine {
       // and getAccount() resolving the disconnected account.
       survived.push(SYNC_SESSION_KEY);
     }
-    for (const key of [SYNC_DATA_KEY, CLOUD_SYNC_ENABLED_KEY, LAST_SYNCED_AT_KEY, LAST_CYCLE_KEY]) {
+    for (const key of [
+      SYNC_DATA_KEY,
+      CLOUD_SYNC_ENABLED_KEY,
+      LAST_SYNCED_AT_KEY,
+      LAST_CYCLE_KEY,
+      RECOVERY_ENVELOPE_KEY,
+    ]) {
       const removed = await this.deps.keyStore.remove(key, 'local');
       if (!removed) {
         survived.push(key);
@@ -431,6 +450,9 @@ export class SyncEngine {
     // After a disable "no cycle" is the truth, so an earlier unreadable record must stop
     // reporting unknown — otherwise a failed hydration outlives the account it described.
     this.lastCycleKnown = true;
+    // Back to unknown, not present: it described the account just removed, and carrying it forward
+    // would answer for whatever account connects next.
+    this.recoveryEnvelope = null;
     this.hydration = null;
     this.setStatus('disabled');
     // Last, and best-effort: an unreadable ledger makes load() throw deterministically, and doing
@@ -452,6 +474,8 @@ export class SyncEngine {
     const mk = await deriveMasterKey(secret);
     const blob = await wrapDataKey(mk, dk, keyId);
     await this.deps.apiClient.putRecoveryEnvelope(blob);
+    // The one repair for a missing envelope, so this is what retires the badge it raised.
+    await this.recordRecoveryEnvelope(true);
     return code;
   }
 
@@ -592,8 +616,9 @@ export class SyncEngine {
    * construction this way, not by trusting adapters and host callbacks (a throwing onStatus would
    * otherwise escape to enableSync's catch and land an enrolled device on `error`).
    */
-  // The step's own return value is discarded: callers that need it must check it themselves.
-  private async bestEffort(step: () => Promise<unknown> | unknown, what: string): Promise<void> {
+  // Void-returning by signature, not by convention: a step that reports failure by RESOLVING would
+  // have that answer swallowed here, so the compiler refuses it and the caller must check instead.
+  private async bestEffort(step: () => Promise<void> | void, what: string): Promise<void> {
     try {
       await step();
     } catch (err) {
@@ -641,6 +666,32 @@ export class SyncEngine {
 
   getLastSyncedAt(): number | null {
     return this.lastSyncedAt;
+  }
+
+  /** null until self-heal has answered once; hosts must not paint "missing" from an unknown. */
+  getRecoveryEnvelopePresent(): boolean | null {
+    return this.recoveryEnvelope;
+  }
+
+  /**
+   * Records what self-heal found and answers whether it is news. Compared against the PERSISTED
+   * value, not the field: a respawned worker starts blank, so an in-memory check would call the
+   * steady state news on every wake — which is the log repeat this exists to stop.
+   */
+  private async recordRecoveryEnvelope(present: boolean): Promise<boolean> {
+    const stored = await this.deps.keyStore.get<boolean>(RECOVERY_ENVELOPE_KEY, 'local');
+    this.recoveryEnvelope = present;
+    if (stored === present) {
+      return false;
+    }
+    const result = await this.deps.keyStore.set(RECOVERY_ENVELOPE_KEY, present, 'local');
+    if (!result.success) {
+      // Non-fatal: the badge is recomputed next start, and losing it costs a repeated log.
+      logger.warn(`Failed to persist the recovery-envelope state: ${result.error.message}`, {
+        error: result.error,
+      });
+    }
+    return true;
   }
 
   /**
@@ -696,7 +747,10 @@ export class SyncEngine {
   private async readPersistedSyncState(epoch: number): Promise<HydrationResult> {
     // One batch read, because `get` collapses "absent" into "read failed" and this is the one
     // place that distinction decides whether a wedged device shows a badge.
-    const stored = await this.deps.keyStore.getMany([LAST_SYNCED_AT_KEY, LAST_CYCLE_KEY], 'local');
+    const stored = await this.deps.keyStore.getMany(
+      [LAST_SYNCED_AT_KEY, LAST_CYCLE_KEY, RECOVERY_ENVELOPE_KEY],
+      'local'
+    );
     if (this.accountEpoch !== epoch) {
       // Installed nothing, but disableSync already cleared the memo; clearing again could drop
       // a newer read's.
@@ -712,6 +766,13 @@ export class SyncEngine {
     const stamp = stored[LAST_SYNCED_AT_KEY];
     if (stamp !== undefined) {
       this.hydrateStamp(stamp);
+    }
+
+    // Only a positively-read boolean; anything else stays null, which the panel paints as nothing
+    // rather than as an account with no recovery path.
+    const envelope = stored[RECOVERY_ENVELOPE_KEY];
+    if (envelope?.readable === true && typeof envelope.value === 'boolean') {
+      this.recoveryEnvelope = envelope.value;
     }
 
     const record = stored[LAST_CYCLE_KEY];
@@ -818,6 +879,7 @@ export class SyncEngine {
 
     try {
       await selfHealKeyBlob(this.keyDeps());
+      await this.recordRecoveryEnvelope(true);
     } catch (err) {
       // Before the type test, not inside it: disableSync clears the session first, so self-heal's
       // envelope fetch usually 401s rather than raising a SelfHeal* error — and the rethrow makes
@@ -843,9 +905,13 @@ export class SyncEngine {
       // abandoning here left an enrolled device reading "off" on macOS after one offline launch.
       if (err instanceof SelfHealUnrecoverableError) {
         // Reaching active is also what keeps Regenerate recovery code, the one fix, on screen.
-        logger.error(
-          'Cloud sync has no recovery envelope on the server; regenerate your recovery code to restore it'
-        );
+        // Logged only on the transition: the extension respawns its worker every wake, so an
+        // unconditional log here is one line per five minutes for as long as the state lasts.
+        if (await this.recordRecoveryEnvelope(false)) {
+          logger.error(
+            'Cloud sync has no recovery envelope on the server; regenerate your recovery code to restore it'
+          );
+        }
       } else {
         logger.error(
           `Cloud sync self-heal could not reach the server: ${describeThrown(err)}`,
@@ -1042,7 +1108,13 @@ export class SyncEngine {
     // Status first, steps independent: a partial cleanup failure must never leave the engine
     // reporting health — armPullLoopUnlessOff reads that status to decide whether to poll on.
     await this.bestEffort(() => this.setStatus('signed_out'), 'signed-out status notification');
-    await this.bestEffort(() => this.deps.sessionManager.clear(), 'session clear');
+    // Not through bestEffort: clear() reports a surviving token by resolving false, and that token
+    // is a live credential — it keeps isSignedIn() true for an account this device just lost.
+    if (!(await this.clearSessionSafely())) {
+      logger.error(
+        `Cloud sync lost its authorisation but could not clear the session: ${SYNC_SESSION_KEY}`
+      );
+    }
     await this.bestEffort(() => this.stop(), 'pull-wake cancel');
   }
 }

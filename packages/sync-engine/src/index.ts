@@ -23,6 +23,7 @@ export {
   type EngineApiClient,
   LAST_CYCLE_KEY,
   LAST_SYNCED_AT_KEY,
+  RECOVERY_ENVELOPE_KEY,
   SyncEngine,
   type SyncEngineDeps,
   type SyncSignInProvider,
@@ -41,6 +42,7 @@ export type SyncEngineControlSurface = Pick<
   | 'getAccount'
   | 'getLastSyncedAt'
   | 'getLastCycle'
+  | 'getRecoveryEnvelopePresent'
   | 'ensureHydrated'
 >;
 export {
