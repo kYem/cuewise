@@ -381,7 +381,11 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
       // Hydration owns lastSyncedAt too; without this the stamp is only correct because
       // getAccount's network hop happens to outlast two local reads.
       await engine.ensureHydrated();
-      return buildSyncDetails(await engine.getAccount(), engine.getLastSyncedAt());
+      return buildSyncDetails(
+        await engine.getAccount(),
+        engine.getLastSyncedAt(),
+        engine.getRecoveryEnvelopePresent()
+      );
     },
     async getLastCycle(): Promise<LastCycleRead> {
       // No realm to be unreachable across, but the record still comes from storage: an unreadable

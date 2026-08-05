@@ -62,6 +62,13 @@ export interface SyncDetails {
   readonly accountId: string;
   /** Millis of the last successful sync cycle; null before the first one is known. */
   readonly lastSyncedAt: number | null;
+  /**
+   * Whether the server holds a recovery envelope. Only `false` is a finding: without one, losing
+   * this device loses the data, and the next device to enrol mints a second key whose records
+   * nothing here can read. Absent means nobody has answered — either self-heal has not run yet, or
+   * the extension's untyped SW↔page wire came from a build that predates the field.
+   */
+  readonly recoveryEnvelopePresent?: boolean | null;
 }
 
 /**
@@ -70,12 +77,18 @@ export interface SyncDetails {
  */
 export function buildSyncDetails(
   account: { userId: string; email: string | null } | null,
-  lastSyncedAt: number | null
+  lastSyncedAt: number | null,
+  recoveryEnvelopePresent: boolean | null = null
 ): SyncDetails | null {
   if (account === null) {
     return null;
   }
-  return { accountEmail: account.email, accountId: account.userId, lastSyncedAt };
+  return {
+    accountEmail: account.email,
+    accountId: account.userId,
+    lastSyncedAt,
+    recoveryEnvelopePresent,
+  };
 }
 
 /**

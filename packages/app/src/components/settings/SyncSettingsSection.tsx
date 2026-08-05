@@ -703,6 +703,10 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   const showUnknownCycle = status === 'active' && badgeMessage === null && cycleUnknown;
   // `?? null` so an unknown persisted status renders nothing, not an empty prompt.
   const reconnectPrompt = RECONNECT_PROMPT[status] ?? null;
+  // Only an explicit false: null is "self-heal has not answered", and an older service worker
+  // answers details with the field absent entirely. Neither may claim an account has no code.
+  // Gated on 'active' because that is the only status where Regenerate, the one fix, renders.
+  const noRecoveryCode = status === 'active' && details?.recoveryEnvelopePresent === false;
 
   // The enable step's sign-in-options div groups Google today; a "Sign in with Apple"
   // button drops in next to it later.
@@ -729,6 +733,16 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
         >
           <AlertTriangle className="h-3.5 w-3.5 flex-none" />
           recovery code not saved — Regenerate to get a new one
+        </div>
+      )}
+
+      {noRecoveryCode && !unsavedCode && (
+        <div
+          data-testid="no-recovery-code-banner"
+          className="my-1.5 flex items-center gap-2 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs font-medium text-warning"
+        >
+          <AlertTriangle className="h-3.5 w-3.5 flex-none" />
+          no recovery code for this account — Regenerate to create one
         </div>
       )}
 

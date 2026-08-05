@@ -1923,6 +1923,56 @@ describe('SyncEngine.start / stop', () => {
     expect(errorSpy).toHaveBeenCalledWith(
       'Cloud sync has no recovery envelope on the server; regenerate your recovery code to restore it'
     );
+    expect(restarted.getRecoveryEnvelopePresent()).toBe(false);
+  });
+
+  // The extension respawns its worker on every wake, so an unconditional log here is one line per
+  // five minutes for as long as the state lasts.
+  it('names a missing envelope once, not on every worker spawn', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    vi.spyOn(device.apiClient, 'getRecoveryEnvelope').mockResolvedValue(null);
+    const restart = async (): Promise<SyncEngine> => {
+      const engine = new SyncEngine({
+        apiClient: device.apiClient,
+        sessionManager: new SessionManager(device.kv),
+        keyStore: device.kv,
+        scheduler: new FakeScheduler(),
+      });
+      await engine.start();
+      return engine;
+    };
+    await restart();
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    const second = await restart();
+
+    expect(errorSpy).not.toHaveBeenCalled();
+    expect(second.getRecoveryEnvelopePresent()).toBe(false);
+  });
+
+  it('retires the finding once Regenerate rebuilds the envelope', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const missing = vi.spyOn(device.apiClient, 'getRecoveryEnvelope').mockResolvedValue(null);
+    const restarted = new SyncEngine({
+      apiClient: device.apiClient,
+      sessionManager: new SessionManager(device.kv),
+      keyStore: device.kv,
+      scheduler: new FakeScheduler(),
+    });
+    await restarted.start();
+    expect(restarted.getRecoveryEnvelopePresent()).toBe(false);
+    missing.mockRestore();
+
+    await restarted.regenerateRecoveryCode();
+
+    expect(restarted.getRecoveryEnvelopePresent()).toBe(true);
   });
 
   it('keeps syncing when the envelope fetch cannot reach the server', async () => {
