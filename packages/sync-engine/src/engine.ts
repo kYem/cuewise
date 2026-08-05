@@ -961,7 +961,10 @@ export class SyncEngine {
   private async firePush(): Promise<void> {
     this.pushTimer = null;
     if (this.cycleInFlight) {
-      // Re-arm rather than run a second cycle over the top of the one already going.
+      // Clear the deadline before re-arming: otherwise, once the in-flight cycle outlives
+      // PUSH_MAX_WAIT_MS, the stale deadline computes delay 0 forever and this spins instead
+      // of polling. Re-arm rather than run a second cycle over the top of the one already going.
+      this.pushDeadline = null;
       this.schedulePush();
       return;
     }

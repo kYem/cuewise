@@ -9,7 +9,7 @@ import {
 } from '@cuewise/storage';
 import { SessionManager } from '@cuewise/sync-client';
 import { goalFactory, quoteFactory } from '@cuewise/test-utils/factories';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FakeApiClient, FakeSyncServer } from './__fixtures__/fake-api-client';
 import { FakeKvStore } from './__fixtures__/fake-kv-store';
 import { FakeScheduler } from './__fixtures__/fake-scheduler';
@@ -37,6 +37,15 @@ function makeClock(start: number): () => number {
   };
 }
 
+// Every engine createDevice makes, so afterEach can stop() each one — a markMutated call under
+// real timers arms a real 2s setTimeout, and nothing else in this file ever cancels it.
+let devices: Device[] = [];
+
+afterEach(async () => {
+  await Promise.all(devices.map((device) => device.engine.stop().catch(() => {})));
+  devices = [];
+});
+
 /** One "device": its own storage/scheduler/session/clock, sharing the given fake server. */
 function createDevice(
   server: FakeSyncServer,
@@ -58,7 +67,9 @@ function createDevice(
     onRecoveryCode,
     ...overrides,
   });
-  return { kv, apiClient, scheduler, engine, onStatus, onRecoveryCode };
+  const device = { kv, apiClient, scheduler, engine, onStatus, onRecoveryCode };
+  devices.push(device);
+  return device;
 }
 
 /** Points the shared @cuewise/storage helpers at this device's backend for the next await chain. */

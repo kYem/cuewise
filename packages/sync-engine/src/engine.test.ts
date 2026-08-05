@@ -14,7 +14,7 @@ import {
   SYNC_SESSION_KEY,
 } from '@cuewise/sync-client';
 import { goalFactory } from '@cuewise/test-utils/factories';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FakeApiClient, FakeSyncServer } from './__fixtures__/fake-api-client';
 import { FakeKvStore } from './__fixtures__/fake-kv-store';
 import { FakeScheduler } from './__fixtures__/fake-scheduler';
@@ -40,6 +40,17 @@ interface Device {
   onRecoveryCode: ReturnType<typeof vi.fn>;
 }
 
+// Every engine createDevice makes, so afterEach can stop() each one — a markMutated call under
+// real timers arms a real 2s setTimeout, and nothing else in this file ever cancels it.
+let devices: Device[] = [];
+
+afterEach(async () => {
+  // Best-effort: some tests mock scheduler.cancel to reject, and restoreMocks only undoes that
+  // before the NEXT test starts — a rejection here must not turn an already-passed test red.
+  await Promise.all(devices.map((device) => device.engine.stop().catch(() => {})));
+  devices = [];
+});
+
 /** Builds one "device": its own storage/scheduler/session, sharing the given fake server. */
 function createDevice(server: FakeSyncServer, overrides: Partial<SyncEngineDeps> = {}): Device {
   const kv = new FakeKvStore();
@@ -56,7 +67,9 @@ function createDevice(server: FakeSyncServer, overrides: Partial<SyncEngineDeps>
     onRecoveryCode,
     ...overrides,
   });
-  return { kv, apiClient, scheduler, engine, onStatus, onRecoveryCode };
+  const device = { kv, apiClient, scheduler, engine, onStatus, onRecoveryCode };
+  devices.push(device);
+  return device;
 }
 
 /**
@@ -2660,6 +2673,12 @@ describe('SyncEngine.regenerateRecoveryCode', () => {
 });
 
 describe('push on change', () => {
+  // A failed assertion above the trailing vi.useRealTimers() in a test would otherwise leak
+  // fake timers into every test that runs after it in this file.
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('pushes a mutation without waiting for the five-minute wake', async () => {
     vi.useFakeTimers();
     const server = new FakeSyncServer();
@@ -2720,6 +2739,48 @@ describe('push on change', () => {
     expect(syncNow).toHaveBeenCalled();
     vi.useRealTimers();
   });
+
+  it('polls at a fixed cadence instead of spinning once an in-flight cycle outlives the max wait', async () => {
+    vi.useFakeTimers();
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+
+    let release = (): void => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const original = device.apiClient.getChanges.bind(device.apiClient);
+    vi.spyOn(device.apiClient, 'getChanges').mockImplementation(async (since: number) => {
+      await gate;
+      return original(since);
+    });
+    // Attached before "running" so it counts that first call too — see the assertions below.
+    const syncNow = vi.spyOn(device.engine, 'syncNow');
+
+    const running = device.engine.syncNow(); // held open past PUSH_MAX_WAIT_MS
+    await device.engine.markMutated('goals', 'g1');
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+
+    // Past the 10s max wait while the cycle is still stuck: a delay-0 spin would call
+    // setTimeout an unbounded number of times in this window instead of polling every 2s.
+    await vi.advanceTimersByTimeAsync(12_000);
+
+    // ~12s at a 2s cadence is around 6 re-arms, nowhere near a runaway spin's call volume.
+    expect(setTimeoutSpy.mock.calls.length).toBeLessThan(20);
+    // Still just the one call ("running" itself): the deferral must not overlap it.
+    expect(syncNow).toHaveBeenCalledTimes(1);
+
+    release();
+    await running;
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    // Once the blocker cleared, the deferred push still ran a cycle of its own.
+    expect(syncNow).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
+  }, 10_000);
 
   it('defers rather than running a second cycle over one already going', async () => {
     vi.useFakeTimers();
