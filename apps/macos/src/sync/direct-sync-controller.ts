@@ -173,7 +173,15 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
     return creds;
   }
 
+  /** Read-and-clear: the slot is one-shot, so a code left in it would surface on a later attempt. */
+  function takeRecoveryCode(): string | undefined {
+    const code = capturedRecoveryCode;
+    capturedRecoveryCode = undefined;
+    return code;
+  }
+
   // Maps a thrown enable/enroll error to its EnableResult; `trace` labels the 401 log line.
+  // Never carries the code — runEnable attaches that to every arm at once.
   function mapEnableError(err: unknown, trace: string): Extract<EnableResult, { ok: false }> {
     if (err instanceof RecoveryCodeRequiredError) {
       return { ok: false, reason: 'needs-code' };
@@ -202,25 +210,24 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
     try {
       await op();
     } catch (err) {
-      return mapEnableError(err, trace);
+      // Attached to every arm, not just the cancel: enableSync hands a minted code over before the
+      // steps that can throw, and the account it opens outlives the attempt — so a failure that
+      // swallows it locks the user out.
+      return { ...mapEnableError(err, trace), recoveryCode: takeRecoveryCode() };
     }
     if (engine.getStatus() === 'signed_out') {
       // The engine swallows 401s into signed_out rather than rethrowing — this is the LIVE
       // trace for a google one-time code that burned/expired after a successful browser dance.
       logger.warn(`Cloud sync sign-in rejected (401) ${trace}`);
-      return { ok: false, reason: 'auth' };
+      return { ok: false, reason: 'auth', recoveryCode: takeRecoveryCode() };
     }
     if (engine.getStatus() === 'disabled') {
       // enableSync returned without activating, so a disable landed inside it: ok here would
-      // persist creds for a removed account. A code it minted still has to reach the user.
-      const abandonedCode = capturedRecoveryCode;
-      capturedRecoveryCode = undefined;
-      return { ok: false, reason: 'cancelled', recoveryCode: abandonedCode };
+      // persist creds for a removed account.
+      return { ok: false, reason: 'cancelled', recoveryCode: takeRecoveryCode() };
     }
     await persistCreds(creds);
-    const capturedCode = capturedRecoveryCode;
-    capturedRecoveryCode = undefined;
-    return { ok: true, recoveryCode: capturedCode };
+    return { ok: true, recoveryCode: takeRecoveryCode() };
   }
 
   function doEnable(

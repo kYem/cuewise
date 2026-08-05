@@ -177,6 +177,9 @@ export class SyncEngine {
   // null until self-heal has answered once, so a panel on a cold worker cannot read "unknown" as
   // "missing" and claim an account has no recovery path before anything has checked.
   private recoveryEnvelope: boolean | null = null;
+  // Whether the enrol in flight minted a code. Never the code itself: this only decides whether the
+  // "only way back" breadcrumb fires, and the value belongs to the host's one-shot slot.
+  private enrollMintedCode = false;
   private hydration: Promise<void> | null = null;
   // The cancellation token for everything a disable must stop: the cycle, each enrol checkpoint,
   // start(), and any bookkeeping already in flight. Only disableSync bumps it, and only upward.
@@ -211,6 +214,8 @@ export class SyncEngine {
     // would move the epoch before a later snapshot read it, and then match at every checkpoint.
     const epoch = this.accountEpoch;
     const before = this.status;
+    // Per attempt: a previous enable's mint must not make this one's rollback claim a code.
+    this.enrollMintedCode = false;
     try {
       this.setStatus('signing_in');
       // A codeVerifier marks a bounced one-time code rather than an id token; of the providers
@@ -271,11 +276,12 @@ export class SyncEngine {
         logger.error('Cloud sync minted a new data key for an already-enrolled device');
       }
       // Handed over before the guard below, not after — see abandonEnroll.
+      this.enrollMintedCode = true;
       this.deps.onRecoveryCode?.(enrolled.recoveryCodeToShow);
     }
     // Before the key is adopted: everything past here writes for an account that is gone.
     if (this.enrollSuperseded(epoch)) {
-      await this.abandonEnroll(enrolled.recoveryCodeToShow);
+      await this.abandonEnroll(enrolled.recoveryCodeToShow !== undefined);
       return;
     }
     this.dk = enrolled.dk;
@@ -293,12 +299,12 @@ export class SyncEngine {
     // it needs that reset repeating before this enroll walks away.
     if (this.enrollSuperseded(epoch)) {
       await this.bestEffort(() => this.resetMeta(), 'abandoned enroll ledger rollback');
-      await this.abandonEnroll(enrolled.recoveryCodeToShow);
+      await this.abandonEnroll(enrolled.recoveryCodeToShow !== undefined);
       return;
     }
     const outcome = await this.syncNow();
     if (this.enrollSuperseded(epoch)) {
-      await this.abandonEnroll(enrolled.recoveryCodeToShow);
+      await this.abandonEnroll(enrolled.recoveryCodeToShow !== undefined);
       return;
     }
     if (outcome.kind === 'signed-out') {
@@ -313,7 +319,7 @@ export class SyncEngine {
     // recovery code for the account the user disconnected.
     if (this.enrollSuperseded(epoch)) {
       await this.rollbackKey(CLOUD_SYNC_ENABLED_KEY, 'its enabled flag', 'abandoned an enable');
-      await this.abandonEnroll(enrolled.recoveryCodeToShow);
+      await this.abandonEnroll(enrolled.recoveryCodeToShow !== undefined);
       return;
     }
     this.setStatus('active');
@@ -356,7 +362,7 @@ export class SyncEngine {
    * withdrawn — there is no delete call — so a code it minted is the only way back into the
    * account it made, which is why that is reported rather than swallowed.
    */
-  private async abandonEnroll(mintedCode: string | undefined): Promise<void> {
+  private async abandonEnroll(mintedACode: boolean): Promise<void> {
     // Redundant today — disableSync nulls these itself, and it always ran to move the epoch — but
     // held here so the method is a complete rollback rather than one that relies on its caller.
     this.dk = null;
@@ -368,7 +374,7 @@ export class SyncEngine {
     if (!(await this.clearSessionSafely())) {
       logger.error('Cloud sync abandoned an enable but could not clear its session');
     }
-    if (mintedCode !== undefined) {
+    if (mintedACode) {
       logger.error(
         'Cloud sync enable was abandoned after creating an account; its recovery code is the only way back into it'
       );
@@ -392,8 +398,9 @@ export class SyncEngine {
         // abandoned enable would otherwise bury.
         logger.error(`Cloud sync enable failed as it was abandoned: ${describeThrown(err)}`, err);
       }
-      // Through the same rollback: a throw partway can still have persisted the key.
-      await this.abandonEnroll(undefined);
+      // Through the same rollback: a throw partway can still have persisted the key — and can
+      // still have minted a code, which the host surfaces from its own capture slot.
+      await this.abandonEnroll(this.enrollMintedCode);
       return;
     }
     if (err instanceof ApiError && err.status === 401) {
@@ -421,7 +428,9 @@ export class SyncEngine {
     this.accountEpoch += 1;
     await this.stop();
     const survived: string[] = [];
-    if (!(await this.deps.sessionManager.clear())) {
+    // Through clearSessionSafely, like abandonEnroll and handleAuthLoss: bare, a throwing adapter
+    // rejects the whole disable and skips the survived-keys summary below.
+    if (!(await this.clearSessionSafely())) {
       // The token is the one surviving key that is a live credential: it keeps isSignedIn() true
       // and getAccount() resolving the disconnected account.
       survived.push(SYNC_SESSION_KEY);

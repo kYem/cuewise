@@ -1,6 +1,7 @@
 import { logger } from '@cuewise/shared';
 import { ApiError } from '@cuewise/sync-client';
 import type { SyncEngineControlSurface, SyncStatus } from '@cuewise/sync-engine';
+import { CLOUD_SYNC_ENABLED_KEY } from '@cuewise/sync-engine';
 import { FakeSyncServer } from '@cuewise/sync-engine/src/__fixtures__/fake-api-client';
 import { fakeControlSurface } from '@cuewise/sync-engine/src/__fixtures__/fake-control-surface';
 import { FakeKvStore } from '@cuewise/sync-engine/src/__fixtures__/fake-kv-store';
@@ -36,6 +37,38 @@ describe('createDirectSyncController: enable()', () => {
       throw new Error('expected enable to succeed');
     }
     expect(result.recoveryCode).toEqual(expect.any(String));
+  });
+
+  // The mint happens before the enabled-flag write, and the account it opens outlives the failed
+  // attempt — the server envelope has no delete call — so swallowing the code locks the user out.
+  it('surfaces the minted code when the enable throws after minting it', async () => {
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    device.kv.failSetsForKey = CLOUD_SYNC_ENABLED_KEY;
+    const { controller } = buildRealController(device);
+
+    const result = await controller.enable('cred-a', 'Device A');
+
+    expect(result.ok).toBe(false);
+    expect(result).toHaveProperty('recoveryCode', expect.any(String));
+  });
+
+  // The other post-mint exit: the engine swallows a 401 into signed_out rather than throwing, so
+  // this lands on runEnable's status branch instead of its catch.
+  it('surfaces the minted code when the initial sync 401s into signed_out', async () => {
+    vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    device.apiClient.rejectNextGetChangesWith401 = true;
+    const { controller } = buildRealController(device);
+
+    const result = await controller.enable('cred-a', 'Device A');
+
+    expect(result).toMatchObject({ ok: false, reason: 'auth' });
+    expect(result).toHaveProperty('recoveryCode', expect.any(String));
   });
 
   it('omits the recovery code when device #2 enrolls with an existing code', async () => {

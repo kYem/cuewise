@@ -1,3 +1,4 @@
+import { logger } from '@cuewise/shared';
 import { ApiError } from '@cuewise/sync-client';
 import {
   RecoveryCodeError,
@@ -239,6 +240,27 @@ describe('handleSyncControlMessage: enable', () => {
     const result = await handleSyncControlMessage(engine, enableMessage(), deps);
 
     expect(result).toEqual({ ok: true, recoveryCode: 'CW1-BBBBB-BBBBB-BBBBB-BBBBB-BBBBB-BBBBB' });
+  });
+
+  // enableSync hands a minted code over before the steps that can throw, and the account it opens
+  // outlives the attempt — a failure that swallows it locks the user out for good.
+  it.each([
+    ['a generic fault', new Error('storage unreachable'), { reason: 'error' }],
+    ['a 401 after the mint', new ApiError('invalid_token', 401), { reason: 'auth' }],
+  ])('surfaces a minted code when the enable fails with %s', async (_name, thrown, expected) => {
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const engine = fakeControlSurface({ enableSync: vi.fn().mockRejectedValue(thrown) });
+    const deps = fakeDeps({
+      takeRecoveryCode: vi
+        .fn()
+        .mockReturnValueOnce(undefined)
+        .mockReturnValueOnce('CW1-MINTED-BEFORE-THE-THROW'),
+    });
+
+    const result = await handleSyncControlMessage(engine, enableMessage(), deps);
+
+    expect(result).toMatchObject({ ok: false, ...expected });
+    expect(result).toHaveProperty('recoveryCode', 'CW1-MINTED-BEFORE-THE-THROW');
   });
 
   it('drains the capture slot before calling enableSync so a stale code never leaks', async () => {
