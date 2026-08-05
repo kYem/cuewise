@@ -14,7 +14,7 @@ import {
   SYNC_SESSION_KEY,
 } from '@cuewise/sync-client';
 import { goalFactory } from '@cuewise/test-utils/factories';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FakeApiClient, FakeSyncServer } from './__fixtures__/fake-api-client';
 import { FakeKvStore } from './__fixtures__/fake-kv-store';
 import { FakeScheduler } from './__fixtures__/fake-scheduler';
@@ -40,6 +40,17 @@ interface Device {
   onRecoveryCode: ReturnType<typeof vi.fn>;
 }
 
+// Every engine createDevice makes, so afterEach can stop() each one — a markMutated call under
+// real timers arms a real 2s setTimeout, and nothing else in this file ever cancels it.
+let devices: Device[] = [];
+
+afterEach(async () => {
+  // Best-effort: some tests mock scheduler.cancel to reject, and restoreMocks only undoes that
+  // before the NEXT test starts — a rejection here must not turn an already-passed test red.
+  await Promise.all(devices.map((device) => device.engine.stop().catch(() => {})));
+  devices = [];
+});
+
 /** Builds one "device": its own storage/scheduler/session, sharing the given fake server. */
 function createDevice(server: FakeSyncServer, overrides: Partial<SyncEngineDeps> = {}): Device {
   const kv = new FakeKvStore();
@@ -56,7 +67,9 @@ function createDevice(server: FakeSyncServer, overrides: Partial<SyncEngineDeps>
     onRecoveryCode,
     ...overrides,
   });
-  return { kv, apiClient, scheduler, engine, onStatus, onRecoveryCode };
+  const device = { kv, apiClient, scheduler, engine, onStatus, onRecoveryCode };
+  devices.push(device);
+  return device;
 }
 
 /**
@@ -757,6 +770,23 @@ describe('SyncEngine.enableSync', () => {
     // A failed cleanup step must not escape into handleEnableError and repaint this as `error`.
     expect(device.engine.getStatus()).toBe('signed_out');
     expect(device.onStatus).not.toHaveBeenCalledWith('error');
+  });
+
+  // The one disable key that is a live credential: left behind, isSignedIn() keeps answering true
+  // for an account this device has just lost authorisation to.
+  it('names the session token when auth loss cannot clear it', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    vi.spyOn(device.kv, 'remove').mockResolvedValue(false);
+    device.apiClient.rejectAllWith401 = true;
+
+    await device.engine.syncNow();
+
+    expect(device.engine.getStatus()).toBe('signed_out');
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining(SYNC_SESSION_KEY));
   });
 
   it('resumeEnrollWithCode lands signed_out (no throw) when the live-looking session 401s mid-enroll', async () => {
@@ -1906,6 +1936,56 @@ describe('SyncEngine.start / stop', () => {
     expect(errorSpy).toHaveBeenCalledWith(
       'Cloud sync has no recovery envelope on the server; regenerate your recovery code to restore it'
     );
+    expect(restarted.getRecoveryEnvelopePresent()).toBe(false);
+  });
+
+  // The extension respawns its worker on every wake, so an unconditional log here is one line per
+  // five minutes for as long as the state lasts.
+  it('names a missing envelope once, not on every worker spawn', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    vi.spyOn(device.apiClient, 'getRecoveryEnvelope').mockResolvedValue(null);
+    const restart = async (): Promise<SyncEngine> => {
+      const engine = new SyncEngine({
+        apiClient: device.apiClient,
+        sessionManager: new SessionManager(device.kv),
+        keyStore: device.kv,
+        scheduler: new FakeScheduler(),
+      });
+      await engine.start();
+      return engine;
+    };
+    await restart();
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    const second = await restart();
+
+    expect(errorSpy).not.toHaveBeenCalled();
+    expect(second.getRecoveryEnvelopePresent()).toBe(false);
+  });
+
+  it('retires the finding once Regenerate rebuilds the envelope', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const missing = vi.spyOn(device.apiClient, 'getRecoveryEnvelope').mockResolvedValue(null);
+    const restarted = new SyncEngine({
+      apiClient: device.apiClient,
+      sessionManager: new SessionManager(device.kv),
+      keyStore: device.kv,
+      scheduler: new FakeScheduler(),
+    });
+    await restarted.start();
+    expect(restarted.getRecoveryEnvelopePresent()).toBe(false);
+    missing.mockRestore();
+
+    await restarted.regenerateRecoveryCode();
+
+    expect(restarted.getRecoveryEnvelopePresent()).toBe(true);
   });
 
   it('keeps syncing when the envelope fetch cannot reach the server', async () => {
@@ -2314,9 +2394,10 @@ describe('SyncEngine.start / stop', () => {
         return result;
       }
       metaReads += 1;
-      // The second is the push opening its own ledger read; the first was the pull's. Coupled to
-      // that count: a new ledger read anywhere in the cycle re-targets this and must move it.
-      if (metaReads === 2) {
+      // The third is the push opening its own ledger read; the first two are the pull's snapshot
+      // and the re-read its delta write makes. Coupled to that count: a new ledger read anywhere
+      // in the cycle re-targets this and must move it.
+      if (metaReads === 3) {
         disabled = true;
         await device.engine.disableSync();
       }
@@ -2656,5 +2737,231 @@ describe('SyncEngine.regenerateRecoveryCode', () => {
     useStorage(device);
 
     await expect(device.engine.regenerateRecoveryCode()).rejects.toThrow();
+  });
+});
+
+describe('push on change', () => {
+  // A failed assertion above the trailing vi.useRealTimers() in a test would otherwise leak
+  // fake timers into every test that runs after it in this file.
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('pushes a mutation without waiting for the five-minute wake', async () => {
+    vi.useFakeTimers();
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    const goal = goalFactory.build({ id: 'g1' });
+    await setGoals([goal]);
+    server.reset();
+    const syncNow = vi.spyOn(device.engine, 'syncNow');
+
+    await device.engine.markMutated('goals', 'g1');
+    await vi.advanceTimersByTimeAsync(2_000);
+    // The fake clock only drains what it owns, and the push seals with real async crypto, so the
+    // cycle that timer fired has to be awaited before asking what reached the server.
+    await Promise.all(syncNow.mock.results.map((result) => result.value));
+
+    expect(server.allRecords().some((r) => r.entityId === 'g1')).toBe(true);
+    vi.useRealTimers();
+  });
+
+  it('coalesces a burst of mutations into one cycle', async () => {
+    vi.useFakeTimers();
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    const syncNow = vi.spyOn(device.engine, 'syncNow');
+
+    await device.engine.markMutated('goals', 'g1');
+    await vi.advanceTimersByTimeAsync(500);
+    await device.engine.markMutated('goals', 'g1');
+    await vi.advanceTimersByTimeAsync(500);
+    await device.engine.markMutated('goals', 'g1');
+
+    // Each later mutation must replace the pending timer, not add another one alongside it —
+    // an uncancelled extra timer would eventually fire its own cycle, just later and unobserved
+    // by a short window (cyclesInFlight would mask it as a harmless re-arm).
+    expect(vi.getTimerCount()).toBe(1);
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    expect(syncNow).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
+  it('still ships during a continuous stream of edits, at the max wait', async () => {
+    vi.useFakeTimers();
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    const syncNow = vi.spyOn(device.engine, 'syncNow');
+
+    // An edit every second forever would reset a plain debounce and never push.
+    for (let i = 0; i < 12; i += 1) {
+      await device.engine.markMutated('goals', 'g1');
+      await vi.advanceTimersByTimeAsync(1_000);
+    }
+
+    expect(syncNow).toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it('polls at a fixed cadence instead of spinning once an in-flight cycle outlives the max wait', async () => {
+    vi.useFakeTimers();
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+
+    let release = (): void => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const original = device.apiClient.getChanges.bind(device.apiClient);
+    vi.spyOn(device.apiClient, 'getChanges').mockImplementation(async (since: number) => {
+      await gate;
+      return original(since);
+    });
+    // Attached before "running" so it counts that first call too — see the assertions below.
+    const syncNow = vi.spyOn(device.engine, 'syncNow');
+
+    const running = device.engine.syncNow(); // held open past PUSH_MAX_WAIT_MS
+    await device.engine.markMutated('goals', 'g1');
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+
+    // Past the 10s max wait while the cycle is still stuck: a delay-0 spin would call
+    // setTimeout an unbounded number of times in this window instead of polling every 2s.
+    await vi.advanceTimersByTimeAsync(12_000);
+
+    // ~12s at a 2s cadence is around 6 re-arms, nowhere near a runaway spin's call volume.
+    expect(setTimeoutSpy.mock.calls.length).toBeLessThan(20);
+    // Still just the one call ("running" itself): the deferral must not overlap it.
+    expect(syncNow).toHaveBeenCalledTimes(1);
+
+    release();
+    await running;
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    // Once the blocker cleared, the deferred push still ran a cycle of its own.
+    expect(syncNow).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
+  }, 10_000);
+
+  it('defers rather than running a second cycle over one already going', async () => {
+    vi.useFakeTimers();
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+
+    let release = (): void => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const original = device.apiClient.getChanges.bind(device.apiClient);
+    vi.spyOn(device.apiClient, 'getChanges').mockImplementation(async (since: number) => {
+      await gate;
+      return original(since);
+    });
+    // Attached after enableSync's own cycle, so it only counts calls from here on.
+    const syncNow = vi.spyOn(device.engine, 'syncNow');
+
+    const running = device.engine.syncNow();
+    await device.engine.markMutated('goals', 'g1');
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    // The timer fired while the first cycle was still inside getChanges: still just the one call.
+    expect(syncNow).toHaveBeenCalledTimes(1);
+
+    release();
+    await running;
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    // Once the first cycle finished, the deferred push still ran a cycle of its own.
+    expect(syncNow).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
+  });
+
+  it('keeps deferring while an outer cycle outlives an inner one that started later', async () => {
+    vi.useFakeTimers();
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+
+    let release = (): void => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const original = device.apiClient.getChanges.bind(device.apiClient);
+    let calls = 0;
+    vi.spyOn(device.apiClient, 'getChanges').mockImplementation(async (since: number) => {
+      calls += 1;
+      if (calls === 1) {
+        await gate;
+      }
+      return original(since);
+    });
+    const syncNow = vi.spyOn(device.engine, 'syncNow');
+
+    const outer = device.engine.syncNow();
+    // Starts second, finishes first — a boolean flag would report "no cycle in flight" here.
+    await device.engine.syncNow();
+    await device.engine.markMutated('goals', 'g1');
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    expect(syncNow).toHaveBeenCalledTimes(2);
+
+    release();
+    await outer;
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    expect(syncNow).toHaveBeenCalledTimes(3);
+    vi.useRealTimers();
+  });
+
+  it('cancels a pending push when the account is disabled mid-debounce', async () => {
+    // dk is nulled by disableSync regardless, which would push nothing either way — spying on
+    // syncNow, not the server, is what actually proves stop() cancelled the pending timer.
+    vi.useFakeTimers();
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    await device.engine.markMutated('goals', 'g1');
+
+    await device.engine.disableSync();
+    const syncNow = vi.spyOn(device.engine, 'syncNow');
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    expect(syncNow).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it('does not schedule a push for a mutation recorded after the account was disabled', async () => {
+    vi.useFakeTimers();
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    await device.engine.disableSync();
+    const syncNow = vi.spyOn(device.engine, 'syncNow');
+
+    await device.engine.markMutated('goals', 'g1');
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    expect(syncNow).not.toHaveBeenCalled();
+    vi.useRealTimers();
   });
 });

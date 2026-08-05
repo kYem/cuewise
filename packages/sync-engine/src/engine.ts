@@ -58,8 +58,21 @@ export const LAST_SYNCED_AT_KEY = 'cuewise.sync.lastSyncedAt';
  */
 export const LAST_CYCLE_KEY = 'cuewise.sync.lastCycle';
 
+/**
+ * Whether the server holds a recovery envelope for this account. Persisted, not held per process:
+ * the extension respawns its worker on every wake, so an in-memory answer would be recomputed —
+ * and re-logged — every five minutes, and the panel reads this on a cold worker.
+ */
+export const RECOVERY_ENVELOPE_KEY = 'cuewise.sync.recoveryEnvelope';
+
 // The periodic pull backstop cadence (spec §3: "~5 min"); foreground opens trigger sooner via syncNow.
 const PULL_REARM_MINUTES = 5;
+
+// A local edit should not wait for the five-minute wake to leave the device. setTimeout, not
+// the Scheduler port: that port schedules OS wakes in minutes and cannot do seconds.
+const PUSH_DEBOUNCE_MS = 2_000;
+// So a continuous stream of edits still ships instead of resetting the debounce forever.
+const PUSH_MAX_WAIT_MS = 10_000;
 
 // Auth providers the enable flow can exchange for a session. Apple isn't in the type yet only
 // because no client-side Apple bounce driver exists — the enableSync/codeVerifier plumbing it
@@ -161,10 +174,18 @@ export class SyncEngine {
   // False once a stored record turned out to be unreadable: that is not "no cycle ran", and
   // answering it as such is exactly what clears a wedged device's badge.
   private lastCycleKnown = true;
+  // null until self-heal has answered once, so a panel on a cold worker cannot read "unknown" as
+  // "missing" and claim an account has no recovery path before anything has checked.
+  private recoveryEnvelope: boolean | null = null;
   private hydration: Promise<void> | null = null;
   // The cancellation token for everything a disable must stop: the cycle, each enrol checkpoint,
   // start(), and any bookkeeping already in flight. Only disableSync bumps it, and only upward.
   private accountEpoch = 0;
+  private pushTimer: ReturnType<typeof setTimeout> | null = null;
+  private pushDeadline: number | null = null;
+  // A count, not a flag: syncNow is concurrently callable (explicit sync, pull wake, start), and a
+  // second cycle finishing first would otherwise clear it while the first is still running.
+  private cyclesInFlight = 0;
 
   constructor(private readonly deps: SyncEngineDeps) {
     this.now = deps.now ?? Date.now;
@@ -259,6 +280,9 @@ export class SyncEngine {
     }
     this.dk = enrolled.dk;
     this.keyId = enrolled.keyId;
+    // Both enrol paths prove one: initNewKey PUT it, enrollFromEnvelope unwrapped it. Without
+    // this a freshly-connected device reads "unknown" until its next start().
+    await this.recordRecoveryEnvelope(true);
 
     this.setStatus('initial_sync');
     // Unconditionally: the enabled flag survives handleAuthLoss, so its presence cannot mean the
@@ -402,7 +426,13 @@ export class SyncEngine {
       // and getAccount() resolving the disconnected account.
       survived.push(SYNC_SESSION_KEY);
     }
-    for (const key of [SYNC_DATA_KEY, CLOUD_SYNC_ENABLED_KEY, LAST_SYNCED_AT_KEY, LAST_CYCLE_KEY]) {
+    for (const key of [
+      SYNC_DATA_KEY,
+      CLOUD_SYNC_ENABLED_KEY,
+      LAST_SYNCED_AT_KEY,
+      LAST_CYCLE_KEY,
+      RECOVERY_ENVELOPE_KEY,
+    ]) {
       const removed = await this.deps.keyStore.remove(key, 'local');
       if (!removed) {
         survived.push(key);
@@ -420,6 +450,9 @@ export class SyncEngine {
     // After a disable "no cycle" is the truth, so an earlier unreadable record must stop
     // reporting unknown — otherwise a failed hydration outlives the account it described.
     this.lastCycleKnown = true;
+    // Back to unknown, not present: it described the account just removed, and carrying it forward
+    // would answer for whatever account connects next.
+    this.recoveryEnvelope = null;
     this.hydration = null;
     this.setStatus('disabled');
     // Last, and best-effort: an unreadable ledger makes load() throw deterministically, and doing
@@ -441,6 +474,8 @@ export class SyncEngine {
     const mk = await deriveMasterKey(secret);
     const blob = await wrapDataKey(mk, dk, keyId);
     await this.deps.apiClient.putRecoveryEnvelope(blob);
+    // The one repair for a missing envelope, so this is what retires the badge it raised.
+    await this.recordRecoveryEnvelope(true);
     return code;
   }
 
@@ -449,50 +484,55 @@ export class SyncEngine {
    * landed inside it. Never throws: callers read the result. A no-op until a DK is held.
    */
   async syncNow(): Promise<SyncNowResult> {
-    const epoch = this.accountEpoch;
-    const outcome = await this.runCycle(epoch);
-    // Both an abandoned cycle and a whole one for a removed account answer `cancelled`: the stamp
-    // and the record below would re-create the very keys disableSync removed, and handleAuthLoss
-    // would repaint the pill as "Sign-in expired" for a device the user deliberately disconnected.
-    if (outcome.kind === 'cancelled' || this.accountEpoch !== epoch) {
-      logger.debug(
-        `Sync cycle result dropped: the account was disabled mid-cycle (${outcome.kind})`
-      );
-      return { kind: 'cancelled' };
+    this.cyclesInFlight += 1;
+    try {
+      const epoch = this.accountEpoch;
+      const outcome = await this.runCycle(epoch);
+      // Both an abandoned cycle and a whole one for a removed account answer `cancelled`: the stamp
+      // and the record below would re-create the very keys disableSync removed, and handleAuthLoss
+      // would repaint the pill as "Sign-in expired" for a device the user deliberately disconnected.
+      if (outcome.kind === 'cancelled' || this.accountEpoch !== epoch) {
+        logger.debug(
+          `Sync cycle result dropped: the account was disabled mid-cycle (${outcome.kind})`
+        );
+        return { kind: 'cancelled' };
+      }
+      if (outcome.kind === 'signed-out') {
+        await this.bestEffort(() => this.handleAuthLoss(), 'auth-loss cleanup');
+      }
+      if (outcome.kind === 'synced') {
+        await this.bestEffort(() => this.stampLastSynced(), 'lastSyncedAt stamp');
+      }
+      if (outcome.kind === 'failed') {
+        // Logged here, not per caller: this is the only place every caller passes through, and the
+        // only one still holding the error itself (the page realm gets a serialized outcome). Reason
+        // and cause go in the MESSAGE — `message` and `cause` are both non-enumerable, so an object
+        // payload renders as `{}` on JSON surfaces and `[object Object]` on coercing ones.
+        logger.error(
+          `Sync cycle failed (${outcome.reason}); the next scheduled wake will retry: ${describeThrown(outcome.error)}`,
+          outcome.error
+        );
+      }
+      // `no-key` means no cycle ran, so it must not speak for the last one that did. An MV3 alarm
+      // registers before start() and can wake a cold worker ahead of the key load, and that no-op
+      // would otherwise overwrite — durably — the failure the user needs to see.
+      if (outcome.kind !== 'no-key') {
+        const cycle: SyncCycle = { at: this.now(), outcome };
+        this.lastCycle = cycle;
+        this.lastCycleKnown = true;
+        await this.bestEffort(() => this.persistLastCycle(cycle), 'last-cycle persist');
+      }
+      // Re-checked after those writes, not only before them: a disable landing inside one of them
+      // would otherwise leave the removed account's stamp to be hydrated onto whatever comes next,
+      // and hand the caller a `synced` to toast.
+      if (this.accountEpoch !== epoch) {
+        await this.rollbackCycleRecord();
+        return { kind: 'cancelled' };
+      }
+      return outcome;
+    } finally {
+      this.cyclesInFlight -= 1;
     }
-    if (outcome.kind === 'signed-out') {
-      await this.bestEffort(() => this.handleAuthLoss(), 'auth-loss cleanup');
-    }
-    if (outcome.kind === 'synced') {
-      await this.bestEffort(() => this.stampLastSynced(), 'lastSyncedAt stamp');
-    }
-    if (outcome.kind === 'failed') {
-      // Logged here, not per caller: this is the only place every caller passes through, and the
-      // only one still holding the error itself (the page realm gets a serialized outcome). Reason
-      // and cause go in the MESSAGE — `message` and `cause` are both non-enumerable, so an object
-      // payload renders as `{}` on JSON surfaces and `[object Object]` on coercing ones.
-      logger.error(
-        `Sync cycle failed (${outcome.reason}); the next scheduled wake will retry: ${describeThrown(outcome.error)}`,
-        outcome.error
-      );
-    }
-    // `no-key` means no cycle ran, so it must not speak for the last one that did. An MV3 alarm
-    // registers before start() and can wake a cold worker ahead of the key load, and that no-op
-    // would otherwise overwrite — durably — the failure the user needs to see.
-    if (outcome.kind !== 'no-key') {
-      const cycle: SyncCycle = { at: this.now(), outcome };
-      this.lastCycle = cycle;
-      this.lastCycleKnown = true;
-      await this.bestEffort(() => this.persistLastCycle(cycle), 'last-cycle persist');
-    }
-    // Re-checked after those writes, not only before them: a disable landing inside one of them
-    // would otherwise leave the removed account's stamp to be hydrated onto whatever comes next,
-    // and hand the caller a `synced` to toast.
-    if (this.accountEpoch !== epoch) {
-      await this.rollbackCycleRecord();
-      return { kind: 'cancelled' };
-    }
-    return outcome;
   }
 
   private async rollbackCycleRecord(): Promise<void> {
@@ -576,8 +616,9 @@ export class SyncEngine {
    * construction this way, not by trusting adapters and host callbacks (a throwing onStatus would
    * otherwise escape to enableSync's catch and land an enrolled device on `error`).
    */
-  // The step's own return value is discarded: callers that need it must check it themselves.
-  private async bestEffort(step: () => Promise<unknown> | unknown, what: string): Promise<void> {
+  // Void-returning by signature, not by convention: a step that reports failure by RESOLVING would
+  // have that answer swallowed here, so the compiler refuses it and the caller must check instead.
+  private async bestEffort(step: () => Promise<void> | void, what: string): Promise<void> {
     try {
       await step();
     } catch (err) {
@@ -625,6 +666,32 @@ export class SyncEngine {
 
   getLastSyncedAt(): number | null {
     return this.lastSyncedAt;
+  }
+
+  /** null until self-heal has answered once; hosts must not paint "missing" from an unknown. */
+  getRecoveryEnvelopePresent(): boolean | null {
+    return this.recoveryEnvelope;
+  }
+
+  /**
+   * Records what self-heal found and answers whether it is news. Compared against the PERSISTED
+   * value, not the field: a respawned worker starts blank, so an in-memory check would call the
+   * steady state news on every wake — which is the log repeat this exists to stop.
+   */
+  private async recordRecoveryEnvelope(present: boolean): Promise<boolean> {
+    const stored = await this.deps.keyStore.get<boolean>(RECOVERY_ENVELOPE_KEY, 'local');
+    this.recoveryEnvelope = present;
+    if (stored === present) {
+      return false;
+    }
+    const result = await this.deps.keyStore.set(RECOVERY_ENVELOPE_KEY, present, 'local');
+    if (!result.success) {
+      // Non-fatal: the badge is recomputed next start, and losing it costs a repeated log.
+      logger.warn(`Failed to persist the recovery-envelope state: ${result.error.message}`, {
+        error: result.error,
+      });
+    }
+    return true;
   }
 
   /**
@@ -680,7 +747,10 @@ export class SyncEngine {
   private async readPersistedSyncState(epoch: number): Promise<HydrationResult> {
     // One batch read, because `get` collapses "absent" into "read failed" and this is the one
     // place that distinction decides whether a wedged device shows a badge.
-    const stored = await this.deps.keyStore.getMany([LAST_SYNCED_AT_KEY, LAST_CYCLE_KEY], 'local');
+    const stored = await this.deps.keyStore.getMany(
+      [LAST_SYNCED_AT_KEY, LAST_CYCLE_KEY, RECOVERY_ENVELOPE_KEY],
+      'local'
+    );
     if (this.accountEpoch !== epoch) {
       // Installed nothing, but disableSync already cleared the memo; clearing again could drop
       // a newer read's.
@@ -696,6 +766,13 @@ export class SyncEngine {
     const stamp = stored[LAST_SYNCED_AT_KEY];
     if (stamp !== undefined) {
       this.hydrateStamp(stamp);
+    }
+
+    // Only a positively-read boolean; anything else stays null, which the panel paints as nothing
+    // rather than as an account with no recovery path.
+    const envelope = stored[RECOVERY_ENVELOPE_KEY];
+    if (envelope?.readable === true && typeof envelope.value === 'boolean') {
+      this.recoveryEnvelope = envelope.value;
     }
 
     const record = stored[LAST_CYCLE_KEY];
@@ -802,6 +879,7 @@ export class SyncEngine {
 
     try {
       await selfHealKeyBlob(this.keyDeps());
+      await this.recordRecoveryEnvelope(true);
     } catch (err) {
       // Before the type test, not inside it: disableSync clears the session first, so self-heal's
       // envelope fetch usually 401s rather than raising a SelfHeal* error — and the rethrow makes
@@ -827,9 +905,13 @@ export class SyncEngine {
       // abandoning here left an enrolled device reading "off" on macOS after one offline launch.
       if (err instanceof SelfHealUnrecoverableError) {
         // Reaching active is also what keeps Regenerate recovery code, the one fix, on screen.
-        logger.error(
-          'Cloud sync has no recovery envelope on the server; regenerate your recovery code to restore it'
-        );
+        // Logged only on the transition: the extension respawns its worker every wake, so an
+        // unconditional log here is one line per five minutes for as long as the state lasts.
+        if (await this.recordRecoveryEnvelope(false)) {
+          logger.error(
+            'Cloud sync has no recovery envelope on the server; regenerate your recovery code to restore it'
+          );
+        }
       } else {
         logger.error(
           `Cloud sync self-heal could not reach the server: ${describeThrown(err)}`,
@@ -889,6 +971,11 @@ export class SyncEngine {
   /** Cancels the armed pull wake. Does not touch session/keys — call disableSync() for that. */
   async stop(): Promise<void> {
     await this.deps.scheduler.cancel(SYNC_PULL_WAKE_ID);
+    if (this.pushTimer !== null) {
+      clearTimeout(this.pushTimer);
+      this.pushTimer = null;
+      this.pushDeadline = null;
+    }
   }
 
   /**
@@ -903,15 +990,54 @@ export class SyncEngine {
 
   async markMutated(collection: string, entityId: string): Promise<void> {
     await this.tracker.markMutated(collection, entityId);
+    this.schedulePush();
   }
 
   /** Bulk form of markMutated: one meta load/save for the whole id list, not one per id. */
   async markMutatedBulk(collection: string, entityIds: string[]): Promise<void> {
     await this.tracker.markMutatedBulk(collection, entityIds);
+    this.schedulePush();
   }
 
   async markDeleted(collection: string, entityId: string): Promise<void> {
     await this.tracker.markDeleted(collection, entityId);
+    this.schedulePush();
+  }
+
+  private schedulePush(): void {
+    // Statuses whose wake is cancelled or whose cycles cannot complete; enableSync re-arms.
+    if (
+      this.status === 'disabled' ||
+      this.status === 'signed_out' ||
+      this.status === 'needs_enroll'
+    ) {
+      return;
+    }
+    const now = this.now();
+    if (this.pushDeadline === null) {
+      this.pushDeadline = now + PUSH_MAX_WAIT_MS;
+    }
+    const delay = Math.min(PUSH_DEBOUNCE_MS, Math.max(0, this.pushDeadline - now));
+    if (this.pushTimer !== null) {
+      clearTimeout(this.pushTimer);
+    }
+    this.pushTimer = setTimeout(() => {
+      void this.firePush();
+    }, delay);
+  }
+
+  private async firePush(): Promise<void> {
+    this.pushTimer = null;
+    if (this.cyclesInFlight > 0) {
+      // Clear the deadline before re-arming: otherwise, once the in-flight cycle outlives
+      // PUSH_MAX_WAIT_MS, the stale deadline computes delay 0 forever and this spins instead
+      // of polling. Re-arm rather than run a second cycle over the top of the one already going.
+      this.pushDeadline = null;
+      this.schedulePush();
+      return;
+    }
+    this.pushDeadline = null;
+    await this.syncNowLoopSafe();
   }
 
   // LOOP callers must never let a transient failure (e.g. offline) kill the backstop poll
@@ -962,22 +1088,19 @@ export class SyncEngine {
   // Only the cursor: widening this would drop the quarantine list too, and the device would
   // re-quarantine the same records on its next pull, re-toasting the user every time.
   private async resetPullCursor(): Promise<void> {
-    const meta = await this.meta.load();
-    if (meta.cursor === 0) {
-      return;
-    }
-    meta.cursor = 0;
-    await this.meta.save(meta);
+    await this.meta.update((meta) => {
+      meta.cursor = 0;
+    });
   }
 
   private async resetMeta(): Promise<void> {
-    const meta = await this.meta.load();
-    meta.cursor = 0;
-    meta.dirty = {};
-    meta.hlcs = {};
-    meta.tombstones = [];
-    meta.quarantine = [];
-    await this.meta.save(meta);
+    await this.meta.update((meta) => {
+      meta.cursor = 0;
+      meta.dirty = {};
+      meta.hlcs = {};
+      meta.tombstones = [];
+      meta.quarantine = [];
+    });
   }
 
   // Auth 401 (spec §5): drop the session, stop the loop, keep local data + DK. User re-enables.
@@ -985,7 +1108,13 @@ export class SyncEngine {
     // Status first, steps independent: a partial cleanup failure must never leave the engine
     // reporting health — armPullLoopUnlessOff reads that status to decide whether to poll on.
     await this.bestEffort(() => this.setStatus('signed_out'), 'signed-out status notification');
-    await this.bestEffort(() => this.deps.sessionManager.clear(), 'session clear');
+    // Not through bestEffort: clear() reports a surviving token by resolving false, and that token
+    // is a live credential — it keeps isSignedIn() true for an account this device just lost.
+    if (!(await this.clearSessionSafely())) {
+      logger.error(
+        `Cloud sync lost its authorisation but could not clear the session: ${SYNC_SESSION_KEY}`
+      );
+    }
     await this.bestEffort(() => this.stop(), 'pull-wake cancel');
   }
 }

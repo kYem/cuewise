@@ -772,6 +772,42 @@ describe('SyncSettingsSectionComponent', () => {
     expect(screen.queryByTestId('unsaved-code-banner')).not.toBeInTheDocument();
   });
 
+  it('names an account with no recovery envelope, pointing at the one repair', async () => {
+    const controller = new FakeSyncController();
+    controller.scriptDetails({
+      accountEmail: 'kes@example.com',
+      accountId: 'acct-1',
+      lastSyncedAt: null,
+      recoveryEnvelopePresent: false,
+    });
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+
+    expect(await screen.findByTestId('no-recovery-code-banner')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Regenerate recovery code/i })).toBeInTheDocument();
+  });
+
+  // null is "self-heal has not answered", and an older service worker omits the field entirely.
+  // Painting either as a missing code tells a healthy account its data is unrecoverable.
+  it.each([
+    ['not yet answered', { recoveryEnvelopePresent: null }],
+    ['answered present', { recoveryEnvelopePresent: true }],
+    ['absent, from a service worker that predates the field', {}],
+  ])('stays quiet when the envelope is %s', async (_name, envelope) => {
+    const controller = new FakeSyncController();
+    controller.scriptDetails({
+      accountEmail: 'kes@example.com',
+      accountId: 'acct-1',
+      lastSyncedAt: null,
+      ...envelope,
+    });
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+
+    await screen.findByText(/kes@example.com/);
+    expect(screen.queryByTestId('no-recovery-code-banner')).not.toBeInTheDocument();
+  });
+
   it('tracks the pill text through status changes', () => {
     const controller = new FakeSyncController();
     renderSection(controller);
@@ -814,6 +850,42 @@ describe('SyncSettingsSectionComponent', () => {
 
     expect(await screen.findByTestId('sync-account-label')).toHaveTextContent('Account: 1b0dc90d…');
     expect(screen.getByTestId('sync-device-label')).not.toHaveTextContent('Last synced');
+  });
+
+  it('holds the account line open with a skeleton while the details fetch is in flight', async () => {
+    const controller = new FakeSyncController();
+    controller.deferNextDetails();
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+
+    expect(await screen.findByTestId('sync-account-skeleton')).toBeInTheDocument();
+    expect(screen.queryByTestId('sync-account-label')).not.toBeInTheDocument();
+
+    act(() =>
+      controller.resolveDetails({
+        accountEmail: 'kes@example.com',
+        accountId: 'user-1',
+        lastSyncedAt: null,
+      })
+    );
+
+    expect(await screen.findByTestId('sync-account-label')).toBeInTheDocument();
+    expect(screen.queryByTestId('sync-account-skeleton')).not.toBeInTheDocument();
+  });
+
+  it('retires the skeleton when the details fetch comes back unavailable', async () => {
+    // A skeleton that outlives its fetch is a lie: it would pulse for the rest of the mount.
+    const controller = new FakeSyncController();
+    controller.deferNextDetails();
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+    await screen.findByTestId('sync-account-skeleton');
+
+    act(() => controller.resolveDetails(null));
+
+    await waitFor(() =>
+      expect(screen.queryByTestId('sync-account-skeleton')).not.toBeInTheDocument()
+    );
   });
 
   it('fetches details once per mount, not on every active/syncing flip', async () => {
@@ -954,6 +1026,9 @@ describe('SyncSettingsSectionComponent', () => {
     act(() => controller.setStatus('active'));
     await waitFor(() => expect(warnSpy).toHaveBeenCalled());
     expect(screen.queryByTestId('sync-account-label')).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.queryByTestId('sync-account-skeleton')).not.toBeInTheDocument()
+    );
 
     act(() => controller.setStatus('syncing'));
     expect(await screen.findByText('Signed in as kes@example.com')).toBeInTheDocument();

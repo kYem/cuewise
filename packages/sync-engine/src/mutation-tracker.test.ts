@@ -45,6 +45,18 @@ describe('MutationTracker', () => {
     expect(saved.tombstones).not.toContain('goals/g3');
   });
 
+  it('keeps both marks when two mutations race', async () => {
+    const meta = new SyncMetadataStore(new FakeKvStore());
+    const tracker = new MutationTracker(meta, () => 1000);
+
+    await Promise.all([tracker.markMutated('goals', 'g1'), tracker.markDeleted('quotes', 'q1')]);
+
+    const saved = await meta.load();
+    expect(saved.dirty.goals).toEqual(['g1']);
+    expect(saved.dirty.quotes).toEqual(['q1']);
+    expect(saved.tombstones).toEqual(['quotes/q1']);
+  });
+
   describe('markMutatedBulk', () => {
     it('marks every id dirty with distinct advancing hlcs in a single save', async () => {
       const kv = new FakeKvStore();

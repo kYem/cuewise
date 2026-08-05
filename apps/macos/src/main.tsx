@@ -14,6 +14,7 @@ import { NoopScheduler, TauriNotifier, TauriScheduler, WebNotifier } from './pla
 import { createTauriOAuthDriver } from './platform/oauth-driver';
 import { initPosture } from './posture/posture-controller';
 import { createDirectSyncController } from './sync/direct-sync-controller';
+import { startFocusSync } from './sync/focus-sync';
 import { TrayStatusBridge } from './tray/TrayStatusBridge';
 
 const rootElement = document.getElementById('root');
@@ -78,6 +79,7 @@ if (window.location.hash === '#glow') {
     syncEngine.start().catch((error) => {
       logger.error('Sync engine failed to start', error);
     });
+    startFocusSync(controller);
   }
 
   // Restore posture tracking if it was left on last session (macOS-only, opt-in).

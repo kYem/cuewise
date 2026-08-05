@@ -250,18 +250,7 @@ describe('createDirectSyncController: enable()', () => {
       toast,
       buildEngine: (trampolines) => {
         trampolines.onQuarantine('goals/g1');
-        return {
-          enableSync: vi.fn().mockResolvedValue(undefined),
-          disableSync: vi.fn().mockResolvedValue(undefined),
-          regenerateRecoveryCode: vi.fn().mockResolvedValue('unused'),
-          resumeEnrollWithCode: vi.fn().mockResolvedValue(undefined),
-          getAccount: vi.fn().mockResolvedValue(null),
-          getLastSyncedAt: vi.fn().mockReturnValue(null),
-          syncNow: vi.fn().mockResolvedValue(undefined),
-          getStatus: vi.fn().mockReturnValue('active' as SyncStatus),
-          getLastCycle: vi.fn().mockReturnValue({ known: true, cycle: null }),
-          ensureHydrated: vi.fn().mockResolvedValue(undefined),
-        };
+        return fakeControlSurface();
       },
     });
 
@@ -611,6 +600,8 @@ describe('createDirectSyncController: getDetails()', () => {
       accountEmail: 'kes@example.com',
       accountId: 'user-1',
       lastSyncedAt: expect.any(Number),
+      // The enrol created it, so a device that has only just connected already knows.
+      recoveryEnvelopePresent: true,
     });
   });
 

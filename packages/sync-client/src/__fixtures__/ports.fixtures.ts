@@ -7,9 +7,9 @@ import {
   storedValue,
 } from '@cuewise/shared';
 
-/** Map-backed KeyValueStore for tests; `set` succeeds unless `failWrites` is set. */
+/** Map-backed KeyValueStore for tests; writes and removes succeed unless told to fail. */
 export function createInMemoryKeyValueStore(
-  opts: { failWrites?: boolean; supportsSync?: boolean } = {}
+  opts: { failWrites?: boolean; failRemoves?: boolean; supportsSync?: boolean } = {}
 ): KeyValueStore & { data: Map<string, unknown> } {
   const data = new Map<string, unknown>();
 
@@ -33,8 +33,15 @@ export function createInMemoryKeyValueStore(
       data.set(`${area}:${key}`, value);
       return { success: true } as const;
     },
+    // Idempotent like the real adapters: removing an absent key SUCCEEDS. Answering Map.delete
+    // here reported "nothing to remove" as a surviving value, which is how a caller learns a
+    // credential outlived its account.
     async remove(key: string, area: StorageArea): Promise<boolean> {
-      return data.delete(`${area}:${key}`);
+      if (opts.failRemoves === true) {
+        return false;
+      }
+      data.delete(`${area}:${key}`);
+      return true;
     },
     async getMany(keys: string[], area: StorageArea): Promise<StoredValues> {
       const result: StoredValues = {};

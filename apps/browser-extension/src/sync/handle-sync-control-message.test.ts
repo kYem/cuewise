@@ -29,6 +29,7 @@ describe('handleSyncControlMessage: details', () => {
         accountEmail: 'kes@example.com',
         accountId: 'u1',
         lastSyncedAt: 1_700_000_000_000,
+        recoveryEnvelopePresent: true,
       },
     });
   });

@@ -1,5 +1,6 @@
 import { type DataKey, DecryptError, EnvelopeParseError } from '@cuewise/crypto';
 import {
+  hlcCompare,
   hlcDecode,
   hlcEncode,
   hlcReceive,
@@ -35,11 +36,63 @@ export interface CycleDeps {
   isCancelled: () => boolean;
 }
 
-async function saveUnlessCancelled(deps: CycleDeps, meta: SyncMeta): Promise<boolean> {
+/**
+ * One pull's working ledger. `meta` is the snapshot it resolves conflicts against and mutates as
+ * records apply; `applied` and `quarantined` name the keys it decided something about, and it may
+ * claim each only while the stored ledger has not moved that key on past it meanwhile. Everything
+ * else in the stored ledger — above all `dirty` — belongs to whoever wrote it.
+ */
+interface PullState {
+  meta: SyncMeta;
+  applied: Set<string>;
+  /** Keys whose quarantine membership this pull changed — not merely re-observed. */
+  quarantined: Set<string>;
+  /** The server discarded this device's cursor, so the merge must rewind it rather than advance. */
+  cursorReset: boolean;
+}
+
+/** One key's membership in a ledger list, mirrored from what the pull decided for it. */
+function withMembership(list: string[], key: string, member: boolean): string[] {
+  if (!member) {
+    return list.filter((k) => k !== key);
+  }
+  if (list.includes(key)) {
+    return list;
+  }
+  return [...list, key];
+}
+
+/** Applies only what the pull owns onto a freshly-loaded ledger; see PullState. */
+function mergePull(fresh: SyncMeta, pull: PullState, wallMs: number): void {
+  if (pull.cursorReset) {
+    fresh.cursor = 0;
+  } else {
+    fresh.cursor = Math.max(fresh.cursor, pull.meta.cursor);
+  }
+  fresh.clock = hlcEncode(hlcReceive(hlcDecode(fresh.clock), hlcDecode(pull.meta.clock), wallMs));
+  for (const key of pull.quarantined) {
+    fresh.quarantine = withMembership(fresh.quarantine, key, pull.meta.quarantine.includes(key));
+  }
+  for (const key of pull.applied) {
+    const held = fresh.hlcs[key];
+    // An edit stamped this key while the pull was in flight, so the pull is the older news of the
+    // two. Writing its hlc back would have the next push send that edit under a stamp every peer
+    // already holds — LWW ties, and the edit would live on this device alone.
+    if (held !== undefined && hlcCompare(hlcDecode(pull.meta.hlcs[key]), hlcDecode(held)) <= 0) {
+      continue;
+    }
+    fresh.hlcs[key] = pull.meta.hlcs[key];
+    fresh.tombstones = withMembership(fresh.tombstones, key, pull.meta.tombstones.includes(key));
+  }
+}
+
+async function savePullUnlessCancelled(deps: CycleDeps, pull: PullState): Promise<boolean> {
   if (deps.isCancelled()) {
     return false;
   }
-  await deps.meta.save(meta);
+  // `update` enqueues synchronously, and no await may come between it and the check above: a
+  // disable slipping into that gap would reset the ledger first and have this delta restore it.
+  await deps.meta.update((fresh) => mergePull(fresh, pull, (deps.now ?? Date.now)()));
   return true;
 }
 
@@ -65,6 +118,8 @@ export const PULL_PAGE = 500;
 interface DirtyRecord {
   collection: string;
   entityId: string;
+  /** The hlc that was sealed into `record`; the ack only speaks for that version — see clearAcked. */
+  hlc: string;
   record: PushRecord;
 }
 
@@ -97,16 +152,17 @@ export async function pushOnce(deps: CycleDeps): Promise<PushResult> {
     }
     const batch = dirtyRecords.slice(start, start + MAX_PUSH_BATCH);
     await deps.transport.pushChanges(batch.map((item) => item.record));
-    clearAcked(meta, batch);
-    // After the round trip, not just before: `save` rewrites the whole ledger from a pre-disable
-    // snapshot, restoring the cursor and hlcs disableSync cleared. The lost ack costs one re-push.
+    // After the round trip: the server already holds these records, and that has to be said. The
+    // skipped write is belt-and-braces — clearAcked's hlc guard no-ops on a reset ledger anyway.
     if (deps.isCancelled()) {
       logger.error(
         `Cloud sync stopped a push for a disconnected account, but its server had already accepted ${batch.length} records`
       );
       return { kind: 'cancelled' };
     }
-    await deps.meta.save(meta);
+    // A delta, not the snapshot above: anything marked dirty during the round trip must survive.
+    // Enqueued synchronously after that check, so nothing may await between the two.
+    await deps.meta.update((fresh) => clearAcked(fresh, batch));
   }
   logger.debug(`Sync push sent ${dirtyRecords.length} record(s)`, {
     byCollection: tallyByCollection(dirtyRecords.map((item) => item.collection)),
@@ -140,16 +196,20 @@ async function buildDirtyRecords(deps: CycleDeps, meta: SyncMeta): Promise<Dirty
       const entity = all[entityId] ?? null;
       const body: RecordBody = { entity, hlc };
       const record = await toPushRecord(deps.dk, deps.keyId, collection, entityId, body);
-      dirtyRecords.push({ collection, entityId, record });
+      dirtyRecords.push({ collection, entityId, hlc, record });
     }
   }
 
   return dirtyRecords;
 }
 
-// Ack clears the pushed ids from dirty (pruning empty collections) and resolves their tombstones.
+// Clears the pushed ids from dirty (pruning empty collections) and resolves their tombstones. An
+// id whose hlc moved during the round trip was re-edited, so the ack does not speak for it.
 function clearAcked(meta: SyncMeta, batch: DirtyRecord[]): void {
-  for (const { collection, entityId } of batch) {
+  for (const { collection, entityId, hlc } of batch) {
+    if (meta.hlcs[SyncMetadataStore.entityKey(collection, entityId)] !== hlc) {
+      continue;
+    }
     const ids = meta.dirty[collection];
     if (ids === undefined) {
       continue;
@@ -178,11 +238,16 @@ export type PullResult =
 
 /** Pulls remote changes in seq order, resolves each via the strategy, and applies the winners. */
 export async function pullOnce(deps: CycleDeps): Promise<PullResult> {
-  const meta = await deps.meta.load();
+  const pull: PullState = {
+    meta: await deps.meta.load(),
+    applied: new Set(),
+    quarantined: new Set(),
+    cursorReset: false,
+  };
   // Once per collection per pull — a page of unknown records is one line, not N.
   const warnedUnknownCollections = new Set<string>();
   let appliedCount = 0;
-  const startCursor = meta.cursor;
+  const startCursor = pull.meta.cursor;
   const appliedCollections: string[] = [];
 
   let pageSize = PULL_PAGE;
@@ -192,11 +257,12 @@ export async function pullOnce(deps: CycleDeps): Promise<PullResult> {
     }
     let result: { records: SyncRecord[]; cursor: number };
     try {
-      result = await deps.transport.getChanges(meta.cursor);
+      result = await deps.transport.getChanges(pull.meta.cursor);
     } catch (err) {
       if (err instanceof ApiError && err.status === 409 && err.code === 'resync_required') {
-        meta.cursor = 0;
-        if (!(await saveUnlessCancelled(deps, meta))) {
+        pull.meta.cursor = 0;
+        pull.cursorReset = true;
+        if (!(await savePullUnlessCancelled(deps, pull))) {
           return cancelledPull(appliedCount);
         }
         return { kind: 'resynced' };
@@ -209,10 +275,10 @@ export async function pullOnce(deps: CycleDeps): Promise<PullResult> {
       if (deps.isCancelled()) {
         return cancelledPull(appliedCount);
       }
-      const applied = await applyPulledRecord(deps, meta, rec, warnedUnknownCollections);
+      const applied = await applyPulledRecord(deps, pull, rec, warnedUnknownCollections);
       if (applied === 'failed') {
         // Apply-before-advance: the write failed, so stop here and leave the cursor before it.
-        if (!(await saveUnlessCancelled(deps, meta))) {
+        if (!(await savePullUnlessCancelled(deps, pull))) {
           return cancelledPull(appliedCount);
         }
         return { kind: 'stalled', collection: rec.collection, entityId: rec.entityId };
@@ -224,12 +290,12 @@ export async function pullOnce(deps: CycleDeps): Promise<PullResult> {
     }
   }
 
-  if (!(await saveUnlessCancelled(deps, meta))) {
+  if (!(await savePullUnlessCancelled(deps, pull))) {
     return cancelledPull(appliedCount);
   }
   logger.debug(`Sync pull applied ${appliedCount} record(s)`, {
     byCollection: tallyByCollection(appliedCollections),
-    cursor: `${startCursor} -> ${meta.cursor}`,
+    cursor: `${startCursor} -> ${pull.meta.cursor}`,
   });
   return { kind: 'complete' };
 }
@@ -239,10 +305,11 @@ type ApplyResult = 'wrote' | 'skipped' | 'failed';
 
 async function applyPulledRecord(
   deps: CycleDeps,
-  meta: SyncMeta,
+  pull: PullState,
   rec: SyncRecord,
   warnedUnknownCollections: Set<string>
 ): Promise<ApplyResult> {
+  const { meta } = pull;
   const key = SyncMetadataStore.entityKey(rec.collection, rec.entityId);
 
   let incoming: RecordBody;
@@ -254,6 +321,7 @@ async function applyPulledRecord(
     }
     if (!meta.quarantine.includes(key)) {
       meta.quarantine.push(key);
+      pull.quarantined.add(key);
       deps.onQuarantine?.(key);
       // Metadata only — collection/entityId/seq — never the ciphertext or decoded payload.
       logger.warn('Quarantined undecryptable sync record', {
@@ -269,6 +337,7 @@ async function applyPulledRecord(
   // Decrypt succeeded: a previously-quarantined key has recovered (spec §5.3 self-heal).
   if (meta.quarantine.includes(key)) {
     meta.quarantine = meta.quarantine.filter((q) => q !== key);
+    pull.quarantined.add(key);
   }
 
   const binding = deps.bindings.find((b) => b.name === rec.collection);
@@ -306,6 +375,7 @@ async function applyPulledRecord(
       return 'failed';
     }
     meta.hlcs[key] = resolution.body.hlc;
+    pull.applied.add(key);
     meta.clock = hlcEncode(
       hlcReceive(hlcDecode(meta.clock), hlcDecode(resolution.body.hlc), (deps.now ?? Date.now)())
     );
