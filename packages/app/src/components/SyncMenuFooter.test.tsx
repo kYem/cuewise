@@ -1,8 +1,18 @@
+import { logger } from '@cuewise/shared';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { FakeSyncController } from '../sync/__fixtures__/fake-sync-controller';
 import { SyncControllerContext } from '../sync/sync-controller';
 import { SyncMenuFooter } from './SyncMenuFooter';
+
+const toastError = vi.fn();
+const toastSuccess = vi.fn();
+const toastWarning = vi.fn();
+vi.mock('../stores/toast-store', () => ({
+  useToastStore: {
+    getState: () => ({ error: toastError, success: toastSuccess, warning: toastWarning }),
+  },
+}));
 
 function renderFooter(controller: FakeSyncController | null, onOpenSettings = vi.fn()) {
   if (controller === null) {
@@ -153,5 +163,92 @@ describe('SyncMenuFooter', () => {
     expect(row).toHaveAccessibleName(/Select to open settings\./);
     const accessibleName = row.getAttribute('aria-label') ?? '';
     expect(accessibleName).not.toMatch(/select to sync now/i);
+  });
+
+  it('logs and toasts when syncNow rejects, and leaves the row usable again', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const controller = new FakeSyncController();
+    controller.setStatus('active');
+    controller.scriptDetails({
+      accountEmail: 'a@b.c',
+      accountId: 'acct-1',
+      lastSyncedAt: Date.now() - 60_000,
+    });
+    controller.failNext('syncNow');
+    renderFooter(controller);
+    await screen.findByText('a@b.c');
+
+    fireEvent.click(screen.getByTestId('sync-menu-footer'));
+
+    await waitFor(() =>
+      expect(toastError).toHaveBeenCalledWith("Couldn't sync right now — please try again.")
+    );
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Cloud sync sync-now failed'),
+      expect.any(Error)
+    );
+    expect(screen.getByTestId('sync-menu-footer')).not.toBeDisabled();
+  });
+
+  it('shows a settings icon rather than the refresh icon when settings-routing is needed', async () => {
+    const controller = new FakeSyncController();
+    controller.setStatus('needs_reauth');
+
+    const { container } = renderFooter(controller);
+    await screen.findByTestId('sync-menu-footer');
+
+    expect(container.querySelector('.lucide-settings')).toBeInTheDocument();
+    expect(container.querySelector('.lucide-refresh-cw')).not.toBeInTheDocument();
+  });
+
+  it('keeps a fresher details paint when an older status-transition fetch resolves late', async () => {
+    const controller = new FakeSyncController();
+    controller.emitsSyncingDuringSyncNow = true;
+    controller.setStatus('active');
+    controller.scriptDetails({
+      accountEmail: 'a@b.c',
+      accountId: 'acct-1',
+      lastSyncedAt: Date.now() - 60 * 60_000,
+    });
+    renderFooter(controller);
+    await screen.findByText('a@b.c');
+
+    // syncNow() flips status to 'syncing' synchronously (macOS-style), starting a details fetch —
+    // held back so it is still the OLDEST in-flight fetch when it finally resolves, below.
+    controller.deferNextDetails();
+    controller.deferNextSyncNow();
+    fireEvent.click(screen.getByTestId('sync-menu-footer'));
+
+    await waitFor(() =>
+      expect(controller.calls.filter((call) => call.method === 'getDetails')).toHaveLength(2)
+    );
+
+    // What the back-to-active transition and the click's own refresh will each see.
+    controller.scriptDetails({
+      accountEmail: 'a@b.c',
+      accountId: 'acct-1',
+      lastSyncedAt: Date.now(),
+    });
+    controller.scriptDetails({
+      accountEmail: 'a@b.c',
+      accountId: 'acct-1',
+      lastSyncedAt: Date.now(),
+    });
+    await act(async () => {
+      controller.resolveSyncNow({ kind: 'synced' });
+    });
+
+    expect(await screen.findByText(/Synced (Just now|0 min ago)/)).toBeInTheDocument();
+
+    await act(async () => {
+      controller.resolveDetails({
+        accountEmail: 'STALE@EXAMPLE.COM',
+        accountId: 'acct-1',
+        lastSyncedAt: null,
+      });
+    });
+
+    expect(screen.queryByText('STALE@EXAMPLE.COM')).not.toBeInTheDocument();
+    expect(screen.getByText('a@b.c')).toBeInTheDocument();
   });
 });

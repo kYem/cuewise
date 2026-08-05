@@ -1,6 +1,8 @@
-import { RefreshCw } from 'lucide-react';
+import { describeThrown, logger } from '@cuewise/shared';
+import { RefreshCw, Settings } from 'lucide-react';
 import type React from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useToastStore } from '../stores/toast-store';
 import { type SyncDetails, type SyncUiStatus, useSyncController } from '../sync/sync-controller';
 import { formatMillisAgo } from '../utils/reminder-date-utils';
 
@@ -23,19 +25,18 @@ const LABELS: Partial<Record<SyncUiStatus, string>> = {
   needs_enroll: 'Needs recovery code',
 };
 
-/**
- * A single `menuitem` button, not a div-with-a-button: the quick menu is `role="menu"`, which may
- * only contain menuitem/menuitemcheckbox/menuitemradio/group/separator — a footer div would be
- * announced wrong or skipped. The visible email/status/icon markup is aria-hidden and carries no
- * meaning of its own; aria-label is the one accessible name, built from the same state so the two
- * can never disagree.
- */
+// `role="menu"` may only contain menuitem/menuitemcheckbox/menuitemradio/group/separator, so this
+// is one `menuitem` button, not a div-with-a-button; the visible markup below is aria-hidden.
 export const SyncMenuFooter: React.FC<SyncMenuFooterProps> = ({ onOpenSettings }) => {
   const controller = useSyncController();
   const [status, setStatus] = useState<SyncUiStatus | null>(() => controller?.getStatus() ?? null);
   const [details, setDetails] = useState<SyncDetails | null>(null);
   const [detailsPending, setDetailsPending] = useState(false);
   const [busy, setBusy] = useState(false);
+  // Guards two concurrent getDetails() callers: a host that emits 'syncing' mid-syncNow (macOS)
+  // re-fetches on both that transition and the back-to-active one, while handleSync fetches its
+  // own refresh — only the fetch started last may paint.
+  const detailsGenRef = useRef(0);
 
   useEffect(() => {
     if (controller === null) {
@@ -51,17 +52,19 @@ export const SyncMenuFooter: React.FC<SyncMenuFooterProps> = ({ onOpenSettings }
     if (controller === null || status === null || status === 'off') {
       return;
     }
-    let cancelled = false;
+    detailsGenRef.current += 1;
+    const gen = detailsGenRef.current;
     setDetailsPending(true);
     controller.getDetails().then((next) => {
-      if (!cancelled) {
-        setDetailsPending(false);
+      if (detailsGenRef.current !== gen) {
+        return;
+      }
+      setDetailsPending(false);
+      // A transient null (offline, slow host) must not blank out details a fresher fetch painted.
+      if (next !== null) {
         setDetails(next);
       }
     });
-    return () => {
-      cancelled = true;
-    };
   }, [controller, status]);
 
   if (controller === null || status === null || status === 'off') {
@@ -83,7 +86,15 @@ export const SyncMenuFooter: React.FC<SyncMenuFooterProps> = ({ onOpenSettings }
     setBusy(true);
     try {
       await controller.syncNow();
-      setDetails(await controller.getDetails());
+      detailsGenRef.current += 1;
+      const gen = detailsGenRef.current;
+      const next = await controller.getDetails();
+      if (detailsGenRef.current === gen && next !== null) {
+        setDetails(next);
+      }
+    } catch (error) {
+      logger.error(`Cloud sync sync-now failed: ${describeThrown(error)}`, error);
+      useToastStore.getState().error("Couldn't sync right now — please try again.");
     } finally {
       setBusy(false);
     }
@@ -123,7 +134,11 @@ export const SyncMenuFooter: React.FC<SyncMenuFooterProps> = ({ onOpenSettings }
         )}
         <div className="flex w-full items-center justify-between gap-2">
           <span className="text-sm font-medium">{label}</span>
-          <RefreshCw className={`w-4 h-4 text-primary-600 ${inProgress ? 'animate-spin' : ''}`} />
+          {needsSettings ? (
+            <Settings className="w-4 h-4 text-primary-600" />
+          ) : (
+            <RefreshCw className={`w-4 h-4 text-primary-600 ${inProgress ? 'animate-spin' : ''}`} />
+          )}
         </div>
       </div>
     </button>
