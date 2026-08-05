@@ -139,6 +139,10 @@ function adoptLastCycle(
 const ABANDONED_CODE_MESSAGE =
   'Cloud Sync was disconnected before setup finished. Save this recovery code — it is the only way back into the account it had already created.';
 
+// h-4 is text-xs's line-height, so the placeholder occupies exactly the row the account line
+// will: the buttons below it don't move when the details fetch lands.
+const ACCOUNT_SKELETON_ROW = 'flex h-4 items-center';
+
 const DISABLE_MESSAGE = 'Re-enabling on this device will need your recovery code.';
 const DISABLE_MESSAGE_UNSAVED =
   "You haven't saved your recovery code yet — regenerate and save one first, or you may lose access when you re-enable this device.";
@@ -231,6 +235,9 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   const mountedRef = useRef(true);
   // "Signed in as … · Last synced …" — fetched once per mount when sync is first seen running.
   const [details, setDetails] = useState<SyncDetails | null>(null);
+  // Only the mount fetch sets this — syncNow's refresh keeps the stale line rather than
+  // replacing a real identity with a skeleton.
+  const [detailsPending, setDetailsPending] = useState(false);
   const detailsRequestedRef = useRef(false);
   // Bumped whenever a details fetch starts or is invalidated (disable). A resolution whose
   // generation is stale is dropped, so a slow fetch for a prior account can't clobber a newer
@@ -263,12 +270,14 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     detailsRequestedRef.current = true;
     detailsGenRef.current += 1;
     const gen = detailsGenRef.current;
+    setDetailsPending(true);
     controller.getDetails().then(
       (result) => {
         if (detailsGenRef.current !== gen) {
           // Superseded by a disable or a newer fetch — this account is no longer current.
           return;
         }
+        setDetailsPending(false);
         if (result === null) {
           // Transient miss (e.g. the fetch queued behind a long initial sync and timed out) —
           // re-arm so the next status transition retries instead of blanking the whole mount.
@@ -285,6 +294,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
           `Cloud sync details unavailable: ${error instanceof Error ? error.message : String(error)}`
         );
         if (detailsGenRef.current === gen) {
+          setDetailsPending(false);
           detailsRequestedRef.current = false;
         }
       }
@@ -668,6 +678,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       // re-arm the once-per-mount fetch, and invalidate any in-flight fetch for the old account
       // so its late resolution can't paint the previous owner's details.
       setDetails(null);
+      setDetailsPending(false);
       detailsRequestedRef.current = false;
       detailsGenRef.current += 1;
       // Same reasoning for the cycle: a re-enable must never wear the previous account's failure,
@@ -836,11 +847,20 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
                 </span>
               )}
             </div>
-            {details && (
+            {details !== null && (
               <div data-testid="sync-account-label" className="text-xs text-tertiary">
                 {details.accountEmail !== null
                   ? `Signed in as ${details.accountEmail}`
                   : `Account: ${details.accountId.slice(0, 8)}…`}
+              </div>
+            )}
+            {detailsPending && (
+              <div
+                data-testid="sync-account-skeleton"
+                aria-hidden="true"
+                className={ACCOUNT_SKELETON_ROW}
+              >
+                <span className="h-3 w-48 animate-pulse rounded bg-surface-variant" />
               </div>
             )}
             <div data-testid="sync-device-label" className="text-xs text-tertiary">
