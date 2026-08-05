@@ -90,10 +90,13 @@ describe('BridgeSyncController: hydrate/reconcile', () => {
   // Never 'error': that renders "Couldn't turn on Cloud Sync" over a Try again that re-runs the
   // sign-in, and a newer worker writing a status this page has not learned is a healthy install.
   it.each([
-    ['a status this build does not know', 'teleporting'],
-    ['a value that is not a string at all', 42],
-    ['a key inherited from Object.prototype', 'constructor'],
-  ])('reconciles from the enabled flag on %s', async (_name, stored) => {
+    ['a status this build does not know', 'teleporting', 'teleporting'],
+    ['a value that is not a string at all', 42, 'number'],
+    // Coerces to the string 'active', so hasOwn alone would accept it — the typeof guard is what
+    // stops a stored array being handed back as a status.
+    ['a one-element array that stringifies to a real status', ['active'], 'object'],
+    ['a key inherited from Object.prototype', 'constructor', 'constructor'],
+  ])('reconciles from the enabled flag on %s', async (_name, stored, described) => {
     const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
     storageMock.data[STATUS_KEY] = stored;
     storageMock.data[CLOUD_SYNC_ENABLED_KEY] = true;
@@ -102,7 +105,21 @@ describe('BridgeSyncController: hydrate/reconcile', () => {
     await flush();
 
     expect(controller.getStatus()).toBe('active');
-    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('unrecognised persisted sync'));
+    expect(errorSpy).toHaveBeenCalledWith(
+      `Ignoring an unrecognised persisted sync status: ${described}`
+    );
+  });
+
+  it('truncates a long unrecognised value rather than logging it whole', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    storageMock.data[STATUS_KEY] = 'z'.repeat(200);
+
+    new BridgeSyncController();
+    await flush();
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      `Ignoring an unrecognised persisted sync status: ${'z'.repeat(40)}…`
+    );
   });
 
   it('reads an unrecognised status on a disabled install as "off", not a failure', async () => {
@@ -115,14 +132,20 @@ describe('BridgeSyncController: hydrate/reconcile', () => {
     expect(controller.getStatus()).toBe('off');
   });
 
-  // Same reconciliation an unrecognised status gets; only the logging differs.
-  it('reconciles cloudSyncEnabled=true with no status key to "active"', async () => {
+  // Same reconciliation an unrecognised status gets; only the logging differs, and the shipped
+  // log level is error — so an unconditional one here is a line in every user's console.
+  it('reconciles cloudSyncEnabled=true with no status key to "active", silently', async () => {
+    // Cleared, not just created: this suite sets no restoreMocks, so spyOn on an already-spied
+    // logger.error hands back the earlier mock with its calls still on it.
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    errorSpy.mockClear();
     storageMock.data[CLOUD_SYNC_ENABLED_KEY] = true;
 
     const controller = new BridgeSyncController();
     await flush();
 
     expect(controller.getStatus()).toBe('active');
+    expect(errorSpy).not.toHaveBeenCalled();
   });
 
   it('defaults to "off" and notifies when neither the status key nor cloudSyncEnabled is set', async () => {

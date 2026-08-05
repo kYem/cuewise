@@ -68,7 +68,7 @@ const enterEnableStep = async (user: ReturnType<typeof userEvent.setup>, account
   await user.type(screen.getByLabelText('Account ID'), accountId);
 };
 
-/** A failed outcome; the reason is arbitrary, tests below care only that it failed. */
+/** The shared failed outcome; some tests below assert on DEVICE_FAILURE_MESSAGE, so the reason is fixed. */
 const deviceFailure = (): SyncOutcome => ({
   kind: 'failed',
   reason: 'device',
