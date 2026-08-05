@@ -39,6 +39,27 @@ describe('SessionManager', () => {
     expect(store.data.has(`sync:${SYNC_SESSION_KEY}`)).toBe(false);
   });
 
+  // The token is a live credential: a caller that cannot tell it survived goes on reporting a
+  // disconnected account as signed in.
+  it('reports a token that survived the clear', async () => {
+    const store = createInMemoryKeyValueStore({ failRemoves: true });
+    const manager = new SessionManager(store);
+    await manager.saveToken('session-token-123');
+
+    expect(await manager.clear()).toBe(false);
+    expect(await manager.isSignedIn()).toBe(true);
+  });
+
+  it('reports a cleared token, and a clear with nothing to remove, alike', async () => {
+    const store = createInMemoryKeyValueStore();
+    const manager = new SessionManager(store);
+
+    expect(await manager.clear()).toBe(true);
+
+    await manager.saveToken('session-token-123');
+    expect(await manager.clear()).toBe(true);
+  });
+
   it('saveToken propagates a failed StorageResult to the caller', async () => {
     const store = createInMemoryKeyValueStore({ failWrites: true });
     const manager = new SessionManager(store);

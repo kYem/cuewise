@@ -759,6 +759,23 @@ describe('SyncEngine.enableSync', () => {
     expect(device.onStatus).not.toHaveBeenCalledWith('error');
   });
 
+  // The one disable key that is a live credential: left behind, isSignedIn() keeps answering true
+  // for an account this device has just lost authorisation to.
+  it('names the session token when auth loss cannot clear it', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    vi.spyOn(device.kv, 'remove').mockResolvedValue(false);
+    device.apiClient.rejectAllWith401 = true;
+
+    await device.engine.syncNow();
+
+    expect(device.engine.getStatus()).toBe('signed_out');
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining(SYNC_SESSION_KEY));
+  });
+
   it('resumeEnrollWithCode lands signed_out (no throw) when the live-looking session 401s mid-enroll', async () => {
     const server = new FakeSyncServer();
     const deviceA = createDevice(server);

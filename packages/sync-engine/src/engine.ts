@@ -576,8 +576,9 @@ export class SyncEngine {
    * construction this way, not by trusting adapters and host callbacks (a throwing onStatus would
    * otherwise escape to enableSync's catch and land an enrolled device on `error`).
    */
-  // The step's own return value is discarded: callers that need it must check it themselves.
-  private async bestEffort(step: () => Promise<unknown> | unknown, what: string): Promise<void> {
+  // Void-returning by signature, not by convention: a step that reports failure by RESOLVING would
+  // have that answer swallowed here, so the compiler refuses it and the caller must check instead.
+  private async bestEffort(step: () => Promise<void> | void, what: string): Promise<void> {
     try {
       await step();
     } catch (err) {
@@ -985,7 +986,13 @@ export class SyncEngine {
     // Status first, steps independent: a partial cleanup failure must never leave the engine
     // reporting health — armPullLoopUnlessOff reads that status to decide whether to poll on.
     await this.bestEffort(() => this.setStatus('signed_out'), 'signed-out status notification');
-    await this.bestEffort(() => this.deps.sessionManager.clear(), 'session clear');
+    // Not through bestEffort: clear() reports a surviving token by resolving false, and that token
+    // is a live credential — it keeps isSignedIn() true for an account this device just lost.
+    if (!(await this.clearSessionSafely())) {
+      logger.error(
+        `Cloud sync lost its authorisation but could not clear the session: ${SYNC_SESSION_KEY}`
+      );
+    }
     await this.bestEffort(() => this.stop(), 'pull-wake cancel');
   }
 }
