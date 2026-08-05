@@ -852,6 +852,42 @@ describe('SyncSettingsSectionComponent', () => {
     expect(screen.getByTestId('sync-device-label')).not.toHaveTextContent('Last synced');
   });
 
+  it('holds the account line open with a skeleton while the details fetch is in flight', async () => {
+    const controller = new FakeSyncController();
+    controller.deferNextDetails();
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+
+    expect(await screen.findByTestId('sync-account-skeleton')).toBeInTheDocument();
+    expect(screen.queryByTestId('sync-account-label')).not.toBeInTheDocument();
+
+    act(() =>
+      controller.resolveDetails({
+        accountEmail: 'kes@example.com',
+        accountId: 'user-1',
+        lastSyncedAt: null,
+      })
+    );
+
+    expect(await screen.findByTestId('sync-account-label')).toBeInTheDocument();
+    expect(screen.queryByTestId('sync-account-skeleton')).not.toBeInTheDocument();
+  });
+
+  it('retires the skeleton when the details fetch comes back unavailable', async () => {
+    // A skeleton that outlives its fetch is a lie: it would pulse for the rest of the mount.
+    const controller = new FakeSyncController();
+    controller.deferNextDetails();
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+    await screen.findByTestId('sync-account-skeleton');
+
+    act(() => controller.resolveDetails(null));
+
+    await waitFor(() =>
+      expect(screen.queryByTestId('sync-account-skeleton')).not.toBeInTheDocument()
+    );
+  });
+
   it('fetches details once per mount, not on every active/syncing flip', async () => {
     // A "Sync now" click flips active → syncing → active on hosts that report 'syncing' (macOS
     // only — the engine has no such status; the extension's mapToUi never emits it). Without the
@@ -990,6 +1026,9 @@ describe('SyncSettingsSectionComponent', () => {
     act(() => controller.setStatus('active'));
     await waitFor(() => expect(warnSpy).toHaveBeenCalled());
     expect(screen.queryByTestId('sync-account-label')).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.queryByTestId('sync-account-skeleton')).not.toBeInTheDocument()
+    );
 
     act(() => controller.setStatus('syncing'));
     expect(await screen.findByText('Signed in as kes@example.com')).toBeInTheDocument();
