@@ -68,7 +68,7 @@ const enterEnableStep = async (user: ReturnType<typeof userEvent.setup>, account
   await user.type(screen.getByLabelText('Account ID'), accountId);
 };
 
-/** The failure the badge tests use: `device` is also the bucket for anything unrecognised. */
+/** A failed outcome; the reason is arbitrary, tests below care only that it failed. */
 const deviceFailure = (): SyncOutcome => ({
   kind: 'failed',
   reason: 'device',
@@ -84,8 +84,8 @@ async function renderShowingFailureBadge(controller: FakeSyncController): Promis
 }
 
 /**
- * A Sync now whose read cannot answer and whose call then times out — the path that folds an
- * unavailable read over whatever the panel already knew.
+ * A Sync now that times out, whose recovery re-read then cannot answer either — the path that
+ * folds an unavailable read over whatever the panel already knew.
  */
 async function syncNowTimesOutOnUnavailableRead(
   user: ReturnType<typeof userEvent.setup>,
@@ -1443,8 +1443,8 @@ describe('SyncSettingsSectionComponent', () => {
     await waitFor(() => expect(screen.queryByTestId('sync-failure-badge')).not.toBeInTheDocument());
   });
 
-  // A cycle that answers is the one thing that may retire a carried-forward failure — so the
-  // failure has to be carried first, or this passes against an implementation that never carries.
+  // The failure has to be carried first, or this passes against an implementation that never
+  // carries one.
   it('drops a carried-forward failure once a cycle succeeds', async () => {
     const user = userEvent.setup();
     const controller = new FakeSyncController();
@@ -1484,8 +1484,8 @@ describe('SyncSettingsSectionComponent', () => {
     ['needs_reauth', { pill: false, prompt: true }],
     ['needs_enroll', { pill: false, prompt: true }],
   ] as const)('gives %s exactly the panel body it owns', async (status, body) => {
-    // A pill and a reconnect prompt are mutually exclusive, and the maps do not enforce that — a
-    // pill on needs_reauth would offer Sync now and Regenerate to a device that cannot use them.
+    // StatusPresentation makes both-at-once uncompilable; this pins which one each status picks.
+    // A pill on needs_reauth would offer Sync now and Regenerate to a device that cannot use them.
     const controller = new FakeSyncController();
     renderSection(controller);
 
@@ -1498,8 +1498,8 @@ describe('SyncSettingsSectionComponent', () => {
   });
 
   it('renders nothing for a status this build does not know', async () => {
-    // status arrives as an unvalidated chrome.storage string, so a downgrade or an older bundle can
-    // read back a newer one. Indexing a total map would answer undefined and pass a !== null gate.
+    // Every host validates before setStatus now, so this pins the last line of defence: reading
+    // `.kind` off a missing entry would throw rather than render nothing.
     const controller = new FakeSyncController();
     renderSection(controller);
 

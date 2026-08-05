@@ -28,9 +28,8 @@ const SYNC_UI_STATUSES: Record<SyncUiStatus, true> = {
 };
 
 /**
- * Narrows a value that crossed an untyped boundary — `chrome.storage` hands the page whatever a
- * possibly-older or newer service worker wrote, and a cast let any string in as a status.
- * Own properties only, so a stored `constructor` or `toString` cannot pass.
+ * Narrows a value that crossed an untyped boundary — a host's own storage hands it back whatever
+ * some other build wrote. Own properties only, so a stored `constructor` cannot pass.
  */
 export function asSyncUiStatus(value: unknown): SyncUiStatus | null {
   if (typeof value === 'string' && Object.hasOwn(SYNC_UI_STATUSES, value)) {

@@ -51,11 +51,7 @@ const GoogleGlyph: React.FC = () => (
   </svg>
 );
 
-/**
- * What a status puts on screen. A pill and a reconnect prompt are alternatives, never both — as two
- * complementary maps only a comment said so, and either could have gained an entry the other
- * already had.
- */
+/** What a status puts on screen. A pill and a reconnect prompt are alternatives, never both. */
 type StatusPresentation =
   | { readonly kind: 'quiet' }
   | { readonly kind: 'pill'; readonly label: string }
@@ -64,8 +60,7 @@ type StatusPresentation =
 const QUIET: StatusPresentation = { kind: 'quiet' };
 
 // Total: a new SyncUiStatus without a presentation is a compile error. `needs_enroll` is quiet of
-// pill on purpose — without a key, Sync now and Regenerate both fail — and speaks through its
-// prompt instead. `error` says its piece through the badge, not here.
+// pill on purpose — without a key, Sync now and Regenerate both fail; `error` has its own block.
 const STATUS_PRESENTATION_BY_STATUS: Record<SyncUiStatus, StatusPresentation> = {
   off: QUIET,
   connecting: { kind: 'pill', label: 'Connecting…' },
@@ -81,10 +76,8 @@ const STATUS_PRESENTATION_BY_STATUS: Record<SyncUiStatus, StatusPresentation> = 
   },
 };
 
-// Read through Partial for the same reason as KNOWN_FAILURE_MESSAGE below: `status` can still reach
-// an older page as a string this build does not know, and that must render nothing rather than an
-// empty prompt beside a live Reconnect button. The literal stays total, so a new member still fails
-// to compile.
+// Belt and braces, not a live path: every host validates before setStatus, so an unknown member
+// would have to come from a future adapter. The literal stays total, so adding one still compiles.
 const STATUS_PRESENTATION: Partial<Record<SyncUiStatus, StatusPresentation>> =
   STATUS_PRESENTATION_BY_STATUS;
 
@@ -123,10 +116,9 @@ function logUnrecognisedReason(outcome: SyncNowResult | null): void {
 }
 
 /**
- * The panel's whole answer about the last cycle, as one value rather than an outcome beside an
- * `unknown` flag. `unknown` carries what was last known because an unreadable read says nothing
- * about it: a failure already on screen is the stronger claim and must survive one. Holding that
- * inside the value is what stops the render deciding it, and what stops a later writer forgetting.
+ * `unknown` carries the last known outcome: an unreadable read says nothing about it, so a failure
+ * already on screen must survive one. That carry-forward holds within one account — see
+ * adoptNewAccount.
  */
 type PanelCycle =
   | { readonly kind: 'none' }
@@ -135,7 +127,7 @@ type PanelCycle =
 
 const CYCLE_NONE: PanelCycle = { kind: 'none' };
 
-/** What a value knows about the last cycle that actually ran, across all three cases. */
+/** What a value knows about the last cycle that actually ran. */
 function knownOutcome(cycle: PanelCycle): SyncOutcome | null {
   if (cycle.kind === 'outcome') {
     return cycle.outcome;
@@ -146,13 +138,8 @@ function knownOutcome(cycle: PanelCycle): SyncOutcome | null {
   return null;
 }
 
-/**
- * Folds a read into the value the panel holds. Only `{outcome:null}` means "no cycle"; an
- * unavailable read keeps whatever was known and says so alongside, never instead.
- *
- * Pure, and it has to stay that way — it runs inside a setState updater, which StrictMode
- * double-invokes. Anything with an effect belongs in adoptRead below.
- */
+// Must stay pure: it runs inside a setState updater, which StrictMode double-invokes. Anything
+// with an effect belongs in adoptRead below.
 function nextPanelCycle(previous: PanelCycle, read: LastCycleRead): PanelCycle {
   if (!read.available) {
     return { kind: 'unknown', lastKnown: knownOutcome(previous) };
@@ -431,9 +418,8 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   const adoptNewAccount = async () => {
     accountGenRef.current += 1;
     detailsRequestedRef.current = false;
-    // Cleared first, like handleDisable: `unknown` carries the last known outcome forward, and
-    // that guarantee holds within one account. If the re-read below cannot answer, the previous
-    // account's failure would otherwise become this one's.
+    // Cleared first, like handleDisable: if the re-read below cannot answer, the carry-forward
+    // would hand this account the previous one's failure.
     setCycle(CYCLE_NONE);
     await refreshLastCycle();
     await refreshDetails();
@@ -751,9 +737,8 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   // Beside the pill, never instead of it: status stays 'active' so the recovery controls survive.
   const known = knownOutcome(cycle);
   const badgeMessage = known?.kind === 'failed' ? failureMessage(known.reason) : null;
-  // The badge outranks the unknown line, and the value already says so — `lastKnown` is what an
-  // unreadable read carried forward. Mid-enrolment there is no freshness claim to qualify, hence
-  // the status gate.
+  // The badge outranks it: a carried-forward failure is the stronger claim. Only 'active' makes a
+  // freshness claim worth qualifying — connecting and syncing have not made one yet.
   const showUnknownCycle = status === 'active' && cycle.kind === 'unknown' && badgeMessage === null;
   const reconnectPrompt = presentation.kind === 'reconnect' ? presentation.prompt : null;
   // Only an explicit false: null is "self-heal has not answered", and an older service worker

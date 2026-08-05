@@ -299,14 +299,13 @@ export class BridgeSyncController implements SyncController {
       this.setStatus(persistedStatus);
       return;
     }
-    // Never 'error': that renders "Couldn't turn on Cloud Sync" over a Try again that re-runs the
-    // sign-in, and an update whose new worker writes a status this page has not learned yet is a
-    // healthy install, not a failed one. Falling through reconciles from the enabled flag instead.
     if (stored[STATUS_KEY] !== undefined) {
       logger.error(
         `Ignoring an unrecognised persisted sync status: ${BridgeSyncController.describeStatus(stored[STATUS_KEY])}`
       );
     }
+    // Unrecognised reconciles the same way absent does, and deliberately not as 'error': a worker
+    // writing a status this page has not learned yet is a healthy install, not a failed enable.
     if (stored[CLOUD_SYNC_ENABLED_KEY] === true) {
       // Enabled but the SW died before writing a status — reconcile to active rather
       // than showing 'off' and implying sync is disabled.
@@ -326,9 +325,9 @@ export class BridgeSyncController implements SyncController {
         if (statusChange !== undefined) {
           const raw = statusChange.newValue;
           if (raw !== undefined) {
+            // An unrecognised status is not information — keep the last one this page understood
+            // rather than letting it through to render a blank panel body.
             const newStatus = asSyncUiStatus(raw);
-            // Kept, not replaced: the last status this page understood is a better answer than a
-            // failure it would be inventing. See hydrate.
             if (newStatus === null) {
               logger.error(
                 `Ignoring an unrecognised sync status change: ${BridgeSyncController.describeStatus(raw)}`

@@ -115,7 +115,7 @@ describe('BridgeSyncController: hydrate/reconcile', () => {
     expect(controller.getStatus()).toBe('off');
   });
 
-  // Absent is not the same as unrecognised: nothing was written, so the enabled flag still decides.
+  // Same reconciliation an unrecognised status gets; only the logging differs.
   it('reconciles cloudSyncEnabled=true with no status key to "active"', async () => {
     storageMock.data[CLOUD_SYNC_ENABLED_KEY] = true;
 
