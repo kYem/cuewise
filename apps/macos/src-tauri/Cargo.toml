@@ -12,6 +12,13 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
+[features]
+# Opt-in inspector for a *bundled* build. Debug builds already have one, but deep links
+# don't arrive under `tauri dev`, so sign-in and sync can only be inspected in a bundle.
+# Off by default so a distributed build never ships a console someone could be talked
+# into pasting into — the data key lives in the webview's reach (see ENG-49).
+devtools = ["tauri/devtools"]
+
 [dependencies]
 # macos-private-api: required for the transparent glow overlay windows (not
 # Mac-App-Store compatible; the app is distributed directly).
