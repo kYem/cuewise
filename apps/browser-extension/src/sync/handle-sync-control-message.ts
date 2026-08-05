@@ -35,20 +35,10 @@ async function doEnable(
   try {
     await engine.enableSync(provider, credential, deviceName, { recoveryCode });
   } catch (err) {
-    if (err instanceof RecoveryCodeRequiredError) {
-      return { ok: false, reason: 'needs-code' };
-    }
-    if (err instanceof RecoveryCodeError) {
-      return { ok: false, reason: 'bad-code', detail: err.kind };
-    }
-    if (err instanceof ApiError && err.status === 401) {
-      return { ok: false, reason: 'auth' };
-    }
-    const detail = describeThrown(err);
-    // Put the cause in the message text so it survives string-coercing surfaces (Chrome's Errors
-    // panel); the Error arg still carries the stack in the console. Metadata only, never the token.
-    logger.error(`Cloud sync enable failed: ${detail}`, err);
-    return { ok: false, reason: 'error', detail };
+    // Drained once, for every arm below. enableSync hands a minted code over before the steps that
+    // can throw, and the account it opens outlives the attempt — so a failure that swallows it
+    // locks the user out. Attaching it here is what stops the next arm forgetting.
+    return { ...enableFailure(err), recoveryCode: deps.takeRecoveryCode() };
   }
   if (engine.getStatus() === 'signed_out') {
     return { ok: false, reason: 'auth' };
@@ -59,6 +49,24 @@ async function doEnable(
     return { ok: false, reason: 'cancelled', recoveryCode: deps.takeRecoveryCode() };
   }
   return { ok: true, recoveryCode: deps.takeRecoveryCode() };
+}
+
+/** Why an enable threw. Never carries the code — runEnable attaches that to every arm at once. */
+function enableFailure(err: unknown): Extract<SyncControlResponse, { ok: false }> {
+  if (err instanceof RecoveryCodeRequiredError) {
+    return { ok: false, reason: 'needs-code' };
+  }
+  if (err instanceof RecoveryCodeError) {
+    return { ok: false, reason: 'bad-code', detail: err.kind };
+  }
+  if (err instanceof ApiError && err.status === 401) {
+    return { ok: false, reason: 'auth' };
+  }
+  const detail = describeThrown(err);
+  // Put the cause in the message text so it survives string-coercing surfaces (Chrome's Errors
+  // panel); the Error arg still carries the stack in the console. Metadata only, never the token.
+  logger.error(`Cloud sync enable failed: ${detail}`, err);
+  return { ok: false, reason: 'error', detail };
 }
 
 /** Read-only details lookup — deliberately NOT serialized (see handleSyncControlMessage). */

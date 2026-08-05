@@ -361,6 +361,59 @@ describe('SyncEngine.enableSync', () => {
     expect(device.engine.getStatus()).toBe('disabled');
   });
 
+  // The throw path reaches abandonEnroll too, and it used to pass `undefined` — so an enable that
+  // minted an account and then failed said nothing about the code being the only way back into it.
+  it('still names the minted code when the abandoned enrol threw rather than returned', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const set = device.kv.set.bind(device.kv);
+    vi.spyOn(device.kv, 'set').mockImplementation(async (key, value, area) => {
+      if (key !== CLOUD_SYNC_ENABLED_KEY) {
+        return set(key, value, area);
+      }
+      // Disable first, so handleEnableError sees a superseded enrol, then fail the write so it
+      // arrives there by throwing rather than by returning.
+      await device.engine.disableSync();
+      return storageFailure('quota exceeded');
+    });
+
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Cloud sync enable was abandoned after creating an account; its recovery code is the only way back into it'
+    );
+  });
+
+  // Same engine, second attempt: without a per-attempt reset the first enable's mint would make
+  // this abandonment claim a code that this attempt never created.
+  it('does not let an earlier mint speak for a later abandoned enrol on the same engine', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    const recoveryCode = device.onRecoveryCode.mock.calls[0][0] as string;
+    await device.engine.disableSync();
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    // Same throw-and-supersede shape as the test above, so this reaches handleEnableError — the
+    // one path that reads the field rather than the enrol's own local.
+    const set = device.kv.set.bind(device.kv);
+    vi.spyOn(device.kv, 'set').mockImplementation(async (key, value, area) => {
+      if (key !== CLOUD_SYNC_ENABLED_KEY) {
+        return set(key, value, area);
+      }
+      await device.engine.disableSync();
+      return storageFailure('quota exceeded');
+    });
+
+    await device.engine.enableSync('dev', 'cred-a', 'Device A', { recoveryCode });
+
+    expect(errorSpy).not.toHaveBeenCalledWith(
+      'Cloud sync enable was abandoned after creating an account; its recovery code is the only way back into it'
+    );
+  });
+
   it('does not claim an account was created when the abandoned enrol only joined one', async () => {
     // Device #2 enrols with an existing code and mints nothing, so the "its recovery code is the
     // only way back" error would be pointing at a code the user already has.
@@ -2458,6 +2511,27 @@ describe('SyncEngine.start / stop', () => {
 
     await device.engine.disableSync();
 
+    expect(errorSpy).toHaveBeenCalledWith('Disable could not remove every sync key: syncSession');
+  });
+
+  // Bare, a throwing adapter rejects the whole disable and the survived-keys summary never runs —
+  // so the one key that is a live credential goes unreported.
+  it('completes a disable whose session clear throws, and still names the token', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    vi.spyOn(device.kv, 'remove').mockImplementation(async (key) => {
+      if (key === 'syncSession') {
+        throw new Error('storage adapter fault');
+      }
+      return true;
+    });
+
+    await expect(device.engine.disableSync()).resolves.toBeUndefined();
+
+    expect(device.engine.getStatus()).toBe('disabled');
     expect(errorSpy).toHaveBeenCalledWith('Disable could not remove every sync key: syncSession');
   });
 
