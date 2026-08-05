@@ -128,7 +128,7 @@ function logUnrecognisedReason(outcome: SyncNowResult | null): void {
  * about it: a failure already on screen is the stronger claim and must survive one. Holding that
  * inside the value is what stops the render deciding it, and what stops a later writer forgetting.
  */
-export type PanelCycle =
+type PanelCycle =
   | { readonly kind: 'none' }
   | { readonly kind: 'outcome'; readonly outcome: SyncOutcome }
   | { readonly kind: 'unknown'; readonly lastKnown: SyncOutcome | null };
