@@ -1,3 +1,4 @@
+import type { SyncUiStatus } from '@cuewise/app';
 import { logger } from '@cuewise/shared';
 
 // Alt-tabbing is cheap for the user and a request for us; one sync per window activation at most.
@@ -15,7 +16,7 @@ interface FocusSyncDeps {
  * change made elsewhere can sit unseen while the user is looking straight at it.
  */
 export function startFocusSync(
-  controller: { syncNow: () => Promise<unknown> },
+  controller: { getStatus: () => SyncUiStatus; syncNow: () => Promise<unknown> },
   deps: FocusSyncDeps = {}
 ): () => void {
   const now = deps.now ?? Date.now;
@@ -23,6 +24,11 @@ export function startFocusSync(
   let lastRun = Number.NEGATIVE_INFINITY;
 
   const handler = (): void => {
+    // Before the throttle stamp, not after: syncNow paints the pill 'syncing' unconditionally, so
+    // a device that never enabled sync would flicker off → syncing → off on every activation.
+    if (controller.getStatus() === 'off') {
+      return;
+    }
     if (now() - lastRun < FOCUS_SYNC_THROTTLE_MS) {
       return;
     }

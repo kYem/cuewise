@@ -1,5 +1,6 @@
 import { type DataKey, DecryptError, EnvelopeParseError } from '@cuewise/crypto';
 import {
+  hlcCompare,
   hlcDecode,
   hlcEncode,
   hlcReceive,
@@ -37,14 +38,28 @@ export interface CycleDeps {
 
 /**
  * One pull's working ledger. `meta` is the snapshot it resolves conflicts against and mutates as
- * records apply; `applied` names the keys whose hlc and tombstone it therefore owns. Everything
- * else in the stored ledger — above all `dirty` — belongs to whoever wrote it meanwhile.
+ * records apply; `applied` and `quarantined` name the keys it decided something about, and it may
+ * claim each only while the stored ledger has not moved that key on past it meanwhile. Everything
+ * else in the stored ledger — above all `dirty` — belongs to whoever wrote it.
  */
 interface PullState {
   meta: SyncMeta;
   applied: Set<string>;
+  /** Keys whose quarantine membership this pull changed — not merely re-observed. */
+  quarantined: Set<string>;
   /** The server discarded this device's cursor, so the merge must rewind it rather than advance. */
   cursorReset: boolean;
+}
+
+/** One key's membership in a ledger list, mirrored from what the pull decided for it. */
+function withMembership(list: string[], key: string, member: boolean): string[] {
+  if (!member) {
+    return list.filter((k) => k !== key);
+  }
+  if (list.includes(key)) {
+    return list;
+  }
+  return [...list, key];
 }
 
 /** Applies only what the pull owns onto a freshly-loaded ledger; see PullState. */
@@ -54,17 +69,20 @@ function mergePull(fresh: SyncMeta, pull: PullState, wallMs: number): void {
   } else {
     fresh.cursor = Math.max(fresh.cursor, pull.meta.cursor);
   }
-  fresh.quarantine = [...pull.meta.quarantine];
   fresh.clock = hlcEncode(hlcReceive(hlcDecode(fresh.clock), hlcDecode(pull.meta.clock), wallMs));
+  for (const key of pull.quarantined) {
+    fresh.quarantine = withMembership(fresh.quarantine, key, pull.meta.quarantine.includes(key));
+  }
   for (const key of pull.applied) {
-    fresh.hlcs[key] = pull.meta.hlcs[key];
-    if (pull.meta.tombstones.includes(key)) {
-      if (!fresh.tombstones.includes(key)) {
-        fresh.tombstones.push(key);
-      }
-    } else {
-      fresh.tombstones = fresh.tombstones.filter((t) => t !== key);
+    const held = fresh.hlcs[key];
+    // An edit stamped this key while the pull was in flight, so the pull is the older news of the
+    // two. Writing its hlc back would have the next push send that edit under a stamp every peer
+    // already holds — LWW ties, and the edit would live on this device alone.
+    if (held !== undefined && hlcCompare(hlcDecode(pull.meta.hlcs[key]), hlcDecode(held)) <= 0) {
+      continue;
     }
+    fresh.hlcs[key] = pull.meta.hlcs[key];
+    fresh.tombstones = withMembership(fresh.tombstones, key, pull.meta.tombstones.includes(key));
   }
 }
 
@@ -223,6 +241,7 @@ export async function pullOnce(deps: CycleDeps): Promise<PullResult> {
   const pull: PullState = {
     meta: await deps.meta.load(),
     applied: new Set(),
+    quarantined: new Set(),
     cursorReset: false,
   };
   // Once per collection per pull — a page of unknown records is one line, not N.
@@ -302,6 +321,7 @@ async function applyPulledRecord(
     }
     if (!meta.quarantine.includes(key)) {
       meta.quarantine.push(key);
+      pull.quarantined.add(key);
       deps.onQuarantine?.(key);
       // Metadata only — collection/entityId/seq — never the ciphertext or decoded payload.
       logger.warn('Quarantined undecryptable sync record', {
@@ -317,6 +337,7 @@ async function applyPulledRecord(
   // Decrypt succeeded: a previously-quarantined key has recovered (spec §5.3 self-heal).
   if (meta.quarantine.includes(key)) {
     meta.quarantine = meta.quarantine.filter((q) => q !== key);
+    pull.quarantined.add(key);
   }
 
   const binding = deps.bindings.find((b) => b.name === rec.collection);

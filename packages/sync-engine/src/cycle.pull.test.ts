@@ -22,6 +22,8 @@ import { LwwHlcStrategy, type RecordBody } from './strategy';
 const KEY_ID = 'dk-1';
 const OLDER_HLC = hlcEncode({ physical: 1_700_000_000_000, counter: 1, node: 'device-a' });
 const NEWER_HLC = hlcEncode({ physical: 1_700_000_001_000, counter: 1, node: 'device-a' });
+/** Wall clock for a local edit that must outrank anything the pull is carrying. */
+const AHEAD_OF_PULL_MS = 1_800_000_000_000;
 
 /** Seals a body with the shared dk/keyId and stamps it with a seq, as the server would. */
 async function sealRecord(
@@ -563,6 +565,80 @@ describe('pullOnce', () => {
     expect(saved.hlcs['goals/g2']).toBeDefined();
     expect(saved.cursor).toBe(1);
     expect(saved.hlcs['goals/g1']).toBe(NEWER_HLC);
+  });
+
+  it('keeps an hlc a concurrent edit stamped ahead of the pull’s own', async () => {
+    await setGoals([goalFactory.build({ id: 'g1', text: 'local' })]);
+    await seedLocalHlc(metaStore, 'goals', 'g1', OLDER_HLC);
+    transport.pullRecords = [
+      await sealRecord(
+        dk,
+        'goals',
+        'g1',
+        { entity: goalFactory.build({ id: 'g1', text: 'incoming' }), hlc: NEWER_HLC },
+        1
+      ),
+    ];
+    const tracker = new MutationTracker(metaStore, () => AHEAD_OF_PULL_MS);
+    duringPull(transport, () => tracker.markMutated('goals', 'g1'));
+
+    await pullOnce(makeDeps());
+
+    const saved = await metaStore.load();
+    expect(saved.hlcs['goals/g1'] > NEWER_HLC).toBe(true);
+    expect(saved.dirty.goals).toEqual(['g1']);
+  });
+
+  it('keeps a tombstone a concurrent delete stamped ahead of the pull’s resurrection', async () => {
+    const meta = await seedLocalHlc(metaStore, 'goals', 'g1', OLDER_HLC);
+    meta.tombstones = ['goals/g1'];
+    await metaStore.save(meta);
+    transport.pullRecords = [
+      await sealRecord(
+        dk,
+        'goals',
+        'g1',
+        { entity: goalFactory.build({ id: 'g1' }), hlc: NEWER_HLC },
+        1
+      ),
+    ];
+    const tracker = new MutationTracker(metaStore, () => AHEAD_OF_PULL_MS);
+    duringPull(transport, () => tracker.markDeleted('goals', 'g1'));
+
+    await pullOnce(makeDeps());
+
+    const saved = await metaStore.load();
+    expect(saved.tombstones).toContain('goals/g1');
+  });
+
+  // Otherwise every pull that re-applies the same delete adds another copy of the key.
+  it('does not duplicate a tombstone the ledger already holds', async () => {
+    const meta = await seedLocalHlc(metaStore, 'goals', 'g1', OLDER_HLC);
+    meta.tombstones = ['goals/g1'];
+    await metaStore.save(meta);
+    transport.pullRecords = [
+      await sealRecord(dk, 'goals', 'g1', { entity: null, hlc: NEWER_HLC }, 1),
+    ];
+
+    await pullOnce(makeDeps());
+
+    expect((await metaStore.load()).tombstones).toEqual(['goals/g1']);
+  });
+
+  it('keeps a key another cycle quarantined while this pull was in flight', async () => {
+    const sealed = await sealRecord(dk, 'goals', 'g1', { entity: null, hlc: NEWER_HLC }, 1);
+    transport.pullRecords = [{ ...sealed, ciphertext: 'garbage' }];
+    duringPull(transport, () =>
+      metaStore.update((meta) => {
+        meta.quarantine.push('quotes/q9');
+      })
+    );
+
+    await pullOnce(makeDeps());
+
+    const saved = await metaStore.load();
+    expect(saved.quarantine).toContain('quotes/q9');
+    expect(saved.quarantine).toContain('goals/g1');
   });
 
   it('leaves the cursor where a concurrent writer moved it rather than rewinding it', async () => {
