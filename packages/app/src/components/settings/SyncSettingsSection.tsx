@@ -3,6 +3,7 @@ import type { SyncFailureReason, SyncNowResult, SyncOutcome } from '@cuewise/syn
 import { cn } from '@cuewise/ui';
 import { AlertTriangle, CloudUpload, KeyRound, Loader2, RefreshCw } from 'lucide-react';
 import type React from 'react';
+import type { Dispatch, SetStateAction } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useSettingsStore } from '../../stores/settings-store';
 import { useToastStore } from '../../stores/toast-store';
@@ -50,38 +51,35 @@ const GoogleGlyph: React.FC = () => (
   </svg>
 );
 
-// Both maps total, like FAILURE_MESSAGE below: a new status with neither a pill nor a prompt would
-// render an empty panel body while the switch still reads on. null says "handled, renders neither".
-// needs_enroll has no pill on purpose — without a key, Sync now and Regenerate both fail.
-const STATUS_PILL_LABEL_BY_STATUS: Record<SyncUiStatus, string | null> = {
-  off: null,
-  connecting: 'Connecting…',
-  syncing: 'Syncing…',
-  active: 'Active',
-  error: null,
-  needs_reauth: null,
-  needs_enroll: null,
-};
+/** What a status puts on screen. A pill and a reconnect prompt are alternatives, never both. */
+type StatusPresentation =
+  | { readonly kind: 'quiet' }
+  | { readonly kind: 'pill'; readonly label: string }
+  | { readonly kind: 'reconnect'; readonly prompt: string };
 
-// One block, two causes: same Reconnect button, but only one of them is about the sign-in.
-const RECONNECT_PROMPT_BY_STATUS: Record<SyncUiStatus, string | null> = {
-  off: null,
-  connecting: null,
-  syncing: null,
-  active: null,
-  error: null,
-  needs_reauth: 'Sign-in expired — reconnect to keep syncing.',
+const QUIET: StatusPresentation = { kind: 'quiet' };
+
+// Total: a new SyncUiStatus without a presentation is a compile error. `needs_enroll` is quiet of
+// pill on purpose — without a key, Sync now and Regenerate both fail; `error` has its own block.
+const STATUS_PRESENTATION_BY_STATUS: Record<SyncUiStatus, StatusPresentation> = {
+  off: QUIET,
+  connecting: { kind: 'pill', label: 'Connecting…' },
+  syncing: { kind: 'pill', label: 'Syncing…' },
+  active: { kind: 'pill', label: 'Active' },
+  error: QUIET,
+  needs_reauth: { kind: 'reconnect', prompt: 'Sign-in expired — reconnect to keep syncing.' },
   // "can't read" rather than "is missing": a transient read failure reaches this status too.
-  needs_enroll:
-    "This device can't read its encryption key, so nothing can sync. Reconnect with your recovery code to restore it.",
+  needs_enroll: {
+    kind: 'reconnect',
+    prompt:
+      "This device can't read its encryption key, so nothing can sync. Reconnect with your recovery code to restore it.",
+  },
 };
 
-// Read through Partial for the same reason as KNOWN_FAILURE_MESSAGE below: `status` reaches the page
-// as an unvalidated chrome.storage string, so an unknown one must render nothing rather than an
-// empty prompt beside a live Reconnect button. The literals stay total, so a new member still fails
-// to compile.
-const STATUS_PILL_LABEL: Partial<Record<SyncUiStatus, string | null>> = STATUS_PILL_LABEL_BY_STATUS;
-const RECONNECT_PROMPT: Partial<Record<SyncUiStatus, string | null>> = RECONNECT_PROMPT_BY_STATUS;
+// Belt and braces, not a live path: every host validates before setStatus, so an unknown member
+// would have to come from a future adapter. The literal stays total, so adding one still compiles.
+const STATUS_PRESENTATION: Partial<Record<SyncUiStatus, StatusPresentation>> =
+  STATUS_PRESENTATION_BY_STATUS;
 
 // Only `network` promises a full recovery, because it is the only reason where that promise is
 // true. `device` is also the bucket for anything unrecognised, so it claims no cause and no cure —
@@ -117,22 +115,47 @@ function logUnrecognisedReason(outcome: SyncNowResult | null): void {
   }
 }
 
-// The only place a read is adopted. An unavailable read must never repaint the outcome — only
-// `{outcome:null}` means "no cycle" — so it sets `unknown` instead, a softer, separate line.
-// Returns whether it painted, so a caller can re-arm its once-per-mount read after a miss.
-function adoptLastCycle(
-  read: LastCycleRead,
-  paint: (outcome: SyncOutcome | null) => void,
-  markUnknown: (unknown: boolean) => void
-): boolean {
-  if (!read.available) {
-    markUnknown(true);
-    return false;
+/**
+ * `unknown` carries the last known outcome: an unreadable read says nothing about it, so a failure
+ * already on screen must survive one. That carry-forward holds within one account — see
+ * adoptNewAccount.
+ */
+type PanelCycle =
+  | { readonly kind: 'none' }
+  | { readonly kind: 'outcome'; readonly outcome: SyncOutcome }
+  | { readonly kind: 'unknown'; readonly lastKnown: SyncOutcome | null };
+
+const CYCLE_NONE: PanelCycle = { kind: 'none' };
+
+/** What a value knows about the last cycle that actually ran. */
+function knownOutcome(cycle: PanelCycle): SyncOutcome | null {
+  if (cycle.kind === 'outcome') {
+    return cycle.outcome;
   }
-  logUnrecognisedReason(read.outcome);
-  markUnknown(false);
-  paint(read.outcome);
-  return true;
+  if (cycle.kind === 'unknown') {
+    return cycle.lastKnown;
+  }
+  return null;
+}
+
+// Must stay pure: it runs inside a setState updater, which StrictMode double-invokes. Anything
+// with an effect belongs in adoptRead below.
+function nextPanelCycle(previous: PanelCycle, read: LastCycleRead): PanelCycle {
+  if (!read.available) {
+    return { kind: 'unknown', lastKnown: knownOutcome(previous) };
+  }
+  if (read.outcome === null) {
+    return CYCLE_NONE;
+  }
+  return { kind: 'outcome', outcome: read.outcome };
+}
+
+/** The one way a read reaches the panel: logs once, then folds. */
+function adoptRead(read: LastCycleRead, setCycle: Dispatch<SetStateAction<PanelCycle>>): void {
+  if (read.available) {
+    logUnrecognisedReason(read.outcome);
+  }
+  setCycle((previous) => nextPanelCycle(previous, read));
 }
 
 // Regenerate cannot fix this one — the abandoned enrol dropped the key it would need.
@@ -244,9 +267,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   // one after disable→re-enable, and syncNow's refresh can't lose a race with the mount fetch.
   const detailsGenRef = useRef(0);
   // What the last cycle did. Reads are guarded by lastCycleGenRef, a click's paint by accountGenRef.
-  const [lastCycle, setLastCycle] = useState<SyncOutcome | null>(null);
-  // A read that could not answer, kept apart from the outcome so it can never clear a badge.
-  const [cycleUnknown, setCycleUnknown] = useState(false);
+  const [cycle, setCycle] = useState<PanelCycle>(CYCLE_NONE);
   // Which account the panel shows; a disable or a successful (re)connect moves it. Separate from
   // the read counter, which any status transition bumps — that must not silence a click.
   const accountGenRef = useRef(0);
@@ -313,7 +334,8 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
         if (lastCycleGenRef.current !== gen) {
           return;
         }
-        if (!adoptLastCycle(read, setLastCycle, setCycleUnknown)) {
+        adoptRead(read, setCycle);
+        if (!read.available) {
           // An unreadable read (asleep worker, timeout) is a transient miss like the details one —
           // re-arm so the next status transition retries instead of latching the badge off.
           lastCycleRequestedRef.current = false;
@@ -324,7 +346,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
         // unreadable read rather than a quieter one, so both paths say "couldn't check".
         logger.error(`Cloud sync last cycle unavailable: ${describeThrown(error)}`, error);
         if (lastCycleGenRef.current === gen) {
-          adoptLastCycle(LAST_CYCLE_UNAVAILABLE, setLastCycle, setCycleUnknown);
+          adoptRead(LAST_CYCLE_UNAVAILABLE, setCycle);
           lastCycleRequestedRef.current = false;
         }
       }
@@ -373,7 +395,8 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     if (lastCycleGenRef.current !== gen) {
       return;
     }
-    if (!adoptLastCycle(read, setLastCycle, setCycleUnknown)) {
+    adoptRead(read, setCycle);
+    if (!read.available) {
       lastCycleRequestedRef.current = false;
     }
   };
@@ -395,6 +418,9 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   const adoptNewAccount = async () => {
     accountGenRef.current += 1;
     detailsRequestedRef.current = false;
+    // Cleared first, like handleDisable: if the re-read below cannot answer, the carry-forward
+    // would hand this account the previous one's failure.
+    setCycle(CYCLE_NONE);
     await refreshLastCycle();
     await refreshDetails();
   };
@@ -603,8 +629,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
         // `no-key` means no cycle ran, so it must not speak for the last one that did — the engine
         // refuses to persist it for the same reason. Everything else is an answer.
         if (outcome.kind !== 'no-key') {
-          setLastCycle(outcome);
-          setCycleUnknown(false);
+          setCycle({ kind: 'outcome', outcome });
         }
         if (outcome.kind === 'synced') {
           useToastStore.getState().success('Synced');
@@ -683,8 +708,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       detailsGenRef.current += 1;
       // Same reasoning for the cycle: a re-enable must never wear the previous account's failure,
       // nor its "couldn't check" — this is what retires a click the disable superseded.
-      setLastCycle(null);
-      setCycleUnknown(false);
+      setCycle(CYCLE_NONE);
       lastCycleGenRef.current += 1;
       accountGenRef.current += 1;
     } catch (error) {
@@ -707,13 +731,16 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   };
 
   const switchChecked = status === 'off' ? enabling : true;
-  const pillLabel = STATUS_PILL_LABEL[status];
+  // `?? QUIET` so a status this build does not know renders nothing, not an empty pill or prompt.
+  const presentation = STATUS_PRESENTATION[status] ?? QUIET;
+  const pillLabel = presentation.kind === 'pill' ? presentation.label : null;
   // Beside the pill, never instead of it: status stays 'active' so the recovery controls survive.
-  const badgeMessage = lastCycle?.kind === 'failed' ? failureMessage(lastCycle.reason) : null;
-  // A failure outranks an unknown, and mid-enrolment there is no freshness claim to qualify yet.
-  const showUnknownCycle = status === 'active' && badgeMessage === null && cycleUnknown;
-  // `?? null` so an unknown persisted status renders nothing, not an empty prompt.
-  const reconnectPrompt = RECONNECT_PROMPT[status] ?? null;
+  const known = knownOutcome(cycle);
+  const badgeMessage = known?.kind === 'failed' ? failureMessage(known.reason) : null;
+  // The badge outranks it: a carried-forward failure is the stronger claim. Only 'active' makes a
+  // freshness claim worth qualifying — connecting and syncing have not made one yet.
+  const showUnknownCycle = status === 'active' && cycle.kind === 'unknown' && badgeMessage === null;
+  const reconnectPrompt = presentation.kind === 'reconnect' ? presentation.prompt : null;
   // Only an explicit false: null is "self-heal has not answered", and an older service worker
   // answers details with the field absent entirely. Neither may claim an account has no code.
   // Gated on 'active' because that is the only status where Regenerate, the one fix, renders.

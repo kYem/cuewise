@@ -15,6 +15,29 @@ export type SyncUiStatus =
   /** Enrolled, but this device cannot read its key: recoverable with the recovery code. */
   | 'needs_enroll';
 
+// Total by construction: a new SyncUiStatus member without an entry here is a compile error, so
+// the validator below cannot silently start rejecting a status the rest of the app accepts.
+const SYNC_UI_STATUSES: Record<SyncUiStatus, true> = {
+  off: true,
+  connecting: true,
+  active: true,
+  syncing: true,
+  error: true,
+  needs_reauth: true,
+  needs_enroll: true,
+};
+
+/**
+ * Narrows a value that crossed an untyped boundary — a host's own storage hands it back whatever
+ * some other build wrote. Own properties only, so a stored `constructor` cannot pass.
+ */
+export function asSyncUiStatus(value: unknown): SyncUiStatus | null {
+  if (typeof value === 'string' && Object.hasOwn(SYNC_UI_STATUSES, value)) {
+    return value as SyncUiStatus;
+  }
+  return null;
+}
+
 export type EnableResult =
   | { ok: true; recoveryCode?: string }
   | {
