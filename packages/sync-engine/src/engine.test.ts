@@ -2658,3 +2658,138 @@ describe('SyncEngine.regenerateRecoveryCode', () => {
     await expect(device.engine.regenerateRecoveryCode()).rejects.toThrow();
   });
 });
+
+describe('push on change', () => {
+  it('pushes a mutation without waiting for the five-minute wake', async () => {
+    vi.useFakeTimers();
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    const goal = goalFactory.build({ id: 'g1' });
+    await setGoals([goal]);
+    server.reset();
+
+    await device.engine.markMutated('goals', 'g1');
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    expect(server.allRecords().some((r) => r.entityId === 'g1')).toBe(true);
+    vi.useRealTimers();
+  });
+
+  it('coalesces a burst of mutations into one cycle', async () => {
+    vi.useFakeTimers();
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    const syncNow = vi.spyOn(device.engine, 'syncNow');
+
+    await device.engine.markMutated('goals', 'g1');
+    await vi.advanceTimersByTimeAsync(500);
+    await device.engine.markMutated('goals', 'g1');
+    await vi.advanceTimersByTimeAsync(500);
+    await device.engine.markMutated('goals', 'g1');
+
+    // Each later mutation must replace the pending timer, not add another one alongside it —
+    // an uncancelled extra timer would eventually fire its own cycle, just later and unobserved
+    // by a short window (cycleInFlight would mask it as a harmless re-arm).
+    expect(vi.getTimerCount()).toBe(1);
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    expect(syncNow).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
+  it('still ships during a continuous stream of edits, at the max wait', async () => {
+    vi.useFakeTimers();
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    const syncNow = vi.spyOn(device.engine, 'syncNow');
+
+    // An edit every second forever would reset a plain debounce and never push.
+    for (let i = 0; i < 12; i += 1) {
+      await device.engine.markMutated('goals', 'g1');
+      await vi.advanceTimersByTimeAsync(1_000);
+    }
+
+    expect(syncNow).toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it('defers rather than running a second cycle over one already going', async () => {
+    vi.useFakeTimers();
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+
+    let release = (): void => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const original = device.apiClient.getChanges.bind(device.apiClient);
+    vi.spyOn(device.apiClient, 'getChanges').mockImplementation(async (since: number) => {
+      await gate;
+      return original(since);
+    });
+    // Attached after enableSync's own cycle, so it only counts calls from here on.
+    const syncNow = vi.spyOn(device.engine, 'syncNow');
+
+    const running = device.engine.syncNow();
+    await device.engine.markMutated('goals', 'g1');
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    // The timer fired while the first cycle was still inside getChanges: still just the one call.
+    expect(syncNow).toHaveBeenCalledTimes(1);
+
+    release();
+    await running;
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    // Once the first cycle finished, the deferred push still ran a cycle of its own.
+    expect(syncNow).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
+  });
+
+  it('cancels a pending push when the account is disabled mid-debounce', async () => {
+    // dk is nulled by disableSync regardless, which would push nothing either way — spying on
+    // syncNow, not the server, is what actually proves stop() cancelled the pending timer.
+    vi.useFakeTimers();
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    await device.engine.markMutated('goals', 'g1');
+
+    await device.engine.disableSync();
+    const syncNow = vi.spyOn(device.engine, 'syncNow');
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    expect(syncNow).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it('does not schedule a push for a mutation recorded after the account was disabled', async () => {
+    vi.useFakeTimers();
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    await device.engine.disableSync();
+    const syncNow = vi.spyOn(device.engine, 'syncNow');
+
+    await device.engine.markMutated('goals', 'g1');
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    expect(syncNow).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+});

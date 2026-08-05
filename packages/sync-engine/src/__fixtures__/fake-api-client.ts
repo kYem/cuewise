@@ -63,6 +63,11 @@ export class FakeSyncServer {
   allRecords(): readonly SyncRecord[] {
     return this.records;
   }
+
+  /** Test-only: drops everything pushed so far, so a test can assert on what happens next. */
+  reset(): void {
+    this.records.length = 0;
+  }
 }
 
 /**
