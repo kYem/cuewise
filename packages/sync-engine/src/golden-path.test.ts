@@ -9,13 +9,14 @@ import {
 } from '@cuewise/storage';
 import { SessionManager } from '@cuewise/sync-client';
 import { goalFactory, quoteFactory } from '@cuewise/test-utils/factories';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FakeApiClient, FakeSyncServer } from './__fixtures__/fake-api-client';
 import { FakeKvStore } from './__fixtures__/fake-kv-store';
 import { FakeScheduler } from './__fixtures__/fake-scheduler';
 import { NoopStrategy } from './__fixtures__/noop-strategy';
 import { type CollectionBinding, defaultBindings } from './collections';
 import { SyncEngine, type SyncEngineDeps } from './engine';
+import { SyncMetadataStore } from './metadata-store';
 
 interface Device {
   kv: FakeKvStore;
@@ -36,6 +37,15 @@ function makeClock(start: number): () => number {
     return value;
   };
 }
+
+// Every engine createDevice makes, so afterEach can stop() each one — a markMutated call under
+// real timers arms a real 2s setTimeout, and nothing else in this file ever cancels it.
+let devices: Device[] = [];
+
+afterEach(async () => {
+  await Promise.all(devices.map((device) => device.engine.stop().catch(() => {})));
+  devices = [];
+});
 
 /** One "device": its own storage/scheduler/session/clock, sharing the given fake server. */
 function createDevice(
@@ -58,7 +68,9 @@ function createDevice(
     onRecoveryCode,
     ...overrides,
   });
-  return { kv, apiClient, scheduler, engine, onStatus, onRecoveryCode };
+  const device = { kv, apiClient, scheduler, engine, onStatus, onRecoveryCode };
+  devices.push(device);
+  return device;
 }
 
 /** Points the shared @cuewise/storage helpers at this device's backend for the next await chain. */
@@ -67,7 +79,11 @@ function useStorage(device: Pick<Device, 'kv'>): void {
 }
 
 function getBinding(name: string): CollectionBinding {
-  const binding = defaultBindings().find((b) => b.name === name);
+  return requireBinding(defaultBindings(), name);
+}
+
+function requireBinding(bindings: CollectionBinding[], name: string): CollectionBinding {
+  const binding = bindings.find((b) => b.name === name);
   if (binding === undefined) {
     throw new Error(`no binding named ${name}`);
   }
@@ -169,6 +185,60 @@ describe('golden path: two devices converge through one shared fake server', () 
     useStorage(deviceA);
     const aGoalsAfterDelete = await getGoals();
     expect(aGoalsAfterDelete.find((g) => g.id === 'g1')).toBeUndefined();
+  });
+});
+
+describe('an edit made while a pull is in flight still reaches the other device', () => {
+  /**
+   * The pull writes the remote body, the user types over it, and the pull then saves. Stamping
+   * that key back to the remote's hlc leaves the surviving dirty mark pushing the user's body
+   * under a stamp every peer already holds — LWW ties, and the edit exists on one device only.
+   */
+  it('keeps the hlc the edit stamped, so the record it pushes outranks the one it raced', async () => {
+    const server = new FakeSyncServer();
+    const deviceA = createDevice(server, makeClock(1_000_000));
+    useStorage(deviceA);
+    await setGoals([goalFactory.build({ id: 'g1', text: 'A original' })]);
+    await deviceA.engine.enableSync('dev', 'devA-cred', 'Device A');
+    const recoveryCode = deviceA.onRecoveryCode.mock.calls[0][0] as string;
+
+    // B's bindings are its own instances so the pull's write can be hooked on that device alone.
+    const bBindings = defaultBindings();
+    const deviceB = createDevice(server, makeClock(5_000_000), { bindings: bBindings });
+    useStorage(deviceB);
+    await deviceB.engine.enableSync('dev', 'devB-cred', 'Device B', { recoveryCode });
+    await deviceB.engine.syncNow();
+
+    useStorage(deviceA);
+    const aEdit = goalFactory.build({ id: 'g1', text: 'A edited' });
+    await getBinding('goals').writeOne('g1', aEdit);
+    await deviceA.engine.markMutated('goals', 'g1');
+    await deviceA.engine.syncNow();
+
+    const bEdit = goalFactory.build({ id: 'g1', text: 'B typed over the pull' });
+    const bGoals = requireBinding(bBindings, 'goals');
+    const write = bGoals.writeOne.bind(bGoals);
+    let stampedByEdit: string | undefined;
+    vi.spyOn(bGoals, 'writeOne').mockImplementation(async (entityId, entity) => {
+      const result = await write(entityId, entity);
+      if (entityId === 'g1' && stampedByEdit === undefined) {
+        await write('g1', bEdit);
+        await deviceB.engine.markMutated('goals', 'g1');
+        stampedByEdit = (await new SyncMetadataStore(deviceB.kv).load()).hlcs['goals/g1'];
+      }
+      return result;
+    });
+
+    useStorage(deviceB);
+    await deviceB.engine.syncNow();
+
+    const bLedger = await new SyncMetadataStore(deviceB.kv).load();
+    expect(bLedger.hlcs['goals/g1']).toBe(stampedByEdit);
+
+    useStorage(deviceA);
+    await deviceA.engine.syncNow();
+    const aGoals = await getGoals();
+    expect(aGoals.find((g) => g.id === 'g1')?.text).toBe(bEdit.text);
   });
 });
 

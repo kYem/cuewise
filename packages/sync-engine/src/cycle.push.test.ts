@@ -8,6 +8,7 @@ import { FakeTransport } from './__fixtures__/fake-transport';
 import { defaultBindings } from './collections';
 import { type CycleDeps, pushOnce } from './cycle';
 import { type SyncMeta, SyncMetadataStore } from './metadata-store';
+import { MutationTracker } from './mutation-tracker';
 import { LwwHlcStrategy } from './strategy';
 
 const KEY_ID = 'dk-1';
@@ -26,6 +27,16 @@ async function seedDirty(
   }
   await metaStore.save(meta);
   return meta;
+}
+
+/** Runs `landing` inside the push's round trip — after the server acked, before the ledger write. */
+function duringPush(transport: FakeTransport, landing: () => Promise<void>): void {
+  const pushChanges = transport.pushChanges.bind(transport);
+  vi.spyOn(transport, 'pushChanges').mockImplementation(async (records) => {
+    const ack = await pushChanges(records);
+    await landing();
+    return ack;
+  });
 }
 
 function makeDeps(
@@ -183,6 +194,46 @@ describe('pushOnce', () => {
 
     const saved = await metaStore.load();
     expect(saved.dirty.goals).toEqual(['g1']);
+  });
+
+  it('keeps an edit marked dirty while the batch was in flight, clearing only what it sent', async () => {
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    const metaStore = new SyncMetadataStore(kv);
+    await seedDirty(metaStore, 'goals', ['g1']);
+    const tracker = new MutationTracker(metaStore, () => 1000);
+    duringPush(transport, () => tracker.markMutated('quotes', 'q1'));
+
+    await pushOnce(makeDeps(kv, transport, { meta: metaStore }));
+
+    const saved = await metaStore.load();
+    expect(saved.dirty.goals).toBeUndefined();
+    expect(saved.dirty.quotes).toEqual(['q1']);
+  });
+
+  it('keeps an id dirty when it was re-edited while its own batch was in flight', async () => {
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    const metaStore = new SyncMetadataStore(kv);
+    await seedDirty(metaStore, 'goals', ['g1']);
+    const tracker = new MutationTracker(metaStore, () => 1000);
+    duringPush(transport, () => tracker.markMutated('goals', 'g1'));
+
+    await pushOnce(makeDeps(kv, transport, { meta: metaStore }));
+
+    const saved = await metaStore.load();
+    expect(saved.dirty.goals).toEqual(['g1']);
+  });
+
+  it('keeps a tombstone a delete re-marked while its own batch was in flight', async () => {
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    const metaStore = new SyncMetadataStore(kv);
+    await seedDirty(metaStore, 'goals', ['g1']);
+    const tracker = new MutationTracker(metaStore, () => 1000);
+    duringPush(transport, () => tracker.markDeleted('goals', 'g1'));
+
+    await pushOnce(makeDeps(kv, transport, { meta: metaStore }));
+
+    const saved = await metaStore.load();
+    expect(saved.tombstones).toContain('goals/g1');
   });
 
   // The only trace of what a healthy cycle moved: nothing else logs on the success path.

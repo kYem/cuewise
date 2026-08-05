@@ -68,6 +68,12 @@ export const RECOVERY_ENVELOPE_KEY = 'cuewise.sync.recoveryEnvelope';
 // The periodic pull backstop cadence (spec §3: "~5 min"); foreground opens trigger sooner via syncNow.
 const PULL_REARM_MINUTES = 5;
 
+// A local edit should not wait for the five-minute wake to leave the device. setTimeout, not
+// the Scheduler port: that port schedules OS wakes in minutes and cannot do seconds.
+const PUSH_DEBOUNCE_MS = 2_000;
+// So a continuous stream of edits still ships instead of resetting the debounce forever.
+const PUSH_MAX_WAIT_MS = 10_000;
+
 // Auth providers the enable flow can exchange for a session. Apple isn't in the type yet only
 // because no client-side Apple bounce driver exists — the enableSync/codeVerifier plumbing it
 // needs is already in place (the macOS google flow uses it).
@@ -175,6 +181,11 @@ export class SyncEngine {
   // The cancellation token for everything a disable must stop: the cycle, each enrol checkpoint,
   // start(), and any bookkeeping already in flight. Only disableSync bumps it, and only upward.
   private accountEpoch = 0;
+  private pushTimer: ReturnType<typeof setTimeout> | null = null;
+  private pushDeadline: number | null = null;
+  // A count, not a flag: syncNow is concurrently callable (explicit sync, pull wake, start), and a
+  // second cycle finishing first would otherwise clear it while the first is still running.
+  private cyclesInFlight = 0;
 
   constructor(private readonly deps: SyncEngineDeps) {
     this.now = deps.now ?? Date.now;
@@ -473,50 +484,55 @@ export class SyncEngine {
    * landed inside it. Never throws: callers read the result. A no-op until a DK is held.
    */
   async syncNow(): Promise<SyncNowResult> {
-    const epoch = this.accountEpoch;
-    const outcome = await this.runCycle(epoch);
-    // Both an abandoned cycle and a whole one for a removed account answer `cancelled`: the stamp
-    // and the record below would re-create the very keys disableSync removed, and handleAuthLoss
-    // would repaint the pill as "Sign-in expired" for a device the user deliberately disconnected.
-    if (outcome.kind === 'cancelled' || this.accountEpoch !== epoch) {
-      logger.debug(
-        `Sync cycle result dropped: the account was disabled mid-cycle (${outcome.kind})`
-      );
-      return { kind: 'cancelled' };
+    this.cyclesInFlight += 1;
+    try {
+      const epoch = this.accountEpoch;
+      const outcome = await this.runCycle(epoch);
+      // Both an abandoned cycle and a whole one for a removed account answer `cancelled`: the stamp
+      // and the record below would re-create the very keys disableSync removed, and handleAuthLoss
+      // would repaint the pill as "Sign-in expired" for a device the user deliberately disconnected.
+      if (outcome.kind === 'cancelled' || this.accountEpoch !== epoch) {
+        logger.debug(
+          `Sync cycle result dropped: the account was disabled mid-cycle (${outcome.kind})`
+        );
+        return { kind: 'cancelled' };
+      }
+      if (outcome.kind === 'signed-out') {
+        await this.bestEffort(() => this.handleAuthLoss(), 'auth-loss cleanup');
+      }
+      if (outcome.kind === 'synced') {
+        await this.bestEffort(() => this.stampLastSynced(), 'lastSyncedAt stamp');
+      }
+      if (outcome.kind === 'failed') {
+        // Logged here, not per caller: this is the only place every caller passes through, and the
+        // only one still holding the error itself (the page realm gets a serialized outcome). Reason
+        // and cause go in the MESSAGE — `message` and `cause` are both non-enumerable, so an object
+        // payload renders as `{}` on JSON surfaces and `[object Object]` on coercing ones.
+        logger.error(
+          `Sync cycle failed (${outcome.reason}); the next scheduled wake will retry: ${describeThrown(outcome.error)}`,
+          outcome.error
+        );
+      }
+      // `no-key` means no cycle ran, so it must not speak for the last one that did. An MV3 alarm
+      // registers before start() and can wake a cold worker ahead of the key load, and that no-op
+      // would otherwise overwrite — durably — the failure the user needs to see.
+      if (outcome.kind !== 'no-key') {
+        const cycle: SyncCycle = { at: this.now(), outcome };
+        this.lastCycle = cycle;
+        this.lastCycleKnown = true;
+        await this.bestEffort(() => this.persistLastCycle(cycle), 'last-cycle persist');
+      }
+      // Re-checked after those writes, not only before them: a disable landing inside one of them
+      // would otherwise leave the removed account's stamp to be hydrated onto whatever comes next,
+      // and hand the caller a `synced` to toast.
+      if (this.accountEpoch !== epoch) {
+        await this.rollbackCycleRecord();
+        return { kind: 'cancelled' };
+      }
+      return outcome;
+    } finally {
+      this.cyclesInFlight -= 1;
     }
-    if (outcome.kind === 'signed-out') {
-      await this.bestEffort(() => this.handleAuthLoss(), 'auth-loss cleanup');
-    }
-    if (outcome.kind === 'synced') {
-      await this.bestEffort(() => this.stampLastSynced(), 'lastSyncedAt stamp');
-    }
-    if (outcome.kind === 'failed') {
-      // Logged here, not per caller: this is the only place every caller passes through, and the
-      // only one still holding the error itself (the page realm gets a serialized outcome). Reason
-      // and cause go in the MESSAGE — `message` and `cause` are both non-enumerable, so an object
-      // payload renders as `{}` on JSON surfaces and `[object Object]` on coercing ones.
-      logger.error(
-        `Sync cycle failed (${outcome.reason}); the next scheduled wake will retry: ${describeThrown(outcome.error)}`,
-        outcome.error
-      );
-    }
-    // `no-key` means no cycle ran, so it must not speak for the last one that did. An MV3 alarm
-    // registers before start() and can wake a cold worker ahead of the key load, and that no-op
-    // would otherwise overwrite — durably — the failure the user needs to see.
-    if (outcome.kind !== 'no-key') {
-      const cycle: SyncCycle = { at: this.now(), outcome };
-      this.lastCycle = cycle;
-      this.lastCycleKnown = true;
-      await this.bestEffort(() => this.persistLastCycle(cycle), 'last-cycle persist');
-    }
-    // Re-checked after those writes, not only before them: a disable landing inside one of them
-    // would otherwise leave the removed account's stamp to be hydrated onto whatever comes next,
-    // and hand the caller a `synced` to toast.
-    if (this.accountEpoch !== epoch) {
-      await this.rollbackCycleRecord();
-      return { kind: 'cancelled' };
-    }
-    return outcome;
   }
 
   private async rollbackCycleRecord(): Promise<void> {
@@ -955,6 +971,11 @@ export class SyncEngine {
   /** Cancels the armed pull wake. Does not touch session/keys — call disableSync() for that. */
   async stop(): Promise<void> {
     await this.deps.scheduler.cancel(SYNC_PULL_WAKE_ID);
+    if (this.pushTimer !== null) {
+      clearTimeout(this.pushTimer);
+      this.pushTimer = null;
+      this.pushDeadline = null;
+    }
   }
 
   /**
@@ -969,15 +990,54 @@ export class SyncEngine {
 
   async markMutated(collection: string, entityId: string): Promise<void> {
     await this.tracker.markMutated(collection, entityId);
+    this.schedulePush();
   }
 
   /** Bulk form of markMutated: one meta load/save for the whole id list, not one per id. */
   async markMutatedBulk(collection: string, entityIds: string[]): Promise<void> {
     await this.tracker.markMutatedBulk(collection, entityIds);
+    this.schedulePush();
   }
 
   async markDeleted(collection: string, entityId: string): Promise<void> {
     await this.tracker.markDeleted(collection, entityId);
+    this.schedulePush();
+  }
+
+  private schedulePush(): void {
+    // Statuses whose wake is cancelled or whose cycles cannot complete; enableSync re-arms.
+    if (
+      this.status === 'disabled' ||
+      this.status === 'signed_out' ||
+      this.status === 'needs_enroll'
+    ) {
+      return;
+    }
+    const now = this.now();
+    if (this.pushDeadline === null) {
+      this.pushDeadline = now + PUSH_MAX_WAIT_MS;
+    }
+    const delay = Math.min(PUSH_DEBOUNCE_MS, Math.max(0, this.pushDeadline - now));
+    if (this.pushTimer !== null) {
+      clearTimeout(this.pushTimer);
+    }
+    this.pushTimer = setTimeout(() => {
+      void this.firePush();
+    }, delay);
+  }
+
+  private async firePush(): Promise<void> {
+    this.pushTimer = null;
+    if (this.cyclesInFlight > 0) {
+      // Clear the deadline before re-arming: otherwise, once the in-flight cycle outlives
+      // PUSH_MAX_WAIT_MS, the stale deadline computes delay 0 forever and this spins instead
+      // of polling. Re-arm rather than run a second cycle over the top of the one already going.
+      this.pushDeadline = null;
+      this.schedulePush();
+      return;
+    }
+    this.pushDeadline = null;
+    await this.syncNowLoopSafe();
   }
 
   // LOOP callers must never let a transient failure (e.g. offline) kill the backstop poll
@@ -1028,22 +1088,19 @@ export class SyncEngine {
   // Only the cursor: widening this would drop the quarantine list too, and the device would
   // re-quarantine the same records on its next pull, re-toasting the user every time.
   private async resetPullCursor(): Promise<void> {
-    const meta = await this.meta.load();
-    if (meta.cursor === 0) {
-      return;
-    }
-    meta.cursor = 0;
-    await this.meta.save(meta);
+    await this.meta.update((meta) => {
+      meta.cursor = 0;
+    });
   }
 
   private async resetMeta(): Promise<void> {
-    const meta = await this.meta.load();
-    meta.cursor = 0;
-    meta.dirty = {};
-    meta.hlcs = {};
-    meta.tombstones = [];
-    meta.quarantine = [];
-    await this.meta.save(meta);
+    await this.meta.update((meta) => {
+      meta.cursor = 0;
+      meta.dirty = {};
+      meta.hlcs = {};
+      meta.tombstones = [];
+      meta.quarantine = [];
+    });
   }
 
   // Auth 401 (spec §5): drop the session, stop the loop, keep local data + DK. User re-enables.
