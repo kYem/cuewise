@@ -25,6 +25,7 @@ import { QuoteDisplay } from './QuoteDisplay';
 import { ReminderWidget } from './ReminderWidget';
 import { ReviewPromptModal } from './ReviewPromptModal';
 import { SettingsModal } from './SettingsModal';
+import { SyncMenuFooter } from './SyncMenuFooter';
 import type { SettingsSection } from './settings/SettingsSections';
 import { WeatherWidget } from './WeatherWidget';
 import { WelcomeModal } from './WelcomeModal';
@@ -352,6 +353,7 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({ extraSections }) => {
               <Settings className="w-5 h-5 text-primary-600" />
               <span className="text-sm font-medium">Settings</span>
             </button>
+            <SyncMenuFooter onOpenSettings={handleOpenSettings} />
           </div>
         )}
       </div>
