@@ -5,7 +5,7 @@ import type {
   SyncDetails,
   SyncUiStatus,
 } from '@cuewise/app';
-import { LAST_CYCLE_UNAVAILABLE } from '@cuewise/app';
+import { asSyncUiStatus, LAST_CYCLE_UNAVAILABLE } from '@cuewise/app';
 import { describeThrown, logger } from '@cuewise/shared';
 import {
   CLOUD_SYNC_ENABLED_KEY,
@@ -270,6 +270,14 @@ export class BridgeSyncController implements SyncController {
     return response.outcome;
   }
 
+  /** The type, plus the value when it is a short string: a status is a vocabulary, not user data. */
+  private static describeStatus(value: unknown): string {
+    if (typeof value !== 'string') {
+      return typeof value;
+    }
+    return value.length <= 40 ? value : `${value.slice(0, 40)}…`;
+  }
+
   private setStatus(status: SyncUiStatus): void {
     this.status = status;
     for (const subscriber of this.subscribers) {
@@ -286,9 +294,18 @@ export class BridgeSyncController implements SyncController {
       this.setStatus('off');
       return;
     }
-    const persistedStatus = stored[STATUS_KEY] as SyncUiStatus | undefined;
-    if (persistedStatus !== undefined) {
-      this.setStatus(persistedStatus);
+    const rawStatus = stored[STATUS_KEY];
+    if (rawStatus !== undefined) {
+      // Absent falls through to the enabled-flag reconcile below; present-but-unrecognised does
+      // not — a worker newer or older than this page wrote it, and guessing which is worse than
+      // saying the panel cannot tell.
+      const persistedStatus = asSyncUiStatus(rawStatus);
+      if (persistedStatus === null) {
+        logger.error(
+          `Ignoring an unrecognised persisted sync status: ${BridgeSyncController.describeStatus(rawStatus)}`
+        );
+      }
+      this.setStatus(persistedStatus ?? 'error');
       return;
     }
     if (stored[CLOUD_SYNC_ENABLED_KEY] === true) {
@@ -308,9 +325,15 @@ export class BridgeSyncController implements SyncController {
         }
         const statusChange = changes[STATUS_KEY];
         if (statusChange !== undefined) {
-          const newStatus = statusChange.newValue as SyncUiStatus | undefined;
-          if (newStatus !== undefined) {
-            this.setStatus(newStatus);
+          const raw = statusChange.newValue;
+          if (raw !== undefined) {
+            const newStatus = asSyncUiStatus(raw);
+            if (newStatus === null) {
+              logger.error(
+                `Ignoring an unrecognised sync status change: ${BridgeSyncController.describeStatus(raw)}`
+              );
+            }
+            this.setStatus(newStatus ?? 'error');
           }
         }
         const quarantineChange = changes[QUARANTINE_KEY];

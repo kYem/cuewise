@@ -1,5 +1,5 @@
 import { logger } from '@cuewise/shared';
-import type { SyncFailureReason } from '@cuewise/sync-engine';
+import type { SyncFailureReason, SyncOutcome } from '@cuewise/sync-engine';
 import { defaultSettings } from '@cuewise/test-utils';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -67,6 +67,37 @@ const enterEnableStep = async (user: ReturnType<typeof userEvent.setup>, account
   await user.click(cloudSyncSwitch());
   await user.type(screen.getByLabelText('Account ID'), accountId);
 };
+
+/** The failure the badge tests use: `device` is also the bucket for anything unrecognised. */
+const deviceFailure = (): SyncOutcome => ({
+  kind: 'failed',
+  reason: 'device',
+  error: new Error('unreadable'),
+});
+
+/** Renders an active panel already showing a failure badge — the start state for the tests below. */
+async function renderShowingFailureBadge(controller: FakeSyncController): Promise<void> {
+  controller.scriptLastCycle(deviceFailure());
+  renderSection(controller);
+  act(() => controller.setStatus('active'));
+  await screen.findByTestId('sync-failure-badge');
+}
+
+/**
+ * A Sync now whose read cannot answer and whose call then times out — the path that folds an
+ * unavailable read over whatever the panel already knew.
+ */
+async function syncNowTimesOutOnUnavailableRead(
+  user: ReturnType<typeof userEvent.setup>,
+  controller: FakeSyncController
+): Promise<void> {
+  controller.scriptLastCycleUnavailable();
+  controller.deferNextSyncNow();
+  await user.click(screen.getByRole('button', { name: 'Sync now' }));
+  await act(async () => {
+    controller.rejectSyncNow(new Error('Sync control message timed out'));
+  });
+}
 
 describe('SyncSettingsSectionComponent', () => {
   beforeEach(() => {
@@ -1118,7 +1149,7 @@ describe('SyncSettingsSectionComponent', () => {
       accountId: 'user-1',
       lastSyncedAt: null,
     });
-    controller.scriptSyncNow({ kind: 'failed', reason: 'device', error: new Error('unreadable') });
+    controller.scriptSyncNow(deviceFailure());
     renderSection(controller);
     act(() => controller.setStatus('active'));
     await screen.findByTestId('sync-account-label');
@@ -1182,7 +1213,7 @@ describe('SyncSettingsSectionComponent', () => {
   it('leaves the badge and the toasts alone when a disable retires the cycle', async () => {
     const user = userEvent.setup();
     const controller = new FakeSyncController();
-    controller.scriptSyncNow({ kind: 'failed', reason: 'device', error: new Error('unreadable') });
+    controller.scriptSyncNow(deviceFailure());
     controller.scriptSyncNow({ kind: 'cancelled' });
     renderSection(controller);
     act(() => controller.setStatus('active'));
@@ -1211,7 +1242,7 @@ describe('SyncSettingsSectionComponent', () => {
     // next mount's read must not answer with it — this pins the fake to the engine it stands for.
     const user = userEvent.setup();
     const controller = new FakeSyncController();
-    controller.scriptSyncNow({ kind: 'failed', reason: 'device', error: new Error('unreadable') });
+    controller.scriptSyncNow(deviceFailure());
     controller.scriptSyncNow({ kind: 'no-key' });
     const { unmount } = renderSection(controller);
     act(() => controller.setStatus('active'));
@@ -1370,25 +1401,42 @@ describe('SyncSettingsSectionComponent', () => {
     // The badge is the stronger claim; an unreadable read says nothing about it.
     const user = userEvent.setup();
     const controller = new FakeSyncController();
-    controller.scriptLastCycle({
-      kind: 'failed',
-      reason: 'device',
-      error: new Error('unreadable'),
-    });
+    controller.scriptLastCycle(deviceFailure());
     renderSection(controller);
     act(() => controller.setStatus('active'));
     await screen.findByTestId('sync-failure-badge');
 
     // A rejected Sync now routes through refreshLastCycle — the path that reads a second time.
-    controller.scriptLastCycleUnavailable();
-    controller.deferNextSyncNow();
-    await user.click(screen.getByRole('button', { name: 'Sync now' }));
-    await act(async () => {
-      controller.rejectSyncNow(new Error('Sync control message timed out'));
-    });
+    await syncNowTimesOutOnUnavailableRead(user, controller);
 
     expect(screen.getByTestId('sync-failure-badge')).toBeInTheDocument();
     expect(screen.queryByTestId('sync-cycle-unknown')).not.toBeInTheDocument();
+  });
+
+  // Two unreadable reads in a row: the second folds over an `unknown`, not over the outcome, so
+  // the carried-forward failure has to survive the hop or the badge silently downgrades.
+  it('keeps the failure badge across a second unavailable read', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    await renderShowingFailureBadge(controller);
+
+    await syncNowTimesOutOnUnavailableRead(user, controller);
+    await syncNowTimesOutOnUnavailableRead(user, controller);
+
+    expect(screen.getByTestId('sync-failure-badge')).toBeInTheDocument();
+    expect(screen.queryByTestId('sync-cycle-unknown')).not.toBeInTheDocument();
+  });
+
+  // A cycle that answers is the one thing that may retire a carried-forward failure.
+  it('drops the failure badge once a cycle succeeds', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    await renderShowingFailureBadge(controller);
+
+    controller.scriptSyncNow({ kind: 'synced' });
+    await user.click(screen.getByRole('button', { name: 'Sync now' }));
+
+    await waitFor(() => expect(screen.queryByTestId('sync-failure-badge')).not.toBeInTheDocument());
   });
 
   it('asks for the recovery code, not a re-auth, when this device has no key', async () => {
@@ -1544,11 +1592,7 @@ describe('SyncSettingsSectionComponent', () => {
     // to persist that over the last real cycle; the panel must refuse to paint it for the same reason.
     const user = userEvent.setup();
     const controller = new FakeSyncController();
-    controller.scriptLastCycle({
-      kind: 'failed',
-      reason: 'device',
-      error: new Error('unreadable'),
-    });
+    controller.scriptLastCycle(deviceFailure());
     controller.scriptSyncNow({ kind: 'no-key' });
     renderSection(controller);
     act(() => controller.setStatus('active'));
@@ -1631,11 +1675,7 @@ describe('SyncSettingsSectionComponent', () => {
   it("drops the failure on disable so a re-enable cannot show the old account's", async () => {
     const user = userEvent.setup();
     const controller = new FakeSyncController();
-    controller.scriptLastCycle({
-      kind: 'failed',
-      reason: 'device',
-      error: new Error('unreadable'),
-    });
+    controller.scriptLastCycle(deviceFailure());
     renderSection(controller);
     act(() => controller.setStatus('active'));
     await screen.findByText(DEVICE_FAILURE_MESSAGE);
@@ -1664,11 +1704,7 @@ describe('SyncSettingsSectionComponent', () => {
     act(() => controller.setStatus('active'));
 
     await act(async () => {
-      controller.resolveSyncNow({
-        kind: 'failed',
-        reason: 'device',
-        error: new Error('unreadable'),
-      });
+      controller.resolveSyncNow(deviceFailure());
     });
 
     expect(screen.queryByTestId('sync-failure-badge')).not.toBeInTheDocument();
@@ -1798,11 +1834,7 @@ describe('SyncSettingsSectionComponent', () => {
       expect(controller.calls.filter((c) => c.method === 'getLastCycle')).toHaveLength(1)
     );
 
-    controller.scriptLastCycle({
-      kind: 'failed',
-      reason: 'device',
-      error: new Error('unreadable'),
-    });
+    controller.scriptLastCycle(deviceFailure());
     act(() => controller.setStatus('active'));
 
     expect(await screen.findByTestId('sync-failure-badge')).toHaveTextContent(
@@ -1942,7 +1974,7 @@ describe('SyncSettingsSectionComponent', () => {
     const user = userEvent.setup();
     const controller = new FakeSyncController();
     controller.deferNextLastCycle();
-    controller.scriptSyncNow({ kind: 'failed', reason: 'device', error: new Error('unreadable') });
+    controller.scriptSyncNow(deviceFailure());
     renderSection(controller);
     act(() => controller.setStatus('active'));
 

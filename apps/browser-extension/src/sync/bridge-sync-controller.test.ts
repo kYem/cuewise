@@ -87,6 +87,24 @@ describe('BridgeSyncController: hydrate/reconcile', () => {
     expect(controller.getStatus()).toBe('active');
   });
 
+  // The worker that wrote it may be newer or older than this page. Guessing which is worse than
+  // saying the panel cannot tell — and a cast let any string in as a status.
+  it.each([
+    ['a status this build does not know', 'teleporting'],
+    ['a value that is not a string at all', 42],
+    ['a key inherited from Object.prototype', 'constructor'],
+  ])('falls back to "error" on %s', async (_name, stored) => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    storageMock.data[STATUS_KEY] = stored;
+
+    const controller = new BridgeSyncController();
+    await flush();
+
+    expect(controller.getStatus()).toBe('error');
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('unrecognised persisted sync'));
+  });
+
+  // Absent is not the same as unrecognised: nothing was written, so the enabled flag still decides.
   it('reconciles cloudSyncEnabled=true with no status key to "active"', async () => {
     storageMock.data[CLOUD_SYNC_ENABLED_KEY] = true;
 
@@ -156,6 +174,20 @@ describe('BridgeSyncController: storage change listener', () => {
     emitChange({ [STATUS_KEY]: { newValue: 'error' } }, 'sync');
 
     expect(controller.getStatus()).toBe('off');
+  });
+
+  it('falls back to "error" on a status change this build does not know', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    storageMock.data[STATUS_KEY] = 'active';
+    const controller = new BridgeSyncController();
+    await flush();
+
+    emitChange({ [STATUS_KEY]: { newValue: 'teleporting', oldValue: 'active' } });
+
+    expect(controller.getStatus()).toBe('error');
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('unrecognised sync status change')
+    );
   });
 
   it('ignores a status removal (newValue undefined)', async () => {

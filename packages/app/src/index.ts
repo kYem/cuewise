@@ -34,6 +34,7 @@ export type {
 } from './sync/sync-controller';
 export {
   AUTH_CANCELLED_DETAIL,
+  asSyncUiStatus,
   buildSyncDetails,
   LAST_CYCLE_UNAVAILABLE,
   SyncControllerContext,
