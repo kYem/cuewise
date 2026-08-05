@@ -1427,6 +1427,22 @@ describe('SyncSettingsSectionComponent', () => {
     expect(screen.queryByTestId('sync-cycle-unknown')).not.toBeInTheDocument();
   });
 
+  // The carry-forward guarantee holds within one account. A reconnect can land on a different one,
+  // so a re-read that cannot answer must not hand the new account the old one's failure.
+  it('does not carry a failure across a reconnect onto another account', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    await renderShowingFailureBadge(controller);
+    act(() => controller.setStatus('needs_reauth'));
+
+    controller.scriptLastCycleUnavailable();
+    controller.scriptReconnect({ ok: true });
+    await user.click(screen.getByRole('button', { name: 'Reconnect' }));
+    act(() => controller.setStatus('active'));
+
+    await waitFor(() => expect(screen.queryByTestId('sync-failure-badge')).not.toBeInTheDocument());
+  });
+
   // A cycle that answers is the one thing that may retire a carried-forward failure — so the
   // failure has to be carried first, or this passes against an implementation that never carries.
   it('drops a carried-forward failure once a cycle succeeds', async () => {

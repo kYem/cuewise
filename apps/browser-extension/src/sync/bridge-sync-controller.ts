@@ -294,19 +294,18 @@ export class BridgeSyncController implements SyncController {
       this.setStatus('off');
       return;
     }
-    const rawStatus = stored[STATUS_KEY];
-    if (rawStatus !== undefined) {
-      // Absent falls through to the enabled-flag reconcile below; present-but-unrecognised does
-      // not — a worker newer or older than this page wrote it, and guessing which is worse than
-      // saying the panel cannot tell.
-      const persistedStatus = asSyncUiStatus(rawStatus);
-      if (persistedStatus === null) {
-        logger.error(
-          `Ignoring an unrecognised persisted sync status: ${BridgeSyncController.describeStatus(rawStatus)}`
-        );
-      }
-      this.setStatus(persistedStatus ?? 'error');
+    const persistedStatus = asSyncUiStatus(stored[STATUS_KEY]);
+    if (persistedStatus !== null) {
+      this.setStatus(persistedStatus);
       return;
+    }
+    // Never 'error': that renders "Couldn't turn on Cloud Sync" over a Try again that re-runs the
+    // sign-in, and an update whose new worker writes a status this page has not learned yet is a
+    // healthy install, not a failed one. Falling through reconciles from the enabled flag instead.
+    if (stored[STATUS_KEY] !== undefined) {
+      logger.error(
+        `Ignoring an unrecognised persisted sync status: ${BridgeSyncController.describeStatus(stored[STATUS_KEY])}`
+      );
     }
     if (stored[CLOUD_SYNC_ENABLED_KEY] === true) {
       // Enabled but the SW died before writing a status — reconcile to active rather
@@ -328,12 +327,15 @@ export class BridgeSyncController implements SyncController {
           const raw = statusChange.newValue;
           if (raw !== undefined) {
             const newStatus = asSyncUiStatus(raw);
+            // Kept, not replaced: the last status this page understood is a better answer than a
+            // failure it would be inventing. See hydrate.
             if (newStatus === null) {
               logger.error(
                 `Ignoring an unrecognised sync status change: ${BridgeSyncController.describeStatus(raw)}`
               );
+            } else {
+              this.setStatus(newStatus);
             }
-            this.setStatus(newStatus ?? 'error');
           }
         }
         const quarantineChange = changes[QUARANTINE_KEY];

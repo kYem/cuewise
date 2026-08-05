@@ -87,21 +87,32 @@ describe('BridgeSyncController: hydrate/reconcile', () => {
     expect(controller.getStatus()).toBe('active');
   });
 
-  // The worker that wrote it may be newer or older than this page. Guessing which is worse than
-  // saying the panel cannot tell — and a cast let any string in as a status.
+  // Never 'error': that renders "Couldn't turn on Cloud Sync" over a Try again that re-runs the
+  // sign-in, and a newer worker writing a status this page has not learned is a healthy install.
   it.each([
     ['a status this build does not know', 'teleporting'],
     ['a value that is not a string at all', 42],
     ['a key inherited from Object.prototype', 'constructor'],
-  ])('falls back to "error" on %s', async (_name, stored) => {
+  ])('reconciles from the enabled flag on %s', async (_name, stored) => {
     const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
     storageMock.data[STATUS_KEY] = stored;
+    storageMock.data[CLOUD_SYNC_ENABLED_KEY] = true;
 
     const controller = new BridgeSyncController();
     await flush();
 
-    expect(controller.getStatus()).toBe('error');
+    expect(controller.getStatus()).toBe('active');
     expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('unrecognised persisted sync'));
+  });
+
+  it('reads an unrecognised status on a disabled install as "off", not a failure', async () => {
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    storageMock.data[STATUS_KEY] = 'teleporting';
+
+    const controller = new BridgeSyncController();
+    await flush();
+
+    expect(controller.getStatus()).toBe('off');
   });
 
   // Absent is not the same as unrecognised: nothing was written, so the enabled flag still decides.
@@ -176,15 +187,19 @@ describe('BridgeSyncController: storage change listener', () => {
     expect(controller.getStatus()).toBe('off');
   });
 
-  it('falls back to "error" on a status change this build does not know', async () => {
+  // Keeps the last status it understood rather than inventing a failure for a healthy install.
+  it('keeps the current status on a change this build does not know', async () => {
     const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
     storageMock.data[STATUS_KEY] = 'active';
     const controller = new BridgeSyncController();
     await flush();
+    const cb = vi.fn();
+    controller.subscribe(cb);
 
     emitChange({ [STATUS_KEY]: { newValue: 'teleporting', oldValue: 'active' } });
 
-    expect(controller.getStatus()).toBe('error');
+    expect(controller.getStatus()).toBe('active');
+    expect(cb).not.toHaveBeenCalled();
     expect(errorSpy).toHaveBeenCalledWith(
       expect.stringContaining('unrecognised sync status change')
     );

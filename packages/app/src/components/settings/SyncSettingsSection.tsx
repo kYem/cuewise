@@ -431,6 +431,10 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   const adoptNewAccount = async () => {
     accountGenRef.current += 1;
     detailsRequestedRef.current = false;
+    // Cleared first, like handleDisable: `unknown` carries the last known outcome forward, and
+    // that guarantee holds within one account. If the re-read below cannot answer, the previous
+    // account's failure would otherwise become this one's.
+    setCycle(CYCLE_NONE);
     await refreshLastCycle();
     await refreshDetails();
   };
