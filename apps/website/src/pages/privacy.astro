@@ -20,7 +20,7 @@ import { SITE } from '../lib/site';
         </div>
         <h1>Privacy Policy</h1>
         <p class="hero-sub">Your data is yours. This page explains, in plain terms, exactly what Cuewise does — and doesn't do — with it.</p>
-        <p class="last-updated">Last Updated: July 19, 2026</p>
+        <p class="last-updated">Last Updated: August 5, 2026</p>
       </div>
     </section>
 
@@ -83,7 +83,7 @@ import { SITE } from '../lib/site';
             <p>By default, all your goals, tasks, and productivity data are stored exclusively on your device using your browser's local storage. This means:</p>
             <ul>
               <li>We never see your personal data</li>
-              <li>Your data doesn't leave your device unless you turn on the optional, end-to-end encrypted Cloud Sync</li>
+              <li>Your data doesn't leave your device unless you turn on an optional feature that needs it: the end-to-end encrypted Cloud Sync, the Google Calendar agenda, or the Weather widget. Each is off until you switch it on, and each is described in its own section below</li>
               <li>No servers store your productivity information in readable form — with sync off, they store nothing at all</li>
               <li>You have complete control over your data</li>
             </ul>
@@ -175,6 +175,47 @@ import { SITE } from '../lib/site';
           </div>
         </div>
 
+        <!-- Card: Weather -->
+        <div class="content-card glass reveal">
+          <h2>
+            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="M20 12h2"/><path d="m19.07 4.93-1.41 1.41"/><path d="M15.947 12.65a4 4 0 0 0-5.925-4.128"/><path d="M13 22H7a5 5 0 1 1 4.9-6H13a3 3 0 0 1 0 6Z"/>
+            </svg>
+            Weather (Optional)
+          </h2>
+          <p>Cuewise offers an <strong>optional, opt-in</strong> Weather widget. It is off by default and only activates when you turn it on and search for a city. It is the one feature that sends anything about where you are to a Cuewise server, so here is exactly what happens.</p>
+          <div>
+            <h3>We never read your device's location:</h3>
+            <ul>
+              <li>Cuewise does <strong>not</strong> use your browser's location permission, GPS, or your IP address to work out where you are. It never asks, because it never uses it.</li>
+              <li>You choose a city yourself by typing its name. The forecast is for the city you picked — nothing more precise, and nothing we inferred about you.</li>
+            </ul>
+          </div>
+          <div>
+            <h3>What is sent, and how little of it:</h3>
+            <ul>
+              <li><strong>For the forecast:</strong> the coordinates of the city you chose, <strong>rounded on your device to about 1 km</strong> before they are sent, plus whether you prefer °C or °F. The rounding happens on your device deliberately — precise coordinates never leave it in the first place.</li>
+              <li><strong>For city search:</strong> the text you type into the search box, so we can look up matching places.</li>
+              <li>Nothing is attached that identifies you — no account, no device id, no name. The Weather widget works whether or not you have ever signed in.</li>
+            </ul>
+          </div>
+          <div>
+            <h3>Why it goes through our server at all:</h3>
+            <ul>
+              <li>Forecasts come from <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo</a>. Your browser <strong>never contacts them directly</strong> — our server asks on your behalf, so the weather provider never sees your IP address, your browser, or that you exist as a distinct person.</li>
+              <li>Nearby users share a single cached request upstream, so the provider sees a place being asked about, not a stream of individual lookups.</li>
+            </ul>
+          </div>
+          <div>
+            <h3>We do not keep it:</h3>
+            <ul>
+              <li><strong>Nothing is stored.</strong> The weather requests touch no database and create no record. They are answered and forgotten.</li>
+              <li><strong>Nothing is logged.</strong> Coordinates and city searches are never written to our logs. The requests are deliberately built so that this data cannot appear in server logs even by accident, and an automated test fails the build if that protection is ever removed.</li>
+              <li>Turn the widget off, and Cuewise stops contacting the weather service entirely.</li>
+            </ul>
+          </div>
+        </div>
+
         <!-- Card 4: What We Don't Do -->
         <div class="content-card glass reveal">
           <h2>
@@ -237,6 +278,7 @@ import { SITE } from '../lib/site';
             <li><strong>Email Delivery:</strong> We use Resend to send newsletter emails. They only have access to your email address if you subscribe.</li>
             <li><strong>Chrome Web Store:</strong> Extension downloads are managed by Google according to their privacy policy.</li>
             <li><strong>Google Calendar (optional):</strong> if you connect it, the extension reads your calendar directly from Google's API; the data stays client-side and never reaches our servers. See "Google Calendar Integration" above.</li>
+            <li><strong>Open-Meteo (optional):</strong> if you turn on the Weather widget, forecasts come from Open-Meteo — but only ever via our server, so they never see you. See "Weather" above.</li>
           </ul>
         </div>
 
