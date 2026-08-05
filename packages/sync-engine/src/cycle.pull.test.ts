@@ -536,4 +536,20 @@ describe('pullOnce', () => {
     const goals = await getGoals();
     expect(goals).toEqual([recoveredGoal]);
   });
+
+  // The only trace of what a healthy cycle moved: nothing else logs on the success path.
+  it('summarises what it applied, with the cursor it moved and no entity ids', async () => {
+    const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => {});
+    const incoming = goalFactory.build({ id: 'g1', text: 'incoming' });
+    const rec = await sealRecord(dk, 'goals', 'g1', { entity: incoming, hlc: NEWER_HLC }, 1);
+    transport.pullRecords = [rec];
+
+    await pullOnce(makeDeps());
+
+    expect(debugSpy).toHaveBeenCalledWith('Sync pull applied 1 record(s)', {
+      byCollection: { goals: 1 },
+      cursor: '0 -> 1',
+    });
+    expect(JSON.stringify(debugSpy.mock.calls)).not.toContain('incoming');
+  });
 });

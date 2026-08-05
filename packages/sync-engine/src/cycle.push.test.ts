@@ -184,4 +184,22 @@ describe('pushOnce', () => {
     const saved = await metaStore.load();
     expect(saved.dirty.goals).toEqual(['g1']);
   });
+
+  // The only trace of what a healthy cycle moved: nothing else logs on the success path.
+  it('summarises what it pushed, by collection and without entity ids', async () => {
+    const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => {});
+    const g1 = goalFactory.build({ id: 'g1' });
+    const g2 = goalFactory.build({ id: 'g2' });
+    await setGoals([g1, g2]);
+    const metaStore = new SyncMetadataStore(kv);
+    await seedDirty(metaStore, 'goals', ['g1', 'g2']);
+
+    await pushOnce(makeDeps(kv, transport));
+
+    expect(debugSpy).toHaveBeenCalledWith('Sync push sent 2 record(s)', {
+      byCollection: { goals: 2 },
+    });
+    const logged = JSON.stringify(debugSpy.mock.calls);
+    expect(logged).not.toContain('g1');
+  });
 });

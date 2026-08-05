@@ -68,6 +68,18 @@ interface DirtyRecord {
   record: PushRecord;
 }
 
+/**
+ * Counts per collection for the cycle summary. Names and totals only — never entity ids or
+ * bodies, which is the whole point of the server holding ciphertext.
+ */
+function tallyByCollection(collections: readonly string[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const name of collections) {
+    counts[name] = (counts[name] ?? 0) + 1;
+  }
+  return counts;
+}
+
 /** Batches before a `cancelled` still reached the server. */
 export type PushResult = { kind: 'complete' } | { kind: 'cancelled' };
 
@@ -96,6 +108,9 @@ export async function pushOnce(deps: CycleDeps): Promise<PushResult> {
     }
     await deps.meta.save(meta);
   }
+  logger.debug(`Sync push sent ${dirtyRecords.length} record(s)`, {
+    byCollection: tallyByCollection(dirtyRecords.map((item) => item.collection)),
+  });
   return { kind: 'complete' };
 }
 
@@ -167,6 +182,8 @@ export async function pullOnce(deps: CycleDeps): Promise<PullResult> {
   // Once per collection per pull — a page of unknown records is one line, not N.
   const warnedUnknownCollections = new Set<string>();
   let appliedCount = 0;
+  const startCursor = meta.cursor;
+  const appliedCollections: string[] = [];
 
   let pageSize = PULL_PAGE;
   while (pageSize === PULL_PAGE) {
@@ -202,6 +219,7 @@ export async function pullOnce(deps: CycleDeps): Promise<PullResult> {
       }
       if (applied === 'wrote') {
         appliedCount += 1;
+        appliedCollections.push(rec.collection);
       }
     }
   }
@@ -209,6 +227,10 @@ export async function pullOnce(deps: CycleDeps): Promise<PullResult> {
   if (!(await saveUnlessCancelled(deps, meta))) {
     return cancelledPull(appliedCount);
   }
+  logger.debug(`Sync pull applied ${appliedCount} record(s)`, {
+    byCollection: tallyByCollection(appliedCollections),
+    cursor: `${startCursor} -> ${meta.cursor}`,
+  });
   return { kind: 'complete' };
 }
 
