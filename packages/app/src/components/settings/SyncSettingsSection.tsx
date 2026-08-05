@@ -3,6 +3,7 @@ import type { SyncFailureReason, SyncNowResult, SyncOutcome } from '@cuewise/syn
 import { cn } from '@cuewise/ui';
 import { AlertTriangle, CloudUpload, KeyRound, Loader2, RefreshCw } from 'lucide-react';
 import type React from 'react';
+import type { Dispatch, SetStateAction } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useSettingsStore } from '../../stores/settings-store';
 import { useToastStore } from '../../stores/toast-store';
@@ -50,8 +51,6 @@ const GoogleGlyph: React.FC = () => (
   </svg>
 );
 
-// Both maps total, like FAILURE_MESSAGE below: a new status with neither a pill nor a prompt would
-// render an empty panel body while the switch still reads on. null says "handled, renders neither".
 /**
  * What a status puts on screen. A pill and a reconnect prompt are alternatives, never both — as two
  * complementary maps only a comment said so, and either could have gained an entry the other
@@ -150,16 +149,26 @@ function knownOutcome(cycle: PanelCycle): SyncOutcome | null {
 /**
  * Folds a read into the value the panel holds. Only `{outcome:null}` means "no cycle"; an
  * unavailable read keeps whatever was known and says so alongside, never instead.
+ *
+ * Pure, and it has to stay that way — it runs inside a setState updater, which StrictMode
+ * double-invokes. Anything with an effect belongs in adoptRead below.
  */
 function nextPanelCycle(previous: PanelCycle, read: LastCycleRead): PanelCycle {
   if (!read.available) {
     return { kind: 'unknown', lastKnown: knownOutcome(previous) };
   }
-  logUnrecognisedReason(read.outcome);
   if (read.outcome === null) {
     return CYCLE_NONE;
   }
   return { kind: 'outcome', outcome: read.outcome };
+}
+
+/** The one way a read reaches the panel: logs once, then folds. */
+function adoptRead(read: LastCycleRead, setCycle: Dispatch<SetStateAction<PanelCycle>>): void {
+  if (read.available) {
+    logUnrecognisedReason(read.outcome);
+  }
+  setCycle((previous) => nextPanelCycle(previous, read));
 }
 
 // Regenerate cannot fix this one — the abandoned enrol dropped the key it would need.
@@ -338,7 +347,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
         if (lastCycleGenRef.current !== gen) {
           return;
         }
-        setCycle((previous) => nextPanelCycle(previous, read));
+        adoptRead(read, setCycle);
         if (!read.available) {
           // An unreadable read (asleep worker, timeout) is a transient miss like the details one —
           // re-arm so the next status transition retries instead of latching the badge off.
@@ -350,7 +359,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
         // unreadable read rather than a quieter one, so both paths say "couldn't check".
         logger.error(`Cloud sync last cycle unavailable: ${describeThrown(error)}`, error);
         if (lastCycleGenRef.current === gen) {
-          setCycle((previous) => nextPanelCycle(previous, LAST_CYCLE_UNAVAILABLE));
+          adoptRead(LAST_CYCLE_UNAVAILABLE, setCycle);
           lastCycleRequestedRef.current = false;
         }
       }
@@ -399,7 +408,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     if (lastCycleGenRef.current !== gen) {
       return;
     }
-    setCycle((previous) => nextPanelCycle(previous, read));
+    adoptRead(read, setCycle);
     if (!read.available) {
       lastCycleRequestedRef.current = false;
     }

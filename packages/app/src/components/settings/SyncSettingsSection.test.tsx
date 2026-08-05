@@ -1427,11 +1427,14 @@ describe('SyncSettingsSectionComponent', () => {
     expect(screen.queryByTestId('sync-cycle-unknown')).not.toBeInTheDocument();
   });
 
-  // A cycle that answers is the one thing that may retire a carried-forward failure.
-  it('drops the failure badge once a cycle succeeds', async () => {
+  // A cycle that answers is the one thing that may retire a carried-forward failure — so the
+  // failure has to be carried first, or this passes against an implementation that never carries.
+  it('drops a carried-forward failure once a cycle succeeds', async () => {
     const user = userEvent.setup();
     const controller = new FakeSyncController();
     await renderShowingFailureBadge(controller);
+    await syncNowTimesOutOnUnavailableRead(user, controller);
+    expect(screen.getByTestId('sync-failure-badge')).toBeInTheDocument();
 
     controller.scriptSyncNow({ kind: 'synced' });
     await user.click(screen.getByRole('button', { name: 'Sync now' }));
