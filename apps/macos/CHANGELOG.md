@@ -1,5 +1,19 @@
 # @cuewise/macos
 
+## 0.6.0
+
+### Minor Changes
+
+- 9c2e322: Cloud Sync is faster and less silent. Edits now reach your other devices in seconds rather than up to ten minutes, and an edit made while a sync was running is no longer dropped. The quick menu shows your account, when it last synced, and a sync button. Sync now warns you when an account has no recovery code or a sign-in has lost authorisation, instead of looking fine. And a setup that fails after your account has been created now hands you the recovery code it made rather than discarding it — without that code, the account it left behind could never be opened again.
+
+### Patch Changes
+
+- f4b91a3: The Mac app can now be built with a web inspector, for diagnosing sign-in and Cloud Sync. Until now only the development build had one, and the development build can't receive the deep links those features depend on — so the parts most worth inspecting were the parts you couldn't reach. The inspector is off unless a build asks for it, so a released app never carries one.
+- Updated dependencies [9c2e322]
+  - @cuewise/app@1.21.0
+  - @cuewise/sync-engine@0.2.0
+  - @cuewise/sync-client@0.1.7
+
 ## 0.5.0
 
 ### Minor Changes
