@@ -131,8 +131,7 @@ describe('ConceptCardDisplay', () => {
   });
 
   it('drops focus after revealing, so the ring does not eat the next space', () => {
-    // The ring turns into "Next" once revealed, and browsers keep focus on a clicked
-    // button — jsdom does not, so focus is set here to stand in for that.
+    // Chromium keeps focus on a clicked button; jsdom does not, so it is set here.
     renderCard();
     const reveal = screen.getByRole('button', { name: /reveal answer/i });
     reveal.focus();

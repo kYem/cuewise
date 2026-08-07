@@ -52,9 +52,8 @@ const RingBtn: React.FC<Pick<DockBtnProps, 'icon' | 'title' | 'onClick'>> = ({
 }) => (
   <button
     type="button"
-    // Pointer only (detail > 0): this becomes "Next" after a reveal and Chromium keeps
-    // focus on click, so the next space would hit that. Blurring a keyboard activation
-    // instead would drop the user at the top of the page.
+    // Pointer only: Chromium keeps focus on click and this becomes "Next" after a reveal,
+    // so the next space hits that — but blurring a keyboard press would strand the user.
     onClick={(e) => {
       if (e.detail > 0) {
         e.currentTarget.blur();
