@@ -112,7 +112,7 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
   // Space goes through the click handler, not refreshQuote: skipping onManualRefresh
   // would leave the auto-rotation timer running and overwrite the quote just asked for.
   useEffect(() => {
-    // error too: that screen recovers only via initialize(), not a refresh.
+    // error too: that screen owns its own recovery, so space must not act behind it.
     if (!enableSpaceShortcut || error) {
       return;
     }

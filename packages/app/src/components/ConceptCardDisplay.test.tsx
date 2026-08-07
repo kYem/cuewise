@@ -137,9 +137,20 @@ describe('ConceptCardDisplay', () => {
     const reveal = screen.getByRole('button', { name: /reveal answer/i });
     reveal.focus();
 
-    fireEvent.click(reveal);
+    fireEvent.click(reveal, { detail: 1 });
 
     expect(document.activeElement).toBe(document.body);
+  });
+
+  it('keeps focus when the ring is activated from the keyboard', () => {
+    // Blurring here would drop a keyboard user at the top of the page.
+    renderCard();
+    const reveal = screen.getByRole('button', { name: /reveal answer/i });
+    reveal.focus();
+
+    fireEvent.click(reveal, { detail: 0 });
+
+    expect(document.activeElement).not.toBe(document.body);
   });
 
   it('names the space shortcut on the reveal control', () => {

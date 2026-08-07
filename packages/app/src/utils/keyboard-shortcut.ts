@@ -21,7 +21,8 @@ export function isShortcutKeyEvent(event: KeyboardEvent): boolean {
  * space belongs to the control the user is on, which already does its own thing with it.
  */
 export function isSpaceShortcutEvent(event: KeyboardEvent): boolean {
-  if (event.key !== ' ' || !isShortcutKeyEvent(event)) {
+  // shiftKey excluded: Shift+Space is Page Up, and the page scrolls.
+  if (event.key !== ' ' || event.shiftKey || !isShortcutKeyEvent(event)) {
     return false;
   }
   const target = event.target;

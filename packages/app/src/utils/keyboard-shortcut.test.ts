@@ -4,7 +4,7 @@ import { isShortcutKeyEvent, isSpaceShortcutEvent } from './keyboard-shortcut';
 function dispatch(
   predicate: (event: KeyboardEvent) => boolean,
   key: string,
-  options: { on?: HTMLElement; metaKey?: boolean; repeat?: boolean } = {}
+  options: { on?: HTMLElement; metaKey?: boolean; repeat?: boolean; shiftKey?: boolean } = {}
 ): boolean {
   const target = options.on ?? document.body;
   let allowed = false;
@@ -18,6 +18,7 @@ function dispatch(
       bubbles: true,
       metaKey: options.metaKey,
       repeat: options.repeat,
+      shiftKey: options.shiftKey,
     })
   );
   document.removeEventListener('keydown', handler);
@@ -28,7 +29,7 @@ function press(options: { on?: HTMLElement; metaKey?: boolean; repeat?: boolean 
   return dispatch(isShortcutKeyEvent, 'c', options);
 }
 
-function pressSpace(options: { on?: HTMLElement } = {}): boolean {
+function pressSpace(options: { on?: HTMLElement; shiftKey?: boolean } = {}): boolean {
   return dispatch(isSpaceShortcutEvent, ' ', options);
 }
 
@@ -115,6 +116,10 @@ describe('isSpaceShortcutEvent', () => {
     ['a summary', 'summary', {}],
   ])('leaves space to %s', (_label, tag, attributes) => {
     expect(pressSpace({ on: appendWith(tag, attributes) })).toBe(false);
+  });
+
+  it('leaves shift+space alone, since that is page up', () => {
+    expect(pressSpace({ shiftKey: true })).toBe(false);
   });
 
   it('leaves space to a control the target sits inside', () => {
