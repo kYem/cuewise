@@ -1,5 +1,5 @@
 import { createSelectorMock } from '@cuewise/test-utils';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useQuoteStore } from '../stores/quote-store';
@@ -87,31 +87,50 @@ describe('QuoteDisplay - Navigation', () => {
       const mockStore = createLoadedMockStore();
       vi.mocked(useQuoteStore).mockImplementation(createSelectorMock(mockStore));
 
-      render(<QuoteDisplay />);
+      render(<QuoteDisplay enableSpaceShortcut />);
       fireEvent.keyDown(document.body, { key: ' ' });
 
       expectNavigationMethodCalled(mockStore, 'refreshQuote');
+    });
+
+    it('should restart the auto-rotation clock on the space key, as the button does', async () => {
+      const mockStore = createLoadedMockStore();
+      vi.mocked(useQuoteStore).mockImplementation(createSelectorMock(mockStore));
+      const onManualRefresh = vi.fn();
+
+      render(<QuoteDisplay enableSpaceShortcut onManualRefresh={onManualRefresh} />);
+      fireEvent.keyDown(document.body, { key: ' ' });
+
+      await waitFor(() => expect(onManualRefresh).toHaveBeenCalled());
+    });
+
+    it('should ignore the space key unless the shortcut is enabled', async () => {
+      const mockStore = createLoadedMockStore();
+      vi.mocked(useQuoteStore).mockImplementation(createSelectorMock(mockStore));
+
+      render(<QuoteDisplay />);
+      fireEvent.keyDown(document.body, { key: ' ' });
+
+      expect(mockStore.refreshQuote).not.toHaveBeenCalled();
     });
 
     it('should leave the space key alone while typing', async () => {
       const mockStore = createLoadedMockStore();
       vi.mocked(useQuoteStore).mockImplementation(createSelectorMock(mockStore));
 
-      render(<QuoteDisplay />);
-      const input = document.createElement('input');
-      document.body.appendChild(input);
-      input.focus();
-      fireEvent.keyDown(input, { key: ' ' });
+      render(<QuoteDisplay enableSpaceShortcut />);
+      render(<input aria-label="note" />);
+      screen.getByLabelText('note').focus();
+      fireEvent.keyDown(screen.getByLabelText('note'), { key: ' ' });
 
       expect(mockStore.refreshQuote).not.toHaveBeenCalled();
-      input.remove();
     });
 
-    it('should leave the space key alone while a button holds focus', async () => {
+    it('should leave the space key to the control that has focus', async () => {
       const mockStore = createLoadedMockStore();
       vi.mocked(useQuoteStore).mockImplementation(createSelectorMock(mockStore));
 
-      render(<QuoteDisplay />);
+      render(<QuoteDisplay enableSpaceShortcut />);
       const newQuoteButton = screen.getByTitle('New quote');
       newQuoteButton.focus();
       fireEvent.keyDown(newQuoteButton, { key: ' ' });

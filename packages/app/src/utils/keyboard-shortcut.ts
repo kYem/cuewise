@@ -17,12 +17,17 @@ export function isShortcutKeyEvent(event: KeyboardEvent): boolean {
 }
 
 /**
- * Space, as a page-level shortcut. Distinct from `isShortcutKeyEvent` because a focused
- * button already activates on space natively — handling it again would fire twice.
+ * Space, as a page-level shortcut. Narrower than `isShortcutKeyEvent`: callers
+ * preventDefault, which cancels the native activation of whatever holds focus — so a
+ * space press aimed at a control would run the page shortcut instead of that control.
  */
 export function isSpaceShortcutEvent(event: KeyboardEvent): boolean {
   if (event.key !== ' ' || !isShortcutKeyEvent(event)) {
     return false;
   }
-  return (event.target as HTMLElement | null)?.tagName !== 'BUTTON';
+  const target = event.target;
+  if (target instanceof Element) {
+    return target.closest('button, [role="button"], summary') === null;
+  }
+  return true;
 }

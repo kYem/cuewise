@@ -23,6 +23,7 @@ function renderCard(props: Partial<CardProps> = {}) {
       isFavorite={false}
       onToggleFavorite={vi.fn()}
       dueCount={0}
+      onSkipToQuote={vi.fn()}
       {...props}
     />
   );
@@ -100,11 +101,8 @@ describe('ConceptCardDisplay', () => {
     expect(screen.getByText(card.definition)).toBeInTheDocument();
   });
 
-  it('leaves space alone while a button holds focus, so it does not fire twice', () => {
-    // A focused button already activates on space natively; a global handler on top
-    // of that would reveal and advance in one press.
-    const onNext = vi.fn();
-    renderCard({ onNext });
+  it('leaves space to the control that has focus, rather than revealing', () => {
+    renderCard();
     const next = screen.getByRole('button', { name: 'Next' });
     next.focus();
 
@@ -115,20 +113,17 @@ describe('ConceptCardDisplay', () => {
 
   it('leaves space alone while typing', () => {
     renderCard();
-    const input = document.createElement('input');
-    document.body.appendChild(input);
-    input.focus();
+    render(<input aria-label="note" />);
+    screen.getByLabelText('note').focus();
 
-    fireEvent.keyDown(input, { key: ' ' });
+    fireEvent.keyDown(screen.getByLabelText('note'), { key: ' ' });
 
     expect(screen.queryByText(card.definition)).not.toBeInTheDocument();
-    input.remove();
   });
 
   it('moves on to a quote when space is pressed after the reveal', () => {
     const onSkipToQuote = vi.fn();
-    renderCard({ onSkipToQuote });
-    fireEvent.keyDown(document.body, { key: ' ' });
+    renderCard({ activeRecall: false, onSkipToQuote });
 
     fireEvent.keyDown(document.body, { key: ' ' });
 

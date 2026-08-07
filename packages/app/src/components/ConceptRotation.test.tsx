@@ -3,12 +3,14 @@ import { conceptCardFactory } from '@cuewise/test-utils/factories';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useConceptCardsStore } from '../stores/concept-cards-store';
+import { useQuoteStore } from '../stores/quote-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { ConceptRotation, selectSurfacedCard } from './ConceptRotation';
 import { Modal } from './Modal';
 
 vi.mock('../stores/settings-store', () => ({ useSettingsStore: vi.fn() }));
 vi.mock('../stores/concept-cards-store', () => ({ useConceptCardsStore: vi.fn() }));
+vi.mock('../stores/quote-store', () => ({ useQuoteStore: vi.fn() }));
 
 const dueCard = conceptCardFactory.build({
   term: 'Saga pattern',
@@ -78,6 +80,21 @@ describe('ConceptRotation', () => {
     fireEvent.click(screen.getByRole('button', { name: /good/i }));
 
     expect(reviewCard).toHaveBeenCalledWith(dueCard.id, 'good');
+  });
+
+  it('leaves the card for a fresh quote when space follows the reveal', async () => {
+    setup({ framing: 'queue', cards: [dueCard] });
+    const refreshQuote = vi.fn();
+    Object.assign(useQuoteStore, { getState: () => ({ refreshQuote }) });
+
+    render(<ConceptRotation fallback={<div>QUOTE</div>} />);
+    fireEvent.click(screen.getByRole('button', { name: /reveal answer/i }));
+    await act(async () => {
+      fireEvent.keyDown(document.body, { key: ' ' });
+    });
+
+    expect(screen.getByText('QUOTE')).toBeInTheDocument();
+    expect(refreshQuote).toHaveBeenCalledTimes(1);
   });
 
   it('yields back to the quote after grading in ambient framing', async () => {

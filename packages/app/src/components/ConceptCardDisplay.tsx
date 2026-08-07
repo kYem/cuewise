@@ -37,7 +37,7 @@ interface ConceptCardDisplayProps {
   onAdd?: () => void;
   queueLabel?: string;
   /** Space once the answer is up: leave the card for the quote rotation, ungraded. */
-  onSkipToQuote?: () => void;
+  onSkipToQuote: () => void;
 }
 
 export const ConceptCardDisplay: React.FC<ConceptCardDisplayProps> = ({
@@ -59,7 +59,6 @@ export const ConceptCardDisplay: React.FC<ConceptCardDisplayProps> = ({
 
   const topic = card.tags?.[0];
 
-  // Space advances whatever is on screen: reveal the answer, then move on to a quote.
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       if (!isSpaceShortcutEvent(e)) {
@@ -67,7 +66,7 @@ export const ConceptCardDisplay: React.FC<ConceptCardDisplayProps> = ({
       }
       e.preventDefault();
       if (revealed) {
-        onSkipToQuote?.();
+        onSkipToQuote();
         return;
       }
       setRevealed(true);

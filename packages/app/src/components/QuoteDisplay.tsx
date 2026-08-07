@@ -18,6 +18,11 @@ interface QuoteDisplayProps {
   position?: 'top' | 'bottom';
   // Hide the category badge (used in the stacked Calendar + Quote layout to save space)
   hideCategory?: boolean;
+  /**
+   * Bind space to "new quote". Opt-in because the Pomodoro page mounts this hidden
+   * below `lg`, where the binding would swallow the key and refresh nothing visible.
+   */
+  enableSpaceShortcut?: boolean;
 }
 
 export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
@@ -25,6 +30,7 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
   variant = 'normal',
   position = 'top',
   hideCategory = false,
+  enableSpaceShortcut = false,
 }) => {
   const { quoteChangeInterval, enableQuoteAnimation } = useSettingsStore(
     useShallow((state) => ({
@@ -73,18 +79,6 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
     showFavoritesOnly ||
     activeCollectionIds.length > 0;
 
-  useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => {
-      if (!isSpaceShortcutEvent(e)) {
-        return;
-      }
-      e.preventDefault();
-      refreshQuote();
-    };
-    document.addEventListener('keydown', handleKey);
-    return () => document.removeEventListener('keydown', handleKey);
-  }, [refreshQuote]);
-
   // Countdown timer for auto-refresh
   useEffect(() => {
     // Reset countdown when interval changes or when quote changes
@@ -114,6 +108,23 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
     setTimeRemaining(quoteChangeInterval); // Reset countdown on manual refresh
     onManualRefresh?.();
   };
+
+  // Space goes through the click handler, not refreshQuote: skipping onManualRefresh
+  // would leave the auto-rotation timer running and overwrite the quote just asked for.
+  useEffect(() => {
+    if (!enableSpaceShortcut) {
+      return;
+    }
+    const handleKey = (e: KeyboardEvent) => {
+      if (!isSpaceShortcutEvent(e)) {
+        return;
+      }
+      e.preventDefault();
+      handleRefreshClick();
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [enableSpaceShortcut, handleRefreshClick]);
 
   const handleGoBack = async () => {
     await goBack();
