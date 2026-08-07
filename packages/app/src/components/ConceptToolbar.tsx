@@ -10,6 +10,7 @@ import {
   SkipForward,
 } from 'lucide-react';
 import type React from 'react';
+import { releaseFocusOnPointer } from '../utils/keyboard-shortcut';
 
 // Shared dock-item geometry (size class applied per call site).
 const DOCK_SHAPE =
@@ -23,18 +24,6 @@ interface DockBtnProps {
   /** Tailwind size class, e.g. 'h-9 w-9'. Defaults to the standard 40px. */
   sizeClass?: string;
 }
-
-/**
- * Chromium keeps focus on a clicked button, and this dock advertises space as a card
- * shortcut — so a press after a click would silently re-fire the button instead. Pointer
- * only (detail > 0): blurring a keyboard activation would strand the user at the top.
- */
-const releaseFocusOnPointer = (onClick: () => void) => (e: React.MouseEvent<HTMLButtonElement>) => {
-  if (e.detail > 0) {
-    e.currentTarget.blur();
-  }
-  onClick();
-};
 
 // Ghosted icon button: icon-only, no fill until hover (active = brand-error fill).
 const DockBtn: React.FC<DockBtnProps> = ({ icon: Icon, title, onClick, active, sizeClass }) => (

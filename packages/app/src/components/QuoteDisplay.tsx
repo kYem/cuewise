@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useQuoteStore } from '../stores/quote-store';
 import { useSettingsStore } from '../stores/settings-store';
-import { isSpaceShortcutEvent } from '../utils/keyboard-shortcut';
+import { isSpaceShortcutEvent, releaseFocusOnPointer } from '../utils/keyboard-shortcut';
 import { AuthorTicker } from './AuthorTicker';
 import { CategoryFilter } from './CategoryFilter';
 import { CategoryTicker } from './CategoryTicker';
@@ -335,7 +335,7 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
         {/* Navigation: Back */}
         <button
           type="button"
-          onClick={handleGoBack}
+          onClick={releaseFocusOnPointer(handleGoBack)}
           disabled={!canGoBack()}
           className={cn(
             'p-2 rounded-full transition-all',
@@ -351,7 +351,7 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
         {/* New Quote (center, slightly larger) */}
         <button
           type="button"
-          onClick={handleRefreshClick}
+          onClick={releaseFocusOnPointer(handleRefreshClick)}
           className="relative p-2.5 bg-surface/60 text-primary rounded-full hover:bg-surface hover:scale-105 transition-all overflow-hidden"
           title="New quote"
         >
@@ -391,7 +391,7 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
         {/* Navigation: Forward */}
         <button
           type="button"
-          onClick={handleGoForward}
+          onClick={releaseFocusOnPointer(handleGoForward)}
           disabled={!canGoForward()}
           className={cn(
             'p-2 rounded-full transition-all',
@@ -410,7 +410,7 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
         {/* Favorite */}
         <button
           type="button"
-          onClick={() => toggleFavorite(currentQuote.id)}
+          onClick={releaseFocusOnPointer(() => toggleFavorite(currentQuote.id))}
           className={cn(
             'p-2 rounded-full transition-all hover:scale-105',
             currentQuote.isFavorite
@@ -428,7 +428,7 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
         {/* Hide */}
         <button
           type="button"
-          onClick={() => hideQuote(currentQuote.id)}
+          onClick={releaseFocusOnPointer(() => hideQuote(currentQuote.id))}
           className="p-2 rounded-full bg-surface/60 text-secondary hover:bg-surface hover:scale-105 transition-all"
           title="Hide this quote"
         >

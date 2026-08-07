@@ -166,7 +166,10 @@ export const ConceptRotation: React.FC<ConceptRotationProps> = ({
   // A fresh quote, and onManualRefresh for the reason QuoteDisplay's space path needs it:
   // without it the rotation timer keeps its phase and overwrites the quote just asked for.
   const skipToQuote = () => {
+    // setSlot('quotes'), not just yieldToQuotes: a card added during this tab is not in
+    // knownIds and keeps surfacing, which would leave space looking dead. `c` brings it back.
     yieldToQuotes();
+    setSlot('quotes');
     useQuoteStore.getState().refreshQuote();
     onManualRefresh?.();
   };

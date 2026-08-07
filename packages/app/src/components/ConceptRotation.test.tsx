@@ -101,6 +101,27 @@ describe('ConceptRotation', () => {
     expect(onManualRefresh).toHaveBeenCalledTimes(1);
   });
 
+  it('still leaves for the quote when a card was added during the tab', async () => {
+    // A card added after the surfacing decision is not in knownIds, so clearing
+    // decision.show alone keeps surfacing it and space would look dead.
+    const added = conceptCardFactory.build({
+      term: 'Added mid-tab',
+      schedule: { dueDate: '2020-01-01', interval: 0, easeFactor: 2.5, repetitions: 0, lapses: 0 },
+    });
+    setup({ framing: 'queue', cards: [dueCard] });
+    const { rerender } = render(<ConceptRotation fallback={<div>QUOTE</div>} />);
+    setup({ framing: 'queue', cards: [dueCard, added] });
+    rerender(<ConceptRotation fallback={<div>QUOTE</div>} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /reveal answer/i }));
+    await act(async () => {
+      fireEvent.keyDown(document.body, { key: ' ' });
+    });
+
+    expect(screen.getByText('QUOTE')).toBeInTheDocument();
+    expect(screen.queryByText('Added mid-tab')).not.toBeInTheDocument();
+  });
+
   it('yields back to the quote after grading in ambient framing', async () => {
     setup({ framing: 'ambient', cards: [dueCard] });
 

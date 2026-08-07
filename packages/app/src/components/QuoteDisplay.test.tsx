@@ -114,6 +114,20 @@ describe('QuoteDisplay - Navigation', () => {
       expect(mockStore.refreshQuote).not.toHaveBeenCalled();
     });
 
+    it('should drop focus from a clicked action button, so space is not eaten', async () => {
+      // Chromium keeps focus on a clicked button; a following space would re-fire it,
+      // silently undoing the favorite instead of drawing a new quote.
+      const mockStore = createLoadedMockStore();
+      vi.mocked(useQuoteStore).mockImplementation(createSelectorMock(mockStore));
+
+      render(<QuoteDisplay enableSpaceShortcut />);
+      const newQuoteButton = screen.getByTitle('New quote');
+      newQuoteButton.focus();
+      fireEvent.click(newQuoteButton, { detail: 1 });
+
+      expect(document.activeElement).toBe(document.body);
+    });
+
     it('should ignore the space key while an error is showing', async () => {
       // A failed refresh leaves the previous quote in place, so currentQuote alone
       // does not gate this — the error clause is what has to.
