@@ -20,8 +20,10 @@ docs, decks, companion apps) stay on-brand.
   (`src/index.css`) using **OKLCH** custom properties under `@theme`.
 - **Repo:** `github.com/kyem/cuewise` (monorepo; `@cuewise/shared`, `/ui`,
   `/storage` workspace packages were not in the attached folder — see Caveats).
-- **Store listing:** `DESCRIPTION.md`, `README.md`, `store-assets/` (screenshots
-  + promo tiles, mirrored under `_ref/` for reference).
+- **Store listing:** the Chrome Web Store dashboard is the only source of truth for
+  listing copy — it is not mirrored in the repo, so read it there rather than
+  inferring the current text. `README.md` and `store-assets/` (screenshots + promo
+  tiles, mirrored under `_ref/`) are here.
 - Icons: **lucide-react**. Charts: **recharts**.
 
 ---
