@@ -8,6 +8,7 @@ import {
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { useConceptCardsStore } from '../stores/concept-cards-store';
+import { useQuoteStore } from '../stores/quote-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { isShortcutKeyEvent } from '../utils/keyboard-shortcut';
 import { ConceptCardDisplay } from './ConceptCardDisplay';
@@ -156,6 +157,13 @@ export const ConceptRotation: React.FC<ConceptRotationProps> = ({ fallback, onAd
     setSlot('auto');
   };
 
+  // Space past a revealed card: the quote it hands back to should be a fresh one,
+  // since the point of the key is "give me the next thing".
+  const skipToQuote = () => {
+    yieldToQuotes();
+    useQuoteStore.getState().refreshQuote();
+  };
+
   const goNext = () => setIndex((i) => i + 1);
   const goPrev = () => setIndex((i) => i - 1);
 
@@ -194,6 +202,7 @@ export const ConceptRotation: React.FC<ConceptRotationProps> = ({ fallback, onAd
       dueCount={due.length}
       onAdd={onAdd}
       queueLabel={queueLabel}
+      onSkipToQuote={skipToQuote}
     />
   );
 };

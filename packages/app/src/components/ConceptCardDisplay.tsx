@@ -10,7 +10,7 @@ import { cn } from '@cuewise/ui';
 import { BookOpen, Brain, CornerRightDown } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useState } from 'react';
-import { isShortcutKeyEvent } from '../utils/keyboard-shortcut';
+import { isShortcutKeyEvent, isSpaceShortcutEvent } from '../utils/keyboard-shortcut';
 import { ConceptToolbar } from './ConceptToolbar';
 
 // Per-grade accent (theme tokens: error / success / brand violet) — a soft
@@ -36,6 +36,8 @@ interface ConceptCardDisplayProps {
   dueCount: number;
   onAdd?: () => void;
   queueLabel?: string;
+  /** Space once the answer is up: leave the card for the quote rotation, ungraded. */
+  onSkipToQuote?: () => void;
 }
 
 export const ConceptCardDisplay: React.FC<ConceptCardDisplayProps> = ({
@@ -49,12 +51,30 @@ export const ConceptCardDisplay: React.FC<ConceptCardDisplayProps> = ({
   dueCount,
   onAdd,
   queueLabel,
+  onSkipToQuote,
 }) => {
   // Active recall hides the definition until "Reveal"; passive mode shows it
   // upfront. The parent keys this component by card id, so state resets per card.
   const [revealed, setRevealed] = useState(!activeRecall);
 
   const topic = card.tags?.[0];
+
+  // Space advances whatever is on screen: reveal the answer, then move on to a quote.
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (!isSpaceShortcutEvent(e)) {
+        return;
+      }
+      e.preventDefault();
+      if (revealed) {
+        onSkipToQuote?.();
+        return;
+      }
+      setRevealed(true);
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [revealed, onSkipToQuote]);
 
   // Anki-style 1/2/3 grading, live only once the answer is revealed.
   useEffect(() => {

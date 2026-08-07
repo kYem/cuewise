@@ -15,3 +15,14 @@ export function isShortcutKeyEvent(event: KeyboardEvent): boolean {
   }
   return document.querySelector('[role="dialog"][aria-modal="true"]') === null;
 }
+
+/**
+ * Space, as a page-level shortcut. Distinct from `isShortcutKeyEvent` because a focused
+ * button already activates on space natively — handling it again would fire twice.
+ */
+export function isSpaceShortcutEvent(event: KeyboardEvent): boolean {
+  if (event.key !== ' ' || !isShortcutKeyEvent(event)) {
+    return false;
+  }
+  return (event.target as HTMLElement | null)?.tagName !== 'BUTTON';
+}

@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useQuoteStore } from '../stores/quote-store';
 import { useSettingsStore } from '../stores/settings-store';
+import { isSpaceShortcutEvent } from '../utils/keyboard-shortcut';
 import { AuthorTicker } from './AuthorTicker';
 import { CategoryFilter } from './CategoryFilter';
 import { CategoryTicker } from './CategoryTicker';
@@ -71,6 +72,18 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
     !showCustomQuotes ||
     showFavoritesOnly ||
     activeCollectionIds.length > 0;
+
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (!isSpaceShortcutEvent(e)) {
+        return;
+      }
+      e.preventDefault();
+      refreshQuote();
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [refreshQuote]);
 
   // Countdown timer for auto-refresh
   useEffect(() => {

@@ -92,6 +92,58 @@ describe('ConceptCardDisplay', () => {
     expect(onGrade).not.toHaveBeenCalled();
   });
 
+  it('reveals the answer with the space key', () => {
+    renderCard();
+
+    fireEvent.keyDown(document.body, { key: ' ' });
+
+    expect(screen.getByText(card.definition)).toBeInTheDocument();
+  });
+
+  it('leaves space alone while a button holds focus, so it does not fire twice', () => {
+    // A focused button already activates on space natively; a global handler on top
+    // of that would reveal and advance in one press.
+    const onNext = vi.fn();
+    renderCard({ onNext });
+    const next = screen.getByRole('button', { name: 'Next' });
+    next.focus();
+
+    fireEvent.keyDown(next, { key: ' ' });
+
+    expect(screen.queryByText(card.definition)).not.toBeInTheDocument();
+  });
+
+  it('leaves space alone while typing', () => {
+    renderCard();
+    const input = document.createElement('input');
+    document.body.appendChild(input);
+    input.focus();
+
+    fireEvent.keyDown(input, { key: ' ' });
+
+    expect(screen.queryByText(card.definition)).not.toBeInTheDocument();
+    input.remove();
+  });
+
+  it('moves on to a quote when space is pressed after the reveal', () => {
+    const onSkipToQuote = vi.fn();
+    renderCard({ onSkipToQuote });
+    fireEvent.keyDown(document.body, { key: ' ' });
+
+    fireEvent.keyDown(document.body, { key: ' ' });
+
+    expect(onSkipToQuote).toHaveBeenCalledTimes(1);
+  });
+
+  it('names the space shortcut on the reveal control', () => {
+    renderCard();
+
+    expect(screen.getByRole('button', { name: /reveal answer/i })).toHaveAttribute(
+      'title',
+      expect.stringMatching(/space/i)
+    );
+  });
+
   it('shows the definition upfront when active recall is off', () => {
     renderCard({ activeRecall: false });
 

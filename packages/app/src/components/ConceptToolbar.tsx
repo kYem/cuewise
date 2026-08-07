@@ -93,7 +93,7 @@ export const ConceptToolbar: React.FC<ConceptToolbarProps> = ({
       <DockBtn icon={ChevronLeft} title="Previous" onClick={onPrev} sizeClass="h-9 w-9" />
       <RingBtn
         icon={revealed ? SkipForward : Eye}
-        title={revealed ? 'Next' : 'Reveal answer'}
+        title={revealed ? 'Next' : 'Reveal answer (Space)'}
         onClick={revealed ? onNext : onReveal}
       />
       <DockBtn icon={ChevronRight} title="Next" onClick={onNext} sizeClass="h-9 w-9" />

@@ -1,5 +1,5 @@
 import { createSelectorMock } from '@cuewise/test-utils';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useQuoteStore } from '../stores/quote-store';
@@ -81,6 +81,42 @@ describe('QuoteDisplay - Navigation', () => {
       await user.click(newQuoteButton);
 
       expectNavigationMethodCalled(mockStore, 'refreshQuote');
+    });
+
+    it('should call refreshQuote on the space key', async () => {
+      const mockStore = createLoadedMockStore();
+      vi.mocked(useQuoteStore).mockImplementation(createSelectorMock(mockStore));
+
+      render(<QuoteDisplay />);
+      fireEvent.keyDown(document.body, { key: ' ' });
+
+      expectNavigationMethodCalled(mockStore, 'refreshQuote');
+    });
+
+    it('should leave the space key alone while typing', async () => {
+      const mockStore = createLoadedMockStore();
+      vi.mocked(useQuoteStore).mockImplementation(createSelectorMock(mockStore));
+
+      render(<QuoteDisplay />);
+      const input = document.createElement('input');
+      document.body.appendChild(input);
+      input.focus();
+      fireEvent.keyDown(input, { key: ' ' });
+
+      expect(mockStore.refreshQuote).not.toHaveBeenCalled();
+      input.remove();
+    });
+
+    it('should leave the space key alone while a button holds focus', async () => {
+      const mockStore = createLoadedMockStore();
+      vi.mocked(useQuoteStore).mockImplementation(createSelectorMock(mockStore));
+
+      render(<QuoteDisplay />);
+      const newQuoteButton = screen.getByTitle('New quote');
+      newQuoteButton.focus();
+      fireEvent.keyDown(newQuoteButton, { key: ' ' });
+
+      expect(mockStore.refreshQuote).not.toHaveBeenCalled();
     });
   });
 
