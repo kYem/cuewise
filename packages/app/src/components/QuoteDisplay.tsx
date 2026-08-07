@@ -112,8 +112,9 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
   // Space goes through the click handler, not refreshQuote: skipping onManualRefresh
   // would leave the auto-rotation timer running and overwrite the quote just asked for.
   useEffect(() => {
-    // error too: that screen owns its own recovery, so space must not act behind it.
-    if (!enableSpaceShortcut || error) {
+    // Only when a quote is actually on screen: the error, loading and empty states own
+    // their own recovery, and consuming space there kills scrolling to do nothing.
+    if (!enableSpaceShortcut || error || isLoading || !currentQuote) {
       return;
     }
     const handleKey = (e: KeyboardEvent) => {
@@ -125,7 +126,7 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
     };
     document.addEventListener('keydown', handleKey);
     return () => document.removeEventListener('keydown', handleKey);
-  }, [enableSpaceShortcut, error, handleRefreshClick]);
+  }, [enableSpaceShortcut, error, isLoading, currentQuote, handleRefreshClick]);
 
   const handleGoBack = async () => {
     await goBack();

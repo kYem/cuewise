@@ -24,11 +24,23 @@ interface DockBtnProps {
   sizeClass?: string;
 }
 
+/**
+ * Chromium keeps focus on a clicked button, and this dock advertises space as a card
+ * shortcut — so a press after a click would silently re-fire the button instead. Pointer
+ * only (detail > 0): blurring a keyboard activation would strand the user at the top.
+ */
+const releaseFocusOnPointer = (onClick: () => void) => (e: React.MouseEvent<HTMLButtonElement>) => {
+  if (e.detail > 0) {
+    e.currentTarget.blur();
+  }
+  onClick();
+};
+
 // Ghosted icon button: icon-only, no fill until hover (active = brand-error fill).
 const DockBtn: React.FC<DockBtnProps> = ({ icon: Icon, title, onClick, active, sizeClass }) => (
   <button
     type="button"
-    onClick={onClick}
+    onClick={releaseFocusOnPointer(onClick)}
     title={title}
     aria-label={title}
     aria-pressed={active}
@@ -52,14 +64,7 @@ const RingBtn: React.FC<Pick<DockBtnProps, 'icon' | 'title' | 'onClick'>> = ({
 }) => (
   <button
     type="button"
-    // Pointer only: Chromium keeps focus on click and this becomes "Next" after a reveal,
-    // so the next space hits that — but blurring a keyboard press would strand the user.
-    onClick={(e) => {
-      if (e.detail > 0) {
-        e.currentTarget.blur();
-      }
-      onClick();
-    }}
+    onClick={releaseFocusOnPointer(onClick)}
     title={title}
     aria-label={title}
     className="inline-flex h-12 w-12 flex-none items-center justify-center rounded-full border-[1.5px] border-white/40 bg-white/10 text-white backdrop-blur-sm transition-colors hover:bg-white/20"

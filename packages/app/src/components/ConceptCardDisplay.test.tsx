@@ -152,6 +152,18 @@ describe('ConceptCardDisplay', () => {
     expect(document.activeElement).not.toBe(document.body);
   });
 
+  it('drops focus from a clicked dock button too, not just the ring', () => {
+    // The dock advertises space as a card shortcut; a press after a click would re-fire
+    // the button instead — silently undoing a favorite.
+    renderCard();
+    const favorite = screen.getByRole('button', { name: /^favorite$/i });
+    favorite.focus();
+
+    fireEvent.click(favorite, { detail: 1 });
+
+    expect(document.activeElement).toBe(document.body);
+  });
+
   it('names the space shortcut on the reveal control', () => {
     renderCard();
 

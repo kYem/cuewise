@@ -114,6 +114,32 @@ describe('QuoteDisplay - Navigation', () => {
       expect(mockStore.refreshQuote).not.toHaveBeenCalled();
     });
 
+    it('should ignore the space key while an error is showing', async () => {
+      // A failed refresh leaves the previous quote in place, so currentQuote alone
+      // does not gate this — the error clause is what has to.
+      const loaded = createLoadedMockStore();
+      const mockStore = createErrorMockStore('Failed to refresh quote.', {
+        currentQuote: loaded.currentQuote,
+      });
+      vi.mocked(useQuoteStore).mockImplementation(createSelectorMock(mockStore));
+
+      render(<QuoteDisplay enableSpaceShortcut />);
+      fireEvent.keyDown(document.body, { key: ' ' });
+
+      expect(mockStore.refreshQuote).not.toHaveBeenCalled();
+    });
+
+    it('should ignore the space key when no quote is on screen', async () => {
+      // These screens own their recovery; consuming space there kills scrolling for nothing.
+      const mockStore = createEmptyMockStore();
+      vi.mocked(useQuoteStore).mockImplementation(createSelectorMock(mockStore));
+
+      render(<QuoteDisplay enableSpaceShortcut />);
+      fireEvent.keyDown(document.body, { key: ' ' });
+
+      expect(mockStore.refreshQuote).not.toHaveBeenCalled();
+    });
+
     it('should leave the space key alone while typing', async () => {
       const mockStore = createLoadedMockStore();
       vi.mocked(useQuoteStore).mockImplementation(createSelectorMock(mockStore));
