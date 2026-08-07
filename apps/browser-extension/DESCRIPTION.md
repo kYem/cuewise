@@ -4,9 +4,9 @@
 
 ---
 
-Cuewise replaces your new tab page with a beautiful productivity dashboard: daily motivational quotes, a focused to-do list, a Pomodoro timer, ambient focus sounds, and insights that show your progress over time.
+Cuewise replaces your new tab page with a beautiful productivity dashboard: daily motivational quotes, a focused to-do list, a Pomodoro timer, ambient focus sounds, today's weather, and insights that show your progress over time.
 
-No accounts. No tracking. No paywalls. Every feature is free, and your data stays in your browser.
+No tracking. No paywalls. Every feature is free, and everything works locally by default.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -42,16 +42,34 @@ No accounts. No tracking. No paywalls. Every feature is free, and your data stay
 • Pomodoro heatmaps and focus-time stats
 • Export your data anytime as JSON or CSV
 
+🌤️ WEATHER AT A GLANCE
+• Current conditions and the rest of today's forecast, right on your new tab
+• You pick the city by name — no location permission is ever requested
+• Requests go through Cuewise's own proxy, so your browser never talks to a weather company
+• Off until you turn it on
+
+💡 CONCEPT CARDS
+• A short idea worth knowing, surfaced alongside your quote
+• Learn something small on the tabs you were opening anyway
+
 🎨 MAKE IT YOURS
 • Light, dark, and auto modes
 • 4 color themes, including a glass theme with a fresh background photo every day
+• Bring your own background image, or refresh the photo whenever you like — with proper attribution to the photographer
 • Compact, comfortable, or spacious layouts
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 🔒 PRIVATE BY DESIGN
 
-Your data never leaves your browser. No accounts, no external servers, no analytics, no tracking. Optionally use Chrome's built-in sync to carry your data across your own devices. Export or delete everything anytime.
+No analytics, no tracking, no ads, no profile of you anywhere. Everything works locally and stays on your device by default.
+
+Exactly two features can reach the network, and both are off until you switch them on:
+
+• Cloud sync — carry your goals, quotes and sessions between your own devices. Your data is encrypted on your device before it leaves it, so we cannot read what you store. Requires signing in.
+• Weather — the city you chose is sent through Cuewise's own proxy, so your browser never talks to a weather company. Nothing is stored or logged, and no location permission is ever requested.
+
+Want everything to stay local? Leave both off — nothing else phones home. You can still use Chrome's built-in sync. Export or delete everything anytime.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -85,16 +103,16 @@ Q: Is Cuewise really free?
 A: Yes. Every feature is free — no premium tier, no upsells, no ads.
 
 Q: Does this sync across devices?
-A: Optionally. Your data can sync through Chrome's built-in sync between your own browsers — it never touches our servers.
+A: Three ways, all optional. Keep everything local, use Chrome's built-in sync, or turn on Cuewise cloud sync — which encrypts your data on your device before it leaves, so we can't read it.
 
 Q: Can I export my data?
 A: Yes! Export your quotes, goals, and sessions as JSON or CSV anytime.
 
 Q: Do you collect any data?
-A: Absolutely not. Zero tracking, zero analytics, zero accounts.
+A: No tracking, no analytics, no ads. Cloud sync is the only thing that carries your content off the device, it's opt-in, and it's encrypted before it leaves — we hold ciphertext we can't read.
 
 Q: Will this slow down my browser?
-A: No. Cuewise is lightweight, loads instantly, and works offline.
+A: No. Cuewise is lightweight, loads instantly, and works offline — only weather and cloud sync need a connection, and both are optional.
 
 Q: What happens if I uninstall?
 A: All local data is removed. Export first if you want to keep it.
