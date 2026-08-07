@@ -112,7 +112,8 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
   // Space goes through the click handler, not refreshQuote: skipping onManualRefresh
   // would leave the auto-rotation timer running and overwrite the quote just asked for.
   useEffect(() => {
-    if (!enableSpaceShortcut) {
+    // error too: that screen recovers only via initialize(), not a refresh.
+    if (!enableSpaceShortcut || error) {
       return;
     }
     const handleKey = (e: KeyboardEvent) => {
@@ -124,7 +125,7 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
     };
     document.addEventListener('keydown', handleKey);
     return () => document.removeEventListener('keydown', handleKey);
-  }, [enableSpaceShortcut, handleRefreshClick]);
+  }, [enableSpaceShortcut, error, handleRefreshClick]);
 
   const handleGoBack = async () => {
     await goBack();

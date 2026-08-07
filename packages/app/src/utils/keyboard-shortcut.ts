@@ -17,9 +17,8 @@ export function isShortcutKeyEvent(event: KeyboardEvent): boolean {
 }
 
 /**
- * Space, as a page-level shortcut. Narrower than `isShortcutKeyEvent`: callers
- * preventDefault, which cancels the native activation of whatever holds focus — so a
- * space press aimed at a control would run the page shortcut instead of that control.
+ * Space, as a page-level shortcut. Skips a focused button, role=button or summary:
+ * space belongs to the control the user is on, which already does its own thing with it.
  */
 export function isSpaceShortcutEvent(event: KeyboardEvent): boolean {
   if (event.key !== ' ' || !isShortcutKeyEvent(event)) {

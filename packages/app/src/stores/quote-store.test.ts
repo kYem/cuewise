@@ -314,6 +314,25 @@ describe('Quote Store', () => {
       expect(state.currentQuote).toBeTruthy();
     });
 
+    it('should clear a latched error once a refresh succeeds', async () => {
+      const mockQuotes = quoteFactory.buildList(5);
+      useQuoteStore.setState({ quotes: mockQuotes, error: 'Failed to refresh quote.' });
+
+      await useQuoteStore.getState().refreshQuote();
+
+      expect(useQuoteStore.getState().error).toBeNull();
+    });
+
+    it('should keep a load error when no quote can be produced', async () => {
+      // Producing nothing is not success: clearing here would swap the error screen,
+      // whose retry runs initialize, for "No quotes available", whose retry cannot.
+      useQuoteStore.setState({ quotes: [], error: 'Failed to load quotes.' });
+
+      await useQuoteStore.getState().refreshQuote();
+
+      expect(useQuoteStore.getState().error).toBe('Failed to load quotes.');
+    });
+
     it('should avoid selecting the same quote consecutively', async () => {
       const mockQuotes = quoteFactory.buildList(5);
       const currentQuote = mockQuotes[0];

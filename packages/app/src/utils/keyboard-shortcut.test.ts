@@ -109,8 +109,6 @@ describe('isSpaceShortcutEvent', () => {
     expect(pressSpace({ on: appendWith('input') })).toBe(false);
   });
 
-  // preventDefault on a space keydown cancels the focused control's own activation,
-  // so claiming the key here would replace what the user aimed at.
   it.each([
     ['a button', 'button', {}],
     ['a role=button control', 'div', { role: 'button' }],

@@ -71,6 +71,8 @@ interface ConceptRotationProps {
   fallback: React.ReactNode;
   /** Opens the add-concept modal from the card's "Add concept" affordance. */
   onAdd?: () => void;
+  /** Same signal QuoteDisplay sends: restarts the host's auto-rotation clock. */
+  onManualRefresh?: () => void;
 }
 
 /**
@@ -81,7 +83,11 @@ interface ConceptRotationProps {
  * lapsing "Again" card never loops back immediately); the toolbar's prev/next
  * browse what remains.
  */
-export const ConceptRotation: React.FC<ConceptRotationProps> = ({ fallback, onAdd }) => {
+export const ConceptRotation: React.FC<ConceptRotationProps> = ({
+  fallback,
+  onAdd,
+  onManualRefresh,
+}) => {
   const enabled = useSettingsStore((state) => state.settings.conceptCardsEnabled);
   const cadence = useSettingsStore((state) => state.settings.conceptCadence);
   const framing = useSettingsStore((state) => state.settings.conceptFraming);
@@ -157,11 +163,12 @@ export const ConceptRotation: React.FC<ConceptRotationProps> = ({ fallback, onAd
     setSlot('auto');
   };
 
-  // Space past a revealed card: the quote it hands back to should be a fresh one,
-  // since the point of the key is "give me the next thing".
+  // A fresh quote, and onManualRefresh for the reason QuoteDisplay's space path needs it:
+  // without it the rotation timer keeps its phase and overwrites the quote just asked for.
   const skipToQuote = () => {
     yieldToQuotes();
     useQuoteStore.getState().refreshQuote();
+    onManualRefresh?.();
   };
 
   const goNext = () => setIndex((i) => i + 1);

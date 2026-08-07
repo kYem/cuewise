@@ -52,7 +52,12 @@ const RingBtn: React.FC<Pick<DockBtnProps, 'icon' | 'title' | 'onClick'>> = ({
 }) => (
   <button
     type="button"
-    onClick={onClick}
+    // Blur first: this becomes "Next" after a reveal and Chromium keeps focus on click,
+    // so the next space press would hit that instead of the advertised shortcut.
+    onClick={(e) => {
+      e.currentTarget.blur();
+      onClick();
+    }}
     title={title}
     aria-label={title}
     className="inline-flex h-12 w-12 flex-none items-center justify-center rounded-full border-[1.5px] border-white/40 bg-white/10 text-white backdrop-blur-sm transition-colors hover:bg-white/20"

@@ -130,6 +130,18 @@ describe('ConceptCardDisplay', () => {
     expect(onSkipToQuote).toHaveBeenCalledTimes(1);
   });
 
+  it('drops focus after revealing, so the ring does not eat the next space', () => {
+    // The ring turns into "Next" once revealed, and browsers keep focus on a clicked
+    // button — jsdom does not, so focus is set here to stand in for that.
+    renderCard();
+    const reveal = screen.getByRole('button', { name: /reveal answer/i });
+    reveal.focus();
+
+    fireEvent.click(reveal);
+
+    expect(document.activeElement).toBe(document.body);
+  });
+
   it('names the space shortcut on the reveal control', () => {
     renderCard();
 

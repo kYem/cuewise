@@ -316,13 +316,13 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         // Add new quote to the beginning
         updatedHistory.unshift(newQuote.id);
 
-        // error cleared on success: it gates the whole panel, so one transient failure
-        // would otherwise keep showing the error screen over every later good refresh.
+        // Cleared only on a real quote: producing none is not success, and clearing there
+        // hides a failed load behind "No quotes available", whose retry never runs initialize.
         set({ currentQuote: newQuote, quoteHistory: updatedHistory, historyIndex: 0, error: null });
         await get().incrementViewCount(newQuote.id);
       } else {
         // No matching quotes found (all filtered out)
-        set({ currentQuote: null, error: null });
+        set({ currentQuote: null });
       }
     } catch (error) {
       logger.error('Error refreshing quote', error);

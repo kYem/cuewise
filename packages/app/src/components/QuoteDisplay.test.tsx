@@ -93,7 +93,7 @@ describe('QuoteDisplay - Navigation', () => {
       expectNavigationMethodCalled(mockStore, 'refreshQuote');
     });
 
-    it('should restart the auto-rotation clock on the space key, as the button does', async () => {
+    it('should signal a manual refresh on the space key, as the button does', async () => {
       const mockStore = createLoadedMockStore();
       vi.mocked(useQuoteStore).mockImplementation(createSelectorMock(mockStore));
       const onManualRefresh = vi.fn();

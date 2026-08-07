@@ -39,7 +39,10 @@ function setup({ enabled = true, framing = 'queue', cadence = 'every', cards = [
   vi.mocked(useConceptCardsStore).mockImplementation(
     createSelectorMock({ cards, isLoading: false, initialize: vi.fn(), reviewCard })
   );
-  return { reviewCard };
+  // clearAllMocks does not strip a plain assigned property, so every test gets its own.
+  const refreshQuote = vi.fn();
+  Object.assign(useQuoteStore, { getState: () => ({ refreshQuote }) });
+  return { reviewCard, refreshQuote };
 }
 
 describe('ConceptRotation', () => {
@@ -83,11 +86,10 @@ describe('ConceptRotation', () => {
   });
 
   it('leaves the card for a fresh quote when space follows the reveal', async () => {
-    setup({ framing: 'queue', cards: [dueCard] });
-    const refreshQuote = vi.fn();
-    Object.assign(useQuoteStore, { getState: () => ({ refreshQuote }) });
+    const { refreshQuote } = setup({ framing: 'queue', cards: [dueCard] });
+    const onManualRefresh = vi.fn();
 
-    render(<ConceptRotation fallback={<div>QUOTE</div>} />);
+    render(<ConceptRotation fallback={<div>QUOTE</div>} onManualRefresh={onManualRefresh} />);
     fireEvent.click(screen.getByRole('button', { name: /reveal answer/i }));
     await act(async () => {
       fireEvent.keyDown(document.body, { key: ' ' });
@@ -95,6 +97,8 @@ describe('ConceptRotation', () => {
 
     expect(screen.getByText('QUOTE')).toBeInTheDocument();
     expect(refreshQuote).toHaveBeenCalledTimes(1);
+    // Without this the host's rotation keeps its phase and overwrites the quote just asked for.
+    expect(onManualRefresh).toHaveBeenCalledTimes(1);
   });
 
   it('yields back to the quote after grading in ambient framing', async () => {
