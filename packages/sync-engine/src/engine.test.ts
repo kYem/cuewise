@@ -121,6 +121,11 @@ function restart(device: Device, scheduler: FakeScheduler = new FakeScheduler())
   return engine;
 }
 
+/** Lets any already-scheduled microtask AND macrotask work run before continuing. */
+function settle(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 /**
  * A promise the test settles by hand, plus `awaited`, which resolves once the code under test has
  * asked for it. Lets a test park one operation mid-flight and drive another past it.
@@ -2093,119 +2098,77 @@ describe('SyncEngine.refreshRecoveryEnvelope', () => {
     await expect(read(RECOVERY_ENVELOPE_KEY, 'local')).resolves.toBeNull();
   });
 
-  it('does not let a stale "absent" outrank a Regenerate that landed while it was on the wire', async () => {
-    // Regenerate PUT an envelope, so a read that started before it is older news. Recording it
-    // would re-raise the banner the click just retired, on an account that now has a recovery path.
+  it('holds a refresh behind a Regenerate, so it reports the envelope that click stored', async () => {
+    // Unqueued, the GET is answered before the PUT lands and the refresh reports — and persists —
+    // "no recovery code" for an account the click had just given one.
     const server = new FakeSyncServer();
     const device = createDevice(server);
     useStorage(device);
     await device.engine.enableSync('dev', 'cred-a', 'Device A');
     vi.spyOn(logger, 'error').mockImplementation(() => {});
-    let regenerated = false;
-    vi.spyOn(device.apiClient, 'getRecoveryEnvelope').mockImplementation(async () => {
-      if (!regenerated) {
-        regenerated = true;
-        await device.engine.regenerateRecoveryCode();
-      }
-      return null;
-    });
-
-    await expect(device.engine.refreshRecoveryEnvelope()).resolves.toBe(true);
-
-    await expect(device.kv.get(RECOVERY_ENVELOPE_KEY, 'local')).resolves.toBe(true);
-  });
-
-  it('does not let an "absent" read that STARTED inside a Regenerate outrank it either', async () => {
-    // The sibling above starts first and resolves late; this one starts after the PUT is already
-    // on the wire, so a completed-writes counter alone sees no change and lets it through. Only
-    // the in-flight gauge catches it. Reachable: 'details' bypasses the extension's control mutex.
-    const server = new FakeSyncServer();
-    const device = createDevice(server);
-    useStorage(device);
-    await device.engine.enableSync('dev', 'cred-a', 'Device A');
-    vi.spyOn(logger, 'error').mockImplementation(() => {});
-    let refresh: Promise<boolean | null> = Promise.resolve(null);
+    const realGet = device.apiClient.getRecoveryEnvelope.bind(device.apiClient);
+    let stored = false;
+    vi.spyOn(device.apiClient, 'getRecoveryEnvelope').mockImplementation(async () =>
+      stored ? realGet() : null
+    );
+    const gate = heldAnswer<void>();
     vi.spyOn(device.apiClient, 'putRecoveryEnvelope').mockImplementation(async () => {
-      // Starts mid-regenerate, and its own GET is answered from the pre-PUT server state.
-      vi.spyOn(device.apiClient, 'getRecoveryEnvelope').mockResolvedValue(null);
-      refresh = device.engine.refreshRecoveryEnvelope();
-      await refresh;
-    });
-
-    await device.engine.regenerateRecoveryCode();
-
-    await expect(refresh).resolves.toBe(true);
-    await expect(device.kv.get(RECOVERY_ENVELOPE_KEY, 'local')).resolves.toBe(true);
-  });
-
-  it('does not let a probe outrank the enrol that minted the envelope', async () => {
-    // initNewKey's PUT happens deep inside initOrEnrollKey, long before the record — so the fence
-    // has to span the whole enrol. Otherwise a brand-new account persists "no recovery code".
-    const server = new FakeSyncServer();
-    const device = createDevice(server);
-    useStorage(device);
-    vi.spyOn(logger, 'error').mockImplementation(() => {});
-    let probe: Promise<boolean | null> = Promise.resolve(null);
-    vi.spyOn(device.apiClient, 'putRecoveryEnvelope').mockImplementation(async () => {
-      // Answered from the pre-PUT server state, and resolving while the enrol is still running.
-      vi.spyOn(device.apiClient, 'getRecoveryEnvelope').mockResolvedValue(null);
-      probe = device.engine.refreshRecoveryEnvelope();
-      await probe;
-    });
-
-    await device.engine.enableSync('dev', 'cred-a', 'Device A');
-
-    await expect(probe).resolves.not.toBe(false);
-    await expect(device.kv.get(RECOVERY_ENVELOPE_KEY, 'local')).resolves.toBe(true);
-  });
-
-  it('does not let a probe record an answer a write completed inside its own record read', async () => {
-    // The enrol fence wraps local storage I/O, so a whole authoritative write fits inside another
-    // probe's keyStore.get — the one window a check taken only before that read cannot see.
-    const server = new FakeSyncServer();
-    const device = createDevice(server);
-    useStorage(device);
-    await device.engine.enableSync('dev', 'cred-a', 'Device A');
-    vi.spyOn(logger, 'error').mockImplementation(() => {});
-    vi.spyOn(device.apiClient, 'getRecoveryEnvelope').mockResolvedValue(null);
-    const read = device.kv.get.bind(device.kv);
-    let regenerated = false;
-    vi.spyOn(device.kv, 'get').mockImplementation(async (key, area) => {
-      const value = await read(key, area);
-      if (key === RECOVERY_ENVELOPE_KEY && !regenerated) {
-        regenerated = true;
-        await device.engine.regenerateRecoveryCode();
-      }
-      return value;
-    });
-
-    await expect(device.engine.refreshRecoveryEnvelope()).resolves.not.toBe(false);
-
-    await expect(read(RECOVERY_ENVELOPE_KEY, 'local')).resolves.toBe(true);
-  });
-
-  it('lets a real answer stand when the authoritative write it raced failed outright', async () => {
-    // A rejected PUT put nothing on the server, so it has no claim to outrank a probe that
-    // genuinely learned the envelope is absent — that banner would be telling the truth. The probe
-    // has to snapshot BEFORE the failed write and record after it, or nothing is being tested.
-    const server = new FakeSyncServer();
-    const device = createDevice(server);
-    useStorage(device);
-    await device.engine.enableSync('dev', 'cred-a', 'Device A');
-    vi.spyOn(logger, 'error').mockImplementation(() => {});
-    const gate = heldAnswer<null>();
-    vi.spyOn(device.apiClient, 'getRecoveryEnvelope').mockImplementation(() => {
       gate.start();
-      return gate.held;
+      await gate.held;
+      stored = true;
     });
-    const probe = device.engine.refreshRecoveryEnvelope();
+
+    const regenerate = device.engine.regenerateRecoveryCode();
     await gate.awaited;
+    const probe = device.engine.refreshRecoveryEnvelope();
+    // An unqueued refresh reaches its GET in here, while the PUT is still parked.
+    await settle();
+    gate.release(undefined);
+    await Promise.all([regenerate, probe]);
+
+    await expect(probe).resolves.toBe(true);
+    await expect(device.kv.get(RECOVERY_ENVELOPE_KEY, 'local')).resolves.toBe(true);
+  });
+
+  it('holds a refresh behind the enrol that mints the envelope', async () => {
+    // Same window on the enable path, where the PUT is buried inside initOrEnrollKey.
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const realGet = device.apiClient.getRecoveryEnvelope.bind(device.apiClient);
+    const realPut = device.apiClient.putRecoveryEnvelope.bind(device.apiClient);
+    let stored = false;
+    let probe: Promise<boolean | null> = Promise.resolve(null);
+    vi.spyOn(device.apiClient, 'getRecoveryEnvelope').mockImplementation(async () =>
+      stored ? realGet() : null
+    );
+    vi.spyOn(device.apiClient, 'putRecoveryEnvelope').mockImplementation(async (envelope, opts) => {
+      // Started, not awaited — awaiting it from inside a queued op would deadlock.
+      probe = device.engine.refreshRecoveryEnvelope();
+      // An unqueued refresh reaches its GET in here, before the envelope exists.
+      await settle();
+      await realPut(envelope, opts);
+      stored = true;
+    });
+
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    await expect(probe).resolves.toBe(true);
+  });
+
+  it('lets a genuine "absent" stand when the Regenerate that raced it failed', async () => {
+    // A rejected PUT put nothing on the server, so the banner this raises is telling the truth.
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
     vi.spyOn(device.apiClient, 'putRecoveryEnvelope').mockRejectedValue(new Error('offline'));
     await expect(device.engine.regenerateRecoveryCode()).rejects.toThrow('offline');
+    vi.spyOn(device.apiClient, 'getRecoveryEnvelope').mockResolvedValue(null);
 
-    gate.release(null);
-
-    await expect(probe).resolves.toBe(false);
+    await expect(device.engine.refreshRecoveryEnvelope()).resolves.toBe(false);
   });
 
   it('answers unknown when a disable lands inside a fetch that then fails', async () => {

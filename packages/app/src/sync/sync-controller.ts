@@ -88,8 +88,8 @@ export interface SyncDetails {
   /**
    * Whether the server holds a recovery envelope. Only `false` is a finding: without one, losing
    * this device loses the data, and the next device to enrol mints a second key whose records
-   * nothing here can read. Absent means nobody has answered — no lookup has yet asked the server
-   * and succeeded, or the extension's untyped SW↔page wire came from a build predating the field.
+   * nothing here can read. Anything else means nobody has answered — no lookup has succeeded yet,
+   * or the extension's untyped SW↔page wire came from a worker predating the field.
    */
   readonly recoveryEnvelopePresent?: boolean | null;
 }
@@ -97,9 +97,8 @@ export interface SyncDetails {
 /** What a details lookup wants beyond the identity every caller shows. */
 export interface SyncDetailsOptions {
   /**
-   * Ask the server whether the recovery envelope still exists, rather than reporting the last
-   * recorded answer. One extra request, so only the surface that renders that finding — the
-   * settings panel's "no recovery code" banner — turns it on (ENG-98).
+   * Ask the server rather than report the last recorded answer. One extra request, so only the
+   * surface that renders the finding — the settings panel's banner — turns it on (ENG-98).
    */
   readonly refreshRecoveryEnvelope?: boolean;
 }

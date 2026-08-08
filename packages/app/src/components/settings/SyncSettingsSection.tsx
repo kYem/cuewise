@@ -30,8 +30,7 @@ import type { SettingsSectionProps } from './settings-types';
 
 const SEARCH_TERMS = 'cloud sync encrypted end-to-end recovery code account device backup';
 
-// This panel is the one surface that renders the "no recovery code" finding, so it is the one
-// that pays for a fresh answer; every other details caller reports the last recorded one.
+// The one surface that renders the "no recovery code" finding, so the one that pays to refresh it.
 const WITH_ENVELOPE: SyncDetailsOptions = { refreshRecoveryEnvelope: true };
 
 /** The standard four-color "G" mark — kept local since lucide-react has no brand icons. */
@@ -406,8 +405,8 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     }
   };
 
-  // Explicit at every call site, with no default: a caller that has just WRITTEN the envelope wants
-  // the recorded answer, and `undefined` would silently pick up a default and go asking instead.
+  // No default: a caller that just WROTE the envelope wants the recorded answer, and `undefined`
+  // picking up a default would send it asking instead.
   const refreshDetails = async (options: SyncDetailsOptions | undefined) => {
     detailsGenRef.current += 1;
     const gen = detailsGenRef.current;
@@ -598,8 +597,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     let regenerated = false;
     try {
       const code = await controller.regenerateRecoveryCode();
-      // Set here, not after surfacing: the envelope is already replaced by this point, so anything
-      // that throws below is a display failure, and it must not also skip the re-read.
+      // The envelope is already replaced here, so a throw below is a display failure only.
       regenerated = true;
       setUnsavedCode(false);
       // Not setRecoveryCode: the server envelope is already replaced, so a closed panel must not
@@ -611,9 +609,8 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     } finally {
       setIsRegenerating(false);
     }
-    // Outside the try, like handleSyncNow: this is the only repair for a missing envelope and this
-    // panel the only thing that re-reads the flag, so without it the banner it just fixed stays up
-    // all mount. No refresh argument — the engine recorded the answer when it wrote the envelope.
+    // Outside the try, like handleSyncNow. Without it the banner this click fixed stays up all
+    // mount; without an option, because the engine recorded the answer as it wrote the envelope.
     if (regenerated) {
       await refreshDetails(undefined);
     }

@@ -77,8 +77,7 @@ async function runDetails(
   // Hydration owns lastSyncedAt as well as the cycle; without this the stamp is only correct
   // because getAccount's network hop happens to outlast two local reads on a cold worker.
   await engine.ensureHydrated();
-  // In parallel because both are network hops on the panel-open path; neither throws (each
-  // answers null instead).
+  // Both are network hops on the panel-open path, and neither throws.
   const [account, recoveryEnvelopePresent] = await Promise.all([
     engine.getAccount(),
     refreshEnvelope ? engine.refreshRecoveryEnvelope() : engine.getRecoveryEnvelopePresent(),
@@ -194,9 +193,8 @@ export async function handleSyncControlMessage(
 ): Promise<SyncControlAnyResponse> {
   const { op } = msg;
   if (op === 'details') {
-    // Bypasses the mutex so a slow account fetch can never delay a queued user action (e.g. a
-    // disable click) behind it. Its one write — the recovery-envelope flag — is epoch-guarded in
-    // the engine, so a disable racing this cannot have the removed badge written back.
+    // Bypasses the mutex so a slow account fetch cannot delay a queued user action (e.g. a
+    // disable click). Its one write, the envelope flag, is epoch-guarded in the engine.
     return runDetails(engine, msg.refreshRecoveryEnvelope);
   }
   if (op === 'getLastCycle') {

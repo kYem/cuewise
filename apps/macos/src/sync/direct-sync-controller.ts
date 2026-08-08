@@ -389,8 +389,7 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
       // Hydration owns lastSyncedAt too; without this the stamp is only correct because
       // getAccount's network hop happens to outlast two local reads.
       await engine.ensureHydrated();
-      // In parallel because both are network hops on the panel-open path; neither throws (each
-      // answers null instead).
+      // Both are network hops on the panel-open path, and neither throws.
       const [account, recoveryEnvelopePresent] = await Promise.all([
         engine.getAccount(),
         options?.refreshRecoveryEnvelope

@@ -145,18 +145,6 @@ function stallError(what: string, outrankedPush: { error: unknown } | undefined)
 type HydrationResult = 'final' | 'retry';
 
 /**
- * Where a recovery-envelope answer came from. An `authority` put the envelope there and cannot be
- * out of date; a `probe` only read what a GET happened to see, and carries the write count it
- * snapshotted first so an authority that overlapped it can be detected. Spelled as a union rather
- * than an optional flag because getting it wrong silently persists the wrong badge.
- */
-type EnvelopeSource =
-  | { readonly kind: 'authority' }
-  | { readonly kind: 'probe'; readonly writes: number };
-
-const AUTHORITY: EnvelopeSource = { kind: 'authority' };
-
-/**
  * Names a rejected record's shape for the log without echoing it — the field names distinguish a
  * legacy shape from a partial write from garbage, and none of them carry user data.
  */
@@ -188,12 +176,8 @@ export class SyncEngine {
   // null until a check has answered once, so a panel on a cold worker cannot read "unknown" as
   // "missing" and claim an account has no recovery path before anything has checked.
   private recoveryEnvelope: boolean | null = null;
-  // A refresh asks the server what is there; these two put something there (enrol, regenerate), so
-  // they outrank it. A count of completed ones AND a gauge of running ones, because either alone
-  // misses a case: the count cannot see a write still in flight, and the gauge cannot see one that
-  // began and finished entirely inside a single refresh. See withEnvelopeAuthority.
-  private envelopeWrites = 0;
-  private envelopeWritesInFlight = 0;
+  // Chains every envelope read and write; see queueEnvelope.
+  private envelopeQueue: Promise<unknown> = Promise.resolve();
   // Whether the enrol in flight minted a code. Never the code itself: this only decides whether the
   // "only way back" breadcrumb fires, and the value belongs to the host's one-shot slot.
   private enrollMintedCode = false;
@@ -285,11 +269,8 @@ export class SyncEngine {
     // A code is only passed when enrolling an additional device; brand-new enable passes none.
     this.setStatus(recoveryCode ? 'enrolling' : 'key_init');
     const wasEnabled = await this.deps.keyStore.get<boolean>(CLOUD_SYNC_ENABLED_KEY, 'local');
-    // Fenced around the whole enrol, not just the record below: initNewKey's PUT happens in here,
-    // and a refresh whose GET was answered before it must not record the "absent" it saw.
-    const enrolled = await this.withEnvelopeAuthority(() =>
-      initOrEnrollKey(this.keyDeps(), recoveryCode)
-    );
+    // Queued, because initNewKey's envelope PUT happens in here.
+    const enrolled = await this.queueEnvelope(() => initOrEnrollKey(this.keyDeps(), recoveryCode));
     if (enrolled.recoveryCodeToShow !== undefined) {
       if (wasEnabled === true) {
         // A fresh key on a device that was already enrolled: every record the old key sealed is now
@@ -309,7 +290,7 @@ export class SyncEngine {
     this.keyId = enrolled.keyId;
     // Both enrol paths prove one: initNewKey PUT it, enrollFromEnvelope unwrapped it. Without
     // this a freshly-connected device reads "unknown" until its next start().
-    await this.recordRecoveryEnvelope(true, epoch, AUTHORITY);
+    await this.recordRecoveryEnvelope(true, epoch);
 
     this.setStatus('initial_sync');
     // Unconditionally: the enabled flag survives handleAuthLoss, so its presence cannot mean the
@@ -504,31 +485,12 @@ export class SyncEngine {
     const { code, secret } = await generateRecoveryCode();
     const mk = await deriveMasterKey(secret);
     const blob = await wrapDataKey(mk, dk, keyId);
-    await this.withEnvelopeAuthority(async () => {
+    await this.queueEnvelope(async () => {
       await this.deps.apiClient.putRecoveryEnvelope(blob);
       // The one repair for a missing envelope, so this is what retires the badge it raised.
-      await this.recordRecoveryEnvelope(true, epoch, AUTHORITY);
+      await this.recordRecoveryEnvelope(true, epoch);
     });
     return code;
-  }
-
-  /**
-   * Fences a write that KNOWS the envelope state (it just put one there) against every concurrent
-   * refresh, which only knows what a GET happened to see. Must span the PUT as well as the record:
-   * a GET served before the PUT lands is stale the moment it resolves, whenever that is.
-   */
-  private async withEnvelopeAuthority<T>(write: () => Promise<T>): Promise<T> {
-    this.envelopeWritesInFlight += 1;
-    try {
-      const result = await write();
-      // Counted only once it succeeded, and before the gauge drops, so no refresh observes a moment
-      // where neither flags it: the gauge covers the write while it runs, the count once it has.
-      // A rejected write put nothing there, so it has no claim to outrank a probe's real answer.
-      this.envelopeWrites += 1;
-      return result;
-    } finally {
-      this.envelopeWritesInFlight -= 1;
-    }
   }
 
   /**
@@ -720,105 +682,72 @@ export class SyncEngine {
     return this.lastSyncedAt;
   }
 
-  /**
-   * The last recorded answer, without asking the server. null until something has managed to
-   * check, which hosts must not paint as "missing". Surfaces that render the finding itself want
-   * `refreshRecoveryEnvelope()` instead; this is for the ones that only carry the value along.
-   */
+  /** The last recorded answer, without asking the server; null until something has checked. */
   getRecoveryEnvelopePresent(): boolean | null {
     return this.recoveryEnvelope;
   }
 
   /**
-   * Asks the server whether this account still has a recovery envelope, records the answer, and
-   * returns it — null while nobody has managed to answer, which hosts must not paint as "missing".
-   *
-   * Hosts call this from their details lookup, i.e. when the settings panel is looking. That banner
-   * is the only consumer, and with the data key on disk the answer changes nothing else, so asking
-   * on the pull loop instead cost a request per worker spawn for a panel that is usually closed
-   * (ENG-98). Never throws: an unreachable server leaves the last known answer standing.
+   * Asks the server whether this account still has a recovery envelope and records the answer.
+   * Hosts call it from their details lookup, so the settings banner that reads it is what pays for
+   * it (ENG-98). Never throws, storage included — an unreachable server leaves the last answer
+   * standing, and null means nobody has answered, which hosts must not paint as "missing".
    */
   async refreshRecoveryEnvelope(): Promise<boolean | null> {
     const epoch = this.accountEpoch;
-    const writes = this.envelopeWrites;
-    // One try over the storage writes as well as the fetch: the never-throws contract has to hold
-    // by construction, not because today's adapters happen to swallow their own errors.
     try {
-      // Like getAccount: a signed-out device would only earn a 401 and a warning for asking, and
-      // hosts call this beside getAccount on every details lookup.
-      if ((await this.deps.sessionManager.getToken()) === null) {
-        return this.recoveryEnvelope;
-      }
-      const present = (await this.deps.apiClient.getRecoveryEnvelope()) !== null;
-      if (this.accountEpoch !== epoch) {
-        // A disable landed during the fetch, so this answer describes an account that is gone —
-        // and recording it would hand the next account to connect the previous one's badge.
-        return null;
-      }
-      if (this.envelopeOutranked(writes)) {
-        // An enrol or Regenerate overlapped this read — finished inside it, or still running. It
-        // PUT an envelope; this only saw what a GET racing that PUT returned, so recording an
-        // "absent" here re-raises the banner the click just retired, on an account that now has one.
-        return this.recoveryEnvelope;
-      }
-      const news = await this.recordRecoveryEnvelope(present, epoch, { kind: 'probe', writes });
-      if (this.accountEpoch !== epoch) {
-        // The disable landed inside the record's own read instead; nothing was written, so this
-        // answer must not be painted either.
-        return null;
-      }
-      if (this.envelopeOutranked(writes)) {
-        // Likewise for a write that landed in there: the record refused it, so returning it would
-        // paint what was deliberately not persisted.
-        return this.recoveryEnvelope;
-      }
-      if (news && !present) {
-        // Regenerate recovery code is the one repair, and it lives in the panel that just asked.
-        logger.error(
-          'Cloud sync has no recovery envelope on the server; regenerate your recovery code to restore it'
-        );
-      }
-      return present;
+      return await this.queueEnvelope(async () => {
+        // Like getAccount: a signed-out device would only earn a 401 and a warning for asking.
+        if ((await this.deps.sessionManager.getToken()) === null) {
+          return this.recoveryEnvelope;
+        }
+        const present = (await this.deps.apiClient.getRecoveryEnvelope()) !== null;
+        const news = await this.recordRecoveryEnvelope(present, epoch);
+        if (this.accountEpoch !== epoch) {
+          return null;
+        }
+        if (news && !present) {
+          // Regenerate recovery code is the one repair, and it lives in the panel that just asked.
+          logger.error(
+            'Cloud sync has no recovery envelope on the server; regenerate your recovery code to restore it'
+          );
+        }
+        return present;
+      });
     } catch (err) {
       logger.warn(`Could not check the cloud sync recovery envelope: ${describeThrown(err)}`, {
         error: err,
       });
-      if (this.accountEpoch !== epoch) {
-        // disableSync clears the session BEFORE it nulls the field, so a disable landing mid-fetch
-        // usually arrives here as a 401 — with the removed account's flag still readable.
-        return null;
-      }
-      return this.recoveryEnvelope;
+      // disableSync clears the session before it nulls the field, so a disable landing mid-fetch
+      // arrives here as a 401 with the removed account's answer still readable.
+      return this.accountEpoch === epoch ? this.recoveryEnvelope : null;
     }
   }
 
-  /** Whether an authoritative write has overlapped a probe that snapshotted `writes` before its GET. */
-  private envelopeOutranked(writes: number): boolean {
-    return this.envelopeWrites !== writes || this.envelopeWritesInFlight > 0;
+  /**
+   * Serialises every envelope read and write: unqueued, a refresh's GET and the record it drives
+   * straddle a Regenerate and persist the "absent" that PUT just fixed. Never call it from inside
+   * a queued op — that deadlocks.
+   */
+  private queueEnvelope<T>(op: () => Promise<T>): Promise<T> {
+    const run = this.envelopeQueue.then(op, op);
+    this.envelopeQueue = run.then(
+      () => {},
+      () => {}
+    );
+    return run;
   }
 
   /**
    * Records what a check found and answers whether it is news. Compared against the PERSISTED
    * value, not the field: a respawned worker starts blank, so an in-memory check would call the
    * steady state news every time the panel asked — which is the log repeat this exists to stop.
-   *
-   * Takes its caller's epoch and source because the read below is an await both a disable and an
-   * authoritative write can land inside — and both writes here are ones a disable has just undone.
    */
-  private async recordRecoveryEnvelope(
-    present: boolean,
-    epoch: number,
-    source: EnvelopeSource
-  ): Promise<boolean> {
+  private async recordRecoveryEnvelope(present: boolean, epoch: number): Promise<boolean> {
     const stored = await this.deps.keyStore.get<boolean>(RECOVERY_ENVELOPE_KEY, 'local');
     if (this.accountEpoch !== epoch) {
-      // Re-creating the key disableSync removed, or the field it nulled, leaves the previous
-      // account's badge waiting for whichever one connects next.
-      return false;
-    }
-    if (source.kind === 'probe' && this.envelopeOutranked(source.writes)) {
-      // An enrol or Regenerate fitted entirely inside the read above — it is local I/O on the
-      // enrol path, so it fits — and this probe would now persist `false` over its `true`.
+      // A disable landed across the read. Re-creating the key it removed, or the field it nulled,
+      // leaves the previous account's badge waiting for whichever one connects next.
       return false;
     }
     this.recoveryEnvelope = present;
