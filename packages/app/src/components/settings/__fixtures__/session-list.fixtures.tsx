@@ -20,6 +20,8 @@ export function session(overrides: Partial<SyncSession> = {}): SyncSession {
 export function controllerWith(sessions: SyncSession[] | null): FakeSyncController {
   const controller = new FakeSyncController();
   controller.sessionsResult = sessions;
+  // SessionList only reads once sync is up, so a default-'off' controller would never load.
+  controller.setStatus('active');
   return controller;
 }
 

@@ -394,9 +394,11 @@ export class BridgeSyncController implements SyncController {
    * is the only field naming what actually went wrong — carry it, as syncNow does.
    */
   private static describeActionFailure(
-    response: Extract<SyncControlResponse, { ok: false }> | undefined
+    response: Extract<SyncControlResponse, { ok: false }> | undefined | null
   ): string {
-    if (response === undefined) {
+    // Null as well as undefined, like describeUnavailableCause: the wire is untyped, and reading
+    // `.detail` off a null answer would replace this diagnostic with the throw it reports.
+    if (response === undefined || response === null) {
       return 'no response from the background';
     }
     const detail = response.detail === undefined ? '' : ` — ${response.detail}`;
@@ -443,9 +445,10 @@ export class BridgeSyncController implements SyncController {
         `Failed to sign out other devices: ${BridgeSyncController.describeActionFailure(response)}`
       );
     }
-    // A skewed SW can answer ok:true with no count; that is unusable, not a success.
-    if (response.kind !== 'revokedCount') {
-      throw new Error('Failed to sign out other devices: response carried no count');
+    // A skewed SW can answer ok:true with no count, or a wrong body can make it non-numeric;
+    // either way that is unusable, not a success worth toasting.
+    if (response.kind !== 'revokedCount' || typeof response.revoked !== 'number') {
+      throw new Error('Failed to sign out other devices: response carried no usable count');
     }
     return response.revoked;
   }

@@ -23,9 +23,9 @@ describe('session ids', () => {
     expect(rows.results.every((r) => r.id !== r.token_hash)).toBe(true);
   });
 
-  // Run against a probe table, not `tokens`: the harness migrates an empty DB, so idx_tokens_id
-  // already forbids the two ''-id rows this needs. Both of 0007's hazards are covered here.
-  it('backfills distinct ids and only then survives the unique index', async () => {
+  // Run against a probe table, not `tokens`: the harness migrates an empty DB, so the real
+  // backfill never meets a pre-existing row. Replays 0007's three statements in order.
+  it('backfills a distinct id per legacy row', async () => {
     await env.DB.prepare('CREATE TABLE backfill_probe (a TEXT)').run();
     await env.DB.prepare("INSERT INTO backfill_probe (a) VALUES ('x'), ('y'), ('z')").run();
 
@@ -33,7 +33,9 @@ describe('session ids', () => {
     await env.DB.prepare(
       "UPDATE backfill_probe SET id = lower(hex(randomblob(16))) WHERE id = ''"
     ).run();
-    await env.DB.prepare('CREATE UNIQUE INDEX idx_probe_id ON backfill_probe (id)').run();
+    await env.DB.prepare(
+      "CREATE UNIQUE INDEX idx_probe_id ON backfill_probe (id) WHERE id != ''"
+    ).run();
 
     const rows = await env.DB.prepare('SELECT id FROM backfill_probe').all<{ id: string }>();
     const ids = rows.results.map((r) => r.id);
@@ -43,17 +45,18 @@ describe('session ids', () => {
     expect(new Set(ids).size).toBe(3);
   });
 
-  it('would fail if the unique index were created before the backfill', async () => {
-    await env.DB.prepare('CREATE TABLE order_probe (a TEXT)').run();
-    await env.DB.prepare("INSERT INTO order_probe (a) VALUES ('x'), ('y')").run();
-    await env.DB.prepare("ALTER TABLE order_probe ADD COLUMN id TEXT NOT NULL DEFAULT ''").run();
-
-    const indexFirst = env.DB.prepare(
-      'CREATE UNIQUE INDEX idx_order_probe_id ON order_probe (id)'
+  // The rollback case: a Worker predating the id column keeps inserting rows at the '' default.
+  it('tolerates repeated default ids while still rejecting a duplicate real one', async () => {
+    await env.DB.prepare("CREATE TABLE partial_probe (id TEXT NOT NULL DEFAULT '')").run();
+    await env.DB.prepare(
+      "CREATE UNIQUE INDEX idx_partial_probe ON partial_probe (id) WHERE id != ''"
     ).run();
 
-    await expect(indexFirst).rejects.toThrow();
-    await env.DB.prepare('DROP TABLE order_probe').run();
+    await env.DB.prepare("INSERT INTO partial_probe (id) VALUES (''), (''), ('real')").run();
+    const duplicateReal = env.DB.prepare("INSERT INTO partial_probe (id) VALUES ('real')").run();
+
+    await expect(duplicateReal).rejects.toThrow();
+    await env.DB.prepare('DROP TABLE partial_probe').run();
   });
 });
 

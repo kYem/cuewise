@@ -52,6 +52,20 @@ describe('SessionList', () => {
     expect(await screen.findByTestId('session-list-unavailable')).toBeInTheDocument();
   });
 
+  // Mounting during 'connecting' would otherwise read before a session exists and pin the
+  // unavailable line for the rest of the mount.
+  it('waits for sync to be up before reading, then reads on the transition', async () => {
+    const controller = controllerWith([session({ id: 's1' })]);
+    controller.setStatus('connecting');
+    renderSessionList(controller);
+
+    expect(controller.calls.filter((c) => c.method === 'listSessions')).toHaveLength(0);
+
+    controller.setStatus('active');
+
+    expect(await screen.findByTestId('session-row-s1')).toBeInTheDocument();
+  });
+
   it('renames a session and refreshes the list', async () => {
     const controller = controllerWith([session({ id: 's1', deviceName: 'laptop' })]);
     renderSessionList(controller);

@@ -5,7 +5,7 @@ import { Check, Pencil, X } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useEffect, useState } from 'react';
 import { useToastStore } from '../../stores/toast-store';
-import { useSyncController } from '../../sync/sync-controller';
+import { type SyncUiStatus, useSyncController } from '../../sync/sync-controller';
 import { formatMillisAgo } from '../../utils/reminder-date-utils';
 import { Modal } from '../Modal';
 
@@ -13,6 +13,17 @@ const ROW = 'flex items-start justify-between gap-3 border-t border-divider py-2
 const META = 'text-xs text-tertiary';
 const GHOST_BUTTON =
   'rounded-lg border border-border bg-surface px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-surface-variant disabled:cursor-not-allowed disabled:opacity-50';
+
+// A stale list can make the server revoke none; "Signed out 0 other devices" reads as a bug.
+function revokedLabel(revoked: number): string {
+  if (revoked === 0) {
+    return 'No other devices were signed in';
+  }
+  if (revoked === 1) {
+    return 'Signed out 1 other device';
+  }
+  return `Signed out ${revoked} other devices`;
+}
 
 // Always rendered: it is what tells two same-named sessions apart (see SyncSession).
 function lastActiveLabel(session: SyncSession): string {
@@ -55,6 +66,9 @@ const SessionRow: React.FC<SessionRowProps> = ({ session, onRename, onRevoke }) 
               // biome-ignore lint/a11y/noAutofocus: the input only exists after a deliberate click
               autoFocus
               aria-label="Device name"
+              // Matches the server's MAX_DEVICE_NAME_LENGTH, so the one deterministic rename
+              // failure can't happen and be reported as "please try again".
+              maxLength={100}
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => {
@@ -127,18 +141,38 @@ export const SessionList: React.FC<SessionListProps> = ({ onRegenerateRecoveryCo
   const [pendingRevoke, setPendingRevoke] = useState<SyncSession | null>(null);
   const [isRevokingOthers, setIsRevokingOthers] = useState(false);
   const [isConfirmingRevokeOthers, setIsConfirmingRevokeOthers] = useState(false);
+  const [status, setStatus] = useState<SyncUiStatus>('off');
+
+  useEffect(() => {
+    if (controller === null) {
+      return undefined;
+    }
+    setStatus(controller.getStatus());
+    return controller.subscribe(setStatus);
+  }, [controller]);
 
   const refresh = useCallback(async () => {
     if (controller === null) {
       return;
     }
-    setSessions(await controller.listSessions());
-    setHasLoaded(true);
+    try {
+      setSessions(await controller.listSessions());
+      setHasLoaded(true);
+    } catch (error) {
+      // listSessions is contracted never to throw; a rejection means a skewed host, and leaving
+      // hasLoaded false would render the aria-hidden skeleton forever.
+      logger.error('Cloud sync list devices failed', error);
+      setSessions(null);
+      setHasLoaded(true);
+    }
   }, [controller]);
 
   useEffect(() => {
+    if (status !== 'active' && status !== 'syncing') {
+      return;
+    }
     void refresh();
-  }, [refresh]);
+  }, [refresh, status]);
 
   const handleRename = async (id: string, deviceName: string) => {
     if (controller === null) {
@@ -162,6 +196,9 @@ export const SessionList: React.FC<SessionListProps> = ({ onRegenerateRecoveryCo
     setPendingRevoke(null);
     try {
       await controller.revokeSession(target.id);
+      // Confirm before refreshing: for a security action the answer to "did that work?" must not
+      // depend on a later read that can itself fail and blank the list.
+      useToastStore.getState().success(`${target.deviceName} signed out`);
       await refresh();
     } catch (error) {
       logger.error('Cloud sync revoke device failed', error);
@@ -177,12 +214,8 @@ export const SessionList: React.FC<SessionListProps> = ({ onRegenerateRecoveryCo
     setIsRevokingOthers(true);
     try {
       const revoked = await controller.revokeOtherSessions();
+      useToastStore.getState().success(revokedLabel(revoked));
       await refresh();
-      useToastStore
-        .getState()
-        .success(
-          revoked === 1 ? 'Signed out 1 other device' : `Signed out ${revoked} other devices`
-        );
     } catch (error) {
       logger.error('Cloud sync revoke other devices failed', error);
       useToastStore.getState().error("Couldn't sign the other devices out — please try again.");
