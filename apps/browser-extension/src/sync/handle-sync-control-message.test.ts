@@ -35,6 +35,25 @@ describe('handleSyncControlMessage: details', () => {
     });
   });
 
+  it('refreshes the recovery envelope rather than reading a cached answer', async () => {
+    // ENG-98 moved the check off the worker's pull loop onto this lookup, which the settings panel
+    // drives. On a respawned worker there is no cached answer to read anyway.
+    const refreshRecoveryEnvelope = vi.fn().mockResolvedValue(false);
+    const engine = fakeControlSurface({
+      getAccount: vi.fn().mockResolvedValue({ userId: 'u1', email: null }),
+      refreshRecoveryEnvelope,
+    });
+
+    const result = await handleSyncControlMessage(
+      engine,
+      { kind: 'cuewise-sync-control', op: 'details' },
+      fakeDeps()
+    );
+
+    expect(refreshRecoveryEnvelope).toHaveBeenCalled();
+    expect(result).toMatchObject({ details: { recoveryEnvelopePresent: false } });
+  });
+
   it('answers details null when the engine has no account', async () => {
     const result = await handleSyncControlMessage(
       fakeControlSurface(),

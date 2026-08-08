@@ -23,6 +23,7 @@ import {
   CLOUD_SYNC_ENABLED_KEY,
   LAST_CYCLE_KEY,
   LAST_SYNCED_AT_KEY,
+  RECOVERY_ENVELOPE_KEY,
   SyncEngine,
   type SyncEngineDeps,
   type SyncStatus,
@@ -103,6 +104,21 @@ function coldStart(
       await started;
     },
   };
+}
+
+/**
+ * A respawned worker: a fresh engine over the same device's storage and transport, so only what
+ * was persisted survives. Registered for the afterEach stop() like any other device engine.
+ */
+function restart(device: Device, scheduler: FakeScheduler = new FakeScheduler()): SyncEngine {
+  const engine = new SyncEngine({
+    apiClient: device.apiClient,
+    sessionManager: new SessionManager(device.kv),
+    keyStore: device.kv,
+    scheduler,
+  });
+  devices.push({ ...device, scheduler, engine });
+  return engine;
 }
 
 /** Points the shared @cuewise/storage helpers at this device's backend for the next await chain. */
@@ -1953,6 +1969,97 @@ describe('SyncEngine.disableSync', () => {
   });
 });
 
+describe('SyncEngine.refreshRecoveryEnvelope', () => {
+  it('reports a missing envelope and says how to restore it', async () => {
+    // The key is here, so the device still syncs; what it has lost is the way back from this
+    // device dying. Regenerate recovery code, the one repair, lives in the panel that just asked.
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    vi.spyOn(device.apiClient, 'getRecoveryEnvelope').mockResolvedValue(null);
+
+    await expect(device.engine.refreshRecoveryEnvelope()).resolves.toBe(false);
+
+    expect(device.engine.getStatus()).toBe('active');
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Cloud sync has no recovery envelope on the server; regenerate your recovery code to restore it'
+    );
+  });
+
+  it('names a missing envelope once, not on every panel open', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    vi.spyOn(device.apiClient, 'getRecoveryEnvelope').mockResolvedValue(null);
+    await device.engine.refreshRecoveryEnvelope();
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await expect(restart(device).refreshRecoveryEnvelope()).resolves.toBe(false);
+
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it('retires the finding once Regenerate rebuilds the envelope', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const missing = vi.spyOn(device.apiClient, 'getRecoveryEnvelope').mockResolvedValue(null);
+    await expect(device.engine.refreshRecoveryEnvelope()).resolves.toBe(false);
+    missing.mockRestore();
+
+    await device.engine.regenerateRecoveryCode();
+
+    await expect(device.engine.refreshRecoveryEnvelope()).resolves.toBe(true);
+  });
+
+  it('keeps the last known answer when the server cannot be reached', async () => {
+    // An unreachable server is not a missing envelope: answering false here would tell a perfectly
+    // recoverable account it has no way back, every time it opened Settings offline.
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    vi.spyOn(device.apiClient, 'getRecoveryEnvelope').mockRejectedValue(new Error('offline'));
+
+    await expect(device.engine.refreshRecoveryEnvelope()).resolves.toBe(true);
+  });
+
+  it('does not ask a signed-out device to check, and keeps what it last knew', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    await new SessionManager(device.kv).clear();
+    const envelopeSpy = vi.spyOn(device.apiClient, 'getRecoveryEnvelope');
+
+    await expect(device.engine.refreshRecoveryEnvelope()).resolves.toBe(true);
+
+    expect(envelopeSpy).not.toHaveBeenCalled();
+  });
+
+  it('records nothing for an account that was disabled mid-check', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    vi.spyOn(device.apiClient, 'getRecoveryEnvelope').mockImplementation(async () => {
+      await device.engine.disableSync();
+      return null;
+    });
+
+    await expect(device.engine.refreshRecoveryEnvelope()).resolves.toBeNull();
+
+    // Left behind, this is the previous account's badge waiting for whichever one connects next.
+    await expect(device.kv.get(RECOVERY_ENVELOPE_KEY, 'local')).resolves.toBeNull();
+  });
+});
+
 describe('SyncEngine.start / stop', () => {
   it('is a no-op when sync was never enabled on this device', async () => {
     const server = new FakeSyncServer();
@@ -1965,105 +2072,43 @@ describe('SyncEngine.start / stop', () => {
     expect(device.scheduler.scheduled).toEqual([]);
   });
 
-  it('keeps syncing when only the server envelope is gone, and says how to restore it', async () => {
-    // The key is here, so the device can sync. Stopping it also hides Regenerate recovery code,
-    // which renders only under the pill and is the only thing that rebuilds the envelope.
+  it('never asks the server about the recovery envelope while the data key is here', async () => {
+    // ENG-98. The answer drives one settings banner and nothing else, and the panel asks for
+    // itself — on the extension this ran per worker spawn, ~288 requests a day for a closed panel.
     const server = new FakeSyncServer();
     const device = createDevice(server);
     useStorage(device);
     await device.engine.enableSync('dev', 'cred-a', 'Device A');
-    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
-    vi.spyOn(device.apiClient, 'getRecoveryEnvelope').mockResolvedValue(null);
+    const envelopeSpy = vi.spyOn(device.apiClient, 'getRecoveryEnvelope');
 
     const scheduler = new FakeScheduler();
-    const restarted = new SyncEngine({
-      apiClient: device.apiClient,
-      sessionManager: new SessionManager(device.kv),
-      keyStore: device.kv,
-      scheduler,
-    });
+    const restarted = restart(device, scheduler);
     await restarted.start();
 
+    expect(envelopeSpy).not.toHaveBeenCalled();
     expect(restarted.getStatus()).toBe('active');
     expect(scheduler.scheduled).not.toEqual([]);
-    expect(errorSpy).toHaveBeenCalledWith(
-      'Cloud sync has no recovery envelope on the server; regenerate your recovery code to restore it'
-    );
-    expect(restarted.getRecoveryEnvelopePresent()).toBe(false);
   });
 
-  // The extension respawns its worker on every wake, so an unconditional log here is one line per
-  // five minutes for as long as the state lasts.
-  it('names a missing envelope once, not on every worker spawn', async () => {
-    const server = new FakeSyncServer();
-    const device = createDevice(server);
-    useStorage(device);
-    await device.engine.enableSync('dev', 'cred-a', 'Device A');
-    vi.spyOn(device.apiClient, 'getRecoveryEnvelope').mockResolvedValue(null);
-    const restart = async (): Promise<SyncEngine> => {
-      const engine = new SyncEngine({
-        apiClient: device.apiClient,
-        sessionManager: new SessionManager(device.kv),
-        keyStore: device.kv,
-        scheduler: new FakeScheduler(),
-      });
-      await engine.start();
-      return engine;
-    };
-    await restart();
-    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
-
-    const second = await restart();
-
-    expect(errorSpy).not.toHaveBeenCalled();
-    expect(second.getRecoveryEnvelopePresent()).toBe(false);
-  });
-
-  it('retires the finding once Regenerate rebuilds the envelope', async () => {
-    const server = new FakeSyncServer();
-    const device = createDevice(server);
-    useStorage(device);
-    await device.engine.enableSync('dev', 'cred-a', 'Device A');
-    vi.spyOn(logger, 'error').mockImplementation(() => {});
-    const missing = vi.spyOn(device.apiClient, 'getRecoveryEnvelope').mockResolvedValue(null);
-    const restarted = new SyncEngine({
-      apiClient: device.apiClient,
-      sessionManager: new SessionManager(device.kv),
-      keyStore: device.kv,
-      scheduler: new FakeScheduler(),
-    });
-    await restarted.start();
-    expect(restarted.getRecoveryEnvelopePresent()).toBe(false);
-    missing.mockRestore();
-
-    await restarted.regenerateRecoveryCode();
-
-    expect(restarted.getRecoveryEnvelopePresent()).toBe(true);
-  });
-
-  it('keeps syncing when the envelope fetch cannot reach the server', async () => {
-    // Self-heal only verifies the SERVER envelope, so an offline launch says nothing about the key
-    // on disk. Abandoning here left macOS reading "off" for an enrolled device.
+  it('asks for the recovery code when the key is gone and the server cannot be reached', async () => {
+    // The fetch is load-bearing only here, and an unanswerable one must still not leave a keyless
+    // device claiming to sync — the fall-through hands it to the key load, which says reconnect.
     const server = new FakeSyncServer();
     const device = createDevice(server);
     useStorage(device);
     await device.engine.enableSync('dev', 'cred-a', 'Device A');
     const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
     vi.spyOn(device.apiClient, 'getRecoveryEnvelope').mockRejectedValue(new Error('offline'));
+    await device.kv.remove(SYNC_DATA_KEY, 'local');
 
     const scheduler = new FakeScheduler();
-    const restarted = new SyncEngine({
-      apiClient: device.apiClient,
-      sessionManager: new SessionManager(device.kv),
-      keyStore: device.kv,
-      scheduler,
-    });
+    const restarted = restart(device, scheduler);
     await restarted.start();
 
-    expect(restarted.getStatus()).toBe('active');
-    expect(scheduler.scheduled).not.toEqual([]);
+    expect(restarted.getStatus()).toBe('needs_enroll');
+    expect(scheduler.scheduled).toEqual([]);
     expect(errorSpy).toHaveBeenCalledWith(
-      'Cloud sync self-heal could not reach the server: offline',
+      'Cloud sync could not check its data key: offline',
       expect.any(Error)
     );
   });
@@ -2079,14 +2124,10 @@ describe('SyncEngine.start / stop', () => {
     vi.spyOn(device.apiClient, 'getRecoveryEnvelope').mockRejectedValue(
       new ApiError('unauthorized', 401)
     );
+    await device.kv.remove(SYNC_DATA_KEY, 'local');
 
     const scheduler = new FakeScheduler();
-    const restarted = new SyncEngine({
-      apiClient: device.apiClient,
-      sessionManager: new SessionManager(device.kv),
-      keyStore: device.kv,
-      scheduler,
-    });
+    const restarted = restart(device, scheduler);
     await restarted.start();
 
     expect(restarted.getStatus()).toBe('signed_out');
@@ -2298,25 +2339,23 @@ describe('SyncEngine.start / stop', () => {
   });
 
   it('does not report a deliberate disable as a missing key, nor resurrect its pill', async () => {
-    // The disable message is what wakes a cold worker, and selfHealKeyBlob is a network hop, so a
-    // disable routinely lands inside start(). Reporting the user's own action as a defect at error
-    // level would fire on every wake of a device they turned off.
+    // The disable message is what wakes a cold worker, and start() awaits storage either side of
+    // its key check, so a disable routinely lands inside it. Reporting the user's own action as a
+    // defect at error level would fire on every wake of a device they turned off.
     const server = new FakeSyncServer();
     const device = createDevice(server);
     useStorage(device);
     await device.engine.enableSync('dev', 'cred-a', 'Device A');
     const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
 
-    const restarted = new SyncEngine({
-      apiClient: device.apiClient,
-      sessionManager: new SessionManager(device.kv),
-      keyStore: device.kv,
-      scheduler: new FakeScheduler(),
-    });
-    // Disable lands while self-heal is on the wire.
-    vi.spyOn(device.apiClient, 'getRecoveryEnvelope').mockImplementation(async () => {
+    const restarted = restart(device);
+    // Lands during hydration, so the key check that follows finds the disable's cleared DK and
+    // raises needs-enroll for an account that is already gone — the epoch, not the error type,
+    // is what has to answer that.
+    const readMany = device.kv.getMany.bind(device.kv);
+    vi.spyOn(device.kv, 'getMany').mockImplementationOnce(async (keys, area) => {
       await restarted.disableSync();
-      return null;
+      return readMany(keys, area);
     });
 
     await restarted.start();

@@ -24,14 +24,13 @@ import {
 import { type CollectionBinding, defaultBindings } from './collections';
 import { type CycleDeps, type PullResult, pullOnce, pushOnce } from './cycle';
 import {
+  checkForLostDataKey,
   initOrEnrollKey,
   type KeyLifecycleDeps,
   loadPersistedDataKey,
   RecoveryCodeRequiredError,
   SelfHealNeedsEnrollError,
-  SelfHealUnrecoverableError,
   SYNC_DATA_KEY,
-  selfHealKeyBlob,
 } from './key-lifecycle';
 import { SyncMetadataStore } from './metadata-store';
 import { MutationTracker } from './mutation-tracker';
@@ -677,15 +676,48 @@ export class SyncEngine {
     return this.lastSyncedAt;
   }
 
-  /** null until self-heal has answered once; hosts must not paint "missing" from an unknown. */
-  getRecoveryEnvelopePresent(): boolean | null {
-    return this.recoveryEnvelope;
+  /**
+   * Asks the server whether this account still has a recovery envelope, records the answer, and
+   * returns it — null while nobody has managed to answer, which hosts must not paint as "missing".
+   *
+   * Hosts call this from their details lookup, i.e. when the settings panel is looking. That banner
+   * is the only consumer, and with the data key on disk the answer changes nothing else, so asking
+   * on the pull loop instead cost a request per worker spawn for a panel that is usually closed
+   * (ENG-98). Never throws: an unreachable server leaves the last known answer standing.
+   */
+  async refreshRecoveryEnvelope(): Promise<boolean | null> {
+    const epoch = this.accountEpoch;
+    let present: boolean;
+    try {
+      // Like getAccount: a signed-out device would only earn a 401 and a warning for asking, and
+      // hosts call this beside getAccount on every details lookup.
+      if ((await this.deps.sessionManager.getToken()) === null) {
+        return this.recoveryEnvelope;
+      }
+      present = (await this.deps.apiClient.getRecoveryEnvelope()) !== null;
+    } catch (err) {
+      logger.warn(`Could not check the cloud sync recovery envelope: ${describeThrown(err)}`);
+      return this.recoveryEnvelope;
+    }
+    if (this.accountEpoch !== epoch) {
+      // A disable landed during the fetch, so this answer describes an account that is gone —
+      // and recording it would hand the next account to connect the previous one's badge.
+      return null;
+    }
+    const news = await this.recordRecoveryEnvelope(present);
+    if (news && !present) {
+      // Regenerate recovery code is the one repair, and it lives in the panel that just asked.
+      logger.error(
+        'Cloud sync has no recovery envelope on the server; regenerate your recovery code to restore it'
+      );
+    }
+    return present;
   }
 
   /**
-   * Records what self-heal found and answers whether it is news. Compared against the PERSISTED
+   * Records what a check found and answers whether it is news. Compared against the PERSISTED
    * value, not the field: a respawned worker starts blank, so an in-memory check would call the
-   * steady state news on every wake — which is the log repeat this exists to stop.
+   * steady state news every time the panel asked — which is the log repeat this exists to stop.
    */
   private async recordRecoveryEnvelope(present: boolean): Promise<boolean> {
     const stored = await this.deps.keyStore.get<boolean>(RECOVERY_ENVELOPE_KEY, 'local');
@@ -695,7 +727,7 @@ export class SyncEngine {
     }
     const result = await this.deps.keyStore.set(RECOVERY_ENVELOPE_KEY, present, 'local');
     if (!result.success) {
-      // Non-fatal: the badge is recomputed next start, and losing it costs a repeated log.
+      // Non-fatal: the badge is recomputed on the next check, and losing it costs a repeated log.
       logger.warn(`Failed to persist the recovery-envelope state: ${result.error.message}`, {
         error: result.error,
       });
@@ -887,18 +919,17 @@ export class SyncEngine {
     await this.ensureHydrated();
 
     try {
-      await selfHealKeyBlob(this.keyDeps());
-      await this.recordRecoveryEnvelope(true);
+      await checkForLostDataKey(this.keyDeps());
     } catch (err) {
-      // Before the type test, not inside it: disableSync clears the session first, so self-heal's
-      // envelope fetch usually 401s rather than raising a SelfHeal* error — and the rethrow makes
+      // Before the type test, not inside it: disableSync clears the session first, so the envelope
+      // fetch usually 401s rather than raising SelfHealNeedsEnrollError — and the rethrow makes
       // the host log "Sync engine failed to start" for what the user deliberately did.
       if (this.startSuperseded(epoch)) {
         return;
       }
       if (err instanceof SelfHealNeedsEnrollError) {
         // The ordinary lost-key case, not a rare one: every account that enabled sync has an
-        // envelope, so self-heal throws here rather than falling through to the branch below.
+        // envelope, so a device that loses its key throws here rather than falling through.
         logger.error(
           "Cloud sync needs the recovery code: this device's data key could not be read"
         );
@@ -909,24 +940,9 @@ export class SyncEngine {
         await this.handleAuthLoss();
         return;
       }
-      // Everything below falls through to the key load. Self-heal only verifies the SERVER envelope,
-      // so neither a missing one nor an unreachable server says anything about the key on disk —
-      // abandoning here left an enrolled device reading "off" on macOS after one offline launch.
-      if (err instanceof SelfHealUnrecoverableError) {
-        // Reaching active is also what keeps Regenerate recovery code, the one fix, on screen.
-        // Logged only on the transition: the extension respawns its worker every wake, so an
-        // unconditional log here is one line per five minutes for as long as the state lasts.
-        if (await this.recordRecoveryEnvelope(false)) {
-          logger.error(
-            'Cloud sync has no recovery envelope on the server; regenerate your recovery code to restore it'
-          );
-        }
-      } else {
-        logger.error(
-          `Cloud sync self-heal could not reach the server: ${describeThrown(err)}`,
-          err
-        );
-      }
+      // Falls through to the key load: an unreachable server says nothing about the key on disk,
+      // and abandoning here left an enrolled device reading "off" on macOS after one offline launch.
+      logger.error(`Cloud sync could not check its data key: ${describeThrown(err)}`, err);
     }
 
     const persisted = await loadPersistedDataKey(this.deps.keyStore);

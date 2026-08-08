@@ -638,6 +638,24 @@ describe('createDirectSyncController: getDetails()', () => {
     });
   });
 
+  it('asks the server about the recovery envelope, rather than reporting a cached answer', async () => {
+    // ENG-98 moved the check off the pull loop and onto this lookup, so opening the panel is now
+    // the only thing that refreshes the banner — a stale `true` would hide a real finding.
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    device.apiClient.accountResult = { userId: 'user-1', email: null };
+    const { controller } = buildRealController(device);
+    await controller.enable('cred-a', 'Device A');
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const envelopeSpy = vi.spyOn(device.apiClient, 'getRecoveryEnvelope').mockResolvedValue(null);
+
+    const details = await controller.getDetails();
+
+    expect(envelopeSpy).toHaveBeenCalled();
+    expect(details?.recoveryEnvelopePresent).toBe(false);
+  });
+
   it('resolves null when the engine has no session', async () => {
     const server = new FakeSyncServer();
     const device = createDevice(server);

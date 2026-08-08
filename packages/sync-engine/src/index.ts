@@ -42,19 +42,18 @@ export type SyncEngineControlSurface = Pick<
   | 'getAccount'
   | 'getLastSyncedAt'
   | 'getLastCycle'
-  | 'getRecoveryEnvelopePresent'
+  | 'refreshRecoveryEnvelope'
   | 'ensureHydrated'
 >;
 export {
+  checkForLostDataKey,
   initOrEnrollKey,
   type KeyLifecycleDeps,
   type KeyTransport,
   loadPersistedDataKey,
   RecoveryCodeRequiredError,
   SelfHealNeedsEnrollError,
-  SelfHealUnrecoverableError,
   SYNC_DATA_KEY,
-  selfHealKeyBlob,
 } from './key-lifecycle';
 export { defaultMeta, SYNC_META_KEY, type SyncMeta, SyncMetadataStore } from './metadata-store';
 export { MutationTracker } from './mutation-tracker';

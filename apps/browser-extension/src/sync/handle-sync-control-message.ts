@@ -74,15 +74,15 @@ async function runDetails(engine: SyncEngineControlSurface): Promise<SyncDetails
   // Hydration owns lastSyncedAt as well as the cycle; without this the stamp is only correct
   // because getAccount's network hop happens to outlast two local reads on a cold worker.
   await engine.ensureHydrated();
-  // Informational for the settings UI; engine.getAccount never throws (null on any failure).
+  // Two independent network hops on the panel-open path; neither throws (both answer null instead).
+  const [account, recoveryEnvelopePresent] = await Promise.all([
+    engine.getAccount(),
+    engine.refreshRecoveryEnvelope(),
+  ]);
   return {
     ok: true,
     kind: 'details',
-    details: buildSyncDetails(
-      await engine.getAccount(),
-      engine.getLastSyncedAt(),
-      engine.getRecoveryEnvelopePresent()
-    ),
+    details: buildSyncDetails(account, engine.getLastSyncedAt(), recoveryEnvelopePresent),
   };
 }
 
