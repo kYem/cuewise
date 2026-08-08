@@ -15,7 +15,7 @@ import {
   reminderAlarmId,
   reminderIdFromAlarm,
 } from '@cuewise/shared';
-import { getReminders, setReminders } from '@cuewise/storage';
+import { getReminders, updateReminders } from '@cuewise/storage';
 
 /**
  * Deliver a reminder's notification when its scheduled wake fires. Looks the
@@ -55,10 +55,11 @@ export async function handleReminderFire(alarmId: string): Promise<void> {
       requireInteraction: true,
     });
 
-    const updatedReminders = reminders.map((r) =>
-      r.id === reminderId ? { ...r, notified: true } : r
+    // A fresh read, not the list from before the notify: that round trip is long enough for a pull
+    // to land, and rewriting the pre-notify list would drop whatever it brought.
+    await updateReminders((current) =>
+      current.map((r) => (r.id === reminderId ? { ...r, notified: true } : r))
     );
-    await setReminders(updatedReminders);
 
     if (reminder.recurring) {
       await scheduleNextOccurrence(reminder);
@@ -72,13 +73,13 @@ export async function handleReminderFire(alarmId: string): Promise<void> {
 async function scheduleNextOccurrence(reminder: Reminder): Promise<void> {
   const nextDueDate = nextReminderDueDate(reminder, new Date());
 
-  const reminders = await getReminders();
-  const updatedReminders = reminders.map((r) =>
-    r.id === reminder.id
-      ? { ...r, dueDate: nextDueDate.toISOString(), notified: false, completed: false }
-      : r
+  await updateReminders((current) =>
+    current.map((r) =>
+      r.id === reminder.id
+        ? { ...r, dueDate: nextDueDate.toISOString(), notified: false, completed: false }
+        : r
+    )
   );
-  await setReminders(updatedReminders);
 
   await getScheduler().scheduleAt(reminderAlarmId(reminder.id), nextDueDate);
 }

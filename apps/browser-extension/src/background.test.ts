@@ -8,6 +8,12 @@ const { getRemindersMock, setRemindersMock } = vi.hoisted(() => ({
 vi.mock('@cuewise/storage', () => ({
   getReminders: getRemindersMock,
   setReminders: setRemindersMock,
+  // Faithful, not a stub: the read has to happen inside the write, so a mock taking the caller's
+  // list would let a read hoisted back out of the lock pass.
+  updateReminders: vi.fn(async (mutate: (reminders: Reminder[]) => Reminder[]) => {
+    const reminders = mutate((await getRemindersMock()) ?? []);
+    return { result: await setRemindersMock(reminders), reminders };
+  }),
   // Runs at module load now, sync or no sync — must resolve, background.ts chains off it.
   ensureSettingsMigrated: vi.fn(() => Promise.resolve()),
 }));

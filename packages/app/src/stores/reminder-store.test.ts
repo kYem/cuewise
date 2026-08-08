@@ -1,4 +1,10 @@
-import { configurePlatform, logger, resetPlatform, type SyncMutationSink } from '@cuewise/shared';
+import {
+  configurePlatform,
+  logger,
+  type Reminder,
+  resetPlatform,
+  type SyncMutationSink,
+} from '@cuewise/shared';
 import * as storage from '@cuewise/storage';
 import { recurringReminderFactory, reminderFactory } from '@cuewise/test-utils/factories';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -9,6 +15,12 @@ import { useReminderStore } from './reminder-store';
 vi.mock('@cuewise/storage', () => ({
   getReminders: vi.fn(),
   setReminders: vi.fn(),
+  // Faithful, not a stub: reading inside the write is the property under test, so a mock that
+  // took the caller's list would let a read hoisted back out of the lock pass.
+  updateReminders: vi.fn(async (mutate: (reminders: Reminder[]) => Reminder[]) => {
+    const reminders = mutate((await storage.getReminders()) ?? []);
+    return { result: await storage.setReminders(reminders), reminders };
+  }),
 }));
 
 // Mock toast store with module-level fns so each level is inspectable across getState() calls.
@@ -38,7 +50,9 @@ const fakeScheduler = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  getRemindersMock.mockResolvedValue([]);
+  // The store is a cache of storage, equal to it after every action — which is what lets a test
+  // seed with setState or an earlier action and still exercise the read-inside-the-write.
+  getRemindersMock.mockImplementation(async () => useReminderStore.getState().reminders);
   setRemindersMock.mockResolvedValue({ success: true });
   configurePlatform({ scheduler: fakeScheduler });
   useReminderStore.setState({

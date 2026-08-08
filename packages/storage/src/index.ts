@@ -77,6 +77,7 @@ export {
   settingsStorageKey,
   setWeatherState,
   updateGoals,
+  updateReminders,
   updateVideoProgress,
   withCollectionLock,
 } from './storage-helpers';

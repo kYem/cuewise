@@ -12,7 +12,7 @@ import {
   reminderIdFromAlarm,
   resolveReminderNotificationAction,
 } from '@cuewise/shared';
-import { ensureSettingsMigrated, getReminders, setReminders } from '@cuewise/storage';
+import { ensureSettingsMigrated, getReminders, updateReminders } from '@cuewise/storage';
 import { SYNC_PULL_WAKE_ID } from '@cuewise/sync-client';
 import { createSyncEngine, type SyncStatus } from '@cuewise/sync-engine';
 import { configureChromePlatform } from './platform';
@@ -188,15 +188,17 @@ notifier.onAction(async (notificationId, buttonIndex) => {
     const action = resolveReminderNotificationAction(reminder, buttonIndex, new Date());
 
     if (action.type === 'complete') {
-      const updated = reminders.map((r) => (r.id === reminderId ? { ...r, completed: true } : r));
-      await setReminders(updated);
-    } else if (action.type === 'snooze') {
-      const updated = reminders.map((r) =>
-        r.id === reminderId
-          ? { ...r, dueDate: action.dueDate, notified: false, completed: false }
-          : r
+      await updateReminders((current) =>
+        current.map((r) => (r.id === reminderId ? { ...r, completed: true } : r))
       );
-      await setReminders(updated);
+    } else if (action.type === 'snooze') {
+      await updateReminders((current) =>
+        current.map((r) =>
+          r.id === reminderId
+            ? { ...r, dueDate: action.dueDate, notified: false, completed: false }
+            : r
+        )
+      );
       await scheduler.scheduleAt(reminderAlarmId(reminderId), new Date(action.dueDate));
     }
 

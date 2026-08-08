@@ -354,6 +354,16 @@ export async function setReminders(reminders: Reminder[]): Promise<StorageResult
   return setValidatedListInStorage(STORAGE_KEYS.REMINDERS, reminders, reminderSchema, area);
 }
 
+/** Changes the reminder list, reading inside the lock. See `updateGoals` for why. */
+export async function updateReminders(
+  mutate: (reminders: Reminder[]) => Reminder[]
+): Promise<{ result: StorageResult; reminders: Reminder[] }> {
+  return withCollectionLock('reminders', async () => {
+    const reminders = mutate(await getReminders());
+    return { result: await setReminders(reminders), reminders };
+  });
+}
+
 /** Raw-then-validate for the same reason as getGoals. */
 export async function getCollections(): Promise<QuoteCollection[]> {
   const area = await getStorageArea();
