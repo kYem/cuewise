@@ -1,5 +1,11 @@
 import { ApiError } from './api-error';
-import type { ExchangeTokenRequest, KeyEnvelopeRecord, PushRecord, SyncRecord } from './types';
+import type {
+  ExchangeTokenRequest,
+  KeyEnvelopeExport,
+  KeyEnvelopeRecord,
+  PushRecord,
+  SyncRecord,
+} from './types';
 
 const MAX_RETRIES = 3;
 
@@ -74,9 +80,9 @@ export class ApiClient {
     return this.parseSuccessBody<{ userId: string; email: string | null }>(res);
   }
 
-  async exportData(): Promise<{ records: SyncRecord[] }> {
+  async exportData(): Promise<{ records: SyncRecord[]; keyEnvelopes: KeyEnvelopeExport[] }> {
     const res = await this.request('/v1/export', { method: 'GET' }, { auth: true });
-    return this.parseSuccessBody<{ records: SyncRecord[] }>(res);
+    return this.parseSuccessBody<{ records: SyncRecord[]; keyEnvelopes: KeyEnvelopeExport[] }>(res);
   }
 
   async deleteAccount(): Promise<void> {

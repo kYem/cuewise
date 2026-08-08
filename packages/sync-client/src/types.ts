@@ -1,11 +1,12 @@
 import type {
   ExchangeTokenRequest,
+  KeyEnvelopeExport,
   KeyEnvelopeRecord,
   PushRecord,
   SyncRecord,
 } from '@cuewise/shared';
 
-export type { ExchangeTokenRequest, KeyEnvelopeRecord, PushRecord, SyncRecord };
+export type { ExchangeTokenRequest, KeyEnvelopeExport, KeyEnvelopeRecord, PushRecord, SyncRecord };
 
 export interface ProblemBody {
   type: string;

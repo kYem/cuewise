@@ -64,3 +64,19 @@ export async function postChanges(app: App, token: string, body: unknown): Promi
     env
   );
 }
+
+export async function getRecovery(app: App, token: string): Promise<Response> {
+  return app.request('/v1/keys/recovery', { headers: { Authorization: `Bearer ${token}` } }, env);
+}
+
+export async function putRecovery(app: App, token: string, body: unknown): Promise<Response> {
+  return app.request(
+    '/v1/keys/recovery',
+    {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: typeof body === 'string' ? body : JSON.stringify(body),
+    },
+    env
+  );
+}

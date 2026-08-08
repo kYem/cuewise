@@ -10,6 +10,7 @@ import {
 import {
   type AuthCodePayload,
   type Identity,
+  type KeyEnvelopeExport,
   type KeyEnvelopeRecord,
   type PushRecord,
   type Session,
@@ -283,7 +284,9 @@ export class D1SyncStore implements SyncStore {
     return { records, cursor: last === undefined ? since : last.seq };
   }
 
-  async exportUser(userId: string): Promise<{ records: SyncRecord[] }> {
+  async exportUser(
+    userId: string
+  ): Promise<{ records: SyncRecord[]; keyEnvelopes: KeyEnvelopeExport[] }> {
     // Page so each D1 query stays bounded; the full set is still assembled in memory, acceptable
     // for this rare one-shot. Streaming is the follow-up for huge accounts.
     const records: SyncRecord[] = [];
@@ -296,7 +299,28 @@ export class D1SyncStore implements SyncStore {
       }
       since = page.cursor;
     }
-    return { records };
+    // Every kind, not just 'recovery': kind is open-ended, so naming one here would omit envelopes
+    // the account holds. Ordered so an unchanged account exports identically twice.
+    const envelopes = await this.db
+      .prepare(
+        'SELECT kind, envelope, updated_at FROM key_envelopes WHERE user_id = ? ORDER BY kind'
+      )
+      .bind(userId)
+      .all<{ kind: string; envelope: string; updated_at: number }>();
+    const keyEnvelopes = envelopes.results.map((row) => ({
+      kind: row.kind,
+      envelope: row.envelope,
+      updatedAt: row.updated_at,
+    }));
+    // Warn, don't fail: only a client can mint an envelope, so refusing would deny the user their
+    // ciphertext too.
+    if (records.length > 0 && keyEnvelopes.length === 0) {
+      logger.warn('Export carries ciphertext but no key envelope; the archive is undecryptable', {
+        userId,
+        records: records.length,
+      });
+    }
+    return { records, keyEnvelopes };
   }
 
   async deleteUser(userId: string): Promise<void> {
