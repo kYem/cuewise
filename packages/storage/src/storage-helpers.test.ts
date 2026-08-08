@@ -212,7 +212,7 @@ describe('updateGoals', () => {
     expect(stored.map((goal) => goal.id).sort()).toEqual([first.id, second.id].sort());
   });
 
-  it('reads inside the write, so a caller cannot pass a stale list', async () => {
+  it('mutates the stored list, never one the caller supplied', async () => {
     configurePlatform({ storage: new LocalStorageKeyValueStore() });
     const existing = goalFactory.build();
     await setGoals([existing]);
