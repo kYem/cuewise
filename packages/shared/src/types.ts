@@ -693,7 +693,6 @@ export interface KeyEnvelopeRecord {
   updatedAt: number;
 }
 
-/** A `KeyEnvelopeRecord` tagged with its kind, so an export can carry every envelope a user has. */
 export interface KeyEnvelopeExport extends KeyEnvelopeRecord {
   kind: string;
 }

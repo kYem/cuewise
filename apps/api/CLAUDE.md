@@ -79,10 +79,8 @@ All endpoints are under `/v1`.
 
 **Why `/v1/export` ships the key envelopes** (ENG-54): records are ciphertext, so an export without
 the wrapped data key is undecryptable even by a user holding their recovery code — an exit hatch that
-opens onto a wall. Bundling the envelope discloses nothing new: `GET /v1/keys/recovery` already returns
-it to the same caller, and the blob is inert without the code. `exportUser` selects envelopes by
-`user_id` alone, never by kind, so rotation (ENG-51) widens the export automatically rather than
-silently dropping the envelope an older record was sealed under.
+opens onto a wall. It discloses nothing new: `GET /v1/keys/recovery` already returns the same blob to
+the same caller, and it is inert without the code.
 
 **Why the weather routes are POST for what are plainly reads**: a Fetch invocation log records `<Method> <URL>` plus request headers — never the body. Coordinates and city names in a query string would therefore land in Workers Logs no matter how careful the route code is, and `observability.logs.invocation_logs` is a *worker-wide* switch, so the alternative was blinding the sync and auth routes too. The body is the one part of the request the platform does not capture. The cost is that responses are no longer browser-cacheable; the `cacheTtl` on the upstream subrequest is what dedups provider calls across nearby users, and it is unaffected. Both routes are stateless — no `SyncStore`, no D1 — so "the server stores ciphertext only" stays true.
 

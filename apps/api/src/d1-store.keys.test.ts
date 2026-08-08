@@ -1,6 +1,6 @@
 import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
-import { newUser } from './__fixtures__/api-test-helpers.fixtures';
+import { newUser, record } from './__fixtures__/api-test-helpers.fixtures';
 import { D1SyncStore } from './d1-store';
 
 describe('D1SyncStore key envelopes', () => {
@@ -81,9 +81,15 @@ describe('D1SyncStore exportUser key envelopes', () => {
     const store = new D1SyncStore(env.DB);
     const userId = await newUser(store, 'x1');
     await store.putKeyEnvelope(userId, 'recovery', 'v1.dk-1.aaaa.bbbb');
+    const stored = await store.getKeyEnvelope(userId, 'recovery');
+    if (stored === null) {
+      throw new Error('expected the envelope just written to be readable');
+    }
+
     const { keyEnvelopes } = await store.exportUser(userId);
+
     expect(keyEnvelopes).toEqual([
-      { kind: 'recovery', envelope: 'v1.dk-1.aaaa.bbbb', updatedAt: expect.any(Number) },
+      { kind: 'recovery', envelope: 'v1.dk-1.aaaa.bbbb', updatedAt: stored.updatedAt },
     ]);
   });
 
@@ -94,15 +100,13 @@ describe('D1SyncStore exportUser key envelopes', () => {
     expect(keyEnvelopes).toEqual([]);
   });
 
-  // Rotation (ENG-51) adds envelopes under new kinds. Export must widen with the table, or an
-  // archive silently loses the key its older records were sealed under.
-  it('carries every kind, not just recovery', async () => {
+  it('carries every kind, ordered, not just recovery', async () => {
     const store = new D1SyncStore(env.DB);
     const userId = await newUser(store, 'x3');
-    await store.putKeyEnvelope(userId, 'recovery', 'v1.dk-2.current');
-    await store.putKeyEnvelope(userId, 'recovery:dk-1', 'v1.dk-1.superseded');
+    await store.putKeyEnvelope(userId, 'recovery', 'v1.dk-1.recovery');
+    await store.putKeyEnvelope(userId, 'device:x', 'v1.dk-1.device');
     const { keyEnvelopes } = await store.exportUser(userId);
-    expect(keyEnvelopes.map((e) => e.kind).sort()).toEqual(['recovery', 'recovery:dk-1']);
+    expect(keyEnvelopes.map((e) => e.kind)).toEqual(['device:x', 'recovery']);
   });
 
   it('never carries another user envelope', async () => {
@@ -111,6 +115,15 @@ describe('D1SyncStore exportUser key envelopes', () => {
     const b = await newUser(store, 'x4b');
     await store.putKeyEnvelope(a, 'recovery', 'v1.dk-1.userA.blob');
     const { keyEnvelopes } = await store.exportUser(b);
+    expect(keyEnvelopes).toEqual([]);
+  });
+
+  it('still returns the records when an account holds ciphertext but no envelope', async () => {
+    const store = new D1SyncStore(env.DB);
+    const userId = await newUser(store, 'x5');
+    await store.applyChanges(userId, [record({ entityId: 'orphan' })]);
+    const { records, keyEnvelopes } = await store.exportUser(userId);
+    expect(records.map((r) => r.entityId)).toEqual(['orphan']);
     expect(keyEnvelopes).toEqual([]);
   });
 });

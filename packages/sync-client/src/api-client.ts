@@ -80,7 +80,6 @@ export class ApiClient {
     return this.parseSuccessBody<{ userId: string; email: string | null }>(res);
   }
 
-  /** `keyEnvelopes` is what makes the archive self-contained — ciphertext alone cannot be opened. */
   async exportData(): Promise<{ records: SyncRecord[]; keyEnvelopes: KeyEnvelopeExport[] }> {
     const res = await this.request('/v1/export', { method: 'GET' }, { auth: true });
     return this.parseSuccessBody<{ records: SyncRecord[]; keyEnvelopes: KeyEnvelopeExport[] }>(res);

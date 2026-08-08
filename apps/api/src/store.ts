@@ -45,8 +45,7 @@ export interface SyncStore {
   // Returns at most MAX_CHANGES_PAGE_SIZE records; a full page means the caller should pull
   // again from the returned cursor. `cursor` is the last returned seq (or `since` when empty).
   listChanges(userId: string, since: number): Promise<{ records: SyncRecord[]; cursor: number }>;
-  // Carries the wrapped key envelopes alongside the ciphertext: without them an export is
-  // undecryptable even by a user holding their recovery code (ENG-54).
+  // Without the envelopes an export is undecryptable even by a user holding their recovery code.
   exportUser(userId: string): Promise<{ records: SyncRecord[]; keyEnvelopes: KeyEnvelopeExport[] }>;
   deleteUser(userId: string): Promise<void>;
   // Deletes tombstones older than retentionMs (a maintenance sweep across all users); returns the count.

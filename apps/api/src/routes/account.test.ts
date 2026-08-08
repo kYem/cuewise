@@ -5,6 +5,7 @@ import {
   clockedStore,
   getChanges,
   postChanges,
+  putRecovery,
   record,
   signedInToken,
 } from '../__fixtures__/api-test-helpers.fixtures';
@@ -44,24 +45,22 @@ describe('GET /v1/export', () => {
     expect(tombstone.deleted).toBe(true);
   });
 
-  it('carries the recovery key envelope, so the archive decrypts with only the recovery code', async () => {
+  it('carries the recovery key envelope alongside the records it unlocks', async () => {
     const { token } = await signedInToken();
-    await app.request(
-      '/v1/keys/recovery',
-      {
-        method: 'PUT',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ envelope: 'v1.dk-1.aaaa.bbbb' }),
-      },
-      env
-    );
+    const put = await putRecovery(app, token, { envelope: 'v1.dk-1.aaaa.bbbb' });
+    expect(put.status).toBe(204);
     await postChanges(app, token, { records: [record({ entityId: 'a' })] });
 
     const res = await getExport(token);
-    const body = await res.json<{ keyEnvelopes: Array<{ kind: string; envelope: string }> }>();
-    expect(body.keyEnvelopes).toEqual([
-      { kind: 'recovery', envelope: 'v1.dk-1.aaaa.bbbb', updatedAt: expect.any(Number) },
-    ]);
+    const body = await res.json<{
+      records: Array<{ entityId: string }>;
+      keyEnvelopes: Array<{ kind: string; envelope: string; updatedAt: number }>;
+    }>();
+    expect(body.records.map((r) => r.entityId)).toEqual(['a']);
+    expect(body.keyEnvelopes).toHaveLength(1);
+    expect(body.keyEnvelopes[0].kind).toBe('recovery');
+    expect(body.keyEnvelopes[0].envelope).toBe('v1.dk-1.aaaa.bbbb');
+    expect(body.keyEnvelopes[0].updatedAt).toBeGreaterThan(0);
   });
 
   it('carries an empty envelope list for an account that never initialized keys', async () => {

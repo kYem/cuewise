@@ -299,20 +299,27 @@ export class D1SyncStore implements SyncStore {
       }
       since = page.cursor;
     }
-    // Selected by user_id alone, not by kind: rotation adds kinds, and an export that named them
-    // would silently drop the envelope an older record was sealed under.
+    // Every kind, not just 'recovery': kind is open-ended, so naming one here would omit envelopes
+    // the account holds. Ordered so an unchanged account exports identically twice.
     const envelopes = await this.db
-      .prepare('SELECT kind, envelope, updated_at FROM key_envelopes WHERE user_id = ?')
+      .prepare(
+        'SELECT kind, envelope, updated_at FROM key_envelopes WHERE user_id = ? ORDER BY kind'
+      )
       .bind(userId)
       .all<{ kind: string; envelope: string; updated_at: number }>();
-    return {
-      records,
-      keyEnvelopes: envelopes.results.map((row) => ({
-        kind: row.kind,
-        envelope: row.envelope,
-        updatedAt: row.updated_at,
-      })),
-    };
+    const keyEnvelopes = envelopes.results.map((row) => ({
+      kind: row.kind,
+      envelope: row.envelope,
+      updatedAt: row.updated_at,
+    }));
+    // The state this endpoint exists to prevent, and the server cannot fix it from here.
+    if (records.length > 0 && keyEnvelopes.length === 0) {
+      logger.warn('Export carries ciphertext but no key envelope; the archive is undecryptable', {
+        userId,
+        records: records.length,
+      });
+    }
+    return { records, keyEnvelopes };
   }
 
   async deleteUser(userId: string): Promise<void> {
