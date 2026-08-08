@@ -162,11 +162,8 @@ export class D1SyncStore implements SyncStore {
   async listSessions(userId: string, currentTokenHash: SessionTokenHash): Promise<SyncSession[]> {
     const rows = await this.db
       .prepare(
-        // id != '' excludes rows written by a Worker predating migration 0007 (rollback window):
-        // they have no addressable handle, so listing them would offer controls that 404.
-        // revoke-others still cuts them, since it keys on token_hash.
         `SELECT id, device_name, created_at, last_used_at, token_hash FROM tokens
-         WHERE user_id = ? AND revoked_at IS NULL AND expires_at > ? AND id != ''
+         WHERE user_id = ? AND revoked_at IS NULL AND expires_at > ?
          ORDER BY created_at DESC`
       )
       .bind(userId, this.now())
@@ -206,9 +203,8 @@ export class D1SyncStore implements SyncStore {
     return (res.meta.changes ?? 0) > 0;
   }
 
-  // Expiry-filtered like listSessions, but deliberately NOT id-filtered: un-migrated rows can't be
-  // listed or addressed individually, so keying on token_hash is their only cut. The count
-  // therefore matches the visible list except when such rows exist, where it exceeds it.
+  // Keyed on token_hash rather than id: the caller's own row is the one to spare, and its hash is
+  // what auth already resolved.
   async revokeOtherSessions(userId: string, currentTokenHash: SessionTokenHash): Promise<number> {
     const res = await this.db
       .prepare(
