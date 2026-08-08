@@ -24,14 +24,13 @@ import {
 import { type CollectionBinding, defaultBindings } from './collections';
 import { type CycleDeps, type PullResult, pullOnce, pushOnce } from './cycle';
 import {
+  checkForLostDataKey,
   initOrEnrollKey,
   type KeyLifecycleDeps,
   loadPersistedDataKey,
   RecoveryCodeRequiredError,
   SelfHealNeedsEnrollError,
-  SelfHealUnrecoverableError,
   SYNC_DATA_KEY,
-  selfHealKeyBlob,
 } from './key-lifecycle';
 import { SyncMetadataStore } from './metadata-store';
 import { MutationTracker } from './mutation-tracker';
@@ -61,9 +60,21 @@ export const LAST_CYCLE_KEY = 'cuewise.sync.lastCycle';
 /**
  * Whether the server holds a recovery envelope for this account. Persisted, not held per process:
  * the extension respawns its worker on every wake, so an in-memory answer would be recomputed —
- * and re-logged — every five minutes, and the panel reads this on a cold worker.
+ * and re-logged — every five minutes, and the panel reads this on a cold worker. Stored as a
+ * boolean, because on disk the question really is binary — `unknown` is the key being absent.
  */
 export const RECOVERY_ENVELOPE_KEY = 'cuewise.sync.recoveryEnvelope';
+
+/**
+ * What is known about the server's recovery envelope. `missing` is the finding — without one,
+ * losing this device loses the data. `unknown` is NOT `missing`: nobody has managed to ask yet,
+ * and painting it as a finding tells a healthy account its data is unrecoverable.
+ */
+export type RecoveryEnvelopeState = 'present' | 'missing' | 'unknown';
+
+function envelopeState(present: boolean): RecoveryEnvelopeState {
+  return present ? 'present' : 'missing';
+}
 
 // The periodic pull backstop cadence (spec §3: "~5 min"); foreground opens trigger sooner via syncNow.
 const PULL_REARM_MINUTES = 5;
@@ -174,9 +185,9 @@ export class SyncEngine {
   // False once a stored record turned out to be unreadable: that is not "no cycle ran", and
   // answering it as such is exactly what clears a wedged device's badge.
   private lastCycleKnown = true;
-  // null until self-heal has answered once, so a panel on a cold worker cannot read "unknown" as
-  // "missing" and claim an account has no recovery path before anything has checked.
-  private recoveryEnvelope: boolean | null = null;
+  private recoveryEnvelope: RecoveryEnvelopeState = 'unknown';
+  // Chains every envelope read and write; see queueEnvelope.
+  private envelopeQueue: Promise<unknown> = Promise.resolve();
   // Whether the enrol in flight minted a code. Never the code itself: this only decides whether the
   // "only way back" breadcrumb fires, and the value belongs to the host's one-shot slot.
   private enrollMintedCode = false;
@@ -245,10 +256,9 @@ export class SyncEngine {
     const epoch = this.accountEpoch;
     const before = this.status;
     try {
-      // Inside the try so a storage fault reading the token routes through handleEnableError
+      // Inside the try so a storage fault reading the session routes through handleEnableError
       // (status → error) like every other enroll failure, not out as a raw rejection.
-      const token = await this.deps.sessionManager.getToken();
-      if (token === null) {
+      if (!(await this.deps.sessionManager.isSignedIn())) {
         // A disable is why the session is gone, and it has already cleared it: handleAuthLoss
         // would repaint the pill as "Sign-in expired" for a device the user disconnected.
         if (this.enrollSuperseded(epoch)) {
@@ -268,7 +278,8 @@ export class SyncEngine {
     // A code is only passed when enrolling an additional device; brand-new enable passes none.
     this.setStatus(recoveryCode ? 'enrolling' : 'key_init');
     const wasEnabled = await this.deps.keyStore.get<boolean>(CLOUD_SYNC_ENABLED_KEY, 'local');
-    const enrolled = await initOrEnrollKey(this.keyDeps(), recoveryCode);
+    // Queued, because initNewKey's envelope PUT happens in here.
+    const enrolled = await this.queueEnvelope(() => initOrEnrollKey(this.keyDeps(), recoveryCode));
     if (enrolled.recoveryCodeToShow !== undefined) {
       if (wasEnabled === true) {
         // A fresh key on a device that was already enrolled: every record the old key sealed is now
@@ -288,7 +299,7 @@ export class SyncEngine {
     this.keyId = enrolled.keyId;
     // Both enrol paths prove one: initNewKey PUT it, enrollFromEnvelope unwrapped it. Without
     // this a freshly-connected device reads "unknown" until its next start().
-    await this.recordRecoveryEnvelope(true);
+    await this.recordRecoveryEnvelope(true, epoch);
 
     this.setStatus('initial_sync');
     // Unconditionally: the enabled flag survives handleAuthLoss, so its presence cannot mean the
@@ -459,9 +470,9 @@ export class SyncEngine {
     // After a disable "no cycle" is the truth, so an earlier unreadable record must stop
     // reporting unknown — otherwise a failed hydration outlives the account it described.
     this.lastCycleKnown = true;
-    // Back to unknown, not present: it described the account just removed, and carrying it forward
-    // would answer for whatever account connects next.
-    this.recoveryEnvelope = null;
+    // Back to unknown: it described the account just removed, and carrying it forward would
+    // answer for whatever account connects next.
+    this.recoveryEnvelope = 'unknown';
     this.hydration = null;
     this.setStatus('disabled');
     // Last, and best-effort: an unreadable ledger makes load() throw deterministically, and doing
@@ -472,6 +483,7 @@ export class SyncEngine {
 
   /** Rotates the recovery code for the current data key; overwrites the server envelope. */
   async regenerateRecoveryCode(): Promise<string> {
+    const epoch = this.accountEpoch;
     // Captured, not re-read below: a disable landing across these awaits nulls the fields, and
     // the narrowing above survives an await even though the value does not.
     const dk = this.dk;
@@ -482,9 +494,11 @@ export class SyncEngine {
     const { code, secret } = await generateRecoveryCode();
     const mk = await deriveMasterKey(secret);
     const blob = await wrapDataKey(mk, dk, keyId);
-    await this.deps.apiClient.putRecoveryEnvelope(blob);
-    // The one repair for a missing envelope, so this is what retires the badge it raised.
-    await this.recordRecoveryEnvelope(true);
+    await this.queueEnvelope(async () => {
+      await this.deps.apiClient.putRecoveryEnvelope(blob);
+      // The one repair for a missing envelope, so this is what retires the badge it raised.
+      await this.recordRecoveryEnvelope(true, epoch);
+    });
     return code;
   }
 
@@ -677,25 +691,88 @@ export class SyncEngine {
     return this.lastSyncedAt;
   }
 
-  /** null until self-heal has answered once; hosts must not paint "missing" from an unknown. */
-  getRecoveryEnvelopePresent(): boolean | null {
+  /** The last recorded answer, without asking the server. */
+  getRecoveryEnvelope(): RecoveryEnvelopeState {
     return this.recoveryEnvelope;
   }
 
   /**
-   * Records what self-heal found and answers whether it is news. Compared against the PERSISTED
-   * value, not the field: a respawned worker starts blank, so an in-memory check would call the
-   * steady state news on every wake — which is the log repeat this exists to stop.
+   * Asks the server whether this account still has a recovery envelope and records the answer.
+   * Hosts call it from their details lookup, so the settings banner that reads it is what pays for
+   * it (ENG-98). Never throws, storage included — an unreachable server leaves the last answer
+   * standing, and null means nobody has answered, which hosts must not paint as "missing".
    */
-  private async recordRecoveryEnvelope(present: boolean): Promise<boolean> {
+  async refreshRecoveryEnvelope(): Promise<RecoveryEnvelopeState> {
+    const epoch = this.accountEpoch;
+    try {
+      return await this.queueEnvelope(async () => {
+        // Like getAccount: a signed-out device would only earn a 401 and a warning for asking.
+        if (!(await this.deps.sessionManager.isSignedIn())) {
+          return this.lastEnvelopeAnswer(epoch);
+        }
+        const present = (await this.deps.apiClient.getRecoveryEnvelope()) !== null;
+        const news = await this.recordRecoveryEnvelope(present, epoch);
+        if (this.accountEpoch !== epoch) {
+          return 'unknown';
+        }
+        if (news && !present) {
+          // Regenerate recovery code is the one repair, and it lives in the panel that just asked.
+          logger.error(
+            'Cloud sync has no recovery envelope on the server; regenerate your recovery code to restore it'
+          );
+        }
+        return envelopeState(present);
+      });
+    } catch (err) {
+      logger.warn(`Could not check the cloud sync recovery envelope: ${describeThrown(err)}`, {
+        error: err,
+      });
+      return this.lastEnvelopeAnswer(epoch);
+    }
+  }
+
+  /**
+   * What a caller that could not reach the server may still report. Null once a disable has
+   * superseded it: disableSync clears the session BEFORE it nulls the field, so both exits above
+   * are reached while the removed account's answer is still readable.
+   */
+  private lastEnvelopeAnswer(epoch: number): RecoveryEnvelopeState {
+    return this.accountEpoch === epoch ? this.recoveryEnvelope : 'unknown';
+  }
+
+  /**
+   * Serialises every envelope read and write: unqueued, a refresh's GET and the record it drives
+   * straddle a Regenerate and persist the "absent" that PUT just fixed. Not reentrant — enforced by
+   * `.biome/no-reentrant-envelope-queue.grit`, which only sees direct calls.
+   */
+  private queueEnvelope<T>(op: () => Promise<T>): Promise<T> {
+    const run = this.envelopeQueue.then(op, op);
+    this.envelopeQueue = run.then(
+      () => {},
+      () => {}
+    );
+    return run;
+  }
+
+  /**
+   * Records what a check found and answers whether it is news. Compared against the PERSISTED
+   * value, not the field: a respawned worker starts blank, so an in-memory check would call the
+   * steady state news every time the panel asked — which is the log repeat this exists to stop.
+   */
+  private async recordRecoveryEnvelope(present: boolean, epoch: number): Promise<boolean> {
     const stored = await this.deps.keyStore.get<boolean>(RECOVERY_ENVELOPE_KEY, 'local');
-    this.recoveryEnvelope = present;
+    if (this.accountEpoch !== epoch) {
+      // A disable landed across the read. Re-creating the key it removed, or the field it nulled,
+      // leaves the previous account's badge waiting for whichever one connects next.
+      return false;
+    }
+    this.recoveryEnvelope = envelopeState(present);
     if (stored === present) {
       return false;
     }
     const result = await this.deps.keyStore.set(RECOVERY_ENVELOPE_KEY, present, 'local');
     if (!result.success) {
-      // Non-fatal: the badge is recomputed next start, and losing it costs a repeated log.
+      // Non-fatal: the badge is recomputed on the next check, and losing it costs a repeated log.
       logger.warn(`Failed to persist the recovery-envelope state: ${result.error.message}`, {
         error: result.error,
       });
@@ -727,7 +804,7 @@ export class SyncEngine {
 
   /**
    * Never rejects, and keeps the memo unless the read is worth retrying. start() awaits this
-   * before self-heal, so a rejection would leave the engine keyless behind a pill the extension
+   * before the key check, so a rejection would leave the engine keyless behind a pill the extension
    * still persists as 'active', and skip the branches that stop it answering "no cycle has run".
    */
   private async hydrate(): Promise<void> {
@@ -781,7 +858,7 @@ export class SyncEngine {
     // rather than as an account with no recovery path.
     const envelope = stored[RECOVERY_ENVELOPE_KEY];
     if (envelope?.readable === true && typeof envelope.value === 'boolean') {
-      this.recoveryEnvelope = envelope.value;
+      this.recoveryEnvelope = envelopeState(envelope.value);
     }
 
     const record = stored[LAST_CYCLE_KEY];
@@ -855,11 +932,10 @@ export class SyncEngine {
    * or on any fetch failure (including 401 — no auth-loss side effects), never throws.
    */
   async getAccount(): Promise<{ userId: string; email: string | null } | null> {
-    // The token read sits inside the try so the never-throws contract holds by construction,
+    // The session read sits inside the try so the never-throws contract holds by construction,
     // not by the current storage adapters happening to swallow their own errors.
     try {
-      const token = await this.deps.sessionManager.getToken();
-      if (token === null) {
+      if (!(await this.deps.sessionManager.isSignedIn())) {
         return null;
       }
       return await this.deps.apiClient.getAccount();
@@ -870,7 +946,7 @@ export class SyncEngine {
     }
   }
 
-  /** Self-heal, then hold the DK and arm the pull loop. No-op if sync was never enabled here. */
+  /** Check the DK, then hold it and arm the pull loop. No-op if sync was never enabled here. */
   async start(): Promise<void> {
     // Snapshotted BEFORE the flag read, not after: a disable completing while that read is in
     // flight returns a stale `true`, and an epoch taken afterwards already matches the bump, so
@@ -887,18 +963,17 @@ export class SyncEngine {
     await this.ensureHydrated();
 
     try {
-      await selfHealKeyBlob(this.keyDeps());
-      await this.recordRecoveryEnvelope(true);
+      await checkForLostDataKey(this.keyDeps());
     } catch (err) {
-      // Before the type test, not inside it: disableSync clears the session first, so self-heal's
-      // envelope fetch usually 401s rather than raising a SelfHeal* error — and the rethrow makes
+      // Before the type test, not inside it: disableSync clears the session first, so the envelope
+      // fetch usually 401s rather than raising SelfHealNeedsEnrollError — and the rethrow makes
       // the host log "Sync engine failed to start" for what the user deliberately did.
       if (this.startSuperseded(epoch)) {
         return;
       }
       if (err instanceof SelfHealNeedsEnrollError) {
         // The ordinary lost-key case, not a rare one: every account that enabled sync has an
-        // envelope, so self-heal throws here rather than falling through to the branch below.
+        // envelope, so a device that loses its key throws here rather than falling through.
         logger.error(
           "Cloud sync needs the recovery code: this device's data key could not be read"
         );
@@ -909,24 +984,9 @@ export class SyncEngine {
         await this.handleAuthLoss();
         return;
       }
-      // Everything below falls through to the key load. Self-heal only verifies the SERVER envelope,
-      // so neither a missing one nor an unreachable server says anything about the key on disk —
-      // abandoning here left an enrolled device reading "off" on macOS after one offline launch.
-      if (err instanceof SelfHealUnrecoverableError) {
-        // Reaching active is also what keeps Regenerate recovery code, the one fix, on screen.
-        // Logged only on the transition: the extension respawns its worker every wake, so an
-        // unconditional log here is one line per five minutes for as long as the state lasts.
-        if (await this.recordRecoveryEnvelope(false)) {
-          logger.error(
-            'Cloud sync has no recovery envelope on the server; regenerate your recovery code to restore it'
-          );
-        }
-      } else {
-        logger.error(
-          `Cloud sync self-heal could not reach the server: ${describeThrown(err)}`,
-          err
-        );
-      }
+      // Falls through to the key load: an unreachable server says nothing about the key on disk,
+      // and abandoning here left an enrolled device reading "off" on macOS after one offline launch.
+      logger.error(`Cloud sync could not check its data key: ${describeThrown(err)}`, err);
     }
 
     const persisted = await loadPersistedDataKey(this.deps.keyStore);

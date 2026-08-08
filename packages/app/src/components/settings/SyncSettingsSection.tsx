@@ -11,6 +11,7 @@ import type {
   EnableResult,
   LastCycleRead,
   SyncDetails,
+  SyncDetailsOptions,
   SyncUiStatus,
 } from '../../sync/sync-controller';
 import {
@@ -28,6 +29,9 @@ import { settingsMatch } from './settings-match';
 import type { SettingsSectionProps } from './settings-types';
 
 const SEARCH_TERMS = 'cloud sync encrypted end-to-end recovery code account device backup';
+
+// The one surface that renders the "no recovery code" finding, so the one that pays to refresh it.
+const WITH_ENVELOPE: SyncDetailsOptions = { refreshRecoveryEnvelope: true };
 
 /** The standard four-color "G" mark — kept local since lucide-react has no brand icons. */
 const GoogleGlyph: React.FC = () => (
@@ -292,7 +296,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     detailsGenRef.current += 1;
     const gen = detailsGenRef.current;
     setDetailsPending(true);
-    controller.getDetails().then(
+    controller.getDetails(WITH_ENVELOPE).then(
       (result) => {
         if (detailsGenRef.current !== gen) {
           // Superseded by a disable or a newer fetch — this account is no longer current.
@@ -401,10 +405,12 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     }
   };
 
-  const refreshDetails = async () => {
+  // No default: a caller that just WROTE the envelope wants the recorded answer, and `undefined`
+  // picking up a default would send it asking instead.
+  const refreshDetails = async (options: SyncDetailsOptions | undefined) => {
     detailsGenRef.current += 1;
     const gen = detailsGenRef.current;
-    const next = await controller.getDetails().catch((error) => {
+    const next = await controller.getDetails(options).catch((error) => {
       logger.error(`Cloud sync details unavailable: ${describeThrown(error)}`, error);
       return null;
     });
@@ -422,7 +428,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     // would hand this account the previous one's failure.
     setCycle(CYCLE_NONE);
     await refreshLastCycle();
-    await refreshDetails();
+    await refreshDetails(WITH_ENVELOPE);
   };
 
   // A disconnect landed mid-enable, so the switch must stop reading on.
@@ -588,8 +594,11 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   // which need not be the one the server kept — a saved code that opens nothing.
   const handleRegenerate = async () => {
     setIsRegenerating(true);
+    let regenerated = false;
     try {
       const code = await controller.regenerateRecoveryCode();
+      // The envelope is already replaced here, so a throw below is a display failure only.
+      regenerated = true;
       setUnsavedCode(false);
       // Not setRecoveryCode: the server envelope is already replaced, so a closed panel must not
       // swallow the only copy of the code that opens it.
@@ -599,6 +608,11 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       useToastStore.getState().error("Couldn't regenerate your recovery code — please try again.");
     } finally {
       setIsRegenerating(false);
+    }
+    // Outside the try, like handleSyncNow. Without it the banner this click fixed stays up all
+    // mount; without an option, because the engine recorded the answer as it wrote the envelope.
+    if (regenerated) {
+      await refreshDetails(undefined);
     }
   };
 
@@ -657,7 +671,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     // Keep the last known details on a transient null: a stale line beats a vanishing one.
     detailsGenRef.current += 1;
     const gen = detailsGenRef.current;
-    const next = await controller.getDetails().catch((error) => {
+    const next = await controller.getDetails(WITH_ENVELOPE).catch((error) => {
       logger.warn(
         `Cloud sync details refresh failed: ${error instanceof Error ? error.message : String(error)}`
       );
@@ -741,10 +755,10 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   // freshness claim worth qualifying — connecting and syncing have not made one yet.
   const showUnknownCycle = status === 'active' && cycle.kind === 'unknown' && badgeMessage === null;
   const reconnectPrompt = presentation.kind === 'reconnect' ? presentation.prompt : null;
-  // Only an explicit false: null is "self-heal has not answered", and an older service worker
+  // Only an explicit 'missing': 'unknown' means nothing has answered yet, and an older worker
   // answers details with the field absent entirely. Neither may claim an account has no code.
   // Gated on 'active' because that is the only status where Regenerate, the one fix, renders.
-  const noRecoveryCode = status === 'active' && details?.recoveryEnvelopePresent === false;
+  const noRecoveryCode = status === 'active' && details?.recoveryEnvelope === 'missing';
 
   // The enable step's sign-in-options div groups Google today; a "Sign in with Apple"
   // button drops in next to it later.
