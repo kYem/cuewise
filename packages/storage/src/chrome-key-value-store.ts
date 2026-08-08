@@ -20,11 +20,11 @@ function areaStore(area: StorageArea): chrome.storage.StorageArea {
   return area === 'sync' ? chrome.storage.sync : chrome.storage.local;
 }
 
-/** KeyValueStore backed by chrome.storage.local/sync (selected only where it exists). */
 function hasLockManager(): boolean {
   return typeof navigator !== 'undefined' && navigator.locks !== undefined;
 }
 
+/** KeyValueStore backed by chrome.storage.local/sync (selected only where it exists). */
 export class ChromeKeyValueStore implements KeyValueStore {
   readonly supportsSync = true;
 

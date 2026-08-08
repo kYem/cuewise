@@ -581,7 +581,10 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
         })
       );
 
-      set({ goals: updatedGoals, todayTasks: reorderedTodayTasks });
+      // Re-derived, not the reordered snapshot: it sorts by the sortOrder just written, so the drag
+      // survives, and a task pulled into today mid-drag is not left invisible until a reload.
+      set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
+      // Still the reordered ids: those are the ones whose sortOrder this write actually changed.
       for (const task of reorderedTodayTasks) {
         notifyMutated('goals', task.id);
       }

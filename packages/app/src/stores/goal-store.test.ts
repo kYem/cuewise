@@ -1582,6 +1582,22 @@ describe('writers read storage, not their own snapshot', () => {
     expect(written.map((goal) => goal.id).sort()).toEqual([overdue.id, pulled.id].sort());
   });
 
+  // The observer cannot repair this one: after the write, goals already equals storage, so its
+  // equality guard returns early and never recomputes the today list.
+  it('reorderTasks shows a task pulled into today mid-drag', async () => {
+    const today = getTodayDateString();
+    const dragged = goalFactory.buildList(2, { date: today });
+    const pulled = goalFactory.build({ date: today });
+    useGoalStore.setState({ goals: dragged, todayTasks: dragged });
+    vi.mocked(storage.getGoals).mockResolvedValue([...dragged, pulled]);
+
+    await useGoalStore.getState().reorderTasks(0, 1);
+
+    const shown = useGoalStore.getState().todayTasks.map((task) => task.id);
+    expect(shown).toContain(pulled.id);
+    expect(shown.indexOf(dragged[1].id)).toBeLessThan(shown.indexOf(dragged[0].id));
+  });
+
   // The snapshot says something is due and storage says nothing is: a snapshot reader rolls and
   // writes, a storage reader skips. Cleanly — a crash inside the lock also writes nothing.
   it('rollDueTasks decides from storage, and skips without erroring', async () => {
