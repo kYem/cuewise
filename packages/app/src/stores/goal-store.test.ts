@@ -1593,9 +1593,10 @@ describe('writers read storage, not their own snapshot', () => {
 
     await useGoalStore.getState().reorderTasks(0, 1);
 
+    // The drag put dragged[1] first; the pulled task keeps its own sortOrder, so it ties at 0 and
+    // a stable sort leaves it where the stored array had it.
     const shown = useGoalStore.getState().todayTasks.map((task) => task.id);
-    expect(shown).toContain(pulled.id);
-    expect(shown.indexOf(dragged[1].id)).toBeLessThan(shown.indexOf(dragged[0].id));
+    expect(shown).toEqual([dragged[1].id, pulled.id, dragged[0].id]);
   });
 
   // The snapshot says something is due and storage says nothing is: a snapshot reader rolls and
