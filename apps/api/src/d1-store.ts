@@ -312,7 +312,8 @@ export class D1SyncStore implements SyncStore {
       envelope: row.envelope,
       updatedAt: row.updated_at,
     }));
-    // The state this endpoint exists to prevent, and the server cannot fix it from here.
+    // Warn, don't fail: only a client can mint an envelope, so refusing would deny the user their
+    // ciphertext too.
     if (records.length > 0 && keyEnvelopes.length === 0) {
       logger.warn('Export carries ciphertext but no key envelope; the archive is undecryptable', {
         userId,

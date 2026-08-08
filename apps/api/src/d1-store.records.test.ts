@@ -106,7 +106,7 @@ describe('D1SyncStore records', () => {
     ]);
     const { records, keyEnvelopes } = await store.exportUser(userId);
     expect(records.map((r) => r.seq)).toEqual([1, 2, 3]);
-    // Paging spans three pages; the envelope must appear once, not once per page.
+    // Two pages: the envelope must appear once, not once per page.
     expect(keyEnvelopes).toHaveLength(1);
   });
 
