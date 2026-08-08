@@ -571,7 +571,7 @@ describe('migrateLegacySettings', () => {
   });
 
   // The flag would otherwise retire a back-stop this build never copied a single value out of.
-  it('leaves the flag unset when the blob is stored but unreadable', async () => {
+  it('flags an unreadable blob but keeps its bytes, since no retry can parse them', async () => {
     const { store, areas } = recordingStore({
       local: { [STORAGE_KEYS.SETTINGS]: legacyBlob({ theme: 'dark' }) },
     });
@@ -589,9 +589,11 @@ describe('migrateLegacySettings', () => {
     });
     vi.spyOn(logger, 'error').mockImplementation(() => {});
 
-    await expect(migrateLegacySettings()).resolves.toBe(false);
+    await expect(migrateLegacySettings()).resolves.toBe(true);
 
-    expect(areas.local[STORAGE_KEYS.SETTINGS_MIGRATED]).toBeUndefined();
+    expect(areas.local[STORAGE_KEYS.SETTINGS_MIGRATED]).toBe(true);
+    // Unparseable to this build is not unsalvageable, and it is the only copy left.
+    expect(areas.local[STORAGE_KEYS.SETTINGS]).toBeDefined();
   });
 
   it('is idempotent across repeated runs', async () => {
@@ -1119,23 +1121,21 @@ describe('a legacy settings blob that is stored but unreadable', () => {
     };
   }
 
-  it('leaves the storage area unanswered rather than guessing local', async () => {
-    configurePlatform({
-      storage: unreadableBlob({ sync: { [STORAGE_KEYS.GOALS]: goalFactory.buildList(2) } }),
-    });
+  // Unreadable is JSON.parse throwing, so its values are gone whatever we do. Refusing would only
+  // withhold the rest of the app on their behalf.
+  it('answers the storage area instead of refusing over values no retry can recover', async () => {
+    const goals = goalFactory.buildList(2);
+    configurePlatform({ storage: unreadableBlob({ local: { [STORAGE_KEYS.GOALS]: goals } }) });
     vi.spyOn(logger, 'error').mockImplementation(() => {});
 
-    await expect(getGoals()).rejects.toThrow(/storage area/i);
+    await expect(getGoals()).resolves.toEqual(goals);
   });
 
-  it('readSettings refuses rather than defaulting the fields it never copied', async () => {
+  it('reads settings as defaults rather than refusing', async () => {
     configurePlatform({ storage: unreadableBlob() });
     vi.spyOn(logger, 'error').mockImplementation(() => {});
 
-    await expect(readSettings()).resolves.toMatchObject({
-      ok: false,
-      unreadable: expect.arrayContaining(['autoRollDueTasks']),
-    });
+    await expect(readSettings()).resolves.toMatchObject({ ok: true });
   });
 
   // The blob is what blocks the migration, so deleting it is the way out — clearSettings removes

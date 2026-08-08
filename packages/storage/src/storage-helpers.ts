@@ -783,10 +783,12 @@ export async function migrateLegacySettings(): Promise<boolean> {
     return true;
   }
   if (legacy.blob === null) {
-    // Unflagged and undeleted, so `clearSettings` is still a way out: it removes the bytes, and
-    // the next run then reads a fresh install. Flagging would seal the defaults as the answer.
-    logger.error('The legacy settings blob is unreadable; leaving it unmigrated');
-    return false;
+    // Unreadable is JSON.parse throwing, which no retry fixes — refusing every read would hold the
+    // app hostage to values already lost. Flag so reads default, but keep the bytes: unparseable to
+    // this build is not unsalvageable, and they are the only copy left.
+    logger.error('The legacy settings blob is unreadable; defaulting its values and keeping it');
+    await markSettingsMigrated();
+    return true;
   }
   const blob = legacy.blob;
 
