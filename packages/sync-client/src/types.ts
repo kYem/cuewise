@@ -3,9 +3,10 @@ import type {
   KeyEnvelopeRecord,
   PushRecord,
   SyncRecord,
+  SyncSession,
 } from '@cuewise/shared';
 
-export type { ExchangeTokenRequest, KeyEnvelopeRecord, PushRecord, SyncRecord };
+export type { ExchangeTokenRequest, KeyEnvelopeRecord, PushRecord, SyncRecord, SyncSession };
 
 export interface ProblemBody {
   type: string;

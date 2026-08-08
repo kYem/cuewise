@@ -1,5 +1,11 @@
 import { ApiError } from './api-error';
-import type { ExchangeTokenRequest, KeyEnvelopeRecord, PushRecord, SyncRecord } from './types';
+import type {
+  ExchangeTokenRequest,
+  KeyEnvelopeRecord,
+  PushRecord,
+  SyncRecord,
+  SyncSession,
+} from './types';
 
 const MAX_RETRIES = 3;
 
@@ -81,6 +87,41 @@ export class ApiClient {
 
   async deleteAccount(): Promise<void> {
     await this.request('/v1/account', { method: 'DELETE' }, { auth: true });
+  }
+
+  // Per-device management (ENG-95). `id` is the server's opaque row handle, never a credential.
+  async listSessions(): Promise<SyncSession[]> {
+    const res = await this.request('/v1/sessions', { method: 'GET' }, { auth: true });
+    return (await this.parseSuccessBody<{ sessions: SyncSession[] }>(res)).sessions;
+  }
+
+  async revokeSession(id: string): Promise<void> {
+    await this.request(
+      `/v1/sessions/${encodeURIComponent(id)}`,
+      { method: 'DELETE' },
+      { auth: true }
+    );
+  }
+
+  async renameSession(id: string, deviceName: string): Promise<void> {
+    await this.request(
+      `/v1/sessions/${encodeURIComponent(id)}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deviceName }),
+      },
+      { auth: true }
+    );
+  }
+
+  async revokeOtherSessions(): Promise<number> {
+    const res = await this.request(
+      '/v1/sessions/revoke-others',
+      { method: 'POST' },
+      { auth: true }
+    );
+    return (await this.parseSuccessBody<{ revoked: number }>(res)).revoked;
   }
 
   // 404 means "signed in but keys never initialized" — a valid state, not an error; every

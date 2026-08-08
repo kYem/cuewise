@@ -469,4 +469,68 @@ describe('ApiClient', () => {
       expect(calls).toHaveLength(1);
     });
   });
+
+  describe('sessions', () => {
+    const sessionFixture = {
+      id: 's1',
+      deviceName: 'laptop',
+      createdAt: 1,
+      lastUsedAt: 2,
+      current: true,
+    };
+
+    it('GETs /v1/sessions and unwraps the sessions array', async () => {
+      const { fetchFn, calls } = stubFetch([{ status: 200, body: { sessions: [sessionFixture] } }]);
+      const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
+
+      const sessions = await client.listSessions();
+
+      expect(sessions).toEqual([sessionFixture]);
+      expect(calls[0].url).toBe(`${BASE_URL}/v1/sessions`);
+      expect(calls[0].init.method).toBe('GET');
+    });
+
+    it('DELETEs the addressed session', async () => {
+      const { fetchFn, calls } = stubFetch([{ status: 204 }]);
+      const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
+
+      await client.revokeSession('s1');
+
+      expect(calls[0].url).toBe(`${BASE_URL}/v1/sessions/s1`);
+      expect(calls[0].init.method).toBe('DELETE');
+    });
+
+    it('PATCHes the new device name', async () => {
+      const { fetchFn, calls } = stubFetch([{ status: 204 }]);
+      const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
+
+      await client.renameSession('s1', 'Work MacBook');
+
+      expect(calls[0].url).toBe(`${BASE_URL}/v1/sessions/s1`);
+      expect(calls[0].init.method).toBe('PATCH');
+      expect(JSON.parse(calls[0].init.body as string)).toEqual({ deviceName: 'Work MacBook' });
+    });
+
+    it('POSTs revoke-others and returns the count', async () => {
+      const { fetchFn, calls } = stubFetch([{ status: 200, body: { revoked: 3 } }]);
+      const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
+
+      const revoked = await client.revokeOtherSessions();
+
+      expect(revoked).toBe(3);
+      expect(calls[0].url).toBe(`${BASE_URL}/v1/sessions/revoke-others`);
+      expect(calls[0].init.method).toBe('POST');
+    });
+
+    it('surfaces a 404 revoke as a typed ApiError', async () => {
+      const { fetchFn } = stubFetch([problemResponse('not_found', 404)]);
+      const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
+
+      await expect(client.revokeSession('gone')).rejects.toMatchObject({
+        code: 'not_found',
+        status: 404,
+        retryable: false,
+      });
+    });
+  });
 });
