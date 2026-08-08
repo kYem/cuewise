@@ -70,8 +70,8 @@ export interface SyncLastCycleResponse {
 
 /**
  * Response to the 'listSessions' op. `sessions` is nullable like SyncDetailsResponse.details:
- * a signed-in caller always has at least its own session, so [] would be indistinguishable from
- * an unreadable list — and the panel must say "couldn't load", not "no devices".
+ * collapsing an unreadable list to [] would render "no devices" on the screen that answers
+ * "who has access to my account?".
  */
 export interface SyncSessionsResponse {
   ok: true;
