@@ -42,6 +42,7 @@ export type SyncEngineControlSurface = Pick<
   | 'getAccount'
   | 'getLastSyncedAt'
   | 'getLastCycle'
+  | 'getRecoveryEnvelopePresent'
   | 'refreshRecoveryEnvelope'
   | 'ensureHydrated'
 >;

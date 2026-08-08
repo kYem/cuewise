@@ -818,7 +818,7 @@ describe('SyncSettingsSectionComponent', () => {
     expect(screen.getByRole('button', { name: /Regenerate recovery code/i })).toBeInTheDocument();
   });
 
-  // null is "self-heal has not answered", and an older service worker omits the field entirely.
+  // null is "nothing has answered yet", and an older service worker omits the field entirely.
   // Painting either as a missing code tells a healthy account its data is unrecoverable.
   it.each([
     ['not yet answered', { recoveryEnvelopePresent: null }],

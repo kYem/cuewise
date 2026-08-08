@@ -3,6 +3,7 @@ import type {
   LastCycleRead,
   SyncController,
   SyncDetails,
+  SyncDetailsOptions,
   SyncUiStatus,
 } from '@cuewise/app';
 import { AUTH_CANCELLED_DETAIL, buildSyncDetails, LAST_CYCLE_UNAVAILABLE } from '@cuewise/app';
@@ -384,14 +385,17 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
         emit(mapStatus(engine.getStatus()));
       }
     },
-    async getDetails(): Promise<SyncDetails | null> {
+    async getDetails(options?: SyncDetailsOptions): Promise<SyncDetails | null> {
       // Hydration owns lastSyncedAt too; without this the stamp is only correct because
       // getAccount's network hop happens to outlast two local reads.
       await engine.ensureHydrated();
-      // Two independent network hops on the panel-open path; neither throws (both answer null instead).
+      // In parallel because both are network hops on the panel-open path; neither throws (each
+      // answers null instead).
       const [account, recoveryEnvelopePresent] = await Promise.all([
         engine.getAccount(),
-        engine.refreshRecoveryEnvelope(),
+        options?.refreshRecoveryEnvelope
+          ? engine.refreshRecoveryEnvelope()
+          : engine.getRecoveryEnvelopePresent(),
       ]);
       return buildSyncDetails(account, engine.getLastSyncedAt(), recoveryEnvelopePresent);
     },

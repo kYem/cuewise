@@ -11,6 +11,7 @@ import type {
   EnableResult,
   LastCycleRead,
   SyncDetails,
+  SyncDetailsOptions,
   SyncUiStatus,
 } from '../../sync/sync-controller';
 import {
@@ -28,6 +29,10 @@ import { settingsMatch } from './settings-match';
 import type { SettingsSectionProps } from './settings-types';
 
 const SEARCH_TERMS = 'cloud sync encrypted end-to-end recovery code account device backup';
+
+// This panel is the one surface that renders the "no recovery code" finding, so it is the one
+// that pays for a fresh answer; every other details caller reports the last recorded one.
+const WITH_ENVELOPE: SyncDetailsOptions = { refreshRecoveryEnvelope: true };
 
 /** The standard four-color "G" mark — kept local since lucide-react has no brand icons. */
 const GoogleGlyph: React.FC = () => (
@@ -292,7 +297,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     detailsGenRef.current += 1;
     const gen = detailsGenRef.current;
     setDetailsPending(true);
-    controller.getDetails().then(
+    controller.getDetails(WITH_ENVELOPE).then(
       (result) => {
         if (detailsGenRef.current !== gen) {
           // Superseded by a disable or a newer fetch — this account is no longer current.
@@ -404,7 +409,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   const refreshDetails = async () => {
     detailsGenRef.current += 1;
     const gen = detailsGenRef.current;
-    const next = await controller.getDetails().catch((error) => {
+    const next = await controller.getDetails(WITH_ENVELOPE).catch((error) => {
       logger.error(`Cloud sync details unavailable: ${describeThrown(error)}`, error);
       return null;
     });
@@ -657,7 +662,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     // Keep the last known details on a transient null: a stale line beats a vanishing one.
     detailsGenRef.current += 1;
     const gen = detailsGenRef.current;
-    const next = await controller.getDetails().catch((error) => {
+    const next = await controller.getDetails(WITH_ENVELOPE).catch((error) => {
       logger.warn(
         `Cloud sync details refresh failed: ${error instanceof Error ? error.message : String(error)}`
       );
@@ -741,7 +746,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   // freshness claim worth qualifying — connecting and syncing have not made one yet.
   const showUnknownCycle = status === 'active' && cycle.kind === 'unknown' && badgeMessage === null;
   const reconnectPrompt = presentation.kind === 'reconnect' ? presentation.prompt : null;
-  // Only an explicit false: null is "self-heal has not answered", and an older service worker
+  // Only an explicit false: null is "nothing has answered yet", and an older service worker
   // answers details with the field absent entirely. Neither may claim an account has no code.
   // Gated on 'active' because that is the only status where Regenerate, the one fix, renders.
   const noRecoveryCode = status === 'active' && details?.recoveryEnvelopePresent === false;

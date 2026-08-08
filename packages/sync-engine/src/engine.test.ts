@@ -1768,7 +1768,7 @@ describe('SyncEngine.syncNow', () => {
   });
 
   it('does not reject when the store throws instead of reporting a failed read', async () => {
-    // start() awaits hydration before self-heal, so a rejection would leave the engine keyless
+    // start() awaits hydration before the key check, so a rejection would leave the engine keyless
     // behind a pill the extension still persists as active — and skipping the unknown branches
     // would answer "no cycle has run", which clears the badge.
     const server = new FakeSyncServer();
@@ -2042,6 +2042,51 @@ describe('SyncEngine.refreshRecoveryEnvelope', () => {
     expect(envelopeSpy).not.toHaveBeenCalled();
   });
 
+  it('records nothing when the disable lands after the fetch, inside the record read', async () => {
+    // The narrower window the gate above cannot see. Concretely reachable: the extension runs
+    // 'details' outside the control-message mutex, so a Disconnect click does overlap a lookup.
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    vi.spyOn(device.apiClient, 'getRecoveryEnvelope').mockResolvedValue(null);
+    const read = device.kv.get.bind(device.kv);
+    let disabled = false;
+    vi.spyOn(device.kv, 'get').mockImplementation(async (key, area) => {
+      const value = await read(key, area);
+      if (key === RECOVERY_ENVELOPE_KEY && !disabled) {
+        disabled = true;
+        await device.engine.disableSync();
+      }
+      return value;
+    });
+
+    await device.engine.refreshRecoveryEnvelope();
+
+    // disableSync removed it; writing the fetched answer back re-creates it for the next account.
+    await expect(read(RECOVERY_ENVELOPE_KEY, 'local')).resolves.toBeNull();
+  });
+
+  it('never rejects, even when the storage adapter throws', async () => {
+    // getDetails is contracted never to reject and this call writes as well as fetches, so the
+    // contract has to hold by construction rather than because today's adapters swallow errors.
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    const read = device.kv.get.bind(device.kv);
+    vi.spyOn(device.kv, 'get').mockImplementation(async (key, area) => {
+      if (key === RECOVERY_ENVELOPE_KEY) {
+        throw new Error('adapter exploded');
+      }
+      return read(key, area);
+    });
+
+    await expect(device.engine.refreshRecoveryEnvelope()).resolves.toBe(true);
+  });
+
   it('records nothing for an account that was disabled mid-check', async () => {
     const server = new FakeSyncServer();
     const device = createDevice(server);
@@ -2135,7 +2180,7 @@ describe('SyncEngine.start / stop', () => {
   });
 
   it('reports needs_enroll for the ordinary lost-key case, where the envelope still exists', async () => {
-    // Every account that enabled sync has an envelope, so self-heal throws NeedsEnroll here rather
+    // Every account that enabled sync has an envelope, so the key check throws NeedsEnroll here rather
     // than falling through — the common path, and it used to claim the sign-in had expired.
     const server = new FakeSyncServer();
     const device = createDevice(server);
@@ -2296,7 +2341,7 @@ describe('SyncEngine.start / stop', () => {
     await device.engine.enableSync('dev', 'cred-a', 'Device A');
     const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
 
-    // Neither the key nor an envelope, so selfHealKeyBlob falls through without throwing and the
+    // Neither the key nor an envelope, so checkForLostDataKey falls through without throwing and the
     // keyless branch is reached rather than its signed-out sibling.
     await device.kv.remove(SYNC_DATA_KEY, 'local');
     vi.spyOn(device.apiClient, 'getRecoveryEnvelope').mockResolvedValue(null);
@@ -2364,8 +2409,8 @@ describe('SyncEngine.start / stop', () => {
     expect(errorSpy).not.toHaveBeenCalled();
   });
 
-  it('does not report a disable that lands after self-heal as a missing key', async () => {
-    // Reaches start()'s SECOND epoch gate, which its sibling test cannot: self-heal succeeds here,
+  it('does not report a disable that lands after the key check as a missing key', async () => {
+    // Reaches start()'s SECOND epoch gate, which its sibling test cannot: the key check passes here,
     // so the disable has to land in the key read that follows it.
     const server = new FakeSyncServer();
     const device = createDevice(server);
@@ -2587,7 +2632,7 @@ describe('SyncEngine.start / stop', () => {
     expect(device.scheduler.scheduled).toEqual([]);
   });
 
-  it('self-heals the DK, syncs, and arms the pull loop for a restarted engine instance', async () => {
+  it('recovers the DK, syncs, and arms the pull loop for a restarted engine instance', async () => {
     const server = new FakeSyncServer();
     const device = createDevice(server);
     useStorage(device);

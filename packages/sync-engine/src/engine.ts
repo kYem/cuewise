@@ -173,7 +173,7 @@ export class SyncEngine {
   // False once a stored record turned out to be unreadable: that is not "no cycle ran", and
   // answering it as such is exactly what clears a wedged device's badge.
   private lastCycleKnown = true;
-  // null until self-heal has answered once, so a panel on a cold worker cannot read "unknown" as
+  // null until a check has answered once, so a panel on a cold worker cannot read "unknown" as
   // "missing" and claim an account has no recovery path before anything has checked.
   private recoveryEnvelope: boolean | null = null;
   // Whether the enrol in flight minted a code. Never the code itself: this only decides whether the
@@ -287,7 +287,7 @@ export class SyncEngine {
     this.keyId = enrolled.keyId;
     // Both enrol paths prove one: initNewKey PUT it, enrollFromEnvelope unwrapped it. Without
     // this a freshly-connected device reads "unknown" until its next start().
-    await this.recordRecoveryEnvelope(true);
+    await this.recordRecoveryEnvelope(true, epoch);
 
     this.setStatus('initial_sync');
     // Unconditionally: the enabled flag survives handleAuthLoss, so its presence cannot mean the
@@ -471,6 +471,7 @@ export class SyncEngine {
 
   /** Rotates the recovery code for the current data key; overwrites the server envelope. */
   async regenerateRecoveryCode(): Promise<string> {
+    const epoch = this.accountEpoch;
     // Captured, not re-read below: a disable landing across these awaits nulls the fields, and
     // the narrowing above survives an await even though the value does not.
     const dk = this.dk;
@@ -483,7 +484,7 @@ export class SyncEngine {
     const blob = await wrapDataKey(mk, dk, keyId);
     await this.deps.apiClient.putRecoveryEnvelope(blob);
     // The one repair for a missing envelope, so this is what retires the badge it raised.
-    await this.recordRecoveryEnvelope(true);
+    await this.recordRecoveryEnvelope(true, epoch);
     return code;
   }
 
@@ -677,6 +678,15 @@ export class SyncEngine {
   }
 
   /**
+   * The last recorded answer, without asking the server. null until something has managed to
+   * check, which hosts must not paint as "missing". Surfaces that render the finding itself want
+   * `refreshRecoveryEnvelope()` instead; this is for the ones that only carry the value along.
+   */
+  getRecoveryEnvelopePresent(): boolean | null {
+    return this.recoveryEnvelope;
+  }
+
+  /**
    * Asks the server whether this account still has a recovery envelope, records the answer, and
    * returns it — null while nobody has managed to answer, which hosts must not paint as "missing".
    *
@@ -687,40 +697,49 @@ export class SyncEngine {
    */
   async refreshRecoveryEnvelope(): Promise<boolean | null> {
     const epoch = this.accountEpoch;
-    let present: boolean;
+    // One try over the storage writes as well as the fetch: the never-throws contract has to hold
+    // by construction, not because today's adapters happen to swallow their own errors.
     try {
       // Like getAccount: a signed-out device would only earn a 401 and a warning for asking, and
       // hosts call this beside getAccount on every details lookup.
       if ((await this.deps.sessionManager.getToken()) === null) {
         return this.recoveryEnvelope;
       }
-      present = (await this.deps.apiClient.getRecoveryEnvelope()) !== null;
+      const present = (await this.deps.apiClient.getRecoveryEnvelope()) !== null;
+      if (this.accountEpoch !== epoch) {
+        // A disable landed during the fetch, so this answer describes an account that is gone —
+        // and recording it would hand the next account to connect the previous one's badge.
+        return null;
+      }
+      const news = await this.recordRecoveryEnvelope(present, epoch);
+      if (news && !present) {
+        // Regenerate recovery code is the one repair, and it lives in the panel that just asked.
+        logger.error(
+          'Cloud sync has no recovery envelope on the server; regenerate your recovery code to restore it'
+        );
+      }
+      return present;
     } catch (err) {
       logger.warn(`Could not check the cloud sync recovery envelope: ${describeThrown(err)}`);
       return this.recoveryEnvelope;
     }
-    if (this.accountEpoch !== epoch) {
-      // A disable landed during the fetch, so this answer describes an account that is gone —
-      // and recording it would hand the next account to connect the previous one's badge.
-      return null;
-    }
-    const news = await this.recordRecoveryEnvelope(present);
-    if (news && !present) {
-      // Regenerate recovery code is the one repair, and it lives in the panel that just asked.
-      logger.error(
-        'Cloud sync has no recovery envelope on the server; regenerate your recovery code to restore it'
-      );
-    }
-    return present;
   }
 
   /**
    * Records what a check found and answers whether it is news. Compared against the PERSISTED
    * value, not the field: a respawned worker starts blank, so an in-memory check would call the
    * steady state news every time the panel asked — which is the log repeat this exists to stop.
+   *
+   * Takes its caller's epoch because the read below is an await a disable can land inside, and
+   * both writes here are ones disableSync has just undone.
    */
-  private async recordRecoveryEnvelope(present: boolean): Promise<boolean> {
+  private async recordRecoveryEnvelope(present: boolean, epoch: number): Promise<boolean> {
     const stored = await this.deps.keyStore.get<boolean>(RECOVERY_ENVELOPE_KEY, 'local');
+    if (this.accountEpoch !== epoch) {
+      // Re-creating the key disableSync removed, or the field it nulled, leaves the previous
+      // account's badge waiting for whichever one connects next.
+      return false;
+    }
     this.recoveryEnvelope = present;
     if (stored === present) {
       return false;
@@ -759,7 +778,7 @@ export class SyncEngine {
 
   /**
    * Never rejects, and keeps the memo unless the read is worth retrying. start() awaits this
-   * before self-heal, so a rejection would leave the engine keyless behind a pill the extension
+   * before the key check, so a rejection would leave the engine keyless behind a pill the extension
    * still persists as 'active', and skip the branches that stop it answering "no cycle has run".
    */
   private async hydrate(): Promise<void> {

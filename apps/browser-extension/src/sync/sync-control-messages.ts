@@ -29,6 +29,9 @@ export interface SyncControlMessage {
   accountId?: string;
   deviceName?: string;
   recoveryCode?: string;
+  // details-only: also ask the server about the recovery envelope. Absent (a page realm predating
+  // the flag, or a surface that only shows the identity) reports the last recorded answer instead.
+  refreshRecoveryEnvelope?: boolean;
 }
 
 // Character-identical to the app's EnableResult — reuse it so the two can't drift.

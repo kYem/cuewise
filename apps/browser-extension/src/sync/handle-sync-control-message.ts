@@ -69,15 +69,19 @@ function enableFailure(err: unknown): Extract<SyncControlResponse, { ok: false }
   return { ok: false, reason: 'error', detail };
 }
 
-/** Read-only details lookup — deliberately NOT serialized (see handleSyncControlMessage). */
-async function runDetails(engine: SyncEngineControlSurface): Promise<SyncDetailsResponse> {
+/** Details lookup — deliberately NOT serialized (see handleSyncControlMessage). */
+async function runDetails(
+  engine: SyncEngineControlSurface,
+  refreshEnvelope: boolean | undefined
+): Promise<SyncDetailsResponse> {
   // Hydration owns lastSyncedAt as well as the cycle; without this the stamp is only correct
   // because getAccount's network hop happens to outlast two local reads on a cold worker.
   await engine.ensureHydrated();
-  // Two independent network hops on the panel-open path; neither throws (both answer null instead).
+  // In parallel because both are network hops on the panel-open path; neither throws (each
+  // answers null instead).
   const [account, recoveryEnvelopePresent] = await Promise.all([
     engine.getAccount(),
-    engine.refreshRecoveryEnvelope(),
+    refreshEnvelope ? engine.refreshRecoveryEnvelope() : engine.getRecoveryEnvelopePresent(),
   ]);
   return {
     ok: true,
@@ -190,9 +194,10 @@ export async function handleSyncControlMessage(
 ): Promise<SyncControlAnyResponse> {
   const { op } = msg;
   if (op === 'details') {
-    // Read-only and side-effect-free — bypasses the mutex so a slow account fetch can never
-    // delay a queued user action (e.g. a disable click) behind it.
-    return runDetails(engine);
+    // Bypasses the mutex so a slow account fetch can never delay a queued user action (e.g. a
+    // disable click) behind it. Its one write — the recovery-envelope flag — is epoch-guarded in
+    // the engine, so a disable racing this cannot have the removed badge written back.
+    return runDetails(engine, msg.refreshRecoveryEnvelope);
   }
   if (op === 'getLastCycle') {
     // Same rationale as 'details': read-only, so it must never queue behind a pending op.

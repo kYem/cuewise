@@ -88,10 +88,20 @@ export interface SyncDetails {
   /**
    * Whether the server holds a recovery envelope. Only `false` is a finding: without one, losing
    * this device loses the data, and the next device to enrol mints a second key whose records
-   * nothing here can read. Absent means nobody has answered — either self-heal has not run yet, or
-   * the extension's untyped SW↔page wire came from a build that predates the field.
+   * nothing here can read. Absent means nobody has answered — no lookup has yet asked the server
+   * and succeeded, or the extension's untyped SW↔page wire came from a build predating the field.
    */
   readonly recoveryEnvelopePresent?: boolean | null;
+}
+
+/** What a details lookup wants beyond the identity every caller shows. */
+export interface SyncDetailsOptions {
+  /**
+   * Ask the server whether the recovery envelope still exists, rather than reporting the last
+   * recorded answer. One extra request, so only the surface that renders that finding — the
+   * settings panel's "no recovery code" banner — turns it on (ENG-98).
+   */
+  readonly refreshRecoveryEnvelope?: boolean;
 }
 
 /**
@@ -137,7 +147,7 @@ export interface SyncController {
   regenerateRecoveryCode(): Promise<string>;
   syncNow(): Promise<SyncNowResult>;
   /** Informational: resolves null when unavailable (signed out, offline, legacy host); never throws. */
-  getDetails(): Promise<SyncDetails | null>;
+  getDetails(options?: SyncDetailsOptions): Promise<SyncDetails | null>;
   /**
    * The last cycle's outcome, or null if none has run — wrapped so a host that could not read it
    * (dead worker, timeout, skewed response) answers LAST_CYCLE_UNAVAILABLE instead of a null that
