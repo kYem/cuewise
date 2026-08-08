@@ -699,7 +699,7 @@ export async function clearSettings(): Promise<boolean> {
 
 /**
  * The legacy blob, with the cases the migration has to tell apart: never stored, stored but not
- * readable as settings, and readable. Null when the read itself failed.
+ * readable as settings, and readable.
  */
 type LegacyBlobEntry = { stored: false } | { stored: true; blob: Record<string, unknown> | null };
 
@@ -728,7 +728,7 @@ async function deleteLegacyBlob(): Promise<void> {
   }
 }
 
-/** Written last, and only after the per-key entries land: it retires the blob as a source. */
+/** Written only after the per-key entries land: it is what retires the blob as a source. */
 async function markSettingsMigrated(): Promise<boolean> {
   const result = await setInStorage(STORAGE_KEYS.SETTINGS_MIGRATED, true, 'local');
   if (!result.success) {
@@ -767,8 +767,10 @@ export async function migrateLegacySettings(): Promise<boolean> {
     return true;
   }
   if (!legacy.stored) {
-    // Fresh install: nothing to copy, and the flag is what stops this repeating on every read.
-    return markSettingsMigrated();
+    // Fresh install: nothing was left uncopied, so an absent per-key entry already means the
+    // default. The flag only stops this repeating; a write that failed must not make reads refuse.
+    await markSettingsMigrated();
+    return true;
   }
   if (legacy.blob === null) {
     // Unflagged and undeleted, so `clearSettings` is still a way out: it removes the bytes, and

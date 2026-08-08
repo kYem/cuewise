@@ -474,6 +474,25 @@ describe('migrateLegacySettings', () => {
     await expect(getFromStorage(STORAGE_KEYS.SETTINGS_MIGRATED, 'local')).resolves.toBe(true);
   });
 
+  // A device with no blob left nothing uncopied, so a flag write it could not store must not
+  // take every read down with it — the flag is only what stops the run repeating.
+  it('lets reads default when a fresh install cannot store the flag', async () => {
+    const { store } = recordingStore();
+    configurePlatform({
+      storage: {
+        ...store,
+        set: async () => ({
+          success: false as const,
+          error: { type: 'quota_exceeded' as const, message: 'Storage full' },
+        }),
+      },
+    });
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await expect(readSettings()).resolves.toMatchObject({ ok: true });
+    await expect(getGoals()).resolves.toEqual([]);
+  });
+
   it('does not copy the blob again once flagged', async () => {
     const { store, areas } = recordingStore({
       local: {
