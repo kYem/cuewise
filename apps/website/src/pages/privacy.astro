@@ -20,7 +20,7 @@ import { SITE } from '../lib/site';
         </div>
         <h1>Privacy Policy</h1>
         <p class="hero-sub">Your data is yours. This page explains, in plain terms, exactly what Cuewise does — and doesn't do — with it.</p>
-        <p class="last-updated">Last Updated: August 5, 2026</p>
+        <p class="last-updated">Last Updated: August 8, 2026</p>
       </div>
     </section>
 
@@ -83,7 +83,7 @@ import { SITE } from '../lib/site';
             <p>By default, all your goals, tasks, and productivity data are stored exclusively on your device using your browser's local storage. This means:</p>
             <ul>
               <li>We never see your personal data</li>
-              <li>Your data doesn't leave your device unless you turn on an optional feature that needs it: the end-to-end encrypted Cloud Sync, the Google Calendar agenda, or the Weather widget. Each is off until you switch it on, and each is described in its own section below</li>
+              <li>Your data doesn't leave your device unless you turn on an optional feature that needs it: the end-to-end encrypted Cloud Sync, the Google Calendar agenda, or the Weather widget. Each is off until you switch it on, and each is described in its own section below. Background photos are the one thing fetched without asking — see "Third-Party Services" for what Unsplash can see</li>
               <li>No servers store your productivity information in readable form — with sync off, they store nothing at all</li>
               <li>You have complete control over your data</li>
             </ul>
@@ -279,7 +279,10 @@ import { SITE } from '../lib/site';
             <li><strong>Chrome Web Store:</strong> Extension downloads are managed by Google according to their privacy policy.</li>
             <li><strong>Google Calendar (optional):</strong> if you connect it, the extension reads your calendar directly from Google's API; the data stays client-side and never reaches our servers. See "Google Calendar Integration" above.</li>
             <li><strong>Open-Meteo (optional):</strong> if you turn on the Weather widget, forecasts come from Open-Meteo — but only ever via our server, so they never see you. See "Weather" above.</li>
+            <li><strong>Unsplash:</strong> the background photos behind the glass theme and Focus mode are loaded straight from Unsplash's image CDN, so Unsplash sees the request — your IP address and browser, nothing more. No account, no identifier, and nothing about your goals or quotes. These photos load only when you use the glass theme, start Focus mode, or open the Pomodoro page; on the other themes nothing is fetched.</li>
+            <li><strong>YouTube (optional):</strong> if you play a focus playlist, the player is YouTube's and they see it as an ordinary YouTube view, subject to their privacy policy. Nothing plays until you choose a playlist.</li>
           </ul>
+          <p>Fonts are bundled with the extension rather than fetched from a font service, so opening a new tab reaches no third party at all.</p>
         </div>
 
         <!-- Card 7: Changes to This Policy -->
