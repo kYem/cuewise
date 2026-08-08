@@ -1,7 +1,7 @@
 import { logger } from '@cuewise/shared';
 import type { SyncFailureReason, SyncOutcome } from '@cuewise/sync-engine';
 import { defaultSettings } from '@cuewise/test-utils';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeSyncController } from '../../sync/__fixtures__/fake-sync-controller';
@@ -1545,6 +1545,28 @@ describe('SyncSettingsSectionComponent', () => {
     });
 
     expect(controller.calls.filter((c) => c.method === 'regenerateRecoveryCode')).toHaveLength(1);
+  });
+
+  // The dialog's copy of the control has to inherit the same in-flight state; without the prop
+  // being wired here it silently reverts to allowing a second, racing regeneration.
+  it('disables the revoke dialog regenerate button while one is in flight', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.sessionsResult = [
+      { id: 's2', deviceName: 'desktop', createdAt: 1, lastUsedAt: 2, current: false },
+    ];
+    controller.deferNextRegenerate();
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+    await screen.findByTestId('sync-status-pill');
+
+    await user.click(screen.getByRole('button', { name: 'Regenerate recovery code' }));
+    await user.click(await screen.findByRole('button', { name: /^Revoke$/ }));
+    const dialog = await screen.findByRole('dialog');
+
+    expect(
+      within(dialog).getByRole('button', { name: /regenerate recovery code/i })
+    ).toBeDisabled();
   });
 
   it('does not let a click paint for the account an enroll code replaced', async () => {

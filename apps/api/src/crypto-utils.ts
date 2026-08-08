@@ -41,8 +41,22 @@ export async function sha256Hex(value: string): Promise<string> {
 export type RawSessionToken = string & { readonly __brand: 'RawSessionToken' };
 export type SessionTokenHash = string & { readonly __brand: 'SessionTokenHash' };
 
+// The public row handle that rides in /v1/sessions/:id. Branded for the opposite reason to the two
+// above: it is NOT a credential, and the whole point of the column is that the auth lookup key
+// never reaches a URL — so a SessionTokenHash must not be assignable where this belongs.
+export type SessionId = string & { readonly __brand: 'SessionId' };
+
 export function randomSessionToken(): RawSessionToken {
   return randomToken() as RawSessionToken;
+}
+
+export function randomSessionId(): SessionId {
+  return randomToken() as SessionId;
+}
+
+/** Blesses an untrusted path param, mirroring bearerToken's treatment of a header. */
+export function sessionIdFromParam(value: string): SessionId {
+  return value as SessionId;
 }
 
 export async function hashSessionToken(raw: RawSessionToken): Promise<SessionTokenHash> {

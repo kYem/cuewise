@@ -1,5 +1,6 @@
 import type { Hono } from 'hono';
 import type { AuthVars } from '../auth-middleware';
+import { sessionIdFromParam } from '../crypto-utils';
 import type { Env } from '../env';
 import { parseJsonBody } from '../http';
 import type { AppDepsResolved } from '../index';
@@ -27,7 +28,10 @@ export function registerSessionsRoutes(
 
   app.delete('/v1/sessions/:id', async (c) => {
     const store = deps.storeFactory(c.env.DB);
-    const found = await store.revokeSessionById(c.get('userId'), c.req.param('id'));
+    const found = await store.revokeSessionById(
+      c.get('userId'),
+      sessionIdFromParam(c.req.param('id'))
+    );
     if (!found) {
       return problem('not_found', { detail: NO_SUCH_SESSION });
     }
@@ -52,7 +56,11 @@ export function registerSessionsRoutes(
       return problem('invalid_request', { errors: issues });
     }
     const store = deps.storeFactory(c.env.DB);
-    const found = await store.renameSession(c.get('userId'), c.req.param('id'), deviceName);
+    const found = await store.renameSession(
+      c.get('userId'),
+      sessionIdFromParam(c.req.param('id')),
+      deviceName
+    );
     if (!found) {
       return problem('not_found', { detail: NO_SUCH_SESSION });
     }

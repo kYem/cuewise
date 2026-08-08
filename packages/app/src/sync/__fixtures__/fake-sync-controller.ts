@@ -54,6 +54,8 @@ export class FakeSyncController implements SyncController {
   private deferredGoogle = false;
   private pendingGoogle: ((result: EnableResult) => void) | null = null;
   private deferredDetails = false;
+  private deferredSessions = false;
+  private pendingSessions: ((sessions: SyncSession[] | null) => void) | null = null;
   private pendingDetails: ((details: SyncDetails | null) => void) | null = null;
   private deferredLastCycle = false;
   private pendingLastCycle: ((read: LastCycleRead) => void) | null = null;
@@ -110,6 +112,20 @@ export class FakeSyncController implements SyncController {
     }
     this.pendingDetails(details);
     this.pendingDetails = null;
+  }
+
+  /** Makes the next listSessions() hang until resolveSessions() releases it — for read races. */
+  deferNextSessions(): void {
+    this.deferredSessions = true;
+  }
+
+  /** Releases a listSessions() call armed via deferNextSessions(). */
+  resolveSessions(sessions: SyncSession[] | null): void {
+    if (this.pendingSessions === null) {
+      throw new Error('FakeSyncController: no pending listSessions() to resolve');
+    }
+    this.pendingSessions(sessions);
+    this.pendingSessions = null;
   }
 
   /** Makes the next getLastCycle() hang until resolveLastCycle() releases it — for asserting read races. */
@@ -387,6 +403,12 @@ export class FakeSyncController implements SyncController {
     // Failable despite the never-throws contract: the panel guards against a skewed host, and
     // that guard needs a way to be exercised.
     this.maybeFail('listSessions');
+    if (this.deferredSessions) {
+      this.deferredSessions = false;
+      return new Promise((resolve) => {
+        this.pendingSessions = resolve;
+      });
+    }
     return this.sessionsResult;
   }
 

@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { SyncControllerContext } from '../../sync/sync-controller';
@@ -7,9 +7,10 @@ import { SessionList } from './SessionList';
 
 const toastError = vi.fn();
 const toastSuccess = vi.fn();
+const toastWarning = vi.fn();
 vi.mock('../../stores/toast-store', () => ({
   useToastStore: {
-    getState: () => ({ error: toastError, success: toastSuccess, warning: vi.fn() }),
+    getState: () => ({ error: toastError, success: toastSuccess, warning: toastWarning }),
   },
 }));
 
@@ -77,6 +78,43 @@ describe('SessionList', () => {
     ).toBeDisabled();
   });
 
+  // Without the generation guard the older read wins and puts the revoked device back on screen,
+  // right after the toast said it was signed out.
+  it('ignores a stale read that resolves after a newer one', async () => {
+    const controller = controllerWith([
+      session({ id: 's1', current: true }),
+      session({ id: 's2', deviceName: 'desktop' }),
+    ]);
+    renderSessionList(controller);
+    await screen.findByTestId('session-row-s2');
+
+    // A status flip starts a read that hangs — this is the one that will land late.
+    controller.deferNextSessions();
+    await act(async () => {
+      controller.setStatus('syncing');
+    });
+
+    // Meanwhile the user revokes, and that action's own refresh resolves normally.
+    controller.sessionsResult = [session({ id: 's1', current: true })];
+    await userEvent.click(screen.getByRole('button', { name: /revoke/i }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.click(within(dialog).getByRole('button', { name: /^revoke$/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('session-row-s2')).toBeNull();
+    });
+
+    // The hung read now answers with the pre-revoke list; it must not resurrect the row.
+    await act(async () => {
+      controller.resolveSessions([
+        session({ id: 's1', current: true }),
+        session({ id: 's2', deviceName: 'desktop' }),
+      ]);
+    });
+
+    expect(screen.queryByTestId('session-row-s2')).toBeNull();
+  });
+
   it('retries the read from the unavailable line', async () => {
     const controller = controllerWith(null);
     renderSessionList(controller);
@@ -98,6 +136,23 @@ describe('SessionList', () => {
     await userEvent.keyboard('{Enter}');
 
     expect(controller.calls.filter((c) => c.method === 'renameSession')).toHaveLength(0);
+    // Silently refusing to save would leave the user retyping into a field that never commits.
+    expect(toastWarning).toHaveBeenCalled();
+  });
+
+  it('accepts a name at exactly the byte bound', async () => {
+    const controller = controllerWith([session({ id: 's1', deviceName: 'laptop' })]);
+    renderSessionList(controller);
+
+    await userEvent.click(await screen.findByTestId('session-name-s1'));
+    const input = screen.getByRole('textbox');
+    await userEvent.clear(input);
+    await userEvent.type(input, 'x'.repeat(100));
+    await userEvent.keyboard('{Enter}');
+
+    await waitFor(() => {
+      expect(controller.calls.filter((c) => c.method === 'renameSession')).toHaveLength(1);
+    });
   });
 
   // Mounting during 'connecting' would otherwise read before a session exists and pin the

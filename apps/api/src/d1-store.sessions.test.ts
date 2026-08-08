@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
 import { clockedStore, newUser } from './__fixtures__/api-test-helpers.fixtures';
-import { hashSessionToken } from './crypto-utils';
+import { hashSessionToken, sessionIdFromParam } from './crypto-utils';
 import { D1SyncStore } from './d1-store';
 
 describe('session ids', () => {
@@ -123,7 +123,7 @@ describe('SyncStore session management', () => {
     const victimHash = await hashSessionToken(victimToken);
     const [victimSession] = await store.listSessions(victim, victimHash);
 
-    const revoked = await store.revokeSessionById(attacker, victimSession.id);
+    const revoked = await store.revokeSessionById(attacker, sessionIdFromParam(victimSession.id));
 
     expect(revoked).toBe(false);
     expect(await store.lookupSession(victimToken)).not.toBeNull();
@@ -135,9 +135,9 @@ describe('SyncStore session management', () => {
     const token = await store.createSession(userId, 'laptop');
     const [session] = await store.listSessions(userId, await hashSessionToken(token));
 
-    expect(await store.revokeSessionById(userId, session.id)).toBe(true);
+    expect(await store.revokeSessionById(userId, sessionIdFromParam(session.id))).toBe(true);
     tick(5_000);
-    expect(await store.revokeSessionById(userId, session.id)).toBe(true);
+    expect(await store.revokeSessionById(userId, sessionIdFromParam(session.id))).toBe(true);
 
     const row = await env.DB.prepare('SELECT revoked_at FROM tokens WHERE id = ?')
       .bind(session.id)
@@ -182,7 +182,9 @@ describe('SyncStore session management', () => {
     const hash = await hashSessionToken(token);
     const [session] = await store.listSessions(userId, hash);
 
-    expect(await store.renameSession(userId, session.id, 'Work MacBook')).toBe(true);
+    expect(await store.renameSession(userId, sessionIdFromParam(session.id), 'Work MacBook')).toBe(
+      true
+    );
 
     const [renamed] = await store.listSessions(userId, hash);
     expect(renamed.deviceName).toBe('Work MacBook');
@@ -196,7 +198,11 @@ describe('SyncStore session management', () => {
     const victimHash = await hashSessionToken(victimToken);
     const [victimSession] = await store.listSessions(victim, victimHash);
 
-    const renamed = await store.renameSession(attacker, victimSession.id, 'pwned');
+    const renamed = await store.renameSession(
+      attacker,
+      sessionIdFromParam(victimSession.id),
+      'pwned'
+    );
 
     // false, not true: a 204 here would also let an attacker probe which ids exist.
     expect(renamed).toBe(false);

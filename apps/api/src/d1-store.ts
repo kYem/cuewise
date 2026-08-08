@@ -2,8 +2,10 @@ import { DAY_IN_MS, logger } from '@cuewise/shared';
 import {
   hashSessionToken,
   type RawSessionToken,
+  randomSessionId,
   randomSessionToken,
   randomToken,
+  type SessionId,
   type SessionTokenHash,
   sha256Hex,
 } from './crypto-utils';
@@ -125,8 +127,7 @@ export class D1SyncStore implements SyncStore {
         deviceName,
         ts + SESSION_TTL_MS,
         ts,
-        // Unbranded on purpose: a public row handle, not a credential like RawSessionToken.
-        randomToken()
+        randomSessionId()
       )
       .run();
     return token;
@@ -187,7 +188,7 @@ export class D1SyncStore implements SyncStore {
 
   // No revoked_at predicate, so a repeat click still matches and answers 204; COALESCE is what
   // stops that repeat overwriting the original revocation time.
-  async revokeSessionById(userId: string, id: string): Promise<boolean> {
+  async revokeSessionById(userId: string, id: SessionId): Promise<boolean> {
     const res = await this.db
       .prepare(
         'UPDATE tokens SET revoked_at = COALESCE(revoked_at, ?) WHERE id = ? AND user_id = ?'
@@ -197,7 +198,7 @@ export class D1SyncStore implements SyncStore {
     return (res.meta.changes ?? 0) > 0;
   }
 
-  async renameSession(userId: string, id: string, deviceName: string): Promise<boolean> {
+  async renameSession(userId: string, id: SessionId, deviceName: string): Promise<boolean> {
     const res = await this.db
       .prepare('UPDATE tokens SET device_name = ? WHERE id = ? AND user_id = ?')
       .bind(deviceName, id, userId)

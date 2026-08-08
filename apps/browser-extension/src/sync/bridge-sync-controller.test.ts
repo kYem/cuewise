@@ -876,18 +876,26 @@ describe('BridgeSyncController: sessions', () => {
     await expect(controller.listSessions()).resolves.toEqual([session]);
   });
 
-  it('passes an unreadable list through as null rather than an empty list', async () => {
+  // Both the forward path and the error fallback answer null, so assert on the warn to tell them
+  // apart — otherwise a typo'd `kind` check falls through to the fallback undetected.
+  it('passes an unreadable list through as null without warning', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
     runtime.sendMessage.mockResolvedValueOnce({ ok: true, kind: 'sessions', sessions: null });
     const controller = new BridgeSyncController();
 
     await expect(controller.listSessions()).resolves.toBeNull();
+    expect(warnSpy).not.toHaveBeenCalled();
   });
 
-  it('resolves null rather than rejecting when no listener responds', async () => {
+  it('resolves null and warns when no listener responds', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
     runtime.sendMessage.mockResolvedValueOnce(undefined as never);
     const controller = new BridgeSyncController();
 
     await expect(controller.listSessions()).resolves.toBeNull();
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Sync session list unavailable (no responder or error fallback)'
+    );
   });
 
   // The panel only learns a revoke failed by catching, so resolving here would report a device

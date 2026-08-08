@@ -1,5 +1,5 @@
 import type { KeyEnvelopeRecord, PushRecord, SyncRecord, SyncSession } from '@cuewise/shared';
-import type { RawSessionToken, SessionTokenHash } from './crypto-utils';
+import type { RawSessionToken, SessionId, SessionTokenHash } from './crypto-utils';
 
 export type { KeyEnvelopeRecord, PushRecord, SyncRecord, SyncSession };
 
@@ -40,9 +40,9 @@ export interface SyncStore {
   // another account is indistinguishable from one that does not exist.
   listSessions(userId: string, currentTokenHash: SessionTokenHash): Promise<SyncSession[]>;
   // false when no row with that id belongs to this user; expiry is not checked, since listSessions
-  // never hands out an expired id.
-  revokeSessionById(userId: string, id: string): Promise<boolean>;
-  renameSession(userId: string, id: string, deviceName: string): Promise<boolean>;
+  // never hands out an expired id. Branded id, so a SessionTokenHash can't land in this slot.
+  revokeSessionById(userId: string, id: SessionId): Promise<boolean>;
+  renameSession(userId: string, id: SessionId, deviceName: string): Promise<boolean>;
   revokeOtherSessions(userId: string, currentTokenHash: SessionTokenHash): Promise<number>;
   mintAuthCode(payload: AuthCodePayload, codeChallenge: string): Promise<string>;
   consumeAuthCode(
