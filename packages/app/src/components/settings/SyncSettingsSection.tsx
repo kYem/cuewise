@@ -599,6 +599,9 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       // Not setRecoveryCode: the server envelope is already replaced, so a closed panel must not
       // swallow the only copy of the code that opens it.
       surfaceRecoveryCode(code);
+      // This click is the only repair for a missing envelope, and this panel is now the only thing
+      // that re-reads the flag — without this the banner it just fixed stays up all mount.
+      await refreshDetails();
     } catch (error) {
       logger.error('Cloud sync regenerate recovery code failed', error);
       useToastStore.getState().error("Couldn't regenerate your recovery code — please try again.");

@@ -818,6 +818,44 @@ describe('SyncSettingsSectionComponent', () => {
     expect(screen.getByRole('button', { name: /Regenerate recovery code/i })).toBeInTheDocument();
   });
 
+  it('asks every details lookup to refresh the envelope, since it renders the finding', async () => {
+    // ENG-98: the check runs where it is consumed, and this panel is the only consumer. A lookup
+    // that forgot the flag would report a recorded answer forever and the banner would go stale.
+    const controller = new FakeSyncController();
+    controller.scriptDetails({
+      accountEmail: 'kes@example.com',
+      accountId: 'acct-1',
+      lastSyncedAt: null,
+      recoveryEnvelopePresent: false,
+    });
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+
+    await screen.findByTestId('no-recovery-code-banner');
+    const lookups = controller.calls.filter((call) => call.method === 'getDetails');
+    expect(lookups).not.toHaveLength(0);
+    for (const lookup of lookups) {
+      expect(lookup.args).toEqual([{ refreshRecoveryEnvelope: true }]);
+    }
+  });
+
+  it('re-reads the envelope after Regenerate, so the banner it repairs comes down', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    const account = { accountEmail: 'kes@example.com', accountId: 'acct-1', lastSyncedAt: null };
+    controller.scriptDetails({ ...account, recoveryEnvelopePresent: false });
+    controller.scriptDetails({ ...account, recoveryEnvelopePresent: true });
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+    await screen.findByTestId('no-recovery-code-banner');
+
+    await user.click(screen.getByRole('button', { name: 'Regenerate recovery code' }));
+
+    await waitFor(() =>
+      expect(screen.queryByTestId('no-recovery-code-banner')).not.toBeInTheDocument()
+    );
+  });
+
   // null is "nothing has answered yet", and an older service worker omits the field entirely.
   // Painting either as a missing code tells a healthy account its data is unrecoverable.
   it.each([

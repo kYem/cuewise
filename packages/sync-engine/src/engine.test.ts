@@ -2062,10 +2062,33 @@ describe('SyncEngine.refreshRecoveryEnvelope', () => {
       return value;
     });
 
-    await device.engine.refreshRecoveryEnvelope();
+    // Unknown, not false: nothing was recorded, so nothing may be painted from it either.
+    await expect(device.engine.refreshRecoveryEnvelope()).resolves.toBeNull();
 
     // disableSync removed it; writing the fetched answer back re-creates it for the next account.
     await expect(read(RECOVERY_ENVELOPE_KEY, 'local')).resolves.toBeNull();
+  });
+
+  it('does not let a stale "absent" outrank a Regenerate that landed while it was on the wire', async () => {
+    // Regenerate PUT an envelope, so a read that started before it is older news. Recording it
+    // would re-raise the banner the click just retired, on an account that now has a recovery path.
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    let regenerated = false;
+    vi.spyOn(device.apiClient, 'getRecoveryEnvelope').mockImplementation(async () => {
+      if (!regenerated) {
+        regenerated = true;
+        await device.engine.regenerateRecoveryCode();
+      }
+      return null;
+    });
+
+    await expect(device.engine.refreshRecoveryEnvelope()).resolves.toBe(true);
+
+    await expect(device.kv.get(RECOVERY_ENVELOPE_KEY, 'local')).resolves.toBe(true);
   });
 
   it('never rejects, even when the storage adapter throws', async () => {
@@ -2158,7 +2181,7 @@ describe('SyncEngine.start / stop', () => {
     );
   });
 
-  it('signs out rather than activating when the envelope fetch is refused', async () => {
+  it('signs out when the key is gone and the envelope fetch is refused', async () => {
     // Without this branch an expired session falls through to active and arms the wake — a
     // signed-out device claiming to sync, forever.
     const server = new FakeSyncServer();
@@ -2175,6 +2198,27 @@ describe('SyncEngine.start / stop', () => {
     const restarted = restart(device, scheduler);
     await restarted.start();
 
+    expect(restarted.getStatus()).toBe('signed_out');
+    expect(scheduler.scheduled).toEqual([]);
+  });
+
+  it('signs out through its own first cycle when the key is here but the session expired', async () => {
+    // start() makes no request of its own while the key is on disk (ENG-98), so the cycle it runs
+    // next is what finds the expired session. It passes through 'active' on the way; the settled
+    // status and the un-armed wake are what the pill and the tray end up on.
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    const envelopeSpy = vi.spyOn(device.apiClient, 'getRecoveryEnvelope');
+    device.apiClient.rejectNextGetChangesWith401 = true;
+
+    const scheduler = new FakeScheduler();
+    const restarted = restart(device, scheduler);
+    await restarted.start();
+
+    expect(envelopeSpy).not.toHaveBeenCalled();
     expect(restarted.getStatus()).toBe('signed_out');
     expect(scheduler.scheduled).toEqual([]);
   });

@@ -176,6 +176,9 @@ export class SyncEngine {
   // null until a check has answered once, so a panel on a cold worker cannot read "unknown" as
   // "missing" and claim an account has no recovery path before anything has checked.
   private recoveryEnvelope: boolean | null = null;
+  // Bumped by every write that KNOWS the envelope state because it just put one there (enrol,
+  // regenerate). A refresh that was already on the wire is the older news, however it resolves.
+  private envelopeAuthority = 0;
   // Whether the enrol in flight minted a code. Never the code itself: this only decides whether the
   // "only way back" breadcrumb fires, and the value belongs to the host's one-shot slot.
   private enrollMintedCode = false;
@@ -287,6 +290,7 @@ export class SyncEngine {
     this.keyId = enrolled.keyId;
     // Both enrol paths prove one: initNewKey PUT it, enrollFromEnvelope unwrapped it. Without
     // this a freshly-connected device reads "unknown" until its next start().
+    this.envelopeAuthority += 1;
     await this.recordRecoveryEnvelope(true, epoch);
 
     this.setStatus('initial_sync');
@@ -482,6 +486,9 @@ export class SyncEngine {
     const { code, secret } = await generateRecoveryCode();
     const mk = await deriveMasterKey(secret);
     const blob = await wrapDataKey(mk, dk, keyId);
+    // Before the PUT, not after: a refresh already on the wire can resolve at any point from here,
+    // and every one of those resolutions is older news than the envelope this is about to store.
+    this.envelopeAuthority += 1;
     await this.deps.apiClient.putRecoveryEnvelope(blob);
     // The one repair for a missing envelope, so this is what retires the badge it raised.
     await this.recordRecoveryEnvelope(true, epoch);
@@ -697,6 +704,7 @@ export class SyncEngine {
    */
   async refreshRecoveryEnvelope(): Promise<boolean | null> {
     const epoch = this.accountEpoch;
+    const authority = this.envelopeAuthority;
     // One try over the storage writes as well as the fetch: the never-throws contract has to hold
     // by construction, not because today's adapters happen to swallow their own errors.
     try {
@@ -711,7 +719,17 @@ export class SyncEngine {
         // and recording it would hand the next account to connect the previous one's badge.
         return null;
       }
+      if (this.envelopeAuthority !== authority) {
+        // A Regenerate landed while this was on the wire: it PUT an envelope, so an "absent" read
+        // that started before it is stale, and recording it re-raises the banner it just retired.
+        return this.recoveryEnvelope;
+      }
       const news = await this.recordRecoveryEnvelope(present, epoch);
+      if (this.accountEpoch !== epoch) {
+        // The disable landed inside the record's own read instead; nothing was written, so this
+        // answer must not be painted either.
+        return null;
+      }
       if (news && !present) {
         // Regenerate recovery code is the one repair, and it lives in the panel that just asked.
         logger.error(
