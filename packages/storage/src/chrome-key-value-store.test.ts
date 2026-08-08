@@ -310,7 +310,7 @@ describe('ChromeKeyValueStore.withLock where the runtime has a LockManager', () 
   });
 
   // afterEach, not a call at the end of each test: a failing assertion would otherwise leak the
-  // mocked LockManager into every later file.
+  // mocked LockManager into every later test in this file.
   afterEach(() => restore());
 
   it('serialises writers holding the same name', async () => {
