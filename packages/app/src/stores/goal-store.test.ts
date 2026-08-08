@@ -32,6 +32,7 @@ vi.mock('@cuewise/storage', () => ({
     const goals = mutate((await storage.getGoals()) ?? []);
     return { result: await storage.setGoals(goals), goals };
   }),
+  withCollectionLock: vi.fn(<T>(_lock: string, apply: () => Promise<T>) => apply()),
 }));
 
 const settingsRead = (settings: Settings): SettingsRead => ({ ok: true, settings });
@@ -1150,6 +1151,7 @@ describe('rollDueTasks', () => {
     useGoalStore.setState({ goals: [], todayTasks: [], isLoading: false, error: null });
     vi.mocked(storage.readSettings).mockClear().mockResolvedValue(settingsRead(defaultSettings));
     vi.mocked(storage.setGoals).mockClear();
+    vi.mocked(storage.getGoals).mockImplementation(async () => useGoalStore.getState().goals);
   });
 
   it('moves due and overdue incomplete tasks into today and persists once', async () => {
@@ -1291,6 +1293,7 @@ describe('handleDayRollover', () => {
     useGoalStore.setState({ goals: [], todayTasks: [], isLoading: false, error: null });
     vi.mocked(storage.readSettings).mockResolvedValue(settingsRead(defaultSettings));
     vi.mocked(storage.setGoals).mockClear();
+    vi.mocked(storage.getGoals).mockImplementation(async () => useGoalStore.getState().goals);
   });
 
   it('recomputes today tasks for the new day and rolls newly due tasks', async () => {
@@ -1535,5 +1538,58 @@ describe('resolved write failures are honored across writers', () => {
     expect(result).toBe(false);
     verify();
     expect(toastError).toHaveBeenCalledOnce();
+  });
+});
+
+describe('writers read storage, not their own snapshot', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useGoalStore.setState({ goals: [], todayTasks: [], isLoading: false, error: null });
+    vi.mocked(storage.setGoals).mockResolvedValue({ success: true });
+  });
+
+  // Storage deliberately holds a goal the store's in-memory list does not: a pull that landed
+  // between the action starting and its write. A snapshot-based writer drops it.
+  const pulledConcurrently = () => {
+    const seeded = goalFactory.build();
+    const pulled = goalFactory.build();
+    useGoalStore.setState({ goals: [seeded], todayTasks: [] });
+    vi.mocked(storage.getGoals).mockResolvedValue([seeded, pulled]);
+    return { seeded, pulled };
+  };
+
+  it('addTask keeps a goal that only storage knows about', async () => {
+    const { seeded, pulled } = pulledConcurrently();
+
+    await useGoalStore.getState().addTask('write the migration');
+
+    const [written] = vi.mocked(storage.setGoals).mock.calls[0];
+    expect(written.map((goal) => goal.id)).toEqual([seeded.id, pulled.id, expect.any(String)]);
+  });
+
+  it('rollDueTasks keeps a goal that only storage knows about', async () => {
+    const overdue = goalFactory.build({ date: '2025-01-01', dueDate: '2025-01-02' });
+    const pulled = goalFactory.build();
+    useGoalStore.setState({ goals: [overdue], todayTasks: [] });
+    vi.mocked(storage.getGoals).mockResolvedValue([overdue, pulled]);
+    vi.mocked(storage.readSettings).mockResolvedValue(settingsRead(defaultSettings));
+
+    await useGoalStore.getState().rollDueTasks();
+
+    const [written] = vi.mocked(storage.setGoals).mock.calls[0];
+    expect(written.map((goal) => goal.id).sort()).toEqual([overdue.id, pulled.id].sort());
+  });
+
+  // The common case, and the reason this cannot just go through updateGoals: nothing due must
+  // not cost a write on every new tab.
+  it('rollDueTasks writes nothing when no task is due', async () => {
+    vi.mocked(storage.getGoals).mockResolvedValue([
+      goalFactory.build({ date: getTodayDateString() }),
+    ]);
+    vi.mocked(storage.readSettings).mockResolvedValue(settingsRead(defaultSettings));
+
+    await useGoalStore.getState().rollDueTasks();
+
+    expect(storage.setGoals).not.toHaveBeenCalled();
   });
 });

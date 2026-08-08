@@ -1,5 +1,6 @@
 import { configurePlatform, DEFAULT_SETTINGS, toStoredValues } from '@cuewise/shared';
 import {
+  COLLECTION_LOCKS,
   getGoals,
   getManyFromStorage,
   getSettings,
@@ -13,6 +14,7 @@ import {
   setRemindersRaw,
   setSettingsPatch,
   settingsStorageKey,
+  updateGoals,
 } from '@cuewise/storage';
 import { goalFactory } from '@cuewise/test-utils/factories';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -293,5 +295,27 @@ describe.each([
     await binding().writeOne('other', { id: 'other' } as never);
 
     expect(Object.keys(await binding().readAll())).toContain('unreadable');
+  });
+});
+
+describe('goals binding and the page-side writer share one lock', () => {
+  // The race the lock exists for: the worker applies a pull through writeOne while the page edits
+  // through updateGoals. Unserialised, whoever wrote second replaced the whole array.
+  it('lets a pull and a page edit both land', async () => {
+    const pulled = goalFactory.build();
+    const edited = goalFactory.build();
+    await setGoals([]);
+
+    await Promise.all([
+      goalsBinding().writeOne(pulled.id, pulled),
+      updateGoals((goals) => [...goals, edited]),
+    ]);
+
+    const stored = await getGoals();
+    expect(stored.map((goal) => goal.id).sort()).toEqual([pulled.id, edited.id].sort());
+  });
+
+  it('names its lock from the shared collection list', () => {
+    expect(COLLECTION_LOCKS).toContain(goalsBinding().name);
   });
 });

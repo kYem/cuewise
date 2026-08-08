@@ -109,4 +109,17 @@ export class FakeKvStore implements KeyValueStore {
     }
     return removed;
   }
+
+  private readonly chains = new Map<string, Promise<unknown>>();
+
+  // Present so engine tests take the locked branch production takes, rather than the fallback.
+  withLock<T>(name: string, fn: () => Promise<T>): Promise<T> {
+    const previous = this.chains.get(name) ?? Promise.resolve();
+    const next = previous.then(fn, fn);
+    this.chains.set(
+      name,
+      next.catch(() => undefined)
+    );
+    return next;
+  }
 }

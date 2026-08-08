@@ -21,6 +21,10 @@ function areaStore(area: StorageArea): chrome.storage.StorageArea {
 }
 
 /** KeyValueStore backed by chrome.storage.local/sync (selected only where it exists). */
+function hasLockManager(): boolean {
+  return typeof navigator !== 'undefined' && navigator.locks !== undefined;
+}
+
 export class ChromeKeyValueStore implements KeyValueStore {
   readonly supportsSync = true;
 
@@ -118,11 +122,12 @@ export class ChromeKeyValueStore implements KeyValueStore {
   /**
    * navigator.locks is origin-scoped, which is exactly the boundary that matters: the extension's
    * page and its service worker share chrome-extension://<id>, and they are the two writers that
-   * race. Absent in a context without it (a test double, an older runtime), the caller falls back.
+   * race. Undefined where the runtime has no LockManager, so canLock answers honestly there.
    */
-  withLock<T>(name: string, fn: () => Promise<T>): Promise<T> {
-    return navigator.locks.request(`cuewise:${name}`, fn) as Promise<T>;
-  }
+  withLock = hasLockManager()
+    ? <T>(name: string, fn: () => Promise<T>): Promise<T> =>
+        navigator.locks.request(`cuewise:${name}`, fn) as Promise<T>
+    : undefined;
 
   async removeMany(keys: string[], area: StorageArea): Promise<boolean> {
     try {

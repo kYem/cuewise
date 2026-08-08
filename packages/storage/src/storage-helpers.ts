@@ -304,32 +304,41 @@ export async function getGoals(): Promise<Goal[]> {
   return keepValidListItems<Goal>(raw, goalSchema, STORAGE_KEYS.GOALS, area);
 }
 
-// Shared with the sync engine's writeOne: two writers on one name is the whole point.
-const GOALS_LOCK = 'goals';
-
 export async function setGoals(goals: Goal[]): Promise<StorageResult> {
   const area = await getStorageArea();
   return setValidatedListInStorage(STORAGE_KEYS.GOALS, goals, goalSchema, area);
 }
 
 /**
- * The one safe way to change the goal list. Reads inside the lock rather than trusting a caller's
- * snapshot: the pull applies its writes from the service worker while the page writes from a
- * `get()` taken before its own await, and whichever lands last used to take the whole array with
- * it — silently reverting an edit, or dropping one already pulled from another device.
- *
- * Falls back to an unlocked read-modify-write where the backend has no lock: still better than a
- * stale snapshot, and the only backends without one run a single realm anyway.
+ * Every writer of one whole-array collection, page or service worker, names its lock from here —
+ * a rename is then a type error rather than two literals silently drifting apart.
+ */
+export const COLLECTION_LOCKS = ['goals', 'quotes', 'collections', 'reminders'] as const;
+
+export type CollectionLock = (typeof COLLECTION_LOCKS)[number];
+
+/**
+ * Serialises a read-modify-write against every other writer of the same collection. Unlocked where
+ * the backend has no lock: those backends run a single realm, so there is no second writer to race.
+ */
+export function withCollectionLock<T>(lock: CollectionLock, apply: () => Promise<T>): Promise<T> {
+  const store = getStorage();
+  return canLock(store) ? store.withLock(lock, apply) : apply();
+}
+
+/**
+ * Changes the goal list. Reads inside the lock rather than trusting a caller's snapshot: the pull
+ * applies its writes from the service worker while the page writes from a `get()` taken before its
+ * own await, and whichever landed last used to take the whole array with it — silently reverting an
+ * edit, or dropping one already pulled from another device.
  */
 export async function updateGoals(
   mutate: (goals: Goal[]) => Goal[]
 ): Promise<{ result: StorageResult; goals: Goal[] }> {
-  const store = getStorage();
-  const apply = async (): Promise<{ result: StorageResult; goals: Goal[] }> => {
+  return withCollectionLock('goals', async () => {
     const goals = mutate(await getGoals());
     return { result: await setGoals(goals), goals };
-  };
-  return canLock(store) ? store.withLock(GOALS_LOCK, apply) : apply();
+  });
 }
 
 /** Raw-then-validate for the same reason as getGoals. */

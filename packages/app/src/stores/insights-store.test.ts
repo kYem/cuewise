@@ -39,6 +39,7 @@ vi.mock('@cuewise/storage', () => ({
   setGoalsRaw: vi.fn(),
   setQuotesRaw: vi.fn(),
   setPomodoroSessionsRaw: vi.fn(),
+  withCollectionLock: vi.fn(<T>(_lock: string, apply: () => Promise<T>) => apply()),
   // Defaults to empty so refresh-after-import paths don't error on posture reads.
   getPostureStats: vi.fn(async () => []),
   setPostureStats: vi.fn(),

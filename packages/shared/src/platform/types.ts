@@ -132,8 +132,8 @@ export interface KeyValueStore {
    * Runs `fn` with exclusive hold of `name`, so a read-modify-write of one stored value cannot be
    * interleaved by another writer. Optional because only a backend with a *cross-realm* primitive
    * can honour it across the extension's page and service worker — the two writers that actually
-   * race. Keep the section short and free of unrelated awaits: a lock held across a network call
-   * is how these deadlock.
+   * race. Keep the section short and free of unrelated awaits: holding one across a network call
+   * stalls every other writer of that name for the duration.
    */
   withLock?<T>(name: string, fn: () => Promise<T>): Promise<T>;
 }
@@ -155,6 +155,7 @@ export interface LockingKeyValueStore extends KeyValueStore {
   withLock<T>(name: string, fn: () => Promise<T>): Promise<T>;
 }
 
+/** Presence again — an adapter whose runtime lacks the primitive must leave `withLock` undefined. */
 export function canLock(store: KeyValueStore): store is LockingKeyValueStore {
   return store.withLock !== undefined;
 }

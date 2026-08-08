@@ -29,6 +29,7 @@ import {
   readSettings,
   setGoals as saveAllGoals,
   updateGoals,
+  withCollectionLock,
 } from '@cuewise/storage';
 import { create } from 'zustand';
 import { createStaleLatch, createStorageObserver, sameEntities } from './storage-changes';
@@ -89,8 +90,8 @@ function filterTodayTasks(goals: Goal[]): Goal[] {
 }
 
 /**
- * The only way this store changes the list. Takes a mutator rather than an array because the read
- * has to happen inside the lock: a snapshot from `get()` is what the pull's own write clobbers.
+ * How this store changes the list, `rollDueTasks` aside. Takes a mutator rather than an array
+ * because the read has to happen inside the lock: a `get()` snapshot is what the pull clobbers.
  *
  * saveAllGoals resolves {success: false} (e.g. quota) instead of rejecting — normalize to a throw
  * so every writer's catch covers both failure channels.
@@ -347,18 +348,24 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
         return false;
       }
 
-      const { goals } = get();
-      const rolled = rollDueTasksToToday(goals, getTodayDateString());
+      // Not persistGoals: the common case is nothing due, and that must not cost a write. Deciding
+      // inside the lock is what keeps the read it decides from going stale before the write lands.
+      const rolled = await withCollectionLock('goals', async () => {
+        const due = rollDueTasksToToday(await loadAllGoals(), getTodayDateString());
+        if (due === null) {
+          return null;
+        }
+        return { ...due, result: await saveAllGoals(due.goals) };
+      });
       if (rolled === null) {
         return false;
       }
 
-      const result = await saveAllGoals(rolled.goals);
       // No toast on failure: this is background automation the user didn't
       // initiate, it retries on the next load/rollover, and the log suffices.
-      if (result?.success === false) {
+      if (rolled.result?.success === false) {
         logger.error('Failed to persist auto-rolled due tasks', {
-          result,
+          result: rolled.result,
           rolledIds: rolled.rolledIds,
         });
         return false;

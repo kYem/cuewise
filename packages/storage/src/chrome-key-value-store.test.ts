@@ -1,5 +1,9 @@
-import { logger, type StorageArea, toStoredValues } from '@cuewise/shared';
-import type { MockChromeStorage, MockChromeStorageEvent } from '@cuewise/test-utils/mocks';
+import { canLock, logger, type StorageArea, toStoredValues } from '@cuewise/shared';
+import {
+  installLockManagerMock,
+  type MockChromeStorage,
+  type MockChromeStorageEvent,
+} from '@cuewise/test-utils/mocks';
 import { describe, expect, it, vi } from 'vitest';
 import { ChromeKeyValueStore } from './chrome-key-value-store';
 
@@ -277,5 +281,47 @@ describe('ChromeKeyValueStore.onChanged', () => {
     event().fire({ 'settings.theme': { newValue: 'dark' } }, 'local');
 
     expect(seen).toEqual([]);
+  });
+});
+
+describe('ChromeKeyValueStore.withLock', () => {
+  it('is absent where the runtime has no LockManager, so canLock refuses', () => {
+    expect(canLock(new ChromeKeyValueStore())).toBe(false);
+  });
+
+  it('serialises writers holding the same name', async () => {
+    const restore = installLockManagerMock();
+    const locking = new ChromeKeyValueStore();
+    const order: string[] = [];
+    const section = (id: string) => async () => {
+      order.push(`${id}:enter`);
+      await Promise.resolve();
+      order.push(`${id}:exit`);
+    };
+
+    if (!canLock(locking)) {
+      throw new Error('the mocked LockManager should make the adapter lockable');
+    }
+    await Promise.all([
+      locking.withLock('goals', section('a')),
+      locking.withLock('goals', section('b')),
+    ]);
+    restore();
+
+    expect(order).toEqual(['a:enter', 'a:exit', 'b:enter', 'b:exit']);
+  });
+
+  it('namespaces the lock so it cannot collide with a page-origin lock', async () => {
+    const restore = installLockManagerMock();
+    const locking = new ChromeKeyValueStore();
+    const requested = vi.spyOn(navigator.locks, 'request');
+
+    if (!canLock(locking)) {
+      throw new Error('the mocked LockManager should make the adapter lockable');
+    }
+    await locking.withLock('goals', async () => undefined);
+    restore();
+
+    expect(requested).toHaveBeenCalledWith('cuewise:goals', expect.any(Function));
   });
 });
