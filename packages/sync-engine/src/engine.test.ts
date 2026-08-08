@@ -121,6 +121,30 @@ function restart(device: Device, scheduler: FakeScheduler = new FakeScheduler())
   return engine;
 }
 
+/**
+ * A promise the test settles by hand, plus `awaited`, which resolves once the code under test has
+ * asked for it. Lets a test park one operation mid-flight and drive another past it.
+ */
+function heldAnswer<T>(): {
+  held: Promise<T>;
+  release: (value: T) => void;
+  reject: (err: unknown) => void;
+  start: () => void;
+  awaited: Promise<void>;
+} {
+  let release = (_: T): void => {};
+  let reject = (_: unknown): void => {};
+  const held = new Promise<T>((resolve, rejectIt) => {
+    release = resolve;
+    reject = rejectIt;
+  });
+  let start = (): void => {};
+  const awaited = new Promise<void>((resolve) => {
+    start = () => resolve();
+  });
+  return { held, release, reject, start: () => start(), awaited };
+}
+
 /** Points the shared @cuewise/storage helpers at this device's backend for the next await chain. */
 function useStorage(device: Pick<Device, 'kv'>): void {
   configurePlatform({ storage: device.kv });
@@ -2112,6 +2136,107 @@ describe('SyncEngine.refreshRecoveryEnvelope', () => {
 
     await expect(refresh).resolves.toBe(true);
     await expect(device.kv.get(RECOVERY_ENVELOPE_KEY, 'local')).resolves.toBe(true);
+  });
+
+  it('does not let a probe outrank the enrol that minted the envelope', async () => {
+    // initNewKey's PUT happens deep inside initOrEnrollKey, long before the record — so the fence
+    // has to span the whole enrol. Otherwise a brand-new account persists "no recovery code".
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    let probe: Promise<boolean | null> = Promise.resolve(null);
+    vi.spyOn(device.apiClient, 'putRecoveryEnvelope').mockImplementation(async () => {
+      // Answered from the pre-PUT server state, and resolving while the enrol is still running.
+      vi.spyOn(device.apiClient, 'getRecoveryEnvelope').mockResolvedValue(null);
+      probe = device.engine.refreshRecoveryEnvelope();
+      await probe;
+    });
+
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    await expect(probe).resolves.not.toBe(false);
+    await expect(device.kv.get(RECOVERY_ENVELOPE_KEY, 'local')).resolves.toBe(true);
+  });
+
+  it('does not let a probe record an answer a write completed inside its own record read', async () => {
+    // The enrol fence wraps local storage I/O, so a whole authoritative write fits inside another
+    // probe's keyStore.get — the one window a check taken only before that read cannot see.
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    vi.spyOn(device.apiClient, 'getRecoveryEnvelope').mockResolvedValue(null);
+    const read = device.kv.get.bind(device.kv);
+    let regenerated = false;
+    vi.spyOn(device.kv, 'get').mockImplementation(async (key, area) => {
+      const value = await read(key, area);
+      if (key === RECOVERY_ENVELOPE_KEY && !regenerated) {
+        regenerated = true;
+        await device.engine.regenerateRecoveryCode();
+      }
+      return value;
+    });
+
+    await expect(device.engine.refreshRecoveryEnvelope()).resolves.not.toBe(false);
+
+    await expect(read(RECOVERY_ENVELOPE_KEY, 'local')).resolves.toBe(true);
+  });
+
+  it('lets a real answer stand when the authoritative write it raced failed outright', async () => {
+    // A rejected PUT put nothing on the server, so it has no claim to outrank a probe that
+    // genuinely learned the envelope is absent — that banner would be telling the truth. The probe
+    // has to snapshot BEFORE the failed write and record after it, or nothing is being tested.
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const gate = heldAnswer<null>();
+    vi.spyOn(device.apiClient, 'getRecoveryEnvelope').mockImplementation(() => {
+      gate.start();
+      return gate.held;
+    });
+    const probe = device.engine.refreshRecoveryEnvelope();
+    await gate.awaited;
+    vi.spyOn(device.apiClient, 'putRecoveryEnvelope').mockRejectedValue(new Error('offline'));
+    await expect(device.engine.regenerateRecoveryCode()).rejects.toThrow('offline');
+
+    gate.release(null);
+
+    await expect(probe).resolves.toBe(false);
+  });
+
+  it('answers unknown when a disable lands inside a fetch that then fails', async () => {
+    // disableSync bumps the epoch synchronously but nulls the field several awaited hops later, so
+    // a 401 the disable itself provoked lands here with the removed account's flag still readable.
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    const gate = heldAnswer<null>();
+    vi.spyOn(device.apiClient, 'getRecoveryEnvelope').mockImplementation(() => {
+      gate.start();
+      return gate.held;
+    });
+    const probe = device.engine.refreshRecoveryEnvelope();
+    await gate.awaited;
+    // Parks the disable in its very first await, past the synchronous epoch bump but well before
+    // it nulls the field — the window where the removed account's flag is still readable.
+    const parked = heldAnswer<void>();
+    vi.spyOn(device.scheduler, 'cancel').mockReturnValue(parked.held);
+    const disable = device.engine.disableSync();
+
+    gate.reject(new ApiError('unauthorized', 401));
+
+    // Read first, then unpark, so a regression fails on the assertion rather than hanging on the
+    // disable this test left parked.
+    const answer = await probe;
+    parked.release(undefined);
+    await disable;
+    expect(answer).toBeNull();
   });
 
   it('never rejects, even when the storage adapter throws', async () => {

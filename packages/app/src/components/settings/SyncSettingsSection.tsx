@@ -598,11 +598,13 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     let regenerated = false;
     try {
       const code = await controller.regenerateRecoveryCode();
+      // Set here, not after surfacing: the envelope is already replaced by this point, so anything
+      // that throws below is a display failure, and it must not also skip the re-read.
+      regenerated = true;
       setUnsavedCode(false);
       // Not setRecoveryCode: the server envelope is already replaced, so a closed panel must not
       // swallow the only copy of the code that opens it.
       surfaceRecoveryCode(code);
-      regenerated = true;
     } catch (error) {
       logger.error('Cloud sync regenerate recovery code failed', error);
       useToastStore.getState().error("Couldn't regenerate your recovery code — please try again.");
