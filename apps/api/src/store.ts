@@ -1,7 +1,7 @@
-import type { KeyEnvelopeRecord, PushRecord, SyncRecord } from '@cuewise/shared';
+import type { KeyEnvelopeRecord, PushRecord, SyncRecord, SyncSession } from '@cuewise/shared';
 import type { RawSessionToken, SessionTokenHash } from './crypto-utils';
 
-export type { KeyEnvelopeRecord, PushRecord, SyncRecord };
+export type { KeyEnvelopeRecord, PushRecord, SyncRecord, SyncSession };
 
 export interface Identity {
   provider: 'google' | 'apple' | 'dev';
@@ -36,6 +36,13 @@ export interface SyncStore {
   createSession(userId: string, deviceName: string): Promise<RawSessionToken>;
   lookupSession(rawToken: RawSessionToken): Promise<Session | null>;
   revokeSession(rawToken: RawSessionToken): Promise<void>;
+  // Per-device management (ENG-95). Every one is scoped to userId, so a session belonging to
+  // another account is indistinguishable from one that does not exist.
+  listSessions(userId: string, currentTokenHash: SessionTokenHash): Promise<SyncSession[]>;
+  // false when no live-or-revoked row with that id belongs to this user.
+  revokeSessionById(userId: string, id: string): Promise<boolean>;
+  renameSession(userId: string, id: string, deviceName: string): Promise<boolean>;
+  revokeOtherSessions(userId: string, currentTokenHash: SessionTokenHash): Promise<number>;
   mintAuthCode(payload: AuthCodePayload, codeChallenge: string): Promise<string>;
   consumeAuthCode(
     rawCode: string

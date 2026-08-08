@@ -15,6 +15,7 @@ import {
   type Session,
   StorageQuotaExceededError,
   type SyncRecord,
+  type SyncSession,
   type SyncStore,
 } from './store';
 
@@ -155,6 +156,59 @@ export class D1SyncStore implements SyncStore {
       .prepare('UPDATE tokens SET revoked_at = ? WHERE token_hash = ?')
       .bind(this.now(), await hashSessionToken(rawToken))
       .run();
+  }
+
+  async listSessions(userId: string, currentTokenHash: SessionTokenHash): Promise<SyncSession[]> {
+    const rows = await this.db
+      .prepare(
+        `SELECT id, device_name, created_at, last_used_at, token_hash FROM tokens
+         WHERE user_id = ? AND revoked_at IS NULL AND expires_at > ?
+         ORDER BY created_at DESC`
+      )
+      .bind(userId, this.now())
+      .all<{
+        id: string;
+        device_name: string;
+        created_at: number;
+        last_used_at: number | null;
+        token_hash: string;
+      }>();
+    return rows.results.map((row) => ({
+      id: row.id,
+      deviceName: row.device_name,
+      createdAt: row.created_at,
+      lastUsedAt: row.last_used_at,
+      current: row.token_hash === currentTokenHash,
+    }));
+  }
+
+  // COALESCE keeps the first revocation time, so a second click is idempotent rather than a 404.
+  async revokeSessionById(userId: string, id: string): Promise<boolean> {
+    const res = await this.db
+      .prepare(
+        'UPDATE tokens SET revoked_at = COALESCE(revoked_at, ?) WHERE id = ? AND user_id = ?'
+      )
+      .bind(this.now(), id, userId)
+      .run();
+    return (res.meta.changes ?? 0) > 0;
+  }
+
+  async renameSession(userId: string, id: string, deviceName: string): Promise<boolean> {
+    const res = await this.db
+      .prepare('UPDATE tokens SET device_name = ? WHERE id = ? AND user_id = ?')
+      .bind(deviceName, id, userId)
+      .run();
+    return (res.meta.changes ?? 0) > 0;
+  }
+
+  async revokeOtherSessions(userId: string, currentTokenHash: SessionTokenHash): Promise<number> {
+    const res = await this.db
+      .prepare(
+        'UPDATE tokens SET revoked_at = ? WHERE user_id = ? AND token_hash != ? AND revoked_at IS NULL'
+      )
+      .bind(this.now(), userId, currentTokenHash)
+      .run();
+    return res.meta.changes ?? 0;
   }
 
   async mintAuthCode(payload: AuthCodePayload, codeChallenge: string): Promise<string> {
