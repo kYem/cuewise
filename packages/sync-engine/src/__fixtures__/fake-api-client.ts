@@ -3,6 +3,7 @@ import type {
   KeyEnvelopeRecord,
   PushRecord,
   SyncRecord,
+  SyncSession,
 } from '@cuewise/shared';
 import { ApiError } from '@cuewise/sync-client';
 import { PULL_PAGE } from '../cycle';
@@ -89,6 +90,16 @@ export class FakeApiClient implements EngineApiClient {
   accountResult: { userId: string; email: string | null } = { userId: 'fake-user', email: null };
   /** One-shot: throws a 401 on the next getAccount call, then clears itself. */
   rejectNextGetAccountWith401 = false;
+  /** Scriptable result for the session-list path (see SyncEngine.listSessions). */
+  sessionsResult: SyncSession[] = [];
+  /** One-shot: throws a 401 on the next listSessions call, then clears itself. */
+  rejectNextListSessionsWith401 = false;
+  /** One-shot: throws a 404 on the next revokeSession call, then clears itself. */
+  rejectNextRevokeSessionWith404 = false;
+  /** Ids passed to revokeSession, in order. */
+  readonly revokedSessionIds: string[] = [];
+  /** [id, deviceName] pairs passed to renameSession, in order. */
+  readonly renamedSessions: [string, string][] = [];
   /** Total successful token exchanges — proves resumeEnrollWithCode doesn't re-exchange. */
   exchangeCount = 0;
   private tokenCounter = 0;
@@ -129,6 +140,34 @@ export class FakeApiClient implements EngineApiClient {
       throw new ApiError('invalid_token', 401);
     }
     return this.accountResult;
+  }
+
+  async listSessions(): Promise<SyncSession[]> {
+    this.assertAuthorized();
+    if (this.rejectNextListSessionsWith401) {
+      this.rejectNextListSessionsWith401 = false;
+      throw new ApiError('invalid_token', 401);
+    }
+    return this.sessionsResult;
+  }
+
+  async revokeSession(id: string): Promise<void> {
+    this.assertAuthorized();
+    if (this.rejectNextRevokeSessionWith404) {
+      this.rejectNextRevokeSessionWith404 = false;
+      throw new ApiError('not_found', 404);
+    }
+    this.revokedSessionIds.push(id);
+  }
+
+  async renameSession(id: string, deviceName: string): Promise<void> {
+    this.assertAuthorized();
+    this.renamedSessions.push([id, deviceName]);
+  }
+
+  async revokeOtherSessions(): Promise<number> {
+    this.assertAuthorized();
+    return Math.max(this.sessionsResult.length - 1, 0);
   }
 
   async getRecoveryEnvelope(): Promise<KeyEnvelopeRecord | null> {

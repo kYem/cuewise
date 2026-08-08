@@ -11,6 +11,7 @@ import {
   logger,
   type Scheduler,
   type StoredValue,
+  type SyncSession,
 } from '@cuewise/shared';
 import {
   ApiError,
@@ -110,6 +111,10 @@ export type EngineApiClient = Pick<
   | 'getRecoveryEnvelope'
   | 'putRecoveryEnvelope'
   | 'getAccount'
+  | 'listSessions'
+  | 'revokeSession'
+  | 'renameSession'
+  | 'revokeOtherSessions'
 >;
 
 export interface SyncEngineDeps {
@@ -868,6 +873,39 @@ export class SyncEngine {
       logger.warn(`Failed to fetch sync account details: ${detail}`);
       return null;
     }
+  }
+
+  /**
+   * Live sessions for the settings UI. Informational only, exactly like getAccount: resolves null
+   * when signed out or on any fetch failure (including 401 — no auth-loss side effects), never
+   * throws. A settings read that fails must not sign the user out.
+   */
+  async listSessions(): Promise<SyncSession[] | null> {
+    // The token read sits inside the try so the never-throws contract holds by construction.
+    try {
+      const token = await this.deps.sessionManager.getToken();
+      if (token === null) {
+        return null;
+      }
+      return await this.deps.apiClient.listSessions();
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      logger.warn(`Failed to list sync sessions: ${detail}`);
+      return null;
+    }
+  }
+
+  // Unlike listSessions, these three reject: a revoke that failed silently would be a security lie.
+  async revokeSession(id: string): Promise<void> {
+    await this.deps.apiClient.revokeSession(id);
+  }
+
+  async renameSession(id: string, deviceName: string): Promise<void> {
+    await this.deps.apiClient.renameSession(id, deviceName);
+  }
+
+  async revokeOtherSessions(): Promise<number> {
+    return this.deps.apiClient.revokeOtherSessions();
   }
 
   /** Self-heal, then hold the DK and arm the pull loop. No-op if sync was never enabled here. */
