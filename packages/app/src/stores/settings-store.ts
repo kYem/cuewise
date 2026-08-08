@@ -406,7 +406,16 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
         }
         // Re-read, not merged in memory: clearSettings left the content keys stored, and a pull
         // may have written a newer note than this realm's copy holds.
-        const reset = await getSettings();
+        const read = await readSettings();
+        // Not getSettings: it answers a failed read with defaults, and committing those here
+        // blanks the pad, which an open widget would then save over the preserved note.
+        if (!read.ok) {
+          const errorMessage = 'Settings were reset but could not be re-read. Reload to see them.';
+          set({ error: errorMessage, preview: null });
+          useToastStore.getState().error(errorMessage);
+          return false;
+        }
+        const reset = read.settings;
         set({ settings: reset, preview: null });
         // Not left to the change subscription: the refresh it queues runs behind this write, and
         // a backend that cannot observe writes never delivers an event at all.

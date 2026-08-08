@@ -704,8 +704,11 @@ export async function clearSettings(): Promise<boolean> {
   }
   // The blob goes too — a reset should not leave a copy of what it cleared — but never the
   // completion flag, which is what stops the migration restoring the blob's values afterwards.
-  // Content keys survive: resetting preferences must not delete what the user wrote.
-  const preserved = new Set(CONTENT_SETTINGS_KEYS.map(settingsStorageKey));
+  // Content keys survive: resetting preferences must not delete what the user wrote. A corrupt
+  // entry goes though — reset is the advertised repair for an unreadable value, note included.
+  const contentKeys = CONTENT_SETTINGS_KEYS.map(settingsStorageKey);
+  const entries = await getManyFromStorage(contentKeys, 'local');
+  const preserved = new Set(contentKeys.filter((key) => entries?.[key]?.readable !== false));
   const toRemove = new Set(
     [...SETTINGS_STORAGE_KEYS, ...stored, STORAGE_KEYS.SETTINGS].filter(
       (key) => !preserved.has(key)

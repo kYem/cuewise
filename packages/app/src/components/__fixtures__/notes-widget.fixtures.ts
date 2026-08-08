@@ -12,9 +12,8 @@ export interface NotesStoreOptions {
 }
 
 /**
- * A real Zustand store behind the mocked hook: the widget reads notesPinned/notesExpanded
- * straight from settings, so a test clicking pin only observes the flip if the mock commits
- * state and re-renders — like the real store, which commits only writes that persisted.
+ * A real Zustand store behind the mocked hook: a test clicking pin only observes the flip if
+ * the mock commits state and re-renders — like the real store, which commits persisted writes.
  */
 export function mockNotesSettingsStore({
   note = '',

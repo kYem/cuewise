@@ -286,6 +286,18 @@ describe('settings', () => {
     expect(settings.theme).toBe(DEFAULT_SETTINGS.theme);
   });
 
+  it('clearSettings drops an unreadable note, keeping reset a real repair', async () => {
+    localStorage.clear();
+    configurePlatform({ storage: new LocalStorageKeyValueStore() });
+    localStorage.setItem(settingsStorageKey('note'), '{not json');
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await expect(clearSettings()).resolves.toBe(true);
+
+    expect(localStorage.getItem(settingsStorageKey('note'))).toBeNull();
+    localStorage.clear();
+  });
+
   it('clearSettings holds when the legacy blob has not migrated yet', async () => {
     const { store } = recordingStore();
     configurePlatform({ storage: store });

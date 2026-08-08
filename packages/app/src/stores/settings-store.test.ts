@@ -141,6 +141,17 @@ describe('sync sink wiring', () => {
     expect(markMutated).toHaveBeenCalledWith('settings', 'theme');
   });
 
+  it('resetToDefaults fails rather than committing defaults when the re-read fails', async () => {
+    const withNote = { ...defaultSettings, note: 'kept' };
+    useSettingsStore.setState({ settings: withNote });
+    seedStorage(withNote);
+    vi.mocked(storage.readSettings).mockResolvedValueOnce({ ok: false, unreadable: [] });
+
+    await expect(useSettingsStore.getState().resetToDefaults()).resolves.toBe(false);
+
+    expect(useSettingsStore.getState().settings.note).toBe('kept');
+  });
+
   it('updateSettings caps an oversized note before persisting it', async () => {
     await useSettingsStore.getState().updateSettings({ note: 'x'.repeat(MAX_NOTE_LENGTH + 10) });
 
@@ -590,6 +601,11 @@ describe('an update blocked by a stored value that cannot be parsed', () => {
       false
     );
 
+    // Mirrors the real helper: clearing removes the unreadable entry, so the re-read succeeds.
+    vi.mocked(storage.readSettings).mockResolvedValue({
+      ok: true,
+      settings: structuredClone(DEFAULT_SETTINGS),
+    });
     await expect(useSettingsStore.getState().resetToDefaults()).resolves.toBe(true);
     expect(storage.clearSettings).toHaveBeenCalledOnce();
     expect(useSettingsStore.getState().settings).toEqual(DEFAULT_SETTINGS);

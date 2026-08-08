@@ -492,6 +492,13 @@ describe('NotesWidget', () => {
     expect(await openPad()).toHaveAttribute('maxlength', '8000');
   });
 
+  it('lifts the typing cap while an oversized pulled note fills the pad', async () => {
+    mockStore({ note: 'x'.repeat(MAX_NOTE_LENGTH + 1000) });
+    render(<NotesWidget />);
+
+    expect(await openPad()).not.toHaveAttribute('maxlength');
+  });
+
   it('shows a saved badge only after a write lands', async () => {
     mockStore();
     render(<NotesWidget />);

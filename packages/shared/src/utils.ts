@@ -1919,9 +1919,8 @@ export function clampBackgroundEffects(patch: Partial<Settings>): Partial<Settin
 }
 
 /**
- * Cut a note to MAX_NOTE_LENGTH without splitting a surrogate pair: a cut ending in half an
- * emoji is an ill-formed string, which the sync crypto path silently rewrites to U+FFFD —
- * the stored and pushed values would never match again.
+ * Cut a note to MAX_NOTE_LENGTH without splitting a surrogate pair: half an emoji is an
+ * ill-formed string, which the sync crypto path silently rewrites to U+FFFD.
  */
 export function truncateNote(value: string): string {
   if (value.length <= MAX_NOTE_LENGTH) {
@@ -1936,10 +1935,8 @@ export function truncateNote(value: string): string {
 }
 
 /**
- * Cap the note on the settings write path, so any writer — the widget, a future settings
- * import, another surface — can't persist a note whose sync record exceeds the server's
- * ciphertext limit and wedges every later push. The widget also caps as it types; this is
- * the store-side backstop.
+ * Store-side backstop on the settings write path: no writer can persist a note whose sync
+ * record exceeds the server's ciphertext limit and wedges every later push.
  */
 export function clampNoteLength(patch: Partial<Settings>): Partial<Settings> {
   if (typeof patch.note !== 'string' || patch.note.length <= MAX_NOTE_LENGTH) {

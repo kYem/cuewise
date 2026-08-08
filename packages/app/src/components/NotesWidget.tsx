@@ -185,6 +185,10 @@ export const NotesWidget: React.FC = () => {
 
   const hasNote = draft.trim().length > 0;
 
+  // With the draft already over the cap (a pull can deliver that), maxLength makes the browser
+  // refuse every insertion — lift it until the draft is back under; saving truncates regardless.
+  const typingCap = draft.length > MAX_NOTE_LENGTH ? undefined : MAX_NOTE_LENGTH;
+
   let statusText = '';
   if (saveFailed) {
     statusText = 'Not saved';
@@ -260,7 +264,7 @@ export const NotesWidget: React.FC = () => {
           onChange={(event) => handleChange(event.target.value)}
           placeholder={isLoading ? 'Loading…' : 'Jot something down…'}
           readOnly={isLoading}
-          maxLength={MAX_NOTE_LENGTH}
+          maxLength={typingCap}
           className={cn(
             'w-full resize-none bg-transparent px-3 py-2.5 text-sm text-primary placeholder:text-secondary focus:outline-none',
             expanded ? 'h-[60vh]' : 'h-40'

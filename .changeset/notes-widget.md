@@ -6,4 +6,4 @@
 '@cuewise/app': minor
 ---
 
-A scratchpad on the new tab: click the note pill to jot something down — it saves as you type and follows you across synced devices.
+A notes scratchpad on the new tab.
