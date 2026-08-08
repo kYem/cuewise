@@ -1,23 +1,45 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { isShortcutKeyEvent } from './keyboard-shortcut';
+import { isShortcutKeyEvent, isSpaceShortcutEvent } from './keyboard-shortcut';
 
-function press(options: { on?: HTMLElement; metaKey?: boolean; repeat?: boolean } = {}): boolean {
+function dispatch(
+  predicate: (event: KeyboardEvent) => boolean,
+  key: string,
+  options: { on?: HTMLElement; metaKey?: boolean; repeat?: boolean; shiftKey?: boolean } = {}
+): boolean {
   const target = options.on ?? document.body;
   let allowed = false;
   const handler = (event: KeyboardEvent) => {
-    allowed = isShortcutKeyEvent(event);
+    allowed = predicate(event);
   };
   document.addEventListener('keydown', handler);
   target.dispatchEvent(
     new KeyboardEvent('keydown', {
-      key: 'c',
+      key,
       bubbles: true,
       metaKey: options.metaKey,
       repeat: options.repeat,
+      shiftKey: options.shiftKey,
     })
   );
   document.removeEventListener('keydown', handler);
   return allowed;
+}
+
+function press(options: { on?: HTMLElement; metaKey?: boolean; repeat?: boolean } = {}): boolean {
+  return dispatch(isShortcutKeyEvent, 'c', options);
+}
+
+function pressSpace(options: { on?: HTMLElement; shiftKey?: boolean } = {}): boolean {
+  return dispatch(isSpaceShortcutEvent, ' ', options);
+}
+
+function appendWith(tag: string, attributes: Record<string, string> = {}): HTMLElement {
+  const el = document.createElement(tag);
+  for (const [name, value] of Object.entries(attributes)) {
+    el.setAttribute(name, value);
+  }
+  document.body.appendChild(el);
+  return el;
 }
 
 describe('isShortcutKeyEvent', () => {
@@ -68,5 +90,43 @@ describe('isShortcutKeyEvent', () => {
     document.body.appendChild(popover);
 
     expect(press()).toBe(true);
+  });
+});
+
+describe('isSpaceShortcutEvent', () => {
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  it('allows a bare space', () => {
+    expect(pressSpace()).toBe(true);
+  });
+
+  it('rejects any other key', () => {
+    expect(dispatch(isSpaceShortcutEvent, 'c')).toBe(false);
+  });
+
+  it('inherits the shared guards, so typing is still exempt', () => {
+    expect(pressSpace({ on: appendWith('input') })).toBe(false);
+  });
+
+  it.each([
+    ['a button', 'button', {}],
+    ['a role=button control', 'div', { role: 'button' }],
+    ['a summary', 'summary', {}],
+  ])('leaves space to %s', (_label, tag, attributes) => {
+    expect(pressSpace({ on: appendWith(tag, attributes) })).toBe(false);
+  });
+
+  it('leaves shift+space alone, since that is page up', () => {
+    expect(pressSpace({ shiftKey: true })).toBe(false);
+  });
+
+  it('leaves space to a control the target sits inside', () => {
+    const button = appendWith('button');
+    const icon = document.createElement('span');
+    button.appendChild(icon);
+
+    expect(pressSpace({ on: icon })).toBe(false);
   });
 });

@@ -4,6 +4,7 @@ import { Check, Filter, FolderOpen, Heart, Sparkles, X } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useQuoteStore } from '../stores/quote-store';
+import { releaseFocusOnPointer } from '../utils/keyboard-shortcut';
 
 interface CategoryFilterProps {
   compact?: boolean;
@@ -89,7 +90,7 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({ compact = false 
       {/* Filter Button */}
       <button
         type="button"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={releaseFocusOnPointer(() => setIsOpen(!isOpen))}
         className={cn(
           'rounded-full transition-all',
           compact ? 'p-2 hover:scale-105' : 'p-density-sm hover:scale-110 hover:shadow-lg',

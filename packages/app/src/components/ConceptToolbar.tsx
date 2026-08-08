@@ -10,6 +10,7 @@ import {
   SkipForward,
 } from 'lucide-react';
 import type React from 'react';
+import { releaseFocusOnPointer } from '../utils/keyboard-shortcut';
 
 // Shared dock-item geometry (size class applied per call site).
 const DOCK_SHAPE =
@@ -28,7 +29,7 @@ interface DockBtnProps {
 const DockBtn: React.FC<DockBtnProps> = ({ icon: Icon, title, onClick, active, sizeClass }) => (
   <button
     type="button"
-    onClick={onClick}
+    onClick={releaseFocusOnPointer(onClick)}
     title={title}
     aria-label={title}
     aria-pressed={active}
@@ -52,7 +53,7 @@ const RingBtn: React.FC<Pick<DockBtnProps, 'icon' | 'title' | 'onClick'>> = ({
 }) => (
   <button
     type="button"
-    onClick={onClick}
+    onClick={releaseFocusOnPointer(onClick)}
     title={title}
     aria-label={title}
     className="inline-flex h-12 w-12 flex-none items-center justify-center rounded-full border-[1.5px] border-white/40 bg-white/10 text-white backdrop-blur-sm transition-colors hover:bg-white/20"
@@ -93,7 +94,7 @@ export const ConceptToolbar: React.FC<ConceptToolbarProps> = ({
       <DockBtn icon={ChevronLeft} title="Previous" onClick={onPrev} sizeClass="h-9 w-9" />
       <RingBtn
         icon={revealed ? SkipForward : Eye}
-        title={revealed ? 'Next' : 'Reveal answer'}
+        title={revealed ? 'Next' : 'Reveal answer (Space)'}
         onClick={revealed ? onNext : onReveal}
       />
       <DockBtn icon={ChevronRight} title="Next" onClick={onNext} sizeClass="h-9 w-9" />

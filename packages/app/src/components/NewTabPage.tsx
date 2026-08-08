@@ -451,9 +451,11 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({ extraSections }) => {
             <div className="flex justify-center">
               <ConceptRotation
                 onAdd={() => setIsAddConceptOpen(true)}
+                onManualRefresh={() => setLastManualRefresh(Date.now())}
                 fallback={
                   <QuoteDisplay
                     onManualRefresh={() => setLastManualRefresh(Date.now())}
+                    enableSpaceShortcut
                     variant={quoteDisplayMode === 'compact' ? 'compact' : 'normal'}
                   />
                 }
@@ -487,9 +489,11 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({ extraSections }) => {
             <div className="flex justify-center">
               <ConceptRotation
                 onAdd={() => setIsAddConceptOpen(true)}
+                onManualRefresh={() => setLastManualRefresh(Date.now())}
                 fallback={
                   <QuoteDisplay
                     onManualRefresh={() => setLastManualRefresh(Date.now())}
+                    enableSpaceShortcut
                     variant="compact"
                     position="bottom"
                   />
