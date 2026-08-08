@@ -1,4 +1,11 @@
-import { DEVICE_LOCAL_SETTINGS_KEYS, logger, type Settings, storageFailure } from '@cuewise/shared';
+import {
+  canLock,
+  DEVICE_LOCAL_SETTINGS_KEYS,
+  getStorage,
+  logger,
+  type Settings,
+  storageFailure,
+} from '@cuewise/shared';
 import {
   getCollectionsRaw,
   getGoalsRaw,
@@ -47,21 +54,28 @@ function arrayBinding<T extends HasId>(
       return Object.fromEntries(items.map((item) => [item.id, item]));
     },
     async writeOne(entityId, entity) {
-      let items: T[];
-      try {
-        items = await getAll();
-      } catch (error) {
-        logger.error(`Could not read the ${name} collection; refusing to rewrite it`, error);
-        return storageFailure(`Could not read the ${name} collection`);
-      }
-      if (entity === null) {
-        return setAll(items.filter((item) => item.id !== entityId));
-      }
-      const exists = items.some((item) => item.id === entityId);
-      const next = exists
-        ? items.map((item) => (item.id === entityId ? (entity as T) : item))
-        : [...items, entity as T];
-      return setAll(next);
+      // Under the collection's lock, and reading inside it: this runs in the extension's service
+      // worker while the page writes the same array from its own read. Whoever landed second used
+      // to take the whole array with them — see the store-side `update*` helpers, same lock name.
+      const store = getStorage();
+      const apply = async (): Promise<StorageResult> => {
+        let items: T[];
+        try {
+          items = await getAll();
+        } catch (error) {
+          logger.error(`Could not read the ${name} collection; refusing to rewrite it`, error);
+          return storageFailure(`Could not read the ${name} collection`);
+        }
+        if (entity === null) {
+          return setAll(items.filter((item) => item.id !== entityId));
+        }
+        const exists = items.some((item) => item.id === entityId);
+        const next = exists
+          ? items.map((item) => (item.id === entityId ? (entity as T) : item))
+          : [...items, entity as T];
+        return setAll(next);
+      };
+      return canLock(store) ? store.withLock(name, apply) : apply();
     },
   };
 }
