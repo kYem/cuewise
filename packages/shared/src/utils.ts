@@ -21,6 +21,7 @@ import {
   BACKGROUND_EFFECT_BOUNDS,
   DAY_IN_MS,
   DEFAULT_REMINDER_INTERVAL_MINUTES,
+  MAX_NOTE_LENGTH,
   POMODORO_DURATION_BOUNDS,
   REMINDER_INTERVAL_MAX,
   REMINDER_INTERVAL_MIN,
@@ -1915,6 +1916,36 @@ export function clampBackgroundEffects(patch: Partial<Settings>): Partial<Settin
     out.backgroundBlur = clamp(out.backgroundBlur, b.backgroundBlur.min, b.backgroundBlur.max);
   }
   return out;
+}
+
+/**
+ * Cut a note to MAX_NOTE_LENGTH without splitting a surrogate pair: a cut ending in half an
+ * emoji is an ill-formed string, which the sync crypto path silently rewrites to U+FFFD —
+ * the stored and pushed values would never match again.
+ */
+export function truncateNote(value: string): string {
+  if (value.length <= MAX_NOTE_LENGTH) {
+    return value;
+  }
+  const cut = value.slice(0, MAX_NOTE_LENGTH);
+  const last = cut.charCodeAt(cut.length - 1);
+  if (last >= 0xd800 && last <= 0xdbff) {
+    return cut.slice(0, -1);
+  }
+  return cut;
+}
+
+/**
+ * Cap the note on the settings write path, so any writer — the widget, a future settings
+ * import, another surface — can't persist a note whose sync record exceeds the server's
+ * ciphertext limit and wedges every later push. The widget also caps as it types; this is
+ * the store-side backstop.
+ */
+export function clampNoteLength(patch: Partial<Settings>): Partial<Settings> {
+  if (typeof patch.note !== 'string' || patch.note.length <= MAX_NOTE_LENGTH) {
+    return patch;
+  }
+  return { ...patch, note: truncateNote(patch.note) };
 }
 
 /** Ultra-compact interval label: "30m", "1h", "1h 30m". */

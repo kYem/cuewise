@@ -37,6 +37,10 @@ export const ALL_QUOTE_CATEGORIES: QuoteCategory[] = Object.keys(
 // base64 adds ~33% — which wedges every push. 8000 leaves roughly a 2x margin in 3-byte scripts.
 export const MAX_NOTE_LENGTH = 8000;
 
+// Content the user wrote, not a preference: "reset settings" restores defaults, it must not
+// delete work — quick links survive a reset the same way, under their own key.
+export const CONTENT_SETTINGS_KEYS: readonly string[] = ['note'];
+
 // Default settings
 export const DEFAULT_SETTINGS: Settings = {
   pomodoroWorkDuration: 25,

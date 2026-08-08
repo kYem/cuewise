@@ -273,6 +273,19 @@ describe('settings', () => {
     expect(settings.theme).toBe(DEFAULT_SETTINGS.theme);
   });
 
+  it('clearSettings keeps the note, so a reset cannot delete what the user wrote', async () => {
+    const { store } = recordingStore();
+    configurePlatform({ storage: store });
+
+    await setSettingsPatch({ note: 'my scratchpad', theme: 'dark' });
+
+    await clearSettings();
+
+    const settings = await getSettings();
+    expect(settings.note).toBe('my scratchpad');
+    expect(settings.theme).toBe(DEFAULT_SETTINGS.theme);
+  });
+
   it('clearSettings holds when the legacy blob has not migrated yet', async () => {
     const { store } = recordingStore();
     configurePlatform({ storage: store });

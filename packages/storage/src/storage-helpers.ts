@@ -5,6 +5,7 @@
 import {
   type CalendarState,
   type CalendarStateEnvelope,
+  CONTENT_SETTINGS_KEYS,
   type ConceptCard,
   calendarEventSchema,
   calendarStateEnvelopeSchema,
@@ -703,7 +704,13 @@ export async function clearSettings(): Promise<boolean> {
   }
   // The blob goes too — a reset should not leave a copy of what it cleared — but never the
   // completion flag, which is what stops the migration restoring the blob's values afterwards.
-  const toRemove = new Set([...SETTINGS_STORAGE_KEYS, ...stored, STORAGE_KEYS.SETTINGS]);
+  // Content keys survive: resetting preferences must not delete what the user wrote.
+  const preserved = new Set(CONTENT_SETTINGS_KEYS.map(settingsStorageKey));
+  const toRemove = new Set(
+    [...SETTINGS_STORAGE_KEYS, ...stored, STORAGE_KEYS.SETTINGS].filter(
+      (key) => !preserved.has(key)
+    )
+  );
   return removeManyFromStorage([...toRemove], 'local');
 }
 

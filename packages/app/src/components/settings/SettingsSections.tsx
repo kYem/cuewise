@@ -896,7 +896,7 @@ function AdvancedSection({ s, set, filter, onReset }: SettingsSectionProps) {
           <div className="flex min-w-0 flex-col gap-1">
             <span className="text-sm font-medium text-primary">Reset all settings</span>
             <span className="text-xs leading-snug text-tertiary">
-              Restores every setting to its default value
+              Restores every setting to its default value. Notes and quick links are kept.
             </span>
           </div>
           <button

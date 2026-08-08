@@ -4,34 +4,12 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import type { Mock } from 'vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useSettingsStore } from '../stores/settings-store';
+import { mockNotesSettingsStore as mockStore } from './__fixtures__/notes-widget.fixtures';
 import { NotesWidget } from './NotesWidget';
 
 vi.mock('../stores/settings-store', () => ({
   useSettingsStore: vi.fn(),
 }));
-
-interface StoreOptions {
-  note?: string;
-  notesExpanded?: boolean;
-  notesPinned?: boolean;
-  saveSucceeds?: boolean;
-  isLoading?: boolean;
-}
-
-function mockStore({
-  note = '',
-  notesExpanded = false,
-  notesPinned = false,
-  saveSucceeds = true,
-  isLoading = false,
-}: StoreOptions = {}) {
-  const updateSettings: Mock = vi.fn().mockResolvedValue(saveSucceeds);
-  const base = createSettingsStoreMock({ note, notesExpanded, notesPinned, updateSettings });
-  vi.mocked(useSettingsStore).mockImplementation((selector) =>
-    base((state) => selector({ ...state, isLoading }))
-  );
-  return { updateSettings };
-}
 
 async function openPad() {
   fireEvent.click(screen.getByRole('button', { name: 'Notes' }));
@@ -236,12 +214,14 @@ describe('NotesWidget', () => {
     const pad = await openPad();
 
     fireEvent.click(screen.getByRole('button', { name: 'Keep notes open' }));
+    await settle();
     fireEvent.pointerDown(document.body);
     expect(screen.getByRole('textbox', { name: 'Notes' })).toBeInTheDocument();
     fireEvent.keyDown(pad, { key: 'Escape' });
     expect(screen.getByRole('textbox', { name: 'Notes' })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Close notes' }));
+    await settle();
 
     expect(screen.queryByRole('textbox', { name: 'Notes' })).not.toBeInTheDocument();
   });
@@ -300,6 +280,7 @@ describe('NotesWidget', () => {
     await openPad();
 
     fireEvent.click(screen.getByRole('button', { name: 'Keep notes open' }));
+    await settle();
 
     expect(updateSettings).toHaveBeenCalledWith({ notesPinned: true });
     expect(screen.getByRole('button', { name: 'Unpin notes' })).toBeInTheDocument();
@@ -348,9 +329,33 @@ describe('NotesWidget', () => {
     await screen.findByRole('textbox', { name: 'Notes' });
 
     fireEvent.click(screen.getByRole('button', { name: 'Close notes' }));
+    await settle();
 
     expect(updateSettings).toHaveBeenCalledWith({ notesPinned: false });
     expect(screen.queryByRole('textbox', { name: 'Notes' })).not.toBeInTheDocument();
+  });
+
+  it('unpins when dismissed from the trigger pill, so the next tab stays quiet', async () => {
+    const { updateSettings } = mockStore({ notesPinned: true });
+    render(<NotesWidget />);
+    await screen.findByRole('textbox', { name: 'Notes' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Notes' }));
+    await settle();
+
+    expect(updateSettings).toHaveBeenCalledWith({ notesPinned: false });
+    expect(screen.queryByRole('textbox', { name: 'Notes' })).not.toBeInTheDocument();
+  });
+
+  it('keeps the pad open when the unpin cannot be saved', async () => {
+    mockStore({ notesPinned: true, saveSucceeds: false });
+    render(<NotesWidget />);
+    await screen.findByRole('textbox', { name: 'Notes' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close notes' }));
+    await settle();
+
+    expect(screen.getByRole('textbox', { name: 'Notes' })).toBeInTheDocument();
   });
 
   it('does not take focus when it opens on its own', async () => {
@@ -375,7 +380,36 @@ describe('NotesWidget', () => {
     expect(screen.getByRole('textbox', { name: 'Notes' }).className).toContain('h-[60vh]');
   });
 
-  it('reverts the pin when the write is rejected', async () => {
+  it('adopts the stored size when opened before settings land, pinned or not', async () => {
+    mockStore({ isLoading: true });
+    const { rerender } = render(<NotesWidget />);
+    await openPad();
+
+    mockStore({ notesExpanded: true });
+    rerender(<NotesWidget />);
+
+    expect(screen.getByRole('textbox', { name: 'Notes' }).className).toContain('h-[60vh]');
+  });
+
+  it('focuses a deliberate reopen after an open that raced settings loading', async () => {
+    mockStore({ isLoading: true });
+    const { rerender } = render(<NotesWidget />);
+    await openPad();
+
+    // Settings land pinned while the pad is already open: nothing auto-opened, so nothing may
+    // suppress the autofocus of the next open.
+    mockStore({ notesPinned: true });
+    rerender(<NotesWidget />);
+    fireEvent.click(screen.getByRole('button', { name: 'Close notes' }));
+    await settle();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Notes' }));
+    await screen.findByRole('textbox', { name: 'Notes' });
+
+    expect(document.body).not.toHaveFocus();
+  });
+
+  it('shows no pin when the write is rejected', async () => {
     mockStore({ saveSucceeds: false });
     render(<NotesWidget />);
     await openPad();
@@ -392,8 +426,11 @@ describe('NotesWidget', () => {
     await openPad();
 
     fireEvent.click(screen.getByRole('button', { name: 'Keep notes open' }));
+    await settle();
     fireEvent.click(screen.getByRole('button', { name: 'Close notes' }));
-    // The pin write lands after the close; without the latch the effect springs the pad open again.
+    await settle();
+    // A stale pin can still land behind the close; without the latch the effect springs the pad
+    // open again.
     mockStore({ notesPinned: true });
     rerender(<NotesWidget />);
 
@@ -450,6 +487,7 @@ describe('NotesWidget', () => {
     const pad = await openPad();
 
     fireEvent.click(screen.getByRole('button', { name: 'Expand notes' }));
+    await settle();
 
     expect(updateSettings).toHaveBeenCalledWith({ notesExpanded: true });
     expect(pad.className).toContain('h-[60vh]');
@@ -472,6 +510,7 @@ describe('NotesWidget', () => {
 
     fireEvent.change(pad, { target: { value: 'mid-thought' } });
     fireEvent.click(screen.getByRole('button', { name: 'Expand notes' }));
+    await settle();
 
     expect(screen.getByRole('textbox', { name: 'Notes' })).toHaveValue('mid-thought');
   });

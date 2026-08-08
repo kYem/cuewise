@@ -1,4 +1,4 @@
-import { MAX_NOTE_LENGTH } from '@cuewise/shared';
+import { MAX_NOTE_LENGTH, truncateNote } from '@cuewise/shared';
 import { cn, Popover, PopoverContent, PopoverTrigger } from '@cuewise/ui';
 import { Maximize2, Minimize2, NotebookPen, Pin, X } from 'lucide-react';
 import type React from 'react';
@@ -25,8 +25,6 @@ export const NotesWidget: React.FC = () => {
 
   const [isOpen, setIsOpen] = useState(false);
   const [draft, setDraft] = useState(note);
-  const [isExpanded, setIsExpanded] = useState(expanded);
-  const [isPinned, setIsPinned] = useState(pinned);
   const [justSaved, setJustSaved] = useState(false);
 
   // The debounce owns the newest text; flushing reads it rather than a captured render's value.
@@ -42,7 +40,7 @@ export const NotesWidget: React.FC = () => {
     }
     // maxLength only bounds typing; a pull can deliver a note longer than this device would let
     // you write. Never persist past our own cap.
-    const ok = await updateSettings({ note: value.slice(0, MAX_NOTE_LENGTH) });
+    const ok = await updateSettings({ note: truncateNote(value) });
     // Left pending on failure so the next flush or keystroke retries it; updateSettings has
     // already told the user.
     if (!ok) {
@@ -110,17 +108,19 @@ export const NotesWidget: React.FC = () => {
   }, [note]);
 
   // Pinned means "stays open", and every new tab is a fresh mount — so reopen it once settings say
-  // it was left pinned, the way the reminders panel does.
+  // it was left pinned, the way the reminders panel does. autoOpening is set only on a real
+  // closed→open transition: a pad the user already opened has no autofocus to suppress, and a
+  // latched flag would swallow the next open's focus instead.
   useEffect(() => {
     if (isLoading || didAutoOpen.current || !pinned) {
       return;
     }
     didAutoOpen.current = true;
-    autoOpening.current = true;
-    setIsPinned(true);
-    setIsExpanded(expanded);
-    setIsOpen(true);
-  }, [isLoading, pinned, expanded]);
+    if (!isOpen) {
+      autoOpening.current = true;
+      setIsOpen(true);
+    }
+  }, [isLoading, pinned, isOpen]);
 
   useEffect(() => {
     if (!justSaved) {
@@ -130,54 +130,46 @@ export const NotesWidget: React.FC = () => {
     return () => clearTimeout(id);
   }, [justSaved]);
 
+  // Every close unpins: the pad reopens from `notesPinned` on every mount, so a close that left
+  // the pin behind — the trigger pill included — would spring the pad back on the next tab. A
+  // failed unpin keeps the pad open: closed-but-still-pinned is exactly that surprise, and the
+  // store has already told the user why.
+  const closePad = async () => {
+    flush();
+    if (pinned) {
+      const ok = await updateSettings({ notesPinned: false });
+      if (!ok) {
+        return;
+      }
+    }
+    setIsOpen(false);
+  };
+
   const handleOpenChange = (open: boolean) => {
-    // Nothing read from settings is trustworthy yet while loading, so an early open must not latch
-    // or mirror — the auto-open effect still has to reconcile once the real values land.
+    // Nothing read from settings is trustworthy yet while loading, so an early open must not
+    // latch — the auto-open effect still has to reconcile once the real values land.
     if (!isLoading) {
       didAutoOpen.current = true;
     }
-    setIsOpen(open);
     if (open) {
-      if (!isLoading) {
-        setIsExpanded(expanded);
-        setIsPinned(pinned);
-      }
+      setIsOpen(true);
       return;
     }
-    flush();
+    void closePad();
   };
 
-  const toggleExpanded = async () => {
-    const next = !isExpanded;
-    setIsExpanded(next);
-    const ok = await updateSettings({ notesExpanded: next });
-    if (!ok) {
-      setIsExpanded(!next);
-    }
+  // No optimistic flip or rollback: the store commits only writes that persisted.
+  const toggleExpanded = () => {
+    void updateSettings({ notesExpanded: !expanded });
   };
 
-  const togglePinned = async () => {
-    const next = !isPinned;
-    setIsPinned(next);
-    const ok = await updateSettings({ notesPinned: next });
-    if (!ok) {
-      setIsPinned(!next);
-    }
-  };
-
-  // Closing unpins: the pad reopens from `notesPinned` on every mount, so leaving it pinned would
-  // undo this the next time the page is navigated back to.
-  // Closing unpins: the pad reopens from `notesPinned` on every mount, so leaving it pinned would
-  // undo this the next time the page is navigated back to.
-  const closePad = () => {
-    setIsPinned(false);
-    void updateSettings({ notesPinned: false });
-    handleOpenChange(false);
+  const togglePinned = () => {
+    void updateSettings({ notesPinned: !pinned });
   };
 
   // A pinned pad ignores click-away and Escape, so it needs a way out that isn't the trigger.
   const keepOpen = (event: Event | KeyboardEvent) => {
-    if (isPinned) {
+    if (pinned) {
       event.preventDefault();
     }
   };
@@ -194,7 +186,7 @@ export const NotesWidget: React.FC = () => {
       <PopoverContent
         className={cn(
           'p-0 bg-surface/95 backdrop-blur-xl transition-[width] duration-150',
-          isExpanded ? 'w-[32rem]' : 'w-72'
+          expanded ? 'w-[32rem]' : 'w-72'
         )}
         align="start"
         onInteractOutside={keepOpen}
@@ -216,27 +208,27 @@ export const NotesWidget: React.FC = () => {
             <button
               type="button"
               onClick={togglePinned}
-              aria-pressed={isPinned}
-              aria-label={isPinned ? 'Unpin notes' : 'Keep notes open'}
-              title={isPinned ? 'Unpin — closes on click away' : 'Keep open'}
-              className={cn(HEADER_BTN_CLASS, isPinned && 'text-primary-600')}
+              aria-pressed={pinned}
+              aria-label={pinned ? 'Unpin notes' : 'Keep notes open'}
+              title={pinned ? 'Unpin — closes on click away' : 'Keep open'}
+              className={cn(HEADER_BTN_CLASS, pinned && 'text-primary-600')}
             >
               <Pin className="h-3.5 w-3.5" />
             </button>
             <button
               type="button"
               onClick={toggleExpanded}
-              aria-label={isExpanded ? 'Shrink notes' : 'Expand notes'}
-              title={isExpanded ? 'Shrink notes' : 'Expand notes'}
+              aria-label={expanded ? 'Shrink notes' : 'Expand notes'}
+              title={expanded ? 'Shrink notes' : 'Expand notes'}
               className={HEADER_BTN_CLASS}
             >
-              {isExpanded ? (
+              {expanded ? (
                 <Minimize2 className="h-3.5 w-3.5" />
               ) : (
                 <Maximize2 className="h-3.5 w-3.5" />
               )}
             </button>
-            {isPinned && (
+            {pinned && (
               <button
                 type="button"
                 onClick={closePad}
@@ -258,7 +250,7 @@ export const NotesWidget: React.FC = () => {
           maxLength={MAX_NOTE_LENGTH}
           className={cn(
             'w-full resize-none bg-transparent px-3 py-2.5 text-sm text-primary placeholder:text-secondary focus:outline-none',
-            isExpanded ? 'h-[60vh]' : 'h-40'
+            expanded ? 'h-[60vh]' : 'h-40'
           )}
         />
         {draft.length >= COUNT_VISIBLE_FROM && (

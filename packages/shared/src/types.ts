@@ -428,7 +428,8 @@ export interface Settings {
   showQuickLinks: boolean; // Show quick-link shortcut tiles top-left on home page (default true)
   showNotes: boolean; // Show the scratchpad pill top-left on home page (default true)
   // A settings key, not a collection: it is written per-key, so a burst of typing never rewrites
-  // a list. MAX_NOTE_LENGTH is clamped by the widget on write, not by this type or the schema.
+  // a list. MAX_NOTE_LENGTH is enforced by clampNoteLength on the store write path, not by this
+  // type or the schema — a schema .max() would refuse to *read* an oversized note back.
   note: string; // The scratchpad's contents (default '')
   notesExpanded: boolean; // Scratchpad opens at the larger size (default false)
   notesPinned: boolean; // Scratchpad stays open until explicitly closed (default false)
