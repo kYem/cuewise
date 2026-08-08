@@ -12,13 +12,19 @@ vi.mock('../stores/settings-store', () => ({
 interface StoreOptions {
   note?: string;
   notesExpanded?: boolean;
+  notesPinned?: boolean;
   saveSucceeds?: boolean;
 }
 
-function mockStore({ note = '', notesExpanded = false, saveSucceeds = true }: StoreOptions = {}) {
+function mockStore({
+  note = '',
+  notesExpanded = false,
+  notesPinned = false,
+  saveSucceeds = true,
+}: StoreOptions = {}) {
   const updateSettings: Mock = vi.fn().mockResolvedValue(saveSucceeds);
   vi.mocked(useSettingsStore).mockImplementation(
-    createSettingsStoreMock({ note, notesExpanded, updateSettings })
+    createSettingsStoreMock({ note, notesExpanded, notesPinned, updateSettings })
   );
   return { updateSettings };
 }
@@ -28,7 +34,7 @@ async function openPad() {
   return screen.findByRole('textbox', { name: 'Notes' });
 }
 
-/** Lets queued promises settle without letting the debounce timer fire. */
+/** Settles promises without advancing the clock, so the debounce can't satisfy an assertion. */
 async function settle() {
   await act(async () => {});
 }
@@ -76,8 +82,6 @@ describe('NotesWidget', () => {
 
     fireEvent.change(pad, { target: { value: 'half a thought' } });
     fireEvent.keyDown(pad, { key: 'Escape' });
-    // Asserted before the debounce could have fired: otherwise the timer satisfies this on its own
-    // and the test passes with the flush deleted.
     await settle();
 
     expect(updateSettings).toHaveBeenCalledWith({ note: 'half a thought' });
@@ -152,6 +156,107 @@ describe('NotesWidget', () => {
     expect(screen.getByRole('textbox', { name: 'Notes' })).toHaveValue(
       'pulled from another device'
     );
+  });
+
+  it('keeps unsaved text when a note arrives from another device', async () => {
+    mockStore({ note: 'first', saveSucceeds: false });
+    const { rerender } = render(<NotesWidget />);
+    const pad = await openPad();
+
+    fireEvent.change(pad, { target: { value: 'my unsaved words' } });
+    mockStore({ note: 'pulled from another device', saveSucceeds: false });
+    rerender(<NotesWidget />);
+
+    expect(screen.getByRole('textbox', { name: 'Notes' })).toHaveValue('my unsaved words');
+  });
+
+  it('writes the newest text when a keystroke lands mid-save', async () => {
+    let release = (_: boolean) => {};
+    const updateSettings: Mock = vi
+      .fn()
+      .mockImplementationOnce(() => new Promise<boolean>((resolve) => (release = resolve)))
+      .mockResolvedValue(true);
+    vi.mocked(useSettingsStore).mockImplementation(
+      createSettingsStoreMock({ note: '', updateSettings })
+    );
+    render(<NotesWidget />);
+    const pad = await openPad();
+
+    fireEvent.change(pad, { target: { value: 'first' } });
+    await act(async () => {
+      vi.advanceTimersByTime(600);
+    });
+    fireEvent.change(pad, { target: { value: 'first second' } });
+    await act(async () => {
+      release(true);
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(600);
+    });
+
+    expect(updateSettings).toHaveBeenNthCalledWith(2, { note: 'first second' });
+  });
+
+  it('does not write before the debounce elapses', async () => {
+    const { updateSettings } = mockStore();
+    render(<NotesWidget />);
+    const pad = await openPad();
+
+    fireEvent.change(pad, { target: { value: 'x' } });
+    await act(async () => {
+      vi.advanceTimersByTime(499);
+    });
+    expect(updateSettings).not.toHaveBeenCalled();
+
+    await act(async () => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(updateSettings).toHaveBeenCalledWith({ note: 'x' });
+  });
+
+  it('flushes a pending write when the widget unmounts', async () => {
+    const { updateSettings } = mockStore();
+    const { unmount } = render(<NotesWidget />);
+    const pad = await openPad();
+
+    fireEvent.change(pad, { target: { value: 'switched off mid-note' } });
+    unmount();
+    await settle();
+
+    expect(updateSettings).toHaveBeenCalledWith({ note: 'switched off mid-note' });
+  });
+
+  it('stays open on click away once pinned, and closes from its own button', async () => {
+    mockStore();
+    render(<NotesWidget />);
+    const pad = await openPad();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Keep notes open' }));
+    fireEvent.keyDown(pad, { key: 'Escape' });
+    expect(screen.getByRole('textbox', { name: 'Notes' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close notes' }));
+
+    expect(screen.queryByRole('textbox', { name: 'Notes' })).not.toBeInTheDocument();
+  });
+
+  it('remembers that the pad was pinned', async () => {
+    const { updateSettings } = mockStore();
+    render(<NotesWidget />);
+    await openPad();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Keep notes open' }));
+
+    expect(updateSettings).toHaveBeenCalledWith({ notesPinned: true });
+    expect(screen.getByRole('button', { name: 'Unpin notes' })).toBeInTheDocument();
+  });
+
+  it('has no close button while unpinned, because clicking away closes it', async () => {
+    mockStore();
+    render(<NotesWidget />);
+    await openPad();
+
+    expect(screen.queryByRole('button', { name: 'Close notes' })).not.toBeInTheDocument();
   });
 
   it('caps the note so one key cannot exceed a sync record', async () => {

@@ -40,6 +40,7 @@ export const settingsSchema = z.object({
   showNotes: z.boolean(),
   note: z.string(),
   notesExpanded: z.boolean(),
+  notesPinned: z.boolean(),
   showWeather: z.boolean(),
   weatherPosition: z.enum(['left', 'right']),
   weatherUnits: z.enum(['auto', 'metric', 'imperial']),

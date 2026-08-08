@@ -33,9 +33,8 @@ export const ALL_QUOTE_CATEGORIES: QuoteCategory[] = Object.keys(
   QUOTE_CATEGORIES
 ) as QuoteCategory[];
 
-// One settings key is one sync record, and the server rejects a record over 64KB of ciphertext
-// with a non-retryable 422 — which would wedge every outbound push, not just this key. Sized so
-// even 4-byte characters stay well under that after sealing and base64.
+// One settings key is one sync record; the server 422s a record over 64KB of ciphertext, and that
+// wedges every push, not just this key. 8000 UTF-16 units is ≤24KB even in 3-byte scripts.
 export const MAX_NOTE_LENGTH = 8000;
 
 // Default settings
@@ -72,6 +71,7 @@ export const DEFAULT_SETTINGS: Settings = {
   showNotes: true, // Scratchpad tile shown by default
   note: '',
   notesExpanded: false,
+  notesPinned: false,
   showWeather: false, // Opt-in: the only widget that sends where you are off the device
   weatherPosition: 'left', // Beside goals and quick links
   weatherUnits: 'auto', // Resolved from the device locale until the user overrides it

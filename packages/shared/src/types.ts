@@ -431,6 +431,7 @@ export interface Settings {
   // a list. Capped at MAX_NOTE_LENGTH — one settings key is one sync record.
   note: string; // The scratchpad's contents (default '')
   notesExpanded: boolean; // Scratchpad opens at the larger size (default false)
+  notesPinned: boolean; // Scratchpad stays open until explicitly closed (default false)
   showWeather: boolean; // Show the weather chip on the new tab (default false)
   weatherPosition: WeatherPosition; // Which floating cluster the chip joins (default 'left')
   weatherUnits: WeatherUnitsPreference; // 'auto' resolves from locale (default 'auto')
