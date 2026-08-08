@@ -4,7 +4,6 @@ import { Maximize2, Minimize2, NotebookPen, Pin, X } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSettingsStore } from '../stores/settings-store';
-import { HOME_TILE_CLASS } from './home-tile';
 
 const SAVE_DEBOUNCE_MS = 500;
 const SAVED_BADGE_MS = 1500;
@@ -196,7 +195,7 @@ export const NotesWidget: React.FC = () => {
   return (
     <Popover open={isOpen} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
-        <button type="button" aria-label="Notes" title="Notes" className={HOME_TILE_CLASS}>
+        <button type="button" aria-label="Notes" title="Notes" className="home-tile">
           <NotebookPen className={cn('h-5 w-5', hasNote ? 'text-primary-600' : 'text-secondary')} />
         </button>
       </PopoverTrigger>

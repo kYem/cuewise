@@ -9,7 +9,6 @@ import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuickLinksStore } from '../stores/quick-links-store';
-import { HOME_TILE_CLASS } from './home-tile';
 
 function faviconUrl(url: string): string | null {
   try {
@@ -189,7 +188,7 @@ export const QuickLinksWidget: React.FC = () => {
           rel="noopener noreferrer"
           title={link.title}
           aria-label={link.title}
-          className={HOME_TILE_CLASS}
+          className="home-tile"
         >
           <Favicon link={link} />
         </a>
@@ -203,7 +202,7 @@ export const QuickLinksWidget: React.FC = () => {
           onClick={() => setIsOpen((open) => !open)}
           aria-expanded={isOpen}
           aria-haspopup="menu"
-          className={HOME_TILE_CLASS}
+          className="home-tile"
           title={hasLinks ? 'More quick links' : 'Add a quick link'}
         >
           {hasLinks ? (
