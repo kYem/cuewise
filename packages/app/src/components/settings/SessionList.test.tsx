@@ -226,6 +226,29 @@ describe('SessionList', () => {
     });
   });
 
+  it('refreshes after a failed revoke, so a row another device already cut cannot linger', async () => {
+    const controller = controllerWith([session({ id: 's2', deviceName: 'desktop' })]);
+    controller.failNext('revokeSession');
+    renderSessionList(controller);
+
+    await userEvent.click(await screen.findByRole('button', { name: /revoke/i }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.click(within(dialog).getByRole('button', { name: /^revoke$/i }));
+
+    // Two listSessions: the mount read, then the one the failure path re-issues.
+    await waitFor(() => {
+      expect(controller.calls.filter((call) => call.method === 'listSessions')).toHaveLength(2);
+    });
+  });
+
+  it('says a session used moments ago is active now, not "Last active Just now"', async () => {
+    const controller = controllerWith([session({ id: 's1', lastUsedAt: Date.now() - 1000 })]);
+    renderSessionList(controller);
+
+    expect(await screen.findByText('Active now')).toBeInTheDocument();
+    expect(screen.queryByText(/last active just now/i)).not.toBeInTheDocument();
+  });
+
   it('reports the count after signing out all other devices', async () => {
     const controller = controllerWith([
       session({ id: 's1', current: true }),

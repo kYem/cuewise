@@ -25,10 +25,17 @@ function revokedLabel(revoked: number): string {
   return `Signed out ${revoked} other devices`;
 }
 
+// formatMillisAgo's under-a-minute answer is a sentence, so "Last active Just now" reads wrong —
+// and every user meets it on their own row, since listing slides last_used_at forward.
+const ACTIVE_NOW_MS = 60_000;
+
 // Always rendered: it is what tells two same-named sessions apart (see SyncSession).
 function lastActiveLabel(session: SyncSession): string {
   if (session.lastUsedAt === null) {
     return 'Not used yet';
+  }
+  if (Date.now() - session.lastUsedAt < ACTIVE_NOW_MS) {
+    return 'Active now';
   }
   return `Last active ${formatMillisAgo(session.lastUsedAt)}`;
 }
@@ -228,6 +235,9 @@ export const SessionList: React.FC<SessionListProps> = ({
     } catch (error) {
       logger.error('Cloud sync revoke device failed', error);
       useToastStore.getState().error("Couldn't sign that device out — please try again.");
+      // A 404 means another device already cut it, so the row on screen is stale: without this it
+      // stays listed and every retry 404s again.
+      await refresh();
     }
   };
 
