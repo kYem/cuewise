@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useToastStore } from '../../stores/toast-store';
 import { useSyncController } from '../../sync/sync-controller';
 import { formatMillisAgo } from '../../utils/reminder-date-utils';
+import { Modal } from '../Modal';
 
 const ROW = 'flex items-start justify-between gap-3 border-t border-divider py-2 first:border-t-0';
 const META = 'text-xs text-tertiary';
@@ -112,10 +113,22 @@ const SessionRow: React.FC<SessionRowProps> = ({ session, onRename, onRevoke }) 
   );
 };
 
-export const SessionList: React.FC = () => {
+interface SessionListProps {
+  /**
+   * Opens the panel's existing Regenerate control. Offered inside the revoke dialog because a
+   * copied recovery code plus access to the provider account could re-enrol the cut device —
+   * ordered before the confirm, following 1Password's regenerate-then-deauthorize runbook.
+   */
+  onRegenerateRecoveryCode?: () => void;
+}
+
+export const SessionList: React.FC<SessionListProps> = ({ onRegenerateRecoveryCode }) => {
   const controller = useSyncController();
   const [sessions, setSessions] = useState<SyncSession[] | null>(null);
   const [hasLoaded, setHasLoaded] = useState(false);
+  const [pendingRevoke, setPendingRevoke] = useState<SyncSession | null>(null);
+  const [isRevokingOthers, setIsRevokingOthers] = useState(false);
+  const [isConfirmingRevokeOthers, setIsConfirmingRevokeOthers] = useState(false);
 
   const refresh = useCallback(async () => {
     if (controller === null) {
@@ -143,6 +156,43 @@ export const SessionList: React.FC = () => {
     }
   };
 
+  const handleRevoke = async () => {
+    if (controller === null || pendingRevoke === null) {
+      return;
+    }
+    const target = pendingRevoke;
+    setPendingRevoke(null);
+    try {
+      await controller.revokeSession(target.id);
+      await refresh();
+    } catch (error) {
+      logger.error('Cloud sync revoke device failed', error);
+      useToastStore.getState().error("Couldn't sign that device out — please try again.");
+    }
+  };
+
+  const handleRevokeOthers = async () => {
+    if (controller === null) {
+      return;
+    }
+    setIsConfirmingRevokeOthers(false);
+    setIsRevokingOthers(true);
+    try {
+      const revoked = await controller.revokeOtherSessions();
+      await refresh();
+      useToastStore
+        .getState()
+        .success(
+          revoked === 1 ? 'Signed out 1 other device' : `Signed out ${revoked} other devices`
+        );
+    } catch (error) {
+      logger.error('Cloud sync revoke other devices failed', error);
+      useToastStore.getState().error("Couldn't sign the other devices out — please try again.");
+    } finally {
+      setIsRevokingOthers(false);
+    }
+  };
+
   if (controller === null) {
     return null;
   }
@@ -163,19 +213,93 @@ export const SessionList: React.FC = () => {
     );
   }
 
+  const otherCount = sessions.filter((s) => !s.current).length;
+
   return (
     <div className="flex flex-col gap-1">
       <div className="text-xs font-medium text-secondary">Signed-in devices</div>
       {sessions.map((s) => (
-        <SessionRow
-          key={s.id}
-          session={s}
-          onRename={handleRename}
-          onRevoke={() => {
-            /* wired to the confirm dialog in the next step */
-          }}
-        />
+        <SessionRow key={s.id} session={s} onRename={handleRename} onRevoke={setPendingRevoke} />
       ))}
+
+      {otherCount > 0 && (
+        <button
+          type="button"
+          onClick={() => setIsConfirmingRevokeOthers(true)}
+          disabled={isRevokingOthers}
+          className={cn(GHOST_BUTTON, 'mt-2 w-fit')}
+        >
+          Sign out all other devices
+        </button>
+      )}
+
+      <Modal
+        isOpen={pendingRevoke !== null}
+        onClose={() => setPendingRevoke(null)}
+        title="Sign out this device?"
+        size="md"
+      >
+        <div className="flex flex-col gap-3">
+          <p className="text-sm text-secondary">
+            {pendingRevoke === null ? '' : `${pendingRevoke.deviceName} will stop syncing.`} It
+            stops receiving new data, but anything already synced stays on that device.
+          </p>
+          <p className={META}>
+            If the device was lost or stolen, regenerate your recovery code first — someone who
+            copied it could otherwise use it to enrol again.
+          </p>
+          {onRegenerateRecoveryCode !== undefined && (
+            <button
+              type="button"
+              onClick={onRegenerateRecoveryCode}
+              className={cn(GHOST_BUTTON, 'w-fit')}
+            >
+              Regenerate recovery code
+            </button>
+          )}
+          <div className="flex justify-end gap-2 pt-1">
+            <button type="button" className={GHOST_BUTTON} onClick={() => setPendingRevoke(null)}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleRevoke}
+              className="rounded-lg bg-red-600 px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-red-700"
+            >
+              Revoke
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={isConfirmingRevokeOthers}
+        onClose={() => setIsConfirmingRevokeOthers(false)}
+        title="Sign out all other devices?"
+        size="md"
+      >
+        <div className="flex flex-col gap-3">
+          <p className="text-sm text-secondary">
+            Every device except this one will stop syncing and need to sign in again.
+          </p>
+          <div className="flex justify-end gap-2 pt-1">
+            <button
+              type="button"
+              className={GHOST_BUTTON}
+              onClick={() => setIsConfirmingRevokeOthers(false)}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleRevokeOthers}
+              className="rounded-lg bg-red-600 px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-red-700"
+            >
+              Sign out
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };

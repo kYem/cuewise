@@ -25,10 +25,13 @@ export function controllerWith(sessions: SyncSession[] | null): FakeSyncControll
   return controller;
 }
 
-export function renderSessionList(controller: FakeSyncController) {
+export function renderSessionList(
+  controller: FakeSyncController,
+  onRegenerateRecoveryCode?: () => void
+) {
   return render(
     <SyncControllerContext.Provider value={controller}>
-      <SessionList />
+      <SessionList onRegenerateRecoveryCode={onRegenerateRecoveryCode} />
     </SyncControllerContext.Provider>
   );
 }

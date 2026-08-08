@@ -22,6 +22,7 @@ import { formatMillisAgo } from '../../utils/reminder-date-utils';
 import { ConfirmationDialog } from '../ConfirmationDialog';
 import { EnrollCodeModal } from './EnrollCodeModal';
 import { RecoveryCodeModal } from './RecoveryCodeModal';
+import { SessionList } from './SessionList';
 import { SettingRow, SettingSubgroup, Switch } from './SettingControls';
 import type { SettingsSection } from './SettingsSections';
 import { settingsMatch } from './settings-match';
@@ -930,6 +931,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
                 Regenerate recovery code
               </button>
             </div>
+            <SessionList onRegenerateRecoveryCode={handleRegenerate} />
           </div>
         </SettingSubgroup>
       )}

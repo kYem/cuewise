@@ -5,9 +5,10 @@ import { controllerWith, renderSessionList, session } from './__fixtures__/sessi
 import { SessionList } from './SessionList';
 
 const toastError = vi.fn();
+const toastSuccess = vi.fn();
 vi.mock('../../stores/toast-store', () => ({
   useToastStore: {
-    getState: () => ({ error: toastError, success: vi.fn(), warning: vi.fn() }),
+    getState: () => ({ error: toastError, success: toastSuccess, warning: vi.fn() }),
   },
 }));
 
@@ -67,6 +68,67 @@ describe('SessionList', () => {
       's1',
       'Work MacBook',
     ]);
+  });
+
+  it('offers regeneration above the confirm and does not force it', async () => {
+    const controller = controllerWith([session({ id: 's2', deviceName: 'desktop' })]);
+    const onRegenerate = vi.fn();
+    renderSessionList(controller, onRegenerate);
+
+    await userEvent.click(await screen.findByRole('button', { name: /revoke/i }));
+    const dialog = await screen.findByRole('dialog');
+
+    expect(within(dialog).getByText(/stays on that device/i)).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole('button', { name: /regenerate recovery code/i })
+    ).toBeInTheDocument();
+
+    await userEvent.click(within(dialog).getByRole('button', { name: /^revoke$/i }));
+
+    expect(onRegenerate).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(controller.calls.filter((c) => c.method === 'revokeSession')).toHaveLength(1);
+    });
+  });
+
+  it('toasts when a revoke fails', async () => {
+    const controller = controllerWith([session({ id: 's2', deviceName: 'desktop' })]);
+    controller.failNext('revokeSession');
+    renderSessionList(controller);
+
+    await userEvent.click(await screen.findByRole('button', { name: /revoke/i }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.click(within(dialog).getByRole('button', { name: /^revoke$/i }));
+
+    await waitFor(() => {
+      expect(toastError).toHaveBeenCalled();
+    });
+  });
+
+  it('reports the count after signing out all other devices', async () => {
+    const controller = controllerWith([
+      session({ id: 's1', current: true }),
+      session({ id: 's2', current: false }),
+    ]);
+    controller.revokedOthersCount = 3;
+    renderSessionList(controller);
+
+    await userEvent.click(
+      await screen.findByRole('button', { name: /sign out all other devices/i })
+    );
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.click(within(dialog).getByRole('button', { name: /^sign out$/i }));
+
+    await waitFor(() => {
+      expect(toastSuccess).toHaveBeenCalledWith('Signed out 3 other devices');
+    });
+  });
+
+  it('hides the bulk action when this is the only device', async () => {
+    renderSessionList(controllerWith([session({ id: 's1', current: true })]));
+
+    expect(await screen.findByTestId('session-row-s1')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /sign out all other devices/i })).toBeNull();
   });
 
   it('reverts and toasts when a rename fails', async () => {
