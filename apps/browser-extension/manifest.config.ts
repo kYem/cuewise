@@ -131,7 +131,7 @@ export default defineManifest(async (env) => {
     },
     // CSP: scoped connect-src (was a wildcard); proxy-page iframe + Google Fonts.
     content_security_policy: {
-      extension_pages: `frame-src ${frameSrc.join(' ')}; default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src ${connectSrc.join(' ')}; img-src * data: blob:;`,
+      extension_pages: `frame-src ${frameSrc.join(' ')}; default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src ${connectSrc.join(' ')}; img-src * data: blob:;`,
     },
   };
 });
