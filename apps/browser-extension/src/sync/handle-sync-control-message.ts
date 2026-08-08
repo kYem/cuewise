@@ -113,8 +113,9 @@ async function runLastCycle(
 
 /** Read-only sessions lookup — deliberately NOT serialized (see handleSyncControlMessage). */
 async function runSessions(engine: SyncEngineControlSurface): Promise<SyncSessionsResponse> {
-  // engine.listSessions never throws (null on any failure), exactly like getAccount.
-  return { ok: true, kind: 'sessions', sessions: (await engine.listSessions()) ?? [] };
+  // The null is forwarded, not collapsed to []: engine.listSessions never throws, so null is the
+  // only way an unreadable list can reach the panel at all.
+  return { ok: true, kind: 'sessions', sessions: await engine.listSessions() };
 }
 
 async function runOp(
@@ -225,7 +226,6 @@ export async function handleSyncControlMessage(
     return runLastCycle(engine);
   }
   if (op === 'listSessions') {
-    // Same rationale as 'details': read-only, so it must never queue behind a pending op.
     return runSessions(engine);
   }
   if (op === 'disable') {

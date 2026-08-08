@@ -106,6 +106,24 @@ describe('/v1/sessions', () => {
     expect((await res.json<{ code: string }>()).code).toBe('invalid_request');
   });
 
+  it('rejects a null JSON body without throwing', async () => {
+    const { token } = await signedInToken();
+    const [session] = await readSessions(app, token);
+
+    const res = await app.request(
+      `/v1/sessions/${session.id}`,
+      {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: 'null',
+      },
+      env
+    );
+
+    expect(res.status).toBe(400);
+    expect((await res.json<{ code: string }>()).code).toBe('invalid_request');
+  });
+
   it('rejects a rename past the shared device-name bound', async () => {
     const { token } = await signedInToken();
     const [session] = await readSessions(app, token);

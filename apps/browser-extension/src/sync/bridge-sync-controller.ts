@@ -373,8 +373,7 @@ export class BridgeSyncController implements SyncController {
     }
   }
 
-  // Informational like getDetails: any unusable answer is "unavailable", never a rejection, so a
-  // failed read hides one panel section instead of breaking it.
+  // Informational like getDetails: any unusable answer is "unavailable", never a rejection.
   async listSessions(): Promise<SyncSession[] | null> {
     try {
       const response = await this.send({ kind: 'cuewise-sync-control', op: 'listSessions' });
@@ -390,6 +389,20 @@ export class BridgeSyncController implements SyncController {
     }
   }
 
+  /**
+   * Names the cause of a failed action. The SW hardcodes reason:'error' for these ops, so `detail`
+   * is the only field naming what actually went wrong — carry it, as syncNow does.
+   */
+  private static describeActionFailure(
+    response: Extract<SyncControlResponse, { ok: false }> | undefined
+  ): string {
+    if (response === undefined) {
+      return 'no response from the background';
+    }
+    const detail = response.detail === undefined ? '' : ` — ${response.detail}`;
+    return `${response.reason}${detail}`;
+  }
+
   // Actions reject, unlike listSessions. chrome.runtime JSON-serialises the response, so the SW
   // answers {ok:false} rather than throwing; turning it back into a rejection here is what makes
   // the panel's try/catch behave the same on both hosts.
@@ -400,7 +413,9 @@ export class BridgeSyncController implements SyncController {
       sessionId: id,
     });
     if (!response?.ok) {
-      throw new Error(`Failed to revoke session: ${response?.reason ?? 'no response'}`);
+      throw new Error(
+        `Failed to revoke session: ${BridgeSyncController.describeActionFailure(response)}`
+      );
     }
   }
 
@@ -412,7 +427,9 @@ export class BridgeSyncController implements SyncController {
       deviceName,
     });
     if (!response?.ok) {
-      throw new Error(`Failed to rename session: ${response?.reason ?? 'no response'}`);
+      throw new Error(
+        `Failed to rename session: ${BridgeSyncController.describeActionFailure(response)}`
+      );
     }
   }
 
@@ -421,8 +438,14 @@ export class BridgeSyncController implements SyncController {
       kind: 'cuewise-sync-control',
       op: 'revokeOtherSessions',
     });
-    if (!response?.ok || response.kind !== 'revokedCount') {
-      throw new Error(`Failed to sign out other devices: ${response?.ok ? 'no count' : 'failed'}`);
+    if (response?.ok !== true) {
+      throw new Error(
+        `Failed to sign out other devices: ${BridgeSyncController.describeActionFailure(response)}`
+      );
+    }
+    // A skewed SW can answer ok:true with no count; that is unusable, not a success.
+    if (response.kind !== 'revokedCount') {
+      throw new Error('Failed to sign out other devices: response carried no count');
     }
     return response.revoked;
   }

@@ -14,8 +14,7 @@ const META = 'text-xs text-tertiary';
 const GHOST_BUTTON =
   'rounded-lg border border-border bg-surface px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-surface-variant disabled:cursor-not-allowed disabled:opacity-50';
 
-// Two sessions can legitimately share a device name (a reinstall leaves the old row live until it
-// expires), so this line is what tells them apart and is always rendered.
+// Always rendered: it is what tells two same-named sessions apart (see SyncSession).
 function lastActiveLabel(session: SyncSession): string {
   if (session.lastUsedAt === null) {
     return 'Not used yet';
@@ -115,9 +114,8 @@ const SessionRow: React.FC<SessionRowProps> = ({ session, onRename, onRevoke }) 
 
 interface SessionListProps {
   /**
-   * Opens the panel's existing Regenerate control. Offered inside the revoke dialog because a
-   * copied recovery code plus access to the provider account could re-enrol the cut device —
-   * ordered before the confirm, following 1Password's regenerate-then-deauthorize runbook.
+   * Opens the panel's existing Regenerate control. Offered inside the revoke dialog, above the
+   * confirm, because a copied recovery code plus provider access could re-enrol the cut device.
    */
   onRegenerateRecoveryCode?: () => void;
 }

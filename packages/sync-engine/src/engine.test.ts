@@ -772,7 +772,6 @@ describe('SyncEngine.enableSync', () => {
     device.apiClient.rejectNextListSessionsWith401 = true;
     expect(await device.engine.listSessions()).toBeNull();
 
-    // A failed settings read must never sign the user out; a retry still works.
     expect(device.engine.getStatus()).toBe('active');
     expect(await device.engine.listSessions()).toHaveLength(1);
   });

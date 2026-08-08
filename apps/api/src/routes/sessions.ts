@@ -18,8 +18,7 @@ export function registerSessionsRoutes(
     return c.json({ sessions });
   });
 
-  // Registered before /v1/sessions/:id — Hono matches in order, so the reverse would route this
-  // into the param handler with id === 'revoke-others'.
+  // Keep ahead of any future POST /v1/sessions/:id — Hono matches in registration order.
   app.post('/v1/sessions/revoke-others', async (c) => {
     const store = deps.storeFactory(c.env.DB);
     const revoked = await store.revokeOtherSessions(c.get('userId'), c.get('tokenHash'));

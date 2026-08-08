@@ -6,7 +6,6 @@ import { SessionList } from '../SessionList';
 
 const HOUR_MS = 60 * 60 * 1000;
 
-/** A live session; override only what the test is about. */
 export function session(overrides: Partial<SyncSession> = {}): SyncSession {
   return {
     id: 's1',
@@ -18,7 +17,6 @@ export function session(overrides: Partial<SyncSession> = {}): SyncSession {
   };
 }
 
-/** A controller whose session list is scripted; null models an unavailable read. */
 export function controllerWith(sessions: SyncSession[] | null): FakeSyncController {
   const controller = new FakeSyncController();
   controller.sessionsResult = sessions;

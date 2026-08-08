@@ -96,10 +96,10 @@ export class FakeApiClient implements EngineApiClient {
   rejectNextListSessionsWith401 = false;
   /** One-shot: throws a 404 on the next revokeSession call, then clears itself. */
   rejectNextRevokeSessionWith404 = false;
-  /** Ids passed to revokeSession, in order. */
   readonly revokedSessionIds: string[] = [];
-  /** [id, deviceName] pairs passed to renameSession, in order. */
   readonly renamedSessions: [string, string][] = [];
+  /** Scriptable count for revokeOtherSessions, so the number the toast shows is pinned. */
+  revokeOtherSessionsResult = 0;
   /** Total successful token exchanges — proves resumeEnrollWithCode doesn't re-exchange. */
   exchangeCount = 0;
   private tokenCounter = 0;
@@ -167,7 +167,7 @@ export class FakeApiClient implements EngineApiClient {
 
   async revokeOtherSessions(): Promise<number> {
     this.assertAuthorized();
-    return Math.max(this.sessionsResult.length - 1, 0);
+    return this.revokeOtherSessionsResult;
   }
 
   async getRecoveryEnvelope(): Promise<KeyEnvelopeRecord | null> {

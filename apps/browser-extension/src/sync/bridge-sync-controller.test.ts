@@ -855,3 +855,75 @@ describe('BridgeSyncController: regenerateRecoveryCode', () => {
     await expect(controller.regenerateRecoveryCode()).rejects.toThrow();
   });
 });
+
+describe('BridgeSyncController: sessions', () => {
+  const session = {
+    id: 's1',
+    deviceName: 'laptop',
+    createdAt: 1,
+    lastUsedAt: 2,
+    current: true,
+  };
+
+  it('returns the sessions from the response', async () => {
+    runtime.sendMessage.mockResolvedValueOnce({
+      ok: true,
+      kind: 'sessions',
+      sessions: [session],
+    });
+    const controller = new BridgeSyncController();
+
+    await expect(controller.listSessions()).resolves.toEqual([session]);
+  });
+
+  it('passes an unreadable list through as null rather than an empty list', async () => {
+    runtime.sendMessage.mockResolvedValueOnce({ ok: true, kind: 'sessions', sessions: null });
+    const controller = new BridgeSyncController();
+
+    await expect(controller.listSessions()).resolves.toBeNull();
+  });
+
+  it('resolves null rather than rejecting when no listener responds', async () => {
+    runtime.sendMessage.mockResolvedValueOnce(undefined as never);
+    const controller = new BridgeSyncController();
+
+    await expect(controller.listSessions()).resolves.toBeNull();
+  });
+
+  // The panel only learns a revoke failed by catching, so resolving here would report a device
+  // as signed out while it is still syncing.
+  it('rejects revokeSession on a non-ok response instead of resolving silently', async () => {
+    runtime.sendMessage.mockResolvedValueOnce({ ok: false, reason: 'error', detail: 'boom' });
+    const controller = new BridgeSyncController();
+
+    await expect(controller.revokeSession('s2')).rejects.toThrow(/boom/);
+  });
+
+  it('rejects revokeSession when no listener responds', async () => {
+    runtime.sendMessage.mockResolvedValueOnce(undefined as never);
+    const controller = new BridgeSyncController();
+
+    await expect(controller.revokeSession('s2')).rejects.toThrow();
+  });
+
+  it('rejects renameSession on a non-ok response', async () => {
+    runtime.sendMessage.mockResolvedValueOnce({ ok: false, reason: 'error' });
+    const controller = new BridgeSyncController();
+
+    await expect(controller.renameSession('s1', 'Work MacBook')).rejects.toThrow();
+  });
+
+  it('returns the revoked count', async () => {
+    runtime.sendMessage.mockResolvedValueOnce({ ok: true, kind: 'revokedCount', revoked: 3 });
+    const controller = new BridgeSyncController();
+
+    await expect(controller.revokeOtherSessions()).resolves.toBe(3);
+  });
+
+  it('rejects revokeOtherSessions when an ok response carries no count', async () => {
+    runtime.sendMessage.mockResolvedValueOnce({ ok: true });
+    const controller = new BridgeSyncController();
+
+    await expect(controller.revokeOtherSessions()).rejects.toThrow();
+  });
+});

@@ -694,7 +694,7 @@ describe('handleSyncControlMessage: sessions', () => {
     expect(result).toEqual({ ok: true, kind: 'sessions', sessions: [session] });
   });
 
-  it('answers an unreadable list with an empty array rather than a failure', async () => {
+  it('forwards an unreadable list as null rather than an empty array', async () => {
     const engine = fakeControlSurface({ listSessions: vi.fn().mockResolvedValue(null) });
 
     const result = await handleSyncControlMessage(
@@ -703,7 +703,7 @@ describe('handleSyncControlMessage: sessions', () => {
       fakeDeps()
     );
 
-    expect(result).toEqual({ ok: true, kind: 'sessions', sessions: [] });
+    expect(result).toEqual({ ok: true, kind: 'sessions', sessions: null });
   });
 
   it('forwards a revoke and answers ok', async () => {
@@ -720,7 +720,6 @@ describe('handleSyncControlMessage: sessions', () => {
     expect(result).toEqual({ ok: true });
   });
 
-  // chrome.runtime JSON-serialises the response, so a thrown Error would reach the page as {}.
   it('answers a failed revoke with a serialisable failure, not a thrown Error', async () => {
     vi.spyOn(logger, 'error').mockImplementation(() => undefined);
     const engine = fakeControlSurface({

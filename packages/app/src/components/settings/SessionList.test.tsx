@@ -68,6 +68,8 @@ describe('SessionList', () => {
       's1',
       'Work MacBook',
     ]);
+    // Second listSessions: without the refresh the row keeps the stale name until a remount.
+    expect(controller.calls.filter((c) => c.method === 'listSessions')).toHaveLength(2);
   });
 
   it('offers regeneration above the confirm and does not force it', async () => {
@@ -89,6 +91,8 @@ describe('SessionList', () => {
     await waitFor(() => {
       expect(controller.calls.filter((c) => c.method === 'revokeSession')).toHaveLength(1);
     });
+    // Without the refresh the revoked device would linger in the list until a remount.
+    expect(controller.calls.filter((c) => c.method === 'listSessions')).toHaveLength(2);
   });
 
   it('toasts when a revoke fails', async () => {
@@ -131,7 +135,7 @@ describe('SessionList', () => {
     expect(screen.queryByRole('button', { name: /sign out all other devices/i })).toBeNull();
   });
 
-  it('reverts and toasts when a rename fails', async () => {
+  it('toasts and re-reads the server name when a rename fails', async () => {
     const controller = controllerWith([session({ id: 's1', deviceName: 'laptop' })]);
     controller.failNext('renameSession');
     renderSessionList(controller);
@@ -144,6 +148,8 @@ describe('SessionList', () => {
     await waitFor(() => {
       expect(toastError).toHaveBeenCalled();
     });
+    // The refresh is what discards the failed edit; the row shows what the server still holds.
+    expect(controller.calls.filter((c) => c.method === 'listSessions')).toHaveLength(2);
     expect(await screen.findByTestId('session-name-s1')).toHaveTextContent('laptop');
   });
 });

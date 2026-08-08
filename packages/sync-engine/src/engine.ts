@@ -877,11 +877,9 @@ export class SyncEngine {
 
   /**
    * Live sessions for the settings UI. Informational only, exactly like getAccount: resolves null
-   * when signed out or on any fetch failure (including 401 — no auth-loss side effects), never
-   * throws. A settings read that fails must not sign the user out.
+   * when signed out or on any fetch failure (including 401 — no auth-loss side effects).
    */
   async listSessions(): Promise<SyncSession[] | null> {
-    // The token read sits inside the try so the never-throws contract holds by construction.
     try {
       const token = await this.deps.sessionManager.getToken();
       if (token === null) {

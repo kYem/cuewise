@@ -201,12 +201,15 @@ export class D1SyncStore implements SyncStore {
     return (res.meta.changes ?? 0) > 0;
   }
 
+  // Mirrors listSessions' filter, expiry included: the count is shown to the user, so it has to
+  // match the rows they were just looking at rather than counting long-expired ones too.
   async revokeOtherSessions(userId: string, currentTokenHash: SessionTokenHash): Promise<number> {
     const res = await this.db
       .prepare(
-        'UPDATE tokens SET revoked_at = ? WHERE user_id = ? AND token_hash != ? AND revoked_at IS NULL'
+        `UPDATE tokens SET revoked_at = ?
+         WHERE user_id = ? AND token_hash != ? AND revoked_at IS NULL AND expires_at > ?`
       )
-      .bind(this.now(), userId, currentTokenHash)
+      .bind(this.now(), userId, currentTokenHash, this.now())
       .run();
     return res.meta.changes ?? 0;
   }

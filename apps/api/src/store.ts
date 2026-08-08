@@ -39,7 +39,8 @@ export interface SyncStore {
   // Per-device management (ENG-95). Every one is scoped to userId, so a session belonging to
   // another account is indistinguishable from one that does not exist.
   listSessions(userId: string, currentTokenHash: SessionTokenHash): Promise<SyncSession[]>;
-  // false when no live-or-revoked row with that id belongs to this user.
+  // false when no row with that id belongs to this user; expiry is not checked, since listSessions
+  // never hands out an expired id.
   revokeSessionById(userId: string, id: string): Promise<boolean>;
   renameSession(userId: string, id: string, deviceName: string): Promise<boolean>;
   revokeOtherSessions(userId: string, currentTokenHash: SessionTokenHash): Promise<number>;

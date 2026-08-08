@@ -68,11 +68,15 @@ export interface SyncLastCycleResponse {
   outcome: SyncOutcome | null;
 }
 
-/** Response to the 'listSessions' op. An unreadable list answers [], never a failure. */
+/**
+ * Response to the 'listSessions' op. `sessions` is nullable like SyncDetailsResponse.details:
+ * a signed-in caller always has at least its own session, so [] would be indistinguishable from
+ * an unreadable list — and the panel must say "couldn't load", not "no devices".
+ */
 export interface SyncSessionsResponse {
   ok: true;
   kind: 'sessions';
-  sessions: SyncSession[];
+  sessions: SyncSession[] | null;
 }
 
 /** Response to the 'revokeOtherSessions' op — how many sessions were cut. */
