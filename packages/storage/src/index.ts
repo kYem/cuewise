@@ -73,5 +73,6 @@ export {
   setSettingsPatchRaw,
   settingsStorageKey,
   setWeatherState,
+  updateGoals,
   updateVideoProgress,
 } from './storage-helpers';

@@ -24,7 +24,12 @@ import {
   STORAGE_KEYS,
   toggleSubtaskInGoal,
 } from '@cuewise/shared';
-import { getGoals as loadAllGoals, readSettings, setGoals as saveAllGoals } from '@cuewise/storage';
+import {
+  getGoals as loadAllGoals,
+  readSettings,
+  setGoals as saveAllGoals,
+  updateGoals,
+} from '@cuewise/storage';
 import { create } from 'zustand';
 import { createStaleLatch, createStorageObserver, sameEntities } from './storage-changes';
 import { useToastStore } from './toast-store';
@@ -83,10 +88,17 @@ function filterTodayTasks(goals: Goal[]): Goal[] {
     .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
 }
 
-// saveAllGoals resolves {success: false} (e.g. quota) instead of rejecting —
-// normalize to a throw so every writer's catch covers both failure channels.
-async function persistGoals(updatedGoals: Goal[]): Promise<void> {
-  assertPersisted(await saveAllGoals(updatedGoals));
+/**
+ * The only way this store changes the list. Takes a mutator rather than an array because the read
+ * has to happen inside the lock: a snapshot from `get()` is what the pull's own write clobbers.
+ *
+ * saveAllGoals resolves {success: false} (e.g. quota) instead of rejecting — normalize to a throw
+ * so every writer's catch covers both failure channels.
+ */
+async function persistGoals(mutate: (goals: Goal[]) => Goal[]): Promise<Goal[]> {
+  const { result, goals } = await updateGoals(mutate);
+  assertPersisted(result);
+  return goals;
 }
 
 const STALE_GOALS_MESSAGE =
@@ -152,10 +164,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
         parentId, // Link to objective if provided
       };
 
-      const { goals } = get();
-      const updatedGoals = [...goals, newGoal];
-
-      await persistGoals(updatedGoals);
+      const updatedGoals = await persistGoals((goals) => [...goals, newGoal]);
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
       notifyMutated('goals', newGoal.id);
@@ -175,13 +184,9 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
     }
 
     try {
-      const { goals } = get();
-
-      const updatedGoals = goals.map((goal) =>
-        goal.id === goalId ? { ...goal, text: text.trim() } : goal
+      const updatedGoals = await persistGoals((goals) =>
+        goals.map((goal) => (goal.id === goalId ? { ...goal, text: text.trim() } : goal))
       );
-
-      await persistGoals(updatedGoals);
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
       notifyMutated('goals', goalId);
@@ -197,13 +202,9 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
 
   toggleTask: async (goalId: string) => {
     try {
-      const { goals } = get();
-
-      const updatedGoals = goals.map((goal) =>
-        goal.id === goalId ? { ...goal, completed: !goal.completed } : goal
+      const updatedGoals = await persistGoals((goals) =>
+        goals.map((goal) => (goal.id === goalId ? { ...goal, completed: !goal.completed } : goal))
       );
-
-      await persistGoals(updatedGoals);
 
       const updatedTodayTasks = filterTodayTasks(updatedGoals);
       set({ goals: updatedGoals, todayTasks: updatedTodayTasks });
@@ -221,11 +222,9 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
 
   deleteTask: async (goalId: string) => {
     try {
-      const { goals } = get();
-
-      const updatedGoals = goals.filter((goal) => goal.id !== goalId);
-
-      await persistGoals(updatedGoals);
+      const updatedGoals = await persistGoals((goals) =>
+        goals.filter((goal) => goal.id !== goalId)
+      );
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
       notifyDeleted('goals', goalId);
@@ -241,17 +240,19 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
 
   clearCompleted: async () => {
     try {
-      const { goals } = get();
       const today = getTodayDateString();
 
-      // Remove completed tasks from today only (don't remove objectives)
-      const removedIds = goals
-        .filter((goal) => goal.date === today && goal.completed && isTask(goal))
-        .map((goal) => goal.id);
-      const removedIdSet = new Set(removedIds);
-      const updatedGoals = goals.filter((goal) => !removedIdSet.has(goal.id));
-
-      await persistGoals(updatedGoals);
+      // Captured inside the mutator: the ids notified must be the ones actually removed from
+      // storage, not ones a snapshot still held.
+      let removedIds: string[] = [];
+      const updatedGoals = await persistGoals((goals) => {
+        // Remove completed tasks from today only (don't remove objectives)
+        removedIds = goals
+          .filter((goal) => goal.date === today && goal.completed && isTask(goal))
+          .map((goal) => goal.id);
+        const removedIdSet = new Set(removedIds);
+        return goals.filter((goal) => !removedIdSet.has(goal.id));
+      });
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
       for (const id of removedIds) {
@@ -269,21 +270,20 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
 
   transferTaskToNextDay: async (goalId: string) => {
     try {
-      const { goals } = get();
       const tomorrow = getNextDayDateString();
 
-      const updatedGoals = goals.map((goal) => {
-        if (goal.id === goalId) {
-          return {
-            ...goal,
-            date: tomorrow,
-            transferCount: (goal.transferCount || 0) + 1,
-          };
-        }
-        return goal;
-      });
-
-      await persistGoals(updatedGoals);
+      const updatedGoals = await persistGoals((goals) =>
+        goals.map((goal) => {
+          if (goal.id === goalId) {
+            return {
+              ...goal,
+              date: tomorrow,
+              transferCount: (goal.transferCount || 0) + 1,
+            };
+          }
+          return goal;
+        })
+      );
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
       notifyMutated('goals', goalId);
@@ -301,21 +301,20 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
 
   moveTaskToToday: async (goalId: string) => {
     try {
-      const { goals } = get();
       const today = getTodayDateString();
 
-      const updatedGoals = goals.map((goal) => {
-        if (goal.id === goalId) {
-          return {
-            ...goal,
-            date: today,
-            completed: false, // Reset completion status when moving to today
-          };
-        }
-        return goal;
-      });
-
-      await persistGoals(updatedGoals);
+      const updatedGoals = await persistGoals((goals) =>
+        goals.map((goal) => {
+          if (goal.id === goalId) {
+            return {
+              ...goal,
+              date: today,
+              completed: false, // Reset completion status when moving to today
+            };
+          }
+          return goal;
+        })
+      );
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
       notifyMutated('goals', goalId);
@@ -409,8 +408,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
 
   duplicateTask: async (goalId: string) => {
     try {
-      const { goals } = get();
-      const goal = goals.find((g) => g.id === goalId && isTask(g));
+      const goal = get().goals.find((g) => g.id === goalId && isTask(g));
 
       if (!goal) {
         logger.warn('Attempted to duplicate a non-existent or non-task goal', { goalId });
@@ -418,9 +416,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       }
 
       const copy = duplicateGoalUtil(goal);
-      const updatedGoals = [...goals, copy];
-
-      await persistGoals(updatedGoals);
+      const updatedGoals = await persistGoals((goals) => [...goals, copy]);
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
       notifyMutated('goals', copy.id);
@@ -437,25 +433,23 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
 
   setTaskDueDate: async (goalId: string, dueDate: string | null) => {
     try {
-      const { goals } = get();
-
-      if (!goals.some((g) => g.id === goalId)) {
+      if (!get().goals.some((g) => g.id === goalId)) {
         logger.warn('Attempted to set due date on non-existent goal', { goalId });
         return false;
       }
 
-      const updatedGoals = goals.map((goal) => {
-        if (goal.id === goalId) {
-          if (dueDate === null) {
-            const { dueDate: _, ...rest } = goal;
-            return rest;
+      const updatedGoals = await persistGoals((goals) =>
+        goals.map((goal) => {
+          if (goal.id === goalId) {
+            if (dueDate === null) {
+              const { dueDate: _, ...rest } = goal;
+              return rest;
+            }
+            return { ...goal, dueDate };
           }
-          return { ...goal, dueDate };
-        }
-        return goal;
-      });
-
-      await persistGoals(updatedGoals);
+          return goal;
+        })
+      );
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
       notifyMutated('goals', goalId);
@@ -475,21 +469,19 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
     }
 
     try {
-      const { goals } = get();
-
-      if (!goals.some((g) => g.id === goalId)) {
+      if (!get().goals.some((g) => g.id === goalId)) {
         logger.warn('Attempted to add subtask to non-existent goal', { goalId });
         return false;
       }
 
-      const updatedGoals = goals.map((goal) => {
-        if (goal.id === goalId) {
-          return addSubtaskToGoal(goal, text.trim());
-        }
-        return goal;
-      });
-
-      await persistGoals(updatedGoals);
+      const updatedGoals = await persistGoals((goals) =>
+        goals.map((goal) => {
+          if (goal.id === goalId) {
+            return addSubtaskToGoal(goal, text.trim());
+          }
+          return goal;
+        })
+      );
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
       notifyMutated('goals', goalId);
@@ -505,21 +497,19 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
 
   toggleSubtask: async (goalId: string, subtaskId: string) => {
     try {
-      const { goals } = get();
-
-      if (!goals.some((g) => g.id === goalId)) {
+      if (!get().goals.some((g) => g.id === goalId)) {
         logger.warn('Attempted to toggle subtask on non-existent goal', { goalId });
         return false;
       }
 
-      const updatedGoals = goals.map((goal) => {
-        if (goal.id === goalId) {
-          return toggleSubtaskInGoal(goal, subtaskId);
-        }
-        return goal;
-      });
-
-      await persistGoals(updatedGoals);
+      const updatedGoals = await persistGoals((goals) =>
+        goals.map((goal) => {
+          if (goal.id === goalId) {
+            return toggleSubtaskInGoal(goal, subtaskId);
+          }
+          return goal;
+        })
+      );
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
       notifyMutated('goals', goalId);
@@ -535,21 +525,19 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
 
   removeSubtask: async (goalId: string, subtaskId: string) => {
     try {
-      const { goals } = get();
-
-      if (!goals.some((g) => g.id === goalId)) {
+      if (!get().goals.some((g) => g.id === goalId)) {
         logger.warn('Attempted to remove subtask from non-existent goal', { goalId });
         return false;
       }
 
-      const updatedGoals = goals.map((goal) => {
-        if (goal.id === goalId) {
-          return removeSubtaskFromGoal(goal, subtaskId);
-        }
-        return goal;
-      });
-
-      await persistGoals(updatedGoals);
+      const updatedGoals = await persistGoals((goals) =>
+        goals.map((goal) => {
+          if (goal.id === goalId) {
+            return removeSubtaskFromGoal(goal, subtaskId);
+          }
+          return goal;
+        })
+      );
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
       notifyMutated('goals', goalId);
@@ -565,7 +553,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
 
   reorderTasks: async (fromIndex: number, toIndex: number) => {
     try {
-      const { goals, todayTasks } = get();
+      const { todayTasks } = get();
 
       const reorderedTodayTasks = reorderGoalsUtil(todayTasks, fromIndex, toIndex);
 
@@ -576,15 +564,15 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
 
       // Update sortOrder in the full goals array
       const sortOrderMap = new Map(reorderedTodayTasks.map((t) => [t.id, t.sortOrder]));
-      const updatedGoals = goals.map((goal) => {
-        const newOrder = sortOrderMap.get(goal.id);
-        if (newOrder !== undefined) {
-          return { ...goal, sortOrder: newOrder };
-        }
-        return goal;
-      });
-
-      await persistGoals(updatedGoals);
+      const updatedGoals = await persistGoals((goals) =>
+        goals.map((goal) => {
+          const newOrder = sortOrderMap.get(goal.id);
+          if (newOrder !== undefined) {
+            return { ...goal, sortOrder: newOrder };
+          }
+          return goal;
+        })
+      );
 
       set({ goals: updatedGoals, todayTasks: reorderedTodayTasks });
       for (const task of reorderedTodayTasks) {
@@ -620,10 +608,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
         description: description?.trim(),
       };
 
-      const { goals } = get();
-      const updatedGoals = [...goals, newGoal];
-
-      await persistGoals(updatedGoals);
+      const updatedGoals = await persistGoals((goals) => [...goals, newGoal]);
       set({ goals: updatedGoals });
       notifyMutated('goals', newGoal.id);
 
@@ -643,22 +628,20 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
     updates: { text?: string; description?: string; date?: string; completed?: boolean }
   ) => {
     try {
-      const { goals } = get();
-
-      const updatedGoals = goals.map((goal) => {
-        if (goal.id === goalId && isObjective(goal)) {
-          return {
-            ...goal,
-            ...(updates.text !== undefined && { text: updates.text.trim() }),
-            ...(updates.description !== undefined && { description: updates.description.trim() }),
-            ...(updates.date !== undefined && { date: updates.date }),
-            ...(updates.completed !== undefined && { completed: updates.completed }),
-          };
-        }
-        return goal;
-      });
-
-      await persistGoals(updatedGoals);
+      const updatedGoals = await persistGoals((goals) =>
+        goals.map((goal) => {
+          if (goal.id === goalId && isObjective(goal)) {
+            return {
+              ...goal,
+              ...(updates.text !== undefined && { text: updates.text.trim() }),
+              ...(updates.description !== undefined && { description: updates.description.trim() }),
+              ...(updates.date !== undefined && { date: updates.date }),
+              ...(updates.completed !== undefined && { completed: updates.completed }),
+            };
+          }
+          return goal;
+        })
+      );
       set({ goals: updatedGoals });
       notifyMutated('goals', goalId);
 
@@ -681,22 +664,23 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
 
   deleteGoal: async (goalId: string) => {
     try {
-      const { goals } = get();
-      const orphanedIds = goals.filter((goal) => goal.parentId === goalId).map((goal) => goal.id);
-
-      // Remove the goal and unlink any tasks that were linked to it
-      const updatedGoals = goals
-        .filter((goal) => goal.id !== goalId)
-        .map((goal) => {
-          if (goal.parentId === goalId) {
-            // Orphan the task - remove the parentId link
-            const { parentId, ...rest } = goal;
-            return rest;
-          }
-          return goal;
-        });
-
-      await persistGoals(updatedGoals);
+      // Captured inside the mutator, like clearCompleted: the ids notified are the ones the
+      // write actually orphaned.
+      let orphanedIds: string[] = [];
+      const updatedGoals = await persistGoals((goals) => {
+        orphanedIds = goals.filter((goal) => goal.parentId === goalId).map((goal) => goal.id);
+        // Remove the goal and unlink any tasks that were linked to it
+        return goals
+          .filter((goal) => goal.id !== goalId)
+          .map((goal) => {
+            if (goal.parentId === goalId) {
+              // Orphan the task - remove the parentId link
+              const { parentId, ...rest } = goal;
+              return rest;
+            }
+            return goal;
+          });
+      });
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
       notifyDeleted('goals', goalId);
@@ -717,21 +701,19 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
 
   linkTaskToGoal: async (taskId: string, goalId: string | null) => {
     try {
-      const { goals } = get();
-
-      const updatedGoals = goals.map((goal) => {
-        if (goal.id === taskId && isTask(goal)) {
-          if (goalId === null) {
-            // Unlink the task - remove parentId
-            const { parentId, ...rest } = goal;
-            return rest;
+      const updatedGoals = await persistGoals((goals) =>
+        goals.map((goal) => {
+          if (goal.id === taskId && isTask(goal)) {
+            if (goalId === null) {
+              // Unlink the task - remove parentId
+              const { parentId, ...rest } = goal;
+              return rest;
+            }
+            return { ...goal, parentId: goalId };
           }
-          return { ...goal, parentId: goalId };
-        }
-        return goal;
-      });
-
-      await persistGoals(updatedGoals);
+          return goal;
+        })
+      );
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
       notifyMutated('goals', taskId);
