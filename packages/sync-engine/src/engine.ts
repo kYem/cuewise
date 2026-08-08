@@ -246,10 +246,9 @@ export class SyncEngine {
     const epoch = this.accountEpoch;
     const before = this.status;
     try {
-      // Inside the try so a storage fault reading the token routes through handleEnableError
+      // Inside the try so a storage fault reading the session routes through handleEnableError
       // (status → error) like every other enroll failure, not out as a raw rejection.
-      const token = await this.deps.sessionManager.getToken();
-      if (token === null) {
+      if (!(await this.deps.sessionManager.isSignedIn())) {
         // A disable is why the session is gone, and it has already cleared it: handleAuthLoss
         // would repaint the pill as "Sign-in expired" for a device the user disconnected.
         if (this.enrollSuperseded(epoch)) {
@@ -698,10 +697,8 @@ export class SyncEngine {
     try {
       return await this.queueEnvelope(async () => {
         // Like getAccount: a signed-out device would only earn a 401 and a warning for asking.
-        if ((await this.deps.sessionManager.getToken()) === null) {
-          // Same guard as the catch: a disable clears the session before it nulls the field, so
-          // the token being gone is exactly when the field can still hold the removed account's.
-          return this.accountEpoch === epoch ? this.recoveryEnvelope : null;
+        if (!(await this.deps.sessionManager.isSignedIn())) {
+          return this.lastEnvelopeAnswer(epoch);
         }
         const present = (await this.deps.apiClient.getRecoveryEnvelope()) !== null;
         const news = await this.recordRecoveryEnvelope(present, epoch);
@@ -720,10 +717,17 @@ export class SyncEngine {
       logger.warn(`Could not check the cloud sync recovery envelope: ${describeThrown(err)}`, {
         error: err,
       });
-      // disableSync clears the session before it nulls the field, so a disable landing mid-fetch
-      // arrives here as a 401 with the removed account's answer still readable.
-      return this.accountEpoch === epoch ? this.recoveryEnvelope : null;
+      return this.lastEnvelopeAnswer(epoch);
     }
+  }
+
+  /**
+   * What a caller that could not reach the server may still report. Null once a disable has
+   * superseded it: disableSync clears the session BEFORE it nulls the field, so both exits above
+   * are reached while the removed account's answer is still readable.
+   */
+  private lastEnvelopeAnswer(epoch: number): boolean | null {
+    return this.accountEpoch === epoch ? this.recoveryEnvelope : null;
   }
 
   /**
@@ -918,11 +922,10 @@ export class SyncEngine {
    * or on any fetch failure (including 401 — no auth-loss side effects), never throws.
    */
   async getAccount(): Promise<{ userId: string; email: string | null } | null> {
-    // The token read sits inside the try so the never-throws contract holds by construction,
+    // The session read sits inside the try so the never-throws contract holds by construction,
     // not by the current storage adapters happening to swallow their own errors.
     try {
-      const token = await this.deps.sessionManager.getToken();
-      if (token === null) {
+      if (!(await this.deps.sessionManager.isSignedIn())) {
         return null;
       }
       return await this.deps.apiClient.getAccount();
