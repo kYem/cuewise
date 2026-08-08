@@ -2091,6 +2091,29 @@ describe('SyncEngine.refreshRecoveryEnvelope', () => {
     await expect(device.kv.get(RECOVERY_ENVELOPE_KEY, 'local')).resolves.toBe(true);
   });
 
+  it('does not let an "absent" read that STARTED inside a Regenerate outrank it either', async () => {
+    // The sibling above starts first and resolves late; this one starts after the PUT is already
+    // on the wire, so a completed-writes counter alone sees no change and lets it through. Only
+    // the in-flight gauge catches it. Reachable: 'details' bypasses the extension's control mutex.
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    let refresh: Promise<boolean | null> = Promise.resolve(null);
+    vi.spyOn(device.apiClient, 'putRecoveryEnvelope').mockImplementation(async () => {
+      // Starts mid-regenerate, and its own GET is answered from the pre-PUT server state.
+      vi.spyOn(device.apiClient, 'getRecoveryEnvelope').mockResolvedValue(null);
+      refresh = device.engine.refreshRecoveryEnvelope();
+      await refresh;
+    });
+
+    await device.engine.regenerateRecoveryCode();
+
+    await expect(refresh).resolves.toBe(true);
+    await expect(device.kv.get(RECOVERY_ENVELOPE_KEY, 'local')).resolves.toBe(true);
+  });
+
   it('never rejects, even when the storage adapter throws', async () => {
     // getDetails is contracted never to reject and this call writes as well as fetches, so the
     // contract has to hold by construction rather than because today's adapters swallow errors.

@@ -176,9 +176,12 @@ export class SyncEngine {
   // null until a check has answered once, so a panel on a cold worker cannot read "unknown" as
   // "missing" and claim an account has no recovery path before anything has checked.
   private recoveryEnvelope: boolean | null = null;
-  // Bumped by every write that KNOWS the envelope state because it just put one there (enrol,
-  // regenerate). A refresh that was already on the wire is the older news, however it resolves.
-  private envelopeAuthority = 0;
+  // A refresh asks the server what is there; these two put something there (enrol, regenerate), so
+  // they outrank it. A count of completed ones AND a gauge of running ones, because either alone
+  // misses a case: the count cannot see a write still in flight, and the gauge cannot see one that
+  // began and finished entirely inside a single refresh. See withEnvelopeAuthority.
+  private envelopeWrites = 0;
+  private envelopeWritesInFlight = 0;
   // Whether the enrol in flight minted a code. Never the code itself: this only decides whether the
   // "only way back" breadcrumb fires, and the value belongs to the host's one-shot slot.
   private enrollMintedCode = false;
@@ -290,8 +293,7 @@ export class SyncEngine {
     this.keyId = enrolled.keyId;
     // Both enrol paths prove one: initNewKey PUT it, enrollFromEnvelope unwrapped it. Without
     // this a freshly-connected device reads "unknown" until its next start().
-    this.envelopeAuthority += 1;
-    await this.recordRecoveryEnvelope(true, epoch);
+    await this.withEnvelopeAuthority(() => this.recordRecoveryEnvelope(true, epoch));
 
     this.setStatus('initial_sync');
     // Unconditionally: the enabled flag survives handleAuthLoss, so its presence cannot mean the
@@ -486,13 +488,29 @@ export class SyncEngine {
     const { code, secret } = await generateRecoveryCode();
     const mk = await deriveMasterKey(secret);
     const blob = await wrapDataKey(mk, dk, keyId);
-    // Before the PUT, not after: a refresh already on the wire can resolve at any point from here,
-    // and every one of those resolutions is older news than the envelope this is about to store.
-    this.envelopeAuthority += 1;
-    await this.deps.apiClient.putRecoveryEnvelope(blob);
-    // The one repair for a missing envelope, so this is what retires the badge it raised.
-    await this.recordRecoveryEnvelope(true, epoch);
+    await this.withEnvelopeAuthority(async () => {
+      await this.deps.apiClient.putRecoveryEnvelope(blob);
+      // The one repair for a missing envelope, so this is what retires the badge it raised.
+      await this.recordRecoveryEnvelope(true, epoch);
+    });
     return code;
+  }
+
+  /**
+   * Fences a write that KNOWS the envelope state (it just put one there) against every concurrent
+   * refresh, which only knows what a GET happened to see. Must span the PUT as well as the record:
+   * a GET served before the PUT lands is stale the moment it resolves, whenever that is.
+   */
+  private async withEnvelopeAuthority(write: () => Promise<unknown>): Promise<void> {
+    this.envelopeWritesInFlight += 1;
+    try {
+      await write();
+    } finally {
+      // Both, in this order, so no refresh ever observes a moment where neither flags the write:
+      // the gauge covers it while it runs, the count covers it once it has.
+      this.envelopeWrites += 1;
+      this.envelopeWritesInFlight -= 1;
+    }
   }
 
   /**
@@ -704,7 +722,7 @@ export class SyncEngine {
    */
   async refreshRecoveryEnvelope(): Promise<boolean | null> {
     const epoch = this.accountEpoch;
-    const authority = this.envelopeAuthority;
+    const writes = this.envelopeWrites;
     // One try over the storage writes as well as the fetch: the never-throws contract has to hold
     // by construction, not because today's adapters happen to swallow their own errors.
     try {
@@ -719,9 +737,10 @@ export class SyncEngine {
         // and recording it would hand the next account to connect the previous one's badge.
         return null;
       }
-      if (this.envelopeAuthority !== authority) {
-        // A Regenerate landed while this was on the wire: it PUT an envelope, so an "absent" read
-        // that started before it is stale, and recording it re-raises the banner it just retired.
+      if (this.envelopeWrites !== writes || this.envelopeWritesInFlight > 0) {
+        // An enrol or Regenerate overlapped this read — finished inside it, or still running. It
+        // PUT an envelope; this only saw what a GET racing that PUT returned, so recording an
+        // "absent" here re-raises the banner the click just retired, on an account that now has one.
         return this.recoveryEnvelope;
       }
       const news = await this.recordRecoveryEnvelope(present, epoch);
@@ -939,7 +958,7 @@ export class SyncEngine {
     }
   }
 
-  /** Self-heal, then hold the DK and arm the pull loop. No-op if sync was never enabled here. */
+  /** Check the DK, then hold it and arm the pull loop. No-op if sync was never enabled here. */
   async start(): Promise<void> {
     // Snapshotted BEFORE the flag read, not after: a disable completing while that read is in
     // flight returns a stale `true`, and an epoch taken afterwards already matches the bump, so

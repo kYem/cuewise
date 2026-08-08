@@ -406,10 +406,12 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     }
   };
 
-  const refreshDetails = async () => {
+  // Explicit at every call site, with no default: a caller that has just WRITTEN the envelope wants
+  // the recorded answer, and `undefined` would silently pick up a default and go asking instead.
+  const refreshDetails = async (options: SyncDetailsOptions | undefined) => {
     detailsGenRef.current += 1;
     const gen = detailsGenRef.current;
-    const next = await controller.getDetails(WITH_ENVELOPE).catch((error) => {
+    const next = await controller.getDetails(options).catch((error) => {
       logger.error(`Cloud sync details unavailable: ${describeThrown(error)}`, error);
       return null;
     });
@@ -427,7 +429,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     // would hand this account the previous one's failure.
     setCycle(CYCLE_NONE);
     await refreshLastCycle();
-    await refreshDetails();
+    await refreshDetails(WITH_ENVELOPE);
   };
 
   // A disconnect landed mid-enable, so the switch must stop reading on.
@@ -593,20 +595,25 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   // which need not be the one the server kept — a saved code that opens nothing.
   const handleRegenerate = async () => {
     setIsRegenerating(true);
+    let regenerated = false;
     try {
       const code = await controller.regenerateRecoveryCode();
       setUnsavedCode(false);
       // Not setRecoveryCode: the server envelope is already replaced, so a closed panel must not
       // swallow the only copy of the code that opens it.
       surfaceRecoveryCode(code);
-      // This click is the only repair for a missing envelope, and this panel is now the only thing
-      // that re-reads the flag — without this the banner it just fixed stays up all mount.
-      await refreshDetails();
+      regenerated = true;
     } catch (error) {
       logger.error('Cloud sync regenerate recovery code failed', error);
       useToastStore.getState().error("Couldn't regenerate your recovery code — please try again.");
     } finally {
       setIsRegenerating(false);
+    }
+    // Outside the try, like handleSyncNow: this is the only repair for a missing envelope and this
+    // panel the only thing that re-reads the flag, so without it the banner it just fixed stays up
+    // all mount. No refresh argument — the engine recorded the answer when it wrote the envelope.
+    if (regenerated) {
+      await refreshDetails(undefined);
     }
   };
 
