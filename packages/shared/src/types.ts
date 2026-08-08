@@ -426,6 +426,11 @@ export interface Settings {
   showThemeSwitcher: boolean; // Show live theme switcher sidebar
   showClock: boolean; // Show clock and date on home page (default false)
   showQuickLinks: boolean; // Show quick-link shortcut tiles top-left on home page (default true)
+  showNotes: boolean; // Show the scratchpad pill top-left on home page (default true)
+  // A settings key, not its own collection: per-key writes keep the highest-churn field in the app
+  // clear of the whole-array rewrite the array bindings still do.
+  note: string; // The scratchpad's contents (default '')
+  notesExpanded: boolean; // Scratchpad opens at the larger size (default false)
   showWeather: boolean; // Show the weather chip on the new tab (default false)
   weatherPosition: WeatherPosition; // Which floating cluster the chip joins (default 'left')
   weatherUnits: WeatherUnitsPreference; // 'auto' resolves from locale (default 'auto')

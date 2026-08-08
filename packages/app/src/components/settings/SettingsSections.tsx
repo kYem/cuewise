@@ -583,6 +583,14 @@ function HomeSection({ s, set, filter }: SettingsSectionProps) {
         />
       </SettingRow>
       <SettingRow
+        label="Notes"
+        filter={filter}
+        help="A scratchpad in the top-left of the home page, kept on this device unless sync is on"
+        keywords="notes scratchpad jot memo text note pad reminder scribble"
+      >
+        <Switch label="Notes" checked={s.showNotes} onChange={(v) => set({ showNotes: v })} />
+      </SettingRow>
+      <SettingRow
         label="Weather"
         filter={filter}
         help="Current conditions and today's forecast, fetched through Cuewise's own proxy"
