@@ -3,12 +3,14 @@ import { conceptCardFactory } from '@cuewise/test-utils/factories';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useConceptCardsStore } from '../stores/concept-cards-store';
+import { useQuoteStore } from '../stores/quote-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { ConceptRotation, selectSurfacedCard } from './ConceptRotation';
 import { Modal } from './Modal';
 
 vi.mock('../stores/settings-store', () => ({ useSettingsStore: vi.fn() }));
 vi.mock('../stores/concept-cards-store', () => ({ useConceptCardsStore: vi.fn() }));
+vi.mock('../stores/quote-store', () => ({ useQuoteStore: vi.fn() }));
 
 const dueCard = conceptCardFactory.build({
   term: 'Saga pattern',
@@ -37,7 +39,10 @@ function setup({ enabled = true, framing = 'queue', cadence = 'every', cards = [
   vi.mocked(useConceptCardsStore).mockImplementation(
     createSelectorMock({ cards, isLoading: false, initialize: vi.fn(), reviewCard })
   );
-  return { reviewCard };
+  // clearAllMocks does not strip a plain assigned property, so every test gets its own.
+  const refreshQuote = vi.fn();
+  Object.assign(useQuoteStore, { getState: () => ({ refreshQuote }) });
+  return { reviewCard, refreshQuote };
 }
 
 describe('ConceptRotation', () => {
@@ -78,6 +83,43 @@ describe('ConceptRotation', () => {
     fireEvent.click(screen.getByRole('button', { name: /good/i }));
 
     expect(reviewCard).toHaveBeenCalledWith(dueCard.id, 'good');
+  });
+
+  it('leaves the card for a fresh quote when space follows the reveal', async () => {
+    const { refreshQuote } = setup({ framing: 'queue', cards: [dueCard] });
+    const onManualRefresh = vi.fn();
+
+    render(<ConceptRotation fallback={<div>QUOTE</div>} onManualRefresh={onManualRefresh} />);
+    fireEvent.click(screen.getByRole('button', { name: /reveal answer/i }));
+    await act(async () => {
+      fireEvent.keyDown(document.body, { key: ' ' });
+    });
+
+    expect(screen.getByText('QUOTE')).toBeInTheDocument();
+    expect(refreshQuote).toHaveBeenCalledTimes(1);
+    // Without this the host's rotation keeps its phase and overwrites the quote just asked for.
+    expect(onManualRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('still leaves for the quote when a card was added during the tab', async () => {
+    // A card added after the surfacing decision is not in knownIds, so clearing
+    // decision.show alone keeps surfacing it and space would look dead.
+    const added = conceptCardFactory.build({
+      term: 'Added mid-tab',
+      schedule: { dueDate: '2020-01-01', interval: 0, easeFactor: 2.5, repetitions: 0, lapses: 0 },
+    });
+    setup({ framing: 'queue', cards: [dueCard] });
+    const { rerender } = render(<ConceptRotation fallback={<div>QUOTE</div>} />);
+    setup({ framing: 'queue', cards: [dueCard, added] });
+    rerender(<ConceptRotation fallback={<div>QUOTE</div>} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /reveal answer/i }));
+    await act(async () => {
+      fireEvent.keyDown(document.body, { key: ' ' });
+    });
+
+    expect(screen.getByText('QUOTE')).toBeInTheDocument();
+    expect(screen.queryByText('Added mid-tab')).not.toBeInTheDocument();
   });
 
   it('yields back to the quote after grading in ambient framing', async () => {

@@ -5,7 +5,7 @@ import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeSyncController } from '../../sync/__fixtures__/fake-sync-controller';
-import type { SyncUiStatus } from '../../sync/sync-controller';
+import type { SyncDetails, SyncUiStatus } from '../../sync/sync-controller';
 import { SyncControllerContext } from '../../sync/sync-controller';
 import { SyncSettingsSectionComponent } from './SyncSettingsSection';
 import type { SettingsSectionProps } from './settings-types';
@@ -809,7 +809,7 @@ describe('SyncSettingsSectionComponent', () => {
       accountEmail: 'kes@example.com',
       accountId: 'acct-1',
       lastSyncedAt: null,
-      recoveryEnvelopePresent: false,
+      recoveryEnvelope: 'missing',
     });
     renderSection(controller);
     act(() => controller.setStatus('active'));
@@ -818,11 +818,49 @@ describe('SyncSettingsSectionComponent', () => {
     expect(screen.getByRole('button', { name: /Regenerate recovery code/i })).toBeInTheDocument();
   });
 
-  // null is "self-heal has not answered", and an older service worker omits the field entirely.
-  // Painting either as a missing code tells a healthy account its data is unrecoverable.
-  it.each([
-    ['not yet answered', { recoveryEnvelopePresent: null }],
-    ['answered present', { recoveryEnvelopePresent: true }],
+  it('asks every details lookup to refresh the envelope, since it renders the finding', async () => {
+    // ENG-98: the check runs where it is consumed, and this panel is the only consumer. A lookup
+    // that forgot the flag would report a recorded answer forever and the banner would go stale.
+    const controller = new FakeSyncController();
+    controller.scriptDetails({
+      accountEmail: 'kes@example.com',
+      accountId: 'acct-1',
+      lastSyncedAt: null,
+      recoveryEnvelope: 'missing',
+    });
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+
+    await screen.findByTestId('no-recovery-code-banner');
+    const lookups = controller.calls.filter((call) => call.method === 'getDetails');
+    expect(lookups).not.toHaveLength(0);
+    for (const lookup of lookups) {
+      expect(lookup.args).toEqual([{ refreshRecoveryEnvelope: true }]);
+    }
+  });
+
+  it('re-reads the envelope after Regenerate, so the banner it repairs comes down', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    const account = { accountEmail: 'kes@example.com', accountId: 'acct-1', lastSyncedAt: null };
+    controller.scriptDetails({ ...account, recoveryEnvelope: 'missing' });
+    controller.scriptDetails({ ...account, recoveryEnvelope: 'present' });
+    renderSection(controller);
+    act(() => controller.setStatus('active'));
+    await screen.findByTestId('no-recovery-code-banner');
+
+    await user.click(screen.getByRole('button', { name: 'Regenerate recovery code' }));
+
+    await waitFor(() =>
+      expect(screen.queryByTestId('no-recovery-code-banner')).not.toBeInTheDocument()
+    );
+  });
+
+  // Only 'missing' is a finding. An older service worker omits the field entirely, which has to
+  // read the same as 'unknown' — painting either tells a healthy account its data is unrecoverable.
+  it.each<[string, Partial<SyncDetails>]>([
+    ['not yet answered', { recoveryEnvelope: 'unknown' }],
+    ['answered present', { recoveryEnvelope: 'present' }],
     ['absent, from a service worker that predates the field', {}],
   ])('stays quiet when the envelope is %s', async (_name, envelope) => {
     const controller = new FakeSyncController();

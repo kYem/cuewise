@@ -23,6 +23,7 @@ function renderCard(props: Partial<CardProps> = {}) {
       isFavorite={false}
       onToggleFavorite={vi.fn()}
       dueCount={0}
+      onSkipToQuote={vi.fn()}
       {...props}
     />
   );
@@ -90,6 +91,86 @@ describe('ConceptCardDisplay', () => {
     fireEvent.keyDown(document.body, { key: '2' });
 
     expect(onGrade).not.toHaveBeenCalled();
+  });
+
+  it('reveals the answer with the space key', () => {
+    renderCard();
+
+    fireEvent.keyDown(document.body, { key: ' ' });
+
+    expect(screen.getByText(card.definition)).toBeInTheDocument();
+  });
+
+  it('leaves space to the control that has focus, rather than revealing', () => {
+    renderCard();
+    const next = screen.getByRole('button', { name: 'Next' });
+    next.focus();
+
+    fireEvent.keyDown(next, { key: ' ' });
+
+    expect(screen.queryByText(card.definition)).not.toBeInTheDocument();
+  });
+
+  it('leaves space alone while typing', () => {
+    renderCard();
+    render(<input aria-label="note" />);
+    screen.getByLabelText('note').focus();
+
+    fireEvent.keyDown(screen.getByLabelText('note'), { key: ' ' });
+
+    expect(screen.queryByText(card.definition)).not.toBeInTheDocument();
+  });
+
+  it('moves on to a quote when space is pressed after the reveal', () => {
+    const onSkipToQuote = vi.fn();
+    renderCard({ activeRecall: false, onSkipToQuote });
+
+    fireEvent.keyDown(document.body, { key: ' ' });
+
+    expect(onSkipToQuote).toHaveBeenCalledTimes(1);
+  });
+
+  it('drops focus after revealing, so the ring does not eat the next space', () => {
+    // Chromium keeps focus on a clicked button; jsdom does not, so it is set here.
+    renderCard();
+    const reveal = screen.getByRole('button', { name: /reveal answer/i });
+    reveal.focus();
+
+    fireEvent.click(reveal, { detail: 1 });
+
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it('keeps focus when the ring is activated from the keyboard', () => {
+    // Blurring here would drop a keyboard user at the top of the page.
+    renderCard();
+    const reveal = screen.getByRole('button', { name: /reveal answer/i });
+    reveal.focus();
+
+    fireEvent.click(reveal, { detail: 0 });
+
+    expect(document.activeElement).not.toBe(document.body);
+  });
+
+  it('drops focus from a clicked dock button too, not just the ring', () => {
+    // The dock advertises space as a card shortcut; a press after a click would re-fire
+    // the button instead — silently undoing a favorite.
+    renderCard();
+    const favorite = screen.getByRole('button', { name: /^favorite$/i });
+    favorite.focus();
+
+    fireEvent.click(favorite, { detail: 1 });
+
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it('names the space shortcut on the reveal control', () => {
+    renderCard();
+
+    expect(screen.getByRole('button', { name: /reveal answer/i })).toHaveAttribute(
+      'title',
+      expect.stringMatching(/space/i)
+    );
   });
 
   it('shows the definition upfront when active recall is off', () => {

@@ -30,9 +30,49 @@ describe('handleSyncControlMessage: details', () => {
         accountEmail: 'kes@example.com',
         accountId: 'u1',
         lastSyncedAt: 1_700_000_000_000,
-        recoveryEnvelopePresent: true,
+        recoveryEnvelope: 'present',
       },
     });
+  });
+
+  it('refreshes the recovery envelope when the caller asks for it', async () => {
+    // ENG-98 moved the check off the worker's pull loop onto this lookup, and the settings panel
+    // is the caller that sets the flag — it is the one surface that renders the finding.
+    const refreshRecoveryEnvelope = vi.fn().mockResolvedValue('missing');
+    const engine = fakeControlSurface({
+      getAccount: vi.fn().mockResolvedValue({ userId: 'u1', email: null }),
+      getRecoveryEnvelope: vi.fn().mockReturnValue('present'),
+      refreshRecoveryEnvelope,
+    });
+
+    const result = await handleSyncControlMessage(
+      engine,
+      { kind: 'cuewise-sync-control', op: 'details', refreshRecoveryEnvelope: true },
+      fakeDeps()
+    );
+
+    expect(refreshRecoveryEnvelope).toHaveBeenCalled();
+    expect(result).toMatchObject({ details: { recoveryEnvelope: 'missing' } });
+  });
+
+  it('reports the recorded answer without asking the server when the flag is absent', async () => {
+    // The quick-menu footer shows the identity and nothing else, so it must not buy a request for
+    // a finding it never renders — the waste ENG-98 is about, in miniature.
+    const refreshRecoveryEnvelope = vi.fn().mockResolvedValue('missing');
+    const engine = fakeControlSurface({
+      getAccount: vi.fn().mockResolvedValue({ userId: 'u1', email: null }),
+      getRecoveryEnvelope: vi.fn().mockReturnValue('present'),
+      refreshRecoveryEnvelope,
+    });
+
+    const result = await handleSyncControlMessage(
+      engine,
+      { kind: 'cuewise-sync-control', op: 'details' },
+      fakeDeps()
+    );
+
+    expect(refreshRecoveryEnvelope).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ details: { recoveryEnvelope: 'present' } });
   });
 
   it('answers details null when the engine has no account', async () => {

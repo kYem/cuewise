@@ -1,6 +1,6 @@
 import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
-import { newUser } from './__fixtures__/api-test-helpers.fixtures';
+import { newUser, record } from './__fixtures__/api-test-helpers.fixtures';
 import { D1SyncStore } from './d1-store';
 
 describe('D1SyncStore key envelopes', () => {
@@ -73,5 +73,57 @@ describe('D1SyncStore key envelopes', () => {
     const b = await newUser(store, 'k8b');
     await expect(store.putKeyEnvelopeIfAbsent(a, 'recovery', 'v1.dk-1.a-only')).resolves.toBe(true);
     await expect(store.putKeyEnvelopeIfAbsent(b, 'recovery', 'v1.dk-1.b-only')).resolves.toBe(true);
+  });
+});
+
+describe('D1SyncStore exportUser key envelopes', () => {
+  it('carries the recovery envelope so an export decrypts offline with only the recovery code', async () => {
+    const store = new D1SyncStore(env.DB);
+    const userId = await newUser(store, 'x1');
+    await store.putKeyEnvelope(userId, 'recovery', 'v1.dk-1.aaaa.bbbb');
+    const stored = await store.getKeyEnvelope(userId, 'recovery');
+    if (stored === null) {
+      throw new Error('expected the envelope just written to be readable');
+    }
+
+    const { keyEnvelopes } = await store.exportUser(userId);
+
+    expect(keyEnvelopes).toEqual([
+      { kind: 'recovery', envelope: 'v1.dk-1.aaaa.bbbb', updatedAt: stored.updatedAt },
+    ]);
+  });
+
+  it('returns an empty list when keys were never initialized', async () => {
+    const store = new D1SyncStore(env.DB);
+    const userId = await newUser(store, 'x2');
+    const { keyEnvelopes } = await store.exportUser(userId);
+    expect(keyEnvelopes).toEqual([]);
+  });
+
+  it('carries every kind, ordered, not just recovery', async () => {
+    const store = new D1SyncStore(env.DB);
+    const userId = await newUser(store, 'x3');
+    await store.putKeyEnvelope(userId, 'recovery', 'v1.dk-1.recovery');
+    await store.putKeyEnvelope(userId, 'device:x', 'v1.dk-1.device');
+    const { keyEnvelopes } = await store.exportUser(userId);
+    expect(keyEnvelopes.map((e) => e.kind)).toEqual(['device:x', 'recovery']);
+  });
+
+  it('never carries another user envelope', async () => {
+    const store = new D1SyncStore(env.DB);
+    const a = await newUser(store, 'x4a');
+    const b = await newUser(store, 'x4b');
+    await store.putKeyEnvelope(a, 'recovery', 'v1.dk-1.userA.blob');
+    const { keyEnvelopes } = await store.exportUser(b);
+    expect(keyEnvelopes).toEqual([]);
+  });
+
+  it('still returns the records when an account holds ciphertext but no envelope', async () => {
+    const store = new D1SyncStore(env.DB);
+    const userId = await newUser(store, 'x5');
+    await store.applyChanges(userId, [record({ entityId: 'orphan' })]);
+    const { records, keyEnvelopes } = await store.exportUser(userId);
+    expect(records.map((r) => r.entityId)).toEqual(['orphan']);
+    expect(keyEnvelopes).toEqual([]);
   });
 });

@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useQuoteStore } from '../stores/quote-store';
 import { useSettingsStore } from '../stores/settings-store';
+import { isSpaceShortcutEvent, releaseFocusOnPointer } from '../utils/keyboard-shortcut';
 import { AuthorTicker } from './AuthorTicker';
 import { CategoryFilter } from './CategoryFilter';
 import { CategoryTicker } from './CategoryTicker';
@@ -17,6 +18,11 @@ interface QuoteDisplayProps {
   position?: 'top' | 'bottom';
   // Hide the category badge (used in the stacked Calendar + Quote layout to save space)
   hideCategory?: boolean;
+  /**
+   * Bind space to "new quote". Opt-in because the Pomodoro page mounts this hidden
+   * below `lg`, where the binding would swallow the key and refresh nothing visible.
+   */
+  enableSpaceShortcut?: boolean;
 }
 
 export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
@@ -24,6 +30,7 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
   variant = 'normal',
   position = 'top',
   hideCategory = false,
+  enableSpaceShortcut = false,
 }) => {
   const { quoteChangeInterval, enableQuoteAnimation } = useSettingsStore(
     useShallow((state) => ({
@@ -101,6 +108,25 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
     setTimeRemaining(quoteChangeInterval); // Reset countdown on manual refresh
     onManualRefresh?.();
   };
+
+  // Space goes through the click handler, not refreshQuote: skipping onManualRefresh
+  // would leave the auto-rotation timer running and overwrite the quote just asked for.
+  useEffect(() => {
+    // Only when a quote is actually on screen: the error, loading and empty states own
+    // their own recovery, and consuming space there kills scrolling to do nothing.
+    if (!enableSpaceShortcut || error || isLoading || !currentQuote) {
+      return;
+    }
+    const handleKey = (e: KeyboardEvent) => {
+      if (!isSpaceShortcutEvent(e)) {
+        return;
+      }
+      e.preventDefault();
+      handleRefreshClick();
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [enableSpaceShortcut, error, isLoading, currentQuote, handleRefreshClick]);
 
   const handleGoBack = async () => {
     await goBack();
@@ -309,7 +335,7 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
         {/* Navigation: Back */}
         <button
           type="button"
-          onClick={handleGoBack}
+          onClick={releaseFocusOnPointer(handleGoBack)}
           disabled={!canGoBack()}
           className={cn(
             'p-2 rounded-full transition-all',
@@ -325,7 +351,7 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
         {/* New Quote (center, slightly larger) */}
         <button
           type="button"
-          onClick={handleRefreshClick}
+          onClick={releaseFocusOnPointer(handleRefreshClick)}
           className="relative p-2.5 bg-surface/60 text-primary rounded-full hover:bg-surface hover:scale-105 transition-all overflow-hidden"
           title="New quote"
         >
@@ -365,7 +391,7 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
         {/* Navigation: Forward */}
         <button
           type="button"
-          onClick={handleGoForward}
+          onClick={releaseFocusOnPointer(handleGoForward)}
           disabled={!canGoForward()}
           className={cn(
             'p-2 rounded-full transition-all',
@@ -384,7 +410,7 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
         {/* Favorite */}
         <button
           type="button"
-          onClick={() => toggleFavorite(currentQuote.id)}
+          onClick={releaseFocusOnPointer(() => toggleFavorite(currentQuote.id))}
           className={cn(
             'p-2 rounded-full transition-all hover:scale-105',
             currentQuote.isFavorite
@@ -402,7 +428,7 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
         {/* Hide */}
         <button
           type="button"
-          onClick={() => hideQuote(currentQuote.id)}
+          onClick={releaseFocusOnPointer(() => hideQuote(currentQuote.id))}
           className="p-2 rounded-full bg-surface/60 text-secondary hover:bg-surface hover:scale-105 transition-all"
           title="Hide this quote"
         >

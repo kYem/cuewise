@@ -30,6 +30,7 @@ export type {
   LastCycleRead,
   SyncController,
   SyncDetails,
+  SyncDetailsOptions,
   SyncUiStatus,
 } from './sync/sync-controller';
 export {

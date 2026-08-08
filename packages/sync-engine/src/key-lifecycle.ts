@@ -33,27 +33,13 @@ export class RecoveryCodeRequiredError extends Error {
 }
 
 /**
- * selfHealKeyBlob signal: the local data key is gone but the server still has a blob for this
+ * checkForLostDataKey signal: the local data key is gone but the server still has a blob for this
  * account. The device can't recover the key itself (no MK/code persisted) — it must re-enroll.
  */
 export class SelfHealNeedsEnrollError extends Error {
   constructor() {
     super('local data key missing but a server recovery envelope exists; re-enroll this device');
     this.name = 'SelfHealNeedsEnrollError';
-  }
-}
-
-/**
- * selfHealKeyBlob signal: the local data key exists but the server has no envelope. Unrecoverable
- * without the recovery code — this device never persists the master key that wrapped it.
- */
-export class SelfHealUnrecoverableError extends Error {
-  constructor() {
-    super(
-      'local data key present but the server recovery envelope is missing; ' +
-        're-enable sync with the recovery code to restore it'
-    );
-    this.name = 'SelfHealUnrecoverableError';
   }
 }
 
@@ -179,30 +165,23 @@ async function enrollFromEnvelope(
 }
 
 /**
- * Corrected from the design doc's "re-wrap and re-upload a missing blob": this device only
- * persists the DK, never the MK, so it cannot re-wrap anything itself. Four cases:
- *  - DK + envelope both present → healthy, no-op.
- *  - DK missing, envelope present → this device lost its key; can't self-recover, so it throws
- *    a typed signal telling the caller to re-enroll with the recovery code (never a silent no-op).
- *  - DK present, envelope missing → unrecoverable without the recovery code (the MK that wrapped
- *    this DK was never persisted); warns (metadata only) and throws a typed signal.
- *  - neither present → sync was never enabled here; nothing to heal.
+ * Throws `SelfHealNeedsEnrollError` when this device's data key is gone but the server still holds
+ * an envelope that the recovery code can unwrap. There is no repair to make here: this device
+ * persists the DK, never the MK that wrapped it, so only a re-enroll can restore the key.
+ *
+ * The server is asked ONLY when the key is missing. With the DK on disk the device syncs whatever
+ * the envelope says, and the one thing that reads it is the settings banner, which asks for itself
+ * via `SyncEngine.refreshRecoveryEnvelope` — so a background check here would be a request per
+ * worker spawn on behalf of a panel that is usually closed (ENG-98).
  */
-export async function selfHealKeyBlob(deps: KeyLifecycleDeps): Promise<void> {
+export async function checkForLostDataKey(deps: KeyLifecycleDeps): Promise<void> {
   const persisted = await loadPersistedDataKey(deps.keyStore);
-  const envelope = await deps.transport.getRecoveryEnvelope();
-
-  if (persisted !== null && envelope !== null) {
+  if (persisted !== null) {
     return;
   }
-  if (persisted === null && envelope !== null) {
+  const envelope = await deps.transport.getRecoveryEnvelope();
+  if (envelope !== null) {
     throw new SelfHealNeedsEnrollError();
   }
-  if (persisted !== null && envelope === null) {
-    logger.warn(
-      'Local data key present but server recovery envelope missing; cannot self-heal without the recovery code',
-      { keyId: persisted.keyId }
-    );
-    throw new SelfHealUnrecoverableError();
-  }
+  // Neither present: sync was never enabled on this device, so there is nothing to recover.
 }

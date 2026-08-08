@@ -71,20 +71,23 @@ function enableFailure(err: unknown): Extract<SyncControlResponse, { ok: false }
   return { ok: false, reason: 'error', detail };
 }
 
-/** Read-only details lookup — deliberately NOT serialized (see handleSyncControlMessage). */
-async function runDetails(engine: SyncEngineControlSurface): Promise<SyncDetailsResponse> {
+/** Details lookup — deliberately NOT serialized (see handleSyncControlMessage). */
+async function runDetails(
+  engine: SyncEngineControlSurface,
+  refreshEnvelope: boolean | undefined
+): Promise<SyncDetailsResponse> {
   // Hydration owns lastSyncedAt as well as the cycle; without this the stamp is only correct
   // because getAccount's network hop happens to outlast two local reads on a cold worker.
   await engine.ensureHydrated();
-  // Informational for the settings UI; engine.getAccount never throws (null on any failure).
+  // Both are network hops on the panel-open path, and neither throws.
+  const [account, recoveryEnvelope] = await Promise.all([
+    engine.getAccount(),
+    refreshEnvelope ? engine.refreshRecoveryEnvelope() : engine.getRecoveryEnvelope(),
+  ]);
   return {
     ok: true,
     kind: 'details',
-    details: buildSyncDetails(
-      await engine.getAccount(),
-      engine.getLastSyncedAt(),
-      engine.getRecoveryEnvelopePresent()
-    ),
+    details: buildSyncDetails(account, engine.getLastSyncedAt(), recoveryEnvelope),
   };
 }
 
@@ -217,9 +220,9 @@ export async function handleSyncControlMessage(
 ): Promise<SyncControlAnyResponse> {
   const { op } = msg;
   if (op === 'details') {
-    // Read-only and side-effect-free — bypasses the mutex so a slow account fetch can never
-    // delay a queued user action (e.g. a disable click) behind it.
-    return runDetails(engine);
+    // Bypasses the mutex so a slow account fetch cannot delay a queued user action (e.g. a
+    // disable click). Its one write, the envelope flag, is epoch-guarded in the engine.
+    return runDetails(engine, msg.refreshRecoveryEnvelope);
   }
   if (op === 'getLastCycle') {
     // Same rationale as 'details': read-only, so it must never queue behind a pending op.

@@ -105,7 +105,7 @@ if (syncApiBaseUrl) {
       syncEngine.handlePullWake();
     }
   });
-  // start() self-heals the key blob and runs the first pull, so it's the one call that must not
+  // start() checks the data key and runs the first pull, so it's the one call that must not
   // touch storage before migration — scheduler.onFire above and the onMessage listeners below
   // stay synchronous and never wait on it.
   settingsMigrated

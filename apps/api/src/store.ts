@@ -1,7 +1,13 @@
-import type { KeyEnvelopeRecord, PushRecord, SyncRecord, SyncSession } from '@cuewise/shared';
+import type {
+  KeyEnvelopeExport,
+  KeyEnvelopeRecord,
+  PushRecord,
+  SyncRecord,
+  SyncSession,
+} from '@cuewise/shared';
 import type { RawSessionToken, SessionId, SessionTokenHash } from './crypto-utils';
 
-export type { KeyEnvelopeRecord, PushRecord, SyncRecord, SyncSession };
+export type { KeyEnvelopeExport, KeyEnvelopeRecord, PushRecord, SyncRecord, SyncSession };
 
 export interface Identity {
   provider: 'google' | 'apple' | 'dev';
@@ -53,7 +59,8 @@ export interface SyncStore {
   // Returns at most MAX_CHANGES_PAGE_SIZE records; a full page means the caller should pull
   // again from the returned cursor. `cursor` is the last returned seq (or `since` when empty).
   listChanges(userId: string, since: number): Promise<{ records: SyncRecord[]; cursor: number }>;
-  exportUser(userId: string): Promise<{ records: SyncRecord[] }>;
+  // Without the envelopes an export is undecryptable even by a user holding their recovery code.
+  exportUser(userId: string): Promise<{ records: SyncRecord[]; keyEnvelopes: KeyEnvelopeExport[] }>;
   deleteUser(userId: string): Promise<void>;
   // Deletes tombstones older than retentionMs (a maintenance sweep across all users); returns the count.
   purgeTombstones(retentionMs: number): Promise<number>;

@@ -1,6 +1,6 @@
 import { ALL_QUOTE_CATEGORIES, QUOTE_CATEGORIES } from '@cuewise/shared';
 import { createSelectorMock } from '@cuewise/test-utils';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { useQuoteStore } from '../stores/quote-store';
@@ -48,6 +48,18 @@ function createMockStore(
 describe('CategoryFilter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('drops focus from a pointer click, so space is not stuck toggling the panel', () => {
+    // This sits in the quote action row, where space means "new quote".
+    vi.mocked(useQuoteStore).mockImplementation(createSelectorMock(createMockStore()));
+    render(<CategoryFilter />);
+    const funnel = screen.getByTitle('Filter categories (11/11)');
+    funnel.focus();
+
+    fireEvent.click(funnel, { detail: 1 });
+
+    expect(document.activeElement).toBe(document.body);
   });
 
   describe('rendering', () => {

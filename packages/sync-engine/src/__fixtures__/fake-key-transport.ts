@@ -2,7 +2,7 @@ import type { KeyEnvelopeRecord } from '@cuewise/shared';
 import { ApiError } from '@cuewise/sync-client';
 import type { KeyTransport } from '../key-lifecycle';
 
-/** In-memory KeyTransport fake with an ifAbsent-aware blob, for exercising initOrEnrollKey/selfHealKeyBlob. */
+/** In-memory KeyTransport fake with an ifAbsent-aware blob, for exercising initOrEnrollKey/checkForLostDataKey. */
 export class FakeKeyTransport implements KeyTransport {
   envelope: string | null = null;
   /** Simulates another device's PUT landing between this call's GET and its own ifAbsent PUT. */

@@ -98,13 +98,16 @@ describe('D1SyncStore records', () => {
   it('exportUser pages internally and returns every record past a single page', async () => {
     const store = cappedStore();
     const userId = await newUser(store, 'u-export');
+    await store.putKeyEnvelope(userId, 'recovery', 'v1.dk-1.aaaa.bbbb');
     await store.applyChanges(userId, [
       record({ entityId: 'a' }),
       record({ entityId: 'b' }),
       record({ entityId: 'c' }),
     ]);
-    const { records } = await store.exportUser(userId);
+    const { records, keyEnvelopes } = await store.exportUser(userId);
     expect(records.map((r) => r.seq)).toEqual([1, 2, 3]);
+    // Two pages: the envelope must appear once, not once per page.
+    expect(keyEnvelopes).toHaveLength(1);
   });
 
   it('accepts a push that lands exactly on the per-user cap', async () => {

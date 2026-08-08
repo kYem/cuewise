@@ -1,28 +1,7 @@
 import { env } from 'cloudflare:test';
-import type { Hono } from 'hono';
 import { describe, expect, it } from 'vitest';
-import { signedInToken } from '../__fixtures__/api-test-helpers.fixtures';
-import type { AuthVars } from '../auth-middleware';
-import type { Env } from '../env';
+import { getRecovery, putRecovery, signedInToken } from '../__fixtures__/api-test-helpers.fixtures';
 import app from '../index';
-
-type App = Hono<{ Bindings: Env } & AuthVars>;
-
-async function getRecovery(app: App, token: string): Promise<Response> {
-  return app.request('/v1/keys/recovery', { headers: { Authorization: `Bearer ${token}` } }, env);
-}
-
-async function putRecovery(app: App, token: string, body: unknown): Promise<Response> {
-  return app.request(
-    '/v1/keys/recovery',
-    {
-      method: 'PUT',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: typeof body === 'string' ? body : JSON.stringify(body),
-    },
-    env
-  );
-}
 
 describe('/v1/keys/recovery', () => {
   it('rejects unauthenticated GET with 401 problem+json', async () => {

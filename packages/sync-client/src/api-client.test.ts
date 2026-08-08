@@ -45,6 +45,23 @@ describe('ApiClient', () => {
     expect(JSON.parse(calls[0].init.body as string)).toEqual({ records: [pushRecordFixture] });
   });
 
+  it('GETs /v1/export and returns the records alongside their key envelopes', async () => {
+    const body = {
+      records: [{ ...pushRecordFixture, seq: 1 }],
+      keyEnvelopes: [
+        { kind: 'recovery', envelope: 'v1.dk-1.aaaa.bbbb', updatedAt: 1_700_000_000_000 },
+      ],
+    };
+    const { fetchFn, calls } = stubFetch([{ status: 200, body }]);
+    const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
+
+    const result = await client.exportData();
+
+    expect(result.keyEnvelopes).toEqual(body.keyEnvelopes);
+    expect(calls[0].url).toBe(`${BASE_URL}/v1/export`);
+    expect(calls[0].init.method).toBe('GET');
+  });
+
   // Regression: the extension service worker (WorkerGlobalScope) rejects fetch called with any
   // receiver but the global, so the default fetchFn must be bound to globalThis.
   describe('default fetch binding', () => {

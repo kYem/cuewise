@@ -8,6 +8,7 @@ import {
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { useConceptCardsStore } from '../stores/concept-cards-store';
+import { useQuoteStore } from '../stores/quote-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { isShortcutKeyEvent } from '../utils/keyboard-shortcut';
 import { ConceptCardDisplay } from './ConceptCardDisplay';
@@ -70,6 +71,8 @@ interface ConceptRotationProps {
   fallback: React.ReactNode;
   /** Opens the add-concept modal from the card's "Add concept" affordance. */
   onAdd?: () => void;
+  /** Same signal QuoteDisplay sends: restarts the host's auto-rotation clock. */
+  onManualRefresh?: () => void;
 }
 
 /**
@@ -80,7 +83,11 @@ interface ConceptRotationProps {
  * lapsing "Again" card never loops back immediately); the toolbar's prev/next
  * browse what remains.
  */
-export const ConceptRotation: React.FC<ConceptRotationProps> = ({ fallback, onAdd }) => {
+export const ConceptRotation: React.FC<ConceptRotationProps> = ({
+  fallback,
+  onAdd,
+  onManualRefresh,
+}) => {
   const enabled = useSettingsStore((state) => state.settings.conceptCardsEnabled);
   const cadence = useSettingsStore((state) => state.settings.conceptCadence);
   const framing = useSettingsStore((state) => state.settings.conceptFraming);
@@ -156,6 +163,17 @@ export const ConceptRotation: React.FC<ConceptRotationProps> = ({ fallback, onAd
     setSlot('auto');
   };
 
+  // A fresh quote, and onManualRefresh for the reason QuoteDisplay's space path needs it:
+  // without it the rotation timer keeps its phase and overwrites the quote just asked for.
+  const skipToQuote = () => {
+    // setSlot('quotes'), not just yieldToQuotes: a card added during this tab is not in
+    // knownIds and keeps surfacing, which would leave space looking dead. `c` brings it back.
+    yieldToQuotes();
+    setSlot('quotes');
+    useQuoteStore.getState().refreshQuote();
+    onManualRefresh?.();
+  };
+
   const goNext = () => setIndex((i) => i + 1);
   const goPrev = () => setIndex((i) => i - 1);
 
@@ -194,6 +212,7 @@ export const ConceptRotation: React.FC<ConceptRotationProps> = ({ fallback, onAd
       dueCount={due.length}
       onAdd={onAdd}
       queueLabel={queueLabel}
+      onSkipToQuote={skipToQuote}
     />
   );
 };

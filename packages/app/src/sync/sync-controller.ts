@@ -1,5 +1,5 @@
 import type { SyncSession } from '@cuewise/shared';
-import type { SyncNowResult, SyncOutcome } from '@cuewise/sync-engine';
+import type { RecoveryEnvelopeState, SyncNowResult, SyncOutcome } from '@cuewise/sync-engine';
 import { createContext, useContext } from 'react';
 
 /**
@@ -87,12 +87,19 @@ export interface SyncDetails {
   /** Millis of the last successful sync cycle; null before the first one is known. */
   readonly lastSyncedAt: number | null;
   /**
-   * Whether the server holds a recovery envelope. Only `false` is a finding: without one, losing
-   * this device loses the data, and the next device to enrol mints a second key whose records
-   * nothing here can read. Absent means nobody has answered — either self-heal has not run yet, or
-   * the extension's untyped SW↔page wire came from a build that predates the field.
+   * What is known about the server's recovery envelope. Absent when the extension's untyped
+   * SW↔page wire came from a worker predating the field, which reads the same as `unknown`.
    */
-  readonly recoveryEnvelopePresent?: boolean | null;
+  readonly recoveryEnvelope?: RecoveryEnvelopeState;
+}
+
+/** What a details lookup wants beyond the identity every caller shows. */
+export interface SyncDetailsOptions {
+  /**
+   * Ask the server rather than report the last recorded answer. One extra request, so only the
+   * surface that renders the finding — the settings panel's banner — turns it on (ENG-98).
+   */
+  readonly refreshRecoveryEnvelope?: boolean;
 }
 
 /**
@@ -102,7 +109,7 @@ export interface SyncDetails {
 export function buildSyncDetails(
   account: { userId: string; email: string | null } | null,
   lastSyncedAt: number | null,
-  recoveryEnvelopePresent: boolean | null = null
+  recoveryEnvelope: RecoveryEnvelopeState = 'unknown'
 ): SyncDetails | null {
   if (account === null) {
     return null;
@@ -111,7 +118,7 @@ export function buildSyncDetails(
     accountEmail: account.email,
     accountId: account.userId,
     lastSyncedAt,
-    recoveryEnvelopePresent,
+    recoveryEnvelope,
   };
 }
 
@@ -138,7 +145,7 @@ export interface SyncController {
   regenerateRecoveryCode(): Promise<string>;
   syncNow(): Promise<SyncNowResult>;
   /** Informational: resolves null when unavailable (signed out, offline, legacy host); never throws. */
-  getDetails(): Promise<SyncDetails | null>;
+  getDetails(options?: SyncDetailsOptions): Promise<SyncDetails | null>;
   /**
    * Live sessions on this account, for the signed-in devices list. Informational like getDetails:
    * resolves null when unavailable and never throws — a settings read that fails must not take the

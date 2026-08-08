@@ -5,6 +5,7 @@ import type {
   LastCycleRead,
   SyncController,
   SyncDetails,
+  SyncDetailsOptions,
   SyncUiStatus,
 } from '../sync-controller';
 import { LAST_CYCLE_UNAVAILABLE } from '../sync-controller';
@@ -377,8 +378,10 @@ export class FakeSyncController implements SyncController {
     return this.lastCycleRead;
   }
 
-  async getDetails(): Promise<SyncDetails | null> {
-    this.calls.push({ method: 'getDetails', args: [] });
+  async getDetails(options?: SyncDetailsOptions): Promise<SyncDetails | null> {
+    // Recorded, not dropped: whether a caller opted into the envelope refresh is the whole of
+    // ENG-98 on this side of the seam, and a swallowed argument makes losing it invisible.
+    this.calls.push({ method: 'getDetails', args: [options] });
     this.maybeFail('getDetails');
     if (this.deferredDetails) {
       this.deferredDetails = false;

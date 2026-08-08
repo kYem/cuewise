@@ -1,5 +1,13 @@
 import type { SyncController } from '@cuewise/app';
 import { App, PomodoroPipProvider, useToastStore } from '@cuewise/app';
+import '@fontsource/inter/300.css';
+import '@fontsource/inter/400.css';
+import '@fontsource/inter/500.css';
+import '@fontsource/inter/600.css';
+import '@fontsource/inter/700.css';
+import '@fontsource/poppins/600.css';
+import '@fontsource/poppins/700.css';
+import '@fontsource/poppins/800.css';
 import '@cuewise/app/styles.css';
 import { configurePlatform } from '@cuewise/shared';
 import React from 'react';

@@ -77,9 +77,15 @@ All endpoints are under `/v1`.
 | `PATCH` | `/v1/sessions/:id` | Rename a session, `{deviceName}`, bounded by the same `MAX_DEVICE_NAME_LENGTH` as enrol | Yes |
 | `POST` | `/v1/sessions/revoke-others` | Revoke every session but the caller's; answers `{revoked: <count>}` | Yes |
 | `GET` | `/v1/export` | Dump all of the caller's records | Yes |
+| `GET` | `/v1/export` | Dump all of the caller's records **and every key envelope they hold** | Yes |
 | `DELETE` | `/v1/account` | Delete user, identities, tokens, records, and key envelopes | Yes |
 | `POST` | `/v1/weather` | Forecast proxy (ENG-18), `{lat, lon, units}` | No |
 | `POST` | `/v1/weather/search` | City lookup proxy, `{q}` | No |
+
+**Why `/v1/export` ships the key envelopes** (ENG-54): records are ciphertext, so an export without
+the wrapped data key is undecryptable even by a user holding their recovery code — an exit hatch that
+opens onto a wall. It discloses nothing new: `GET /v1/keys/recovery` already returns the recovery blob
+to the same caller, and every envelope is inert without the code.
 
 **Why the weather routes are POST for what are plainly reads**: a Fetch invocation log records `<Method> <URL>` plus request headers — never the body. Coordinates and city names in a query string would therefore land in Workers Logs no matter how careful the route code is, and `observability.logs.invocation_logs` is a *worker-wide* switch, so the alternative was blinding the sync and auth routes too. The body is the one part of the request the platform does not capture. The cost is that responses are no longer browser-cacheable; the `cacheTtl` on the upstream subrequest is what dedups provider calls across nearby users, and it is unaffected. Both routes are stateless — no `SyncStore`, no D1 — so "the server stores ciphertext only" stays true.
 

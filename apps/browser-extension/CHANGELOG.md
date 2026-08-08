@@ -1,5 +1,17 @@
 # @cuewise/browser-extension
 
+## 1.24.0
+
+### Minor Changes
+
+- 407c43f: Space now moves the new tab along: it reveals a recall card's answer, and gives you a new quote the rest of the time. The reveal button says so on hover. Grading stays on 1/2/3.
+
+### Patch Changes
+
+- 221498d: Opening a new tab no longer contacts anyone. Fonts were being fetched from Google on every new tab, which sat badly with "no tracking" — they now ship with the extension, so they also work offline. The privacy policy additionally spells out what Unsplash and YouTube can see when you use background photos or a focus playlist.
+- Updated dependencies [407c43f]
+  - @cuewise/app@1.22.0
+
 ## 1.23.0
 
 ### Minor Changes
