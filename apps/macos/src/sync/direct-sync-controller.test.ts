@@ -634,7 +634,7 @@ describe('createDirectSyncController: getDetails()', () => {
       accountId: 'user-1',
       lastSyncedAt: expect.any(Number),
       // The enrol created it, so a device that has only just connected already knows.
-      recoveryEnvelopePresent: true,
+      recoveryEnvelope: 'present',
     });
   });
 
@@ -653,7 +653,7 @@ describe('createDirectSyncController: getDetails()', () => {
     const details = await controller.getDetails({ refreshRecoveryEnvelope: true });
 
     expect(envelopeSpy).toHaveBeenCalled();
-    expect(details?.recoveryEnvelopePresent).toBe(false);
+    expect(details?.recoveryEnvelope).toBe('missing');
   });
 
   it('reports the recorded answer without asking, for a caller that does not opt in', async () => {
@@ -670,7 +670,7 @@ describe('createDirectSyncController: getDetails()', () => {
     const details = await controller.getDetails();
 
     expect(envelopeSpy).not.toHaveBeenCalled();
-    expect(details?.recoveryEnvelopePresent).toBe(true);
+    expect(details?.recoveryEnvelope).toBe('present');
   });
 
   it('resolves null when the engine has no session', async () => {

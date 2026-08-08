@@ -24,6 +24,7 @@ import {
   LAST_CYCLE_KEY,
   LAST_SYNCED_AT_KEY,
   RECOVERY_ENVELOPE_KEY,
+  type RecoveryEnvelopeState,
   SyncEngine,
   type SyncEngineDeps,
   type SyncStatus,
@@ -2009,7 +2010,7 @@ describe('SyncEngine.refreshRecoveryEnvelope', () => {
     const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
     vi.spyOn(device.apiClient, 'getRecoveryEnvelope').mockResolvedValue(null);
 
-    await expect(device.engine.refreshRecoveryEnvelope()).resolves.toBe(false);
+    await expect(device.engine.refreshRecoveryEnvelope()).resolves.toBe('missing');
 
     expect(device.engine.getStatus()).toBe('active');
     expect(errorSpy).toHaveBeenCalledWith(
@@ -2026,7 +2027,7 @@ describe('SyncEngine.refreshRecoveryEnvelope', () => {
     await device.engine.refreshRecoveryEnvelope();
     const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
 
-    await expect(restart(device).refreshRecoveryEnvelope()).resolves.toBe(false);
+    await expect(restart(device).refreshRecoveryEnvelope()).resolves.toBe('missing');
 
     expect(errorSpy).not.toHaveBeenCalled();
   });
@@ -2038,12 +2039,12 @@ describe('SyncEngine.refreshRecoveryEnvelope', () => {
     await device.engine.enableSync('dev', 'cred-a', 'Device A');
     vi.spyOn(logger, 'error').mockImplementation(() => {});
     const missing = vi.spyOn(device.apiClient, 'getRecoveryEnvelope').mockResolvedValue(null);
-    await expect(device.engine.refreshRecoveryEnvelope()).resolves.toBe(false);
+    await expect(device.engine.refreshRecoveryEnvelope()).resolves.toBe('missing');
     missing.mockRestore();
 
     await device.engine.regenerateRecoveryCode();
 
-    await expect(device.engine.refreshRecoveryEnvelope()).resolves.toBe(true);
+    await expect(device.engine.refreshRecoveryEnvelope()).resolves.toBe('present');
   });
 
   it('keeps the last known answer when the server cannot be reached', async () => {
@@ -2055,7 +2056,7 @@ describe('SyncEngine.refreshRecoveryEnvelope', () => {
     await device.engine.enableSync('dev', 'cred-a', 'Device A');
     vi.spyOn(device.apiClient, 'getRecoveryEnvelope').mockRejectedValue(new Error('offline'));
 
-    await expect(device.engine.refreshRecoveryEnvelope()).resolves.toBe(true);
+    await expect(device.engine.refreshRecoveryEnvelope()).resolves.toBe('present');
   });
 
   it('does not ask a signed-out device to check, and keeps what it last knew', async () => {
@@ -2066,7 +2067,7 @@ describe('SyncEngine.refreshRecoveryEnvelope', () => {
     await new SessionManager(device.kv).clear();
     const envelopeSpy = vi.spyOn(device.apiClient, 'getRecoveryEnvelope');
 
-    await expect(device.engine.refreshRecoveryEnvelope()).resolves.toBe(true);
+    await expect(device.engine.refreshRecoveryEnvelope()).resolves.toBe('present');
 
     expect(envelopeSpy).not.toHaveBeenCalled();
   });
@@ -2092,7 +2093,7 @@ describe('SyncEngine.refreshRecoveryEnvelope', () => {
     });
 
     // Unknown, not false: nothing was recorded, so nothing may be painted from it either.
-    await expect(device.engine.refreshRecoveryEnvelope()).resolves.toBeNull();
+    await expect(device.engine.refreshRecoveryEnvelope()).resolves.toBe('unknown');
 
     // disableSync removed it; writing the fetched answer back re-creates it for the next account.
     await expect(read(RECOVERY_ENVELOPE_KEY, 'local')).resolves.toBeNull();
@@ -2126,7 +2127,7 @@ describe('SyncEngine.refreshRecoveryEnvelope', () => {
     gate.release(undefined);
     await Promise.all([regenerate, probe]);
 
-    await expect(probe).resolves.toBe(true);
+    await expect(probe).resolves.toBe('present');
     await expect(device.kv.get(RECOVERY_ENVELOPE_KEY, 'local')).resolves.toBe(true);
   });
 
@@ -2139,7 +2140,7 @@ describe('SyncEngine.refreshRecoveryEnvelope', () => {
     const realGet = device.apiClient.getRecoveryEnvelope.bind(device.apiClient);
     const realPut = device.apiClient.putRecoveryEnvelope.bind(device.apiClient);
     let stored = false;
-    let probe: Promise<boolean | null> = Promise.resolve(null);
+    let probe: Promise<RecoveryEnvelopeState> = Promise.resolve('unknown');
     vi.spyOn(device.apiClient, 'getRecoveryEnvelope').mockImplementation(async () =>
       stored ? realGet() : null
     );
@@ -2154,7 +2155,7 @@ describe('SyncEngine.refreshRecoveryEnvelope', () => {
 
     await device.engine.enableSync('dev', 'cred-a', 'Device A');
 
-    await expect(probe).resolves.toBe(true);
+    await expect(probe).resolves.toBe('present');
   });
 
   it('lets a genuine "absent" stand when the Regenerate that raced it failed', async () => {
@@ -2168,7 +2169,7 @@ describe('SyncEngine.refreshRecoveryEnvelope', () => {
     await expect(device.engine.regenerateRecoveryCode()).rejects.toThrow('offline');
     vi.spyOn(device.apiClient, 'getRecoveryEnvelope').mockResolvedValue(null);
 
-    await expect(device.engine.refreshRecoveryEnvelope()).resolves.toBe(false);
+    await expect(device.engine.refreshRecoveryEnvelope()).resolves.toBe('missing');
   });
 
   it('answers unknown when a disable lands inside a fetch that then fails', async () => {
@@ -2199,7 +2200,7 @@ describe('SyncEngine.refreshRecoveryEnvelope', () => {
     const answer = await probe;
     parked.release(undefined);
     await disable;
-    expect(answer).toBeNull();
+    expect(answer).toBe('unknown');
   });
 
   it('never rejects, even when the storage adapter throws', async () => {
@@ -2218,7 +2219,7 @@ describe('SyncEngine.refreshRecoveryEnvelope', () => {
       return read(key, area);
     });
 
-    await expect(device.engine.refreshRecoveryEnvelope()).resolves.toBe(true);
+    await expect(device.engine.refreshRecoveryEnvelope()).resolves.toBe('present');
   });
 
   it('records nothing for an account that was disabled mid-check', async () => {
@@ -2232,7 +2233,7 @@ describe('SyncEngine.refreshRecoveryEnvelope', () => {
       return null;
     });
 
-    await expect(device.engine.refreshRecoveryEnvelope()).resolves.toBeNull();
+    await expect(device.engine.refreshRecoveryEnvelope()).resolves.toBe('unknown');
 
     // Left behind, this is the previous account's badge waiting for whichever one connects next.
     await expect(device.kv.get(RECOVERY_ENVELOPE_KEY, 'local')).resolves.toBeNull();

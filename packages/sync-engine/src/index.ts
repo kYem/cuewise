@@ -24,6 +24,7 @@ export {
   LAST_CYCLE_KEY,
   LAST_SYNCED_AT_KEY,
   RECOVERY_ENVELOPE_KEY,
+  type RecoveryEnvelopeState,
   SyncEngine,
   type SyncEngineDeps,
   type SyncSignInProvider,
@@ -42,7 +43,7 @@ export type SyncEngineControlSurface = Pick<
   | 'getAccount'
   | 'getLastSyncedAt'
   | 'getLastCycle'
-  | 'getRecoveryEnvelopePresent'
+  | 'getRecoveryEnvelope'
   | 'refreshRecoveryEnvelope'
   | 'ensureHydrated'
 >;

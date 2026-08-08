@@ -755,10 +755,10 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   // freshness claim worth qualifying — connecting and syncing have not made one yet.
   const showUnknownCycle = status === 'active' && cycle.kind === 'unknown' && badgeMessage === null;
   const reconnectPrompt = presentation.kind === 'reconnect' ? presentation.prompt : null;
-  // Only an explicit false: null is "nothing has answered yet", and an older service worker
+  // Only an explicit 'missing': 'unknown' means nothing has answered yet, and an older worker
   // answers details with the field absent entirely. Neither may claim an account has no code.
   // Gated on 'active' because that is the only status where Regenerate, the one fix, renders.
-  const noRecoveryCode = status === 'active' && details?.recoveryEnvelopePresent === false;
+  const noRecoveryCode = status === 'active' && details?.recoveryEnvelope === 'missing';
 
   // The enable step's sign-in-options div groups Google today; a "Sign in with Apple"
   // button drops in next to it later.

@@ -60,9 +60,21 @@ export const LAST_CYCLE_KEY = 'cuewise.sync.lastCycle';
 /**
  * Whether the server holds a recovery envelope for this account. Persisted, not held per process:
  * the extension respawns its worker on every wake, so an in-memory answer would be recomputed —
- * and re-logged — every five minutes, and the panel reads this on a cold worker.
+ * and re-logged — every five minutes, and the panel reads this on a cold worker. Stored as a
+ * boolean, because on disk the question really is binary — `unknown` is the key being absent.
  */
 export const RECOVERY_ENVELOPE_KEY = 'cuewise.sync.recoveryEnvelope';
+
+/**
+ * What is known about the server's recovery envelope. `missing` is the finding — without one,
+ * losing this device loses the data. `unknown` is NOT `missing`: nobody has managed to ask yet,
+ * and painting it as a finding tells a healthy account its data is unrecoverable.
+ */
+export type RecoveryEnvelopeState = 'present' | 'missing' | 'unknown';
+
+function envelopeState(present: boolean): RecoveryEnvelopeState {
+  return present ? 'present' : 'missing';
+}
 
 // The periodic pull backstop cadence (spec §3: "~5 min"); foreground opens trigger sooner via syncNow.
 const PULL_REARM_MINUTES = 5;
@@ -173,9 +185,7 @@ export class SyncEngine {
   // False once a stored record turned out to be unreadable: that is not "no cycle ran", and
   // answering it as such is exactly what clears a wedged device's badge.
   private lastCycleKnown = true;
-  // null until a check has answered once, so a panel on a cold worker cannot read "unknown" as
-  // "missing" and claim an account has no recovery path before anything has checked.
-  private recoveryEnvelope: boolean | null = null;
+  private recoveryEnvelope: RecoveryEnvelopeState = 'unknown';
   // Chains every envelope read and write; see queueEnvelope.
   private envelopeQueue: Promise<unknown> = Promise.resolve();
   // Whether the enrol in flight minted a code. Never the code itself: this only decides whether the
@@ -460,9 +470,9 @@ export class SyncEngine {
     // After a disable "no cycle" is the truth, so an earlier unreadable record must stop
     // reporting unknown — otherwise a failed hydration outlives the account it described.
     this.lastCycleKnown = true;
-    // Back to unknown, not present: it described the account just removed, and carrying it forward
-    // would answer for whatever account connects next.
-    this.recoveryEnvelope = null;
+    // Back to unknown: it described the account just removed, and carrying it forward would
+    // answer for whatever account connects next.
+    this.recoveryEnvelope = 'unknown';
     this.hydration = null;
     this.setStatus('disabled');
     // Last, and best-effort: an unreadable ledger makes load() throw deterministically, and doing
@@ -681,8 +691,8 @@ export class SyncEngine {
     return this.lastSyncedAt;
   }
 
-  /** The last recorded answer, without asking the server; null until something has checked. */
-  getRecoveryEnvelopePresent(): boolean | null {
+  /** The last recorded answer, without asking the server. */
+  getRecoveryEnvelope(): RecoveryEnvelopeState {
     return this.recoveryEnvelope;
   }
 
@@ -692,7 +702,7 @@ export class SyncEngine {
    * it (ENG-98). Never throws, storage included — an unreachable server leaves the last answer
    * standing, and null means nobody has answered, which hosts must not paint as "missing".
    */
-  async refreshRecoveryEnvelope(): Promise<boolean | null> {
+  async refreshRecoveryEnvelope(): Promise<RecoveryEnvelopeState> {
     const epoch = this.accountEpoch;
     try {
       return await this.queueEnvelope(async () => {
@@ -703,7 +713,7 @@ export class SyncEngine {
         const present = (await this.deps.apiClient.getRecoveryEnvelope()) !== null;
         const news = await this.recordRecoveryEnvelope(present, epoch);
         if (this.accountEpoch !== epoch) {
-          return null;
+          return 'unknown';
         }
         if (news && !present) {
           // Regenerate recovery code is the one repair, and it lives in the panel that just asked.
@@ -711,7 +721,7 @@ export class SyncEngine {
             'Cloud sync has no recovery envelope on the server; regenerate your recovery code to restore it'
           );
         }
-        return present;
+        return envelopeState(present);
       });
     } catch (err) {
       logger.warn(`Could not check the cloud sync recovery envelope: ${describeThrown(err)}`, {
@@ -726,8 +736,8 @@ export class SyncEngine {
    * superseded it: disableSync clears the session BEFORE it nulls the field, so both exits above
    * are reached while the removed account's answer is still readable.
    */
-  private lastEnvelopeAnswer(epoch: number): boolean | null {
-    return this.accountEpoch === epoch ? this.recoveryEnvelope : null;
+  private lastEnvelopeAnswer(epoch: number): RecoveryEnvelopeState {
+    return this.accountEpoch === epoch ? this.recoveryEnvelope : 'unknown';
   }
 
   /**
@@ -756,7 +766,7 @@ export class SyncEngine {
       // leaves the previous account's badge waiting for whichever one connects next.
       return false;
     }
-    this.recoveryEnvelope = present;
+    this.recoveryEnvelope = envelopeState(present);
     if (stored === present) {
       return false;
     }
@@ -848,7 +858,7 @@ export class SyncEngine {
     // rather than as an account with no recovery path.
     const envelope = stored[RECOVERY_ENVELOPE_KEY];
     if (envelope?.readable === true && typeof envelope.value === 'boolean') {
-      this.recoveryEnvelope = envelope.value;
+      this.recoveryEnvelope = envelopeState(envelope.value);
     }
 
     const record = stored[LAST_CYCLE_KEY];

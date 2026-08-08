@@ -24,8 +24,8 @@ export function fakeControlSurface(
     getAccount: vi.fn().mockResolvedValue(null),
     getLastSyncedAt: vi.fn().mockReturnValue(null),
     getLastCycle: vi.fn().mockReturnValue({ known: true, cycle: null }),
-    getRecoveryEnvelopePresent: vi.fn().mockReturnValue(true),
-    refreshRecoveryEnvelope: vi.fn().mockResolvedValue(true),
+    getRecoveryEnvelope: vi.fn().mockReturnValue('present'),
+    refreshRecoveryEnvelope: vi.fn().mockResolvedValue('present'),
     ensureHydrated: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };

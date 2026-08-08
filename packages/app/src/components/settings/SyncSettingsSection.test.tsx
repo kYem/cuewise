@@ -5,7 +5,7 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeSyncController } from '../../sync/__fixtures__/fake-sync-controller';
-import type { SyncUiStatus } from '../../sync/sync-controller';
+import type { SyncDetails, SyncUiStatus } from '../../sync/sync-controller';
 import { SyncControllerContext } from '../../sync/sync-controller';
 import { SyncSettingsSectionComponent } from './SyncSettingsSection';
 import type { SettingsSectionProps } from './settings-types';
@@ -809,7 +809,7 @@ describe('SyncSettingsSectionComponent', () => {
       accountEmail: 'kes@example.com',
       accountId: 'acct-1',
       lastSyncedAt: null,
-      recoveryEnvelopePresent: false,
+      recoveryEnvelope: 'missing',
     });
     renderSection(controller);
     act(() => controller.setStatus('active'));
@@ -826,7 +826,7 @@ describe('SyncSettingsSectionComponent', () => {
       accountEmail: 'kes@example.com',
       accountId: 'acct-1',
       lastSyncedAt: null,
-      recoveryEnvelopePresent: false,
+      recoveryEnvelope: 'missing',
     });
     renderSection(controller);
     act(() => controller.setStatus('active'));
@@ -843,8 +843,8 @@ describe('SyncSettingsSectionComponent', () => {
     const user = userEvent.setup();
     const controller = new FakeSyncController();
     const account = { accountEmail: 'kes@example.com', accountId: 'acct-1', lastSyncedAt: null };
-    controller.scriptDetails({ ...account, recoveryEnvelopePresent: false });
-    controller.scriptDetails({ ...account, recoveryEnvelopePresent: true });
+    controller.scriptDetails({ ...account, recoveryEnvelope: 'missing' });
+    controller.scriptDetails({ ...account, recoveryEnvelope: 'present' });
     renderSection(controller);
     act(() => controller.setStatus('active'));
     await screen.findByTestId('no-recovery-code-banner');
@@ -856,11 +856,11 @@ describe('SyncSettingsSectionComponent', () => {
     );
   });
 
-  // null is "nothing has answered yet", and an older service worker omits the field entirely.
-  // Painting either as a missing code tells a healthy account its data is unrecoverable.
-  it.each([
-    ['not yet answered', { recoveryEnvelopePresent: null }],
-    ['answered present', { recoveryEnvelopePresent: true }],
+  // Only 'missing' is a finding. An older service worker omits the field entirely, which has to
+  // read the same as 'unknown' — painting either tells a healthy account its data is unrecoverable.
+  it.each<[string, Partial<SyncDetails>]>([
+    ['not yet answered', { recoveryEnvelope: 'unknown' }],
+    ['answered present', { recoveryEnvelope: 'present' }],
     ['absent, from a service worker that predates the field', {}],
   ])('stays quiet when the envelope is %s', async (_name, envelope) => {
     const controller = new FakeSyncController();

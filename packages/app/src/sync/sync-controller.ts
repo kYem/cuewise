@@ -1,4 +1,4 @@
-import type { SyncNowResult, SyncOutcome } from '@cuewise/sync-engine';
+import type { RecoveryEnvelopeState, SyncNowResult, SyncOutcome } from '@cuewise/sync-engine';
 import { createContext, useContext } from 'react';
 
 /**
@@ -86,12 +86,10 @@ export interface SyncDetails {
   /** Millis of the last successful sync cycle; null before the first one is known. */
   readonly lastSyncedAt: number | null;
   /**
-   * Whether the server holds a recovery envelope. Only `false` is a finding: without one, losing
-   * this device loses the data, and the next device to enrol mints a second key whose records
-   * nothing here can read. Anything else means nobody has answered — no lookup has succeeded yet,
-   * or the extension's untyped SW↔page wire came from a worker predating the field.
+   * What is known about the server's recovery envelope. Absent when the extension's untyped
+   * SW↔page wire came from a worker predating the field, which reads the same as `unknown`.
    */
-  readonly recoveryEnvelopePresent?: boolean | null;
+  readonly recoveryEnvelope?: RecoveryEnvelopeState;
 }
 
 /** What a details lookup wants beyond the identity every caller shows. */
@@ -110,7 +108,7 @@ export interface SyncDetailsOptions {
 export function buildSyncDetails(
   account: { userId: string; email: string | null } | null,
   lastSyncedAt: number | null,
-  recoveryEnvelopePresent: boolean | null = null
+  recoveryEnvelope: RecoveryEnvelopeState = 'unknown'
 ): SyncDetails | null {
   if (account === null) {
     return null;
@@ -119,7 +117,7 @@ export function buildSyncDetails(
     accountEmail: account.email,
     accountId: account.userId,
     lastSyncedAt,
-    recoveryEnvelopePresent,
+    recoveryEnvelope,
   };
 }
 

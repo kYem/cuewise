@@ -78,14 +78,14 @@ async function runDetails(
   // because getAccount's network hop happens to outlast two local reads on a cold worker.
   await engine.ensureHydrated();
   // Both are network hops on the panel-open path, and neither throws.
-  const [account, recoveryEnvelopePresent] = await Promise.all([
+  const [account, recoveryEnvelope] = await Promise.all([
     engine.getAccount(),
-    refreshEnvelope ? engine.refreshRecoveryEnvelope() : engine.getRecoveryEnvelopePresent(),
+    refreshEnvelope ? engine.refreshRecoveryEnvelope() : engine.getRecoveryEnvelope(),
   ]);
   return {
     ok: true,
     kind: 'details',
-    details: buildSyncDetails(account, engine.getLastSyncedAt(), recoveryEnvelopePresent),
+    details: buildSyncDetails(account, engine.getLastSyncedAt(), recoveryEnvelope),
   };
 }
 

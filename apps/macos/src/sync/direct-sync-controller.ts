@@ -390,13 +390,13 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
       // getAccount's network hop happens to outlast two local reads.
       await engine.ensureHydrated();
       // Both are network hops on the panel-open path, and neither throws.
-      const [account, recoveryEnvelopePresent] = await Promise.all([
+      const [account, recoveryEnvelope] = await Promise.all([
         engine.getAccount(),
         options?.refreshRecoveryEnvelope
           ? engine.refreshRecoveryEnvelope()
-          : engine.getRecoveryEnvelopePresent(),
+          : engine.getRecoveryEnvelope(),
       ]);
-      return buildSyncDetails(account, engine.getLastSyncedAt(), recoveryEnvelopePresent);
+      return buildSyncDetails(account, engine.getLastSyncedAt(), recoveryEnvelope);
     },
     async getLastCycle(): Promise<LastCycleRead> {
       // No realm to be unreachable across, but the record still comes from storage: an unreadable
