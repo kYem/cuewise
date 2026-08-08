@@ -342,6 +342,50 @@ describe('NotesWidget', () => {
     expect(screen.getByRole('button', { name: 'Unpin notes' })).toBeInTheDocument();
   });
 
+  it('unpins when closed, so navigating back does not reopen it', async () => {
+    const { updateSettings } = mockStore({ notesPinned: true });
+    render(<NotesWidget />);
+    await screen.findByRole('textbox', { name: 'Notes' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close notes' }));
+
+    expect(updateSettings).toHaveBeenCalledWith({ notesPinned: false });
+    expect(screen.queryByRole('textbox', { name: 'Notes' })).not.toBeInTheDocument();
+  });
+
+  it('does not take focus when it opens on its own', async () => {
+    mockStore({ notesPinned: true });
+    render(<NotesWidget />);
+
+    const pad = await screen.findByRole('textbox', { name: 'Notes' });
+
+    expect(pad).not.toHaveFocus();
+    expect(screen.getByRole('button', { name: 'Unpin notes' })).not.toHaveFocus();
+  });
+
+  it('keeps the stored size and pin when opened before settings land', async () => {
+    mockStore({ isLoading: true });
+    const { rerender } = render(<NotesWidget />);
+    await openPad();
+
+    mockStore({ notesPinned: true, notesExpanded: true });
+    rerender(<NotesWidget />);
+
+    expect(screen.getByRole('button', { name: 'Unpin notes' })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Notes' }).className).toContain('h-[60vh]');
+  });
+
+  it('reverts the pin when the write is rejected', async () => {
+    mockStore({ saveSucceeds: false });
+    render(<NotesWidget />);
+    await openPad();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Keep notes open' }));
+    await settle();
+
+    expect(screen.getByRole('button', { name: 'Keep notes open' })).toBeInTheDocument();
+  });
+
   it('stays shut after the user pins then closes it, even once the store catches up', async () => {
     mockStore();
     const { rerender } = render(<NotesWidget />);

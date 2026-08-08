@@ -33,6 +33,7 @@ export const NotesWidget: React.FC = () => {
   const pending = useRef<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const didAutoOpen = useRef(false);
+  const autoOpening = useRef(false);
 
   const persist = useCallback(async () => {
     const value = pending.current;
@@ -115,6 +116,7 @@ export const NotesWidget: React.FC = () => {
       return;
     }
     didAutoOpen.current = true;
+    autoOpening.current = true;
     setIsPinned(true);
     setIsExpanded(expanded);
     setIsOpen(true);
@@ -129,28 +131,48 @@ export const NotesWidget: React.FC = () => {
   }, [justSaved]);
 
   const handleOpenChange = (open: boolean) => {
-    // Latches on the first deliberate open or close: once the user has driven the pad, a later
-    // settings change must never spring it back open.
-    didAutoOpen.current = true;
+    // Nothing read from settings is trustworthy yet while loading, so an early open must not latch
+    // or mirror — the auto-open effect still has to reconcile once the real values land.
+    if (!isLoading) {
+      didAutoOpen.current = true;
+    }
     setIsOpen(open);
     if (open) {
-      setIsExpanded(expanded);
-      setIsPinned(pinned);
+      if (!isLoading) {
+        setIsExpanded(expanded);
+        setIsPinned(pinned);
+      }
       return;
     }
     flush();
   };
 
-  const toggleExpanded = () => {
+  const toggleExpanded = async () => {
     const next = !isExpanded;
     setIsExpanded(next);
-    void updateSettings({ notesExpanded: next });
+    const ok = await updateSettings({ notesExpanded: next });
+    if (!ok) {
+      setIsExpanded(!next);
+    }
   };
 
-  const togglePinned = () => {
+  const togglePinned = async () => {
     const next = !isPinned;
     setIsPinned(next);
-    void updateSettings({ notesPinned: next });
+    const ok = await updateSettings({ notesPinned: next });
+    if (!ok) {
+      setIsPinned(!next);
+    }
+  };
+
+  // Closing unpins: the pad reopens from `notesPinned` on every mount, so leaving it pinned would
+  // undo this the next time the page is navigated back to.
+  // Closing unpins: the pad reopens from `notesPinned` on every mount, so leaving it pinned would
+  // undo this the next time the page is navigated back to.
+  const closePad = () => {
+    setIsPinned(false);
+    void updateSettings({ notesPinned: false });
+    handleOpenChange(false);
   };
 
   // A pinned pad ignores click-away and Escape, so it needs a way out that isn't the trigger.
@@ -177,6 +199,13 @@ export const NotesWidget: React.FC = () => {
         align="start"
         onInteractOutside={keepOpen}
         onEscapeKeyDown={keepOpen}
+        onOpenAutoFocus={(event) => {
+          // A pad that opened on its own must not take the caret out of the address bar.
+          if (autoOpening.current) {
+            autoOpening.current = false;
+            event.preventDefault();
+          }
+        }}
       >
         <div className="flex items-center justify-between px-3 py-2 border-b border-border">
           <span className="text-sm font-medium text-primary">Notes</span>
@@ -210,7 +239,7 @@ export const NotesWidget: React.FC = () => {
             {isPinned && (
               <button
                 type="button"
-                onClick={() => handleOpenChange(false)}
+                onClick={closePad}
                 aria-label="Close notes"
                 title="Close notes"
                 className={HEADER_BTN_CLASS}
