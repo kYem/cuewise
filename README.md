@@ -1,264 +1,108 @@
 # Cuewise
 
-**Your personal productivity companion.** A beautiful browser extension that combines motivational quotes, goal tracking, Pomodoro timer, and productivity insights in your new tab.
+**A calm new tab.** Motivational quotes, daily goals, a Pomodoro timer, and productivity insights — every time you open a tab.
 
-**Current Version:** 1.9.1 | **Status:** Live on the Chrome Web Store
-
-**[Install from the Chrome Web Store](https://chromewebstore.google.com/detail/cuewise/abjkbnhoepcnmbabflkedbapbldnpkbf)** · **[cuewise.app](https://cuewise.app)**
+[**Install from the Chrome Web Store**](https://chromewebstore.google.com/detail/cuewise/abjkbnhoepcnmbabflkedbapbldnpkbf) · [cuewise.app](https://cuewise.app) · [Releases](https://github.com/kYem/cuewise/releases)
 
 ---
 
-## ✨ Features
+## Privacy first
 
-### 📝 Smart Goal Management
-- **Daily Focus**: Add and track today's goals with visual progress
-- **Goal History**: View all past, present, and future goals organized by date
-- **Flexible Actions**: Edit, complete, delete, or move goals between days
-- **Filter by Status**: View all, completed, or incomplete goals
-- **Auto-Transfer**: Move incomplete goals to tomorrow with one click
+Cuewise is open source and local-first. Your goals, quotes, sessions, and settings live on your device.
 
-### 💭 Motivational Quotes
-- **100+ Curated Quotes**: Across 10 categories (Inspiration, Learning, Productivity, and more)
-- **Custom Quotes**: Add your own with author, category, source, and personal notes
-- **Smart Features**: Favorite, hide, view count tracking, and quote history navigation
-- **Category Colors**: Beautiful OKLCH-based color coding for each category
+- **Nothing leaves your device by default.** Three features can send data, and each is off until you turn it on: end-to-end encrypted Cloud Sync, the Google Calendar agenda, and the Weather widget.
+- **Cloud Sync is end-to-end encrypted.** Your data is encrypted on your device before it is sent. The server stores ciphertext it cannot read.
+- **No analytics, no telemetry, no third-party trackers.** There is no tracking code in this repository.
+- **Three permissions at install:** `storage`, `notifications`, `alarms`. Nothing else. Google access (`identity`) is an *optional* permission requested at runtime only if you connect Calendar or sign in to Sync — install it and never touch those, and you grant nothing Google-related.
 
-### ⏱️ Pomodoro Timer
-- **Classic Technique**: 25-minute work sessions, 5-minute breaks, 15-minute long breaks
-- **Customizable**: Adjust all durations and intervals to your preference
-- **Ambient Sounds**: Focus with optional background audio
-- **Session Tracking**: Complete history of all Pomodoro sessions
-- **Widget Access**: Quick timer control from any page
+Full details in the [privacy policy](https://cuewise.app/privacy).
 
-### 📊 Insights & Analytics
-- **Productivity Stats**: Goals completed, focus time, Pomodoro sessions
-- **Streak Tracking**: Current and longest goal completion streaks
-- **Advanced Analytics**: Daily, weekly, and monthly trends
-- **Visual Charts**: Goal completion rates and Pomodoro heatmaps
-- **Data Export**: Download your data as JSON or CSV
+## What it does
 
-### 🎨 Beautiful Customization
-- **Dark Mode**: Seamless light/dark/auto theme switching
-- **4 Color Themes**: Purple, Forest Green, Rose Pink, and the signature Glass mode
-- **3 Density Modes**: Compact, Comfortable, and Spacious layouts
-- **Live Preview**: See theme changes in real-time before applying
-- **Persistent Settings**: All preferences saved locally
+**Quotes** — 100 curated quotes across 10 categories, plus your own. Favourite, hide, browse history, track what you return to.
 
-### 🔔 Smart Reminders
-- **Flexible Scheduling**: Set reminders with specific dates and times
-- **Browser Notifications**: Never miss what matters
-- **Snooze Options**: 5 min, 15 min, 1 hour, or 1 day
-- **Recurring Support**: Daily, weekly, or monthly reminders
-- **Quick Management**: Mark complete or delete with one click
+**Goals** — Today's focus with visual progress. Full history by date, filters, and one-click transfer of unfinished goals to tomorrow.
 
-### 💾 Storage Management
-- **Usage Tracking**: Monitor Chrome storage usage with visual indicators
-- **Warning System**: Alerts when approaching storage limits
-- **Hybrid Strategy**: Seed quotes in local storage, custom data in sync storage
-- **Cross-Device Sync**: Enable Chrome Sync to share data across devices
+**Pomodoro** — Classic 25/5/15, fully adjustable. Ambient soundscapes, session history, and heatmaps of your most productive hours. A sticky widget keeps the timer reachable from any page.
 
----
+**Focus mode** — Full-screen timer over a background image, with your quote underneath.
 
-## 🚀 Quick Start
+**Concepts** — Spaced-repetition cards for things you're learning, graded as you review them.
 
-### Prerequisites
-- Node.js >= 18.0.0
-- pnpm >= 8.0.0
-- Chrome or Edge browser
+**Insights** — Streaks, daily/weekly/monthly trends, completion charts. Export everything as JSON or CSV.
 
-### Installation
+**Reminders** — Scheduled and recurring, with browser notifications and snooze.
+
+**Also** — Weather widget, quick links, an optional Google Calendar agenda, and optional end-to-end encrypted sync across devices.
+
+**Make it yours** — Light/dark/auto, four colour themes (Purple, Forest, Rose, and the signature Glass), and three density modes.
+
+## Platforms
+
+| Platform | Status |
+|---|---|
+| Chrome / Edge extension | Live on the Chrome Web Store |
+| macOS (Tauri) | In this repo, builds from source — not yet distributed |
+| Web, mobile | Planned |
+
+## Getting started
+
+**Prerequisites:** Node >= 24, pnpm >= 8, a Chromium browser.
 
 ```bash
-# Clone and install
-git clone <repository-url>
+git clone https://github.com/kYem/cuewise.git
 cd cuewise
 pnpm install
-
-# Build the extension
 pnpm --filter @cuewise/browser-extension build
 ```
 
-### Load in Chrome
+Then load it in Chrome:
 
 1. Open `chrome://extensions/`
-2. Enable "Developer mode" (top-right toggle)
-3. Click "Load unpacked"
-4. Select `apps/browser-extension/dist` folder
-5. Open a new tab to see your productivity dashboard! 🎉
+2. Enable **Developer mode**
+3. Click **Load unpacked** and select `apps/browser-extension/dist`
+4. Open a new tab
 
----
-
-## 🛠️ Development
+## Development
 
 ```bash
-# Start dev server with HMR
-pnpm --filter @cuewise/browser-extension dev
-
-# Run linting and type check
-pnpm lint
-pnpm type-check
-
-# Run tests
-pnpm --filter @cuewise/browser-extension test
-pnpm --filter @cuewise/browser-extension test:watch
-
-# Build for production
-pnpm build
-
-# Clean build artifacts
-pnpm clean
+pnpm --filter @cuewise/browser-extension dev    # dev server with HMR, localhost:5173
+pnpm --filter @cuewise/browser-extension test   # tests
+pnpm lint                                       # Biome check (lint:fix to autofix)
+pnpm type-check                                 # types across all packages
+pnpm build                                      # build everything
 ```
 
-### Development URLs
-- **Extension**: Load `dist/` folder in Chrome
-- **Dev Server**: `http://localhost:5173/` (for rapid testing without extension reload)
+## Repo layout
 
----
-
-## 📦 Tech Stack
-
-### Monorepo Architecture
-- **Package Manager**: pnpm with workspaces
-- **Build Tool**: Turbo for efficient caching
-- **Linting**: Biome (50x faster than ESLint)
-
-### Frontend
-- **Framework**: React 18 + TypeScript (ES2022)
-- **Build**: Vite with @crxjs/vite-plugin for HMR
-- **Styling**: Tailwind CSS 4 with OKLCH colors
-- **State**: Zustand stores with persistence
-- **Icons**: Lucide React
-- **Testing**: Vitest + Testing Library + Fishery factories
-
-### Structure
 ```
 cuewise/
 ├── apps/
-│   └── browser-extension/    # Chrome/Edge extension (30 components, 11 stores)
-├── packages/
-│   ├── shared/               # Platform-agnostic types, utils, constants
-│   ├── storage/              # Multi-platform storage adapters
-│   ├── ui/                   # Shared UI components (Toast, Modal, etc.)
-│   └── test-utils/           # Testing factories and mocks
+│   ├── browser-extension/   # Chrome/Edge extension (Manifest V3)
+│   ├── macos/               # Native macOS app (Tauri + Swift posture sidecar)
+│   ├── api/                 # Cloud-sync server (Cloudflare Worker + D1)
+│   └── website/             # cuewise.app (Astro)
+└── packages/
+    ├── app/                 # Shared React app — components, stores, hooks
+    ├── shared/              # Platform-agnostic types, utils, constants, ports
+    ├── storage/             # Storage adapters and typed helpers
+    ├── sync-engine/         # Sync cycle orchestration
+    ├── sync-client/         # Typed cloud-sync API client
+    ├── crypto/              # End-to-end encryption primitives
+    ├── ui/                  # Shared UI primitives
+    └── test-utils/          # Factories, mocks, fixtures
 ```
 
----
+Platform differences are handled through ports and adapters, so the same React app runs in the extension and in the macOS shell. See [CLAUDE.md](./CLAUDE.md) for architecture and [ARCHITECTURE.md](./ARCHITECTURE.md) for the deeper guide.
 
-## 📚 Key Features Explained
+**Tech:** React 18, TypeScript, Vite, Tailwind CSS 4, Zustand, Vitest, Biome, Turbo, pnpm workspaces.
 
-### Goal History View
-Access past and future goals even when today's list is empty:
-- **Always Accessible**: "View All Goals" button never disappears
-- **Date Grouping**: Goals organized with relative dates (Today, Yesterday, Tomorrow)
-- **Smart Filtering**: Toggle between All, Completed, or Incomplete
-- **Move to Today**: One-click to bring back past goals
-- **Transfer Forward**: Move incomplete goals to tomorrow
+## Contributing
 
-### Pomodoro Integration
-Full-featured timer with ambient sounds and tracking:
-- **Flexible Settings**: Customize work/break durations
-- **Auto-Start**: Optional auto-transition between intervals
-- **Sound Options**: Multiple ambient soundscapes
-- **Sticky Widget**: Access timer from any page
-- **Complete Analytics**: Heatmaps show your most productive hours
+Contributions welcome. Please write tests for new behaviour, keep TypeScript strict (no `any`), and run `pnpm lint:fix` before opening a PR. See [CLAUDE.md](./CLAUDE.md) for conventions and code style.
 
-### Storage Strategy
-Smart hybrid approach for performance and sync:
-- **Local Storage**: 99 seed quotes (fast, no sync needed)
-- **Sync Storage**: Custom quotes and user data (syncs across devices)
-- **Visual Indicators**: Real-time storage usage with color-coded warnings
-- **Efficient**: Optimized to stay well under Chrome's limits
+## Licence
 
----
+MIT — see [LICENSE](./LICENSE).
 
-## 🎯 Usage Tips
-
-### Goals
-- **Add**: Type and press Enter
-- **Complete**: Click the circle checkbox
-- **Edit**: Click the goal text
-- **Move to Today**: Expand history, click move button on past goals
-- **Transfer**: Hover and click arrow to move to tomorrow (after 8 PM)
-- **Clear**: Bulk remove completed goals with one click
-
-### Quotes
-- **New Quote**: Click refresh button or open a new tab
-- **Navigate**: Use arrow buttons to browse quote history
-- **Favorite**: Click heart icon (favorites never appear as random)
-- **Hide**: Click eye icon (hidden quotes never appear)
-- **Custom Quote**: Click floating "+" button to add your own
-
-### Pomodoro
-- **Quick Start**: Click "Pomodoro" in top-right corner
-- **Customize**: Open settings (⚙️) → Pomodoro section
-- **Ambient Sound**: Select from multiple options and adjust volume
-- **Track Progress**: View session history and analytics in Insights
-
-### Theme Customization
-- **Live Preview**: Enable theme switcher sidebar to test instantly
-- **Density**: Choose Compact (minimal), Comfortable (balanced), or Spacious (relaxed)
-- **Dark Mode**: Auto-syncs with system preferences or set manually
-- **Persistence**: All settings saved automatically
-
----
-
-## 🔮 Planned Enhancements
-
-### Near-Term
-- Spaced repetition for quotes (review mode)
-- Onboarding tutorial for new users
-- Firefox support
-
-### Future Platforms
-- 🌐 **Web App** (Next.js) - Use without browser extension
-- 📱 **Mobile App** (React Native) - iOS and Android support
-- ☁️ **Cloud Sync** - Backend service for cross-platform data sync
-
----
-
-## 🤝 Contributing
-
-Contributions welcome! Please:
-- Write tests for new features
-- Follow TypeScript strict mode (no `any` types)
-- Use Biome for linting (auto-fix with `pnpm lint:fix`)
-- Keep components focused and under 300 lines
-- Add JSDoc comments for public APIs
-
-See [CLAUDE.md](./CLAUDE.md) for architecture details and [LINTING.md](./LINTING.md) for code style.
-
----
-
-## 🐛 Troubleshooting
-
-**Extension not loading**
-- Verify you selected the `dist/` folder
-- Rebuild: `pnpm --filter @cuewise/browser-extension build`
-- Check Chrome DevTools console for errors
-
-**Data not syncing**
-- Enable Chrome Sync in settings
-- Check storage usage in Insights page
-- Ensure you're signed into Chrome on all devices
-
-**Build errors**
-```bash
-# Clear everything and reinstall
-rm -rf node_modules packages/*/node_modules apps/*/node_modules
-pnpm install
-pnpm build
-```
-
----
-
-## 📄 License
-
-MIT License - See LICENSE file for details.
-
-**Exception**: the cloud-sync server (`apps/api/`) is licensed under AGPL-3.0-only — see `apps/api/LICENSE`. The extension and apps only talk to it over HTTP, so this changes nothing for them; it means anyone who runs a modified copy of the sync server as a service must publish their source.
-
----
-
-**Stay motivated. Stay productive. Stay focused.** ✨
-
-Made with ❤️ using React, TypeScript, and Tailwind CSS
+**Exception:** the cloud-sync server (`apps/api/`) is AGPL-3.0-only, see [`apps/api/LICENSE`](./apps/api/LICENSE). The extension and apps only talk to it over HTTP, so this changes nothing for them — it means anyone running a modified copy of the sync server as a service must publish their source.
