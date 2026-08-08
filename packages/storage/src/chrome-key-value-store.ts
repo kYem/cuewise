@@ -115,6 +115,15 @@ export class ChromeKeyValueStore implements KeyValueStore {
     }
   }
 
+  /**
+   * navigator.locks is origin-scoped, which is exactly the boundary that matters: the extension's
+   * page and its service worker share chrome-extension://<id>, and they are the two writers that
+   * race. Absent in a context without it (a test double, an older runtime), the caller falls back.
+   */
+  withLock<T>(name: string, fn: () => Promise<T>): Promise<T> {
+    return navigator.locks.request(`cuewise:${name}`, fn) as Promise<T>;
+  }
+
   async removeMany(keys: string[], area: StorageArea): Promise<boolean> {
     try {
       await areaStore(area).remove(keys);

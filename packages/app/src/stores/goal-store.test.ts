@@ -1,6 +1,7 @@
 import {
   configurePlatform,
   DEFAULT_SETTINGS,
+  type Goal,
   getTodayDateString,
   logger,
   resetPlatform,
@@ -25,6 +26,12 @@ vi.mock('@cuewise/storage', () => ({
   getGoals: vi.fn(),
   setGoals: vi.fn(),
   readSettings: vi.fn(),
+  // A faithful stand-in, not a stub: updateGoals' whole point is that it reads inside the write,
+  // so a mock that skipped the read would let a stale-snapshot regression pass.
+  updateGoals: vi.fn(async (mutate: (goals: Goal[]) => Goal[]) => {
+    const goals = mutate((await storage.getGoals()) ?? []);
+    return { result: await storage.setGoals(goals), goals };
+  }),
 }));
 
 const settingsRead = (settings: Settings): SettingsRead => ({ ok: true, settings });
@@ -72,6 +79,11 @@ describe('Goal Store', () => {
 
     // Clear all mocks
     vi.clearAllMocks();
+
+    // Storage mirrors the store, which is the invariant the app maintains — and what lets a test
+    // seed with setState and still exercise the read-inside-the-write.
+    vi.mocked(storage.getGoals).mockImplementation(async () => useGoalStore.getState().goals);
+    vi.mocked(storage.setGoals).mockResolvedValue({ success: true });
   });
 
   describe('initialize', () => {
