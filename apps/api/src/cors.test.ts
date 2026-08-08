@@ -76,6 +76,11 @@ describe('CORS middleware wiring', () => {
     expect(res.status).toBe(204);
     expect(res.headers.get('Access-Control-Allow-Origin')).toBe(DEV_ORIGIN);
     expect(res.headers.get('Access-Control-Allow-Methods')).toContain('GET');
+    // Every method the routes actually use — a route added without its method here preflight-fails
+    // from a browser origin while working fine from the extension and Tauri clients.
+    for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) {
+      expect(res.headers.get('Access-Control-Allow-Methods')).toContain(method);
+    }
     expect(res.headers.get('Access-Control-Allow-Headers')).toContain('Authorization');
   });
 

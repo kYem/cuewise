@@ -27,6 +27,10 @@ export function fakeControlSurface(
     getRecoveryEnvelope: vi.fn().mockReturnValue('present'),
     refreshRecoveryEnvelope: vi.fn().mockResolvedValue('present'),
     ensureHydrated: vi.fn().mockResolvedValue(undefined),
+    listSessions: vi.fn().mockResolvedValue([]),
+    revokeSession: vi.fn().mockResolvedValue(undefined),
+    renameSession: vi.fn().mockResolvedValue(undefined),
+    revokeOtherSessions: vi.fn().mockResolvedValue(0),
     ...overrides,
   };
 }

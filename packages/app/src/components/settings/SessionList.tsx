@@ -1,0 +1,377 @@
+import type { SyncSession } from '@cuewise/shared';
+import { logger, MAX_DEVICE_NAME_BYTES } from '@cuewise/shared';
+import { cn } from '@cuewise/ui';
+import { Check, Pencil, X } from 'lucide-react';
+import type React from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useToastStore } from '../../stores/toast-store';
+import { type SyncUiStatus, useSyncController } from '../../sync/sync-controller';
+import { formatMillisAgo } from '../../utils/reminder-date-utils';
+import { Modal } from '../Modal';
+
+const ROW = 'flex items-start justify-between gap-3 border-t border-divider py-2 first:border-t-0';
+const META = 'text-xs text-tertiary';
+const GHOST_BUTTON =
+  'rounded-lg border border-border bg-surface px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-surface-variant disabled:cursor-not-allowed disabled:opacity-50';
+
+// A stale list can make the server revoke none; "Signed out 0 other devices" reads as a bug.
+function revokedLabel(revoked: number): string {
+  if (revoked === 0) {
+    return 'No other devices were signed in';
+  }
+  if (revoked === 1) {
+    return 'Signed out 1 other device';
+  }
+  return `Signed out ${revoked} other devices`;
+}
+
+// formatMillisAgo's under-a-minute answer is a sentence, so "Last active Just now" reads wrong —
+// and every user meets it on their own row, since listing slides last_used_at forward.
+const ACTIVE_NOW_MS = 60_000;
+
+// Always rendered: it is what tells two same-named sessions apart (see SyncSession).
+function lastActiveLabel(session: SyncSession): string {
+  if (session.lastUsedAt === null) {
+    return 'Not used yet';
+  }
+  if (Date.now() - session.lastUsedAt < ACTIVE_NOW_MS) {
+    return 'Active now';
+  }
+  return `Last active ${formatMillisAgo(session.lastUsedAt)}`;
+}
+
+interface SessionRowProps {
+  session: SyncSession;
+  onRename: (id: string, deviceName: string) => Promise<void>;
+  onRevoke: (session: SyncSession) => void;
+}
+
+const SessionRow: React.FC<SessionRowProps> = ({ session, onRename, onRevoke }) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [draft, setDraft] = useState(session.deviceName);
+
+  const startEditing = () => {
+    setDraft(session.deviceName);
+    setIsEditing(true);
+  };
+
+  const commit = async () => {
+    const next = draft.trim();
+    if (next.length === 0 || next === session.deviceName) {
+      setIsEditing(false);
+      return;
+    }
+    // Bytes, matching the server's own measure — a 40-character CJK name is over the bound while
+    // being well under 100 code units, and would otherwise 400 and read as a transient failure.
+    if (new TextEncoder().encode(next).length > MAX_DEVICE_NAME_BYTES) {
+      useToastStore.getState().warning('That device name is too long.');
+      return;
+    }
+    setIsEditing(false);
+    await onRename(session.id, next);
+  };
+
+  return (
+    <div data-testid={`session-row-${session.id}`} className={ROW}>
+      <div className="flex min-w-0 flex-col gap-0.5">
+        {isEditing ? (
+          <div className="flex items-center gap-1">
+            <input
+              // biome-ignore lint/a11y/noAutofocus: the input only exists after a deliberate click
+              autoFocus
+              aria-label="Device name"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  void commit();
+                }
+                if (e.key === 'Escape') {
+                  setIsEditing(false);
+                }
+              }}
+              className="w-40 rounded border border-border bg-surface px-2 py-1 text-sm text-primary"
+            />
+            <button type="button" aria-label="Save name" className={GHOST_BUTTON} onClick={commit}>
+              <Check className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              aria-label="Cancel rename"
+              className={GHOST_BUTTON}
+              onClick={() => setIsEditing(false)}
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            data-testid={`session-name-${session.id}`}
+            onClick={startEditing}
+            className="group flex items-center gap-1.5 text-left text-sm font-medium text-primary"
+          >
+            <span className="truncate">{session.deviceName}</span>
+            <Pencil className="h-3 w-3 flex-none text-tertiary opacity-0 transition-opacity group-hover:opacity-100" />
+            {session.current && (
+              <span className="flex-none rounded-full bg-surface-variant px-2 py-0.5 text-[10px] font-medium text-secondary">
+                This device
+              </span>
+            )}
+          </button>
+        )}
+        <span data-testid={`session-last-active-${session.id}`} className={META}>
+          {lastActiveLabel(session)}
+        </span>
+      </div>
+      {!session.current && (
+        <button
+          type="button"
+          onClick={() => onRevoke(session)}
+          className={cn(GHOST_BUTTON, 'flex-none')}
+        >
+          Revoke
+        </button>
+      )}
+    </div>
+  );
+};
+
+interface SessionListProps {
+  /**
+   * Opens the panel's existing Regenerate control. Offered inside the revoke dialog, above the
+   * confirm, because a copied recovery code plus provider access could re-enrol the cut device.
+   */
+  onRegenerateRecoveryCode?: () => void;
+  /**
+   * Mirrors the panel's own in-flight state. Load-bearing: two regenerations upload two envelopes
+   * under two master keys and surface whichever resolved last, which need not be the one the
+   * server kept — a saved code that opens nothing.
+   */
+  isRegeneratingRecoveryCode?: boolean;
+}
+
+export const SessionList: React.FC<SessionListProps> = ({
+  onRegenerateRecoveryCode,
+  isRegeneratingRecoveryCode = false,
+}) => {
+  const controller = useSyncController();
+  const [sessions, setSessions] = useState<SyncSession[] | null>(null);
+  const [hasLoaded, setHasLoaded] = useState(false);
+  const [pendingRevoke, setPendingRevoke] = useState<SyncSession | null>(null);
+  const [isRevokingOthers, setIsRevokingOthers] = useState(false);
+  const [isConfirmingRevokeOthers, setIsConfirmingRevokeOthers] = useState(false);
+  const [status, setStatus] = useState<SyncUiStatus>('off');
+  const readGenRef = useRef(0);
+
+  useEffect(() => {
+    if (controller === null) {
+      return undefined;
+    }
+    setStatus(controller.getStatus());
+    return controller.subscribe(setStatus);
+  }, [controller]);
+
+  const refresh = useCallback(async () => {
+    if (controller === null) {
+      return;
+    }
+    // Generation guard, like the panel's details fetch: an action's refresh and a status-driven
+    // one can be in flight together, and without this the older resolution wins and can put a
+    // just-revoked device back on screen after the success toast.
+    readGenRef.current += 1;
+    const gen = readGenRef.current;
+    try {
+      const next = await controller.listSessions();
+      if (gen === readGenRef.current) {
+        setSessions(next);
+        setHasLoaded(true);
+      }
+    } catch (error) {
+      // listSessions is contracted never to throw; a rejection means a skewed host, and leaving
+      // hasLoaded false would render the aria-hidden skeleton forever. Generation-checked like the
+      // success arm, so a stale rejection can't blank a list a newer read already filled.
+      logger.error('Cloud sync list devices failed', error);
+      if (gen === readGenRef.current) {
+        setSessions(null);
+        setHasLoaded(true);
+      }
+    }
+  }, [controller]);
+
+  useEffect(() => {
+    if (status !== 'active' && status !== 'syncing') {
+      return;
+    }
+    void refresh();
+  }, [refresh, status]);
+
+  const handleRename = async (id: string, deviceName: string) => {
+    if (controller === null) {
+      return;
+    }
+    try {
+      await controller.renameSession(id, deviceName);
+      await refresh();
+    } catch (error) {
+      logger.error('Cloud sync rename device failed', error);
+      useToastStore.getState().error("Couldn't rename that device — please try again.");
+      await refresh();
+    }
+  };
+
+  const handleRevoke = async () => {
+    if (controller === null || pendingRevoke === null) {
+      return;
+    }
+    const target = pendingRevoke;
+    setPendingRevoke(null);
+    try {
+      await controller.revokeSession(target.id);
+      // Confirm before refreshing: for a security action the answer to "did that work?" must not
+      // depend on a later read that can itself fail and blank the list.
+      useToastStore.getState().success(`${target.deviceName} signed out`);
+      await refresh();
+    } catch (error) {
+      logger.error('Cloud sync revoke device failed', error);
+      useToastStore.getState().error("Couldn't sign that device out — please try again.");
+      // A 404 means another device already cut it, so the row on screen is stale: without this it
+      // stays listed and every retry 404s again.
+      await refresh();
+    }
+  };
+
+  const handleRevokeOthers = async () => {
+    if (controller === null) {
+      return;
+    }
+    setIsConfirmingRevokeOthers(false);
+    setIsRevokingOthers(true);
+    try {
+      const revoked = await controller.revokeOtherSessions();
+      useToastStore.getState().success(revokedLabel(revoked));
+      await refresh();
+    } catch (error) {
+      logger.error('Cloud sync revoke other devices failed', error);
+      useToastStore.getState().error("Couldn't sign the other devices out — please try again.");
+    } finally {
+      setIsRevokingOthers(false);
+    }
+  };
+
+  if (controller === null) {
+    return null;
+  }
+
+  if (!hasLoaded) {
+    return (
+      <div data-testid="session-list-skeleton" aria-hidden="true" className="flex h-4 items-center">
+        <span className="h-3 w-48 animate-pulse rounded bg-surface-variant" />
+      </div>
+    );
+  }
+
+  if (sessions === null) {
+    // A retry affordance, not just a message: status stays 'active' after a transient miss, so
+    // nothing would re-trigger the read and the panel would stay stuck until it remounts.
+    return (
+      <div data-testid="session-list-unavailable" className="flex items-center gap-2">
+        <span className={META}>Couldn't load your signed-in devices.</span>
+        <button type="button" className={GHOST_BUTTON} onClick={() => void refresh()}>
+          Try again
+        </button>
+      </div>
+    );
+  }
+
+  const otherCount = sessions.filter((s) => !s.current).length;
+
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="text-xs font-medium text-secondary">Signed-in devices</div>
+      {sessions.map((s) => (
+        <SessionRow key={s.id} session={s} onRename={handleRename} onRevoke={setPendingRevoke} />
+      ))}
+
+      {otherCount > 0 && (
+        <button
+          type="button"
+          onClick={() => setIsConfirmingRevokeOthers(true)}
+          disabled={isRevokingOthers}
+          className={cn(GHOST_BUTTON, 'mt-2 w-fit')}
+        >
+          Sign out all other devices
+        </button>
+      )}
+
+      <Modal
+        isOpen={pendingRevoke !== null}
+        onClose={() => setPendingRevoke(null)}
+        title="Sign out this device?"
+        size="md"
+      >
+        <div className="flex flex-col gap-3">
+          <p className="text-sm text-secondary">
+            {pendingRevoke === null ? '' : `${pendingRevoke.deviceName} will stop syncing.`} It
+            stops receiving new data, but anything already synced stays on that device.
+          </p>
+          <p className={META}>
+            If the device was lost or stolen, regenerate your recovery code first — someone who
+            copied it could otherwise use it to enrol again.
+          </p>
+          {onRegenerateRecoveryCode !== undefined && (
+            <button
+              type="button"
+              onClick={onRegenerateRecoveryCode}
+              disabled={isRegeneratingRecoveryCode}
+              className={cn(GHOST_BUTTON, 'w-fit')}
+            >
+              Regenerate recovery code
+            </button>
+          )}
+          <div className="flex justify-end gap-2 pt-1">
+            <button type="button" className={GHOST_BUTTON} onClick={() => setPendingRevoke(null)}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleRevoke}
+              className="rounded-lg bg-red-600 px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-red-700"
+            >
+              Revoke
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={isConfirmingRevokeOthers}
+        onClose={() => setIsConfirmingRevokeOthers(false)}
+        title="Sign out all other devices?"
+        size="md"
+      >
+        <div className="flex flex-col gap-3">
+          <p className="text-sm text-secondary">
+            Every device except this one will stop syncing and need to sign in again.
+          </p>
+          <div className="flex justify-end gap-2 pt-1">
+            <button
+              type="button"
+              className={GHOST_BUTTON}
+              onClick={() => setIsConfirmingRevokeOthers(false)}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleRevokeOthers}
+              className="rounded-lg bg-red-600 px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-red-700"
+            >
+              Sign out
+            </button>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  );
+};

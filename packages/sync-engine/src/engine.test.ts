@@ -806,6 +806,64 @@ describe('SyncEngine.enableSync', () => {
     expect(await device.engine.getAccount()).not.toBeNull();
   });
 
+  it('listSessions resolves null on a 401 without auth-loss side effects', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    device.apiClient.sessionsResult = [
+      { id: 's1', deviceName: 'Device A', createdAt: 1, lastUsedAt: 2, current: true },
+    ];
+
+    device.apiClient.rejectNextListSessionsWith401 = true;
+    expect(await device.engine.listSessions()).toBeNull();
+
+    expect(device.engine.getStatus()).toBe('active');
+    expect(await device.engine.listSessions()).toHaveLength(1);
+  });
+
+  it('listSessions resolves null when signed out', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+
+    expect(await device.engine.listSessions()).toBeNull();
+  });
+
+  it('revokeSession rejects so the caller can report the failure', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    device.apiClient.rejectNextRevokeSessionWith404 = true;
+    await expect(device.engine.revokeSession('gone')).rejects.toMatchObject({ status: 404 });
+
+    await device.engine.revokeSession('s2');
+    expect(device.apiClient.revokedSessionIds).toEqual(['s2']);
+  });
+
+  it('revokeOtherSessions returns the server count unchanged', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    device.apiClient.revokeOtherSessionsResult = 4;
+
+    await expect(device.engine.revokeOtherSessions()).resolves.toBe(4);
+  });
+
+  it('renameSession forwards the new device name', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    await device.engine.renameSession('s1', 'Work MacBook');
+
+    expect(device.apiClient.renamedSessions).toEqual([['s1', 'Work MacBook']]);
+  });
+
   it('resumeEnrollWithCode finishes a needs-code enroll on the live session, no re-exchange', async () => {
     const server = new FakeSyncServer();
     const deviceA = createDevice(server);

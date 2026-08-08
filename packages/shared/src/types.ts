@@ -698,6 +698,20 @@ export interface KeyEnvelopeExport extends KeyEnvelopeRecord {
 }
 
 /**
+ * One live session on the account (ENG-95). A session, not a device: reinstalling without
+ * disconnecting leaves the old row live until it expires, so one machine can hold several and
+ * `lastUsedAt` is what tells same-named rows apart. `id` is an opaque public handle — never the
+ * session token or its hash.
+ */
+export interface SyncSession {
+  id: string;
+  deviceName: string;
+  createdAt: number;
+  lastUsedAt: number | null;
+  current: boolean;
+}
+
+/**
  * codeVerifier (PKCE): required for apple, present for google bounced-code exchanges (the
  * macOS deep-link flow), absent for google id_token exchanges (extension) and dev.
  */

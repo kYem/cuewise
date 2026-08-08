@@ -18,6 +18,7 @@ import {
   registerGoogleRoutes,
 } from './routes/google';
 import { registerKeysRoutes } from './routes/keys';
+import { registerSessionsRoutes } from './routes/sessions';
 import { registerWeatherRoutes, type UpstreamFetch } from './routes/weather';
 import type { SyncStore } from './store';
 import { type IdTokenVerifier, verifyAppleIdToken, verifyGoogleIdToken } from './verifiers';
@@ -49,7 +50,7 @@ export function createApp(deps: AppDeps = {}): Hono<{ Bindings: Env } & AuthVars
     '/v1/*',
     cors({
       origin: (origin, c) => resolveAllowedOrigin(origin, c.env),
-      allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
       allowHeaders: ['Authorization', 'Content-Type'],
       maxAge: 86_400,
     })
@@ -66,6 +67,7 @@ export function createApp(deps: AppDeps = {}): Hono<{ Bindings: Env } & AuthVars
   // registration below, which relies on the same behavior.
   app.use('/v1/changes/*', auth);
   app.use('/v1/keys/*', auth);
+  app.use('/v1/sessions/*', auth);
   app.use('/v1/export', auth);
   app.use('/v1/account', auth);
   app.use('/v1/auth/logout', auth);
@@ -76,6 +78,7 @@ export function createApp(deps: AppDeps = {}): Hono<{ Bindings: Env } & AuthVars
   });
   app.use('/v1/changes/*', perTokenRateLimit);
   app.use('/v1/keys/*', perTokenRateLimit);
+  app.use('/v1/sessions/*', perTokenRateLimit);
   app.use('/v1/export', perTokenRateLimit);
   app.use('/v1/account', perTokenRateLimit);
 
@@ -98,6 +101,7 @@ export function createApp(deps: AppDeps = {}): Hono<{ Bindings: Env } & AuthVars
   registerGoogleRoutes(app, resolved);
   registerChangesRoutes(app, resolved);
   registerKeysRoutes(app, resolved);
+  registerSessionsRoutes(app, resolved);
   registerAccountRoutes(app, resolved);
   registerWeatherRoutes(app, resolved);
 

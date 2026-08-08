@@ -37,7 +37,7 @@ D1 tables (`migrations/0001_init.sql`, plus later numbered migrations):
 |---|---|---|
 | `users` | `id`, `email`, `last_seq`, `created_at` | `last_seq` is the per-user sync cursor — bumped once per push, never per-row. |
 | `identities` | `(provider, provider_sub)` → `user_id`, `email`, `created_at` | Composite PK. One row per linked provider — makes linking Google + Apple to one account additive, no schema change. |
-| `tokens` | `token_hash` (PK), `user_id`, `device_name`, `expires_at`, `revoked_at`, `last_used_at`, `window_start`/`window_count`, `created_at` | The raw session token is never stored, only its SHA-256. Rate-limit counters live on the token's own row, so per-token limiting needs no separate table. |
+| `tokens` | `token_hash` (PK), `id` (unique), `user_id`, `device_name`, `expires_at`, `revoked_at`, `last_used_at`, `window_start`/`window_count`, `created_at` | The raw session token is never stored, only its SHA-256. Rate-limit counters live on the token's own row, so per-token limiting needs no separate table. `id` is an opaque public handle used by `/v1/sessions` — deliberately not `token_hash`, so the auth lookup key never reaches a URL or an invocation log. Its default generates a value, so a row can never be written without an addressable handle — which is why migration 0007 rebuilds the table rather than adding a column (SQLite forbids an expression default on `ADD COLUMN`). Holds no IP, geolocation or user-agent, by design. |
 | `auth_codes` | `code_hash` (PK), `payload` (JSON), `expires_at`, `used_at`, `code_challenge` | The server-bounce one-time exchange codes (Apple and Google, also hash-only; `payload.provider` records which). 60s TTL; `code_challenge` binds it to a PKCE verifier. `consumeAuthCode` DELETEs the row (single-use + PII gone at once), so `used_at` is now vestigial. |
 | `records` | `(user_id, collection, entity_id)` (PK), `seq`, `ciphertext`, `deleted`, `client_updated_at`, `server_received_at` | See below. |
 | `key_envelopes` | `(user_id, kind)` (PK), `envelope`, `updated_at` | ENG-44 E2E key material, client-wrapped — `envelope` is opaque, the server never reads it. |
@@ -72,6 +72,11 @@ All endpoints are under `/v1`.
 | `POST` | `/v1/changes` | Atomic batch push, ≤100 records, ≤64 KB ciphertext/record | Yes |
 | `GET` | `/v1/keys/recovery` | Fetch the caller's opaque recovery key envelope | Yes |
 | `PUT` | `/v1/keys/recovery` | Store/replace the caller's opaque recovery key envelope, ≤1024 bytes. `{ifAbsent: true}` makes it create-only — 409 `key_envelope_exists` if one is already stored, no overwrite. | Yes |
+| `GET` | `/v1/sessions` | List the caller's live sessions (`id`, `deviceName`, `createdAt`, `lastUsedAt`, `current`). Revoked and expired rows are omitted. | Yes |
+| `DELETE` | `/v1/sessions/:id` | Revoke one session. Idempotent — a repeat answers 204 and keeps the first revocation time. 404 when the id is unknown *or* belongs to another account. | Yes |
+| `PATCH` | `/v1/sessions/:id` | Rename a session, `{deviceName}`, bounded by the same `MAX_DEVICE_NAME_LENGTH` as enrol | Yes |
+| `POST` | `/v1/sessions/revoke-others` | Revoke every session but the caller's; answers `{revoked: <count>}` | Yes |
+| `GET` | `/v1/export` | Dump all of the caller's records | Yes |
 | `GET` | `/v1/export` | Dump all of the caller's records **and every key envelope they hold** | Yes |
 | `DELETE` | `/v1/account` | Delete user, identities, tokens, records, and key envelopes | Yes |
 | `POST` | `/v1/weather` | Forecast proxy (ENG-18), `{lat, lon, units}` | No |
@@ -151,7 +156,7 @@ Body: `type` (`https://cuewise.app/problems/<code-with-dashes>`), `title`, `stat
 
 | Scope | Applies to | Limit | Window |
 |---|---|---|---|
-| Per-token, fixed window (`rate-limit.ts`) | `/v1/changes/*`, `/v1/keys/*`, `/v1/export`, `/v1/account` | 60 req | 60s — counter anchored on the token's own D1 row, no extra infra |
+| Per-token, fixed window (`rate-limit.ts`) | `/v1/changes/*`, `/v1/keys/*`, `/v1/sessions/*`, `/v1/export`, `/v1/account` | 60 req | 60s — counter anchored on the token's own D1 row, no extra infra |
 | Per-IP, fixed window, isolate-local (`ip-rate-limit.ts`) | `/v1/auth/token`, `/v1/auth/{apple,google}/start`, `/v1/auth/{apple,google}/callback` | 30 req (default) | 60s — in-memory `Map`, resets on isolate recycle; defense-in-depth, production also fronts these with WAF rules |
 | Per-IP (own instance) | `/v1/weather` | 120 req | 60s — a device fetches ~2/hour, so the headroom is for shared office/NAT egress |
 | Per-IP (own instance) | `/v1/weather/search` | 60 req | 60s — fires as the user types, debounced at 300ms |

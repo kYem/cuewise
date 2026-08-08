@@ -1,4 +1,5 @@
 import type { EnableResult, SyncDetails } from '@cuewise/app';
+import type { SyncSession } from '@cuewise/shared';
 import type { SyncNowResult, SyncOutcome, SyncSignInProvider } from '@cuewise/sync-engine';
 import { z } from 'zod/mini';
 
@@ -11,6 +12,10 @@ export const SYNC_CONTROL_OPS = [
   'syncNow',
   'details',
   'getLastCycle',
+  'listSessions',
+  'revokeSession',
+  'renameSession',
+  'revokeOtherSessions',
 ] as const;
 export type SyncControlOp = (typeof SYNC_CONTROL_OPS)[number];
 
@@ -29,6 +34,8 @@ export interface SyncControlMessage {
   accountId?: string;
   deviceName?: string;
   recoveryCode?: string;
+  // revokeSession/renameSession-only: the opaque session handle from listSessions. Never a token.
+  sessionId?: string;
   // details-only: also ask the server about the recovery envelope. Absent (a page realm predating
   // the flag, or a surface that only shows the identity) reports the last recorded answer instead.
   refreshRecoveryEnvelope?: boolean;
@@ -65,6 +72,24 @@ export interface SyncLastCycleResponse {
 }
 
 /**
+ * Response to the 'listSessions' op. `sessions` is nullable like SyncDetailsResponse.details:
+ * collapsing an unreadable list to [] would render "no devices" on the screen that answers
+ * "who has access to my account?".
+ */
+export interface SyncSessionsResponse {
+  ok: true;
+  kind: 'sessions';
+  sessions: SyncSession[] | null;
+}
+
+/** Response to the 'revokeOtherSessions' op — how many sessions were cut. */
+export interface SyncRevokedCountResponse {
+  ok: true;
+  kind: 'revokedCount';
+  revoked: number;
+}
+
+/**
  * Ties each op to the response shape its SW handler produces, so the bridge's send<O> can't
  * silently mis-assume one (adding an op without an entry here is a compile error at send).
  */
@@ -75,11 +100,15 @@ export interface SyncOpResponse {
   regenerate: SyncControlResponse;
   // Honestly both shapes: the router's error fallback answers ANY op with a failed
   // SyncControlResponse, so the bridge must narrow on `ok` rather than assume an outcome. That
-  // applies to every op, so the read-only two carry it too — declaring them `ok:true` only would
+  // applies to every op, so the read-only ones carry it too — declaring them `ok:true` only would
   // mark the bridge's load-bearing `ok`/`kind` guards as redundancies safe to delete.
   syncNow: SyncOutcomeResponse | Extract<SyncControlResponse, { ok: false }>;
   details: SyncDetailsResponse | Extract<SyncControlResponse, { ok: false }>;
   getLastCycle: SyncLastCycleResponse | Extract<SyncControlResponse, { ok: false }>;
+  listSessions: SyncSessionsResponse | Extract<SyncControlResponse, { ok: false }>;
+  revokeSession: SyncControlResponse;
+  renameSession: SyncControlResponse;
+  revokeOtherSessions: SyncRevokedCountResponse | Extract<SyncControlResponse, { ok: false }>;
 }
 
 /** Any op's response — derived from the map so the two never drift. */

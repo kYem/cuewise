@@ -1,7 +1,13 @@
-import type { KeyEnvelopeExport, KeyEnvelopeRecord, PushRecord, SyncRecord } from '@cuewise/shared';
-import type { RawSessionToken, SessionTokenHash } from './crypto-utils';
+import type {
+  KeyEnvelopeExport,
+  KeyEnvelopeRecord,
+  PushRecord,
+  SyncRecord,
+  SyncSession,
+} from '@cuewise/shared';
+import type { RawSessionToken, SessionId, SessionTokenHash } from './crypto-utils';
 
-export type { KeyEnvelopeExport, KeyEnvelopeRecord, PushRecord, SyncRecord };
+export type { KeyEnvelopeExport, KeyEnvelopeRecord, PushRecord, SyncRecord, SyncSession };
 
 export interface Identity {
   provider: 'google' | 'apple' | 'dev';
@@ -36,6 +42,14 @@ export interface SyncStore {
   createSession(userId: string, deviceName: string): Promise<RawSessionToken>;
   lookupSession(rawToken: RawSessionToken): Promise<Session | null>;
   revokeSession(rawToken: RawSessionToken): Promise<void>;
+  // Per-device management (ENG-95). Every one is scoped to userId, so a session belonging to
+  // another account is indistinguishable from one that does not exist.
+  listSessions(userId: string, currentTokenHash: SessionTokenHash): Promise<SyncSession[]>;
+  // false when no row with that id belongs to this user; expiry is not checked, since listSessions
+  // never hands out an expired id. Branded id, so a SessionTokenHash can't land in this slot.
+  revokeSessionById(userId: string, id: SessionId): Promise<boolean>;
+  renameSession(userId: string, id: SessionId, deviceName: string): Promise<boolean>;
+  revokeOtherSessions(userId: string, currentTokenHash: SessionTokenHash): Promise<number>;
   mintAuthCode(payload: AuthCodePayload, codeChallenge: string): Promise<string>;
   consumeAuthCode(
     rawCode: string

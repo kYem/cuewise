@@ -46,6 +46,10 @@ export type SyncEngineControlSurface = Pick<
   | 'getRecoveryEnvelope'
   | 'refreshRecoveryEnvelope'
   | 'ensureHydrated'
+  | 'listSessions'
+  | 'revokeSession'
+  | 'renameSession'
+  | 'revokeOtherSessions'
 >;
 export {
   checkForLostDataKey,

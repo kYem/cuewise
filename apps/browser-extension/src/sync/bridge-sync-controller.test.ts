@@ -855,3 +855,83 @@ describe('BridgeSyncController: regenerateRecoveryCode', () => {
     await expect(controller.regenerateRecoveryCode()).rejects.toThrow();
   });
 });
+
+describe('BridgeSyncController: sessions', () => {
+  const session = {
+    id: 's1',
+    deviceName: 'laptop',
+    createdAt: 1,
+    lastUsedAt: 2,
+    current: true,
+  };
+
+  it('returns the sessions from the response', async () => {
+    runtime.sendMessage.mockResolvedValueOnce({
+      ok: true,
+      kind: 'sessions',
+      sessions: [session],
+    });
+    const controller = new BridgeSyncController();
+
+    await expect(controller.listSessions()).resolves.toEqual([session]);
+  });
+
+  // Both the forward path and the error fallback answer null, so assert on the warn to tell them
+  // apart — otherwise a typo'd `kind` check falls through to the fallback undetected.
+  it('passes an unreadable list through as null without warning', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    runtime.sendMessage.mockResolvedValueOnce({ ok: true, kind: 'sessions', sessions: null });
+    const controller = new BridgeSyncController();
+
+    await expect(controller.listSessions()).resolves.toBeNull();
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  it('resolves null and warns when no listener responds', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    runtime.sendMessage.mockResolvedValueOnce(undefined as never);
+    const controller = new BridgeSyncController();
+
+    await expect(controller.listSessions()).resolves.toBeNull();
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Sync session list unavailable (no responder or error fallback)'
+    );
+  });
+
+  // The panel only learns a revoke failed by catching, so resolving here would report a device
+  // as signed out while it is still syncing.
+  it('rejects revokeSession on a non-ok response instead of resolving silently', async () => {
+    runtime.sendMessage.mockResolvedValueOnce({ ok: false, reason: 'error', detail: 'boom' });
+    const controller = new BridgeSyncController();
+
+    await expect(controller.revokeSession('s2')).rejects.toThrow(/boom/);
+  });
+
+  it('rejects revokeSession when no listener responds', async () => {
+    runtime.sendMessage.mockResolvedValueOnce(undefined as never);
+    const controller = new BridgeSyncController();
+
+    await expect(controller.revokeSession('s2')).rejects.toThrow();
+  });
+
+  it('rejects renameSession on a non-ok response', async () => {
+    runtime.sendMessage.mockResolvedValueOnce({ ok: false, reason: 'error' });
+    const controller = new BridgeSyncController();
+
+    await expect(controller.renameSession('s1', 'Work MacBook')).rejects.toThrow();
+  });
+
+  it('returns the revoked count', async () => {
+    runtime.sendMessage.mockResolvedValueOnce({ ok: true, kind: 'revokedCount', revoked: 3 });
+    const controller = new BridgeSyncController();
+
+    await expect(controller.revokeOtherSessions()).resolves.toBe(3);
+  });
+
+  it('rejects revokeOtherSessions when an ok response carries no count', async () => {
+    runtime.sendMessage.mockResolvedValueOnce({ ok: true });
+    const controller = new BridgeSyncController();
+
+    await expect(controller.revokeOtherSessions()).rejects.toThrow();
+  });
+});

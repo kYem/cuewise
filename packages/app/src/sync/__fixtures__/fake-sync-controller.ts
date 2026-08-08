@@ -1,3 +1,4 @@
+import type { SyncSession } from '@cuewise/shared';
 import type { SyncNowResult, SyncOutcome } from '@cuewise/sync-engine';
 import type {
   EnableResult,
@@ -23,7 +24,11 @@ type FailableMethod =
   | 'regenerateRecoveryCode'
   | 'syncNow'
   | 'getDetails'
-  | 'getLastCycle';
+  | 'getLastCycle'
+  | 'listSessions'
+  | 'revokeSession'
+  | 'renameSession'
+  | 'revokeOtherSessions';
 
 const DEFAULT_ENABLE_RESULT: EnableResult = { ok: true };
 const DEFAULT_RECOVERY_CODE = 'FAKE-RECOVERY-CODE';
@@ -50,6 +55,8 @@ export class FakeSyncController implements SyncController {
   private deferredGoogle = false;
   private pendingGoogle: ((result: EnableResult) => void) | null = null;
   private deferredDetails = false;
+  private deferredSessions = false;
+  private pendingSessions: ((sessions: SyncSession[] | null) => void) | null = null;
   private pendingDetails: ((details: SyncDetails | null) => void) | null = null;
   private deferredLastCycle = false;
   private pendingLastCycle: ((read: LastCycleRead) => void) | null = null;
@@ -106,6 +113,20 @@ export class FakeSyncController implements SyncController {
     }
     this.pendingDetails(details);
     this.pendingDetails = null;
+  }
+
+  /** Makes the next listSessions() hang until resolveSessions() releases it — for read races. */
+  deferNextSessions(): void {
+    this.deferredSessions = true;
+  }
+
+  /** Releases a listSessions() call armed via deferNextSessions(). */
+  resolveSessions(sessions: SyncSession[] | null): void {
+    if (this.pendingSessions === null) {
+      throw new Error('FakeSyncController: no pending listSessions() to resolve');
+    }
+    this.pendingSessions(sessions);
+    this.pendingSessions = null;
   }
 
   /** Makes the next getLastCycle() hang until resolveLastCycle() releases it — for asserting read races. */
@@ -373,6 +394,41 @@ export class FakeSyncController implements SyncController {
       return next;
     }
     return null;
+  }
+
+  /** Scriptable session list; null models an unavailable read (offline, skewed worker). */
+  sessionsResult: SyncSession[] | null = [];
+  /** How many sessions revokeOtherSessions reports cutting. */
+  revokedOthersCount = 0;
+
+  async listSessions(): Promise<SyncSession[] | null> {
+    this.calls.push({ method: 'listSessions', args: [] });
+    // Failable despite the never-throws contract: the panel guards against a skewed host, and
+    // that guard needs a way to be exercised.
+    this.maybeFail('listSessions');
+    if (this.deferredSessions) {
+      this.deferredSessions = false;
+      return new Promise((resolve) => {
+        this.pendingSessions = resolve;
+      });
+    }
+    return this.sessionsResult;
+  }
+
+  async revokeSession(id: string): Promise<void> {
+    this.calls.push({ method: 'revokeSession', args: [id] });
+    this.maybeFail('revokeSession');
+  }
+
+  async renameSession(id: string, deviceName: string): Promise<void> {
+    this.calls.push({ method: 'renameSession', args: [id, deviceName] });
+    this.maybeFail('renameSession');
+  }
+
+  async revokeOtherSessions(): Promise<number> {
+    this.calls.push({ method: 'revokeOtherSessions', args: [] });
+    this.maybeFail('revokeOtherSessions');
+    return this.revokedOthersCount;
   }
 
   /** Resolves a deferred enableWithGoogle as a quiet cancel, mirroring the macOS driver. */

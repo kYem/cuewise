@@ -2,8 +2,10 @@ import { DAY_IN_MS, logger } from '@cuewise/shared';
 import {
   hashSessionToken,
   type RawSessionToken,
+  randomSessionId,
   randomSessionToken,
   randomToken,
+  type SessionId,
   type SessionTokenHash,
   sha256Hex,
 } from './crypto-utils';
@@ -16,6 +18,7 @@ import {
   type Session,
   StorageQuotaExceededError,
   type SyncRecord,
+  type SyncSession,
   type SyncStore,
 } from './store';
 
@@ -117,9 +120,16 @@ export class D1SyncStore implements SyncStore {
     const ts = this.now();
     await this.db
       .prepare(
-        'INSERT INTO tokens (token_hash, user_id, device_name, expires_at, created_at) VALUES (?, ?, ?, ?, ?)'
+        'INSERT INTO tokens (token_hash, user_id, device_name, expires_at, created_at, id) VALUES (?, ?, ?, ?, ?, ?)'
       )
-      .bind(await hashSessionToken(token), userId, deviceName, ts + SESSION_TTL_MS, ts)
+      .bind(
+        await hashSessionToken(token),
+        userId,
+        deviceName,
+        ts + SESSION_TTL_MS,
+        ts,
+        randomSessionId()
+      )
       .run();
     return token;
   }
@@ -148,6 +158,63 @@ export class D1SyncStore implements SyncStore {
       .prepare('UPDATE tokens SET revoked_at = ? WHERE token_hash = ?')
       .bind(this.now(), await hashSessionToken(rawToken))
       .run();
+  }
+
+  async listSessions(userId: string, currentTokenHash: SessionTokenHash): Promise<SyncSession[]> {
+    const rows = await this.db
+      .prepare(
+        `SELECT id, device_name, created_at, last_used_at, token_hash FROM tokens
+         WHERE user_id = ? AND revoked_at IS NULL AND expires_at > ?
+         ORDER BY created_at DESC`
+      )
+      .bind(userId, this.now())
+      .all<{
+        id: string;
+        device_name: string;
+        created_at: number;
+        last_used_at: number | null;
+        token_hash: string;
+      }>();
+    return rows.results.map((row) => ({
+      id: row.id,
+      deviceName: row.device_name,
+      createdAt: row.created_at,
+      lastUsedAt: row.last_used_at,
+      current: row.token_hash === currentTokenHash,
+    }));
+  }
+
+  // No revoked_at predicate, so a repeat click still matches and answers 204; COALESCE is what
+  // stops that repeat overwriting the original revocation time.
+  async revokeSessionById(userId: string, id: SessionId): Promise<boolean> {
+    const res = await this.db
+      .prepare(
+        'UPDATE tokens SET revoked_at = COALESCE(revoked_at, ?) WHERE id = ? AND user_id = ?'
+      )
+      .bind(this.now(), id, userId)
+      .run();
+    return (res.meta.changes ?? 0) > 0;
+  }
+
+  async renameSession(userId: string, id: SessionId, deviceName: string): Promise<boolean> {
+    const res = await this.db
+      .prepare('UPDATE tokens SET device_name = ? WHERE id = ? AND user_id = ?')
+      .bind(deviceName, id, userId)
+      .run();
+    return (res.meta.changes ?? 0) > 0;
+  }
+
+  // Keyed on token_hash rather than id: the caller's own row is the one to spare, and its hash is
+  // what auth already resolved.
+  async revokeOtherSessions(userId: string, currentTokenHash: SessionTokenHash): Promise<number> {
+    const res = await this.db
+      .prepare(
+        `UPDATE tokens SET revoked_at = ?
+         WHERE user_id = ? AND token_hash != ? AND revoked_at IS NULL AND expires_at > ?`
+      )
+      .bind(this.now(), userId, currentTokenHash, this.now())
+      .run();
+    return res.meta.changes ?? 0;
   }
 
   async mintAuthCode(payload: AuthCodePayload, codeChallenge: string): Promise<string> {
