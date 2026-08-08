@@ -81,7 +81,7 @@ describe('Goal Store', () => {
     // Clear all mocks
     vi.clearAllMocks();
 
-    // Storage mirrors the store, which is the invariant the app maintains — and what lets a test
+    // The store is a cache of storage, equal to it after every action — which is what lets a test
     // seed with setState and still exercise the read-inside-the-write.
     vi.mocked(storage.getGoals).mockImplementation(async () => useGoalStore.getState().goals);
     vi.mocked(storage.setGoals).mockResolvedValue({ success: true });
@@ -1580,8 +1580,6 @@ describe('writers read storage, not their own snapshot', () => {
     expect(written.map((goal) => goal.id).sort()).toEqual([overdue.id, pulled.id].sort());
   });
 
-  // The common case, and the reason this cannot just go through updateGoals: nothing due must
-  // not cost a write on every new tab.
   it('rollDueTasks writes nothing when no task is due', async () => {
     vi.mocked(storage.getGoals).mockResolvedValue([
       goalFactory.build({ date: getTodayDateString() }),

@@ -1,10 +1,16 @@
-import { canLock, logger, type StorageArea, toStoredValues } from '@cuewise/shared';
+import {
+  canLock,
+  type LockingKeyValueStore,
+  logger,
+  type StorageArea,
+  toStoredValues,
+} from '@cuewise/shared';
 import {
   installLockManagerMock,
   type MockChromeStorage,
   type MockChromeStorageEvent,
 } from '@cuewise/test-utils/mocks';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChromeKeyValueStore } from './chrome-key-value-store';
 
 const store = new ChromeKeyValueStore();
@@ -288,10 +294,26 @@ describe('ChromeKeyValueStore.withLock', () => {
   it('is absent where the runtime has no LockManager, so canLock refuses', () => {
     expect(canLock(new ChromeKeyValueStore())).toBe(false);
   });
+});
+
+describe('ChromeKeyValueStore.withLock where the runtime has a LockManager', () => {
+  let restore: () => void;
+  let locking: LockingKeyValueStore;
+
+  beforeEach(() => {
+    restore = installLockManagerMock();
+    const store = new ChromeKeyValueStore();
+    if (!canLock(store)) {
+      throw new Error('the mocked LockManager should make the adapter lockable');
+    }
+    locking = store;
+  });
+
+  // afterEach, not a call at the end of each test: a failing assertion would otherwise leak the
+  // mocked LockManager into every later file.
+  afterEach(() => restore());
 
   it('serialises writers holding the same name', async () => {
-    const restore = installLockManagerMock();
-    const locking = new ChromeKeyValueStore();
     const order: string[] = [];
     const section = (id: string) => async () => {
       order.push(`${id}:enter`);
@@ -299,28 +321,18 @@ describe('ChromeKeyValueStore.withLock', () => {
       order.push(`${id}:exit`);
     };
 
-    if (!canLock(locking)) {
-      throw new Error('the mocked LockManager should make the adapter lockable');
-    }
     await Promise.all([
       locking.withLock('goals', section('a')),
       locking.withLock('goals', section('b')),
     ]);
-    restore();
 
     expect(order).toEqual(['a:enter', 'a:exit', 'b:enter', 'b:exit']);
   });
 
   it('namespaces the lock so it cannot collide with a page-origin lock', async () => {
-    const restore = installLockManagerMock();
-    const locking = new ChromeKeyValueStore();
     const requested = vi.spyOn(navigator.locks, 'request');
 
-    if (!canLock(locking)) {
-      throw new Error('the mocked LockManager should make the adapter lockable');
-    }
     await locking.withLock('goals', async () => undefined);
-    restore();
 
     expect(requested).toHaveBeenCalledWith('cuewise:goals', expect.any(Function));
   });

@@ -155,7 +155,6 @@ export interface LockingKeyValueStore extends KeyValueStore {
   withLock<T>(name: string, fn: () => Promise<T>): Promise<T>;
 }
 
-/** Presence again — an adapter whose runtime lacks the primitive must leave `withLock` undefined. */
 export function canLock(store: KeyValueStore): store is LockingKeyValueStore {
   return store.withLock !== undefined;
 }

@@ -122,7 +122,8 @@ export class ChromeKeyValueStore implements KeyValueStore {
   /**
    * navigator.locks is origin-scoped, which is exactly the boundary that matters: the extension's
    * page and its service worker share chrome-extension://<id>, and they are the two writers that
-   * race. Undefined where the runtime has no LockManager, so canLock answers honestly there.
+   * race. Undefined where the runtime has no LockManager, so canLock answers honestly — resolved
+   * once at construction, so build the store after the locks capability exists, not before.
    */
   withLock = hasLockManager()
     ? <T>(name: string, fn: () => Promise<T>): Promise<T> =>

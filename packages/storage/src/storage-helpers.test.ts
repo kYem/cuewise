@@ -196,8 +196,8 @@ describe('custom background', () => {
 });
 
 describe('updateGoals', () => {
-  // The bug this exists for: the page and the service worker both read the goal array, mutate it,
-  // and write it back, so whoever lands second used to erase the other's entry.
+  // The page and the service worker both read the goal array, mutate it, and write it back, so
+  // without the lock whoever lands second erases the other's entry.
   it('lets two concurrent writers both land', async () => {
     configurePlatform({ storage: new LocalStorageKeyValueStore() });
     const [first, second] = goalFactory.buildList(2);

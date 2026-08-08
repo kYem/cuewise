@@ -56,8 +56,8 @@ function arrayBinding<T extends HasId>(
     },
     async writeOne(entityId, entity) {
       // Reads inside the lock: this runs in the service worker while the page writes the same array
-      // from its own read, and whoever landed second used to take the whole array with them. Only
-      // goals has a locked page-side writer so far (`updateGoals`); the others still race.
+      // from its own read, and whoever lands second carries the whole array with them. Only goals
+      // has a locked page-side writer so far (`updateGoals`); the others still race.
       return withCollectionLock(name, async (): Promise<StorageResult> => {
         let items: T[];
         try {

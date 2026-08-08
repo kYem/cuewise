@@ -318,8 +318,9 @@ export const COLLECTION_LOCKS = ['goals', 'quotes', 'collections', 'reminders'] 
 export type CollectionLock = (typeof COLLECTION_LOCKS)[number];
 
 /**
- * Serialises a read-modify-write against every other writer of the same collection. Unlocked where
- * the backend has no lock: those backends run a single realm, so there is no second writer to race.
+ * Serialises a read-modify-write against every other writer of the same collection. The unlocked
+ * branch is not a safe single-realm case — the one backend that reaches it is Chrome without
+ * `navigator.locks`, which is exactly the two-realm one — it is just better than refusing to write.
  */
 export function withCollectionLock<T>(lock: CollectionLock, apply: () => Promise<T>): Promise<T> {
   const store = getStorage();
@@ -329,8 +330,8 @@ export function withCollectionLock<T>(lock: CollectionLock, apply: () => Promise
 /**
  * Changes the goal list. Reads inside the lock rather than trusting a caller's snapshot: the pull
  * applies its writes from the service worker while the page writes from a `get()` taken before its
- * own await, and whichever landed last used to take the whole array with it — silently reverting an
- * edit, or dropping one already pulled from another device.
+ * own await, and whichever lands last carries the whole array with it — reverting an edit, or
+ * dropping one already pulled from another device.
  */
 export async function updateGoals(
   mutate: (goals: Goal[]) => Goal[]
