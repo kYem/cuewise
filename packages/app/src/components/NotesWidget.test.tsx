@@ -1,3 +1,4 @@
+import { MAX_NOTE_LENGTH } from '@cuewise/shared';
 import { createSettingsStoreMock } from '@cuewise/test-utils';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import type { Mock } from 'vitest';
@@ -14,6 +15,7 @@ interface StoreOptions {
   notesExpanded?: boolean;
   notesPinned?: boolean;
   saveSucceeds?: boolean;
+  isLoading?: boolean;
 }
 
 function mockStore({
@@ -21,10 +23,12 @@ function mockStore({
   notesExpanded = false,
   notesPinned = false,
   saveSucceeds = true,
+  isLoading = false,
 }: StoreOptions = {}) {
   const updateSettings: Mock = vi.fn().mockResolvedValue(saveSucceeds);
-  vi.mocked(useSettingsStore).mockImplementation(
-    createSettingsStoreMock({ note, notesExpanded, notesPinned, updateSettings })
+  const base = createSettingsStoreMock({ note, notesExpanded, notesPinned, updateSettings });
+  vi.mocked(useSettingsStore).mockImplementation((selector) =>
+    base((state) => selector({ ...state, isLoading }))
   );
   return { updateSettings };
 }
@@ -232,12 +236,62 @@ describe('NotesWidget', () => {
     const pad = await openPad();
 
     fireEvent.click(screen.getByRole('button', { name: 'Keep notes open' }));
+    fireEvent.pointerDown(document.body);
+    expect(screen.getByRole('textbox', { name: 'Notes' })).toBeInTheDocument();
     fireEvent.keyDown(pad, { key: 'Escape' });
     expect(screen.getByRole('textbox', { name: 'Notes' })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Close notes' }));
 
     expect(screen.queryByRole('textbox', { name: 'Notes' })).not.toBeInTheDocument();
+  });
+
+  it('closes on click away while unpinned', async () => {
+    mockStore();
+    render(<NotesWidget />);
+    await openPad();
+
+    fireEvent.pointerDown(document.body);
+
+    expect(screen.queryByRole('textbox', { name: 'Notes' })).not.toBeInTheDocument();
+  });
+
+  it('reopens already pinned on a fresh tab', async () => {
+    mockStore({ notesPinned: true, note: 'left open' });
+    render(<NotesWidget />);
+
+    expect(await screen.findByRole('textbox', { name: 'Notes' })).toHaveValue('left open');
+    expect(screen.getByRole('button', { name: 'Unpin notes' })).toBeInTheDocument();
+    fireEvent.pointerDown(document.body);
+    expect(screen.getByRole('textbox', { name: 'Notes' })).toBeInTheDocument();
+  });
+
+  it('truncates an oversized pulled note before writing it back', async () => {
+    const oversized = 'x'.repeat(MAX_NOTE_LENGTH + 1000);
+    const { updateSettings } = mockStore({ note: oversized });
+    render(<NotesWidget />);
+    const pad = await openPad();
+
+    fireEvent.change(pad, { target: { value: `${oversized}!` } });
+    await act(async () => {
+      vi.advanceTimersByTime(600);
+    });
+
+    expect(updateSettings.mock.calls[0][0].note).toHaveLength(MAX_NOTE_LENGTH);
+  });
+
+  it('ignores typing until settings have loaded, so the stored note is not replaced', async () => {
+    const { updateSettings } = mockStore({ isLoading: true });
+    render(<NotesWidget />);
+    const pad = await openPad();
+
+    fireEvent.change(pad, { target: { value: 'x' } });
+    await act(async () => {
+      vi.advanceTimersByTime(600);
+    });
+
+    expect(updateSettings).not.toHaveBeenCalled();
+    expect(pad).toHaveValue('');
   });
 
   it('remembers that the pad was pinned', async () => {

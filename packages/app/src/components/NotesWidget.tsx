@@ -20,6 +20,7 @@ export const NotesWidget: React.FC = () => {
   const note = useSettingsStore((state) => state.settings.note);
   const expanded = useSettingsStore((state) => state.settings.notesExpanded);
   const pinned = useSettingsStore((state) => state.settings.notesPinned);
+  const isLoading = useSettingsStore((state) => state.isLoading);
   const updateSettings = useSettingsStore((state) => state.updateSettings);
 
   const [isOpen, setIsOpen] = useState(false);
@@ -31,6 +32,7 @@ export const NotesWidget: React.FC = () => {
   // The debounce owns the newest text; flushing reads it rather than a captured render's value.
   const pending = useRef<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const didAutoOpen = useRef(false);
 
   const persist = useCallback(async () => {
     const value = pending.current;
@@ -60,6 +62,11 @@ export const NotesWidget: React.FC = () => {
   }, [persist]);
 
   const handleChange = (value: string) => {
+    // Before settings land the pad shows DEFAULT_SETTINGS' empty note. A keystroke here would
+    // mark unsaved text, so the real note would be refused on arrival and then overwritten.
+    if (isLoading) {
+      return;
+    }
     setDraft(value);
     setJustSaved(false);
     pending.current = value;
@@ -72,19 +79,26 @@ export const NotesWidget: React.FC = () => {
     }, SAVE_DEBOUNCE_MS);
   };
 
+  // Held in a ref so the teardown below can depend on nothing: with `flush` as a dep, any change
+  // in its identity would re-run the effect and fire its cleanup write on a live pad.
+  const flushRef = useRef(flush);
+  useEffect(() => {
+    flushRef.current = flush;
+  }, [flush]);
+
   // A pending debounce dies with the tab, taking the last sentence typed with it.
   useEffect(() => {
     const onHide = () => {
       if (document.visibilityState === 'hidden') {
-        flush();
+        flushRef.current();
       }
     };
     document.addEventListener('visibilitychange', onHide);
     return () => {
       document.removeEventListener('visibilitychange', onHide);
-      flush();
+      flushRef.current();
     };
-  }, [flush]);
+  }, []);
 
   // A pull can rewrite the note under an open pad. Adopting it over unsaved text would send back
   // a value the user was never shown.
@@ -93,6 +107,18 @@ export const NotesWidget: React.FC = () => {
       setDraft(note);
     }
   }, [note]);
+
+  // Pinned means "stays open", and every new tab is a fresh mount — so reopen it once settings say
+  // it was left pinned, the way the reminders panel does.
+  useEffect(() => {
+    if (isLoading || didAutoOpen.current || !pinned) {
+      return;
+    }
+    didAutoOpen.current = true;
+    setIsPinned(true);
+    setIsExpanded(expanded);
+    setIsOpen(true);
+  }, [isLoading, pinned, expanded]);
 
   useEffect(() => {
     if (!justSaved) {
@@ -195,7 +221,8 @@ export const NotesWidget: React.FC = () => {
           aria-label="Notes"
           value={draft}
           onChange={(event) => handleChange(event.target.value)}
-          placeholder="Jot something down…"
+          placeholder={isLoading ? 'Loading…' : 'Jot something down…'}
+          readOnly={isLoading}
           maxLength={MAX_NOTE_LENGTH}
           className={cn(
             'w-full resize-none bg-transparent px-3 py-2.5 text-sm text-primary placeholder:text-secondary focus:outline-none',
@@ -203,8 +230,15 @@ export const NotesWidget: React.FC = () => {
           )}
         />
         {draft.length >= COUNT_VISIBLE_FROM && (
-          <p className="px-3 pb-2 text-xs text-secondary">
-            {draft.length}/{MAX_NOTE_LENGTH} characters
+          <p
+            className={cn(
+              'px-3 pb-2 text-xs',
+              draft.length > MAX_NOTE_LENGTH ? 'text-red-500' : 'text-secondary'
+            )}
+          >
+            {draft.length > MAX_NOTE_LENGTH
+              ? `Over the limit — saving keeps the first ${MAX_NOTE_LENGTH} characters`
+              : `${draft.length}/${MAX_NOTE_LENGTH} characters`}
           </p>
         )}
       </PopoverContent>
