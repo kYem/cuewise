@@ -27,8 +27,6 @@ export function registerSessionsRoutes(
 
   app.delete('/v1/sessions/:id', async (c) => {
     const store = deps.storeFactory(c.env.DB);
-    // Scoped by user_id in SQL: another account's session is indistinguishable from a missing one,
-    // so this can't be used to probe whether an id exists.
     const found = await store.revokeSessionById(c.get('userId'), c.req.param('id'));
     if (!found) {
       return problem('not_found', { detail: NO_SUCH_SESSION });

@@ -97,7 +97,7 @@ export interface SyncOpResponse {
   regenerate: SyncControlResponse;
   // Honestly both shapes: the router's error fallback answers ANY op with a failed
   // SyncControlResponse, so the bridge must narrow on `ok` rather than assume an outcome. That
-  // applies to every op, so the read-only two carry it too — declaring them `ok:true` only would
+  // applies to every op, so the read-only ones carry it too — declaring them `ok:true` only would
   // mark the bridge's load-bearing `ok`/`kind` guards as redundancies safe to delete.
   syncNow: SyncOutcomeResponse | Extract<SyncControlResponse, { ok: false }>;
   details: SyncDetailsResponse | Extract<SyncControlResponse, { ok: false }>;

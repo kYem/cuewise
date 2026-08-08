@@ -98,7 +98,6 @@ export class FakeApiClient implements EngineApiClient {
   rejectNextRevokeSessionWith404 = false;
   readonly revokedSessionIds: string[] = [];
   readonly renamedSessions: [string, string][] = [];
-  /** Scriptable count for revokeOtherSessions, so the number the toast shows is pinned. */
   revokeOtherSessionsResult = 0;
   /** Total successful token exchanges — proves resumeEnrollWithCode doesn't re-exchange. */
   exchangeCount = 0;

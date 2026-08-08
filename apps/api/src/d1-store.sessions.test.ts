@@ -45,18 +45,28 @@ describe('session ids', () => {
     expect(new Set(ids).size).toBe(3);
   });
 
-  // The rollback case: a Worker predating the id column keeps inserting rows at the '' default.
-  it('tolerates repeated default ids while still rejecting a duplicate real one', async () => {
-    await env.DB.prepare("CREATE TABLE partial_probe (id TEXT NOT NULL DEFAULT '')").run();
-    await env.DB.prepare(
-      "CREATE UNIQUE INDEX idx_partial_probe ON partial_probe (id) WHERE id != ''"
-    ).run();
+  // Against the REAL tokens table, not a copy of the DDL: the harness applies migration 0007, so
+  // making its index total again fails here. The rollback case is two rows at the '' default.
+  it('tolerates repeated default ids on tokens while rejecting a duplicate real one', async () => {
+    const store = new D1SyncStore(env.DB);
+    const userId = await newUser(store, `u-${crypto.randomUUID()}`);
+    const legacyRow = (hash: string) =>
+      env.DB.prepare(
+        "INSERT INTO tokens (token_hash, user_id, device_name, expires_at, created_at, id) VALUES (?, ?, 'legacy', 9e12, 0, '')"
+      ).bind(hash, userId);
 
-    await env.DB.prepare("INSERT INTO partial_probe (id) VALUES (''), (''), ('real')").run();
-    const duplicateReal = env.DB.prepare("INSERT INTO partial_probe (id) VALUES ('real')").run();
+    await legacyRow(`legacy-a-${crypto.randomUUID()}`).run();
+    await legacyRow(`legacy-b-${crypto.randomUUID()}`).run();
+
+    const token = await store.createSession(userId, 'laptop');
+    const [session] = await store.listSessions(userId, await hashSessionToken(token));
+    const duplicateReal = env.DB.prepare(
+      "INSERT INTO tokens (token_hash, user_id, device_name, expires_at, created_at, id) VALUES (?, ?, 'dupe', 9e12, 0, ?)"
+    )
+      .bind(`dupe-${crypto.randomUUID()}`, userId, session.id)
+      .run();
 
     await expect(duplicateReal).rejects.toThrow();
-    await env.DB.prepare('DROP TABLE partial_probe').run();
   });
 });
 
@@ -160,12 +170,12 @@ describe('SyncStore session management', () => {
     const listed = await store.listSessions(userId, hash);
     const count = await store.revokeOtherSessions(userId, hash);
 
-    // The count is toasted to the user, so it has to match the rows they were looking at.
+    // With no un-migrated rows present, the toasted count matches the visible list exactly.
     expect(count).toBe(listed.filter((s) => !s.current).length);
     expect(count).toBe(1);
   });
 
-  it('renames only the caller own session', async () => {
+  it('renames the caller own session', async () => {
     const store = new D1SyncStore(env.DB);
     const userId = await newUser(store, `u-${crypto.randomUUID()}`);
     const token = await store.createSession(userId, 'laptop');
@@ -176,5 +186,40 @@ describe('SyncStore session management', () => {
 
     const [renamed] = await store.listSessions(userId, hash);
     expect(renamed.deviceName).toBe('Work MacBook');
+  });
+
+  it('does not rename a session belonging to another user', async () => {
+    const store = new D1SyncStore(env.DB);
+    const victim = await newUser(store, `u-${crypto.randomUUID()}`);
+    const attacker = await newUser(store, `u-${crypto.randomUUID()}`);
+    const victimToken = await store.createSession(victim, 'victim-laptop');
+    const victimHash = await hashSessionToken(victimToken);
+    const [victimSession] = await store.listSessions(victim, victimHash);
+
+    const renamed = await store.renameSession(attacker, victimSession.id, 'pwned');
+
+    // false, not true: a 204 here would also let an attacker probe which ids exist.
+    expect(renamed).toBe(false);
+    expect((await store.listSessions(victim, victimHash))[0].deviceName).toBe('victim-laptop');
+  });
+
+  it('still revokes un-migrated rows through revoke-others', async () => {
+    const store = new D1SyncStore(env.DB);
+    const userId = await newUser(store, `u-${crypto.randomUUID()}`);
+    const mine = await store.createSession(userId, 'laptop');
+    const legacyHash = `legacy-${crypto.randomUUID()}`;
+    await env.DB.prepare(
+      "INSERT INTO tokens (token_hash, user_id, device_name, expires_at, created_at, id) VALUES (?, ?, 'legacy', 9e12, 0, '')"
+    )
+      .bind(legacyHash, userId)
+      .run();
+
+    await store.revokeOtherSessions(userId, await hashSessionToken(mine));
+
+    // Un-migrated rows can't be listed or addressed individually, so this is their only cut.
+    const row = await env.DB.prepare('SELECT revoked_at FROM tokens WHERE token_hash = ?')
+      .bind(legacyHash)
+      .first<{ revoked_at: number | null }>();
+    expect(row?.revoked_at).not.toBeNull();
   });
 });

@@ -185,7 +185,8 @@ export class D1SyncStore implements SyncStore {
     }));
   }
 
-  // COALESCE keeps the first revocation time, so a second click is idempotent rather than a 404.
+  // No revoked_at predicate, so a repeat click still matches and answers 204; COALESCE is what
+  // stops that repeat overwriting the original revocation time.
   async revokeSessionById(userId: string, id: string): Promise<boolean> {
     const res = await this.db
       .prepare(
@@ -204,9 +205,9 @@ export class D1SyncStore implements SyncStore {
     return (res.meta.changes ?? 0) > 0;
   }
 
-  // Expiry-filtered like listSessions, so the count matches the rows the user was looking at.
-  // Deliberately NOT id-filtered: un-migrated rows can't be listed or addressed individually, and
-  // keying on token_hash is the only way to cut them — so this can exceed the visible count.
+  // Expiry-filtered like listSessions, but deliberately NOT id-filtered: un-migrated rows can't be
+  // listed or addressed individually, so keying on token_hash is their only cut. The count
+  // therefore matches the visible list except when such rows exist, where it exceeds it.
   async revokeOtherSessions(userId: string, currentTokenHash: SessionTokenHash): Promise<number> {
     const res = await this.db
       .prepare(

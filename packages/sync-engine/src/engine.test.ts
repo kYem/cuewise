@@ -797,6 +797,16 @@ describe('SyncEngine.enableSync', () => {
     expect(device.apiClient.revokedSessionIds).toEqual(['s2']);
   });
 
+  it('revokeOtherSessions returns the server count unchanged', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    device.apiClient.revokeOtherSessionsResult = 4;
+
+    await expect(device.engine.revokeOtherSessions()).resolves.toBe(4);
+  });
+
   it('renameSession forwards the new device name', async () => {
     const server = new FakeSyncServer();
     const device = createDevice(server);
