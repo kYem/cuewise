@@ -116,9 +116,17 @@ export class D1SyncStore implements SyncStore {
     const ts = this.now();
     await this.db
       .prepare(
-        'INSERT INTO tokens (token_hash, user_id, device_name, expires_at, created_at) VALUES (?, ?, ?, ?, ?)'
+        'INSERT INTO tokens (token_hash, user_id, device_name, expires_at, created_at, id) VALUES (?, ?, ?, ?, ?, ?)'
       )
-      .bind(await hashSessionToken(token), userId, deviceName, ts + SESSION_TTL_MS, ts)
+      .bind(
+        await hashSessionToken(token),
+        userId,
+        deviceName,
+        ts + SESSION_TTL_MS,
+        ts,
+        // Unbranded on purpose: a public row handle, not a credential like RawSessionToken.
+        randomToken()
+      )
       .run();
     return token;
   }
