@@ -39,7 +39,7 @@ export const MAX_NOTE_LENGTH = 8000;
 
 // Content the user wrote, not a preference: "reset settings" restores defaults, it must not
 // delete work — quick links survive a reset the same way, under their own key.
-export const CONTENT_SETTINGS_KEYS: readonly string[] = ['note'];
+export const CONTENT_SETTINGS_KEYS: readonly (keyof Settings)[] = ['note'];
 
 // Default settings
 export const DEFAULT_SETTINGS: Settings = {

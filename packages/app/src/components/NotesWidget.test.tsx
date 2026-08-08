@@ -105,11 +105,36 @@ describe('NotesWidget', () => {
       vi.advanceTimersByTime(600);
     });
     expect(updateSettings).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('Saved')).not.toBeInTheDocument();
+    expect(screen.getByText('Not saved')).toBeInTheDocument();
 
     fireEvent.keyDown(pad, { key: 'Escape' });
     await settle();
 
     expect(updateSettings).toHaveBeenNthCalledWith(2, { note: 'precious' });
+  });
+
+  it('retires the not-saved warning once a retry lands', async () => {
+    const updateSettings: Mock = vi.fn().mockResolvedValueOnce(false).mockResolvedValue(true);
+    vi.mocked(useSettingsStore).mockImplementation(
+      createSettingsStoreMock({ note: '', updateSettings })
+    );
+    render(<NotesWidget />);
+    const pad = await openPad();
+
+    fireEvent.change(pad, { target: { value: 'precious' } });
+    await act(async () => {
+      vi.advanceTimersByTime(600);
+    });
+    expect(screen.getByText('Not saved')).toBeInTheDocument();
+
+    fireEvent.change(pad, { target: { value: 'precious!' } });
+    await act(async () => {
+      vi.advanceTimersByTime(600);
+    });
+
+    expect(screen.queryByText('Not saved')).not.toBeInTheDocument();
+    expect(screen.getByText('Saved')).toBeInTheDocument();
   });
 
   it('does not overwrite unsaved text with the stored note when reopened', async () => {

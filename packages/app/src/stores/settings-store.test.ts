@@ -1,4 +1,5 @@
 import {
+  CONTENT_SETTINGS_KEYS,
   configurePlatform,
   DEFAULT_SETTINGS,
   type KeyValueStore,
@@ -66,7 +67,10 @@ function seedStorage(settings: Settings = defaultSettings) {
   });
   vi.mocked(storage.clearSettings).mockImplementation(async () => {
     // Mirrors the real helper: content keys survive a reset.
-    storedSettings = { ...DEFAULT_SETTINGS, note: storedSettings.note };
+    const kept = Object.fromEntries(
+      CONTENT_SETTINGS_KEYS.map((key) => [key, storedSettings[key]])
+    ) as Partial<Settings>;
+    storedSettings = { ...DEFAULT_SETTINGS, ...kept };
     return true;
   });
 }
@@ -117,6 +121,12 @@ describe('sync sink wiring', () => {
     });
 
     expect(markMutated).not.toHaveBeenCalled();
+  });
+
+  it('notifies the note after a save, so it follows the user across devices', async () => {
+    await useSettingsStore.getState().updateSettings({ note: 'hello' });
+
+    expect(markMutated).toHaveBeenCalledWith('settings', 'note');
   });
 
   it('resetToDefaults keeps the note and does not push it to other devices', async () => {
@@ -247,6 +257,11 @@ describe('background preview lifecycle', () => {
     );
     expect(state.settings.backgroundDim).toBe(0);
     expect(markMutated).not.toHaveBeenCalled();
+    // Collapsed, because this is the path a retrying note writer hammers on quota exhaustion.
+    expect(toastError).toHaveBeenCalledWith(
+      'Storage is full — could not save settings. Clear some data to continue.',
+      { collapseRepeats: true }
+    );
   });
 
   it('a successful unrelated write leaves a live background preview untouched', async () => {
@@ -976,7 +991,9 @@ describe('converging on settings written elsewhere', () => {
 
     await vi.waitFor(() => expect(toastError).toHaveBeenCalled());
     expect(toastError.mock.calls[0][0]).toContain('out of date');
-    expect(toastError.mock.calls[0][0]).not.toContain('not saved');
+    for (const [message] of toastError.mock.calls) {
+      expect(message).not.toContain('not saved');
+    }
   });
 
   it('says so again when the same value goes unreadable after recovering', async () => {

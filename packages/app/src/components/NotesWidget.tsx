@@ -4,15 +4,13 @@ import { Maximize2, Minimize2, NotebookPen, Pin, X } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSettingsStore } from '../stores/settings-store';
+import { HOME_TILE_CLASS } from './home-tile';
 
 const SAVE_DEBOUNCE_MS = 500;
 const SAVED_BADGE_MS = 1500;
 // Show the count only once it could plausibly bite; a permanent counter is clutter on an
 // ambient pad.
 const COUNT_VISIBLE_FROM = MAX_NOTE_LENGTH - 500;
-
-const TILE_CLASS =
-  'flex h-10 w-10 items-center justify-center rounded-full bg-surface/80 backdrop-blur-sm shadow-md hover:shadow-lg hover:scale-110 transition-all';
 
 const HEADER_BTN_CLASS = 'text-secondary hover:text-primary transition-colors';
 
@@ -26,6 +24,8 @@ export const NotesWidget: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [draft, setDraft] = useState(note);
   const [justSaved, setJustSaved] = useState(false);
+  // Outlives the toast: a failed save otherwise looks saved once the toast expires.
+  const [saveFailed, setSaveFailed] = useState(false);
 
   // The debounce owns the newest text; flushing reads it rather than a captured render's value.
   const pending = useRef<string | null>(null);
@@ -44,8 +44,10 @@ export const NotesWidget: React.FC = () => {
     // Left pending on failure so the next flush or keystroke retries it; updateSettings has
     // already told the user.
     if (!ok) {
+      setSaveFailed(true);
       return;
     }
+    setSaveFailed(false);
     if (pending.current === value) {
       pending.current = null;
       setJustSaved(true);
@@ -85,7 +87,8 @@ export const NotesWidget: React.FC = () => {
     flushRef.current = flush;
   }, [flush]);
 
-  // A pending debounce dies with the tab, taking the last sentence typed with it.
+  // A pending debounce dies with the tab, taking the last sentence typed with it. Best effort:
+  // teardown can still pre-empt the write chain, and the debounce keeps that window under 500ms.
   useEffect(() => {
     const onHide = () => {
       if (document.visibilityState === 'hidden') {
@@ -108,14 +111,14 @@ export const NotesWidget: React.FC = () => {
   }, [note]);
 
   // Pinned means "stays open", and every new tab is a fresh mount — so reopen it once settings say
-  // it was left pinned, the way the reminders panel does. autoOpening is set only on a real
-  // closed→open transition: a pad the user already opened has no autofocus to suppress, and a
-  // latched flag would swallow the next open's focus instead.
+  // it was left pinned, the way the reminders panel does.
   useEffect(() => {
     if (isLoading || didAutoOpen.current || !pinned) {
       return;
     }
     didAutoOpen.current = true;
+    // A pad the user already opened has no autofocus to suppress; a latched flag would swallow
+    // the next open's.
     if (!isOpen) {
       autoOpening.current = true;
       setIsOpen(true);
@@ -131,13 +134,12 @@ export const NotesWidget: React.FC = () => {
   }, [justSaved]);
 
   // Every close unpins: the pad reopens from `notesPinned` on every mount, so a close that left
-  // the pin behind — the trigger pill included — would spring the pad back on the next tab. A
-  // failed unpin keeps the pad open: closed-but-still-pinned is exactly that surprise, and the
-  // store has already told the user why.
+  // the pin behind — the trigger pill included — would spring the pad back on the next tab.
   const closePad = async () => {
     flush();
     if (pinned) {
       const ok = await updateSettings({ notesPinned: false });
+      // Stays open: closed-but-still-pinned is that same surprise, and the store already toasted.
       if (!ok) {
         return;
       }
@@ -167,19 +169,34 @@ export const NotesWidget: React.FC = () => {
     void updateSettings({ notesPinned: !pinned });
   };
 
-  // A pinned pad ignores click-away and Escape, so it needs a way out that isn't the trigger.
+  // A pinned pad ignores click-away and Escape; the X button and the trigger still close it.
   const keepOpen = (event: Event | KeyboardEvent) => {
     if (pinned) {
       event.preventDefault();
     }
   };
 
+  // A pad that opened on its own must not take the caret out of the address bar.
+  const suppressAutoOpenFocus = (event: Event) => {
+    if (autoOpening.current) {
+      autoOpening.current = false;
+      event.preventDefault();
+    }
+  };
+
   const hasNote = draft.trim().length > 0;
+
+  let statusText = '';
+  if (saveFailed) {
+    statusText = 'Not saved';
+  } else if (justSaved) {
+    statusText = 'Saved';
+  }
 
   return (
     <Popover open={isOpen} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
-        <button type="button" aria-label="Notes" title="Notes" className={TILE_CLASS}>
+        <button type="button" aria-label="Notes" title="Notes" className={HOME_TILE_CLASS}>
           <NotebookPen className={cn('h-5 w-5', hasNote ? 'text-primary-600' : 'text-secondary')} />
         </button>
       </PopoverTrigger>
@@ -191,19 +208,16 @@ export const NotesWidget: React.FC = () => {
         align="start"
         onInteractOutside={keepOpen}
         onEscapeKeyDown={keepOpen}
-        onOpenAutoFocus={(event) => {
-          // A pad that opened on its own must not take the caret out of the address bar.
-          if (autoOpening.current) {
-            autoOpening.current = false;
-            event.preventDefault();
-          }
-        }}
+        onOpenAutoFocus={suppressAutoOpenFocus}
       >
         <div className="flex items-center justify-between px-3 py-2 border-b border-border">
           <span className="text-sm font-medium text-primary">Notes</span>
           <div className="flex items-center gap-2">
-            <span aria-live="polite" className="text-xs text-secondary">
-              {justSaved ? 'Saved' : ''}
+            <span
+              aria-live="polite"
+              className={cn('text-xs', saveFailed ? 'text-red-500' : 'text-secondary')}
+            >
+              {statusText}
             </span>
             <button
               type="button"
@@ -231,7 +245,7 @@ export const NotesWidget: React.FC = () => {
             {pinned && (
               <button
                 type="button"
-                onClick={closePad}
+                onClick={() => void closePad()}
                 aria-label="Close notes"
                 title="Close notes"
                 className={HEADER_BTN_CLASS}

@@ -299,8 +299,8 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
           // Latched so a later good read can retire it.
           reportedUnreadable = errorMessage;
           set({ error: errorMessage, preview: null });
-          // Collapsed on every updateSettings failure path: the notes widget retries a failed
-          // write on each pause in typing, which would otherwise stack identical toasts.
+          // Collapsed on the failure paths a retrying writer can hit: the notes widget retries
+          // a failed write on each pause in typing, which would otherwise stack identical toasts.
           useToastStore.getState().error(errorMessage, { collapseRepeats: true });
           return false;
         }
@@ -329,6 +329,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
           const migrateResult = await migrateStorageData(fromArea, toArea);
 
           if (!migrateResult.success) {
+            logger.error('Error migrating data for a sync change', migrateResult.error);
             let errorMessage = 'Failed to migrate data. Please try again.';
 
             // Provide specific error message for quota errors
@@ -403,17 +404,15 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
           useToastStore.getState().error(errorMessage);
           return false;
         }
-        // clearSettings left the content keys stored, so the in-memory copy keeps them too —
-        // and their values did not change, so they are not announced to sync below.
-        const kept = Object.fromEntries(
-          CONTENT_SETTINGS_KEYS.map((key) => [key, get().settings[key as keyof Settings]])
-        );
-        const reset = { ...DEFAULT_SETTINGS, ...kept };
+        // Re-read, not merged in memory: clearSettings left the content keys stored, and a pull
+        // may have written a newer note than this realm's copy holds.
+        const reset = await getSettings();
         set({ settings: reset, preview: null });
         // Not left to the change subscription: the refresh it queues runs behind this write, and
         // a backend that cannot observe writes never delivers an event at all.
         clearOwnComplaint();
-        for (const key of Object.keys(DEFAULT_SETTINGS)) {
+        // Content keys did not change, so they are not announced to sync.
+        for (const key of SETTINGS_KEYS) {
           if (!DEVICE_LOCAL_SETTINGS_KEYS.includes(key) && !CONTENT_SETTINGS_KEYS.includes(key)) {
             notifyMutated('settings', key);
           }

@@ -427,9 +427,8 @@ export interface Settings {
   showClock: boolean; // Show clock and date on home page (default false)
   showQuickLinks: boolean; // Show quick-link shortcut tiles top-left on home page (default true)
   showNotes: boolean; // Show the scratchpad pill top-left on home page (default true)
-  // A settings key, not a collection: it is written per-key, so a burst of typing never rewrites
-  // a list. MAX_NOTE_LENGTH is enforced by clampNoteLength on the store write path, not by this
-  // type or the schema — a schema .max() would refuse to *read* an oversized note back.
+  // Written per-key, so a burst of typing never rewrites a list. The cap is clampNoteLength on
+  // the write path, not the schema — a schema .max() would refuse to *read* an oversized note.
   note: string; // The scratchpad's contents (default '')
   notesExpanded: boolean; // Scratchpad opens at the larger size (default false)
   notesPinned: boolean; // Scratchpad stays open until explicitly closed (default false)
