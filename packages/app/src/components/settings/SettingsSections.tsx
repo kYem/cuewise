@@ -583,6 +583,14 @@ function HomeSection({ s, set, filter }: SettingsSectionProps) {
         />
       </SettingRow>
       <SettingRow
+        label="Notes"
+        filter={filter}
+        help="A scratchpad in the top-left of the home page, kept on this device unless Cloud Sync is on"
+        keywords="notes scratchpad jot memo text note pad reminder scribble"
+      >
+        <Switch label="Notes" checked={s.showNotes} onChange={(v) => set({ showNotes: v })} />
+      </SettingRow>
+      <SettingRow
         label="Weather"
         filter={filter}
         help="Current conditions and today's forecast, fetched through Cuewise's own proxy"
@@ -888,7 +896,7 @@ function AdvancedSection({ s, set, filter, onReset }: SettingsSectionProps) {
           <div className="flex min-w-0 flex-col gap-1">
             <span className="text-sm font-medium text-primary">Reset all settings</span>
             <span className="text-xs leading-snug text-tertiary">
-              Restores every setting to its default value
+              Restores every setting to its default value. Notes and quick links are kept.
             </span>
           </div>
           <button

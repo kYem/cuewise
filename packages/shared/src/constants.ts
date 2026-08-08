@@ -33,6 +33,14 @@ export const ALL_QUOTE_CATEGORIES: QuoteCategory[] = Object.keys(
   QUOTE_CATEGORIES
 ) as QuoteCategory[];
 
+// One settings key is one sync record, and the server 422s a record over 64KB of *ciphertext* —
+// base64 adds ~33% — which wedges every push. 8000 leaves roughly a 2x margin in 3-byte scripts.
+export const MAX_NOTE_LENGTH = 8000;
+
+// Content the user wrote, not a preference: "reset settings" restores defaults, it must not
+// delete work — quick links survive a reset the same way, under their own key.
+export const CONTENT_SETTINGS_KEYS: readonly (keyof Settings)[] = ['note'];
+
 // Default settings
 export const DEFAULT_SETTINGS: Settings = {
   pomodoroWorkDuration: 25,
@@ -64,6 +72,10 @@ export const DEFAULT_SETTINGS: Settings = {
   showThemeSwitcher: false,
   showClock: false, // Clock hidden by default for simpler UI
   showQuickLinks: true, // Quick-link tiles shown by default
+  showNotes: true, // Scratchpad tile shown by default
+  note: '',
+  notesExpanded: false,
+  notesPinned: false,
   showWeather: false, // Opt-in: the only widget that sends where you are off the device
   weatherPosition: 'left', // Beside goals and quick links
   weatherUnits: 'auto', // Resolved from the device locale until the user overrides it

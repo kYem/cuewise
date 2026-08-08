@@ -20,6 +20,7 @@ import { ConceptRotation } from './ConceptRotation';
 import { GoalsSection } from './GoalsSection';
 import { GoalButton } from './goals';
 import { Modal } from './Modal';
+import { NotesWidget } from './NotesWidget';
 import { QuickLinksWidget } from './QuickLinksWidget';
 import { QuoteDisplay } from './QuoteDisplay';
 import { ReminderWidget } from './ReminderWidget';
@@ -44,6 +45,7 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({ extraSections }) => {
   const showThemeSwitcher = useSettingsStore((state) => state.settings.showThemeSwitcher);
   const showClock = useSettingsStore((state) => state.settings.showClock);
   const showQuickLinks = useSettingsStore((state) => state.settings.showQuickLinks);
+  const showNotes = useSettingsStore((state) => state.settings.showNotes);
   const weatherPosition = useSettingsStore((state) => state.settings.weatherPosition);
   const conceptCardsEnabled = useSettingsStore((state) => state.settings.conceptCardsEnabled);
   const conceptNudgeDismissed = useSettingsStore((state) => state.settings.conceptNudgeDismissed);
@@ -419,6 +421,7 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({ extraSections }) => {
           <div className="flex items-center gap-density-sm">
             <GoalButton />
             {showQuickLinks && <QuickLinksWidget />}
+            {showNotes && <NotesWidget />}
             {weatherPosition === 'left' && <WeatherWidget />}
           </div>
         </div>

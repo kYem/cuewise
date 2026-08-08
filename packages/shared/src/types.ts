@@ -426,6 +426,12 @@ export interface Settings {
   showThemeSwitcher: boolean; // Show live theme switcher sidebar
   showClock: boolean; // Show clock and date on home page (default false)
   showQuickLinks: boolean; // Show quick-link shortcut tiles top-left on home page (default true)
+  showNotes: boolean; // Show the scratchpad pill top-left on home page (default true)
+  // Written per-key, so a burst of typing never rewrites a list. The cap is clampNoteLength on
+  // the write path, not the schema — a schema .max() would refuse to *read* an oversized note.
+  note: string; // The scratchpad's contents (default '')
+  notesExpanded: boolean; // Scratchpad opens at the larger size (default false)
+  notesPinned: boolean; // Scratchpad stays open until explicitly closed (default false)
   showWeather: boolean; // Show the weather chip on the new tab (default false)
   weatherPosition: WeatherPosition; // Which floating cluster the chip joins (default 'left')
   weatherUnits: WeatherUnitsPreference; // 'auto' resolves from locale (default 'auto')

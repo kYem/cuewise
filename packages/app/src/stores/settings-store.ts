@@ -1,6 +1,8 @@
 import {
+  CONTENT_SETTINGS_KEYS,
   type ColorTheme,
   clampBackgroundEffects,
+  clampNoteLength,
   clampPomodoroDurations,
   configureLogger,
   DEFAULT_SETTINGS,
@@ -297,7 +299,9 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
           // Latched so a later good read can retire it.
           reportedUnreadable = errorMessage;
           set({ error: errorMessage, preview: null });
-          useToastStore.getState().error(errorMessage);
+          // Collapsed on the failure paths a retrying writer can hit: the notes widget retries
+          // a failed write on each pause in typing, which would otherwise stack identical toasts.
+          useToastStore.getState().error(errorMessage, { collapseRepeats: true });
           return false;
         }
         clearOwnComplaint();
@@ -306,7 +310,9 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
         // Clamp ranged values here — the settings write path the UI uses — so
         // presets/steppers (and a future settings import) can't persist an out-of-range
         // value. Inside the try so a future throwing clamp is caught here.
-        const clampedPartial = clampBackgroundEffects(clampPomodoroDurations(partialSettings));
+        const clampedPartial = clampBackgroundEffects(
+          clampPomodoroDurations(clampNoteLength(partialSettings))
+        );
         const updatedSettings = { ...settings, ...clampedPartial };
 
         // Check if syncEnabled changed
@@ -323,6 +329,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
           const migrateResult = await migrateStorageData(fromArea, toArea);
 
           if (!migrateResult.success) {
+            logger.error('Error migrating data for a sync change', migrateResult.error);
             let errorMessage = 'Failed to migrate data. Please try again.';
 
             // Provide specific error message for quota errors
@@ -349,7 +356,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
             'Failed to update settings. Please try again.'
           );
           set({ error: errorMessage, preview: null });
-          useToastStore.getState().error(errorMessage);
+          useToastStore.getState().error(errorMessage, { collapseRepeats: true });
           return false;
         }
         set({
@@ -379,7 +386,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
         const errorMessage = 'Failed to update settings. Please try again.';
         // Drop any preview too, so the visible state snaps back to persisted truth.
         set({ error: errorMessage, preview: null });
-        useToastStore.getState().error(errorMessage);
+        useToastStore.getState().error(errorMessage, { collapseRepeats: true });
         return false;
       }
     }),
@@ -397,16 +404,29 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
           useToastStore.getState().error(errorMessage);
           return false;
         }
-        set({ settings: DEFAULT_SETTINGS, preview: null });
+        // Re-read, not merged in memory: clearSettings left the content keys stored, and a pull
+        // may have written a newer note than this realm's copy holds.
+        const read = await readSettings();
+        // Not getSettings: it answers a failed read with defaults, and committing those here
+        // blanks the pad, which an open widget would then save over the preserved note.
+        if (!read.ok) {
+          const errorMessage = 'Settings were reset but could not be re-read. Reload to see them.';
+          set({ error: errorMessage, preview: null });
+          useToastStore.getState().error(errorMessage);
+          return false;
+        }
+        const reset = read.settings;
+        set({ settings: reset, preview: null });
         // Not left to the change subscription: the refresh it queues runs behind this write, and
         // a backend that cannot observe writes never delivers an event at all.
         clearOwnComplaint();
-        for (const key of Object.keys(DEFAULT_SETTINGS)) {
-          if (!DEVICE_LOCAL_SETTINGS_KEYS.includes(key)) {
+        // Content keys did not change, so they are not announced to sync.
+        for (const key of SETTINGS_KEYS) {
+          if (!DEVICE_LOCAL_SETTINGS_KEYS.includes(key) && !CONTENT_SETTINGS_KEYS.includes(key)) {
             notifyMutated('settings', key);
           }
         }
-        applyAll(DEFAULT_SETTINGS);
+        applyAll(reset);
         return true;
       } catch (error) {
         logger.error('Error resetting settings', error);

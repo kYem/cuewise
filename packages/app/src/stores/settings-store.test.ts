@@ -1,8 +1,10 @@
 import {
+  CONTENT_SETTINGS_KEYS,
   configurePlatform,
   DEFAULT_SETTINGS,
   type KeyValueStore,
   logger,
+  MAX_NOTE_LENGTH,
   resetPlatform,
   type Settings,
   type StorageResult,
@@ -64,7 +66,11 @@ function seedStorage(settings: Settings = defaultSettings) {
     return { success: true };
   });
   vi.mocked(storage.clearSettings).mockImplementation(async () => {
-    storedSettings = DEFAULT_SETTINGS;
+    // Mirrors the real helper: content keys survive a reset.
+    const kept = Object.fromEntries(
+      CONTENT_SETTINGS_KEYS.map((key) => [key, storedSettings[key]])
+    ) as Partial<Settings>;
+    storedSettings = { ...DEFAULT_SETTINGS, ...kept };
     return true;
   });
 }
@@ -104,15 +110,53 @@ describe('sync sink wiring', () => {
     expect(markMutated).toHaveBeenCalledWith('settings', 'colorTheme');
   });
 
-  it('does not notify for device-local keys (syncEnabled, cloudSyncEnabled, logLevel, focusedGoalId, hasSeenOnboarding)', async () => {
+  it('does not notify for device-local keys, the notes window chrome included', async () => {
     await useSettingsStore.getState().updateSettings({
       syncEnabled: true,
       logLevel: 'debug',
       focusedGoalId: 'g1',
       hasSeenOnboarding: true,
+      notesExpanded: true,
+      notesPinned: true,
     });
 
     expect(markMutated).not.toHaveBeenCalled();
+  });
+
+  it('notifies the note after a save, so it follows the user across devices', async () => {
+    await useSettingsStore.getState().updateSettings({ note: 'hello' });
+
+    expect(markMutated).toHaveBeenCalledWith('settings', 'note');
+  });
+
+  it('resetToDefaults keeps the note and does not push it to other devices', async () => {
+    const withNote = { ...defaultSettings, note: 'do not lose this' };
+    useSettingsStore.setState({ settings: withNote });
+    seedStorage(withNote);
+
+    await useSettingsStore.getState().resetToDefaults();
+
+    expect(useSettingsStore.getState().settings.note).toBe('do not lose this');
+    expect(markMutated).not.toHaveBeenCalledWith('settings', 'note');
+    expect(markMutated).toHaveBeenCalledWith('settings', 'theme');
+  });
+
+  it('resetToDefaults fails rather than committing defaults when the re-read fails', async () => {
+    const withNote = { ...defaultSettings, note: 'kept' };
+    useSettingsStore.setState({ settings: withNote });
+    seedStorage(withNote);
+    vi.mocked(storage.readSettings).mockResolvedValueOnce({ ok: false, unreadable: [] });
+
+    await expect(useSettingsStore.getState().resetToDefaults()).resolves.toBe(false);
+
+    expect(useSettingsStore.getState().settings.note).toBe('kept');
+  });
+
+  it('updateSettings caps an oversized note before persisting it', async () => {
+    await useSettingsStore.getState().updateSettings({ note: 'x'.repeat(MAX_NOTE_LENGTH + 10) });
+
+    const patch = vi.mocked(storage.setSettingsPatch).mock.calls[0][0];
+    expect(patch.note).toHaveLength(MAX_NOTE_LENGTH);
   });
 
   it('does not notify a key whose value did not actually change', async () => {
@@ -224,6 +268,11 @@ describe('background preview lifecycle', () => {
     );
     expect(state.settings.backgroundDim).toBe(0);
     expect(markMutated).not.toHaveBeenCalled();
+    // Collapsed, because this is the path a retrying note writer hammers on quota exhaustion.
+    expect(toastError).toHaveBeenCalledWith(
+      'Storage is full — could not save settings. Clear some data to continue.',
+      { collapseRepeats: true }
+    );
   });
 
   it('a successful unrelated write leaves a live background preview untouched', async () => {
@@ -529,7 +578,7 @@ describe('an update blocked by a stored value that cannot be parsed', () => {
 
     const message =
       "Cuewise can't read your saved value for pomodoroAutoStartBreaks, so the change was not saved. Reset to defaults in Settings to fix it.";
-    expect(toastError).toHaveBeenCalledWith(message);
+    expect(toastError).toHaveBeenCalledWith(message, { collapseRepeats: true });
     expect(useSettingsStore.getState().error).toBe(message);
   });
 
@@ -542,7 +591,8 @@ describe('an update blocked by a stored value that cannot be parsed', () => {
     await useSettingsStore.getState().updateSettings({ theme: 'dark' });
 
     expect(toastError).toHaveBeenCalledWith(
-      "Cuewise can't read your saved values for autoRollDueTasks, colorTheme, so the change was not saved. Reset to defaults in Settings to fix it."
+      "Cuewise can't read your saved values for autoRollDueTasks, colorTheme, so the change was not saved. Reset to defaults in Settings to fix it.",
+      { collapseRepeats: true }
     );
   });
 
@@ -551,6 +601,11 @@ describe('an update blocked by a stored value that cannot be parsed', () => {
       false
     );
 
+    // Mirrors the real helper: clearing removes the unreadable entry, so the re-read succeeds.
+    vi.mocked(storage.readSettings).mockResolvedValue({
+      ok: true,
+      settings: structuredClone(DEFAULT_SETTINGS),
+    });
     await expect(useSettingsStore.getState().resetToDefaults()).resolves.toBe(true);
     expect(storage.clearSettings).toHaveBeenCalledOnce();
     expect(useSettingsStore.getState().settings).toEqual(DEFAULT_SETTINGS);
@@ -951,8 +1006,10 @@ describe('converging on settings written elsewhere', () => {
     fake.emit(['settings.colorTheme']);
 
     await vi.waitFor(() => expect(toastError).toHaveBeenCalled());
-    expect(toastError).toHaveBeenCalledWith(expect.stringContaining('out of date'));
-    expect(toastError).not.toHaveBeenCalledWith(expect.stringContaining('not saved'));
+    expect(toastError.mock.calls[0][0]).toContain('out of date');
+    for (const [message] of toastError.mock.calls) {
+      expect(message).not.toContain('not saved');
+    }
   });
 
   it('says so again when the same value goes unreadable after recovering', async () => {
