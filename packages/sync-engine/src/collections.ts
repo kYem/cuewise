@@ -19,7 +19,10 @@ export interface CollectionBinding {
   name: string;
   readAll(): Promise<Record<string, unknown>>;
   writeOne(entityId: string, entity: unknown | null): Promise<StorageResult>;
-  /** Ids the enroll backfill may claim authorship of; defaults to every id readAll answers. */
+  /**
+   * Ids the enroll backfill may claim authorship of; defaults to every id readAll answers. Must
+   * answer a subset of readAll's ids — an extra id pushes as a tombstone.
+   */
   readBackfillIds?(): Promise<string[]>;
 }
 

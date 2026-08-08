@@ -765,6 +765,18 @@ describe('a migration whose write failed', () => {
     await expect(getSettingsForSync()).rejects.toThrow(/unreadable/i);
   });
 
+  // A partial answer would enroll without ever claiming the blob-held choices.
+  it('refuses the stored settings keys the migration has not copied out', async () => {
+    configurePlatform({
+      storage: cannotWriteSettings({
+        local: { [STORAGE_KEYS.SETTINGS]: legacyBlob({ theme: 'dark' }) },
+      }),
+    });
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await expect(getStoredSettingsKeys()).rejects.toThrow(/unreadable/i);
+  });
+
   it('reads settings as stale rather than serving the defaults it would push', async () => {
     configurePlatform({
       storage: cannotWriteSettings({
@@ -849,6 +861,12 @@ describe('a settings read that fails', () => {
     configurePlatform({ storage: cannotReadSettings() });
 
     await expect(getSettingsForSync()).rejects.toThrow(/settings/i);
+  });
+
+  it('refuses the stored settings keys it could not read', async () => {
+    configurePlatform({ storage: cannotReadSettings() });
+
+    await expect(getStoredSettingsKeys()).rejects.toThrow(/settings/i);
   });
 
   // An all-clear against a quota the user may not be on hides the warning that explains

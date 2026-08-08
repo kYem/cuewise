@@ -286,8 +286,8 @@ describe('settings: per-key sync round-trips a shared key but excludes device-lo
   it('propagates a shared setting to the other device but never a device-local one', async () => {
     const server = new FakeSyncServer();
 
-    // Offsets are arbitrary now: the backfill claims only stored keys, so a fresh enroll pushes
-    // no settings and adopts whatever A sends. The claims-only-stored-keys suite below proves it.
+    // Offsets are arbitrary: the backfill claims only stored keys, so a fresh enroll pushes no
+    // settings and adopts whatever A sends. The stored-keys suite below proves both directions.
     const deviceA = createDevice(server, makeClock(5_000_000));
     useStorage(deviceA);
     await deviceA.engine.enableSync('dev', 'devA-cred', 'Device A');
@@ -337,6 +337,24 @@ describe('settings: per-key sync round-trips a shared key but excludes device-lo
 });
 
 describe('settings: an enrolling device claims only the keys it explicitly wrote', () => {
+  it('a choice stored before sync was enabled reaches the account through the backfill alone', async () => {
+    const server = new FakeSyncServer();
+
+    const deviceA = createDevice(server, makeClock(1_000_000));
+    useStorage(deviceA);
+    await setSettingsPatch({ theme: 'dark' });
+    await deviceA.engine.enableSync('dev', 'devA-cred', 'Device A');
+    const recoveryCode = deviceA.onRecoveryCode.mock.calls[0][0] as string;
+
+    const deviceB = createDevice(server, makeClock(2_000_000));
+    useStorage(deviceB);
+    await deviceB.engine.enableSync('dev', 'devB-cred', 'Device B', { recoveryCode });
+    await deviceB.engine.syncNow();
+
+    const bSettings = await getSettings();
+    expect(bSettings.theme).toBe('dark');
+  });
+
   it("a later-clock enroll adopts the first device's choice instead of reverting it", async () => {
     const server = new FakeSyncServer();
 

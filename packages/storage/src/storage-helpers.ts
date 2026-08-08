@@ -935,13 +935,22 @@ export async function getCollectionsRaw(): Promise<QuoteCollection[]> {
 }
 
 /**
- * The keys the user explicitly wrote — never the defaults standing in for the rest. Storage is
- * sparse per-key, so this is exactly what an absent entry already distinguishes.
+ * The keys the user explicitly wrote — never the defaults standing in for the rest. Refuses on
+ * unreadable fields like getSettingsForSync: an uncopied migration reports absent keys there,
+ * and answering the partial set would enroll without ever claiming the blob-held choices.
  */
 export async function getStoredSettingsKeys(): Promise<string[]> {
   const entries = await readSettingsEntries();
   if (entries === null) {
     throw new Error('Could not read the stored settings keys: the settings read failed');
+  }
+  if (entries.unreadable.length > 0) {
+    logger.error('Refusing to answer the stored settings keys with unreadable fields', {
+      fields: entries.unreadable,
+    });
+    throw new Error(
+      `Could not read the stored settings keys: ${entries.unreadable.join(', ')} unreadable`
+    );
   }
   return Object.keys(entries.values).filter((key) => entries.values[key] !== undefined);
 }
