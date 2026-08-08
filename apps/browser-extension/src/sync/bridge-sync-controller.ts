@@ -3,6 +3,7 @@ import type {
   LastCycleRead,
   SyncController,
   SyncDetails,
+  SyncDetailsOptions,
   SyncUiStatus,
 } from '@cuewise/app';
 import { asSyncUiStatus, LAST_CYCLE_UNAVAILABLE } from '@cuewise/app';
@@ -349,14 +350,18 @@ export class BridgeSyncController implements SyncController {
     );
   }
 
-  async getDetails(): Promise<SyncDetails | null> {
+  async getDetails(options?: SyncDetailsOptions): Promise<SyncDetails | null> {
     try {
       // The response type is {ok:true, kind:'details', details}, but the SW↔page wire is untyped —
       // don't delete these guards. A skewed SW can return undefined (a pre-details SW's op guard
       // rejects the message outright, so nothing responds), {ok:false} (the router's error fallback
       // → fails the ok guard), or {ok:true, details} with no kind (a pre-kind SW → fails the kind
       // guard). This call is purely informational, so any of those is "unavailable", not an error.
-      const response = await this.send({ kind: 'cuewise-sync-control', op: 'details' });
+      const response = await this.send({
+        kind: 'cuewise-sync-control',
+        op: 'details',
+        refreshRecoveryEnvelope: options?.refreshRecoveryEnvelope,
+      });
       if (response?.ok && response.kind === 'details') {
         return response.details;
       }

@@ -132,6 +132,11 @@ function recordingStore(initial: Partial<Record<StorageArea, Record<string, unkn
   return { store, areas };
 }
 
+const quotaExceeded = {
+  success: false as const,
+  error: { type: 'quota_exceeded' as const, message: 'Storage full' },
+};
+
 describe('custom background', () => {
   it('returns null when the user has not set one', async () => {
     const { store } = recordingStore();
@@ -285,10 +290,7 @@ describe('settings', () => {
     configurePlatform({
       storage: {
         ...store,
-        setMany: async () => ({
-          success: false as const,
-          error: { type: 'quota_exceeded' as const, message: 'Storage full' },
-        }),
+        setMany: async () => quotaExceeded,
       },
     });
     await setInStorage(STORAGE_KEYS.SETTINGS, legacyBlob({ theme: 'dark' }), 'local');
@@ -318,20 +320,6 @@ describe('settings', () => {
       theme: 'dark',
       colorTheme: DEFAULT_SETTINGS.colorTheme,
     });
-  });
-
-  // The rollback: the flag is the only thing retiring the blob, so removing it restores the
-  // read-through. The migration memo is left resolved, so this is the read path alone.
-  it('reads through the blob again once the flag is cleared', async () => {
-    const { store, areas } = recordingStore();
-    configurePlatform({ storage: store });
-    await setInStorage(STORAGE_KEYS.SETTINGS, legacyBlob({ theme: 'dark' }), 'local');
-    await ensureSettingsMigrated();
-    areas.local[STORAGE_KEYS.SETTINGS] = legacyBlob({ theme: 'dark', colorTheme: 'forest' });
-
-    delete areas.local[STORAGE_KEYS.SETTINGS_MIGRATED];
-
-    await expect(getSettings()).resolves.toMatchObject({ colorTheme: 'forest' });
   });
 
   it('a changed default reaches a user who never set that key', async () => {
@@ -421,10 +409,7 @@ describe('migrateLegacySettings', () => {
     configurePlatform({
       storage: {
         ...store,
-        setMany: async () => ({
-          success: false as const,
-          error: { type: 'quota_exceeded' as const, message: 'Storage full' },
-        }),
+        setMany: async () => quotaExceeded,
       },
     });
     const blob = legacyBlob({ theme: 'dark' });
@@ -435,14 +420,44 @@ describe('migrateLegacySettings', () => {
     expect(await readLegacySettingsBlob()).toEqual(blob);
   });
 
-  it('flags the move and keeps the legacy blob as a backup', async () => {
-    const blob = legacyBlob({ theme: 'dark' });
-    await setInStorage(STORAGE_KEYS.SETTINGS, blob, 'local');
+  it('flags the move and deletes the legacy blob', async () => {
+    await setInStorage(STORAGE_KEYS.SETTINGS, legacyBlob({ theme: 'dark' }), 'local');
 
     await expect(migrateLegacySettings()).resolves.toBe(true);
 
-    expect(await readLegacySettingsBlob()).toEqual(blob);
+    expect(await readLegacySettingsBlob()).toBeNull();
     await expect(getFromStorage(STORAGE_KEYS.SETTINGS_MIGRATED, 'local')).resolves.toBe(true);
+  });
+
+  it('flags the move even when the blob will not delete, and says so', async () => {
+    const blob = legacyBlob({ theme: 'dark' });
+    const { store } = recordingStore({ local: { [STORAGE_KEYS.SETTINGS]: blob } });
+    configurePlatform({ storage: { ...store, remove: async () => false } });
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await expect(migrateLegacySettings()).resolves.toBe(true);
+
+    await expect(getFromStorage(STORAGE_KEYS.SETTINGS_MIGRATED, 'local')).resolves.toBe(true);
+    expect(await readLegacySettingsBlob()).toEqual(blob);
+    expect(error).toHaveBeenCalledWith(expect.stringContaining('still on disk'));
+  });
+
+  // The release that introduced the flag kept the blob as a rollback, so every device that
+  // migrated then is already flagged — the only population with bytes left to collect.
+  it('deletes a blob left behind by a migration that already flagged', async () => {
+    const { store, areas } = recordingStore({
+      local: {
+        [STORAGE_KEYS.SETTINGS]: legacyBlob({ theme: 'dark' }),
+        [STORAGE_KEYS.SETTINGS_MIGRATED]: true,
+        [settingsStorageKey('theme')]: 'dark',
+      },
+    });
+    configurePlatform({ storage: store });
+
+    await expect(migrateLegacySettings()).resolves.toBe(true);
+
+    expect(await readLegacySettingsBlob()).toBeNull();
+    expect(areas.local[settingsStorageKey('theme')]).toBe('dark');
   });
 
   it('does nothing when there is no legacy blob', async () => {
@@ -458,7 +473,49 @@ describe('migrateLegacySettings', () => {
     await expect(getFromStorage(STORAGE_KEYS.SETTINGS_MIGRATED, 'local')).resolves.toBe(true);
   });
 
-  it('does not re-run or read the blob once flagged', async () => {
+  // A device with no blob left nothing uncopied, so a flag write it could not store must not
+  // take every read down with it — the flag is only what stops the run repeating.
+  it('lets reads default when a fresh install cannot store the flag', async () => {
+    const { store } = recordingStore();
+    configurePlatform({
+      storage: {
+        ...store,
+        set: async () => quotaExceeded,
+      },
+    });
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await expect(readSettings()).resolves.toMatchObject({ ok: true });
+    await expect(getGoals()).resolves.toEqual([]);
+  });
+
+  // Storage full enough to refuse the flag is storage the copy may still have fit into, and the
+  // copy is what decides whether an absent per-key entry is a default.
+  it('keeps the blob for a later run when the flag will not store', async () => {
+    const { store, areas } = recordingStore({
+      local: { [STORAGE_KEYS.SETTINGS]: legacyBlob({ theme: 'dark' }) },
+    });
+    configurePlatform({ storage: { ...store, set: async () => quotaExceeded } });
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await expect(migrateLegacySettings()).resolves.toBe(true);
+
+    expect(areas.local[settingsStorageKey('theme')]).toBe('dark');
+    expect(areas.local[STORAGE_KEYS.SETTINGS]).toBeDefined();
+  });
+
+  it('lets reads default when the flag will not store after a copy that landed', async () => {
+    const { store } = recordingStore({
+      local: { [STORAGE_KEYS.SETTINGS]: legacyBlob({ theme: 'dark' }) },
+    });
+    configurePlatform({ storage: { ...store, set: async () => quotaExceeded } });
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await expect(getGoals()).resolves.toEqual([]);
+    await expect(getSettings()).resolves.toMatchObject({ theme: 'dark' });
+  });
+
+  it('does not copy the blob again once flagged', async () => {
     const { store, areas } = recordingStore({
       local: {
         [STORAGE_KEYS.SETTINGS]: legacyBlob({ theme: 'dark' }),
@@ -482,7 +539,7 @@ describe('migrateLegacySettings', () => {
 
     await expect(migrateLegacySettings()).resolves.toBe(true);
 
-    expect(readKeys).toEqual([STORAGE_KEYS.SETTINGS_MIGRATED]);
+    expect(readKeys).toEqual([STORAGE_KEYS.SETTINGS_MIGRATED, STORAGE_KEYS.SETTINGS]);
     expect(areas.local[settingsStorageKey('theme')]).toBeUndefined();
   });
 
@@ -496,10 +553,7 @@ describe('migrateLegacySettings', () => {
         ...store,
         setMany: async (entries: Record<string, unknown>, area: StorageArea) => {
           if (writesFail) {
-            return {
-              success: false as const,
-              error: { type: 'quota_exceeded' as const, message: 'Storage full' },
-            };
+            return quotaExceeded;
           }
           return store.setMany(entries, area);
         },
@@ -517,7 +571,7 @@ describe('migrateLegacySettings', () => {
   });
 
   // The flag would otherwise retire a back-stop this build never copied a single value out of.
-  it('leaves the flag unset when the blob is stored but unreadable', async () => {
+  it('flags an unreadable blob but keeps its bytes, since no retry can parse them', async () => {
     const { store, areas } = recordingStore({
       local: { [STORAGE_KEYS.SETTINGS]: legacyBlob({ theme: 'dark' }) },
     });
@@ -535,9 +589,11 @@ describe('migrateLegacySettings', () => {
     });
     vi.spyOn(logger, 'error').mockImplementation(() => {});
 
-    await expect(migrateLegacySettings()).resolves.toBe(false);
+    await expect(migrateLegacySettings()).resolves.toBe(true);
 
-    expect(areas.local[STORAGE_KEYS.SETTINGS_MIGRATED]).toBeUndefined();
+    expect(areas.local[STORAGE_KEYS.SETTINGS_MIGRATED]).toBe(true);
+    // Unparseable to this build is not unsalvageable, and it is the only copy left.
+    expect(areas.local[STORAGE_KEYS.SETTINGS]).toBeDefined();
   });
 
   it('is idempotent across repeated runs', async () => {
@@ -615,8 +671,53 @@ describe('migrateLegacySettings', () => {
   });
 });
 
-// The blob stays on disk when the write fails, and it is still the only record of those keys —
-// including `syncEnabled`, which decides the area every other collection lives in.
+// The flag on disk is proof a past run copied the blob out, so a realm that could not re-read it
+// has nothing left uncopied and must not refuse.
+describe('a realm whose own migration read failed', () => {
+  function cannotReadTheBlob(
+    initial: Partial<Record<StorageArea, Record<string, unknown>>>
+  ): KeyValueStore {
+    const { store } = recordingStore(initial);
+    return {
+      ...store,
+      getMany: async (keys: string[], area: StorageArea) => {
+        if (keys.includes(STORAGE_KEYS.SETTINGS)) {
+          return null;
+        }
+        return store.getMany(keys, area);
+      },
+    };
+  }
+
+  it('answers the storage area from the flag already on disk', async () => {
+    configurePlatform({
+      storage: cannotReadTheBlob({ local: { [STORAGE_KEYS.SETTINGS_MIGRATED]: true } }),
+    });
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await expect(getGoals()).resolves.toEqual([]);
+  });
+
+  it('reads settings rather than calling every absent key unreadable', async () => {
+    configurePlatform({
+      storage: cannotReadTheBlob({
+        local: {
+          [STORAGE_KEYS.SETTINGS_MIGRATED]: true,
+          [settingsStorageKey('colorTheme')]: 'forest',
+        },
+      }),
+    });
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await expect(readSettings()).resolves.toMatchObject({
+      ok: true,
+      settings: expect.objectContaining({ colorTheme: 'forest' }),
+    });
+  });
+});
+
+// The blob stays on disk when the write fails, and nothing reads it, so those keys have no source
+// at all — including `syncEnabled`, which decides the area every other collection lives in.
 describe('a migration whose write failed', () => {
   function cannotWriteSettings(
     initial: Partial<Record<StorageArea, Record<string, unknown>>>
@@ -624,36 +725,47 @@ describe('a migration whose write failed', () => {
     const { store } = recordingStore(initial);
     return {
       ...store,
-      setMany: async () => ({
-        success: false as const,
-        error: { type: 'quota_exceeded' as const, message: 'Storage full' },
-      }),
+      setMany: async () => quotaExceeded,
     };
   }
 
-  it('still reads a sync user out of the sync area', async () => {
-    const goals = goalFactory.buildList(2);
+  // Answering 'local' here reads a sync user's data as empty, and the sync cycle then seals every
+  // dirty entity as a deletion for every other device.
+  it('refuses the storage area rather than reading a sync user as local', async () => {
     configurePlatform({
       storage: cannotWriteSettings({
         local: { [STORAGE_KEYS.SETTINGS]: legacyBlob({ syncEnabled: true }) },
-        sync: { [STORAGE_KEYS.GOALS]: goals },
+        sync: { [STORAGE_KEYS.GOALS]: goalFactory.buildList(2) },
       }),
     });
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
 
-    await expect(getGoals()).resolves.toEqual(goals);
+    await expect(getGoals()).rejects.toThrow(/storage area/i);
   });
 
-  // What the migration would have destroyed must not instead be pushed to every other device.
-  it('drops a blob field that fails its schema, exactly as the migration would', async () => {
+  // Our defaults would win LWW over the value every peer actually chose.
+  it('refuses to push settings the migration has not copied out', async () => {
     configurePlatform({
       storage: cannotWriteSettings({
-        local: { [STORAGE_KEYS.SETTINGS]: { ...legacyBlob({ theme: 'dark' }), colorTheme: 42 } },
+        local: { [STORAGE_KEYS.SETTINGS]: legacyBlob({ theme: 'dark' }) },
       }),
     });
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
 
-    await expect(getSettingsForSync()).resolves.toMatchObject({
-      theme: 'dark',
-      colorTheme: DEFAULT_SETTINGS.colorTheme,
+    await expect(getSettingsForSync()).rejects.toThrow(/unreadable/i);
+  });
+
+  it('reads settings as stale rather than serving the defaults it would push', async () => {
+    configurePlatform({
+      storage: cannotWriteSettings({
+        local: { [STORAGE_KEYS.SETTINGS]: legacyBlob({ autoRollDueTasks: false }) },
+      }),
+    });
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await expect(readSettings()).resolves.toMatchObject({
+      ok: false,
+      unreadable: expect.arrayContaining(['autoRollDueTasks']),
     });
   });
 
@@ -672,20 +784,22 @@ describe('a migration whose write failed', () => {
     await expect(getSettings()).resolves.toMatchObject({ theme: 'light' });
   });
 
+  // The per-key value is the opposite of the default here, so answering it cannot be confused
+  // with the fallback that a missing entry would take.
   it('routes on the per-key syncEnabled, not the blob still on disk', async () => {
-    const localGoals = goalFactory.buildList(2);
+    const syncGoals = goalFactory.buildList(2);
     configurePlatform({
       storage: cannotWriteSettings({
         local: {
-          [STORAGE_KEYS.SETTINGS]: legacyBlob({ syncEnabled: true, colorTheme: 'forest' }),
-          [settingsStorageKey('syncEnabled')]: false,
-          [STORAGE_KEYS.GOALS]: localGoals,
+          [STORAGE_KEYS.SETTINGS]: legacyBlob({ syncEnabled: false, colorTheme: 'forest' }),
+          [settingsStorageKey('syncEnabled')]: true,
+          [STORAGE_KEYS.GOALS]: goalFactory.buildList(1),
         },
-        sync: { [STORAGE_KEYS.GOALS]: goalFactory.buildList(1) },
+        sync: { [STORAGE_KEYS.GOALS]: syncGoals },
       }),
     });
 
-    await expect(getGoals()).resolves.toEqual(localGoals);
+    await expect(getGoals()).resolves.toEqual(syncGoals);
   });
 });
 
@@ -804,10 +918,7 @@ describe('ensureSettingsMigrated', () => {
         ...store,
         setMany: async (entries: Record<string, unknown>, area: StorageArea) => {
           if (writesFail) {
-            return {
-              success: false as const,
-              error: { type: 'quota_exceeded' as const, message: 'Storage full' },
-            };
+            return quotaExceeded;
           }
           return store.setMany(entries, area);
         },
@@ -987,8 +1098,8 @@ describe('a settings value that is stored but unreadable', () => {
   });
 });
 
-// The blob back-stops every field until the migration runs, so a blob that cannot be read blinds
-// the same fields an unreadable per-key entry would — and reads exactly like one that never held.
+// Nothing reads the blob any more, so an unreadable one blocks the migration instead: the values
+// it holds were never copied out, and absence cannot yet be read as a default.
 describe('a legacy settings blob that is stored but unreadable', () => {
   function unreadableBlob(
     initial: Partial<Record<StorageArea, Record<string, unknown>>> = {}
@@ -999,17 +1110,10 @@ describe('a legacy settings blob that is stored but unreadable', () => {
     });
     return {
       ...store,
-      // The single-key read conflates unreadable with absent, which is what leaves the blob on
-      // disk: the migration reads null, returns early, and every later read still goes through it.
-      get: async <T>(key: string, area: StorageArea) => {
-        if (key === STORAGE_KEYS.SETTINGS) {
-          return null;
-        }
-        return store.get<T>(key, area);
-      },
+      // Presence, not the requested key: a blob a reset has deleted is absent, not unreadable.
       getMany: async (keys: string[], area: StorageArea) => {
         const seen = await store.getMany(keys, area);
-        if (seen !== null && keys.includes(STORAGE_KEYS.SETTINGS)) {
+        if (seen !== null && seen[STORAGE_KEYS.SETTINGS] !== undefined) {
           seen[STORAGE_KEYS.SETTINGS] = UNREADABLE_VALUE;
         }
         return seen;
@@ -1017,23 +1121,32 @@ describe('a legacy settings blob that is stored but unreadable', () => {
     };
   }
 
-  it('leaves the storage area unanswered rather than guessing local', async () => {
-    configurePlatform({
-      storage: unreadableBlob({ sync: { [STORAGE_KEYS.GOALS]: goalFactory.buildList(2) } }),
-    });
+  // Unreadable is JSON.parse throwing, so its values are gone whatever we do. Refusing would only
+  // withhold the rest of the app on their behalf.
+  it('answers the storage area instead of refusing over values no retry can recover', async () => {
+    const goals = goalFactory.buildList(2);
+    configurePlatform({ storage: unreadableBlob({ local: { [STORAGE_KEYS.GOALS]: goals } }) });
     vi.spyOn(logger, 'error').mockImplementation(() => {});
 
-    await expect(getGoals()).rejects.toThrow(/storage area/i);
+    await expect(getGoals()).resolves.toEqual(goals);
   });
 
-  it('readSettings refuses rather than defaulting the fields it back-stopped', async () => {
+  it('reads settings as defaults rather than refusing', async () => {
     configurePlatform({ storage: unreadableBlob() });
     vi.spyOn(logger, 'error').mockImplementation(() => {});
 
-    await expect(readSettings()).resolves.toMatchObject({
-      ok: false,
-      unreadable: expect.arrayContaining(['autoRollDueTasks']),
-    });
+    await expect(readSettings()).resolves.toMatchObject({ ok: true });
+  });
+
+  // The blob is what blocks the migration, so deleting it is the way out — clearSettings removes
+  // it, and the next run reads a fresh install.
+  it('recovers once a reset has deleted the unreadable blob', async () => {
+    configurePlatform({ storage: unreadableBlob() });
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    await expect(clearSettings()).resolves.toBe(true);
+    resetSettingsMigration();
+
+    await expect(readSettings()).resolves.toMatchObject({ ok: true });
   });
 
   it('keeps a per-key value that does not depend on the blob', async () => {
@@ -1045,7 +1158,8 @@ describe('a legacy settings blob that is stored but unreadable', () => {
     await expect(getSettings()).resolves.toMatchObject({ colorTheme: 'forest' });
   });
 
-  // Once flagged it back-stops nothing, so it can no longer take the storage area down with it.
+  // The flag says the copy already happened, so an absent per-key entry is a real default and the
+  // bytes left behind cannot take the storage area down with them.
   it('answers the storage area anyway once the migration is flagged', async () => {
     const goals = goalFactory.buildList(2);
     configurePlatform({

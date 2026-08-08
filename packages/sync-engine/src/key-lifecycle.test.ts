@@ -10,12 +10,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { FakeKeyTransport } from './__fixtures__/fake-key-transport';
 import { FakeKvStore } from './__fixtures__/fake-kv-store';
 import {
+  checkForLostDataKey,
   initOrEnrollKey,
   RecoveryCodeRequiredError,
   SelfHealNeedsEnrollError,
-  SelfHealUnrecoverableError,
   SYNC_DATA_KEY,
-  selfHealKeyBlob,
 } from './key-lifecycle';
 
 describe('initOrEnrollKey', () => {
@@ -131,13 +130,18 @@ describe('initOrEnrollKey', () => {
   });
 });
 
-describe('selfHealKeyBlob', () => {
-  it('no-ops when both the local dk and the server envelope are present', async () => {
+describe('checkForLostDataKey', () => {
+  it('does not ask the server anything while the local dk is present', async () => {
+    // ENG-98: with the key on disk the device syncs either way, so the envelope is the settings
+    // panel's business (SyncEngine.refreshRecoveryEnvelope) and not a per-start network hop.
     const transport = new FakeKeyTransport();
     const keyStore = new FakeKvStore();
     await initOrEnrollKey({ transport, keyStore });
+    const getEnvSpy = vi.spyOn(transport, 'getRecoveryEnvelope');
 
-    await expect(selfHealKeyBlob({ transport, keyStore })).resolves.toBeUndefined();
+    await expect(checkForLostDataKey({ transport, keyStore })).resolves.toBeUndefined();
+
+    expect(getEnvSpy).not.toHaveBeenCalled();
     expect(transport.putCalls).toHaveLength(1); // no re-upload attempted
   });
 
@@ -146,25 +150,14 @@ describe('selfHealKeyBlob', () => {
     await initOrEnrollKey({ transport, keyStore: new FakeKvStore() });
     const freshKeyStore = new FakeKvStore(); // simulates a device with no local dk
 
-    await expect(selfHealKeyBlob({ transport, keyStore: freshKeyStore })).rejects.toThrow(
+    await expect(checkForLostDataKey({ transport, keyStore: freshKeyStore })).rejects.toThrow(
       SelfHealNeedsEnrollError
-    );
-  });
-
-  it('throws an unrecoverable signal when the local dk is present but the server blob is missing', async () => {
-    const transport = new FakeKeyTransport();
-    const keyStore = new FakeKvStore();
-    await initOrEnrollKey({ transport, keyStore });
-    transport.envelope = null; // simulates the server having lost/never received the blob
-
-    await expect(selfHealKeyBlob({ transport, keyStore })).rejects.toThrow(
-      SelfHealUnrecoverableError
     );
   });
 
   it('no-ops when neither the local dk nor the server envelope exist', async () => {
     await expect(
-      selfHealKeyBlob({ transport: new FakeKeyTransport(), keyStore: new FakeKvStore() })
+      checkForLostDataKey({ transport: new FakeKeyTransport(), keyStore: new FakeKvStore() })
     ).resolves.toBeUndefined();
   });
 });

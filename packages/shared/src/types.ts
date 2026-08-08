@@ -498,7 +498,7 @@ export const STORAGE_KEYS = {
   SETTINGS: 'settings',
   // Deliberately outside the `settings.` prefix: `clearSettings` enumerates that prefix and would
   // wipe the flag, re-running the migration and restoring the values the user just reset.
-  SETTINGS_MIGRATED: 'settingsMigrated', // Per-key settings migration completed (blob kept as backup)
+  SETTINGS_MIGRATED: 'settingsMigrated', // Per-key settings migration completed (blob then deleted)
   CURRENT_QUOTE: 'currentQuote',
   CUSTOM_YOUTUBE_PLAYLISTS: 'customYoutubePlaylists', // User-added YouTube playlists
   YOUTUBE_PROGRESS: 'youtubeProgress', // YouTube playback progress (timestamps per video)
