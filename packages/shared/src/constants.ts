@@ -33,8 +33,8 @@ export const ALL_QUOTE_CATEGORIES: QuoteCategory[] = Object.keys(
   QUOTE_CATEGORIES
 ) as QuoteCategory[];
 
-// One settings key is one sync record; the server 422s a record over 64KB of ciphertext, and that
-// wedges every push, not just this key. 8000 UTF-16 units is ≤24KB even in 3-byte scripts.
+// One settings key is one sync record, and the server 422s a record over 64KB of *ciphertext* —
+// base64 adds ~33% — which wedges every push. 8000 leaves roughly a 2x margin in 3-byte scripts.
 export const MAX_NOTE_LENGTH = 8000;
 
 // Default settings

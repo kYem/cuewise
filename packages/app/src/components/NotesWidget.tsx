@@ -39,8 +39,8 @@ export const NotesWidget: React.FC = () => {
     if (value === null) {
       return;
     }
-    // Clamped here too, not just by maxLength: a pull can install a longer note than this device
-    // could have typed, and one oversized key 422s the whole push forever.
+    // maxLength only bounds typing; a pull can deliver a note longer than this device would let
+    // you write. Never persist past our own cap.
     const ok = await updateSettings({ note: value.slice(0, MAX_NOTE_LENGTH) });
     // Left pending on failure so the next flush or keystroke retries it; updateSettings has
     // already told the user.
@@ -62,8 +62,8 @@ export const NotesWidget: React.FC = () => {
   }, [persist]);
 
   const handleChange = (value: string) => {
-    // Before settings land the pad shows DEFAULT_SETTINGS' empty note. A keystroke here would
-    // mark unsaved text, so the real note would be refused on arrival and then overwritten.
+    // Paired with readOnly below: nothing may reach `pending` before the stored note lands, or
+    // the real note is refused on arrival as though it were stale.
     if (isLoading) {
       return;
     }
@@ -79,8 +79,8 @@ export const NotesWidget: React.FC = () => {
     }, SAVE_DEBOUNCE_MS);
   };
 
-  // Held in a ref so the teardown below can depend on nothing: with `flush` as a dep, any change
-  // in its identity would re-run the effect and fire its cleanup write on a live pad.
+  // Latest-ref so the listener below stays mount-only whatever `flush`'s identity does. Stable
+  // today, since updateSettings is defined once by the store.
   const flushRef = useRef(flush);
   useEffect(() => {
     flushRef.current = flush;
@@ -100,8 +100,8 @@ export const NotesWidget: React.FC = () => {
     };
   }, []);
 
-  // A pull can rewrite the note under an open pad. Adopting it over unsaved text would send back
-  // a value the user was never shown.
+  // A pull can rewrite the note under an open pad. Adopting it over unsaved text would swap the
+  // pad's contents for a value the next flush is about to overwrite anyway.
   useEffect(() => {
     if (pending.current === null) {
       setDraft(note);
@@ -129,6 +129,9 @@ export const NotesWidget: React.FC = () => {
   }, [justSaved]);
 
   const handleOpenChange = (open: boolean) => {
+    // Latches on the first deliberate open or close: once the user has driven the pad, a later
+    // settings change must never spring it back open.
+    didAutoOpen.current = true;
     setIsOpen(open);
     if (open) {
       setIsExpanded(expanded);

@@ -313,6 +313,72 @@ describe('NotesWidget', () => {
     expect(screen.queryByRole('button', { name: 'Close notes' })).not.toBeInTheDocument();
   });
 
+  it('adopts a later pull once the earlier text has saved', async () => {
+    mockStore({ note: 'first' });
+    const { rerender } = render(<NotesWidget />);
+    const pad = await openPad();
+
+    fireEvent.change(pad, { target: { value: 'mine' } });
+    await act(async () => {
+      vi.advanceTimersByTime(600);
+    });
+    mockStore({ note: 'theirs' });
+    rerender(<NotesWidget />);
+
+    expect(screen.getByRole('textbox', { name: 'Notes' })).toHaveValue('theirs');
+  });
+
+  it('opens pinned and expanded once settings finish loading', async () => {
+    mockStore({ isLoading: true });
+    const { rerender } = render(<NotesWidget />);
+    expect(screen.queryByRole('textbox', { name: 'Notes' })).not.toBeInTheDocument();
+
+    mockStore({ notesPinned: true, notesExpanded: true, note: 'left open' });
+    rerender(<NotesWidget />);
+
+    const pad = await screen.findByRole('textbox', { name: 'Notes' });
+    expect(pad).toHaveValue('left open');
+    expect(pad.className).toContain('h-[60vh]');
+    expect(screen.getByRole('button', { name: 'Unpin notes' })).toBeInTheDocument();
+  });
+
+  it('stays shut after the user pins then closes it, even once the store catches up', async () => {
+    mockStore();
+    const { rerender } = render(<NotesWidget />);
+    await openPad();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Keep notes open' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Close notes' }));
+    // The pin write lands after the close; without the latch the effect springs the pad open again.
+    mockStore({ notesPinned: true });
+    rerender(<NotesWidget />);
+
+    expect(screen.queryByRole('textbox', { name: 'Notes' })).not.toBeInTheDocument();
+  });
+
+  it('blocks typing at the DOM while settings load', async () => {
+    mockStore({ isLoading: true });
+    render(<NotesWidget />);
+
+    const pad = await openPad();
+
+    expect(pad).toHaveAttribute('readonly');
+    expect(pad).toHaveAttribute('placeholder', 'Loading…');
+  });
+
+  it('warns that an over-long note will be trimmed, and stays quiet well under', async () => {
+    mockStore({ note: 'x'.repeat(MAX_NOTE_LENGTH + 1) });
+    const { rerender } = render(<NotesWidget />);
+    await openPad();
+    expect(screen.getByText(/saving keeps the first/)).toBeInTheDocument();
+
+    mockStore({ note: 'short' });
+    rerender(<NotesWidget />);
+
+    expect(screen.queryByText(/characters/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/saving keeps the first/)).not.toBeInTheDocument();
+  });
+
   it('caps the note so one key cannot exceed a sync record', async () => {
     mockStore();
     render(<NotesWidget />);
