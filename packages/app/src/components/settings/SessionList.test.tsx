@@ -1,6 +1,7 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
+import { SyncControllerContext } from '../../sync/sync-controller';
 import { controllerWith, renderSessionList, session } from './__fixtures__/session-list.fixtures';
 import { SessionList } from './SessionList';
 
@@ -50,6 +51,30 @@ describe('SessionList', () => {
     renderSessionList(controllerWith(null));
 
     expect(await screen.findByTestId('session-list-unavailable')).toBeInTheDocument();
+  });
+
+  it('shows the unavailable line rather than a permanent skeleton if the read rejects', async () => {
+    const controller = controllerWith([session({ id: 's1' })]);
+    controller.failNext('listSessions');
+    renderSessionList(controller);
+
+    expect(await screen.findByTestId('session-list-unavailable')).toBeInTheDocument();
+  });
+
+  it('disables regeneration while one is already in flight', async () => {
+    const controller = controllerWith([session({ id: 's2', deviceName: 'desktop' })]);
+    render(
+      <SyncControllerContext.Provider value={controller}>
+        <SessionList onRegenerateRecoveryCode={vi.fn()} isRegeneratingRecoveryCode={true} />
+      </SyncControllerContext.Provider>
+    );
+
+    await userEvent.click(await screen.findByRole('button', { name: /revoke/i }));
+    const dialog = await screen.findByRole('dialog');
+
+    expect(
+      within(dialog).getByRole('button', { name: /regenerate recovery code/i })
+    ).toBeDisabled();
   });
 
   it('retries the read from the unavailable line', async () => {

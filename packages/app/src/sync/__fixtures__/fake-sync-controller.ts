@@ -24,6 +24,7 @@ type FailableMethod =
   | 'syncNow'
   | 'getDetails'
   | 'getLastCycle'
+  | 'listSessions'
   | 'revokeSession'
   | 'renameSession'
   | 'revokeOtherSessions';
@@ -383,6 +384,9 @@ export class FakeSyncController implements SyncController {
 
   async listSessions(): Promise<SyncSession[] | null> {
     this.calls.push({ method: 'listSessions', args: [] });
+    // Failable despite the never-throws contract: the panel guards against a skewed host, and
+    // that guard needs a way to be exercised.
+    this.maybeFail('listSessions');
     return this.sessionsResult;
   }
 

@@ -136,9 +136,18 @@ interface SessionListProps {
    * confirm, because a copied recovery code plus provider access could re-enrol the cut device.
    */
   onRegenerateRecoveryCode?: () => void;
+  /**
+   * Mirrors the panel's own in-flight state. Load-bearing: two regenerations upload two envelopes
+   * under two master keys and surface whichever resolved last, which need not be the one the
+   * server kept — a saved code that opens nothing.
+   */
+  isRegeneratingRecoveryCode?: boolean;
 }
 
-export const SessionList: React.FC<SessionListProps> = ({ onRegenerateRecoveryCode }) => {
+export const SessionList: React.FC<SessionListProps> = ({
+  onRegenerateRecoveryCode,
+  isRegeneratingRecoveryCode = false,
+}) => {
   const controller = useSyncController();
   const [sessions, setSessions] = useState<SyncSession[] | null>(null);
   const [hasLoaded, setHasLoaded] = useState(false);
@@ -167,17 +176,19 @@ export const SessionList: React.FC<SessionListProps> = ({ onRegenerateRecoveryCo
     const gen = readGenRef.current;
     try {
       const next = await controller.listSessions();
-      if (gen !== readGenRef.current) {
-        return;
+      if (gen === readGenRef.current) {
+        setSessions(next);
+        setHasLoaded(true);
       }
-      setSessions(next);
-      setHasLoaded(true);
     } catch (error) {
       // listSessions is contracted never to throw; a rejection means a skewed host, and leaving
-      // hasLoaded false would render the aria-hidden skeleton forever.
+      // hasLoaded false would render the aria-hidden skeleton forever. Generation-checked like the
+      // success arm, so a stale rejection can't blank a list a newer read already filled.
       logger.error('Cloud sync list devices failed', error);
-      setSessions(null);
-      setHasLoaded(true);
+      if (gen === readGenRef.current) {
+        setSessions(null);
+        setHasLoaded(true);
+      }
     }
   }, [controller]);
 
@@ -302,6 +313,7 @@ export const SessionList: React.FC<SessionListProps> = ({ onRegenerateRecoveryCo
             <button
               type="button"
               onClick={onRegenerateRecoveryCode}
+              disabled={isRegeneratingRecoveryCode}
               className={cn(GHOST_BUTTON, 'w-fit')}
             >
               Regenerate recovery code

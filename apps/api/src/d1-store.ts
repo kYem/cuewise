@@ -204,8 +204,9 @@ export class D1SyncStore implements SyncStore {
     return (res.meta.changes ?? 0) > 0;
   }
 
-  // Mirrors listSessions' filter, expiry included: the count is shown to the user, so it has to
-  // match the rows they were just looking at rather than counting long-expired ones too.
+  // Expiry-filtered like listSessions, so the count matches the rows the user was looking at.
+  // Deliberately NOT id-filtered: un-migrated rows can't be listed or addressed individually, and
+  // keying on token_hash is the only way to cut them — so this can exceed the visible count.
   async revokeOtherSessions(userId: string, currentTokenHash: SessionTokenHash): Promise<number> {
     const res = await this.db
       .prepare(

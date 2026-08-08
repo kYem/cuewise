@@ -931,7 +931,10 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
                 Regenerate recovery code
               </button>
             </div>
-            <SessionList onRegenerateRecoveryCode={handleRegenerate} />
+            <SessionList
+              onRegenerateRecoveryCode={handleRegenerate}
+              isRegeneratingRecoveryCode={isRegenerating}
+            />
           </div>
         </SettingSubgroup>
       )}
