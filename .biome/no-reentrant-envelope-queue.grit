@@ -5,10 +5,12 @@ language js(typescript)
 // Only catches direct calls — a helper that queues on its caller's behalf still slips through.
 `this.queueEnvelope($op)` as $queued where {
   $op <: contains or {
-    `this.queueEnvelope($_)`,
-    `this.refreshRecoveryEnvelope()`,
-    `this.regenerateRecoveryCode()`,
-    `this.enableSync($$$_)`
+    `this.queueEnvelope($...)`,
+    `this.refreshRecoveryEnvelope($...)`,
+    `this.regenerateRecoveryCode($...)`,
+    `this.enableSync($...)`,
+    `this.resumeEnrollWithCode($...)`,
+    `this.enrollAndActivate($...)`
   },
   register_diagnostic(span=$queued, message="Deadlock: this queued operation calls back into the envelope queue it already holds.", severity="error")
 }

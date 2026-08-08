@@ -699,7 +699,9 @@ export class SyncEngine {
       return await this.queueEnvelope(async () => {
         // Like getAccount: a signed-out device would only earn a 401 and a warning for asking.
         if ((await this.deps.sessionManager.getToken()) === null) {
-          return this.recoveryEnvelope;
+          // Same guard as the catch: a disable clears the session before it nulls the field, so
+          // the token being gone is exactly when the field can still hold the removed account's.
+          return this.accountEpoch === epoch ? this.recoveryEnvelope : null;
         }
         const present = (await this.deps.apiClient.getRecoveryEnvelope()) !== null;
         const news = await this.recordRecoveryEnvelope(present, epoch);
