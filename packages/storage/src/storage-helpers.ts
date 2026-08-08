@@ -71,11 +71,11 @@ import {
  * already surfaces that as an error state, which is recoverable where a wrong area is not.
  */
 async function getStorageArea(): Promise<'local' | 'sync'> {
-  await ensureSettingsMigrated();
-  // One batch, not the whole settings blob: this runs on nearly every storage helper call, so
-  // reading through to the blob a failed migration left behind costs no extra round trip.
+  const migrated = await ensureSettingsMigrated();
+  // The flag rides along in the batch this call already makes: it is proof a past run copied the
+  // blob out, so a realm whose own migration read just failed still answers instead of refusing.
   const stored = await getManyFromStorage(
-    [SETTINGS_SYNC_ENABLED_KEY, STORAGE_KEYS.SETTINGS, STORAGE_KEYS.SETTINGS_MIGRATED],
+    [SETTINGS_SYNC_ENABLED_KEY, STORAGE_KEYS.SETTINGS_MIGRATED],
     'local'
   );
   if (stored === null) {
@@ -92,23 +92,11 @@ async function getStorageArea(): Promise<'local' | 'sync'> {
   let syncEnabled: unknown = DEFAULT_SETTINGS.syncEnabled;
   if (perKey?.readable === true && settingsValueIsValid('syncEnabled', perKey.value)) {
     syncEnabled = perKey.value;
-  } else if (!settingsMigrationCompleted(stored)) {
-    // The blob back-stops the per-key value until the migration runs, so an unreadable blob is as
-    // blinding as an unreadable per-key entry — reading it as "never held syncEnabled" is a guess.
-    const blobEntry = stored[STORAGE_KEYS.SETTINGS];
-    if (blobEntry !== undefined && !blobEntry.readable) {
-      logger.error('The legacy settings blob is unreadable; refusing to guess the storage area');
-      throw new Error(
-        'Could not determine the storage area: the legacy settings blob is unreadable'
-      );
-    }
-    let legacy: unknown;
-    if (blobEntry?.readable === true) {
-      legacy = legacySettingsField(blobEntry.value, 'syncEnabled');
-    }
-    if (legacy !== undefined) {
-      syncEnabled = legacy;
-    }
+  } else if (!migrated && !settingsMigrationCompleted(stored)) {
+    // Absence means "never chose" only once the migration has copied the blob out; before that it
+    // means the choice is in a blob nothing reads any more, so defaulting it is still a guess.
+    logger.error('The settings migration has not run; refusing to guess the storage area');
+    throw new Error('Could not determine the storage area: the settings migration has not run');
   }
   if (syncEnabled === true) {
     return 'sync';
@@ -508,8 +496,8 @@ const SETTINGS_SYNC_ENABLED_KEY = settingsStorageKey('syncEnabled');
 
 /**
  * The migration's completion flag, read out of a batch the caller already needed. Only an
- * explicit `true` counts: absent, unreadable or any other value means the blob is still the
- * back-stop, which is the safe answer for a migration that may never have run.
+ * explicit `true` counts: absent, unreadable or any other value reads as "may never have run",
+ * which is what stops a sparse per-key entry being mistaken for a value the user never set.
  */
 function settingsMigrationCompleted(stored: StoredValues): boolean {
   const entry = stored[STORAGE_KEYS.SETTINGS_MIGRATED];
@@ -560,28 +548,6 @@ function keepReadableSettingsFields(values: Record<string, unknown>): Partial<Se
   return kept as Partial<Settings>;
 }
 
-/**
- * A field of the legacy blob, judged exactly as the migration judges it — a value it would have
- * discarded must not reach `getSettingsForSync` and be pushed to every other device.
- *
- * Read through from disk rather than cached: the blob survives only until a migration write
- * succeeds and deletes it, so two realms cannot disagree about what it still holds, and a reset
- * that deletes it is visible to both at once.
- */
-function legacySettingsField(blob: unknown, key: string): unknown {
-  if (blob === null || typeof blob !== 'object' || Array.isArray(blob)) {
-    return undefined;
-  }
-  if (!Object.hasOwn(blob, key)) {
-    return undefined;
-  }
-  const value = (blob as Record<string, unknown>)[key];
-  if (!settingsValueIsValid(key, value)) {
-    return undefined;
-  }
-  return value;
-}
-
 interface SettingsEntries {
   values: Record<string, unknown>;
   /** Stored but unreadable — not the same as never written, and never defaulted silently. */
@@ -591,34 +557,25 @@ interface SettingsEntries {
 // Nothing to seed for a key this build cannot name: it sits in its own entry, which no patch
 // rewrites. Null when the read failed, so no caller mistakes that for a stored default.
 async function readSettingsEntries(): Promise<SettingsEntries | null> {
-  await ensureSettingsMigrated();
+  // Absence means the default only once the migration has copied the blob out; before that the
+  // value may still be in a blob nothing reads, which is not the same as never written. The flag
+  // rides along so a realm whose own migration read just failed still trusts a past run's copy.
+  const migrated = await ensureSettingsMigrated();
   const stored = await getManyFromStorage(
-    [...SETTINGS_STORAGE_KEYS, STORAGE_KEYS.SETTINGS, STORAGE_KEYS.SETTINGS_MIGRATED],
+    [...SETTINGS_STORAGE_KEYS, STORAGE_KEYS.SETTINGS_MIGRATED],
     'local'
   );
   if (stored === null) {
     return null;
   }
-  // Once flagged the blob is a backup, not a source: consulting it would freeze every default it
-  // still holds a value for, which is the whole reason the per-key entries are sparse.
-  const migrated = settingsMigrationCompleted(stored);
-  const blobEntry = stored[STORAGE_KEYS.SETTINGS];
-  // An unreadable blob blinds every key it would have back-stopped: those keys have no per-key
-  // entry, so "absent" here would mean the default, which is a guess about a value that is there.
-  const blobUnreadable = !migrated && blobEntry !== undefined && !blobEntry.readable;
-  let blob: unknown;
-  if (!migrated && blobEntry?.readable === true) {
-    blob = blobEntry.value;
-  }
+  const uncopied = !migrated && !settingsMigrationCompleted(stored);
   const values: Record<string, unknown> = {};
   const unreadable: string[] = [];
   for (const key of SETTINGS_KEYS) {
     const entry = stored[settingsStorageKey(key)];
     if (entry === undefined) {
-      if (blobUnreadable) {
+      if (uncopied) {
         unreadable.push(key);
-      } else {
-        values[key] = legacySettingsField(blob, key);
       }
     } else if (entry.readable) {
       values[key] = entry.value;
@@ -752,15 +709,11 @@ export async function clearSettings(): Promise<boolean> {
 
 /**
  * The legacy blob, with the cases the migration has to tell apart: never stored, stored but not
- * readable as settings, and readable. Null when the read itself failed.
+ * readable as settings, and readable.
  */
 type LegacyBlobEntry = { stored: false } | { stored: true; blob: Record<string, unknown> | null };
 
-async function readLegacyBlobEntry(): Promise<LegacyBlobEntry | null> {
-  const stored = await getManyFromStorage([STORAGE_KEYS.SETTINGS], 'local');
-  if (stored === null) {
-    return null;
-  }
+function legacyBlobEntry(stored: StoredValues): LegacyBlobEntry {
   const entry = stored[STORAGE_KEYS.SETTINGS];
   if (entry === undefined) {
     return { stored: false };
@@ -775,7 +728,17 @@ async function readLegacyBlobEntry(): Promise<LegacyBlobEntry | null> {
   return { stored: true, blob: value as Record<string, unknown> };
 }
 
-/** Written last, and only after the per-key entries land: it retires the blob as a source. */
+/**
+ * After the flag, never before: a blob removed with no flag would leave a device with neither a
+ * source nor a record of having migrated. A failed removal only strands bytes no read consults.
+ */
+async function deleteLegacyBlob(): Promise<void> {
+  if (!(await removeFromStorage(STORAGE_KEYS.SETTINGS, 'local'))) {
+    logger.error('Could not delete the migrated settings blob; it is inert but still on disk');
+  }
+}
+
+/** Written only after the per-key entries land: it is what retires the blob as a source. */
 async function markSettingsMigrated(): Promise<boolean> {
   const result = await setInStorage(STORAGE_KEYS.SETTINGS_MIGRATED, true, 'local');
   if (!result.success) {
@@ -786,35 +749,46 @@ async function markSettingsMigrated(): Promise<boolean> {
 }
 
 /**
- * One-time copy from the legacy settings blob into per-key entries. Idempotent and safe to run in
- * more than one realm: it fills only gaps, so a value a sync pull already wrote is never clobbered,
- * and it writes nothing at all through the store, so no key is ever marked dirty for sync.
+ * One-time copy from the legacy settings blob into per-key entries, followed by deleting the blob.
+ * Idempotent and safe to run in more than one realm: it fills only gaps, so a value a sync pull
+ * already wrote is never clobbered, and it writes nothing at all through the store, so no key is
+ * ever marked dirty for sync.
  *
- * The blob is kept, not deleted — the flag is what retires it as a source, so clearing the flag
- * puts every read back on the blob. A later release deletes it once nobody needs the rollback.
+ * The flag alone does not end the run: the release that introduced it kept the blob as a rollback,
+ * so an already-flagged device still has one to collect, and this is the only path that reaches it.
  *
- * Resolves false when the move has to be retried; the read-through keeps serving the blob
- * meanwhile, so an incomplete migration costs nothing but a later attempt.
+ * Resolves false only while values are still uncopied. Nothing back-stops the per-key entries
+ * meanwhile, so every read refuses rather than mistaking an uncopied value for one never set.
  */
 export async function migrateLegacySettings(): Promise<boolean> {
-  const flag = await getManyFromStorage([STORAGE_KEYS.SETTINGS_MIGRATED], 'local');
-  if (flag !== null && settingsMigrationCompleted(flag)) {
-    return true;
-  }
-
-  const legacy = await readLegacyBlobEntry();
-  if (legacy === null) {
+  const stored = await getManyFromStorage(
+    [STORAGE_KEYS.SETTINGS_MIGRATED, STORAGE_KEYS.SETTINGS],
+    'local'
+  );
+  if (stored === null) {
     logger.error('Could not read the legacy settings blob; the migration will run again');
     return false;
   }
+  const legacy = legacyBlobEntry(stored);
+  if (settingsMigrationCompleted(stored)) {
+    if (legacy.stored) {
+      await deleteLegacyBlob();
+    }
+    return true;
+  }
   if (!legacy.stored) {
-    // Fresh install: nothing to copy, and the flag is what stops this repeating on every read.
-    return markSettingsMigrated();
+    // Fresh install: nothing was left uncopied, so an absent per-key entry already means the
+    // default. The flag only stops this repeating; a write that failed must not make reads refuse.
+    await markSettingsMigrated();
+    return true;
   }
   if (legacy.blob === null) {
-    // Flagging here would retire a back-stop this build never copied a single value out of.
-    logger.error('The legacy settings blob is unreadable; leaving it unmigrated');
-    return false;
+    // Unreadable is JSON.parse throwing, which no retry fixes — refusing every read would hold the
+    // app hostage to values already lost. Flag so reads default, but keep the bytes: unparseable to
+    // this build is not unsalvageable, and they are the only copy left.
+    logger.error('The legacy settings blob is unreadable; defaulting its values and keeping it');
+    await markSettingsMigrated();
+    return true;
   }
   const blob = legacy.blob;
 
@@ -852,13 +826,12 @@ export async function migrateLegacySettings(): Promise<boolean> {
     patch[storageKey] = value;
   }
 
-  // Before the flag, never after: the flag is what stops the read-through consulting the blob,
+  // Before the flag, never after: the flag is what lets a read treat an absent key as a default,
   // so a flag that outran its entries would default every key the write never landed.
   if (Object.keys(patch).length > 0) {
     const result = await setManyInStorage(patch, 'local');
     if (!result.success) {
-      // Unflagged, so every settings read still falls back through the blob, and `syncEnabled`
-      // decides which area the rest of the data lives in.
+      // Unflagged, so every read refuses instead of serving defaults for values still in the blob.
       logger.error('Settings migration write failed; leaving it unflagged', result.error);
       return false;
     }
@@ -871,17 +844,25 @@ export async function migrateLegacySettings(): Promise<boolean> {
     });
   }
 
-  return markSettingsMigrated();
+  // The copy landed, so an absent per-key entry already means the default whether or not the flag
+  // stored. Refusing every read over the flag alone would wedge a device whose storage is full.
+  if (await markSettingsMigrated()) {
+    await deleteLegacyBlob();
+  }
+  return true;
 }
 
-let settingsMigration: Promise<void> | null = null;
+let settingsMigration: Promise<boolean> | null = null;
 
 /**
  * Runs the legacy-blob migration once per realm; every settings read awaits it, so no
  * caller has to order it. migrateLegacySettings must never call this — it reads and writes with
  * an explicit 'local' area rather than through getStorageArea, which keeps that from recursing.
+ *
+ * Resolves whether the move completed, because that is what tells a read whether an absent
+ * per-key entry is a value the user never set or one still sitting in an uncopied blob.
  */
-export function ensureSettingsMigrated(): Promise<void> {
+export function ensureSettingsMigrated(): Promise<boolean> {
   if (settingsMigration === null) {
     // Neither an incomplete run nor a rejection is memoized: getStorageArea awaits this on nearly
     // every storage call, so a cached failure would freeze the migration for the whole session.
@@ -890,6 +871,7 @@ export function ensureSettingsMigrated(): Promise<void> {
         if (!completed) {
           settingsMigration = null;
         }
+        return completed;
       })
       .catch((error: unknown) => {
         settingsMigration = null;
