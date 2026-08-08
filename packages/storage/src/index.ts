@@ -43,6 +43,7 @@ export {
   getSettings,
   getSettingsForSync,
   getStorageUsage,
+  getStoredSettingsKeys,
   getWeatherState,
   getYoutubeProgress,
   isCustomQuote,

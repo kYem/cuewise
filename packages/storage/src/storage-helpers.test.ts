@@ -26,6 +26,7 @@ import {
   getSettings,
   getSettingsForSync,
   getStorageUsage,
+  getStoredSettingsKeys,
   isCustomQuote,
   migrateLegacySettings,
   readLegacySettingsBlob,
@@ -258,6 +259,15 @@ describe('settings', () => {
 
     expect(result.success).toBe(true);
     expect(areas.local[settingsStorageKey('toString')]).toBe('from-a-newer-build');
+  });
+
+  it('getStoredSettingsKeys answers only the keys explicitly written, never defaults', async () => {
+    const { store } = recordingStore();
+    configurePlatform({ storage: store });
+
+    await setSettingsPatch({ theme: 'dark' });
+
+    await expect(getStoredSettingsKeys()).resolves.toEqual(['theme']);
   });
 
   it('clearSettings removes every settings key so defaults apply again', async () => {

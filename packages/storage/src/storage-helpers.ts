@@ -934,6 +934,18 @@ export async function getCollectionsRaw(): Promise<QuoteCollection[]> {
   return getListRaw<QuoteCollection>(STORAGE_KEYS.COLLECTIONS, await getStorageArea());
 }
 
+/**
+ * The keys the user explicitly wrote — never the defaults standing in for the rest. Storage is
+ * sparse per-key, so this is exactly what an absent entry already distinguishes.
+ */
+export async function getStoredSettingsKeys(): Promise<string[]> {
+  const entries = await readSettingsEntries();
+  if (entries === null) {
+    throw new Error('Could not read the stored settings keys: the settings read failed');
+  }
+  return Object.keys(entries.values).filter((key) => entries.values[key] !== undefined);
+}
+
 /** Defaults fill only what was never written; nothing is defaulted for being unreadable. */
 export async function getSettingsForSync(): Promise<Settings> {
   const entries = await readSettingsEntries();

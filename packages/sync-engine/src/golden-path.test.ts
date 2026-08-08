@@ -286,11 +286,8 @@ describe('settings: per-key sync round-trips a shared key but excludes device-lo
   it('propagates a shared setting to the other device but never a device-local one', async () => {
     const server = new FakeSyncServer();
 
-    // A enables first with the higher clock offset. The settings binding backfills every
-    // non-device-local key from DEFAULT_SETTINGS on enable (even unset ones), so B (enrolling
-    // second) needs a LOWER offset than A's already-pushed defaults — otherwise B's own backfill
-    // would numerically outrank A's incoming records and B would never adopt (or clock-catch-up
-    // to) anything A sends, including its later theme edit.
+    // Offsets are arbitrary now: the backfill claims only stored keys, so a fresh enroll pushes
+    // no settings and adopts whatever A sends. The claims-only-stored-keys suite below proves it.
     const deviceA = createDevice(server, makeClock(5_000_000));
     useStorage(deviceA);
     await deviceA.engine.enableSync('dev', 'devA-cred', 'Device A');
@@ -336,5 +333,33 @@ describe('settings: per-key sync round-trips a shared key but excludes device-lo
     expect(bSettingsAfterDeviceLocalSync.logLevel).toBe('error');
     expect(bSettingsAfterDeviceLocalSync.focusedGoalId).toBe(null);
     expect(bSettingsAfterDeviceLocalSync.hasSeenOnboarding).toBe(false);
+  });
+});
+
+describe('settings: an enrolling device claims only the keys it explicitly wrote', () => {
+  it("a later-clock enroll adopts the first device's choice instead of reverting it", async () => {
+    const server = new FakeSyncServer();
+
+    const deviceA = createDevice(server, makeClock(1_000_000));
+    useStorage(deviceA);
+    await deviceA.engine.enableSync('dev', 'devA-cred', 'Device A');
+    const recoveryCode = deviceA.onRecoveryCode.mock.calls[0][0] as string;
+    await setSettingsPatch({ theme: 'dark' });
+    await deviceA.engine.markMutated('settings', 'theme');
+    await deviceA.engine.syncNow();
+
+    // B enrolls second with the HIGHER clock: a backfill claiming never-written defaults would
+    // outrank A's older explicit choice under LWW and revert it account-wide.
+    const deviceB = createDevice(server, makeClock(5_000_000));
+    useStorage(deviceB);
+    await deviceB.engine.enableSync('dev', 'devB-cred', 'Device B', { recoveryCode });
+    await deviceB.engine.syncNow();
+    const bSettings = await getSettings();
+    expect(bSettings.theme).toBe('dark');
+
+    useStorage(deviceA);
+    await deviceA.engine.syncNow();
+    const aSettings = await getSettings();
+    expect(aSettings.theme).toBe('dark');
   });
 });

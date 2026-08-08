@@ -5,6 +5,7 @@ import {
   getQuotesRaw,
   getRemindersRaw,
   getSettingsForSync,
+  getStoredSettingsKeys,
   type StorageResult,
   setCollectionsRaw,
   setGoalsRaw,
@@ -18,6 +19,8 @@ export interface CollectionBinding {
   name: string;
   readAll(): Promise<Record<string, unknown>>;
   writeOne(entityId: string, entity: unknown | null): Promise<StorageResult>;
+  /** Ids the enroll backfill may claim authorship of; defaults to every id readAll answers. */
+  readBackfillIds?(): Promise<string[]>;
 }
 
 // Re-exported so existing consumers (cycle.ts, index.ts, tests) keep importing from here — the
@@ -75,12 +78,20 @@ interface SettingsEntity {
 function settingsBinding(): CollectionBinding {
   return {
     name: 'settings',
+    // Merges defaults on purpose: a key a reset just cleared is dirty, and its push must carry
+    // the default the reset chose.
     async readAll() {
       const settings = await getSettingsForSync();
       const entries = Object.entries(settings).filter(
         ([key]) => !DEVICE_LOCAL_SETTINGS_KEYS.includes(key)
       );
       return Object.fromEntries(entries.map(([key, value]) => [key, { key, value }]));
+    },
+    // Only keys explicitly stored here: claiming the merged defaults would stamp them dirty at
+    // enroll-time HLC, outranking every peer's older real choices under LWW.
+    async readBackfillIds() {
+      const stored = await getStoredSettingsKeys();
+      return stored.filter((key) => !DEVICE_LOCAL_SETTINGS_KEYS.includes(key));
     },
     async writeOne(entityId, entity) {
       // Settings keys aren't deletable, and device-local keys never accept a synced write.
