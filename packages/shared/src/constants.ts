@@ -114,6 +114,9 @@ export const DEFAULT_SETTINGS: Settings = {
   conceptNudgeLastShownAt: null,
 };
 
+/** Device-name bound, in UTF-8 BYTES — the server measures bytes, so the UI must too. */
+export const MAX_DEVICE_NAME_BYTES = 100;
+
 /** Chrome Web Store reviews tab — where the in-app prompt sends users. */
 export const REVIEW_URL =
   'https://chromewebstore.google.com/detail/cuewise/abjkbnhoepcnmbabflkedbapbldnpkbf/reviews';

@@ -52,6 +52,29 @@ describe('SessionList', () => {
     expect(await screen.findByTestId('session-list-unavailable')).toBeInTheDocument();
   });
 
+  it('retries the read from the unavailable line', async () => {
+    const controller = controllerWith(null);
+    renderSessionList(controller);
+
+    await userEvent.click(await screen.findByRole('button', { name: /try again/i }));
+
+    expect(controller.calls.filter((c) => c.method === 'listSessions')).toHaveLength(2);
+  });
+
+  it('rejects a rename whose UTF-8 length exceeds the bound, without calling the server', async () => {
+    const controller = controllerWith([session({ id: 's1', deviceName: 'laptop' })]);
+    renderSessionList(controller);
+
+    await userEvent.click(await screen.findByTestId('session-name-s1'));
+    const input = screen.getByRole('textbox');
+    await userEvent.clear(input);
+    // 40 CJK characters: 120 UTF-8 bytes but only 40 code units, so a code-unit cap would miss it.
+    await userEvent.type(input, '設'.repeat(40));
+    await userEvent.keyboard('{Enter}');
+
+    expect(controller.calls.filter((c) => c.method === 'renameSession')).toHaveLength(0);
+  });
+
   // Mounting during 'connecting' would otherwise read before a session exists and pin the
   // unavailable line for the rest of the mount.
   it('waits for sync to be up before reading, then reads on the transition', async () => {

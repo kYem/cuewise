@@ -1,9 +1,9 @@
 import type { SyncSession } from '@cuewise/shared';
-import { logger } from '@cuewise/shared';
+import { logger, MAX_DEVICE_NAME_BYTES } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
 import { Check, Pencil, X } from 'lucide-react';
 import type React from 'react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useToastStore } from '../../stores/toast-store';
 import { type SyncUiStatus, useSyncController } from '../../sync/sync-controller';
 import { formatMillisAgo } from '../../utils/reminder-date-utils';
@@ -50,10 +50,17 @@ const SessionRow: React.FC<SessionRowProps> = ({ session, onRename, onRevoke }) 
 
   const commit = async () => {
     const next = draft.trim();
-    setIsEditing(false);
     if (next.length === 0 || next === session.deviceName) {
+      setIsEditing(false);
       return;
     }
+    // Bytes, matching the server's own measure — a 40-character CJK name is over the bound while
+    // being well under 100 code units, and would otherwise 400 and read as a transient failure.
+    if (new TextEncoder().encode(next).length > MAX_DEVICE_NAME_BYTES) {
+      useToastStore.getState().warning('That device name is too long.');
+      return;
+    }
+    setIsEditing(false);
     await onRename(session.id, next);
   };
 
@@ -66,9 +73,6 @@ const SessionRow: React.FC<SessionRowProps> = ({ session, onRename, onRevoke }) 
               // biome-ignore lint/a11y/noAutofocus: the input only exists after a deliberate click
               autoFocus
               aria-label="Device name"
-              // Matches the server's MAX_DEVICE_NAME_LENGTH, so the one deterministic rename
-              // failure can't happen and be reported as "please try again".
-              maxLength={100}
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => {
@@ -142,6 +146,7 @@ export const SessionList: React.FC<SessionListProps> = ({ onRegenerateRecoveryCo
   const [isRevokingOthers, setIsRevokingOthers] = useState(false);
   const [isConfirmingRevokeOthers, setIsConfirmingRevokeOthers] = useState(false);
   const [status, setStatus] = useState<SyncUiStatus>('off');
+  const readGenRef = useRef(0);
 
   useEffect(() => {
     if (controller === null) {
@@ -155,8 +160,17 @@ export const SessionList: React.FC<SessionListProps> = ({ onRegenerateRecoveryCo
     if (controller === null) {
       return;
     }
+    // Generation guard, like the panel's details fetch: an action's refresh and a status-driven
+    // one can be in flight together, and without this the older resolution wins and can put a
+    // just-revoked device back on screen after the success toast.
+    readGenRef.current += 1;
+    const gen = readGenRef.current;
     try {
-      setSessions(await controller.listSessions());
+      const next = await controller.listSessions();
+      if (gen !== readGenRef.current) {
+        return;
+      }
+      setSessions(next);
       setHasLoaded(true);
     } catch (error) {
       // listSessions is contracted never to throw; a rejection means a skewed host, and leaving
@@ -237,9 +251,14 @@ export const SessionList: React.FC<SessionListProps> = ({ onRegenerateRecoveryCo
   }
 
   if (sessions === null) {
+    // A retry affordance, not just a message: status stays 'active' after a transient miss, so
+    // nothing would re-trigger the read and the panel would stay stuck until it remounts.
     return (
-      <div data-testid="session-list-unavailable" className={META}>
-        Couldn't load your signed-in devices.
+      <div data-testid="session-list-unavailable" className="flex items-center gap-2">
+        <span className={META}>Couldn't load your signed-in devices.</span>
+        <button type="button" className={GHOST_BUTTON} onClick={() => void refresh()}>
+          Try again
+        </button>
       </div>
     );
   }

@@ -88,6 +88,23 @@ describe('SyncStore session management', () => {
     expect(await store.lookupSession(stale)).toBeNull();
   });
 
+  // Rows a pre-0007 Worker wrote have no addressable handle, so listing them would offer a
+  // Revoke that 404s. revoke-others still cuts them.
+  it('omits un-migrated rows that carry no id', async () => {
+    const store = new D1SyncStore(env.DB);
+    const userId = await newUser(store, `u-${crypto.randomUUID()}`);
+    const mine = await store.createSession(userId, 'laptop');
+    await env.DB.prepare(
+      "INSERT INTO tokens (token_hash, user_id, device_name, expires_at, created_at, id) VALUES (?, ?, 'legacy', 9e12, 0, '')"
+    )
+      .bind(`legacy-${crypto.randomUUID()}`, userId)
+      .run();
+
+    const sessions = await store.listSessions(userId, await hashSessionToken(mine));
+
+    expect(sessions.map((s) => s.deviceName)).toEqual(['laptop']);
+  });
+
   it('does not revoke a session belonging to another user', async () => {
     const store = new D1SyncStore(env.DB);
     const victim = await newUser(store, `u-${crypto.randomUUID()}`);
