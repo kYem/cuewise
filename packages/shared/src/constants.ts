@@ -33,6 +33,11 @@ export const ALL_QUOTE_CATEGORIES: QuoteCategory[] = Object.keys(
   QUOTE_CATEGORIES
 ) as QuoteCategory[];
 
+// One settings key is one sync record, and the server rejects a record over 64KB of ciphertext
+// with a non-retryable 422 — which would wedge every outbound push, not just this key. Sized so
+// even 4-byte characters stay well under that after sealing and base64.
+export const MAX_NOTE_LENGTH = 8000;
+
 // Default settings
 export const DEFAULT_SETTINGS: Settings = {
   pomodoroWorkDuration: 25,
@@ -64,7 +69,7 @@ export const DEFAULT_SETTINGS: Settings = {
   showThemeSwitcher: false,
   showClock: false, // Clock hidden by default for simpler UI
   showQuickLinks: true, // Quick-link tiles shown by default
-  showNotes: true, // Scratchpad pill shown by default; near-invisible until written in
+  showNotes: true, // Scratchpad tile shown by default
   note: '',
   notesExpanded: false,
   showWeather: false, // Opt-in: the only widget that sends where you are off the device

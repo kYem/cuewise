@@ -427,8 +427,8 @@ export interface Settings {
   showClock: boolean; // Show clock and date on home page (default false)
   showQuickLinks: boolean; // Show quick-link shortcut tiles top-left on home page (default true)
   showNotes: boolean; // Show the scratchpad pill top-left on home page (default true)
-  // A settings key, not its own collection: per-key writes keep the highest-churn field in the app
-  // clear of the whole-array rewrite the array bindings still do.
+  // A settings key, not a collection: it is written per-key, so a burst of typing never rewrites
+  // a list. Capped at MAX_NOTE_LENGTH — one settings key is one sync record.
   note: string; // The scratchpad's contents (default '')
   notesExpanded: boolean; // Scratchpad opens at the larger size (default false)
   showWeather: boolean; // Show the weather chip on the new tab (default false)

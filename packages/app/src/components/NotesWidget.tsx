@@ -1,10 +1,9 @@
-import { logger } from '@cuewise/shared';
+import { MAX_NOTE_LENGTH } from '@cuewise/shared';
 import { cn, Popover, PopoverContent, PopoverTrigger } from '@cuewise/ui';
 import { Maximize2, Minimize2, NotebookPen } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSettingsStore } from '../stores/settings-store';
-import { useToastStore } from '../stores/toast-store';
 
 const SAVE_DEBOUNCE_MS = 500;
 const SAVED_BADGE_MS = 1500;
@@ -31,12 +30,14 @@ export const NotesWidget: React.FC = () => {
     if (value === null) {
       return;
     }
-    pending.current = null;
     const ok = await updateSettings({ note: value });
+    // Left pending on failure so the next flush or keystroke retries it; updateSettings has
+    // already told the user. Cleared only if no newer keystroke replaced it meanwhile.
     if (!ok) {
-      logger.error('Failed to save the scratchpad note');
-      useToastStore.getState().error("Couldn't save your note");
       return;
+    }
+    if (pending.current === value) {
+      pending.current = null;
     }
     setJustSaved(true);
   }, [updateSettings]);
@@ -76,6 +77,14 @@ export const NotesWidget: React.FC = () => {
     };
   }, [flush]);
 
+  // A pull can rewrite the note under an open pad. Adopt it unless this device has unsaved text,
+  // or the next keystroke writes a value the user was never shown over the one they were sent.
+  useEffect(() => {
+    if (pending.current === null) {
+      setDraft(note);
+    }
+  }, [note]);
+
   useEffect(() => {
     if (!justSaved) {
       return;
@@ -87,7 +96,10 @@ export const NotesWidget: React.FC = () => {
   const handleOpenChange = (open: boolean) => {
     setIsOpen(open);
     if (open) {
-      setDraft(note);
+      // Unsaved text outranks the stored value, which is older by definition.
+      if (pending.current === null) {
+        setDraft(note);
+      }
       setIsExpanded(expanded);
       return;
     }
@@ -119,14 +131,8 @@ export const NotesWidget: React.FC = () => {
         <div className="flex items-center justify-between px-3 py-2 border-b border-border">
           <span className="text-sm font-medium text-primary">Notes</span>
           <div className="flex items-center gap-2">
-            <span
-              aria-live="polite"
-              className={cn(
-                'text-xs text-secondary transition-opacity',
-                justSaved ? 'opacity-100' : 'opacity-0'
-              )}
-            >
-              Saved
+            <span aria-live="polite" className="text-xs text-secondary">
+              {justSaved ? 'Saved' : ''}
             </span>
             <button
               type="button"
@@ -148,6 +154,7 @@ export const NotesWidget: React.FC = () => {
           value={draft}
           onChange={(event) => handleChange(event.target.value)}
           placeholder="Jot something down…"
+          maxLength={MAX_NOTE_LENGTH}
           className={cn(
             'w-full resize-none bg-transparent px-3 py-2.5 text-sm text-primary placeholder:text-secondary focus:outline-none',
             isExpanded ? 'h-[60vh]' : 'h-40'
