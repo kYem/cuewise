@@ -34,7 +34,8 @@ function isDevAuthEnabled(env: Env): boolean {
   return true;
 }
 
-const MAX_DEVICE_NAME_LENGTH = 100;
+// Exported so PATCH /v1/sessions/:id enforces the same bound as enrol rather than a second literal.
+export const MAX_DEVICE_NAME_LENGTH = 100;
 // Real ID tokens run 1-2 KB and the bounce one-time codes are 43 chars; this just caps abuse.
 const MAX_CREDENTIAL_LENGTH = 8192;
 // RFC 7636 §4.1: a PKCE code_verifier is 43-128 characters from the unreserved set
