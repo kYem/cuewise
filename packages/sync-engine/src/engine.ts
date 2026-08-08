@@ -1182,8 +1182,9 @@ export class SyncEngine {
   // first-enable migration over an existing library does O(collections) meta saves, not O(entities).
   private async backfillDirty(): Promise<void> {
     for (const binding of this.bindings) {
-      const all = await binding.readAll();
-      const entityIds = Object.keys(all);
+      const entityIds = binding.readBackfillIds
+        ? await binding.readBackfillIds()
+        : Object.keys(await binding.readAll());
       if (entityIds.length === 0) {
         continue;
       }

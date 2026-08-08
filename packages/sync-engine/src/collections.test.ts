@@ -11,6 +11,7 @@ import {
   setManyInStorage,
   setQuotesRaw,
   setRemindersRaw,
+  setSettingsPatch,
   settingsStorageKey,
 } from '@cuewise/storage';
 import { goalFactory } from '@cuewise/test-utils/factories';
@@ -91,6 +92,12 @@ describe('settings binding', () => {
     expect(result.cloudSyncEnabled).toBeUndefined();
     expect(result.syncEnabled).toBeUndefined();
     expect(result.theme).toEqual({ key: 'theme', value: DEFAULT_SETTINGS.theme });
+  });
+
+  it('readBackfillIds claims stored keys but never device-local or unwritten ones', async () => {
+    await setSettingsPatch({ theme: 'dark', syncEnabled: true });
+
+    await expect(settingsBinding().readBackfillIds?.()).resolves.toEqual(['theme']);
   });
 
   // 'dark', not 'forest': the latter is a colorTheme, so it would assert the validator.

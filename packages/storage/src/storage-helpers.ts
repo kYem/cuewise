@@ -944,6 +944,27 @@ export async function getCollectionsRaw(): Promise<QuoteCollection[]> {
   return getListRaw<QuoteCollection>(STORAGE_KEYS.COLLECTIONS, await getStorageArea());
 }
 
+/**
+ * The keys the user explicitly wrote — never the defaults standing in for the rest. Refuses on
+ * unreadable fields like getSettingsForSync: an uncopied migration reports absent keys there,
+ * and answering the partial set would enroll without ever claiming the blob-held choices.
+ */
+export async function getStoredSettingsKeys(): Promise<string[]> {
+  const entries = await readSettingsEntries();
+  if (entries === null) {
+    throw new Error('Could not read the stored settings keys: the settings read failed');
+  }
+  if (entries.unreadable.length > 0) {
+    logger.error('Refusing to answer the stored settings keys with unreadable fields', {
+      fields: entries.unreadable,
+    });
+    throw new Error(
+      `Could not read the stored settings keys: ${entries.unreadable.join(', ')} unreadable`
+    );
+  }
+  return Object.keys(entries.values).filter((key) => entries.values[key] !== undefined);
+}
+
 /** Defaults fill only what was never written; nothing is defaulted for being unreadable. */
 export async function getSettingsForSync(): Promise<Settings> {
   const entries = await readSettingsEntries();
