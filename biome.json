@@ -95,5 +95,6 @@
         }
       }
     }
-  ]
+  ],
+  "plugins": ["./.biome/no-reentrant-envelope-queue.grit"]
 }

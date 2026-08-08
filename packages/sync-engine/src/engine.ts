@@ -726,8 +726,8 @@ export class SyncEngine {
 
   /**
    * Serialises every envelope read and write: unqueued, a refresh's GET and the record it drives
-   * straddle a Regenerate and persist the "absent" that PUT just fixed. Never call it from inside
-   * a queued op — that deadlocks.
+   * straddle a Regenerate and persist the "absent" that PUT just fixed. Not reentrant — enforced by
+   * `.biome/no-reentrant-envelope-queue.grit`, which only sees direct calls.
    */
   private queueEnvelope<T>(op: () => Promise<T>): Promise<T> {
     const run = this.envelopeQueue.then(op, op);

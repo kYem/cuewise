@@ -1,0 +1,14 @@
+language js(typescript)
+
+// A queued operation that calls back into the envelope queue waits on a lock it already holds.
+// Nothing recovers it: the queue stops, the recovery-code banner goes stale and Regenerate hangs.
+// Only catches direct calls — a helper that queues on its caller's behalf still slips through.
+`this.queueEnvelope($op)` as $queued where {
+  $op <: contains or {
+    `this.queueEnvelope($_)`,
+    `this.refreshRecoveryEnvelope()`,
+    `this.regenerateRecoveryCode()`,
+    `this.enableSync($$$_)`
+  },
+  register_diagnostic(span=$queued, message="Deadlock: this queued operation calls back into the envelope queue it already holds.", severity="error")
+}
