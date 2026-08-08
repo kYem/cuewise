@@ -132,6 +132,11 @@ function recordingStore(initial: Partial<Record<StorageArea, Record<string, unkn
   return { store, areas };
 }
 
+const quotaExceeded = {
+  success: false as const,
+  error: { type: 'quota_exceeded' as const, message: 'Storage full' },
+};
+
 describe('custom background', () => {
   it('returns null when the user has not set one', async () => {
     const { store } = recordingStore();
@@ -285,10 +290,7 @@ describe('settings', () => {
     configurePlatform({
       storage: {
         ...store,
-        setMany: async () => ({
-          success: false as const,
-          error: { type: 'quota_exceeded' as const, message: 'Storage full' },
-        }),
+        setMany: async () => quotaExceeded,
       },
     });
     await setInStorage(STORAGE_KEYS.SETTINGS, legacyBlob({ theme: 'dark' }), 'local');
@@ -407,10 +409,7 @@ describe('migrateLegacySettings', () => {
     configurePlatform({
       storage: {
         ...store,
-        setMany: async () => ({
-          success: false as const,
-          error: { type: 'quota_exceeded' as const, message: 'Storage full' },
-        }),
+        setMany: async () => quotaExceeded,
       },
     });
     const blob = legacyBlob({ theme: 'dark' });
@@ -481,16 +480,39 @@ describe('migrateLegacySettings', () => {
     configurePlatform({
       storage: {
         ...store,
-        set: async () => ({
-          success: false as const,
-          error: { type: 'quota_exceeded' as const, message: 'Storage full' },
-        }),
+        set: async () => quotaExceeded,
       },
     });
     vi.spyOn(logger, 'error').mockImplementation(() => {});
 
     await expect(readSettings()).resolves.toMatchObject({ ok: true });
     await expect(getGoals()).resolves.toEqual([]);
+  });
+
+  // Storage full enough to refuse the flag is storage the copy may still have fit into, and the
+  // copy is what decides whether an absent per-key entry is a default.
+  it('keeps the blob for a later run when the flag will not store', async () => {
+    const { store, areas } = recordingStore({
+      local: { [STORAGE_KEYS.SETTINGS]: legacyBlob({ theme: 'dark' }) },
+    });
+    configurePlatform({ storage: { ...store, set: async () => quotaExceeded } });
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await expect(migrateLegacySettings()).resolves.toBe(true);
+
+    expect(areas.local[settingsStorageKey('theme')]).toBe('dark');
+    expect(areas.local[STORAGE_KEYS.SETTINGS]).toBeDefined();
+  });
+
+  it('lets reads default when the flag will not store after a copy that landed', async () => {
+    const { store } = recordingStore({
+      local: { [STORAGE_KEYS.SETTINGS]: legacyBlob({ theme: 'dark' }) },
+    });
+    configurePlatform({ storage: { ...store, set: async () => quotaExceeded } });
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await expect(getGoals()).resolves.toEqual([]);
+    await expect(getSettings()).resolves.toMatchObject({ theme: 'dark' });
   });
 
   it('does not copy the blob again once flagged', async () => {
@@ -531,10 +553,7 @@ describe('migrateLegacySettings', () => {
         ...store,
         setMany: async (entries: Record<string, unknown>, area: StorageArea) => {
           if (writesFail) {
-            return {
-              success: false as const,
-              error: { type: 'quota_exceeded' as const, message: 'Storage full' },
-            };
+            return quotaExceeded;
           }
           return store.setMany(entries, area);
         },
@@ -650,6 +669,51 @@ describe('migrateLegacySettings', () => {
   });
 });
 
+// The flag on disk is proof a past run copied the blob out, so a realm that could not re-read it
+// has nothing left uncopied and must not refuse.
+describe('a realm whose own migration read failed', () => {
+  function cannotReadTheBlob(
+    initial: Partial<Record<StorageArea, Record<string, unknown>>>
+  ): KeyValueStore {
+    const { store } = recordingStore(initial);
+    return {
+      ...store,
+      getMany: async (keys: string[], area: StorageArea) => {
+        if (keys.includes(STORAGE_KEYS.SETTINGS)) {
+          return null;
+        }
+        return store.getMany(keys, area);
+      },
+    };
+  }
+
+  it('answers the storage area from the flag already on disk', async () => {
+    configurePlatform({
+      storage: cannotReadTheBlob({ local: { [STORAGE_KEYS.SETTINGS_MIGRATED]: true } }),
+    });
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await expect(getGoals()).resolves.toEqual([]);
+  });
+
+  it('reads settings rather than calling every absent key unreadable', async () => {
+    configurePlatform({
+      storage: cannotReadTheBlob({
+        local: {
+          [STORAGE_KEYS.SETTINGS_MIGRATED]: true,
+          [settingsStorageKey('colorTheme')]: 'forest',
+        },
+      }),
+    });
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await expect(readSettings()).resolves.toMatchObject({
+      ok: true,
+      settings: expect.objectContaining({ colorTheme: 'forest' }),
+    });
+  });
+});
+
 // The blob stays on disk when the write fails, and nothing reads it, so those keys have no source
 // at all — including `syncEnabled`, which decides the area every other collection lives in.
 describe('a migration whose write failed', () => {
@@ -659,10 +723,7 @@ describe('a migration whose write failed', () => {
     const { store } = recordingStore(initial);
     return {
       ...store,
-      setMany: async () => ({
-        success: false as const,
-        error: { type: 'quota_exceeded' as const, message: 'Storage full' },
-      }),
+      setMany: async () => quotaExceeded,
     };
   }
 
@@ -855,10 +916,7 @@ describe('ensureSettingsMigrated', () => {
         ...store,
         setMany: async (entries: Record<string, unknown>, area: StorageArea) => {
           if (writesFail) {
-            return {
-              success: false as const,
-              error: { type: 'quota_exceeded' as const, message: 'Storage full' },
-            };
+            return quotaExceeded;
           }
           return store.setMany(entries, area);
         },
