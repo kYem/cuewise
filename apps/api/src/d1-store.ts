@@ -10,6 +10,7 @@ import {
 import {
   type AuthCodePayload,
   type Identity,
+  type KeyEnvelopeExport,
   type KeyEnvelopeRecord,
   type PushRecord,
   type Session,
@@ -283,7 +284,9 @@ export class D1SyncStore implements SyncStore {
     return { records, cursor: last === undefined ? since : last.seq };
   }
 
-  async exportUser(userId: string): Promise<{ records: SyncRecord[] }> {
+  async exportUser(
+    userId: string
+  ): Promise<{ records: SyncRecord[]; keyEnvelopes: KeyEnvelopeExport[] }> {
     // Page so each D1 query stays bounded; the full set is still assembled in memory, acceptable
     // for this rare one-shot. Streaming is the follow-up for huge accounts.
     const records: SyncRecord[] = [];
@@ -296,7 +299,20 @@ export class D1SyncStore implements SyncStore {
       }
       since = page.cursor;
     }
-    return { records };
+    // Selected by user_id alone, not by kind: rotation adds kinds, and an export that named them
+    // would silently drop the envelope an older record was sealed under.
+    const envelopes = await this.db
+      .prepare('SELECT kind, envelope, updated_at FROM key_envelopes WHERE user_id = ?')
+      .bind(userId)
+      .all<{ kind: string; envelope: string; updated_at: number }>();
+    return {
+      records,
+      keyEnvelopes: envelopes.results.map((row) => ({
+        kind: row.kind,
+        envelope: row.envelope,
+        updatedAt: row.updated_at,
+      })),
+    };
   }
 
   async deleteUser(userId: string): Promise<void> {

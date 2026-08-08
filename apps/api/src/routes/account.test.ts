@@ -43,6 +43,33 @@ describe('GET /v1/export', () => {
     }
     expect(tombstone.deleted).toBe(true);
   });
+
+  it('carries the recovery key envelope, so the archive decrypts with only the recovery code', async () => {
+    const { token } = await signedInToken();
+    await app.request(
+      '/v1/keys/recovery',
+      {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ envelope: 'v1.dk-1.aaaa.bbbb' }),
+      },
+      env
+    );
+    await postChanges(app, token, { records: [record({ entityId: 'a' })] });
+
+    const res = await getExport(token);
+    const body = await res.json<{ keyEnvelopes: Array<{ kind: string; envelope: string }> }>();
+    expect(body.keyEnvelopes).toEqual([
+      { kind: 'recovery', envelope: 'v1.dk-1.aaaa.bbbb', updatedAt: expect.any(Number) },
+    ]);
+  });
+
+  it('carries an empty envelope list for an account that never initialized keys', async () => {
+    const { token } = await signedInToken();
+    const res = await getExport(token);
+    const body = await res.json<{ keyEnvelopes: unknown[] }>();
+    expect(body.keyEnvelopes).toEqual([]);
+  });
 });
 
 describe('DELETE /v1/account', () => {

@@ -693,6 +693,11 @@ export interface KeyEnvelopeRecord {
   updatedAt: number;
 }
 
+/** A `KeyEnvelopeRecord` tagged with its kind, so an export can carry every envelope a user has. */
+export interface KeyEnvelopeExport extends KeyEnvelopeRecord {
+  kind: string;
+}
+
 /**
  * codeVerifier (PKCE): required for apple, present for google bounced-code exchanges (the
  * macOS deep-link flow), absent for google id_token exchanges (extension) and dev.
