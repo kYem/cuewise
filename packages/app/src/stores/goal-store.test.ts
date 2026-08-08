@@ -1546,6 +1546,8 @@ describe('writers read storage, not their own snapshot', () => {
     vi.clearAllMocks();
     useGoalStore.setState({ goals: [], todayTasks: [], isLoading: false, error: null });
     vi.mocked(storage.setGoals).mockResolvedValue({ success: true });
+    // clearAllMocks keeps implementations, so an earlier block's getGoals would leak in here.
+    vi.mocked(storage.getGoals).mockResolvedValue([]);
   });
 
   // Storage deliberately holds a goal the store's in-memory list does not: a pull that landed
@@ -1580,7 +1582,14 @@ describe('writers read storage, not their own snapshot', () => {
     expect(written.map((goal) => goal.id).sort()).toEqual([overdue.id, pulled.id].sort());
   });
 
-  it('rollDueTasks writes nothing when no task is due', async () => {
+  // The snapshot says something is due and storage says nothing is: a snapshot reader rolls and
+  // writes, a storage reader skips. Cleanly — a crash inside the lock also writes nothing.
+  it('rollDueTasks decides from storage, and skips without erroring', async () => {
+    const errorLog = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    useGoalStore.setState({
+      goals: [goalFactory.build({ date: '2025-01-01', dueDate: '2025-01-02' })],
+      todayTasks: [],
+    });
     vi.mocked(storage.getGoals).mockResolvedValue([
       goalFactory.build({ date: getTodayDateString() }),
     ]);
@@ -1589,5 +1598,6 @@ describe('writers read storage, not their own snapshot', () => {
     await useGoalStore.getState().rollDueTasks();
 
     expect(storage.setGoals).not.toHaveBeenCalled();
+    expect(errorLog).not.toHaveBeenCalled();
   });
 });

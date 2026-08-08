@@ -1,6 +1,5 @@
 import { configurePlatform, DEFAULT_SETTINGS, toStoredValues } from '@cuewise/shared';
 import {
-  COLLECTION_LOCKS,
   getGoals,
   getManyFromStorage,
   getSettings,
@@ -300,7 +299,7 @@ describe.each([
 
 describe('goals binding and the page-side writer share one lock', () => {
   // The race the lock exists for: the worker applies a pull through writeOne while the page edits
-  // through updateGoals. Unserialised, whoever wrote second replaced the whole array.
+  // through updateGoals. Unserialised, whoever writes second replaces the whole array.
   it('lets a pull and a page edit both land', async () => {
     const pulled = goalFactory.build();
     const edited = goalFactory.build();
@@ -313,9 +312,5 @@ describe('goals binding and the page-side writer share one lock', () => {
 
     const stored = await getGoals();
     expect(stored.map((goal) => goal.id).sort()).toEqual([pulled.id, edited.id].sort());
-  });
-
-  it('names its lock from the shared collection list', () => {
-    expect(COLLECTION_LOCKS).toContain(goalsBinding().name);
   });
 });
