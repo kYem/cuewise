@@ -1,3 +1,4 @@
+import type { SyncSession } from '@cuewise/shared';
 import type { SyncNowResult, SyncOutcome } from '@cuewise/sync-engine';
 import { createContext, useContext } from 'react';
 
@@ -138,6 +139,17 @@ export interface SyncController {
   syncNow(): Promise<SyncNowResult>;
   /** Informational: resolves null when unavailable (signed out, offline, legacy host); never throws. */
   getDetails(): Promise<SyncDetails | null>;
+  /**
+   * Live sessions on this account, for the signed-in devices list. Informational like getDetails:
+   * resolves null when unavailable and never throws — a settings read that fails must not take the
+   * panel down or trip the sign-in-expired path.
+   */
+  listSessions(): Promise<SyncSession[] | null>;
+  /** Actions, unlike listSessions: these reject, so a failure can be told to the user. */
+  revokeSession(id: string): Promise<void>;
+  renameSession(id: string, deviceName: string): Promise<void>;
+  /** Revokes every session but this one; resolves how many were cut. */
+  revokeOtherSessions(): Promise<number>;
   /**
    * The last cycle's outcome, or null if none has run — wrapped so a host that could not read it
    * (dead worker, timeout, skewed response) answers LAST_CYCLE_UNAVAILABLE instead of a null that

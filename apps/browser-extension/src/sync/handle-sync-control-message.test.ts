@@ -670,3 +670,118 @@ describe('isSyncControlMessage', () => {
     expect(isSyncControlMessage('not-a-message')).toBe(false);
   });
 });
+
+describe('handleSyncControlMessage: sessions', () => {
+  const session = {
+    id: 's1',
+    deviceName: 'laptop',
+    createdAt: 1,
+    lastUsedAt: 2,
+    current: true,
+  };
+
+  it('answers listSessions with the sessions kind', async () => {
+    const engine = fakeControlSurface({
+      listSessions: vi.fn().mockResolvedValue([session]),
+    });
+
+    const result = await handleSyncControlMessage(
+      engine,
+      { kind: 'cuewise-sync-control', op: 'listSessions' },
+      fakeDeps()
+    );
+
+    expect(result).toEqual({ ok: true, kind: 'sessions', sessions: [session] });
+  });
+
+  it('answers an unreadable list with an empty array rather than a failure', async () => {
+    const engine = fakeControlSurface({ listSessions: vi.fn().mockResolvedValue(null) });
+
+    const result = await handleSyncControlMessage(
+      engine,
+      { kind: 'cuewise-sync-control', op: 'listSessions' },
+      fakeDeps()
+    );
+
+    expect(result).toEqual({ ok: true, kind: 'sessions', sessions: [] });
+  });
+
+  it('forwards a revoke and answers ok', async () => {
+    const revokeSession = vi.fn().mockResolvedValue(undefined);
+    const engine = fakeControlSurface({ revokeSession });
+
+    const result = await handleSyncControlMessage(
+      engine,
+      { kind: 'cuewise-sync-control', op: 'revokeSession', sessionId: 's2' },
+      fakeDeps()
+    );
+
+    expect(revokeSession).toHaveBeenCalledWith('s2');
+    expect(result).toEqual({ ok: true });
+  });
+
+  // chrome.runtime JSON-serialises the response, so a thrown Error would reach the page as {}.
+  it('answers a failed revoke with a serialisable failure, not a thrown Error', async () => {
+    vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+    const engine = fakeControlSurface({
+      revokeSession: vi.fn().mockRejectedValue(new ApiError('not_found', 404)),
+    });
+
+    const result = await handleSyncControlMessage(
+      engine,
+      { kind: 'cuewise-sync-control', op: 'revokeSession', sessionId: 'gone' },
+      fakeDeps()
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok === false) {
+      expect(result.reason).toBe('error');
+    }
+  });
+
+  it('rejects a revoke with no session id rather than forwarding it', async () => {
+    vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+    const revokeSession = vi.fn().mockResolvedValue(undefined);
+    const engine = fakeControlSurface({ revokeSession });
+
+    const result = await handleSyncControlMessage(
+      engine,
+      { kind: 'cuewise-sync-control', op: 'revokeSession' },
+      fakeDeps()
+    );
+
+    expect(revokeSession).not.toHaveBeenCalled();
+    expect(result).toEqual({ ok: false, reason: 'error' });
+  });
+
+  it('forwards a rename with both fields', async () => {
+    const renameSession = vi.fn().mockResolvedValue(undefined);
+    const engine = fakeControlSurface({ renameSession });
+
+    const result = await handleSyncControlMessage(
+      engine,
+      {
+        kind: 'cuewise-sync-control',
+        op: 'renameSession',
+        sessionId: 's1',
+        deviceName: 'Work MacBook',
+      },
+      fakeDeps()
+    );
+
+    expect(renameSession).toHaveBeenCalledWith('s1', 'Work MacBook');
+    expect(result).toEqual({ ok: true });
+  });
+
+  it('answers revokeOtherSessions with the count', async () => {
+    const engine = fakeControlSurface({ revokeOtherSessions: vi.fn().mockResolvedValue(3) });
+
+    const result = await handleSyncControlMessage(
+      engine,
+      { kind: 'cuewise-sync-control', op: 'revokeOtherSessions' },
+      fakeDeps()
+    );
+
+    expect(result).toEqual({ ok: true, kind: 'revokedCount', revoked: 3 });
+  });
+});

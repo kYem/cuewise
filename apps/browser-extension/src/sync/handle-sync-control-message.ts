@@ -14,6 +14,8 @@ import type {
   SyncDetailsResponse,
   SyncLastCycleResponse,
   SyncOutcomeResponse,
+  SyncRevokedCountResponse,
+  SyncSessionsResponse,
 } from './sync-control-messages';
 
 export interface SyncControlDeps {
@@ -109,13 +111,19 @@ async function runLastCycle(
   };
 }
 
+/** Read-only sessions lookup — deliberately NOT serialized (see handleSyncControlMessage). */
+async function runSessions(engine: SyncEngineControlSurface): Promise<SyncSessionsResponse> {
+  // engine.listSessions never throws (null on any failure), exactly like getAccount.
+  return { ok: true, kind: 'sessions', sessions: (await engine.listSessions()) ?? [] };
+}
+
 async function runOp(
   engine: SyncEngineControlSurface,
   msg: SyncControlMessage & {
-    op: Exclude<SyncControlMessage['op'], 'details' | 'getLastCycle'>;
+    op: Exclude<SyncControlMessage['op'], 'details' | 'getLastCycle' | 'listSessions'>;
   },
   deps: SyncControlDeps
-): Promise<SyncControlResponse | SyncOutcomeResponse> {
+): Promise<SyncControlResponse | SyncOutcomeResponse | SyncRevokedCountResponse> {
   if (msg.op === 'enable') {
     // Runtime guard (the wire is untyped): reject an unknown provider or an empty credential/
     // device name, not just `undefined`. Log so a caller regression isn't a bare, detail-less error.
@@ -150,6 +158,24 @@ async function runOp(
         return { ok: true, recoveryCode: await engine.regenerateRecoveryCode() };
       case 'syncNow':
         return { ok: true, kind: 'outcome', outcome: await engine.syncNow() };
+      // The session id is the server's opaque handle; an empty one is a caller bug, not a
+      // request worth forwarding — same runtime guard rationale as enable's fields.
+      case 'revokeSession':
+        if (!msg.sessionId) {
+          logger.error('Cloud sync revoke rejected: malformed control message');
+          return { ok: false, reason: 'error' };
+        }
+        await engine.revokeSession(msg.sessionId);
+        return { ok: true };
+      case 'renameSession':
+        if (!msg.sessionId || !msg.deviceName) {
+          logger.error('Cloud sync rename rejected: malformed control message');
+          return { ok: false, reason: 'error' };
+        }
+        await engine.renameSession(msg.sessionId, msg.deviceName);
+        return { ok: true };
+      case 'revokeOtherSessions':
+        return { ok: true, kind: 'revokedCount', revoked: await engine.revokeOtherSessions() };
       default: {
         // Exhaustiveness: a new SYNC_CONTROL_OPS entry is a compile error here — never a
         // silent fallthrough into some other operation.
@@ -197,6 +223,10 @@ export async function handleSyncControlMessage(
   if (op === 'getLastCycle') {
     // Same rationale as 'details': read-only, so it must never queue behind a pending op.
     return runLastCycle(engine);
+  }
+  if (op === 'listSessions') {
+    // Same rationale as 'details': read-only, so it must never queue behind a pending op.
+    return runSessions(engine);
   }
   if (op === 'disable') {
     // Deliberately outside the mutex, unlike enable/reconnect: queued behind an in-flight enable

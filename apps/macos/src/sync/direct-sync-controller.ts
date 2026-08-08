@@ -6,7 +6,7 @@ import type {
   SyncUiStatus,
 } from '@cuewise/app';
 import { AUTH_CANCELLED_DETAIL, buildSyncDetails, LAST_CYCLE_UNAVAILABLE } from '@cuewise/app';
-import { type KeyValueStore, logger, type Scheduler } from '@cuewise/shared';
+import { type KeyValueStore, logger, type Scheduler, type SyncSession } from '@cuewise/shared';
 import { ApiError } from '@cuewise/sync-client';
 import {
   createSyncEngine,
@@ -393,6 +393,18 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
         engine.getLastSyncedAt(),
         engine.getRecoveryEnvelopePresent()
       );
+    },
+    async listSessions(): Promise<SyncSession[] | null> {
+      return engine.listSessions();
+    },
+    async revokeSession(id: string): Promise<void> {
+      await engine.revokeSession(id);
+    },
+    async renameSession(id: string, deviceName: string): Promise<void> {
+      await engine.renameSession(id, deviceName);
+    },
+    async revokeOtherSessions(): Promise<number> {
+      return engine.revokeOtherSessions();
     },
     async getLastCycle(): Promise<LastCycleRead> {
       // No realm to be unreachable across, but the record still comes from storage: an unreadable

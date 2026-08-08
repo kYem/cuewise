@@ -6,7 +6,7 @@ import type {
   SyncUiStatus,
 } from '@cuewise/app';
 import { asSyncUiStatus, LAST_CYCLE_UNAVAILABLE } from '@cuewise/app';
-import { describeThrown, logger } from '@cuewise/shared';
+import { describeThrown, logger, type SyncSession } from '@cuewise/shared';
 import {
   CLOUD_SYNC_ENABLED_KEY,
   type SyncNowResult,
@@ -371,6 +371,60 @@ export class BridgeSyncController implements SyncController {
       logger.warn(`Sync details control message failed: ${detail}`);
       return null;
     }
+  }
+
+  // Informational like getDetails: any unusable answer is "unavailable", never a rejection, so a
+  // failed read hides one panel section instead of breaking it.
+  async listSessions(): Promise<SyncSession[] | null> {
+    try {
+      const response = await this.send({ kind: 'cuewise-sync-control', op: 'listSessions' });
+      if (response?.ok && response.kind === 'sessions') {
+        return response.sessions;
+      }
+      logger.warn('Sync session list unavailable (no responder or error fallback)');
+      return null;
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      logger.warn(`Sync session list control message failed: ${detail}`);
+      return null;
+    }
+  }
+
+  // Actions reject, unlike listSessions. chrome.runtime JSON-serialises the response, so the SW
+  // answers {ok:false} rather than throwing; turning it back into a rejection here is what makes
+  // the panel's try/catch behave the same on both hosts.
+  async revokeSession(id: string): Promise<void> {
+    const response = await this.send({
+      kind: 'cuewise-sync-control',
+      op: 'revokeSession',
+      sessionId: id,
+    });
+    if (!response?.ok) {
+      throw new Error(`Failed to revoke session: ${response?.reason ?? 'no response'}`);
+    }
+  }
+
+  async renameSession(id: string, deviceName: string): Promise<void> {
+    const response = await this.send({
+      kind: 'cuewise-sync-control',
+      op: 'renameSession',
+      sessionId: id,
+      deviceName,
+    });
+    if (!response?.ok) {
+      throw new Error(`Failed to rename session: ${response?.reason ?? 'no response'}`);
+    }
+  }
+
+  async revokeOtherSessions(): Promise<number> {
+    const response = await this.send({
+      kind: 'cuewise-sync-control',
+      op: 'revokeOtherSessions',
+    });
+    if (!response?.ok || response.kind !== 'revokedCount') {
+      throw new Error(`Failed to sign out other devices: ${response?.ok ? 'no count' : 'failed'}`);
+    }
+    return response.revoked;
   }
 
   /** Names which of the three unavailable causes this was; `reason` is present on every ok:false. */

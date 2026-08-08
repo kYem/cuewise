@@ -1,3 +1,4 @@
+import type { SyncSession } from '@cuewise/shared';
 import type { SyncNowResult, SyncOutcome } from '@cuewise/sync-engine';
 import type {
   EnableResult,
@@ -22,7 +23,10 @@ type FailableMethod =
   | 'regenerateRecoveryCode'
   | 'syncNow'
   | 'getDetails'
-  | 'getLastCycle';
+  | 'getLastCycle'
+  | 'revokeSession'
+  | 'renameSession'
+  | 'revokeOtherSessions';
 
 const DEFAULT_ENABLE_RESULT: EnableResult = { ok: true };
 const DEFAULT_RECOVERY_CODE = 'FAKE-RECOVERY-CODE';
@@ -370,6 +374,32 @@ export class FakeSyncController implements SyncController {
       return next;
     }
     return null;
+  }
+
+  /** Scriptable session list; null models an unavailable read (offline, skewed worker). */
+  sessionsResult: SyncSession[] | null = [];
+  /** How many sessions revokeOtherSessions reports cutting. */
+  revokedOthersCount = 0;
+
+  async listSessions(): Promise<SyncSession[] | null> {
+    this.calls.push({ method: 'listSessions', args: [] });
+    return this.sessionsResult;
+  }
+
+  async revokeSession(id: string): Promise<void> {
+    this.calls.push({ method: 'revokeSession', args: [id] });
+    this.maybeFail('revokeSession');
+  }
+
+  async renameSession(id: string, deviceName: string): Promise<void> {
+    this.calls.push({ method: 'renameSession', args: [id, deviceName] });
+    this.maybeFail('renameSession');
+  }
+
+  async revokeOtherSessions(): Promise<number> {
+    this.calls.push({ method: 'revokeOtherSessions', args: [] });
+    this.maybeFail('revokeOtherSessions');
+    return this.revokedOthersCount;
   }
 
   /** Resolves a deferred enableWithGoogle as a quiet cancel, mirroring the macOS driver. */

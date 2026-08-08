@@ -44,6 +44,10 @@ export type SyncEngineControlSurface = Pick<
   | 'getLastCycle'
   | 'getRecoveryEnvelopePresent'
   | 'ensureHydrated'
+  | 'listSessions'
+  | 'revokeSession'
+  | 'renameSession'
+  | 'revokeOtherSessions'
 >;
 export {
   initOrEnrollKey,
