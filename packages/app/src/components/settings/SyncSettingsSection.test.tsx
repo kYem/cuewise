@@ -2493,6 +2493,68 @@ describe('SyncSettingsSectionComponent', () => {
       }
     });
 
+    // The quiet path covers one completion, not the rest of the mount: a later attempt's own
+    // failure is the user's only feedback that their code was wrong.
+    it('still reports a later attempt that genuinely fails after an earlier pairing', async () => {
+      vi.useFakeTimers();
+      const controller = new FakeSyncController();
+      controller.scriptEnableWithGoogle({ ok: false, reason: 'needs-code' });
+      controller.scriptPairingPolls({ kind: 'complete' });
+      controller.scriptReconnect({ ok: false, reason: 'needs-code' });
+      controller.scriptReconnect({ ok: false, reason: 'bad-code', detail: 'checksum' });
+      try {
+        renderSection(controller);
+        fireEvent.click(cloudSyncSwitch());
+        fireEvent.click(screen.getByRole('button', { name: 'Sign in with Google' }));
+        await flush();
+        await pollTick();
+        await flush();
+
+        act(() => controller.setStatus('needs_reauth'));
+        fireEvent.click(screen.getByRole('button', { name: 'Reconnect' }));
+        await flush();
+        fireEvent.click(screen.getByRole('button', { name: PAIRING_CODE_LINK }));
+        fireEvent.change(screen.getByLabelText('Recovery code'), { target: { value: 'wrong' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Enroll' }));
+        await flush();
+
+        expect(screen.getByRole('alert')).toHaveTextContent("Code didn't check out");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    // The account the abandoned attempt created outlives it, and this code is the only way in.
+    it('never swallows a minted recovery code, whatever the latch says', async () => {
+      vi.useFakeTimers();
+      const controller = new FakeSyncController();
+      controller.scriptEnableWithGoogle({ ok: false, reason: 'needs-code' });
+      controller.scriptPairingPolls({ kind: 'complete' });
+      controller.deferNextEnrollWithCode();
+      try {
+        renderSection(controller);
+        fireEvent.click(cloudSyncSwitch());
+        fireEvent.click(screen.getByRole('button', { name: 'Sign in with Google' }));
+        await flush();
+        fireEvent.click(screen.getByRole('button', { name: PAIRING_CODE_LINK }));
+        fireEvent.change(screen.getByLabelText('Recovery code'), { target: { value: CODE } });
+        fireEvent.click(screen.getByRole('button', { name: 'Enroll' }));
+        await flush();
+
+        await pollTick();
+        await flush();
+        act(() =>
+          controller.resolveEnrollWithCode({ ok: false, reason: 'cancelled', recoveryCode: CODE })
+        );
+        await flush();
+
+        expect(screen.getByText('Save your recovery code')).toBeInTheDocument();
+        expect(toastWarning).toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     // Models the extension, whose status arrives over a storage broadcast after the enrol tail:
     // a second request here would answer null and flash "Not approved" over a success.
     it('starts no fresh request while the host status still says this device has no key', async () => {

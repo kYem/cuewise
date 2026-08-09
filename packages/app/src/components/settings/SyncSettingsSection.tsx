@@ -268,9 +268,10 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   // Whether the modal opens on the code input: true only when the screen behind it already
   // offered pairing, so the same offer is not made twice.
   const [enrollCodeFirst, setEnrollCodeFirst] = useState(false);
-  // Latched when a pairing completes and cleared once this device is un-enrolled again. Both hosts
-  // report the resulting status asynchronously (the extension's arrives over a storage broadcast),
-  // so until it lands this is the only thing that knows the device already has its key.
+  // Covers ONE pairing completion, and only until something ends it: any status change (the enrol
+  // became visible, or this device is keyless again) or a new enroll attempt starting. It exists
+  // because both hosts report status asynchronously — the extension's arrives over a storage
+  // broadcast — so in that gap nothing else knows this device already has its key.
   const [pairedEnroll, setPairedEnroll] = useState(false);
   // Beside the state because a submission that resolves later reads it from a stale closure.
   const pairedEnrollRef = useRef(false);
@@ -307,13 +308,12 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     };
   }, []);
 
-  // Only a CHANGE into one of these clears the latch: the window it exists for is the one where
-  // the status still reads needs_enroll after a pairing completed, and no change happens there.
+  // Any status change ends the window, in either direction: active/syncing means the enrol this
+  // covered is visible now, off/needs_enroll that the device is keyless again. The window itself is
+  // precisely the stretch where no change has arrived yet.
   useEffect(() => {
-    if (status === 'off' || status === 'needs_enroll') {
-      pairedEnrollRef.current = false;
-      setPairedEnroll(false);
-    }
+    pairedEnrollRef.current = false;
+    setPairedEnroll(false);
   }, [status]);
 
   useEffect(() => {
@@ -450,6 +450,13 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     }
   };
 
+  // One writer for both halves, so the ref a late submission reads can never disagree with the
+  // state the pairing panel's gate reads.
+  const latchPairedEnroll = (paired: boolean) => {
+    pairedEnrollRef.current = paired;
+    setPairedEnroll(paired);
+  };
+
   // Every path that lands on a new account: a reconnect can land on a DIFFERENT one, so an in-flight
   // click must stop being able to paint or toast for the previous one, and both shown facts re-read.
   const adoptNewAccount = async () => {
@@ -509,6 +516,8 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       // brand-new account (device #1) never needs a code.
       setEnrollSource(source);
       setEnrollCodeFirst(false);
+      // A new attempt: whatever a previous pairing did, this one's answers are its own.
+      latchPairedEnroll(false);
       setEnrollOpen(true);
       return;
     }
@@ -600,12 +609,6 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       logger.error('Enroll submit failed', error);
       return { ok: false, reason: 'error' };
     }
-    if (!result.ok && pairedEnrollRef.current) {
-      // Pairing won the race the revealed code input deliberately allows. The device is enrolled,
-      // so this answer has nothing left to report — quiet, like a cancelled sign-in.
-      logger.info('Cloud sync enroll answered after pairing had already enrolled this device');
-      return PAIRING_ALREADY_ENROLLED;
-    }
     if (result.ok) {
       // Enrolled successfully — hand off from Chrome sync (see takeOverFromChromeSync).
       // A code is only required when the target account has an envelope, so this is the branch the
@@ -620,6 +623,11 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       routeAbandonedEnable(result.recoveryCode);
     } else if (isCancelledEnable(result)) {
       logger.info('Cloud sync enroll sign-in was cancelled by the user');
+    } else if (pairedEnrollRef.current && result.recoveryCode === undefined) {
+      // Pairing won the race the revealed code input deliberately allows, so this answer is moot —
+      // but never when it carries a minted code, which only the branches above can surface.
+      logger.info('Cloud sync enroll answered after pairing had already enrolled this device');
+      return PAIRING_ALREADY_ENROLLED;
     } else {
       // The modal renders the message; this is the default-visible trace of what failed.
       logger.error(
@@ -742,6 +750,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   const handleUseRecoveryCode = () => {
     setEnrollSource('reconnect');
     setEnrollCodeFirst(true);
+    latchPairedEnroll(false);
     setEnrollOpen(true);
   };
 
@@ -749,8 +758,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   // recovery code, which pairing never mints. The latch goes up first and synchronously: it is
   // what keeps any surface from starting a fresh request while the status catches up.
   const finishPairedEnroll = async () => {
-    pairedEnrollRef.current = true;
-    setPairedEnroll(true);
+    latchPairedEnroll(true);
     setEnrollOpen(false);
     await takeOverFromChromeSync();
     await adoptNewAccount();
