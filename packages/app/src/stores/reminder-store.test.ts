@@ -952,6 +952,19 @@ describe('writers read storage, not their own snapshot', () => {
     expect(toastWarning).toHaveBeenCalledWith('This reminder no longer exists');
   });
 
+  // Editing only the due date must not wake a reminder the user paused.
+  it('updateReminder arms no alarm for a paused reminder', async () => {
+    const recurring = { frequency: 'interval' as const, intervalMinutes: 30 };
+    const paused = recurringReminderFactory.build({ id: 'r', recurring, paused: true });
+    useReminderStore.setState({ reminders: [paused] });
+
+    await useReminderStore
+      .getState()
+      .updateReminder('r', { dueDate: new Date(Date.now() + 60_000).toISOString() });
+
+    expect(fakeScheduler.scheduleAt).not.toHaveBeenCalled();
+  });
+
   it('snoozeReminder says so when the pull deleted it', async () => {
     storageAheadOfStore([reminderFactory.build({ id: 'gone' })], []);
 

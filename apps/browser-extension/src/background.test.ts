@@ -149,7 +149,6 @@ describe('background: notification action buttons', () => {
     });
   });
 
-  // The lookup read and the locked read are separate; a pull can land between them.
   it('does not arm the snooze wake when the write did not persist', async () => {
     const reminder = reminderFactory.build({
       id: 'r6',
@@ -168,6 +167,7 @@ describe('background: notification action buttons', () => {
     expect(chromeMock.alarms.create).not.toHaveBeenCalled();
   });
 
+  // The lookup read and the locked read are separate; a pull can land between them.
   it('keeps a reminder that arrived between the lookup and the Done write', async () => {
     const reminder = reminderFactory.build({ id: 'r2', completed: false });
     const pulled = reminderFactory.build({ id: 'pulled' });

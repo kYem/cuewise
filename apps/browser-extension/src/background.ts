@@ -187,9 +187,14 @@ notifier.onAction(async (notificationId, buttonIndex) => {
     const action = resolveReminderNotificationAction(reminder, buttonIndex, new Date());
 
     if (action.type === 'complete') {
-      await updateReminders((current) =>
+      const { result } = await updateReminders((current) =>
         current.map((r) => (r.id === reminderId ? { ...r, completed: true } : r))
       );
+      // Nothing is armed off this one, so there is no wake to withhold — but a Done click that
+      // silently failed to persist would otherwise leave no trace at all.
+      if (result?.success === false) {
+        logger.error('Could not persist the completed reminder', result.error);
+      }
     } else if (action.type === 'snooze') {
       const { result } = await updateReminders((current) =>
         current.map((r) =>

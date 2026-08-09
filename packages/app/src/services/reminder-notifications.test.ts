@@ -1,4 +1,4 @@
-import { configurePlatform, type Reminder } from '@cuewise/shared';
+import { configurePlatform, logger, type Reminder } from '@cuewise/shared';
 import * as storage from '@cuewise/storage';
 import { recurringReminderFactory, reminderFactory } from '@cuewise/test-utils/factories';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -121,9 +121,14 @@ describe('handleReminderFire', () => {
       error: { type: 'quota_exceeded', message: 'full' },
     });
 
+    const errorLog = vi.spyOn(logger, 'error').mockImplementation(() => {});
     await handleReminderFire('reminder-r5');
 
     expect(scheduleAt).not.toHaveBeenCalled();
+    expect(errorLog).toHaveBeenCalledWith(
+      'Could not persist the fired reminder',
+      expect.anything()
+    );
   });
 
   it('does not notify a completed reminder', async () => {
