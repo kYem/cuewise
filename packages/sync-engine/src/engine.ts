@@ -300,8 +300,22 @@ export class SyncEngine {
       await this.abandonEnroll(enrolled.recoveryCodeToShow !== undefined);
       return;
     }
-    this.dk = enrolled.dk;
-    this.keyId = enrolled.keyId;
+    await this.activateWithKey(
+      enrolled.dk,
+      enrolled.keyId,
+      epoch,
+      enrolled.recoveryCodeToShow !== undefined
+    );
+  }
+
+  private async activateWithKey(
+    dk: DataKey,
+    keyId: string,
+    epoch: number,
+    mintedCode: boolean
+  ): Promise<void> {
+    this.dk = dk;
+    this.keyId = keyId;
     // Both enrol paths prove one: initNewKey PUT it, enrollFromEnvelope unwrapped it. Without
     // this a freshly-connected device reads "unknown" until its next start().
     await this.recordRecoveryEnvelope(true, epoch);
@@ -315,12 +329,12 @@ export class SyncEngine {
     // it needs that reset repeating before this enroll walks away.
     if (this.enrollSuperseded(epoch)) {
       await this.bestEffort(() => this.resetMeta(), 'abandoned enroll ledger rollback');
-      await this.abandonEnroll(enrolled.recoveryCodeToShow !== undefined);
+      await this.abandonEnroll(mintedCode);
       return;
     }
     const outcome = await this.syncNow();
     if (this.enrollSuperseded(epoch)) {
-      await this.abandonEnroll(enrolled.recoveryCodeToShow !== undefined);
+      await this.abandonEnroll(mintedCode);
       return;
     }
     if (outcome.kind === 'signed-out') {
@@ -335,7 +349,7 @@ export class SyncEngine {
     // recovery code for the account the user disconnected.
     if (this.enrollSuperseded(epoch)) {
       await this.rollbackKey(CLOUD_SYNC_ENABLED_KEY, 'its enabled flag', 'abandoned an enable');
-      await this.abandonEnroll(enrolled.recoveryCodeToShow !== undefined);
+      await this.abandonEnroll(mintedCode);
       return;
     }
     this.setStatus('active');
