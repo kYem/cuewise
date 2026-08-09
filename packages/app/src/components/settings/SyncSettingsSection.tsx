@@ -15,6 +15,7 @@ import type {
   SyncUiStatus,
 } from '../../sync/sync-controller';
 import {
+  AUTH_CANCELLED_DETAIL,
   isCancelledEnable,
   LAST_CYCLE_UNAVAILABLE,
   useSyncController,
@@ -103,6 +104,14 @@ const FAILURE_MESSAGE: Record<SyncFailureReason, string> = {
 };
 
 const INCOMPLETE_MESSAGE = "Sync didn't complete — your data is safe on this device.";
+
+// The modal's one quiet outcome — no error line, no toast (see isCancelledEnable). Returned when
+// a pairing has already enrolled the device, so the typed code's late answer is moot.
+const PAIRING_ALREADY_ENROLLED: EnableResult = {
+  ok: false,
+  reason: 'auth',
+  detail: AUTH_CANCELLED_DETAIL,
+};
 
 // Widened once: `reason` crosses an untrusted wire, so a skewed peer's unknown value must fall
 // back rather than paint an empty badge.
@@ -256,6 +265,15 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   // Which flow opened EnrollCodeModal — reconnect reuses persisted creds; enable/google re-run
   // that same sign-in with the entered code (google re-auths for a fresh id token).
   const [enrollSource, setEnrollSource] = useState<'enable' | 'google' | 'reconnect'>('enable');
+  // Whether the modal opens on the code input: true only when the screen behind it already
+  // offered pairing, so the same offer is not made twice.
+  const [enrollCodeFirst, setEnrollCodeFirst] = useState(false);
+  // Latched when a pairing completes and cleared once this device is un-enrolled again. Both hosts
+  // report the resulting status asynchronously (the extension's arrives over a storage broadcast),
+  // so until it lands this is the only thing that knows the device already has its key.
+  const [pairedEnroll, setPairedEnroll] = useState(false);
+  // Beside the state because a submission that resolves later reads it from a stale closure.
+  const pairedEnrollRef = useRef(false);
   const [confirmDisableOpen, setConfirmDisableOpen] = useState(false);
   const [unsavedCode, setUnsavedCode] = useState(false);
   // The error state's "Try again" retries the exact action that failed (enable / google /
@@ -288,6 +306,15 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       mountedRef.current = false;
     };
   }, []);
+
+  // Only a CHANGE into one of these clears the latch: the window it exists for is the one where
+  // the status still reads needs_enroll after a pairing completed, and no change happens there.
+  useEffect(() => {
+    if (status === 'off' || status === 'needs_enroll') {
+      pairedEnrollRef.current = false;
+      setPairedEnroll(false);
+    }
+  }, [status]);
 
   useEffect(() => {
     if (!controller || detailsRequestedRef.current) {
@@ -477,9 +504,11 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       return;
     }
     if (result.reason === 'needs-code') {
-      // Device #2 of an existing account: EnrollCodeModal collects the recovery code and re-runs
-      // this same sign-in method with it. A brand-new account (device #1) never needs a code.
+      // Device #2 of an existing account: EnrollCodeModal leads with pairing and collects the
+      // recovery code behind it, re-running this same sign-in method with what was typed. A
+      // brand-new account (device #1) never needs a code.
       setEnrollSource(source);
+      setEnrollCodeFirst(false);
       setEnrollOpen(true);
       return;
     }
@@ -570,6 +599,12 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     } catch (error) {
       logger.error('Enroll submit failed', error);
       return { ok: false, reason: 'error' };
+    }
+    if (!result.ok && pairedEnrollRef.current) {
+      // Pairing won the race the revealed code input deliberately allows. The device is enrolled,
+      // so this answer has nothing left to report — quiet, like a cancelled sign-in.
+      logger.info('Cloud sync enroll answered after pairing had already enrolled this device');
+      return PAIRING_ALREADY_ENROLLED;
     }
     if (result.ok) {
       // Enrolled successfully — hand off from Chrome sync (see takeOverFromChromeSync).
@@ -702,17 +737,20 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   };
 
   // The keyless device's code path is the reconnect one without the code-less attempt that can
-  // only fail: reconnect(code) is where that flow already ended. The modal leads with pairing
-  // itself, and a second request would replace this device's own row — hence the !enrollOpen gate
-  // on the panel below.
+  // only fail: reconnect(code) is where that flow already ended. Code-first, because this screen
+  // is the pairing offer — the modal must not repeat it.
   const handleUseRecoveryCode = () => {
     setEnrollSource('reconnect');
+    setEnrollCodeFirst(true);
     setEnrollOpen(true);
   };
 
   // An approval enrolled this device, so it ends where a typed code would have — minus the
-  // recovery code, which pairing never mints.
+  // recovery code, which pairing never mints. The latch goes up first and synchronously: it is
+  // what keeps any surface from starting a fresh request while the status catches up.
   const finishPairedEnroll = async () => {
+    pairedEnrollRef.current = true;
+    setPairedEnroll(true);
     setEnrollOpen(false);
     await takeOverFromChromeSync();
     await adoptNewAccount();
@@ -988,7 +1026,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
             <p data-testid="sync-reconnect-prompt" className="text-xs text-tertiary">
               {stoppedPrompt}
             </p>
-            {presentation.kind === 'pairing' && !enrollOpen && (
+            {presentation.kind === 'pairing' && !pairedEnroll && (
               <PairingPanel
                 onUseRecoveryCode={handleUseRecoveryCode}
                 onComplete={handlePairingComplete}
@@ -1048,6 +1086,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
         onSubmit={handleEnrollSubmit}
         onClose={() => setEnrollOpen(false)}
         onPaired={handlePairingComplete}
+        startWithCode={enrollCodeFirst}
       />
     </div>
   );

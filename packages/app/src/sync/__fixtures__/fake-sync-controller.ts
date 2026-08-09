@@ -447,12 +447,35 @@ export class FakeSyncController implements SyncController {
     return this;
   }
 
+  private deferredEnrollWithCode = false;
+  private pendingEnrollWithCode: ((result: EnableResult) => void) | null = null;
+
+  /** Makes the next enrollWithCode() hang until resolveEnrollWithCode() — for asserting late answers. */
+  deferNextEnrollWithCode(): void {
+    this.deferredEnrollWithCode = true;
+  }
+
+  /** Releases an enrollWithCode() call armed via deferNextEnrollWithCode(). */
+  resolveEnrollWithCode(result: EnableResult): void {
+    if (this.pendingEnrollWithCode === null) {
+      throw new Error('FakeSyncController: no pending enrollWithCode() to resolve');
+    }
+    this.pendingEnrollWithCode(result);
+    this.pendingEnrollWithCode = null;
+  }
+
   enrollWithCode?: (deviceName: string, recoveryCode: string) => Promise<EnableResult> = async (
     deviceName,
     recoveryCode
   ) => {
     this.calls.push({ method: 'enrollWithCode', args: [deviceName, recoveryCode] });
     this.maybeFail('enrollWithCode');
+    if (this.deferredEnrollWithCode) {
+      this.deferredEnrollWithCode = false;
+      return new Promise((resolve) => {
+        this.pendingEnrollWithCode = resolve;
+      });
+    }
     const next = this.enrollWithCodeResults.shift();
     if (next !== undefined) {
       return next;

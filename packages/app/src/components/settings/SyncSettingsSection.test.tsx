@@ -2360,9 +2360,14 @@ describe('SyncSettingsSectionComponent', () => {
       await renderPairingScreen(controller);
 
       await user.click(screen.getByRole('button', { name: PAIRING_CODE_LINK }));
-      await openEnrollCodeInput(user);
-      await user.type(screen.getByLabelText('Recovery code'), CODE);
-      await user.click(screen.getByRole('button', { name: 'Enroll' }));
+
+      // One click, not two: this screen already asked about pairing, so the modal opens on the code.
+      const dialog = await screen.findByRole('dialog');
+      expect(within(dialog).getByLabelText('Recovery code')).toBeInTheDocument();
+      expect(within(dialog).queryByText(PAIRING_HEADING)).not.toBeInTheDocument();
+
+      await user.type(within(dialog).getByLabelText('Recovery code'), CODE);
+      await user.click(within(dialog).getByRole('button', { name: 'Enroll' }));
 
       await waitFor(() =>
         expect(controller.calls).toContainEqual({ method: 'reconnect', args: [CODE] })
@@ -2452,6 +2457,59 @@ describe('SyncSettingsSectionComponent', () => {
 
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
         expect(settingsMock.updateSettings).toHaveBeenCalledWith({ syncEnabled: false });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    // The reveal keeps both paths live on purpose, so the losing one must not report a failure
+    // for a device that is already enrolled.
+    it('stays quiet when pairing wins a race the typed code was still in', async () => {
+      vi.useFakeTimers();
+      const controller = new FakeSyncController();
+      controller.scriptEnableWithGoogle({ ok: false, reason: 'needs-code' });
+      controller.scriptPairingPolls({ kind: 'complete' });
+      controller.deferNextEnrollWithCode();
+      try {
+        renderSection(controller);
+        fireEvent.click(cloudSyncSwitch());
+        fireEvent.click(screen.getByRole('button', { name: 'Sign in with Google' }));
+        await flush();
+        fireEvent.click(screen.getByRole('button', { name: PAIRING_CODE_LINK }));
+        fireEvent.change(screen.getByLabelText('Recovery code'), { target: { value: 'wrong' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Enroll' }));
+        await flush();
+
+        await pollTick();
+        await flush();
+        act(() => controller.resolveEnrollWithCode({ ok: false, reason: 'bad-code' }));
+        await flush();
+
+        expect(toastError).not.toHaveBeenCalled();
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    // Models the extension, whose status arrives over a storage broadcast after the enrol tail:
+    // a second request here would answer null and flash "Not approved" over a success.
+    it('starts no fresh request while the host status still says this device has no key', async () => {
+      vi.useFakeTimers();
+      const controller = new FakeSyncController();
+      controller.scriptPairingPolls({ kind: 'complete' });
+      try {
+        renderSection(controller);
+        act(() => controller.setStatus('needs_enroll'));
+        await flush();
+
+        await pollTick();
+        await flush();
+
+        expect(controller.calls.filter((call) => call.method === 'beginPairing')).toHaveLength(1);
+        expect(screen.queryByText(PAIRING_FAILED)).not.toBeInTheDocument();
+        expect(screen.queryByTestId('pairing-waiting')).not.toBeInTheDocument();
       } finally {
         vi.useRealTimers();
       }

@@ -360,6 +360,16 @@ describe('EnrollCodeModal', () => {
       expect(screen.queryByRole('button', { name: 'Enroll' })).not.toBeInTheDocument();
     });
 
+    // Opened from a screen that already offers pairing, so repeating the offer would ask twice.
+    it('opens on the code input, with no pairing lead, when the caller asked for it', () => {
+      const h = handlers(async () => ({ ok: true }));
+      render(<EnrollCodeModal isOpen startWithCode {...h} />);
+
+      expect(screen.getByLabelText(/recovery code/i)).toBeInTheDocument();
+      expect(screen.queryByText(PAIRING_HEADING)).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: PAIRING_CODE_LINK })).not.toBeInTheDocument();
+    });
+
     it('reveals the code input behind the link and submits it unchanged', async () => {
       const user = userEvent.setup();
       const h = handlers(async () => ({ ok: true }));

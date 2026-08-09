@@ -13,6 +13,11 @@ export interface EnrollCodeModalProps {
   onClose: () => void;
   /** A pairing approval enrolled this device instead of the code — the caller finishes the enrol. */
   onPaired: () => void;
+  /**
+   * Opens straight on the code input, with no pairing lead: the screen that opened this modal is
+   * already offering pairing, and leading with it again would ask the same question twice.
+   */
+  startWithCode?: boolean;
 }
 
 // Covers both halves: this device joins the account by approval, or by the code behind the link.
@@ -46,13 +51,14 @@ export const EnrollCodeModal: React.FC<EnrollCodeModalProps> = ({
   onSubmit,
   onClose,
   onPaired,
+  startWithCode = false,
 }) => {
   const [code, setCode] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   // Pairing leads; the code is the fallback the user asks for. Revealing it leaves the pairing
   // request polling, so whichever finishes first enrols this device.
-  const [codeShown, setCodeShown] = useState(false);
+  const [codeShown, setCodeShown] = useState(startWithCode);
   // A google-source submit can run a minutes-long OAuth dance; the user may dismiss the modal
   // meanwhile. The ref lets the late resolution route its error to a toast instead of a
   // no-longer-rendered error line.
@@ -64,9 +70,9 @@ export const EnrollCodeModal: React.FC<EnrollCodeModalProps> = ({
     if (isOpen) {
       setCode('');
       setErrorMessage(null);
-      setCodeShown(false);
+      setCodeShown(startWithCode);
     }
-  }, [isOpen]);
+  }, [isOpen, startWithCode]);
 
   // Escape can unmount the whole settings tree without an isOpen=false render (SettingsModal
   // and Modal both handle it) — treat unmount as dismissed so a late failure still toasts.
@@ -113,10 +119,12 @@ export const EnrollCodeModal: React.FC<EnrollCodeModalProps> = ({
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={TITLE} size="md">
       <div className="space-y-4">
-        <PairingPanel
-          onComplete={onPaired}
-          onUseRecoveryCode={codeShown ? undefined : revealCode}
-        />
+        {!startWithCode && (
+          <PairingPanel
+            onComplete={onPaired}
+            onUseRecoveryCode={codeShown ? undefined : revealCode}
+          />
+        )}
 
         {codeShown && (
           <div className="space-y-4 border-t border-border pt-4">
