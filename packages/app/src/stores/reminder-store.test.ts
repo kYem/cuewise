@@ -599,13 +599,27 @@ describe('sync sink wiring', () => {
   });
 
   // Marking a gone id dirty makes the next push seal a tombstone this device never authored.
-  it('does not mark a reminder dirty when the pull deleted it before the write', async () => {
+  // One writer per test: snoozeReminder commits the empty fresh list, so a second action in the
+  // same test bails on its own pre-check and never reaches the guard under examination.
+  const deletedBeforeTheWrite = (): void => {
     const recurring = { frequency: 'interval' as const, intervalMinutes: 30 };
-    const mine = recurringReminderFactory.build({ id: 'gone', recurring, paused: false });
-    useReminderStore.setState({ reminders: [mine] });
+    useReminderStore.setState({
+      reminders: [recurringReminderFactory.build({ id: 'gone', recurring, paused: false })],
+    });
     getRemindersMock.mockResolvedValue([]);
+  };
+
+  it('snoozeReminder does not mark a reminder the pull deleted dirty', async () => {
+    deletedBeforeTheWrite();
 
     await useReminderStore.getState().snoozeReminder('gone', 5);
+
+    expect(markMutated).not.toHaveBeenCalled();
+  });
+
+  it('setReminderPaused does not mark a reminder the pull deleted dirty', async () => {
+    deletedBeforeTheWrite();
+
     await useReminderStore.getState().setReminderPaused('gone', true);
 
     expect(markMutated).not.toHaveBeenCalled();

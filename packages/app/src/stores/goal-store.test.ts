@@ -1621,6 +1621,18 @@ describe('writers read storage, not their own snapshot', () => {
     expect(shown).toContain(pulled.id);
   });
 
+  it('updateGoal shows a task pulled into today by someone else', async () => {
+    const today = getTodayDateString();
+    const objective = objectiveFactory.build({ id: 'obj' });
+    const pulled = goalFactory.build({ date: today });
+    useGoalStore.setState({ goals: [objective], todayTasks: [] });
+    vi.mocked(storage.getGoals).mockResolvedValue([objective, pulled]);
+
+    await useGoalStore.getState().updateGoal('obj', { text: 'Ship it' });
+
+    expect(useGoalStore.getState().todayTasks.map((task) => task.id)).toEqual([pulled.id]);
+  });
+
   // The observer cannot repair this one: after the write, goals already equals storage, so its
   // equality guard returns early and never recomputes the today list.
   it('reorderTasks shows a task pulled into today mid-drag', async () => {
