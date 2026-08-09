@@ -1,9 +1,9 @@
+import { b64urlEncode } from './base64url';
 import { EnvelopeParseError } from './errors';
 import type { DataKey } from './keys';
 import {
   aesGcmOpen,
   aesGcmSeal,
-  b64urlEncode,
   generateX25519KeyPair,
   hkdfSha256,
   isValidKeyId,

@@ -8,7 +8,7 @@ Every cryptographic operation delegates to the platform's `crypto.subtle` (audit
 
 ## Public surface (`src/index.ts`)
 
-Exports `envelope`, `errors`, `keys`, `recovery-code`. **`primitives.ts` is deliberately NOT exported** — it is the swappable WebCrypto backend seam (a future non-WebCrypto runtime replaces that one file), and `getSubtle()` throws a clear error if `crypto.subtle` is absent rather than failing opaquely.
+Exports `base64url`, `envelope`, `errors`, `keys`, `pairing`, `recovery-code`. **`primitives.ts` is deliberately NOT exported** — it is the swappable WebCrypto backend seam (a future non-WebCrypto runtime replaces that one file), and `getSubtle()` throws a clear error if `crypto.subtle` is absent rather than failing opaquely. `base64url.ts` is framing rather than a primitive, so it lives outside that seam and callers that put a key on the wire (device pairing) encode through it.
 
 - `generateRecoveryCode()` / `parseRecoveryCode()` → the `CW1-…` code (150-bit machine entropy + 25-bit checksum); `secret` is a branded `RecoverySecret`.
 - `deriveMasterKey(secret)` → branded `MasterKey`; `generateDataKey()` → branded `DataKey`. The brands make a swapped `mk`/`dk` (or code-for-secret) a compile error, not a silent wrong-key derivation.

@@ -1,10 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { DecryptError, EnvelopeParseError } from './errors';
+import { b64urlEncode } from './base64url';
+import { DecryptError } from './errors';
 import {
   aesGcmOpen,
   aesGcmSeal,
-  b64urlDecode,
-  b64urlEncode,
   generateX25519KeyPair,
   hkdfSha256,
   randomBytes,
@@ -79,32 +78,6 @@ describe('primitives', () => {
     const sealed = await aesGcmSeal(key, iv, utf8('hello'), utf8('aad'));
     sealed[0] ^= 0x01;
     await expect(aesGcmOpen(key, iv, sealed, utf8('aad'))).rejects.toThrow(DecryptError);
-  });
-
-  it('b64url round-trips and rejects invalid input', () => {
-    const bytes = randomBytes(33);
-    expect(b64urlDecode(b64urlEncode(bytes))).toEqual(bytes);
-    expect(b64urlEncode(bytes)).not.toMatch(/[+/=]/);
-    expect(() => b64urlDecode('not!!valid')).toThrow(EnvelopeParseError);
-  });
-
-  it('b64urlDecode carries the atob failure as .cause on valid-alphabet, invalid-length input', () => {
-    // 'A' passes the alphabet check but pads to a length atob rejects.
-    expect(() => b64urlDecode('A')).toThrowError(
-      expect.objectContaining({ cause: expect.anything() })
-    );
-  });
-
-  it.each([
-    32767, 32768, 32769, 65536,
-  ])('b64urlEncode round-trips and matches Buffer.from(bytes).toString("base64url") at length %i (CHUNK_SIZE=0x8000 boundary)', (length) => {
-    const bytes = new Uint8Array(length);
-    for (let i = 0; i < length; i += 1) {
-      bytes[i] = i % 251;
-    }
-    const encoded = b64urlEncode(bytes);
-    expect(encoded).toBe(Buffer.from(bytes).toString('base64url'));
-    expect(b64urlDecode(encoded)).toEqual(bytes);
   });
 
   it('caches the imported AES CryptoKey by object reference: same key object imports once, a different one re-imports', async () => {
