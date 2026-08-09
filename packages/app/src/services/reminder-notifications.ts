@@ -57,7 +57,7 @@ export async function handleReminderFire(alarmId: string): Promise<void> {
     // One locked section reading fresh, not the list from before the notify: that round trip is
     // long enough for a pull to land, and every decision below has to be made against what it left.
     let nextDueDate: Date | null = null;
-    await updateReminders((current) =>
+    const { result } = await updateReminders((current) =>
       current.map((r) => {
         if (r.id !== reminderId) {
           return r;
@@ -71,6 +71,12 @@ export async function handleReminderFire(alarmId: string): Promise<void> {
         return { ...r, notified: true };
       })
     );
+    // setReminders resolves {success:false} on quota rather than throwing, so the catch below
+    // never sees it. Arming the next occurrence off an unpersisted advance would double-fire it.
+    if (result?.success === false) {
+      logger.error('Could not persist the fired reminder', result.error);
+      return;
+    }
 
     if (nextDueDate !== null) {
       await getScheduler().scheduleAt(reminderAlarmId(reminderId), nextDueDate);

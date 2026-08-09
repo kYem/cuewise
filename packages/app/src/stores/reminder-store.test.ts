@@ -952,6 +952,14 @@ describe('writers read storage, not their own snapshot', () => {
     expect(toastWarning).toHaveBeenCalledWith('This reminder no longer exists');
   });
 
+  it('snoozeReminder says so when the pull deleted it', async () => {
+    storageAheadOfStore([reminderFactory.build({ id: 'gone' })], []);
+
+    await useReminderStore.getState().snoozeReminder('gone', 5);
+
+    expect(toastWarning).toHaveBeenCalledWith('This reminder no longer exists');
+  });
+
   // Arming here resurrects a wake on a reminder the user explicitly paused.
   it('snoozeReminder arms no alarm when the pull paused it', async () => {
     const recurring = { frequency: 'interval' as const, intervalMinutes: 30 };

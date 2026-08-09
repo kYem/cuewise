@@ -441,9 +441,9 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       // Update alarm if dueDate changed
       if (updates.dueDate) {
         await clearReminderAlarm(reminderId);
-        // Don't re-arm a paused reminder.
+        // Don't re-arm a paused reminder. It is necessarily present — the write matched it.
         const updatedReminder = updatedReminders.find((r) => r.id === reminderId);
-        if (updatedReminder !== undefined && !updatedReminder.paused) {
+        if (updatedReminder?.paused !== true) {
           await armReminderAlarm(reminderId, new Date(updates.dueDate).getTime());
         }
       }
@@ -490,10 +490,13 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       // Only for a reminder the write actually found: a pull may have deleted or paused it while
       // this waited on the lock, and marking a gone id dirty pushes a tombstone we never authored.
       const snoozed = updatedReminders.find((r) => r.id === reminderId);
-      if (snoozed !== undefined) {
-        notifyMutated('reminders', reminderId);
+      if (snoozed === undefined) {
+        logger.warn(`snoozeReminder: reminder ${reminderId} was gone before the write`);
+        useToastStore.getState().warning('This reminder no longer exists');
+        return;
       }
-      if (snoozed !== undefined && snoozed.paused !== true) {
+      notifyMutated('reminders', reminderId);
+      if (snoozed.paused !== true) {
         await clearReminderAlarm(reminderId);
         await armReminderAlarm(reminderId, newDueDate.getTime());
       }
@@ -515,7 +518,9 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
 
       // Pausing must not touch dueDate: writing the snapshot's copy would revert an occurrence
       // a pull advanced while this was waiting on the lock.
-      const applied: { paused: boolean; dueDate: string | null } = { paused: false, dueDate: null };
+      // `found`, not the requested `paused`: the latter only doubles as a found-flag while the
+      // resume branch always sets dueDate, which a later change could quietly stop doing.
+      const applied: { found: boolean; dueDate: string | null } = { found: false, dueDate: null };
 
       // Bail before committing state or touching the alarm on a failed write.
       const { result, reminders: updated } = await updateReminders((current) =>
@@ -523,7 +528,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
           if (r.id !== reminderId || !r.recurring) {
             return r;
           }
-          applied.paused = paused;
+          applied.found = true;
           if (paused) {
             return { ...r, paused };
           }
@@ -539,7 +544,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       }
 
       commitReminders(set, updated);
-      if (applied.paused || applied.dueDate !== null) {
+      if (applied.found) {
         notifyMutated('reminders', reminderId);
       }
 
@@ -547,7 +552,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       // turned into a one-off leaves storage saying active while nothing will ever fire.
       if (applied.dueDate !== null) {
         await armReminderAlarm(reminderId, new Date(applied.dueDate).getTime());
-      } else if (applied.paused) {
+      } else if (applied.found) {
         await clearReminderAlarm(reminderId);
       }
     } catch (error) {

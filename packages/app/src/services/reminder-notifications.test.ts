@@ -108,6 +108,24 @@ describe('handleReminderFire', () => {
     expect(scheduleAt).toHaveBeenCalledWith('reminder-r2', expect.any(Date));
   });
 
+  // setReminders resolves {success:false} on quota instead of throwing, so nothing else catches it.
+  it('does not arm the next occurrence when the write did not persist', async () => {
+    getRemindersMock.mockResolvedValue([
+      recurringReminderFactory.build({
+        id: 'r5',
+        recurring: { frequency: 'interval', intervalMinutes: 30 },
+      }),
+    ]);
+    setRemindersMock.mockResolvedValue({
+      success: false,
+      error: { type: 'quota_exceeded', message: 'full' },
+    });
+
+    await handleReminderFire('reminder-r5');
+
+    expect(scheduleAt).not.toHaveBeenCalled();
+  });
+
   it('does not notify a completed reminder', async () => {
     getRemindersMock.mockResolvedValue([reminderFactory.build({ id: 'done', completed: true })]);
 
