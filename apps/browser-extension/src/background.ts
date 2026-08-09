@@ -191,14 +191,20 @@ notifier.onAction(async (notificationId, buttonIndex) => {
         current.map((r) => (r.id === reminderId ? { ...r, completed: true } : r))
       );
     } else if (action.type === 'snooze') {
-      await updateReminders((current) =>
+      const { result } = await updateReminders((current) =>
         current.map((r) =>
           r.id === reminderId
             ? { ...r, dueDate: action.dueDate, notified: false, completed: false }
             : r
         )
       );
-      await scheduler.scheduleAt(reminderAlarmId(reminderId), new Date(action.dueDate));
+      // Arming a wake for a dueDate that never persisted fires the reminder at the snoozed time
+      // against its still-overdue stored copy, which notifies all over again.
+      if (result?.success === false) {
+        logger.error('Could not persist the snoozed reminder', result.error);
+      } else {
+        await scheduler.scheduleAt(reminderAlarmId(reminderId), new Date(action.dueDate));
+      }
     }
 
     await notifier.clear(notificationId);

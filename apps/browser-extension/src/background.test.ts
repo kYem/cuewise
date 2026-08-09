@@ -150,6 +150,24 @@ describe('background: notification action buttons', () => {
   });
 
   // The lookup read and the locked read are separate; a pull can land between them.
+  it('does not arm the snooze wake when the write did not persist', async () => {
+    const reminder = reminderFactory.build({
+      id: 'r6',
+      completed: false,
+      dueDate: new Date(Date.now() - 1000).toISOString(),
+    });
+    getRemindersMock.mockResolvedValue([reminder]);
+    setRemindersMock.mockResolvedValue({
+      success: false,
+      error: { type: 'quota_exceeded', message: 'full' },
+    });
+
+    fireButton('reminder-r6', 1);
+
+    await vi.waitFor(() => expect(setRemindersMock).toHaveBeenCalled());
+    expect(chromeMock.alarms.create).not.toHaveBeenCalled();
+  });
+
   it('keeps a reminder that arrived between the lookup and the Done write', async () => {
     const reminder = reminderFactory.build({ id: 'r2', completed: false });
     const pulled = reminderFactory.build({ id: 'pulled' });
