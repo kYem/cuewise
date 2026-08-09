@@ -152,6 +152,18 @@ export type PairingPollResult =
   | { kind: 'complete' }
   | { kind: 'failed'; reason: 'expired_or_denied' | 'signed_out' | 'error' };
 
+/**
+ * Statuses no pairing request may start from: `active` already has a key, and the four mid-enroll
+ * ones are about to resolve one — a request from either races the key it would install.
+ */
+const PAIRING_BLOCKED_STATUSES: readonly SyncStatus[] = [
+  'active',
+  'signing_in',
+  'key_init',
+  'enrolling',
+  'initial_sync',
+];
+
 /** The request this device is polling: its keypair, and what the approver has answered so far. */
 interface PairingRequest {
   id: string;
@@ -316,10 +328,12 @@ export class SyncEngine {
   /**
    * Starts a device-pairing request (ENG-50): this device publishes a one-shot public key for
    * another signed-in device to wrap the account's data key to, and `pollPairing` drives the rest.
-   * Null when this device is not waiting for a key, or when the session carrying it is gone.
+   * Null unless this device holds no key and is not mid-enroll — both surfaces that ask for a
+   * recovery code qualify, a fresh device #2 (`disabled`) and one that lost its key
+   * (`needs_enroll`) — or when the session that would carry the request is gone.
    */
   async beginPairing(): Promise<{ pairingId: string } | null> {
-    if (this.status !== 'needs_enroll') {
+    if (this.dk !== null || PAIRING_BLOCKED_STATUSES.includes(this.status)) {
       return null;
     }
     const epoch = this.accountEpoch;
@@ -369,6 +383,11 @@ export class SyncEngine {
     const before = this.status;
     try {
       const found = await this.deps.apiClient.getPairing(pairing.id);
+      // Two overlapping polls both read the same request before either finished; without this the
+      // one that lost adopts the key a second time, re-running the whole activation over the top.
+      if (this.pairing !== pairing) {
+        return { kind: 'failed', reason: 'error' };
+      }
       if (found === null) {
         this.pairing = null;
         return { kind: 'failed', reason: 'expired_or_denied' };

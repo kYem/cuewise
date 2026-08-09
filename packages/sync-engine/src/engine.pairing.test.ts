@@ -16,7 +16,7 @@ import { FakeApiClient, FakeSyncServer, PAIRING_TTL_MS } from './__fixtures__/fa
 import { FakeKvStore } from './__fixtures__/fake-kv-store';
 import { FakeScheduler } from './__fixtures__/fake-scheduler';
 import { CLOUD_SYNC_ENABLED_KEY, SyncEngine } from './engine';
-import { loadPersistedDataKey, SYNC_DATA_KEY } from './key-lifecycle';
+import { loadPersistedDataKey, RecoveryCodeRequiredError, SYNC_DATA_KEY } from './key-lifecycle';
 import { SyncMetadataStore } from './metadata-store';
 
 interface Device {
@@ -188,15 +188,26 @@ function approverSas(side: ApproverSide): Promise<string> {
 }
 
 describe('SyncEngine.beginPairing', () => {
-  it('answers null unless this device is waiting for a key', async () => {
+  it('answers null once a key is held, and begins from a device that was asked for a code', async () => {
     const server = new FakeSyncServer();
-    const off = createDevice(server);
-    useStorage(off);
-    expect(await off.engine.beginPairing()).toBeNull();
+    const first = createDevice(server);
+    useStorage(first);
+    await first.engine.enableSync('dev', 'cred-a', 'Device A');
+    expect(first.engine.getStatus()).toBe('active');
 
-    await off.engine.enableSync('dev', 'cred-a', 'Device A');
-    expect(off.engine.getStatus()).toBe('active');
-    expect(await off.engine.beginPairing()).toBeNull();
+    expect(await first.engine.beginPairing()).toBeNull();
+
+    // Device #2 signs in, finds an account that already has a key, and is sent to the code prompt
+    // reading `disabled` — the surface pairing exists to replace.
+    const second = createDevice(server);
+    useStorage(second);
+    await expect(second.engine.enableSync('dev', 'cred-b', 'Device B')).rejects.toThrow(
+      RecoveryCodeRequiredError
+    );
+    expect(second.engine.getStatus()).toBe('disabled');
+
+    await beginPairing(second.engine);
+    expect(await second.engine.pollPairing()).toEqual({ kind: 'waiting' });
   });
 
   it('answers null and reports the lost sign-in when the session is gone', async () => {
@@ -321,6 +332,36 @@ describe('SyncEngine.pollPairing', () => {
       reason: 'signed_out',
     });
     expect(flow.requester.engine.getStatus()).toBe('signed_out');
+  });
+
+  it('lets only one of two overlapping polls adopt the key', async () => {
+    const flow = await pairingFlow();
+    await beginPairing(flow.requester.engine);
+    const side = await commitAsApprover(flow);
+    await flow.requester.engine.pollPairing();
+    await wrapKeyAsApprover(flow, side);
+
+    // The first poll is parked with the envelope already on the row, and a second runs past it.
+    const gate = heldAnswer();
+    const answer = flow.requester.apiClient.getPairing.bind(flow.requester.apiClient);
+    let parkNext = true;
+    vi.spyOn(flow.requester.apiClient, 'getPairing').mockImplementation(async (id) => {
+      if (parkNext) {
+        parkNext = false;
+        await gate.held();
+      }
+      return answer(id);
+    });
+    const writes = vi.spyOn(flow.requester.kv, 'set');
+
+    const first = flow.requester.engine.pollPairing();
+    await gate.awaited;
+    expect(await flow.requester.engine.pollPairing()).toEqual({ kind: 'complete' });
+    gate.release();
+
+    expect(await first).toEqual({ kind: 'failed', reason: 'error' });
+    expect(writes.mock.calls.filter(([key]) => key === SYNC_DATA_KEY)).toHaveLength(1);
+    expect(flow.requester.engine.getStatus()).toBe('active');
   });
 
   it('never installs a key for an account disabled while the poll was in flight', async () => {
