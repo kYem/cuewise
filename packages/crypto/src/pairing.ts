@@ -75,3 +75,31 @@ export async function unwrapDataKeyFromPeer(
   const dk = await aesGcmOpen(key, iv, ct, pairingAad(pairingId, keyId));
   return { dk: dk as DataKey, keyId };
 }
+
+export async function makePairingCommitment(
+  pub: Uint8Array
+): Promise<{ commitment: string; nonce: Uint8Array }> {
+  const nonce = randomBytes(32);
+  const transcript = new Uint8Array(pub.length + nonce.length);
+  transcript.set(pub, 0);
+  transcript.set(nonce, pub.length);
+  const hash = await sha256(transcript);
+  const commitment = b64urlEncode(hash);
+  return { commitment, nonce };
+}
+
+export async function verifyPairingCommitment(
+  commitment: string,
+  pub: Uint8Array,
+  nonce: Uint8Array
+): Promise<boolean> {
+  const transcript = new Uint8Array(pub.length + nonce.length);
+  transcript.set(pub, 0);
+  transcript.set(nonce, pub.length);
+  const hash = await sha256(transcript);
+  const expectedCommitment = b64urlEncode(hash);
+  if (commitment === expectedCommitment) {
+    return true;
+  }
+  return false;
+}

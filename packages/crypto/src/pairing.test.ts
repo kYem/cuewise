@@ -4,7 +4,9 @@ import { generateDataKey } from './keys';
 import {
   derivePairingSas,
   generatePairingKeypair,
+  makePairingCommitment,
   unwrapDataKeyFromPeer,
+  verifyPairingCommitment,
   wrapDataKeyToPeer,
 } from './pairing';
 
@@ -111,5 +113,44 @@ describe('wrapDataKeyToPeer / unwrapDataKeyFromPeer', () => {
     await expect(
       unwrapDataKeyFromPeer(eavesdropper.privateKey, approver.publicKey, envelope, 'p-1')
     ).rejects.toThrow(DecryptError);
+  });
+});
+
+describe('makePairingCommitment / verifyPairingCommitment', () => {
+  it('round-trip verifies to true', async () => {
+    const requester = await generatePairingKeypair();
+    const { commitment, nonce } = await makePairingCommitment(requester.publicKey);
+
+    const verified = await verifyPairingCommitment(commitment, requester.publicKey, nonce);
+
+    expect(verified).toBe(true);
+  });
+
+  it('wrong public key fails verification', async () => {
+    const requester = await generatePairingKeypair();
+    const other = await generatePairingKeypair();
+    const { commitment, nonce } = await makePairingCommitment(requester.publicKey);
+
+    const verified = await verifyPairingCommitment(commitment, other.publicKey, nonce);
+
+    expect(verified).toBe(false);
+  });
+
+  it('wrong nonce fails verification', async () => {
+    const requester = await generatePairingKeypair();
+    const { commitment } = await makePairingCommitment(requester.publicKey);
+    const wrongNonce = new Uint8Array(32);
+
+    const verified = await verifyPairingCommitment(commitment, requester.publicKey, wrongNonce);
+
+    expect(verified).toBe(false);
+  });
+
+  it('two commitments for same public key differ (fresh nonces)', async () => {
+    const requester = await generatePairingKeypair();
+    const { commitment: commitment1 } = await makePairingCommitment(requester.publicKey);
+    const { commitment: commitment2 } = await makePairingCommitment(requester.publicKey);
+
+    expect(commitment1).not.toBe(commitment2);
   });
 });
