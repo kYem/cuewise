@@ -1,7 +1,7 @@
 import { logger } from '@cuewise/shared';
 import type { SyncFailureReason, SyncOutcome } from '@cuewise/sync-engine';
 import { defaultSettings } from '@cuewise/test-utils';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeSyncController } from '../../sync/__fixtures__/fake-sync-controller';
@@ -68,6 +68,12 @@ function renderSection(
 }
 
 const cloudSyncSwitch = () => screen.getByRole('checkbox', { name: 'Cloud Sync' });
+
+/** The enrol modal leads with pairing; its code input sits behind the secondary link. */
+const openEnrollCodeInput = async (user: ReturnType<typeof userEvent.setup>) => {
+  const dialog = await screen.findByRole('dialog');
+  await user.click(within(dialog).getByRole('button', { name: PAIRING_CODE_LINK }));
+};
 
 const enterEnableStep = async (user: ReturnType<typeof userEvent.setup>, accountId: string) => {
   await user.click(cloudSyncSwitch());
@@ -291,12 +297,12 @@ describe('SyncSettingsSectionComponent', () => {
 
     await user.click(cloudSyncSwitch());
     await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
-    await screen.findByText('Enter recovery code');
+    await openEnrollCodeInput(user);
     await user.type(screen.getByLabelText(/recovery code/i), CODE);
     await user.click(screen.getByRole('button', { name: 'Enroll' }));
 
     expect(await screen.findByText('Save your recovery code')).toBeInTheDocument();
-    expect(screen.queryByText('Enter recovery code')).not.toBeInTheDocument();
+    expect(screen.queryByText(PAIRING_HEADING)).not.toBeInTheDocument();
   });
 
   it('explains the modal it just opened, with one warning', async () => {
@@ -450,13 +456,13 @@ describe('SyncSettingsSectionComponent', () => {
 
     await user.click(cloudSyncSwitch());
     await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
-    await screen.findByText('Enter recovery code');
+    await openEnrollCodeInput(user);
     await user.type(screen.getByLabelText(/recovery code/i), CODE);
     await user.click(screen.getByRole('button', { name: 'Enroll' }));
 
     // Modal stays open for another attempt; a deliberate cancel shows no failure message.
     expect(await screen.findByRole('button', { name: 'Enroll' })).toBeEnabled();
-    expect(screen.getByText('Enter recovery code')).toBeInTheDocument();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
@@ -579,7 +585,9 @@ describe('SyncSettingsSectionComponent', () => {
     await enterEnableStep(user, 'acct-1');
     await user.click(screen.getByRole('button', { name: 'Enable' }));
 
-    expect(await screen.findByText('Enter recovery code')).toBeInTheDocument();
+    // Pairing-first: the modal opens on the approval screen, with the code behind its link.
+    expect(await screen.findByRole('dialog')).toHaveTextContent(PAIRING_HEADING);
+    expect(screen.queryByLabelText('Recovery code')).not.toBeInTheDocument();
   });
 
   it('shows a toast error when enable fails with a bad-code reason', async () => {
@@ -592,7 +600,7 @@ describe('SyncSettingsSectionComponent', () => {
     await user.click(screen.getByRole('button', { name: 'Enable' }));
 
     await waitFor(() => expect(toastError).toHaveBeenCalledTimes(1));
-    expect(screen.queryByText('Enter recovery code')).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
   it('shows a toast error when enable fails with an auth reason', async () => {
@@ -638,7 +646,7 @@ describe('SyncSettingsSectionComponent', () => {
 
     await user.click(screen.getByRole('button', { name: 'Reconnect' }));
 
-    expect(await screen.findByText('Enter recovery code')).toBeInTheDocument();
+    expect(await screen.findByRole('dialog')).toHaveTextContent(PAIRING_HEADING);
   });
 
   it('routes the reconnect→needs-code enroll submit through reconnect(code), never enable', async () => {
@@ -649,7 +657,7 @@ describe('SyncSettingsSectionComponent', () => {
     act(() => controller.setStatus('needs_reauth'));
 
     await user.click(screen.getByRole('button', { name: 'Reconnect' }));
-    await screen.findByText('Enter recovery code');
+    await openEnrollCodeInput(user);
     await user.type(screen.getByLabelText(/recovery code/i), CODE);
     await user.click(screen.getByRole('button', { name: 'Enroll' }));
 
@@ -669,7 +677,7 @@ describe('SyncSettingsSectionComponent', () => {
     await user.click(cloudSyncSwitch());
     const deviceName = (screen.getByLabelText('Device name') as HTMLInputElement).value;
     await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
-    await screen.findByText('Enter recovery code');
+    await openEnrollCodeInput(user);
     await user.type(screen.getByLabelText(/recovery code/i), CODE);
     await user.click(screen.getByRole('button', { name: 'Enroll' }));
 
@@ -695,7 +703,7 @@ describe('SyncSettingsSectionComponent', () => {
 
     await user.click(cloudSyncSwitch());
     await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
-    await screen.findByText('Enter recovery code');
+    await openEnrollCodeInput(user);
     await user.type(screen.getByLabelText(/recovery code/i), CODE);
     await user.click(screen.getByRole('button', { name: 'Enroll' }));
 
@@ -712,7 +720,7 @@ describe('SyncSettingsSectionComponent', () => {
     await user.click(cloudSyncSwitch());
     const deviceName = (screen.getByLabelText('Device name') as HTMLInputElement).value;
     await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
-    await screen.findByText('Enter recovery code');
+    await openEnrollCodeInput(user);
     await user.type(screen.getByLabelText(/recovery code/i), CODE);
     await user.click(screen.getByRole('button', { name: 'Enroll' }));
 
@@ -736,7 +744,7 @@ describe('SyncSettingsSectionComponent', () => {
     await user.click(cloudSyncSwitch());
     const deviceName = (screen.getByLabelText('Device name') as HTMLInputElement).value;
     await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
-    await screen.findByText('Enter recovery code');
+    await openEnrollCodeInput(user);
     await user.type(screen.getByLabelText(/recovery code/i), CODE);
     await user.click(screen.getByRole('button', { name: 'Enroll' }));
 
@@ -1629,7 +1637,7 @@ describe('SyncSettingsSectionComponent', () => {
     await user.click(screen.getByRole('button', { name: 'Sync now' }));
     act(() => controller.setStatus('needs_reauth'));
     await user.click(screen.getByRole('button', { name: 'Reconnect' }));
-    await screen.findByText('Enter recovery code');
+    await openEnrollCodeInput(user);
     await user.type(screen.getByLabelText(/recovery code/i), CODE);
     await user.click(screen.getByRole('button', { name: 'Enroll' }));
     await act(async () => {
@@ -2045,7 +2053,7 @@ describe('SyncSettingsSectionComponent', () => {
 
     await enterEnableStep(user, 'acct-2');
     await user.click(screen.getByRole('button', { name: 'Enable' }));
-    await screen.findByText('Enter recovery code');
+    await openEnrollCodeInput(user);
     controller.scriptLastCycle({ kind: 'failed', reason: 'network', error: new Error('offline') });
     await user.type(screen.getByLabelText(/recovery code/i), CODE);
     await user.click(screen.getByRole('button', { name: 'Enroll' }));
@@ -2177,7 +2185,7 @@ describe('SyncSettingsSectionComponent', () => {
     await user.clear(deviceInput);
     await user.type(deviceInput, 'MyMac');
     await user.click(screen.getByRole('button', { name: 'Enable' }));
-    await screen.findByText('Enter recovery code');
+    await openEnrollCodeInput(user);
 
     await user.type(screen.getByLabelText(/recovery code/i), CODE);
     await user.click(screen.getByRole('button', { name: 'Enroll' }));
@@ -2352,7 +2360,8 @@ describe('SyncSettingsSectionComponent', () => {
       await renderPairingScreen(controller);
 
       await user.click(screen.getByRole('button', { name: PAIRING_CODE_LINK }));
-      await user.type(await screen.findByLabelText('Recovery code'), CODE);
+      await openEnrollCodeInput(user);
+      await user.type(screen.getByLabelText('Recovery code'), CODE);
       await user.click(screen.getByRole('button', { name: 'Enroll' }));
 
       await waitFor(() =>
@@ -2400,6 +2409,49 @@ describe('SyncSettingsSectionComponent', () => {
         await pollTick();
 
         expect(pollCount(controller)).toBe(polled);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    // The headline flow: a brand-new second device signing in for the first time.
+    it('leads with pairing on a fresh second device, before asking for the code', async () => {
+      const user = userEvent.setup();
+      const controller = new FakeSyncController();
+      controller.scriptEnableWithGoogle({ ok: false, reason: 'needs-code' });
+      renderSection(controller);
+
+      await user.click(cloudSyncSwitch());
+      await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
+
+      const dialog = await screen.findByRole('dialog');
+      expect(within(dialog).getByText(PAIRING_BODY)).toBeInTheDocument();
+      expect(within(dialog).queryByLabelText('Recovery code')).not.toBeInTheDocument();
+      await waitFor(() =>
+        expect(controller.calls.filter((call) => call.method === 'beginPairing')).toHaveLength(1)
+      );
+    });
+
+    // The tail a typed code would have run: Chrome sync handed off, and the modal gone.
+    // fireEvent, not userEvent: its clock is the fake one the poll below needs.
+    it('finishes the enrol when the approval lands while that modal is open', async () => {
+      vi.useFakeTimers();
+      const controller = new FakeSyncController();
+      controller.scriptEnableWithGoogle({ ok: false, reason: 'needs-code' });
+      controller.scriptPairingPolls({ kind: 'complete' });
+      settingsMock.syncEnabled = true;
+      try {
+        renderSection(controller);
+        fireEvent.click(cloudSyncSwitch());
+        fireEvent.click(screen.getByRole('button', { name: 'Sign in with Google' }));
+        await flush();
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+        await pollTick();
+        await flush();
+
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        expect(settingsMock.updateSettings).toHaveBeenCalledWith({ syncEnabled: false });
       } finally {
         vi.useRealTimers();
       }

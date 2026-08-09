@@ -2,7 +2,7 @@ import { describeThrown, logger } from '@cuewise/shared';
 import type { PairingPollResult } from '@cuewise/sync-engine';
 import { RefreshCw } from 'lucide-react';
 import type React from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSyncController } from '../../sync/sync-controller';
 
 const HEADING = 'Approve from another device';
@@ -34,8 +34,10 @@ function formatSas(sas: string): string {
 }
 
 interface PairingPanelProps {
-  /** Opens the recovery-code flow this screen is the alternative to. */
-  onUseRecoveryCode: () => void;
+  /** Offers the recovery code as the fallback; omitted where that flow is already on screen. */
+  onUseRecoveryCode?: () => void;
+  /** An approval landed and this device adopted the key — the caller finishes the enrol. */
+  onComplete: () => void;
 }
 
 /**
@@ -43,11 +45,17 @@ interface PairingPanelProps {
  * this panel is on screen, so a device that still holds the key can hand it over after both
  * screens show the same digits.
  */
-export const PairingPanel: React.FC<PairingPanelProps> = ({ onUseRecoveryCode }) => {
+export const PairingPanel: React.FC<PairingPanelProps> = ({ onUseRecoveryCode, onComplete }) => {
   const controller = useSyncController();
   const [state, setState] = useState<PairingState>(STARTING);
   // Bumped by Try again; re-runs the effect, whose cleanup ends the request it replaces.
   const [attempt, setAttempt] = useState(0);
+  // Read through a ref, so a caller re-rendering a new closure cannot restart the request.
+  const completeRef = useRef(onComplete);
+
+  useEffect(() => {
+    completeRef.current = onComplete;
+  }, [onComplete]);
 
   useEffect(() => {
     if (controller === null) {
@@ -85,8 +93,9 @@ export const PairingPanel: React.FC<PairingPanelProps> = ({ onUseRecoveryCode })
         return;
       }
       if (result.kind === 'complete') {
-        // The status change repaints the whole panel — nothing left for this screen to say.
+        // This device is enrolled now: the caller runs the same tail a typed code would have.
         stopPolling();
+        completeRef.current();
         return;
       }
       if (result.kind === 'failed') {
@@ -166,13 +175,15 @@ export const PairingPanel: React.FC<PairingPanelProps> = ({ onUseRecoveryCode })
           </button>
         </div>
       )}
-      <button
-        type="button"
-        onClick={onUseRecoveryCode}
-        className="w-fit text-xs font-medium text-secondary underline underline-offset-2 transition-colors hover:text-primary"
-      >
-        {USE_RECOVERY_CODE}
-      </button>
+      {onUseRecoveryCode !== undefined && (
+        <button
+          type="button"
+          onClick={onUseRecoveryCode}
+          className="w-fit text-xs font-medium text-secondary underline underline-offset-2 transition-colors hover:text-primary"
+        >
+          {USE_RECOVERY_CODE}
+        </button>
+      )}
     </div>
   );
 };

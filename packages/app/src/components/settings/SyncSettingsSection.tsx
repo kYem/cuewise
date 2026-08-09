@@ -702,10 +702,25 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   };
 
   // The keyless device's code path is the reconnect one without the code-less attempt that can
-  // only fail: reconnect(code) is where that flow already ended.
+  // only fail: reconnect(code) is where that flow already ended. The modal leads with pairing
+  // itself, and a second request would replace this device's own row — hence the !enrollOpen gate
+  // on the panel below.
   const handleUseRecoveryCode = () => {
     setEnrollSource('reconnect');
     setEnrollOpen(true);
+  };
+
+  // An approval enrolled this device, so it ends where a typed code would have — minus the
+  // recovery code, which pairing never mints.
+  const finishPairedEnroll = async () => {
+    setEnrollOpen(false);
+    await takeOverFromChromeSync();
+    await adoptNewAccount();
+    setEnabling(false);
+  };
+
+  const handlePairingComplete = () => {
+    void finishPairedEnroll();
   };
 
   const handleToggle = (checked: boolean) => {
@@ -973,8 +988,11 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
             <p data-testid="sync-reconnect-prompt" className="text-xs text-tertiary">
               {stoppedPrompt}
             </p>
-            {presentation.kind === 'pairing' && (
-              <PairingPanel onUseRecoveryCode={handleUseRecoveryCode} />
+            {presentation.kind === 'pairing' && !enrollOpen && (
+              <PairingPanel
+                onUseRecoveryCode={handleUseRecoveryCode}
+                onComplete={handlePairingComplete}
+              />
             )}
             {presentation.kind === 'reconnect' && (
               <button
@@ -1029,6 +1047,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
         isOpen={enrollOpen}
         onSubmit={handleEnrollSubmit}
         onClose={() => setEnrollOpen(false)}
+        onPaired={handlePairingComplete}
       />
     </div>
   );

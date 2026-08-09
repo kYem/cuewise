@@ -107,7 +107,8 @@ describe('enable-sync UI end-to-end flow', () => {
 
     await user.click(screen.getByRole('button', { name: 'Reconnect' }));
 
-    expect(await screen.findByText('Enter recovery code')).toBeInTheDocument();
+    // Pairing-first: the modal opens on the approval screen, code behind its secondary link.
+    expect(await screen.findByRole('dialog')).toHaveTextContent('Approve from another device');
   });
 
   it('disabling from an active state shows the confirm dialog with the recovery-code warning', async () => {
