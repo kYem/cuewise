@@ -23,9 +23,8 @@ import { QUARANTINE_KEY, STATUS_KEY } from './sync/sync-storage-keys';
 
 const { scheduler, notifier } = configureChromePlatform();
 
-// Fire a reminder's notification when its scheduled time arrives. The lookup +
-// deliver + recurring re-arm logic is shared with the macOS app so both platforms
-// behave identically.
+// The lookup + deliver + recurring re-arm logic is shared with the macOS app, so both
+// platforms behave identically.
 scheduler.onFire(handleReminderFire);
 
 // Uninstall feedback (spec 2026-07-17): ask departing users why. Only the

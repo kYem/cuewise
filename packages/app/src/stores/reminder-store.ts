@@ -202,9 +202,8 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
 
       commitReminders(set, reminders, { isLoading: false });
 
-      // Rust-backed schedulers lose their armed wakes on restart (unlike
-      // chrome.alarms), so re-arm every active reminder from storage. Overdue
-      // one-offs fire on arm; skip ones already delivered so they don't re-notify.
+      // Rust-backed schedulers lose their armed wakes on restart, unlike chrome.alarms, so re-arm
+      // from storage. Overdue one-offs fire on arm; skip delivered ones so they don't re-notify.
       const scheduler = getScheduler();
       if (scheduler.deliversInBackground && !scheduler.persistsAcrossRestarts) {
         for (const reminder of reminders) {
@@ -287,9 +286,8 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
 
       const isCompleting = !reminder.completed;
       const now = new Date();
-      // Recurrence is decided inside the lock, off the fresh entity: a pull can add or drop it
-      // while this waits, and choosing the branch from the snapshot then writes the wrong one —
-      // completing a series, or silently doing nothing while still cancelling its alarm.
+      // Recurrence is decided off the fresh entity: a pull can add or drop it while this waits,
+      // and branching on the snapshot then completes a series, or no-ops while killing its alarm.
       const done: { outcome: 'advanced' | 'toggled' | 'absent'; written: Reminder | null } = {
         outcome: 'absent',
         written: null,
@@ -304,9 +302,8 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
           // Any recurring reminder (active OR paused) advances to its next occurrence
           // instead of being marked complete, which would permanently destroy it.
           if (isCompleting && r.recurring) {
-            // A not-yet-due occurrence is skipped to the one after it (calendar reminders keep
-            // their clock time, e.g. tonight 9pm → tomorrow 9pm); a due/overdue one restarts
-            // its cadence from now.
+            // A not-yet-due occurrence is skipped to the one after it, keeping its clock time
+            // (tonight 9pm → tomorrow 9pm); a due/overdue one restarts its cadence from now.
             const nextDueDate = isUpcomingRecurringOccurrence(r, now)
               ? skipReminderOccurrence(r)
               : nextReminderDueDate(r, now);
@@ -577,9 +574,8 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
         return;
       }
 
-      // The due set is re-derived inside the lock — stamping notified on a reminder a pull just
-      // snoozed would silence that occurrence for good — and nothing due means no write, since
-      // this polls on an interval.
+      // Re-derived inside the lock: stamping notified on a reminder a pull just snoozed silences
+      // that occurrence for good. Nothing due means no write at all, since this polls.
       const fired = await withCollectionLock('reminders', async () => {
         const current = await loadAllReminders();
         const dueNow = current.filter(isDue);
@@ -603,16 +599,14 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       const { dueNow, reminders: updated } = fired;
 
       commitReminders(set, updated);
-      // `notified` is now persisted, so this sweep is the only chance to announce them. At error
-      // level because the shipped default log level is 'error' — below it, a reminder that fired
-      // but never reached the user leaves no trace at all.
+      // At error level because that is the shipped default: `notified` is now persisted, so a
+      // reminder that fired but never reached the user would otherwise leave no trace.
       logger.error('Fired due reminders', { count: dueNow.length });
 
       for (const r of dueNow) {
         useToastStore.getState().warning(`Reminder: ${r.text}`);
-        // With no background worker to raise the OS notification (web / a native
-        // app whose scheduler doesn't deliver in the background), deliver it here
-        // via the port. Where a resident host owns delivery, it notifies instead.
+        // No background worker to raise the OS notification, so deliver it here via the port.
+        // Where a resident host owns delivery, it notifies instead.
         if (!getScheduler().deliversInBackground) {
           getNotifier()
             .notify({
