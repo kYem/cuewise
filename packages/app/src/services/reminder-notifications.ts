@@ -11,7 +11,6 @@ import {
   getScheduler,
   logger,
   nextReminderDueDate,
-  type Reminder,
   reminderAlarmId,
   reminderIdFromAlarm,
 } from '@cuewise/shared';
@@ -55,31 +54,28 @@ export async function handleReminderFire(alarmId: string): Promise<void> {
       requireInteraction: true,
     });
 
-    // A fresh read, not the list from before the notify: that round trip is long enough for a pull
-    // to land, and rewriting the pre-notify list would drop whatever it brought.
+    // One locked section reading fresh, not the list from before the notify: that round trip is
+    // long enough for a pull to land, and every decision below has to be made against what it left.
+    let nextDueDate: Date | null = null;
     await updateReminders((current) =>
-      current.map((r) => (r.id === reminderId ? { ...r, notified: true } : r))
+      current.map((r) => {
+        if (r.id !== reminderId) {
+          return r;
+        }
+        // Re-checked here, not from the pre-notify copy: a pull may have paused, completed or
+        // re-cadenced this reminder, and advancing it then would undo that and arm a dead wake.
+        if (r.recurring && !r.paused && !r.completed) {
+          nextDueDate = nextReminderDueDate(r, new Date());
+          return { ...r, dueDate: nextDueDate.toISOString(), notified: false, completed: false };
+        }
+        return { ...r, notified: true };
+      })
     );
 
-    if (reminder.recurring) {
-      await scheduleNextOccurrence(reminder);
+    if (nextDueDate !== null) {
+      await getScheduler().scheduleAt(reminderAlarmId(reminderId), nextDueDate);
     }
   } catch (error) {
     logger.error('Error handling reminder fire', error);
   }
-}
-
-/** Advance a recurring reminder to its next occurrence and re-arm its wake. */
-async function scheduleNextOccurrence(reminder: Reminder): Promise<void> {
-  const nextDueDate = nextReminderDueDate(reminder, new Date());
-
-  await updateReminders((current) =>
-    current.map((r) =>
-      r.id === reminder.id
-        ? { ...r, dueDate: nextDueDate.toISOString(), notified: false, completed: false }
-        : r
-    )
-  );
-
-  await getScheduler().scheduleAt(reminderAlarmId(reminder.id), nextDueDate);
 }

@@ -21,6 +21,7 @@ vi.mock('@cuewise/storage', () => ({
     const reminders = mutate((await storage.getReminders()) ?? []);
     return { result: await storage.setReminders(reminders), reminders };
   }),
+  withCollectionLock: vi.fn(<T>(_lock: string, apply: () => Promise<T>) => apply()),
 }));
 
 // Mock toast store with module-level fns so each level is inspectable across getState() calls.
@@ -47,6 +48,19 @@ const fakeScheduler = {
   scheduleAt: vi.fn(() => Promise.resolve()),
   cancel: vi.fn(() => Promise.resolve()),
 };
+
+/**
+ * Seeds the store and storage with deliberately different lists — a pull that landed after the
+ * store last read. Every writer must persist against `stored`, not the state it can see.
+ */
+function storageAheadOfStore(inStore: Reminder[], stored: Reminder[]): void {
+  useReminderStore.setState({ reminders: inStore });
+  getRemindersMock.mockResolvedValue(stored);
+}
+
+function persistedIds(): string[] {
+  return (setRemindersMock.mock.calls[0][0] as Reminder[]).map((r) => r.id);
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -722,5 +736,138 @@ describe('converging on reminders written elsewhere', () => {
     await loaded;
 
     expect(useReminderStore.getState().reminders).toHaveLength(2);
+  });
+});
+
+// Storage holds a reminder the store has not seen — a pull that landed while this action was
+// waiting on the lock. Each writer must merge into it, and derive from it, not from `get()`.
+describe('writers read storage, not their own snapshot', () => {
+  const pulled = () => reminderFactory.build({ id: 'pulled', text: 'from another device' });
+
+  it('addReminder keeps it', async () => {
+    const incoming = pulled();
+    storageAheadOfStore([], [incoming]);
+
+    await useReminderStore.getState().addReminder('Stretch', new Date(Date.now() + 60_000));
+
+    expect(persistedIds()).toContain(incoming.id);
+  });
+
+  it('deleteReminder keeps it', async () => {
+    const mine = reminderFactory.build({ id: 'mine' });
+    const incoming = pulled();
+    storageAheadOfStore([mine], [mine, incoming]);
+
+    await useReminderStore.getState().deleteReminder('mine');
+
+    expect(persistedIds()).toEqual([incoming.id]);
+  });
+
+  it('markAsNotified keeps it', async () => {
+    const mine = reminderFactory.build({ id: 'mine' });
+    const incoming = pulled();
+    storageAheadOfStore([mine], [mine, incoming]);
+
+    await useReminderStore.getState().markAsNotified('mine');
+
+    expect(persistedIds()).toContain(incoming.id);
+  });
+
+  it('fireDueReminders keeps it', async () => {
+    const due = reminderFactory.build({
+      id: 'due',
+      notified: false,
+      dueDate: new Date(Date.now() - 60_000).toISOString(),
+    });
+    const incoming = pulled();
+    storageAheadOfStore([due], [due, incoming]);
+
+    await useReminderStore.getState().fireDueReminders();
+
+    expect(persistedIds()).toContain(incoming.id);
+  });
+
+  // Only a snooze or an advance clears `notified`, so stamping it on a reminder a pull just
+  // snoozed silences that occurrence for good.
+  it('fireDueReminders leaves a reminder the pull already snoozed alone', async () => {
+    const stale = reminderFactory.build({
+      id: 'snoozed',
+      notified: false,
+      dueDate: new Date(Date.now() - 60_000).toISOString(),
+    });
+    const snoozed = { ...stale, dueDate: new Date(Date.now() + 60 * 60_000).toISOString() };
+    storageAheadOfStore([stale], [snoozed]);
+
+    await useReminderStore.getState().fireDueReminders();
+
+    expect(setRemindersMock).not.toHaveBeenCalled();
+  });
+
+  // initialize's auto-advance had no coverage at all: disabling the whole branch kept the suite
+  // green, so the happy path is pinned here alongside the race.
+  it('initialize advances an overdue recurring reminder and arms its next occurrence', async () => {
+    const overdue = recurringReminderFactory.build({
+      id: 'overdue',
+      dueDate: new Date(Date.now() - 60 * 60_000).toISOString(),
+      recurring: { frequency: 'interval', intervalMinutes: 30 },
+      paused: false,
+      completed: false,
+    });
+    getRemindersMock.mockResolvedValue([overdue]);
+    const before = Date.now();
+
+    await useReminderStore.getState().initialize();
+
+    // The persisted list, not the final state: initialize ends with a reconcile that re-reads,
+    // and the mocked setReminders does not feed getReminders.
+    const written = setRemindersMock.mock.calls[0][0] as Reminder[];
+    expect(new Date(written[0].dueDate).getTime()).toBeGreaterThan(before);
+    expect(fakeScheduler.scheduleAt).toHaveBeenCalledWith('reminder-overdue', expect.any(Date));
+  });
+
+  it('initialize advances the pulled version, not the one it first read', async () => {
+    const recurring = { frequency: 'interval' as const, intervalMinutes: 30 };
+    const stale = recurringReminderFactory.build({
+      id: 'overdue',
+      text: 'Move',
+      dueDate: new Date(Date.now() - 60 * 60_000).toISOString(),
+      recurring,
+      paused: false,
+      completed: false,
+    });
+    getRemindersMock.mockResolvedValueOnce([stale]);
+    getRemindersMock.mockResolvedValue([{ ...stale, text: 'Move around' }]);
+
+    await useReminderStore.getState().initialize();
+
+    const written = setRemindersMock.mock.calls[0][0] as Reminder[];
+    expect(written[0].text).toBe('Move around');
+  });
+
+  // Pausing must not touch dueDate; the snapshot's copy predates the pull's advance.
+  it('setReminderPaused does not revert a dueDate the pull advanced', async () => {
+    const recurring = { frequency: 'interval' as const, intervalMinutes: 30 };
+    const stale = recurringReminderFactory.build({ id: 'r', recurring, paused: false });
+    const advanced = { ...stale, dueDate: new Date(Date.now() + 30 * 60_000).toISOString() };
+    storageAheadOfStore([stale], [advanced]);
+
+    await useReminderStore.getState().setReminderPaused('r', true);
+
+    const written = setRemindersMock.mock.calls[0][0] as Reminder[];
+    expect(written[0].dueDate).toBe(advanced.dueDate);
+    expect(written[0].paused).toBe(true);
+  });
+
+  // The advanced entity is spread from the fresh read, so a rename the pull brought survives.
+  it('toggleReminder advances the pulled version of a recurring reminder', async () => {
+    const recurring = { frequency: 'interval' as const, intervalMinutes: 30 };
+    const stale = recurringReminderFactory.build({ id: 'r', text: 'Stretch', recurring });
+    const renamed = { ...stale, text: 'Stretch legs' };
+    storageAheadOfStore([stale], [renamed]);
+
+    await useReminderStore.getState().toggleReminder('r');
+
+    const written = setRemindersMock.mock.calls[0][0] as Reminder[];
+    expect(written[0].text).toBe('Stretch legs');
   });
 });

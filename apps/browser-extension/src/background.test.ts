@@ -149,6 +149,39 @@ describe('background: notification action buttons', () => {
     });
   });
 
+  // The lookup read and the locked read are separate; a pull can land between them.
+  it('keeps a reminder that arrived between the lookup and the Done write', async () => {
+    const reminder = reminderFactory.build({ id: 'r2', completed: false });
+    const pulled = reminderFactory.build({ id: 'pulled' });
+    getRemindersMock.mockResolvedValueOnce([reminder]);
+    getRemindersMock.mockResolvedValue([reminder, pulled]);
+
+    fireButton('reminder-r2', 0);
+
+    await vi.waitFor(() => {
+      const saved = setRemindersMock.mock.calls[0][0] as Reminder[];
+      expect(saved.map((r) => r.id)).toEqual(['r2', 'pulled']);
+    });
+  });
+
+  it('keeps a reminder that arrived between the lookup and the Snooze write', async () => {
+    const reminder = reminderFactory.build({
+      id: 'r3',
+      completed: false,
+      dueDate: new Date(Date.now() - 1000).toISOString(),
+    });
+    const pulled = reminderFactory.build({ id: 'pulled' });
+    getRemindersMock.mockResolvedValueOnce([reminder]);
+    getRemindersMock.mockResolvedValue([reminder, pulled]);
+
+    fireButton('reminder-r3', 1);
+
+    await vi.waitFor(() => {
+      const saved = setRemindersMock.mock.calls[0][0] as Reminder[];
+      expect(saved.map((r) => r.id)).toEqual(['r3', 'pulled']);
+    });
+  });
+
   it('snoozes the reminder on the Snooze button (index 1) and re-arms the alarm', async () => {
     const reminder = reminderFactory.build({
       id: 'r3',
