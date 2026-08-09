@@ -73,6 +73,27 @@ describe('handleReminderFire', () => {
     expect(saved.find((r) => r.id === 'r1')?.notified).toBe(true);
   });
 
+  // The recurrence decision is re-made against the fresh read: advancing a reminder the pull
+  // paused would undo the pause and arm a wake that must never fire.
+  it('does not advance a recurring reminder the pull paused during the notification', async () => {
+    const active = recurringReminderFactory.build({
+      id: 'r4',
+      recurring: { frequency: 'interval', intervalMinutes: 30 },
+      paused: false,
+    });
+    getRemindersMock.mockResolvedValueOnce([active]);
+    notify.mockImplementationOnce(async () => {
+      getRemindersMock.mockResolvedValue([{ ...active, paused: true }]);
+    });
+
+    await handleReminderFire('reminder-r4');
+
+    const saved = setRemindersMock.mock.calls[0][0];
+    expect(saved[0].dueDate).toBe(active.dueDate);
+    expect(saved[0].notified).toBe(true);
+    expect(scheduleAt).not.toHaveBeenCalled();
+  });
+
   it('re-arms the next occurrence of a recurring reminder', async () => {
     getRemindersMock.mockResolvedValue([
       recurringReminderFactory.build({
