@@ -286,21 +286,24 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       }
 
       const isCompleting = !reminder.completed;
+      const now = new Date();
+      // Recurrence is decided inside the lock, off the fresh entity: a pull can add or drop it
+      // while this waits, and choosing the branch from the snapshot then writes the wrong one —
+      // completing a series, or silently doing nothing while still cancelling its alarm.
+      const done: { outcome: 'advanced' | 'toggled' | 'absent'; written: Reminder | null } = {
+        outcome: 'absent',
+        written: null,
+      };
 
-      // Any recurring reminder (active OR paused) advances to its next occurrence
-      // instead of being marked complete, which would permanently destroy it.
-      if (isCompleting && reminder.recurring) {
-        const now = new Date();
-        // Spreading the fresh `r`, never the snapshot: a pull may have renamed or re-cadenced
-        // this reminder while the lock was held, and substituting the snapshot reverts it.
-        const written: { advanced: Reminder | null } = { advanced: null };
-
-        // Bail before committing state, arming an alarm, or toasting success on a failed write.
-        const { result, reminders: updatedReminders } = await updateReminders((current) =>
-          current.map((r) => {
-            if (r.id !== reminderId || !r.recurring) {
-              return r;
-            }
+      // Bail before committing state, arming an alarm, or toasting success on a failed write.
+      const { result, reminders: updatedReminders } = await updateReminders((current) =>
+        current.map((r) => {
+          if (r.id !== reminderId) {
+            return r;
+          }
+          // Any recurring reminder (active OR paused) advances to its next occurrence
+          // instead of being marked complete, which would permanently destroy it.
+          if (isCompleting && r.recurring) {
             // A not-yet-due occurrence is skipped to the one after it (calendar reminders keep
             // their clock time, e.g. tonight 9pm → tomorrow 9pm); a due/overdue one restarts
             // its cadence from now.
@@ -308,59 +311,53 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
               ? skipReminderOccurrence(r)
               : nextReminderDueDate(r, now);
             // The full spread preserves paused/recurring, so a paused reminder stays paused.
-            written.advanced = {
+            done.outcome = 'advanced';
+            done.written = {
               ...r,
               dueDate: nextDueDate.toISOString(),
               completed: false,
               notified: false,
             };
-            return written.advanced;
-          })
-        );
-        if (result?.success === false) {
-          logger.error('Failed to persist advanced recurring reminder', result.error);
-          useToastStore.getState().error('Failed to update reminder. Please try again.');
-          return;
-        }
-
-        commitReminders(set, updatedReminders);
-        notifyMutated('reminders', reminderId);
-
-        // Only (re)arm an alarm when the reminder is active; a paused one must not fire.
-        await clearReminderAlarm(reminderId);
-        if (written.advanced !== null && !written.advanced.paused) {
-          await armReminderAlarm(reminderId, new Date(written.advanced.dueDate).getTime());
-        }
-
-        useToastStore.getState().success('Recurring reminder advanced to next occurrence');
-        return;
-      }
-
-      // For non-recurring reminders, toggle completed status.
-      // Bail before committing state or clearing the alarm on a failed write.
-      const { result, reminders: updatedReminders } = await updateReminders((current) =>
-        current.map((r) =>
-          r.id === reminderId
-            ? {
-                ...r,
-                completed: isCompleting,
-                // Track when the reminder was completed for context-aware suggestions
-                completedAt: isCompleting ? new Date().toISOString() : undefined,
-              }
-            : r
-        )
+            return done.written;
+          }
+          done.outcome = 'toggled';
+          done.written = {
+            ...r,
+            completed: isCompleting,
+            // Track when the reminder was completed for context-aware suggestions
+            completedAt: isCompleting ? now.toISOString() : undefined,
+          };
+          return done.written;
+        })
       );
       if (result?.success === false) {
         logger.error('Failed to persist reminder toggle', result.error);
         useToastStore.getState().error('Failed to update reminder. Please try again.');
         return;
       }
+      // A pull deleted it while the lock was held: nothing was written, so touching its alarm
+      // or claiming success would both be lies.
+      if (done.outcome === 'absent' || done.written === null) {
+        logger.warn(`toggleReminder: Reminder with id ${reminderId} was removed before the write`);
+        useToastStore.getState().warning('This reminder no longer exists');
+        return;
+      }
 
       commitReminders(set, updatedReminders);
       notifyMutated('reminders', reminderId);
 
+      if (done.outcome === 'advanced') {
+        // Only (re)arm an alarm when the reminder is active; a paused one must not fire.
+        await clearReminderAlarm(reminderId);
+        if (!done.written.paused) {
+          await armReminderAlarm(reminderId, new Date(done.written.dueDate).getTime());
+        }
+        useToastStore.getState().success('Recurring reminder advanced to next occurrence');
+        return;
+      }
+
       // Cancel alarm if completed
-      if (isCompleting) {
+      if (done.written.completed) {
         await clearReminderAlarm(reminderId);
       }
     } catch (error) {
@@ -482,9 +479,13 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       commitReminders(set, updatedReminders);
       notifyMutated('reminders', reminderId);
 
-      // Update alarm
-      await clearReminderAlarm(reminderId);
-      await armReminderAlarm(reminderId, newDueDate.getTime());
+      // Only touch the alarm for a reminder the write actually found: a pull may have deleted
+      // or paused it while this waited on the lock, and arming it then resurrects a dead wake.
+      const snoozed = updatedReminders.find((r) => r.id === reminderId);
+      if (snoozed !== undefined && snoozed.paused !== true) {
+        await clearReminderAlarm(reminderId);
+        await armReminderAlarm(reminderId, newDueDate.getTime());
+      }
     } catch (error) {
       logger.error('Error snoozing reminder', error);
       const errorMessage = 'Failed to snooze reminder. Please try again.';
@@ -503,7 +504,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
 
       // Pausing must not touch dueDate: writing the snapshot's copy would revert an occurrence
       // a pull advanced while this was waiting on the lock.
-      const resumed: { dueDate: string | null } = { dueDate: null };
+      const applied: { paused: boolean; dueDate: string | null } = { paused: false, dueDate: null };
 
       // Bail before committing state or touching the alarm on a failed write.
       const { result, reminders: updated } = await updateReminders((current) =>
@@ -511,12 +512,13 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
           if (r.id !== reminderId || !r.recurring) {
             return r;
           }
+          applied.paused = paused;
           if (paused) {
             return { ...r, paused };
           }
           // On resume, advance dueDate to the next occurrence so it isn't stale/overdue.
-          resumed.dueDate = nextReminderDueDate(r, new Date()).toISOString();
-          return { ...r, dueDate: resumed.dueDate, paused };
+          applied.dueDate = nextReminderDueDate(r, new Date()).toISOString();
+          return { ...r, dueDate: applied.dueDate, paused };
         })
       );
       if (result?.success === false) {
@@ -528,10 +530,12 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       commitReminders(set, updated);
       notifyMutated('reminders', reminderId);
 
-      if (paused) {
+      // Only when the write found it still recurring: cancelling the alarm of a reminder a pull
+      // turned into a one-off leaves storage saying active while nothing will ever fire.
+      if (applied.dueDate !== null) {
+        await armReminderAlarm(reminderId, new Date(applied.dueDate).getTime());
+      } else if (applied.paused) {
         await clearReminderAlarm(reminderId);
-      } else if (resumed.dueDate !== null) {
-        await armReminderAlarm(reminderId, new Date(resumed.dueDate).getTime());
       }
     } catch (error) {
       logger.error('Error pausing reminder', error);

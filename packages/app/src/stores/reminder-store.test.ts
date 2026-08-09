@@ -844,6 +844,66 @@ describe('writers read storage, not their own snapshot', () => {
     expect(written[0].text).toBe('Move around');
   });
 
+  // Branching from the snapshot would complete a series a pull had just made recurring.
+  it('toggleReminder advances a reminder the pull turned recurring', async () => {
+    const recurring = { frequency: 'interval' as const, intervalMinutes: 30 };
+    const oneOff = reminderFactory.build({ id: 'r', completed: false });
+    storageAheadOfStore([oneOff], [{ ...oneOff, recurring }]);
+
+    await useReminderStore.getState().toggleReminder('r');
+
+    const written = setRemindersMock.mock.calls[0][0] as Reminder[];
+    expect(written[0].completed).toBe(false);
+    expect(toastSuccess).toHaveBeenCalledWith('Recurring reminder advanced to next occurrence');
+  });
+
+  // The mirror case: the snapshot says recurring, the fresh entity is a one-off. Completing it
+  // is right; silently writing nothing while still cancelling its alarm is not.
+  it('toggleReminder completes a reminder the pull turned into a one-off', async () => {
+    const recurring = { frequency: 'interval' as const, intervalMinutes: 30 };
+    const stale = recurringReminderFactory.build({ id: 'r', recurring, completed: false });
+    const { recurring: _dropped, ...oneOff } = stale;
+    storageAheadOfStore([stale], [oneOff as Reminder]);
+
+    await useReminderStore.getState().toggleReminder('r');
+
+    const written = setRemindersMock.mock.calls[0][0] as Reminder[];
+    expect(written[0].completed).toBe(true);
+    expect(toastSuccess).not.toHaveBeenCalled();
+  });
+
+  it('toggleReminder touches no alarm when the pull deleted it', async () => {
+    const mine = reminderFactory.build({ id: 'gone', completed: false });
+    storageAheadOfStore([mine], []);
+
+    await useReminderStore.getState().toggleReminder('gone');
+
+    expect(fakeScheduler.cancel).not.toHaveBeenCalled();
+    expect(toastWarning).toHaveBeenCalledWith('This reminder no longer exists');
+  });
+
+  // Cancelling the alarm of a reminder the pull turned into a one-off leaves storage saying
+  // active while nothing will ever fire it.
+  it('setReminderPaused touches no alarm when the pull dropped recurrence', async () => {
+    const recurring = { frequency: 'interval' as const, intervalMinutes: 30 };
+    const stale = recurringReminderFactory.build({ id: 'r', recurring, paused: false });
+    const { recurring: _dropped, ...oneOff } = stale;
+    storageAheadOfStore([stale], [oneOff as Reminder]);
+
+    await useReminderStore.getState().setReminderPaused('r', true);
+
+    expect(fakeScheduler.cancel).not.toHaveBeenCalled();
+  });
+
+  it('snoozeReminder arms no alarm when the pull deleted it', async () => {
+    const mine = reminderFactory.build({ id: 'gone' });
+    storageAheadOfStore([mine], []);
+
+    await useReminderStore.getState().snoozeReminder('gone', 5);
+
+    expect(fakeScheduler.scheduleAt).not.toHaveBeenCalled();
+  });
+
   // Pausing must not touch dueDate; the snapshot's copy predates the pull's advance.
   it('setReminderPaused does not revert a dueDate the pull advanced', async () => {
     const recurring = { frequency: 'interval' as const, intervalMinutes: 30 };
