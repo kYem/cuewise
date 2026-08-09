@@ -443,3 +443,136 @@ describe('the fake pairing relay', () => {
     });
   });
 });
+
+/** Device A: fully enrolled and active, holding the account's real data key. */
+interface ApproverFlow {
+  server: FakeSyncServer;
+  approver: Device;
+  /** Device B: signed in, but asked for a recovery code — the surface pairing replaces. */
+  requester: Device;
+}
+
+/** Two real devices on the same account: one active (the approver), one needing a key. */
+async function approverFlow(): Promise<ApproverFlow> {
+  const server = new FakeSyncServer();
+  const approver = createDevice(server);
+  useStorage(approver);
+  await approver.engine.enableSync('dev', 'cred-a', 'Device A');
+  expect(approver.engine.getStatus()).toBe('active');
+
+  const requester = createDevice(server);
+  useStorage(requester);
+  await expect(requester.engine.enableSync('dev', 'cred-b', 'Device B')).rejects.toThrow(
+    RecoveryCodeRequiredError
+  );
+  expect(requester.engine.getStatus()).toBe('disabled');
+
+  return { server, approver, requester };
+}
+
+/** commitPairing's sas, or a loud failure — narrows without a non-null assertion. */
+async function commitPairing(engine: SyncEngine, id: string): Promise<string> {
+  const committed = await engine.commitPairing(id);
+  if (committed === null) {
+    throw new Error('commitPairing answered null for a pending request');
+  }
+  return committed.sas;
+}
+
+describe('SyncEngine approver pairing methods', () => {
+  it('listPairingRequests answers the request with its deviceName', async () => {
+    const flow = await approverFlow();
+    const id = await beginPairing(flow.requester.engine);
+
+    const pending = await flow.approver.engine.listPairingRequests();
+
+    expect(pending).toEqual([expect.objectContaining({ id, deviceName: 'Device B' })]);
+  });
+
+  it('listPairingRequests answers [] when the engine is not active', async () => {
+    const flow = await approverFlow();
+    await beginPairing(flow.requester.engine);
+
+    // A third device: signed in, not the requester, and never enrolled here — so the row IS
+    // visible to a raw list call, and only the engine's own active+dk guard can hide it.
+    const bystander = createDevice(flow.server);
+    await expect(bystander.engine.enableSync('dev', 'cred-c', 'Device C')).rejects.toThrow(
+      RecoveryCodeRequiredError
+    );
+    expect(bystander.engine.getStatus()).toBe('disabled');
+    expect(await bystander.apiClient.listPairings()).toHaveLength(1);
+
+    expect(await bystander.engine.listPairingRequests()).toEqual([]);
+  });
+
+  it('commitPairing answers the same sas the requester derives', async () => {
+    const flow = await approverFlow();
+    const id = await beginPairing(flow.requester.engine);
+
+    const sas = await commitPairing(flow.approver.engine, id);
+
+    expect(await flow.requester.engine.pollPairing()).toEqual({ kind: 'confirm', sas });
+  });
+
+  it('commitPairing answers null once another session has already committed', async () => {
+    const flow = await approverFlow();
+    const id = await beginPairing(flow.requester.engine);
+    const rival = new FakeApiClient(flow.server);
+    await rival.exchangeToken({ provider: 'dev', credential: 'cred-c', deviceName: 'Device C' });
+    const rivalKeypair = await generatePairingKeypair();
+    await rival.commitPairing(id, b64urlEncode(rivalKeypair.publicKey));
+
+    expect(await flow.approver.engine.commitPairing(id)).toBeNull();
+  });
+
+  it("approvePairing uploads an envelope the requester's pollPairing completes from", async () => {
+    const flow = await approverFlow();
+    const id = await beginPairing(flow.requester.engine);
+    await commitPairing(flow.approver.engine, id);
+    // The digits must reach the requester's screen before the device will open an envelope.
+    await flow.requester.engine.pollPairing();
+
+    expect(await flow.approver.engine.approvePairing(id)).toBe(true);
+
+    expect(await flow.requester.engine.pollPairing()).toEqual({ kind: 'complete' });
+    expect(flow.requester.engine.getStatus()).toBe('active');
+  });
+
+  it('approvePairing answers false without a matching commit', async () => {
+    const flow = await approverFlow();
+    const id = await beginPairing(flow.requester.engine);
+
+    expect(await flow.approver.engine.approvePairing(id)).toBe(false);
+  });
+
+  it('approvePairing answers false for an id other than the one committed', async () => {
+    const flow = await approverFlow();
+    const id = await beginPairing(flow.requester.engine);
+    await commitPairing(flow.approver.engine, id);
+
+    expect(await flow.approver.engine.approvePairing('some-other-pairing-id')).toBe(false);
+  });
+
+  it('denyPairing deletes the row, and the requester polls failed', async () => {
+    const flow = await approverFlow();
+    const id = await beginPairing(flow.requester.engine);
+
+    await flow.approver.engine.denyPairing(id);
+
+    expect(await flow.approver.engine.listPairingRequests()).toEqual([]);
+    expect(await flow.requester.engine.pollPairing()).toEqual({
+      kind: 'failed',
+      reason: 'expired_or_denied',
+    });
+  });
+
+  it('denyPairing clears its own commit, so a later approvePairing answers false', async () => {
+    const flow = await approverFlow();
+    const id = await beginPairing(flow.requester.engine);
+    await commitPairing(flow.approver.engine, id);
+
+    await flow.approver.engine.denyPairing(id);
+
+    expect(await flow.approver.engine.approvePairing(id)).toBe(false);
+  });
+});

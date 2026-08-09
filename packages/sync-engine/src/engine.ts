@@ -9,6 +9,7 @@ import {
   RecoveryCodeError,
   unwrapDataKeyFromPeer,
   wrapDataKey,
+  wrapDataKeyToPeer,
   type X25519KeyPair,
 } from '@cuewise/crypto';
 import {
@@ -23,6 +24,7 @@ import {
   ApiError,
   armSyncPull,
   type ExchangeTokenRequest,
+  type PendingPairing,
   type ApiClient as RealApiClient,
   type SessionManager,
   SYNC_PULL_WAKE_ID,
@@ -244,6 +246,9 @@ export class SyncEngine {
   // Held only between beginPairing and the poll that ends it; cleared by anything that ends the
   // session or the account it belongs to.
   private pairing: PairingRequest | null = null;
+  // The approver's half of the same handshake: held between commitPairing and the
+  // approvePairing/denyPairing that resolves it, cleared the same way as `pairing` above.
+  private approving: { id: string; keypair: X25519KeyPair; requesterPub: Uint8Array } | null = null;
   // The cancellation token for everything a disable must stop: the cycle, each enrol checkpoint,
   // start(), and any bookkeeping already in flight. Only disableSync bumps it, and only upward.
   private accountEpoch = 0;
@@ -463,6 +468,78 @@ export class SyncEngine {
     return { kind: 'failed', reason: 'error' };
   }
 
+  /**
+   * Pending requests on this account (ENG-50), for the approver's screen. `[]` unless this device
+   * is active and holds the data key — only such a device can wrap it to a requester.
+   */
+  async listPairingRequests(): Promise<PendingPairing[]> {
+    if (this.status !== 'active' || this.dk === null) {
+      return [];
+    }
+    return this.deps.apiClient.listPairings();
+  }
+
+  /**
+   * Commits this device's key to a request, so its screen and the requester's derive the same
+   * digits. Null once the row is gone or another session already committed — both are the same
+   * `pairing_not_found`/`pairing_conflict` the server answers; anything else rethrows.
+   */
+  async commitPairing(id: string): Promise<{ sas: string } | null> {
+    const rows = await this.deps.apiClient.listPairings();
+    const row = rows.find((candidate) => candidate.id === id);
+    if (row === undefined) {
+      return null;
+    }
+    const keypair = await generatePairingKeypair();
+    try {
+      await this.deps.apiClient.commitPairing(id, b64urlEncode(keypair.publicKey));
+    } catch (err) {
+      if (
+        err instanceof ApiError &&
+        (err.code === 'pairing_conflict' || err.code === 'pairing_not_found')
+      ) {
+        return null;
+      }
+      throw err;
+    }
+    const requesterPub = b64urlDecode(row.requesterPublicKey);
+    this.approving = { id, keypair, requesterPub };
+    return { sas: await derivePairingSas(requesterPub, keypair.publicKey, id) };
+  }
+
+  /**
+   * Wraps the account's data key to the request this device committed to and uploads it. False
+   * without a matching commit in hand: a stale id, a second call, or a device that lost its key
+   * between commit and approve.
+   */
+  async approvePairing(id: string): Promise<boolean> {
+    if (this.approving === null || this.approving.id !== id) {
+      return false;
+    }
+    if (this.dk === null || this.keyId === null) {
+      return false;
+    }
+    const { keypair, requesterPub } = this.approving;
+    const envelope = await wrapDataKeyToPeer(
+      keypair.privateKey,
+      requesterPub,
+      this.dk,
+      this.keyId,
+      id
+    );
+    await this.deps.apiClient.putPairingEnvelope(id, envelope);
+    this.approving = null;
+    return true;
+  }
+
+  /** Declines a pending request. deletePairing is 404-tolerant, so a stale id is a no-op. */
+  async denyPairing(id: string): Promise<void> {
+    await this.deps.apiClient.deletePairing(id);
+    if (this.approving !== null && this.approving.id === id) {
+      this.approving = null;
+    }
+  }
+
   /** The enroll → initial-sync → activate tail shared by enableSync and resumeEnrollWithCode. */
   private async enrollAndActivate(recoveryCode: string | undefined, epoch: number): Promise<void> {
     // A code is only passed when enrolling an additional device; brand-new enable passes none.
@@ -671,6 +748,7 @@ export class SyncEngine {
     this.keyId = null;
     // Whatever a pairing in flight is offered, it would be a key for the account just removed.
     this.pairing = null;
+    this.approving = null;
     this.lastSyncedAt = null;
     this.lastCycle = null;
     // After a disable "no cycle" is the truth, so an earlier unreadable record must stop
@@ -1415,6 +1493,7 @@ export class SyncEngine {
   private async handleAuthLoss(): Promise<void> {
     // A pairing request rides the session that was just lost, so nothing can finish it.
     this.pairing = null;
+    this.approving = null;
     // Status first, steps independent: a partial cleanup failure must never leave the engine
     // reporting health — armPullLoopUnlessOff reads that status to decide whether to poll on.
     await this.bestEffort(() => this.setStatus('signed_out'), 'signed-out status notification');
