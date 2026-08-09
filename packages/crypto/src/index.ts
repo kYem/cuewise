@@ -2,4 +2,5 @@
 export * from './envelope';
 export * from './errors';
 export * from './keys';
+export * from './pairing';
 export * from './recovery-code';
