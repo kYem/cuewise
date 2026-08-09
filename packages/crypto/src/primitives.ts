@@ -174,3 +174,33 @@ export function splitEnvelope(value: string): { keyId: string; iv: Uint8Array; c
   }
   return { keyId, iv, ct };
 }
+
+export interface X25519KeyPair {
+  publicKey: Uint8Array;
+  privateKey: CryptoKey;
+}
+
+// Private key stays a non-extractable CryptoKey: nothing in this codebase ever needs its bytes,
+// and non-extractable means a bug cannot leak them.
+export async function generateX25519KeyPair(): Promise<X25519KeyPair> {
+  const pair = (await getSubtle().generateKey({ name: 'X25519' }, false, [
+    'deriveBits',
+  ])) as CryptoKeyPair;
+  const raw = await getSubtle().exportKey('raw', pair.publicKey);
+  return { publicKey: new Uint8Array(raw), privateKey: pair.privateKey };
+}
+
+export async function x25519SharedSecret(
+  privateKey: CryptoKey,
+  peerPublicKey: Uint8Array
+): Promise<Uint8Array> {
+  const peer = await getSubtle().importKey(
+    'raw',
+    asBufferSource(peerPublicKey),
+    { name: 'X25519' },
+    false,
+    []
+  );
+  const bits = await getSubtle().deriveBits({ name: 'X25519', public: peer }, privateKey, 256);
+  return new Uint8Array(bits);
+}

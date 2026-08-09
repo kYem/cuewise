@@ -5,10 +5,12 @@ import {
   aesGcmSeal,
   b64urlDecode,
   b64urlEncode,
+  generateX25519KeyPair,
   hkdfSha256,
   randomBytes,
   sha256,
   utf8,
+  x25519SharedSecret,
 } from './primitives';
 
 describe('primitives', () => {
@@ -143,5 +145,34 @@ describe('primitives', () => {
     } finally {
       Object.defineProperty(globalThis.crypto, 'subtle', { value: original, configurable: true });
     }
+  });
+});
+
+describe('x25519', () => {
+  it('two keypairs derive the same shared secret from opposite sides', async () => {
+    const a = await generateX25519KeyPair();
+    const b = await generateX25519KeyPair();
+
+    const ab = await x25519SharedSecret(a.privateKey, b.publicKey);
+    const ba = await x25519SharedSecret(b.privateKey, a.publicKey);
+
+    expect(ab).toEqual(ba);
+    expect(ab).toHaveLength(32);
+  });
+
+  it('a third keypair derives a different secret', async () => {
+    const a = await generateX25519KeyPair();
+    const b = await generateX25519KeyPair();
+    const c = await generateX25519KeyPair();
+
+    const ab = await x25519SharedSecret(a.privateKey, b.publicKey);
+    const cb = await x25519SharedSecret(c.privateKey, b.publicKey);
+
+    expect(ab).not.toEqual(cb);
+  });
+
+  it('exports a 32-byte raw public key', async () => {
+    const pair = await generateX25519KeyPair();
+    expect(pair.publicKey).toHaveLength(32);
   });
 });
