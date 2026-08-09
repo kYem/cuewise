@@ -940,11 +940,35 @@ describe('sync sink wiring', () => {
     markDeleted.mockClear();
     vi.mocked(storage.readSettings).mockResolvedValue(settingsRead(defaultSettings));
     vi.mocked(storage.setGoals).mockResolvedValue({ success: true });
+    vi.mocked(storage.getGoals).mockImplementation(async () => useGoalStore.getState().goals);
     configurePlatform({ syncSink: fakeSink });
   });
 
   afterEach(() => {
     configurePlatform({ syncSink: null });
+  });
+
+  // Marking a gone id dirty makes the next push seal a tombstone this device never authored.
+  it('does not mark a goal dirty when the pull deleted it before the write', async () => {
+    const mine = objectiveFactory.build({ id: 'gone' });
+    useGoalStore.setState({ goals: [mine], todayTasks: [] });
+    vi.mocked(storage.getGoals).mockResolvedValue([]);
+
+    await useGoalStore.getState().updateGoal('gone', { text: 'renamed' });
+    await useGoalStore.getState().updateTask('gone', 'renamed');
+
+    expect(markMutated).not.toHaveBeenCalled();
+  });
+
+  // GoalForm closes on true, so success here would discard the edit without saying anything.
+  it('updateGoal reports failure when the pull deleted it', async () => {
+    const mine = objectiveFactory.build({ id: 'gone' });
+    useGoalStore.setState({ goals: [mine], todayTasks: [] });
+    vi.mocked(storage.getGoals).mockResolvedValue([]);
+
+    await expect(useGoalStore.getState().updateGoal('gone', { text: 'renamed' })).resolves.toBe(
+      false
+    );
   });
 
   it('notifies markMutatedBulk with the rolled ids after an auto-roll persists', async () => {

@@ -102,6 +102,39 @@ async function persistGoals(mutate: (goals: Goal[]) => Goal[]): Promise<Goal[]> 
   return goals;
 }
 
+/** Announce only a write that landed: a gone id pushes a tombstone this device never authored. */
+function notifyIfWritten(goals: Goal[], goalId: string): void {
+  if (goals.some((goal) => goal.id === goalId)) {
+    notifyMutated('goals', goalId);
+  }
+}
+
+/**
+ * persistGoals for a write aimed at one entity. `matched` is false when the fresh read no longer
+ * holds it, or holds the wrong kind — announcing such a write marks a gone id dirty, and the next
+ * push seals a tombstone this device never authored. Return null from `mutate` to decline.
+ */
+async function persistOneGoal(
+  goalId: string,
+  mutate: (goal: Goal) => Goal | null
+): Promise<{ goals: Goal[]; matched: boolean }> {
+  const hit = { matched: false };
+  const goals = await persistGoals((current) =>
+    current.map((goal) => {
+      if (goal.id !== goalId) {
+        return goal;
+      }
+      const next = mutate(goal);
+      if (next === null) {
+        return goal;
+      }
+      hit.matched = true;
+      return next;
+    })
+  );
+  return { goals, matched: hit.matched };
+}
+
 const STALE_GOALS_MESSAGE =
   "Cuewise couldn't re-read your goals just now, so what you see may be out of date.";
 
@@ -190,7 +223,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       );
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
-      notifyMutated('goals', goalId);
+      notifyIfWritten(updatedGoals, goalId);
       return true;
     } catch (error) {
       logger.error('Error updating goal', error);
@@ -209,7 +242,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
 
       const updatedTodayTasks = filterTodayTasks(updatedGoals);
       set({ goals: updatedGoals, todayTasks: updatedTodayTasks });
-      notifyMutated('goals', goalId);
+      notifyIfWritten(updatedGoals, goalId);
 
       return true;
     } catch (error) {
@@ -287,7 +320,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       );
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
-      notifyMutated('goals', goalId);
+      notifyIfWritten(updatedGoals, goalId);
 
       useToastStore.getState().success('Goal transferred to tomorrow');
       return true;
@@ -318,7 +351,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       );
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
-      notifyMutated('goals', goalId);
+      notifyIfWritten(updatedGoals, goalId);
 
       useToastStore.getState().success('Goal moved to today');
       return true;
@@ -459,7 +492,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       );
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
-      notifyMutated('goals', goalId);
+      notifyIfWritten(updatedGoals, goalId);
       return true;
     } catch (error) {
       logger.error('Error setting task due date', error);
@@ -491,7 +524,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       );
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
-      notifyMutated('goals', goalId);
+      notifyIfWritten(updatedGoals, goalId);
       return true;
     } catch (error) {
       logger.error('Error adding subtask', error);
@@ -519,7 +552,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       );
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
-      notifyMutated('goals', goalId);
+      notifyIfWritten(updatedGoals, goalId);
       return true;
     } catch (error) {
       logger.error('Error toggling subtask', error);
@@ -547,7 +580,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       );
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
-      notifyMutated('goals', goalId);
+      notifyIfWritten(updatedGoals, goalId);
       return true;
     } catch (error) {
       logger.error('Error removing subtask', error);
@@ -584,9 +617,13 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       // Re-derived, not the reordered snapshot: it sorts by the sortOrder just written, so the drag
       // survives, and a task pulled into today mid-drag is not left invisible until a reload.
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
-      // Still the reordered ids: those are the ones whose sortOrder this write actually changed.
+      // Intersected with the write: a task the pull deleted mid-drag is in the snapshot but got no
+      // new sortOrder, and notifying it would push a tombstone this device never authored.
+      const written = new Set(updatedGoals.map((goal) => goal.id));
       for (const task of reorderedTodayTasks) {
-        notifyMutated('goals', task.id);
+        if (written.has(task.id)) {
+          notifyMutated('goals', task.id);
+        }
       }
       return true;
     } catch (error) {
@@ -640,20 +677,24 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
     updates: { text?: string; description?: string; date?: string; completed?: boolean }
   ) => {
     try {
-      const updatedGoals = await persistGoals((goals) =>
-        goals.map((goal) => {
-          if (goal.id === goalId && isObjective(goal)) {
-            return {
-              ...goal,
-              ...(updates.text !== undefined && { text: updates.text.trim() }),
-              ...(updates.description !== undefined && { description: updates.description.trim() }),
-              ...(updates.date !== undefined && { date: updates.date }),
-              ...(updates.completed !== undefined && { completed: updates.completed }),
-            };
-          }
-          return goal;
-        })
-      );
+      const { goals: updatedGoals, matched } = await persistOneGoal(goalId, (goal) => {
+        if (!isObjective(goal)) {
+          return null;
+        }
+        return {
+          ...goal,
+          ...(updates.text !== undefined && { text: updates.text.trim() }),
+          ...(updates.description !== undefined && { description: updates.description.trim() }),
+          ...(updates.date !== undefined && { date: updates.date }),
+          ...(updates.completed !== undefined && { completed: updates.completed }),
+        };
+      });
+      // GoalForm closes on true, so reporting success for a write that found nothing loses the edit.
+      if (!matched) {
+        logger.warn(`updateGoal: goal ${goalId} was gone before the write`);
+        useToastStore.getState().warning('This goal no longer exists');
+        return false;
+      }
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
       notifyMutated('goals', goalId);
 
@@ -713,19 +754,21 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
 
   linkTaskToGoal: async (taskId: string, goalId: string | null) => {
     try {
-      const updatedGoals = await persistGoals((goals) =>
-        goals.map((goal) => {
-          if (goal.id === taskId && isTask(goal)) {
-            if (goalId === null) {
-              // Unlink the task - remove parentId
-              const { parentId, ...rest } = goal;
-              return rest;
-            }
-            return { ...goal, parentId: goalId };
-          }
-          return goal;
-        })
-      );
+      const { goals: updatedGoals, matched } = await persistOneGoal(taskId, (goal) => {
+        if (!isTask(goal)) {
+          return null;
+        }
+        if (goalId === null) {
+          // Unlink the task - remove parentId
+          const { parentId, ...rest } = goal;
+          return rest;
+        }
+        return { ...goal, parentId: goalId };
+      });
+      if (!matched) {
+        logger.warn(`linkTaskToGoal: task ${taskId} was gone before the write`);
+        return false;
+      }
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
       notifyMutated('goals', taskId);
