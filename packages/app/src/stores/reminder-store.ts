@@ -302,8 +302,8 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
           // Any recurring reminder (active OR paused) advances to its next occurrence
           // instead of being marked complete, which would permanently destroy it.
           if (isCompleting && r.recurring) {
-            // A not-yet-due occurrence is skipped to the one after it, keeping its clock time
-            // (tonight 9pm → tomorrow 9pm); a due/overdue one restarts its cadence from now.
+            // Not-yet-due is skipped to the next occurrence — calendar keeps its clock time,
+            // interval adds one cadence; due or overdue restarts the cadence from now.
             const nextDueDate = isUpcomingRecurringOccurrence(r, now)
               ? skipReminderOccurrence(r)
               : nextReminderDueDate(r, now);
