@@ -882,6 +882,16 @@ describe('writers read storage, not their own snapshot', () => {
     expect(toastWarning).toHaveBeenCalledWith('This reminder no longer exists');
   });
 
+  // Committing here would also announce the write to the sync engine, which never happened.
+  it('toggleReminder commits nothing when the pull deleted it', async () => {
+    const mine = reminderFactory.build({ id: 'gone', completed: false });
+    storageAheadOfStore([mine], []);
+
+    await useReminderStore.getState().toggleReminder('gone');
+
+    expect(useReminderStore.getState().reminders).toEqual([mine]);
+  });
+
   // Cancelling the alarm of a reminder the pull turned into a one-off leaves storage saying
   // active while nothing will ever fire it.
   it('setReminderPaused touches no alarm when the pull dropped recurrence', async () => {
@@ -900,6 +910,17 @@ describe('writers read storage, not their own snapshot', () => {
     storageAheadOfStore([mine], []);
 
     await useReminderStore.getState().snoozeReminder('gone', 5);
+
+    expect(fakeScheduler.scheduleAt).not.toHaveBeenCalled();
+  });
+
+  // Arming here resurrects a wake on a reminder the user explicitly paused.
+  it('snoozeReminder arms no alarm when the pull paused it', async () => {
+    const recurring = { frequency: 'interval' as const, intervalMinutes: 30 };
+    const active = recurringReminderFactory.build({ id: 'r', recurring, paused: false });
+    storageAheadOfStore([active], [{ ...active, paused: true }]);
+
+    await useReminderStore.getState().snoozeReminder('r', 5);
 
     expect(fakeScheduler.scheduleAt).not.toHaveBeenCalled();
   });
