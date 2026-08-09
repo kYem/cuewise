@@ -392,6 +392,8 @@ export class SyncEngine {
         this.pairing = null;
         return { kind: 'failed', reason: 'expired_or_denied' };
       }
+      // Unclaimed, unlike the adoption below, because it needs no claim: two polls here decode the
+      // same key and derive the same digits from it, so either order leaves the same request.
       if (found.approverPublicKey !== null && pairing.approverPub === null) {
         pairing.approverPub = b64urlDecode(found.approverPublicKey);
         pairing.sas = await derivePairingSas(
@@ -423,17 +425,17 @@ export class SyncEngine {
     envelope: string,
     epoch: number
   ): Promise<PairingPollResult> {
+    // Claimed before the first await, so the caller's identity check and this claim are one
+    // unraceable step: of two polls holding the same request, only one can reach the unwrap.
+    this.pairing = null;
     const { dk, keyId } = await unwrapDataKeyFromPeer(
       pairing.keypair.privateKey,
       approverPub,
       envelope,
       pairing.id
     );
-    // Before the key is adopted, so a disable landing inside activateWithKey rolls this write back
-    // with the rest; after it, the rollback would have run first and left the key on disk.
-    this.pairing = null;
-    // The enroll path's initOrEnrollKey persists what it resolved; this path has to persist its
-    // own, or the paired device is keyless again at its next start().
+    // Persisted before the activation, not after: a disable landing inside activateWithKey rolls
+    // this write back with the rest, where a later write would outlive that rollback.
     await persistDataKey(this.deps.keyStore, keyId, dk);
     await this.activateWithKey(dk, keyId, epoch, false);
     if (this.accountEpoch !== epoch) {

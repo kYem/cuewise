@@ -334,6 +334,37 @@ describe('SyncEngine.pollPairing', () => {
     expect(flow.requester.engine.getStatus()).toBe('signed_out');
   });
 
+  it('lets only one of two polls that answer together adopt the key', async () => {
+    const flow = await pairingFlow();
+    await beginPairing(flow.requester.engine);
+    const side = await commitAsApprover(flow);
+    await flow.requester.engine.pollPairing();
+    await wrapKeyAsApprover(flow, side);
+
+    // Both polls park inside getPairing and are released together — two similar-latency calls
+    // fired at once, which is what a 3s poll loop over a slow link actually produces.
+    const gate = heldAnswer();
+    const answer = flow.requester.apiClient.getPairing.bind(flow.requester.apiClient);
+    let parked = 0;
+    vi.spyOn(flow.requester.apiClient, 'getPairing').mockImplementation(async (id) => {
+      parked += 1;
+      await gate.held();
+      return answer(id);
+    });
+    const writes = vi.spyOn(flow.requester.kv, 'set');
+
+    const both = [flow.requester.engine.pollPairing(), flow.requester.engine.pollPairing()];
+    await gate.awaited;
+    expect(parked).toBe(2);
+    gate.release();
+
+    const results = await Promise.all(both);
+    expect(results.filter((result) => result.kind === 'complete')).toHaveLength(1);
+    expect(results.filter((result) => result.kind === 'failed')).toHaveLength(1);
+    expect(writes.mock.calls.filter(([key]) => key === SYNC_DATA_KEY)).toHaveLength(1);
+    expect(flow.requester.engine.getStatus()).toBe('active');
+  });
+
   it('lets only one of two overlapping polls adopt the key', async () => {
     const flow = await pairingFlow();
     await beginPairing(flow.requester.engine);
